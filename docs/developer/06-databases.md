@@ -160,7 +160,9 @@ CREATE INDEX idx_c_ab12cd34_acl ON tw_shop_app.c_ab12cd34 USING gin (_acl);
 
 ## 7 权限模型（`_acl` 内嵌 + RLS 判定执行点，阶段③）
 
-条目 `type:role`，`type∈{read,create,update,delete}`（`write` 展开为三写）。角色：`any`（合成，仅 read 可授予）/`users`/`user:{id}`/`group:{id}`/`keys`/`admin`/`guests`/`__system__`。`ExpandPermissionRoles` 无条件注入 `any`；`ExpandPermissionTemplates` 展开 `user:`/`group:` 模板。**存储（包 A）**：文档 ACE 内嵌 `_acl TEXT[]`（元素 `"type:role"`，空数组回退集合级——B1），`_perms` 表退役（不再创建/读写，存量死表不迁移）；集合级权限与 `documentSecurity` 存 catalog（policy 经 InitPlan 子查询**实时读取**——集合级权限变更零 DDL 即时生效）。**读回免费**：`to_jsonb(d.*)` 载荷已含 `_acl`，`parseDocumentJSON` 顺带解析为 `Document.Permissions`（List/Get 零额外查询）。
+条目 `type:role`，`type∈{read,create,update,delete}`（`write` 展开为三写）。角色：`any`（合成，仅 read 可授予）/`users`/`user:{id}`/`group:{id}`/`keys`/`key:{id}`（B14 一等可授予角色——per-key 数据隔离身份，API key 主体自带）/`admin`/`guests`/`__system__`。`ExpandPermissionRoles` 无条件注入 `any`；`ExpandPermissionTemplates` 展开 `user:`/`group:` 模板。**存储（包 A）**：文档 ACE 内嵌 `_acl TEXT[]`（元素 `"type:role"`，空数组回退集合级——B1），`_perms` 表退役（不再创建/读写，存量死表不迁移）；集合级权限与 `documentSecurity` 存 catalog（policy 经 InitPlan 子查询**实时读取**——集合级权限变更零 DDL 即时生效）。**读回免费**：`to_jsonb(d.*)` 载荷已含 `_acl`，`parseDocumentJSON` 顺带解析为 `Document.Permissions`（List/Get 零额外查询）。
+
+**per-key 私有（B14，C6 决议：不接受"项目内全体 API key 互通"）**：API key 主体的角色集为 `keys` + `key:<自身id>`——`keys` 承载 scope/API 面（集合默认权限、特权授予判定），`key:<id>` 承载数据隔离身份。空 ACE 种子（`seedDocumentPermissions`）对 API key 主体绑 `read/update/delete:key:<自身id>`（与 user 主体 owner ACE 同构）——**默认私有**：keyA 建的文档 keyB 不可见（Get = NotFound，防枚举），跨 key 协作需显式授予 `key:<id>` ACE。存量共享语义兼容：catalog 与文档中**既有 `keys` ACE 保留有效**（显式授予过的继续共享，不做数据迁移），但默认种子不再产生 `keys` ACE；`DefaultCollectionPermissions` 的集合级 `keys` 四连为集合默认授权，不受本收敛影响。
 
 **判定执行点（包 C）= RLS policy**（业务集合 c_\* 表，建表生成 + DDL touch reconcile，`rls_policy.go`）：
 
@@ -239,7 +241,7 @@ CREATE INDEX idx_c_ab12cd34_acl ON tw_shop_app.c_ab12cd34 USING gin (_acl);
 |---|---|
 | `_id` | 文档主键，`idgen.UUID()` 默认，`^[a-zA-Z0-9_.:-]{1,64}$`（`docIDRe`） |
 | `_created_at/_updated_at` | 自动维护（`NOW()`） |
-| `_created_by/_updated_by` | 归因主体：`user:<id>` 角色存裸 id；API key 主体存 `key:<keyID>`（`databases.Principal.KeyID` 由 `DocPrincipal` 投影，`userIDFromPrincipal`）；其余留空 |
+| `_created_by/_updated_by` | 归因主体：`user:<id>` 角色存裸 id；API key 主体存 `key:<keyID>`（`databases.Principal.KeyID` 由 `DocPrincipal` 投影，`userIDFromPrincipal`）；其余留空。B14 后该归因身份与空 ACE 种子（`key:<id>` 私有）同一命名空间——文档属主可直接从 `_created_by` 读出协作授予目标 |
 | `_acl` | 内嵌文档 ACE（`TEXT[]`，元素 `"type:role"`；空数组回退集合级）——变更通道唯一化为 `tw_set_document_acl`（000029，SECURITY DEFINER；create/upsert 插入支经函数补设，update/upsert 更新支/bulk 经函数替换）；对 `tw_app` 的 INSERT/UPDATE 列级授权**双向排除**（`_version/_created_at/_updated_at/_created_by/_updated_by` 为合法写路径所需，`_tenant`/`_acl` 锁死） |
 | `_tenant` | 租户标签；**对 `tw_app` 列级锁死不可写**（GRANT 排除；SELECT 可读——查询谓词需要） |
 | 用户输入 `_` 前缀字段 | `buildInsertParts`/`buildUpdateParts` 直接过滤，防伪造系统列 |

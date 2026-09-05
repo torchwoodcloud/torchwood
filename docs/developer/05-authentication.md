@@ -27,7 +27,7 @@
 | 终端用户 JWT | Client API | `end-user-jwt` 域密钥签发，claims 含 `pid`/`sid`/`uid`，Roles 实时解析 |
 | End-user session | Client API 浏览器 | `TORCHWOOD_session_<projectID>`，`SessionCookieCodec` HMAC（`internal/infra/auth/session_cookie.go`）或 JWT 形态 |
 | Console admin session | Console | `TORCHWOOD_session_console` HttpOnly cookie（`internal/api/consolegrpc/cookies.go`），refresh 限 `/v1/console/auth` |
-| API Key | Server API | `secret → sha256 hex` 存库，细粒度 scope（§4），以 `keys` 角色参与 `_perms` |
+| API Key | Server API | `secret → sha256 hex` 存库，细粒度 scope（§4），以 `keys` + `key:<自身id>` 双角色参与 `_acl`（B14 per-key 私有） |
 
 ---
 
@@ -37,7 +37,7 @@
 
 | 凭证 | 校验 |
 |------|------|
-| `api_key` | `sha256(raw)` → `GetAPIKeyBySecretHash`；查 `Enabled`/`ExpireAt`；**查 `project Status==active`**（`validator.go:136`）否则 `Unauthenticated: project is not active`；成功 `ActorKind=service`、`Roles=["keys"]`、`Permissions=Scopes`、`ProjectID=key.ProjectID` |
+| `api_key` | `sha256(raw)` → `GetAPIKeyBySecretHash`；查 `Enabled`/`ExpireAt`；**查 `project Status==active`**（`validator.go:136`）否则 `Unauthenticated: project is not active`；成功 `ActorKind=service`、`Roles=["keys", "key:<APIKeyID>"]`（B14：keys 承载 scope/API 面，`key:<id>` 承载数据隔离身份）、`Permissions=Scopes`、`ProjectID=key.ProjectID` |
 | `token` | 先 `admin-jwt` 域验签，失配再试 `end-user-jwt`（`parseJWT:109`，域分离见 §6）；分发到 `principalFromJWT` |
 | `session` | 先当 JWT 试解（console JWT），否则 `SessionCookieCodec.Verify` 得 `projectID:sessionID` → `principalFromSession` 查 `sessions` 集合 |
 
@@ -96,7 +96,7 @@ Console 多项目：仅 `admin` 会话读 `X-Torchwood-Project` 写入 `ProjectI
 
 匹配：裸资源名=`*`/`all` 全量放行；`*.read` 仅读方法；`*.write` 仅写方法；**未登记方法即使 `*` 也 fail-closed**。
 
-**防护**：`IsAPIKeysServiceMethod` 拒绝 API key 调 `APIKeysService`（防自铸提权）；API Key 以 `Roles=["keys"]` 参与用户 collection `_perms`（`read:keys`/`write:keys` 需显式授予，不默认 bypass；仅 `SystemPrincipal`/平台 admin 绕过）。
+**防护**：`IsAPIKeysServiceMethod` 拒绝 API key 调 `APIKeysService`（防自铸提权）；API Key 以 `Roles=["keys", "key:<自身id>"]` 参与用户 collection `_acl`（不默认 bypass；仅 `SystemPrincipal`/平台 admin 绕过）。**默认私有（B14，C6 决议）**：key 创建文档的空 ACE 种子绑 `read/update/delete:key:<自身id>`——其他 key 不可见（Get = NotFound）；跨 key 协作需显式授予对方 `key:<id>` ACE；遗留的 `read:keys`/`write:keys` 显式授予仍共享（存量 keys ACE 保留有效，默认种子不再产生）。详见 `06-databases.md §7`。
 
 ---
 
@@ -156,4 +156,4 @@ Functions DDL 与 Storage 已对齐 `RequireServerWriteActor` 口径（Databases
 | `password` | `pkg/password/password.go` | Argon2id `t=3 m=65536 p=4`，`$argon2id$v=19$...`，`ConstantTimeCompare` |
 | `secretbox` | `pkg/secretbox/secretbox.go` | `sha256("torchwood-secretbox:"+secret)` → AES-256-GCM，`enc:v1:` 前缀，空透传兼容旧明文；OAuth `client_secret`（`bunrepo/oauth_provider_repo.go:24`）、TOTP `factor.Secret`（`infra/auth/totp.go:52`） |
 
-> 详见 `docs/developer/06-databases.md §3`（`_perms` 与 `keys` 角色）、`03-configuration.md §6.2`（会话 cookie）、`pkg/jwtparser` 源码。
+> 详见 `docs/developer/06-databases.md §3`（`_perms` 历史）与 `§7`（`_acl` 与 `keys`/`key:{id}` 角色）、`03-configuration.md §6.2`（会话 cookie）、`pkg/jwtparser` 源码。

@@ -145,6 +145,10 @@ Agent 集成建议：以 `genproto/**/*.swagger.json` 为 schema 权威生成工
 
 `APIKeysService` 被 `invoke.go:40` 的 `findServerMethod` 与 `tools.go` 双重排除：泄露的 Key 若能自铸新 Key，等同永久提权。密钥生命周期只在 Console 或带 `apikeys:write` 的受控流程里处理。
 
+**Q: 一个项目跑多个 Agent（多个 API key），数据互相可见吗？**
+
+不（B14 per-key 私有）。每个 key 创建文档时空 ACE 种子绑 `read/update/delete:key:<自身id>`——默认只有创建者 key 可读写删，其他 key 查询返回 NotFound（防枚举）。跨 key 协作（如主 Agent 复核子 Agent 产出）需由持有者显式授予对方 `key:<id>` 的文档 ACE；`_created_by` 字段即对方 key 的授予目标（`key:<id>` 形态）。遗留的显式 `read:keys`/`write:keys` 授予仍共享（向后兼容），但默认不再产生。详见 `06-databases.md §7`。
+
 **Q: TS SDK 没有 `InvokeJSON` 怎么办？**
 
 TS 属 `fetch` 层，`HttpTransport.request` 已支持 `auth:"apiKey"` 的任意路径；按 `genproto` 的 OpenAPI 路径直接 `fetch` 即可，或在 Node 侧复用 Go SDK 的 `InvokeJSON`。`agentTools` 只给 `fullMethod` 就是为宿主自选传输。
