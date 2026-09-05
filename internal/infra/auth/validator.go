@@ -148,8 +148,11 @@ func (v *Validator) validateAPIKey(ctx context.Context, raw string) (*shared.Pri
 		CredentialType: shared.CredentialTypeAPIKey,
 		ProjectID:      key.ProjectID,
 		APIKeyID:       key.ID,
-		Roles:          []string{"keys"},
-		Permissions:    key.Scopes,
+		// B14 per-key 角色（C6 决议）：keys 承载 scope/API 面（集合默认权限、
+		// 特权授予判定不受影响），key:<id> 承载数据隔离身份——RLS 谓词可见、
+		// 可作文档 ACE 授予目标（跨 key 协作需显式授予 key:<id> ACE）。
+		Roles:       []string{"keys", "key:" + key.ID},
+		Permissions: key.Scopes,
 	}, nil
 }
 

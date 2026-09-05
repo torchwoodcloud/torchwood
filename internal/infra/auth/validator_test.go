@@ -355,6 +355,8 @@ func TestValidator_ValidateAPIKey(t *testing.T) {
 	require.Equal(t, shared.ActorKindService, p.ActorKind)
 	require.Equal(t, "proj-1", p.ProjectID)
 	require.Equal(t, []string{"storage", "users"}, p.Permissions)
+	// B14 per-key 角色：keys（scope/API 面）与 key:<id>（数据隔离身份）并存。
+	require.Equal(t, []string{"keys", "key:key-1"}, p.Roles)
 
 	key.Enabled = false
 	_, err = v.ValidateCredential(ctx, secret, shared.CredentialTypeAPIKey)
