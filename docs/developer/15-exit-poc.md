@@ -218,6 +218,7 @@
 - **要做什么**：① `key:{keyID}` 进入 API key 主体的角色集（`internal/infra/auth` validator + `databases.Principal`，机制基础已就绪——`_acl` 内嵌与 `type:role` 模型零改动支持）；② 空 ACE 种子收敛：API key 主体的种子从共享 `keys` 角色改为 `read/update/delete:key:<自身id>`（对齐 user 主体 owner ACE 语义，`creatorSeedRole` 分支调整）；③ 现存共享 `keys` 语义的兼容决策（存量集合的 `keys` ACE 保留与否 + 文档明示）；④ golden 测试补 per-key ACE 与种子用例。
 - **完成判据**：不同 key 互不可见彼此私钥文档（集成测试：keyA 建、keyB 查 → NotFound）；显式授予 `key:<id>` ACE 后可跨 key 协作；RLS/policy 全套回归绿；06-databases 权限节与 §10.1 同步。
 - **建议归属**：auth/权限会话（机制基础已就绪，预计中等工程量）。
+- **闭环（2026-09-06）**：四步落地，commit `ff48ff9`（①validator 注入 `Roles=["keys","key:<id>"]`，三通道核对——EndUser 不触、DocPrincipal 透传、realtime 投影同步且 WS 拒 API key 语义不动）→ `0b0985e`（②`seedDocumentPermissions` 对 KeyID 主体种 `read/update/delete:key:<自身id>`，Create/Upsert/execute-tx 三入口一处收敛，R1 per-op 豁免结构与包 0-1 upsert 种子对齐不受影响，无 KeyID 合成主体维持历史行为）→ `ceac697`（③keys 兼容决策：**保留存量 keys ACE 不清除**——显式授予继续有效、零数据迁移；默认种子不再产生 keys ACE；06-databases §7/§10 + 05-authentication + 14-agent-tools 明示"默认私有（per-key）、跨 key 协作需显式授予 key:<id>、遗留 keys ACE 仍共享"）→ `3e4cdda`（④golden 矩阵 tw_can/tw_visible 补 key:<id> 行 + 行为级 ka/kb 双 key 断言；集成测试 `TestDatabases_PerKeyDocumentIsolation`——keyA 空 ACE 建、种子恰为 key:ka 三连、keyB Get=NotFound/List 不含/Count=0、显式授予 read:key:kb 后 keyB 可见且只读、keyA 全权不变；`TestDatabases_PerKeySeedViaExecuteTransactions` 锁事务批种子）。判据取数：单文档面与 execute-tx 面的 keyB 不可见断言均以 `NotFound`/空集通过；回归面 RLS 全套（golden/behavior/自锁/tenant/EXPLAIN/基准）、permissions、`TestRolesSig_*`（sig 消息自动覆盖新角色，4 用例绿）、execute-tx 全量、A1 grants reconcile（零角色串引用，确认与角色无关）、app/api/grpc/domain 全量、`go build ./... && go vet`、sdk/go 与 TS 全量——全绿。
 
 ## C 决策确认区（7 条）
 
@@ -281,6 +282,7 @@
 
 - **分区统计**（2026-09-05 成文时点）：A 区 10 条、B 区 13 条、C 区 7 条，合计 30 条；其中标〔新发现〕8 条（A5 并入 1、B4/B10/B11/B12/B13 独立 5、C6/C7 独立 2——B5/B7 各并入 1 处子项）。
 - **统计更新（2026-09-06）**：A 区 10 条全部闭环；B 区 C6 决议新立 **B14**（per-key 角色，B 区 14 条）；C 区 7 条全部决议闭环（C1-C5/C7 维持或监控态关闭，C6 转入 B14）。
-- **当前活跃工程项**：仅 **B14**（per-key 角色 + 种子收敛）——其余挂账均为"远期/按触发器监控"登记态。
+- **统计更新（2026-09-06，B14 闭环）**：**B14 四步落地闭环（同日）**——B 区 14 条全部闭环；剩余挂账均为"远期/按触发器监控"登记态，**无活跃工程项**。
+- **当前活跃工程项**：无（B14 已于 2026-09-06 闭环；其余挂账均为"远期/按触发器监控"登记态）。
 - **闭环纪律**：满足完成判据后在条目下追加证据行（`闭环：<日期>｜<commit/测试/决议链接>｜<摘要>`）；A 区全部闭环前，发布流程（release workflow）不得执行对外发布步骤。
 - **与 redesign §6 的关系**：redesign §6 挂账清单为 2026-09-05 快照；本文件为活跃清单，后续新挂账一律登记于此。
