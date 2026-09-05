@@ -224,9 +224,9 @@ func TestDatabases_UpsertDocument_EmptyACESeed(t *testing.T) {
 
 // requirePermsMatchRoles 断言 perms 恰好是 role 的 read/update/delete 三元组
 // （seedDocumentPermissions 的种子形态，不含 __private__）。
-func requirePermsMatchRoles(t *testing.T, perms []databases.Permission, role string) {
+func requirePermsMatchRoles(t *testing.T, perms []databases.Permission, role string, msgAndArgs ...any) {
 	t.Helper()
-	require.Len(t, perms, 3)
+	require.Len(t, perms, 3, msgAndArgs...)
 	got := map[string]string{}
 	for _, p := range perms {
 		got[p.Type] = p.Role
@@ -296,4 +296,130 @@ func TestDatabases_UpdateDocument_OCCConflictCarriesCurrentVersion(t *testing.T)
 	}, nil, nil, nil, principal, &got.Version, "")
 	require.NoError(t, err)
 	require.Equal(t, "v1-merged", updated.Data["title"])
+}
+
+// keyPrincipal 构造 API key 文档主体（DocPrincipal 投影形态：keys 承载
+// scope/API 面，key:<id> 承载数据隔离身份，KeyID 供写入归因）。
+func keyPrincipal(id string) databases.Principal {
+	return databases.Principal{Roles: []string{"keys", "key:" + id}, KeyID: id}
+}
+
+// TestDatabases_PerKeyDocumentIsolation（B14 完成判据，C6 决议）：默认私有——
+// keyA 空 ACE 种子建的文档 keyB 不可见（Get=NotFound 防枚举、List/Count 过滤）；
+// 显式授予 read:key:<keyB> ACE 后 keyB 可见（只读，写被 policy 拒绝）；keyA
+// 自身读写删全权不变；execute-tx 的空 permissions create op 走同一种子。
+func TestDatabases_PerKeyDocumentIsolation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	ctx := platformAdminCtx(context.Background())
+	db := testutil.SetupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	projectID, _, cleanup := testutil.CreateTestProject(ctx, db)
+	defer cleanup()
+
+	docDB := documentdb.NewPostgresDocumentDB(db, nil)
+	uc := NewDatabases(bunrepo.NewProjectRepository(db), docDB, nil)
+	keyA, keyB := keyPrincipal("ka"), keyPrincipal("kb")
+
+	require.NoError(t, uc.CreateDatabase(ctx, projectID, "app", "Application DB"))
+	// 集合只授 create:keys（无集合级 read）：读回必须依赖文档级种子 ACE，
+	// 精确锁定 per-key 私有语义。
+	require.NoError(t, uc.CreateCollection(ctx, projectID, "app", "notes", "Notes", []databases.Attribute{
+		{ID: "title", Key: "title", Type: "string", Size: 128},
+	}, nil, []databases.Permission{{Type: "create", Role: "keys"}}, true))
+
+	// keyA 空 ACE 创建 → 种子绑 key:ka 三连（非共享 keys）。
+	created, _, err := uc.CreateDocument(ctx, projectID, "app", "notes", "doc-a", map[string]any{
+		"title": "by-key-a",
+	}, nil, keyA, "")
+	require.NoError(t, err)
+	requirePermsMatchRoles(t, created.Permissions, "key:ka")
+
+	// keyB 全路径不可见：Get=NotFound（防枚举）、List 不含、Count=0。
+	_, err = uc.GetDocument(ctx, projectID, "app", "notes", "doc-a", keyB)
+	require.Equal(t, codes.NotFound, status.Code(err), "keyB 不可见必须 NotFound（防枚举）")
+	listB, err := uc.ListDocuments(ctx, projectID, "app", "notes", databases.Query{}, keyB)
+	require.NoError(t, err)
+	require.Empty(t, listB.Documents, "keyB 的 List 不得包含 keyA 私有文档")
+	countB, err := uc.CountDocuments(ctx, projectID, "app", "notes", databases.Query{}, keyB)
+	require.NoError(t, err)
+	require.Zero(t, countB)
+
+	// keyA 自身全权不变：读改删往返（种子三连语义）。
+	got, err := uc.GetDocument(ctx, projectID, "app", "notes", "doc-a", keyA)
+	require.NoError(t, err)
+	require.Equal(t, "by-key-a", got.Data["title"])
+	updated, _, err := uc.UpdateDocument(ctx, projectID, "app", "notes", "doc-a", map[string]any{
+		"title": "by-key-a-v2",
+	}, nil, nil, nil, keyA, &got.Version, "")
+	require.NoError(t, err)
+	require.Equal(t, int64(2), updated.Version)
+
+	// 显式授予跨 key 协作：keyA 追加 read:key:kb ACE（keys 主体 privileged，
+	// 授予校验跳过——与既有 keys 授予面一致）。
+	_, _, err = uc.UpdateDocument(ctx, projectID, "app", "notes", "doc-a", nil,
+		[]databases.Permission{
+			{Type: "read", Role: "key:ka"},
+			{Type: "update", Role: "key:ka"},
+			{Type: "delete", Role: "key:ka"},
+			{Type: "read", Role: "key:kb"},
+		}, nil, nil, keyA, &updated.Version, "")
+	require.NoError(t, err)
+
+	// keyB 可见（只读）：Get 成功；写被 policy 拒绝（可见 + version 相符 → PERMISSION_DENIED）。
+	granted, err := uc.GetDocument(ctx, projectID, "app", "notes", "doc-a", keyB)
+	require.NoError(t, err, "显式授予 read:key:kb 后 keyB 可见（跨 key 协作）")
+	require.Equal(t, "by-key-a-v2", granted.Data["title"])
+	v3 := int64(3)
+	_, _, err = uc.UpdateDocument(ctx, projectID, "app", "notes", "doc-a", map[string]any{
+		"title": "by-key-b",
+	}, nil, nil, nil, keyB, &v3, "")
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "read-only 授予不可写（policy 拒绝）")
+
+	// keyA 全权仍在：自锁授权面不变，keyA 可删自身文档。
+	_, err = uc.DeleteDocument(ctx, projectID, "app", "notes", "doc-a", keyA, &v3, "")
+	require.NoError(t, err)
+}
+
+// TestDatabases_PerKeySeedViaExecuteTransactions（B14）：execute-tx 的
+// create/upsert 空 permissions op 与单文档 API 同种子（R1 per-op 豁免结构
+// 不变，种子值收敛为 key:<id>）——keyA 经事务批建文档，keyB 不可见。
+func TestDatabases_PerKeySeedViaExecuteTransactions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	ctx := platformAdminCtx(context.Background())
+	db := testutil.SetupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	projectID, _, cleanup := testutil.CreateTestProject(ctx, db)
+	defer cleanup()
+
+	docDB := documentdb.NewPostgresDocumentDB(db, nil)
+	uc := NewDatabases(bunrepo.NewProjectRepository(db), docDB, nil)
+	keyA, keyB := keyPrincipal("ka"), keyPrincipal("kb")
+
+	require.NoError(t, uc.CreateDatabase(ctx, projectID, "app", "Application DB"))
+	require.NoError(t, uc.CreateCollection(ctx, projectID, "app", "notes", "Notes", []databases.Attribute{
+		{ID: "title", Key: "title", Type: "string", Size: 128},
+	}, nil, []databases.Permission{{Type: "create", Role: "keys"}}, true))
+
+	results, _, err := uc.ExecuteTransactions(ctx, projectID, "app", []databases.TransactionOp{
+		{Type: databases.TransactionOpCreate, CollectionID: "notes", DocumentID: "tx-a",
+			Data: map[string]any{"title": "tx-by-key-a"}},
+	}, databases.TransactionModeAtomic, keyA, "")
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.True(t, results[0].OK)
+
+	got, err := uc.GetDocument(ctx, projectID, "app", "notes", "tx-a", keyA)
+	require.NoError(t, err)
+	requirePermsMatchRoles(t, got.Permissions, "key:ka", "execute-tx 空 permissions op 种子绑 key:<id>")
+
+	_, err = uc.GetDocument(ctx, projectID, "app", "notes", "tx-a", keyB)
+	require.Equal(t, codes.NotFound, status.Code(err), "execute-tx 种子文档对其他 key 同样不可见")
 }

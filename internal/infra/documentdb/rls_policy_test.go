@@ -44,6 +44,11 @@ func TestRLS_GoldenMatrix_TwCan(t *testing.T) {
 	require.True(t, can(`{read:user:a}`, `{user:a,any}`, "read", false))
 	require.False(t, can(`{read:user:a}`, `{user:b,any}`, "read", false))
 	require.False(t, can(`{update:user:a}`, `{user:a,any}`, "read", false), "update ACE 不授予 read")
+	// B14：key:<id> 角色对 policy 函数透明（任意角色串）——持有者命中、
+	// 其他 key 不命中（per-key 隔离的函数级锚点）。
+	require.True(t, can(`{read:key:k1}`, `{key:k1,any}`, "read", false))
+	require.False(t, can(`{read:key:k1}`, `{key:k2,any}`, "read", false), "跨 key 不命中（per-key 私有）")
+	require.True(t, can(`{write:key:k1}`, `{key:k1,any}`, "delete", false), "write 展开对 key:<id> 同构")
 	// write 展开：create/update/delete 命中 write ACE；read 不命中。
 	require.True(t, can(`{write:user:a}`, `{user:a,any}`, "update", false))
 	require.True(t, can(`{write:user:a}`, `{user:a,any}`, "delete", false))
@@ -108,6 +113,9 @@ func TestRLS_GoldenMatrix_TwVisible(t *testing.T) {
 	// 可写即可读：update-only / delete-only ACE（无 read）仍可见。
 	require.True(t, visible(`{update:user:b}`, `{user:b,any}`, true, false, false, false))
 	require.True(t, visible(`{delete:user:b}`, `{user:b,any}`, true, false, false, false))
+	// B14：key:<id> ACE 的可写即可读对 key 主体同构。
+	require.True(t, visible(`{update:key:k1}`, `{key:k1,any}`, true, false, false, false))
+	require.False(t, visible(`{read:key:k1}`, `{key:k2,any}`, true, true, true, true), "跨 key 不可见")
 	// read-only 可见（写权由各自 policy 管，tw_visible 只管可见）。
 	require.True(t, visible(`{read:user:b}`, `{user:b,any}`, true, false, false, false))
 	// 无任何命中不可见（非空 ACE 覆盖集合级）。
@@ -160,6 +168,12 @@ func setupRLSBehaviorEnv(t *testing.T) *rlsBehaviorEnv {
 	mk("write-c", []databases.Permission{{Type: "write", Role: "user:c"}})
 	mk("read-only-d", []databases.Permission{{Type: "read", Role: "user:d"}})
 	mk("empty-e", nil)
+	// B14：per-key ACE 文档（keyA 种子形态，种子值 read/update/delete:key:ka）。
+	mk("key-owned", []databases.Permission{
+		{Type: "read", Role: "key:ka"},
+		{Type: "update", Role: "key:ka"},
+		{Type: "delete", Role: "key:ka"},
+	})
 	return env
 }
 
@@ -223,9 +237,16 @@ func TestRLS_Behavior_VisibilityMatrix(t *testing.T) {
 	keys := env.visibleIDs(t, databases.Principal{Roles: []string{"keys"}})
 	require.Equal(t, map[string]bool{"empty-e": true}, keys)
 
+	// B14 per-key：key:ka 持有者可见自身种子文档 + 空回退；key:kb 不可见
+	// keyA 的文档（跨 key 隔离行为级锚点）。
+	ka := env.visibleIDs(t, databases.Principal{Roles: []string{"keys", "key:ka"}})
+	require.Equal(t, map[string]bool{"key-owned": true, "empty-e": true}, ka)
+	kb := env.visibleIDs(t, databases.Principal{Roles: []string{"keys", "key:kb"}})
+	require.Equal(t, map[string]bool{"empty-e": true}, kb)
+
 	// SystemPrincipal 全路径旁路（BYPASSRLS）。
 	sys := env.visibleIDs(t, databases.SystemPrincipal)
-	require.Len(t, sys, 4, "BYPASSRLS 旁路：删除 write-c 后余 4 篇")
+	require.Len(t, sys, 5, "BYPASSRLS 旁路：删除 write-c 后余 5 篇")
 }
 
 func TestRLS_Behavior_GetInvisibleIsNotFound(t *testing.T) {
