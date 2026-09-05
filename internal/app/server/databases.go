@@ -559,26 +559,38 @@ func ownerUserRole(principal databases.Principal) string {
 }
 
 // seedDocumentPermissions 生成空 ACE 写入的创建者种子（CreateDocument /
-// UpsertDocument 共用）：owner user 角色 → creatorSeedRole（keys/admin 等
+// UpsertDocument 共用）：API key 主体 → key:<自身id>（B14 per-key 私有，与
+// user 主体 owner ACE 同构）→ owner user 角色 → creatorSeedRole（admin 等
 // 常规凭证角色）→ __private__ 纯私有标记。返回的 perms 恒非空。
 func seedDocumentPermissions(principal databases.Principal) []databases.Permission {
+	if principal.KeyID != "" {
+		return creatorSeedPerms("key:" + principal.KeyID)
+	}
 	role := ownerUserRole(principal)
 	if role == "" {
 		role = creatorSeedRole(principal)
 	}
 	if role != "" {
-		return []databases.Permission{
-			{Type: "read", Role: role},
-			{Type: "update", Role: role},
-			{Type: "delete", Role: role},
-		}
+		return creatorSeedPerms(role)
 	}
 	// 无常规角色可绑定（如仅特权旁路的主体）：纯私有标记。
 	return []databases.Permission{{Type: "read", Role: "__private__"}}
 }
 
-// creatorSeedRole 返回空 ACE 文档占位绑定用的创建者常规角色（首个非
-// user: 前缀、非合成的角色，如 keys/admin）；找不到时返回空串。
+// creatorSeedPerms 是创建者种子的 read/update/delete 三连 ACE（占位私有：
+// 集合回落关闭，仅创建者身份可读写删——跨身份协作需显式授予 ACE）。
+func creatorSeedPerms(role string) []databases.Permission {
+	return []databases.Permission{
+		{Type: "read", Role: role},
+		{Type: "update", Role: role},
+		{Type: "delete", Role: role},
+	}
+}
+
+// creatorSeedRole 返回空 ACE 文档占位绑定用的创建者常规角色（首个非 user:
+// 前缀、非合成的角色，如 admin）；找不到时返回空串。API key 主体不走本函数
+// （B14 后种子绑 key:<id>，见 seedDocumentPermissions），存量非 key 主体
+// （手工构造的无 KeyID keys 主体）维持绑 keys 的历史行为。
 func creatorSeedRole(principal databases.Principal) string {
 	for _, r := range principal.Roles {
 		switch r {
