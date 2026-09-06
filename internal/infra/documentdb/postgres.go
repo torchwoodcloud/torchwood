@@ -134,10 +134,20 @@ func mapIdentError(err error) error {
 	return err
 }
 
+// pgTextArray 把字符串列表编码为 PG 数组字面量（配 "?::text[]" 绑定）。
+// S-1（数据保真）：PG 数组字面量的带引号元素内 `\` 是转义符——必须双写
+// （`\` → `\\`），引号以反斜杠转义（`"` → `\"`）。**先双写 `\` 再转义 `"`**
+// （顺序勿反：`\"` 的 `\` 不能再被双写）。实证（PG 16 psql）：`{"a""c"}` →
+// 22P02 "Incorrectly quoted array element"（`""` 双写是 CSV 规则、PG 数组
+// 不支持）；`{"a\"c"}` → `a"c`；裸 `\` 形态 `{"C:\Users\tw"}` → `\t` 被解为
+// tab、`\U` 被去转义（数据失真）。读回走 to_jsonb（PG 服务端解码）无需
+// 对称处理。
 func pgTextArray(items []string) string {
 	var parts []string
 	for _, item := range items {
-		parts = append(parts, `"`+strings.ReplaceAll(item, `"`, `""`)+`"`)
+		item = strings.ReplaceAll(item, `\`, `\\`)
+		item = strings.ReplaceAll(item, `"`, `\"`)
+		parts = append(parts, `"`+item+`"`)
 	}
 	return `{` + strings.Join(parts, ",") + `}`
 }
@@ -156,7 +166,10 @@ func pgArrayLiteral(v any) (string, bool) {
 		for _, e := range vv {
 			switch ev := e.(type) {
 			case string:
-				parts = append(parts, `"`+strings.ReplaceAll(ev, `"`, `""`)+`"`)
+				// S-1：与 pgTextArray 同转义序——先双写 `\` 再以 `\"` 转义引号。
+				ev = strings.ReplaceAll(ev, `\`, `\\`)
+				ev = strings.ReplaceAll(ev, `"`, `\"`)
+				parts = append(parts, `"`+ev+`"`)
 			case bool:
 				if ev {
 					parts = append(parts, "t")
