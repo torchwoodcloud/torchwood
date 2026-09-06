@@ -3,6 +3,7 @@ package ident
 import (
 	"errors"
 	"regexp"
+	"strings"
 )
 
 const (
@@ -78,4 +79,20 @@ func SchemaName(projectID, databaseID string) (string, error) {
 		return "", ErrInvalidSchemaResourceID
 	}
 	return name, nil
+}
+
+// ParseSchemaName 反解两段式 schema tw_{project.id}_{database.id}。两端 ID
+// 字符集（^[a-z][a-z0-9]{0,27}$）不含下划线，前缀后第一道 "_" 即分割点，
+// 反解无歧义；一段式项目数据面 schema 返回 error。
+func ParseSchemaName(name string) (projectID, databaseID string, err error) {
+	rest := strings.TrimPrefix(name, SchemaPrefix)
+	i := strings.IndexByte(rest, '_')
+	if i <= 0 || i == len(rest)-1 {
+		return "", "", ErrInvalidSchemaResourceID
+	}
+	projectID, databaseID = rest[:i], rest[i+1:]
+	if ValidateSchemaResourceID(projectID) != nil || ValidateSchemaResourceID(databaseID) != nil {
+		return "", "", ErrInvalidSchemaResourceID
+	}
+	return projectID, databaseID, nil
 }

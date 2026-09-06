@@ -161,13 +161,16 @@ func ImportProject(ctx context.Context, db *clients.Database, projectID, inDir s
 		if err != nil {
 			return nil, fmt.Errorf("import: decode indexes of %s/%s: %w", c.DatabaseID, c.CollectionID, err)
 		}
+		// 物理表名 = collectionID（2026-09-06 勘误，redesign §4.2）：manifest
+		// 的 physical_name 字段忽略——旧 base32 导出物导入时按逻辑名重算。
+		physical := c.CollectionID
 		err = p.withOwnerTx(ctx, func(txCtx context.Context) error {
 			if err := p.ensureSchema(txCtx, schema); err != nil {
 				return err
 			}
 			// 清位（幂等恢复）：物理表与 catalog 行一并清除后按 manifest 重建。
 			if _, err := p.conn(txCtx).ExecContext(txCtx,
-				fmt.Sprintf(`DROP TABLE IF EXISTS %s CASCADE`, tableName(schema, c.PhysicalName))); err != nil {
+				fmt.Sprintf(`DROP TABLE IF EXISTS %s CASCADE`, tableName(schema, physical))); err != nil {
 				return err
 			}
 			if _, err := p.conn(txCtx).NewDelete().Model((*model.DocumentCollection)(nil)).
@@ -181,14 +184,14 @@ func ImportProject(ctx context.Context, db *clients.Database, projectID, inDir s
 			// 与 CreateCollection 相同的 DDL 汇聚点：建表（系统列 + attrs 列 +
 			// 默认索引 + RLS）→ _version reconcile → 声明索引。业务库集合恒
 			// 用户集合（is_system=false，_version/RLS 全套）。
-			if err := p.createCollectionTable(txCtx, schema, c.PhysicalName, internalID, attrs, false); err != nil {
+			if err := p.createCollectionTable(txCtx, schema, physical, internalID, attrs, false); err != nil {
 				return err
 			}
-			if err := p.reconcileVersionColumn(txCtx, schema, c.PhysicalName, false); err != nil {
+			if err := p.reconcileVersionColumn(txCtx, schema, physical, false); err != nil {
 				return err
 			}
 			for _, idx := range idxs {
-				if err := p.createCollectionIndex(txCtx, schema, c.PhysicalName, idx, attrs); err != nil {
+				if err := p.createCollectionIndex(txCtx, schema, physical, idx, attrs); err != nil {
 					return err
 				}
 			}
@@ -197,9 +200,9 @@ func ImportProject(ctx context.Context, db *clients.Database, projectID, inDir s
 		if err != nil {
 			return nil, fmt.Errorf("import: rebuild %s/%s: %w", c.DatabaseID, c.CollectionID, err)
 		}
-		// 物理名缓存（B13c）：import 清位重建后写穿（manifest 携带的原物理名
-		// 即重建后的物理名），防本实例陈旧键指向已 DROP 的表。
-		p.storePhysicalName(projectID, c.DatabaseID, c.CollectionID, c.PhysicalName)
+		// 存在性缓存（原 B13c 物理名缓存）：import 清位重建后写穿，防本实例
+		// 陈旧键指向已 DROP 的表。
+		p.storePhysicalName(projectID, c.DatabaseID, c.CollectionID, physical)
 		report.CollectionsRestored = append(report.CollectionsRestored,
 			c.DatabaseID+"/"+c.CollectionID)
 	}
@@ -252,14 +255,13 @@ func sortStrings(s []string) {
 	}
 }
 
-// insertCollectionMetadataNamed 沿用 manifest 的物理名与其余 catalog 字段重建
-// catalog_collections 行（B5 import 专用，替代 insertCollectionMetadata 的
-// 随机分配路径）：DDLSeq/SchemaVersion/时间戳原样保真，后续 CreateAttribute/
-// CreateIndex 的 ddl_seq CAS 在恢复值上继续成立。物理名全局唯一索引若与
-// 存量撞名（跨项目残留）原样报 23505——不换名重试，导入物必须自洽。
+// insertCollectionMetadataNamed 按其余 catalog 字段重建 catalog_collections
+// 行（B5 import 专用）：DDLSeq/SchemaVersion/时间戳原样保真，后续
+// CreateAttribute/CreateIndex 的 ddl_seq CAS 在恢复值上继续成立。物理名恒 =
+// collectionID（2026-09-06 勘误），manifest 的 physical_name 字段忽略。
 func insertCollectionMetadataNamed(idb bun.IDB, projectID string, c *ExportedCollection) error {
-	if c.PhysicalName == "" {
-		return status.Error(codes.Internal, "manifest collection has empty physical_name")
+	if c.CollectionID == "" {
+		return status.Error(codes.Internal, "manifest collection has empty collection_id")
 	}
 	perms, attrs, idxs := c.Permissions, c.Attrs, c.Indexes
 	if perms == "" {
@@ -283,7 +285,7 @@ func insertCollectionMetadataNamed(idb bun.IDB, projectID string, c *ExportedCol
 		DatabaseID:       c.DatabaseID,
 		CollectionID:     c.CollectionID,
 		Name:             c.Name,
-		PhysicalName:     c.PhysicalName,
+		PhysicalName:     c.CollectionID,
 		DocumentSecurity: c.DocumentSecurity,
 		Disabled:         c.Disabled,
 		IsSystem:         false,

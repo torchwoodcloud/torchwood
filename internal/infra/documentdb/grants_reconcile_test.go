@@ -137,7 +137,7 @@ func TestGrantsReconcile_DeviationRestored(t *testing.T) {
 	now := time.Now()
 	_, err := env.db.NewInsert().Model(&model.DocumentCollection{
 		ProjectID: env.project, DatabaseID: "app", CollectionID: "ghost",
-		Name: "Ghost", PhysicalName: "c_ghostmissing", DocumentSecurity: false,
+		Name: "Ghost", PhysicalName: "ghost", DocumentSecurity: false,
 		Permissions: "[]", Attrs: "[]", Indexes: "[]",
 		SchemaVersion: 1, DDLSeq: 1, CreatedAt: now, UpdatedAt: now,
 	}).Exec(ctx)

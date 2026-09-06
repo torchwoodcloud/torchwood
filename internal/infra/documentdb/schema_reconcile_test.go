@@ -172,8 +172,8 @@ func TestSchemaReconcile_ThreeDriftClasses(t *testing.T) {
 	require.Equal(t, 0, rep2.Failed)
 }
 
-// reconcileGhostName 拼一个合法的幽灵表名（c_ 前缀 + 测试专属后缀，不与
-// 服务端分配名冲突）。
+// reconcileGhostName 拼一个合法的幽灵表名（c_ghost_ 前缀 + 真实名变体，
+// 不与任何集合物理表名冲突）。
 func reconcileGhostName(physical string) string {
 	return "c_ghost_" + physical[2:]
 }

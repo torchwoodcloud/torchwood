@@ -256,6 +256,9 @@ message Database {
 
 message CreateCollectionRequest {
   string database_id = 1;
+  // 集合 ID：^[a-z_][a-z0-9_]*$，≤40（2026-09-06 收紧为小写——集合 ID 同时
+  // 作为业务库物理表名，小写使 psql/pg_dump 等运维路径免引号直用）。索引 ID
+  // 组合长度约束另见索引创建入口。
   string id = 2;
   string name = 3;
   repeated string permissions = 4;

@@ -18,8 +18,9 @@ CREATE TABLE catalog_collections (
     database_id       TEXT NOT NULL,
     collection_id     TEXT NOT NULL,
     name              TEXT NOT NULL,
-    -- 物理名服务端分配（c_<base32(8)>，全局唯一）——内部实现细节，不出现在
-    -- 任何 API 响应；sentinel 系统集合物理名 = 逻辑名（静态表不可改名）。
+    -- 物理名 = collection_id 冗余投影（2026-09-06 勘误：随机物理名 c_<base32>
+    -- 退役，物理表名 = 逻辑 collectionID，运维可读；redesign §4.2 勘误登记）。
+    -- 不出现在任何 API 响应；sentinel 系统集合同理（静态表名 = 逻辑名）。
     physical_name     TEXT NOT NULL,
     document_security BOOLEAN NOT NULL DEFAULT TRUE,
     disabled          BOOLEAN NOT NULL DEFAULT FALSE,
@@ -41,12 +42,9 @@ CREATE TABLE catalog_collections (
         REFERENCES catalog_databases (project_id, database_id) ON DELETE CASCADE
 );
 
--- 物理名唯一性：分配名（c_<base32>）全局唯一；sentinel 系统集合的物理名 =
--- 静态表名（tw_<p>.users，schema 内局部），跨项目必然同名，排除在约束外。
--- 部分唯一索引承载该语义（约束名即 23505 判别键）。
-CREATE UNIQUE INDEX uq_catalog_collections_physical_name
-    ON catalog_collections (physical_name)
-    WHERE database_id <> '_';
+-- 物理名唯一性约束随 2026-09-06 勘误退役：物理名 = collection_id，唯一性由
+-- 主键 (project_id, database_id, collection_id) 一比一保证；物理表名语义上
+-- 局限于 (project, database) schema 内，跨项目/跨库同名合法。
 
 -- ListCollections 按 (project_id, database_id) 过滤 + created_at DESC 排序。
 CREATE INDEX idx_catalog_collections_db_created

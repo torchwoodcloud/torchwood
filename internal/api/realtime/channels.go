@@ -52,7 +52,8 @@ func parseChannel(ch string) (parsedChannel, bool) {
 //	databases . <db> . collections . <coll> [ . documents . <doc...> ]
 //
 // databaseId 须满足 schema 资源 id（pkg/ident）；collectionId 须满足
-// identifierRe（不含 "."）；documentId 取余下全部（可含 "." ":" "-"）。
+// collectionIDRe（小写，与 app 层 validateCollectionID 一致，不含 "."）；
+// documentId 取余下全部（可含 "." ":" "-"）。
 // 禁止 strings.Split 到 channel 任意位置后凭片段拼写，防止文档 id 含 "." 造成越权。
 func parseDatabasesChannel(ch string) (parsedChannel, bool) {
 	parts := strings.Split(ch, ".")
@@ -60,7 +61,7 @@ func parseDatabasesChannel(ch string) (parsedChannel, bool) {
 		return parsedChannel{}, false
 	}
 	dbID, collID := parts[1], parts[3]
-	if ident.ValidateSchemaResourceID(dbID) != nil || !identifierRe.MatchString(collID) {
+	if ident.ValidateSchemaResourceID(dbID) != nil || !collectionIDRe.MatchString(collID) {
 		return parsedChannel{}, false
 	}
 	rest := parts[4:]

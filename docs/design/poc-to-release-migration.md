@@ -112,6 +112,8 @@ CREATE INDEX IF NOT EXISTS idx_<phys>_acl ON tw_p_db.c_xxx USING gin ("_acl");
 
 ## 5. 直切点③：物理名解耦（存量表名 = 逻辑名 → `c_<base32(8)>`）
 
+> **【勘误 2026-09-06：本直切点整体作废，零迁移】** redesign §4.2 勘误登记裁决：随机物理名退役，**物理表名 = collectionID**（collectionID 收紧小写 `^[a-z_][a-z0-9_]*$` ≤40）。存量库的物理表名本来就是逻辑名，RENAME 迁移不再需要——`physical_name` 列值即 collection_id 冗余投影，唯一约束随 000003 基线删除。§4 搬迁器相应简化：catalog 行回填时 `physical_name = collection_id` 直拷，`newPhysicalName()` 分配与 `ALTER TABLE RENAME` 步骤删除。本节以下原文仅存档。
+
 随 §4 搬迁器一并执行，单独成节只为把不变量写死：
 
 1. **分配**：复用 `newPhysicalName()`（`catalog_codec.go`，5 字节熵 base32(8)，全局唯一约束 + 碰撞重试）。

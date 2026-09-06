@@ -52,6 +52,15 @@ func TestValidateIdentifier_LengthLimit(t *testing.T) {
 	st, _ = status.FromError(d.validateCollectionID(strings.Repeat("c", 41)))
 	require.Equal(t, codes.InvalidArgument, st.Code())
 
+	// collectionID 小写收紧（2026-09-06 勘误：物理表名 = collectionID，
+	// 小写使 psql/pg_dump 等运维路径免引号直用）。
+	require.NoError(t, d.validateCollectionID("posts"))
+	require.NoError(t, d.validateCollectionID("_system_events"))
+	require.Error(t, d.validateCollectionID("Posts"))
+	require.Error(t, d.validateCollectionID("1posts"))
+	require.Error(t, d.validateCollectionID("posts-app"))
+	require.Error(t, d.validateCollectionID(""))
+
 	// 索引 ID 专用上限 40。
 	require.NoError(t, d.ValidateIndex(databases.Index{ID: strings.Repeat("i", 40), Type: "key", Attributes: []string{"email"}}))
 	st, _ = status.FromError(d.ValidateIndex(databases.Index{ID: strings.Repeat("i", 41), Type: "key", Attributes: []string{"email"}}))

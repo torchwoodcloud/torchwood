@@ -24,10 +24,6 @@ import (
 	"github.com/torchwooddev/torchwood/pkg/ident"
 )
 
-// physicalNameAllocAttempts 限制物理名碰撞重试次数（5 字节熵 40 bit，
-// 撞库内既有名的概率可忽略；上限只防异常态下的死循环）。
-const physicalNameAllocAttempts = 8
-
 func (p *postgresDocumentDB) CreateCollection(ctx context.Context, projectID, databaseID, collectionID, name string, attrs []databases.Attribute, idxs []databases.Index, perms []databases.Permission, documentSecurity bool) error {
 	// sentinel 只允许系统名单集合（测试重建旧文档表）；生产入口已
 	// RejectExternalDatabaseID，不得对 "_" 建业务集合。测试播种走停 000008
@@ -74,8 +70,7 @@ func (p *postgresDocumentDB) CreateCollection(ctx context.Context, projectID, da
 	}
 
 	// DDL 与 catalog 元数据包进同一事务（PG 支持事务内 DDL），任一步失败
-	// 整体回滚，避免"物理表建成而元数据缺失"。元数据先行（预留物理名），
-	// 物理名碰撞在 INSERT 上换名重试，DDL 失败随回滚释放预留名。
+	// 整体回滚，避免"物理表建成而元数据缺失"。
 	var physicalName string
 	txErr := p.withOwnerTx(ctx, func(txCtx context.Context) error {
 		if err := p.ensureSchema(txCtx, schema); err != nil {
@@ -86,8 +81,9 @@ func (p *postgresDocumentDB) CreateCollection(ctx context.Context, projectID, da
 			return err
 		}
 		physicalName = physical
-		// 分配后的物理名是索引名的实际前缀段（idx_<phys>_<id> 自然 ≤63，
-		// 预决策 2）；sentinel 物理名 = 逻辑名，直调防线由此保留。
+		// 物理表名 = collectionID（2026-09-06 勘误），索引名前缀段即逻辑 ID；
+		// idx_<coll>_<id> 组合长度由入口与上方的 validateIndexNameLen 把关
+		//（63 字节截断类缺陷仍被机制性拒绝，而非自然消失）。
 		for _, idx := range idxs {
 			if err := validateIndexNameLen(physical, idx.ID); err != nil {
 				return err
@@ -123,9 +119,12 @@ func (p *postgresDocumentDB) CreateCollection(ctx context.Context, projectID, da
 	return p.mapError(txErr)
 }
 
-// insertCollectionMetadata 写入 catalog_collections 合一行（含物理名预留与
-// attrs/indexes/permissions JSONB）。返回分配的物理名；系统集合命中既有行时
-// 幂等成功（复用既有物理名），用户集合返回 ErrDuplicateKey（→ AlreadyExists）。
+// insertCollectionMetadata 写入 catalog_collections 合一行（attrs/indexes/
+// permissions JSONB）。physical_name 是 collectionID 的冗余投影（2026-09-06
+// 勘误：阶段②随机物理名退役，物理表名 = 逻辑 collectionID，运维可读；redesign
+// §4.2 标识符治理勘误登记），sentinel 系统集合同理（静态表名 = 逻辑名）。
+// 系统集合命中既有行时幂等成功（复用既有行走后续 IF NOT EXISTS DDL），用户
+// 集合返回 ErrDuplicateKey（→ AlreadyExists）。
 func (p *postgresDocumentDB) insertCollectionMetadata(ctx context.Context, projectID, databaseID, collectionID, name string, attrs []databases.Attribute, idxs []databases.Index, perms []databases.Permission, documentSecurity bool) (string, bool, error) {
 	attrsJSON, err := encodeAttributes(attrs)
 	if err != nil {
@@ -141,69 +140,40 @@ func (p *postgresDocumentDB) insertCollectionMetadata(ctx context.Context, proje
 	}
 	isSystem := databases.IsSystemCollection(projectID, databaseID, collectionID)
 	now := time.Now()
-	for attempt := 0; attempt < physicalNameAllocAttempts; attempt++ {
-		// sentinel 系统集合的物理表即静态表（不可改名），物理名 = 逻辑名。
-		candidate := newPhysicalName()
-		if databaseID == ident.ProjectDataPlaneID {
-			candidate = collectionID
-		}
-		m := &model.DocumentCollection{
-			ProjectID:        projectID,
-			DatabaseID:       databaseID,
-			CollectionID:     collectionID,
-			Name:             name,
-			PhysicalName:     candidate,
-			DocumentSecurity: documentSecurity,
-			IsSystem:         isSystem,
-			Permissions:      permsJSON,
-			Attrs:            attrsJSON,
-			Indexes:          idxsJSON,
-			SchemaVersion:    1,
-			DDLSeq:           1,
-			CreatedAt:        now,
-			UpdatedAt:        now,
-		}
-		res, err := p.conn(ctx).NewInsert().Model(m).
-			On("CONFLICT (project_id, database_id, collection_id) DO NOTHING").Exec(ctx)
-		if err != nil {
-			if isPhysicalNameConflict(err) {
-				// 全局物理名碰撞：换名重试（有界）。
-				continue
-			}
-			return "", false, err
-		}
-		affected, err := res.RowsAffected()
-		if err != nil {
-			return "", false, err
-		}
-		if affected > 0 {
-			return candidate, false, nil
-		}
-		// 集合行已存在：系统集合视为幂等成功（并发首请求防护，复用既有
-		// 物理名走后续 IF NOT EXISTS DDL）；用户集合返回 ErrDuplicateKey。
-		if !isSystem {
-			return "", false, ErrDuplicateKey
-		}
-		var existing string
-		if err := p.conn(ctx).NewSelect().Model((*model.DocumentCollection)(nil)).
-			Column("physical_name").
-			Where("project_id = ? AND database_id = ? AND collection_id = ?", projectID, databaseID, collectionID).
-			Scan(ctx, &existing); err != nil {
-			return "", false, err
-		}
-		return existing, true, nil
+	m := &model.DocumentCollection{
+		ProjectID:        projectID,
+		DatabaseID:       databaseID,
+		CollectionID:     collectionID,
+		Name:             name,
+		PhysicalName:     collectionID,
+		DocumentSecurity: documentSecurity,
+		IsSystem:         isSystem,
+		Permissions:      permsJSON,
+		Attrs:            attrsJSON,
+		Indexes:          idxsJSON,
+		SchemaVersion:    1,
+		DDLSeq:           1,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
-	return "", false, status.Error(codes.Internal, "physical name allocation exhausted retries")
-}
-
-// isPhysicalNameConflict 识别 23505 且约束为物理名唯一索引（区别于集合
-// 主键/名称冲突——后者不可换名重试）。
-func isPhysicalNameConflict(err error) bool {
-	var fielder pgErrorFielder
-	if !errors.As(err, &fielder) {
-		return false
+	res, err := p.conn(ctx).NewInsert().Model(m).
+		On("CONFLICT (project_id, database_id, collection_id) DO NOTHING").Exec(ctx)
+	if err != nil {
+		return "", false, err
 	}
-	return fielder.Field('C') == "23505" && fielder.Field('n') == physicalNameConstraint
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return "", false, err
+	}
+	if affected > 0 {
+		return collectionID, false, nil
+	}
+	// 集合行已存在：系统集合视为幂等成功（并发首请求防护，物理表走后续
+	// IF NOT EXISTS DDL）；用户集合返回 ErrDuplicateKey。
+	if !isSystem {
+		return "", false, ErrDuplicateKey
+	}
+	return collectionID, true, nil
 }
 
 func (p *postgresDocumentDB) GetCollection(ctx context.Context, projectID, databaseID, collectionID string) (*databases.Collection, error) {

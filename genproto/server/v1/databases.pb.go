@@ -452,12 +452,15 @@ func (x *Database) GetUpdatedAt() *timestamppb.Timestamp {
 }
 
 type CreateCollectionRequest struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	DatabaseId       string                 `protobuf:"bytes,1,opt,name=database_id,json=databaseId,proto3" json:"database_id,omitempty"`
-	Id               string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
-	Name             string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Permissions      []string               `protobuf:"bytes,4,rep,name=permissions,proto3" json:"permissions,omitempty"`
-	DocumentSecurity *bool                  `protobuf:"varint,5,opt,name=document_security,json=documentSecurity,proto3,oneof" json:"document_security,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	DatabaseId string                 `protobuf:"bytes,1,opt,name=database_id,json=databaseId,proto3" json:"database_id,omitempty"`
+	// 集合 ID：^[a-z_][a-z0-9_]*$，≤40（2026-09-06 收紧为小写——集合 ID 同时
+	// 作为业务库物理表名，小写使 psql/pg_dump 等运维路径免引号直用）。索引 ID
+	// 组合长度约束另见索引创建入口。
+	Id               string   `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	Name             string   `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Permissions      []string `protobuf:"bytes,4,rep,name=permissions,proto3" json:"permissions,omitempty"`
+	DocumentSecurity *bool    `protobuf:"varint,5,opt,name=document_security,json=documentSecurity,proto3,oneof" json:"document_security,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }

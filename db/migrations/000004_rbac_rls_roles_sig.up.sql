@@ -243,13 +243,24 @@ DECLARE
     v_acl text[];
     v_sigtenant bigint;
     n integer;
+    v_ids text;
+    v_split integer;
 BEGIN
     v_sigtenant := public.tw_tenant();
     IF v_sigtenant IS NULL OR v_sigtenant <> p_tenant THEN
         RETURN 0;
     END IF;
+    -- 物理名 = collectionID 后（2026-09-06 勘误）跨项目/跨库同名合法，
+    -- catalog 白名单校验必须按 p_schema 反解 (project, database) 三元组
+    -- 收窄，否则同名集合 >1 行触发 21000。两端 ID 字符集不含下划线
+    --（pkg/ident），前缀后第一道 "_" 即分割点，反解无歧义。
+    v_ids := substring(p_schema from 4);
+    v_split := position('_' in v_ids);
     SELECT cc.document_security, cc.permissions INTO v_docsec, v_perms
-    FROM public.catalog_collections cc WHERE cc.physical_name = p_table;
+    FROM public.catalog_collections cc
+    WHERE cc.project_id = left(v_ids, v_split - 1)
+      AND cc.database_id = substring(v_ids from v_split + 1)
+      AND cc.physical_name = p_table;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'unknown collection table: %', p_table USING ERRCODE = '42704';
     END IF;

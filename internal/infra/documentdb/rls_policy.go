@@ -20,13 +20,23 @@ import (
 	"strings"
 
 	"github.com/torchwooddev/torchwood/internal/infra/clients"
+	"github.com/torchwooddev/torchwood/pkg/ident"
 )
 
-// policyCatalogLookup 生成按物理名点查 catalog_collections 的标量子查询
-//（InitPlan 化：无行变量相关性，规划器转为每语句一次）。
-func policyCatalogLookup(physical, expr string) string {
-	return fmt.Sprintf(`(SELECT %s FROM public.catalog_collections cc WHERE cc.physical_name = '%s')`,
-		expr, escapeSQLStringLiteral(physical))
+// policyCatalogLookup 生成按 (project, database, 物理名) 点查 catalog_collections
+// 的标量子查询（InitPlan 化：无行变量相关性，规划器转为每语句一次）。
+// 物理名 = collectionID 后（2026-09-06 勘误）跨项目/跨库同名合法，子查询必须
+// 三元组等值收窄，否则同名集合 >1 行触发 21000。
+func policyCatalogLookup(schema, physical, expr string) string {
+	projectID, databaseID, err := ident.ParseSchemaName(schema)
+	if err != nil {
+		// 理论不可达：schema 由 ident.SchemaName 生成。保留断言作纵深防御，
+		// 不让非法 schema 静默生成宽匹配 policy。
+		panic(fmt.Sprintf("rls policy: parse schema %q: %v", schema, err))
+	}
+	return fmt.Sprintf(
+		`(SELECT %s FROM public.catalog_collections cc WHERE cc.project_id = '%s' AND cc.database_id = '%s' AND cc.physical_name = '%s')`,
+		expr, escapeSQLStringLiteral(projectID), escapeSQLStringLiteral(databaseID), escapeSQLStringLiteral(physical))
 }
 
 // rlsPolicySQL 生成 <tbl> 的四条 policy 语句（DROP IF EXISTS + CREATE，幂等重建）。
@@ -36,9 +46,9 @@ func policyCatalogLookup(physical, expr string) string {
 func rlsPolicySQL(schema, physical string) []string {
 	tbl := tableName(schema, physical)
 	roles := `(SELECT public.tw_roles())`
-	docsec := policyCatalogLookup(physical, "cc.document_security")
+	docsec := policyCatalogLookup(schema, physical, "cc.document_security")
 	collAllows := func(typ string) string {
-		return policyCatalogLookup(physical, fmt.Sprintf("public.tw_coll_allows(cc.permissions, public.tw_roles(), '%s')", typ))
+		return policyCatalogLookup(schema, physical, fmt.Sprintf("public.tw_coll_allows(cc.permissions, public.tw_roles(), '%s')", typ))
 	}
 	fastPath := fmt.Sprintf(
 		`COALESCE(cardinality(_acl) = 0 AND cardinality(%s) > 0 AND (%s OR %s OR %s), false)`,

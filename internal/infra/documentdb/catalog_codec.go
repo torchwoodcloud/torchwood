@@ -4,8 +4,6 @@
 package documentdb
 
 import (
-	"crypto/rand"
-	"encoding/base32"
 	"encoding/json"
 	"strings"
 
@@ -176,21 +174,4 @@ func decodePermissions(raw string) ([]databases.Permission, error) {
 		out = append(out, databases.Permission{Type: p.Type, Role: p.Role})
 	}
 	return out, nil
-}
-
-// physicalNameConstraint 是 catalog_collections.physical_name 部分唯一索引名，
-// 23505 时按其区分"物理名碰撞（换名重试）"与"集合主键冲突（AlreadyExists）"。
-const physicalNameConstraint = "uq_catalog_collections_physical_name"
-
-// newPhysicalName 分配集合物理表名 c_<base32(8)>（小写字母数字，5 字节熵 →
-// 8 字符，redesign §4.2 标识符治理）：全局唯一约束 + 调用方碰撞重试。物理名
-// 是内部实现细节，不得出现在任何 API 响应。
-func newPhysicalName() string {
-	var b [5]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		// crypto/rand 失败属进程级异常；退化为零熵名会在唯一约束上碰撞重试，
-		// 由调用方的有界重试兜底并最终报错。
-		return "c_00000000"
-	}
-	return "c_" + strings.ToLower(base32.StdEncoding.EncodeToString(b[:]))
 }

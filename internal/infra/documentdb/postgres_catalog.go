@@ -142,16 +142,17 @@ func (p *postgresDocumentDB) businessSchema(projectID, databaseID string) (strin
 }
 
 // resolvePhysicalTable 把 (project, database, collection) 解析为行查询/DDL 的
-// 物理寻址（internalID, schema, 物理表名）。阶段②包 B（redesign §4.2 标识符
-// 治理，预决策 4）：
-//   - sentinel 直通逻辑名（物理表即 tw_<project> 静态表，零额外查询）；
-//   - 业务库单条 catalog 点查取 physical_name——不依赖 GetCollection 返回的
-//     coll 对象，System/bypass 聚合与列表路径（跳过 GetCollection）同样可用；
-//   - 行缺失 → NotFound（物理名是内部实现细节，物理表与 catalog 行同生共死）。
+// 物理寻址（internalID, schema, 物理表名）。2026-09-06 勘误（redesign §4.2
+// 标识符治理回退，运维可读性裁决）：物理表名 = 逻辑 collectionID，阶段②的
+// c_<base32> 随机分配退役；sentinel 直通逻辑名（物理表即 tw_<project> 静态
+// 表）不变。
 //
-// 物理名进程内缓存（B13c，转出 POC 落地；阶段②预决策 4 的"评估后置"收口）：
-// 点查实测占业务查询单次往返的 ~26%（≥5% 判据 → 缓存），热路径命中后零额外
-// 往返。失效面 = catalog_collections 的全部删除路径（DeleteCollection /
+// 业务库仍单条 catalog 点查——物理名已知（= collectionID）后，点查唯一剩余
+// 价值是存在性判定：行缺失 → NotFound（物理表与 catalog 行同生共死，裸 42P01
+// 会把"集合不存在"污染成内部错误）；不依赖 GetCollection 返回的 coll 对象，
+// System/bypass 聚合与列表路径（跳过 GetCollection）同样可用。存在性缓存
+// （原 B13c 物理名缓存）保留：点查实测占业务查询单次往返 ~26%，热路径命中后
+// 零额外往返；失效面 = catalog_collections 的全部删除路径（DeleteCollection /
 // DeleteDatabase / import 清位）+ CreateCollection 写穿覆盖；跨实例陈旧语义
 // fail-loud（42P01 表不存在），无静默错写。
 func (p *postgresDocumentDB) resolvePhysicalTable(ctx context.Context, projectID, databaseID, collectionID string) (int64, string, string, error) {
@@ -187,8 +188,8 @@ func physicalNameCacheKey(projectID, databaseID, collectionID string) string {
 	return projectID + "\x1f" + databaseID + "\x1f" + collectionID
 }
 
-// storePhysicalName 在 CreateCollection 提交后写穿覆盖（同名逻辑 ID 重建必得
-// 新物理名，覆盖即失效）。
+// storePhysicalName 在 CreateCollection 提交后写穿覆盖（同名逻辑 ID 重建复用
+// 同名物理表，覆盖即收敛陈旧键）。
 func (p *postgresDocumentDB) storePhysicalName(projectID, databaseID, collectionID, physical string) {
 	p.physicalNameCache.Store(physicalNameCacheKey(projectID, databaseID, collectionID), physical)
 }
@@ -209,6 +210,7 @@ func (p *postgresDocumentDB) dropDatabasePhysicalNames(projectID, databaseID str
 	})
 }
 
+// tableName 业务文档表的寻址拼装：物理表名 = collectionID（2026-09-06 勘误）。
 func tableName(schema, collectionID string) string {
 	return quoteIdent(schema) + "." + quoteIdent(collectionID)
 }

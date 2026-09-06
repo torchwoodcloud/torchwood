@@ -17,9 +17,13 @@ import (
 
 var identifierRe = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
+// collectionIDRe 收紧集合 ID 为小写（2026-09-06 勘误：物理表名 = collectionID，
+// 阶段②随机物理名退役；小写使 psql/pg_dump 等运维路径免引号直用）。attribute
+// key 等其余标识符不受此限，仍走 identifierRe。
+var collectionIDRe = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
+
 // 标识符长度上限（POC 期入口治理，封死 PG 63 字节截断把两个仅超长部分不同
-// 的名字映射到同一物理对象的问题；redesign 阶段②逻辑/物理名解耦后收紧为
-// collectionID ≤36 [a-z0-9-] 并服务端分配物理名，本组上限随之退役）。
+// 的名字映射到同一物理对象的问题）。
 const (
 	// maxCollectionIDLen 约束物理表名（= collectionID），并为索引名
 	// idx_<coll>_<id> / idx_<coll>_tenant_created 的前缀段留出预算。
@@ -871,13 +875,20 @@ func (d *Databases) ValidateIdentifier(id string) error {
 	return nil
 }
 
-// validateCollectionID 在通用标识符校验之上叠加集合 ID 专用上限
-// （物理表名 + 索引名前缀段预算）。
+// validateCollectionID 叠加集合 ID 专用约束：小写字符集（物理表名 =
+// collectionID，2026-09-06 勘误）+ 长度上限（表名 + 索引名前缀段预算）。
 func (d *Databases) validateCollectionID(id string) error {
+	if id == "" {
+		return status.Error(codes.InvalidArgument, "collection id is required")
+	}
 	if len(id) > maxCollectionIDLen {
 		return status.Errorf(codes.InvalidArgument, "collection id %q exceeds maximum length of %d", id, maxCollectionIDLen)
 	}
-	return d.ValidateIdentifier(id)
+	if !collectionIDRe.MatchString(id) {
+		return status.Errorf(codes.InvalidArgument,
+			"collection id %q must match %s (lowercase: it doubles as the physical table name)", id, collectionIDRe.String())
+	}
+	return nil
 }
 
 // validateIndexNameLen 校验物理索引名 idx_<coll>_<id> 的拼接长度：静态上限

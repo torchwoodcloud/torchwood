@@ -242,9 +242,10 @@ func TestCreateCollection_ConcurrentSameID_AlreadyExists(t *testing.T) {
 	require.Equal(t, n-1, alreadyExists)
 }
 
-// TestCreateCollection_PhysicalNameReserved：业务集合行预留服务端分配的
-// c_<base32> 物理名（全局唯一）；sentinel 系统集合物理名 = 逻辑名（静态表）。
-func TestCreateCollection_PhysicalNameReserved(t *testing.T) {
+// TestCreateCollection_PhysicalNameProjection：physical_name = collection_id
+// 冗余投影（2026-09-06 勘误，随机物理名退役，运维可读）；sentinel 系统集合
+// 同理（静态表名 = 逻辑名）。
+func TestCreateCollection_PhysicalNameProjection(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -261,16 +262,19 @@ func TestCreateCollection_PhysicalNameReserved(t *testing.T) {
 	require.NoError(t, docDB.CreateCollection(ctx, projectID, "app", "comments", "Comments", nil, nil, nil, true))
 	require.NoError(t, testutil.SeedSystemDocumentCollections(ctx, db, docDB, projectID))
 
-	var phys []string
-	require.NoError(t, db.NewSelect().Model((*model.DocumentCollection)(nil)).
-		Column("physical_name").
-		Where("project_id = ? AND database_id = ?", projectID, "app").
-		Scan(ctx, &phys))
-	require.Len(t, phys, 2)
-	for _, name := range phys {
-		require.Regexp(t, `^c_[a-z2-7]{8}$`, name, "业务集合物理名由服务端分配")
+	type row struct {
+		CollectionID string
+		PhysicalName string
 	}
-	require.NotEqual(t, phys[0], phys[1], "不同集合物理名不同（全局唯一）")
+	var rows []row
+	require.NoError(t, db.NewSelect().Model((*model.DocumentCollection)(nil)).
+		Column("collection_id", "physical_name").
+		Where("project_id = ? AND database_id = ?", projectID, "app").
+		Scan(ctx, &rows))
+	require.Len(t, rows, 2)
+	for _, r := range rows {
+		require.Equal(t, r.CollectionID, r.PhysicalName, "物理名 = collection_id 冗余投影")
+	}
 
 	// sentinel 系统集合：物理名 = 逻辑名（静态表不可改名）。
 	var sentinelPhys string
@@ -280,7 +284,7 @@ func TestCreateCollection_PhysicalNameReserved(t *testing.T) {
 		Scan(ctx, &sentinelPhys))
 	require.Equal(t, "users", sentinelPhys)
 
-	// 物理名不出现在 API 形状（domain Collection）里。
+	// 物理寻址字段不出现在 API 形状（domain Collection）里。
 	got, err := docDB.GetCollection(ctx, projectID, "app", "posts")
 	require.NoError(t, err)
 	require.Equal(t, "posts", got.ID)
