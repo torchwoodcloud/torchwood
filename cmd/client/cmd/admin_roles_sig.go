@@ -25,10 +25,10 @@ const adminJWTSecretFlagEnv = "TORCHWOOD_SECURITY_JWT_SECRET"
 //
 // B15 形态约束（docs/developer/13-operations.md §4.5）：
 //   - 执行身份必须是 **owner/引导账号**（迁移 DSN），不是运行态 authenticator
-//     DSN——000033 起 authenticator 对 tw_secrets 零权限，伪造通道封死；
+//     DSN——000004 起 authenticator 对 tw_secrets 零权限，伪造通道封死；
 //   - 幂等（重跑安全）；换钥 = 改运行态 security.jwt.secret 后重跑本作业，
 //     滚动重启窗口内旧 sig 经 previous 槽验签（双钥语义，门禁 A4）；
-//   - 部署时序：迁移（000033）→ 本作业 → server/worker 启动。服务在密钥
+//   - 部署时序：迁移（000004）→ 本作业 → server/worker 启动。服务在密钥
 //     未落库时启动，文档查询 fail-closed（零角色）属预期——首个业务查询
 //     暴露而非静默放行。
 func newAdminSyncRolesSigCmd() *cobra.Command {

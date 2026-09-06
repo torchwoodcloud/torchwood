@@ -91,7 +91,7 @@ func TestExecIdentity_RoleSeparation(t *testing.T) {
 		_, _ = db.ExecContext(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %s CASCADE`, quoteIdent(schema)))
 	})
 
-	// tw_owner 可建 schema + 表（CREATE ON DATABASE 由 000026 授予）。
+	// tw_owner 可建 schema + 表（CREATE ON DATABASE 由 000004 授予）。
 	require.NoError(t, docDB.withOwnerTx(ctx, func(txCtx context.Context) error {
 		return docDB.ensureSchema(txCtx, schema)
 	}))

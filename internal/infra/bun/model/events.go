@@ -11,7 +11,7 @@ import (
 // （public 元数据库，与文档写同 COMMIT；payload 为完整事件信封 JSON，含 acl）。
 // v3 起经济事件复用同表（设计 §5.1）：channel 落显式扇出频道（D17），
 // 文档事件 channel 为 NULL。
-// seq 为全局分配序（阶段④，000028 GENERATED ALWAYS AS IDENTITY）：INSERT
+// seq 为全局分配序（阶段④，000002 GENERATED ALWAYS AS IDENTITY）：INSERT
 // 必须列白名单排除本列（bun 无 identity 特判），读取走 SELECT 列清单。
 type DocumentEventsOutbox struct {
 	bun.BaseModel `bun:"table:document_events_outbox,alias:deo"`

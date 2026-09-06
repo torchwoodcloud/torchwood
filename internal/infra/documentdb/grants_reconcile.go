@@ -133,7 +133,7 @@ func (p *postgresDocumentDB) reconcileCollectionColumnGrants(ctx context.Context
 			continue
 		}
 		// 与 DDL touch（reconcileVersionColumn）同特权路径：tw_owner 事务内
-		// 执行（000026 后表 owner = tw_owner，DSN authenticator 需 SET LOCAL
+		// 执行（000004 后表 owner = tw_owner，DSN authenticator 需 SET LOCAL
 		// ROLE 才握有 GRANT/REVOKE 权），顺带把 REVOKE→GRANT 序列包成单事务
 		// ——中断只可能是全有或全无，不留半刷新态。
 		txErr := p.withOwnerTx(ctx, func(txCtx context.Context) error {

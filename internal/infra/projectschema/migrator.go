@@ -109,7 +109,7 @@ func applyUpTo(ctx context.Context, db *clients.Database, projectID string, maxV
 			fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS %s`, quoted)); err != nil {
 			return fmt.Errorf("create project schema: %w", err)
 		}
-		// RBAC schema 级授权（阶段③包 B，public 000026 建角色）：schema 供给
+		// RBAC schema 级授权（阶段③包 B，public 000004 建角色）：schema 供给
 		// 的一部分而非版本化迁移——ApplyUpTo 截断（legacy 状态模拟）也必须授予，
 		// 否则 tw_owner 无法在项目数据面建 sentinel 集合表。幂等可重复。
 		if _, err := db.Conn(txCtx).ExecContext(txCtx, fmt.Sprintf(

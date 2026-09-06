@@ -431,7 +431,7 @@ func TestRLS_Behavior_TenantColumnLocked(t *testing.T) {
 }
 
 // TestRLS_Behavior_ACLColumnLockedToSystemPath（R13a + 阶段③-b 包 C + R16 ③）：
-// _acl 的**删改**通道唯一化为 tw_set_document_acl（000029 修订，函数内租户
+// _acl 的**删改**通道唯一化为 tw_set_document_acl（000004，函数内租户
 // 绑定 + 可见性校验）。tw_app 即使注入正常 roles（policy 判定全放行）也不得
 // 直改 _acl：UPDATE 列级 GRANT 排除 _acl（非自锁变更可过 SELECT policy 新行
 // 复检，该旁路必须从列权限上封死）；INSERT 携带 _acl 是合法通道（R16 ③ 恢复：

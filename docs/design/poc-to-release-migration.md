@@ -1,5 +1,6 @@
 # POC 直切点的存量升级路径（转出迁移方案）
 
+> **归档说明（2026-09-06）**：本方案的适用前提——"POC 期任一历史版本上、数据不可弃的真实存量部署"——经拍板确认**不存在**（当前无任何生产/对外存量库），存量处置一律重建（`docker:purge` + `db:migrate`）。本文转历史材料存档，不再维护；同日 `db/migrations` 基线重定为 5 个迁移（000001 控制面 / 000002 事件脊柱 / 000003 全局 catalog+账本 / 000004 RBAC·RLS·roles_sig / 000005 pgvector），文中 000023–000033 为旧编号，映射见 `docs/developer/15-exit-poc.md` 文首横幅。
 > 状态：**决策材料（A5 拍板附件），待维护者评审**——本文件履行 redesign 状态头义务（"转出 POC 前需重审本文所有'直接切换'类表述并补迁移方案"），对应 `docs/developer/15-exit-poc.md` A5 条目。评审通过后本文件转为活跃方案；实施类条目（G2 迁移器、000031 补丁）按 §8 的结论立项。
 > 成文：2026-09-05，基于对 redesign 全文、`db/migrations/000001..000030`、`internal/infra/documentdb`（rls_policy.go / postgres_collection_ddl.go / catalog_codec.go / acl_column.go）、`internal/infra/projectschema`（000001/000009/000011 与 git 历史 copy.go@47ea7ac/fa0834d）、`internal/pkg/bootkit/hooks.go` 的逐项核验。
 > 适用对象：**在 POC 期任一历史版本上建立、且数据不可弃的真实存量部署**。本地/测试/可弃数据一律走 POC 定义（`docker:purge` + `db:migrate` 重建），不适用本文件。

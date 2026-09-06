@@ -1,7 +1,7 @@
-// roles_sig 密钥面收口时序测试（转出 POC 门禁 B15）：部署顺序 = 迁移（000033）
+// roles_sig 密钥面收口时序测试（转出 POC 门禁 B15）：部署顺序 = 迁移（000004）
 // → `torchwood admin sync-roles-sig`（owner 身份落库）→ 服务启动；服务在密钥
 // 未落库时启动 → tw_roles() 验签 fail-closed（零角色）→ 文档查询不可见，属
-// 预期（既有 000029 fail-closed 语义：与漏注入/错 sig 同型，首个业务查询暴露
+// 预期（既有 000004 fail-closed 语义：与漏注入/错 sig 同型，首个业务查询暴露
 // 而非静默放行）。本测试以 "DELETE tw_secrets 模拟 owner 未跑作业 → 零角色
 // 不可见 → owner 身份重跑作业 → 恢复" 锁定该时序契约。
 package documentdb

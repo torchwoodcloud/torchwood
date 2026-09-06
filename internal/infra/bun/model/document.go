@@ -6,7 +6,7 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// 全局 catalog 两表（db/migrations/000025，redesign §4.2 / C1）：
+// 全局 catalog 两表（db/migrations/000003，redesign §4.2 / C1）：
 // catalog_databases 简单行；catalog_collections 把 attrs/indexes/permissions
 // 以 JSONB 列合一（每项目四表模型已退役）。JSONB 列用 string 承载——
 // bun/pgdriver 对 jsonb 列的 string 参数按文本协议发送由 PG 隐式转型，
@@ -42,7 +42,7 @@ type DocumentCollection struct {
 	UpdatedAt        time.Time `bun:"updated_at,notnull"`
 }
 
-// DocumentMigration 是 copy 迁移任务行（000032，转出 POC 门禁 B4，redesign
+// DocumentMigration 是 copy 迁移任务行（000003，转出 POC 门禁 B4，redesign
 // §4.6）：改类型/收紧 = 新列（物理名带版本后缀）→ 异步批量回填 → 锁窗校验
 // → 原子 swap → 旧列 deprecated。FromAttr/ToAttr 以 attrs JSONB 同构形态
 // 落库（documentdb 层编解码）。phase：backfilling | swapped | retired | failed。

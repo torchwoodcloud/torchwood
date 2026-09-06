@@ -1,2 +1,0 @@
-DROP TABLE IF EXISTS admin_projects CASCADE;
-DROP TABLE IF EXISTS audit_logs CASCADE;

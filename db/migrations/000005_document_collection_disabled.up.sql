@@ -1,2 +1,0 @@
-ALTER TABLE document_collections
-    ADD COLUMN IF NOT EXISTS disabled BOOLEAN NOT NULL DEFAULT FALSE;

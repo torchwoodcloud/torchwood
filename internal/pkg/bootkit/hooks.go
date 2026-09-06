@@ -45,7 +45,7 @@ type (
 // 与调用方注入的可选扩展钩子。roles 签名密钥同步钩子已退役（转出 POC 门禁
 // B15）：密钥落库改部署期 owner 一次性作业（`torchwood admin sync-roles-sig`，
 // clients.SyncRolesSigKey），运行 DSN 对 public.tw_secrets 零权限（迁移
-// 000033）——进程内派生钥仍由 InitRolesSigSigning 启用（注入 GUC 用进程内钥，
+// 000004）——进程内派生钥仍由 InitRolesSigSigning 启用（注入 GUC 用进程内钥，
 // 无需读库）。
 // grantsReconcile / scaleMetrics / schemaReconcile 由组合根注入（cmd/server
 // 分别传 documentdb 列授权全量 reconcile（门禁 A1）、规模预警线表计数采集
@@ -97,7 +97,7 @@ func ProjectSchemaEnsureHook(repo projects.Repository, db *clients.Database, log
 
 // （RolesSigKeySyncHook 已退役（转出 POC 门禁 B15）：密钥落库改部署期 owner
 // 一次性作业 `torchwood admin sync-roles-sig`——运行 DSN 持 tw_secrets 四权
-// 意味着 DSN 泄漏可读密钥伪造 app.roles GUC 提权，000033 REVOKE 后伪造通道
+// 意味着 DSN 泄漏可读密钥伪造 app.roles GUC 提权，000004 REVOKE 后伪造通道
 // 封死；进程内派生（InitRolesSigSigning）保留，注入 GUC 用的是进程内钥。
 // CollectionGrantsReconcileHook 与 ScaleMetricsHook 已移至 cmd/server 组合根：
 // 两者都是 documentdb 域职责（门禁 A1 / B12），bootkit 为 server/worker 共享

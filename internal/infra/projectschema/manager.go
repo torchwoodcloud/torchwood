@@ -83,7 +83,7 @@ func (m *SchemaManager) ReconcileOrphanSchemas(ctx context.Context, projectID st
 	twoSegmentPrefix := projectSchema + "_"
 
 	// catalog 清单：本项目已登记的业务库 id。catalog 已全局化（阶段②包 A，
-	// public.catalog_databases，000025），项目 schema 是否存在不再影响清单
+	// public.catalog_databases，000003），项目 schema 是否存在不再影响清单
 	// 可读性——直接查全局表。
 	expected := map[string]struct{}{projectSchema: {}}
 	var scanErr error

@@ -17,7 +17,7 @@ func NewAdminCmd(g *globalFlags) *cobra.Command {
 	// 与启动钩子后台 reconcile 同源逻辑，支持 --dry-run。
 	cmd.AddCommand(newAdminSchemaCmd())
 	// B15 roles 签名密钥落库作业（部署期 owner 一次性作业）：运行态启动钩子
-	// 已退役（000033 收口 authenticator 对 tw_secrets 零权限），换钥后重跑。
+	// 已退役（000004 收口 authenticator 对 tw_secrets 零权限），换钥后重跑。
 	cmd.AddCommand(newAdminSyncRolesSigCmd())
 	return cmd
 }

@@ -3,23 +3,23 @@
 // # 并行安全契约（转出门禁 A6，`go test ./... -p 4` 稳定性）
 //
 //   - 隔离库生命周期互斥：SetupTestDB 与迁移循环测试的 CREATE DATABASE、
-//     迁移执行（含 000026 的 CREATE ROLE/GRANT membership 等集群目录写）、
+//     迁移执行（含 000004 的 CREATE ROLE/GRANT membership 等集群目录写）、
 //     pg_terminate_backend + DROP DATABASE 段全部持有集群级 advisory lock
 //     （testDBLifecycleLockKey）——`-p N` 下每个包是独立进程，进程内互斥锁
 //     无效，因此互斥点选在 PG 服务端：跨进程、跨包内 t.Parallel 均互斥。
 //     锁只包建库/迁移/删库段，库内用例执行不持锁，并行度不受影响。
-//     迁移段入锁的原因：000026 up 的 GRANT membership 与迁移循环 down 的
+//     迁移段入锁的原因：000004 up 的 GRANT membership 与迁移循环 down 的
 //     REVOKE 并发更新 pg_auth_members 同一目录行会撞 XX000 tuple concurrently
 //     deleted（角色保留方案下 GRANT/REVOKE 仍存在，必须串行化）。
 //   - 瞬时故障重试：建库/删库语句对集群瞬时过载（连接打满 too many clients、
 //     i/o timeout 等）做指数退避重试（≤3 次）兜底；CREATE DATABASE 在前次
 //     响应丢失后重试撞"已存在"（42P04）视为成功。
-//   - 角色对象所有权策略：000026 建的 tw_owner/tw_app/tw_system 是集群级角色、
+//   - 角色对象所有权策略：000004 建的 tw_owner/tw_app/tw_system 是集群级角色、
 //     被所有并行测试库共享——up 以原子幂等方式创建（duplicate 容错），down 仅
 //     清理本库（REASSIGN/DROP OWNED + REVOKE membership）且不 DROP ROLE。
 //     因此角色名下对象恒属于某个测试库、随该库 DROP DATABASE 一并消亡，
 //     不产生跨库清理义务，迁移循环 down 与并行库无集群对象竞争（详见
-//     db/migrations/000026_rbac_roles.down.sql 头注释）。
+//     db/migrations/000004_rbac_rls_roles_sig.down.sql 头注释）。
 package testutil
 
 import (
@@ -257,7 +257,7 @@ func SetupTestDB(t *testing.T) *clients.Database {
 	t.Cleanup(func() { _ = db.Close() })
 
 	// 建库 + 迁移持集群级 advisory lock（并行安全契约见包注释）：迁移中的
-	// 000026 up（CREATE ROLE + GRANT membership）是集群目录写，与其他包并行
+	// 000004 up（CREATE ROLE + GRANT membership）是集群目录写，与其他包并行
 	// 迁移以及迁移循环测试 down 的 REVOKE 并发会撞 pg_auth_members 行竞态
 	// （XX000 tuple concurrently deleted），故一并串行化；SyncRolesSigKey 只写
 	// 本库 tw_secrets，在锁外。
@@ -282,7 +282,7 @@ func SetupTestDB(t *testing.T) *clients.Database {
 		}
 	})
 
-	// roles_sig（000029，阶段③-b 包 C）：进程内派生签名密钥并落库 tw_secrets，
+	// roles_sig（000004，阶段③-b 包 C）：进程内派生签名密钥并落库 tw_secrets，
 	// tw_roles() 验签依赖——漏接则所有 tw_app RLS 查询 fail-closed（测试红）。
 	if err := clients.InitRolesSigKey(TestRolesSigMaster); err != nil {
 		t.Fatalf("init roles sig key: %v", err)

@@ -79,7 +79,7 @@ func (r *outboxRepo) ReplayDeadLetter(ctx context.Context, eventID, projectID st
 			return err
 		}
 		ch := dead.Channel
-		// 列白名单：seq 为 GENERATED ALWAYS AS IDENTITY（000028），重放
+		// 列白名单：seq 为 GENERATED ALWAYS AS IDENTITY（000002），重放
 		// 插入同样不得显式提供。
 		if _, err := r.db.Conn(txCtx).NewInsert().Model(&model.DocumentEventsOutbox{
 			EventID:     dead.EventID,

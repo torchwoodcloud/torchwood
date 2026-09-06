@@ -1,8 +1,7 @@
--- 全局 catalog（redesign §4.2 / C1 / G1，阶段②包 A）：catalog 定位 cluster 内
--- 全局，POC 单集群即 public。attrs/indexes/permissions 以 JSONB 列合一
---（预决策 1）：GetCollection 热路径从 3 查询收敛为 1，default_value 等全量
--- 属性契约以 catalog 为唯一源，四表模型的契约断裂类漂移从结构上消灭。
--- 每项目 catalog 四表随 projectschema 000011 退役（本迁移不搬数据，POC 测试库重建）。
+-- 全局 catalog（基线重定 2026-09-06：000025/000032 合并；redesign §4.2 / C1 /
+-- G1，阶段②包 A）。catalog 定位 cluster 内全局，POC 单集群即 public。
+-- attrs/indexes/permissions 以 JSONB 列合一（预决策 1）：GetCollection 热路径
+-- 从 3 查询收敛为 1，default_value 等全量属性契约以 catalog 为唯一源。
 
 CREATE TABLE catalog_databases (
     project_id  TEXT NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
@@ -52,3 +51,36 @@ CREATE UNIQUE INDEX uq_catalog_collections_physical_name
 -- ListCollections 按 (project_id, database_id) 过滤 + created_at DESC 排序。
 CREATE INDEX idx_catalog_collections_db_created
     ON catalog_collections (project_id, database_id, created_at DESC);
+
+-- catalog_migrations：schema 演进 copy 迁移任务账本（转出 POC 门禁 B4，redesign
+-- §4.6 / 预决策 3）。改类型/收紧 = 新列（物理名带版本后缀）→ 异步批量回填
+-- （批 500 行、限速、游标可恢复）→ 锁窗校验 → 原子 swap（RENAME 列）→ 旧列
+-- deprecated。任务行承载：进度（cursor_id/rows_done）、阶段
+--（backfilling|swapped|retired|failed）、swap 后旧列的物理名（old_physical
+-- —— retired 时 DROP 的目标）。schema_version 在 swap commit 时递增。
+CREATE TABLE catalog_migrations (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    database_id TEXT NOT NULL,
+    collection_id TEXT NOT NULL,
+    attr_key TEXT NOT NULL,
+    from_attr JSONB NOT NULL,
+    to_attr JSONB NOT NULL,
+    old_physical TEXT NOT NULL,
+    new_physical TEXT NOT NULL,
+    phase TEXT NOT NULL DEFAULT 'backfilling',
+    cursor_id TEXT,
+    rows_done BIGINT NOT NULL DEFAULT 0,
+    error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 进行中任务的寻址索引（MigrateAttribute 重入 / 运维观测按集合定位）。
+CREATE INDEX idx_catalog_migrations_pending
+    ON catalog_migrations (project_id, database_id, collection_id, attr_key)
+    WHERE phase = 'backfilling';
+
+-- 角色授权（tw_owner 写任务账本；tw_system 读任务行并执行回填数据语句——
+-- 迁移期数据访问 = 运维面，BYPASSRLS 身份执行）随 000004 RBAC 一次性落位
+--（三角色在 000004 才创建，本迁移只建结构）。

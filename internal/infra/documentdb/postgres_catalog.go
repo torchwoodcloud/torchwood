@@ -99,7 +99,7 @@ func (p *postgresDocumentDB) DeleteDatabase(ctx context.Context, projectID, id s
 }
 
 // EnsureCatalog 对项目数据面执行 projectschema.Apply。职责已收缩（阶段②包 A）：
-// catalog 元数据在 public 全局两表（000025），此处仅确保项目 schema 存在——
+// catalog 元数据在 public 全局两表（000003），此处仅确保项目 schema 存在——
 // sentinel 系统集合的物理表寄居 tw_<project>，建集合前必须就绪；业务库两段式
 // schema 与项目数据面无依赖，不走本函数。
 func (p *postgresDocumentDB) EnsureCatalog(ctx context.Context, projectID string) error {

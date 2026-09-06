@@ -482,7 +482,7 @@ func (p *postgresDocumentDB) runBackfill(task backfillTask) {
 //
 // 执行身份 = tw_system（BYPASSRLS）：业务行受 FORCE RLS 管辖，tw_owner 无签名
 // 角色不可见任何行（A6"owner 查询走 tw_system"同源）；任务账本已 GRANT 给
-// tw_system（000032）。
+// tw_system（000003）。
 func (p *postgresDocumentDB) backfillBatch(ctx context.Context, task backfillTask) (int, error) {
 	n := 0
 	txErr := p.withDocumentTx(ctx, clients.ExecIdentity{Role: clients.RoleSystem}, func(txCtx context.Context) error {

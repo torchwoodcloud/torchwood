@@ -1,6 +1,6 @@
 // vector 列编解码与清单缓存（会话 #10 §10.5 P0 最后一项）。
 //
-// 物理形态：pgvector 原生 VECTOR(dims) 列（扩展由迁移 000030 启用）。
+// 物理形态：pgvector 原生 VECTOR(dims) 列（扩展由迁移 000005 启用）。
 // 写入：data 通道的 JSON 数组（[]any 浮点）编码为 pgvector 字面量
 // "[1,2,3]" + ?::vector 绑定（pgdriver 无 vector 原生驱动，文本协议）。
 // 读回：to_jsonb(vector) 输出字符串（原型 3 实证），Data 契约 = JSON

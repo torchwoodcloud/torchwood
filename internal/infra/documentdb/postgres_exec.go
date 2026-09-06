@@ -46,7 +46,7 @@ func (p *postgresDocumentDB) execIdentity(ctx context.Context, projectID string,
 }
 
 // setDocumentACL 替换文档 _acl（R16 收口后语义）：
-//   - tw_app 身份：经 tw_set_document_acl（000029 修订，SECURITY DEFINER
+//   - tw_app 身份：经 tw_set_document_acl（000004，SECURITY DEFINER
 //     owner=tw_system，BYPASSRLS 绕开 UPDATE 修改 SELECT policy 引用列的新行
 //     复检）。函数内两道强制校验：p_tenant = tw_tenant()（验签 tenant，跨
 //     租户/跨项目在签名层死锁）与目标行 tw_visible 可见性（堵项目内改他人

@@ -303,10 +303,9 @@ func TestFunctionRepository_RecoverOrphanExecutions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, domainfunctions.ExecutionStatusRunning, got.Status, "不得扫到其它项目")
 
-	var publicN int
-	require.NoError(t, db.DB.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM public.functions WHERE project_id = ?`, projectID).Scan(&publicN))
-	require.Zero(t, publicN, "PR5: functions 不得再写 public")
+	// PR5 的回归守卫（查询 public.functions 计数为 0，断言"functions 不得再写
+	// public"）已随基线重定退役：public.functions 幽灵表在 db/migrations 基线
+	// 重定（2026-09-06）时整体移除，运行时唯一落点即项目 schema。
 }
 
 func TestFunctionRepository_InvalidProjectID(t *testing.T) {

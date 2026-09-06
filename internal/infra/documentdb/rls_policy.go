@@ -98,7 +98,7 @@ func (p *postgresDocumentDB) refreshColumnGrants(ctx context.Context, schema, ph
 	// 与 to_jsonb(d.*) 载荷需要）；INSERT 授数据列 + 除 _tenant 外系统列（含
 	// _acl——create/upsert 插入支的 _acl 随行携带：新行无旧行、可见性校验
 	// 不适用，内容治理在 app 层授予校验，信任等价于"自己创建的内容"）；UPDATE
-	// 排除 _acl——_acl 的变更通道唯一化为 tw_set_document_acl（000029，SECURITY
+	// 排除 _acl——_acl 的变更通道唯一化为 tw_set_document_acl（000004，SECURITY
 	// DEFINER owner=tw_system，函数内租户绑定 + 可见性校验），应用身份直改
 	// _acl 的旁路从 UPDATE 列权限上封死（非自锁变更可过 SELECT policy 新行
 	// 复检，必须不可达）。

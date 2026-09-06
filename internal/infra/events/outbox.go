@@ -69,7 +69,7 @@ func (o *eventOutbox) Publish(ctx context.Context, ev domainevents.Envelope) err
 			ch := ev.Channel
 			channel = &ch
 		}
-		// 列白名单：seq 为 GENERATED ALWAYS AS IDENTITY（000028），bun 无
+		// 列白名单：seq 为 GENERATED ALWAYS AS IDENTITY（000002），bun 无
 		// identity 特判，不排除会显式插 0 被 PG 拒绝。
 		if _, err := o.db.Conn(ctx).NewInsert().Model(&model.DocumentEventsOutbox{
 			EventID:     ev.EventID,
@@ -82,7 +82,7 @@ func (o *eventOutbox) Publish(ctx context.Context, ev domainevents.Envelope) err
 		}).Column("event_id", "project_id", "topic", "channel", "payload", "created_at", "available_at").Exec(ctx); err != nil {
 			return err
 		}
-		// 唤醒信号由 000028 的 AFTER INSERT 触发器发出（同事务、随 commit
+		// 唤醒信号由 000002 的 AFTER INSERT 触发器发出（同事务、随 commit
 		// 投递、同事务多次自动合并）——应用侧零额外语句，Bulk 语句数预算
 		//（R5-P2-6）不受事件路径影响。
 		return nil

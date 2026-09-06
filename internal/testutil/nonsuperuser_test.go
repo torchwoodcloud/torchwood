@@ -26,15 +26,15 @@ import (
 //
 // 双账号契约：
 //   - owner 引导账号（superuser，即 compose/CI 的 POSTGRES_USER 形态）：仅
-//     迁移与扩展引导——000030 `CREATE EXTENSION vector`（非 trusted，superuser
-//     专属）、000029 `GRANT CREATE ON SCHEMA public TO tw_system` 与
+//     迁移与扩展引导——000005 `CREATE EXTENSION vector`（非 trusted，superuser
+//     专属）、000004 `GRANT CREATE ON SCHEMA public TO tw_system` 与
 //     `ALTER FUNCTION ... OWNER TO tw_system` 都需要特权身份；roles_sig 密钥
 //     落库（B15 部署期 owner 作业，对齐 `torchwood admin sync-roles-sig`）
 //     同属此账号；
-//   - tw_authenticator（非 superuser、无 BYPASSRLS）：仅 000026 三角色
+//   - tw_authenticator（非 superuser、无 BYPASSRLS）：仅 000004 三角色
 //     membership + 库级 CONNECT/CREATE + 控制面静态表 DML（边界邻居面），
 //     server/worker 运行态 DSN 全部流量走它；对 public.tw_secrets **零权限**
-//     （B15 收口：密钥不可读 → GUC 伪造通道封死，迁移 000033）。
+//     （B15 收口：密钥不可读 → GUC 伪造通道封死，迁移 000004）。
 //
 // 流程：独立临时库上 owner 跑全量迁移 → owner 建 authenticator 并授权 →
 // 断言 rolsuper=false / 三角色 membership / SET ROLE 可达 / untrusted 扩展
@@ -59,11 +59,11 @@ func TestNonSuperuserAuthenticator_MigrateAndSmoke(t *testing.T) {
 	defer func() { _ = adminDB.Close() }()
 
 	// 1) 独立临时库（owner 引导账号建库）+ 全量迁移（双账号契约的「迁移 =
-	// owner」落点）：000030 的 vector 扩展、000029 的 GRANT CREATE ON SCHEMA
+	// owner」落点）：000005 的 vector 扩展、000004 的 GRANT CREATE ON SCHEMA
 	// public TO tw_system / ALTER FUNCTION OWNER TO tw_system 均需特权身份；
-	// 000026 的 `GRANT ... TO CURRENT_USER` 亦落在 owner 上，authenticator 的
+	// 000004 的 `GRANT ... TO CURRENT_USER` 亦落在 owner 上，authenticator 的
 	// membership 由第 2) 步显式授予。段内持集群级 lifecycle lock（A6 并行安全
-	// 契约：000026 up 的 membership GRANT 是集群目录写）。
+	// 契约：000004 up 的 membership GRANT 是集群目录写）。
 	dbName := uniqueTestDBName()
 	roleName := strings.ToLower(fmt.Sprintf("tw_auth_%d_%d", os.Getpid(), testDBSeq.Add(1)))
 	rolePass := "tw-authenticator-test-" + roleName
@@ -77,16 +77,16 @@ func TestNonSuperuserAuthenticator_MigrateAndSmoke(t *testing.T) {
 	// 13-operations §4.5 对应；角色名唯一化仅为测试隔离，生产为固定名）。
 	bootstrap := []string{
 		fmt.Sprintf(`CREATE ROLE %s LOGIN PASSWORD '%s' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION`, roleName, rolePass),
-		// 000026 授权面：变色龙三角色 membership（PostgREST authenticator 模式）。
+		// 000004 授权面：变色龙三角色 membership（PostgREST authenticator 模式）。
 		fmt.Sprintf(`GRANT tw_owner, tw_app, tw_system TO %s`, roleName),
 		// 库级权限：CONNECT + CREATE（tw_<project.id> schema 供给——projectschema.Apply
-		// 以 base identity CREATE SCHEMA；对齐 000026 授 tw_owner 的 CREATE ON DATABASE）。
+		// 以 base identity CREATE SCHEMA；对齐 000004 授 tw_owner 的 CREATE ON DATABASE）。
 		fmt.Sprintf(`GRANT CONNECT, CREATE ON DATABASE %s TO %s`, dbName, roleName),
 		fmt.Sprintf(`GRANT USAGE ON SCHEMA public TO %s`, roleName),
 		// 控制面静态表 DML（边界邻居面，base identity）：public 全表排除 catalog
-		// 两表（读写仅经角色可达，与 000026 授权面一致）与 tw_secrets。roleName
+		// 两表（读写仅经角色可达，与 000004 授权面一致）与 tw_secrets。roleName
 		// 为测试生成的安全标识符直接内插；%I 属 SQL format 动词，不经 fmt.Sprintf。
-		// tw_secrets 自 B15（迁移 000033）起对运行账号零权限，永久排除。
+		// tw_secrets 自 B15（迁移 000004）起对运行账号零权限，永久排除。
 		`DO $do$ DECLARE t text; BEGIN
 			FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public'
 				AND tablename NOT IN ('catalog_databases', 'catalog_collections', 'tw_secrets')
@@ -163,7 +163,7 @@ func TestNonSuperuserAuthenticator_MigrateAndSmoke(t *testing.T) {
 	require.NoError(t, rows.Err())
 	require.NoError(t, rows.Close())
 	require.Equal(t, []string{"tw_app", "tw_owner", "tw_system"}, memberships,
-		"authenticator 应持有 000026 三角色 membership")
+		"authenticator 应持有 000004 三角色 membership")
 
 	// 4) 以 authenticator 连接：SET ROLE 三角色可达性 + 引导面反例。
 	authDSN, err := replaceDatabaseUser(ownerDSN, roleName, rolePass)
@@ -190,7 +190,7 @@ func TestNonSuperuserAuthenticator_MigrateAndSmoke(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.NoError(t, setRoleConn.Close())
-	// 反例：非 trusted 扩展安装是 superuser 引导面（000030 的 vector 属同类，
+	// 反例：非 trusted 扩展安装是 superuser 引导面（000005 的 vector 属同类，
 	// 但它在临时库已随迁移装好、IF NOT EXISTS 会 no-op 跳过权限检查，故用
 	// 同为 untrusted 且未安装的 pg_stat_statements 做确定性别证），必须被拒
 	// ——否则迁移与运行账号的权限边界形同虚设。

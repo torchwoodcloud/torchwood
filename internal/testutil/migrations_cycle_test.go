@@ -24,7 +24,7 @@ import (
 // golang-migrate 库代码驱动，在独立临时库上跑完整 up→down(全部)→up 循环，
 // 并断言 down 全量后 public schema 无业务表残留——任何 down SQL 损坏在此红。
 //
-// 并行安全（A6）：000026 down 为集群角色保留形态（不 DROP ROLE，见该迁移头
+// 并行安全（A6）：000004 down 为集群角色保留形态（不 DROP ROLE，见该迁移头
 // 注释），本测试不删集群级角色、与并行库无 2BP01 依赖冲突；但 up/down 的
 // CREATE ROLE/GRANT/REVOKE membership 仍是集群目录写，与并行包的迁移段并发
 // 会撞 XX000 tuple concurrently deleted——因此建库与整个循环持

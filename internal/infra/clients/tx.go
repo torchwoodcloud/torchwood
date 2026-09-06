@@ -203,9 +203,9 @@ func SignRolesSig(keyHex string, tenant int64, roles string, now time.Time) stri
 }
 
 // SyncRolesSigKey 把进程内派生的 roles 签名密钥落进 public.tw_secrets
-//（迁移 000029 + 000031 双钥槽位），供 tw_roles() 验签——部署期 owner 一次
+//（迁移 000004，双钥槽位），供 tw_roles() 验签——部署期 owner 一次
 // 性作业（`torchwood admin sync-roles-sig`，转出 POC 门禁 B15）以引导/owner
-// 身份调用；运行 DSN 对 tw_secrets 零权限（迁移 000033 收口），启动钩子已
+// 身份调用；运行 DSN 对 tw_secrets 零权限（迁移 000004 收口），启动钩子已
 // 退役，server/worker 不再落库（进程内派生钥仅供注入签名，无需读库）。
 //
 // 双钥轮换（转出 POC 门禁 A4）：新钥落 current 位，旧 current 降级 previous

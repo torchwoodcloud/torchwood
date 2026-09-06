@@ -62,7 +62,7 @@ func TestInternalIDCache_InvalidationOnRecreate(t *testing.T) {
 	require.Equal(t, firstInternalID, tenantOf(t, id1), "_tenant 应为首次解析的 internal_id")
 
 	// 模拟项目删除：DROP 业务 schema + 清全局 catalog 行 + 删控制面行
-	// （缓存此时已陈旧；catalog 位于 public 两表，见 db/migrations/000025）。
+	// （缓存此时已陈旧；catalog 位于 public 两表，见 db/migrations/000003）。
 	_, err = db.ExecContext(ctx,
 		`DROP SCHEMA IF EXISTS `+quoteIdent(appSchema)+` CASCADE`)
 	require.NoError(t, err)

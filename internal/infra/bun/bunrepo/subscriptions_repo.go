@@ -507,8 +507,8 @@ func isSubUniqueViolation(err error) bool {
 }
 
 // subscriptionsLiveUniqueIndex 是 (project_id, user_id, plan_id) 活跃订阅
-// partial unique index 的名字（projectschema 000010 / 控制面 000023 迁移创建，
-// 各项目 schema 各一份）。状态串与 domain subscriptions 状态常量一致。
+// partial unique index 的名字（projectschema 000010 迁移创建，各项目 schema
+// 各一份）。状态串与 domain subscriptions 状态常量一致。
 const subscriptionsLiveUniqueIndex = "subscriptions_live_unique"
 
 // isSubscriptionsLiveUniqueViolation 识别 subscriptions_live_unique 的 23505
