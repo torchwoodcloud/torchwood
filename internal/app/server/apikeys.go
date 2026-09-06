@@ -24,10 +24,13 @@ const (
 
 type APIKeys struct {
 	repo projects.APIKeyRepository
+	// vocab 是合法 scope 词表（从 PolicySet 派生，组合根注入）——key 创建
+	// 校验与 proto 声明单一事实源对齐。
+	vocab *domainauth.ScopeVocabulary
 }
 
-func NewAPIKeys(repo projects.APIKeyRepository) *APIKeys {
-	return &APIKeys{repo: repo}
+func NewAPIKeys(repo projects.APIKeyRepository, vocab *domainauth.ScopeVocabulary) *APIKeys {
+	return &APIKeys{repo: repo, vocab: vocab}
 }
 
 type CreateAPIKeyCommand struct {
@@ -82,7 +85,7 @@ func (a *APIKeys) CreateInternal(ctx context.Context, cmd CreateAPIKeyCommand) (
 		return nil, "", status.Errorf(codes.InvalidArgument, "scopes exceeds maximum of %d", maxAPIKeyScopes)
 	}
 	for _, s := range cmd.Scopes {
-		if len(s) > maxAPIKeyScopeLength || !domainauth.ValidAPIKeyScope(s) {
+		if len(s) > maxAPIKeyScopeLength || !a.vocab.Valid(s) {
 			return nil, "", status.Errorf(codes.InvalidArgument, "invalid scope %q (allowed: * | all | <resource> | <resource>.read | <resource>.write)", s)
 		}
 	}

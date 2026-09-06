@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/domain/projects"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
 	"github.com/torchwooddev/torchwood/internal/infra/auth"
@@ -18,7 +19,7 @@ import (
 func TestHTTPAuth_MultipleCredentialsRejected(t *testing.T) {
 	t.Parallel()
 
-	a := newHTTPAuth(newFunctionsValidator(&functionsDocDB{}))
+	a := newHTTPAuth(newFunctionsValidator(&functionsDocDB{}), testPolicies())
 
 	cases := []struct {
 		name  string
@@ -62,7 +63,7 @@ func TestHTTPAuth_MultipleCredentialsRejected(t *testing.T) {
 func TestHTTPAuth_SameKeyMultipleValuesRejected(t *testing.T) {
 	t.Parallel()
 
-	a := newHTTPAuth(newFunctionsValidator(&functionsDocDB{}))
+	a := newHTTPAuth(newFunctionsValidator(&functionsDocDB{}), testPolicies())
 
 	cases := []struct {
 		name  string
@@ -114,7 +115,7 @@ func TestHTTPAuth_SingleCredentialAccepted(t *testing.T) {
 		},
 	}}
 	validator := auth.NewValidator(functionsTestConfig(), repo, nil, &functionsAdminRepo{}, &functionsAdminProjectRepo{}, nil, nil, nil, nil)
-	a := newHTTPAuth(validator)
+	a := newHTTPAuth(validator, testPolicies())
 
 	r := httptest.NewRequest(http.MethodGet, "/x", nil)
 	r.Header.Set("X-Api-Key", "auth-key-ok")
@@ -134,7 +135,7 @@ func TestHTTPAuth_SingleCredentialAccepted(t *testing.T) {
 func TestFileHandler_MultipleCredentialsRejected(t *testing.T) {
 	t.Parallel()
 
-	h, err := NewFileHandler(functionsTestConfig(), newFunctionsValidator(&functionsDocDB{}), nil, nil, nil)
+	h, err := NewFileHandler(functionsTestConfig(), newFunctionsValidator(&functionsDocDB{}), nil, nil, nil, testPolicies())
 	require.NoError(t, err)
 
 	r := httptest.NewRequest(http.MethodGet, "/v1/storage/buckets/b-1/files/f-1/download", nil)
@@ -157,4 +158,17 @@ func TestFunctionsHandler_MultipleCredentialsRejected(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.upload(rec, r, map[string]string{"functionId": "fn-1"})
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+// testPolicies 构造最小策略注册表（真实策略由 runtime.PolicySet 注入）。
+func testPolicies() *domainauth.PolicySet {
+	set, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{
+		{Method: domainauth.StorageServiceCreateFile, Service: "/torchwood.server.v1.StorageService", Access: domainauth.AccessServer,
+			AdminRoles: []domainauth.AdminRole{domainauth.AdminRoleMember, domainauth.AdminRoleAdmin, domainauth.AdminRoleOwner},
+			Scope:      &domainauth.ScopeRule{Resource: domainauth.ScopeStorage, Op: domainauth.ScopeWrite}},
+	})
+	if err != nil {
+		panic(err)
+	}
+	return set
 }

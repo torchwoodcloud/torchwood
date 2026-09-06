@@ -3,8 +3,9 @@ package testutil
 import (
 	"context"
 
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
 	"github.com/torchwooddev/torchwood/internal/api/interceptor"
+	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	"github.com/torchwooddev/torchwood/internal/domain/databases"
 	"github.com/torchwooddev/torchwood/internal/infra/auth"
 	"github.com/torchwooddev/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwooddev/torchwood/internal/infra/bun/model"
@@ -44,15 +45,19 @@ func NewInterceptorEnv(db *clients.Database, cfg *config.AppConfig, docDB databa
 		bunrepo.NewUserRepository(db),
 		nil,
 	)
-	authIC, err := interceptor.NewAuthInterceptor(
-		validator,
-		[]string{MethodHealthCheck},
-		[]string{MethodListUsers},
-		map[string][]string{
-			MethodAccountMe:      {"users"},
-			MethodAccountSignOut: {"users"},
-		},
-	)
+	// 小策略注册表（与生产 BuildMethodPolicies 同构的 PolicySet 注入；
+	// 全量策略语义由 runtime AssertSemantic + 矩阵测试把关）。
+	policies, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{
+		{Method: MethodHealthCheck, Service: "/torchwood.server.v1.HealthService", Access: domainauth.AccessPublic},
+		{Method: MethodListUsers, Service: "/torchwood.server.v1.UsersService", Access: domainauth.AccessServer,
+			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeUsers, Op: domainauth.ScopeRead}},
+		{Method: MethodAccountMe, Service: "/torchwood.client.v1.AccountService", Access: domainauth.AccessEndUser, Permissions: []string{"users"}},
+		{Method: MethodAccountSignOut, Service: "/torchwood.client.v1.AccountService", Access: domainauth.AccessEndUser, Permissions: []string{"users"}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	authIC, err := interceptor.NewAuthInterceptor(validator, policies)
 	if err != nil {
 		return nil, err
 	}

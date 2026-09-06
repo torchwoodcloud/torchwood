@@ -51,7 +51,7 @@ func TestAuthInterceptor_LogsCredentialMissing(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	ic, err := NewAuthInterceptor(stubValidator{}, nil, nil, nil)
+	ic, err := newTestInterceptor(stubValidator{}, nil, nil, nil)
 	requireNoError(t, err)
 	ic.WithLogger(captureLogger(&buf))
 
@@ -81,7 +81,7 @@ func TestAuthInterceptor_LogsMultipleCredentials(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	ic, err := NewAuthInterceptor(stubValidator{}, nil, nil, nil)
+	ic, err := newTestInterceptor(stubValidator{}, nil, nil, nil)
 	requireNoError(t, err)
 	ic.WithLogger(captureLogger(&buf))
 
@@ -102,7 +102,7 @@ func TestAuthInterceptor_LogsInvalidAuthorization(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	ic, err := NewAuthInterceptor(stubValidator{}, nil, nil, nil)
+	ic, err := newTestInterceptor(stubValidator{}, nil, nil, nil)
 	requireNoError(t, err)
 	ic.WithLogger(captureLogger(&buf))
 
@@ -120,7 +120,7 @@ func TestAuthInterceptor_LogsInvalidCredential(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	ic, err := NewAuthInterceptor(failingValidator{err: errors.New("bad key")}, nil, nil, nil)
+	ic, err := NewAuthInterceptor(failingValidator{err: errors.New("bad key")}, mustPolicySet())
 	requireNoError(t, err)
 	ic.WithLogger(captureLogger(&buf))
 
@@ -144,7 +144,7 @@ func TestAuthInterceptor_LogsPermissionDenied(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	ic, err := NewAuthInterceptor(stubValidator{principal: &shared.Principal{
+	ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind:      shared.ActorKindService,
 		CredentialType: shared.CredentialTypeAPIKey,
 		Roles:          []string{"keys"},
@@ -166,7 +166,7 @@ func TestAuthInterceptor_NoLogOnSuccess(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	ic, err := NewAuthInterceptor(stubValidator{principal: &shared.Principal{
+	ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind: shared.ActorKindEndUser,
 		UserID:    "user-1",
 		Roles:     []string{"users"},

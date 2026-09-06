@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/torchwooddev/torchwood/internal/app/client"
 	"github.com/torchwooddev/torchwood/internal/api/interceptor"
+	"github.com/torchwooddev/torchwood/internal/app/client"
 	"github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
 )

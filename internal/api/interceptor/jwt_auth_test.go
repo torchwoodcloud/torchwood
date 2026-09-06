@@ -40,7 +40,7 @@ func (s stubValidator) ValidateAdminProjectAccess(context.Context, *shared.Princ
 func TestAuthInterceptor_RejectsAPIKeyOnUsersPermissionMethod(t *testing.T) {
 	t.Parallel()
 
-	ic, err := NewAuthInterceptor(stubValidator{principal: &shared.Principal{
+	ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind:      shared.ActorKindService,
 		CredentialType: shared.CredentialTypeAPIKey,
 		Roles:          []string{"keys"},
@@ -63,7 +63,7 @@ func TestAuthInterceptor_RejectsAPIKeyOnUsersPermissionMethod(t *testing.T) {
 func TestAuthInterceptor_AllowsEndUserOnUsersPermissionMethod(t *testing.T) {
 	t.Parallel()
 
-	ic, err := NewAuthInterceptor(stubValidator{principal: &shared.Principal{
+	ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind: shared.ActorKindEndUser,
 		UserID:    "user-1",
 		Roles:     []string{"users", "user:user-1"},
@@ -104,7 +104,7 @@ func requirePermissionDenied(t *testing.T, err error) {
 func TestAuthInterceptor_DeniesAPIKeyOnAPIKeysService(t *testing.T) {
 	t.Parallel()
 
-	ic, err := NewAuthInterceptor(stubValidator{principal: &shared.Principal{
+	ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind:      shared.ActorKindService,
 		CredentialType: shared.CredentialTypeAPIKey,
 		Roles:          []string{"keys"},
@@ -125,7 +125,7 @@ func TestAuthInterceptor_DeniesAPIKeyOnAPIKeysService(t *testing.T) {
 func TestAuthInterceptor_AllowsAdminSessionOnAPIKeysService(t *testing.T) {
 	t.Parallel()
 
-	ic, err := NewAuthInterceptor(stubValidator{principal: &shared.Principal{
+	ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind:      shared.ActorKindAdmin,
 		CredentialType: shared.CredentialTypeSession,
 		Roles:          []string{"admin"},
@@ -160,7 +160,7 @@ func TestAuthInterceptor_RejectsAPIKeyWildcardScopeOnAdminsService(t *testing.T)
 	}
 	for _, scopes := range [][]string{{"*"}, {"all"}} {
 		for _, method := range methods {
-			ic, err := NewAuthInterceptor(stubValidator{principal: &shared.Principal{
+			ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 				ActorKind:      shared.ActorKindService,
 				CredentialType: shared.CredentialTypeAPIKey,
 				Roles:          []string{"keys"},
@@ -211,7 +211,7 @@ func TestAuthInterceptor_RejectsViewerOrMemberAdminOnWriteMethods(t *testing.T) 
 		} else {
 			apiKeyMethods = []string{method}
 		}
-		ic, err := NewAuthInterceptor(stubValidator{principal: &shared.Principal{
+		ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 			ActorKind:      shared.ActorKindAdmin,
 			CredentialType: shared.CredentialTypeSession,
 			Roles:          []string{role},
@@ -254,7 +254,7 @@ func TestAuthInterceptor_AllowsOwnerAdminOnWriteMethods(t *testing.T) {
 			"/torchwood.server.v1.DatabasesService/CreateDatabase",
 			"/torchwood.server.v1.FunctionsService/SetVariables",
 		} {
-			ic, err := NewAuthInterceptor(stubValidator{principal: &shared.Principal{
+			ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 				ActorKind:      shared.ActorKindAdmin,
 				CredentialType: shared.CredentialTypeSession,
 				Roles:          []string{role},
@@ -282,7 +282,7 @@ func TestAuthInterceptor_AllowsOwnerAdminOnWriteMethods(t *testing.T) {
 func TestAuthInterceptor_RejectsMultipleCredentials(t *testing.T) {
 	t.Parallel()
 
-	ic, err := NewAuthInterceptor(stubValidator{principal: &shared.Principal{
+	ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind: shared.ActorKindEndUser,
 		UserID:    "user-1",
 		Roles:     []string{"users"},
@@ -319,7 +319,7 @@ func requireUnauthenticated(t *testing.T, err error) {
 func TestAuthInterceptor_RejectsSameKeyMultipleCredentials(t *testing.T) {
 	t.Parallel()
 
-	ic, err := NewAuthInterceptor(stubValidator{principal: &shared.Principal{
+	ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind: shared.ActorKindEndUser,
 		UserID:    "user-1",
 		Roles:     []string{"users"},

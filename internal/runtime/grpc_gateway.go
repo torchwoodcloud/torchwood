@@ -15,6 +15,7 @@ import (
 	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
 	apirealtime "github.com/torchwooddev/torchwood/internal/api/realtime"
 	"github.com/torchwooddev/torchwood/internal/api/serverhttp"
+	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/infra/health"
 	"github.com/torchwooddev/torchwood/internal/pkg/config"
 	"google.golang.org/grpc"
@@ -34,6 +35,7 @@ func NewGRPCGatewayServer(
 	functionsHandler *serverhttp.FunctionsHandler,
 	paymentsHandler *serverhttp.PaymentsHandler,
 	realtimeHandler *apirealtime.Handler,
+	policySet *domainauth.PolicySet,
 ) (*GRPCGatewayServer, error) {
 	httpCfg := cfg.GetServer().GetHttp()
 	timeout := parseDuration(httpCfg.GetTimeout(), 60*time.Second)
@@ -89,7 +91,7 @@ func NewGRPCGatewayServer(
 	paymentsHandler.Register(mux)
 	// /.well-known/torchwood（B10）：Agent 可发现性目录——纯 HTTP 面静态
 	// 路由（无 gRPC 对应物、公开端点），payload 构造期直读单一事实源。
-	wellKnown := serverhttp.NewWellKnownHandler()
+	wellKnown := serverhttp.NewWellKnownHandler(policySet)
 	wellKnown.Register(mux)
 
 	handler := http.Handler(mux)

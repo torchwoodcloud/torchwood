@@ -4,43 +4,91 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/api/interceptor"
+	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 )
 
-// TestAuthzCoverage_RealProtoRegistry（返工 R7）：以真实 proto registry
-// （与 NewGRPCServer 的 collectMethodsByAccess 同源）复现启动期两条 fail-closed
-// 断言——scope 表覆盖 ACCESS_API_KEY 方法集合、admin 角色表覆盖全部写方法。
-// 此前该链条只在启动期执行，包测试全绿而 main 可处于启动 panic 状态
-// （会话 #3 的 ExecuteTransactions 漏登即此缺口）；本测试使"新增写 RPC 漏登
-// scope/角色表"直接变红。
-func TestAuthzCoverage_RealProtoRegistry(t *testing.T) {
+// TestAssertSemantic_RealProtoRegistry：以真实 proto registry（与
+// ProvideMethodPolicies 同源）复现启动期语义断言——完备性/死 scope/档位/
+// client·console 值域/项目寻址白名单/streaming。策略违例在测试期直接变红，
+// 而不是等 main 启动失败。
+func TestAssertSemantic_RealProtoRegistry(t *testing.T) {
 	t.Parallel()
 
-	_, apiKeyMethods, _, err := collectMethodsByAccess(authzFileDescriptors()...)
+	set, err := ProvideMethodPolicies()
 	require.NoError(t, err)
-	require.NotEmpty(t, apiKeyMethods, "真实 registry 必须能推导出 ACCESS_API_KEY 方法")
+	require.NotEmpty(t, set.Methods())
 
-	require.NotPanics(t, func() {
-		interceptor.AssertAPIKeyScopeCoverage(apiKeyMethods)
-		interceptor.AssertAdminRoleWriteCoverage()
-	}, "启动期 authz 覆盖断言在测试期必须同样成立（漏登 scope/角色表即红）")
+	// 抽查裁决决策已落地（锚点子集；完整锚点矩阵由 Phase B 生成）。
+	checks := []struct {
+		method string
+		verify func(domainauth.MethodPolicy) bool
+		desc   string
+	}{
+		{"/torchwood.server.v1.UsersService/UpdateUserPassword", func(p domainauth.MethodPolicy) bool {
+			return p.Access == domainauth.AccessServer && p.Scope != nil &&
+				string(p.Scope.Resource) == "users" && p.Scope.Op == domainauth.ScopeWrite &&
+				len(p.AdminRoles) == 3
+		}, "users 六写方法归一业务写档"},
+		{"/torchwood.server.v1.ProjectsService/CreateProject", func(p domainauth.MethodPolicy) bool {
+			return p.Access == domainauth.AccessPermission
+		}, "CreateProject 为 PERMISSION 平台专属"},
+		{"/torchwood.server.v1.APIKeysService/CreateAPIKey", func(p domainauth.MethodPolicy) bool {
+			return p.Access == domainauth.AccessPermission && p.Scope == nil
+		}, "APIKeys 全服务 PERMISSION（无 key 通道）"},
+		{"/torchwood.server.v1.OutboxService/ListDeadLetters", func(p domainauth.MethodPolicy) bool {
+			return p.Access == domainauth.AccessServer && len(p.AdminRoles) == 2 && p.Scope != nil && p.Scope.Op == domainauth.ScopeRead
+		}, "死信读面限 owner/admin + outbox.read"},
+	}
+	for _, c := range checks {
+		p, ok := set.Get(c.method)
+		require.True(t, ok, "%s 必须在策略注册表", c.method)
+		require.True(t, c.verify(p), "%s：%s（实际 Access=%v AdminRoles=%v Scope=%v）", c.method, c.desc, p.Access, p.AdminRoles, p.Scope)
+	}
+
+	// apikeys/economy 资源已退役；assets 在词表。
+	vocab := domainauth.VocabularyFromPolicies(set)
+	require.False(t, vocab.Valid("apikeys.write"), "apikeys scope 资源应退役")
+	require.False(t, vocab.Valid("economy.read"), "economy 应更名 assets")
+	require.True(t, vocab.Valid("assets.read"), "assets 词表项存在")
 }
 
-// TestAuthzCoverage_DetectsFabricatedMethod：向方法集合注入虚构的写方法，
-// 断言链条真的会抓漏（防上一测试自身失效——确认非空洞通过）。
-// 角色表侧的注入检出（diff 纯函数的 missing/extra）由
-// internal/api/interceptor/admin_roles_test.go 覆盖。
-func TestAuthzCoverage_DetectsFabricatedMethod(t *testing.T) {
+// TestAssertSemantic_DetectsViolations：构造违例策略，断言语义断言真的会
+// 抓漏（防上一测试空洞通过）。
+func TestAssertSemantic_DetectsViolations(t *testing.T) {
 	t.Parallel()
 
-	_, apiKeyMethods, _, err := collectMethodsByAccess(authzFileDescriptors()...)
-	require.NoError(t, err)
+	base := func(mutate func(*domainauth.MethodPolicy)) []domainauth.MethodPolicy {
+		p := domainauth.MethodPolicy{
+			Method:     "/torchwood.server.v1.TestService/DoThing",
+			Service:    "/torchwood.server.v1.TestService",
+			Access:     domainauth.AccessServer,
+			AdminRoles: []domainauth.AdminRole{domainauth.AdminRoleMember, domainauth.AdminRoleAdmin, domainauth.AdminRoleOwner},
+			Scope:      &domainauth.ScopeRule{Resource: domainauth.ScopeUsers, Op: domainauth.ScopeWrite},
+		}
+		if mutate != nil {
+			mutate(&p)
+		}
+		return []domainauth.MethodPolicy{p}
+	}
 
-	fabricated := append(append([]string{}, apiKeyMethods...),
-		"/torchwood.server.v1.DatabasesService/FabricatedWriteThing")
-	require.PanicsWithValue(t,
-		"apiKeyScopeRules 与 ACCESS_SERVER 方法集合不一致 (fail-closed): "+
-			"proto 声明但规则表缺失=[/torchwood.server.v1.DatabasesService/FabricatedWriteThing]; 规则表多余=[]",
-		func() { interceptor.AssertAPIKeyScopeCoverage(fabricated) },
-	)
+	set, err := domainauth.NewPolicySet(base(nil))
+	require.NoError(t, err)
+	require.NoError(t, domainauth.AssertSemantic(set), "合法业务写档应通过")
+
+	for name, mutate := range map[string]func(*domainauth.MethodPolicy){
+		"SERVER 缺 scope": func(p *domainauth.MethodPolicy) { p.Scope = nil },
+		"write+空角色（无档位）": func(p *domainauth.MethodPolicy) { p.AdminRoles = nil },
+		"角色含 viewer":     func(p *domainauth.MethodPolicy) { p.AdminRoles = []domainauth.AdminRole{domainauth.AdminRoleViewer} },
+		"PERMISSION+member": func(p *domainauth.MethodPolicy) {
+			p.Access = domainauth.AccessPermission
+			p.Permissions = []string{"member"}
+		},
+		"项目寻址违例": func(p *domainauth.MethodPolicy) {
+			p.RequestHasProjectID = true
+		},
+	} {
+		set, err := domainauth.NewPolicySet(base(mutate))
+		require.NoError(t, err)
+		require.Error(t, domainauth.AssertSemantic(set), "违例 [%s] 必须被语义断言拒绝", name)
+	}
 }

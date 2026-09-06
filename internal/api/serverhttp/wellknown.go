@@ -109,8 +109,8 @@ var wellKnownVerbs = []wellKnownVerb{
 const databasesServiceFullName = "/torchwood.server.v1.DatabasesService/"
 
 // buildWellKnownPayload 构造目录 JSON（进程内一次；错误码与 scope 两段构造期
-// 直读单一事实源）。
-func buildWellKnownPayload() []byte {
+// 直读 PolicySet——proto 策略声明的唯一派生）。
+func buildWellKnownPayload(policies *auth.PolicySet) []byte {
 	errorCodes := databases.ErrorCodeCatalog()
 	codeEntries := make([]map[string]any, 0, len(errorCodes))
 	for code := range errorCodes {
@@ -120,13 +120,22 @@ func buildWellKnownPayload() []byte {
 		})
 	}
 
-	scopes := auth.APIKeyScopeRules()
 	verbs := make([]wellKnownVerb, 0, len(wellKnownVerbs))
 	for _, v := range wellKnownVerbs {
-		if rule, ok := scopes[databasesServiceFullName+v.RPC]; ok {
-			v.Scope = rule.Resource + "." + rule.Op
+		if rule := policies.HasAPIKeyScope(databasesServiceFullName + v.RPC); rule != nil {
+			v.Scope = string(rule.Resource) + "." + string(rule.Op)
 		}
 		verbs = append(verbs, v)
+	}
+	// scope 词表全量下发（M4：console 建 key 多选/SDK 常量的数据源）。
+	vocab := auth.VocabularyFromPolicies(policies)
+	scopeCatalog := make([]map[string]any, 0, len(vocab.Resources()))
+	for _, res := range vocab.Resources() {
+		scopeCatalog = append(scopeCatalog, map[string]any{
+			"resource": string(res),
+			"read":     vocab.HasOp(res, auth.ScopeRead),
+			"write":    vocab.HasOp(res, auth.ScopeWrite),
+		})
 	}
 
 	doc := map[string]any{
@@ -144,7 +153,8 @@ func buildWellKnownPayload() []byte {
 				"vector_search is a KNN operator outside the filter tree (typed AST only, no DSL string)",
 			},
 		},
-		"error_codes": codeEntries,
+		"error_codes":    codeEntries,
+		"api_key_scopes": scopeCatalog,
 		"resources": map[string]any{
 			"databases": map[string]any{
 				"service": "torchwood.server.v1.DatabasesService",
@@ -166,8 +176,8 @@ type WellKnownHandler struct {
 }
 
 // NewWellKnownHandler 构造目录 handler：payload 构造期生成一次（静态内容）。
-func NewWellKnownHandler() *WellKnownHandler {
-	return &WellKnownHandler{payload: buildWellKnownPayload()}
+func NewWellKnownHandler(policies *auth.PolicySet) *WellKnownHandler {
+	return &WellKnownHandler{payload: buildWellKnownPayload(policies)}
 }
 
 // Register 把目录路由挂到 gateway mux（纯 HTTP 面，无 gRPC 对应物；公开端点

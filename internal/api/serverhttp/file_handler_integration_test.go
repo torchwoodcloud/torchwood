@@ -109,7 +109,7 @@ func setupStorageHTTPFixture(t *testing.T, storageOpts ...appstorage.StorageOpti
 		bunrepo.NewUserRepository(db),
 		nil,
 	)
-	handler, err := NewFileHandler(cfg, validator, storageUC, nil, nil)
+	handler, err := NewFileHandler(cfg, validator, storageUC, nil, nil, testPolicies())
 	require.NoError(t, err)
 
 	mux := runtime.NewServeMux()
@@ -330,7 +330,7 @@ func TestFileHandler_UserJWTProjectScope(t *testing.T) {
 		bunrepo.NewUserRepository(db),
 		nil,
 	)
-	handler, err := NewFileHandler(cfg, validator, storageUC, nil, nil)
+	handler, err := NewFileHandler(cfg, validator, storageUC, nil, nil, testPolicies())
 	require.NoError(t, err)
 	mux := runtime.NewServeMux()
 	handler.Register(mux)
@@ -433,7 +433,7 @@ func TestFileHandler_APIKeyRequiresStorageScope(t *testing.T) {
 		bunrepo.NewUserRepository(db),
 		nil,
 	)
-	handler, err := NewFileHandler(cfg, validator, storageUC, nil, nil)
+	handler, err := NewFileHandler(cfg, validator, storageUC, nil, nil, testPolicies())
 	require.NoError(t, err)
 	mux := runtime.NewServeMux()
 	handler.Register(mux)
@@ -493,7 +493,7 @@ func TestFileHandler_AdminRequiresProjectAccess(t *testing.T) {
 		bunrepo.NewUserRepository(db),
 		nil,
 	)
-	handler, err := NewFileHandler(cfg, validator, storageUC, nil, nil)
+	handler, err := NewFileHandler(cfg, validator, storageUC, nil, nil, testPolicies())
 	require.NoError(t, err)
 	mux := runtime.NewServeMux()
 	handler.Register(mux)
@@ -724,3 +724,5 @@ func newFileHandlerTestAccount(cfg *config.AppConfig, projectRepo projects.Repos
 	sessions := auth.NewSessionService(cfg, sessionRepo, roles, nil)
 	return client.NewAccount(cfg, projectRepo, nil, sessions, nil, nil, nil, nil, nil, nil, nil, nil, nil, roles, nil, nil, nil, nil, usersRepo, identities, sessionRepo, auth.NewOAuthAuthenticatorFactory(), auth.NewWeChatMiniProgramExchanger(), auth.NewOTPGenerator())
 }
+
+// testPolicies 定义于 auth_test.go（同包共享）。

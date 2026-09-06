@@ -19,13 +19,15 @@ type AuthValidator interface {
 }
 
 // httpAuth 是 serverhttp 各 handler 共享的 HTTP 认证/鉴权原语，与 gRPC /
-// Realtime 共用 Validator.Authenticate。
+// Realtime 共用 Validator.Authenticate。scope 匹配读 PolicySet（与拦截器
+// 同源，禁止手写策略值）。
 type httpAuth struct {
 	validator AuthValidator
+	policies  *domainauth.PolicySet
 }
 
-func newHTTPAuth(validator AuthValidator) *httpAuth {
-	return &httpAuth{validator: validator}
+func newHTTPAuth(validator AuthValidator, policies *domainauth.PolicySet) *httpAuth {
+	return &httpAuth{validator: validator, policies: policies}
 }
 
 // authenticate 解析并校验请求凭证，返回认证主体；多凭证并存、同一凭证头
@@ -44,7 +46,7 @@ func (a *httpAuth) authorize(r *http.Request, apiKeyScope func(*http.Request) st
 		return nil, err
 	}
 	if principal.CredentialType == shared.CredentialTypeAPIKey {
-		if !domainauth.APIKeyScopeAllowed(apiKeyScope(r), principal.Permissions) {
+		if !a.policies.AllowsAPIKey(apiKeyScope(r), principal.Permissions) {
 			return nil, status.Error(codes.PermissionDenied, "api key missing required scope")
 		}
 	}

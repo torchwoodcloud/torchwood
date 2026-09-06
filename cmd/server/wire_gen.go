@@ -24,6 +24,7 @@ import (
 	"github.com/torchwooddev/torchwood/internal/app/server"
 	storage2 "github.com/torchwooddev/torchwood/internal/app/storage"
 	"github.com/torchwooddev/torchwood/internal/app/subscriptions"
+	"github.com/torchwooddev/torchwood/internal/bootkit"
 	"github.com/torchwooddev/torchwood/internal/infra/auth"
 	"github.com/torchwooddev/torchwood/internal/infra/billing"
 	"github.com/torchwooddev/torchwood/internal/infra/bun/bunrepo"
@@ -38,7 +39,6 @@ import (
 	"github.com/torchwooddev/torchwood/internal/infra/queue"
 	"github.com/torchwooddev/torchwood/internal/infra/realtime"
 	"github.com/torchwooddev/torchwood/internal/infra/storage"
-	"github.com/torchwooddev/torchwood/internal/bootkit"
 	"github.com/torchwooddev/torchwood/internal/runtime"
 )
 
@@ -147,7 +147,13 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	storageService := servergrpc.NewStorageService(storageStorage)
 	users := server.NewUsers(repository, sessionService, database, userRepository, sessionRepository, groupRepository, membershipRepository)
 	usersService := servergrpc.NewUsersService(users)
-	apiKeys := server.NewAPIKeys(apiKeyRepository)
+	policySet, err := runtime.ProvideMethodPolicies()
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	scopeVocabulary := runtime.ProvideScopeVocabulary(policySet)
+	apiKeys := server.NewAPIKeys(apiKeyRepository, scopeVocabulary)
 	apiKeysService := servergrpc.NewAPIKeysService(apiKeys)
 	oAuthProviders := server.NewOAuthProviders(oAuthProviderRepository)
 	oAuthProvidersService := servergrpc.NewOAuthProvidersService(oAuthProviders)
@@ -176,12 +182,12 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	outboxRepository := bunrepo.NewOutboxRepository(database)
 	outboxAdmin := events2.NewOutboxAdmin(outboxRepository, repository)
 	outboxService := servergrpc.NewOutboxService(outboxAdmin)
-	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, healthService, projectsService, storageService, usersService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, functionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, authService, adminsService, outboxService)
+	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, healthService, projectsService, storageService, usersService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, functionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, authService, adminsService, outboxService, policySet)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	fileHandler, err := serverhttp.NewFileHandler(appConfig, validator, storageStorage, auditRepository, logger)
+	fileHandler, err := serverhttp.NewFileHandler(appConfig, validator, storageStorage, auditRepository, logger, policySet)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -191,7 +197,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	functionsHandler, err := serverhttp.NewFunctionsHandler(appConfig, validator, functionsFunctions, auditRepository, logger)
+	functionsHandler, err := serverhttp.NewFunctionsHandler(appConfig, validator, functionsFunctions, auditRepository, logger, policySet)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -207,7 +213,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	grpcGatewayServer, err := runtime.NewGRPCGatewayServer(app, appConfig, checkers, fileHandler, oAuthHandler, functionsHandler, paymentsHandler, handler)
+	grpcGatewayServer, err := runtime.NewGRPCGatewayServer(app, appConfig, checkers, fileHandler, oAuthHandler, functionsHandler, paymentsHandler, handler, policySet)
 	if err != nil {
 		cleanup()
 		return nil, nil, err

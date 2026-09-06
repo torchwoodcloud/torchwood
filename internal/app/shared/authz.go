@@ -40,7 +40,7 @@ func RequireAdminActor(ctx context.Context) error {
 // RequireServerWriteActor 校验调用者具备经 Server API 调用业务写方法的资格
 // （纵深防御第二层）：console admin 会话（ActorKind=admin，角色细粒度由
 // 拦截器 adminRoleMethodRules 把关）或 API key 主体（ActorKind=service，
-// scope 细粒度由拦截器 APIKeyScopeAllowed 把关）。匿名与端用户一律拒绝——
+// scope 细粒度由拦截器 PolicySet.AllowsAPIKey 把关）。匿名与端用户一律拒绝——
 // use-case 直接调用（绕过拦截器）时不得以 SystemPrincipal 执行写操作。
 func RequireServerWriteActor(ctx context.Context) error {
 	principal, ok := contexts.Principal(ctx)

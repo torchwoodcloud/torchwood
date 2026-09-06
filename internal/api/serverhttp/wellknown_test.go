@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -12,13 +13,39 @@ import (
 	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
 	"github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/domain/databases"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
+
+// wellKnownTestPolicies 按 wellKnownVerbs 清单构造最小 databases 策略
+// （真实策略由 runtime.PolicySet 注入；本包测试不得 import runtime——会循环）。
+func wellKnownTestPolicies() *auth.PolicySet {
+	pols := make([]auth.MethodPolicy, 0, len(wellKnownVerbs))
+	for _, v := range wellKnownVerbs {
+		op := auth.ScopeWrite
+		for _, prefix := range []string{"List", "Get", "Count", "Export"} {
+			if strings.HasPrefix(v.RPC, prefix) {
+				op = auth.ScopeRead
+				break
+			}
+		}
+		pols = append(pols, auth.MethodPolicy{
+			Method: databasesServiceFullName + v.RPC, Service: databasesServiceFullName,
+			Access: auth.AccessServer, Scope: &auth.ScopeRule{Resource: auth.ScopeDatabases, Op: op},
+		})
+	}
+	set, err := auth.NewPolicySet(pols)
+	if err != nil {
+		panic(err)
+	}
+	return set
+}
 
 // serveWellKnown 经真实 runtime.ServeMux 注册路径后发起 GET（端点行为级测试）。
 func serveWellKnown(t *testing.T) *httptest.ResponseRecorder {
 	t.Helper()
 	mux := runtime.NewServeMux()
-	NewWellKnownHandler().Register(mux)
+	NewWellKnownHandler(wellKnownTestPolicies()).Register(mux)
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/torchwood", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -43,6 +70,9 @@ func TestWellKnownEndpoint(t *testing.T) {
 
 	errorCodes := doc["error_codes"].([]any)
 	require.NotEmpty(t, errorCodes)
+
+	scopes := doc["api_key_scopes"].([]any)
+	require.NotEmpty(t, scopes, "scope 词表下发段应非空（M4）")
 
 	resources := doc["resources"].(map[string]any)["databases"].(map[string]any)
 	verbs := resources["verbs"].([]any)
@@ -141,15 +171,20 @@ func TestWellKnownResourcesSync(t *testing.T) {
 	}
 
 	verbRPCs := map[string]struct{}{}
-	scopes := auth.APIKeyScopeRules()
 	for _, v := range doc.Resources.Databases.Verbs {
 		require.NotContains(t, verbRPCs, v.RPC, "动词重复登记: %s", v.RPC)
 		verbRPCs[v.RPC] = struct{}{}
 		require.Contains(t, v.HTTP, " ", "动词 %s 缺 HTTP 形态", v.RPC)
-		// scope 与单一事实源匹配（handler 构造期直读，此处锁定格式与存在性）。
-		rule, ok := scopes[databasesServiceFullName+v.RPC]
-		require.True(t, ok, "动词 %s 缺 scope 规则登记", v.RPC)
-		require.Equal(t, rule.Resource+"."+rule.Op, v.Scope, "动词 %s", v.RPC)
+		// scope 与 proto 注解（单一事实源）逐动词锁定——注解漂移即红。
+		md := serviceDesc.Methods().ByName(protoreflect.Name(v.RPC))
+		require.NotNil(t, md, "动词 %s 不在 proto 服务里", v.RPC)
+		ma, _ := proto.GetExtension(md.Options(), sharedv1.E_MethodAuth).(*sharedv1.MethodAuth)
+		require.NotNil(t, ma, "动词 %s 缺 method_auth 注解", v.RPC)
+		sc := ma.GetApiKeyScope()
+		require.NotNil(t, sc, "动词 %s 缺 api_key_scope", v.RPC)
+		want := strings.ToLower(strings.TrimPrefix(sc.GetResource().String(), "SCOPE_RESOURCE_")) +
+			"." + strings.ToLower(strings.TrimPrefix(sc.GetOp().String(), "SCOPE_OP_"))
+		require.Equal(t, want, v.Scope, "动词 %s scope 与 proto 注解不一致", v.RPC)
 	}
 	require.Equal(t, protoMethods, verbRPCs, "目录动词清单必须与 proto 方法全集一致")
 

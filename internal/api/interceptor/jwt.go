@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
+	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
 	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc"
@@ -22,38 +23,32 @@ type Validator interface {
 	ValidateAdminProjectAccess(ctx context.Context, principal *shared.Principal) error
 }
 
+// AuthInterceptor 是统一授权执行点（机制重设计 M3）：策略唯一声明在 proto
+// （authz 注解），经 runtime.BuildMethodPolicies 收集为 domainauth.PolicySet
+// 注入本拦截器；admin 角色/API key scope/permissions 全部从 PolicySet 读取，
+// 本包不再持有任何手写策略表。
 type AuthInterceptor struct {
-	validator         Validator
-	publicMethods     map[string]struct{}
-	apiKeyMethods     map[string]struct{}
-	permissionMethods map[string][]string
-	logger            *slog.Logger
+	validator Validator
+	policies  *domainauth.PolicySet
+	logger    *slog.Logger
 }
 
-func NewAuthInterceptor(validator Validator, publicMethods, apiKeyMethods []string, permissionMethods map[string][]string) (*AuthInterceptor, error) {
+// NewAuthInterceptor 构造拦截器；policies 为策略注册表（nil 拒绝构造）。
+func NewAuthInterceptor(validator Validator, policies *domainauth.PolicySet) (*AuthInterceptor, error) {
 	if validator == nil {
 		return nil, errors.New("validator cannot be nil")
 	}
-	i := &AuthInterceptor{
-		validator:         validator,
-		publicMethods:     make(map[string]struct{}),
-		apiKeyMethods:     make(map[string]struct{}),
-		permissionMethods: permissionMethods,
-		logger:            slog.Default(),
+	if policies == nil {
+		return nil, errors.New("method policies cannot be nil")
 	}
-	if i.permissionMethods == nil {
-		i.permissionMethods = map[string][]string{}
-	}
-	for _, m := range publicMethods {
-		i.publicMethods[m] = struct{}{}
-	}
-	for _, m := range apiKeyMethods {
-		i.apiKeyMethods[m] = struct{}{}
-	}
-	return i, nil
+	return &AuthInterceptor{
+		validator: validator,
+		policies:  policies,
+		logger:    slog.Default(),
+	}, nil
 }
 
-// WithLogger 替换认证失败留痕所用的 logger（默认 slog.Default()），返回自身便于链式调用。
+// WithLogger 替换认证失败留痕所用的 logger（默认 slog.Default()），返回自身便于链式。
 func (i *AuthInterceptor) WithLogger(l *slog.Logger) *AuthInterceptor {
 	if l != nil {
 		i.logger = l
@@ -75,7 +70,15 @@ func (i *AuthInterceptor) logAuthFailure(ctx context.Context, method, reason str
 }
 
 func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	if _, ok := i.publicMethods[info.FullMethod]; ok {
+	policy, ok := i.policies.Get(info.FullMethod)
+	if !ok {
+		// fail-closed：未登记策略的方法一律拒绝（启动期另有
+		// assertRegisteredMethodsHaveAuthz 兜底，此处防御直接调用）。
+		i.logAuthFailure(ctx, info.FullMethod, "policy_missing", "")
+		return nil, status.Error(codes.PermissionDenied, "no auth policy for method")
+	}
+
+	if policy.Access == domainauth.AccessPublic {
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
 			if principal, err := i.validator.Authenticate(ctx, authnRequestFromMD(md)); err == nil && principal != nil {
 				ctx = contexts.WithPrincipal(ctx, principal)
@@ -107,18 +110,16 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 	}
 	credentialType := principal.CredentialType
 
-	if _, isAPIKeyMethod := i.apiKeyMethods[info.FullMethod]; isAPIKeyMethod {
+	if policy.Access == domainauth.AccessServer {
+		// SERVER 面（原 ACCESS_API_KEY）：凭证族 = API key 或 admin 会话。
 		if principal.CredentialType != shared.CredentialTypeAPIKey && principal.ActorKind != shared.ActorKindAdmin {
 			i.logAuthFailure(ctx, info.FullMethod, "credential_type_not_allowed", credentialType)
 			return nil, status.Error(codes.Unauthenticated, "developer API requires x-api-key header or admin session")
 		}
 		if principal.CredentialType == shared.CredentialTypeAPIKey {
-			// API key 凭证禁止调用 APIKeys 服务，防止泄露的 key 自铸新 key 造成永久提权。
-			if IsAPIKeysServiceMethod(info.FullMethod) {
-				i.logAuthFailure(ctx, info.FullMethod, "apikey_self_management_denied", credentialType)
-				return nil, status.Error(codes.PermissionDenied, "api keys cannot manage api keys")
-			}
-			if !APIKeyScopeAllowed(info.FullMethod, principal.Permissions) {
+			// 平台专属面不声明 api_key_scope（AssertSemantic 保证），scope
+			// 匹配 fail-closed：未声明即拒绝（通配符不豁免）。
+			if !i.policies.AllowsAPIKey(info.FullMethod, principal.Permissions) {
 				i.logAuthFailure(ctx, info.FullMethod, "apikey_scope_missing", credentialType)
 				return nil, status.Error(codes.PermissionDenied, "api key missing required scope")
 			}
@@ -127,8 +128,8 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 
 	// Allow admin console sessions to target a specific project via header.
 	if principal.ActorKind == shared.ActorKindAdmin {
-		// 受限 admin（viewer/member）不得调用仅 owner/admin 的 Server API 写方法。
-		if perms := adminRoleMethodRules[info.FullMethod]; len(perms) > 0 && !principal.HasAnyRole(perms) {
+		// 角色门（SERVER 面的 admin_roles；nil = 不限角色）。
+		if roles := policy.AdminRoles; len(roles) > 0 && !principal.HasAnyRole(adminRoleStrings(roles)) {
 			i.logAuthFailure(ctx, info.FullMethod, "admin_role_denied", credentialType)
 			return nil, status.Error(codes.PermissionDenied, "missing required admin role")
 		}
@@ -147,9 +148,10 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 		}
 	}
 
-	if perms := i.permissionMethods[info.FullMethod]; len(perms) > 0 {
-		// API Key 只允许经 apiKeyMethods 的 scope 门禁调用；console/owner 类
-		// 权限是 admin 会话专属，scope * / all 也不得放行（安全评审 M7）。
+	if perms := policy.Permissions; len(perms) > 0 {
+		// PERMISSION/END_USER 面角色门。API key 只允许经 SERVER 面的 scope
+		// 门禁调用；console/owner 类权限是 admin 会话专属，scope * / all
+		// 也不得放行（安全评审 M7）。
 		if principal.CredentialType == shared.CredentialTypeAPIKey {
 			i.logAuthFailure(ctx, info.FullMethod, "apikey_permission_method_denied", credentialType)
 			return nil, status.Error(codes.PermissionDenied, "api key credentials not allowed on permission-gated methods")
@@ -162,6 +164,16 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 
 	ctx = contexts.WithPrincipal(ctx, principal)
 	return handler(ctx, req)
+}
+
+// adminRoleStrings 将 enum 角色转为主体角色串（AdminRole 的字符串形态即
+// principal.Roles 中的角色串，两者由 policy.go 词表锁定一致）。
+func adminRoleStrings(roles []domainauth.AdminRole) []string {
+	out := make([]string, 0, len(roles))
+	for _, r := range roles {
+		out = append(out, string(r))
+	}
+	return out
 }
 
 func parseFailureReason(err error) string {

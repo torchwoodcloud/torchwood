@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/domain/projects"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
 	"github.com/torchwooddev/torchwood/internal/infra/bun/bunrepo"
@@ -15,6 +16,18 @@ import (
 )
 
 type fakeAPIKeyRepository struct{}
+
+// testScopeVocabulary 构造含常用资源的最小词表（真实词表由 PolicySet 派生）。
+func testScopeVocabulary() *domainauth.ScopeVocabulary {
+	set, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{
+		{Method: "/t/a", Service: "/t", Access: domainauth.AccessServer, Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeUsers, Op: domainauth.ScopeWrite}},
+		{Method: "/t/b", Service: "/t", Access: domainauth.AccessServer, Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeDatabases, Op: domainauth.ScopeRead}},
+	})
+	if err != nil {
+		panic(err)
+	}
+	return domainauth.VocabularyFromPolicies(set)
+}
 
 func (f *fakeAPIKeyRepository) CreateAPIKey(ctx context.Context, key *projects.APIKey) error {
 	return nil
@@ -35,7 +48,7 @@ func (f *fakeAPIKeyRepository) DeleteAPIKey(ctx context.Context, projectID, id s
 // TestAPIKeys_Create_ScopeValidation (B2): Create 时校验 scope 格式
 // ∈ {*, all, 裸资源名, <resource>.read, <resource>.write}，上限 32 项/64 字符。
 func TestAPIKeys_Create_ScopeValidation(t *testing.T) {
-	uc := NewAPIKeys(&fakeAPIKeyRepository{})
+	uc := NewAPIKeys(&fakeAPIKeyRepository{}, testScopeVocabulary())
 	ctx := platformAdminCtx(context.Background())
 
 	for _, scopes := range [][]string{
@@ -86,7 +99,7 @@ func TestAPIKeys_Create_ScopeValidation(t *testing.T) {
 // TestAPIKeys_Create_RequiresPlatformAdmin（F2-2 纵深防御）：受限 admin
 // （viewer/member）与 API key 主体调用 Create 必须 PermissionDenied。
 func TestAPIKeys_Create_RequiresPlatformAdmin(t *testing.T) {
-	uc := NewAPIKeys(&fakeAPIKeyRepository{})
+	uc := NewAPIKeys(&fakeAPIKeyRepository{}, testScopeVocabulary())
 
 	for _, principal := range []*shared.Principal{
 		{ActorID: "admin-2", ActorKind: shared.ActorKindAdmin, Roles: []string{"viewer"}},
@@ -107,7 +120,7 @@ func TestAPIKeys_Create_RequiresPlatformAdmin(t *testing.T) {
 // 受限 admin（viewer/member）一律 PermissionDenied，匿名 Unauthenticated；
 // 平台 admin 通过守卫后进入业务路径（key 不存在 → NotFound）。
 func TestAPIKeys_Delete_RequiresPlatformAdmin(t *testing.T) {
-	uc := NewAPIKeys(&fakeAPIKeyRepository{})
+	uc := NewAPIKeys(&fakeAPIKeyRepository{}, testScopeVocabulary())
 
 	for _, principal := range []*shared.Principal{
 		{ActorID: "user-1", ActorKind: shared.ActorKindEndUser, UserID: "user-1"},
@@ -142,7 +155,7 @@ func TestAPIKeys_CrossProjectGetDeleteNotFound(t *testing.T) {
 	p2, _, c2 := testutil.CreateTestProject(ctx, db)
 	defer c2()
 
-	uc := NewAPIKeys(bunrepo.NewAPIKeyRepository(db))
+	uc := NewAPIKeys(bunrepo.NewAPIKeyRepository(db), testScopeVocabulary())
 	key, _, err := uc.CreateInternal(ctx, CreateAPIKeyCommand{
 		ProjectID: p1,
 		Name:      "k",

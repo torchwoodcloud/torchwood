@@ -58,30 +58,13 @@ func NewGRPCServer(
 	consoleAuth *consolegrpc.AuthService,
 	adminsService *consolegrpc.AdminsService,
 	outboxService *servergrpc.OutboxService,
+	policySet *domainauth.PolicySet,
 ) (*lynxgrpc.Server, error) {
 	grpcCfg := cfg.GetServer().GetGrpc()
 	timeout := parseDuration(grpcCfg.GetTimeout(), 30*time.Second)
 
-	publicMethods, apiKeyMethods, permissionMethods, err := collectMethodsByAccess(authzFileDescriptors()...)
-	if err != nil {
-		return nil, err
-	}
-	// 语义断言（机制重设计 M2）：完备性/死 scope/档位/client·console 值域/
-	// 项目寻址不变量/streaming fail-closed——策略语义违例启动即失败。
-	policySet, err := BuildMethodPolicies(authzFileDescriptors()...)
-	if err != nil {
-		return nil, err
-	}
-	if err := domainauth.AssertSemantic(policySet); err != nil {
-		return nil, err
-	}
-	// 过渡期交叉核验（A2 拦截器换源 PolicySet 后两断言随两表退役）：
-	// proto 推导的 SERVER 方法集合必须与 apiKeyScopeRules 完全一致，
-	// scope 写方法必须已登记 adminRoleMethodRules。
-	interceptor.AssertAPIKeyScopeCoverage(apiKeyMethods)
-	interceptor.AssertAdminRoleWriteCoverage()
-
-	authInterceptor, err := interceptor.NewAuthInterceptor(validator, publicMethods, apiKeyMethods, permissionMethods)
+	// 策略注册表由 ProvideMethodPolicies 注入（唯一收集点，含语义断言）。
+	authInterceptor, err := interceptor.NewAuthInterceptor(validator, policySet)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +125,7 @@ func NewGRPCServer(
 	}
 
 	// fail-closed：所有已注册方法都必须带有 authz 注解，缺失的方法会在拦截器里被放行。
-	if err := assertRegisteredMethodsHaveAuthz(grpcSrv, publicMethods, apiKeyMethods, permissionMethods); err != nil {
+	if err := assertRegisteredMethodsHaveAuthz(grpcSrv, policySet); err != nil {
 		return nil, err
 	}
 
@@ -157,21 +140,10 @@ var authzExemptServicePrefixes = []string{
 	"grpc.reflection.",
 }
 
-// assertRegisteredMethodsHaveAuthz 断言每个已注册的 gRPC 方法都存在于某一类 access map
-// （public/apiKey/permission 之一）。漏配的方法不在任何 map 中，会在拦截器
-// "len(perms)==0 跳过"分支被任意有效凭证放行，因此启动期直接报错（fail-closed）。
-func assertRegisteredMethodsHaveAuthz(grpcSrv *grpc.Server, publicMethods, apiKeyMethods []string, permissionMethods map[string][]string) error {
-	covered := make(map[string]struct{}, len(publicMethods)+len(apiKeyMethods)+len(permissionMethods))
-	for _, m := range publicMethods {
-		covered[m] = struct{}{}
-	}
-	for _, m := range apiKeyMethods {
-		covered[m] = struct{}{}
-	}
-	for m := range permissionMethods {
-		covered[m] = struct{}{}
-	}
-
+// assertRegisteredMethodsHaveAuthz 断言每个已注册的 gRPC 方法都在策略注册
+// 表中。漏配的方法会被拦截器 fail-closed 拒绝（policy_missing），启动期
+// 直接报错以尽早暴露注解缺失。
+func assertRegisteredMethodsHaveAuthz(grpcSrv *grpc.Server, policies *domainauth.PolicySet) error {
 	var missing []string
 	for serviceName, info := range grpcSrv.GetServiceInfo() {
 		exempt := false
@@ -186,7 +158,7 @@ func assertRegisteredMethodsHaveAuthz(grpcSrv *grpc.Server, publicMethods, apiKe
 		}
 		for _, m := range info.Methods {
 			fullMethod := "/" + serviceName + "/" + m.Name
-			if _, ok := covered[fullMethod]; !ok {
+			if _, ok := policies.Get(fullMethod); !ok {
 				missing = append(missing, fullMethod)
 			}
 		}
@@ -225,30 +197,6 @@ func authzFileDescriptors() []protoreflect.FileDescriptor {
 		consolev1.File_console_v1_auth_proto,
 		consolev1.File_console_v1_admins_proto,
 	}
-}
-
-// collectMethodsByAccess 从 PolicySet 派生拦截器所需的三张方法集合
-// （A2 拦截器换源后本函数退役）。END_USER/PERMISSION 都落在 permissionMethods；
-// SERVER 落在 apiKeyMethods（历史命名，A2 更名 serverMethods）。
-func collectMethodsByAccess(fileDescs ...protoreflect.FileDescriptor) (publicMethods []string, apiKeyMethods []string, permissionMethods map[string][]string, err error) {
-	set, err := BuildMethodPolicies(fileDescs...)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	permissionMethods = make(map[string][]string)
-	for _, p := range set.Methods() {
-		switch p.Access {
-		case domainauth.AccessPublic:
-			publicMethods = append(publicMethods, p.Method)
-		case domainauth.AccessServer:
-			apiKeyMethods = append(apiKeyMethods, p.Method)
-		case domainauth.AccessEndUser, domainauth.AccessPermission:
-			permissionMethods[p.Method] = p.Permissions
-		default:
-			return nil, nil, nil, fmt.Errorf("method %s: access %d 无 bucket", p.Method, p.Access)
-		}
-	}
-	return publicMethods, apiKeyMethods, permissionMethods, nil
 }
 
 func resolveServiceDefaultAccess(service protoreflect.ServiceDescriptor) sharedv1.AccessLevel {

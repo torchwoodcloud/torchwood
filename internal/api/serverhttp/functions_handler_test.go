@@ -187,7 +187,7 @@ func functionsSignToken(t *testing.T, claims jwtparser.Claims) string {
 
 func newFunctionsHandler(t *testing.T, validator *auth.Validator) *FunctionsHandler {
 	t.Helper()
-	h, err := NewFunctionsHandler(functionsTestConfig(), validator, nil, nil, nil)
+	h, err := NewFunctionsHandler(functionsTestConfig(), validator, nil, nil, nil, testPolicies())
 	require.NoError(t, err)
 	return h
 }
@@ -522,7 +522,7 @@ func TestFunctionsHandler_Upload_InjectsPrincipalIntoCtx(t *testing.T) {
 		validator := auth.NewValidator(functionsTestConfig(), &functionsAPIKeyRepo{}, nil, &functionsAdminRepo{
 			admins: map[string]*projects.Admin{admin.ID: admin},
 		}, &functionsAdminProjectRepo{}, nil, nil, nil, nil)
-		h, err := NewFunctionsHandler(functionsTestConfig(), validator, uc, nil, nil)
+		h, err := NewFunctionsHandler(functionsTestConfig(), validator, uc, nil, nil, testPolicies())
 		require.NoError(t, err)
 
 		token := functionsSignToken(t, jwtparser.Claims{
@@ -559,7 +559,7 @@ func TestFunctionsHandler_Upload_InjectsPrincipalIntoCtx(t *testing.T) {
 				},
 			},
 		}, nil, &functionsAdminRepo{}, &functionsAdminProjectRepo{}, nil, nil, nil, nil)
-		h, err := NewFunctionsHandler(functionsTestConfig(), validator, uc, nil, nil)
+		h, err := NewFunctionsHandler(functionsTestConfig(), validator, uc, nil, nil, testPolicies())
 		require.NoError(t, err)
 
 		r := newUploadRequest(t, map[string]string{"X-Api-Key": "fn-key-ok"})
@@ -600,7 +600,7 @@ func TestFunctionsHandler_UploadWritesAudit(t *testing.T) {
 	}
 	validator := newFunctionsValidator(docDB)
 	auditRepo := &functionsAuditRepo{}
-	h, err := NewFunctionsHandler(functionsTestConfig(), validator, nil, auditRepo, nil)
+	h, err := NewFunctionsHandler(functionsTestConfig(), validator, nil, auditRepo, nil, testPolicies())
 	require.NoError(t, err)
 
 	token := functionsSignToken(t, jwtparser.Claims{
@@ -623,3 +623,5 @@ func TestFunctionsHandler_UploadWritesAudit(t *testing.T) {
 	require.Equal(t, "PermissionDenied", entry.Status)
 	// 授权失败路径无 principal（与 gRPC AuditInterceptor 一致），actor 字段为空。
 }
+
+// testPolicies 定义于 auth_test.go（同包共享）。

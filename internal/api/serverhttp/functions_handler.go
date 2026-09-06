@@ -8,10 +8,11 @@ import (
 	"net/http"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/torchwooddev/torchwood/internal/api/interceptor"
 	appfunctions "github.com/torchwooddev/torchwood/internal/app/functions"
 	"github.com/torchwooddev/torchwood/internal/domain/audit"
+	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
-	"github.com/torchwooddev/torchwood/internal/api/interceptor"
 	"github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc/codes"
@@ -27,6 +28,7 @@ const maxCodePackageBytes = 50 << 20
 
 // FunctionsHandler 提供 deployment 代码包 multipart 上传。
 type FunctionsHandler struct {
+	policies  *domainauth.PolicySet
 	cfg       *config.AppConfig
 	auth      *httpAuth
 	functions *appfunctions.Functions
@@ -42,6 +44,7 @@ func NewFunctionsHandler(
 	functions *appfunctions.Functions,
 	auditRepo audit.Repository,
 	logger *slog.Logger,
+	policies *domainauth.PolicySet,
 ) (*FunctionsHandler, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -50,8 +53,8 @@ func NewFunctionsHandler(
 	if err != nil {
 		return nil, fmt.Errorf("parse security.trusted_proxies: %w", err)
 	}
-	return &FunctionsHandler{cfg: cfg, auth: newHTTPAuth(validator), functions: functions, auditRepo: auditRepo,
-		trusted: trusted, logger: logger}, nil
+	return &FunctionsHandler{cfg: cfg, auth: newHTTPAuth(validator, policies), functions: functions, auditRepo: auditRepo,
+		trusted: trusted, logger: logger, policies: policies}, nil
 }
 
 // Register attaches the deployment upload route to the gateway mux.
@@ -199,7 +202,8 @@ func (h *FunctionsHandler) authorize(r *http.Request) (*shared.Principal, error)
 	if principal.ActorKind == shared.ActorKindEndUser {
 		return nil, status.Error(codes.PermissionDenied, "end-user credentials cannot upload deployments")
 	}
-	if principal.ActorKind == shared.ActorKindAdmin && !principal.HasAnyRole([]string{"owner", "admin"}) {
+	if principal.ActorKind == shared.ActorKindAdmin &&
+		!principal.HasAnyRole(domainauth.RoleStrings(h.policies.AllowedAdminRoles(FunctionsServiceCreateDeployment))) {
 		return nil, status.Error(codes.PermissionDenied, "admin role not permitted for deployment upload")
 	}
 	return principal, nil

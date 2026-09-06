@@ -157,6 +157,95 @@ func (s *PolicySet) HasAPIKeyScope(fullMethod string) *ScopeRule {
 	return p.Scope
 }
 
+// AllowsAPIKey 判定给定 scope 集合是否放行该方法（B2 匹配语义）：
+// * / all 全量放行；裸资源名放行该资源全部方法；<res>.read 仅读方法；
+// <res>.write 仅写方法。未声明 scope 的方法（非 SERVER 面或平台专属）
+// 一律拒绝——fail-closed，与通配符无关。
+func (s *PolicySet) AllowsAPIKey(fullMethod string, scopes []string) bool {
+	rule := s.HasAPIKeyScope(fullMethod)
+	if rule == nil {
+		return false
+	}
+	for _, sc := range scopes {
+		if sc == "*" || sc == "all" {
+			return true
+		}
+		if sc == string(rule.Resource) {
+			return true
+		}
+		if rule.Op == ScopeRead && sc == string(rule.Resource)+".read" {
+			return true
+		}
+		if rule.Op == ScopeWrite && sc == string(rule.Resource)+".write" {
+			return true
+		}
+	}
+	return false
+}
+
+// ScopeVocabulary 是从 PolicySet 派生的合法 scope 词表（创建校验与
+// well-known/SDK/console 下发的单一来源）。词表 = 全部被引用资源的
+// {资源名, 资源名.read, 资源名.write} ∪ {*, all}。
+type ScopeVocabulary struct {
+	valid     map[string]struct{}
+	resources []ScopeResource
+	ops       map[ScopeResource]map[ScopeOp]struct{}
+}
+
+// VocabularyFromPolicies 从策略注册表派生词表（死 scope 断言保证每个资源
+// 至少被引用一次，因此 resources 恒非空）。
+func VocabularyFromPolicies(set *PolicySet) *ScopeVocabulary {
+	v := &ScopeVocabulary{valid: map[string]struct{}{"*": {}, "all": {}}, ops: map[ScopeResource]map[ScopeOp]struct{}{}}
+	seen := map[ScopeResource]struct{}{}
+	for _, p := range set.Methods() {
+		if p.Scope == nil {
+			continue
+		}
+		if _, ok := seen[p.Scope.Resource]; !ok {
+			seen[p.Scope.Resource] = struct{}{}
+			v.resources = append(v.resources, p.Scope.Resource)
+		}
+		if v.ops[p.Scope.Resource] == nil {
+			v.ops[p.Scope.Resource] = map[ScopeOp]struct{}{}
+		}
+		v.ops[p.Scope.Resource][p.Scope.Op] = struct{}{}
+		v.valid[string(p.Scope.Resource)] = struct{}{}
+		v.valid[string(p.Scope.Resource)+"."+string(p.Scope.Op)] = struct{}{}
+	}
+	sort.Slice(v.resources, func(i, j int) bool { return v.resources[i] < v.resources[j] })
+	return v
+}
+
+// Valid 报告 scope 字符串是否在词表内（key 创建校验用）。
+func (v *ScopeVocabulary) Valid(s string) bool {
+	if v == nil {
+		return false
+	}
+	_, ok := v.valid[s]
+	return ok
+}
+
+// Resources 返回被引用的资源清单（排序稳定，供下发与生成）。
+func (v *ScopeVocabulary) Resources() []ScopeResource {
+	if v == nil {
+		return nil
+	}
+	return append([]ScopeResource{}, v.resources...)
+}
+
+// HasOp 报告资源是否声明了该方向（供下发面描述资源能力）。
+func (v *ScopeVocabulary) HasOp(r ScopeResource, op ScopeOp) bool {
+	if v == nil {
+		return false
+	}
+	ops, ok := v.ops[r]
+	if !ok {
+		return false
+	}
+	_, has := ops[op]
+	return has
+}
+
 // Tier 是 SERVER/PERMISSION 面方法的档位（从声明派生，非独立声明维度——
 // 机制裁决：档位是 classify 纯函数的输出，不进 proto，避免第二策略源）。
 type Tier string
@@ -173,6 +262,17 @@ const (
 	// 无 key 通道（项目建删、API key 管理）。
 	TierPlatformOnly Tier = "platform_only"
 )
+
+// RoleStrings 将 AdminRole 集合转为主体角色串集合（AdminRole 的字符串
+// 形态即 principal.Roles 中的角色串，两者由本包词表锁定一致）。供
+// HasAnyRole 消费点把策略角色门转为主体角色匹配。
+func RoleStrings(roles []AdminRole) []string {
+	out := make([]string, 0, len(roles))
+	for _, r := range roles {
+		out = append(out, string(r))
+	}
+	return out
+}
 
 // roleSet 规范化角色集合比较（顺序无关）。
 func roleSet(roles []AdminRole) map[AdminRole]struct{} {

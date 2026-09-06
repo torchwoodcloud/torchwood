@@ -17,12 +17,13 @@ import (
 
 	"github.com/disintegration/imaging"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/torchwooddev/torchwood/internal/api/interceptor"
 	appstorage "github.com/torchwooddev/torchwood/internal/app/storage"
 	"github.com/torchwooddev/torchwood/internal/domain/audit"
+	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/domain/databases"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
 	domainstorage "github.com/torchwooddev/torchwood/internal/domain/storage"
-	"github.com/torchwooddev/torchwood/internal/api/interceptor"
 	"github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/pkg/idgen"
 	_ "golang.org/x/image/bmp"
@@ -47,6 +48,7 @@ var inlineSafeMimeTypes = map[string]struct{}{
 
 // FileHandler provides HTTP multipart upload/download for storage.
 type FileHandler struct {
+	policies  *domainauth.PolicySet
 	cfg       *config.AppConfig
 	auth      *httpAuth
 	storage   *appstorage.Storage
@@ -62,6 +64,7 @@ func NewFileHandler(
 	storage *appstorage.Storage,
 	auditRepo audit.Repository,
 	logger *slog.Logger,
+	policies *domainauth.PolicySet,
 ) (*FileHandler, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -70,8 +73,8 @@ func NewFileHandler(
 	if err != nil {
 		return nil, fmt.Errorf("parse security.trusted_proxies: %w", err)
 	}
-	return &FileHandler{cfg: cfg, auth: newHTTPAuth(validator), storage: storage, auditRepo: auditRepo,
-		trusted: trusted, logger: logger}, nil
+	return &FileHandler{cfg: cfg, auth: newHTTPAuth(validator, policies), storage: storage, auditRepo: auditRepo,
+		trusted: trusted, logger: logger, policies: policies}, nil
 }
 
 // clientIP 与 gRPC ClientInfoInterceptor 走同一 trusted-proxy 规则。
@@ -809,9 +812,9 @@ func imagingFormat(mime string) imaging.Format {
 // 认证/项目解析等公共逻辑见 httpAuth（auth.go）。
 func (h *FileHandler) authorize(r *http.Request) (*shared.Principal, error) {
 	isRead := r.Method == http.MethodGet
-	method := interceptor.StorageServiceGetFile
+	method := domainauth.StorageServiceGetFile
 	if !isRead {
-		method = interceptor.StorageServiceCreateFile
+		method = domainauth.StorageServiceCreateFile
 	}
 	p, err := h.auth.authorize(r, func(*http.Request) string { return method })
 	if err != nil {
@@ -821,7 +824,8 @@ func (h *FileHandler) authorize(r *http.Request) (*shared.Principal, error) {
 		return p, nil
 	}
 	if p.ActorKind == shared.ActorKindAdmin && !isRead {
-		if !p.HasAnyRole([]string{"member", "owner", "admin"}) {
+		// 角色门从 PolicySet 派生（镜像收编 M3：与拦截器 admin_roles 同源）。
+		if !p.HasAnyRole(domainauth.RoleStrings(h.policies.AllowedAdminRoles(domainauth.StorageServiceCreateFile))) {
 			return nil, status.Error(codes.PermissionDenied, "admin role not permitted for storage write")
 		}
 	}
