@@ -217,4 +217,3 @@ func TestConstructors(t *testing.T) {
 	// nil 子节点被跳过（坍缩同单子节点）。
 	require.Equal(t, a, And(nil, a))
 }
-
