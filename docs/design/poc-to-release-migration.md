@@ -2,7 +2,7 @@
 
 > **归档说明（2026-09-06）**：本方案的适用前提——"POC 期任一历史版本上、数据不可弃的真实存量部署"——经拍板确认**不存在**（当前无任何生产/对外存量库），存量处置一律重建（`docker:purge` + `db:migrate`）。本文转历史材料存档，不再维护；同日 `db/migrations` 基线重定为 5 个迁移（000001 控制面 / 000002 事件脊柱 / 000003 全局 catalog+账本 / 000004 RBAC·RLS·roles_sig / 000005 pgvector），文中 000023–000033 为旧编号，映射见 `docs/developer/15-exit-poc.md` 文首横幅。
 > 状态：**决策材料（A5 拍板附件），待维护者评审**——本文件履行 redesign 状态头义务（"转出 POC 前需重审本文所有'直接切换'类表述并补迁移方案"），对应 `docs/developer/15-exit-poc.md` A5 条目。评审通过后本文件转为活跃方案；实施类条目（G2 迁移器、000031 补丁）按 §8 的结论立项。
-> 成文：2026-09-05，基于对 redesign 全文、`db/migrations/000001..000030`、`internal/infra/documentdb`（rls_policy.go / postgres_collection_ddl.go / catalog_codec.go / acl_column.go）、`internal/infra/projectschema`（000001/000009/000011 与 git 历史 copy.go@47ea7ac/fa0834d）、`internal/pkg/bootkit/hooks.go` 的逐项核验。
+> 成文：2026-09-05，基于对 redesign 全文、`db/migrations/000001..000030`、`internal/infra/documentdb`（rls_policy.go / postgres_collection_ddl.go / catalog_codec.go / acl_column.go）、`internal/infra/projectschema`（000001/000009/000011 与 git 历史 copy.go@47ea7ac/fa0834d）、`internal/bootkit/hooks.go` 的逐项核验。
 > 适用对象：**在 POC 期任一历史版本上建立、且数据不可弃的真实存量部署**。本地/测试/可弃数据一律走 POC 定义（`docker:purge` + `db:migrate` 重建），不适用本文件。
 
 ---
@@ -32,7 +32,7 @@
 升级三步（`db:migrate` → 启动 → DDL touch）在存量库上的实际行为逐点核验如下，这是迁移方案必须存在的原因：
 
 1. **`db:migrate`（public 迁移 000001..000030）本身安全**：000025 建空全局 catalog（注释明示"本迁移不搬数据"）；000026/000027/000029 建 RBAC/RLS/签名面；不动项目 schema。
-2. **首次启动的 EnsureAll 是销毁点**：`internal/pkg/bootkit/hooks.go` 的 `ProjectSchemaEnsureHook` 对每个项目幂等执行 `projectschema.EnsureAll` → 存量项目 schema_migrations 落后时逐版重放至最新 → **000011 `DROP document_attributes/indexes/collections/databases`**（IF EXISTS，静默成功）。此后四表元数据不可恢复（行数据表还在，但 catalog 换轴所需的 attrs/indexes/permissions 定义已随表删除）。**迁移器必须挂在 `db:migrate` 之后、服务首次启动之前**，或自行接管 000011 的执行（§4.4）。
+2. **首次启动的 EnsureAll 是销毁点**：`internal/bootkit/hooks.go` 的 `ProjectSchemaEnsureHook` 对每个项目幂等执行 `projectschema.EnsureAll` → 存量项目 schema_migrations 落后时逐版重放至最新 → **000011 `DROP document_attributes/indexes/collections/databases`**（IF EXISTS，静默成功）。此后四表元数据不可恢复（行数据表还在，但 catalog 换轴所需的 attrs/indexes/permissions 定义已随表删除）。**迁移器必须挂在 `db:migrate` 之后、服务首次启动之前**，或自行接管 000011 的执行（§4.4）。
 3. **首次 DDL touch 是第二个故障点**：`reconcileVersionColumn` → `ensureACLIndex` 对无 `_acl` 列的存量表执行 `CREATE INDEX … USING gin (_acl)` 直接报错（现有代码没有 `ADD COLUMN _acl` 的对账分支——`_acl` 仅存在于 `createCollectionTable` 的新表列清单里）。即存量表连"懒修复"都不存在，必须前置补列。
 4. **RLS 面**：000026 三角色 + 000027 函数对存量库生效后，凡被 touch 的表立即进入 policy 管辖（`ensureCollectionRLS`），此时 `_acl` 尚未回填 → §0.3 的 fail-open 窗口。policy 启用与回填的先后必须由迁移器保证，不能依赖 DDL touch 顺序。
 

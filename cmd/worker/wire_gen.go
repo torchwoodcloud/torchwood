@@ -24,7 +24,7 @@ import (
 	"github.com/torchwooddev/torchwood/internal/infra/queue"
 	"github.com/torchwooddev/torchwood/internal/infra/realtime"
 	"github.com/torchwooddev/torchwood/internal/infra/storage"
-	"github.com/torchwooddev/torchwood/internal/pkg/bootkit"
+	"github.com/torchwooddev/torchwood/internal/bootkit"
 )
 
 // Injectors from wire.go:

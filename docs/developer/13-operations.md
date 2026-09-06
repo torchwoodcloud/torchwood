@@ -106,7 +106,7 @@ security:
   trusted_proxies: []  # 默认不信任 X-Forwarded-For / X-Real-Ip
 ```
 
-- 需恢复真实 IP：`TORCHWOOD_SECURITY_TRUSTED_PROXIES=127.0.0.1/32,10.0.0.0/8`（逗号分隔 CIDR，`internal/grpc/interceptor/trusted_proxy.go`）；
+- 需恢复真实 IP：`TORCHWOOD_SECURITY_TRUSTED_PROXIES=127.0.0.1/32,10.0.0.0/8`（逗号分隔 CIDR，`internal/api/interceptor/trusted_proxy.go`）；
 - 仅直连 peer 命中可信网段时才采信 `X-Forwarded-For` 首跳；gateway 与 gRPC 同进程部署时须包含 `127.0.0.1/32`。
 
 ### 4.3 关停排水：`TORCHWOOD_ENV`
@@ -267,7 +267,7 @@ torchwood admin sync-roles-sig \
 
 **Metrics**：`internal/infra/server/metrics.go` 独立 HTTP，`GET /metrics`（`promhttp.Handler()`），`server.metrics.addr`（默认 `127.0.0.1:9040`）。除 runtime 采集器外还有自定义业务指标（realtime Hub/Stream、documentdb 列授权 reconcile、projectschema ensure——规模预警线三指标见 §5.1）。
 
-**日志**：统一 `slog`（`lynx` + `lynxzap`），`--log-level` 控制；gateway 请求日志为 `Debug`（`lynxhttp.WithRequestLog(true)`，`grpc_gateway.go`），`RequestURL` 含完整 query（含 OAuth code），生产开 debug 前需评估；认证拒绝由 `internal/grpc/interceptor/jwt.go:logAuthFailure` 输出 Warn（无 token 明文）。
+**日志**：统一 `slog`（`lynx` + `lynxzap`），`--log-level` 控制；gateway 请求日志为 `Debug`（`lynxhttp.WithRequestLog(true)`，`grpc_gateway.go`），`RequestURL` 含完整 query（含 OAuth code），生产开 debug 前需评估；认证拒绝由 `internal/api/interceptor/jwt.go:logAuthFailure` 输出 Warn（无 token 明文）。
 
 **慢查询**：`internal/infra/clients/dbhook.go` 的 `SlowQueryHook`（`bun.QueryHook`）
 

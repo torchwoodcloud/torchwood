@@ -23,7 +23,7 @@ import (
 	infraqueue "github.com/torchwooddev/torchwood/internal/infra/queue"
 	"github.com/torchwooddev/torchwood/internal/infra/realtime"
 	infrastorage "github.com/torchwooddev/torchwood/internal/infra/storage"
-	"github.com/torchwooddev/torchwood/internal/pkg/bootkit"
+	"github.com/torchwooddev/torchwood/internal/bootkit"
 	config "github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/pkg/uow"
 )

@@ -14,7 +14,7 @@ Torchwood 将 **AI/Agent-Native** 作为与 BaaS 核心能力并列的产品定�
 | 能力 | 说明 | 关键组件 |
 |------|------|----------|
 | Protobuf + OpenAPI | API 单一事实来源，自动生成 Swagger | `proto/`、`buf.gen.yaml`、`genproto/**/*.swagger.json` |
-| Server API + 细粒度 Scope | Agent/自动化通过 API Key 调用管理面，按 scope 限权 | `proto/server/v1/*`、`api_keys.scopes`、`internal/grpc/interceptor` |
+| Server API + 细粒度 Scope | Agent/自动化通过 API Key 调用管理面，按 scope 限权 | `proto/server/v1/*`、`api_keys.scopes`、`internal/api/interceptor` |
 | 结构化鉴权注解 | 每个 gRPC 方法声明 `method_auth`，便于生成工具 schema | `proto/shared/v1/authz.proto` |
 | TypeScript SDK | Client + Server API 封装，便于 Agent 工作流集成 | `sdk/typescript/`、`sdk/demo/` |
 | 动态文档层 | Agent 可运行时建库/集合/文档，无需手工迁移 | `internal/infra/documentdb/`、`pkg/query/` |
@@ -267,7 +267,7 @@ Sprint 1 已完成 Server/Client Document CRUD；批量操作与 attribute/index
 
 | 任务 | 说明 | 关键文件 | 状态 |
 |------|------|----------|------|
-| API Key scope 校验 | 拦截器解析 scopes，对端点做细粒度授权 | `internal/grpc/interceptor/scope.go` | ✅ 完成 |
+| API Key scope 校验 | 拦截器解析 scopes，对端点做细粒度授权 | `internal/api/interceptor/scope.go` | ✅ 完成 |
 | 单元测试补齐 | 每个新增 use-case 至少一个单元测试（Functions use-case 已补） | `internal/app/**/*_test.go` | ✅ 完成 |
 | 集成测试 | Account、Databases Documents、Storage 端到端测试；本次补 UpdateCollection/DeleteAttribute/DeleteIndex/increment 路径 | `internal/app/**/*_integration_test.go` | ✅ 完成 |
 | Seed 数据增强 | 提供示例 collection、文件、函数 | ~~`cmd/seed/main.go`~~ | 已由首个管理员 bootstrap 取代（`docs/implementation-bootstrap-and-cli.md`），`cmd/seed` 移除 |

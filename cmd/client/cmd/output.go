@@ -82,7 +82,7 @@ func ExitCode(err error) int {
 }
 
 // formatRPCError 把 gRPC 调用错误转成 CLI 可读文本并附下一步动作提示：
-// PermissionDenied 提示 scope（scope 格式见 internal/grpc/interceptor/apikey_scope.go），
+// PermissionDenied 提示 scope（scope 格式见 internal/api/interceptor/apikey_scope.go），
 // Unauthenticated 提示 API Key 自诊断。
 func formatRPCError(err error) string {
 	if server.IsPermissionDenied(err) {

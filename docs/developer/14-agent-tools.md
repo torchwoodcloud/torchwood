@@ -127,7 +127,7 @@ TS 不提供 `InvokeJSON`；catalog 仅提供名字与 `fullMethod`，实际执�
 
 - **Proto**：`proto/client/`、`proto/server/`、`proto/console/`、`proto/shared/`；
 - **OpenAPI**：`task generate:proto`（`buf generate`）后 `genproto/**/*.swagger.json`（`buf.gen.yaml` 的 `openapiv2` 插件，`json_names_for_fields=false` 输出 snake_case，时间一律 `google.protobuf.Timestamp` → RFC3339）；
-- **Scope**：每个 Server RPC 在 `internal/grpc/interceptor/apikey_scope.go`（映射重建自 `internal/domain/auth/scope.go` 单一事实来源）有显式 `databases:read/write` 等映射，`AssertAPIKeyScopeCoverage` 在 `internal/runtime/grpc.go` 启动期 fail-closed 校验；
+- **Scope**：每个 Server RPC 在 `internal/api/interceptor/apikey_scope.go`（映射重建自 `internal/domain/auth/scope.go` 单一事实来源）有显式 `databases:read/write` 等映射，`AssertAPIKeyScopeCoverage` 在 `internal/runtime/grpc.go` 启动期 fail-closed 校验；
 - **计数**：187 = Client 61 + Server 116 + Console 10（以 `proto/**/*.proto` 的 `rpc` 计数为准；`genproto/**/*.swagger.json` 的 `operationId` 为 192（含 additional_bindings 复用），`buf breaking` 保障不兼容变更必经 `reserved`）。
 > 计数复现：`grep -r "^\s*rpc " proto | wc -l`（数字随 API 演进变化，以命令实时结果为准）。
 

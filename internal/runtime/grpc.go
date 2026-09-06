@@ -18,7 +18,7 @@ import (
 	"github.com/torchwooddev/torchwood/internal/domain/audit"
 	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	domainbilling "github.com/torchwooddev/torchwood/internal/domain/billing"
-	"github.com/torchwooddev/torchwood/internal/grpc/interceptor"
+	"github.com/torchwooddev/torchwood/internal/api/interceptor"
 	"github.com/torchwooddev/torchwood/internal/infra/auth"
 	"github.com/torchwooddev/torchwood/internal/infra/health"
 	"github.com/torchwooddev/torchwood/internal/pkg/config"

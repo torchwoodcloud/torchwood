@@ -125,7 +125,7 @@ wireBootstrap → NewAppConfig → UnmarshalConfig → 校验 jwt.secret/encrypt
 
 ### 6.1 trusted_proxies
 
-`security.trusted_proxies` 声明可信代理 CIDR（裸 IP 按 `/32`/`/128`）。仅当 gRPC 直连 `peer` 命中网段时才采纳 `X-Forwarded-For` 首跳或 `X-Real-Ip`，否则用 peer 地址（`internal/grpc/interceptor/trusted_proxy.go`）。默认空 = 不信任任何代理，防伪造绕过限流/审计；gateway 与 gRPC 同进程部署需含 `127.0.0.1/32`。
+`security.trusted_proxies` 声明可信代理 CIDR（裸 IP 按 `/32`/`/128`）。仅当 gRPC 直连 `peer` 命中网段时才采纳 `X-Forwarded-For` 首跳或 `X-Real-Ip`，否则用 peer 地址（`internal/api/interceptor/trusted_proxy.go`）。默认空 = 不信任任何代理，防伪造绕过限流/审计；gateway 与 gRPC 同进程部署需含 `127.0.0.1/32`。
 
 ```yaml
 security:

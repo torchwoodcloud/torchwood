@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/grpc/interceptor"
+	"github.com/torchwooddev/torchwood/internal/api/interceptor"
 )
 
 // TestAuthzCoverage_RealProtoRegistry（返工 R7）：以真实 proto registry
@@ -29,7 +29,7 @@ func TestAuthzCoverage_RealProtoRegistry(t *testing.T) {
 // TestAuthzCoverage_DetectsFabricatedMethod：向方法集合注入虚构的写方法，
 // 断言链条真的会抓漏（防上一测试自身失效——确认非空洞通过）。
 // 角色表侧的注入检出（diff 纯函数的 missing/extra）由
-// internal/grpc/interceptor/admin_roles_test.go 覆盖。
+// internal/api/interceptor/admin_roles_test.go 覆盖。
 func TestAuthzCoverage_DetectsFabricatedMethod(t *testing.T) {
 	t.Parallel()
 

@@ -7,7 +7,7 @@
 - 服务器组件由 `cmd/server/provides.go` 启动，包含 gRPC、grpc-gateway、独立 HTTP handler、metrics、Admin Console SPA。
 - gRPC/API Proto 定义在 `proto/client`、`proto/server`、`proto/console`、`proto/shared`，生成代码位于 `genproto/`。
 - 典型调用链：gRPC handler -> app use-case -> domain repo port -> infra adapter（bun 或 documentdb）。
-- 认证中间件位于 `internal/grpc/interceptor` 中，使用 Principal 注入；API_KEY 方法同时允许 admin console session（需带 `X-Torchwood-Project` header）。
+- 认证中间件位于 `internal/api/interceptor` 中，使用 Principal 注入；API_KEY 方法同时允许 admin console session（需带 `X-Torchwood-Project` header）。
 
 ## 项目结构补充
 - `console/`：React + Vite + TanStack Query + shadcn/ui 管理后台前端，通过 `console/embed.go` 嵌入 Go 二进制。

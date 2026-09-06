@@ -12,7 +12,7 @@ Torchwood 是 **Appwrite-inspired、AI/Agent-Native 的 BaaS**，Go + PostgreSQL
 | 能力 | 说明 |
 |------|------|
 | Protobuf 单一事实来源 | `proto/` → `buf generate` 产出 gRPC stub / gateway / OpenAPI（`genproto/`），Agent 可直接消费 |
-| scoped API Key | `x-api-key` 调用 Server API，按 `api_keys.scopes` 限权（`internal/grpc/interceptor/apikey_scope.go:25`） |
+| scoped API Key | `x-api-key` 调用 Server API，按 `api_keys.scopes` 限权（`internal/api/interceptor/apikey_scope.go:25`） |
 | 结构化鉴权注解 | 每个 gRPC 方法带 `method_auth`（`proto/shared/v1/authz.proto:18`），启动期强校验 |
 | 动态文档层 | 运行时建库/集合/文档，无需手工迁移（`internal/infra/documentdb/` + `pkg/query`） |
 | 官方 SDK | `sdk/typescript`（HTTP）与 `sdk/go`（gRPC 直连 + `InvokeJSON` 动态分发） |
@@ -126,7 +126,7 @@ HTTP 客户端 / Agent
   │ POST /v1/server/users（x-api-key）
   ▼ grpc-gateway（internal/infra/server/grpc_gateway.go）
   │ JSON↔proto、CORS、header 透传
-  ▼ gRPC Server + AuthInterceptor（internal/grpc/interceptor/jwt.go:77）
+  ▼ gRPC Server + AuthInterceptor（internal/api/interceptor/jwt.go:77）
   │ 校验 scope/角色、Principal 注入（contexts.WithPrincipal）
   ▼ internal/api/servergrpc.UsersService.CreateUser     【传输层】
   │ 请求校验、Principal 读取

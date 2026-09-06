@@ -1,6 +1,6 @@
 # Torchwood 认证与授权
 
-> 四凭证、Principal 注入、方法级 authz 双表与纵深防御。以代码为准：`internal/infra/auth/validator.go:21`、`internal/grpc/interceptor/`、`proto/shared/v1/authz.proto`、`internal/infra/server/grpc.go:217`。
+> 四凭证、Principal 注入、方法级 authz 双表与纵深防御。以代码为准：`internal/infra/auth/validator.go:21`、`internal/api/interceptor/`、`proto/shared/v1/authz.proto`、`internal/infra/server/grpc.go:217`。
 > 最新更新：2026-08-23
 
 ---
@@ -14,7 +14,7 @@
 | `CredentialType` | `token`（JWT Bearer）· `session`（cookie 不透明/HMAC）· `api_key` |
 | `ActorKind` | `end_user`（终端用户）· `admin`（Console 管理员）· `service`（API Key 自动化） |
 
-`internal/grpc/interceptor/jwt.go:77` 的 `Authenticate` 按以下优先级解析 `metadata`（`shared.ParseAuthnRequest`）：
+`internal/api/interceptor/jwt.go:77` 的 `Authenticate` 按以下优先级解析 `metadata`（`shared.ParseAuthnRequest`）：
 
 | 优先级 | 头 | 映射 |
 |--------|----|------|
@@ -131,7 +131,7 @@ extend ServiceOptions { ServiceAuth service_auth = 52002; }
 
 ## 6. adminRoleMethodRules 与纵深防御
 
-`internal/grpc/interceptor/admin_roles.go:16` 登记 Server API **全部写方法**的允许角色，拦截器 `adminRoleMethodRules[method]` 非空时 `HasAnyRole(perms)`（`jwt.go:131`）：
+`internal/api/interceptor/admin_roles.go:16` 登记 Server API **全部写方法**的允许角色，拦截器 `adminRoleMethodRules[method]` 非空时 `HasAnyRole(perms)`（`jwt.go:131`）：
 
 - `owner,admin`：`APIKeysService`、用户接管面（`UpdateUser/DeleteUser` 等）、Databases schema DDL（`CreateDatabase/Collection/Attribute/Index`）、Functions、`OAuthProviders`、`Projects Create/Delete`、`Payments Refund/ManualFulfill`、`Assets Grant/Consume...`、`OutboxService ReplayDeadLetter`；
 - `member,owner,admin`：用户文档 CRUD、Storage 桶/文件、Groups、Projects Update、`Assets` 目录 CRUD 等业务写。

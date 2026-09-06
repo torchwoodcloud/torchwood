@@ -26,7 +26,7 @@ import (
 	"github.com/torchwooddev/torchwood/internal/infra/documentdb"
 	"github.com/torchwooddev/torchwood/internal/infra/health"
 	"github.com/torchwooddev/torchwood/internal/infra/projectschema"
-	"github.com/torchwooddev/torchwood/internal/pkg/bootkit"
+	"github.com/torchwooddev/torchwood/internal/bootkit"
 	"github.com/torchwooddev/torchwood/internal/pkg/buildinfo"
 	config "github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/internal/runtime"
