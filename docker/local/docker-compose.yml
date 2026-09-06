@@ -1,17 +1,17 @@
 services:
   postgres:
-    # pgvector 官方镜像（会话 #10：vector 列 + HNSW 索引）。锁 0.8.6（≥0.8
-    # 才有 iterative scan），PG 主版本与原 postgres:18 一致。
-    # vector 非 trusted extension：非 superuser 部署的启用引导（superuser
-    # 预装路径）见 docs/developer/13-operations.md §6.6。
-    # Debian 基座 initdb 默认 en_US.utf8，与原 alpine 基座（musl，C）不同——
-    # 字符串排序语义会变（如 id 排序平局的保留选择）。显式锁 C 保持与
-    # alpine 时代及 CI 一致；已有卷不受影响（initdb 仅首次建库生效）。
+    # Percona Distribution for PostgreSQL：发行版镜像自带 pgvector（0.8.3，
+    # ≥0.8 满足 iterative scan 契约）及 pg_stat_monitor/pgaudit/pg_repack/
+    # pg_tde 等常用扩展，替代原 pgvector/pgvector 单一扩展镜像。
+    # entrypoint 为官方 docker-library 脚本 fork，POSTGRES_* 与
+    # POSTGRES_INITDB_ARGS 语义一致。
+    # 数据目录是 /data/db（PG18 官方系镜像为 /var/lib/postgresql）——换镜像
+    # 必须同步改挂载点，否则 initdb 落在容器层，容器重建即丢数据。
     # locale=C 时 initdb 默认服务端编码是 SQL_ASCII，而 pgdriver（bun
     # ≥1.2.16）握手期校验 ParameterStatus，client_encoding≠UTF8 直接拒连，
-    # 故必须显式 --encoding=UTF8（排序语义仍由 locale=C 锁定）。编码只在
-    # 首次 initdb 生效：老 SQL_ASCII 卷需 down -v 重建后才生效。
-    image: pgvector/pgvector:0.8.6-pg18
+    # 故必须显式 --encoding=UTF8（排序语义由 locale=C 锁定，与 CI 一致）。
+    # 编码只在首次 initdb 生效。
+    image: percona/percona-distribution-postgresql:18
     container_name: torchwood-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-torchwood}
@@ -21,7 +21,7 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql
+      - postgres_data:/data/db
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-torchwood} -d ${POSTGRES_DB:-torchwood}"]
       interval: 5s
