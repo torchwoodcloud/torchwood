@@ -12,6 +12,9 @@ var SystemRoles = []string{"__system__"}
 // DefaultCollectionPermissions returns a reasonable default permission set for
 // user-created collections that do not specify explicit permissions.
 // WHY: 默认集合不再含 read:any，避免空权限文档通过集合回落对 guest 可读；公开集合需显式授予 read:any。
+// admin ACE 已删除（M6.3 决策 v8）：唯一能持裸 "admin" 的主体（console
+// role=admin）必为 PlatformAdmin 走 bypass，该 ACE 是死语义且与 console
+// 角色撞名；DocPrincipal 投影净化后裸 console 角色串不再进入文档角色集。
 func DefaultCollectionPermissions() []Permission {
 	return []Permission{
 		{Type: "create", Role: "users"},
@@ -21,10 +24,6 @@ func DefaultCollectionPermissions() []Permission {
 		{Type: "read", Role: "keys"},
 		{Type: "update", Role: "keys"},
 		{Type: "delete", Role: "keys"},
-		{Type: "create", Role: "admin"},
-		{Type: "read", Role: "admin"},
-		{Type: "update", Role: "admin"},
-		{Type: "delete", Role: "admin"},
 	}
 }
 

@@ -75,8 +75,10 @@ func TestPrincipal_DocPrincipal_DropsConsoleTag(t *testing.T) {
 		Roles:     []string{"member", RoleConsole},
 	}
 	got := p.DocPrincipal()
+	// 投影净化（M6.3 决策 v8）：console 命名空间整组出局（含 RBAC 裸角色
+	// member），admin 的文档身份 = user:<AdminID> + PlatformAdmin flag。
 	require.NotContains(t, got.Roles, RoleConsole)
-	require.Contains(t, got.Roles, "member")
+	require.NotContains(t, got.Roles, "member")
 	require.Contains(t, got.Roles, "user:a1")
 	require.True(t, p.HasAnyRole([]string{RoleConsole}))
 }

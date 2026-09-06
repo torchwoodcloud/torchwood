@@ -6,6 +6,7 @@ import (
 	consolev1 "github.com/torchwooddev/torchwood/genproto/console/v1"
 	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
 	"github.com/torchwooddev/torchwood/internal/app/console"
+	appshared "github.com/torchwooddev/torchwood/internal/app/shared"
 	"github.com/torchwooddev/torchwood/internal/domain/projects"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
 	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
@@ -36,18 +37,8 @@ func (s *AdminsService) GetCurrentAdmin(ctx context.Context, _ *consolev1.GetCur
 	return mapAdmin(admin), nil
 }
 
-// requireAdminActor 纵深防御：AdminsService 仅接受 admin 会话凭证
-// （拦截器已拒绝 API Key，此处兜底防止绕过拦截器的直接调用）。
-func requireAdminActor(ctx context.Context) error {
-	p, ok := principalFrom(ctx)
-	if !ok || p.ActorKind != shared.ActorKindAdmin {
-		return status.Error(codes.PermissionDenied, "console admin session required")
-	}
-	return nil
-}
-
 func (s *AdminsService) ListAdmins(ctx context.Context, req *consolev1.ListAdminsRequest) (*consolev1.ListAdminsResponse, error) {
-	if err := requireAdminActor(ctx); err != nil {
+	if err := appshared.RequireAdminActor(ctx); err != nil {
 		return nil, err
 	}
 	// P3-9：ListAdmins 分页（走 crud，内存分页，total_count 精确）
@@ -97,7 +88,7 @@ func (s *AdminsService) ListAdmins(ctx context.Context, req *consolev1.ListAdmin
 }
 
 func (s *AdminsService) CreateAdmin(ctx context.Context, req *consolev1.CreateAdminRequest) (*consolev1.Admin, error) {
-	if err := requireAdminActor(ctx); err != nil {
+	if err := appshared.RequireAdminActor(ctx); err != nil {
 		return nil, err
 	}
 	admin, err := s.admins.Create(ctx, console.CreateAdminCommand{
@@ -112,7 +103,7 @@ func (s *AdminsService) CreateAdmin(ctx context.Context, req *consolev1.CreateAd
 }
 
 func (s *AdminsService) UpdateAdmin(ctx context.Context, req *consolev1.UpdateAdminRequest) (*consolev1.Admin, error) {
-	if err := requireAdminActor(ctx); err != nil {
+	if err := appshared.RequireAdminActor(ctx); err != nil {
 		return nil, err
 	}
 	// role 为 optional（R10-P1-6）：未设置 = 不修改；设置（含空串）= 更新/清空。
@@ -133,7 +124,7 @@ func (s *AdminsService) UpdateAdmin(ctx context.Context, req *consolev1.UpdateAd
 }
 
 func (s *AdminsService) DeleteAdmin(ctx context.Context, req *consolev1.DeleteAdminRequest) (*sharedv1.Empty, error) {
-	if err := requireAdminActor(ctx); err != nil {
+	if err := appshared.RequireAdminActor(ctx); err != nil {
 		return nil, err
 	}
 	if err := s.admins.Delete(ctx, req.GetId(), callerID(ctx)); err != nil {

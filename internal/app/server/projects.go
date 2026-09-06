@@ -76,14 +76,9 @@ type CreateProjectCommand struct {
 }
 
 func (s *Projects) CreateProject(ctx context.Context, cmd CreateProjectCommand) (*projects.Project, error) {
-	principal, ok := contexts.Principal(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "unauthenticated")
-	}
-	// 项目是平台级资源，创建仅限平台 admin（console 会话的 owner/admin 角色）；
-	// API key 与受限 admin（viewer/member）一律拒绝（安全评审 M7）。
-	if principal.ActorKind != shared.ActorKindAdmin || !principal.IsPlatformAdmin {
-		return nil, status.Error(codes.PermissionDenied, "platform admin required to create projects")
+	// 项目是平台级资源：PERMISSION [owner,admin]（proto 声明）+ 本守卫纵深防御。
+	if err := appshared.RequirePlatformAdmin(ctx); err != nil {
+		return nil, err
 	}
 	return s.CreateProjectInternal(ctx, cmd)
 }
@@ -139,12 +134,8 @@ func (s *Projects) CreateProjectInternal(ctx context.Context, cmd CreateProjectC
 
 // DeleteProject 对外删除入口：仅平台 admin。校验存在后委托 DeleteProjectInternal。
 func (s *Projects) DeleteProject(ctx context.Context, id string) error {
-	principal, ok := contexts.Principal(ctx)
-	if !ok {
-		return status.Error(codes.Unauthenticated, "unauthenticated")
-	}
-	if principal.ActorKind != shared.ActorKindAdmin || !principal.IsPlatformAdmin {
-		return status.Error(codes.PermissionDenied, "platform admin required to delete projects")
+	if err := appshared.RequirePlatformAdmin(ctx); err != nil {
+		return err
 	}
 	if err := ident.ValidateSchemaResourceID(id); err != nil {
 		return appshared.MapIdentError(err)

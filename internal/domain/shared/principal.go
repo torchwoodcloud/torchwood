@@ -150,8 +150,10 @@ func (p *Principal) HasAnyRole(roles []string) bool {
 }
 
 // DocPrincipal 投影到文档 ACL 视图。System 走 databases.SystemPrincipal。
-// 剔除拦截器标签 RoleConsole；admin 带上 user:<AdminID> 以便按属主匹配 ACE；
-// API key 主体带 KeyID 供写入归因（_created_by/_updated_by 落 key:<id>）。
+// 投影净化（M6.3，机制重设计）：console 命名空间整组出局——会话标签
+// RoleConsole 与 admin RBAC 裸角色（owner/admin/member/viewer）都不是文档
+// 角色；admin 的文档身份 = user:<AdminID>（属主匹配）+ PlatformAdmin flag
+// （bypass 走 flag，不走角色串）。API key 主体带 KeyID 供写入归因。
 func (p *Principal) DocPrincipal() databases.Principal {
 	if p == nil {
 		return databases.GuestPrincipal
@@ -161,7 +163,7 @@ func (p *Principal) DocPrincipal() databases.Principal {
 	}
 	roles := make([]string, 0, len(p.Roles)+1)
 	for _, r := range p.Roles {
-		if r == RoleConsole {
+		if isConsoleNamespaceRole(r) {
 			continue
 		}
 		roles = append(roles, r)
@@ -184,4 +186,20 @@ func (p *Principal) DocPrincipal() databases.Principal {
 		keyID = p.APIKeyID
 	}
 	return databases.Principal{Roles: roles, PlatformAdmin: p.IsPlatformAdmin, KeyID: keyID}
+}
+
+// consoleNamespaceRoles 是 console RBAC 命名空间（平台级角色词表，M6.3
+// 投影互斥不变量）：这些串不携带文档语义，进入文档角色集/RLS app.roles
+// 只会制造撞名（DefaultCollectionPermissions 的 "admin" ACE 即历史撞名）。
+var consoleNamespaceRoles = map[string]struct{}{
+	RoleConsole: {},
+	"owner":     {},
+	"admin":     {},
+	"member":    {},
+	"viewer":    {},
+}
+
+func isConsoleNamespaceRole(r string) bool {
+	_, ok := consoleNamespaceRoles[r]
+	return ok
 }
