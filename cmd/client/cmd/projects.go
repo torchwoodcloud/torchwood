@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"os"
+	"flag"
 
-	"github.com/spf13/cobra"
+	"github.com/lynx-go/commands"
 )
 
 const (
@@ -11,50 +11,36 @@ const (
 	methodProjectsGet  = "/torchwood.server.v1.ProjectsService/GetProject"
 )
 
-// NewProjectsCmd 提供 ProjectsService 的 list/get。
+// newProjectsCmd 提供 ProjectsService 的 list/get。
 // CreateProject/UpdateProject/DeleteProject 限平台 admin（console session），API Key 无法调用，CLI 不提供。
-func NewProjectsCmd(g *globalFlags) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "projects",
-		Short: "项目管理（list/get；create/update/delete 限平台 admin，CLI 不提供）",
-	}
-	cmd.AddCommand(
-		newProjectsListCmd(g),
-		newProjectsGetCmd(g),
-	)
-	return cmd
+func newProjectsCmd(g *globalFlags) *group {
+	return newGroup(g, "projects", "项目管理（list/get；create/update/delete 限平台 admin，CLI 不提供）", func(sub *commands.App) {
+		sub.Register(
+			newProjectsListCmd(g),
+			newProjectsGetCmd(g),
+		)
+	})
 }
 
-func newProjectsListCmd(g *globalFlags) *cobra.Command {
-	var pageSize int32
+func newProjectsListCmd(g *globalFlags) *verb {
+	var pageSize int
 	var pageToken string
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "列出项目",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			resp, err := invoke(g, methodProjectsList, listJSON(pageSize, pageToken))
-			if err != nil {
-				return err
-			}
-			return printJSON(os.Stdout, resp)
+	return newVerb(g, "list", "列出项目", "projects list",
+		func(fs *flag.FlagSet) {
+			fs.IntVar(&pageSize, "page-size", 0, "每页条数（服务端默认 50，上限 1000）")
+			fs.StringVar(&pageToken, "page-token", "", "上一页返回的 next_page_token")
 		},
-	}
-	cmd.Flags().Int32Var(&pageSize, "page-size", 0, "每页条数（服务端默认 50，上限 1000）")
-	cmd.Flags().StringVar(&pageToken, "page-token", "", "上一页返回的 next_page_token")
-	return cmd
+		func(v *verb, env *commands.Environment, _ []string) error {
+			return call(g, env, methodProjectsList, listJSON(pageSize, pageToken))
+		})
 }
 
-func newProjectsGetCmd(g *globalFlags) *cobra.Command {
-	return &cobra.Command{
-		Use:   "get <id>",
-		Short: "按 ID 获取项目",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			resp, err := invoke(g, methodProjectsGet, map[string]any{"id": args[0]})
-			if err != nil {
+func newProjectsGetCmd(g *globalFlags) *verb {
+	return newVerb(g, "get", "按 ID 获取项目", "projects get <id>", nil,
+		func(v *verb, env *commands.Environment, args []string) error {
+			if err := exactArgs(v, args, 1); err != nil {
 				return err
 			}
-			return printJSON(os.Stdout, resp)
-		},
-	}
+			return call(g, env, methodProjectsGet, map[string]any{"id": args[0]})
+		})
 }

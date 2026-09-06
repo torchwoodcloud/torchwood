@@ -5,10 +5,11 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"flag"
 	"net/url"
 	"testing"
 
-	"github.com/spf13/cobra"
+	"github.com/lynx-go/commands"
 	"github.com/stretchr/testify/require"
 
 	"github.com/torchwooddev/torchwood/internal/infra/clients"
@@ -45,7 +46,7 @@ func twSecretsRowCount(t *testing.T, ctx context.Context, db *clients.Database) 
 }
 
 // TestAdminSyncRolesSigViaCLI 是 B15 admin 作业 CLI 集成测试（有测试库时真
-// 跑，未设置 TORCHWOOD_TEST_* 时 skip）：经 cobra 命令完整执行
+// 跑，未设置 TORCHWOOD_TEST_* 时 skip）：经 CLI 动词完整执行
 // `torchwood admin sync-roles-sig`（--dsn 直连 + --jwt-secret），覆盖
 //   - 首次落库（owner 身份，SetupTestDB 的 DSN 即 owner 引导账号形态）；
 //   - 幂等重跑（同钥二次执行整体 no-op）；
@@ -126,24 +127,18 @@ func TestAdminSyncRolesSig_RequiresFlags(t *testing.T) {
 		{name: "blank jwt secret", flags: map[string]string{"dsn": "postgres://u:p@127.0.0.1:5432/db", "jwt-secret": "   "}, errHas: "jwt secret is empty"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cmd := newAdminSyncRolesSigCmd()
-			cmd.SilenceUsage = true
-			cmd.SilenceErrors = true
-			for k, v := range tc.flags {
-				require.NoError(t, cmd.Flags().Set(k, v))
+			v := newAdminSyncRolesSigCmd()
+			v.SetFlags(flag.NewFlagSet(v.Name(), flag.ContinueOnError))
+			for k, val := range tc.flags {
+				require.NoError(t, v.fs.Set(k, val))
 			}
-			err := cmd.Execute()
+			err := v.Run(context.Background(), &commands.Environment{}, nil)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tc.errHas)
 		})
 	}
-	// cobra 构造路径经 *cobra.Command 断言命令注册形态（admin 父命令可见）。
-	var p *cobra.Command = NewAdminCmd(&globalFlags{})
-	found := false
-	for _, sub := range p.Commands() {
-		if sub.Name() == "sync-roles-sig" {
-			found = true
-		}
-	}
+	// 注册形态断言（admin 分组下可见 sync-roles-sig）。
+	admin := newAdminCmd(&globalFlags{})
+	_, found := admin.sub.Lookup("sync-roles-sig")
 	require.True(t, found, "torchwood admin sync-roles-sig 应已注册")
 }

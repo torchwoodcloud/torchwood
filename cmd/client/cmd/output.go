@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/lynx-go/commands"
+
 	"github.com/torchwooddev/torchwood/sdk/go/server"
 )
 
@@ -58,7 +60,16 @@ func printJSON(w io.Writer, b []byte) error {
 	return err
 }
 
-// rpcError 携带原始 RPC 错误的 CLI 错误：ExitCode 据此映射进程退出码。
+// call 是 RPC 叶子动词的统一执行尾：invoke 后把响应渲染到 env.Stdout。
+func call(g *globalFlags, env *commands.Environment, method string, req any) error {
+	resp, err := invoke(g, method, req)
+	if err != nil {
+		return err
+	}
+	return printJSON(env.Stdout, resp)
+}
+
+// rpcError 携带原始 RPC 错误的 CLI 错误：rpcExitCode 据此映射进程退出码。
 type rpcError struct {
 	msg   string
 	cause error
@@ -66,20 +77,6 @@ type rpcError struct {
 
 func (e *rpcError) Error() string { return e.msg }
 func (e *rpcError) Unwrap() error { return e.cause }
-
-// ExitCode 把根命令 Execute 返回的错误映射为脚本可分支的退出码：
-// 成功=0；参数/校验错误等非 RPC 错误=1；40x=2；5xx=3；限流(429)=4。
-// gRPC code → HTTP 类别的判定复用 SDK 的 HTTPErrorClass（CLI 不直接依赖 grpc）。
-func ExitCode(err error) int {
-	if err == nil {
-		return 0
-	}
-	re, ok := err.(*rpcError)
-	if !ok {
-		return 1
-	}
-	return server.HTTPErrorClass(re.cause)
-}
 
 // formatRPCError 把 gRPC 调用错误转成 CLI 可读文本并附下一步动作提示：
 // PermissionDenied 提示 scope（scope 格式见 internal/api/interceptor/apikey_scope.go），

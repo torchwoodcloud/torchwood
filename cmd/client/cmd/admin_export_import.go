@@ -4,13 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
+	"github.com/lynx-go/commands"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/driver/pgdriver"
@@ -57,12 +58,15 @@ func openAdminProjectDB(dsn string) (*clients.Database, func(), error) {
 	return db, func() { _ = db.Close() }, nil
 }
 
-func newAdminExportCmd() *cobra.Command {
+func newAdminExportCmd() *verb {
 	var projectID, outDir, dsn string
-	cmd := &cobra.Command{
-		Use:   "export --project <id> --out <dir>",
-		Short: "导出项目文档面（catalog 快照 + 集合 NDJSON + snapshot_seq，转出 POC B5）",
-		RunE: func(cmd *cobra.Command, args []string) error {
+	return newVerb(nil, "export", "导出项目文档面（catalog 快照 + 集合 NDJSON + snapshot_seq，转出 POC B5）", "admin export --project <id> --out <dir>",
+		func(fs *flag.FlagSet) {
+			fs.StringVar(&projectID, "project", "", "项目 ID（必填）")
+			fs.StringVar(&outDir, "out", "", "导出目录（必填，写入 manifest.json 与 data/*.ndjson）")
+			fs.StringVar(&dsn, "dsn", os.Getenv(adminDBFlagDsn), "Postgres DSN（缺省读 "+adminDBFlagDsn+"）")
+		},
+		func(v *verb, env *commands.Environment, _ []string) error {
 			if projectID == "" || outDir == "" {
 				return fmt.Errorf("--project 与 --out 必填")
 			}
@@ -79,23 +83,21 @@ func newAdminExportCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cmd.Printf("导出完成：%d 库 / %d 集合 → %s\n", len(manifest.Databases), len(manifest.Collections), outDir)
-			cmd.Printf("snapshot_seq=%d；增量续接：:changes?since_seq=%d\n", manifest.SnapshotSeq, manifest.SnapshotSeq)
-			return printJSON(os.Stdout, out)
-		},
-	}
-	cmd.Flags().StringVar(&projectID, "project", "", "项目 ID（必填）")
-	cmd.Flags().StringVar(&outDir, "out", "", "导出目录（必填，写入 manifest.json 与 data/*.ndjson）")
-	cmd.Flags().StringVar(&dsn, "dsn", os.Getenv(adminDBFlagDsn), "Postgres DSN（缺省读 "+adminDBFlagDsn+"）")
-	return cmd
+			fmt.Fprintf(env.Stderr, "导出完成：%d 库 / %d 集合 → %s\n", len(manifest.Databases), len(manifest.Collections), outDir)
+			fmt.Fprintf(env.Stderr, "snapshot_seq=%d；增量续接：:changes?since_seq=%d\n", manifest.SnapshotSeq, manifest.SnapshotSeq)
+			return printJSON(env.Stdout, out)
+		})
 }
 
-func newAdminImportCmd() *cobra.Command {
+func newAdminImportCmd() *verb {
 	var projectID, inDir, dsn string
-	cmd := &cobra.Command{
-		Use:   "import --project <id> --in <dir>",
-		Short: "导入项目文档面（catalog 重建 + 行保真导入，转出 POC B5）",
-		RunE: func(cmd *cobra.Command, args []string) error {
+	return newVerb(nil, "import", "导入项目文档面（catalog 重建 + 行保真导入，转出 POC B5）", "admin import --project <id> --in <dir>",
+		func(fs *flag.FlagSet) {
+			fs.StringVar(&projectID, "project", "", "项目 ID（必填，须与导出时一致）")
+			fs.StringVar(&inDir, "in", "", "导入目录（必填，须含 manifest.json）")
+			fs.StringVar(&dsn, "dsn", os.Getenv(adminDBFlagDsn), "Postgres DSN（缺省读 "+adminDBFlagDsn+"）")
+		},
+		func(v *verb, env *commands.Environment, _ []string) error {
 			if projectID == "" || inDir == "" {
 				return fmt.Errorf("--project 与 --in 必填")
 			}
@@ -112,14 +114,9 @@ func newAdminImportCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cmd.Printf("导入完成：%d 库 / %d 集合 / %d 行\n",
+			fmt.Fprintf(env.Stderr, "导入完成：%d 库 / %d 集合 / %d 行\n",
 				len(report.DatabasesRestored), len(report.CollectionsRestored), report.RowsImported)
-			cmd.Println(report.ResumeHint)
-			return printJSON(os.Stdout, out)
-		},
-	}
-	cmd.Flags().StringVar(&projectID, "project", "", "项目 ID（必填，须与导出时一致）")
-	cmd.Flags().StringVar(&inDir, "in", "", "导入目录（必填，须含 manifest.json）")
-	cmd.Flags().StringVar(&dsn, "dsn", os.Getenv(adminDBFlagDsn), "Postgres DSN（缺省读 "+adminDBFlagDsn+"）")
-	return cmd
+			fmt.Fprintln(env.Stderr, report.ResumeHint)
+			return printJSON(env.Stdout, out)
+		})
 }

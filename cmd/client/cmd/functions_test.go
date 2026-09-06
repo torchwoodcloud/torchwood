@@ -2,28 +2,24 @@ package cmd
 
 import (
 	"encoding/base64"
+	"flag"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
 
-func newFuncCmdWithFlags(t *testing.T, set map[string]string) *cobra.Command {
-	c := &cobra.Command{}
-	c.Flags().Int32("timeout-seconds", 0, "")
-	c.Flags().String("spec", "", "")
-	c.Flags().Bool("enabled", false, "")
-	c.Flags().String("name", "", "")
-	c.Flags().String("entrypoint", "", "")
-	c.Flags().String("deployment-id", "", "")
-	c.Flags().Bool("async", false, "")
-	for k, v := range set {
-		require.NoError(t, c.Flags().Set(k, v))
-	}
-	return c
+// funcFlagsDecl 声明 functions 域动词涉及的旗标（供 presence 测试）。
+func funcFlagsDecl(fs *flag.FlagSet) {
+	fs.Int("timeout-seconds", 0, "")
+	fs.String("spec", "", "")
+	fs.Bool("enabled", false, "")
+	fs.String("name", "", "")
+	fs.String("entrypoint", "", "")
+	fs.String("deployment-id", "", "")
+	fs.Bool("async", false, "")
 }
 
 func TestBuildCreateFunctionReq(t *testing.T) {
@@ -33,7 +29,7 @@ func TestBuildCreateFunctionReq(t *testing.T) {
 		functionName   string
 		runtime        string
 		entrypoint     string
-		timeoutSeconds int32
+		timeoutSeconds int
 		spec           string
 		enabled        bool
 		set            map[string]string
@@ -49,7 +45,7 @@ func TestBuildCreateFunctionReq(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, err := buildCreateFunctionReq(newFuncCmdWithFlags(t, tt.set), tt.id, tt.functionName, tt.runtime, tt.entrypoint,
+			req, err := buildCreateFunctionReq(newPresenceVerb(t, funcFlagsDecl, tt.set), tt.id, tt.functionName, tt.runtime, tt.entrypoint,
 				tt.timeoutSeconds, tt.spec, tt.enabled)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
@@ -95,7 +91,7 @@ func TestBuildUpdateFunctionReq(t *testing.T) {
 		functionID     string
 		newName        string
 		entrypoint     string
-		timeoutSeconds int32
+		timeoutSeconds int
 		spec           string
 		enabled        bool
 		set            map[string]string
@@ -109,7 +105,7 @@ func TestBuildUpdateFunctionReq(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, err := buildUpdateFunctionReq(newFuncCmdWithFlags(t, tt.set), tt.functionID, tt.newName, tt.entrypoint,
+			req, err := buildUpdateFunctionReq(newPresenceVerb(t, funcFlagsDecl, tt.set), tt.functionID, tt.newName, tt.entrypoint,
 				tt.timeoutSeconds, tt.spec, tt.enabled)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
@@ -230,7 +226,7 @@ func TestBuildCreateExecutionReq(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, err := buildCreateExecutionReq(newFuncCmdWithFlags(t, tt.set), tt.functionID, tt.input, tt.deploymentID, tt.async)
+			req, err := buildCreateExecutionReq(newPresenceVerb(t, funcFlagsDecl, tt.set), tt.functionID, tt.input, tt.deploymentID, tt.async)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("want error containing %q, got %v", tt.wantErr, err)

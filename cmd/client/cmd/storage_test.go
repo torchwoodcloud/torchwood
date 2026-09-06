@@ -1,23 +1,19 @@
 package cmd
 
 import (
+	"flag"
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
 
-func newStorageCmdWithFlags(t *testing.T, set map[string]string) *cobra.Command {
-	c := &cobra.Command{}
-	c.Flags().Bool("public", false, "")
-	c.Flags().String("name", "", "")
-	c.Flags().String("mime-type", "", "")
-	c.Flags().String("metadata", "", "")
-	for k, v := range set {
-		require.NoError(t, c.Flags().Set(k, v))
-	}
-	return c
+// storageFlagsDecl 声明 storage 域动词涉及的旗标（供 presence 测试）。
+func storageFlagsDecl(fs *flag.FlagSet) {
+	fs.Bool("public", false, "")
+	fs.String("name", "", "")
+	fs.String("mime-type", "", "")
+	fs.String("metadata", "", "")
 }
 
 func TestBuildCreateBucketReq(t *testing.T) {
@@ -70,7 +66,7 @@ func TestBuildUpdateBucketReq(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, err := buildUpdateBucketReq(newStorageCmdWithFlags(t, tt.set), tt.id, tt.newName, tt.set["public"] == "true")
+			req, err := buildUpdateBucketReq(newPresenceVerb(t, storageFlagsDecl, tt.set), tt.id, tt.newName, tt.set["public"] == "true")
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("want error containing %q, got %v", tt.wantErr, err)
@@ -115,7 +111,7 @@ func TestBuildUpdateFileReq(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, err := buildUpdateFileReq(newStorageCmdWithFlags(t, tt.set), tt.bucketID, tt.fileID, tt.fileName, tt.mimeType, tt.metadata)
+			req, err := buildUpdateFileReq(newPresenceVerb(t, storageFlagsDecl, tt.set), tt.bucketID, tt.fileID, tt.fileName, tt.mimeType, tt.metadata)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("want error containing %q, got %v", tt.wantErr, err)

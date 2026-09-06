@@ -3,9 +3,11 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"flag"
+	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
+	"github.com/lynx-go/commands"
 
 	"github.com/torchwooddev/torchwood/internal/infra/documentdb"
 )
@@ -15,22 +17,21 @@ import (
 //（缺列 / INVALID·failed 索引 / 幽灵表）并修复；--dry-run 只报告 diff 不落
 // DDL。逻辑与 server 启动钩子的后台 reconcile 同源（documentdb.
 // ReconcileSchemaDrift），CLI 形态对齐 admin export/import（直连 DB）。
-func newAdminSchemaCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "schema",
-		Short: "schema 漂移对账（缺列 / INVALID 索引 / 幽灵表，B3）",
-	}
-	cmd.AddCommand(newAdminSchemaRepairCmd())
-	return cmd
+func newAdminSchemaCmd() *group {
+	return newGroup(nil, "schema", "schema 漂移对账（缺列 / INVALID 索引 / 幽灵表，B3）", func(sub *commands.App) {
+		sub.Register(newAdminSchemaRepairCmd())
+	})
 }
 
-func newAdminSchemaRepairCmd() *cobra.Command {
+func newAdminSchemaRepairCmd() *verb {
 	var dsn string
 	var dryRun bool
-	cmd := &cobra.Command{
-		Use:   "repair",
-		Short: "扫描并修复 schema 漂移（--dry-run 只报告不修复）",
-		RunE: func(cmd *cobra.Command, args []string) error {
+	return newVerb(nil, "repair", "扫描并修复 schema 漂移（--dry-run 只报告不修复）", "admin schema repair [--dry-run]",
+		func(fs *flag.FlagSet) {
+			fs.BoolVar(&dryRun, "dry-run", false, "只报告漂移 diff，不执行修复 DDL")
+			fs.StringVar(&dsn, "dsn", os.Getenv(adminDBFlagDsn), "Postgres DSN（缺省读 "+adminDBFlagDsn+"）")
+		},
+		func(v *verb, env *commands.Environment, _ []string) error {
 			db, closeDB, err := openAdminProjectDB(dsn)
 			if err != nil {
 				return err
@@ -47,16 +48,12 @@ func newAdminSchemaRepairCmd() *cobra.Command {
 				return err
 			}
 			if dryRun {
-				cmd.Printf("漂移扫描（dry-run，未修复）：%d 集合 / %d 项检出 / %d 失败\n",
+				fmt.Fprintf(env.Stderr, "漂移扫描（dry-run，未修复）：%d 集合 / %d 项检出 / %d 失败\n",
 					report.Scanned, len(report.Items), report.Failed)
 			} else {
-				cmd.Printf("漂移修复完成：%d 集合 / %d 项修复 / %d 失败\n",
+				fmt.Fprintf(env.Stderr, "漂移修复完成：%d 集合 / %d 项修复 / %d 失败\n",
 					report.Scanned, report.Fixed, report.Failed)
 			}
-			return printJSON(os.Stdout, out)
-		},
-	}
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "只报告漂移 diff，不执行修复 DDL")
-	cmd.Flags().StringVar(&dsn, "dsn", os.Getenv(adminDBFlagDsn), "Postgres DSN（缺省读 "+adminDBFlagDsn+"）")
-	return cmd
+			return printJSON(env.Stdout, out)
+		})
 }

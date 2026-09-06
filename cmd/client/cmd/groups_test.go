@@ -124,7 +124,7 @@ func TestBuildListMembershipsReq(t *testing.T) {
 		name      string
 		groupID   string
 		queries   string
-		pageSize  int32
+		pageSize  int
 		pageToken string
 		wantErr   string
 	}{
@@ -148,7 +148,7 @@ func TestBuildListMembershipsReq(t *testing.T) {
 				require.NotContains(t, req, "queries")
 			}
 			if tt.pageSize > 0 {
-				require.Equal(t, int32(10), req["pageSize"])
+				require.Equal(t, 10, req["pageSize"])
 			} else {
 				require.NotContains(t, req, "pageSize")
 			}

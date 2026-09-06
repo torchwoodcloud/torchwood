@@ -3,10 +3,11 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"flag"
 	"net/url"
 	"testing"
 
-	"github.com/spf13/cobra"
+	"github.com/lynx-go/commands"
 	"github.com/stretchr/testify/require"
 
 	"github.com/torchwooddev/torchwood/internal/domain/databases"
@@ -16,24 +17,22 @@ import (
 	"github.com/torchwooddev/torchwood/internal/testutil"
 )
 
-// executeAdminCmd 设置 flags 并执行（CLI 子命令集成路径：cobra → RunE →
+// executeAdminCmd 设置 flags 并执行（CLI 子命令集成路径：verb → Run →
 // 直连 DB → documentdb 导出/导入执行体）。
-func executeAdminCmd(t *testing.T, cmd *cobra.Command, flags map[string]string) {
+func executeAdminCmd(t *testing.T, v *verb, flags map[string]string) {
 	t.Helper()
-	cmd.SilenceUsage = true
-	cmd.SilenceErrors = true
 	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	for k, v := range flags {
-		require.NoError(t, cmd.Flags().Set(k, v))
+	env := &commands.Environment{Stdout: &out, Stderr: &out}
+	v.SetFlags(flag.NewFlagSet(v.Name(), flag.ContinueOnError))
+	for k, val := range flags {
+		require.NoError(t, v.fs.Set(k, val))
 	}
-	require.NoError(t, cmd.Execute())
+	require.NoError(t, v.Run(context.Background(), env, nil))
 }
 
 // TestAdminExportImportRoundTripViaCLI 是 B5 CLI 子命令集成测试（有测试库
 // 时真跑，未设置 TORCHWOOD_TEST_* 时 skip，与仓库集成测试惯例一致）：
-// 经 cobra 命令完整执行 export → drop → import，验证库/集合/行恢复。
+// 经 CLI 动词完整执行 export → drop → import，验证库/集合/行恢复。
 // 命令体直连 DSN（--dsn），不经 InvokeJSON/API 面——import_guard 允许
 //（禁的是 genproto/grpc/protobuf 字面 import）。
 func TestAdminExportImportRoundTripViaCLI(t *testing.T) {

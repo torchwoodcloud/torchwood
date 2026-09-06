@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/joho/godotenv"
+	"github.com/lynx-go/commands"
 
 	"github.com/torchwooddev/torchwood/cmd/client/cmd"
 )
@@ -16,10 +18,9 @@ func main() {
 	// 与 cmd/server、cmd/worker 一致：加载仓库根 .env（可选）。
 	_ = godotenv.Load()
 
-	if err := cmd.NewRootCmd(buildVersion(version, commit, date)).Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(cmd.ExitCode(err))
-	}
+	app := cmd.NewApp(buildVersion(version, commit, date))
+	env := &commands.Environment{Stdout: os.Stdout, Stderr: os.Stderr}
+	os.Exit(app.Run(context.Background(), env, os.Args[1:]))
 }
 
 // buildVersion 把 ldflags 注入的 commit/date 拼进版本串，避免元数据被丢弃；

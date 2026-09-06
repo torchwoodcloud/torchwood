@@ -2,10 +2,10 @@ package cmd
 
 import (
 	"encoding/json"
+	"flag"
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,13 +53,14 @@ func TestBuildCreateUserReq(t *testing.T) {
 }
 
 func TestBuildUpdateUserReq(t *testing.T) {
-	newCmd := func(setEmailVerified bool) *cobra.Command {
-		c := &cobra.Command{}
-		c.Flags().Bool("email-verified", false, "")
+	newVerbFor := func(setEmailVerified bool) *verb {
+		set := map[string]string{}
 		if setEmailVerified {
-			require.NoError(t, c.Flags().Set("email-verified", "true"))
+			set["email-verified"] = "true"
 		}
-		return c
+		return newPresenceVerb(t, func(fs *flag.FlagSet) {
+			fs.Bool("email-verified", false, "")
+		}, set)
 	}
 	tests := []struct {
 		name          string
@@ -83,7 +84,7 @@ func TestBuildUpdateUserReq(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, err := buildUpdateUserReq(newCmd(tt.emailVerified), tt.id, tt.emailVerified, tt.nameArg, tt.email, tt.status, tt.data)
+			req, err := buildUpdateUserReq(newVerbFor(tt.emailVerified), tt.id, tt.emailVerified, tt.nameArg, tt.email, tt.status, tt.data)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("want error containing %q, got %v", tt.wantErr, err)
@@ -114,7 +115,7 @@ func TestBuildUpdateUserReq(t *testing.T) {
 func TestListJSON(t *testing.T) {
 	tests := []struct {
 		name      string
-		pageSize  int32
+		pageSize  int
 		pageToken string
 		wantKeys  []string
 	}{

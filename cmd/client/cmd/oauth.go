@@ -1,10 +1,10 @@
 package cmd
 
 import (
+	"flag"
 	"fmt"
-	"os"
 
-	"github.com/spf13/cobra"
+	"github.com/lynx-go/commands"
 )
 
 const (
@@ -13,79 +13,61 @@ const (
 	methodOAuthDelete = "/torchwood.server.v1.OAuthProvidersService/DeleteOAuthProvider"
 )
 
-// NewOAuthProvidersCmd 覆盖 OAuthProvidersService 全部 3 个方法：
+// newOAuthProvidersCmd 覆盖 OAuthProvidersService 全部 3 个方法：
 // list/upsert/delete（proto 无 get 方法；upsert 即 create+update 语义）。
-func NewOAuthProvidersCmd(g *globalFlags) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "oauth-providers",
-		Short: "OAuth 提供商管理（OAuthProvidersService 全部方法）",
-	}
-	cmd.AddCommand(
-		newOAuthProvidersListCmd(g),
-		newOAuthProvidersUpsertCmd(g),
-		newOAuthProvidersDeleteCmd(g),
-	)
-	return cmd
+func newOAuthProvidersCmd(g *globalFlags) *group {
+	return newGroup(g, "oauth-providers", "OAuth 提供商管理（OAuthProvidersService 全部方法）", func(sub *commands.App) {
+		sub.Register(
+			newOAuthProvidersListCmd(g),
+			newOAuthProvidersUpsertCmd(g),
+			newOAuthProvidersDeleteCmd(g),
+		)
+	})
 }
 
-func newOAuthProvidersListCmd(g *globalFlags) *cobra.Command {
-	var pageSize int32
+func newOAuthProvidersListCmd(g *globalFlags) *verb {
+	var pageSize int
 	var pageToken string
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "列出 OAuth 提供商",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			resp, err := invoke(g, methodOAuthList, listJSON(pageSize, pageToken))
-			if err != nil {
-				return err
-			}
-			return printJSON(os.Stdout, resp)
+	return newVerb(g, "list", "列出 OAuth 提供商", "oauth-providers list",
+		func(fs *flag.FlagSet) {
+			fs.IntVar(&pageSize, "page-size", 0, "每页条数（服务端默认 50，上限 1000）")
+			fs.StringVar(&pageToken, "page-token", "", "上一页返回的 next_page_token")
 		},
-	}
-	cmd.Flags().Int32Var(&pageSize, "page-size", 0, "每页条数（服务端默认 50，上限 1000）")
-	cmd.Flags().StringVar(&pageToken, "page-token", "", "上一页返回的 next_page_token")
-	return cmd
+		func(v *verb, env *commands.Environment, _ []string) error {
+			return call(g, env, methodOAuthList, listJSON(pageSize, pageToken))
+		})
 }
 
-func newOAuthProvidersUpsertCmd(g *globalFlags) *cobra.Command {
+func newOAuthProvidersUpsertCmd(g *globalFlags) *verb {
 	var enabled bool
 	var clientID, clientSecret, scopes string
-	cmd := &cobra.Command{
-		Use:   "upsert <provider> --client-id <id>",
-		Short: "创建或更新 OAuth 提供商（如 google/github）",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+	return newVerb(g, "upsert", "创建或更新 OAuth 提供商（如 google/github）", "oauth-providers upsert <provider> --client-id <id>",
+		func(fs *flag.FlagSet) {
+			fs.BoolVar(&enabled, "enabled", false, "是否启用（启用且无既有 secret 时服务端要求 --client-secret）")
+			fs.StringVar(&clientID, "client-id", "", "OAuth client ID（必填）")
+			fs.StringVar(&clientSecret, "client-secret", "", "OAuth client secret（启用时必填）")
+			fs.StringVar(&scopes, "scopes", "", "请求 scope JSON 数组（如 '[\"email\",\"profile\"]'）")
+		},
+		func(v *verb, env *commands.Environment, args []string) error {
+			if err := exactArgs(v, args, 1); err != nil {
+				return err
+			}
 			req, err := buildUpsertOAuthProviderReq(args[0], enabled, clientID, clientSecret, scopes)
 			if err != nil {
 				return err
 			}
-			resp, err := invoke(g, methodOAuthUpsert, req)
-			if err != nil {
-				return err
-			}
-			return printJSON(os.Stdout, resp)
-		},
-	}
-	cmd.Flags().BoolVar(&enabled, "enabled", false, "是否启用（启用且无既有 secret 时服务端要求 --client-secret）")
-	cmd.Flags().StringVar(&clientID, "client-id", "", "OAuth client ID（必填）")
-	cmd.Flags().StringVar(&clientSecret, "client-secret", "", "OAuth client secret（启用时必填）")
-	cmd.Flags().StringVar(&scopes, "scopes", "", "请求 scope JSON 数组（如 '[\"email\",\"profile\"]'）")
-	return cmd
+			return call(g, env, methodOAuthUpsert, req)
+		})
 }
 
-func newOAuthProvidersDeleteCmd(g *globalFlags) *cobra.Command {
-	return &cobra.Command{
-		Use:   "delete <provider>",
-		Short: "删除 OAuth 提供商",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			resp, err := invoke(g, methodOAuthDelete, map[string]any{"provider": args[0]})
-			if err != nil {
+func newOAuthProvidersDeleteCmd(g *globalFlags) *verb {
+	return newVerb(g, "delete", "删除 OAuth 提供商", "oauth-providers delete <provider>", nil,
+		func(v *verb, env *commands.Environment, args []string) error {
+			if err := exactArgs(v, args, 1); err != nil {
 				return err
 			}
-			return printJSON(os.Stdout, resp)
-		},
-	}
+			return call(g, env, methodOAuthDelete, map[string]any{"provider": args[0]})
+		})
 }
 
 // buildUpsertOAuthProviderReq 构造 UpsertOAuthProviderRequest（client-id 必填；

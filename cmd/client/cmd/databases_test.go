@@ -2,22 +2,25 @@ package cmd
 
 import (
 	"encoding/json"
+	"flag"
 	"testing"
 
-	"github.com/spf13/cobra"
+	"github.com/lynx-go/commands"
 	"github.com/stretchr/testify/require"
 )
 
-// newCmdWithFlags 构造带集合相关 bool flag 的 cobra 命令，
-// 用于表达 --document-security/--disabled 的显式 presence。
-func newCmdWithFlags(t *testing.T, set map[string]string) *cobra.Command {
-	c := &cobra.Command{}
-	c.Flags().Bool("document-security", false, "")
-	c.Flags().Bool("disabled", false, "")
-	for k, v := range set {
-		require.NoError(t, c.Flags().Set(k, v))
+// newPresenceVerb 构造带指定旗标的测试动词：SetFlags 后在动词捕获的
+// FlagSet 上 Set，模拟"显式传入"的 presence（与生产分发同构，供
+// setChanged/verb.changed 判断）。
+func newPresenceVerb(t *testing.T, decl func(fs *flag.FlagSet), set map[string]string) *verb {
+	t.Helper()
+	v := newVerb(nil, "test", "test", "test", decl,
+		func(v *verb, env *commands.Environment, args []string) error { return nil })
+	v.SetFlags(flag.NewFlagSet("test", flag.ContinueOnError))
+	for k, val := range set {
+		require.NoError(t, v.fs.Set(k, val))
 	}
-	return c
+	return v
 }
 
 func TestBuildCreateDatabaseReq(t *testing.T) {
@@ -75,8 +78,11 @@ func TestBuildCreateCollectionReq(t *testing.T) {
 			if tt.docSec != "" {
 				set["document-security"] = tt.docSec
 			}
-			cmd := newCmdWithFlags(t, set)
-			req, err := buildCreateCollectionReq(cmd, tt.databaseID, tt.id, tt.collectionName, tt.permissions, tt.docSec == "true")
+			v := newPresenceVerb(t, func(fs *flag.FlagSet) {
+				fs.Bool("document-security", false, "")
+				fs.Bool("disabled", false, "")
+			}, set)
+			req, err := buildCreateCollectionReq(v, tt.databaseID, tt.id, tt.collectionName, tt.permissions, tt.docSec == "true")
 			if tt.wantErr != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.wantErr)
@@ -133,8 +139,11 @@ func TestBuildUpdateCollectionReq(t *testing.T) {
 			if tt.disabled != "" {
 				set["disabled"] = tt.disabled
 			}
-			cmd := newCmdWithFlags(t, set)
-			req, err := buildUpdateCollectionReq(cmd, tt.databaseID, tt.collectionID, tt.collectionName,
+			v := newPresenceVerb(t, func(fs *flag.FlagSet) {
+				fs.Bool("document-security", false, "")
+				fs.Bool("disabled", false, "")
+			}, set)
+			req, err := buildUpdateCollectionReq(v, tt.databaseID, tt.collectionID, tt.collectionName,
 				tt.permissions, tt.docSec == "true", tt.disabled == "true")
 			if tt.wantErr != "" {
 				require.Error(t, err)
@@ -179,7 +188,7 @@ func TestBuildCreateAttributeReq(t *testing.T) {
 		collectionID string
 		key          string
 		typ          string
-		size         int32
+		size         int
 		required     bool
 		array        bool
 		defaultValue string
@@ -273,7 +282,7 @@ func TestBuildListDocumentsReq(t *testing.T) {
 		databaseID   string
 		collectionID string
 		queries      string
-		pageSize     int32
+		pageSize     int
 		pageToken    string
 		wantErr      string
 	}{

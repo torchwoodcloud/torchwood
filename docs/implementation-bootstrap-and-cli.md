@@ -3,6 +3,8 @@
 > 状态：待实施（方案已评审，拆分为 3 个可分派的实施 prompt，见 `docs/prompts/`）
 > 创建日期：2026-08-10
 > 关联：`docs/roadmap.md` §2.9（Seed 数据增强，本方案以「移除 seed」取代）、§0 Agent-Native（CLI 是 Agent/自动化调用的入口之一）
+>
+> **2026-09-06 更新**：CLI 框架已由 `spf13/cobra` 迁移至 `github.com/lynx-go/commands`（零依赖子命令框架，§4.2/§5 等涉及 cobra 的描述以现状代码 `cmd/client/cmd/` 为准）。行为差异：全局旗标须在子命令路径之后、位置参数之前给出；`--version` 改为 `version` 动词；shell completion 不再提供；退出码契约不变（0/1/2=40x/3=5xx/4=429，经 `commands.ExitCode` 钩子注入）。
 
 ---
 

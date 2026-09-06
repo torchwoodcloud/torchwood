@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"os"
+	"flag"
 
-	"github.com/spf13/cobra"
+	"github.com/lynx-go/commands"
 )
 
 const (
@@ -11,27 +11,27 @@ const (
 	methodOutboxReplay   = "/torchwood.server.v1.OutboxService/ReplayDeadLetter"
 )
 
-// NewOutboxCmd 提供 outbox 死信管理（admin）。
-func NewOutboxCmd(g *globalFlags) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "outbox",
-		Short: "outbox 死信管理（list-dead/replay）",
-	}
-	cmd.AddCommand(
-		newOutboxListDeadCmd(g),
-		newOutboxReplayCmd(g),
-	)
-	return cmd
+// newOutboxCmd 提供 outbox 死信管理（admin）。
+func newOutboxCmd(g *globalFlags) *group {
+	return newGroup(g, "outbox", "outbox 死信管理（list-dead/replay）", func(sub *commands.App) {
+		sub.Register(
+			newOutboxListDeadCmd(g),
+			newOutboxReplayCmd(g),
+		)
+	})
 }
 
-func newOutboxListDeadCmd(g *globalFlags) *cobra.Command {
+func newOutboxListDeadCmd(g *globalFlags) *verb {
 	var projectID string
-	var pageSize int32
+	var pageSize int
 	var pageToken string
-	cmd := &cobra.Command{
-		Use:   "list-dead",
-		Short: "列出死信",
-		RunE: func(cmd *cobra.Command, args []string) error {
+	return newVerb(g, "list-dead", "列出死信", "admin outbox list-dead [--project-id]",
+		func(fs *flag.FlagSet) {
+			fs.StringVar(&projectID, "project-id", "", "项目 ID（必填）")
+			fs.IntVar(&pageSize, "page-size", 0, "每页条数")
+			fs.StringVar(&pageToken, "page-token", "", "上一页 next_page_token")
+		},
+		func(v *verb, env *commands.Environment, _ []string) error {
 			payload := map[string]any{}
 			if projectID != "" {
 				payload["project_id"] = projectID
@@ -42,37 +42,24 @@ func newOutboxListDeadCmd(g *globalFlags) *cobra.Command {
 			if pageToken != "" {
 				payload["page_token"] = pageToken
 			}
-			resp, err := invoke(g, methodOutboxListDead, payload)
-			if err != nil {
-				return err
-			}
-			return printJSON(os.Stdout, resp)
-		},
-	}
-	cmd.Flags().StringVar(&projectID, "project-id", "", "项目 ID（必填）")
-	cmd.Flags().Int32Var(&pageSize, "page-size", 0, "每页条数")
-	cmd.Flags().StringVar(&pageToken, "page-token", "", "上一页 next_page_token")
-	return cmd
+			return call(g, env, methodOutboxListDead, payload)
+		})
 }
 
-func newOutboxReplayCmd(g *globalFlags) *cobra.Command {
+func newOutboxReplayCmd(g *globalFlags) *verb {
 	var projectID string
-	cmd := &cobra.Command{
-		Use:   "replay <event-id>",
-		Short: "重放单条死信",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+	return newVerb(g, "replay", "重放单条死信", "admin outbox replay <event-id> [--project-id]",
+		func(fs *flag.FlagSet) {
+			fs.StringVar(&projectID, "project-id", "", "项目 ID（必填）")
+		},
+		func(v *verb, env *commands.Environment, args []string) error {
+			if err := exactArgs(v, args, 1); err != nil {
+				return err
+			}
 			payload := map[string]any{"event_id": args[0]}
 			if projectID != "" {
 				payload["project_id"] = projectID
 			}
-			resp, err := invoke(g, methodOutboxReplay, payload)
-			if err != nil {
-				return err
-			}
-			return printJSON(os.Stdout, resp)
-		},
-	}
-	cmd.Flags().StringVar(&projectID, "project-id", "", "项目 ID（必填）")
-	return cmd
+			return call(g, env, methodOutboxReplay, payload)
+		})
 }

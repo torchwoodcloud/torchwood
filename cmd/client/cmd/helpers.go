@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-
-	"github.com/spf13/cobra"
 )
 
 // decodeJSON 以 UseNumber 解码，避免 64 位整型经 float64 丢精度。
@@ -80,15 +78,16 @@ func mergeJSON(m map[string]any, data string) error {
 	return nil
 }
 
-// setChanged 在 flag 显式设置时写入请求 map（proto3 optional presence 用键存在性表达）。
-func setChanged(cmd *cobra.Command, flag string, m map[string]any, key string, v any) {
-	if cmd.Flags().Changed(flag) {
-		m[key] = v
+// setChanged 在旗标显式设置时写入请求 map（proto3 optional presence 用键存
+// 在性表达；presence 经动词捕获的 FlagSet 判断，见 verb.changed）。
+func setChanged(v *verb, flag string, m map[string]any, key string, val any) {
+	if v.changed(flag) {
+		m[key] = val
 	}
 }
 
 // listJSON 构造分页请求 map（仅放非零键）。
-func listJSON(pageSize int32, pageToken string) map[string]any {
+func listJSON(pageSize int, pageToken string) map[string]any {
 	m := map[string]any{}
 	if pageSize > 0 {
 		m["pageSize"] = pageSize

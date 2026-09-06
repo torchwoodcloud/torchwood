@@ -2,50 +2,45 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/spf13/cobra"
+	"github.com/lynx-go/commands"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 func TestValidateMissingAPIKey(t *testing.T) {
 	g := &globalFlags{output: "json", timeout: "30s"}
-	leaf := &cobra.Command{Use: "list"}
-	root := &cobra.Command{Use: "users"}
-	root.AddCommand(leaf)
 
 	// 非豁免命令缺 key 报错
-	if err := g.validate(leaf, nil); err == nil || !strings.Contains(err.Error(), "缺少 API key") {
+	if err := g.validate(true); err == nil || !strings.Contains(err.Error(), "缺少 API key") {
 		t.Fatalf("非豁免命令缺 key 应报错，got %v", err)
 	}
 
-	// health 命令（含子命令）豁免
-	health := &cobra.Command{Use: "health", Annotations: map[string]string{annotationNoKey: "true"}}
-	get := &cobra.Command{Use: "get"}
-	health.AddCommand(get)
-	if err := g.validate(get, nil); err != nil {
-		t.Fatalf("health 子命令应豁免 api-key 校验：%v", err)
+	// 公开命令（health/uuid/version）豁免
+	if err := g.validate(false); err != nil {
+		t.Fatalf("公开命令应豁免 api-key 校验：%v", err)
 	}
 
 	// 带 key 通过
 	g.apiKey = "k"
-	if err := g.validate(leaf, nil); err != nil {
+	if err := g.validate(true); err != nil {
 		t.Fatalf("带 key 应通过：%v", err)
 	}
 }
 
 func TestValidateOutputAndTimeout(t *testing.T) {
 	g := &globalFlags{output: "yaml", timeout: "30s", apiKey: "k"}
-	if err := g.validate(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "不支持的输出格式") {
+	if err := g.validate(true); err == nil || !strings.Contains(err.Error(), "不支持的输出格式") {
 		t.Fatalf("非法 output 应报错，got %v", err)
 	}
 	g.output = "json"
 	g.timeout = "abc"
-	if err := g.validate(&cobra.Command{}, nil); err == nil || !strings.Contains(err.Error(), "无效的 --timeout") {
+	if err := g.validate(true); err == nil || !strings.Contains(err.Error(), "无效的 --timeout") {
 		t.Fatalf("非法 timeout 应报错，got %v", err)
 	}
 }
@@ -84,15 +79,16 @@ func TestFormatRPCError(t *testing.T) {
 	}
 }
 
-// TestExitCode 固化退出码映射：OK=0 / 参数错=1 / 40x=2 / 5xx=3 / 限流=4。
-func TestExitCode(t *testing.T) {
+// TestRPCExitCode 固化退出码映射（rpcExitCode 钩子，nil 不会到达钩子——
+// App.Run 对 nil/ErrHelp 直接返回 0）：参数错=1 / 40x=2 / 5xx=3 / 限流=4。
+func TestRPCExitCode(t *testing.T) {
 	tests := []struct {
 		name string
 		err  error
 		want int
 	}{
-		{name: "nil 为成功", err: nil, want: 0},
 		{name: "非 RPC 错误（参数校验等）为 1", err: errors.New("无效的 --timeout"), want: 1},
+		{name: "UsageError（位置参数不符）为 1", err: &commands.UsageError{Err: errors.New("需要 1 个位置参数")}, want: 1},
 		{name: "Unauthenticated(401) 为 2", err: &rpcError{cause: status.Error(codes.Unauthenticated, "401")}, want: 2},
 		{name: "PermissionDenied(403) 为 2", err: &rpcError{cause: status.Error(codes.PermissionDenied, "403")}, want: 2},
 		{name: "NotFound(404) 为 2", err: &rpcError{cause: status.Error(codes.NotFound, "404")}, want: 2},
@@ -107,8 +103,8 @@ func TestExitCode(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ExitCode(tt.err); got != tt.want {
-				t.Errorf("ExitCode(%v) = %d, want %d", tt.err, got, tt.want)
+			if got := rpcExitCode(tt.err); got != tt.want {
+				t.Errorf("rpcExitCode(%v) = %d, want %d", tt.err, got, tt.want)
 			}
 		})
 	}
@@ -124,8 +120,8 @@ func TestInvokeMapsGRPCErrors(t *testing.T) {
 	if !ok {
 		t.Fatalf("invoke 应返回 *rpcError，got %T", err)
 	}
-	if ExitCode(re) != 3 {
-		t.Errorf("连接失败应归入 5xx 类（退出码 3），got %d", ExitCode(re))
+	if rpcExitCode(re) != 3 {
+		t.Errorf("连接失败应归入 5xx 类（退出码 3），got %d", rpcExitCode(re))
 	}
 }
 
@@ -145,5 +141,85 @@ func TestPrintJSON(t *testing.T) {
 	out := buf.String()
 	if out != "{\"version\":\"v1.2.3\"}\n" {
 		t.Errorf("printJSON 应原样写字节 + 换行：%q", out)
+	}
+}
+
+// TestAppRunExitCodes 端到端固化 commands App.Run → rpcExitCode 的退出码
+// 面板：帮助 0 / 未知动词 1（附帮助面）/ 缺 key 1 / 拨号失败（5xx 类）3，
+// 以及裸分组命令打子命令帮助退 0。
+func TestAppRunExitCodes(t *testing.T) {
+	t.Setenv("TORCHWOOD_CLI_API_KEY", "")
+	t.Setenv("TORCHWOOD_CLI_ENDPOINT", "127.0.0.1:1")
+	t.Setenv("TORCHWOOD_CLI_TIMEOUT", "300ms")
+
+	app := NewApp("test")
+	var out, errOut bytes.Buffer
+	env := &commands.Environment{Stdout: &out, Stderr: &errOut}
+	run := func(args ...string) int {
+		out.Reset()
+		errOut.Reset()
+		return app.Run(context.Background(), env, args)
+	}
+
+	// 空参数：帮助面（含版本 footer）+ 0
+	if code := run(); code != commands.ExitOK {
+		t.Fatalf("空参数退出码 = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "torchwood test") {
+		t.Fatalf("帮助面应含版本 footer：%q", out.String())
+	}
+
+	// 未知动词：1（钩子归一），stderr 渲染错误并附帮助面
+	if code := run("bogus"); code != commands.ExitError {
+		t.Fatalf("未知动词退出码 = %d, want 1", code)
+	}
+	if !strings.Contains(errOut.String(), "unknown verb") || !strings.Contains(errOut.String(), "commands:") {
+		t.Fatalf("未知动词应渲染错误并附帮助面：%q", errOut.String())
+	}
+
+	// 本地命令：uuid 打印一行 UUID；version 打印版本串；位置参数被拒
+	if code := run("uuid"); code != commands.ExitOK {
+		t.Fatalf("uuid 退出码 = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "-") {
+		t.Fatalf("uuid 应输出 UUID：%q", out.String())
+	}
+	if code := run("version"); code != commands.ExitOK || !strings.Contains(out.String(), "torchwood test") {
+		t.Fatalf("version 应输出版本（退出码 0）：code=%d out=%q", code, out.String())
+	}
+	if code := run("uuid", "extra"); code != commands.ExitError {
+		t.Fatalf("uuid 多余位置参数退出码 = %d, want 1", code)
+	}
+
+	// 裸分组命令：打子命令帮助面，退出 0
+	if code := run("users"); code != commands.ExitOK {
+		t.Fatalf("裸分组退出码 = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "create") || !strings.Contains(out.String(), "list") {
+		t.Fatalf("裸分组应列子命令：%q", out.String())
+	}
+
+	// 缺 API key：非豁免 RPC 命令校验失败 → 1
+	if code := run("users", "list"); code != commands.ExitError {
+		t.Fatalf("缺 key 退出码 = %d, want 1", code)
+	}
+	if !strings.Contains(errOut.String(), "缺少 API key") {
+		t.Fatalf("缺 key 应渲染校验错误：%q", errOut.String())
+	}
+
+	// RPC 拨号失败（loopback 关闭端口）→ Unknown → 5xx 类 → 3
+	if code := run("users", "list", "--api-key", "k"); code != 3 {
+		t.Fatalf("拨号失败退出码 = %d, want 3", code)
+	}
+
+	// 旗标须在位置参数之前：get 的旗标放在位置参数后不再被解析（Go flag 语义）
+	if code := run("users", "get", "u1", "--api-key", "k"); code != commands.ExitError {
+		t.Fatalf("位置参数后的旗标退出码 = %d, want 1", code)
+	}
+
+	// 全局旗标在分组层给出（分组与叶子之间）不被叶子的缺省声明覆盖，
+	// 直达拨号失败路径 → 3
+	if code := run("users", "--api-key", "k", "--endpoint", "127.0.0.1:1", "list"); code != 3 {
+		t.Fatalf("分组层全局旗标退出码 = %d, want 3", code)
 	}
 }

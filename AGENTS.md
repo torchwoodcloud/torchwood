@@ -11,7 +11,7 @@
 
 ## 项目结构补充
 - `console/`：React + Vite + TanStack Query + shadcn/ui 管理后台前端，通过 `console/embed.go` 嵌入 Go 二进制。
-- `cmd/client/`：Torchwood CLI 二进制（`bin/torchwood`），cobra 实现，通过 sdk/go（server 包 InvokeJSON）以 API Key 调用 Server API；CLI 源码不直接 import genproto/grpc（有 import_guard_test 兜底），方法覆盖完整性由 `sdk/go/server` 的测试保证，新增 RPC 无需在 CLI 登记。
+- `cmd/client/`：Torchwood CLI 二进制（`bin/torchwood`），基于 `github.com/lynx-go/commands`（零依赖子命令 CLI 框架）实现，通过 sdk/go（server 包 InvokeJSON）以 API Key 调用 Server API；CLI 源码不直接 import genproto/grpc（有 import_guard_test 兜底），方法覆盖完整性由 `sdk/go/server` 的测试保证，新增 RPC 无需在 CLI 登记。全局旗标在子命令路径之后、位置参数之前给出（环境变量 `TORCHWOOD_CLI_*` 优先）；退出码契约 0/1/2=40x/3=5xx/4=429 经 `commands.ExitCode` 钩子注入（`cmd/client/cmd/root.go` rpcExitCode）。
 - `internal/api/serverhttp/`：自定义 HTTP handler，例如 Storage multipart 上传下载。
 - `pkg/query/`：Appwrite 风格查询 DSL 解析器，供动态文档层使用。
 - `internal/testutil/`：集成测试数据库辅助工具。

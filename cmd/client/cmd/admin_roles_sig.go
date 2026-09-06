@@ -2,11 +2,12 @@ package cmd
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/spf13/cobra"
+	"github.com/lynx-go/commands"
 
 	"github.com/torchwooddev/torchwood/internal/infra/clients"
 )
@@ -31,16 +32,20 @@ const adminJWTSecretFlagEnv = "TORCHWOOD_SECURITY_JWT_SECRET"
 //   - 部署时序：迁移（000004）→ 本作业 → server/worker 启动。服务在密钥
 //     未落库时启动，文档查询 fail-closed（零角色）属预期——首个业务查询
 //     暴露而非静默放行。
-func newAdminSyncRolesSigCmd() *cobra.Command {
+//
+// 直连 DB 的部署期作业（对齐 export/import 形态）：不持 Server API key，
+// 不挂全局旗标、不做 api-key 校验。
+func newAdminSyncRolesSigCmd() *verb {
 	var dsn string
 	var jwtSecret string
-	cmd := &cobra.Command{
-		Use:   "sync-roles-sig",
-		Short: "roles 签名密钥落库 tw_secrets（部署期 owner 作业，B15）",
-		// 直连 DB 的部署期作业（对齐 health/uuid 的豁免形态）：不持 Server
-		// API key——root 的 api-key 必填校验按 annotation 豁免。
-		Annotations: map[string]string{annotationNoKey: "true"},
-		RunE: func(cmd *cobra.Command, args []string) error {
+	return newVerb(nil, "sync-roles-sig", "roles 签名密钥落库 tw_secrets（部署期 owner 作业，B15）", "admin sync-roles-sig",
+		func(fs *flag.FlagSet) {
+			fs.StringVar(&dsn, "dsn", os.Getenv(adminDBFlagDsn),
+				"Postgres DSN（owner/引导账号，非运行态 authenticator；缺省读 "+adminDBFlagDsn+"）")
+			fs.StringVar(&jwtSecret, "jwt-secret", os.Getenv(adminJWTSecretFlagEnv),
+				"主密钥 security.jwt.secret（须与运行态一致；缺省读 "+adminJWTSecretFlagEnv+"）")
+		},
+		func(v *verb, env *commands.Environment, _ []string) error {
 			secret := strings.TrimSpace(jwtSecret)
 			if secret == "" {
 				return fmt.Errorf("jwt secret is empty: pass --jwt-secret or set %s", adminJWTSecretFlagEnv)
@@ -56,13 +61,7 @@ func newAdminSyncRolesSigCmd() *cobra.Command {
 			if err := clients.SyncRolesSigKey(context.Background(), db); err != nil {
 				return err
 			}
-			cmd.Println("roles sig key synced into public.tw_secrets (current slot; dual-key rotation preserved)")
+			fmt.Fprintln(env.Stderr, "roles sig key synced into public.tw_secrets (current slot; dual-key rotation preserved)")
 			return nil
-		},
-	}
-	cmd.Flags().StringVar(&dsn, "dsn", os.Getenv(adminDBFlagDsn),
-		"Postgres DSN（owner/引导账号，非运行态 authenticator；缺省读 "+adminDBFlagDsn+"）")
-	cmd.Flags().StringVar(&jwtSecret, "jwt-secret", os.Getenv(adminJWTSecretFlagEnv),
-		"主密钥 security.jwt.secret（须与运行态一致；缺省读 "+adminJWTSecretFlagEnv+"）")
-	return cmd
+		})
 }
