@@ -82,7 +82,9 @@ func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 		return nil, err
 	}
 	// 阶段③-b 包 C：启用 roles GUC 签名密钥派生（A2，page-token 同模式）；
-	// 落库由 OnStart 钩子（bootkit.RolesSigKeySyncHook）完成。
+	// 注入 GUC 用进程内钥。落库由部署期 owner 一次性作业完成（`torchwood
+	// admin sync-roles-sig`，门禁 B15——启动钩子已退役，运行 DSN 对
+	// tw_secrets 零权限，迁移 000033）。
 	if err := bootkit.InitRolesSigSigning(&c); err != nil {
 		return nil, err
 	}

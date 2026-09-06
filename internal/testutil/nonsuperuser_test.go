@@ -28,19 +28,20 @@ import (
 //   - owner 引导账号（superuser，即 compose/CI 的 POSTGRES_USER 形态）：仅
 //     迁移与扩展引导——000030 `CREATE EXTENSION vector`（非 trusted，superuser
 //     专属）、000029 `GRANT CREATE ON SCHEMA public TO tw_system` 与
-//     `ALTER FUNCTION ... OWNER TO tw_system` 都需要特权身份；
+//     `ALTER FUNCTION ... OWNER TO tw_system` 都需要特权身份；roles_sig 密钥
+//     落库（B15 部署期 owner 作业，对齐 `torchwood admin sync-roles-sig`）
+//     同属此账号；
 //   - tw_authenticator（非 superuser、无 BYPASSRLS）：仅 000026 三角色
-//     membership + 库级 CONNECT/CREATE + 控制面静态表 DML（边界邻居面）+
-//     tw_secrets SELECT,INSERT,UPDATE,DELETE（roles_sig 启动同步的四语句面，
-//     残余风险注记见 13-operations §4.5），server/worker 运行态 DSN 全部
-//     流量走它。
+//     membership + 库级 CONNECT/CREATE + 控制面静态表 DML（边界邻居面），
+//     server/worker 运行态 DSN 全部流量走它；对 public.tw_secrets **零权限**
+//     （B15 收口：密钥不可读 → GUC 伪造通道封死，迁移 000033）。
 //
 // 流程：独立临时库上 owner 跑全量迁移 → owner 建 authenticator 并授权 →
 // 断言 rolsuper=false / 三角色 membership / SET ROLE 可达 / untrusted 扩展
-// 安装被拒 → 以 authenticator 完成 roles_sig 同步 + 建项目 schema + 建业务
-// 库/集合/写读文档冒烟。角色与库名唯一化（集群级对象，避免并行会话竞态）；
-// 建库/迁移/删库段按 testutil 并行安全契约（A6）持集群级 lifecycle advisory
-// lock（runInDBLifecycleLock）。
+// 安装被拒 / tw_secrets 零权限 → 以 owner 完成 roles_sig 落库作业 + 建项目
+// schema + 建业务库/集合/写读文档冒烟（authenticator 只注入验签）。角色与
+// 库名唯一化（集群级对象，避免并行会话竞态）；建库/迁移/删库段按 testutil
+// 并行安全契约（A6）持集群级 lifecycle advisory lock（runInDBLifecycleLock）。
 func TestNonSuperuserAuthenticator_MigrateAndSmoke(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -85,6 +86,7 @@ func TestNonSuperuserAuthenticator_MigrateAndSmoke(t *testing.T) {
 		// 控制面静态表 DML（边界邻居面，base identity）：public 全表排除 catalog
 		// 两表（读写仅经角色可达，与 000026 授权面一致）与 tw_secrets。roleName
 		// 为测试生成的安全标识符直接内插；%I 属 SQL format 动词，不经 fmt.Sprintf。
+		// tw_secrets 自 B15（迁移 000033）起对运行账号零权限，永久排除。
 		`DO $do$ DECLARE t text; BEGIN
 			FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public'
 				AND tablename NOT IN ('catalog_databases', 'catalog_collections', 'tw_secrets')
@@ -96,10 +98,6 @@ func TestNonSuperuserAuthenticator_MigrateAndSmoke(t *testing.T) {
 		// 的 `REFERENCES public.projects(id)`）：建外键要求被引用表上的
 		// REFERENCES 权限。
 		fmt.Sprintf(`GRANT REFERENCES ON public.projects TO %s`, roleName),
-		// roles_sig 启动同步（bootkit RolesSigKeySyncHook → SyncRolesSigKey 的
-		// 降级/落位/裁剪四语句）：需 SELECT,INSERT,UPDATE,DELETE 全量——PG 对
-		// 子查询/冲突位读强制要求 SELECT，剩余风险注记见 13-operations §4.5。
-		fmt.Sprintf(`GRANT SELECT, INSERT, UPDATE, DELETE ON public.tw_secrets TO %s`, roleName),
 	}
 
 	err = runInDBLifecycleLock(ctx, adminDB, func(ctx context.Context) error {
@@ -199,13 +197,35 @@ func TestNonSuperuserAuthenticator_MigrateAndSmoke(t *testing.T) {
 	_, err = authBase.ExecContext(ctx, "CREATE EXTENSION IF NOT EXISTS pg_stat_statements")
 	require.Error(t, err, "非 superuser authenticator 不得安装 untrusted 扩展（引导面必须 owner 账号）")
 
-	// 5) 运行态冒烟（全部流量走 authenticator DSN）：roles_sig 密钥同步 →
-	// 建项目（控制面 INSERT + 项目 schema CREATE SCHEMA）→ 建业务库/集合
-	//（tw_owner DDL）→ 写文档（tw_system）→ RLS 读回（tw_app + sig 验签）。
+	// 4') B15 完成判据核心断言：authenticator 对 public.tw_secrets 无任何权限
+	//（\dp tw_secrets 等价：has_table_privilege 七特权位全 false——该函数含
+	// membership 间接授权语义，即 SET ROLE 可达面的全集；与 SECURITY DEFINER
+	// owner 链区分：验签函数以自身 owner（迁移执行者）读表，不经运行账号）。
+	// 表 owner 另查——owner 对自有表隐式全权，不在此七位内。
+	var twSecretsOwner string
+	require.NoError(t, ownerDB.QueryRowContext(ctx,
+		`SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = 'public.tw_secrets'::regclass`,
+	).Scan(&twSecretsOwner))
+	require.NotEqual(t, roleName, twSecretsOwner, "authenticator 不得是 tw_secrets 的 owner")
+	for _, priv := range []string{"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"} {
+		var allowed bool
+		require.NoError(t, authBase.QueryRowContext(ctx,
+			`SELECT has_table_privilege(?, 'public.tw_secrets', ?)`, roleName, priv).Scan(&allowed),
+			"has_table_privilege 查询失败（priv=%s）", priv)
+		require.False(t, allowed, "authenticator 对 tw_secrets 不得持有 %s（B15：DSN 泄漏不得读密钥伪造 GUC 提权）", priv)
+	}
+
+	// 5) 运行态冒烟（全部流量走 authenticator DSN）：roles_sig 密钥落库改
+	// owner 引导身份执行（B15 部署期作业，对齐 `torchwood admin sync-roles-sig`
+	// 的内部路径 InitRolesSigKey + SyncRolesSigKey）→ 建项目（控制面 INSERT +
+	// 项目 schema CREATE SCHEMA）→ 建业务库/集合（tw_owner DDL）→ 写文档
+	//（tw_system）→ RLS 读回（tw_app + sig 验签；authenticator 只注入验签，
+	// 不再落库）。
 	require.NoError(t, clients.InitRolesSigKey(TestRolesSigMaster))
+	ownerClient := &clients.Database{DB: ownerDB}
+	require.NoError(t, clients.SyncRolesSigKey(ctx, ownerClient),
+		"owner 引导账号应能完成 roles_sig 密钥落库（B15 部署期作业面）")
 	authDB := &clients.Database{DB: authBase}
-	require.NoError(t, clients.SyncRolesSigKey(ctx, authDB),
-		"authenticator 应能完成 roles_sig 密钥落库（tw_secrets 四语句授权面）")
 
 	projectID, _, cleanupProject := CreateTestProjectT(ctx, t, authDB)
 	defer cleanupProject()

@@ -169,8 +169,10 @@ const rolesSigTTL = 60 * time.Second
 var rolesSigKeyHex atomic.Value // string
 
 // InitRolesSigKey 以主密钥（security.jwt.secret）进程内派生 roles 签名密钥
-//（hex）。组合根启动期调用（server/worker 各自一次），随后由启动钩子落库
-// public.tw_secrets 供 tw_roles() 验签（documentdb.SyncRolesSigKey）。
+//（hex）。组合根启动期调用（server/worker 各自一次）；落库 public.tw_secrets
+// 供 tw_roles() 验签由部署期 owner 一次性作业完成（`torchwood admin
+// sync-roles-sig` → SyncRolesSigKey，转出 POC 门禁 B15——运行 DSN 对
+// tw_secrets 零权限，启动钩子已退役）。
 func InitRolesSigKey(master string) error {
 	if strings.TrimSpace(master) == "" {
 		return fmt.Errorf("roles sig signing requires a non-empty master secret")
@@ -201,8 +203,10 @@ func SignRolesSig(keyHex string, tenant int64, roles string, now time.Time) stri
 }
 
 // SyncRolesSigKey 把进程内派生的 roles 签名密钥落进 public.tw_secrets
-//（迁移 000029 + 000031 双钥槽位），供 tw_roles() 验签——server/worker
-// 启动钩子（bootkit）调用，以 authenticator（表 owner）身份执行。
+//（迁移 000029 + 000031 双钥槽位），供 tw_roles() 验签——部署期 owner 一次
+// 性作业（`torchwood admin sync-roles-sig`，转出 POC 门禁 B15）以引导/owner
+// 身份调用；运行 DSN 对 tw_secrets 零权限（迁移 000033 收口），启动钩子已
+// 退役，server/worker 不再落库（进程内派生钥仅供注入签名，无需读库）。
 //
 // 双钥轮换（转出 POC 门禁 A4）：新钥落 current 位，旧 current 降级 previous
 //（而非覆盖删除），previous 至多保留紧邻上一把（third 条直接删）。滚动重启

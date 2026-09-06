@@ -57,7 +57,7 @@ func TestCollectionGrantsReconcileHook_WiredInOnStarts(t *testing.T) {
 		return err
 	}
 	hooks := NewOnStarts(nil, db, logger, reconcile, nil, nil)
-	require.Len(t, hooks, 3, "NewOnStarts 必须包含注入的 reconcile 钩子（A1 接线锁定）")
+	require.Len(t, hooks, 2, "NewOnStarts 必须包含注入的 reconcile 钩子（A1 接线锁定；基础钩子 = 项目 schema 确保一项——roles 密钥同步钩子已随 B15 退役）")
 	for i, hook := range hooks {
 		require.NoError(t, hook(ctx), "hook %d", i)
 	}
@@ -109,15 +109,16 @@ func TestScaleMetricsHook_WiredInOnStarts(t *testing.T) {
 		WHERE c.relkind IN ('r', 'p') AND n.nspname = ?`, businessSchema).Scan(&wantBusiness))
 	require.GreaterOrEqual(t, wantBusiness, int64(1))
 
-	// 接线断言：未注入扩展钩子时仅 2 个基础钩子（nil 跳过语义）；
-	// 注入 scaleMetrics 闭包后为 3 个，执行后指标被刷新。
-	require.Len(t, NewOnStarts(nil, nil, nil, nil, nil, nil), 2, "nil 扩展钩子必须被跳过")
+	// 接线断言：未注入扩展钩子时仅 1 个基础钩子（nil 跳过语义；roles 密钥
+	// 同步钩子已随 B15 退役）；注入 scaleMetrics 闭包后为 2 个，执行后指标
+	// 被刷新。
+	require.Len(t, NewOnStarts(nil, nil, nil, nil, nil, nil), 1, "nil 扩展钩子必须被跳过（基础钩子 = 项目 schema 确保一项）")
 	scale := func(ctx context.Context) error {
 		_, err := documentdb.CollectScaleMetrics(ctx, db)
 		return err
 	}
 	hooks := NewOnStarts(nil, db, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, scale, nil)
-	require.Len(t, hooks, 3, "NewOnStarts 必须包含注入的 scaleMetrics 钩子（B12 接线锁定）")
+	require.Len(t, hooks, 2, "NewOnStarts 必须包含注入的 scaleMetrics 钩子（B12 接线锁定）")
 	for i, hook := range hooks {
 		require.NoError(t, hook(ctx), "hook %d", i)
 	}
