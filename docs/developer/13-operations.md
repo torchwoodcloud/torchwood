@@ -462,3 +462,45 @@ $ psql -U tw_migrator_probe -d vector_probe \
 |----------|------|------|
 | `permission denied to create extension "vector"`（HINT: Must be superuser to create this extension.） | 迁移身份非 superuser 且目标库未启用扩展（场景 a 实测形态） | 走路径二第 1 步，superuser 预装后重跑迁移；golang-migrate 失败事务已回滚、版本记录未推进，重放安全 |
 | `extension "vector" is not available`（HINT: The extension must first be installed on the system where PostgreSQL is running.） | PG 实例基座不含 pgvector 扩展文件（本会话以不存在扩展名实测同形态报错） | 换 pgvector 预装基座（如 `pgvector/pgvector:0.8.6-pg18`）或按 pgvector 官方文档为实例安装扩展文件，之后仍走路径二第 1 步 |
+
+### 6.7 RBAC 角色生命周期（转出 POC 门禁 A8）
+
+RBAC 三角色 `tw_owner`（DDL/迁移身份，SET ROLE 使用）、`tw_app`（运行时应用身份，GUC 注入 + RLS 判定）、`tw_system`（BYPASSRLS 信任根，内部读回/回填）由迁移 000026 **幂等创建**（duplicate_object 容错），并 GRANT 给引导账号（`POSTGRES_USER`）作 membership；down **不 DROP ROLE**（集群角色保留形态，只回滚本库作用域：REASSIGN/DROP OWNED + REVOKE membership）。
+
+**探测查询**（DBA 常规巡检/清理前使用）：
+
+```sql
+-- 角色存在性与特权位（tw_system 必须 BYPASSRLS=t，tw_app/tw_owner 必须 f）
+SELECT rolname, rolsuper, rolbypassrls, rolcreatedb, rolcreaterole
+FROM pg_roles WHERE rolname IN ('tw_owner','tw_app','tw_system') ORDER BY rolname;
+
+-- membership 现状（哪些账号持有哪些角色——集群级，跨库一致）
+SELECT member.rolname AS member, grp.rolname AS group_role
+FROM pg_auth_members m
+JOIN pg_roles grp ON grp.oid = m.roleid
+JOIN pg_roles member ON member.oid = m.member
+WHERE grp.rolname LIKE 'tw\_%' ORDER BY 1,2;
+
+-- 角色名下对象分布（清理前必查；对象属于某个库，随该库消亡）
+SELECT n.nspname AS schema, c.relname, pg_get_userbyid(c.relowner) AS owner
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE pg_get_userbyid(c.relowner) IN ('tw_owner','tw_app','tw_system')
+ORDER BY 1,2 LIMIT 50;
+
+-- 依赖残留全景（DROP ROLE 报 2BP01 时按此定位）
+SELECT * FROM pg_shdepend WHERE refobjid IN (
+  SELECT oid FROM pg_roles WHERE rolname LIKE 'tw\_%');
+```
+
+**清理流程**（逐库；角色本身按需保留——up 会幂等重建）：
+
+```sql
+-- 在目标库执行（每库一次）
+REASSIGN OWNED BY tw_owner, tw_app, tw_system TO <bootstrap_account>;
+DROP OWNED BY tw_owner, tw_app, tw_system;
+REVOKE tw_owner, tw_app, tw_system FROM <bootstrap_account>;
+-- 角色保留不 DROP（up 幂等重建）；确认全集群弃用才执行：
+-- DROP ROLE tw_app; DROP ROLE tw_owner; DROP ROLE tw_system;  -- 2BP01 → 回上一步
+```
+
+**跨库影响实测记录（2026-09-05，双沙箱库演练）**：`GRANT/REVOKE membership` 是**集群级**操作——在 sandbox_a 执行 000026 down 后，bootstrap 在 sandbox_b 的 membership 同步清空（pg_auth_members 0 行，跨库一致）；恢复方式 = 在任一库重新 `GRANT tw_app, tw_owner, tw_system TO <bootstrap>`（等价于重跑 000026 up 段，实测 membership 立即恢复）。**结论：共享集群上对任一库跑 down，等于对全集群撤销运行时身份——其他库需重新 GRANT 后方可继续服务**。另有实测注记：`tw_system` 的 BYPASSRLS 属性独立于 membership 存续（down 后仍为 t），属预期（信任根属性随角色定义保留）。

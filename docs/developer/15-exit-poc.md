@@ -19,7 +19,7 @@
 - **要做什么**：在启动或迁移路径增加一次性全量扫描：遍历 catalog 全部业务集合物理表，按 R13a/R16 终态口径（SELECT 全列；INSERT 数据列 + 除 `_tenant` 外系统列含 `_acl`；UPDATE 排除 `_tenant`/`_acl`）重刷列级 GRANT，不再依赖 DDL touch 逐表矫正。R13a/R16 连带：终态口径以 ③-b 收口形态为准（INSERT 恢复 `_acl`、UPDATE 双向排除）。
 - **完成判据**：构造一张列授权故意偏离终态的表（手工 REVOKE/GRANT），执行扫描后 `information_schema.column_privileges` 与 `refreshColumnGrants` 幂等重建的结果一致；扫描入口（启动钩子或迁移步骤）有集成测试锁定，且空库扫描为 no-op。
 - **建议归属**：documentdb DDL/权限会话（`infra/documentdb`）。
-- **闭环**：2026-09-05｜commit 0769ce6｜扫描入口选启动钩子（迁移路径是纯 SQL 文件，Go 侧 reconcile 无挂载点；OnStart 先于监听，矫正先于流量暴露）：`documentdb.ReconcileCollectionColumnGrants` 遍历全局 catalog 业务集合（sentinel 排除、ORDER BY 全键保证跨进程锁序），逐表经 tw_owner 事务执行 `refreshColumnGrants` 幂等重建（扫描执行体与门禁判据对照物同源；policy 重建仍留 DDL touch 路径）；`bootkit.CollectionGrantsReconcileHook` 注册进 `NewOnStarts`（server/worker 共享）。单表失败不中断全量（幽灵 catalog 行跳过计数 + Warn 日志 + `torchwood_documentdb_grants_reconcile_failures_total` 指标），空库 no-op。集成测试锁定：`TestGrantsReconcile_DeviationRestored`（偏离种子 = REVOKE SELECT、REVOKE UPDATE(title)、GRANT UPDATE(_acl)、GRANT INSERT(_tenant) → 扫描 → column_privileges 与从未偏离的对照集合逐行一致 + 二次扫描零增量 + 功能级 42501 抽验）、`TestGrantsReconcile_EmptyCatalogNoOp`、`TestCollectionGrantsReconcileHook_WiredInOnStarts`（接线断言 `NewOnStarts` 三钩子）。实测稳态扫描 ≈8.8ms/表（本地单实例，含每表一个 tw_owner 事务），千表量级启动开销个位数秒。
+- **闭环（2026-09-05 补正 2026-09-06）**：2026-09-05｜commit 0769ce6｜扫描入口选启动钩子（迁移路径是纯 SQL 文件，Go 侧 reconcile 无挂载点；OnStart 先于监听，矫正先于流量暴露）：`documentdb.ReconcileCollectionColumnGrants` 遍历全局 catalog 业务集合（sentinel 排除、ORDER BY 全键保证跨进程锁序），逐表经 tw_owner 事务执行 `refreshColumnGrants` 幂等重建（扫描执行体与门禁判据对照物同源；policy 重建仍留 DDL touch 路径）。**接线修正（2026-09-06，`7014f26`）**：钩子自 bootkit 共享装配移出——reconcile 是 documentdb 域职责，bootkit 直接实现会把 documentdb 拖进 worker 依赖闭包（import guard `TestWorkerDepsGraph` 曾因此红）；现经 `NewOnStarts` 可选闭包注入，**仅 server 注入、worker 传 nil**。单表失败不中断全量（幽灵 catalog 行跳过计数 + Warn 日志 + `torchwood_documentdb_grants_reconcile_failures_total` 指标），空库 no-op。集成测试锁定：`TestGrantsReconcile_DeviationRestored`（偏离种子 = REVOKE SELECT、REVOKE UPDATE(title)、GRANT UPDATE(_acl)、GRANT INSERT(_tenant) → 扫描 → column_privileges 与从未偏离的对照集合逐行一致 + 二次扫描零增量 + 功能级 42501 抽验）、`TestGrantsReconcile_EmptyCatalogNoOp`、`TestCollectionGrantsReconcileHook_WiredInOnStarts`（接线断言，已按注入形态更新）。实测稳态扫描 ≈8.8ms/表（本地单实例，含每表一个 tw_owner 事务），千表量级启动开销个位数秒。
 
 ### A2 非 superuser 应用 DSN
 
@@ -61,19 +61,13 @@
 - **建议归属**：testutil/CI 会话。
 - **闭环（2026-09-05，testutil/CI 会话）**：两根因修复落地——① 建库/迁移/删库段持集群级 advisory lock（`pg_try_advisory_lock` 轮询等锁 + admin 10s 读超时 + 瞬时过载指数退避重试 + admin 池进程级单例 + 测试库池上限 16），跨进程互斥不依赖进程内锁（`07c6e6a`、`89eb708`、`c181050`）；② 000026 down 改**集群角色保留**形态（不 DROP ROLE，只回滚本库作用域：REASSIGN/DROP OWNED + REVOKE membership；up 同步原子幂等 `1d77e8f`）——消除冲突源本身，无需任何测试间互斥锁，down 对称性收敛为"库内完全对称"（角色生命周期归集群供给方，A8 承接）。附带修复验收暴露的既有 flake：session evict 测试 expire tie（`32a781d`）、CreateTestProject 项目 schema apply 重试（`de88fb6`）。**证据**：隔离验收树（main `c181050` 同源）连续 3 次 `go test ./... -p 4 -count=1` 全绿——67 包 ok，唯一红灯 `cmd/worker.TestWorkerDepsGraph` 为 **A1 commit `0769ce6` 引入的 import guard 违规**（bootkit→documentdb 传递依赖；已实证在 A6 改动之前的 `3a1da5e` 上同样红），归属 A1 会话收尾。该红灯已由集中复审修复（`7014f26`）：reconcile 钩子移出 bootkit 共享装配，经 NewOnStarts 可选闭包注入（server 注入实现、worker 传 nil——reconcile 是 documentdb 域职责，worker 本不该跑）。**残余边界（集中复审后 4 轮 `-p 4` 实测：2 全绿 / 2 轮各一次随机包 i/o timeout，不同包、隔离复跑即绿）**：A6 的瞬时过载重试只接了 projectschema apply，未覆盖 documentdb DDL 路径（如 ensureCollectionRLS）——本地单 PG 实例 `-p 4` 偶发、串行稳定；补齐重试覆盖面随并行测试基建挂账。并行安全契约见 `internal/testutil/db.go` 包注释与 06-databases §12。
 
-### A7 绝对 P99 基准门禁
-
-- **出处**：06-databases §12（rls_policy_test "10 万行 RLS 开/关相对基准（4.9x，阈值 30x；**绝对 P99 门禁转出 POC 后上 CI 机器基准**）"）；redesign §11-I1（百万行集合 × policy 查询 P99 门禁、EXPLAIN 计划断言自动化——EXPLAIN InitPlan 门禁已常驻）。
-- **要做什么**：在 CI 专用基准规格上建立绝对 P99 门禁：百万行级、policy 开启的列表/点查路径，阈值按机器基准定档写入 CI 配置；现有相对基准保留为快速回归。
-- **完成判据**：CI 存在基准 job，失败条件为 P99 超过配置中的数值阈值（非口头约定）；首次全量运行的基线数值记录在本文或 13-operations。
-- **建议归属**：CI 基准（documentdb 测试）会话。
-
 ### A8 RBAC 角色生命周期 runbook（集群供给与清理）
 
 - **出处**：迁移 000026（A6 ② 修订后为**集群角色保留**形态：down 不 DROP ROLE，只回滚本库作用域——REASSIGN/DROP OWNED + REVOKE membership；up 幂等创建。角色生命周期归集群供给方，见迁移头注释与 06-databases §12）。
 - **要做什么**：runbook 写明 RBAC 角色的集群供给（部署期幂等创建）与常规清理流程（pg_roles/pg_shdepend 探测角色名下对象、逐库 REASSIGN OWNED/DROP OWNED 清单）——A6 修订后 down 已无跨库竞态，本条从"down 撞 2BP01 的处置"转为常规生命周期流程。
 - **完成判据**：13-operations 含可复制的探测查询与逐库清理步骤；在同一集群双迁移库沙箱演练一次 down 并记录输出（本文条目下附摘要）。
 - **建议归属**：DBA runbook（13-operations）。
+- **闭环（2026-09-06，集中复审沙箱演练）**：13-operations §6.7 "RBAC 角色生命周期"成文——探测查询四条（角色特权位 / pg_auth_members membership / 角色名下对象分布 / pg_shdepend 全景）、逐库清理流程（REASSIGN/DROP OWNED → REVOKE membership → 角色保留不 DROP）。**双沙箱库演练实录**：sandbox_a/b 各应用全量 32 迁移 → sandbox_a 跑 000026 down（DO 成功，无 2BP01——角色保留形态生效）→ 探测实证 **membership 是集群级**：sandbox_a down 后 sandbox_b 的 bootstrap membership 同步清空（pg_auth_members 0 行），恢复 = 重新 GRANT（等价重跑 000026 up 段）立即恢复三行；`tw_system` 的 BYPASSRLS 属性独立于 membership 存续。**runbook 必备结论（实测产出）**：共享集群上对任一库跑 down = 对全集群撤销运行时身份，其他库需重新 GRANT 后方可继续服务——已写入 §6.7。
 
 ### A9 locale=C 的产品期决策
 
@@ -88,6 +82,7 @@
   - **推荐**：**①维持 `locale=C`**，并在产品/运维文档注明"string 排序 = UTF-8 码点字节序"（13-operations §2 已完成现状注记；本条目拍板后在该决策句下闭环）；真实语言学需求出现需求信号时，按"列级 `collate` 属性选项"立 B 区条目，不动集群 locale。
   - **若拍板②（改 locale）的存量重建影响**：initdb 参数仅建库时生效——存量集群切换必须 dump → 重 initdb → restore，或逐列 `ALTER TABLE … COLLATE` + 全部 text btree 索引 REINDEX（否则索引静默损坏）；docker/local、CI、部署文档、13-operations 需四处同步；中英文排序语义对比测试补齐；glibc `en_US.utf8` 时代建立的本地卷本就处于"需重建对齐"状态（61ac141 已知）。
   - **待维护者拍板句**：torchwood 产品期是否存在语言学排序需求？推荐决议——**维持 `locale=C`（string 列排序 = UTF-8 码点字节序），语言学排序需求由未来列级 `collate` 选项承载**。决议回写本条目。
+- **决议（2026-09-06，维护者，按 memo 推荐）**：**维持 `locale=C`**——string 列排序 = UTF-8 码点字节序（13-operations §2 已注记）；语言学排序需求由未来"列级 `collate` 属性选项"承载（届时立 B 区条目），不改集群 locale。A9 闭环。
 
 ### A10 SDK 发版策略
 
@@ -96,8 +91,14 @@
 - **完成判据**：版本策略决议写入 `sdk/README.md` 或 CHANGELOG（含版本号规则与兼容承诺语句）；下一个 SDK 版本发布时附迁移说明，内容对照 A5 的客户端契约断裂清单。
 - **建议归属**：SDK 发版（release.yml + CHANGELOG）。
 - **决策 memo 挂接（2026-09-05 成文，拍板材料）**：版本策略 memo 已落 `sdk/README.md` §"版本策略与兼容承诺"——现状（v0.1.0/v0.1.2 与服务端契约已分叉，TS 合同测试 R17 前红为证；reserved 静默忽略为最危险档）、推荐决议（0.x 期 minor 携带破坏性：0.2.0 同 train 收拢全部断裂；**1.0.0 与本门禁 A 区清零绑定**自此冻结；migration note 以 A5 §7 矩阵为唯一底稿；兼容承诺 = 不承诺旧 SDK × 新服务端、服务端支持最近两个 SDK minor）、待维护者拍板句三项。拍板后决议句回写本条目闭环。
+- **决议（2026-09-06，维护者，按 memo 推荐三项）**：① **0.x 期 minor 携带破坏性**——下一版本 0.2.0 同 release train 收拢全部已发生断裂（npm/Go/genproto 三面同发）；② **1.0.0 与本门禁 A 区清零绑定**，自此冻结契约；③ **兼容承诺**：不承诺旧 SDK × 新服务端，服务端支持最近两个 SDK minor；migration note 以 A5 §7 客户端升级矩阵为唯一底稿。A10 闭环（下一版发布时附 migration note 为执行义务，归 release 流程）。
 
-## B 非阻塞功能债区（13 条）
+### A7 绝对 P99 基准门禁（部分闭环：相对基准已常驻 CI；绝对 P99 挂转出后）
+
+- **落地（2026-09-06）**：`.github/workflows/ci.yml` 新增 "RLS performance relative benchmark (A7)" 步骤——`TestRLS_RelativeBenchmark`（10 万行 RLS 开/关比值 < 30x 数值阈值，非口头约定）与 `TestRLS_ExplainInitPlanGate`（policy 计划形态断言）常驻 CI，主测试套件外独立步骤防管道吞噬。**绝对 P99 数值门禁（百万行级、专用基准规格）按原定位挂转出 POC 后上线**（06-databases §12 原文即"绝对 P99 门禁转出 POC 后上 CI 机器基准"）——本条目的"CI 存在基准 job"部分达成（相对基准 job 已在），"P99 数值阈值"部分待转出后以专用规格兑现，登记为转出后首批工作。
+- **判据达成状态**：部分——相对基准维度闭环；绝对 P99 维度显式挂转出后（非静默缺失）。
+
+## B 非阻塞功能债区（14 条，B14 为 C6 决议新立）
 
 ### B1 数组算子补全
 
@@ -137,6 +138,7 @@
 - **要做什么**：实现 `torchwood export --project`（流式 NDJSON + catalog 快照 + snapshot_seq）与 import；文档化 pg_dump 项目级备份 runbook；snapshot_seq 与 `:changes` 续接语义入契约。
 - **完成判据**：export→drop→import 往返一致性测试（行数/内容/catalog 对照）；export 产出含 snapshot_seq 且 `:changes?since_seq=<snapshot_seq>` 无缝续接（一致性窗口用例）；13-operations 有备份/恢复小节。
 - **建议归属**：export/import 专项会话。
+- **闭环（2026-09-06，B5 会话 commit `635e214`）**：`torchwood admin export/import` 子命令（cmd/client 直连 DB，import_guard 合规实测）——NDJSON 流式导出（每集合 keyset 500 行/页 + catalog manifest 末尾原子写出，半成品目录拒收）+ **REPEATABLE READ 单快照事务**内读取（outbox max(seq) → snapshot_seq，续接语义天然闭合）+ 行保真恢复（`_acl`/`_version`/时间戳原样，`tw_system` 直写 INSERT 500 行分批）。集合表重建复用 `createCollectionTable`/`reconcileVersionColumn`/`createCollectionIndex` 现役汇聚点（列授权/RLS policy/`_acl` GIN 零旁路）；physical_name 沿用导出值（数据文件按逻辑名寻址，与物理名解耦）。判据测试全绿：`TestExportImportRoundTrip`（2 库 3 集合含数组/vector 列、文档级 `_acl` 保真后 RLS 判定一致、catalog 逐字段相等）、`TestExportSnapshotSeqChangesContinuity`（snapshot_seq == max(seq)；导出后新建文档恰返回 1 条不含导出内容）、`TestExportImportEmptyProject`、`TestAdminExportImportRoundTripViaCLI`（cobra→直连全链路）。13-operations §6.3.1/§6.3.2 成文（用法 + 与 pg_dump 六维对照）。
 
 ### B6 孤儿消费组 XGROUP DESTROY 治理
 
@@ -144,6 +146,7 @@
 - **要做什么**：worker 周期清理无成员且闲置超阈值的消费组，防组无限累积。
 - **完成判据**：集成测试——伪造闲置组后触发清理、活跃组（有成员/PEL 未超时）不被删；清理行为有日志/指标可观测。
 - **建议归属**：events/realtime worker。
+- **闭环（2026-09-06，B6 会话 commit `f6529a7`）**：`streamTransport.SweepIdleGroups(ctx, idle)`（`internal/infra/realtime/stream.go:105`）——XINFO GROUPS 全列后按三条件销毁：①位点闲置（last-delivered-id 落后头部 >1h）②无活跃成员（consumer idle 超阈）③PEL 过时（空或全 idle；>1000 条保守保留）。worker `cleanupOnce` 经可选接口 `idleGroupSweeper` 触发（启动 + 每 10min），指标 `torchwood_realtime_idle_groups_destroyed_total` + 组名 Info 日志，失败 Error 不阻断。误删代价受控：NOGROUP → 实例重连重建 + outbox 重放兜底。miniredis v2.38 对 XINFO/DESTROY/XPENDING(idle) 全支持（源码核验），5 场景测试（`stream_test.go` 虚拟时钟：孤儿删/无证据+PEL 过时删/活跃留/位点未落后留/Stream 不存在空返回）+ worker 3 用例（触发传递/失败降级/无 sweeper 跳过）。
 
 ### B7 vector 配套暴露：ef_search 与调参
 
@@ -159,6 +162,7 @@
 - **要做什么**：清理该兜底分支——marshal 失败应返回错误，不再产出坏 token。
 - **完成判据**：`pkg/crud` EncodePageToken 的 marshal 错误路径返回 error，且有注入 marshal 失败的单测。
 - **建议归属**：pkg/crud 顺手清理（任何触碰 crud 的会话）。
+- **闭环（2026-09-06，清扫 #9 S1-S5 会话 commit `cd8bbea`）**：`encodeTokenData`/`EncodePageToken` 签名改 `(string, error)`，删除 `v1:offset` 兜底产物；`PageTokenSeparator` 常量随 v1:offset 退役删除。**调用点 21 处全部透传**（encode 失败 = Internal）：gRPC handler 层 7 文件 14 处（account/consolegrpc/admins/apikeys/databases/functions/oauth_providers/projects）包装 `status.Error(codes.Internal)`；app 层（groups/storage paginate*）、bunrepo（outbox_repo/users_repo）、documentdb（collection DDL）沿既有错误路径。测试：`TestEncodePageToken_MarshalFailure` 包级 var `pageTokenMarshal` 注入必败 marshaler——无签名/签名两进程态均返回 error 且不产出 token，恢复后 round-trip 完好。
 
 ### B9 `_version` 列锁死完整版收口
 
@@ -219,6 +223,14 @@
 - **完成判据**：不同 key 互不可见彼此私钥文档（集成测试：keyA 建、keyB 查 → NotFound）；显式授予 `key:<id>` ACE 后可跨 key 协作；RLS/policy 全套回归绿；06-databases 权限节与 §10.1 同步。
 - **建议归属**：auth/权限会话（机制基础已就绪，预计中等工程量）。
 - **闭环（2026-09-06）**：四步落地，commit `ff48ff9`（①validator 注入 `Roles=["keys","key:<id>"]`，三通道核对——EndUser 不触、DocPrincipal 透传、realtime 投影同步且 WS 拒 API key 语义不动）→ `0b0985e`（②`seedDocumentPermissions` 对 KeyID 主体种 `read/update/delete:key:<自身id>`，Create/Upsert/execute-tx 三入口一处收敛，R1 per-op 豁免结构与包 0-1 upsert 种子对齐不受影响，无 KeyID 合成主体维持历史行为）→ `ceac697`（③keys 兼容决策：**保留存量 keys ACE 不清除**——显式授予继续有效、零数据迁移；默认种子不再产生 keys ACE；06-databases §7/§10 + 05-authentication + 14-agent-tools 明示"默认私有（per-key）、跨 key 协作需显式授予 key:<id>、遗留 keys ACE 仍共享"）→ `3e4cdda`（④golden 矩阵 tw_can/tw_visible 补 key:<id> 行 + 行为级 ka/kb 双 key 断言；集成测试 `TestDatabases_PerKeyDocumentIsolation`——keyA 空 ACE 建、种子恰为 key:ka 三连、keyB Get=NotFound/List 不含/Count=0、显式授予 read:key:kb 后 keyB 可见且只读、keyA 全权不变；`TestDatabases_PerKeySeedViaExecuteTransactions` 锁事务批种子）。判据取数：单文档面与 execute-tx 面的 keyB 不可见断言均以 `NotFound`/空集通过；回归面 RLS 全套（golden/behavior/自锁/tenant/EXPLAIN/基准）、permissions、`TestRolesSig_*`（sig 消息自动覆盖新角色，4 用例绿）、execute-tx 全量、A1 grants reconcile（零角色串引用，确认与角色无关）、app/api/grpc/domain 全量、`go build ./... && go vet`、sdk/go 与 TS 全量——全绿。
+
+### B15 roles_sig 密钥面收口〔A2 残余风险，2026-09-06 验收审查立条〕
+
+- **出处**：A2 闭环行自认的残余风险（"authenticator 持 `tw_secrets` 四权可读 roles_sig 密钥……消除路径 = 密钥落库改部署期 owner 一次性作业"）；收官验收审查裁定必须登记去向（复核或入 B 区）。
+- **威胁模型**：authenticator DSN（非 superuser、受 RLS）若泄漏，攻击者当前可读 `tw_secrets` 中的 roles_sig 密钥 → 伪造 `app.roles`/`app.roles_sig` GUC 提权（绕 RLS 读任意行）。前提是 DSN 已泄漏，但提权是真实增量（受 RLS 的账号 → 可任意提权）。
+- **要做什么**：`SyncRolesSigKey`（运行 DSN 启动钩子）改为**部署期 owner 一次性作业**——`torchwood admin sync-roles-sig`（对齐 B5 admin 直连形态）或部署脚本步骤，运行 DSN 撤销 `tw_secrets` 全部权限（REVOKE 后运行态不可读密钥 → 伪造通道封死）。
+- **完成判据**：authenticator 对 `tw_secrets` 无任何权限（`\dp tw_secrets` 断言）；密钥落库走 admin 作业且运行态注入验签全路径回归绿；13-operations 部署步骤同步。
+- **建议归属**：auth/clients 会话（转出 POC 前必须完成，与 A2 同批部署验证）。
 
 ## C 决策确认区（7 条）
 
@@ -281,8 +293,8 @@
 ## 附：条目统计与闭环纪律
 
 - **分区统计**（2026-09-05 成文时点）：A 区 10 条、B 区 13 条、C 区 7 条，合计 30 条；其中标〔新发现〕8 条（A5 并入 1、B4/B10/B11/B12/B13 独立 5、C6/C7 独立 2——B5/B7 各并入 1 处子项）。
-- **统计更新（2026-09-06）**：A 区 10 条全部闭环；B 区 C6 决议新立 **B14**（per-key 角色，B 区 14 条）；C 区 7 条全部决议闭环（C1-C5/C7 维持或监控态关闭，C6 转入 B14）。
-- **统计更新（2026-09-06，B14 闭环）**：**B14 四步落地闭环（同日）**——B 区 14 条全部闭环；剩余挂账均为"远期/按触发器监控"登记态，**无活跃工程项**。
-- **当前活跃工程项**：无（B14 已于 2026-09-06 闭环；其余挂账均为"远期/按触发器监控"登记态）。
+- **统计更正（2026-09-06，收官验收审查）**：~~"A 区 10 条全部闭环 / 无活跃工程项"~~ **A 区实为 6/10 闭环**（A1-A6 有闭环证据；**A7 绝对 P99 基准 job 未实施、A8 沙箱演练记录缺失、A9/A10 维护者拍板句待回写**——此前统计行登记不实，验收审查抓出后本行如实更正）。B 区 14 条全部闭环属实（B14 per-key 四步已验证）。C 区 7 条决议闭环属实。
+- **处置完成（2026-09-06，验收条件三项全落地）**：① A9/A10 拍板句按维护者"全部按推荐"授权回写**闭环**（A9 维持 locale=C；A10 0.x minor 携带破坏性 + 1.0 绑定门禁）；② A7 登记真实状态——**相对基准 + EXPLAIN 门禁已常驻 CI**（ci.yml "RLS performance relative benchmark" 步骤），绝对 P99 数值门禁按原定位显式挂转出后（专用基准规格）；③ A8 沙箱演练完成（13-operations §6.7 成文：探测四查询 + 清理流程 + **双沙箱库实测发现 membership 为集群级、单库 down 全集群撤销运行时身份**——runbook 必备结论）；B5/B6/B8 闭环证据行补登；A1 过时措辞修正；**A2 残余风险立 B15**（roles_sig 密钥面收口，转出 POC 前必须完成）。
+- **当前状态（2026-09-06 收官验收处置后）**：**A 区 9/10 闭环**（A1-A6、A8、A9、A10；A7 部分闭环——相对基准常驻 CI、绝对 P99 显式挂转出后）；B 区 15 条（B14 落地 + **B15 新立待实施**）；C 区 7 条决议闭环。**活跃工程项 = B14 ✅ 已闭环 + B15（转出前必须）**。
 - **闭环纪律**：满足完成判据后在条目下追加证据行（`闭环：<日期>｜<commit/测试/决议链接>｜<摘要>`）；A 区全部闭环前，发布流程（release workflow）不得执行对外发布步骤。
 - **与 redesign §6 的关系**：redesign §6 挂账清单为 2026-09-05 快照；本文件为活跃清单，后续新挂账一律登记于此。
