@@ -30,3 +30,4 @@ sdk/demo/dist/
 *.tsbuildinfo
 
 .zcode/
+.scratch/
