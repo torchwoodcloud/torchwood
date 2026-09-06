@@ -3,7 +3,7 @@
 // 数据文件按逻辑集合寻址、不与物理名重映射耦合）与集合物理表，再行级导入。
 //
 // DDL 复用现役代码路径：集合表经由与 CreateCollection 同一 DDL 汇聚点
-//（createCollectionTable + reconcileVersionColumn + createCollectionIndex）——
+// （createCollectionTable + reconcileVersionColumn + createCollectionIndex）——
 // _version 列、默认时间索引、_acl GIN、RLS policy + FORCE、列级 GRANT 全部
 // 走与在线建集合相同的函数，不另写一套建表 SQL。
 //

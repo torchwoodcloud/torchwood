@@ -166,6 +166,11 @@ func testPolicies() *domainauth.PolicySet {
 		{Method: domainauth.StorageServiceCreateFile, Service: "/torchwood.server.v1.StorageService", Access: domainauth.AccessServer,
 			AdminRoles: []domainauth.AdminRole{domainauth.AdminRoleMember, domainauth.AdminRoleAdmin, domainauth.AdminRoleOwner},
 			Scope:      &domainauth.ScopeRule{Resource: domainauth.ScopeStorage, Op: domainauth.ScopeWrite}},
+		{Method: domainauth.StorageServiceGetFile, Service: "/torchwood.server.v1.StorageService", Access: domainauth.AccessServer,
+			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeStorage, Op: domainauth.ScopeRead}},
+		{Method: FunctionsServiceCreateDeployment, Service: "/torchwood.server.v1.FunctionsService", Access: domainauth.AccessServer,
+			AdminRoles: []domainauth.AdminRole{domainauth.AdminRoleAdmin, domainauth.AdminRoleOwner},
+			Scope:      &domainauth.ScopeRule{Resource: domainauth.ScopeFunctions, Op: domainauth.ScopeWrite}},
 	})
 	if err != nil {
 		panic(err)

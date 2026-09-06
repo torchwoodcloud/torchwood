@@ -2,7 +2,7 @@
 //   - tw_roles()/tw_tenant() 验签三态 fail-closed（无 sig / 错 sig / 过期 sig
 //     → 零角色 / NULL tenant，与漏注入同语义）；
 //   - R16 ② tw_set_document_acl 的租户绑定（跨项目/跨租户死锁）与可见性校验
-//    （项目内改他人 ACL 提权读 → 0 行）；
+//     （项目内改他人 ACL 提权读 → 0 行）；
 //   - R16 ③ app.tenant GUC 篡改面（sig 失配 → 验签失败）；
 //   - 合法注入路径全链路回归。
 package documentdb

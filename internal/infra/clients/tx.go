@@ -106,11 +106,11 @@ func SameExecIdentity(a, b ExecIdentity) bool {
 //
 // roles_sig（阶段③-b 包 C，A2 简化版 + R16 ①）：tw_app 身份同时注入
 // app.tenant 与 app.roles_sig = HMAC-SHA256(密钥, tenant|roles|exp)
-//（"<exp>|<hexmac>"，60s 窗口），供 tw_roles()/tw_tenant() 验签——app.roles
+// （"<exp>|<hexmac>"，60s 窗口），供 tw_roles()/tw_tenant() 验签——app.roles
 // 与 app.tenant GUC 本身可被任何持 SQL 会话者 set_config 伪造，验签后伪造
 // 通道封死（密钥仅存在于 Go 进程与 tw_secrets 表，tw_app 不可读）。
 // 密钥未初始化时不注入 sig → 验签失败 → 零角色/NULL tenant fail-closed
-//（与漏注入同语义）。
+// （与漏注入同语义）。
 func InjectExecIdentity(ctx context.Context, idb bun.IDB, id ExecIdentity) error {
 	switch id.Role {
 	case RoleApp, RoleOwner, RoleSystem:
@@ -144,7 +144,7 @@ func injectIdentitySQL(role string, tenant int64, roles string) (string, []any) 
 
 // ResetExecIdentity 把连接恢复为 authenticator 本身份（RESET ROLE）并清空
 // app.roles/app.roles_sig/app.tenant——用于无外层身份的事务中段切换退出
-//（复合 uow 事务回到 DSN 用户）。
+// （复合 uow 事务回到 DSN 用户）。
 func ResetExecIdentity(ctx context.Context, idb bun.IDB) error {
 	if _, err := idb.ExecContext(ctx,
 		`RESET ROLE; SELECT set_config('app.roles', '', true), set_config('app.roles_sig', '', true), set_config('app.tenant', '', true)`,
@@ -169,7 +169,7 @@ const rolesSigTTL = 60 * time.Second
 var rolesSigKeyHex atomic.Value // string
 
 // InitRolesSigKey 以主密钥（security.jwt.secret）进程内派生 roles 签名密钥
-//（hex）。组合根启动期调用（server/worker 各自一次）；落库 public.tw_secrets
+// （hex）。组合根启动期调用（server/worker 各自一次）；落库 public.tw_secrets
 // 供 tw_roles() 验签由部署期 owner 一次性作业完成（`torchwood admin
 // sync-roles-sig` → SyncRolesSigKey，转出 POC 门禁 B15——运行 DSN 对
 // tw_secrets 零权限，启动钩子已退役）。
@@ -184,7 +184,7 @@ func InitRolesSigKey(master string) error {
 }
 
 // RolesSigKeyHex 返回进程内派生的 roles 签名密钥（hex）；未初始化时 ok=false
-//（此时 tw_app 注入不带 sig，DB 侧验签 fail-closed）。
+// （此时 tw_app 注入不带 sig，DB 侧验签 fail-closed）。
 func RolesSigKeyHex() (string, bool) {
 	v, ok := rolesSigKeyHex.Load().(string)
 	return v, ok && v != ""
@@ -203,18 +203,18 @@ func SignRolesSig(keyHex string, tenant int64, roles string, now time.Time) stri
 }
 
 // SyncRolesSigKey 把进程内派生的 roles 签名密钥落进 public.tw_secrets
-//（迁移 000004，双钥槽位），供 tw_roles() 验签——部署期 owner 一次
+// （迁移 000004，双钥槽位），供 tw_roles() 验签——部署期 owner 一次
 // 性作业（`torchwood admin sync-roles-sig`，转出 POC 门禁 B15）以引导/owner
 // 身份调用；运行 DSN 对 tw_secrets 零权限（迁移 000004 收口），启动钩子已
 // 退役，server/worker 不再落库（进程内派生钥仅供注入签名，无需读库）。
 //
 // 双钥轮换（转出 POC 门禁 A4）：新钥落 current 位，旧 current 降级 previous
-//（而非覆盖删除），previous 至多保留紧邻上一把（third 条直接删）。滚动重启
+// （而非覆盖删除），previous 至多保留紧邻上一把（third 条直接删）。滚动重启
 // 换钥期间，旧进程签发的 sig 在 60s TTL 窗口内经 previous 验签通过、窗口外
-//（exp 过期）依旧拒绝——消除单钥覆盖式换钥的权限面降级窗口。同钥重启幂等
-//（current 已是目标钥时整体 no-op）；回滚场景（目标钥躺在 previous 位）把
+// （exp 过期）依旧拒绝——消除单钥覆盖式换钥的权限面降级窗口。同钥重启幂等
+// （current 已是目标钥时整体 no-op）；回滚场景（目标钥躺在 previous 位）把
 // 该钥提回 current。四条语句经 simple protocol 单次往返执行，构成隐式事务
-//（全或无）。
+// （全或无）。
 func SyncRolesSigKey(ctx context.Context, db *Database) error {
 	keyHex, ok := RolesSigKeyHex()
 	if !ok {
@@ -257,7 +257,7 @@ func (d *Database) Run(ctx context.Context, fn func(ctx context.Context) error) 
 // deadlock on DDL locks held by the outer transaction.
 // ctx 带 ExecIdentity 时（阶段③包 B），BEGIN 后立即注入 SET LOCAL ROLE +
 // app.roles（每请求一事务，A1）；未带身份的事务保持 authenticator 本身份
-//（静态系统表面 = 边界邻居，独立应用层授权，redesign 预决策 9）。
+// （静态系统表面 = 边界邻居，独立应用层授权，redesign 预决策 9）。
 func (d *Database) RunInTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	if InTx(ctx) {
 		return fn(ctx)

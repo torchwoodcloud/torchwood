@@ -29,7 +29,7 @@ const (
 var eventsStreamMaxLen int64 = 100000
 
 // streamTransport 是 shared.RealtimeTransport 的 Redis Stream 实现
-//（阶段④：XADD 替代 PUBLISH）。
+// （阶段④：XADD 替代 PUBLISH）。
 type streamTransport struct {
 	client *redis.Client
 }

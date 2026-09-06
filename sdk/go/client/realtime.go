@@ -86,14 +86,14 @@ type realtimeInboundFrame struct {
 
 // realtimeServerFrame 是服务端出站帧。
 type realtimeServerFrame struct {
-	Type      string         `json:"type"`
-	ID        string         `json:"id"`
-	Code      string         `json:"code"`
-	Message   string         `json:"message"`
-	Channel   string         `json:"channel"`
-	Payload   map[string]any `json:"payload"`
-	Replayed  int64          `json:"replayed"`
-	HasMore   bool           `json:"has_more"`
+	Type     string         `json:"type"`
+	ID       string         `json:"id"`
+	Code     string         `json:"code"`
+	Message  string         `json:"message"`
+	Channel  string         `json:"channel"`
+	Payload  map[string]any `json:"payload"`
+	Replayed int64          `json:"replayed"`
+	HasMore  bool           `json:"has_more"`
 }
 
 // RealtimeSubscription 是退订句柄。
@@ -397,8 +397,8 @@ func (r *RealtimeConn) resubscribeAll() {
 	r.mu.Lock()
 	conn := r.conn
 	type pending struct {
-		channel  string
-		lastSeq  int64
+		channel string
+		lastSeq int64
 	}
 	list := make([]pending, 0, len(r.subs))
 	for ch := range r.subs {

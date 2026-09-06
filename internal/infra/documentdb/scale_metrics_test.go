@@ -1,7 +1,7 @@
 // 规模预警线 SLO 指标测试（转出 POC 门禁 B12，docs/developer/15-exit-poc.md）：
-// 1. CollectScaleMetrics 三平面计数与 pg_class 独立复核查询一致（业务文档面
-//    以真实 CreateDatabase+CreateCollection 造出物理表，静态面/控制面非零）；
-// 2. db 为 nil 时 no-op；3. ObservePgDumpDuration 更新 pg_dump 指标骨架。
+//  1. CollectScaleMetrics 三平面计数与 pg_class 独立复核查询一致（业务文档面
+//     以真实 CreateDatabase+CreateCollection 造出物理表，静态面/控制面非零）；
+//  2. db 为 nil 时 no-op；3. ObservePgDumpDuration 更新 pg_dump 指标骨架。
 package documentdb
 
 import (

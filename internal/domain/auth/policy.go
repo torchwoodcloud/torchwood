@@ -341,6 +341,64 @@ var ProjectIDAllowlist = map[string]struct{}{
 	"/torchwood.server.v1.AssetsService/ListUserLedger":            {},
 }
 
+// AssertPolicy 是单方法语义断言（完备性/档位/值域/项目寻址；不含死 scope
+// 与 streaming 全局项）——供逐方法测试与矩阵测试复用。
+func AssertPolicy(p MethodPolicy) error {
+	var errs []string
+	switch p.Access {
+	case AccessPublic:
+	case AccessEndUser:
+		if !isClientFace(p.Service) {
+			errs = append(errs, fmt.Sprintf("%s: END_USER 级仅允许 client 面", p.Method))
+		}
+	case AccessServer:
+		if p.Scope == nil {
+			errs = append(errs, fmt.Sprintf("%s: SERVER 面必须声明 api_key_scope（不对 key 开放请改 PERMISSION）", p.Method))
+			break
+		}
+		if _, badScope := validScope(*p.Scope); badScope != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", p.Method, badScope))
+		}
+		if _, err := ClassifyTier(p); err != nil {
+			errs = append(errs, err.Error())
+		}
+	case AccessPermission:
+		if len(p.Permissions) == 0 {
+			errs = append(errs, fmt.Sprintf("%s: PERMISSION 面必须显式 permissions", p.Method))
+			break
+		}
+		if isServerFace(p.Service) {
+			if _, err := ClassifyTier(p); err != nil {
+				errs = append(errs, err.Error())
+			}
+		}
+	case AccessSystem:
+		errs = append(errs, fmt.Sprintf("%s: SYSTEM 级当前无对外契约，禁止使用", p.Method))
+	default:
+		errs = append(errs, fmt.Sprintf("%s: access 未声明", p.Method))
+	}
+	if p.RequestHasProjectID && isServerFace(p.Service) && !isProjectsService(p.Service) {
+		if _, ok := ProjectIDAllowlist[p.Method]; !ok {
+			errs = append(errs, fmt.Sprintf("%s: server 面请求体不得携带 project_id（项目上下文来自凭证；存量迁移请登记 ProjectIDAllowlist）", p.Method))
+		}
+	}
+	if isConsoleFace(p.Service) {
+		if err := assertConsoleValueDomain(p); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+	if isClientFace(p.Service) {
+		if err := assertClientValueDomain(p); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+	if len(errs) > 0 {
+		sort.Strings(errs)
+		return fmt.Errorf("策略语义断言失败 (fail-closed):\n  - %s", strings.Join(errs, "\n  - "))
+	}
+	return nil
+}
+
 // AssertSemantic 是 PolicySet 的全量语义断言（启动期 fail-closed）：
 // 完备性、死 scope、档位合法性、client/console 值域、项目寻址不变量、
 // streaming 禁用。返回的 error 聚合全部违例。
@@ -349,60 +407,14 @@ func AssertSemantic(set *PolicySet) error {
 	referenced := map[ScopeResource]struct{}{}
 
 	for _, p := range set.Methods() {
-		switch p.Access {
-		case AccessPublic:
-		case AccessEndUser:
-			if !isClientFace(p.Service) {
-				errs = append(errs, fmt.Sprintf("%s: END_USER 级仅允许 client 面", p.Method))
-			}
-		case AccessServer:
-			if p.Scope == nil {
-				errs = append(errs, fmt.Sprintf("%s: SERVER 面必须声明 api_key_scope（不对 key 开放请改 PERMISSION）", p.Method))
-				break
-			}
-			if _, badScope := validScope(*p.Scope); badScope != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", p.Method, badScope))
-			}
-			referenced[p.Scope.Resource] = struct{}{}
-			if _, err := ClassifyTier(p); err != nil {
-				errs = append(errs, err.Error())
-			}
-		case AccessPermission:
-			if len(p.Permissions) == 0 {
-				errs = append(errs, fmt.Sprintf("%s: PERMISSION 面必须显式 permissions", p.Method))
-				break
-			}
-			if _, err := ClassifyTier(p); err != nil {
-				errs = append(errs, err.Error())
-			}
-		case AccessSystem:
-			errs = append(errs, fmt.Sprintf("%s: SYSTEM 级当前无对外契约，禁止使用", p.Method))
-		default:
-			errs = append(errs, fmt.Sprintf("%s: access 未声明", p.Method))
+		if err := AssertPolicy(p); err != nil {
+			errs = append(errs, err.Error())
 		}
-
+		if p.Scope != nil {
+			referenced[p.Scope.Resource] = struct{}{}
+		}
 		if p.IsStreaming {
 			errs = append(errs, fmt.Sprintf("%s: streaming RPC 未接入认证拦截器（fail-closed）", p.Method))
-		}
-
-		// 项目寻址不变量：server 面请求体禁 project_id（白名单豁免）。
-		if p.RequestHasProjectID && isServerFace(p.Service) && !isProjectsService(p.Service) {
-			if _, ok := ProjectIDAllowlist[p.Method]; !ok {
-				errs = append(errs, fmt.Sprintf("%s: server 面请求体不得携带 project_id（项目上下文来自凭证；存量迁移请登记 ProjectIDAllowlist）", p.Method))
-			}
-		}
-
-		// console 面值域。
-		if isConsoleFace(p.Service) {
-			if err := assertConsoleValueDomain(p); err != nil {
-				errs = append(errs, err.Error())
-			}
-		}
-		// client 面值域。
-		if isClientFace(p.Service) {
-			if err := assertClientValueDomain(p); err != nil {
-				errs = append(errs, err.Error())
-			}
 		}
 	}
 

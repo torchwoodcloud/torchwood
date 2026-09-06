@@ -33,8 +33,8 @@ import (
 	"github.com/torchwooddev/torchwood/internal/domain/databases"
 	"github.com/torchwooddev/torchwood/internal/infra/bun/model"
 	"github.com/torchwooddev/torchwood/internal/infra/clients"
-	"github.com/torchwooddev/torchwood/pkg/idgen"
 	"github.com/torchwooddev/torchwood/pkg/ident"
+	"github.com/torchwooddev/torchwood/pkg/idgen"
 )
 
 // 迁移任务阶段（catalog_migrations.phase）。
@@ -372,7 +372,7 @@ func attrPGType(a databases.Attribute) string {
 
 // applyInstantMigration 是放宽路径（扩宽/required→optional）：即时 ALTER +
 // attrs 回写 + schema_version++（同事务）。扩宽 = ALTER COLUMN TYPE
-//（varchar 扩宽元数据级）；required→optional = DROP NOT NULL。
+// （varchar 扩宽元数据级）；required→optional = DROP NOT NULL。
 func (p *postgresDocumentDB) applyInstantMigration(ctx context.Context, row *model.DocumentCollection, attrs []databases.Attribute, current databases.Attribute, key string, target databases.Attribute, oldPg, newPg string) error {
 	schema, err := ident.SchemaName(row.ProjectID, row.DatabaseID)
 	if err != nil {
@@ -552,7 +552,7 @@ func (p *postgresDocumentDB) backfillBatch(ctx context.Context, task backfillTas
 //
 // 双身份编排（A6）：数据语句（追平/校验）以 tw_system 中段切换执行（BYPASSRLS
 // ——tw_owner 受 FORCE RLS 不可见业务行），DDL 与 catalog 回写以 tw_owner 执行
-//（表所有权）；退出前恢复 owner 身份，边界一致。
+// （表所有权）；退出前恢复 owner 身份，边界一致。
 func (p *postgresDocumentDB) swapMigration(ctx context.Context, task backfillTask) error {
 	return p.withOwnerTx(ctx, func(txCtx context.Context) error {
 		row, err := p.loadCollectionRow(txCtx, task.projectID, task.databaseID, task.collectionID)
@@ -718,7 +718,7 @@ func (p *postgresDocumentDB) latestBackfillingTask(ctx context.Context, projectI
 
 // resumeTask 从任务行重建回填快照（重入路径：游标在账本内，批量天然从
 // `new IS NULL AND _id > cursor` 续跑）。行缺失/解码失败返回零值任务
-//（调用方以 id 判空跳过）。
+// （调用方以 id 判空跳过）。
 func (p *postgresDocumentDB) resumeTask(ctx context.Context, taskID, schema, physical string) backfillTask {
 	m := new(model.DocumentMigration)
 	if err := p.conn(ctx).NewSelect().Model(m).Where("id = ?", taskID).Scan(ctx); err != nil {

@@ -87,8 +87,8 @@ func vectorColumnsFromColl(coll *databases.Collection) map[string]int {
 // 原则）：目标列必须是声明的 vector 属性（维度等长）、且存在与请求 metric
 // 匹配的 hnsw 索引（无索引/metric 不符 → InvalidArgument——search 需
 // fulltext 索引的同款纪律）。ef_search（B7）合法域 [1,500]：≤0 非法
-//（pgvector 要求 ≥1），>500 超防滥用上限——一律 InvalidArgument 显式拒绝
-//（不用静默 clamp：R9 显式拒绝原则，静默改写让调用方误以为请求值生效）。
+// （pgvector 要求 ≥1），>500 超防滥用上限——一律 InvalidArgument 显式拒绝
+// （不用静默 clamp：R9 显式拒绝原则，静默改写让调用方误以为请求值生效）。
 func validateVectorSearch(coll *databases.Collection, vs *query.VectorSearch) error {
 	if vs == nil {
 		return nil

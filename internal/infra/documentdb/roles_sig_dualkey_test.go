@@ -1,6 +1,6 @@
 // roles_sig 双钥轮换窗口测试（转出 POC 门禁 A4，方案①，15-exit-poc）：
 //   - 验收判据①：换钥后旧钥签发的 sig 在 60s TTL 窗口内仍验签通过
-//    （previous 槽命中），RLS 全路径（policy → tw_roles → tw_tenant）不降级；
+//     （previous 槽命中），RLS 全路径（policy → tw_roles → tw_tenant）不降级；
 //   - 验收判据②：窗口外（exp 过期）旧钥 sig 拒绝——过期判定先于钥匹配，
 //     previous 命中无法给过期 sig 续命；
 //   - third 条直接删：连续两次换钥后两代前 sig 拒绝、行数回到 2（Go 侧

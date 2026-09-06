@@ -208,7 +208,7 @@ func (d *Documents) CreateDocument(
 }
 
 // ListDocumentsResult 是列表查询的出站聚合：Distances 仅 vector_search
-//（KNN）查询非空（与 Documents 平行；会话 #10 预决策 4）。
+// （KNN）查询非空（与 Documents 平行；会话 #10 预决策 4）。
 type ListDocumentsResult struct {
 	Documents     []databases.Document
 	TotalCount    int64
@@ -309,10 +309,10 @@ func (d *Documents) UpdateDocument(
 				effData = map[string]any{}
 			}
 			updated, err := d.docDB.UpdateDocument(ctx, projectID, databaseID, collectionID, databases.DocumentUpdate{
-				Document:      databases.Document{ID: documentID, Data: effData},
-				Permissions:   effPerms,
-				Increment:     increment,
-				ArrayUpdates:  arrayUpdates,
+				Document:        databases.Document{ID: documentID, Data: effData},
+				Permissions:     effPerms,
+				Increment:       increment,
+				ArrayUpdates:    arrayUpdates,
 				ExpectedVersion: *version,
 			}, principal)
 			if err != nil {

@@ -490,7 +490,7 @@ func TestPermissions_ListORFallback(t *testing.T) {
 // TestPermissions_WriteRowTypeConsistency (B1 step 7): _acl 可能存在 'write:'
 // 元素（ParsePermissionStrings 会展开，但直调 adapter 的路径可能不展开）。
 // matchTypes 使 create/update/delete 检查命中 write 元素——经 RLS policy
-//（阶段③包 C）与 tw_visible 的"可写即可读"产品语义：write ACE 持有者可见、
+// （阶段③包 C）与 tw_visible 的"可写即可读"产品语义：write ACE 持有者可见、
 // 可改、可删（原"write 不隐含 read"的 D3 断言被有意取代，§3.2 #10）。
 func TestPermissions_WriteRowTypeConsistency(t *testing.T) {
 	if testing.Short() {
@@ -554,7 +554,7 @@ func TestPermissions_WriteRowTypeConsistency(t *testing.T) {
 
 // TestPermissions_ListBackfillNoExtraQueries（阶段③包 A）：List 的 permissions
 // 回填来自 to_jsonb(d.*) 载荷内的 _acl 顺带解析——查询数不随可见文档数增长
-//（attachDocumentPermissionsBatch 的批量 IN 查询已删除，B6 回填零额外查询）。
+// （attachDocumentPermissionsBatch 的批量 IN 查询已删除，B6 回填零额外查询）。
 // queryCountHook 复用 postgres_catalog_global_test.go 的定义。
 func TestPermissions_ListBackfillNoExtraQueries(t *testing.T) {
 	if testing.Short() {

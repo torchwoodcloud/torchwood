@@ -1,7 +1,7 @@
 // 执行身份包装（redesign §3.2 工程纪律 / A1，阶段③包 B）：文档面所有入口
 // 经 withDocumentTx/withOwnerTx 包进带身份的显式事务——每请求一事务（含读，
 // autocommit 退役），事务首条 SET LOCAL ROLE + set_config('app.roles') 注入
-//（漏注入 = RLS policy 恒 false，fail-closed；policy 本身在包 C 落地）。
+// （漏注入 = RLS policy 恒 false，fail-closed；policy 本身在包 C 落地）。
 package documentdb
 
 import (
@@ -55,6 +55,7 @@ func (p *postgresDocumentDB) execIdentity(ctx context.Context, projectID string,
 //   - tw_system 身份（SystemPrincipal/PlatformAdmin 的 _acl 替换）：信任根
 //     直写 UPDATE——tw_system 无函数 EXECUTE（R16 ④ 收紧后仅 tw_app），且
 //     表级 ALL 不受列授权限制；BYPASSRLS 语义等价、无提权面（已持全权）。
+//
 // p_table 在函数内经 catalog physical_name 白名单校验（防注入）。
 func (p *postgresDocumentDB) setDocumentACL(ctx context.Context, schema, physical string, tenant int64, docID string, perms []databases.Permission) error {
 	if id, ok := clients.ExecIdentityFrom(ctx); ok && id.Role == clients.RoleSystem {

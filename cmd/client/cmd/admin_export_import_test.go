@@ -34,7 +34,7 @@ func executeAdminCmd(t *testing.T, v *verb, flags map[string]string) {
 // 时真跑，未设置 TORCHWOOD_TEST_* 时 skip，与仓库集成测试惯例一致）：
 // 经 CLI 动词完整执行 export → drop → import，验证库/集合/行恢复。
 // 命令体直连 DSN（--dsn），不经 InvokeJSON/API 面——import_guard 允许
-//（禁的是 genproto/grpc/protobuf 字面 import）。
+// （禁的是 genproto/grpc/protobuf 字面 import）。
 func TestAdminExportImportRoundTripViaCLI(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

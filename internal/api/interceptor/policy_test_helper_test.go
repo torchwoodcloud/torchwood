@@ -62,9 +62,12 @@ func serviceOf(fullMethod string) string {
 	return fullMethod
 }
 
-// mustPolicySet 构造非 nil 空策略注册表（failingValidator 类用例）。
+// mustPolicySet 构造含 ListUsers（SERVER）的最小注册表（failingValidator
+// 类用例：凭证校验失败发生在策略放行之后）。
 func mustPolicySet() *domainauth.PolicySet {
-	set, err := domainauth.NewPolicySet(nil)
+	set, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{
+		{Method: "/torchwood.server.v1.UsersService/ListUsers", Service: "/torchwood.server.v1.UsersService", Access: domainauth.AccessServer},
+	})
 	if err != nil {
 		panic(err)
 	}

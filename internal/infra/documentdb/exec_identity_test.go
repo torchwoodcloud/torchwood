@@ -157,7 +157,7 @@ GRANT SELECT ON %s TO tw_app, tw_system;
 }
 
 // TestExecIdentity_PerRequestTxOverhead 是 A1 遗留原型任务②：每请求一事务
-//（BEGIN + 身份注入 + SELECT + COMMIT）与 autocommit 单语句的往返开销对比。
+// （BEGIN + 身份注入 + SELECT + COMMIT）与 autocommit 单语句的往返开销对比。
 // pgdriver 全程 simple protocol + 客户端插参——两条注入语句合并为单次往返，
 // 本测试同时测未合并形态（两次 Exec）作对照，数字进 t.Log 供复审报告引用。
 func TestExecIdentity_PerRequestTxOverhead(t *testing.T) {
@@ -250,7 +250,7 @@ func TestExecIdentity_FailClosedRolesGUC(t *testing.T) {
 
 // 编译期锚点（阶段③-b 包 C 更新）：systemExecIdentity 已随 _acl 写点收敛到
 // tw_set_document_acl 退役；尾随读回/事件快照的系统身份经 execIdentityFor
-//（SystemPrincipal → tw_system）承载，锚点改挂 execIdentityFor。
+// （SystemPrincipal → tw_system）承载，锚点改挂 execIdentityFor。
 var _ = execIdentityFor
 
 // 静态检查 execIdentityFor 的主体映射。

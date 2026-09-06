@@ -290,8 +290,8 @@ func TestExecuteTransactions_ArrayUpdates(t *testing.T) {
 	stale := int64(2)
 	_, err = docDB.ExecuteTransactions(ctx, projectID, dbID, []databases.TransactionOp{
 		{Type: databases.TransactionOpUpdate, CollectionID: "items", DocumentID: "i1",
-			Data:         map[string]any{"tags": []any{"dup"}},
-			ArrayUpdates: map[string]databases.ArrayUpdate{"tags": {Op: databases.ArrayUpdateOpAppend, Values: []string{"x"}}},
+			Data:            map[string]any{"tags": []any{"dup"}},
+			ArrayUpdates:    map[string]databases.ArrayUpdate{"tags": {Op: databases.ArrayUpdateOpAppend, Values: []string{"x"}}},
 			ExpectedVersion: &stale},
 	}, databases.TransactionModeAtomic, txKeys)
 	require.Error(t, err)

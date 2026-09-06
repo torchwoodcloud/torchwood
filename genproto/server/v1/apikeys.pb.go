@@ -373,7 +373,7 @@ const file_server_v1_apikeys_proto_rawDesc = "" +
 	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
-	"\x06apiKey\x12\x00z\"\n" +
+	"\x06cookie\x12\x00z\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
 	"permissionZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
 

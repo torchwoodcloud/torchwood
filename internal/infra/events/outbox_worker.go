@@ -224,7 +224,7 @@ type idleGroupSweeper interface {
 // cleanupOnce 删除超过保留窗口的已发布行与死信行（表无限增长治理），
 // 并对投递 Stream 做周期 XTRIM（B3：MAXLEN ~ 100k，未投递条目不受影响——
 // XADD 不带 MAXLEN，裁剪只发生在低频清理路径）；最后销毁闲置孤儿消费组
-//（B6：组名 = 实例 ID，实例崩溃/重启后旧组无人认领，周期回收防无限累积）。
+// （B6：组名 = 实例 ID，实例崩溃/重启后旧组无人认领，周期回收防无限累积）。
 func (w *OutboxWorker) cleanupOnce(ctx context.Context) {
 	func() {
 		ctx2, cancel := context.WithTimeout(ctx, outboxStatementTimeout)

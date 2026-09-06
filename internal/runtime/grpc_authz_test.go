@@ -71,9 +71,9 @@ func TestAssertSemantic_DetectsViolations(t *testing.T) {
 		return []domainauth.MethodPolicy{p}
 	}
 
-	set, err := domainauth.NewPolicySet(base(nil))
+	_, err := domainauth.NewPolicySet(base(nil))
 	require.NoError(t, err)
-	require.NoError(t, domainauth.AssertSemantic(set), "合法业务写档应通过")
+	require.NoError(t, domainauth.AssertPolicy(base(nil)[0]), "合法业务写档应通过（单方法断言）")
 
 	for name, mutate := range map[string]func(*domainauth.MethodPolicy){
 		"SERVER 缺 scope": func(p *domainauth.MethodPolicy) { p.Scope = nil },
@@ -87,8 +87,8 @@ func TestAssertSemantic_DetectsViolations(t *testing.T) {
 			p.RequestHasProjectID = true
 		},
 	} {
-		set, err := domainauth.NewPolicySet(base(mutate))
+		_, err := domainauth.NewPolicySet(base(mutate))
 		require.NoError(t, err)
-		require.Error(t, domainauth.AssertSemantic(set), "违例 [%s] 必须被语义断言拒绝", name)
+		require.Error(t, domainauth.AssertPolicy(base(mutate)[0]), "违例 [%s] 必须被语义断言拒绝", name)
 	}
 }

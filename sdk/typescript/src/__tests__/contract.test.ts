@@ -310,8 +310,8 @@ const REQUIRED_SCHEMES = ["apiKey", "Bearer", "cookie"];
 
 // 服务默认 access（swagger 顶层 x-torchwood-access）→ 期望的全局 security。
 const EXPECTED_GLOBAL_SECURITY: Record<string, string[]> = {
-  api_key: ["apiKey"],
-  authenticated: ["Bearer"],
+  server: ["apiKey"],
+  end_user: ["Bearer"],
   permission: ["cookie"],
   public: [],
 };

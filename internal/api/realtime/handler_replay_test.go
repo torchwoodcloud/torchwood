@@ -21,10 +21,10 @@ import (
 // replayDocDB 在 fakeDocDB 之上注入 ListChanges 结果（阶段④重放路径）。
 type replayDocDB struct {
 	*fakeDocDB
-	changes []databases.DocumentChange
-	hasMore bool
-	err     error
-	calls   int
+	changes  []databases.DocumentChange
+	hasMore  bool
+	err      error
+	calls    int
 	lastOpts databases.ListChangesOptions
 }
 
@@ -151,7 +151,7 @@ func TestSubscribe_LastSeqReplaysBeforeLive(t *testing.T) {
 }
 
 // TestSubscribe_HasMoreOnAck：补发超上限 → subscribed 带 has_more=true
-//（:changes 续传指引）。
+// （:changes 续传指引）。
 func TestSubscribe_HasMoreOnAck(t *testing.T) {
 	docDB := &replayDocDB{fakeDocDB: &fakeDocDB{collections: map[string]*databases.Collection{}}}
 	setupCollection(docDB.fakeDocDB, "app", "posts", false, false)

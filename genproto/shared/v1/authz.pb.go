@@ -25,13 +25,14 @@ const (
 // AccessLevel 是方法的凭证族门禁（第一维）。完整策略 = 凭证族 + 该族下的
 // 细粒度门（SERVER 面为 admin_roles + api_key_scope；PERMISSION 面为
 // permissions；END_USER 面为登录会话本身）。语义：
-//   PUBLIC      匿名可调（自证凭证型：secret/challenge-token 即授权）。
-//   END_USER    端用户会话/JWT 专属（Client API 面）。
-//   SERVER      admin console 会话（admin_roles 把关）或 API key
-//               （api_key_scope 把关）——Server API 面的凭证族。
-//   PERMISSION  admin console 会话专属，permissions（HasAnyRole）把关；
-//               API key 凭证一律拒绝（scope * / all 也不放行）。
-//   SYSTEM      内部系统调用专属（当前无外部 RPC 使用，预留给 worker 面）。
+//
+//	PUBLIC      匿名可调（自证凭证型：secret/challenge-token 即授权）。
+//	END_USER    端用户会话/JWT 专属（Client API 面）。
+//	SERVER      admin console 会话（admin_roles 把关）或 API key
+//	            （api_key_scope 把关）——Server API 面的凭证族。
+//	PERMISSION  admin console 会话专属，permissions（HasAnyRole）把关；
+//	            API key 凭证一律拒绝（scope * / all 也不放行）。
+//	SYSTEM      内部系统调用专属（当前无外部 RPC 使用，预留给 worker 面）。
 type AccessLevel int32
 
 const (
@@ -334,11 +335,12 @@ func (x *APIKeyScope) GetOp() ScopeOp {
 }
 
 // MethodAuth 是方法的完整授权策略声明（单一策略源）：
-//   access        凭证族（必填）。
-//   permissions   PERMISSION 面的角色门（字符串词表 = AdminRole 名小写 ∪
-//                 "console" 会话标签）；client 面端用户方法为 ["users"]。
-//   admin_roles   SERVER 面的 admin 会话角色门（enum）。
-//   api_key_scope SERVER 面的 API key scope 门；缺省 = 该方法不对 key 开放。
+//
+//	access        凭证族（必填）。
+//	permissions   PERMISSION 面的角色门（字符串词表 = AdminRole 名小写 ∪
+//	              "console" 会话标签）；client 面端用户方法为 ["users"]。
+//	admin_roles   SERVER 面的 admin 会话角色门（enum）。
+//	api_key_scope SERVER 面的 API key scope 门；缺省 = 该方法不对 key 开放。
 type MethodAuth struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Access        AccessLevel            `protobuf:"varint,1,opt,name=access,proto3,enum=torchwood.shared.v1.AccessLevel" json:"access,omitempty"`

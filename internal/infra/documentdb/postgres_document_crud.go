@@ -738,14 +738,14 @@ func (p *postgresDocumentDB) deleteDocument(ctx context.Context, projectID, data
 			}
 			return err
 		}
-			if !opts.SkipVersion {
-				if opts.ExpectedVersion <= 0 {
-					return databases.ErrVersionRequired
-				}
-				if currentVersion != opts.ExpectedVersion {
-					return &databases.VersionConflictError{CurrentVersion: currentVersion}
-				}
+		if !opts.SkipVersion {
+			if opts.ExpectedVersion <= 0 {
+				return databases.ErrVersionRequired
 			}
+			if currentVersion != opts.ExpectedVersion {
+				return &databases.VersionConflictError{CurrentVersion: currentVersion}
+			}
+		}
 		// 分叉：有 publisher 时删除后带删除前 version 发 delete 事件；无
 		// publisher 走下方公共路径。删除行数校验：可见（预读已过 SELECT
 		// policy）且 OCC 守卫命中时 0 行 ⇒ 并发改写（VersionMismatch）或
@@ -768,7 +768,7 @@ func (p *postgresDocumentDB) deleteDocument(ctx context.Context, projectID, data
 // execDeleteVersioned 执行单文档 DELETE：OCC 时带 _version 守卫（compare-and-
 // delete，与旧 FOR UPDATE 预读+比较的防竞态语义等价且不误拒 delete-only 用户）；
 // 0 行 ⇒ OCC 守卫未命中（VersionMismatch）或 DELETE policy 拒绝
-//（PERMISSION_DENIED——预读已过 SELECT policy，行可见）。
+// （PERMISSION_DENIED——预读已过 SELECT policy，行可见）。
 func (p *postgresDocumentDB) execDeleteVersioned(ctx context.Context, tbl, docID string, tenant int64, occ bool, expected int64) error {
 	where := "_id = ? AND _tenant = ?"
 	args := []any{docID, tenant}

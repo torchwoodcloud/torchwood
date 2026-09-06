@@ -33,7 +33,7 @@ func TestMapCollection_AttributeDefaultValue(t *testing.T) {
 }
 
 // TestMapArrayUpdates_SetFamily（转出 POC B1）：四新算子 proto → domain 映射
-//（含 insert index presence 透传）与 UNSPECIFIED 拒绝；TransactionOp.array_updates
+// （含 insert index presence 透传）与 UNSPECIFIED 拒绝；TransactionOp.array_updates
 // 经 transactionOpFromProto 全链透传。
 func TestMapArrayUpdates_SetFamily(t *testing.T) {
 	idx := int32(2)

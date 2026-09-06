@@ -37,15 +37,15 @@ const buildingStaleAfter = 30 * time.Minute
 
 // 漂移条目类别（DriftItem.Kind）。
 const (
-	DriftMissingColumn        = "missing_column"         // catalog 有 attr、物理表无列
-	DriftInvalidIndex         = "invalid_index"          // 物理索引 indisvalid=false
-	DriftGhostTable           = "ghost_table"            // 物理表 catalog 无行
-	DriftBuildingRebuilt      = "building_stale_rebuilt" // building 超时残留重建（中断恢复）
-	DriftBuildingValid        = "building_valid_backfill"// building 残留但物理索引 valid → 补账 active
-	DriftFailedRebuilt        = "failed_index_rebuilt"   // failed 条目重入
-	DriftMissingActiveIndex   = "missing_active_index"   // catalog active 但物理索引缺失（带外 DROP）
-	DriftMissingDefaultIndex  = "missing_default_index"  // 默认时间索引/_acl GIN 缺失（DDL touch 收窄后的自愈通道）
-	DriftCatalogRowNoTable    = "catalog_row_no_table"   // catalog 有行物理表缺失（不可自动修复——重建意味着放弃存量数据）
+	DriftMissingColumn       = "missing_column"          // catalog 有 attr、物理表无列
+	DriftInvalidIndex        = "invalid_index"           // 物理索引 indisvalid=false
+	DriftGhostTable          = "ghost_table"             // 物理表 catalog 无行
+	DriftBuildingRebuilt     = "building_stale_rebuilt"  // building 超时残留重建（中断恢复）
+	DriftBuildingValid       = "building_valid_backfill" // building 残留但物理索引 valid → 补账 active
+	DriftFailedRebuilt       = "failed_index_rebuilt"    // failed 条目重入
+	DriftMissingActiveIndex  = "missing_active_index"    // catalog active 但物理索引缺失（带外 DROP）
+	DriftMissingDefaultIndex = "missing_default_index"   // 默认时间索引/_acl GIN 缺失（DDL touch 收窄后的自愈通道）
+	DriftCatalogRowNoTable   = "catalog_row_no_table"    // catalog 有行物理表缺失（不可自动修复——重建意味着放弃存量数据）
 )
 
 // 漂移条目处置（DriftItem.Action）。
@@ -409,7 +409,7 @@ func (p *postgresDocumentDB) reconcileCollectionIndexes(ctx context.Context, e r
 }
 
 // backfillActive 把 building 残留但物理索引 valid 的条目补账为 active
-//（崩溃发生在 CIC 完成之后、事务 B 之前）。
+// （崩溃发生在 CIC 完成之后、事务 B 之前）。
 func (p *postgresDocumentDB) backfillActive(ctx context.Context, e reconcileEntry, indexID string, rep *SchemaDriftReport) {
 	target := e.schema + "." + e.physical + "." + indexID
 	if rep.DryRun {
@@ -538,7 +538,7 @@ func (p *postgresDocumentDB) dropGhostTable(ctx context.Context, schema, physica
 }
 
 // execConcurrentDDL 在事务外独立连接上以 tw_owner 会话身份执行单条 DDL
-//（CONCURRENTLY 语句专用；复用 createIndexConcurrently 的连接纪律——用毕
+// （CONCURRENTLY 语句专用；复用 createIndexConcurrently 的连接纪律——用毕
 // RESET ROLE，失败剔除连接）。
 func (p *postgresDocumentDB) execConcurrentDDL(ctx context.Context, stmt string) error {
 	sqlDB := p.db.DB.DB

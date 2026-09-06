@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lynx-go/commands"
 	"github.com/google/uuid"
+	"github.com/lynx-go/commands"
 	"github.com/stretchr/testify/require"
 )
 

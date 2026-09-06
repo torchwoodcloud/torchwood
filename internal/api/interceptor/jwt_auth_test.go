@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
 	"github.com/torchwooddev/torchwood/internal/infra/auth"
 	"google.golang.org/grpc"
@@ -203,19 +204,19 @@ func TestAuthInterceptor_RejectsViewerOrMemberAdminOnWriteMethods(t *testing.T) 
 		"/torchwood.server.v1.FunctionsService/SetVariables",
 		"/torchwood.server.v1.OAuthProvidersService/UpsertOAuthProvider",
 	}
-	runCase := func(method string, role string, permissionWired bool) {
-		var apiKeyMethods []string
+	runCase := func(method string, role string, permissionWired bool, roles []domainauth.AdminRole) {
+		var serverRoles map[string][]domainauth.AdminRole
 		var permissionMethods map[string][]string
 		if permissionWired {
 			permissionMethods = map[string][]string{method: {"owner", "admin"}}
 		} else {
-			apiKeyMethods = []string{method}
+			serverRoles = map[string][]domainauth.AdminRole{method: roles}
 		}
-		ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
+		ic, err := newTestInterceptorRoles(stubValidator{principal: &shared.Principal{
 			ActorKind:      shared.ActorKindAdmin,
 			CredentialType: shared.CredentialTypeSession,
 			Roles:          []string{role},
-		}}, nil, apiKeyMethods, permissionMethods)
+		}}, nil, serverRoles, permissionMethods)
 		requireNoError(t, err)
 		ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Session admin-token"))
 		_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{
@@ -228,17 +229,17 @@ func TestAuthInterceptor_RejectsViewerOrMemberAdminOnWriteMethods(t *testing.T) 
 	}
 
 	for _, method := range roleGatedWrites {
-		runCase(method, "viewer", false)
+		runCase(method, "viewer", false, []domainauth.AdminRole{domainauth.AdminRoleMember, domainauth.AdminRoleAdmin, domainauth.AdminRoleOwner})
 	}
 	for _, method := range delegatedOnly {
-		runCase(method, "member", false)
+		runCase(method, "member", false, []domainauth.AdminRole{domainauth.AdminRoleAdmin, domainauth.AdminRoleOwner})
 	}
 	for _, method := range []string{
 		"/torchwood.server.v1.ProjectsService/CreateProject",
 		"/torchwood.server.v1.APIKeysService/CreateAPIKey",
 	} {
-		runCase(method, "viewer", true)
-		runCase(method, "member", true)
+		runCase(method, "viewer", true, nil)
+		runCase(method, "member", true, nil)
 	}
 }
 
@@ -286,7 +287,7 @@ func TestAuthInterceptor_RejectsMultipleCredentials(t *testing.T) {
 		ActorKind: shared.ActorKindEndUser,
 		UserID:    "user-1",
 		Roles:     []string{"users"},
-	}}, nil, nil, nil)
+	}}, nil, []string{"/torchwood.server.v1.UsersService/ListUsers"}, nil)
 	requireNoError(t, err)
 
 	for _, md := range []metadata.MD{
@@ -323,7 +324,7 @@ func TestAuthInterceptor_RejectsSameKeyMultipleCredentials(t *testing.T) {
 		ActorKind: shared.ActorKindEndUser,
 		UserID:    "user-1",
 		Roles:     []string{"users"},
-	}}, nil, nil, nil)
+	}}, nil, []string{"/torchwood.server.v1.UsersService/ListUsers"}, nil)
 	requireNoError(t, err)
 
 	for _, md := range []metadata.MD{

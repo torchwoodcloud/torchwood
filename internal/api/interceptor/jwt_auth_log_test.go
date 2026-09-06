@@ -51,7 +51,8 @@ func TestAuthInterceptor_LogsCredentialMissing(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	ic, err := newTestInterceptor(stubValidator{}, nil, nil, nil)
+	ic, err := newTestInterceptor(stubValidator{}, nil,
+		[]string{"/torchwood.server.v1.UsersService/ListUsers"}, nil)
 	requireNoError(t, err)
 	ic.WithLogger(captureLogger(&buf))
 
@@ -81,7 +82,7 @@ func TestAuthInterceptor_LogsMultipleCredentials(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	ic, err := newTestInterceptor(stubValidator{}, nil, nil, nil)
+	ic, err := newTestInterceptor(stubValidator{}, nil, []string{"/torchwood.server.v1.UsersService/ListUsers"}, nil)
 	requireNoError(t, err)
 	ic.WithLogger(captureLogger(&buf))
 
@@ -102,7 +103,7 @@ func TestAuthInterceptor_LogsInvalidAuthorization(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	ic, err := newTestInterceptor(stubValidator{}, nil, nil, nil)
+	ic, err := newTestInterceptor(stubValidator{}, nil, []string{"/torchwood.server.v1.UsersService/ListUsers"}, nil)
 	requireNoError(t, err)
 	ic.WithLogger(captureLogger(&buf))
 
@@ -149,7 +150,9 @@ func TestAuthInterceptor_LogsPermissionDenied(t *testing.T) {
 		CredentialType: shared.CredentialTypeAPIKey,
 		Roles:          []string{"keys"},
 		Permissions:    []string{"*"},
-	}}, nil, []string{"/torchwood.server.v1.APIKeysService/CreateAPIKey"}, nil)
+	}}, nil, nil, map[string][]string{
+		"/torchwood.server.v1.APIKeysService/CreateAPIKey": {"owner", "admin"},
+	})
 	requireNoError(t, err)
 	ic.WithLogger(captureLogger(&buf))
 
@@ -157,7 +160,8 @@ func TestAuthInterceptor_LogsPermissionDenied(t *testing.T) {
 	_ = invokeAuth(ic, ctx, "/torchwood.server.v1.APIKeysService/CreateAPIKey")
 
 	out := buf.String()
-	if !strings.Contains(out, "reason=apikey_self_management_denied") {
+	// IsAPIKeysServiceMethod 特例已退役（A2a）：PERMISSION 面 API key 一律拒绝。
+	if !strings.Contains(out, "reason=apikey_permission_method_denied") {
 		t.Fatalf("unexpected log output: %s", out)
 	}
 }

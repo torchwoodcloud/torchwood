@@ -4,7 +4,7 @@
 // 两阶段状态机存在的结构性原因，而非可选优化）+ `lock_timeout` 短超时重试。
 //
 // 分界（预决策 1）：建集合时的既有索引（含默认时间索引/_acl GIN）维持事务内
-//（createCollectionIndex，新表无并发读者，CONCURRENTLY 无意义）；仅存量表的
+// （createCollectionIndex，新表无并发读者，CONCURRENTLY 无意义）；仅存量表的
 // DDL touch / repair / reconcile 路径走 CONCURRENTLY。
 //
 // 状态机：
@@ -45,8 +45,8 @@ const (
 )
 
 // errOnlineIndexRetryable 判定 CIC 失败是否值得重试：55P03 lock_not_available
-//（lock_timeout 触发）与 40P01 deadlock_detected——均为瞬态锁竞争；其余失败
-//（唯一冲突、语法、列缺失等）重试无意义。
+// （lock_timeout 触发）与 40P01 deadlock_detected——均为瞬态锁竞争；其余失败
+// （唯一冲突、语法、列缺失等）重试无意义。
 func errOnlineIndexRetryable(err error) bool {
 	var fielder pgErrorFielder
 	if !errors.As(err, &fielder) {
@@ -169,7 +169,7 @@ func dropIndexStatement(schema, physicalIndexName string) string {
 }
 
 // createIndexConcurrently 在**事务外独立连接**上执行 CREATE INDEX CONCURRENTLY
-//（CIC 不能在事务块内运行）。连接身份模型（redesign §3.2）：单一变色龙
+// （CIC 不能在事务块内运行）。连接身份模型（redesign §3.2）：单一变色龙
 // authenticator + 会话级 SET ROLE tw_owner（CIC 无事务可挂 SET LOCAL ROLE；
 // tw_owner 是表 owner，CIC 需要其所有权）+ 会话级 lock_timeout；用毕 RESET
 // ROLE 归还连接，RESET 失败则经 driver.ErrBadConn 把连接从池中剔除（绝不让
@@ -248,7 +248,7 @@ func (p *postgresDocumentDB) createIndexConcurrently(ctx context.Context, schema
 // schema_reconcile.go（CONCURRENTLY 通道）承担，CreateIndex 不再是 DDL touch
 // 汇聚点（B3 语义收窄）。返回值 reentry 报告既有同 ID 条目被重入（building/
 // failed 残留——中断恢复路径），调用方据此在事务外先清理残留 INVALID 索引
-//（createIndexConcurrently 的重试前清理已覆盖）。
+// （createIndexConcurrently 的重试前清理已覆盖）。
 func (p *postgresDocumentDB) indexBeginBuilding(ctx context.Context, projectID, databaseID, collectionID string, idx databases.Index) (reentry bool, err error) {
 	txErr := p.withOwnerTx(ctx, func(txCtx context.Context) error {
 		row, err := p.loadCollectionRow(txCtx, projectID, databaseID, collectionID)

@@ -30,7 +30,7 @@ type ExecutionResult struct {
 // 事务边界（redesign §4.8 Phase 2 形态乙，阶段③-b 定稿）：函数代码运行在
 // 外部 Docker 容器（进程隔离），与 server 不共享 ctx/事务连接——函数内的
 // 多写原子性不经执行器承载，统一由 DatabasesService/ExecuteTransactions
-//（execute-tx）RPC 提供（函数经 API/SDK 调用即可，批内事件序 = op 序）。
+// （execute-tx）RPC 提供（函数经 API/SDK 调用即可，批内事件序 = op 序）。
 // 不做跨进程事务魔法（两阶段/补偿协调器不在 POC 范围）。
 type Executor interface {
 	// Build 将 zip 代码包构建为镜像（解压校验 → 生成 Dockerfile → docker build）。

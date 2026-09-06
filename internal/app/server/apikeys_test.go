@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -17,12 +18,26 @@ import (
 
 type fakeAPIKeyRepository struct{}
 
-// testScopeVocabulary 构造含常用资源的最小词表（真实词表由 PolicySet 派生）。
+// testScopeVocabulary 构造覆盖常用资源（读+写双向）的词表（真实词表由
+// PolicySet 派生；本测试面需覆盖历史合法 scope 形态全集）。
 func testScopeVocabulary() *domainauth.ScopeVocabulary {
-	set, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{
-		{Method: "/t/a", Service: "/t", Access: domainauth.AccessServer, Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeUsers, Op: domainauth.ScopeWrite}},
-		{Method: "/t/b", Service: "/t", Access: domainauth.AccessServer, Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeDatabases, Op: domainauth.ScopeRead}},
-	})
+	resources := []domainauth.ScopeResource{
+		domainauth.ScopeUsers, domainauth.ScopeDatabases, domainauth.ScopeStorage,
+		domainauth.ScopeGroups, domainauth.ScopeProjects, domainauth.ScopeOAuthProviders,
+		domainauth.ScopeFunctions, domainauth.ScopePayments, domainauth.ScopeAssets,
+		domainauth.ScopeSubscriptions, domainauth.ScopeBilling, domainauth.ScopeOutbox,
+	}
+	pols := make([]domainauth.MethodPolicy, 0, len(resources)*2)
+	for i, res := range resources {
+		for j, op := range []domainauth.ScopeOp{domainauth.ScopeRead, domainauth.ScopeWrite} {
+			pols = append(pols, domainauth.MethodPolicy{
+				Method: fmt.Sprintf("/t/r%d/%d", i, j), Service: "/t",
+				Access: domainauth.AccessServer,
+				Scope:  &domainauth.ScopeRule{Resource: res, Op: op},
+			})
+		}
+	}
+	set, err := domainauth.NewPolicySet(pols)
 	if err != nil {
 		panic(err)
 	}

@@ -202,7 +202,7 @@ func (b *VectorSearchBuilder) MaxDistance(max float64) *VectorSearchBuilder {
 }
 
 // EfSearch HNSW 搜索广度（B7）：本次查询的 hnsw.ef_search，合法域 [1,500]
-//（≤0 / >500 服务端 InvalidArgument）。缺省不设置——服务端维持 pgvector
+// （≤0 / >500 服务端 InvalidArgument）。缺省不设置——服务端维持 pgvector
 // 缺省 40，行为与未提供时一致。近重复簇边界召回不足时调大（代价：访存
 // 与延迟随 ef 线性增长）。
 func (b *VectorSearchBuilder) EfSearch(n int32) *VectorSearchBuilder {

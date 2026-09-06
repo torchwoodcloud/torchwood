@@ -87,7 +87,7 @@ func TestStreamTransport_Trim(t *testing.T) {
 }
 
 // TestMarshalEnvelope_RoundTrip：Envelope → JSON → Envelope 无损往返
-//（worker 从 outbox.payload 重建信封再 XADD，序列化必须稳定）。
+// （worker 从 outbox.payload 重建信封再 XADD，序列化必须稳定）。
 func TestMarshalEnvelope_RoundTrip(t *testing.T) {
 	ev := testEnvelope()
 	first, err := infraevents.MarshalEnvelope(ev)

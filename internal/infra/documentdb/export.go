@@ -5,7 +5,7 @@
 // snapshot_seq 与 `:changes` 续接语义（§10.1 一致性窗口闭合）：全部读取
 // （outbox max(seq)、catalog 两表、集合行）包在**单一 REPEATABLE READ 快照
 // 事务**内——快照后提交的写入不在导出行中、其全局 seq 必大于 snapshot_seq
-//（seq 是全局分配序，000002 identity 单调），因此
+// （seq 是全局分配序，000002 identity 单调），因此
 // `:changes?since_seq=<snapshot_seq>` 恰返回导出之后的变更，无重无漏。
 //
 // 流式纪律：集合逐页 keyset（_id 游标）读取写盘，不整表载内存；catalog 与
@@ -201,7 +201,7 @@ type exportRow struct {
 }
 
 // exportCollectionRows 把一个集合物理表逐页 keyset 导出为 NDJSON
-//（行 = to_jsonb(d.*)，含 _acl/_version/_id 等系统列与用户列），返回行数。
+// （行 = to_jsonb(d.*)，含 _acl/_version/_id 等系统列与用户列），返回行数。
 func exportCollectionRows(ctx context.Context, tx bun.Tx, schema, physical, path string) (int64, error) {
 	f, err := os.Create(path)
 	if err != nil {

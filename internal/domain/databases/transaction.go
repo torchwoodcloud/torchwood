@@ -54,12 +54,12 @@ const (
 // TransactionOp 是单个事务操作（复用旧 document_transaction_ops 字段族；
 // 单 database 批——database 在请求级）。
 type TransactionOp struct {
-	Type            TransactionOpType
-	CollectionID    string
-	DocumentID      string
-	Data            map[string]any
-	Permissions     []Permission
-	Increment       map[string]int64
+	Type         TransactionOpType
+	CollectionID string
+	DocumentID   string
+	Data         map[string]any
+	Permissions  []Permission
+	Increment    map[string]int64
 	// ArrayUpdates 是数组列原子更新（转出 POC B1）：仅 update op 消费，
 	// 语义与 DocumentUpdate.ArrayUpdates 同源（buildArrayParts 单语句 SET）。
 	ArrayUpdates    map[string]ArrayUpdate

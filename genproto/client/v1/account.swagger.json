@@ -46,7 +46,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       }
     },
     "/v1/account/email-change": {
@@ -115,7 +115,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       }
     },
     "/v1/account/logs": {
@@ -162,7 +162,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       }
     },
     "/v1/account/me": {
@@ -193,7 +193,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       }
     },
     "/v1/account/mfa": {
@@ -217,7 +217,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       }
     },
     "/v1/account/mfa/challenge": {
@@ -284,7 +284,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       },
       "put": {
         "operationId": "AccountService_VerifyTOTPFactor",
@@ -315,7 +315,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       }
     },
     "/v1/account/mfa/{factor_id}": {
@@ -353,7 +353,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       }
     },
     "/v1/account/prefs": {
@@ -376,7 +376,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       },
       "put": {
         "operationId": "AccountService_UpdatePrefs",
@@ -407,7 +407,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       }
     },
     "/v1/account/recovery": {
@@ -530,7 +530,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       },
       "delete": {
         "operationId": "AccountService_DeleteSessions",
@@ -559,7 +559,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       }
     },
     "/v1/account/sessions/anonymous": {
@@ -827,7 +827,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       }
     },
     "/v1/account/sessions/oauth2/{provider}/link/token": {
@@ -866,7 +866,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       }
     },
     "/v1/account/sessions/oauth2/{provider}/token": {
@@ -1039,7 +1039,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       }
     },
     "/v1/account/sign-in": {
@@ -1106,7 +1106,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       }
     },
     "/v1/account/sign-up": {
@@ -1173,7 +1173,7 @@
         "tags": [
           "AccountService"
         ],
-        "x-torchwood-access": "permission"
+        "x-torchwood-access": "end_user"
       },
       "put": {
         "operationId": "AccountService_UpdateVerification",

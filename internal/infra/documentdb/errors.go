@@ -50,24 +50,24 @@ func mapPGError(err error) error {
 	if err == nil {
 		return nil
 	}
-		var fielder pgErrorFielder
-		if errors.As(err, &fielder) {
-			state := fielder.Field('C')
-			if code, ok := docDBErrorSQLStates[state]; ok {
-				switch code {
-				case codes.AlreadyExists:
-					// 23505：领域哨兵 ErrDuplicateKey（与 isUniqueViolation 路径一致，
-					// 由 app 层 MapDocumentDBError 统一产出域码）。
-					return databases.ErrDuplicateKey
-				case codes.PermissionDenied:
-					// 42501（阶段③包 C）：RLS policy 违例 / 权限不足 → 领域哨兵
-					// ErrPermissionDenied。
-					return databases.ErrPermissionDenied
-				}
-				domainCode := databases.ErrCodeInvalidArgument
-				if code == codes.ResourceExhausted {
-					domainCode = databases.ErrCodeExhausted
-				}
+	var fielder pgErrorFielder
+	if errors.As(err, &fielder) {
+		state := fielder.Field('C')
+		if code, ok := docDBErrorSQLStates[state]; ok {
+			switch code {
+			case codes.AlreadyExists:
+				// 23505：领域哨兵 ErrDuplicateKey（与 isUniqueViolation 路径一致，
+				// 由 app 层 MapDocumentDBError 统一产出域码）。
+				return databases.ErrDuplicateKey
+			case codes.PermissionDenied:
+				// 42501（阶段③包 C）：RLS policy 违例 / 权限不足 → 领域哨兵
+				// ErrPermissionDenied。
+				return databases.ErrPermissionDenied
+			}
+			domainCode := databases.ErrCodeInvalidArgument
+			if code == codes.ResourceExhausted {
+				domainCode = databases.ErrCodeExhausted
+			}
 			st := status.New(code, fmt.Sprintf("%s: postgres error (sqlstate %s)", domainCode, state))
 			st, _ = st.WithDetails(&errdetails.ErrorInfo{
 				Reason: domainCode,

@@ -18,10 +18,10 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/torchwooddev/torchwood/internal/api/interceptor"
 	"github.com/torchwooddev/torchwood/internal/domain/databases"
 	domainevents "github.com/torchwooddev/torchwood/internal/domain/events"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
-	"github.com/torchwooddev/torchwood/internal/api/interceptor"
 	"github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/pkg/idgen"
 	"github.com/torchwooddev/torchwood/pkg/jwtparser"
@@ -42,11 +42,11 @@ const (
 
 // 出站错误码（与协议约定一致，客户端按码分支）。
 const (
-	errCodeUnauthenticated    = "UNAUTHENTICATED"
-	errCodeResourceExhausted  = "RESOURCE_EXHAUSTED"
-	errCodeNotFound           = "NOT_FOUND"
-	errCodeInvalidArgument    = "INVALID_ARGUMENT"
-	errCodeInternal           = "INTERNAL"
+	errCodeUnauthenticated     = "UNAUTHENTICATED"
+	errCodeResourceExhausted   = "RESOURCE_EXHAUSTED"
+	errCodeNotFound            = "NOT_FOUND"
+	errCodeInvalidArgument     = "INVALID_ARGUMENT"
+	errCodeInternal            = "INTERNAL"
 	errCodeEventsResumeExpired = "EVENTS.RESUME_EXPIRED"
 )
 
@@ -194,9 +194,9 @@ type connState struct {
 	// resyncCh（阶段④水位断开）：Hub 满水位触发 OnSlow → writeLoop 收款
 	// 后以 close reason "resync:<last_seq>" 断开；客户端重连带 last_seq
 	// 即天然 RESYNC（断开即重放，语义等价、协议更简——B4 简化）。
-	resyncCh   chan int64
-	lastPong   atomic.Int64 // unix nano；hello_ok 后置初值
-	cancel     context.CancelFunc
+	resyncCh chan int64
+	lastPong atomic.Int64 // unix nano；hello_ok 后置初值
+	cancel   context.CancelFunc
 	// expiryTimer 是 JWT 到期关连接定时器；连接提前断开时必须 Stop
 	//（P2-5：否则 timer 持有 conn 状态直至 token 到期，高 churn 下累积）。
 	expiryTimer *time.Timer
@@ -630,7 +630,7 @@ func (h *Handler) handleSubscribe(ctx context.Context, c *websocket.Conn, st *co
 // subscribeWithReplay 执行带 last_seq 的订阅（调用方已校验频道合法且非
 // 重复订阅）：BeginReplay → Subscribe → ListChanges 补发 → EndReplay。
 // 补发帧先入 Send；补发期间 Dispatch 到达的实时帧在 backlog 中去重
-//（event_id 已在补发批）后续序刷入。nextSeq 为续传游标（R15）：扫描
+// （event_id 已在补发批）后续序刷入。nextSeq 为续传游标（R15）：扫描
 // 游标优先，0 时回退末条补发事件 seq（自然耗尽时为 0——hasMore=false
 // 不会消费它）。
 func (h *Handler) subscribeWithReplay(ctx context.Context, st *connState, ch parsedChannel, f *inboundFrame) (int64, bool, int64, error) {
@@ -677,19 +677,19 @@ func (h *Handler) subscribeWithReplay(ctx context.Context, st *connState, ch par
 }
 
 // changePayload 把领域 Change 映射为与实时事件帧同形的 payload
-//（Envelope.ClientPayload 语义：无 acl，seq/transaction_id 透出）。
+// （Envelope.ClientPayload 语义：无 acl，seq/transaction_id 透出）。
 func changePayload(projectID string, ch parsedChannel, c databases.DocumentChange) map[string]any {
 	m := map[string]any{
-		"event_id":       c.EventID,
-		"event":          c.Event,
-		"project_id":     projectID,
-		"database_id":    ch.dbID,
-		"collection_id":  ch.collID,
-		"document_id":    c.DocumentID,
-		"version":        c.Version,
-		"created_at":     c.CreatedAt.UTC().Format(time.RFC3339),
-		"truncated":      c.Truncated,
-		"seq":            c.Seq,
+		"event_id":      c.EventID,
+		"event":         c.Event,
+		"project_id":    projectID,
+		"database_id":   ch.dbID,
+		"collection_id": ch.collID,
+		"document_id":   c.DocumentID,
+		"version":       c.Version,
+		"created_at":    c.CreatedAt.UTC().Format(time.RFC3339),
+		"truncated":     c.Truncated,
+		"seq":           c.Seq,
 	}
 	if c.TransactionID != "" {
 		m["transaction_id"] = c.TransactionID

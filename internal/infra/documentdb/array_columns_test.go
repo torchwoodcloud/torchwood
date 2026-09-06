@@ -27,7 +27,8 @@ func anyPerms() []databases.Permission {
 	}
 }
 
-func setupArrayCollection(ctx context.Context, t *testing.T) (databases.DocumentDB, string) {	t.Helper()
+func setupArrayCollection(ctx context.Context, t *testing.T) (databases.DocumentDB, string) {
+	t.Helper()
 	db := testutil.SetupTestDB(t)
 	t.Cleanup(func() { _ = db.Close() })
 	projectID, _, cleanup := testutil.CreateTestProjectThrough(ctx, db, 8)
@@ -66,7 +67,7 @@ func TestArrayColumns_DDLAndRoundtrip(t *testing.T) {
 			MAX(udt_name) FILTER (WHERE column_name = 'flags'),
 			MAX(udt_name) FILTER (WHERE column_name = 'times')
 		FROM information_schema.columns
-		WHERE table_schema = 'tw_` + projectID + `_app' AND table_name = (
+		WHERE table_schema = 'tw_`+projectID+`_app' AND table_name = (
 			SELECT physical_name FROM catalog_collections
 			WHERE project_id = ? AND database_id = 'app' AND collection_id = 'items')`,
 		projectID).Scan(&udtTags, &udtNums, &udtPrices, &udtFlags, &udtTimes)
@@ -107,7 +108,7 @@ func TestArrayColumns_DDLAndRoundtrip(t *testing.T) {
 }
 
 // TestArrayColumns_ContainsSemantics：containsAny（交集非空）/ containsAll
-//（子集）语义矩阵——交集命中、无交集、子集、空数组列、NULL 列。
+// （子集）语义矩阵——交集命中、无交集、子集、空数组列、NULL 列。
 func TestArrayColumns_ContainsSemantics(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -175,7 +176,7 @@ func TestArrayColumns_ContainsSemantics(t *testing.T) {
 }
 
 // TestArrayColumns_WriteOperators：四写算子端到端——append/prepend/remove
-//（移空后空数组非 NULL）/unique（保序去重），与 increment 同语句组合、
+// （移空后空数组非 NULL）/unique（保序去重），与 increment 同语句组合、
 // OCC 不匹配拒绝且不落任何变更。
 func TestArrayColumns_WriteOperators(t *testing.T) {
 	if testing.Short() {
@@ -283,7 +284,7 @@ func TestArrayColumns_WriteOperators(t *testing.T) {
 }
 
 // TestArrayColumns_WriteOperatorsSetFamily：转出 POC B1 四算子——intersect
-//（交集去重保 col 首次出现序）/ diff（差集保序不去重，与 remove 同构）/
+// （交集去重保 col 首次出现序）/ diff（差集保序不去重，与 remove 同构）/
 // filter（受限形态 = remove 等价）/ insert（0 基定点插入，越界尾插）。
 // NULL 列语义锁定：读改写类（intersect/diff/filter）保真，添加类（insert）
 // 归一为空数组；校验拒绝（insert index 缺省/负值/values≠1，交集差集过滤

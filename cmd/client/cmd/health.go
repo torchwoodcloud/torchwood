@@ -5,8 +5,8 @@ import (
 )
 
 const (
-	methodHealthCheck    = "/torchwood.server.v1.HealthService/Check"
-	methodHealthGetVer   = "/torchwood.server.v1.HealthService/GetVersion"
+	methodHealthCheck  = "/torchwood.server.v1.HealthService/Check"
+	methodHealthGetVer = "/torchwood.server.v1.HealthService/GetVersion"
 )
 
 // newHealthCmd 提供 HealthService 两个公开方法（ACCESS_PUBLIC，无需 API key）。

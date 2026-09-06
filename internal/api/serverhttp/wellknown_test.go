@@ -23,7 +23,7 @@ func wellKnownTestPolicies() *auth.PolicySet {
 	pols := make([]auth.MethodPolicy, 0, len(wellKnownVerbs))
 	for _, v := range wellKnownVerbs {
 		op := auth.ScopeWrite
-		for _, prefix := range []string{"List", "Get", "Count", "Export"} {
+		for _, prefix := range []string{"List", "Get", "Count", "Export", "Aggregate"} {
 			if strings.HasPrefix(v.RPC, prefix) {
 				op = auth.ScopeRead
 				break

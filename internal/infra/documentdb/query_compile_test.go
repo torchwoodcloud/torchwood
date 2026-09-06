@@ -98,7 +98,7 @@ func TestBuildAppwriteQuery_CustomOrderHasIDTiebreaker(t *testing.T) {
 }
 
 // TestBuildAppwriteQuery_TotalFilterParamsLimit：跨 filter 绑定参数累计上限
-//（单 filter ≤1000 不封总量：100 叶 × 1000 值可积 10 万参数，超 PG 65535
+// （单 filter ≤1000 不封总量：100 叶 × 1000 值可积 10 万参数，超 PG 65535
 // 语句参数上限后以运行时错误暴露）。
 func TestBuildAppwriteQuery_TotalFilterParamsLimit(t *testing.T) {
 	makeFilter := func(n int) *query.Filter {
@@ -147,7 +147,7 @@ func TestBuildAppwriteQuery_EmptyValuesInvalidArgument(t *testing.T) {
 
 // TestBuildAppwriteQuery_ArrayOperators（阶段③-b 预决策 2 门禁）：containsAny
 // 编译 &&（交集非空）、containsAll 编译 @>（子集），参数按列元素类型 cast
-//（pgTextArray 字面量 + ?::T[]）；arrayTypes 缺席（标量列/系统列/未声明列）
+// （pgTextArray 字面量 + ?::T[]）；arrayTypes 缺席（标量列/系统列/未声明列）
 // 编译期兜底拒绝（validateQueryFields 白名单先行）。
 func TestBuildAppwriteQuery_ArrayOperators(t *testing.T) {
 	arrTypes := map[string]string{"tags": "TEXT[]", "nums": "BIGINT[]"}
@@ -180,7 +180,7 @@ func TestBuildAppwriteQuery_ArrayOperators(t *testing.T) {
 }
 
 // TestBuildArrayParts（阶段③-b 预决策 3）：四写算子的 SET 表达式形态断言
-//（append/prepend 的 NULL 归一、remove 的空数组兜底、unique 的保序去重），
+// （append/prepend 的 NULL 归一、remove 的空数组兜底、unique 的保序去重），
 // 与 data/increment 同 SET 子句组合、非法输入拒绝。
 func TestBuildArrayParts(t *testing.T) {
 	attrs := []databases.Attribute{

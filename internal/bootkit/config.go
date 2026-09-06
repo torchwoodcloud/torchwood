@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"strings"
 
-	config "github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/internal/infra/clients"
+	config "github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/pkg/crud"
 )
 
@@ -78,7 +78,7 @@ func InitPageTokenSigning(c *config.AppConfig) error {
 // HMAC-SHA256(jwt.secret, "tw-roles-guc-v1")，page-token 同模式）。派生钥供
 // tw_app 身份注入 app.roles_sig GUC 时签名——注入用的是进程内钥，无需读库，
 // server/worker 均注入。tw_secrets 落库由部署期 owner 一次性作业完成
-//（`torchwood admin sync-roles-sig`，转出 POC 门禁 B15：运行 DSN 对
+// （`torchwood admin sync-roles-sig`，转出 POC 门禁 B15：运行 DSN 对
 // tw_secrets 零权限，启动钩子已退役）。密钥未落库（部署时序未跑作业）时
 // tw_app 查询 fail-closed（零角色）属预期，见 13-operations §4.5。
 func InitRolesSigSigning(c *config.AppConfig) error {

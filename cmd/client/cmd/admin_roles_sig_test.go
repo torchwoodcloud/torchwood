@@ -117,6 +117,11 @@ func TestAdminSyncRolesSigViaCLI(t *testing.T) {
 // TestAdminSyncRolesSig_RequiresFlags 锁命令的 fail-fast 参数校验：缺 DSN 或
 // 缺主密钥时拒绝执行（不触碰数据库）。
 func TestAdminSyncRolesSig_RequiresFlags(t *testing.T) {
+	// 密闭化：本机 .env 常设 TORCHWOOD_DATA_DATABASE_SOURCE /
+	// TORCHWOOD_SECURITY_JWT_SECRET（旗标默认值来源），不隔离时 "missing dsn"
+	// 用例会带真实 DSN 连库同步并向 nil Environment 打印而 panic。
+	t.Setenv("TORCHWOOD_DATA_DATABASE_SOURCE", "")
+	t.Setenv("TORCHWOOD_SECURITY_JWT_SECRET", "")
 	for _, tc := range []struct {
 		name   string
 		flags  map[string]string

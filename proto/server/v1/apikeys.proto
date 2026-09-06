@@ -42,9 +42,10 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
       }
     }
   }
+  // PERMISSION 面：key 凭证禁入，仅 console admin 会话（cookie）。
   security: {
     security_requirement: {
-      key: "apiKey"
+      key: "cookie"
       value: {}
     }
   }

@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/uptrace/bun/driver/pgdriver"
 	domainevents "github.com/torchwooddev/torchwood/internal/domain/events"
 	"github.com/torchwooddev/torchwood/internal/infra/clients"
 	"github.com/torchwooddev/torchwood/internal/testutil"
+	"github.com/uptrace/bun/driver/pgdriver"
 )
 
 // TestOutbox_SeqMonotonic（阶段④包 A，B1 顺序承诺）：
@@ -70,7 +70,7 @@ func TestOutbox_SeqGapFromRollback(t *testing.T) {
 }
 
 // TestOutbox_NotifyWakesListener（阶段④ NOTIFY 原型验证 + 数字）：
-// Publish 提交 → 同事务 pg_notify('tw_outbox','') → worker 专属 LISTEN
+// Publish 提交 → 同事务 pg_notify('tw_outbox',”) → worker 专属 LISTEN
 // 连接（pgdriver.Listener）在毫秒级收到唤醒。N 次取平均/最大值进测试日志，
 // 供实施报告引用。
 func TestOutbox_NotifyWakesListener(t *testing.T) {
@@ -153,7 +153,7 @@ func TestPublish_TransactionIDFromContext(t *testing.T) {
 }
 
 // TestOutboxWorker_EnqueueCarriesSeq：dispatch 回填 seq 到出站信封
-//（Stream 条目与 WS 帧 seq 的唯一注入点）。
+// （Stream 条目与 WS 帧 seq 的唯一注入点）。
 func TestOutboxWorker_EnqueueCarriesSeq(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

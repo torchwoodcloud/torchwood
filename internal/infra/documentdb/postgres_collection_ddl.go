@@ -734,7 +734,7 @@ func (p *postgresDocumentDB) requireVersionColumn(ctx context.Context, schema, p
 // 键以物理表名为准（逻辑/物理名解耦后同名逻辑集合不串缓存）。
 //
 // R5-J3-1：入口先幂等补建默认时间索引（ensureTenantCreatedIndex）、_acl GIN
-//（ensureACLIndex，阶段③包 A）与 RLS policy + 列级 GRANT（ensureCollectionRLS，
+// （ensureACLIndex，阶段③包 A）与 RLS policy + 列级 GRANT（ensureCollectionRLS，
 // 阶段③包 C）——本函数是用户集合所有 DDL touch（CreateCollection/
 // CreateAttribute/CreateIndex）的汇聚点，存量集合在下次任意 DDL touch 时自动
 // 补齐；放在 versionColumns 缓存短路之前，保证每次 touch 都对账（幂等重建）。
@@ -854,7 +854,7 @@ func (p *postgresDocumentDB) versionColumnReady(ctx context.Context, schema, phy
 // 表与索引名前缀均用物理表名（idx_<phys>_<id> 自然 ≤63，预决策 2）。
 // 数组列（阶段③-b 预决策 2）：key 索引自动选 GIN array_ops（&&/@> 可走索引）；
 // unique 对数组列拒绝（PG 数组无唯一约束语义）；fulltext 对数组列拒绝
-//（search 编译 col::text 是整列文本投影，数组列语义误导）；数组列仅支持
+// （search 编译 col::text 是整列文本投影，数组列语义误导）；数组列仅支持
 // 单列索引（GIN 多列混排非数组列需 btree_gin 扩展，不引入）。
 // hnsw（会话 #10 预决策 2）：目标列必须是声明的 vector 属性（非 vector 列/
 // 系统列拒绝）；opclass 按 metric 映射（cosine/l2/ip）；同列可建多 metric
@@ -889,7 +889,7 @@ func (p *postgresDocumentDB) ensureTenantCreatedIndex(ctx context.Context, schem
 
 // ensureACLIndex 为用户集合幂等补建 _acl 的 GIN 索引（阶段③包 A，redesign
 // §3.2 工程纪律：_acl 建 GIN，&& 可作索引条件）。索引名前缀段用物理表名
-//（idx_<phys>_acl 自然 ≤63，与 idx_<phys>_tenant_created 同方案）；IF NOT EXISTS
+// （idx_<phys>_acl 自然 ≤63，与 idx_<phys>_tenant_created 同方案）；IF NOT EXISTS
 // 幂等，DDL 路径重复执行仅一次 catalog 查找。
 func (p *postgresDocumentDB) ensureACLIndex(ctx context.Context, schema, physical string) error {
 	idxName := quoteIdent(fmt.Sprintf("idx_%s_acl", physical))
@@ -1095,7 +1095,7 @@ func quoteLiteral(s string) string {
 }
 
 // mapCollectionRow 从 catalog_collections 合一行解码 domain Collection
-//（attrs/indexes/permissions JSONB 单源读回，default/size/array 全字段）。
+// （attrs/indexes/permissions JSONB 单源读回，default/size/array 全字段）。
 // PhysicalName 是内部实现细节，不进 domain 形状（不出现在任何 API 响应）。
 func mapCollectionRow(m *model.DocumentCollection) (*databases.Collection, error) {
 	c := &databases.Collection{

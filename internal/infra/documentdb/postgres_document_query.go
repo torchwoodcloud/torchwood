@@ -558,7 +558,7 @@ type sortKey struct {
 // 方向一致（全 ASC 或全 DESC）→ 行比较 `(k1,…,kn,_id) op (?,…,?)`——形式
 // 最简且 PG 可用 RowCompare 索引扫描；方向混合 → 逐键 OR 展开
 // `k1 OP1 ? OR (k1 = ? AND k2 OP2 ?) OR … OR (k1 = ? AND … AND _id OPn ?)`
-//（行比较无法表达逐键方向）。op 选取：after = ORDER BY 方向的"向后"，
+// （行比较无法表达逐键方向）。op 选取：after = ORDER BY 方向的"向后"，
 // before = 反向（与单键时代语义一致）。
 func buildKeysetPredicate(sortKeys []sortKey, values []any, cursorID, cursorKind string) (string, []any, error) {
 	if len(sortKeys) == 0 || len(sortKeys) != len(values) {
@@ -654,7 +654,7 @@ func decodeKeysetToken(token string) (id, kind string, ok bool) {
 const knnCursorPrefix = "kvc:"
 
 // knnCursor 是 kvc: token 解码后的续传位置。id 为空 = "该距离起点"形态
-//（首页 tie-trim 全裁时发放），谓词退化为 dist >= dist。
+// （首页 tie-trim 全裁时发放），谓词退化为 dist >= dist。
 type knnCursor struct {
 	dist float64
 	id   string
@@ -662,9 +662,9 @@ type knnCursor struct {
 
 // encodeKNNCursor 编码 kvc:<dist_hex16>:<docID>。距离用 float8 比特模式的
 // 定长 16 位十六进制编码——精确往返、无浮点十进制解析歧义，负距离
-//（inner_product 的 <#> 值域 (-inf,0]）原生支持。pgvector 距离算子返回
+// （inner_product 的 <#> 值域 (-inf,0]）原生支持。pgvector 距离算子返回
 // float8，扫描值与谓词绑定值同源同型，等值比较无歧义。docID 允许 ':'
-//（docIDRe），编码侧无歧义（hex 段定长），解码侧 Cut 取首段。
+// （docIDRe），编码侧无歧义（hex 段定长），解码侧 Cut 取首段。
 func encodeKNNCursor(dist float64, docID string) string {
 	return knnCursorPrefix + fmt.Sprintf("%016x", math.Float64bits(dist)) + ":" + docID
 }

@@ -178,7 +178,7 @@ func (p *postgresDocumentDB) listPermissionFilter(
 // missingRowsError 探测批量化路径的缺失行（RETURNING / FOR UPDATE 行集与
 // 输入的差集）成因（阶段③包 C）：可见（经 SELECT policy）但未被主语句触及
 // ⇒ 不可写 ⇒ ErrPermissionDenied；不可见 ⇒ 不存在 ⇒ ErrDocumentNotFound
-//（"0 行⇒不存在"仅对不可见行成立——可见不可写行须回 PERMISSION_DENIED）。
+// （"0 行⇒不存在"仅对不可见行成立——可见不可写行须回 PERMISSION_DENIED）。
 func (p *postgresDocumentDB) missingRowsError(ctx context.Context, tbl string, missing []string, tenant int64) error {
 	if len(missing) == 0 {
 		return nil
@@ -236,9 +236,9 @@ func buildIncrementParts(increment map[string]int64) (setParts []string, args []
 //	filter    → 受限形态 = 移除等于任一 values（与 remove 等价）；NULL 保真
 //
 // 添加类算子（append/prepend/insert）对 NULL 列归一（视为空数组），读改写类
-//（remove/unique/intersect/diff/filter）保真——NULL 列保持 NULL。
+// （remove/unique/intersect/diff/filter）保真——NULL 列保持 NULL。
 // 校验（InvalidArgument）：键安全、列在 attrs 且 array=true、不与 data 同列
-//（同一 SET 子句同列双赋值歧义）、APPEND/PREPEND/REMOVE/INTERSECT/DIFF/
+// （同一 SET 子句同列双赋值歧义）、APPEND/PREPEND/REMOVE/INTERSECT/DIFF/
 // FILTER 要求 values >= 1、INSERT 要求 values 恰 1 且 index 已设置且 >= 0。
 // SET 右侧的裸列名引用旧行值（UPDATE 语义），bulk 的 `UPDATE tbl AS d SET`
 // 下同样合法。insert 无 PG 内建（array_insert 未进 PG 18）——以 unnest
@@ -463,7 +463,7 @@ func (p *postgresDocumentDB) collectionForEvents(ctx context.Context, projectID,
 // + 同一 AllowsDocumentAccess 判定），再单条 UPDATE ... IN ... RETURNING 取
 // 写后快照（_acl 替换内嵌 SET 子句，阶段③包 A），随后每文档一条 outbox。
 // 任一文档不存在（RETURNING 行数不足）或权限拒绝 → 整体回滚
-//（all-or-nothing，与原逐条循环语义一致）。Bulk 是唯一 SkipVersion=true 的
+// （all-or-nothing，与原逐条循环语义一致）。Bulk 是唯一 SkipVersion=true 的
 // Update 调用方（LWW）：无 ExpectedVersion 比对，但非系统集合仍
 // _version = _version + 1。
 func (p *postgresDocumentDB) bulkUpdateDocuments(
@@ -666,8 +666,8 @@ func (p *postgresDocumentDB) BulkDeleteDocuments(
 // 同一 AllowsDocumentAccess 判定），非系统集合再 FOR UPDATE 批量锁行取写前
 // _version（行锁语义保留；缺失 → ErrDocumentNotFound 整体回滚），随后批量
 // 删行（_acl 随行消亡，无跨表清理），最后每文档一条 delete outbox
-//（version/acl 均写前）。Bulk 是唯一 SkipVersion=true 的 Delete 调用方
-//（LWW）；系统集合与单条 deleteDocument 一致：不做存在性检查、不发事件。
+// （version/acl 均写前）。Bulk 是唯一 SkipVersion=true 的 Delete 调用方
+// （LWW）；系统集合与单条 deleteDocument 一致：不做存在性检查、不发事件。
 func (p *postgresDocumentDB) bulkDeleteDocuments(
 	ctx context.Context,
 	projectID, databaseID, collectionID string,

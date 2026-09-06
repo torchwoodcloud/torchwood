@@ -14,7 +14,7 @@ import (
 
 // newAdminSchemaCmd 提供 schema 漂移对账命令（转出 POC 门禁 B3，redesign
 // §4.4）：`torchwood admin schema repair [--dry-run]`——扫描三类漂移
-//（缺列 / INVALID·failed 索引 / 幽灵表）并修复；--dry-run 只报告 diff 不落
+// （缺列 / INVALID·failed 索引 / 幽灵表）并修复；--dry-run 只报告 diff 不落
 // DDL。逻辑与 server 启动钩子的后台 reconcile 同源（documentdb.
 // ReconcileSchemaDrift），CLI 形态对齐 admin export/import（直连 DB）。
 func newAdminSchemaCmd() *group {

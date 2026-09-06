@@ -58,15 +58,15 @@ func normalizeData(data map[string]any) map[string]any {
 // documentFingerprintBody 是单文档写（Create/Update/Upsert/Delete）的指纹体；
 // 各方法只填自己的字段，方法名前缀保证跨方法不碰撞。
 type documentFingerprintBody struct {
-	Database        string                            `json:"database"`
-	Collection      string                            `json:"collection"`
-	Document        string                            `json:"document"`
-	Data            map[string]any                    `json:"data"`
-	Permissions     []databases.Permission            `json:"permissions"`
-	Increment       map[string]int64                  `json:"increment,omitempty"`
-	ArrayUpdates    map[string]databases.ArrayUpdate  `json:"array_updates,omitempty"`
-	ConflictColumns []string                          `json:"conflict_columns,omitempty"`
-	Version         *int64                            `json:"version,omitempty"`
+	Database        string                           `json:"database"`
+	Collection      string                           `json:"collection"`
+	Document        string                           `json:"document"`
+	Data            map[string]any                   `json:"data"`
+	Permissions     []databases.Permission           `json:"permissions"`
+	Increment       map[string]int64                 `json:"increment,omitempty"`
+	ArrayUpdates    map[string]databases.ArrayUpdate `json:"array_updates,omitempty"`
+	ConflictColumns []string                         `json:"conflict_columns,omitempty"`
+	Version         *int64                           `json:"version,omitempty"`
 }
 
 // bulkFingerprintBody 是 Bulk 写的指纹体（ID 集合排序规范化）。

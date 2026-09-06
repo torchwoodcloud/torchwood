@@ -4,11 +4,13 @@
 // catalog——权限变更零 DDL；所有跨表取值 InitPlan 化（§3.2 工程纪律）。
 //
 // 四条 policy（预决策 4）：
-//   SELECT  USING = tw_visible（可写即可读，产品语义）
-//   INSERT  WITH CHECK = 集合级 create（catalog 子查询）
-//   UPDATE  USING = CASE docsec → tw_can(update) ELSE 集合级 update；
-//           WITH CHECK = 恒真（保现状"允许自锁"——C1 种子与事件写前快照依赖）
-//   DELETE  USING = CASE docsec → tw_can(delete) ELSE 集合级 delete
+//
+//	SELECT  USING = tw_visible（可写即可读，产品语义）
+//	INSERT  WITH CHECK = 集合级 create（catalog 子查询）
+//	UPDATE  USING = CASE docsec → tw_can(update) ELSE 集合级 update；
+//	        WITH CHECK = 恒真（保现状"允许自锁"——C1 种子与事件写前快照依赖）
+//	DELETE  USING = CASE docsec → tw_can(delete) ELSE 集合级 delete
+//
 // 全表 ENABLE + FORCE ROW LEVEL SECURITY（owner 亦受 policy，仅 BYPASSRLS 旁路）。
 // 列级 GRANT：tw_app 仅 SELECT 全列 + INSERT/UPDATE 数据列与除 _tenant 外的
 // 系统列（_tenant 锁死不可写，预决策 6）；tw_system 表级 ALL。

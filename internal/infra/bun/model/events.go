@@ -16,8 +16,8 @@ import (
 type DocumentEventsOutbox struct {
 	bun.BaseModel `bun:"table:document_events_outbox,alias:deo"`
 
-	EventID string `bun:"event_id,pk"`
-	Seq     int64  `bun:"seq,notnull"`
+	EventID      string          `bun:"event_id,pk"`
+	Seq          int64           `bun:"seq,notnull"`
 	ProjectID    string          `bun:"project_id,notnull"`
 	Topic        string          `bun:"topic,notnull"`
 	Channel      *string         `bun:"channel"`

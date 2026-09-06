@@ -57,7 +57,9 @@ func publishChange(t *testing.T, db *clients.Database, docID, event, userID stri
 	return row
 }
 
-func u1Principal() databases.Principal { return databases.Principal{Roles: []string{"users", "user:u1"}} }
+func u1Principal() databases.Principal {
+	return databases.Principal{Roles: []string{"users", "user:u1"}}
+}
 
 // TestListChanges_OrderSinceAndTombstone：seq 升序、since 过滤、delete 为
 // tombstone（无 data）。

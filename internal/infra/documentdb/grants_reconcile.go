@@ -1,8 +1,8 @@
 // 存量列授权全量 reconcile 扫描（转出 POC 门禁 A1，docs/developer/15-exit-poc.md）：
 // R13a/R16 后业务表列级 GRANT 终态口径以 refreshColumnGrants 为唯一权威
-//（SELECT 全列；INSERT 数据列 + 除 _tenant 外系统列含 _acl；UPDATE 排除
+// （SELECT 全列；INSERT 数据列 + 除 _tenant 外系统列含 _acl；UPDATE 排除
 // _tenant/_acl；DELETE 表级），但存量表的旧授权形态只在 DDL touch
-//（reconcileVersionColumn 汇聚点）时被矫正——无 DDL touch 的表带着旧口径
+// （reconcileVersionColumn 汇聚点）时被矫正——无 DDL touch 的表带着旧口径
 // 存活。本入口在启动期一次性扫齐：遍历全局 catalog 全部业务集合物理表，
 // 逐表执行 refreshColumnGrants 幂等重建，不再依赖 DDL touch 逐表碰运气。
 //

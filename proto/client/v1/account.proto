@@ -94,11 +94,11 @@ service AccountService {
 
   rpc SignOut(SignOutRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { post: "/v1/account/sign-out", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }
@@ -117,22 +117,22 @@ service AccountService {
 
   rpc Me(MeRequest) returns (Account) {
     option (google.api.http) = { get: "/v1/account/me" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }
 
   rpc UpdateAccount(UpdateAccountRequest) returns (Account) {
     option (google.api.http) = { patch: "/v1/account", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }
@@ -155,22 +155,22 @@ service AccountService {
 
   rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse) {
     option (google.api.http) = { get: "/v1/account/sessions" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }
 
   rpc DeleteSession(DeleteSessionRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/account/sessions/{session_id}" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }
@@ -179,33 +179,33 @@ service AccountService {
     // REST 绑定：DELETE 不带 body（避免依赖 allow_delete_body），
     // keep_current 经 query 传递：DELETE /v1/account/sessions?keep_current=true。
     option (google.api.http) = { delete: "/v1/account/sessions" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }
 
   rpc GetPrefs(GetPrefsRequest) returns (GetPrefsResponse) {
     option (google.api.http) = { get: "/v1/account/prefs" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }
 
   rpc UpdatePrefs(UpdatePrefsRequest) returns (GetPrefsResponse) {
     option (google.api.http) = { put: "/v1/account/prefs", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }
@@ -308,33 +308,33 @@ service AccountService {
 
   rpc CreateOAuth2LinkSession(CreateOAuth2LinkSessionRequest) returns (CreateOAuth2SessionResponse) {
     option (google.api.http) = { get: "/v1/account/sessions/oauth2/{provider}/link" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }
 
   rpc CreateOAuth2LinkTokenSession(CreateOAuth2LinkTokenSessionRequest) returns (Account) {
     option (google.api.http) = { post: "/v1/account/sessions/oauth2/{provider}/link/token", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }
 
   rpc CreateVerification(CreateVerificationRequest) returns (CreateVerificationResponse) {
     option (google.api.http) = { post: "/v1/account/verification", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }
@@ -378,44 +378,44 @@ service AccountService {
   // MFA
   rpc ListFactors(ListFactorsRequest) returns (ListFactorsResponse) {
     option (google.api.http) = { get: "/v1/account/mfa" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }
 
   rpc CreateTOTPFactor(CreateTOTPFactorRequest) returns (TOTPFactor) {
     option (google.api.http) = { post: "/v1/account/mfa/totp", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }
 
   rpc VerifyTOTPFactor(VerifyTOTPFactorRequest) returns (Factor) {
     option (google.api.http) = { put: "/v1/account/mfa/totp", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }
 
   rpc DeleteFactor(DeleteFactorRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/account/mfa/{factor_id}" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }
@@ -435,11 +435,11 @@ service AccountService {
   // 一次性 JWT
   rpc CreateJWT(CreateJWTRequest) returns (CreateJWTResponse) {
     option (google.api.http) = { post: "/v1/account/jwt", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }
@@ -472,11 +472,11 @@ service AccountService {
   // 账号日志
   rpc ListLogs(ListLogsRequest) returns (ListLogsResponse) {
     option (google.api.http) = { get: "/v1/account/logs" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PERMISSION, permissions: ["users"] };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
-        value: { string_value: "permission" }
+        value: { string_value: "end_user" }
       }
     };
   }

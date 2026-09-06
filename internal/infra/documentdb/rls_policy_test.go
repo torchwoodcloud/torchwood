@@ -1,5 +1,5 @@
 // RLS 判定执行点测试（阶段③包 C，redesign §3.3/§4.3/I1-I2）：SQL golden 矩阵
-//（函数级，直接对 tw_can/tw_coll_allows/tw_visible 断言，CI 锁语义）+ 行为级
+// （函数级，直接对 tw_can/tw_coll_allows/tw_visible 断言，CI 锁语义）+ 行为级
 // 断言（经 policy）双层；EXPLAIN InitPlan 门禁 + 10 万行表 RLS 开/关相对基准。
 package documentdb
 

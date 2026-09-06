@@ -243,7 +243,7 @@ func itoa64(v int64) string {
 
 // TestCopyMigration_ValidateFailureAndResume：string→integer 撞不兼容数据 →
 // 任务 failed、属性维持 migrating（写拒收）；修数后重入续跑收敛 swapped
-//（判据"可恢复"）。
+// （判据"可恢复"）。
 func TestCopyMigration_ValidateFailureAndResume(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

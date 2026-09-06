@@ -216,7 +216,7 @@ func (s *Subscriber) claimStale(ctx context.Context) error {
 // published_at 标记（由 markLoop 攒批落库）。返回 false 的消息（空载荷/
 // 解码失败）由调用方直接丢弃（XACK），不重投。队列满载时丢弃标记并告警：
 // 事件本身已完成扇出，丢标的后果是该 outbox 行在 redispatch 窗口后被重投
-//（at-least-once），不丢事件。
+// （at-least-once），不丢事件。
 func (s *Subscriber) processMessage(msg redis.XMessage) bool {
 	raw, _ := msg.Values["payload"].(string)
 	if raw == "" {

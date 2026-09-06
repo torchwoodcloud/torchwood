@@ -5,12 +5,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/torchwooddev/torchwood/internal/api/interceptor"
 	"github.com/torchwooddev/torchwood/internal/app/client"
 	appserver "github.com/torchwooddev/torchwood/internal/app/server"
+	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/domain/databases"
 	"github.com/torchwooddev/torchwood/internal/domain/projects"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
-	"github.com/torchwooddev/torchwood/internal/api/interceptor"
 	infrAuth "github.com/torchwooddev/torchwood/internal/infra/auth"
 	"github.com/torchwooddev/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwooddev/torchwood/internal/infra/clients"
@@ -182,12 +183,11 @@ func TestP0_Section8_AccessPermission(t *testing.T) {
 			Roles:          []string{"guests"},
 		},
 	}
-	authIC, err := interceptor.NewAuthInterceptor(
-		mockValidator,
-		nil,
-		nil,
-		map[string][]string{testutil.MethodAccountMe: {"users"}},
-	)
+	policySet, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{
+		{Method: testutil.MethodAccountMe, Service: "/torchwood.client.v1.AccountService", Access: domainauth.AccessEndUser, Permissions: []string{"users"}},
+	})
+	require.NoError(t, err)
+	authIC, err := interceptor.NewAuthInterceptor(mockValidator, policySet)
 	require.NoError(t, err)
 	ctx = metadata.NewIncomingContext(ctx, userMD)
 	_, err = authIC.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{
