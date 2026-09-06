@@ -2,8 +2,8 @@ package client
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/torchwooddev/torchwood/internal/domain/databases"
 	"github.com/torchwooddev/torchwood/internal/domain/groups"
 	"github.com/torchwooddev/torchwood/internal/domain/users"
 )
@@ -19,7 +19,8 @@ func NewUserRoles(usersRepo users.Repository, memberships groups.MembershipRepos
 }
 
 func (r *UserRoles) LoadUserRoles(ctx context.Context, projectID, userID string) ([]string, error) {
-	baseRoles := []string{"users", fmt.Sprintf("user:%s", userID)}
+	// 角色形态一律取自 DocRole 词表（M6.1 主权），禁止裸串拼接。
+	baseRoles := []string{databases.RoleUsers, databases.RoleUser(userID)}
 	if r.users == nil {
 		return baseRoles, nil
 	}
@@ -31,11 +32,11 @@ func (r *UserRoles) LoadUserRoles(ctx context.Context, projectID, userID string)
 		return baseRoles, nil
 	}
 	if found.EmailVerified {
-		baseRoles = append(baseRoles, fmt.Sprintf("user:%s/verified", userID))
+		baseRoles = append(baseRoles, databases.RoleUserVerified(userID))
 	}
 	for _, label := range found.Labels {
 		if label != "" {
-			baseRoles = append(baseRoles, "label:"+label)
+			baseRoles = append(baseRoles, databases.RoleLabel(label))
 		}
 	}
 	groupRoles, err := r.loadGroupRoles(ctx, projectID, userID)
@@ -58,10 +59,10 @@ func (r *UserRoles) loadGroupRoles(ctx context.Context, projectID, userID string
 		if m.Status != groups.StatusAccepted || m.GroupID == "" {
 			continue
 		}
-		out = append(out, fmt.Sprintf("group:%s", m.GroupID), fmt.Sprintf("member:%s", m.ID))
+		out = append(out, databases.RoleGroup(m.GroupID), databases.RoleMembership(m.ID))
 		for _, role := range m.Roles {
 			if role != "" {
-				out = append(out, fmt.Sprintf("group:%s/%s", m.GroupID, role))
+				out = append(out, databases.RoleGroupRole(m.GroupID, role))
 			}
 		}
 	}

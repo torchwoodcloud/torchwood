@@ -38,7 +38,7 @@ func (s *AdminsService) GetCurrentAdmin(ctx context.Context, _ *consolev1.GetCur
 }
 
 func (s *AdminsService) ListAdmins(ctx context.Context, req *consolev1.ListAdminsRequest) (*consolev1.ListAdminsResponse, error) {
-	if err := appshared.RequireAdminActor(ctx); err != nil {
+	if err := appshared.RequireConsolePrincipal(ctx); err != nil {
 		return nil, err
 	}
 	// P3-9：ListAdmins 分页（走 crud，内存分页，total_count 精确）
@@ -88,7 +88,7 @@ func (s *AdminsService) ListAdmins(ctx context.Context, req *consolev1.ListAdmin
 }
 
 func (s *AdminsService) CreateAdmin(ctx context.Context, req *consolev1.CreateAdminRequest) (*consolev1.Admin, error) {
-	if err := appshared.RequireAdminActor(ctx); err != nil {
+	if err := appshared.RequireConsolePrincipal(ctx); err != nil {
 		return nil, err
 	}
 	admin, err := s.admins.Create(ctx, console.CreateAdminCommand{
@@ -103,7 +103,7 @@ func (s *AdminsService) CreateAdmin(ctx context.Context, req *consolev1.CreateAd
 }
 
 func (s *AdminsService) UpdateAdmin(ctx context.Context, req *consolev1.UpdateAdminRequest) (*consolev1.Admin, error) {
-	if err := appshared.RequireAdminActor(ctx); err != nil {
+	if err := appshared.RequireConsolePrincipal(ctx); err != nil {
 		return nil, err
 	}
 	// role 为 optional（R10-P1-6）：未设置 = 不修改；设置（含空串）= 更新/清空。
@@ -124,7 +124,7 @@ func (s *AdminsService) UpdateAdmin(ctx context.Context, req *consolev1.UpdateAd
 }
 
 func (s *AdminsService) DeleteAdmin(ctx context.Context, req *consolev1.DeleteAdminRequest) (*sharedv1.Empty, error) {
-	if err := appshared.RequireAdminActor(ctx); err != nil {
+	if err := appshared.RequireConsolePrincipal(ctx); err != nil {
 		return nil, err
 	}
 	if err := s.admins.Delete(ctx, req.GetId(), callerID(ctx)); err != nil {

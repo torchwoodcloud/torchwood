@@ -244,12 +244,14 @@ func testGroupsUC(rows ...*groups.Membership) (*Groups, *memMembershipRepo, *mem
 // TestGroups_LastOwnerProtection_DeleteMembership: 删除唯一 accepted owner → 拒绝；
 // 删除非 owner 或存在第二 owner 时放行。
 func TestGroups_LastOwnerProtection_DeleteMembership(t *testing.T) {
+	// 写方法入口双面守卫：server 面（admin 会话）主体注入。
+	adminCtx := contexts.WithPrincipal(context.Background(), &shared.Principal{ActorKind: shared.ActorKindAdmin})
 	t.Run("last owner rejected", func(t *testing.T) {
 		uc, _, _ := testGroupsUC(
 			fakeMem("m-owner", "group-1", "user-a", groups.StatusAccepted, []string{groups.RoleOwner}),
 			fakeMem("m-member", "group-1", "user-b", groups.StatusAccepted, []string{groups.RoleMember}),
 		)
-		err := uc.DeleteMembership(context.Background(), "proj-1", "group-1", "m-owner", databases.Principal{Roles: []string{"admin"}})
+		err := uc.DeleteMembership(adminCtx, "proj-1", "group-1", "m-owner", databases.Principal{Roles: []string{"admin"}})
 		require.Error(t, err)
 		require.Equal(t, codes.FailedPrecondition, status.Code(err))
 	})
@@ -259,7 +261,7 @@ func TestGroups_LastOwnerProtection_DeleteMembership(t *testing.T) {
 			fakeMem("m-owner1", "group-1", "user-a", groups.StatusAccepted, []string{groups.RoleOwner}),
 			fakeMem("m-owner2", "group-1", "user-b", groups.StatusAccepted, []string{groups.RoleOwner}),
 		)
-		err := uc.DeleteMembership(context.Background(), "proj-1", "group-1", "m-owner1", databases.Principal{Roles: []string{"admin"}})
+		err := uc.DeleteMembership(adminCtx, "proj-1", "group-1", "m-owner1", databases.Principal{Roles: []string{"admin"}})
 		require.NoError(t, err)
 		got, _ := mems.GetByID(context.Background(), "proj-1", "m-owner1")
 		require.Nil(t, got)
@@ -269,7 +271,7 @@ func TestGroups_LastOwnerProtection_DeleteMembership(t *testing.T) {
 		uc, _, _ := testGroupsUC(
 			fakeMem("m-pending", "group-1", "user-a", groups.StatusPending, []string{groups.RoleOwner}),
 		)
-		err := uc.DeleteMembership(context.Background(), "proj-1", "group-1", "m-pending", databases.Principal{Roles: []string{"admin"}})
+		err := uc.DeleteMembership(adminCtx, "proj-1", "group-1", "m-pending", databases.Principal{Roles: []string{"admin"}})
 		require.NoError(t, err)
 	})
 
@@ -278,7 +280,7 @@ func TestGroups_LastOwnerProtection_DeleteMembership(t *testing.T) {
 			fakeMem("m-owner", "group-1", "user-a", groups.StatusAccepted, []string{groups.RoleOwner}),
 			fakeMem("m-member", "group-1", "user-b", groups.StatusAccepted, []string{groups.RoleMember}),
 		)
-		err := uc.DeleteMembership(context.Background(), "proj-1", "group-1", "m-member", databases.Principal{Roles: []string{"admin"}})
+		err := uc.DeleteMembership(adminCtx, "proj-1", "group-1", "m-member", databases.Principal{Roles: []string{"admin"}})
 		require.NoError(t, err)
 	})
 }
@@ -286,12 +288,14 @@ func TestGroups_LastOwnerProtection_DeleteMembership(t *testing.T) {
 // TestGroups_LastOwnerProtection_UpdateMembership: 唯一 owner 降级 → 拒绝；
 // 有第二 owner 时降级放行；仍保留 owner 角色时放行。
 func TestGroups_LastOwnerProtection_UpdateMembership(t *testing.T) {
+	// 写方法入口双面守卫：server 面（admin 会话）主体注入。
+	adminCtx := contexts.WithPrincipal(context.Background(), &shared.Principal{ActorKind: shared.ActorKindAdmin})
 	t.Run("downgrade last owner rejected", func(t *testing.T) {
 		uc, _, _ := testGroupsUC(
 			fakeMem("m-owner", "group-1", "user-a", groups.StatusAccepted, []string{groups.RoleOwner}),
 			fakeMem("m-member", "group-1", "user-b", groups.StatusAccepted, []string{groups.RoleMember}),
 		)
-		_, err := uc.UpdateMembership(context.Background(), "proj-1", "group-1", "m-owner",
+		_, err := uc.UpdateMembership(adminCtx, "proj-1", "group-1", "m-owner",
 			UpdateMembershipCommand{Roles: []string{groups.RoleMember}}, databases.Principal{Roles: []string{"admin"}})
 		require.Error(t, err)
 		require.Equal(t, codes.FailedPrecondition, status.Code(err))
@@ -302,7 +306,7 @@ func TestGroups_LastOwnerProtection_UpdateMembership(t *testing.T) {
 			fakeMem("m-owner1", "group-1", "user-a", groups.StatusAccepted, []string{groups.RoleOwner}),
 			fakeMem("m-owner2", "group-1", "user-b", groups.StatusAccepted, []string{groups.RoleOwner}),
 		)
-		updated, err := uc.UpdateMembership(context.Background(), "proj-1", "group-1", "m-owner1",
+		updated, err := uc.UpdateMembership(adminCtx, "proj-1", "group-1", "m-owner1",
 			UpdateMembershipCommand{Roles: []string{groups.RoleMember}}, databases.Principal{Roles: []string{"admin"}})
 		require.NoError(t, err)
 		require.Equal(t, []string{groups.RoleMember}, updated.Data["roles"])
@@ -312,7 +316,7 @@ func TestGroups_LastOwnerProtection_UpdateMembership(t *testing.T) {
 		uc, _, _ := testGroupsUC(
 			fakeMem("m-owner", "group-1", "user-a", groups.StatusAccepted, []string{groups.RoleOwner}),
 		)
-		updated, err := uc.UpdateMembership(context.Background(), "proj-1", "group-1", "m-owner",
+		updated, err := uc.UpdateMembership(adminCtx, "proj-1", "group-1", "m-owner",
 			UpdateMembershipCommand{Roles: []string{groups.RoleOwner, groups.RoleAdmin}}, databases.Principal{Roles: []string{"admin"}})
 		require.NoError(t, err)
 		require.Equal(t, []string{groups.RoleOwner, groups.RoleAdmin}, updated.Data["roles"])

@@ -77,7 +77,7 @@ type CreateProjectCommand struct {
 
 func (s *Projects) CreateProject(ctx context.Context, cmd CreateProjectCommand) (*projects.Project, error) {
 	// 项目是平台级资源：PERMISSION [owner,admin]（proto 声明）+ 本守卫纵深防御。
-	if err := appshared.RequirePlatformAdmin(ctx); err != nil {
+	if err := appshared.RequirePlatformPrincipal(ctx); err != nil {
 		return nil, err
 	}
 	return s.CreateProjectInternal(ctx, cmd)
@@ -134,7 +134,7 @@ func (s *Projects) CreateProjectInternal(ctx context.Context, cmd CreateProjectC
 
 // DeleteProject 对外删除入口：仅平台 admin。校验存在后委托 DeleteProjectInternal。
 func (s *Projects) DeleteProject(ctx context.Context, id string) error {
-	if err := appshared.RequirePlatformAdmin(ctx); err != nil {
+	if err := appshared.RequirePlatformPrincipal(ctx); err != nil {
 		return err
 	}
 	if err := ident.ValidateSchemaResourceID(id); err != nil {

@@ -9,7 +9,7 @@ import (
 )
 
 func requireServerWrite(ctx context.Context) error {
-	return appshared.RequireServerWriteActor(ctx)
+	return appshared.RequireServerPrincipal(ctx)
 }
 
 // withSystemPrincipal 为 worker / 履约注入 system 主体（资产写路径 requireAssetWrite）。

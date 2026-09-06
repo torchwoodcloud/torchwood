@@ -43,7 +43,7 @@ type CreateAPIKeyCommand struct {
 // Create 创建 API Key；平台级写操作，仅限平台 admin（安全评审 M7）。
 // 引导（console setup）等系统路径请调用 CreateInternal，调用方负责授权。
 func (a *APIKeys) Create(ctx context.Context, cmd CreateAPIKeyCommand) (*projects.APIKey, string, error) {
-	if err := appshared.RequirePlatformAdmin(ctx); err != nil {
+	if err := appshared.RequirePlatformPrincipal(ctx); err != nil {
 		return nil, "", err
 	}
 	// G2-5（R06-P3）：cmd.Scopes 不得超出调用者自身权限——当前入口仅平台
@@ -127,7 +127,7 @@ func (a *APIKeys) Get(ctx context.Context, projectID, id string) (*projects.APIK
 func (a *APIKeys) Delete(ctx context.Context, projectID, id string) error {
 	// 纵深防御（Round3 H1-3）：与 Create 对齐，平台级写操作仅限平台 admin；
 	// 即使绕过拦截器，viewer/member/API key 也不能删除 API Key。
-	if err := appshared.RequirePlatformAdmin(ctx); err != nil {
+	if err := appshared.RequirePlatformPrincipal(ctx); err != nil {
 		return err
 	}
 	key, err := a.repo.GetAPIKey(ctx, projectID, id)

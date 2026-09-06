@@ -363,7 +363,7 @@ func checkUploadOwner(session *storage.UploadSession, callerUserID string, princ
 	if callerUserID == session.OwnerUserID {
 		return nil
 	}
-	if principal.BypassesDocumentACL() || principal.HasRole("keys") {
+	if principal.BypassesDocumentACL() || principal.HasRole(databases.RoleKeys) {
 		return nil
 	}
 	// admin console 角色同样豁免会话 owner 校验（A8：admin 可管理全部文件/会话）

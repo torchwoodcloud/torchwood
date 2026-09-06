@@ -40,7 +40,7 @@ func (o *OutboxAdmin) ensureProjectActive(ctx context.Context, projectID string)
 func (o *OutboxAdmin) ListDeadLetters(ctx context.Context, projectID string, pageSize int32, pageToken string) ([]events.DeadLetter, int64, string, error) {
 	// 二道防线（决策 v8）：死信 payload 含文档数据，读面与重放同为
 	// server 写主体门（角色/scope 细粒度由拦截器策略表把关）。
-	if err := shared.RequireServerWriteActor(ctx); err != nil {
+	if err := shared.RequireServerPrincipal(ctx); err != nil {
 		return nil, 0, "", err
 	}
 	if projectID == "" {
@@ -58,7 +58,7 @@ func (o *OutboxAdmin) ListDeadLetters(ctx context.Context, projectID string, pag
 }
 
 func (o *OutboxAdmin) ReplayDeadLetter(ctx context.Context, eventID, projectID string) error {
-	if err := shared.RequireServerWriteActor(ctx); err != nil {
+	if err := shared.RequireServerPrincipal(ctx); err != nil {
 		return err
 	}
 	if eventID == "" {

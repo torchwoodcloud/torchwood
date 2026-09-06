@@ -7,7 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/torchwooddev/torchwood/internal/domain/databases"
 	"github.com/torchwooddev/torchwood/internal/domain/groups"
+	"github.com/torchwooddev/torchwood/internal/domain/shared"
 	domainusers "github.com/torchwooddev/torchwood/internal/domain/users"
+	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -23,10 +25,14 @@ func TestGroups_CreateMembership_Idempotent(t *testing.T) {
 	mems.seed(&groups.Membership{ID: "m-2", GroupID: "group-1", Email: "p@x.com", Status: groups.StatusPending})
 	uc := NewGroups(fakeProjectRepo{}, usersMem, g, mems)
 	principal := databases.Principal{Roles: []string{"admin"}}
+	// 写方法入口双面守卫：server 面（API key）主体注入。
+	actorCtx := contexts.WithPrincipal(context.Background(), &shared.Principal{
+		ActorID: "key-1", ActorKind: shared.ActorKindService, ProjectID: "proj-1", Roles: []string{"keys"},
+	})
 
 	t.Run("accepted duplicate by user_id", func(t *testing.T) {
 		before := mems.count()
-		_, err := uc.CreateMembership(context.Background(), "proj-1", CreateMembershipCommand{
+		_, err := uc.CreateMembership(actorCtx, "proj-1", CreateMembershipCommand{
 			GroupID: "group-1", UserID: "u-1", Roles: []string{groups.RoleMember}, Status: groups.StatusAccepted,
 		}, principal)
 		require.Equal(t, codes.AlreadyExists, status.Code(err), "同 user 重复 accepted 必须 AlreadyExists")
@@ -35,7 +41,7 @@ func TestGroups_CreateMembership_Idempotent(t *testing.T) {
 
 	t.Run("pending duplicate by email", func(t *testing.T) {
 		before := mems.count()
-		_, err := uc.CreateMembership(context.Background(), "proj-1", CreateMembershipCommand{
+		_, err := uc.CreateMembership(actorCtx, "proj-1", CreateMembershipCommand{
 			GroupID: "group-1", Email: "p@x.com", Roles: []string{groups.RoleMember}, Status: groups.StatusPending,
 		}, principal)
 		require.Equal(t, codes.AlreadyExists, status.Code(err))

@@ -180,7 +180,7 @@ func TestCreateFile_Success(t *testing.T) {
 	require.Equal(t, "hello", string(got))
 }
 
-// G6-4/R06-P1：CreateBucket use-case 守卫对齐 CreateUser（RequireServerWriteActor）：
+// G6-4/R06-P1：CreateBucket use-case 守卫对齐 CreateUser（RequireServerPrincipal）：
 // 匿名 Unauthenticated、端用户 PermissionDenied；console admin / API key 主体放行
 // 进入业务校验（空 name → InvalidArgument 证明守卫已过）。
 func TestCreateBucket_RequiresServerWriteActor(t *testing.T) {

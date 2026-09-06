@@ -7,7 +7,7 @@ import (
 
 // SystemRoles bypass document-level _perms checks. Use only for internal
 // infrastructure paths (session validation, post-create reads, email lookup).
-var SystemRoles = []string{"__system__"}
+var SystemRoles = []string{RoleSystem}
 
 // DefaultCollectionPermissions returns a reasonable default permission set for
 // user-created collections that do not specify explicit permissions.
@@ -17,25 +17,25 @@ var SystemRoles = []string{"__system__"}
 // 角色撞名；DocPrincipal 投影净化后裸 console 角色串不再进入文档角色集。
 func DefaultCollectionPermissions() []Permission {
 	return []Permission{
-		{Type: "create", Role: "users"},
-		{Type: "update", Role: "users"},
-		{Type: "delete", Role: "users"},
-		{Type: "create", Role: "keys"},
-		{Type: "read", Role: "keys"},
-		{Type: "update", Role: "keys"},
-		{Type: "delete", Role: "keys"},
+		{Type: "create", Role: RoleUsers},
+		{Type: "update", Role: RoleUsers},
+		{Type: "delete", Role: RoleUsers},
+		{Type: "create", Role: RoleKeys},
+		{Type: "read", Role: RoleKeys},
+		{Type: "update", Role: RoleKeys},
+		{Type: "delete", Role: RoleKeys},
 	}
 }
 
 // ExpandPermissionRoles augments caller roles for ACL matching.
-// "any" is always included (public read:any). "users" is added only when the
-// caller is authenticated (has the users role).
+// RoleAny is always included (public read:any). RoleUsers is added only when
+// the caller is authenticated (has the users role).
 func ExpandPermissionRoles(roles []string) []string {
 	seen := make(map[string]struct{}, len(roles)+2)
 	out := make([]string, 0, len(roles)+2)
 	hasUsers := false
 	for _, r := range roles {
-		if r == "users" {
+		if r == RoleUsers {
 			hasUsers = true
 		}
 		if _, ok := seen[r]; ok {
@@ -44,21 +44,21 @@ func ExpandPermissionRoles(roles []string) []string {
 		seen[r] = struct{}{}
 		out = append(out, r)
 	}
-	if _, ok := seen["any"]; !ok {
-		out = append(out, "any")
+	if _, ok := seen[RoleAny]; !ok {
+		out = append(out, RoleAny)
 	}
 	if hasUsers {
-		if _, ok := seen["users"]; !ok {
-			out = append(out, "users")
+		if _, ok := seen[RoleUsers]; !ok {
+			out = append(out, RoleUsers)
 		}
 	}
 	return out
 }
 
 // syntheticRoles 由 ExpandPermissionRoles 无条件注入、不构成授予凭据的角色。
-// "any" 的写类授予一律拒绝；read 类授予保留（文档公开读取是集合级显式行为）。
+// RoleAny 的写类授予一律拒绝；read 类授予保留（文档公开读取是集合级显式行为）。
 var syntheticRoles = map[string]struct{}{
-	"any": {},
+	RoleAny: {},
 }
 
 // CollectionAllows reports whether the collection-level permission list grants
@@ -167,27 +167,27 @@ func ParsePermissionStrings(items []string) ([]Permission, error) {
 }
 
 // ExpandPermissionTemplates replaces the Appwrite-style placeholders
-// "user:{id}" and "group:{id}" in permission roles with the caller's first
-// matching concrete role (e.g. "user:<uuid>"), preserving original entries
-// when no matching role is held. The expanded set is used for grant
+// RoleUserTemplate and RoleGroupTemplate in permission roles with the caller's
+// first matching concrete role (e.g. RoleUser("uuid")), preserving original
+// entries when no matching role is held. The expanded set is used for grant
 // validation and persistence, mirroring Appwrite's create/update semantics.
 func ExpandPermissionTemplates(perms []Permission, roles []string) []Permission {
 	if len(perms) == 0 {
 		return perms
 	}
-	firstUser, firstGroup := firstPrefixedRole(roles, "user:"), firstPrefixedRole(roles, "group:")
+	firstUser, firstGroup := firstPrefixedRole(roles, RolePrefixUser), firstPrefixedRole(roles, RolePrefixGroup)
 	if firstUser == "" && firstGroup == "" {
 		return perms
 	}
 	out := make([]Permission, len(perms))
 	for i, p := range perms {
 		switch p.Role {
-		case "user:{id}":
+		case RoleUserTemplate:
 			if firstUser != "" {
 				out[i] = Permission{Type: p.Type, Role: firstUser}
 				continue
 			}
-		case "group:{id}":
+		case RoleGroupTemplate:
 			if firstGroup != "" {
 				out[i] = Permission{Type: p.Type, Role: firstGroup}
 				continue

@@ -507,7 +507,7 @@ func newUploadRequest(t *testing.T, header map[string]string) *http.Request {
 // TestFunctionsHandler_Upload_InjectsPrincipalIntoCtx：admin 会话与带
 // functions.write 的 API Key 走完 upload 必须 201，且 executor 收到的 ctx
 // 里能读到 principal（ActorKind 为 admin/service）。修复前 upload 用裸
-// r.Context()，RequireServerWriteActor 在 use-case 入口直接 401，executor
+// r.Context()，RequireServerPrincipal 在 use-case 入口直接 401，executor
 // 不会被调、此测试失败——证明测的是根因。
 func TestFunctionsHandler_Upload_InjectsPrincipalIntoCtx(t *testing.T) {
 	projectID := "proj-1"

@@ -76,7 +76,7 @@ func (a *Admins) Get(ctx context.Context, id string) (*projects.Admin, error) {
 func (a *Admins) Create(ctx context.Context, cmd CreateAdminCommand) (*projects.Admin, error) {
 	// 纵深防御（G2-4/R04-P2-2）：管理员的增删改仅接受 admin actor，
 	// 对齐 handler 层 requireAdminActor；防止绕过拦截器直接调用 use-case。
-	if err := appshared.RequireAdminActor(ctx); err != nil {
+	if err := appshared.RequireConsolePrincipal(ctx); err != nil {
 		return nil, err
 	}
 	email := normalizeAdminEmail(cmd.Email)
@@ -124,7 +124,7 @@ func (a *Admins) Create(ctx context.Context, cmd CreateAdminCommand) (*projects.
 }
 
 func (a *Admins) Update(ctx context.Context, cmd UpdateAdminCommand) (*projects.Admin, error) {
-	if err := appshared.RequireAdminActor(ctx); err != nil {
+	if err := appshared.RequireConsolePrincipal(ctx); err != nil {
 		return nil, err
 	}
 	if cmd.ID == "" {
@@ -173,7 +173,7 @@ func (a *Admins) Update(ctx context.Context, cmd UpdateAdminCommand) (*projects.
 }
 
 func (a *Admins) Delete(ctx context.Context, id, callerID string) error {
-	if err := appshared.RequireAdminActor(ctx); err != nil {
+	if err := appshared.RequireConsolePrincipal(ctx); err != nil {
 		return err
 	}
 	if id == "" {

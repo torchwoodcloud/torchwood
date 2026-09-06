@@ -30,7 +30,7 @@ type CreateDeploymentCommand struct {
 
 func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCommand) (*domainfunctions.Deployment, error) {
 	// 纵深防御（G2-1/R06-P0，G12 调整）：部署写操作允许 admin 会话与 API key。
-	if err := appshared.RequireServerWriteActor(ctx); err != nil {
+	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return nil, err
 	}
 	if len(cmd.Code) == 0 {
@@ -146,7 +146,7 @@ func (f *Functions) GetDeployment(ctx context.Context, projectID, functionID, de
 // DeleteDeployment 删除顺序：先 DB 级联删除 → 再 docker image rm → 最后删本地 zip
 // （全部幂等，失败仅记日志），避免进行中构建/执行读到半删除状态。
 func (f *Functions) DeleteDeployment(ctx context.Context, projectID, functionID, deploymentID string) error {
-	if err := appshared.RequireServerWriteActor(ctx); err != nil {
+	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return err
 	}
 	fn, err := f.repo.GetFunction(ctx, projectID, functionID)

@@ -13,11 +13,11 @@ import (
 )
 
 // Round3 H3-1：Databases schema DDL 用例层守卫与 G12 Functions 同口径——
-// RequireServerWriteActor（console admin 会话 / API key 放行，角色细粒度由
+// RequireServerPrincipal（console admin 会话 / API key 放行，角色细粒度由
 // 拦截器 adminRoleMethodRules 把关；端用户 PermissionDenied、匿名
-// Unauthenticated）。修复前 RequirePlatformAdmin 会误伤持 databases.write
+// Unauthenticated）。修复前 RequirePlatformPrincipal 会误伤持 databases.write
 // 的 API key（ActorKind=service 必然被拒）。
-func TestDatabases_DDLMethods_RequireServerWriteActor(t *testing.T) {
+func TestDatabases_DDLMethods_RequireServerPrincipal(t *testing.T) {
 	uc := NewDatabases(fakeProjectRepo{}, newFakeDocDB(), nil)
 
 	denied := []*shared.Principal{
@@ -55,7 +55,7 @@ func TestDatabases_DDLMethods_RequireServerWriteActor(t *testing.T) {
 	}
 }
 
-// Round3 H3：守卫放开后 sentinel 库仍拒（不被 RequireServerWriteActor 的放行吞掉）。
+// Round3 H3：守卫放开后 sentinel 库仍拒（不被 RequireServerPrincipal 的放行吞掉）。
 func TestDatabases_DDLMethods_KeepSystemCollectionProtection(t *testing.T) {
 	uc := NewDatabases(fakeProjectRepo{}, newFakeDocDB(), nil)
 	ctx := contexts.WithPrincipal(context.Background(), &shared.Principal{

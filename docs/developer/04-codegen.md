@@ -122,7 +122,7 @@ generate:all
 1. 在 `proto/*/v1/*.proto` 为方法加 `(method_auth)`（或依赖 `service_auth` 默认），必填否则 `collectMethodsByAccess` 启动 `missing auth policy`；
 2. 若 `ACCESS_API_KEY`，在 `internal/api/interceptor/apikey_scope.go:25` 登记 `{resource, op}`，否则 `AssertAPIKeyScopeCoverage` panic；
 3. 若 `op==write`，在 `admin_roles.go:16` 登记允许角色，否则 `AssertAdminRoleWriteCoverage` panic；
-4. 在对应 `app/shared/authz.go` 选择 `RequireServerWriteActor`（业务写，API Key 可做）或 `RequirePlatformAdmin`（平台级）做纵深防御；
+4. 在对应 `app/shared/authz.go` 选择 `RequireServerPrincipal`（业务写，API Key 可做）或 `RequirePlatformPrincipal`（平台级）做纵深防御；
 5. 运行 `task generate:all && task build && go vet ./...` 验证零漂移。
 
 `proto/shared/v1/authz.proto:18` 的 `AccessLevel` 与 `method_auth` 为鉴权唯一事实源，OpenAPI `x-torchwood-access` 扩展一致性由 `internal/runtime/grpc_swagger_test.go` 断言。

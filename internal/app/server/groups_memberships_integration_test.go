@@ -39,7 +39,9 @@ func TestGroups_Memberships(t *testing.T) {
 		Status: users.StatusActive,
 	}))
 	principal := databases.Principal{Roles: []string{"users", "user:" + ownerID}}
-	group, ownerMembership, err := uc.CreateGroupWithOwner(ctx, projectID, "Engineering", ownerID, ownerEmail, principal)
+	// 写方法入口双面守卫：server 面（admin 会话）主体注入。
+	serverCtx := contexts.WithPrincipal(ctx, &shared.Principal{ActorKind: shared.ActorKindAdmin, ProjectID: projectID})
+	group, ownerMembership, err := uc.CreateGroupWithOwner(serverCtx, projectID, "Engineering", ownerID, ownerEmail, principal)
 	require.NoError(t, err)
 	require.NotEmpty(t, group.ID)
 	require.Equal(t, groups.StatusAccepted, ownerMembership.Data["status"])
@@ -56,7 +58,7 @@ func TestGroups_Memberships(t *testing.T) {
 		Status:       users.StatusActive,
 	}))
 
-	invite, err := uc.CreateMembership(ctx, projectID, CreateMembershipCommand{
+	invite, err := uc.CreateMembership(serverCtx, projectID, CreateMembershipCommand{
 		GroupID: group.ID,
 		Email:   "member@torchwood.local",
 		Name:    "Member User",
@@ -68,6 +70,7 @@ func TestGroups_Memberships(t *testing.T) {
 
 	memberRoles := databases.Principal{Roles: []string{"users", "user:" + memberUserID}}
 	authCtx := contexts.WithPrincipal(ctx, &shared.Principal{
+		ActorKind: shared.ActorKindEndUser,
 		ProjectID: projectID,
 		UserID:    memberUserID,
 		Email:     "member@torchwood.local",
@@ -87,7 +90,7 @@ func TestGroups_Memberships(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, list, 2)
 
-	updated, err := uc.UpdateMembership(ctx, projectID, group.ID, accepted.ID, UpdateMembershipCommand{
+	updated, err := uc.UpdateMembership(serverCtx, projectID, group.ID, accepted.ID, UpdateMembershipCommand{
 		Roles: []string{groups.RoleAdmin},
 	}, ownerRoles)
 	require.NoError(t, err)
@@ -104,7 +107,7 @@ func TestGroups_Memberships(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), groupTotal(t, groupAfterLeave))
 
-	require.NoError(t, uc.DeleteGroup(ctx, projectID, group.ID, ownerRoles))
+	require.NoError(t, uc.DeleteGroup(serverCtx, projectID, group.ID, ownerRoles))
 	_, err = uc.GetGroup(ctx, projectID, group.ID, ownerRoles)
 	require.Equal(t, codes.NotFound, status.Code(err))
 }

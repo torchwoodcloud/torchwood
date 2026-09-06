@@ -33,7 +33,7 @@ var _ projects.Repository = (*emptyProjectRepo)(nil)
 
 // G2-2 纵深防御：CreateUser/DeleteUserSession 对匿名/端用户拒绝，
 // console admin 会话与 API key 主体（Server API 写凭证）放行。
-func TestUsers_WriteMethods_RequireServerWriteActor(t *testing.T) {
+func TestUsers_WriteMethods_RequireServerPrincipal(t *testing.T) {
 	uc := NewUsers(&emptyProjectRepo{}, nil, nil, nil, nil, nil, nil)
 
 	denied := []*shared.Principal{

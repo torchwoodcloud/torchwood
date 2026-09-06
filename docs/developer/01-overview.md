@@ -131,7 +131,7 @@ HTTP 客户端 / Agent
   ▼ internal/api/servergrpc.UsersService.CreateUser     【传输层】
   │ 请求校验、Principal 读取
   ▼ internal/app/server.Users                           【用例层】
-  │ 业务规则、RequireServerWriteActor 等纵深防御
+  │ 业务规则、RequireServerPrincipal 等纵深防御
   ▼ internal/domain/users.UserRepo                      【端口】
   ▼ internal/infra/bun/bunrepo | documentdb             【适配器层】
   ▼ PostgreSQL / Redis / S3

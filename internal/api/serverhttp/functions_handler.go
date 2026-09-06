@@ -161,7 +161,7 @@ func (h *FunctionsHandler) upload(w http.ResponseWriter, r *http.Request, pathPa
 	}
 
 	// Round3 H2-1：把已鉴权 principal 注入 ctx 再调 use-case——HTTP 路径不经
-	// gRPC 拦截器，RequireServerWriteActor 依赖 ctx 中的 Principal，缺了会对
+	// gRPC 拦截器，RequireServerPrincipal 依赖 ctx 中的 Principal，缺了会对
 	// 合法 admin / functions.write API Key 恒 401。
 	ctx := contexts.WithPrincipal(r.Context(), principal)
 	dep, err := h.functions.CreateDeployment(ctx, appfunctions.CreateDeploymentCommand{

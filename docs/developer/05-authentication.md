@@ -136,13 +136,14 @@ extend ServiceOptions { ServiceAuth service_auth = 52002; }
 - `owner,admin`：`APIKeysService`、用户接管面（`UpdateUser/DeleteUser` 等）、Databases schema DDL（`CreateDatabase/Collection/Attribute/Index`）、Functions、`OAuthProviders`、`Projects Create/Delete`、`Payments Refund/ManualFulfill`、`Assets Grant/Consume...`、`OutboxService ReplayDeadLetter`；
 - `member,owner,admin`：用户文档 CRUD、Storage 桶/文件、Groups、Projects Update、`Assets` 目录 CRUD 等业务写。
 
-纵深防御（`internal/app/shared/authz.go`）：
+纵深防御四守卫（`internal/app/shared/authz.go`，机制 v8 评审 B1 改名归组；双面共享 use-case 用 `RequireAnyOf` 组合）：
 
-- `RequireServerWriteActor:45`（Databases DDL 等业务写）：放行 `admin` 或 `service`（API Key），匿名/端用户 `PermissionDenied`——绕过拦截器直调 use-case 时仍不可 `SystemPrincipal` 写；
-- `RequirePlatformAdmin:18`（Functions 写、API Key 管理、用户密码/令牌等平台级）：仅 `admin.IsPlatformAdmin`，API Key / 受限 admin 一律拒绝；
-- `RequireAdminActor:32`（Console 专属）。
+- `RequireServerPrincipal:61`（Databases DDL 等业务写）：放行 `admin` 或 `service`（API Key），匿名/端用户 `PermissionDenied`——绕过拦截器直调 use-case 时仍不可 `SystemPrincipal` 写；
+- `RequirePlatformPrincipal:34`（Functions 写、API Key 管理、用户密码/令牌等平台级）：仅 `admin.IsPlatformAdmin`，API Key / 受限 admin 一律拒绝；
+- `RequireConsolePrincipal:48`（Console 专属）；
+- `RequireEndUser:17`（纯端用户 actor 语义，带项目绑定的判断留在调用面）。
 
-Functions DDL 与 Storage 已对齐 `RequireServerWriteActor` 口径（Databases 组自 Round3 起与 Functions 同口径，API Key 持 `databases.write` 可做 DDL）。
+Functions DDL 与 Storage 已对齐 `RequireServerPrincipal` 口径（Databases 组自 Round3 起与 Functions 同口径，API Key 持 `databases.write` 可做 DDL）。
 
 ---
 

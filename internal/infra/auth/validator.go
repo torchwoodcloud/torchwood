@@ -8,6 +8,7 @@ import (
 	"time"
 
 	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	"github.com/torchwooddev/torchwood/internal/domain/databases"
 	"github.com/torchwooddev/torchwood/internal/domain/projects"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
 	"github.com/torchwooddev/torchwood/internal/domain/users"
@@ -151,7 +152,8 @@ func (v *Validator) validateAPIKey(ctx context.Context, raw string) (*shared.Pri
 		// B14 per-key 角色（C6 决议）：keys 承载 scope/API 面（集合默认权限、
 		// 特权授予判定不受影响），key:<id> 承载数据隔离身份——RLS 谓词可见、
 		// 可作文档 ACE 授予目标（跨 key 协作需显式授予 key:<id> ACE）。
-		Roles:       []string{"keys", "key:" + key.ID},
+		// 角色形态取自 DocRole 词表（M6.1 主权），禁止裸串拼接。
+		Roles:       []string{databases.RoleKeys, databases.RoleKey(key.ID)},
 		Permissions: key.Scopes,
 	}, nil
 }
@@ -281,7 +283,7 @@ func (v *Validator) validateEndUserSession(ctx context.Context, projectID, sessi
 // 避免 JWT claims 中的旧角色残留。
 func (v *Validator) resolveEndUserRoles(ctx context.Context, projectID, userID string) ([]string, error) {
 	if v.roleResolver == nil {
-		return []string{"users", fmt.Sprintf("user:%s", userID)}, nil
+		return []string{databases.RoleUsers, databases.RoleUser(userID)}, nil
 	}
 	resolved, err := v.roleResolver.LoadUserRoles(ctx, projectID, userID)
 	if err != nil {

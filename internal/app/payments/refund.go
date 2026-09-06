@@ -14,7 +14,7 @@ import (
 // requireServerWrite 断言 Server 面写操作主体（纵深防御：admin 会话 /
 // API key；角色与 scope 细粒度由拦截器把关，红线 D6 同源约束）。
 func (p *Payments) requireServerWrite(ctx context.Context) error {
-	return appshared.RequireServerWriteActor(ctx)
+	return appshared.RequireServerPrincipal(ctx)
 }
 
 // Refund 对已支付订单发起退款（Server 面，scope payments.write / owner+admin）。

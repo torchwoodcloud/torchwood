@@ -25,11 +25,11 @@ func platformAdminCtx() context.Context {
 	})
 }
 
-// G12（产品决策 B）：functions 写方法 use-case 层守卫为 RequireServerWriteActor——
+// G12（产品决策 B）：functions 写方法 use-case 层守卫为 RequireServerPrincipal——
 // console admin 会话（viewer/member 的角色细粒度由拦截器 adminRoleMethodRules
 // 把关）与 API key（scope 由 apiKeyScopeRules 把关）放行；端用户 PermissionDenied、
 // 匿名 Unauthenticated。
-func TestFunctionsWriteMethods_RequireServerWriteActor(t *testing.T) {
+func TestFunctionsWriteMethods_RequireServerPrincipal(t *testing.T) {
 	repo := newMockRepo()
 	seedReadyFunction(repo, "p1", "fn_1", true, 15)
 	uc := newTestUC(newMockExecutor(nil, nil), repo, newMockQueue())

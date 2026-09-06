@@ -19,7 +19,7 @@ const secretMask = "******"
 // 变量是平台级敏感写操作：允许 admin 会话与 API key（scope 门禁），
 // 拒绝端用户/匿名（纵深防御，G2-1；G12 产品决策 B 调整）。
 func (f *Functions) SetVariables(ctx context.Context, projectID, functionID string, vars map[string]string) (map[string]string, error) {
-	if err := appshared.RequireServerWriteActor(ctx); err != nil {
+	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return nil, err
 	}
 	fn, err := f.repo.GetFunction(ctx, projectID, functionID)

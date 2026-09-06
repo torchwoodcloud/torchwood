@@ -68,7 +68,7 @@ func (d *Databases) resolveProject(ctx context.Context, projectID string) (*proj
 }
 
 func (d *Databases) CreateDatabase(ctx context.Context, projectID, id, name string) error {
-	if err := shared.RequireServerWriteActor(ctx); err != nil {
+	if err := shared.RequireServerPrincipal(ctx); err != nil {
 		return err
 	}
 	if err := shared.RejectExternalDatabaseID(id); err != nil {
@@ -112,7 +112,7 @@ func (d *Databases) GetDatabase(ctx context.Context, projectID, databaseID strin
 }
 
 func (d *Databases) DeleteDatabase(ctx context.Context, projectID, databaseID string) error {
-	if err := shared.RequireServerWriteActor(ctx); err != nil {
+	if err := shared.RequireServerPrincipal(ctx); err != nil {
 		return err
 	}
 	if err := shared.RejectExternalDatabaseID(databaseID); err != nil {
@@ -125,7 +125,7 @@ func (d *Databases) DeleteDatabase(ctx context.Context, projectID, databaseID st
 }
 
 func (d *Databases) CreateCollection(ctx context.Context, projectID, databaseID, collectionID, name string, attrs []databases.Attribute, idxs []databases.Index, perms []databases.Permission, documentSecurity bool) error {
-	if err := shared.RequireServerWriteActor(ctx); err != nil {
+	if err := shared.RequireServerPrincipal(ctx); err != nil {
 		return err
 	}
 	if err := shared.RejectExternalDatabaseID(databaseID); err != nil {
@@ -228,7 +228,7 @@ func (d *Databases) GetCollection(ctx context.Context, projectID, databaseID, co
 }
 
 func (d *Databases) DeleteCollection(ctx context.Context, projectID, databaseID, collectionID string) error {
-	if err := shared.RequireServerWriteActor(ctx); err != nil {
+	if err := shared.RequireServerPrincipal(ctx); err != nil {
 		return err
 	}
 	if err := shared.RejectExternalDatabaseID(databaseID); err != nil {
@@ -244,7 +244,7 @@ func (d *Databases) DeleteCollection(ctx context.Context, projectID, databaseID,
 }
 
 func (d *Databases) UpdateCollection(ctx context.Context, projectID, databaseID, collectionID string, patch databases.CollectionPatch, principal databases.Principal) error {
-	if err := shared.RequireServerWriteActor(ctx); err != nil {
+	if err := shared.RequireServerPrincipal(ctx); err != nil {
 		return err
 	}
 	if err := shared.RejectExternalDatabaseID(databaseID); err != nil {
@@ -268,7 +268,7 @@ func (d *Databases) UpdateCollection(ctx context.Context, projectID, databaseID,
 }
 
 func (d *Databases) CreateAttribute(ctx context.Context, projectID, databaseID, collectionID string, attr databases.Attribute) error {
-	if err := shared.RequireServerWriteActor(ctx); err != nil {
+	if err := shared.RequireServerPrincipal(ctx); err != nil {
 		return err
 	}
 	if err := shared.RejectExternalDatabaseID(databaseID); err != nil {
@@ -309,7 +309,7 @@ func (d *Databases) CreateAttribute(ctx context.Context, projectID, databaseID, 
 }
 
 func (d *Databases) CreateIndex(ctx context.Context, projectID, databaseID, collectionID string, idx databases.Index) error {
-	if err := shared.RequireServerWriteActor(ctx); err != nil {
+	if err := shared.RequireServerPrincipal(ctx); err != nil {
 		return err
 	}
 	if err := shared.RejectExternalDatabaseID(databaseID); err != nil {
@@ -334,7 +334,7 @@ func (d *Databases) CreateIndex(ctx context.Context, projectID, databaseID, coll
 }
 
 func (d *Databases) DeleteAttribute(ctx context.Context, projectID, databaseID, collectionID, key string) error {
-	if err := shared.RequireServerWriteActor(ctx); err != nil {
+	if err := shared.RequireServerPrincipal(ctx); err != nil {
 		return err
 	}
 	if err := shared.RejectExternalDatabaseID(databaseID); err != nil {
@@ -353,7 +353,7 @@ func (d *Databases) DeleteAttribute(ctx context.Context, projectID, databaseID, 
 }
 
 func (d *Databases) DeleteIndex(ctx context.Context, projectID, databaseID, collectionID, indexID string) error {
-	if err := shared.RequireServerWriteActor(ctx); err != nil {
+	if err := shared.RequireServerPrincipal(ctx); err != nil {
 		return err
 	}
 	if err := shared.RejectExternalDatabaseID(databaseID); err != nil {
@@ -383,7 +383,7 @@ func (d *Databases) schemaEvolution() (databases.SchemaEvolution, error) {
 // RetireAttribute 是删列两段的段二（B4 §4.6）：deprecated 属性物理删列
 // （不可逆）；swap 后迁移残留旧列的退役同入口。
 func (d *Databases) RetireAttribute(ctx context.Context, projectID, databaseID, collectionID, key string) error {
-	if err := shared.RequireServerWriteActor(ctx); err != nil {
+	if err := shared.RequireServerPrincipal(ctx); err != nil {
 		return err
 	}
 	if err := shared.RejectExternalDatabaseID(databaseID); err != nil {
@@ -411,7 +411,7 @@ func (d *Databases) RetireAttribute(ctx context.Context, projectID, databaseID, 
 // RestoreAttribute 回滚生命周期：deprecated → active；migrating → 中止迁移
 // 并恢复 active（§4.6 可回滚语义）。
 func (d *Databases) RestoreAttribute(ctx context.Context, projectID, databaseID, collectionID, key string) error {
-	if err := shared.RequireServerWriteActor(ctx); err != nil {
+	if err := shared.RequireServerPrincipal(ctx); err != nil {
 		return err
 	}
 	if err := shared.RejectExternalDatabaseID(databaseID); err != nil {
@@ -439,7 +439,7 @@ func (d *Databases) RestoreAttribute(ctx context.Context, projectID, databaseID,
 // MigrateAttribute 创建 copy 迁移任务（B4 §4.6 收紧/改类型行）：目标定义
 // 走 CreateAttribute 同款校验后交适配器（迁移分诊在 infra）。
 func (d *Databases) MigrateAttribute(ctx context.Context, projectID, databaseID, collectionID, key string, target databases.Attribute) (*databases.AttributeMigration, error) {
-	if err := shared.RequireServerWriteActor(ctx); err != nil {
+	if err := shared.RequireServerPrincipal(ctx); err != nil {
 		return nil, err
 	}
 	if err := shared.RejectExternalDatabaseID(databaseID); err != nil {
@@ -782,7 +782,7 @@ func (d *Databases) ExecuteTransactions(
 	principal databases.Principal,
 	requestID string,
 ) ([]databases.TransactionOpResult, bool, error) {
-	if err := shared.RequireServerWriteActor(ctx); err != nil {
+	if err := shared.RequireServerPrincipal(ctx); err != nil {
 		return nil, false, err
 	}
 	if err := shared.RejectExternalDatabaseID(databaseID); err != nil {

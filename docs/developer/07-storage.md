@@ -67,7 +67,7 @@ MIME 归一化（`normalizeMimeType`）：`""` 与 `text/html`、`application/xh
 
 | RPC | HTTP | 说明 |
 |---|---|---|
-| `CreateBucket` | `POST /v1/server/storage/buckets` | `RequireServerWriteActor`，`permissions` 废弃仍落库 |
+| `CreateBucket` | `POST /v1/server/storage/buckets` | `RequireServerPrincipal`，`permissions` 废弃仍落库 |
 | `ListBuckets` | `GET /v1/server/storage/buckets` | `shared.v1.ListRequest` → `ListBucketsResponse{buckets,meta}`（AIP-158，`crud.DecodePageToken`，默认 25） |
 | `GetBucket` | `GET /v1/server/storage/buckets/{id}` |  |
 | `UpdateBucket` | `PATCH /v1/server/storage/buckets/{id}` | `optional name/public` |

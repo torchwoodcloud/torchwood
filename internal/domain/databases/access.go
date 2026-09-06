@@ -7,9 +7,9 @@ import "strings"
 // DocumentDB implementations. Keeping it in domain/databases avoids a
 // dependency on internal/domain/shared from the document port.
 type Principal struct {
-	// Roles carries the caller's role strings (e.g. "users", "user:<id>",
-	// "group:<id>", "keys", "any"). The "__system__" role is the document
-	// projection of ActorKind System and bypasses document-level checks.
+	// Roles carries the caller's role strings（形态由 docrole.go 词表定义，
+	// 如 RoleUsers / RoleUser(id) / RoleGroup(id) / RoleKeys / RoleAny）。
+	// RoleSystem 是 ActorKind System 的文档投影，bypass 文档级检查。
 	Roles []string
 
 	// PlatformAdmin indicates the caller is a console admin with full
@@ -23,13 +23,13 @@ type Principal struct {
 }
 
 // GuestPrincipal is used for unauthenticated Client API read requests.
-var GuestPrincipal = Principal{Roles: []string{"guests"}}
+var GuestPrincipal = Principal{Roles: []string{RoleGuests}}
 
 // SystemPrincipal is the principal used by internal infrastructure paths
 // (session validation, post-create reads, email lookup). It bypasses all
 // document-level permission checks.
 var SystemPrincipal = Principal{
-	Roles: []string{"__system__"},
+	Roles: []string{RoleSystem},
 }
 
 // HasRole reports whether the principal holds the given role.
@@ -43,9 +43,9 @@ func (p Principal) HasRole(role string) bool {
 }
 
 // IsSystem reports whether this is the internal System actor projection
-// (__system__ 角色)，不是 PlatformAdmin。
+// （RoleSystem 角色），不是 PlatformAdmin。
 func (p Principal) IsSystem() bool {
-	return p.HasRole("__system__")
+	return p.HasRole(RoleSystem)
 }
 
 // BypassesDocumentACL reports whether document permission checks should be
@@ -61,12 +61,12 @@ func (p Principal) BypassesDocumentACL() bool {
 // 而不是让所有匿名主体共享同一命名空间。
 func (p Principal) StableActorID() string {
 	for _, r := range p.Roles {
-		if id, ok := strings.CutPrefix(r, "user:"); ok && id != "" {
+		if id, ok := strings.CutPrefix(r, RolePrefixUser); ok && id != "" {
 			return id
 		}
 	}
 	if p.KeyID != "" {
-		return "key:" + p.KeyID
+		return RoleKey(p.KeyID)
 	}
 	if p.IsSystem() {
 		return "system"

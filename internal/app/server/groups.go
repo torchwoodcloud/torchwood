@@ -73,7 +73,17 @@ func (t *Groups) getGroup(ctx context.Context, projectID, groupID string) (*grou
 	return g, nil
 }
 
+// groupsWriteGuard 是 Groups 写方法的双面入口守卫（纵深防御，fail-closed）：
+// server 面（console admin 会话 / API key）或端用户任一放行；匿名与 System
+// 一律拒绝。Groups 由 client 面（端用户带项目绑定）与 server 面共享。
+func groupsWriteGuard(ctx context.Context) error {
+	return appshared.RequireAnyOf(ctx, appshared.RequireServerPrincipal, appshared.RequireEndUser)
+}
+
 func (t *Groups) CreateGroup(ctx context.Context, projectID, name string, perms []string) (*databases.Document, error) {
+	if err := groupsWriteGuard(ctx); err != nil {
+		return nil, err
+	}
 	if name == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
@@ -98,6 +108,9 @@ func (t *Groups) CreateGroup(ctx context.Context, projectID, name string, perms 
 }
 
 func (t *Groups) CreateGroupWithOwner(ctx context.Context, projectID, name, ownerUserID, ownerEmail string, principal databases.Principal) (*databases.Document, *databases.Document, error) {
+	if err := groupsWriteGuard(ctx); err != nil {
+		return nil, nil, err
+	}
 	group, err := t.CreateGroup(ctx, projectID, name, nil)
 	if err != nil {
 		return nil, nil, err
@@ -163,6 +176,9 @@ func (t *Groups) GetGroupPrefs(ctx context.Context, projectID, groupID string, _
 }
 
 func (t *Groups) UpdateGroupPrefs(ctx context.Context, projectID, groupID string, prefs map[string]any, _ databases.Principal) (map[string]any, error) {
+	if err := groupsWriteGuard(ctx); err != nil {
+		return nil, err
+	}
 	if _, err := t.resolveProject(ctx, projectID); err != nil {
 		return nil, err
 	}
@@ -186,6 +202,9 @@ func (t *Groups) UpdateGroupPrefs(ctx context.Context, projectID, groupID string
 }
 
 func (t *Groups) DeleteGroup(ctx context.Context, projectID, groupID string, _ databases.Principal) error {
+	if err := groupsWriteGuard(ctx); err != nil {
+		return err
+	}
 	if _, err := t.resolveProject(ctx, projectID); err != nil {
 		return err
 	}
@@ -196,6 +215,9 @@ func (t *Groups) DeleteGroup(ctx context.Context, projectID, groupID string, _ d
 }
 
 func (t *Groups) CreateMembership(ctx context.Context, projectID string, cmd CreateMembershipCommand, _ databases.Principal) (*databases.Document, error) {
+	if err := groupsWriteGuard(ctx); err != nil {
+		return nil, err
+	}
 	if cmd.GroupID == "" {
 		return nil, status.Error(codes.InvalidArgument, "group_id is required")
 	}
@@ -297,6 +319,9 @@ func (t *Groups) GetMembership(ctx context.Context, projectID, groupID, membersh
 }
 
 func (t *Groups) UpdateMembership(ctx context.Context, projectID, groupID, membershipID string, cmd UpdateMembershipCommand, _ databases.Principal) (*databases.Document, error) {
+	if err := groupsWriteGuard(ctx); err != nil {
+		return nil, err
+	}
 	if len(cmd.Roles) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "roles is required")
 	}
@@ -329,6 +354,9 @@ func (t *Groups) UpdateMembership(ctx context.Context, projectID, groupID, membe
 }
 
 func (t *Groups) UpdateMembershipStatus(ctx context.Context, projectID, groupID, membershipID, statusVal string, _ databases.Principal) (*databases.Document, error) {
+	if err := groupsWriteGuard(ctx); err != nil {
+		return nil, err
+	}
 	if err := groups.ValidateStatus(statusVal); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -366,6 +394,9 @@ func (t *Groups) UpdateMembershipStatus(ctx context.Context, projectID, groupID,
 }
 
 func (t *Groups) DeleteMembership(ctx context.Context, projectID, groupID, membershipID string, _ databases.Principal) error {
+	if err := groupsWriteGuard(ctx); err != nil {
+		return err
+	}
 	m, err := t.getMembership(ctx, projectID, groupID, membershipID)
 	if err != nil {
 		return err

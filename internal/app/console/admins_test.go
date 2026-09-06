@@ -213,10 +213,10 @@ func TestAdmins_Delete_AllowsWithSecondOwner(t *testing.T) {
 	require.Len(t, repo.admins, 2)
 }
 
-// TestAdmins_WriteMethods_RequireAdminActor（G2-4/R04-P2-2 纵深防御）：
+// TestAdmins_WriteMethods_RequireConsolePrincipal（G2-4/R04-P2-2 纵深防御）：
 // Create/Update/Delete 对非 admin actor（API key/端用户/匿名）一律
 // PermissionDenied，对齐 handler 层 requireAdminActor。
-func TestAdmins_WriteMethods_RequireAdminActor(t *testing.T) {
+func TestAdmins_WriteMethods_RequireConsolePrincipal(t *testing.T) {
 	t.Parallel()
 	repo := newAdminRepo(
 		mkAdmin("a1", "owner@x.com", "owner"),

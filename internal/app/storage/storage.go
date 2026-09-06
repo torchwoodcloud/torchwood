@@ -93,10 +93,10 @@ type CreateFileCommand struct {
 
 func (s *Storage) CreateBucket(ctx context.Context, cmd CreateBucketCommand) (*storage.Bucket, error) {
 	// 纵深防御（G6-4/R06-P1）：CreateBucket 是 Server API 业务写操作，与
-	// CreateUser 对齐使用 RequireServerWriteActor（console admin 会话或 API key
-	// 主体；viewer 角色细粒度由拦截器 adminRoleMethodRules 把关）。RequirePlatformAdmin
+	// CreateUser 对齐使用 RequireServerPrincipal（console admin 会话或 API key
+	// 主体；viewer 角色细粒度由拦截器 adminRoleMethodRules 把关）。RequirePlatformPrincipal
 	// 过严：会拒绝拦截器已放行的 member/owner/admin 会话与 API key 写路径。
-	if err := appshared.RequireServerWriteActor(ctx); err != nil {
+	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return nil, err
 	}
 	if cmd.Name == "" {
@@ -609,7 +609,7 @@ func isStoragePrivileged(p databases.Principal) bool {
 	if p.BypassesDocumentACL() {
 		return true
 	}
-	if p.HasRole("keys") {
+	if p.HasRole(databases.RoleKeys) {
 		return true
 	}
 	for _, r := range p.Roles {
@@ -624,7 +624,7 @@ func isStoragePrivileged(p databases.Principal) bool {
 func storageEndUserID(p databases.Principal) string {
 	hasUsers := false
 	for _, r := range p.Roles {
-		if r == "users" {
+		if r == databases.RoleUsers {
 			hasUsers = true
 			break
 		}
@@ -633,8 +633,8 @@ func storageEndUserID(p databases.Principal) string {
 		return ""
 	}
 	for _, r := range p.Roles {
-		if strings.HasPrefix(r, "user:") {
-			return strings.TrimPrefix(r, "user:")
+		if id, ok := strings.CutPrefix(r, databases.RolePrefixUser); ok {
+			return id
 		}
 	}
 	return ""

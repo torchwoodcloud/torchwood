@@ -19,7 +19,7 @@ HTTP multipart FunctionsHandler (internal/api/serverhttp/functions_handler.go, P
 
 ## 2 7 个写方法与鉴权
 
-`proto/server/v1/functions.proto:61` `FunctionsService` 共 13 RPC（`ACCESS_API_KEY` 默认），其中 **7 个写方法**在用例层以 `appshared.RequireServerWriteActor` 纵深防御（`internal/app/functions/*.go`）：
+`proto/server/v1/functions.proto:61` `FunctionsService` 共 13 RPC（`ACCESS_API_KEY` 默认），其中 **7 个写方法**在用例层以 `appshared.RequireServerPrincipal` 纵深防御（`internal/app/functions/*.go`）：
 
 | RPC | HTTP | 写语义 |
 |---|---|---|
@@ -31,7 +31,7 @@ HTTP multipart FunctionsHandler (internal/api/serverhttp/functions_handler.go, P
 | `SetVariables` | `PUT .../{function_id}/variables` | 全量替换，`repeated Variable`，明文存储（`function_variables`） |
 | `CreateExecution` | `POST .../{function_id}/executions` | 同/异步二选一（见 §5） |
 
-`RequireServerWriteActor` 允许 `System`/`PlatformAdmin`/`keys`，拦截 `viewer` 等细粒度由 `grpc/interceptor` 的 `adminRoleMethodRules` 把关（`IsAPIKeysServiceMethod` 禁 API Key 自铸）。读方法（`List*/Get*`/`ListRuntimes/Specifications`/`GetVariables`）不强制写角色。
+`RequireServerPrincipal` 允许 `System`/`PlatformAdmin`/`keys`，拦截 `viewer` 等细粒度由 `grpc/interceptor` 的 `adminRoleMethodRules` 把关（`IsAPIKeysServiceMethod` 禁 API Key 自铸）。读方法（`List*/Get*`/`ListRuntimes/Specifications`/`GetVariables`）不强制写角色。
 
 ## 3 运行时与构建
 
@@ -144,7 +144,7 @@ TORCHWOOD_RUN_DOCKER_TESTS=1 go test ./internal/infra/functions -run TestDockerB
 
 ## 11 测试与边界
 
-- 单元：`internal/app/functions/functions_test.go`/`executions_test.go`/`mocks_test.go`（`maxConcurrentBuilds/Runs`、截断、队列 payload 校验、`RequireServerWriteActor` 分支）；`internal/infra/queue/redis_queue_test.go`（`LPUSH/BRPOP`、`Trim`）。
+- 单元：`internal/app/functions/functions_test.go`/`executions_test.go`/`mocks_test.go`（`maxConcurrentBuilds/Runs`、截断、队列 payload 校验、`RequireServerPrincipal` 分支）；`internal/infra/queue/redis_queue_test.go`（`LPUSH/BRPOP`、`Trim`）。
 - 安全：`security_test.go` 校验代码包 `zip slip`/符号链接/size 上限；`authz_test.go` 校验写方法鉴权；`semaphore_test.go` 校验 `SETNX+Lua` 互斥。
 - 集成：`internal/infra/functions/docker_integration_test.go`（`TORCHWOOD_RUN_DOCKER_TESTS=1`，CI 预拉 `node:18-alpine`/`python:3.11-alpine`）；`cmd/worker/consume_test.go` / `requeue_test.go`（`attempt` 持久化、死信未落、`Transition` CAS）。
 - 未落地：独立构建队列（`CreateDeployment` 同步构建，Worker 消费前补构建兜底）；重试无死信队列（超限 `FailExecutionIfActive`）；变量明文；`entrypoint` 固定入口；多机需对象存储承载 zip。
@@ -155,5 +155,5 @@ TORCHWOOD_RUN_DOCKER_TESTS=1 go test ./internal/infra/functions -run TestDockerB
 - `internal/infra/functions/docker.go:238` `timeoutFromExec` 与容器 `Remove` 兜底；`internal/infra/queue/redis_queue.go:44` 队列 `5s` 超时；`internal/app/functions/runtimes.go` 运行时/规格清单。
 - `AGENTS.md` §开发流程（`task generate:proto/wire:all`）与 `docs/roadmap.md` §0 Agent-Native API 定位；`docs/developer/09-api-guide.md` §1 新增 RPC 全流程。
 - 关联：`07-storage.md` 的分片锁 `SETNX EX 300` 与本章信号量同属 Redis 原子语义，可对照实现；进阶可读 `internal/app/functions/management.go` 的幂等清理。
-- 另见 `docs/developer/05-authentication.md` 的 `RequireServerWriteActor` 在 Storage/Functions 的一致应用。
+- 另见 `docs/developer/05-authentication.md` 的 `RequireServerPrincipal` 在 Storage/Functions 的一致应用。
 - 关联 `docs/developer/09-api-guide.md` §11 的 `OutboxService` 可作为新增 Functions RPC 的端到端参照。

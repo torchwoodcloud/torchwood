@@ -105,7 +105,7 @@ var userUpdateProtectedFields = map[string]struct{}{
 // 纵深防御（G2-2）：业务写主体（console admin 会话 / API key）才允许经
 // SystemPrincipal 写库；viewer 角色细粒度由拦截器 adminRoleMethodRules 把关。
 func (u *Users) CreateUser(ctx context.Context, projectID string, cmd CreateUserCommand) (*databases.Document, error) {
-	if err := appshared.RequireServerWriteActor(ctx); err != nil {
+	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return nil, err
 	}
 	if _, err := u.resolveProject(ctx, projectID); err != nil {
@@ -160,7 +160,7 @@ func (u *Users) UpdateUser(ctx context.Context, projectID, userID string, update
 	// 必须由 Server 写主体（console admin 会话 / API key）调用；端用户/匿名
 	// 即使绕过拦截器也不得以 SystemPrincipal 改他人资料。owner/admin 角色
 	// 细粒度由拦截器 adminRoleMethodRules 把关。
-	if err := appshared.RequireServerWriteActor(ctx); err != nil {
+	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return nil, err
 	}
 	if _, err := u.resolveProject(ctx, projectID); err != nil {
@@ -230,7 +230,7 @@ func (u *Users) UpdateUser(ctx context.Context, projectID, userID string, update
 // 决策 v8：users 六写方法归一业务写档（member+users.write）——接管的信任
 // 边界收敛到 scope/角色授予环节；角色/scope 细粒度由拦截器策略表把关。
 func (u *Users) UpdateUserPassword(ctx context.Context, projectID, userID, newPassword string) (*databases.Document, error) {
-	if err := appshared.RequireServerWriteActor(ctx); err != nil {
+	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return nil, err
 	}
 	if _, err := u.resolveProject(ctx, projectID); err != nil {
@@ -287,7 +287,7 @@ func (u *Users) ListUserSessions(ctx context.Context, projectID, userID string) 
 }
 
 func (u *Users) DeleteUserSession(ctx context.Context, projectID, userID, sessionID string) error {
-	if err := appshared.RequireServerWriteActor(ctx); err != nil {
+	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return err
 	}
 	if _, err := u.resolveProject(ctx, projectID); err != nil {
@@ -309,7 +309,7 @@ func (u *Users) DeleteUserSession(ctx context.Context, projectID, userID, sessio
 // 决策 v8：归一业务写档（member+users.write）；评审补偿控制（TTL 硬上限
 // 1h、改 email/status 撤会话）由 M5 落地。
 func (u *Users) CreateUserToken(ctx context.Context, projectID, userID string) (*domainauth.TokenBundle, error) {
-	if err := appshared.RequireServerWriteActor(ctx); err != nil {
+	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return nil, err
 	}
 	if _, err := u.resolveProject(ctx, projectID); err != nil {
@@ -344,7 +344,7 @@ func (u *Users) CreateUserToken(ctx context.Context, projectID, userID string) (
 
 // 决策 v8：users 六写方法归一业务写档（member+users.write）。
 func (u *Users) DeleteUser(ctx context.Context, projectID, userID string, _ databases.Principal) error {
-	if err := appshared.RequireServerWriteActor(ctx); err != nil {
+	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return err
 	}
 	if _, err := u.resolveProject(ctx, projectID); err != nil {

@@ -37,7 +37,7 @@ import (
 )
 
 // serverWriteCtx 返回带 Server API 写主体（API key 类型）principal 的上下文：
-// G6-4 后 CreateBucket use-case 要求 RequireServerWriteActor，测试直接调
+// G6-4 后 CreateBucket use-case 要求 RequireServerPrincipal，测试直接调
 // use-case 需注入主体。
 func serverWriteCtx() context.Context {
 	return contexts.WithPrincipal(context.Background(), &shared.Principal{
