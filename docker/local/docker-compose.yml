@@ -7,13 +7,17 @@ services:
     # Debian 基座 initdb 默认 en_US.utf8，与原 alpine 基座（musl，C）不同——
     # 字符串排序语义会变（如 id 排序平局的保留选择）。显式锁 C 保持与
     # alpine 时代及 CI 一致；已有卷不受影响（initdb 仅首次建库生效）。
+    # locale=C 时 initdb 默认服务端编码是 SQL_ASCII，而 pgdriver（bun
+    # ≥1.2.16）握手期校验 ParameterStatus，client_encoding≠UTF8 直接拒连，
+    # 故必须显式 --encoding=UTF8（排序语义仍由 locale=C 锁定）。编码只在
+    # 首次 initdb 生效：老 SQL_ASCII 卷需 down -v 重建后才生效。
     image: pgvector/pgvector:0.8.6-pg18
     container_name: torchwood-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-torchwood}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-torchwood}
       POSTGRES_DB: ${POSTGRES_DB:-torchwood}
-      POSTGRES_INITDB_ARGS: "--locale=C"
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
