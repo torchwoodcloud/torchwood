@@ -33,10 +33,10 @@ const (
 	OpIn               = "in"
 	// 数组算子（§10.5 P0）：仅 array=true 属性可用（服务端白名单校验）。
 	// containsAny = 交集非空；containsAll = 子集。值必须是数组。
-	OpContainsAny      = "containsAny"
-	OpContainsAll      = "containsAll"
-	OpAnd              = "and"
-	OpOr               = "or"
+	OpContainsAny = "containsAny"
+	OpContainsAll = "containsAll"
+	OpAnd         = "and"
+	OpOr          = "or"
 )
 
 // Codec input limits (A2). documentdb still clamps SQL-side IN arity.
@@ -77,8 +77,8 @@ type VectorSearch struct {
 
 // Supported distance metrics（与 proto DistanceMetric / hnsw 索引同枚举域）。
 const (
-	MetricCosine      = "COSINE"
-	MetricL2          = "L2"
+	MetricCosine       = "COSINE"
+	MetricL2           = "L2"
 	MetricInnerProduct = "INNER_PRODUCT"
 )
 
