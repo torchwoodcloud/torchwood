@@ -62,6 +62,7 @@ func TestHub_SlowConsumerDisconnects(t *testing.T) {
 	// 新语义：带 OnSlow。
 	conn := &shared.RealtimeConn{
 		ID:           "slow",
+		ProjectID:    "default", // 与 testEnvelope 一致（B-1 项目过滤）
 		DocPrincipal: databases.Principal{Roles: []string{"users", "user:u1"}},
 		Send:         make(chan map[string]any, 2),
 	}

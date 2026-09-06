@@ -224,8 +224,12 @@ func newConnState(principal *shared.Principal, projectID, quotaKey string, claim
 		ID:            connID,
 		PlatformAdmin: st.platformAdmin,
 		DocPrincipal:  st.docPrincipal,
-		Send:          make(chan map[string]any, shared.RealtimeSendBuffer),
-		OnSlow:        func(lastSeq int64) { st.requestResync(lastSeq) },
+		// B-1 隔离锚点：hello.project_id 已在 authenticate 与凭证一致性
+		// 校验（admin 绑定 + end_user 等值断言），Hub 扇出按其等值过滤
+		// 文档事件（频道名为全局命名空间，隔离由消费端 project 过滤保证）。
+		ProjectID: st.projectID,
+		Send:      make(chan map[string]any, shared.RealtimeSendBuffer),
+		OnSlow:    func(lastSeq int64) { st.requestResync(lastSeq) },
 	}
 	return st
 }

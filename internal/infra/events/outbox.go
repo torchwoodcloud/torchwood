@@ -57,6 +57,10 @@ func (o *eventOutbox) Publish(ctx context.Context, ev domainevents.Envelope) err
 		return err
 	}
 	insert := func(ctx context.Context) error {
+		// B-1 隔离锚点：topic（= CollectionChannel()）是全局命名空间、不含
+		// project 维度——跨项目同名集合共享同一 topic。行级隔离由本列的
+		// project_id 保证，消费端（:changes 扫描 / Hub 扇出）必须按其等值
+		// 过滤；详见 envelope.CollectionChannel 的锚点注释。
 		topic := ev.CollectionChannel()
 		var channel *string
 		if ev.IsEconomy() {
@@ -92,10 +96,11 @@ func (o *eventOutbox) Publish(ctx context.Context, ev domainevents.Envelope) err
 }
 
 // marshalEnvelope 序列化完整信封并按 1 MiB 上限做防御性截断：
-// 1) 整体超限 → 去掉 data、标记 truncated（业务写不回滚）；
-// 2) acl 仍超限（极端权限列表）→ 截断 acl 数组并记日志：先按平均条目
-//    字节一次跳删到目标附近（逐条重 marshal 是 O(n²)，数万条权限下
-//    分钟级不可用），残余量再逐条收敛。
+//  1. 整体超限 → 去掉 data、标记 truncated（业务写不回滚）；
+//  2. acl 仍超限（极端权限列表）→ 截断 acl 数组并记日志：先按平均条目
+//     字节一次跳删到目标附近（逐条重 marshal 是 O(n²)，数万条权限下
+//     分钟级不可用），残余量再逐条收敛。
+//
 // 经济事件（Domain 非空）载荷小且无 acl / data，直接序列化。
 func marshalEnvelope(ev domainevents.Envelope) (json.RawMessage, error) {
 	if ev.IsEconomy() {

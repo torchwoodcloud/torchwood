@@ -26,7 +26,7 @@ const (
 // maxChangesScanRows 是单次调用扫描行数硬上限（极端私有集合下防无界
 // 扫描）。R15：上限退出改返回扫描游标 + has_more=true（越过已判不可见
 // 的块续传），不再静默截断。var 而非 const：测试覆写缩短验证块场景
-//（对齐 idempotencyWaitBudget 先例）。
+// （对齐 idempotencyWaitBudget 先例）。
 var maxChangesScanRows = 50000
 
 // ListChanges 返回 collection 中 seq > SinceSeq 的已提交事件（可见性过滤
@@ -37,7 +37,13 @@ var maxChangesScanRows = 50000
 //   - (b) 扫描上限退出：= 内部扫描位置（越过已判不可见的块）——续传
 //     从块后继续，不再重扫；
 //   - 自然耗尽：hasMore=false、nextSinceSeq=0。
+//
 // SinceSeq > 0 且早于该集合最老可用事件 → ErrResumeExpired。
+//
+// B-1（终局安全评审）：topic/频道 = databases.<db>.collections.<coll> 不含
+// project 维度，跨项目同名集合共享同一全局 topic——扫描/游标判定必须强制
+// outbox.project_id 等值过滤（has_more/游标推进在过滤后的项目行集上进行，
+// 不可见行跳过语义与 R15 两级游标不受影响）。
 func (p *postgresDocumentDB) ListChanges(
 	ctx context.Context,
 	projectID, databaseID, collectionID string,
@@ -56,7 +62,7 @@ func (p *postgresDocumentDB) ListChanges(
 	topic := fmt.Sprintf("databases.%s.collections.%s", databaseID, collectionID)
 
 	if opts.SinceSeq > 0 {
-		if err := p.checkChangesCursor(ctx, topic, opts.SinceSeq); err != nil {
+		if err := p.checkChangesCursor(ctx, projectID, topic, opts.SinceSeq); err != nil {
 			return nil, false, 0, err
 		}
 	}
@@ -74,7 +80,7 @@ func (p *postgresDocumentDB) ListChanges(
 			scanCapped = true
 			break
 		}
-		rows, err := p.scanChanges(ctx, topic, lastSeq, opts.DocumentID, changesScanBatch)
+		rows, err := p.scanChanges(ctx, projectID, topic, lastSeq, opts.DocumentID, changesScanBatch)
 		if err != nil {
 			return nil, false, 0, err
 		}
@@ -130,10 +136,13 @@ func (p *postgresDocumentDB) ListChanges(
 // checkChangesCursor 判定续传游标是否仍在可用窗口内：SinceSeq 早于该
 // 集合最老可用事件（两者之间可能存在已被清理的行）→ ErrResumeExpired。
 // 集合无任何行时不判过期（返回空集是合法的「已追平」）。
-func (p *postgresDocumentDB) checkChangesCursor(ctx context.Context, topic string, sinceSeq int64) error {
+// B-1：MIN(seq) 在 project 过滤后的行集上判定——他项目同名集合的更老行
+// 不得造成误判过期（也不得掩盖本项目的真实过期）。
+func (p *postgresDocumentDB) checkChangesCursor(ctx context.Context, projectID, topic string, sinceSeq int64) error {
 	var oldest *int64
 	if err := p.conn(ctx).NewSelect().TableExpr("document_events_outbox").
 		ColumnExpr("MIN(seq)").
+		Where("project_id = ?", projectID).
 		Where("topic = ?", topic).
 		Scan(ctx, &oldest); err != nil {
 		return err
@@ -145,9 +154,12 @@ func (p *postgresDocumentDB) checkChangesCursor(ctx context.Context, topic strin
 }
 
 // scanChanges 读一页原始行（不做可见性过滤），seq 升序。
-func (p *postgresDocumentDB) scanChanges(ctx context.Context, topic string, sinceSeq int64, documentID string, limit int) ([]outboxScanRow, error) {
+// B-1：project_id 等值过滤——topic 为全局命名空间（不含 project 维度），
+// 扫描面必须锁定请求者项目（隔离由消费端 project 过滤保证）。
+func (p *postgresDocumentDB) scanChanges(ctx context.Context, projectID, topic string, sinceSeq int64, documentID string, limit int) ([]outboxScanRow, error) {
 	q := p.conn(ctx).NewSelect().TableExpr("document_events_outbox").
 		Column("seq", "payload").
+		Where("project_id = ?", projectID).
 		Where("topic = ?", topic).
 		Where("seq > ?", sinceSeq).
 		Order("seq ASC").
@@ -163,8 +175,8 @@ func (p *postgresDocumentDB) scanChanges(ctx context.Context, topic string, sinc
 }
 
 type outboxScanRow struct {
-	Seq     int64         `bun:"seq"`
-	Payload []byte        `bun:"payload"`
+	Seq     int64  `bun:"seq"`
+	Payload []byte `bun:"payload"`
 }
 
 var _ databases.ChangeFeed = (*postgresDocumentDB)(nil)

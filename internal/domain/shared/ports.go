@@ -60,7 +60,13 @@ type RealtimeConn struct {
 	ID            string
 	PlatformAdmin bool
 	DocPrincipal  databases.Principal
-	Send          chan map[string]any
+	// ProjectID 是连接归属项目（B-1 隔离锚点）：WS 握手已校验
+	// hello.project_id 与凭证一致（admin 绑定 + end_user 等值断言），此处
+	// 即信任锚。Hub 对文档事件按 ev.ProjectID == ProjectID 等值过滤扇出
+	//（频道名/ topic 不含 project 维度，隔离由消费端 project 过滤保证）。
+	// 空串 fail-closed：不投递任何文档事件。
+	ProjectID string
+	Send      chan map[string]any
 
 	// lastSeq 是该连接最后成功入队帧的 seq（单调上抬，resync close
 	// reason 的数据源；redispatch 重投旧事件不会使游标回退）。

@@ -78,7 +78,9 @@ func TestHubDispatchEconomyChannel(t *testing.T) {
 func TestHubDispatchDocumentUnchangedWithEconomyFields(t *testing.T) {
 	hub := NewHub(nil)
 	conn := &Conn{
-		ID:           "c1",
+		ID: "c1",
+		// B-1 项目隔离：文档事件按连接归属项目等值过滤，须与事件一致。
+		ProjectID:    "p1",
 		DocPrincipal: shared.RealtimeConn{}.DocPrincipal, // zero value ok
 		Send:         make(chan map[string]any, 4),
 	}

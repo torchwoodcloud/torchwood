@@ -87,11 +87,19 @@ func TransactionIDFrom(ctx context.Context) string {
 func (e Envelope) IsEconomy() bool { return e.Domain != "" }
 
 // CollectionChannel 返回集合频道名（topic 与订阅用）。
+//
+// B-1 隔离锚点：频道名/topic 是**全局命名空间**——不含 project 维度，
+// 跨项目同名集合共享同一频道。项目隔离不由频道名保证，而由消费两端
+// 强制 project 过滤保证：`:changes` 扫描按 outbox.project_id 等值过滤
+// （documentdb.postgres_changes），Hub 扇出按连接归属项目等值过滤
+// （realtime.Hub.Dispatch，连接 ProjectID 来自 WS 握手信任锚）。若后续
+// 引入跨项目同名集合的合法共享场景，须重新评审本决策。
 func (e Envelope) CollectionChannel() string {
 	return fmt.Sprintf("databases.%s.collections.%s", e.DatabaseID, e.CollectionID)
 }
 
-// DocumentChannel 返回文档频道名（Hub 按信封 fan-out 两路）。
+// DocumentChannel 返回文档频道名（Hub 按信封 fan-out 两路）。隔离语义
+// 同 CollectionChannel 的 B-1 锚点注释。
 func (e Envelope) DocumentChannel() string {
 	return fmt.Sprintf("databases.%s.collections.%s.documents.%s", e.DatabaseID, e.CollectionID, e.DocumentID)
 }

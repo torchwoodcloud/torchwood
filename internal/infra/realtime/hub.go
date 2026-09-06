@@ -133,7 +133,7 @@ func (h *Hub) BeginReplay(conn *Conn) {
 }
 
 // EndReplay 结束门控并刷入 backlog：seen 为补发批已含的 event_id 集
-//（重复跳过），其余按积压序入 Send；满水位走 TrySend 的慢断开路径。
+// （重复跳过），其余按积压序入 Send；满水位走 TrySend 的慢断开路径。
 func (h *Hub) EndReplay(conn *Conn, seen map[string]struct{}) {
 	h.gateMu.Lock()
 	g := h.gates[conn.ID]
@@ -163,8 +163,13 @@ func (h *Hub) EndReplay(conn *Conn, seen map[string]struct{}) {
 // 入队帧只用 ev.ClientPayload()（剥掉 acl）。入队统一走 TrySend：
 // 满水位带因断开（resync + last_seq），不再丢帧（OnSlow 为 nil 的
 // 测试桩退化为旧丢帧语义）。
-// 经济事件（Domain 非空，v3 设计 §5.1/D17）：只扇出显式 Channel，无 acl——
-// 可见性由频道本身保证（订阅侧 parseChannel 派发表仅允许本人订阅）。
+// B-1（终局安全评审）：频道名/ topic 是全局命名空间（不含 project 维度），
+// 跨项目同名集合订阅的是同一频道——文档事件必须先按连接归属项目等值
+// 过滤（ev.ProjectID == c.ProjectID），不等直接跳过（在他项目事件上不做
+// ACL 评估）。连接归属项目来自 WS 握手信任锚（hello.project_id 已与凭证
+// 一致校验）；连接无项目归属（空串，生产握手路径不可达）时 fail-closed
+// 不投递。经济事件（Domain 非空，v3 设计 §5.1/D17）不受此过滤：可见性由
+// 显式频道本身保证（订阅侧 parseChannel 派发表仅允许本人订阅）。
 // 门控中的连接：帧积压进 backlog（EndReplay 统一去重刷入）。
 func (h *Hub) Dispatch(ev events.Envelope) {
 	if !h.markSeen(ev.EventID) {
@@ -185,8 +190,15 @@ func (h *Hub) Dispatch(ev events.Envelope) {
 		}
 		h.mu.RUnlock()
 		for _, c := range subs {
-			if !ev.IsEconomy() && !c.PlatformAdmin && !events.VisibleTo(ev.ACL, c.DocPrincipal) {
-				continue
+			if !ev.IsEconomy() {
+				// B-1 项目隔离先于 ACL 评估：他项目事件不进入本连接的
+				// 可见性判定（fail-closed：空 ProjectID 连接一律跳过）。
+				if ev.ProjectID != c.ProjectID {
+					continue
+				}
+				if !c.PlatformAdmin && !events.VisibleTo(ev.ACL, c.DocPrincipal) {
+					continue
+				}
 			}
 			frame := map[string]any{"type": "event", "channel": ch, "payload": payload}
 			if g := h.gateOf(c.ID); g != nil {
