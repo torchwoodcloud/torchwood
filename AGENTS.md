@@ -60,6 +60,7 @@
 - 列表查询复用 `pkg/crud` 或等价的 AIP-132/158/160 抽象，不要手拼 SQL filter/order；动态文档优先使用 `pkg/query`。
 - JWT claims 保持与 `pkg/jwtparser` 的映射兼容。
 - Console 前端组件放在 `console/src/components/ui/`，样式基于 Tailwind + shadcn/ui。
+- **文件 I/O 工具选择**：普通文件的读写与小幅修改一律用内置 Read/Write/Edit 工具（diff 可审阅、`file:line` 引用可点击、Edit 精确匹配是安全网），不要绕道 Python/shell 脚本（Git Bash 下内联脚本还有引号转义坑）。仅以下场景允许用脚本处理文件：批量同构操作（多文件正则替换/重命名/格式转换）、写入内容为计算产物（聚合/派生数据，无需全文进上下文）、超大文件或超长行、编码/换行符敏感（GBK/BOM/CRLF/LF）需显式控制。
 
 ## 已接受取舍（P3-18）
 - **app 层允许 `grpc/status`**：`internal/app/*` 直接使用 `google.golang.org/grpc/status` 与 `codes` 表达领域错误（56 文件），视为项目约定而非分层违规，不引入中间 AppError 类型；`domain` 层仍保持纯净，禁止依赖 gRPC。
