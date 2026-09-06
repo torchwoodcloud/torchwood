@@ -96,6 +96,14 @@ jobs:
       - name: Tests (unit + integration, race + coverage)
         run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
 
+      # A7（转出 POC 门禁）：RLS 性能相对基准常驻 CI——documentdb RLS 开/关
+      # 计数比值超过阈值（30x，见 rls_policy_test.go）即失败。绝对 P99 数值
+      # 门禁需 CI 专用基准规格（百万行级数据灌入），转出 POC 后上线
+      #（15-exit-poc A7 登记此分界）。
+      - name: RLS performance relative benchmark (A7)
+        run: go test ./internal/infra/documentdb/ -run 'TestRLS_RelativeBenchmark|TestRLS_ExplainInitPlanGate' -count=1 -v
+
+
       - name: Coverage gate
         run: |
           total=$(go tool cover -func=coverage.out | awk '/^total:/ {sub(/%/, "", $3); print $3}')
