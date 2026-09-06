@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -27,12 +28,31 @@ func accessLevelString(l sharedv1.AccessLevel) (string, bool) {
 	switch l {
 	case sharedv1.AccessLevel_ACCESS_PUBLIC:
 		return "public", true
-	case sharedv1.AccessLevel_ACCESS_AUTHENTICATED:
-		return "authenticated", true
+	case sharedv1.AccessLevel_ACCESS_END_USER:
+		return "end_user", true
+	case sharedv1.AccessLevel_ACCESS_SERVER:
+		return "server", true
 	case sharedv1.AccessLevel_ACCESS_PERMISSION:
 		return "permission", true
-	case sharedv1.AccessLevel_ACCESS_API_KEY:
-		return "api_key", true
+	case sharedv1.AccessLevel_ACCESS_SYSTEM:
+		return "system", true
+	}
+	return "", false
+}
+
+// domainAccessString 映射 domain AccessLevel → swagger x-torchwood-access 字符串。
+func domainAccessString(l domainauth.AccessLevel) (string, bool) {
+	switch l {
+	case domainauth.AccessPublic:
+		return "public", true
+	case domainauth.AccessEndUser:
+		return "end_user", true
+	case domainauth.AccessServer:
+		return "server", true
+	case domainauth.AccessPermission:
+		return "permission", true
+	case domainauth.AccessSystem:
+		return "system", true
 	}
 	return "", false
 }
@@ -64,12 +84,11 @@ const errorResponseRef = "#/definitions/v1ErrorResponse"
 // 前提：仓库根执行过 task generate:proto（genproto 已入库，本测试直接可用）。
 func TestSwaggerAccessExtensionMatchesCollectMethodsByAccess(t *testing.T) {
 	descs := businessFileDescriptors()
-	_, _, _, err := collectMethodsByAccess(descs...)
+	policies, err := BuildMethodPolicies(descs...)
 	require.NoError(t, err)
 
-	// 按 collectMethodsByAccess 的解析语义（方法级 method_auth 优先，否则服务级
-	// 默认）推导每个方法的 access；ACCESS_AUTHENTICATED 也落在 permissionMethods，
-	// 因此不能直接用三个集合反推，这里逐方法解析。
+	// 按收集器解析语义（方法级 method_auth 优先，否则服务级默认）推导每个
+	// 方法的 access（直接消费 PolicySet，与启动路径同源）。
 	accessOf := make(map[string]string)
 	defaultOf := make(map[string]string) // service full name → 服务默认 access
 	byProtoPath := make(map[string]protoreflect.FileDescriptor, len(descs))
@@ -78,21 +97,15 @@ func TestSwaggerAccessExtensionMatchesCollectMethodsByAccess(t *testing.T) {
 		for i := 0; i < fd.Services().Len(); i++ {
 			s := fd.Services().Get(i)
 			serviceName := string(s.FullName())
-			serviceDefault := resolveServiceDefaultAccess(s)
-			def, ok := accessLevelString(serviceDefault)
+			def, ok := accessLevelString(resolveServiceDefaultAccess(s))
 			require.True(t, ok, "service %s 无法解析默认 access", serviceName)
 			defaultOf[serviceName] = def
-			methods := s.Methods()
-			for j := 0; j < methods.Len(); j++ {
-				m := methods.Get(j)
-				access, _, ok := resolveMethodAccess(m, serviceDefault)
-				require.True(t, ok && access != sharedv1.AccessLevel_ACCESS_LEVEL_UNSPECIFIED,
-					"method %s/%s 无法解析 access", serviceName, m.Name())
-				as, ok := accessLevelString(access)
-				require.True(t, ok, "method %s/%s access 非法", serviceName, m.Name())
-				accessOf["/"+serviceName+"/"+string(m.Name())] = as
-			}
 		}
+	}
+	for _, p := range policies.Methods() {
+		as, ok := domainAccessString(p.Access)
+		require.True(t, ok, "method %s access 非法", p.Method)
+		accessOf[p.Method] = as
 	}
 
 	genprotoDir := filepath.Join("..", "..", "genproto")

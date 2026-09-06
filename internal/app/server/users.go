@@ -227,8 +227,10 @@ func (u *Users) UpdateUser(ctx context.Context, projectID, userID string, update
 
 // UpdateUserPassword 服务端直接重置密码，并撤销该用户全部会话（与客户端
 // 改密后清会话语义一致），避免旧令牌继续有效。
+// 决策 v8：users 六写方法归一业务写档（member+users.write）——接管的信任
+// 边界收敛到 scope/角色授予环节；角色/scope 细粒度由拦截器策略表把关。
 func (u *Users) UpdateUserPassword(ctx context.Context, projectID, userID, newPassword string) (*databases.Document, error) {
-	if err := appshared.RequirePlatformAdmin(ctx); err != nil {
+	if err := appshared.RequireServerWriteActor(ctx); err != nil {
 		return nil, err
 	}
 	if _, err := u.resolveProject(ctx, projectID); err != nil {
@@ -301,11 +303,13 @@ func (u *Users) DeleteUserSession(ctx context.Context, projectID, userID, sessio
 	return u.sessionRepo.Delete(ctx, projectID, sessionID)
 }
 
-// CreateUserToken 模拟登录：以指定用户身份创建会话并签发 token（调试/客服场景）。
-// 注意：签发的 token 生命周期为默认会话 TTL（7 天），仅供调试使用，
-// 不应作为长期凭证用于生产路径。
+// CreateUserToken 模拟登录：以指定用户身份创建会话并签发 token。用途：
+// 服务端登录桥接（自有 auth 体系验证后为用户铸造 Torchwood 会话，见
+// docs/developer/12-sdk.md §4.4 的 agent 典型流程）与客服/调试模拟登录。
+// 决策 v8：归一业务写档（member+users.write）；评审补偿控制（TTL 硬上限
+// 1h、改 email/status 撤会话）由 M5 落地。
 func (u *Users) CreateUserToken(ctx context.Context, projectID, userID string) (*domainauth.TokenBundle, error) {
-	if err := appshared.RequirePlatformAdmin(ctx); err != nil {
+	if err := appshared.RequireServerWriteActor(ctx); err != nil {
 		return nil, err
 	}
 	if _, err := u.resolveProject(ctx, projectID); err != nil {
@@ -338,8 +342,9 @@ func (u *Users) CreateUserToken(ctx context.Context, projectID, userID string) (
 	return bundle, nil
 }
 
+// 决策 v8：users 六写方法归一业务写档（member+users.write）。
 func (u *Users) DeleteUser(ctx context.Context, projectID, userID string, _ databases.Principal) error {
-	if err := appshared.RequirePlatformAdmin(ctx); err != nil {
+	if err := appshared.RequireServerWriteActor(ctx); err != nil {
 		return err
 	}
 	if _, err := u.resolveProject(ctx, projectID); err != nil {

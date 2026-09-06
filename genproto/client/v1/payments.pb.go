@@ -647,7 +647,7 @@ const file_client_v1_payments_proto_rawDesc = "" +
 	"\n" +
 	"GetMyOrder\x12&.torchwood.client.v1.GetMyOrderRequest\x1a!.torchwood.client.v1.PaymentOrder\"&\x82\xd3\xe4\x93\x02 \x12\x1e/v1/payments/orders/{order_id}\x12\x80\x01\n" +
 	"\fListMyOrders\x12(.torchwood.client.v1.ListMyOrdersRequest\x1a).torchwood.client.v1.ListMyOrdersResponse\"\x1b\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/payments/orders\x12\x92\x01\n" +
-	"\rVerifyReceipt\x12).torchwood.client.v1.VerifyReceiptRequest\x1a*.torchwood.client.v1.VerifyReceiptResponse\"*\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/v1/payments/ios/verify-receipt\x1a\x06\x92\xb2\x19\x02\b\x02B\xfa\x03\x92A\xb7\x03RR\n" +
+	"\rVerifyReceipt\x12).torchwood.client.v1.VerifyReceiptRequest\x1a*.torchwood.client.v1.VerifyReceiptResponse\"*\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/v1/payments/ios/verify-receipt\x1a\x06\x92\xb2\x19\x02\b\x02B\xf5\x03\x92A\xb2\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xab\x02\n" +
@@ -659,8 +659,9 @@ const file_client_v1_payments_proto_rawDesc = "" +
 	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
-	"\x06Bearer\x12\x00z%\n" +
-	"\x12x-torchwood-access\x12\x0f\x1a\rauthenticatedZ=github.com/torchwooddev/torchwood/genproto/client/v1;clientv1b\x06proto3"
+	"\x06Bearer\x12\x00z \n" +
+	"\x12x-torchwood-access\x12\n" +
+	"\x1a\bend_userZ=github.com/torchwooddev/torchwood/genproto/client/v1;clientv1b\x06proto3"
 
 var (
 	file_client_v1_payments_proto_rawDescOnce sync.Once

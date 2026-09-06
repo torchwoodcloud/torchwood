@@ -1480,24 +1480,31 @@ const file_server_v1_functions_proto_rawDesc = "" +
 	"\x16ListExecutionsResponse\x12>\n" +
 	"\n" +
 	"executions\x18\x01 \x03(\v2\x1e.torchwood.server.v1.ExecutionR\n" +
-	"executions2\xd1\x12\n" +
-	"\x10FunctionsService\x12|\n" +
-	"\fListRuntimes\x12\x1a.torchwood.shared.v1.Empty\x1a).torchwood.server.v1.ListRuntimesResponse\"%\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/server/functions:runtimes\x12\x8e\x01\n" +
-	"\x12ListSpecifications\x12\x1a.torchwood.shared.v1.Empty\x1a/.torchwood.server.v1.ListSpecificationsResponse\"+\x82\xd3\xe4\x93\x02%\x12#/v1/server/functions:specifications\x12|\n" +
-	"\x0eCreateFunction\x12*.torchwood.server.v1.CreateFunctionRequest\x1a\x1d.torchwood.server.v1.Function\"\x1f\x82\xd3\xe4\x93\x02\x19:\x01*\"\x14/v1/server/functions\x12{\n" +
-	"\rListFunctions\x12 .torchwood.shared.v1.ListRequest\x1a*.torchwood.server.v1.ListFunctionsResponse\"\x1c\x82\xd3\xe4\x93\x02\x16\x12\x14/v1/server/functions\x12\x81\x01\n" +
-	"\vGetFunction\x12'.torchwood.server.v1.GetFunctionRequest\x1a\x1d.torchwood.server.v1.Function\"*\x82\xd3\xe4\x93\x02$\x12\"/v1/server/functions/{function_id}\x12\x8a\x01\n" +
-	"\x0eUpdateFunction\x12*.torchwood.server.v1.UpdateFunctionRequest\x1a\x1d.torchwood.server.v1.Function\"-\x82\xd3\xe4\x93\x02':\x01*2\"/v1/server/functions/{function_id}\x12\x81\x01\n" +
-	"\x0eDeleteFunction\x12'.torchwood.server.v1.GetFunctionRequest\x1a\x1a.torchwood.shared.v1.Empty\"*\x82\xd3\xe4\x93\x02$*\"/v1/server/functions/{function_id}\x12\x9c\x01\n" +
-	"\x10CreateDeployment\x12,.torchwood.server.v1.CreateDeploymentRequest\x1a\x1f.torchwood.server.v1.Deployment\"9\x82\xd3\xe4\x93\x023:\x01*\"./v1/server/functions/{function_id}/deployments\x12\xa0\x01\n" +
-	"\x0fListDeployments\x12'.torchwood.server.v1.GetFunctionRequest\x1a,.torchwood.server.v1.ListDeploymentsResponse\"6\x82\xd3\xe4\x93\x020\x12./v1/server/functions/{function_id}/deployments\x12\xa3\x01\n" +
-	"\rGetDeployment\x12).torchwood.server.v1.GetDeploymentRequest\x1a\x1f.torchwood.server.v1.Deployment\"F\x82\xd3\xe4\x93\x02@\x12>/v1/server/functions/{function_id}/deployments/{deployment_id}\x12\xa1\x01\n" +
-	"\x10DeleteDeployment\x12).torchwood.server.v1.GetDeploymentRequest\x1a\x1a.torchwood.shared.v1.Empty\"F\x82\xd3\xe4\x93\x02@*>/v1/server/functions/{function_id}/deployments/{deployment_id}\x12\x97\x01\n" +
-	"\fSetVariables\x12(.torchwood.server.v1.SetVariablesRequest\x1a\x1e.torchwood.server.v1.Variables\"=\x8a\xb2\x19\x02\b\x04\x82\xd3\xe4\x93\x021:\x01*\x1a,/v1/server/functions/{function_id}/variables\x12\x93\x01\n" +
-	"\fGetVariables\x12'.torchwood.server.v1.GetFunctionRequest\x1a\x1e.torchwood.server.v1.Variables\":\x8a\xb2\x19\x02\b\x04\x82\xd3\xe4\x93\x02.\x12,/v1/server/functions/{function_id}/variables\x12\x98\x01\n" +
-	"\x0fCreateExecution\x12+.torchwood.server.v1.CreateExecutionRequest\x1a\x1e.torchwood.server.v1.Execution\"8\x82\xd3\xe4\x93\x022:\x01*\"-/v1/server/functions/{function_id}/executions\x12\x9d\x01\n" +
-	"\x0eListExecutions\x12'.torchwood.server.v1.GetFunctionRequest\x1a+.torchwood.server.v1.ListExecutionsResponse\"5\x82\xd3\xe4\x93\x02/\x12-/v1/server/functions/{function_id}/executions\x12\x9e\x01\n" +
-	"\fGetExecution\x12(.torchwood.server.v1.GetExecutionRequest\x1a\x1e.torchwood.server.v1.Execution\"D\x82\xd3\xe4\x93\x02>\x12</v1/server/functions/{function_id}/executions/{execution_id}\x1a\x06\x92\xb2\x19\x02\b\x04B\xda\x03\x92A\x97\x03RR\n" +
+	"executions2\x84\x14\n" +
+	"\x10FunctionsService\x12\x86\x01\n" +
+	"\fListRuntimes\x12\x1a.torchwood.shared.v1.Empty\x1a).torchwood.server.v1.ListRuntimesResponse\"/\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/server/functions:runtimes\x12\x98\x01\n" +
+	"\x12ListSpecifications\x12\x1a.torchwood.shared.v1.Empty\x1a/.torchwood.server.v1.ListSpecificationsResponse\"5\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x02%\x12#/v1/server/functions:specifications\x12\x8a\x01\n" +
+	"\x0eCreateFunction\x12*.torchwood.server.v1.CreateFunctionRequest\x1a\x1d.torchwood.server.v1.Function\"-\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x02\x19:\x01*\"\x14/v1/server/functions\x12\x85\x01\n" +
+	"\rListFunctions\x12 .torchwood.shared.v1.ListRequest\x1a*.torchwood.server.v1.ListFunctionsResponse\"&\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x02\x16\x12\x14/v1/server/functions\x12\x8b\x01\n" +
+	"\vGetFunction\x12'.torchwood.server.v1.GetFunctionRequest\x1a\x1d.torchwood.server.v1.Function\"4\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x02$\x12\"/v1/server/functions/{function_id}\x12\x98\x01\n" +
+	"\x0eUpdateFunction\x12*.torchwood.server.v1.UpdateFunctionRequest\x1a\x1d.torchwood.server.v1.Function\";\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x02':\x01*2\"/v1/server/functions/{function_id}\x12\x8f\x01\n" +
+	"\x0eDeleteFunction\x12'.torchwood.server.v1.GetFunctionRequest\x1a\x1a.torchwood.shared.v1.Empty\"8\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x02$*\"/v1/server/functions/{function_id}\x12\xaa\x01\n" +
+	"\x10CreateDeployment\x12,.torchwood.server.v1.CreateDeploymentRequest\x1a\x1f.torchwood.server.v1.Deployment\"G\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x023:\x01*\"./v1/server/functions/{function_id}/deployments\x12\xaa\x01\n" +
+	"\x0fListDeployments\x12'.torchwood.server.v1.GetFunctionRequest\x1a,.torchwood.server.v1.ListDeploymentsResponse\"@\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x020\x12./v1/server/functions/{function_id}/deployments\x12\xad\x01\n" +
+	"\rGetDeployment\x12).torchwood.server.v1.GetDeploymentRequest\x1a\x1f.torchwood.server.v1.Deployment\"P\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x02@\x12>/v1/server/functions/{function_id}/deployments/{deployment_id}\x12\xaf\x01\n" +
+	"\x10DeleteDeployment\x12).torchwood.server.v1.GetDeploymentRequest\x1a\x1a.torchwood.shared.v1.Empty\"T\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x02@*>/v1/server/functions/{function_id}/deployments/{deployment_id}\x12\x9f\x01\n" +
+	"\fSetVariables\x12(.torchwood.server.v1.SetVariablesRequest\x1a\x1e.torchwood.server.v1.Variables\"E\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x021:\x01*\x1a,/v1/server/functions/{function_id}/variables\x12\x97\x01\n" +
+	"\fGetVariables\x12'.torchwood.server.v1.GetFunctionRequest\x1a\x1e.torchwood.server.v1.Variables\">\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x02.\x12,/v1/server/functions/{function_id}/variables\x12\xa6\x01\n" +
+	"\x0fCreateExecution\x12+.torchwood.server.v1.CreateExecutionRequest\x1a\x1e.torchwood.server.v1.Execution\"F\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x022:\x01*\"-/v1/server/functions/{function_id}/executions\x12\xa7\x01\n" +
+	"\x0eListExecutions\x12'.torchwood.server.v1.GetFunctionRequest\x1a+.torchwood.server.v1.ListExecutionsResponse\"?\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x02/\x12-/v1/server/functions/{function_id}/executions\x12\xa8\x01\n" +
+	"\fGetExecution\x12(.torchwood.server.v1.GetExecutionRequest\x1a\x1e.torchwood.server.v1.Execution\"N\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x02>\x12</v1/server/functions/{function_id}/executions/{execution_id}\x1a\x06\x92\xb2\x19\x02\b\x03B\xd9\x03\x92A\x96\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
@@ -1509,8 +1516,8 @@ const file_server_v1_functions_proto_rawDesc = "" +
 	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
-	"\x06apiKey\x12\x00z\x1f\n" +
-	"\x12x-torchwood-access\x12\t\x1a\aapi_keyZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
+	"\x06apiKey\x12\x00z\x1e\n" +
+	"\x12x-torchwood-access\x12\b\x1a\x06serverZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
 
 var (
 	file_server_v1_functions_proto_rawDescOnce sync.Once

@@ -51,7 +51,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   }
   extensions: {
     key: "x-torchwood-access"
-    value: { string_value: "authenticated" }
+    value: { string_value: "end_user" }
   }
   // 统一 default 错误响应（运行时错误体即 shared.v1.ErrorResponse），
   // 文件级声明自动填充到本文件全部 operation。
@@ -67,7 +67,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // AssetsService 是终端用户资产面（v3 设计 §2.7 / §6）：只读三个方法。
 // 终端用户没有任何直接写资产的 API（红线 D6）。
 service AssetsService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_AUTHENTICATED };
+  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_END_USER };
 
   rpc ListAssetDefs(ListAssetDefsRequest) returns (ListAssetDefsResponse) {
     option (google.api.http) = { get: "/v1/assets/defs" };

@@ -926,21 +926,21 @@ const file_server_v1_groups_proto_rawDesc = "" +
 	"\x1dUpdateMembershipStatusRequest\x12\x19\n" +
 	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12#\n" +
 	"\rmembership_id\x18\x02 \x01(\tR\fmembershipId\x12\x16\n" +
-	"\x06status\x18\x03 \x01(\tR\x06status2\xdb\r\n" +
-	"\rGroupsService\x12p\n" +
-	"\vCreateGroup\x12'.torchwood.server.v1.CreateGroupRequest\x1a\x1a.torchwood.server.v1.Group\"\x1c\x82\xd3\xe4\x93\x02\x16:\x01*\"\x11/v1/server/groups\x12r\n" +
+	"\x06status\x18\x03 \x01(\tR\x06status2\xf6\x0e\n" +
+	"\rGroupsService\x12\x7f\n" +
+	"\vCreateGroup\x12'.torchwood.server.v1.CreateGroupRequest\x1a\x1a.torchwood.server.v1.Group\"+\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x03\x10\x02\x82\xd3\xe4\x93\x02\x16:\x01*\"\x11/v1/server/groups\x12|\n" +
 	"\n" +
-	"ListGroups\x12 .torchwood.shared.v1.ListRequest\x1a'.torchwood.server.v1.ListGroupsResponse\"\x19\x82\xd3\xe4\x93\x02\x13\x12\x11/v1/server/groups\x12l\n" +
-	"\bGetGroup\x12$.torchwood.server.v1.GetGroupRequest\x1a\x1a.torchwood.server.v1.Group\"\x1e\x82\xd3\xe4\x93\x02\x18\x12\x16/v1/server/groups/{id}\x12o\n" +
-	"\vDeleteGroup\x12$.torchwood.server.v1.GetGroupRequest\x1a\x1a.torchwood.shared.v1.Empty\"\x1e\x82\xd3\xe4\x93\x02\x18*\x16/v1/server/groups/{id}\x12\x87\x01\n" +
-	"\rGetGroupPrefs\x12$.torchwood.server.v1.GetGroupRequest\x1a*.torchwood.server.v1.GetGroupPrefsResponse\"$\x82\xd3\xe4\x93\x02\x1e\x12\x1c/v1/server/groups/{id}/prefs\x12\x95\x01\n" +
-	"\x10UpdateGroupPrefs\x12,.torchwood.server.v1.UpdateGroupPrefsRequest\x1a*.torchwood.server.v1.GetGroupPrefsResponse\"'\x82\xd3\xe4\x93\x02!:\x01*\x1a\x1c/v1/server/groups/{id}/prefs\x12\x96\x01\n" +
-	"\x10CreateMembership\x12,.torchwood.server.v1.CreateMembershipRequest\x1a\x1f.torchwood.server.v1.Membership\"3\x82\xd3\xe4\x93\x02-:\x01*\"(/v1/server/groups/{group_id}/memberships\x12\x9e\x01\n" +
-	"\x0fListMemberships\x12+.torchwood.server.v1.ListMembershipsRequest\x1a,.torchwood.server.v1.ListMembershipsResponse\"0\x82\xd3\xe4\x93\x02*\x12(/v1/server/groups/{group_id}/memberships\x12\x9d\x01\n" +
-	"\rGetMembership\x12).torchwood.server.v1.GetMembershipRequest\x1a\x1f.torchwood.server.v1.Membership\"@\x82\xd3\xe4\x93\x02:\x128/v1/server/groups/{group_id}/memberships/{membership_id}\x12\xa6\x01\n" +
-	"\x10UpdateMembership\x12,.torchwood.server.v1.UpdateMembershipRequest\x1a\x1f.torchwood.server.v1.Membership\"C\x82\xd3\xe4\x93\x02=:\x01*28/v1/server/groups/{group_id}/memberships/{membership_id}\x12\xb9\x01\n" +
-	"\x16UpdateMembershipStatus\x122.torchwood.server.v1.UpdateMembershipStatusRequest\x1a\x1f.torchwood.server.v1.Membership\"J\x82\xd3\xe4\x93\x02D:\x01*2?/v1/server/groups/{group_id}/memberships/{membership_id}/status\x12\x9b\x01\n" +
-	"\x10DeleteMembership\x12).torchwood.server.v1.GetMembershipRequest\x1a\x1a.torchwood.shared.v1.Empty\"@\x82\xd3\xe4\x93\x02:*8/v1/server/groups/{group_id}/memberships/{membership_id}\x1a\x06\x92\xb2\x19\x02\b\x04B\xda\x03\x92A\x97\x03RR\n" +
+	"ListGroups\x12 .torchwood.shared.v1.ListRequest\x1a'.torchwood.server.v1.ListGroupsResponse\"#\x8a\xb2\x19\x06\"\x04\b\x03\x10\x01\x82\xd3\xe4\x93\x02\x13\x12\x11/v1/server/groups\x12v\n" +
+	"\bGetGroup\x12$.torchwood.server.v1.GetGroupRequest\x1a\x1a.torchwood.server.v1.Group\"(\x8a\xb2\x19\x06\"\x04\b\x03\x10\x01\x82\xd3\xe4\x93\x02\x18\x12\x16/v1/server/groups/{id}\x12~\n" +
+	"\vDeleteGroup\x12$.torchwood.server.v1.GetGroupRequest\x1a\x1a.torchwood.shared.v1.Empty\"-\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x03\x10\x02\x82\xd3\xe4\x93\x02\x18*\x16/v1/server/groups/{id}\x12\x91\x01\n" +
+	"\rGetGroupPrefs\x12$.torchwood.server.v1.GetGroupRequest\x1a*.torchwood.server.v1.GetGroupPrefsResponse\".\x8a\xb2\x19\x06\"\x04\b\x03\x10\x01\x82\xd3\xe4\x93\x02\x1e\x12\x1c/v1/server/groups/{id}/prefs\x12\xa4\x01\n" +
+	"\x10UpdateGroupPrefs\x12,.torchwood.server.v1.UpdateGroupPrefsRequest\x1a*.torchwood.server.v1.GetGroupPrefsResponse\"6\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x03\x10\x02\x82\xd3\xe4\x93\x02!:\x01*\x1a\x1c/v1/server/groups/{id}/prefs\x12\xa5\x01\n" +
+	"\x10CreateMembership\x12,.torchwood.server.v1.CreateMembershipRequest\x1a\x1f.torchwood.server.v1.Membership\"B\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x03\x10\x02\x82\xd3\xe4\x93\x02-:\x01*\"(/v1/server/groups/{group_id}/memberships\x12\xa8\x01\n" +
+	"\x0fListMemberships\x12+.torchwood.server.v1.ListMembershipsRequest\x1a,.torchwood.server.v1.ListMembershipsResponse\":\x8a\xb2\x19\x06\"\x04\b\x03\x10\x01\x82\xd3\xe4\x93\x02*\x12(/v1/server/groups/{group_id}/memberships\x12\xa7\x01\n" +
+	"\rGetMembership\x12).torchwood.server.v1.GetMembershipRequest\x1a\x1f.torchwood.server.v1.Membership\"J\x8a\xb2\x19\x06\"\x04\b\x03\x10\x01\x82\xd3\xe4\x93\x02:\x128/v1/server/groups/{group_id}/memberships/{membership_id}\x12\xb5\x01\n" +
+	"\x10UpdateMembership\x12,.torchwood.server.v1.UpdateMembershipRequest\x1a\x1f.torchwood.server.v1.Membership\"R\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x03\x10\x02\x82\xd3\xe4\x93\x02=:\x01*28/v1/server/groups/{group_id}/memberships/{membership_id}\x12\xc8\x01\n" +
+	"\x16UpdateMembershipStatus\x122.torchwood.server.v1.UpdateMembershipStatusRequest\x1a\x1f.torchwood.server.v1.Membership\"Y\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x03\x10\x02\x82\xd3\xe4\x93\x02D:\x01*2?/v1/server/groups/{group_id}/memberships/{membership_id}/status\x12\xaa\x01\n" +
+	"\x10DeleteMembership\x12).torchwood.server.v1.GetMembershipRequest\x1a\x1a.torchwood.shared.v1.Empty\"O\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x03\x10\x02\x82\xd3\xe4\x93\x02:*8/v1/server/groups/{group_id}/memberships/{membership_id}\x1a\x06\x92\xb2\x19\x02\b\x03B\xd9\x03\x92A\x96\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
@@ -952,8 +952,8 @@ const file_server_v1_groups_proto_rawDesc = "" +
 	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
-	"\x06apiKey\x12\x00z\x1f\n" +
-	"\x12x-torchwood-access\x12\t\x1a\aapi_keyZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
+	"\x06apiKey\x12\x00z\x1e\n" +
+	"\x12x-torchwood-access\x12\b\x1a\x06serverZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
 
 var (
 	file_server_v1_groups_proto_rawDescOnce sync.Once

@@ -6,17 +6,79 @@ option go_package = "github.com/torchwooddev/torchwood/genproto/shared/v1;shared
 
 import "google/protobuf/descriptor.proto";
 
+// AccessLevel 是方法的凭证族门禁（第一维）。完整策略 = 凭证族 + 该族下的
+// 细粒度门（SERVER 面为 admin_roles + api_key_scope；PERMISSION 面为
+// permissions；END_USER 面为登录会话本身）。语义：
+//   PUBLIC      匿名可调（自证凭证型：secret/challenge-token 即授权）。
+//   END_USER    端用户会话/JWT 专属（Client API 面）。
+//   SERVER      admin console 会话（admin_roles 把关）或 API key
+//               （api_key_scope 把关）——Server API 面的凭证族。
+//   PERMISSION  admin console 会话专属，permissions（HasAnyRole）把关；
+//               API key 凭证一律拒绝（scope * / all 也不放行）。
+//   SYSTEM      内部系统调用专属（当前无外部 RPC 使用，预留给 worker 面）。
 enum AccessLevel {
   ACCESS_LEVEL_UNSPECIFIED = 0;
   ACCESS_PUBLIC = 1;
-  ACCESS_AUTHENTICATED = 2;
-  ACCESS_PERMISSION = 3;
-  ACCESS_API_KEY = 4;
+  ACCESS_END_USER = 2;
+  ACCESS_SERVER = 3;
+  ACCESS_PERMISSION = 4;
+  ACCESS_SYSTEM = 5;
 }
 
+// AdminRole 是 console admin 的 RBAC 角色（平台级角色体系）。
+// 会话标签 "console"（GetCurrentAdmin 类 me 方法放行所有 admin 会话）不是
+// 角色，不进本 enum，经 permissions 字符串值域显式登记。
+enum AdminRole {
+  ADMIN_ROLE_UNSPECIFIED = 0;
+  ADMIN_ROLE_VIEWER = 1;
+  ADMIN_ROLE_MEMBER = 2;
+  ADMIN_ROLE_ADMIN = 3;
+  ADMIN_ROLE_OWNER = 4;
+}
+
+// ScopeResource 是 API key scope 的资源词表（单一事实源）。
+// 注意：apikeys 资源已删除（APIKeysService 为 PERMISSION 面，key 凭证禁入，
+// 资源本身无消费方）；economy 已更名 assets（与服务名对齐）。
+enum ScopeResource {
+  SCOPE_RESOURCE_UNSPECIFIED = 0;
+  SCOPE_RESOURCE_DATABASES = 1;
+  SCOPE_RESOURCE_USERS = 2;
+  SCOPE_RESOURCE_GROUPS = 3;
+  SCOPE_RESOURCE_STORAGE = 4;
+  SCOPE_RESOURCE_PROJECTS = 5;
+  SCOPE_RESOURCE_OAUTH_PROVIDERS = 6;
+  SCOPE_RESOURCE_FUNCTIONS = 7;
+  SCOPE_RESOURCE_PAYMENTS = 8;
+  SCOPE_RESOURCE_ASSETS = 9;
+  SCOPE_RESOURCE_SUBSCRIPTIONS = 10;
+  SCOPE_RESOURCE_BILLING = 11;
+  SCOPE_RESOURCE_OUTBOX = 12;
+}
+
+// ScopeOp 是 API key scope 的读写方向。
+enum ScopeOp {
+  SCOPE_OP_UNSPECIFIED = 0;
+  SCOPE_OP_READ = 1;
+  SCOPE_OP_WRITE = 2;
+}
+
+// APIKeyScope 声明 SERVER 面方法对 API key 凭证开放的 scope 门。
+message APIKeyScope {
+  ScopeResource resource = 1;
+  ScopeOp op = 2;
+}
+
+// MethodAuth 是方法的完整授权策略声明（单一策略源）：
+//   access        凭证族（必填）。
+//   permissions   PERMISSION 面的角色门（字符串词表 = AdminRole 名小写 ∪
+//                 "console" 会话标签）；client 面端用户方法为 ["users"]。
+//   admin_roles   SERVER 面的 admin 会话角色门（enum）。
+//   api_key_scope SERVER 面的 API key scope 门；缺省 = 该方法不对 key 开放。
 message MethodAuth {
   AccessLevel access = 1;
   repeated string permissions = 2;
+  repeated AdminRole admin_roles = 3;
+  APIKeyScope api_key_scope = 4;
 }
 
 message ServiceAuth {

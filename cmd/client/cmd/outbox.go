@@ -21,21 +21,18 @@ func newOutboxCmd(g *globalFlags) *group {
 	})
 }
 
+// 项目上下文来自凭证（决策 v8 项目寻址不变量）：API key 取密钥行绑定，
+// 请求体不再携带 project_id。
 func newOutboxListDeadCmd(g *globalFlags) *verb {
-	var projectID string
 	var pageSize int
 	var pageToken string
-	return newVerb(g, "list-dead", "列出死信", "admin outbox list-dead [--project-id]",
+	return newVerb(g, "list-dead", "列出死信", "admin outbox list-dead",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&projectID, "project-id", "", "项目 ID（必填）")
 			fs.IntVar(&pageSize, "page-size", 0, "每页条数")
 			fs.StringVar(&pageToken, "page-token", "", "上一页 next_page_token")
 		},
 		func(v *verb, env *commands.Environment, _ []string) error {
 			payload := map[string]any{}
-			if projectID != "" {
-				payload["project_id"] = projectID
-			}
 			if pageSize != 0 {
 				payload["page_size"] = pageSize
 			}
@@ -47,19 +44,12 @@ func newOutboxListDeadCmd(g *globalFlags) *verb {
 }
 
 func newOutboxReplayCmd(g *globalFlags) *verb {
-	var projectID string
-	return newVerb(g, "replay", "重放单条死信", "admin outbox replay <event-id> [--project-id]",
-		func(fs *flag.FlagSet) {
-			fs.StringVar(&projectID, "project-id", "", "项目 ID（必填）")
-		},
+	return newVerb(g, "replay", "重放单条死信", "admin outbox replay <event-id>",
+		func(fs *flag.FlagSet) {},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
 				return err
 			}
-			payload := map[string]any{"event_id": args[0]}
-			if projectID != "" {
-				payload["project_id"] = projectID
-			}
-			return call(g, env, methodOutboxReplay, payload)
+			return call(g, env, methodOutboxReplay, map[string]any{"event_id": args[0]})
 		})
 }

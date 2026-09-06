@@ -50,7 +50,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   }
   extensions: {
     key: "x-torchwood-access"
-    value: { string_value: "api_key" }
+    value: { string_value: "server" }
   }
   // 统一 default 错误响应（运行时错误体即 shared.v1.ErrorResponse），
   // 文件级声明自动填充到本文件全部 operation。
@@ -64,10 +64,13 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service OAuthProvidersService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_API_KEY };
+  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
 
   rpc ListOAuthProviders(shared.v1.ListRequest) returns (ListOAuthProvidersResponse) {
     option (google.api.http) = { get: "/v1/server/oauth-providers" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_OAUTH_PROVIDERS, op: SCOPE_OP_READ }
+    };
   }
 
   rpc UpsertOAuthProvider(UpsertOAuthProviderRequest) returns (OAuthProvider) {
@@ -75,10 +78,18 @@ service OAuthProvidersService {
       put: "/v1/server/oauth-providers/{provider}"
       body: "*"
     };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_OAUTH_PROVIDERS, op: SCOPE_OP_WRITE }
+    };
   }
 
   rpc DeleteOAuthProvider(DeleteOAuthProviderRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/oauth-providers/{provider}" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_OAUTH_PROVIDERS, op: SCOPE_OP_WRITE }
+    };
   }
 }
 

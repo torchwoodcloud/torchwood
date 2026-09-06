@@ -1262,21 +1262,31 @@ const file_server_v1_subscriptions_proto_rawDesc = "" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"\\\n" +
 	"\x19ExpireSubscriptionRequest\x12'\n" +
 	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason2\xd8\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason2\xac\v\n" +
+	"\x14SubscriptionsService\x12\x95\x01\n" +
 	"\n" +
-	"\x14SubscriptionsService\x12\x8c\x01\n" +
+	"CreatePlan\x12&.torchwood.server.v1.CreatePlanRequest\x1a%.torchwood.server.v1.SubscriptionPlan\"8\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\n" +
+	"\x10\x02\x82\xd3\xe4\x93\x02#:\x01*\"\x1e/v1/server/subscriptions/plans\x12\x87\x01\n" +
+	"\tListPlans\x12 .torchwood.shared.v1.ListRequest\x1a&.torchwood.server.v1.ListPlansResponse\"0\x8a\xb2\x19\x06\"\x04\b\n" +
+	"\x10\x01\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/subscriptions/plans\x12\x91\x01\n" +
+	"\aGetPlan\x12#.torchwood.server.v1.GetPlanRequest\x1a%.torchwood.server.v1.SubscriptionPlan\":\x8a\xb2\x19\x06\"\x04\b\n" +
+	"\x10\x01\x82\xd3\xe4\x93\x02*\x12(/v1/server/subscriptions/plans/{plan_id}\x12\x9f\x01\n" +
 	"\n" +
-	"CreatePlan\x12&.torchwood.server.v1.CreatePlanRequest\x1a%.torchwood.server.v1.SubscriptionPlan\"/\x8a\xb2\x19\x02\b\x04\x82\xd3\xe4\x93\x02#:\x01*\"\x1e/v1/server/subscriptions/plans\x12}\n" +
-	"\tListPlans\x12 .torchwood.shared.v1.ListRequest\x1a&.torchwood.server.v1.ListPlansResponse\"&\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/subscriptions/plans\x12\x87\x01\n" +
-	"\aGetPlan\x12#.torchwood.server.v1.GetPlanRequest\x1a%.torchwood.server.v1.SubscriptionPlan\"0\x82\xd3\xe4\x93\x02*\x12(/v1/server/subscriptions/plans/{plan_id}\x12\x96\x01\n" +
+	"UpdatePlan\x12&.torchwood.server.v1.UpdatePlanRequest\x1a%.torchwood.server.v1.SubscriptionPlan\"B\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\n" +
+	"\x10\x02\x82\xd3\xe4\x93\x02-:\x01*2(/v1/server/subscriptions/plans/{plan_id}\x12\x91\x01\n" +
 	"\n" +
-	"UpdatePlan\x12&.torchwood.server.v1.UpdatePlanRequest\x1a%.torchwood.server.v1.SubscriptionPlan\"9\x8a\xb2\x19\x02\b\x04\x82\xd3\xe4\x93\x02-:\x01*2(/v1/server/subscriptions/plans/{plan_id}\x12\x88\x01\n" +
-	"\n" +
-	"DeletePlan\x12&.torchwood.server.v1.DeletePlanRequest\x1a\x1a.torchwood.shared.v1.Empty\"6\x8a\xb2\x19\x02\b\x04\x82\xd3\xe4\x93\x02**(/v1/server/subscriptions/plans/{plan_id}\x12\x87\x01\n" +
-	"\x11ListSubscriptions\x12 .torchwood.shared.v1.ListRequest\x1a..torchwood.server.v1.ListSubscriptionsResponse\" \x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/server/subscriptions\x12\x95\x01\n" +
-	"\x0fGetSubscription\x12+.torchwood.server.v1.GetSubscriptionRequest\x1a!.torchwood.server.v1.Subscription\"2\x82\xd3\xe4\x93\x02,\x12*/v1/server/subscriptions/{subscription_id}\x12\xab\x01\n" +
-	"\x12CancelSubscription\x12..torchwood.server.v1.CancelSubscriptionRequest\x1a!.torchwood.server.v1.Subscription\"B\x8a\xb2\x19\x02\b\x04\x82\xd3\xe4\x93\x026:\x01*\"1/v1/server/subscriptions/{subscription_id}:cancel\x12\xab\x01\n" +
-	"\x12ExpireSubscription\x12..torchwood.server.v1.ExpireSubscriptionRequest\x1a!.torchwood.server.v1.Subscription\"B\x8a\xb2\x19\x02\b\x04\x82\xd3\xe4\x93\x026:\x01*\"1/v1/server/subscriptions/{subscription_id}:expire\x1a\x06\x92\xb2\x19\x02\b\x04B\xda\x03\x92A\x97\x03RR\n" +
+	"DeletePlan\x12&.torchwood.server.v1.DeletePlanRequest\x1a\x1a.torchwood.shared.v1.Empty\"?\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\n" +
+	"\x10\x02\x82\xd3\xe4\x93\x02**(/v1/server/subscriptions/plans/{plan_id}\x12\x91\x01\n" +
+	"\x11ListSubscriptions\x12 .torchwood.shared.v1.ListRequest\x1a..torchwood.server.v1.ListSubscriptionsResponse\"*\x8a\xb2\x19\x06\"\x04\b\n" +
+	"\x10\x01\x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/server/subscriptions\x12\x9f\x01\n" +
+	"\x0fGetSubscription\x12+.torchwood.server.v1.GetSubscriptionRequest\x1a!.torchwood.server.v1.Subscription\"<\x8a\xb2\x19\x06\"\x04\b\n" +
+	"\x10\x01\x82\xd3\xe4\x93\x02,\x12*/v1/server/subscriptions/{subscription_id}\x12\xb3\x01\n" +
+	"\x12CancelSubscription\x12..torchwood.server.v1.CancelSubscriptionRequest\x1a!.torchwood.server.v1.Subscription\"J\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\n" +
+	"\x10\x02\x82\xd3\xe4\x93\x026:\x01*\"1/v1/server/subscriptions/{subscription_id}:cancel\x12\xb3\x01\n" +
+	"\x12ExpireSubscription\x12..torchwood.server.v1.ExpireSubscriptionRequest\x1a!.torchwood.server.v1.Subscription\"J\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\n" +
+	"\x10\x02\x82\xd3\xe4\x93\x026:\x01*\"1/v1/server/subscriptions/{subscription_id}:expire\x1a\x06\x92\xb2\x19\x02\b\x03B\xd9\x03\x92A\x96\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
@@ -1288,8 +1298,8 @@ const file_server_v1_subscriptions_proto_rawDesc = "" +
 	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
-	"\x06apiKey\x12\x00z\x1f\n" +
-	"\x12x-torchwood-access\x12\t\x1a\aapi_keyZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
+	"\x06apiKey\x12\x00z\x1e\n" +
+	"\x12x-torchwood-access\x12\b\x1a\x06serverZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
 
 var (
 	file_server_v1_subscriptions_proto_rawDescOnce sync.Once

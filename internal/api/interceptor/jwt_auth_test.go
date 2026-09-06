@@ -180,14 +180,15 @@ func TestAuthInterceptor_RejectsAPIKeyWildcardScopeOnAdminsService(t *testing.T)
 	}
 }
 
-// TestAuthInterceptor_RejectsViewerOrMemberAdminOnWriteMethods（F2-2）：
-// viewer/member 角色 admin 会话调用仅 owner/admin 的 Server API 写方法
-// 必须 PermissionDenied。
+// TestAuthInterceptor_RejectsViewerOrMemberAdminOnWriteMethods（F2-2，
+// 决策 v8 口径）：
+//   - viewer 调角色门写方法（users 写/DDL/Functions/OAuth）必须拒绝；
+//   - member 调委托平台档（DDL/Functions/OAuth）必须拒绝（users 已归一业务写）；
+//   - viewer/member 调平台专属面（PERMISSION 接线）必须拒绝。
 func TestAuthInterceptor_RejectsViewerOrMemberAdminOnWriteMethods(t *testing.T) {
 	t.Parallel()
 
-	writeMethods := []string{
-		"/torchwood.server.v1.APIKeysService/CreateAPIKey",
+	roleGatedWrites := []string{
 		"/torchwood.server.v1.UsersService/CreateUserToken",
 		"/torchwood.server.v1.UsersService/UpdateUserPassword",
 		"/torchwood.server.v1.UsersService/DeleteUser",
@@ -197,24 +198,47 @@ func TestAuthInterceptor_RejectsViewerOrMemberAdminOnWriteMethods(t *testing.T) 
 		"/torchwood.server.v1.FunctionsService/SetVariables",
 		"/torchwood.server.v1.OAuthProvidersService/UpsertOAuthProvider",
 	}
-	for _, role := range []string{"viewer", "member"} {
-		for _, method := range writeMethods {
-			ic, err := NewAuthInterceptor(stubValidator{principal: &shared.Principal{
-				ActorKind:      shared.ActorKindAdmin,
-				CredentialType: shared.CredentialTypeSession,
-				Roles:          []string{role},
-			}}, nil, []string{method}, nil)
-			requireNoError(t, err)
-
-			ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Session admin-token"))
-			_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{
-				FullMethod: method,
-			}, func(context.Context, any) (any, error) {
-				t.Fatal("handler should not run")
-				return nil, nil
-			})
-			requirePermissionDenied(t, err)
+	delegatedOnly := []string{
+		"/torchwood.server.v1.DatabasesService/CreateDatabase",
+		"/torchwood.server.v1.FunctionsService/SetVariables",
+		"/torchwood.server.v1.OAuthProvidersService/UpsertOAuthProvider",
+	}
+	runCase := func(method string, role string, permissionWired bool) {
+		var apiKeyMethods []string
+		var permissionMethods map[string][]string
+		if permissionWired {
+			permissionMethods = map[string][]string{method: {"owner", "admin"}}
+		} else {
+			apiKeyMethods = []string{method}
 		}
+		ic, err := NewAuthInterceptor(stubValidator{principal: &shared.Principal{
+			ActorKind:      shared.ActorKindAdmin,
+			CredentialType: shared.CredentialTypeSession,
+			Roles:          []string{role},
+		}}, nil, apiKeyMethods, permissionMethods)
+		requireNoError(t, err)
+		ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Session admin-token"))
+		_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{
+			FullMethod: method,
+		}, func(context.Context, any) (any, error) {
+			t.Fatalf("handler should not run for %s on %s", role, method)
+			return nil, nil
+		})
+		requirePermissionDenied(t, err)
+	}
+
+	for _, method := range roleGatedWrites {
+		runCase(method, "viewer", false)
+	}
+	for _, method := range delegatedOnly {
+		runCase(method, "member", false)
+	}
+	for _, method := range []string{
+		"/torchwood.server.v1.ProjectsService/CreateProject",
+		"/torchwood.server.v1.APIKeysService/CreateAPIKey",
+	} {
+		runCase(method, "viewer", true)
+		runCase(method, "member", true)
 	}
 }
 

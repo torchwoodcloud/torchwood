@@ -3255,32 +3255,32 @@ const file_client_v1_account_proto_rawDesc = "" +
 	"\x12x-torchwood-access\x12\b\x1a\x06public\x8a\xb2\x19\x02\b\x01\x82\xd3\xe4\x93\x02\x18:\x01*\"\x13/v1/account/sign-in\x12\x9f\x01\n" +
 	"\aSignOut\x12#.torchwood.client.v1.SignOutRequest\x1a\x1a.torchwood.shared.v1.Empty\"S\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x02\x19:\x01*\"\x14/v1/account/sign-out\x12\xae\x01\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x02\x19:\x01*\"\x14/v1/account/sign-out\x12\xae\x01\n" +
 	"\fRefreshToken\x12(.torchwood.client.v1.RefreshTokenRequest\x1a).torchwood.client.v1.RefreshTokenResponse\"I\x92A\"b\x00j\x1e\n" +
 	"\x12x-torchwood-access\x12\b\x1a\x06public\x8a\xb2\x19\x02\b\x01\x82\xd3\xe4\x93\x02\x18:\x01*\"\x13/v1/account/refresh\x12\x8e\x01\n" +
 	"\x02Me\x12\x1e.torchwood.client.v1.MeRequest\x1a\x1c.torchwood.client.v1.Account\"J\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x02\x10\x12\x0e/v1/account/me\x12\xa4\x01\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x02\x10\x12\x0e/v1/account/me\x12\xa4\x01\n" +
 	"\rUpdateAccount\x12).torchwood.client.v1.UpdateAccountRequest\x1a\x1c.torchwood.client.v1.Account\"J\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x02\x10:\x01*2\v/v1/account\x12\xb2\x01\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x02\x10:\x01*2\v/v1/account\x12\xb2\x01\n" +
 	"\x12ConfirmEmailChange\x12..torchwood.client.v1.ConfirmEmailChangeRequest\x1a\x1c.torchwood.client.v1.Account\"N\x92A\"b\x00j\x1e\n" +
 	"\x12x-torchwood-access\x12\b\x1a\x06public\x8a\xb2\x19\x02\b\x01\x82\xd3\xe4\x93\x02\x1d:\x01*\x1a\x18/v1/account/email-change\x12\xb5\x01\n" +
 	"\fListSessions\x12(.torchwood.client.v1.ListSessionsRequest\x1a).torchwood.client.v1.ListSessionsResponse\"P\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x02\x16\x12\x14/v1/account/sessions\x12\xb5\x01\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x02\x16\x12\x14/v1/account/sessions\x12\xb5\x01\n" +
 	"\rDeleteSession\x12).torchwood.client.v1.DeleteSessionRequest\x1a\x1a.torchwood.shared.v1.Empty\"]\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x02#*!/v1/account/sessions/{session_id}\x12\xaa\x01\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x02#*!/v1/account/sessions/{session_id}\x12\xaa\x01\n" +
 	"\x0eDeleteSessions\x12*.torchwood.client.v1.DeleteSessionsRequest\x1a\x1a.torchwood.shared.v1.Empty\"P\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x02\x16*\x14/v1/account/sessions\x12\xa6\x01\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x02\x16*\x14/v1/account/sessions\x12\xa6\x01\n" +
 	"\bGetPrefs\x12$.torchwood.client.v1.GetPrefsRequest\x1a%.torchwood.client.v1.GetPrefsResponse\"M\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x02\x13\x12\x11/v1/account/prefs\x12\xaf\x01\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x02\x13\x12\x11/v1/account/prefs\x12\xaf\x01\n" +
 	"\vUpdatePrefs\x12'.torchwood.client.v1.UpdatePrefsRequest\x1a%.torchwood.client.v1.GetPrefsResponse\"P\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x02\x16:\x01*\x1a\x11/v1/account/prefs\x12\xba\x01\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x02\x16:\x01*\x1a\x11/v1/account/prefs\x12\xba\x01\n" +
 	"\x0eCreateEmailOTP\x12*.torchwood.client.v1.CreateEmailOTPRequest\x1a&.torchwood.client.v1.ChallengeResponse\"T\x92A\"b\x00j\x1e\n" +
 	"\x12x-torchwood-access\x12\b\x1a\x06public\x8a\xb2\x19\x02\b\x01\x82\xd3\xe4\x93\x02#:\x01*\"\x1e/v1/account/sessions/email-otp\x12\xcc\x01\n" +
 	"\x15CreateEmailOTPSession\x121.torchwood.client.v1.CreateEmailOTPSessionRequest\x1a#.torchwood.client.v1.SignInResponse\"[\x92A\"b\x00j\x1e\n" +
@@ -3299,13 +3299,13 @@ const file_client_v1_account_proto_rawDesc = "" +
 	"\x12x-torchwood-access\x12\b\x1a\x06public\x8a\xb2\x19\x02\b\x01\x82\xd3\xe4\x93\x02#:\x01*\"\x1e/v1/account/sessions/anonymous\x12\xe9\x01\n" +
 	"\x17CreateOAuth2LinkSession\x123.torchwood.client.v1.CreateOAuth2LinkSessionRequest\x1a0.torchwood.client.v1.CreateOAuth2SessionResponse\"g\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x02-\x12+/v1/account/sessions/oauth2/{provider}/link\x12\xe8\x01\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x02-\x12+/v1/account/sessions/oauth2/{provider}/link\x12\xe8\x01\n" +
 	"\x1cCreateOAuth2LinkTokenSession\x128.torchwood.client.v1.CreateOAuth2LinkTokenSessionRequest\x1a\x1c.torchwood.client.v1.Account\"p\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x026:\x01*\"1/v1/account/sessions/oauth2/{provider}/link/token\x12\xce\x01\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x026:\x01*\"1/v1/account/sessions/oauth2/{provider}/link/token\x12\xce\x01\n" +
 	"\x12CreateVerification\x12..torchwood.client.v1.CreateVerificationRequest\x1a/.torchwood.client.v1.CreateVerificationResponse\"W\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/account/verification\x12\xb2\x01\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/account/verification\x12\xb2\x01\n" +
 	"\x12UpdateVerification\x12..torchwood.client.v1.UpdateVerificationRequest\x1a\x1c.torchwood.client.v1.Account\"N\x92A\"b\x00j\x1e\n" +
 	"\x12x-torchwood-access\x12\b\x1a\x06public\x8a\xb2\x19\x02\b\x01\x82\xd3\xe4\x93\x02\x1d:\x01*\x1a\x18/v1/account/verification\x12\xa4\x01\n" +
 	"\x0eCreateRecovery\x12*.torchwood.client.v1.CreateRecoveryRequest\x1a\x1a.torchwood.shared.v1.Empty\"J\x92A\"b\x00j\x1e\n" +
@@ -3314,28 +3314,28 @@ const file_client_v1_account_proto_rawDesc = "" +
 	"\x12x-torchwood-access\x12\b\x1a\x06public\x8a\xb2\x19\x02\b\x01\x82\xd3\xe4\x93\x02\x19:\x01*\x1a\x14/v1/account/recovery\x12\xad\x01\n" +
 	"\vListFactors\x12'.torchwood.client.v1.ListFactorsRequest\x1a(.torchwood.client.v1.ListFactorsResponse\"K\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/account/mfa\x12\xb6\x01\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x02\x11\x12\x0f/v1/account/mfa\x12\xb6\x01\n" +
 	"\x10CreateTOTPFactor\x12,.torchwood.client.v1.CreateTOTPFactorRequest\x1a\x1f.torchwood.client.v1.TOTPFactor\"S\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x02\x19:\x01*\"\x14/v1/account/mfa/totp\x12\xb2\x01\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x02\x19:\x01*\"\x14/v1/account/mfa/totp\x12\xb2\x01\n" +
 	"\x10VerifyTOTPFactor\x12,.torchwood.client.v1.VerifyTOTPFactorRequest\x1a\x1b.torchwood.client.v1.Factor\"S\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x02\x19:\x01*\x1a\x14/v1/account/mfa/totp\x12\xad\x01\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x02\x19:\x01*\x1a\x14/v1/account/mfa/totp\x12\xad\x01\n" +
 	"\fDeleteFactor\x12(.torchwood.client.v1.DeleteFactorRequest\x1a\x1a.torchwood.shared.v1.Empty\"W\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x02\x1d*\x1b/v1/account/mfa/{factor_id}\x12\xb6\x01\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x02\x1d*\x1b/v1/account/mfa/{factor_id}\x12\xb6\x01\n" +
 	"\x10CreateMFASession\x12,.torchwood.client.v1.CreateMFASessionRequest\x1a#.torchwood.client.v1.SignInResponse\"O\x92A\"b\x00j\x1e\n" +
 	"\x12x-torchwood-access\x12\b\x1a\x06public\x8a\xb2\x19\x02\b\x01\x82\xd3\xe4\x93\x02\x1e:\x01*\"\x19/v1/account/mfa/challenge\x12\xaa\x01\n" +
 	"\tCreateJWT\x12%.torchwood.client.v1.CreateJWTRequest\x1a&.torchwood.client.v1.CreateJWTResponse\"N\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x02\x14:\x01*\"\x0f/v1/account/jwt\x12\xc8\x01\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x02\x14:\x01*\"\x0f/v1/account/jwt\x12\xc8\x01\n" +
 	"\x15CreateMagicURLSession\x121.torchwood.client.v1.CreateMagicURLSessionRequest\x1a&.torchwood.client.v1.ChallengeResponse\"T\x92A\"b\x00j\x1e\n" +
 	"\x12x-torchwood-access\x12\b\x1a\x06public\x8a\xb2\x19\x02\b\x01\x82\xd3\xe4\x93\x02#:\x01*\"\x1e/v1/account/sessions/magic-url\x12\xc5\x01\n" +
 	"\x15UpdateMagicURLSession\x121.torchwood.client.v1.UpdateMagicURLSessionRequest\x1a#.torchwood.client.v1.SignInResponse\"T\x92A\"b\x00j\x1e\n" +
 	"\x12x-torchwood-access\x12\b\x1a\x06public\x8a\xb2\x19\x02\b\x01\x82\xd3\xe4\x93\x02#:\x01*\x1a\x1e/v1/account/sessions/magic-url\x12\xa5\x01\n" +
 	"\bListLogs\x12$.torchwood.client.v1.ListLogsRequest\x1a%.torchwood.client.v1.ListLogsResponse\"L\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\t\b\x03\x12\x05users\x82\xd3\xe4\x93\x02\x12\x12\x10/v1/account/logs\x1a\x06\x92\xb2\x19\x02\b\x02B\xfa\x03\x92A\xb7\x03RR\n" +
+	"permission\x8a\xb2\x19\t\b\x04\x12\x05users\x82\xd3\xe4\x93\x02\x12\x12\x10/v1/account/logs\x1a\x06\x92\xb2\x19\x02\b\x02B\xf5\x03\x92A\xb2\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xab\x02\n" +
@@ -3347,8 +3347,9 @@ const file_client_v1_account_proto_rawDesc = "" +
 	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
-	"\x06Bearer\x12\x00z%\n" +
-	"\x12x-torchwood-access\x12\x0f\x1a\rauthenticatedZ=github.com/torchwooddev/torchwood/genproto/client/v1;clientv1b\x06proto3"
+	"\x06Bearer\x12\x00z \n" +
+	"\x12x-torchwood-access\x12\n" +
+	"\x1a\bend_userZ=github.com/torchwooddev/torchwood/genproto/client/v1;clientv1b\x06proto3"
 
 var (
 	file_client_v1_account_proto_rawDescOnce sync.Once

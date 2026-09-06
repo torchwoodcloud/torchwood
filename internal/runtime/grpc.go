@@ -14,11 +14,11 @@ import (
 	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
 	"github.com/torchwooddev/torchwood/internal/api/clientgrpc"
 	"github.com/torchwooddev/torchwood/internal/api/consolegrpc"
+	"github.com/torchwooddev/torchwood/internal/api/interceptor"
 	"github.com/torchwooddev/torchwood/internal/api/servergrpc"
 	"github.com/torchwooddev/torchwood/internal/domain/audit"
 	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	domainbilling "github.com/torchwooddev/torchwood/internal/domain/billing"
-	"github.com/torchwooddev/torchwood/internal/api/interceptor"
 	"github.com/torchwooddev/torchwood/internal/infra/auth"
 	"github.com/torchwooddev/torchwood/internal/infra/health"
 	"github.com/torchwooddev/torchwood/internal/pkg/config"
@@ -66,12 +66,19 @@ func NewGRPCServer(
 	if err != nil {
 		return nil, err
 	}
-	// fail-closed（R10-P1-5）：proto 注解推导的 ACCESS_API_KEY 方法集合必须与
-	// apiKeyScopeRules 完全一致，不一致直接 panic（见 AssertAPIKeyScopeCoverage）。
+	// 语义断言（机制重设计 M2）：完备性/死 scope/档位/client·console 值域/
+	// 项目寻址不变量/streaming fail-closed——策略语义违例启动即失败。
+	policySet, err := BuildMethodPolicies(authzFileDescriptors()...)
+	if err != nil {
+		return nil, err
+	}
+	if err := domainauth.AssertSemantic(policySet); err != nil {
+		return nil, err
+	}
+	// 过渡期交叉核验（A2 拦截器换源 PolicySet 后两断言随两表退役）：
+	// proto 推导的 SERVER 方法集合必须与 apiKeyScopeRules 完全一致，
+	// scope 写方法必须已登记 adminRoleMethodRules。
 	interceptor.AssertAPIKeyScopeCoverage(apiKeyMethods)
-	// fail-closed（Round3 H1-1）：apiKeyScopeRules 的全部写方法必须已登记
-	// adminRoleMethodRules，且角色表不得残留读方法/未映射方法，否则 viewer
-	// 会话可越权调用未登记写方法（见 AssertAdminRoleWriteCoverage）。
 	interceptor.AssertAdminRoleWriteCoverage()
 
 	authInterceptor, err := interceptor.NewAuthInterceptor(validator, publicMethods, apiKeyMethods, permissionMethods)
@@ -220,38 +227,25 @@ func authzFileDescriptors() []protoreflect.FileDescriptor {
 	}
 }
 
+// collectMethodsByAccess 从 PolicySet 派生拦截器所需的三张方法集合
+// （A2 拦截器换源后本函数退役）。END_USER/PERMISSION 都落在 permissionMethods；
+// SERVER 落在 apiKeyMethods（历史命名，A2 更名 serverMethods）。
 func collectMethodsByAccess(fileDescs ...protoreflect.FileDescriptor) (publicMethods []string, apiKeyMethods []string, permissionMethods map[string][]string, err error) {
+	set, err := BuildMethodPolicies(fileDescs...)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	permissionMethods = make(map[string][]string)
-	for _, fileDesc := range fileDescs {
-		services := fileDesc.Services()
-		for i := 0; i < services.Len(); i++ {
-			service := services.Get(i)
-			serviceDefault := resolveServiceDefaultAccess(service)
-			methods := service.Methods()
-			for j := 0; j < methods.Len(); j++ {
-				method := methods.Get(j)
-				access, perms, ok := resolveMethodAccess(method, serviceDefault)
-				if !ok || access == sharedv1.AccessLevel_ACCESS_LEVEL_UNSPECIFIED {
-					return nil, nil, nil, fmt.Errorf("missing auth policy for method %s/%s", service.FullName(), method.Name())
-				}
-				fullMethod := fmt.Sprintf("/%s/%s", service.FullName(), method.Name())
-				switch access {
-				case sharedv1.AccessLevel_ACCESS_PUBLIC:
-					publicMethods = append(publicMethods, fullMethod)
-				case sharedv1.AccessLevel_ACCESS_API_KEY:
-					apiKeyMethods = append(apiKeyMethods, fullMethod)
-				case sharedv1.AccessLevel_ACCESS_AUTHENTICATED:
-					if len(perms) == 0 {
-						perms = []string{"users"}
-					}
-					permissionMethods[fullMethod] = perms
-				case sharedv1.AccessLevel_ACCESS_PERMISSION:
-					if len(perms) == 0 {
-						return nil, nil, nil, fmt.Errorf("access_permission method %s/%s requires explicit permissions", service.FullName(), method.Name())
-					}
-					permissionMethods[fullMethod] = perms
-				}
-			}
+	for _, p := range set.Methods() {
+		switch p.Access {
+		case domainauth.AccessPublic:
+			publicMethods = append(publicMethods, p.Method)
+		case domainauth.AccessServer:
+			apiKeyMethods = append(apiKeyMethods, p.Method)
+		case domainauth.AccessEndUser, domainauth.AccessPermission:
+			permissionMethods[p.Method] = p.Permissions
+		default:
+			return nil, nil, nil, fmt.Errorf("method %s: access %d 无 bucket", p.Method, p.Access)
 		}
 	}
 	return publicMethods, apiKeyMethods, permissionMethods, nil
@@ -270,20 +264,9 @@ func resolveServiceDefaultAccess(service protoreflect.ServiceDescriptor) sharedv
 	return policy.GetDefaultAccess()
 }
 
-func resolveMethodAccess(method protoreflect.MethodDescriptor, serviceDefault sharedv1.AccessLevel) (sharedv1.AccessLevel, []string, bool) {
-	options, ok := method.Options().(*descriptorpb.MethodOptions)
-	if ok && options != nil && proto.HasExtension(options, sharedv1.E_MethodAuth) {
-		ext := proto.GetExtension(options, sharedv1.E_MethodAuth)
-		policy, ok := ext.(*sharedv1.MethodAuth)
-		if ok && policy.GetAccess() != sharedv1.AccessLevel_ACCESS_LEVEL_UNSPECIFIED {
-			return policy.GetAccess(), policy.GetPermissions(), true
-		}
-	}
-	if serviceDefault != sharedv1.AccessLevel_ACCESS_LEVEL_UNSPECIFIED {
-		return serviceDefault, nil, true
-	}
-	return sharedv1.AccessLevel_ACCESS_LEVEL_UNSPECIFIED, nil, false
-}
+// resolveMethodAccess 已由 BuildMethodPolicies/buildMethodPolicy 取代
+// （策略解析单一实现）；保留 resolveServiceDefaultAccess 供 swagger 一致性
+// 测试推导服务默认 access。
 
 func parseDuration(s string, fallback time.Duration) time.Duration {
 	if s == "" {

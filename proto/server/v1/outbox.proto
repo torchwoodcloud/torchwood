@@ -49,7 +49,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   }
   extensions: {
     key: "x-torchwood-access"
-    value: { string_value: "api_key" }
+    value: { string_value: "server" }
   }
   // 统一 default 错误响应（运行时错误体即 shared.v1.ErrorResponse），
   // 文件级声明自动填充到本文件全部 operation。
@@ -63,19 +63,29 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service OutboxService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_API_KEY };
+  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
 
   rpc ListDeadLetters(ListDeadLettersRequest) returns (ListDeadLettersResponse) {
     option (google.api.http) = { get: "/v1/server/outbox/dead-letters" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_OUTBOX, op: SCOPE_OP_READ }
+    };
   }
 
   rpc ReplayDeadLetter(ReplayDeadLetterRequest) returns (ReplayDeadLetterResponse) {
     option (google.api.http) = { post: "/v1/server/outbox/dead-letters/{event_id}:replay", body: "*" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_OUTBOX, op: SCOPE_OP_WRITE }
+    };
   }
 }
 
+// ListDeadLettersRequest 不携带 project_id（决策 v8 项目寻址不变量）：
+// 项目上下文一律来自凭证——API key 取密钥行绑定，admin 会话必须携带
+// X-Torchwood-Project 头（含平台 admin），否则 FailedPrecondition。
 message ListDeadLettersRequest {
-  string project_id = 1;
   int32 page_size = 2;
   string page_token = 3;
 }
@@ -96,9 +106,9 @@ message ListDeadLettersResponse {
   shared.v1.ListResponseMeta meta = 2;
 }
 
+// ReplayDeadLetterRequest 同上：项目上下文来自凭证，不做请求体寻址。
 message ReplayDeadLetterRequest {
   string event_id = 1;
-  string project_id = 2;
 }
 
 message ReplayDeadLetterResponse {

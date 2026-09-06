@@ -22,14 +22,25 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// AccessLevel 是方法的凭证族门禁（第一维）。完整策略 = 凭证族 + 该族下的
+// 细粒度门（SERVER 面为 admin_roles + api_key_scope；PERMISSION 面为
+// permissions；END_USER 面为登录会话本身）。语义：
+//   PUBLIC      匿名可调（自证凭证型：secret/challenge-token 即授权）。
+//   END_USER    端用户会话/JWT 专属（Client API 面）。
+//   SERVER      admin console 会话（admin_roles 把关）或 API key
+//               （api_key_scope 把关）——Server API 面的凭证族。
+//   PERMISSION  admin console 会话专属，permissions（HasAnyRole）把关；
+//               API key 凭证一律拒绝（scope * / all 也不放行）。
+//   SYSTEM      内部系统调用专属（当前无外部 RPC 使用，预留给 worker 面）。
 type AccessLevel int32
 
 const (
 	AccessLevel_ACCESS_LEVEL_UNSPECIFIED AccessLevel = 0
 	AccessLevel_ACCESS_PUBLIC            AccessLevel = 1
-	AccessLevel_ACCESS_AUTHENTICATED     AccessLevel = 2
-	AccessLevel_ACCESS_PERMISSION        AccessLevel = 3
-	AccessLevel_ACCESS_API_KEY           AccessLevel = 4
+	AccessLevel_ACCESS_END_USER          AccessLevel = 2
+	AccessLevel_ACCESS_SERVER            AccessLevel = 3
+	AccessLevel_ACCESS_PERMISSION        AccessLevel = 4
+	AccessLevel_ACCESS_SYSTEM            AccessLevel = 5
 )
 
 // Enum value maps for AccessLevel.
@@ -37,16 +48,18 @@ var (
 	AccessLevel_name = map[int32]string{
 		0: "ACCESS_LEVEL_UNSPECIFIED",
 		1: "ACCESS_PUBLIC",
-		2: "ACCESS_AUTHENTICATED",
-		3: "ACCESS_PERMISSION",
-		4: "ACCESS_API_KEY",
+		2: "ACCESS_END_USER",
+		3: "ACCESS_SERVER",
+		4: "ACCESS_PERMISSION",
+		5: "ACCESS_SYSTEM",
 	}
 	AccessLevel_value = map[string]int32{
 		"ACCESS_LEVEL_UNSPECIFIED": 0,
 		"ACCESS_PUBLIC":            1,
-		"ACCESS_AUTHENTICATED":     2,
-		"ACCESS_PERMISSION":        3,
-		"ACCESS_API_KEY":           4,
+		"ACCESS_END_USER":          2,
+		"ACCESS_SERVER":            3,
+		"ACCESS_PERMISSION":        4,
+		"ACCESS_SYSTEM":            5,
 	}
 )
 
@@ -77,17 +90,268 @@ func (AccessLevel) EnumDescriptor() ([]byte, []int) {
 	return file_shared_v1_authz_proto_rawDescGZIP(), []int{0}
 }
 
+// AdminRole 是 console admin 的 RBAC 角色（平台级角色体系）。
+// 会话标签 "console"（GetCurrentAdmin 类 me 方法放行所有 admin 会话）不是
+// 角色，不进本 enum，经 permissions 字符串值域显式登记。
+type AdminRole int32
+
+const (
+	AdminRole_ADMIN_ROLE_UNSPECIFIED AdminRole = 0
+	AdminRole_ADMIN_ROLE_VIEWER      AdminRole = 1
+	AdminRole_ADMIN_ROLE_MEMBER      AdminRole = 2
+	AdminRole_ADMIN_ROLE_ADMIN       AdminRole = 3
+	AdminRole_ADMIN_ROLE_OWNER       AdminRole = 4
+)
+
+// Enum value maps for AdminRole.
+var (
+	AdminRole_name = map[int32]string{
+		0: "ADMIN_ROLE_UNSPECIFIED",
+		1: "ADMIN_ROLE_VIEWER",
+		2: "ADMIN_ROLE_MEMBER",
+		3: "ADMIN_ROLE_ADMIN",
+		4: "ADMIN_ROLE_OWNER",
+	}
+	AdminRole_value = map[string]int32{
+		"ADMIN_ROLE_UNSPECIFIED": 0,
+		"ADMIN_ROLE_VIEWER":      1,
+		"ADMIN_ROLE_MEMBER":      2,
+		"ADMIN_ROLE_ADMIN":       3,
+		"ADMIN_ROLE_OWNER":       4,
+	}
+)
+
+func (x AdminRole) Enum() *AdminRole {
+	p := new(AdminRole)
+	*p = x
+	return p
+}
+
+func (x AdminRole) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AdminRole) Descriptor() protoreflect.EnumDescriptor {
+	return file_shared_v1_authz_proto_enumTypes[1].Descriptor()
+}
+
+func (AdminRole) Type() protoreflect.EnumType {
+	return &file_shared_v1_authz_proto_enumTypes[1]
+}
+
+func (x AdminRole) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AdminRole.Descriptor instead.
+func (AdminRole) EnumDescriptor() ([]byte, []int) {
+	return file_shared_v1_authz_proto_rawDescGZIP(), []int{1}
+}
+
+// ScopeResource 是 API key scope 的资源词表（单一事实源）。
+// 注意：apikeys 资源已删除（APIKeysService 为 PERMISSION 面，key 凭证禁入，
+// 资源本身无消费方）；economy 已更名 assets（与服务名对齐）。
+type ScopeResource int32
+
+const (
+	ScopeResource_SCOPE_RESOURCE_UNSPECIFIED     ScopeResource = 0
+	ScopeResource_SCOPE_RESOURCE_DATABASES       ScopeResource = 1
+	ScopeResource_SCOPE_RESOURCE_USERS           ScopeResource = 2
+	ScopeResource_SCOPE_RESOURCE_GROUPS          ScopeResource = 3
+	ScopeResource_SCOPE_RESOURCE_STORAGE         ScopeResource = 4
+	ScopeResource_SCOPE_RESOURCE_PROJECTS        ScopeResource = 5
+	ScopeResource_SCOPE_RESOURCE_OAUTH_PROVIDERS ScopeResource = 6
+	ScopeResource_SCOPE_RESOURCE_FUNCTIONS       ScopeResource = 7
+	ScopeResource_SCOPE_RESOURCE_PAYMENTS        ScopeResource = 8
+	ScopeResource_SCOPE_RESOURCE_ASSETS          ScopeResource = 9
+	ScopeResource_SCOPE_RESOURCE_SUBSCRIPTIONS   ScopeResource = 10
+	ScopeResource_SCOPE_RESOURCE_BILLING         ScopeResource = 11
+	ScopeResource_SCOPE_RESOURCE_OUTBOX          ScopeResource = 12
+)
+
+// Enum value maps for ScopeResource.
+var (
+	ScopeResource_name = map[int32]string{
+		0:  "SCOPE_RESOURCE_UNSPECIFIED",
+		1:  "SCOPE_RESOURCE_DATABASES",
+		2:  "SCOPE_RESOURCE_USERS",
+		3:  "SCOPE_RESOURCE_GROUPS",
+		4:  "SCOPE_RESOURCE_STORAGE",
+		5:  "SCOPE_RESOURCE_PROJECTS",
+		6:  "SCOPE_RESOURCE_OAUTH_PROVIDERS",
+		7:  "SCOPE_RESOURCE_FUNCTIONS",
+		8:  "SCOPE_RESOURCE_PAYMENTS",
+		9:  "SCOPE_RESOURCE_ASSETS",
+		10: "SCOPE_RESOURCE_SUBSCRIPTIONS",
+		11: "SCOPE_RESOURCE_BILLING",
+		12: "SCOPE_RESOURCE_OUTBOX",
+	}
+	ScopeResource_value = map[string]int32{
+		"SCOPE_RESOURCE_UNSPECIFIED":     0,
+		"SCOPE_RESOURCE_DATABASES":       1,
+		"SCOPE_RESOURCE_USERS":           2,
+		"SCOPE_RESOURCE_GROUPS":          3,
+		"SCOPE_RESOURCE_STORAGE":         4,
+		"SCOPE_RESOURCE_PROJECTS":        5,
+		"SCOPE_RESOURCE_OAUTH_PROVIDERS": 6,
+		"SCOPE_RESOURCE_FUNCTIONS":       7,
+		"SCOPE_RESOURCE_PAYMENTS":        8,
+		"SCOPE_RESOURCE_ASSETS":          9,
+		"SCOPE_RESOURCE_SUBSCRIPTIONS":   10,
+		"SCOPE_RESOURCE_BILLING":         11,
+		"SCOPE_RESOURCE_OUTBOX":          12,
+	}
+)
+
+func (x ScopeResource) Enum() *ScopeResource {
+	p := new(ScopeResource)
+	*p = x
+	return p
+}
+
+func (x ScopeResource) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ScopeResource) Descriptor() protoreflect.EnumDescriptor {
+	return file_shared_v1_authz_proto_enumTypes[2].Descriptor()
+}
+
+func (ScopeResource) Type() protoreflect.EnumType {
+	return &file_shared_v1_authz_proto_enumTypes[2]
+}
+
+func (x ScopeResource) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ScopeResource.Descriptor instead.
+func (ScopeResource) EnumDescriptor() ([]byte, []int) {
+	return file_shared_v1_authz_proto_rawDescGZIP(), []int{2}
+}
+
+// ScopeOp 是 API key scope 的读写方向。
+type ScopeOp int32
+
+const (
+	ScopeOp_SCOPE_OP_UNSPECIFIED ScopeOp = 0
+	ScopeOp_SCOPE_OP_READ        ScopeOp = 1
+	ScopeOp_SCOPE_OP_WRITE       ScopeOp = 2
+)
+
+// Enum value maps for ScopeOp.
+var (
+	ScopeOp_name = map[int32]string{
+		0: "SCOPE_OP_UNSPECIFIED",
+		1: "SCOPE_OP_READ",
+		2: "SCOPE_OP_WRITE",
+	}
+	ScopeOp_value = map[string]int32{
+		"SCOPE_OP_UNSPECIFIED": 0,
+		"SCOPE_OP_READ":        1,
+		"SCOPE_OP_WRITE":       2,
+	}
+)
+
+func (x ScopeOp) Enum() *ScopeOp {
+	p := new(ScopeOp)
+	*p = x
+	return p
+}
+
+func (x ScopeOp) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ScopeOp) Descriptor() protoreflect.EnumDescriptor {
+	return file_shared_v1_authz_proto_enumTypes[3].Descriptor()
+}
+
+func (ScopeOp) Type() protoreflect.EnumType {
+	return &file_shared_v1_authz_proto_enumTypes[3]
+}
+
+func (x ScopeOp) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ScopeOp.Descriptor instead.
+func (ScopeOp) EnumDescriptor() ([]byte, []int) {
+	return file_shared_v1_authz_proto_rawDescGZIP(), []int{3}
+}
+
+// APIKeyScope 声明 SERVER 面方法对 API key 凭证开放的 scope 门。
+type APIKeyScope struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Resource      ScopeResource          `protobuf:"varint,1,opt,name=resource,proto3,enum=torchwood.shared.v1.ScopeResource" json:"resource,omitempty"`
+	Op            ScopeOp                `protobuf:"varint,2,opt,name=op,proto3,enum=torchwood.shared.v1.ScopeOp" json:"op,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *APIKeyScope) Reset() {
+	*x = APIKeyScope{}
+	mi := &file_shared_v1_authz_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *APIKeyScope) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*APIKeyScope) ProtoMessage() {}
+
+func (x *APIKeyScope) ProtoReflect() protoreflect.Message {
+	mi := &file_shared_v1_authz_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use APIKeyScope.ProtoReflect.Descriptor instead.
+func (*APIKeyScope) Descriptor() ([]byte, []int) {
+	return file_shared_v1_authz_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *APIKeyScope) GetResource() ScopeResource {
+	if x != nil {
+		return x.Resource
+	}
+	return ScopeResource_SCOPE_RESOURCE_UNSPECIFIED
+}
+
+func (x *APIKeyScope) GetOp() ScopeOp {
+	if x != nil {
+		return x.Op
+	}
+	return ScopeOp_SCOPE_OP_UNSPECIFIED
+}
+
+// MethodAuth 是方法的完整授权策略声明（单一策略源）：
+//   access        凭证族（必填）。
+//   permissions   PERMISSION 面的角色门（字符串词表 = AdminRole 名小写 ∪
+//                 "console" 会话标签）；client 面端用户方法为 ["users"]。
+//   admin_roles   SERVER 面的 admin 会话角色门（enum）。
+//   api_key_scope SERVER 面的 API key scope 门；缺省 = 该方法不对 key 开放。
 type MethodAuth struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Access        AccessLevel            `protobuf:"varint,1,opt,name=access,proto3,enum=torchwood.shared.v1.AccessLevel" json:"access,omitempty"`
 	Permissions   []string               `protobuf:"bytes,2,rep,name=permissions,proto3" json:"permissions,omitempty"`
+	AdminRoles    []AdminRole            `protobuf:"varint,3,rep,packed,name=admin_roles,json=adminRoles,proto3,enum=torchwood.shared.v1.AdminRole" json:"admin_roles,omitempty"`
+	ApiKeyScope   *APIKeyScope           `protobuf:"bytes,4,opt,name=api_key_scope,json=apiKeyScope,proto3" json:"api_key_scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MethodAuth) Reset() {
 	*x = MethodAuth{}
-	mi := &file_shared_v1_authz_proto_msgTypes[0]
+	mi := &file_shared_v1_authz_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -99,7 +363,7 @@ func (x *MethodAuth) String() string {
 func (*MethodAuth) ProtoMessage() {}
 
 func (x *MethodAuth) ProtoReflect() protoreflect.Message {
-	mi := &file_shared_v1_authz_proto_msgTypes[0]
+	mi := &file_shared_v1_authz_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -112,7 +376,7 @@ func (x *MethodAuth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MethodAuth.ProtoReflect.Descriptor instead.
 func (*MethodAuth) Descriptor() ([]byte, []int) {
-	return file_shared_v1_authz_proto_rawDescGZIP(), []int{0}
+	return file_shared_v1_authz_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *MethodAuth) GetAccess() AccessLevel {
@@ -129,6 +393,20 @@ func (x *MethodAuth) GetPermissions() []string {
 	return nil
 }
 
+func (x *MethodAuth) GetAdminRoles() []AdminRole {
+	if x != nil {
+		return x.AdminRoles
+	}
+	return nil
+}
+
+func (x *MethodAuth) GetApiKeyScope() *APIKeyScope {
+	if x != nil {
+		return x.ApiKeyScope
+	}
+	return nil
+}
+
 type ServiceAuth struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	DefaultAccess AccessLevel            `protobuf:"varint,1,opt,name=default_access,json=defaultAccess,proto3,enum=torchwood.shared.v1.AccessLevel" json:"default_access,omitempty"`
@@ -138,7 +416,7 @@ type ServiceAuth struct {
 
 func (x *ServiceAuth) Reset() {
 	*x = ServiceAuth{}
-	mi := &file_shared_v1_authz_proto_msgTypes[1]
+	mi := &file_shared_v1_authz_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -150,7 +428,7 @@ func (x *ServiceAuth) String() string {
 func (*ServiceAuth) ProtoMessage() {}
 
 func (x *ServiceAuth) ProtoReflect() protoreflect.Message {
-	mi := &file_shared_v1_authz_proto_msgTypes[1]
+	mi := &file_shared_v1_authz_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -163,7 +441,7 @@ func (x *ServiceAuth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceAuth.ProtoReflect.Descriptor instead.
 func (*ServiceAuth) Descriptor() ([]byte, []int) {
-	return file_shared_v1_authz_proto_rawDescGZIP(), []int{1}
+	return file_shared_v1_authz_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ServiceAuth) GetDefaultAccess() AccessLevel {
@@ -208,19 +486,51 @@ var File_shared_v1_authz_proto protoreflect.FileDescriptor
 
 const file_shared_v1_authz_proto_rawDesc = "" +
 	"\n" +
-	"\x15shared/v1/authz.proto\x12\x13torchwood.shared.v1\x1a google/protobuf/descriptor.proto\"h\n" +
+	"\x15shared/v1/authz.proto\x12\x13torchwood.shared.v1\x1a google/protobuf/descriptor.proto\"{\n" +
+	"\vAPIKeyScope\x12>\n" +
+	"\bresource\x18\x01 \x01(\x0e2\".torchwood.shared.v1.ScopeResourceR\bresource\x12,\n" +
+	"\x02op\x18\x02 \x01(\x0e2\x1c.torchwood.shared.v1.ScopeOpR\x02op\"\xef\x01\n" +
 	"\n" +
 	"MethodAuth\x128\n" +
 	"\x06access\x18\x01 \x01(\x0e2 .torchwood.shared.v1.AccessLevelR\x06access\x12 \n" +
-	"\vpermissions\x18\x02 \x03(\tR\vpermissions\"V\n" +
+	"\vpermissions\x18\x02 \x03(\tR\vpermissions\x12?\n" +
+	"\vadmin_roles\x18\x03 \x03(\x0e2\x1e.torchwood.shared.v1.AdminRoleR\n" +
+	"adminRoles\x12D\n" +
+	"\rapi_key_scope\x18\x04 \x01(\v2 .torchwood.shared.v1.APIKeyScopeR\vapiKeyScope\"V\n" +
 	"\vServiceAuth\x12G\n" +
-	"\x0edefault_access\x18\x01 \x01(\x0e2 .torchwood.shared.v1.AccessLevelR\rdefaultAccess*\x83\x01\n" +
+	"\x0edefault_access\x18\x01 \x01(\x0e2 .torchwood.shared.v1.AccessLevelR\rdefaultAccess*\x90\x01\n" +
 	"\vAccessLevel\x12\x1c\n" +
 	"\x18ACCESS_LEVEL_UNSPECIFIED\x10\x00\x12\x11\n" +
-	"\rACCESS_PUBLIC\x10\x01\x12\x18\n" +
-	"\x14ACCESS_AUTHENTICATED\x10\x02\x12\x15\n" +
-	"\x11ACCESS_PERMISSION\x10\x03\x12\x12\n" +
-	"\x0eACCESS_API_KEY\x10\x04:b\n" +
+	"\rACCESS_PUBLIC\x10\x01\x12\x13\n" +
+	"\x0fACCESS_END_USER\x10\x02\x12\x11\n" +
+	"\rACCESS_SERVER\x10\x03\x12\x15\n" +
+	"\x11ACCESS_PERMISSION\x10\x04\x12\x11\n" +
+	"\rACCESS_SYSTEM\x10\x05*\x81\x01\n" +
+	"\tAdminRole\x12\x1a\n" +
+	"\x16ADMIN_ROLE_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11ADMIN_ROLE_VIEWER\x10\x01\x12\x15\n" +
+	"\x11ADMIN_ROLE_MEMBER\x10\x02\x12\x14\n" +
+	"\x10ADMIN_ROLE_ADMIN\x10\x03\x12\x14\n" +
+	"\x10ADMIN_ROLE_OWNER\x10\x04*\x8e\x03\n" +
+	"\rScopeResource\x12\x1e\n" +
+	"\x1aSCOPE_RESOURCE_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18SCOPE_RESOURCE_DATABASES\x10\x01\x12\x18\n" +
+	"\x14SCOPE_RESOURCE_USERS\x10\x02\x12\x19\n" +
+	"\x15SCOPE_RESOURCE_GROUPS\x10\x03\x12\x1a\n" +
+	"\x16SCOPE_RESOURCE_STORAGE\x10\x04\x12\x1b\n" +
+	"\x17SCOPE_RESOURCE_PROJECTS\x10\x05\x12\"\n" +
+	"\x1eSCOPE_RESOURCE_OAUTH_PROVIDERS\x10\x06\x12\x1c\n" +
+	"\x18SCOPE_RESOURCE_FUNCTIONS\x10\a\x12\x1b\n" +
+	"\x17SCOPE_RESOURCE_PAYMENTS\x10\b\x12\x19\n" +
+	"\x15SCOPE_RESOURCE_ASSETS\x10\t\x12 \n" +
+	"\x1cSCOPE_RESOURCE_SUBSCRIPTIONS\x10\n" +
+	"\x12\x1a\n" +
+	"\x16SCOPE_RESOURCE_BILLING\x10\v\x12\x19\n" +
+	"\x15SCOPE_RESOURCE_OUTBOX\x10\f*J\n" +
+	"\aScopeOp\x12\x18\n" +
+	"\x14SCOPE_OP_UNSPECIFIED\x10\x00\x12\x11\n" +
+	"\rSCOPE_OP_READ\x10\x01\x12\x12\n" +
+	"\x0eSCOPE_OP_WRITE\x10\x02:b\n" +
 	"\vmethod_auth\x12\x1e.google.protobuf.MethodOptions\x18\xa1\x96\x03 \x01(\v2\x1f.torchwood.shared.v1.MethodAuthR\n" +
 	"methodAuth:f\n" +
 	"\fservice_auth\x12\x1f.google.protobuf.ServiceOptions\x18\xa2\x96\x03 \x01(\v2 .torchwood.shared.v1.ServiceAuthR\vserviceAuthB?Z=github.com/torchwooddev/torchwood/genproto/shared/v1;sharedv1b\x06proto3"
@@ -237,27 +547,35 @@ func file_shared_v1_authz_proto_rawDescGZIP() []byte {
 	return file_shared_v1_authz_proto_rawDescData
 }
 
-var file_shared_v1_authz_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_shared_v1_authz_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_shared_v1_authz_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_shared_v1_authz_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_shared_v1_authz_proto_goTypes = []any{
 	(AccessLevel)(0),                    // 0: torchwood.shared.v1.AccessLevel
-	(*MethodAuth)(nil),                  // 1: torchwood.shared.v1.MethodAuth
-	(*ServiceAuth)(nil),                 // 2: torchwood.shared.v1.ServiceAuth
-	(*descriptorpb.MethodOptions)(nil),  // 3: google.protobuf.MethodOptions
-	(*descriptorpb.ServiceOptions)(nil), // 4: google.protobuf.ServiceOptions
+	(AdminRole)(0),                      // 1: torchwood.shared.v1.AdminRole
+	(ScopeResource)(0),                  // 2: torchwood.shared.v1.ScopeResource
+	(ScopeOp)(0),                        // 3: torchwood.shared.v1.ScopeOp
+	(*APIKeyScope)(nil),                 // 4: torchwood.shared.v1.APIKeyScope
+	(*MethodAuth)(nil),                  // 5: torchwood.shared.v1.MethodAuth
+	(*ServiceAuth)(nil),                 // 6: torchwood.shared.v1.ServiceAuth
+	(*descriptorpb.MethodOptions)(nil),  // 7: google.protobuf.MethodOptions
+	(*descriptorpb.ServiceOptions)(nil), // 8: google.protobuf.ServiceOptions
 }
 var file_shared_v1_authz_proto_depIdxs = []int32{
-	0, // 0: torchwood.shared.v1.MethodAuth.access:type_name -> torchwood.shared.v1.AccessLevel
-	0, // 1: torchwood.shared.v1.ServiceAuth.default_access:type_name -> torchwood.shared.v1.AccessLevel
-	3, // 2: torchwood.shared.v1.method_auth:extendee -> google.protobuf.MethodOptions
-	4, // 3: torchwood.shared.v1.service_auth:extendee -> google.protobuf.ServiceOptions
-	1, // 4: torchwood.shared.v1.method_auth:type_name -> torchwood.shared.v1.MethodAuth
-	2, // 5: torchwood.shared.v1.service_auth:type_name -> torchwood.shared.v1.ServiceAuth
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	4, // [4:6] is the sub-list for extension type_name
-	2, // [2:4] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	2,  // 0: torchwood.shared.v1.APIKeyScope.resource:type_name -> torchwood.shared.v1.ScopeResource
+	3,  // 1: torchwood.shared.v1.APIKeyScope.op:type_name -> torchwood.shared.v1.ScopeOp
+	0,  // 2: torchwood.shared.v1.MethodAuth.access:type_name -> torchwood.shared.v1.AccessLevel
+	1,  // 3: torchwood.shared.v1.MethodAuth.admin_roles:type_name -> torchwood.shared.v1.AdminRole
+	4,  // 4: torchwood.shared.v1.MethodAuth.api_key_scope:type_name -> torchwood.shared.v1.APIKeyScope
+	0,  // 5: torchwood.shared.v1.ServiceAuth.default_access:type_name -> torchwood.shared.v1.AccessLevel
+	7,  // 6: torchwood.shared.v1.method_auth:extendee -> google.protobuf.MethodOptions
+	8,  // 7: torchwood.shared.v1.service_auth:extendee -> google.protobuf.ServiceOptions
+	5,  // 8: torchwood.shared.v1.method_auth:type_name -> torchwood.shared.v1.MethodAuth
+	6,  // 9: torchwood.shared.v1.service_auth:type_name -> torchwood.shared.v1.ServiceAuth
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	8,  // [8:10] is the sub-list for extension type_name
+	6,  // [6:8] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_shared_v1_authz_proto_init() }
@@ -270,8 +588,8 @@ func file_shared_v1_authz_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_shared_v1_authz_proto_rawDesc), len(file_shared_v1_authz_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   2,
+			NumEnums:      4,
+			NumMessages:   3,
 			NumExtensions: 2,
 			NumServices:   0,
 		},

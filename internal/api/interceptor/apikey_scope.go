@@ -64,9 +64,16 @@ func AssertAPIKeyScopeCoverage(apiKeyMethods []string) {
 	domainauth.AssertAPIKeyScopeCoverage(apiKeyMethods)
 }
 
+// allowedReadRoleEntries 是角色表中允许指向读方法（op=="read"）的显式
+// 白名单（决策 v8：Outbox 死信读面限 owner/admin——payload 含文档数据，
+// viewer 不可枚举）。新增受限读方法必须显式登记于此。
+var allowedReadRoleEntries = map[string]struct{}{
+	"/torchwood.server.v1.OutboxService/ListDeadLetters": {},
+}
+
 // adminRoleWriteCoverageDiff 比较 scope 写方法集合与角色表，返回：
 //   - missing：scope 表声明 op=="write" 但角色表未登记的方法；
-//   - extra：角色表登记了读方法（op=="read"）或 scope 表不存在的方法。
+//   - extra：角色表登记了读方法（op=="read"，白名单除外）或 scope 表不存在的方法。
 //
 // 抽成纯函数便于单测构造缺失/多余场景（AssertAdminRoleWriteCoverage 直接调用）。
 func adminRoleWriteCoverageDiff(scopeRules map[string]apiKeyScopeRule, roleRules map[string][]string) (missing, extra []string) {
@@ -85,7 +92,9 @@ func adminRoleWriteCoverageDiff(scopeRules map[string]apiKeyScopeRule, roleRules
 			continue
 		}
 		if rule.op != "write" {
-			extra = append(extra, m)
+			if _, allowed := allowedReadRoleEntries[m]; !allowed {
+				extra = append(extra, m)
+			}
 		}
 	}
 	sort.Strings(missing)

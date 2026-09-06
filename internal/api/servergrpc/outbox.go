@@ -22,13 +22,21 @@ func NewOutboxService(outbox *events.OutboxAdmin) *OutboxService {
 	return &OutboxService{outbox: outbox}
 }
 
-func (s *OutboxService) ListDeadLetters(ctx context.Context, req *serverv1.ListDeadLettersRequest) (*serverv1.ListDeadLettersResponse, error) {
-	projectID := s.projectID(ctx)
-	if projectID == "" {
-		projectID = req.GetProjectId()
+// projectContext 落实项目寻址不变量（决策 v8，修 viewer 跨项目枚举死信）：
+// 项目上下文一律来自凭证（API key=密钥行绑定；admin=X-Torchwood-Project，
+// 含平台 admin），请求体不做寻址回退；缺失即 FailedPrecondition。
+func (s *OutboxService) projectContext(ctx context.Context) (string, error) {
+	p, ok := contexts.Principal(ctx)
+	if !ok || p == nil || p.ProjectID == "" {
+		return "", status.Error(codes.FailedPrecondition, "project context required (X-Torchwood-Project header for admin sessions)")
 	}
-	if projectID == "" {
-		return nil, status.Error(codes.InvalidArgument, "project_id is required")
+	return p.ProjectID, nil
+}
+
+func (s *OutboxService) ListDeadLetters(ctx context.Context, req *serverv1.ListDeadLettersRequest) (*serverv1.ListDeadLettersResponse, error) {
+	projectID, err := s.projectContext(ctx)
+	if err != nil {
+		return nil, err
 	}
 	ctx = contexts.WithAuditResource(ctx, "outbox/dead")
 	letters, total, next, err := s.outbox.ListDeadLetters(ctx, projectID, req.GetPageSize(), req.GetPageToken())
@@ -55,15 +63,12 @@ func (s *OutboxService) ListDeadLetters(ctx context.Context, req *serverv1.ListD
 }
 
 func (s *OutboxService) ReplayDeadLetter(ctx context.Context, req *serverv1.ReplayDeadLetterRequest) (*serverv1.ReplayDeadLetterResponse, error) {
-	projectID := s.projectID(ctx)
-	if projectID == "" {
-		projectID = req.GetProjectId()
-	}
 	if req.GetEventId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "event_id is required")
 	}
-	if projectID == "" {
-		return nil, status.Error(codes.InvalidArgument, "project_id is required")
+	projectID, err := s.projectContext(ctx)
+	if err != nil {
+		return nil, err
 	}
 	ctx = contexts.WithAuditResource(ctx, "outbox/dead/"+req.GetEventId())
 	if err := s.outbox.ReplayDeadLetter(ctx, req.GetEventId(), projectID); err != nil {
@@ -71,12 +76,4 @@ func (s *OutboxService) ReplayDeadLetter(ctx context.Context, req *serverv1.Repl
 	}
 	// available_at 为重放时刻的 NOW（与 outbox_repo 的 AvailableAt 一致在秒级内）.
 	return &serverv1.ReplayDeadLetterResponse{EventId: req.GetEventId(), AvailableAt: timestamppb.New(time.Now())}, nil
-}
-
-func (s *OutboxService) projectID(ctx context.Context) string {
-	p, ok := contexts.Principal(ctx)
-	if !ok {
-		return ""
-	}
-	return p.ProjectID
 }

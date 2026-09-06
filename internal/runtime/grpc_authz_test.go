@@ -39,7 +39,7 @@ func TestAuthzCoverage_DetectsFabricatedMethod(t *testing.T) {
 	fabricated := append(append([]string{}, apiKeyMethods...),
 		"/torchwood.server.v1.DatabasesService/FabricatedWriteThing")
 	require.PanicsWithValue(t,
-		"apiKeyScopeRules 与 ACCESS_API_KEY 方法集合不一致 (fail-closed): "+
+		"apiKeyScopeRules 与 ACCESS_SERVER 方法集合不一致 (fail-closed): "+
 			"proto 声明但规则表缺失=[/torchwood.server.v1.DatabasesService/FabricatedWriteThing]; 规则表多余=[]",
 		func() { interceptor.AssertAPIKeyScopeCoverage(fabricated) },
 	)

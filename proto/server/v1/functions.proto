@@ -50,7 +50,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   }
   extensions: {
     key: "x-torchwood-access"
-    value: { string_value: "api_key" }
+    value: { string_value: "server" }
   }
   // 统一 default 错误响应（运行时错误体即 shared.v1.ErrorResponse），
   // 文件级声明自动填充到本文件全部 operation。
@@ -68,61 +68,114 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // images; executions run the built image synchronously or asynchronously
 // via a worker queue.
 service FunctionsService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_API_KEY };
+  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
 
   // functions:runtimes / functions:specifications 为自定义方法段（REST
   // 自定义动词），不再占用 function_id 命名空间；function_id 可自由取任意合法值。
   rpc ListRuntimes(shared.v1.Empty) returns (ListRuntimesResponse) {
     option (google.api.http) = { get: "/v1/server/functions:runtimes" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_READ }
+    };
   }
   rpc ListSpecifications(shared.v1.Empty) returns (ListSpecificationsResponse) {
     option (google.api.http) = { get: "/v1/server/functions:specifications" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_READ }
+    };
   }
   rpc CreateFunction(CreateFunctionRequest) returns (Function) {
     option (google.api.http) = { post: "/v1/server/functions", body: "*" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_WRITE }
+    };
   }
   rpc ListFunctions(shared.v1.ListRequest) returns (ListFunctionsResponse) {
     option (google.api.http) = { get: "/v1/server/functions" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_READ }
+    };
   }
   rpc GetFunction(GetFunctionRequest) returns (Function) {
     option (google.api.http) = { get: "/v1/server/functions/{function_id}" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_READ }
+    };
   }
   rpc UpdateFunction(UpdateFunctionRequest) returns (Function) {
     option (google.api.http) = { patch: "/v1/server/functions/{function_id}", body: "*" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_WRITE }
+    };
   }
   rpc DeleteFunction(GetFunctionRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/functions/{function_id}" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_WRITE }
+    };
   }
   rpc CreateDeployment(CreateDeploymentRequest) returns (Deployment) {
     option (google.api.http) = { post: "/v1/server/functions/{function_id}/deployments", body: "*" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_WRITE }
+    };
   }
   rpc ListDeployments(GetFunctionRequest) returns (ListDeploymentsResponse) {
     option (google.api.http) = { get: "/v1/server/functions/{function_id}/deployments" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_READ }
+    };
   }
   rpc GetDeployment(GetDeploymentRequest) returns (Deployment) {
     option (google.api.http) = { get: "/v1/server/functions/{function_id}/deployments/{deployment_id}" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_READ }
+    };
   }
   rpc DeleteDeployment(GetDeploymentRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/functions/{function_id}/deployments/{deployment_id}" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_WRITE }
+    };
   }
   rpc SetVariables(SetVariablesRequest) returns (Variables) {
     option (google.api.http) = { put: "/v1/server/functions/{function_id}/variables", body: "*" };
     // 敏感方法显式声明 method_auth（R10-P1-1），不依赖服务级默认值。
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_API_KEY };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_WRITE }
+    };
   }
   rpc GetVariables(GetFunctionRequest) returns (Variables) {
     option (google.api.http) = { get: "/v1/server/functions/{function_id}/variables" };
     // 敏感方法显式声明 method_auth（R10-P1-1），不依赖服务级默认值。
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_API_KEY };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_READ }
+    };
   }
   rpc CreateExecution(CreateExecutionRequest) returns (Execution) {
     option (google.api.http) = { post: "/v1/server/functions/{function_id}/executions", body: "*" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_WRITE }
+    };
   }
   rpc ListExecutions(GetFunctionRequest) returns (ListExecutionsResponse) {
     option (google.api.http) = { get: "/v1/server/functions/{function_id}/executions" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_READ }
+    };
   }
   rpc GetExecution(GetExecutionRequest) returns (Execution) {
     option (google.api.http) = { get: "/v1/server/functions/{function_id}/executions/{execution_id}" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_READ }
+    };
   }
 }
 

@@ -50,7 +50,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   }
   extensions: {
     key: "x-torchwood-access"
-    value: { string_value: "api_key" }
+    value: { string_value: "server" }
   }
   // 统一 default 错误响应（运行时错误体即 shared.v1.ErrorResponse），
   // 文件级声明自动填充到本文件全部 operation。
@@ -64,26 +64,56 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service ProjectsService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_API_KEY };
+  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
 
   rpc CreateProject(CreateProjectRequest) returns (Project) {
     option (google.api.http) = { post: "/v1/server/projects", body: "*" };
+    option (torchwood.shared.v1.method_auth) = {
+      access: ACCESS_PERMISSION
+      permissions: ["owner", "admin"]
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      extensions: {
+        key: "x-torchwood-access"
+        value: { string_value: "permission" }
+      }
+    };
   }
 
   rpc ListProjects(shared.v1.ListRequest) returns (ListProjectsResponse) {
     option (google.api.http) = { get: "/v1/server/projects" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_PROJECTS, op: SCOPE_OP_READ }
+    };
   }
 
   rpc GetProject(GetProjectRequest) returns (Project) {
     option (google.api.http) = { get: "/v1/server/projects/{id}" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_PROJECTS, op: SCOPE_OP_READ }
+    };
   }
 
   rpc UpdateProject(UpdateProjectRequest) returns (Project) {
     option (google.api.http) = { patch: "/v1/server/projects/{id}", body: "*" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_MEMBER, ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_PROJECTS, op: SCOPE_OP_WRITE }
+    };
   }
 
   rpc DeleteProject(GetProjectRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/projects/{id}" };
+    option (torchwood.shared.v1.method_auth) = {
+      access: ACCESS_PERMISSION
+      permissions: ["owner", "admin"]
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      extensions: {
+        key: "x-torchwood-access"
+        value: { string_value: "permission" }
+      }
+    };
   }
 }
 

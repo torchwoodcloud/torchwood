@@ -18,29 +18,29 @@ type apiKeyScopeRule struct {
 	op       string // "read" 或 "write"
 }
 
-// apiKeyScopeRules 显式映射全部 ACCESS_API_KEY 服务的方法（Health 是
+// apiKeyScopeRules 显式映射全部 ACCESS_SERVER 服务的方法（Health 是
 // ACCESS_PUBLIC，不映射）。读方法 = List/Get/Count 类，其余一律 write。
-// 新增 ACCESS_API_KEY 方法必须在此登记，否则 APIKeyScopeAllowed 对其 fail-closed；
+// 新增 ACCESS_SERVER 方法必须在此登记，否则 APIKeyScopeAllowed 对其 fail-closed；
 // 一致性由 AssertAPIKeyScopeCoverage 在启动期校验（R10-P1-5）。
 var apiKeyScopeRules = map[string]apiKeyScopeRule{
 	// DatabasesService
-	"/torchwood.server.v1.DatabasesService/CreateDatabase":      {"databases", "write"},
-	"/torchwood.server.v1.DatabasesService/ListDatabases":       {"databases", "read"},
-	"/torchwood.server.v1.DatabasesService/GetDatabase":         {"databases", "read"},
-	"/torchwood.server.v1.DatabasesService/DeleteDatabase":      {"databases", "write"},
-	"/torchwood.server.v1.DatabasesService/CreateCollection":    {"databases", "write"},
-	"/torchwood.server.v1.DatabasesService/ListCollections":     {"databases", "read"},
-	"/torchwood.server.v1.DatabasesService/GetCollection":       {"databases", "read"},
-	"/torchwood.server.v1.DatabasesService/DeleteCollection":    {"databases", "write"},
-	"/torchwood.server.v1.DatabasesService/UpdateCollection":    {"databases", "write"},
-	"/torchwood.server.v1.DatabasesService/CreateAttribute":     {"databases", "write"},
-	"/torchwood.server.v1.DatabasesService/DeleteAttribute":     {"databases", "write"},
+	"/torchwood.server.v1.DatabasesService/CreateDatabase":   {"databases", "write"},
+	"/torchwood.server.v1.DatabasesService/ListDatabases":    {"databases", "read"},
+	"/torchwood.server.v1.DatabasesService/GetDatabase":      {"databases", "read"},
+	"/torchwood.server.v1.DatabasesService/DeleteDatabase":   {"databases", "write"},
+	"/torchwood.server.v1.DatabasesService/CreateCollection": {"databases", "write"},
+	"/torchwood.server.v1.DatabasesService/ListCollections":  {"databases", "read"},
+	"/torchwood.server.v1.DatabasesService/GetCollection":    {"databases", "read"},
+	"/torchwood.server.v1.DatabasesService/DeleteCollection": {"databases", "write"},
+	"/torchwood.server.v1.DatabasesService/UpdateCollection": {"databases", "write"},
+	"/torchwood.server.v1.DatabasesService/CreateAttribute":  {"databases", "write"},
+	"/torchwood.server.v1.DatabasesService/DeleteAttribute":  {"databases", "write"},
 	// B4 schema 演进生命周期（§4.6）：删列两段/回滚/copy 迁移——DDL 写语义。
-	"/torchwood.server.v1.DatabasesService/RestoreAttribute": {"databases", "write"},
-	"/torchwood.server.v1.DatabasesService/RetireAttribute":  {"databases", "write"},
-	"/torchwood.server.v1.DatabasesService/MigrateAttribute": {"databases", "write"},
-	"/torchwood.server.v1.DatabasesService/CreateIndex":      {"databases", "write"},
-	"/torchwood.server.v1.DatabasesService/DeleteIndex":      {"databases", "write"},
+	"/torchwood.server.v1.DatabasesService/RestoreAttribute":    {"databases", "write"},
+	"/torchwood.server.v1.DatabasesService/RetireAttribute":     {"databases", "write"},
+	"/torchwood.server.v1.DatabasesService/MigrateAttribute":    {"databases", "write"},
+	"/torchwood.server.v1.DatabasesService/CreateIndex":         {"databases", "write"},
+	"/torchwood.server.v1.DatabasesService/DeleteIndex":         {"databases", "write"},
 	"/torchwood.server.v1.DatabasesService/CreateDocument":      {"databases", "write"},
 	"/torchwood.server.v1.DatabasesService/ListDocuments":       {"databases", "read"},
 	"/torchwood.server.v1.DatabasesService/GetDocument":         {"databases", "read"},
@@ -92,40 +92,36 @@ var apiKeyScopeRules = map[string]apiKeyScopeRule{
 	"/torchwood.server.v1.StorageService/UpdateFile":      {"storage", "write"},
 	"/torchwood.server.v1.StorageService/CreateFileToken": {"storage", "write"},
 	"/torchwood.server.v1.StorageService/GetStorageUsage": {"storage", "read"},
-	// ProjectsService
-	"/torchwood.server.v1.ProjectsService/CreateProject": {"projects", "write"},
+	// ProjectsService（决策 v8：Create/Delete 为 PERMISSION 平台专属，key 不可调，
+	// 不在本表；projects.write 对 key 的实际效力 = 仅 UpdateProject）
 	"/torchwood.server.v1.ProjectsService/ListProjects":  {"projects", "read"},
 	"/torchwood.server.v1.ProjectsService/GetProject":    {"projects", "read"},
 	"/torchwood.server.v1.ProjectsService/UpdateProject": {"projects", "write"},
-	"/torchwood.server.v1.ProjectsService/DeleteProject": {"projects", "write"},
 	// OAuthProvidersService
 	"/torchwood.server.v1.OAuthProvidersService/ListOAuthProviders":  {"oauthproviders", "read"},
 	"/torchwood.server.v1.OAuthProvidersService/UpsertOAuthProvider": {"oauthproviders", "write"},
 	"/torchwood.server.v1.OAuthProvidersService/DeleteOAuthProvider": {"oauthproviders", "write"},
-	// APIKeysService（IsAPIKeysServiceMethod 仍禁 API key 凭证调用）
-	"/torchwood.server.v1.APIKeysService/CreateAPIKey": {"apikeys", "write"},
-	"/torchwood.server.v1.APIKeysService/ListAPIKeys":  {"apikeys", "read"},
-	"/torchwood.server.v1.APIKeysService/GetAPIKey":    {"apikeys", "read"},
-	"/torchwood.server.v1.APIKeysService/DeleteAPIKey": {"apikeys", "write"},
+	// APIKeysService 已整体挪 PERMISSION owner/admin（决策 v8）：key 凭证禁入，
+	// apikeys scope 资源退役（不再可被授予）。
 	// PaymentsService（v3 设计 §6：读 payments.read，写 payments.write）
 	"/torchwood.server.v1.PaymentsService/ListOrders":    {"payments", "read"},
 	"/torchwood.server.v1.PaymentsService/GetOrder":      {"payments", "read"},
 	"/torchwood.server.v1.PaymentsService/Refund":        {"payments", "write"},
 	"/torchwood.server.v1.PaymentsService/ManualFulfill": {"payments", "write"},
-	// AssetsService（v3 设计 §6：读 economy.read，写 economy.write）
-	"/torchwood.server.v1.AssetsService/CreateAssetDef": {"economy", "write"},
-	"/torchwood.server.v1.AssetsService/ListAssetDefs":  {"economy", "read"},
-	"/torchwood.server.v1.AssetsService/GetAssetDef":    {"economy", "read"},
-	"/torchwood.server.v1.AssetsService/UpdateAssetDef": {"economy", "write"},
-	"/torchwood.server.v1.AssetsService/DeleteAssetDef": {"economy", "write"},
-	"/torchwood.server.v1.AssetsService/Grant":          {"economy", "write"},
-	"/torchwood.server.v1.AssetsService/Consume":        {"economy", "write"},
-	"/torchwood.server.v1.AssetsService/Transfer":       {"economy", "write"},
-	"/torchwood.server.v1.AssetsService/Mutate":         {"economy", "write"},
-	"/torchwood.server.v1.AssetsService/Expire":         {"economy", "write"},
-	"/torchwood.server.v1.AssetsService/Reconcile":      {"economy", "write"},
-	"/torchwood.server.v1.AssetsService/ListUserAssets": {"economy", "read"},
-	"/torchwood.server.v1.AssetsService/ListUserLedger": {"economy", "read"},
+	// AssetsService（读 assets.read，写 assets.write；economy→assets 决策 v8）
+	"/torchwood.server.v1.AssetsService/CreateAssetDef": {"assets", "write"},
+	"/torchwood.server.v1.AssetsService/ListAssetDefs":  {"assets", "read"},
+	"/torchwood.server.v1.AssetsService/GetAssetDef":    {"assets", "read"},
+	"/torchwood.server.v1.AssetsService/UpdateAssetDef": {"assets", "write"},
+	"/torchwood.server.v1.AssetsService/DeleteAssetDef": {"assets", "write"},
+	"/torchwood.server.v1.AssetsService/Grant":          {"assets", "write"},
+	"/torchwood.server.v1.AssetsService/Consume":        {"assets", "write"},
+	"/torchwood.server.v1.AssetsService/Transfer":       {"assets", "write"},
+	"/torchwood.server.v1.AssetsService/Mutate":         {"assets", "write"},
+	"/torchwood.server.v1.AssetsService/Expire":         {"assets", "write"},
+	"/torchwood.server.v1.AssetsService/Reconcile":      {"assets", "write"},
+	"/torchwood.server.v1.AssetsService/ListUserAssets": {"assets", "read"},
+	"/torchwood.server.v1.AssetsService/ListUserLedger": {"assets", "read"},
 	// SubscriptionsService（v3 设计 §6：读 subscriptions.read，写 subscriptions.write）
 	"/torchwood.server.v1.SubscriptionsService/CreatePlan":         {"subscriptions", "write"},
 	"/torchwood.server.v1.SubscriptionsService/ListPlans":          {"subscriptions", "read"},
@@ -237,7 +233,7 @@ func APIKeyScopeRules() map[string]APIKeyScopeRule {
 }
 
 // AssertAPIKeyScopeCoverage 断言 apiKeyScopeRules 覆盖集合与 proto 注解推导出的
-// ACCESS_API_KEY 方法集合完全一致（R10-P1-5，fail-closed）：
+// ACCESS_SERVER 方法集合完全一致（R10-P1-5，fail-closed）：
 // 不一致直接 panic，并列出缺失（proto 新增方法未登记 scope 规则）与多余
 // （规则表残留已删除/改级的方法）。由 server 启动路径调用
 // （internal/runtime/grpc.go NewGRPCServer）。
@@ -264,6 +260,6 @@ func AssertAPIKeyScopeCoverage(apiKeyMethods []string) {
 	}
 	sort.Strings(missing)
 	sort.Strings(extra)
-	panic(fmt.Sprintf("apiKeyScopeRules 与 ACCESS_API_KEY 方法集合不一致 (fail-closed): "+
+	panic(fmt.Sprintf("apiKeyScopeRules 与 ACCESS_SERVER 方法集合不一致 (fail-closed): "+
 		"proto 声明但规则表缺失=%v; 规则表多余=%v", missing, extra))
 }

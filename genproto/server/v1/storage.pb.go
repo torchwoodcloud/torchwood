@@ -1056,23 +1056,23 @@ const file_server_v1_storage_proto_rawDesc = "" +
 	"\abuckets\x18\x01 \x01(\x03R\abuckets\x12\x14\n" +
 	"\x05files\x18\x02 \x01(\x03R\x05files\x12\x1d\n" +
 	"\n" +
-	"total_size\x18\x03 \x01(\x03R\ttotalSize2\x95\r\n" +
-	"\x0eStorageService\x12|\n" +
-	"\fCreateBucket\x12(.torchwood.server.v1.CreateBucketRequest\x1a\x1b.torchwood.server.v1.Bucket\"%\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/v1/server/storage/buckets\x12}\n" +
-	"\vListBuckets\x12 .torchwood.shared.v1.ListRequest\x1a(.torchwood.server.v1.ListBucketsResponse\"\"\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/server/storage/buckets\x12x\n" +
-	"\tGetBucket\x12%.torchwood.server.v1.GetBucketRequest\x1a\x1b.torchwood.server.v1.Bucket\"'\x82\xd3\xe4\x93\x02!\x12\x1f/v1/server/storage/buckets/{id}\x12z\n" +
-	"\fDeleteBucket\x12%.torchwood.server.v1.GetBucketRequest\x1a\x1a.torchwood.shared.v1.Empty\"'\x82\xd3\xe4\x93\x02!*\x1f/v1/server/storage/buckets/{id}\x12\x81\x01\n" +
-	"\fUpdateBucket\x12(.torchwood.server.v1.UpdateBucketRequest\x1a\x1b.torchwood.server.v1.Bucket\"*\x82\xd3\xe4\x93\x02$:\x01*2\x1f/v1/server/storage/buckets/{id}\x12\x88\x01\n" +
+	"total_size\x18\x03 \x01(\x03R\ttotalSize2\xae\x0e\n" +
+	"\x0eStorageService\x12\x8b\x01\n" +
+	"\fCreateBucket\x12(.torchwood.server.v1.CreateBucketRequest\x1a\x1b.torchwood.server.v1.Bucket\"4\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x04\x10\x02\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/v1/server/storage/buckets\x12\x87\x01\n" +
+	"\vListBuckets\x12 .torchwood.shared.v1.ListRequest\x1a(.torchwood.server.v1.ListBucketsResponse\",\x8a\xb2\x19\x06\"\x04\b\x04\x10\x01\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/server/storage/buckets\x12\x82\x01\n" +
+	"\tGetBucket\x12%.torchwood.server.v1.GetBucketRequest\x1a\x1b.torchwood.server.v1.Bucket\"1\x8a\xb2\x19\x06\"\x04\b\x04\x10\x01\x82\xd3\xe4\x93\x02!\x12\x1f/v1/server/storage/buckets/{id}\x12\x89\x01\n" +
+	"\fDeleteBucket\x12%.torchwood.server.v1.GetBucketRequest\x1a\x1a.torchwood.shared.v1.Empty\"6\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x04\x10\x02\x82\xd3\xe4\x93\x02!*\x1f/v1/server/storage/buckets/{id}\x12\x90\x01\n" +
+	"\fUpdateBucket\x12(.torchwood.server.v1.UpdateBucketRequest\x1a\x1b.torchwood.server.v1.Bucket\"9\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x04\x10\x02\x82\xd3\xe4\x93\x02$:\x01*2\x1f/v1/server/storage/buckets/{id}\x12\x97\x01\n" +
 	"\n" +
-	"CreateFile\x12&.torchwood.server.v1.CreateFileRequest\x1a\x19.torchwood.server.v1.File\"7\x82\xd3\xe4\x93\x021:\x01*\",/v1/server/storage/buckets/{bucket_id}/files\x12\x90\x01\n" +
-	"\tListFiles\x12%.torchwood.server.v1.ListFilesRequest\x1a&.torchwood.server.v1.ListFilesResponse\"4\x82\xd3\xe4\x93\x02.\x12,/v1/server/storage/buckets/{bucket_id}/files\x12\x89\x01\n" +
-	"\aGetFile\x12#.torchwood.server.v1.GetFileRequest\x1a\x19.torchwood.server.v1.File\">\x82\xd3\xe4\x93\x028\x126/v1/server/storage/buckets/{bucket_id}/files/{file_id}\x12\x8d\x01\n" +
+	"CreateFile\x12&.torchwood.server.v1.CreateFileRequest\x1a\x19.torchwood.server.v1.File\"F\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x04\x10\x02\x82\xd3\xe4\x93\x021:\x01*\",/v1/server/storage/buckets/{bucket_id}/files\x12\x9a\x01\n" +
+	"\tListFiles\x12%.torchwood.server.v1.ListFilesRequest\x1a&.torchwood.server.v1.ListFilesResponse\">\x8a\xb2\x19\x06\"\x04\b\x04\x10\x01\x82\xd3\xe4\x93\x02.\x12,/v1/server/storage/buckets/{bucket_id}/files\x12\x93\x01\n" +
+	"\aGetFile\x12#.torchwood.server.v1.GetFileRequest\x1a\x19.torchwood.server.v1.File\"H\x8a\xb2\x19\x06\"\x04\b\x04\x10\x01\x82\xd3\xe4\x93\x028\x126/v1/server/storage/buckets/{bucket_id}/files/{file_id}\x12\x9c\x01\n" +
 	"\n" +
-	"DeleteFile\x12#.torchwood.server.v1.GetFileRequest\x1a\x1a.torchwood.shared.v1.Empty\">\x82\xd3\xe4\x93\x028*6/v1/server/storage/buckets/{bucket_id}/files/{file_id}\x12\x92\x01\n" +
+	"DeleteFile\x12#.torchwood.server.v1.GetFileRequest\x1a\x1a.torchwood.shared.v1.Empty\"M\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x04\x10\x02\x82\xd3\xe4\x93\x028*6/v1/server/storage/buckets/{bucket_id}/files/{file_id}\x12\xa1\x01\n" +
 	"\n" +
-	"UpdateFile\x12&.torchwood.server.v1.UpdateFileRequest\x1a\x19.torchwood.server.v1.File\"A\x82\xd3\xe4\x93\x02;:\x01*26/v1/server/storage/buckets/{bucket_id}/files/{file_id}\x12\xae\x01\n" +
-	"\x0fCreateFileToken\x12+.torchwood.server.v1.CreateFileTokenRequest\x1a\x1e.torchwood.server.v1.FileToken\"N\x8a\xb2\x19\x02\b\x04\x82\xd3\xe4\x93\x02B:\x01*\"=/v1/server/storage/buckets/{bucket_id}/files/{file_id}/tokens\x12\x83\x01\n" +
-	"\x0fGetStorageUsage\x12+.torchwood.server.v1.GetStorageUsageRequest\x1a!.torchwood.server.v1.StorageUsage\" \x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/server/storage/usage\x1a\x06\x92\xb2\x19\x02\b\x04B\xda\x03\x92A\x97\x03RR\n" +
+	"UpdateFile\x12&.torchwood.server.v1.UpdateFileRequest\x1a\x19.torchwood.server.v1.File\"P\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x04\x10\x02\x82\xd3\xe4\x93\x02;:\x01*26/v1/server/storage/buckets/{bucket_id}/files/{file_id}\x12\xb7\x01\n" +
+	"\x0fCreateFileToken\x12+.torchwood.server.v1.CreateFileTokenRequest\x1a\x1e.torchwood.server.v1.FileToken\"W\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x04\x10\x02\x82\xd3\xe4\x93\x02B:\x01*\"=/v1/server/storage/buckets/{bucket_id}/files/{file_id}/tokens\x12\x8d\x01\n" +
+	"\x0fGetStorageUsage\x12+.torchwood.server.v1.GetStorageUsageRequest\x1a!.torchwood.server.v1.StorageUsage\"*\x8a\xb2\x19\x06\"\x04\b\x04\x10\x01\x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/server/storage/usage\x1a\x06\x92\xb2\x19\x02\b\x03B\xd9\x03\x92A\x96\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
@@ -1084,8 +1084,8 @@ const file_server_v1_storage_proto_rawDesc = "" +
 	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
-	"\x06apiKey\x12\x00z\x1f\n" +
-	"\x12x-torchwood-access\x12\t\x1a\aapi_keyZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
+	"\x06apiKey\x12\x00z\x1e\n" +
+	"\x12x-torchwood-access\x12\b\x1a\x06serverZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
 
 var (
 	file_server_v1_storage_proto_rawDescOnce sync.Once

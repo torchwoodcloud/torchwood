@@ -987,7 +987,7 @@ const file_client_v1_databases_proto_rawDesc = "" +
 	"\x0eDeleteDocument\x12*.torchwood.client.v1.DeleteDocumentRequest\x1a\x1a.torchwood.shared.v1.Empty\"W\x82\xd3\xe4\x93\x02Q*O/v1/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\xb5\x02\n" +
 	"\x0eCountDocuments\x12*.torchwood.client.v1.CountDocumentsRequest\x1a+.torchwood.client.v1.CountDocumentsResponse\"\xc9\x01\x92A\"b\x00j\x1e\n" +
 	"\x12x-torchwood-access\x12\b\x1a\x06public\x8a\xb2\x19\x02\b\x01\x82\xd3\xe4\x93\x02\x97\x01ZL:\x01*\"G/v1/databases/{database_id}/collections/{collection_id}/documents:count\x12G/v1/databases/{database_id}/collections/{collection_id}/documents:count\x12\xa9\x01\n" +
-	"\vListChanges\x12'.torchwood.client.v1.ListChangesRequest\x1a(.torchwood.client.v1.ListChangesResponse\"G\x82\xd3\xe4\x93\x02A\x12?/v1/databases/{database_id}/collections/{collection_id}/changes\x1a\x06\x92\xb2\x19\x02\b\x02B\xfa\x03\x92A\xb7\x03RR\n" +
+	"\vListChanges\x12'.torchwood.client.v1.ListChangesRequest\x1a(.torchwood.client.v1.ListChangesResponse\"G\x82\xd3\xe4\x93\x02A\x12?/v1/databases/{database_id}/collections/{collection_id}/changes\x1a\x06\x92\xb2\x19\x02\b\x02B\xf5\x03\x92A\xb2\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xab\x02\n" +
@@ -999,8 +999,9 @@ const file_client_v1_databases_proto_rawDesc = "" +
 	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
-	"\x06Bearer\x12\x00z%\n" +
-	"\x12x-torchwood-access\x12\x0f\x1a\rauthenticatedZ=github.com/torchwooddev/torchwood/genproto/client/v1;clientv1b\x06proto3"
+	"\x06Bearer\x12\x00z \n" +
+	"\x12x-torchwood-access\x12\n" +
+	"\x1a\bend_userZ=github.com/torchwooddev/torchwood/genproto/client/v1;clientv1b\x06proto3"
 
 var (
 	file_client_v1_databases_proto_rawDescOnce sync.Once

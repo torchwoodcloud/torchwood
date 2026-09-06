@@ -1,29 +1,26 @@
 package interceptor
 
-// adminRoleMethodRules 登记 Server API 全部写方法对应的允许角色（安全评审
-// M7 / Round3 H1）：受限 admin（viewer）会话一律拒绝；member 可写业务资源；
-// 平台敏感写（API Key 管理、用户接管面、Databases DDL、Functions、OAuth
-// 提供方、项目创建/删除）仅 owner/admin。API key 与端用户凭证不在此表处理
-// （分别走 apiKeyMethods scope 门禁与 use-case 层 RequireServerWriteActor
-// /RequirePlatformAdmin 守门）。
+// adminRoleMethodRules 登记 Server API 写方法（及受限读方法）对应的允许
+// 角色。策略单一声明源已迁 proto method_auth（机制重设计 M1/M2），本表是
+// A2 拦截器换源 PolicySet 前的过渡执行表，与 proto 声明由
+// AssertAdminRoleWriteCoverage + AssertAPIKeyScopeCoverage 启动断言锁定一致。
 //
-// 角色模型对齐 Console useAdminRole：viewer 只读（仅 List/Get/Count）；
-// member 可写业务资源；owner/admin（平台 admin）不受限。
+// 角色模型（对齐 Console useAdminRole）：viewer 只读；member 可写业务资源；
+// owner/admin（平台 admin）不受限。档位语义（决策 v8）：
 //
-// 完整性由 AssertAdminRoleWriteCoverage 在启动期 fail-closed 断言：
-// apiKeyScopeRules 中每个 op=="write" 的方法都必须登记在本表，反之本表
-// 不得出现读方法或未映射方法（见 apikey_scope.go）。
+//	业务写（member+）：用户六写方法、文档 CRUD、storage/groups/plans/catalog；
+//	委托自动化（owner/admin + key scope）：DDL、Functions、OAuth 提供方、
+//	  退款/履约、资产五动词、死信重放、UpdateProject；
+//	平台专属（PERMISSION，不在本表）：项目建删、API Key 管理（key 禁入）。
 var adminRoleMethodRules = map[string][]string{
-	// APIKeysService（仅 owner/admin：key 是平台级凭据，删除等同接管）
-	"/torchwood.server.v1.APIKeysService/CreateAPIKey": {"owner", "admin"},
-	"/torchwood.server.v1.APIKeysService/DeleteAPIKey": {"owner", "admin"},
-	// UsersService
+	// UsersService（决策 v8：六写方法归一业务写档——member+users.write；
+	// 接管信任边界收敛到 scope 授予环节，key 仅 owner/admin 可建）
 	"/torchwood.server.v1.UsersService/CreateUser":         {"member", "owner", "admin"},
-	"/torchwood.server.v1.UsersService/UpdateUser":         {"owner", "admin"},
-	"/torchwood.server.v1.UsersService/UpdateUserPassword": {"owner", "admin"},
-	"/torchwood.server.v1.UsersService/DeleteUser":         {"owner", "admin"},
-	"/torchwood.server.v1.UsersService/DeleteUserSession":  {"owner", "admin"},
-	"/torchwood.server.v1.UsersService/CreateUserToken":    {"owner", "admin"},
+	"/torchwood.server.v1.UsersService/UpdateUser":         {"member", "owner", "admin"},
+	"/torchwood.server.v1.UsersService/UpdateUserPassword": {"member", "owner", "admin"},
+	"/torchwood.server.v1.UsersService/DeleteUser":         {"member", "owner", "admin"},
+	"/torchwood.server.v1.UsersService/DeleteUserSession":  {"member", "owner", "admin"},
+	"/torchwood.server.v1.UsersService/CreateUserToken":    {"member", "owner", "admin"},
 	// DatabasesService（schema DDL 写方法，仅 owner/admin）
 	"/torchwood.server.v1.DatabasesService/CreateDatabase":   {"owner", "admin"},
 	"/torchwood.server.v1.DatabasesService/DeleteDatabase":   {"owner", "admin"},
@@ -97,11 +94,11 @@ var adminRoleMethodRules = map[string][]string{
 	"/torchwood.server.v1.SubscriptionsService/DeletePlan":         {"member", "owner", "admin"},
 	"/torchwood.server.v1.SubscriptionsService/CancelSubscription": {"owner", "admin"},
 	"/torchwood.server.v1.SubscriptionsService/ExpireSubscription": {"owner", "admin"},
-	// ProjectsService（创建/删除是平台级资源，仅 owner/admin——与 use-case
-	// CreateProject/DeleteProject 平台 admin 守卫一致；更新是业务写，仅收 viewer）
-	"/torchwood.server.v1.ProjectsService/CreateProject": {"owner", "admin"},
+	// ProjectsService（决策 v8：创建/删除挪 PERMISSION 平台专属——不在本表；
+	// 更新是业务写）
 	"/torchwood.server.v1.ProjectsService/UpdateProject": {"member", "owner", "admin"},
-	"/torchwood.server.v1.ProjectsService/DeleteProject": {"owner", "admin"},
-	// OutboxService（死信重放是平台运维敏感写，仅 owner/admin）
+	// OutboxService（决策 v8：死信面委托平台档——payload 含文档数据，
+	// 读面也限 owner/admin，viewer 不再可枚举）
+	"/torchwood.server.v1.OutboxService/ListDeadLetters":  {"owner", "admin"},
 	"/torchwood.server.v1.OutboxService/ReplayDeadLetter": {"owner", "admin"},
 }

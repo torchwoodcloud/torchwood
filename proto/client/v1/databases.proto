@@ -53,7 +53,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   }
   extensions: {
     key: "x-torchwood-access"
-    value: { string_value: "authenticated" }
+    value: { string_value: "end_user" }
   }
   // 统一 default 错误响应（运行时错误体即 shared.v1.ErrorResponse），
   // 文件级声明自动填充到本文件全部 operation。
@@ -67,7 +67,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service DatabasesService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_AUTHENTICATED };
+  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_END_USER };
 
   // 自定义方法说明：documents:count 为自定义方法段（REST 自定义动词），不再占用
   // document_id 命名空间；document_id 可自由取任意合法值。

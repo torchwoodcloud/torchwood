@@ -157,12 +157,14 @@ func TestAPIKeyScopeAllowed(t *testing.T) {
 		t.Fatal("unrelated scope must NOT allow UpdateProject")
 	}
 
+	// 决策 v8：DeleteProject/CreateProject 为 PERMISSION 平台专属，key 不可调，
+	// 不在 scope 表——projects.write 对 key 的实际效力 = 仅 UpdateProject。
 	deleteProject := "/torchwood.server.v1.ProjectsService/DeleteProject"
-	if !APIKeyScopeAllowed(deleteProject, []string{"projects.write"}) {
-		t.Fatal("projects.write scope should allow DeleteProject")
+	if APIKeyScopeAllowed(deleteProject, []string{"projects.write"}) {
+		t.Fatal("projects.write scope must NOT allow DeleteProject (PERMISSION 面)")
 	}
-	if APIKeyScopeAllowed(deleteProject, []string{"projects.read"}) {
-		t.Fatal("projects.read scope must NOT allow DeleteProject")
+	if APIKeyScopeAllowed(deleteProject, []string{"*"}) {
+		t.Fatal("wildcard scope must NOT allow DeleteProject (PERMISSION 面)")
 	}
 
 	// Groups prefs：GetGroupPrefs 需要 groups.read，UpdateGroupPrefs 需要 groups.write。
@@ -210,16 +212,16 @@ func TestValidAPIKeyScope(t *testing.T) {
 
 	for _, s := range []string{
 		"*", "all",
-		"databases", "users", "groups", "storage", "projects", "oauthproviders", "apikeys",
+		"databases", "users", "groups", "storage", "projects", "oauthproviders", "assets",
 		"databases.read", "databases.write",
 		"storage.read", "storage.write",
 		"users.read", "users.write",
 		"groups.read", "groups.write",
 		"projects.read", "projects.write",
 		"oauthproviders.read", "oauthproviders.write",
-		"apikeys.read", "apikeys.write",
+		"assets.read", "assets.write",
 		"payments", "payments.read", "payments.write",
-		"economy", "economy.read", "economy.write",
+		"assets", "assets.read", "assets.write",
 		"subscriptions", "subscriptions.read", "subscriptions.write",
 		"billing", "billing.read", "billing.write",
 	} {
@@ -228,7 +230,7 @@ func TestValidAPIKeyScope(t *testing.T) {
 		}
 	}
 
-	for _, s := range []string{"", "foo", "health", "health.read", "databases.delete", "databases.read.extra", "any", "users.read.write"} {
+	for _, s := range []string{"", "foo", "health", "health.read", "databases.delete", "databases.read.extra", "any", "users.read.write", "apikeys", "apikeys.read", "apikeys.write", "economy", "economy.read"} {
 		if ValidAPIKeyScope(s) {
 			t.Fatalf("scope %q should be invalid", s)
 		}

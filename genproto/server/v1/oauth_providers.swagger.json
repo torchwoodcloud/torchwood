@@ -195,7 +195,7 @@
         "ERROR_CODE_TIMEOUT"
       ],
       "default": "ERROR_CODE_UNSPECIFIED",
-      "title": "ErrorCode 与 gRPC code 的映射（HTTPErrorHandler 单一事实来源，\n见 internal/infra/server/errors.go）：\n  - InvalidArgument → ERROR_CODE_INVALID_REQUEST\n  - FailedPrecondition → ERROR_CODE_PRECONDITION_FAILED\n  - NotFound → ERROR_CODE_RESOURCE_NOT_FOUND\n  - AlreadyExists → ERROR_CODE_RESOURCE_CONFLICT\n  - Aborted → ERROR_CODE_CONCURRENT_MODIFICATION\n  - Unauthenticated → ERROR_CODE_INVALID_CREDENTIALS\n  - PermissionDenied → ERROR_CODE_PERMISSION_DENIED\n  - ResourceExhausted → ERROR_CODE_QUOTA_EXCEEDED\n  - DeadlineExceeded → ERROR_CODE_TIMEOUT\n  - 其余 → ERROR_CODE_INTERNAL_ERROR"
+      "title": "ErrorCode 与 gRPC code 的映射（HTTPErrorHandler 单一事实来源，\r\n见 internal/infra/server/errors.go）：\r\n  - InvalidArgument → ERROR_CODE_INVALID_REQUEST\r\n  - FailedPrecondition → ERROR_CODE_PRECONDITION_FAILED\r\n  - NotFound → ERROR_CODE_RESOURCE_NOT_FOUND\r\n  - AlreadyExists → ERROR_CODE_RESOURCE_CONFLICT\r\n  - Aborted → ERROR_CODE_CONCURRENT_MODIFICATION\r\n  - Unauthenticated → ERROR_CODE_INVALID_CREDENTIALS\r\n  - PermissionDenied → ERROR_CODE_PERMISSION_DENIED\r\n  - ResourceExhausted → ERROR_CODE_QUOTA_EXCEEDED\r\n  - DeadlineExceeded → ERROR_CODE_TIMEOUT\r\n  - 其余 → ERROR_CODE_INTERNAL_ERROR"
     },
     "v1ErrorResponse": {
       "type": "object",
@@ -297,5 +297,5 @@
       "apiKey": []
     }
   ],
-  "x-torchwood-access": "api_key"
+  "x-torchwood-access": "server"
 }

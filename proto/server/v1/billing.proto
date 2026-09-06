@@ -51,7 +51,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   }
   extensions: {
     key: "x-torchwood-access"
-    value: { string_value: "api_key" }
+    value: { string_value: "server" }
   }
   // 统一 default 错误响应（运行时错误体即 shared.v1.ErrorResponse），
   // 文件级声明自动填充到本文件全部 operation。
@@ -68,16 +68,25 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // rollup、月账单文档。全部只读；scope billing.read / console admin。
 // 一期不出票、不向 owner 收款、不挂钩配额/限流。
 service BillingService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_API_KEY };
+  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
 
   rpc GetUsage(GetUsageRequest) returns (Usage) {
     option (google.api.http) = { get: "/v1/server/billing/usage" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_BILLING, op: SCOPE_OP_READ }
+    };
   }
   rpc ListRollups(ListRollupsRequest) returns (ListRollupsResponse) {
     option (google.api.http) = { get: "/v1/server/billing/rollups" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_BILLING, op: SCOPE_OP_READ }
+    };
   }
   rpc ListStatements(shared.v1.ListRequest) returns (ListStatementsResponse) {
     option (google.api.http) = { get: "/v1/server/billing/statements" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_BILLING, op: SCOPE_OP_READ }
+    };
   }
 }
 

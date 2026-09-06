@@ -3933,37 +3933,49 @@ const file_server_v1_databases_proto_rawDesc = "" +
 	"\x13TransactionOpStatus\x12%\n" +
 	"!TRANSACTION_OP_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18TRANSACTION_OP_STATUS_OK\x10\x01\x12\x1f\n" +
-	"\x1bTRANSACTION_OP_STATUS_ERROR\x10\x022\x84*\n" +
-	"\x10DatabasesService\x12|\n" +
-	"\x0eCreateDatabase\x12*.torchwood.server.v1.CreateDatabaseRequest\x1a\x1d.torchwood.server.v1.Database\"\x1f\x82\xd3\xe4\x93\x02\x19:\x01*\"\x14/v1/server/databases\x12{\n" +
-	"\rListDatabases\x12 .torchwood.shared.v1.ListRequest\x1a*.torchwood.server.v1.ListDatabasesResponse\"\x1c\x82\xd3\xe4\x93\x02\x16\x12\x14/v1/server/databases\x12x\n" +
-	"\vGetDatabase\x12'.torchwood.server.v1.GetDatabaseRequest\x1a\x1d.torchwood.server.v1.Database\"!\x82\xd3\xe4\x93\x02\x1b\x12\x19/v1/server/databases/{id}\x12x\n" +
-	"\x0eDeleteDatabase\x12'.torchwood.server.v1.GetDatabaseRequest\x1a\x1a.torchwood.shared.v1.Empty\"!\x82\xd3\xe4\x93\x02\x1b*\x19/v1/server/databases/{id}\x12\x9c\x01\n" +
-	"\x10CreateCollection\x12,.torchwood.server.v1.CreateCollectionRequest\x1a\x1f.torchwood.server.v1.Collection\"9\x82\xd3\xe4\x93\x023:\x01*\"./v1/server/databases/{database_id}/collections\x12\xa4\x01\n" +
-	"\x0fListCollections\x12+.torchwood.server.v1.ListCollectionsRequest\x1a,.torchwood.server.v1.ListCollectionsResponse\"6\x82\xd3\xe4\x93\x020\x12./v1/server/databases/{database_id}/collections\x12\xa3\x01\n" +
-	"\rGetCollection\x12).torchwood.server.v1.GetCollectionRequest\x1a\x1f.torchwood.server.v1.Collection\"F\x82\xd3\xe4\x93\x02@\x12>/v1/server/databases/{database_id}/collections/{collection_id}\x12\xa1\x01\n" +
-	"\x10DeleteCollection\x12).torchwood.server.v1.GetCollectionRequest\x1a\x1a.torchwood.shared.v1.Empty\"F\x82\xd3\xe4\x93\x02@*>/v1/server/databases/{database_id}/collections/{collection_id}\x12\xac\x01\n" +
-	"\x10UpdateCollection\x12,.torchwood.server.v1.UpdateCollectionRequest\x1a\x1f.torchwood.server.v1.Collection\"I\x82\xd3\xe4\x93\x02C:\x01*2>/v1/server/databases/{database_id}/collections/{collection_id}\x12\xb4\x01\n" +
-	"\x0fCreateAttribute\x12+.torchwood.server.v1.CreateAttributeRequest\x1a\x1e.torchwood.server.v1.Attribute\"T\x82\xd3\xe4\x93\x02N:\x01*\"I/v1/server/databases/{database_id}/collections/{collection_id}/attributes\x12\xb3\x01\n" +
-	"\x0fDeleteAttribute\x12+.torchwood.server.v1.DeleteAttributeRequest\x1a\x1a.torchwood.shared.v1.Empty\"W\x82\xd3\xe4\x93\x02Q*O/v1/server/databases/{database_id}/collections/{collection_id}/attributes/{key}\x12\xc0\x01\n" +
-	"\x10RestoreAttribute\x12,.torchwood.server.v1.RestoreAttributeRequest\x1a\x1a.torchwood.shared.v1.Empty\"b\x82\xd3\xe4\x93\x02\\:\x01*\"W/v1/server/databases/{database_id}/collections/{collection_id}/attributes/{key}:restore\x12\xbd\x01\n" +
-	"\x0fRetireAttribute\x12+.torchwood.server.v1.RetireAttributeRequest\x1a\x1a.torchwood.shared.v1.Empty\"a\x82\xd3\xe4\x93\x02[:\x01*\"V/v1/server/databases/{database_id}/collections/{collection_id}/attributes/{key}:retire\x12\xcd\x01\n" +
-	"\x10MigrateAttribute\x12,.torchwood.server.v1.MigrateAttributeRequest\x1a'.torchwood.server.v1.AttributeMigration\"b\x82\xd3\xe4\x93\x02\\:\x01*\"W/v1/server/databases/{database_id}/collections/{collection_id}/attributes/{key}:migrate\x12\xa5\x01\n" +
-	"\vCreateIndex\x12'.torchwood.server.v1.CreateIndexRequest\x1a\x1a.torchwood.server.v1.Index\"Q\x82\xd3\xe4\x93\x02K:\x01*\"F/v1/server/databases/{database_id}/collections/{collection_id}/indexes\x12\xad\x01\n" +
-	"\vDeleteIndex\x12'.torchwood.server.v1.DeleteIndexRequest\x1a\x1a.torchwood.shared.v1.Empty\"Y\x82\xd3\xe4\x93\x02S*Q/v1/server/databases/{database_id}/collections/{collection_id}/indexes/{index_id}\x12\xb0\x01\n" +
-	"\x0eCreateDocument\x12*.torchwood.server.v1.CreateDocumentRequest\x1a\x1d.torchwood.shared.v1.Document\"S\x82\xd3\xe4\x93\x02M:\x01*\"H/v1/server/databases/{database_id}/collections/{collection_id}/documents\x12\x92\x02\n" +
-	"\rListDocuments\x12).torchwood.server.v1.ListDocumentsRequest\x1a*.torchwood.server.v1.ListDocumentsResponse\"\xa9\x01\x82\xd3\xe4\x93\x02\xa2\x01ZV:\x05query\"M/v1/server/databases/{database_id}/collections/{collection_id}/documents:list\x12H/v1/server/databases/{database_id}/collections/{collection_id}/documents\x12\xb5\x01\n" +
-	"\vGetDocument\x12'.torchwood.server.v1.GetDocumentRequest\x1a\x1d.torchwood.shared.v1.Document\"^\x82\xd3\xe4\x93\x02X\x12V/v1/server/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\xbe\x01\n" +
-	"\x0eUpdateDocument\x12*.torchwood.server.v1.UpdateDocumentRequest\x1a\x1d.torchwood.shared.v1.Document\"a\x82\xd3\xe4\x93\x02[:\x01*2V/v1/server/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\xbe\x01\n" +
-	"\x0eUpsertDocument\x12*.torchwood.server.v1.UpsertDocumentRequest\x1a\x1d.torchwood.shared.v1.Document\"a\x82\xd3\xe4\x93\x02[:\x01*\x1aV/v1/server/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\xb8\x01\n" +
-	"\x0eDeleteDocument\x12*.torchwood.server.v1.DeleteDocumentRequest\x1a\x1a.torchwood.shared.v1.Empty\"^\x82\xd3\xe4\x93\x02X*V/v1/server/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\x98\x02\n" +
-	"\x0eCountDocuments\x12*.torchwood.server.v1.CountDocumentsRequest\x1a+.torchwood.server.v1.CountDocumentsResponse\"\xac\x01\x82\xd3\xe4\x93\x02\xa5\x01ZS:\x01*\"N/v1/server/databases/{database_id}/collections/{collection_id}/documents:count\x12N/v1/server/databases/{database_id}/collections/{collection_id}/documents:count\x12\xd4\x01\n" +
-	"\x12AggregateDocuments\x12..torchwood.server.v1.AggregateDocumentsRequest\x1a/.torchwood.server.v1.AggregateDocumentsResponse\"]\x82\xd3\xe4\x93\x02W:\x01*\"R/v1/server/databases/{database_id}/collections/{collection_id}/documents:aggregate\x12\xd2\x01\n" +
-	"\x13BulkUpdateDocuments\x12/.torchwood.server.v1.BulkUpdateDocumentsRequest\x1a*.torchwood.server.v1.BulkDocumentsResponse\"^\x82\xd3\xe4\x93\x02X:\x01*2S/v1/server/databases/{database_id}/collections/{collection_id}/documents:bulkUpdate\x12\xd2\x01\n" +
-	"\x13BulkDeleteDocuments\x12/.torchwood.server.v1.BulkDeleteDocumentsRequest\x1a*.torchwood.server.v1.BulkDocumentsResponse\"^\x82\xd3\xe4\x93\x02X:\x01*\"S/v1/server/databases/{database_id}/collections/{collection_id}/documents:bulkDelete\x12\xbc\x01\n" +
-	"\x13ExecuteTransactions\x12/.torchwood.server.v1.ExecuteTransactionsRequest\x1a0.torchwood.server.v1.ExecuteTransactionsResponse\"B\x82\xd3\xe4\x93\x02<:\x01*\"7/v1/server/databases/{database_id}/documents:execute-tx\x12\xb0\x01\n" +
-	"\vListChanges\x12'.torchwood.server.v1.ListChangesRequest\x1a(.torchwood.server.v1.ListChangesResponse\"N\x82\xd3\xe4\x93\x02H\x12F/v1/server/databases/{database_id}/collections/{collection_id}/changes\x12\xd6\x01\n" +
-	"\x16ExportCollectionSchema\x122.torchwood.server.v1.ExportCollectionSchemaRequest\x1a3.torchwood.server.v1.ExportCollectionSchemaResponse\"S\x82\xd3\xe4\x93\x02M\x12K/v1/server/databases/{database_id}/collections/{collection_id}:exportSchema\x1a\x06\x92\xb2\x19\x02\b\x04B\xda\x03\x92A\x97\x03RR\n" +
+	"\x1bTRANSACTION_OP_STATUS_ERROR\x10\x022\xfd,\n" +
+	"\x10DatabasesService\x12\x8a\x01\n" +
+	"\x0eCreateDatabase\x12*.torchwood.server.v1.CreateDatabaseRequest\x1a\x1d.torchwood.server.v1.Database\"-\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02\x19:\x01*\"\x14/v1/server/databases\x12\x85\x01\n" +
+	"\rListDatabases\x12 .torchwood.shared.v1.ListRequest\x1a*.torchwood.server.v1.ListDatabasesResponse\"&\x8a\xb2\x19\x06\"\x04\b\x01\x10\x01\x82\xd3\xe4\x93\x02\x16\x12\x14/v1/server/databases\x12\x82\x01\n" +
+	"\vGetDatabase\x12'.torchwood.server.v1.GetDatabaseRequest\x1a\x1d.torchwood.server.v1.Database\"+\x8a\xb2\x19\x06\"\x04\b\x01\x10\x01\x82\xd3\xe4\x93\x02\x1b\x12\x19/v1/server/databases/{id}\x12\x86\x01\n" +
+	"\x0eDeleteDatabase\x12'.torchwood.server.v1.GetDatabaseRequest\x1a\x1a.torchwood.shared.v1.Empty\"/\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02\x1b*\x19/v1/server/databases/{id}\x12\xaa\x01\n" +
+	"\x10CreateCollection\x12,.torchwood.server.v1.CreateCollectionRequest\x1a\x1f.torchwood.server.v1.Collection\"G\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x023:\x01*\"./v1/server/databases/{database_id}/collections\x12\xae\x01\n" +
+	"\x0fListCollections\x12+.torchwood.server.v1.ListCollectionsRequest\x1a,.torchwood.server.v1.ListCollectionsResponse\"@\x8a\xb2\x19\x06\"\x04\b\x01\x10\x01\x82\xd3\xe4\x93\x020\x12./v1/server/databases/{database_id}/collections\x12\xad\x01\n" +
+	"\rGetCollection\x12).torchwood.server.v1.GetCollectionRequest\x1a\x1f.torchwood.server.v1.Collection\"P\x8a\xb2\x19\x06\"\x04\b\x01\x10\x01\x82\xd3\xe4\x93\x02@\x12>/v1/server/databases/{database_id}/collections/{collection_id}\x12\xaf\x01\n" +
+	"\x10DeleteCollection\x12).torchwood.server.v1.GetCollectionRequest\x1a\x1a.torchwood.shared.v1.Empty\"T\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02@*>/v1/server/databases/{database_id}/collections/{collection_id}\x12\xba\x01\n" +
+	"\x10UpdateCollection\x12,.torchwood.server.v1.UpdateCollectionRequest\x1a\x1f.torchwood.server.v1.Collection\"W\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02C:\x01*2>/v1/server/databases/{database_id}/collections/{collection_id}\x12\xc2\x01\n" +
+	"\x0fCreateAttribute\x12+.torchwood.server.v1.CreateAttributeRequest\x1a\x1e.torchwood.server.v1.Attribute\"b\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02N:\x01*\"I/v1/server/databases/{database_id}/collections/{collection_id}/attributes\x12\xc1\x01\n" +
+	"\x0fDeleteAttribute\x12+.torchwood.server.v1.DeleteAttributeRequest\x1a\x1a.torchwood.shared.v1.Empty\"e\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02Q*O/v1/server/databases/{database_id}/collections/{collection_id}/attributes/{key}\x12\xce\x01\n" +
+	"\x10RestoreAttribute\x12,.torchwood.server.v1.RestoreAttributeRequest\x1a\x1a.torchwood.shared.v1.Empty\"p\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02\\:\x01*\"W/v1/server/databases/{database_id}/collections/{collection_id}/attributes/{key}:restore\x12\xcb\x01\n" +
+	"\x0fRetireAttribute\x12+.torchwood.server.v1.RetireAttributeRequest\x1a\x1a.torchwood.shared.v1.Empty\"o\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02[:\x01*\"V/v1/server/databases/{database_id}/collections/{collection_id}/attributes/{key}:retire\x12\xdb\x01\n" +
+	"\x10MigrateAttribute\x12,.torchwood.server.v1.MigrateAttributeRequest\x1a'.torchwood.server.v1.AttributeMigration\"p\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02\\:\x01*\"W/v1/server/databases/{database_id}/collections/{collection_id}/attributes/{key}:migrate\x12\xb3\x01\n" +
+	"\vCreateIndex\x12'.torchwood.server.v1.CreateIndexRequest\x1a\x1a.torchwood.server.v1.Index\"_\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02K:\x01*\"F/v1/server/databases/{database_id}/collections/{collection_id}/indexes\x12\xbb\x01\n" +
+	"\vDeleteIndex\x12'.torchwood.server.v1.DeleteIndexRequest\x1a\x1a.torchwood.shared.v1.Empty\"g\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02S*Q/v1/server/databases/{database_id}/collections/{collection_id}/indexes/{index_id}\x12\xbf\x01\n" +
+	"\x0eCreateDocument\x12*.torchwood.server.v1.CreateDocumentRequest\x1a\x1d.torchwood.shared.v1.Document\"b\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02M:\x01*\"H/v1/server/databases/{database_id}/collections/{collection_id}/documents\x12\x9c\x02\n" +
+	"\rListDocuments\x12).torchwood.server.v1.ListDocumentsRequest\x1a*.torchwood.server.v1.ListDocumentsResponse\"\xb3\x01\x8a\xb2\x19\x06\"\x04\b\x01\x10\x01\x82\xd3\xe4\x93\x02\xa2\x01ZV:\x05query\"M/v1/server/databases/{database_id}/collections/{collection_id}/documents:list\x12H/v1/server/databases/{database_id}/collections/{collection_id}/documents\x12\xbf\x01\n" +
+	"\vGetDocument\x12'.torchwood.server.v1.GetDocumentRequest\x1a\x1d.torchwood.shared.v1.Document\"h\x8a\xb2\x19\x06\"\x04\b\x01\x10\x01\x82\xd3\xe4\x93\x02X\x12V/v1/server/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\xcd\x01\n" +
+	"\x0eUpdateDocument\x12*.torchwood.server.v1.UpdateDocumentRequest\x1a\x1d.torchwood.shared.v1.Document\"p\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02[:\x01*2V/v1/server/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\xcd\x01\n" +
+	"\x0eUpsertDocument\x12*.torchwood.server.v1.UpsertDocumentRequest\x1a\x1d.torchwood.shared.v1.Document\"p\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02[:\x01*\x1aV/v1/server/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\xc7\x01\n" +
+	"\x0eDeleteDocument\x12*.torchwood.server.v1.DeleteDocumentRequest\x1a\x1a.torchwood.shared.v1.Empty\"m\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02X*V/v1/server/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\xa2\x02\n" +
+	"\x0eCountDocuments\x12*.torchwood.server.v1.CountDocumentsRequest\x1a+.torchwood.server.v1.CountDocumentsResponse\"\xb6\x01\x8a\xb2\x19\x06\"\x04\b\x01\x10\x01\x82\xd3\xe4\x93\x02\xa5\x01ZS:\x01*\"N/v1/server/databases/{database_id}/collections/{collection_id}/documents:count\x12N/v1/server/databases/{database_id}/collections/{collection_id}/documents:count\x12\xde\x01\n" +
+	"\x12AggregateDocuments\x12..torchwood.server.v1.AggregateDocumentsRequest\x1a/.torchwood.server.v1.AggregateDocumentsResponse\"g\x8a\xb2\x19\x06\"\x04\b\x01\x10\x01\x82\xd3\xe4\x93\x02W:\x01*\"R/v1/server/databases/{database_id}/collections/{collection_id}/documents:aggregate\x12\xe1\x01\n" +
+	"\x13BulkUpdateDocuments\x12/.torchwood.server.v1.BulkUpdateDocumentsRequest\x1a*.torchwood.server.v1.BulkDocumentsResponse\"m\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02X:\x01*2S/v1/server/databases/{database_id}/collections/{collection_id}/documents:bulkUpdate\x12\xe1\x01\n" +
+	"\x13BulkDeleteDocuments\x12/.torchwood.server.v1.BulkDeleteDocumentsRequest\x1a*.torchwood.server.v1.BulkDocumentsResponse\"m\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02X:\x01*\"S/v1/server/databases/{database_id}/collections/{collection_id}/documents:bulkDelete\x12\xcb\x01\n" +
+	"\x13ExecuteTransactions\x12/.torchwood.server.v1.ExecuteTransactionsRequest\x1a0.torchwood.server.v1.ExecuteTransactionsResponse\"Q\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02<:\x01*\"7/v1/server/databases/{database_id}/documents:execute-tx\x12\xba\x01\n" +
+	"\vListChanges\x12'.torchwood.server.v1.ListChangesRequest\x1a(.torchwood.server.v1.ListChangesResponse\"X\x8a\xb2\x19\x06\"\x04\b\x01\x10\x01\x82\xd3\xe4\x93\x02H\x12F/v1/server/databases/{database_id}/collections/{collection_id}/changes\x12\xe0\x01\n" +
+	"\x16ExportCollectionSchema\x122.torchwood.server.v1.ExportCollectionSchemaRequest\x1a3.torchwood.server.v1.ExportCollectionSchemaResponse\"]\x8a\xb2\x19\x06\"\x04\b\x01\x10\x01\x82\xd3\xe4\x93\x02M\x12K/v1/server/databases/{database_id}/collections/{collection_id}:exportSchema\x1a\x06\x92\xb2\x19\x02\b\x03B\xd9\x03\x92A\x96\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
@@ -3975,8 +3987,8 @@ const file_server_v1_databases_proto_rawDesc = "" +
 	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
-	"\x06apiKey\x12\x00z\x1f\n" +
-	"\x12x-torchwood-access\x12\t\x1a\aapi_keyZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
+	"\x06apiKey\x12\x00z\x1e\n" +
+	"\x12x-torchwood-access\x12\b\x1a\x06serverZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
 
 var (
 	file_server_v1_databases_proto_rawDescOnce sync.Once

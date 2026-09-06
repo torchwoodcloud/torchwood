@@ -606,13 +606,15 @@ const file_server_v1_payments_proto_rawDesc = "" +
 	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x8a\x01\n" +
 	"\x12ListOrdersResponse\x129\n" +
 	"\x06orders\x18\x01 \x03(\v2!.torchwood.server.v1.PaymentOrderR\x06orders\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xd5\x04\n" +
-	"\x0fPaymentsService\x12{\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xfa\x04\n" +
+	"\x0fPaymentsService\x12\x85\x01\n" +
 	"\n" +
-	"ListOrders\x12 .torchwood.shared.v1.ListRequest\x1a'.torchwood.server.v1.ListOrdersResponse\"\"\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/server/payments/orders\x12\x82\x01\n" +
-	"\bGetOrder\x12$.torchwood.server.v1.GetOrderRequest\x1a!.torchwood.server.v1.PaymentOrder\"-\x82\xd3\xe4\x93\x02'\x12%/v1/server/payments/orders/{order_id}\x12\x8e\x01\n" +
-	"\x06Refund\x12\".torchwood.server.v1.RefundRequest\x1a!.torchwood.server.v1.PaymentOrder\"=\x8a\xb2\x19\x02\b\x04\x82\xd3\xe4\x93\x021:\x01*\",/v1/server/payments/orders/{order_id}:refund\x12\xa6\x01\n" +
-	"\rManualFulfill\x12).torchwood.server.v1.ManualFulfillRequest\x1a*.torchwood.server.v1.ManualFulfillResponse\">\x8a\xb2\x19\x02\b\x04\x82\xd3\xe4\x93\x022:\x01*\"-/v1/server/payments/orders/{order_id}:fulfill\x1a\x06\x92\xb2\x19\x02\b\x04B\xda\x03\x92A\x97\x03RR\n" +
+	"ListOrders\x12 .torchwood.shared.v1.ListRequest\x1a'.torchwood.server.v1.ListOrdersResponse\",\x8a\xb2\x19\x06\"\x04\b\b\x10\x01\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/server/payments/orders\x12\x8c\x01\n" +
+	"\bGetOrder\x12$.torchwood.server.v1.GetOrderRequest\x1a!.torchwood.server.v1.PaymentOrder\"7\x8a\xb2\x19\x06\"\x04\b\b\x10\x01\x82\xd3\xe4\x93\x02'\x12%/v1/server/payments/orders/{order_id}\x12\x96\x01\n" +
+	"\x06Refund\x12\".torchwood.server.v1.RefundRequest\x1a!.torchwood.server.v1.PaymentOrder\"E\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\b\x10\x02\x82\xd3\xe4\x93\x021:\x01*\",/v1/server/payments/orders/{order_id}:refund\x12\xae\x01\n" +
+	"\rManualFulfill\x12).torchwood.server.v1.ManualFulfillRequest\x1a*.torchwood.server.v1.ManualFulfillResponse\"F\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\b\x10\x02\x82\xd3\xe4\x93\x022:\x01*\"-/v1/server/payments/orders/{order_id}:fulfill\x1a\x06\x92\xb2\x19\x02\b\x03B\xd9\x03\x92A\x96\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
@@ -624,8 +626,8 @@ const file_server_v1_payments_proto_rawDesc = "" +
 	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
-	"\x06apiKey\x12\x00z\x1f\n" +
-	"\x12x-torchwood-access\x12\t\x1a\aapi_keyZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
+	"\x06apiKey\x12\x00z\x1e\n" +
+	"\x12x-torchwood-access\x12\b\x1a\x06serverZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
 
 var (
 	file_server_v1_payments_proto_rawDescOnce sync.Once

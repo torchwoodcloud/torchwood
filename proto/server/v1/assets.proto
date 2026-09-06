@@ -51,7 +51,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   }
   extensions: {
     key: "x-torchwood-access"
-    value: { string_value: "api_key" }
+    value: { string_value: "server" }
   }
   // 统一 default 错误响应（运行时错误体即 shared.v1.ErrorResponse），
   // 文件级声明自动填充到本文件全部 operation。
@@ -68,60 +68,99 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // 写方法 scope economy.write（apiKeyScopeRules）并登记 adminRoleMethodRules；
 // 终端用户无写入口（红线 D6；use-case 再断言 system / admin-key）。
 service AssetsService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_API_KEY };
+  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
 
   rpc CreateAssetDef(CreateAssetDefRequest) returns (AssetDef) {
     option (google.api.http) = { post: "/v1/server/assets/defs", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_API_KEY };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_MEMBER, ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_ASSETS, op: SCOPE_OP_WRITE }
+    };
   }
   rpc ListAssetDefs(shared.v1.ListRequest) returns (ListAssetDefsResponse) {
     option (google.api.http) = { get: "/v1/server/assets/defs" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_ASSETS, op: SCOPE_OP_READ }
+    };
   }
   rpc GetAssetDef(GetAssetDefRequest) returns (AssetDef) {
     option (google.api.http) = { get: "/v1/server/assets/defs/{def_id}" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_ASSETS, op: SCOPE_OP_READ }
+    };
   }
   rpc UpdateAssetDef(UpdateAssetDefRequest) returns (AssetDef) {
     option (google.api.http) = { patch: "/v1/server/assets/defs/{def_id}", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_API_KEY };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_MEMBER, ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_ASSETS, op: SCOPE_OP_WRITE }
+    };
   }
   rpc DeleteAssetDef(DeleteAssetDefRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/assets/defs/{def_id}" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_API_KEY };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_MEMBER, ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_ASSETS, op: SCOPE_OP_WRITE }
+    };
   }
 
   rpc Grant(GrantRequest) returns (AssetOpResponse) {
     option (google.api.http) = { post: "/v1/server/assets:grant", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_API_KEY };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_ASSETS, op: SCOPE_OP_WRITE }
+    };
   }
   rpc Consume(ConsumeRequest) returns (AssetOpResponse) {
     option (google.api.http) = { post: "/v1/server/assets:consume", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_API_KEY };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_ASSETS, op: SCOPE_OP_WRITE }
+    };
   }
   rpc Transfer(TransferRequest) returns (AssetOpResponse) {
     option (google.api.http) = { post: "/v1/server/assets:transfer", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_API_KEY };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_ASSETS, op: SCOPE_OP_WRITE }
+    };
   }
   rpc Mutate(MutateRequest) returns (AssetOpResponse) {
     option (google.api.http) = { post: "/v1/server/assets:mutate", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_API_KEY };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_ASSETS, op: SCOPE_OP_WRITE }
+    };
   }
   rpc Expire(ExpireRequest) returns (AssetOpResponse) {
     option (google.api.http) = { post: "/v1/server/assets:expire", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_API_KEY };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_ASSETS, op: SCOPE_OP_WRITE }
+    };
   }
 
   // 对账任务手动触发（设计 §2.4 / PR2）：流水重放 = holdings 快照。
   rpc Reconcile(ReconcileRequest) returns (ReconcileResponse) {
     option (google.api.http) = { post: "/v1/server/assets:reconcile", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_API_KEY };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_ASSETS, op: SCOPE_OP_WRITE }
+    };
   }
 
   // ListUserAssets / ListUserLedger：Console 用户资产查询（PR6，只读）。
   rpc ListUserAssets(ListUserAssetsRequest) returns (ListUserAssetsResponse) {
     option (google.api.http) = { get: "/v1/server/assets/users/{owner_id}" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_ASSETS, op: SCOPE_OP_READ }
+    };
   }
   rpc ListUserLedger(ListUserLedgerRequest) returns (ListUserLedgerResponse) {
     option (google.api.http) = { get: "/v1/server/assets/users/{owner_id}/ledger" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_ASSETS, op: SCOPE_OP_READ }
+    };
   }
 }
 

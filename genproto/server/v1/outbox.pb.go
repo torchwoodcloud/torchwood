@@ -25,9 +25,11 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// ListDeadLettersRequest 不携带 project_id（决策 v8 项目寻址不变量）：
+// 项目上下文一律来自凭证——API key 取密钥行绑定，admin 会话必须携带
+// X-Torchwood-Project 头（含平台 admin），否则 FailedPrecondition。
 type ListDeadLettersRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -62,13 +64,6 @@ func (x *ListDeadLettersRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListDeadLettersRequest.ProtoReflect.Descriptor instead.
 func (*ListDeadLettersRequest) Descriptor() ([]byte, []int) {
 	return file_server_v1_outbox_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *ListDeadLettersRequest) GetProjectId() string {
-	if x != nil {
-		return x.ProjectId
-	}
-	return ""
 }
 
 func (x *ListDeadLettersRequest) GetPageSize() int32 {
@@ -237,10 +232,10 @@ func (x *ListDeadLettersResponse) GetMeta() *v1.ListResponseMeta {
 	return nil
 }
 
+// ReplayDeadLetterRequest 同上：项目上下文来自凭证，不做请求体寻址。
 type ReplayDeadLetterRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	ProjectId     string                 `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -278,13 +273,6 @@ func (*ReplayDeadLetterRequest) Descriptor() ([]byte, []int) {
 func (x *ReplayDeadLetterRequest) GetEventId() string {
 	if x != nil {
 		return x.EventId
-	}
-	return ""
-}
-
-func (x *ReplayDeadLetterRequest) GetProjectId() string {
-	if x != nil {
-		return x.ProjectId
 	}
 	return ""
 }
@@ -345,10 +333,8 @@ var File_server_v1_outbox_proto protoreflect.FileDescriptor
 
 const file_server_v1_outbox_proto_rawDesc = "" +
 	"\n" +
-	"\x16server/v1/outbox.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"s\n" +
-	"\x16ListDeadLettersRequest\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
+	"\x16server/v1/outbox.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"T\n" +
+	"\x16ListDeadLettersRequest\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\x03 \x01(\tR\tpageToken\"\x86\x02\n" +
@@ -367,17 +353,17 @@ const file_server_v1_outbox_proto_rawDesc = "" +
 	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x98\x01\n" +
 	"\x17ListDeadLettersResponse\x12B\n" +
 	"\fdead_letters\x18\x01 \x03(\v2\x1f.torchwood.server.v1.DeadLetterR\vdeadLetters\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"S\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"4\n" +
 	"\x17ReplayDeadLetterRequest\x12\x19\n" +
-	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x02 \x01(\tR\tprojectId\"t\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId\"t\n" +
 	"\x18ReplayDeadLetterResponse\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12=\n" +
-	"\favailable_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vavailableAt2\xdd\x02\n" +
-	"\rOutboxService\x12\x94\x01\n" +
-	"\x0fListDeadLetters\x12+.torchwood.server.v1.ListDeadLettersRequest\x1a,.torchwood.server.v1.ListDeadLettersResponse\"&\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/outbox/dead-letters\x12\xac\x01\n" +
-	"\x10ReplayDeadLetter\x12,.torchwood.server.v1.ReplayDeadLetterRequest\x1a-.torchwood.server.v1.ReplayDeadLetterResponse\";\x82\xd3\xe4\x93\x025:\x01*\"0/v1/server/outbox/dead-letters/{event_id}:replay\x1a\x06\x92\xb2\x19\x02\b\x04B\xd3\x02\x92A\x90\x02RR\n" +
+	"\favailable_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vavailableAt2\xf9\x02\n" +
+	"\rOutboxService\x12\xa2\x01\n" +
+	"\x0fListDeadLetters\x12+.torchwood.server.v1.ListDeadLettersRequest\x1a,.torchwood.server.v1.ListDeadLettersResponse\"4\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\f\x10\x01\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/outbox/dead-letters\x12\xba\x01\n" +
+	"\x10ReplayDeadLetter\x12,.torchwood.server.v1.ReplayDeadLetterRequest\x1a-.torchwood.server.v1.ReplayDeadLetterResponse\"I\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\f\x10\x02\x82\xd3\xe4\x93\x025:\x01*\"0/v1/server/outbox/dead-letters/{event_id}:replay\x1a\x06\x92\xb2\x19\x02\b\x03B\xd2\x02\x92A\x8f\x02RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x8a\x01\n" +
@@ -389,8 +375,8 @@ const file_server_v1_outbox_proto_rawDesc = "" +
 	"\x06cookie\x12-\b\x02\x12\x1fTORCHWOOD_session_console=<sid>\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
-	"\x06apiKey\x12\x00z\x1f\n" +
-	"\x12x-torchwood-access\x12\t\x1a\aapi_keyZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
+	"\x06apiKey\x12\x00z\x1e\n" +
+	"\x12x-torchwood-access\x12\b\x1a\x06serverZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
 
 var (
 	file_server_v1_outbox_proto_rawDescOnce sync.Once

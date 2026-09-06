@@ -623,11 +623,11 @@ const file_server_v1_billing_proto_rawDesc = "" +
 	"\n" +
 	"statements\x18\x01 \x03(\v2%.torchwood.server.v1.BillingStatementR\n" +
 	"statements\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\x98\x03\n" +
-	"\x0eBillingService\x12n\n" +
-	"\bGetUsage\x12$.torchwood.server.v1.GetUsageRequest\x1a\x1a.torchwood.server.v1.Usage\" \x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/server/billing/usage\x12\x84\x01\n" +
-	"\vListRollups\x12'.torchwood.server.v1.ListRollupsRequest\x1a(.torchwood.server.v1.ListRollupsResponse\"\"\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/server/billing/rollups\x12\x86\x01\n" +
-	"\x0eListStatements\x12 .torchwood.shared.v1.ListRequest\x1a+.torchwood.server.v1.ListStatementsResponse\"%\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/server/billing/statements\x1a\x06\x92\xb2\x19\x02\b\x04B\xda\x03\x92A\x97\x03RR\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xb6\x03\n" +
+	"\x0eBillingService\x12x\n" +
+	"\bGetUsage\x12$.torchwood.server.v1.GetUsageRequest\x1a\x1a.torchwood.server.v1.Usage\"*\x8a\xb2\x19\x06\"\x04\b\v\x10\x01\x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/server/billing/usage\x12\x8e\x01\n" +
+	"\vListRollups\x12'.torchwood.server.v1.ListRollupsRequest\x1a(.torchwood.server.v1.ListRollupsResponse\",\x8a\xb2\x19\x06\"\x04\b\v\x10\x01\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/server/billing/rollups\x12\x90\x01\n" +
+	"\x0eListStatements\x12 .torchwood.shared.v1.ListRequest\x1a+.torchwood.server.v1.ListStatementsResponse\"/\x8a\xb2\x19\x06\"\x04\b\v\x10\x01\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/server/billing/statements\x1a\x06\x92\xb2\x19\x02\b\x03B\xd9\x03\x92A\x96\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
@@ -639,8 +639,8 @@ const file_server_v1_billing_proto_rawDesc = "" +
 	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
-	"\x06apiKey\x12\x00z\x1f\n" +
-	"\x12x-torchwood-access\x12\t\x1a\aapi_keyZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
+	"\x06apiKey\x12\x00z\x1e\n" +
+	"\x12x-torchwood-access\x12\b\x1a\x06serverZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
 
 var (
 	file_server_v1_billing_proto_rawDescOnce sync.Once

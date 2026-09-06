@@ -38,14 +38,18 @@ func (o *OutboxAdmin) ensureProjectActive(ctx context.Context, projectID string)
 }
 
 func (o *OutboxAdmin) ListDeadLetters(ctx context.Context, projectID string, pageSize int32, pageToken string) ([]events.DeadLetter, int64, string, error) {
-	if _, ok := contexts.Principal(ctx); !ok {
-		return nil, 0, "", status.Error(codes.Unauthenticated, "unauthenticated")
+	// 二道防线（决策 v8）：死信 payload 含文档数据，读面与重放同为
+	// server 写主体门（角色/scope 细粒度由拦截器策略表把关）。
+	if err := shared.RequireServerWriteActor(ctx); err != nil {
+		return nil, 0, "", err
 	}
 	if projectID == "" {
-		return nil, 0, "", status.Error(codes.InvalidArgument, "project_id is required")
+		return nil, 0, "", status.Error(codes.FailedPrecondition, "project context required")
 	}
-	if p, ok := contexts.Principal(ctx); ok && p != nil && p.ProjectID != "" && p.ProjectID != projectID {
-		return nil, 0, "", status.Error(codes.PermissionDenied, "project mismatch")
+	// 项目绑定核对（fail-closed：空 ProjectID 不再放行——修越权面）；
+	// 越权统一 NotFound 防枚举（错误码总则）。
+	if p, _ := contexts.Principal(ctx); p != nil && p.ProjectID != projectID {
+		return nil, 0, "", status.Error(codes.NotFound, "dead letters not found")
 	}
 	if err := o.ensureProjectActive(ctx, projectID); err != nil {
 		return nil, 0, "", err
@@ -61,10 +65,10 @@ func (o *OutboxAdmin) ReplayDeadLetter(ctx context.Context, eventID, projectID s
 		return status.Error(codes.InvalidArgument, "event_id is required")
 	}
 	if projectID == "" {
-		return status.Error(codes.InvalidArgument, "project_id is required")
+		return status.Error(codes.FailedPrecondition, "project context required")
 	}
-	if p, ok := contexts.Principal(ctx); ok && p != nil && p.ProjectID != "" && p.ProjectID != projectID {
-		return status.Error(codes.PermissionDenied, "project mismatch")
+	if p, _ := contexts.Principal(ctx); p != nil && p.ProjectID != projectID {
+		return status.Error(codes.NotFound, "dead letter not found")
 	}
 	if err := o.ensureProjectActive(ctx, projectID); err != nil {
 		return err

@@ -3358,5 +3358,5 @@
       "apiKey": []
     }
   ],
-  "x-torchwood-access": "api_key"
+  "x-torchwood-access": "server"
 }

@@ -74,9 +74,10 @@ func adminCtx(projectID string) context.Context {
 func TestOutboxAdmin_ListDeadLetters_ProjectMismatch(t *testing.T) {
 	repo := &stubOutboxRepo{}
 	uc := appevents.NewOutboxAdmin(repo, nil)
+	// 决策 v8：越权统一 NotFound 防枚举（错误码总则）。
 	ctx := adminCtx("p1")
 	_, _, _, err := uc.ListDeadLetters(ctx, "p2", 10, "")
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Equal(t, codes.NotFound, status.Code(err))
 }
 
 func TestOutboxAdmin_ReplayDeadLetter_ProjectMismatch(t *testing.T) {
@@ -84,7 +85,7 @@ func TestOutboxAdmin_ReplayDeadLetter_ProjectMismatch(t *testing.T) {
 	uc := appevents.NewOutboxAdmin(repo, nil)
 	ctx := adminCtx("p1")
 	err := uc.ReplayDeadLetter(ctx, "e1", "p2")
-	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Equal(t, codes.NotFound, status.Code(err))
 }
 
 func TestOutboxAdmin_ReplayDeadLetter_RequiresProjectID(t *testing.T) {
@@ -92,7 +93,7 @@ func TestOutboxAdmin_ReplayDeadLetter_RequiresProjectID(t *testing.T) {
 	uc := appevents.NewOutboxAdmin(repo, nil)
 	ctx := adminCtx("p1")
 	err := uc.ReplayDeadLetter(ctx, "e1", "")
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
 func TestOutboxAdmin_ListDeadLetters_Suspended(t *testing.T) {

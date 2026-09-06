@@ -848,7 +848,7 @@ const file_client_v1_subscriptions_proto_rawDesc = "" +
 	"\tListPlans\x12%.torchwood.client.v1.ListPlansRequest\x1a&.torchwood.client.v1.ListPlansResponse\"\x1f\x82\xd3\xe4\x93\x02\x19\x12\x17/v1/subscriptions/plans\x12x\n" +
 	"\tSubscribe\x12%.torchwood.client.v1.SubscribeRequest\x1a&.torchwood.client.v1.SubscribeResponse\"\x1c\x82\xd3\xe4\x93\x02\x16:\x01*\"\x11/v1/subscriptions\x12\x83\x01\n" +
 	"\x11GetMySubscription\x12-.torchwood.client.v1.GetMySubscriptionRequest\x1a!.torchwood.client.v1.Subscription\"\x1c\x82\xd3\xe4\x93\x02\x16\x12\x14/v1/subscriptions/me\x12\x86\x01\n" +
-	"\x06Cancel\x12\".torchwood.client.v1.CancelRequest\x1a!.torchwood.client.v1.Subscription\"5\x82\xd3\xe4\x93\x02/:\x01*\"*/v1/subscriptions/{subscription_id}:cancel\x1a\x06\x92\xb2\x19\x02\b\x02B\xfa\x03\x92A\xb7\x03RR\n" +
+	"\x06Cancel\x12\".torchwood.client.v1.CancelRequest\x1a!.torchwood.client.v1.Subscription\"5\x82\xd3\xe4\x93\x02/:\x01*\"*/v1/subscriptions/{subscription_id}:cancel\x1a\x06\x92\xb2\x19\x02\b\x02B\xf5\x03\x92A\xb2\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xab\x02\n" +
@@ -860,8 +860,9 @@ const file_client_v1_subscriptions_proto_rawDesc = "" +
 	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
-	"\x06Bearer\x12\x00z%\n" +
-	"\x12x-torchwood-access\x12\x0f\x1a\rauthenticatedZ=github.com/torchwooddev/torchwood/genproto/client/v1;clientv1b\x06proto3"
+	"\x06Bearer\x12\x00z \n" +
+	"\x12x-torchwood-access\x12\n" +
+	"\x1a\bend_userZ=github.com/torchwooddev/torchwood/genproto/client/v1;clientv1b\x06proto3"
 
 var (
 	file_client_v1_subscriptions_proto_rawDescOnce sync.Once

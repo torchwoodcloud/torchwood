@@ -65,25 +65,23 @@ func TestAdminRoleMethodRules_BusinessWriteMethodsAllowMember(t *testing.T) {
 		require.NotContains(t, roles, "viewer", "%s 不得允许 viewer", m)
 	}
 
-	// DeleteUserSession 是管理员操作，仅 owner/admin。
+	// 决策 v8：users 六写方法归一业务写档——DeleteUserSession 也是 member+。
 	roles := adminRoleMethodRules["/torchwood.server.v1.UsersService/DeleteUserSession"]
 	require.NotNil(t, roles)
-	require.Contains(t, roles, "owner")
-	require.Contains(t, roles, "admin")
-	require.NotContains(t, roles, "member")
+	for _, allowed := range []string{"member", "owner", "admin"} {
+		require.Contains(t, roles, allowed, "DeleteUserSession 必须允许 %s", allowed)
+	}
 	require.NotContains(t, roles, "viewer")
 
-	// CreateProject/DeleteProject 是平台级资源，仅 owner/admin。
+	// 决策 v8：平台专属面挪 PERMISSION（permissions ["owner","admin"]），
+	// 不在角色表——角色门由拦截器 permissionMethods 分支承担。
 	for _, m := range []string{
 		"/torchwood.server.v1.ProjectsService/CreateProject",
 		"/torchwood.server.v1.ProjectsService/DeleteProject",
+		"/torchwood.server.v1.APIKeysService/CreateAPIKey",
+		"/torchwood.server.v1.APIKeysService/DeleteAPIKey",
 	} {
-		roles := adminRoleMethodRules[m]
-		require.NotNil(t, roles, "%s 必须登记 adminRoleMethodRules", m)
-		require.Contains(t, roles, "owner")
-		require.Contains(t, roles, "admin")
-		require.NotContains(t, roles, "member")
-		require.NotContains(t, roles, "viewer")
+		require.NotContains(t, adminRoleMethodRules, m, "%s 已挪 PERMISSION 面，不得残留角色表", m)
 	}
 }
 
@@ -218,15 +216,19 @@ func TestAuthInterceptor_MemberAllowedOnBusinessWritesDeniedOnAdminOp(t *testing
 		}
 	}
 
+	// 决策 v8：users 接管面已归一业务写档（member 可调）；member 被拒的
+	// 平台专属面由 PERMISSION 门禁承担（CreateProject 接线为 permissionMethods）。
 	ic, err := NewAuthInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind:      shared.ActorKindAdmin,
 		CredentialType: shared.CredentialTypeSession,
 		Roles:          []string{"member"},
-	}}, nil, []string{"/torchwood.server.v1.UsersService/DeleteUserSession"}, nil)
+	}}, nil, nil, map[string][]string{
+		"/torchwood.server.v1.ProjectsService/CreateProject": {"owner", "admin"},
+	})
 	requireNoError(t, err)
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Session admin-token"))
 	_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{
-		FullMethod: "/torchwood.server.v1.UsersService/DeleteUserSession",
+		FullMethod: "/torchwood.server.v1.ProjectsService/CreateProject",
 	}, func(context.Context, any) (any, error) {
 		t.Fatal("handler should not run")
 		return nil, nil
@@ -318,8 +320,9 @@ func TestAdminRoleWriteCoverageDiff_DetectsMissingAndExtra(t *testing.T) {
 // CreateDocument/CreateGroup/DeleteBucket/CreateFileToken）必须 PermissionDenied。
 func TestAuthInterceptor_RejectsViewerOnNewlyRegisteredWrites(t *testing.T) {
 	t.Parallel()
+	// 决策 v8：APIKeys 已挪 PERMISSION（viewer 拒绝由 permission 门禁测试覆盖）；
+	// UpdateUser 归一业务写档，viewer 仍由角色表拒绝。
 	methods := []string{
-		"/torchwood.server.v1.APIKeysService/DeleteAPIKey",
 		"/torchwood.server.v1.UsersService/UpdateUser",
 		"/torchwood.server.v1.DatabasesService/CreateDocument",
 		"/torchwood.server.v1.GroupsService/CreateGroup",
@@ -345,19 +348,19 @@ func TestAuthInterceptor_RejectsViewerOnNewlyRegisteredWrites(t *testing.T) {
 	}
 }
 
-// Round3 H1-1：member 调接管面写（DeleteAPIKey/UpdateUser）必须
-// PermissionDenied；调业务写（CreateDocument/CreateGroup）过拦截器。
+// 决策 v8：member 调平台专属面（PERMISSION 接线：DeleteAPIKey/CreateProject）
+// 必须 PermissionDenied；调 users 接管面与业务写（均已归一业务写档）过拦截器。
 func TestAuthInterceptor_MemberDeniedOnTakeoverWritesAllowedOnBusinessWrites(t *testing.T) {
 	t.Parallel()
 	for _, method := range []string{
 		"/torchwood.server.v1.APIKeysService/DeleteAPIKey",
-		"/torchwood.server.v1.UsersService/UpdateUser",
+		"/torchwood.server.v1.ProjectsService/CreateProject",
 	} {
 		ic, err := NewAuthInterceptor(stubValidator{principal: &shared.Principal{
 			ActorKind:      shared.ActorKindAdmin,
 			CredentialType: shared.CredentialTypeSession,
 			Roles:          []string{"member"},
-		}}, nil, []string{method}, nil)
+		}}, nil, nil, map[string][]string{method: {"owner", "admin"}})
 		requireNoError(t, err)
 		ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Session admin-token"))
 		_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{
@@ -370,6 +373,8 @@ func TestAuthInterceptor_MemberDeniedOnTakeoverWritesAllowedOnBusinessWrites(t *
 	}
 
 	for _, method := range []string{
+		"/torchwood.server.v1.UsersService/UpdateUser",
+		"/torchwood.server.v1.UsersService/CreateUserToken",
 		"/torchwood.server.v1.DatabasesService/CreateDocument",
 		"/torchwood.server.v1.GroupsService/CreateGroup",
 	} {
