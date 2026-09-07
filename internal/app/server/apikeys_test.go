@@ -2,7 +2,10 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -12,6 +15,7 @@ import (
 	"github.com/torchwooddev/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
 	"github.com/torchwooddev/torchwood/internal/testutil"
+	"github.com/torchwooddev/torchwood/pkg/idgen"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -58,6 +62,18 @@ func (f *fakeAPIKeyRepository) ListAPIKeys(ctx context.Context, projectID string
 }
 func (f *fakeAPIKeyRepository) DeleteAPIKey(ctx context.Context, projectID, id string) error {
 	return nil
+}
+
+// TestAPIKeys_Create_SecretFormat：明文 secret 带 sk- 前缀（idgen.APIKeySecret
+// 单一事实源），SecretHash 为该明文的 SHA-256——校验侧按哈希反查，前缀纯标识。
+func TestAPIKeys_Create_SecretFormat(t *testing.T) {
+	uc := NewAPIKeys(&fakeAPIKeyRepository{}, testScopeVocabulary())
+
+	key, secret, err := uc.CreateInternal(context.Background(), CreateAPIKeyCommand{Name: "k", Scopes: []string{"*"}})
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(secret, idgen.APIKeySecretPrefix), "secret 应带 %q 前缀: %s", idgen.APIKeySecretPrefix, secret)
+	hash := sha256.Sum256([]byte(secret))
+	require.Equal(t, hex.EncodeToString(hash[:]), key.SecretHash)
 }
 
 // TestAPIKeys_Create_ScopeValidation (B2): Create 时校验 scope 格式

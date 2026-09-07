@@ -90,7 +90,7 @@ func (a *APIKeys) CreateInternal(ctx context.Context, cmd CreateAPIKeyCommand) (
 		}
 	}
 	id := idgen.UUID().String()
-	secret := idgen.UUID().String() + idgen.UUID().String()
+	secret := idgen.APIKeySecret()
 	hash := sha256.Sum256([]byte(secret))
 	key := &projects.APIKey{
 		ID:         id,

@@ -17,7 +17,7 @@ func CreateTestAPIKey(ctx context.Context, db *clients.Database, projectID strin
 	if len(scopes) == 0 {
 		scopes = []string{"users", "storage", "databases", "groups"}
 	}
-	secret := idgen.UUID().String() + idgen.UUID().String()
+	secret := idgen.APIKeySecret()
 	hash := sha256.Sum256([]byte(secret))
 	key := &model.APIKey{
 		ID:         idgen.UUID().String(),
