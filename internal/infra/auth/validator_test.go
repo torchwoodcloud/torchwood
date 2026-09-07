@@ -120,6 +120,12 @@ func (r *stubAdminRepo) CreateAdmin(context.Context, *projects.Admin) error {
 func (r *stubAdminRepo) UpdateAdmin(context.Context, *projects.Admin) error {
 	return nil
 }
+func (r *stubAdminRepo) RevokeCredentials(_ context.Context, adminID string, revokedAt time.Time) error {
+	if a, ok := r.admins[adminID]; ok {
+		a.RevokedAt = revokedAt
+	}
+	return nil
+}
 func (r *stubAdminRepo) DeleteAdmin(context.Context, string) error {
 	return nil
 }
@@ -471,6 +477,84 @@ func TestValidator_ValidateAdminJWT_Revoked(t *testing.T) {
 		TokenType: jwtparser.TokenTypeAccess,
 		IssuedAt:  issuedAt,
 		ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	})
+	_, err := v.ValidateToken(ctx, token)
+	requireCode(t, err, codes.Unauthenticated)
+}
+
+// M5 C1：撤销事实源收敛到 DB（revoked_at 随 admins 行读出，零额外查询）。
+// iat <= revoked_at 即拒（与 Redis 判定同构）；iat > revoked_at 与未撤销
+// 不受影响；DB 与 Redis 并存时取两者 max。
+func TestValidator_ValidateAdminJWT_RevokedInDB(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	// 撤销时刻取过去时刻：fresh 分支的 iat 需落在过去（WithIssuedAt 拒未来 iat）。
+	revokedAt := time.Now().Add(-time.Hour)
+	admin := &projects.Admin{ID: "admin-1", Email: "admin@torchwood.local", Role: "owner", RevokedAt: revokedAt}
+	admins := &stubAdminRepo{admins: map[string]*projects.Admin{admin.ID: admin}}
+	v := auth.NewValidator(testValidatorConfig(), &stubAPIKeyRepo{}, nil, admins, &stubAdminProjectRepo{}, nil, nil, nil, nil)
+
+	staleToken := signToken(t, jwtparser.Claims{
+		UserID:    admin.ID,
+		ActorKind: "admin",
+		TokenType: jwtparser.TokenTypeAccess,
+		IssuedAt:  revokedAt.Add(-time.Hour).Unix(),
+		ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	})
+	_, err := v.ValidateToken(ctx, staleToken)
+	requireCode(t, err, codes.Unauthenticated)
+
+	// 撤销时刻整秒边界同样拒绝（与 Redis 快路径 iat <= 判定一致）。
+	boundaryToken := signToken(t, jwtparser.Claims{
+		UserID:    admin.ID,
+		ActorKind: "admin",
+		TokenType: jwtparser.TokenTypeAccess,
+		IssuedAt:  revokedAt.Unix(),
+		ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	})
+	_, err = v.ValidateToken(ctx, boundaryToken)
+	requireCode(t, err, codes.Unauthenticated)
+
+	// 撤销之后签发的新 token 不受影响。
+	freshToken := signToken(t, jwtparser.Claims{
+		UserID:    admin.ID,
+		ActorKind: "admin",
+		TokenType: jwtparser.TokenTypeAccess,
+		IssuedAt:  revokedAt.Add(time.Minute).Unix(),
+		ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	})
+	p, err := v.ValidateToken(ctx, freshToken)
+	require.NoError(t, err)
+	require.Equal(t, shared.ActorKindAdmin, p.ActorKind)
+}
+
+func TestValidator_ValidateAdminJWT_RevokeTakesMaxOfDBAndRedis(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	redisRevoked := time.Now().Add(-2 * time.Hour)
+	dbRevoked := time.Now().Add(-time.Hour)
+	admin := &projects.Admin{ID: "admin-1", Email: "admin@torchwood.local", Role: "owner", RevokedAt: dbRevoked}
+	revokeStore := newMemAdminRevokeStore()
+	require.NoError(t, revokeStore.RevokeBefore(ctx, admin.ID, redisRevoked, time.Hour))
+
+	v := auth.NewValidator(
+		testValidatorConfig(),
+		&stubAPIKeyRepo{},
+		nil,
+		&stubAdminRepo{admins: map[string]*projects.Admin{admin.ID: admin}},
+		&stubAdminProjectRepo{},
+		revokeStore,
+		nil,
+		nil,
+		nil,
+	)
+	// iat 介于 Redis 与 DB 撤销时刻之间：只看 Redis 会放行，取 max 后必须拒绝。
+	token := signToken(t, jwtparser.Claims{
+		UserID:    admin.ID,
+		ActorKind: "admin",
+		TokenType: jwtparser.TokenTypeAccess,
+		IssuedAt:  redisRevoked.Add(time.Minute).Unix(),
+		ExpiresAt: dbRevoked.Add(time.Hour).Unix(),
 	})
 	_, err := v.ValidateToken(ctx, token)
 	requireCode(t, err, codes.Unauthenticated)

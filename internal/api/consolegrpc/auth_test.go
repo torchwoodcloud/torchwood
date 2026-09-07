@@ -88,6 +88,10 @@ func (r *stubAdminRepo) UpdateAdmin(context.Context, *projects.Admin) error {
 	return nil
 }
 
+func (r *stubAdminRepo) RevokeCredentials(_ context.Context, _ string, _ time.Time) error {
+	return nil
+}
+
 func (r *stubAdminRepo) DeleteAdmin(context.Context, string) error {
 	return nil
 }

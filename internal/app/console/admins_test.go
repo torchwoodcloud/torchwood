@@ -68,6 +68,15 @@ func (r *memAdminRepo) UpdateAdmin(_ context.Context, admin *projects.Admin) err
 	return nil
 }
 
+func (r *memAdminRepo) RevokeCredentials(_ context.Context, adminID string, revokedAt time.Time) error {
+	for i := range r.admins {
+		if r.admins[i].ID == adminID && (r.admins[i].RevokedAt.IsZero() || r.admins[i].RevokedAt.Before(revokedAt)) {
+			r.admins[i].RevokedAt = revokedAt
+		}
+	}
+	return nil
+}
+
 func (r *memAdminRepo) DeleteAdmin(_ context.Context, id string) error {
 	for i := range r.admins {
 		if r.admins[i].ID == id {
@@ -112,7 +121,7 @@ func mkAdmin(id, email, role string) projects.Admin {
 
 func TestAdmins_Create_ValidatesInput(t *testing.T) {
 	t.Parallel()
-	uc := console.NewAdmins(newAdminRepo(), nil)
+	uc := console.NewAdmins(newAdminRepo(), nil, nil)
 
 	_, err := uc.Create(adminActorCtx(context.Background()), console.CreateAdminCommand{Email: "", Password: "Passw0rd", Role: "owner"})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -127,7 +136,7 @@ func TestAdmins_Create_ValidatesInput(t *testing.T) {
 func TestAdmins_Create_HashesPasswordAndNormalizesEmail(t *testing.T) {
 	t.Parallel()
 	repo := newAdminRepo()
-	uc := console.NewAdmins(repo, nil)
+	uc := console.NewAdmins(repo, nil, nil)
 
 	created, err := uc.Create(adminActorCtx(context.Background()), console.CreateAdminCommand{
 		Email: "  Ops@Example.COM ", Password: "Passw0rd", Role: "member",
@@ -147,7 +156,7 @@ func TestAdmins_Create_HashesPasswordAndNormalizesEmail(t *testing.T) {
 func TestAdmins_Update_RejectsSelfDemotion(t *testing.T) {
 	t.Parallel()
 	repo := newAdminRepo(mkAdmin("a1", "owner@x.com", "owner"), mkAdmin("a2", "admin@x.com", "admin"))
-	uc := console.NewAdmins(repo, nil)
+	uc := console.NewAdmins(repo, nil, nil)
 
 	_, err := uc.Update(adminActorCtx(context.Background()), console.UpdateAdminCommand{ID: "a1", CallerID: "a1", Role: "member"})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -156,7 +165,7 @@ func TestAdmins_Update_RejectsSelfDemotion(t *testing.T) {
 func TestAdmins_Update_RejectsDemotingLastOwner(t *testing.T) {
 	t.Parallel()
 	repo := newAdminRepo(mkAdmin("a1", "owner@x.com", "owner"))
-	uc := console.NewAdmins(repo, nil)
+	uc := console.NewAdmins(repo, nil, nil)
 
 	_, err := uc.Update(adminActorCtx(context.Background()), console.UpdateAdminCommand{ID: "a1", CallerID: "a2", Role: "member"})
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
@@ -168,7 +177,7 @@ func TestAdmins_Update_AllowsRoleChangeAndPasswordReset(t *testing.T) {
 		mkAdmin("a1", "owner@x.com", "owner"),
 		mkAdmin("a2", "admin@x.com", "admin"),
 	)
-	uc := console.NewAdmins(repo, nil)
+	uc := console.NewAdmins(repo, nil, nil)
 
 	updated, err := uc.Update(adminActorCtx(context.Background()), console.UpdateAdminCommand{
 		ID: "a2", CallerID: "a1", Role: "member", Password: "NewPassw0rd",
@@ -180,10 +189,53 @@ func TestAdmins_Update_AllowsRoleChangeAndPasswordReset(t *testing.T) {
 	require.True(t, ok)
 }
 
+// M5 C1：改密/删除即撤销既有凭证——撤销时间戳与 admins 行写同事务落库，
+// 改密前签发的 token（iat < revokedAt）验证即拒。
+func TestAdmins_Update_PasswordResetRevokesCredentials(t *testing.T) {
+	t.Parallel()
+	repo := newAdminRepo(
+		mkAdmin("a1", "owner@x.com", "owner"),
+		mkAdmin("a2", "admin@x.com", "admin"),
+	)
+	uc := console.NewAdmins(repo, nil, nil)
+
+	before := time.Now().Add(-time.Minute)
+	updated, err := uc.Update(adminActorCtx(context.Background()), console.UpdateAdminCommand{
+		ID: "a2", CallerID: "a1", Password: "NewPassw0rd",
+	})
+	require.NoError(t, err)
+	require.False(t, updated.RevokedAt.IsZero(), "改密后必须落撤销时间戳")
+	require.True(t, updated.RevokedAt.After(before), "撤销时间戳应晚于改密前 token 的 iat")
+
+	// 未改密的角色变更不触发撤销。
+	updated, err = uc.Update(adminActorCtx(context.Background()), console.UpdateAdminCommand{
+		ID: "a2", CallerID: "a1", Role: "member",
+	})
+	require.NoError(t, err)
+	require.False(t, updated.RevokedAt.IsZero())
+	firstRevokedAt := updated.RevokedAt
+	got, err := repo.GetAdmin(context.Background(), "a2")
+	require.NoError(t, err)
+	require.False(t, got.RevokedAt.IsZero())
+	require.True(t, got.RevokedAt.Equal(firstRevokedAt), "角色变更不得前推撤销时间戳")
+}
+
+func TestAdmins_Delete_RevokesCredentialsBeforeRowDeletion(t *testing.T) {
+	t.Parallel()
+	repo := newAdminRepo(
+		mkAdmin("a1", "owner1@x.com", "owner"),
+		mkAdmin("a2", "owner2@x.com", "owner"),
+	)
+	uc := console.NewAdmins(repo, nil, nil)
+
+	require.NoError(t, uc.Delete(adminActorCtx(context.Background()), "a2", "a1"))
+	require.Len(t, repo.admins, 1)
+}
+
 func TestAdmins_Delete_RejectsSelfDeletion(t *testing.T) {
 	t.Parallel()
 	repo := newAdminRepo(mkAdmin("a1", "owner@x.com", "owner"))
-	uc := console.NewAdmins(repo, nil)
+	uc := console.NewAdmins(repo, nil, nil)
 
 	err := uc.Delete(adminActorCtx(context.Background()), "a1", "a1")
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -193,7 +245,7 @@ func TestAdmins_Delete_RejectsSelfDeletion(t *testing.T) {
 func TestAdmins_Delete_RejectsDeletingLastOwner(t *testing.T) {
 	t.Parallel()
 	repo := newAdminRepo(mkAdmin("a1", "owner@x.com", "owner"))
-	uc := console.NewAdmins(repo, nil)
+	uc := console.NewAdmins(repo, nil, nil)
 
 	err := uc.Delete(adminActorCtx(context.Background()), "a1", "a2")
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
@@ -207,7 +259,7 @@ func TestAdmins_Delete_AllowsWithSecondOwner(t *testing.T) {
 		mkAdmin("a2", "owner2@x.com", "owner"),
 		mkAdmin("a3", "admin@x.com", "admin"),
 	)
-	uc := console.NewAdmins(repo, nil)
+	uc := console.NewAdmins(repo, nil, nil)
 
 	require.NoError(t, uc.Delete(adminActorCtx(context.Background()), "a3", "a1"))
 	require.Len(t, repo.admins, 2)
@@ -222,7 +274,7 @@ func TestAdmins_WriteMethods_RequireConsolePrincipal(t *testing.T) {
 		mkAdmin("a1", "owner@x.com", "owner"),
 		mkAdmin("a2", "admin@x.com", "admin"),
 	)
-	uc := console.NewAdmins(repo, nil)
+	uc := console.NewAdmins(repo, nil, nil)
 
 	denied := []*shared.Principal{
 		{ActorID: "key-1", ActorKind: shared.ActorKindService, Roles: []string{"keys"}, Permissions: []string{"*"}},

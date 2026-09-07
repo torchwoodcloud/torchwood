@@ -99,16 +99,18 @@ func (a *Auth) RefreshToken(ctx context.Context, cmd RefreshTokenCommand) (*Toke
 	if claims.TokenType != jwtparser.TokenTypeRefresh || claims.ActorKind != "admin" {
 		return nil, status.Error(codes.Unauthenticated, "invalid refresh token")
 	}
-	if err := a.checkAdminTokenRevoked(ctx, claims); err != nil {
-		return nil, err
-	}
 	// 以库内记录为准：已删除账号不得续签，角色变更立即生效（不用 JWT 快照）。
+	// 撤销判定随行读出（M5 C1）：DB revoked_at 为事实源，Redis 为登出快
+	// 路径，取两者 max——改密/降级后的旧 refresh token 不得换取新对。
 	admin, err := a.adminRepo.GetAdmin(ctx, claims.UserID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "admin lookup failed")
 	}
 	if admin == nil {
 		return nil, status.Error(codes.Unauthenticated, "invalid refresh token")
+	}
+	if err := a.checkAdminTokenRevoked(ctx, claims, admin.RevokedAt); err != nil {
+		return nil, err
 	}
 	if a.rotation == nil {
 		return a.issueAdminTokens(ctx, admin.ID, admin.Email, admin.Role)
@@ -249,15 +251,24 @@ func (a *Auth) resetLoginThrottle(ctx context.Context, email, ip string) {
 	_ = a.loginThrottle.Reset(ctx, domainauth.LoginNamespaceAdmin, email, ip)
 }
 
-func (a *Auth) checkAdminTokenRevoked(ctx context.Context, claims *jwtparser.Claims) error {
-	if a.adminRevokeStore == nil || claims == nil || claims.UserID == "" {
+// checkAdminTokenRevoked 判定 admin token 撤销（M5 C1）：DB revoked_at 为
+// 事实源（改密/删除等管理动作同事务落库），Redis RevokedBefore 为登出快
+// 路径；取两者 max，iat <= max 即拒。
+func (a *Auth) checkAdminTokenRevoked(ctx context.Context, claims *jwtparser.Claims, dbRevokedAt time.Time) error {
+	if claims == nil || claims.UserID == "" {
 		return nil
 	}
-	revokedBefore, err := a.adminRevokeStore.RevokedBefore(ctx, claims.UserID)
-	if err != nil {
-		return err
+	revokedAt := dbRevokedAt
+	if a.adminRevokeStore != nil {
+		redisRevoked, err := a.adminRevokeStore.RevokedBefore(ctx, claims.UserID)
+		if err != nil {
+			return err
+		}
+		if redisRevoked.After(revokedAt) {
+			revokedAt = redisRevoked
+		}
 	}
-	if !revokedBefore.IsZero() && claims.IssuedAt <= revokedBefore.Unix() {
+	if !revokedAt.IsZero() && claims.IssuedAt <= revokedAt.Unix() {
 		return status.Error(codes.Unauthenticated, "token revoked")
 	}
 	return nil

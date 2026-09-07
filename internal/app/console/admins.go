@@ -11,6 +11,7 @@ import (
 	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
 	"github.com/torchwooddev/torchwood/pkg/idgen"
 	"github.com/torchwooddev/torchwood/pkg/password"
+	"github.com/torchwooddev/torchwood/pkg/uow"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -35,10 +36,13 @@ var validAdminRoles = map[string]struct{}{
 type Admins struct {
 	repo             projects.AdminRepository
 	adminProjectRepo projects.AdminProjectRepository
+	// db 是工作单元缝（M5 C1）：改密/删除与凭证撤销必须同事务提交；
+	// 未装配（部分单测）时退化为直接执行（单语句自动提交，语义不变）。
+	db uow.Runner
 }
 
-func NewAdmins(repo projects.AdminRepository, adminProjectRepo projects.AdminProjectRepository) *Admins {
-	return &Admins{repo: repo, adminProjectRepo: adminProjectRepo}
+func NewAdmins(repo projects.AdminRepository, adminProjectRepo projects.AdminProjectRepository, db uow.Runner) *Admins {
+	return &Admins{repo: repo, adminProjectRepo: adminProjectRepo, db: db}
 }
 
 type CreateAdminCommand struct {
@@ -166,8 +170,21 @@ func (a *Admins) Update(ctx context.Context, cmd UpdateAdminCommand) (*projects.
 	}
 
 	admin.UpdatedAt = time.Now()
-	if err := a.repo.UpdateAdmin(ctx, admin); err != nil {
-		return nil, status.Errorf(codes.Internal, "update admin: %v", err)
+	// M5 C1：改密即撤销既有凭证——撤销时间戳与密码哈希同事务落库，消除
+	// "密码已改但改密前签发的 access/refresh token 仍有效"窗口。
+	// （iat <= revoked_at 即拒，正在同秒签发的 token 一并覆盖。）
+	if err := a.runInTx(ctx, func(txCtx context.Context) error {
+		if err := a.repo.UpdateAdmin(txCtx, admin); err != nil {
+			return status.Errorf(codes.Internal, "update admin: %v", err)
+		}
+		if cmd.Password != "" {
+			if err := a.repo.RevokeCredentials(txCtx, admin.ID, admin.UpdatedAt); err != nil {
+				return status.Errorf(codes.Internal, "revoke admin credentials: %v", err)
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return admin, nil
 }
@@ -194,10 +211,30 @@ func (a *Admins) Delete(ctx context.Context, id, callerID string) error {
 			return err
 		}
 	}
-	if err := a.repo.DeleteAdmin(ctx, id); err != nil {
-		return status.Errorf(codes.Internal, "delete admin: %v", err)
+	// M5 C1：删除前先落撤销痕迹再删行（同事务）。行删除本身已令后续验证
+	// 以 admin not found 拒绝，撤销痕迹是纵深防御：保留不变量"管理面凭证
+	// 生命周期动作必有持久撤销记录"，也为将来软删除演进兜底。
+	if err := a.runInTx(ctx, func(txCtx context.Context) error {
+		if err := a.repo.RevokeCredentials(txCtx, id, time.Now()); err != nil {
+			return status.Errorf(codes.Internal, "revoke admin credentials: %v", err)
+		}
+		if err := a.repo.DeleteAdmin(txCtx, id); err != nil {
+			return status.Errorf(codes.Internal, "delete admin: %v", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 	return nil
+}
+
+// runInTx 在可用的工作单元内执行 fn；runner 未装配时直接执行
+//（单语句自动提交，与事务内执行语义一致）。
+func (a *Admins) runInTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	if a.db == nil {
+		return fn(ctx)
+	}
+	return a.db.Run(ctx, fn)
 }
 
 // ensureNotLastOwner 拒绝删除/降级系统中最后一个 owner。

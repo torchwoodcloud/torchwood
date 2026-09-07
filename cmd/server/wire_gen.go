@@ -175,7 +175,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	billingBilling := billing2.NewBilling(redisCounter, usageRepo, statementRepo, repository, fileRepository, logger)
 	billingService := servergrpc.NewBillingService(billingBilling)
 	consoleAuth := console.NewAuth(appConfig, adminRepository, redisAdminTokenRevokeStore, redisLoginThrottle, redisRefreshRotationStore)
-	admins := console.NewAdmins(adminRepository, adminProjectRepository)
+	admins := console.NewAdmins(adminRepository, adminProjectRepository, database)
 	setup := console.NewSetup(appConfig, admins, projects, consoleAuth, adminRepository, adminProjectRepository, repository)
 	authService := consolegrpc.NewAuthService(consoleAuth, setup)
 	adminsService := consolegrpc.NewAdminsService(admins)

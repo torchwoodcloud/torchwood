@@ -1,6 +1,9 @@
 package projects
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type Repository interface {
 	CreateProject(ctx context.Context, p *Project) error
@@ -47,6 +50,10 @@ type AdminRepository interface {
 	ListAdmins(ctx context.Context) ([]Admin, error)
 	CreateAdmin(ctx context.Context, admin *Admin) error
 	UpdateAdmin(ctx context.Context, admin *Admin) error
+	// RevokeCredentials 持久化 admin 凭证撤销时间戳：撤销时刻之前签发的
+	// 全部 token 在验证时失效。幂等且只前推（已有更晚撤销时间不回退）。
+	// 感知调用方事务：与 admins 行写同事务提交。
+	RevokeCredentials(ctx context.Context, adminID string, revokedAt time.Time) error
 	DeleteAdmin(ctx context.Context, id string) error
 	CountAdminsByRole(ctx context.Context, role string) (int64, error)
 	// WithBootstrapLock 在事务内持 pg_advisory_xact_lock(key) 执行 fn，

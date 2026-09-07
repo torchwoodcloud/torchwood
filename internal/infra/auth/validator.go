@@ -164,15 +164,18 @@ func (v *Validator) principalFromJWT(ctx context.Context, claims *jwtparser.Clai
 		if claims.TokenType != "" && claims.TokenType != jwtparser.TokenTypeAccess {
 			return nil, status.Error(codes.Unauthenticated, "invalid token type")
 		}
-		if err := v.checkAdminTokenRevoked(ctx, claims); err != nil {
-			return nil, err
-		}
+		// 撤销判定随行读出（M5 C1）：每请求本来就要取 admins 行读角色，
+		// revoked_at 同行带出零额外查询——DB 为事实源，Redis 保留为登出
+		// 快路径，判定取两者 max。
 		admin, err := v.adminRepo.GetAdmin(ctx, claims.UserID)
 		if err != nil {
 			return nil, status.Error(codes.Internal, "admin lookup failed")
 		}
 		if admin == nil {
 			return nil, status.Error(codes.Unauthenticated, "admin not found")
+		}
+		if err := v.checkAdminTokenRevoked(ctx, claims, admin.RevokedAt); err != nil {
+			return nil, err
 		}
 		return &shared.Principal{
 			ActorID:         idgen.ID(admin.ID),
@@ -336,15 +339,24 @@ func (v *Validator) ValidateAdminProjectAccess(ctx context.Context, principal *s
 	return nil
 }
 
-func (v *Validator) checkAdminTokenRevoked(ctx context.Context, claims *jwtparser.Claims) error {
-	if v.adminRevokeStore == nil || claims == nil || claims.UserID == "" {
+// checkAdminTokenRevoked 判定 admin token 撤销（M5 C1）：DB revoked_at 为
+// 事实源（改密/删除等管理动作同事务落库），Redis RevokedBefore 为登出快
+// 路径；取两者 max，iat <= max 即拒（与 Redis 原判定同构）。
+func (v *Validator) checkAdminTokenRevoked(ctx context.Context, claims *jwtparser.Claims, dbRevokedAt time.Time) error {
+	if claims == nil || claims.UserID == "" {
 		return nil
 	}
-	revokedBefore, err := v.adminRevokeStore.RevokedBefore(ctx, claims.UserID)
-	if err != nil {
-		return err
+	revokedAt := dbRevokedAt
+	if v.adminRevokeStore != nil {
+		redisRevoked, err := v.adminRevokeStore.RevokedBefore(ctx, claims.UserID)
+		if err != nil {
+			return err
+		}
+		if redisRevoked.After(revokedAt) {
+			revokedAt = redisRevoked
+		}
 	}
-	if !revokedBefore.IsZero() && claims.IssuedAt <= revokedBefore.Unix() {
+	if !revokedAt.IsZero() && claims.IssuedAt <= revokedAt.Unix() {
 		return status.Error(codes.Unauthenticated, "token revoked")
 	}
 	return nil

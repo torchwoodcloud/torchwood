@@ -36,10 +36,12 @@ type APIKey struct {
 type Admin struct {
 	bun.BaseModel `bun:"table:admins,alias:ca"`
 
-	ID           string    `bun:"id,pk"`
-	Email        string    `bun:"email,notnull,unique"`
-	PasswordHash string    `bun:"password_hash,notnull"`
-	Role         string    `bun:"role,notnull,default:'owner'"`
-	CreatedAt    time.Time `bun:"created_at,notnull"`
-	UpdatedAt    time.Time `bun:"updated_at,notnull"`
+	ID           string     `bun:"id,pk"`
+	Email        string     `bun:"email,notnull,unique"`
+	PasswordHash string     `bun:"password_hash,notnull"`
+	Role         string     `bun:"role,notnull,default:'owner'"`
+	// RevokedAt 凭证撤销时间戳（nullzero：零值写 NULL=未撤销），随迁移 000006。
+	RevokedAt time.Time `bun:"revoked_at,nullzero"`
+	CreatedAt time.Time `bun:"created_at,notnull"`
+	UpdatedAt time.Time `bun:"updated_at,notnull"`
 }

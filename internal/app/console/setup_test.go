@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/torchwooddev/torchwood/internal/app/server"
@@ -45,6 +46,15 @@ func (r *fakeAdminRepo) CreateAdmin(_ context.Context, a *projects.Admin) error 
 }
 
 func (r *fakeAdminRepo) UpdateAdmin(context.Context, *projects.Admin) error {
+	return nil
+}
+
+func (r *fakeAdminRepo) RevokeCredentials(_ context.Context, adminID string, revokedAt time.Time) error {
+	for i := range r.admins {
+		if r.admins[i].ID == adminID && (r.admins[i].RevokedAt.IsZero() || r.admins[i].RevokedAt.Before(revokedAt)) {
+			r.admins[i].RevokedAt = revokedAt
+		}
+	}
 	return nil
 }
 
@@ -198,7 +208,7 @@ func setupCmd() SignUpCommand {
 // 具体类型，字段收窄为接口；测试直接改字段注入 fake 即可）。
 func setupWithFakes(adminRepo *fakeAdminRepo, projectRepo *fakeProjectRepo, adminProjectRepo *fakeAdminProjectRepo, projectsCreator *fakeProjects, auth *fakeAuth) *Setup {
 	cfg := &config.AppConfig{Security: &config.Security{SetupToken: setupToken}}
-	s := NewSetup(cfg, NewAdmins(adminRepo, nil), nil, nil, adminRepo, adminProjectRepo, projectRepo)
+	s := NewSetup(cfg, NewAdmins(adminRepo, nil, nil), nil, nil, adminRepo, adminProjectRepo, projectRepo)
 	projectsCreator.projectRepo = projectRepo
 	s.projects = projectsCreator
 	s.auth = auth
@@ -344,7 +354,7 @@ func TestSetup_SignUp_RejectedWhenTokenNotConfigured(t *testing.T) {
 	ctx := context.Background()
 	adminRepo := &fakeAdminRepo{}
 	cfg := &config.AppConfig{Security: &config.Security{}}
-	s := NewSetup(cfg, NewAdmins(adminRepo, nil), nil, nil, adminRepo, &fakeAdminProjectRepo{}, &fakeProjectRepo{})
+	s := NewSetup(cfg, NewAdmins(adminRepo, nil, nil), nil, nil, adminRepo, &fakeAdminProjectRepo{}, &fakeProjectRepo{})
 
 	cmd := setupCmd()
 	cmd.SetupToken = ""

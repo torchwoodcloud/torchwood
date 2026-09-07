@@ -49,7 +49,7 @@ func setupBootstrapFixture(t *testing.T) *bootstrapFixture {
 	adminRepo := bunrepo.NewAdminRepository(db)
 	projectRepo := bunrepo.NewProjectRepository(db)
 	apiKeyRepo := bunrepo.NewAPIKeyRepository(db)
-	admins := console.NewAdmins(adminRepo, bunrepo.NewAdminProjectRepository(db))
+	admins := console.NewAdmins(adminRepo, bunrepo.NewAdminProjectRepository(db), db)
 	projects := server.NewProjects(projectRepo, docDB, db, projectschema.NewSchemaManager(db), bunrepo.NewAdminProjectRepository(db))
 	auth := console.NewAuth(cfg, adminRepo, nil, nil, nil)
 	setupUC := console.NewSetup(cfg, admins, projects, auth, adminRepo, bunrepo.NewAdminProjectRepository(db), projectRepo)
