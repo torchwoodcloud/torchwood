@@ -7,6 +7,7 @@
 package serverv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
 	v1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
@@ -1146,7 +1147,7 @@ var File_server_v1_subscriptions_proto protoreflect.FileDescriptor
 
 const file_server_v1_subscriptions_proto_rawDesc = "" +
 	"\n" +
-	"\x1dserver/v1/subscriptions.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"|\n" +
+	"\x1dserver/v1/subscriptions.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"|\n" +
 	"\fBenefitGrant\x12\x1d\n" +
 	"\n" +
 	"asset_code\x18\x01 \x01(\tR\tassetCode\x12\x1a\n" +
@@ -1221,11 +1222,11 @@ const file_server_v1_subscriptions_proto_rawDesc = "" +
 	"trial_days\x18\b \x01(\x05R\ttrialDays\x129\n" +
 	"\bbenefits\x18\t \x01(\v2\x1d.torchwood.server.v1.BenefitsR\bbenefits\x12U\n" +
 	"\x12provider_overrides\x18\n" +
-	" \x01(\v2&.torchwood.server.v1.ProviderOverridesR\x11providerOverrides\")\n" +
-	"\x0eGetPlanRequest\x12\x17\n" +
-	"\aplan_id\x18\x01 \x01(\tR\x06planId\"\xae\x04\n" +
-	"\x11UpdatePlanRequest\x12\x17\n" +
-	"\aplan_id\x18\x01 \x01(\tR\x06planId\x12\x17\n" +
+	" \x01(\v2&.torchwood.server.v1.ProviderOverridesR\x11providerOverrides\"1\n" +
+	"\x0eGetPlanRequest\x12\x1f\n" +
+	"\aplan_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06planId\"\xb6\x04\n" +
+	"\x11UpdatePlanRequest\x12\x1f\n" +
+	"\aplan_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06planId\x12\x17\n" +
 	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12\x1b\n" +
 	"\x06amount\x18\x03 \x01(\x03H\x01R\x06amount\x88\x01\x01\x12\x1f\n" +
 	"\bcurrency\x18\x04 \x01(\tH\x02R\bcurrency\x88\x01\x01\x12\x1f\n" +
@@ -1246,22 +1247,22 @@ const file_server_v1_subscriptions_proto_rawDesc = "" +
 	"\x0e_interval_daysB\r\n" +
 	"\v_grace_daysB\r\n" +
 	"\v_trial_daysB\t\n" +
-	"\a_status\",\n" +
-	"\x11DeletePlanRequest\x12\x17\n" +
-	"\aplan_id\x18\x01 \x01(\tR\x06planId\"\x8b\x01\n" +
+	"\a_status\"4\n" +
+	"\x11DeletePlanRequest\x12\x1f\n" +
+	"\aplan_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06planId\"\x8b\x01\n" +
 	"\x11ListPlansResponse\x12;\n" +
 	"\x05plans\x18\x01 \x03(\v2%.torchwood.server.v1.SubscriptionPlanR\x05plans\x129\n" +
 	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\x9f\x01\n" +
 	"\x19ListSubscriptionsResponse\x12G\n" +
 	"\rsubscriptions\x18\x01 \x03(\v2!.torchwood.server.v1.SubscriptionR\rsubscriptions\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"A\n" +
-	"\x16GetSubscriptionRequest\x12'\n" +
-	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\"\\\n" +
-	"\x19CancelSubscriptionRequest\x12'\n" +
-	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"\\\n" +
-	"\x19ExpireSubscriptionRequest\x12'\n" +
-	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x12\x16\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"I\n" +
+	"\x16GetSubscriptionRequest\x12/\n" +
+	"\x0fsubscription_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x0esubscriptionId\"d\n" +
+	"\x19CancelSubscriptionRequest\x12/\n" +
+	"\x0fsubscription_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x0esubscriptionId\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"d\n" +
+	"\x19ExpireSubscriptionRequest\x12/\n" +
+	"\x0fsubscription_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x0esubscriptionId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason2\xac\v\n" +
 	"\x14SubscriptionsService\x12\x95\x01\n" +
 	"\n" +

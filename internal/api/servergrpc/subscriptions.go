@@ -66,9 +66,7 @@ func (s *SubscriptionsService) ListPlans(ctx context.Context, req *sharedv1.List
 }
 
 func (s *SubscriptionsService) GetPlan(ctx context.Context, req *serverv1.GetPlanRequest) (*serverv1.SubscriptionPlan, error) {
-	if req == nil || req.GetPlanId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "plan_id is required")
-	}
+	// plan_id required 由 buf.validate 注解在 validate 拦截器承担（09-api-guide §2.3）。
 	plan, err := s.subs.GetPlan(ctx, req.GetPlanId())
 	if err != nil {
 		return nil, err
@@ -77,9 +75,7 @@ func (s *SubscriptionsService) GetPlan(ctx context.Context, req *serverv1.GetPla
 }
 
 func (s *SubscriptionsService) UpdatePlan(ctx context.Context, req *serverv1.UpdatePlanRequest) (*serverv1.SubscriptionPlan, error) {
-	if req == nil || req.GetPlanId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "plan_id is required")
-	}
+	// plan_id required 同上，由 buf.validate 注解承担。
 	cmd := appsubs.UpdatePlanCommand{PlanID: req.GetPlanId()}
 	if req.Name != nil {
 		cmd.Name = req.Name
@@ -123,9 +119,7 @@ func (s *SubscriptionsService) UpdatePlan(ctx context.Context, req *serverv1.Upd
 }
 
 func (s *SubscriptionsService) DeletePlan(ctx context.Context, req *serverv1.DeletePlanRequest) (*sharedv1.Empty, error) {
-	if req == nil || req.GetPlanId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "plan_id is required")
-	}
+	// plan_id required 同上，由 buf.validate 注解承担。
 	if err := s.subs.DeletePlan(withAuditResource(ctx, req.GetPlanId()), req.GetPlanId()); err != nil {
 		return nil, err
 	}
@@ -153,9 +147,7 @@ func (s *SubscriptionsService) ListSubscriptions(ctx context.Context, req *share
 }
 
 func (s *SubscriptionsService) GetSubscription(ctx context.Context, req *serverv1.GetSubscriptionRequest) (*serverv1.Subscription, error) {
-	if req == nil || req.GetSubscriptionId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "subscription_id is required")
-	}
+	// subscription_id required 同上，由 buf.validate 注解承担。
 	sub, plan, err := s.subs.GetSubscription(ctx, req.GetSubscriptionId())
 	if err != nil {
 		return nil, err
@@ -164,9 +156,7 @@ func (s *SubscriptionsService) GetSubscription(ctx context.Context, req *serverv
 }
 
 func (s *SubscriptionsService) CancelSubscription(ctx context.Context, req *serverv1.CancelSubscriptionRequest) (*serverv1.Subscription, error) {
-	if req == nil || req.GetSubscriptionId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "subscription_id is required")
-	}
+	// subscription_id required 同上，由 buf.validate 注解承担。
 	sub, plan, err := s.subs.ForceCancel(withAuditResource(ctx, req.GetSubscriptionId()), req.GetSubscriptionId())
 	if err != nil {
 		return nil, err
@@ -175,9 +165,7 @@ func (s *SubscriptionsService) CancelSubscription(ctx context.Context, req *serv
 }
 
 func (s *SubscriptionsService) ExpireSubscription(ctx context.Context, req *serverv1.ExpireSubscriptionRequest) (*serverv1.Subscription, error) {
-	if req == nil || req.GetSubscriptionId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "subscription_id is required")
-	}
+	// subscription_id required 同上，由 buf.validate 注解承担。
 	sub, plan, err := s.subs.ForceExpire(withAuditResource(ctx, req.GetSubscriptionId()), req.GetSubscriptionId())
 	if err != nil {
 		return nil, err

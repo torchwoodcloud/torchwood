@@ -196,9 +196,8 @@ func (s *DatabasesService) ListChanges(ctx context.Context, req *clientv1.ListCh
 		return nil, err
 	}
 	ctx = contexts.WithAuditResource(ctx, "databases/"+req.GetDatabaseId()+"/collections/"+req.GetCollectionId())
-	if req.GetSinceSeq() < 0 {
-		return nil, status.Error(codes.InvalidArgument, "since_seq must be >= 0")
-	}
+	// since_seq >= 0 由 ListChangesRequest 的 buf.validate gte 注解在
+	// validate 拦截器承担（09-api-guide §2.3）。
 	changes, hasMore, nextSinceSeq, err := s.databases.ListChanges(ctx, projectID, req.GetDatabaseId(), req.GetCollectionId(),
 		databases.ListChangesOptions{SinceSeq: req.GetSinceSeq(), Limit: int(req.GetLimit())})
 	if err != nil {

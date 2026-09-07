@@ -7,6 +7,7 @@
 package serverv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
 	v1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
@@ -860,7 +861,7 @@ var File_server_v1_groups_proto protoreflect.FileDescriptor
 
 const file_server_v1_groups_proto_rawDesc = "" +
 	"\n" +
-	"\x16server/v1/groups.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"J\n" +
+	"\x16server/v1/groups.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"J\n" +
 	"\x12CreateGroupRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vpermissions\x18\x02 \x03(\tR\vpermissions\"!\n" +
@@ -870,10 +871,10 @@ const file_server_v1_groups_proto_rawDesc = "" +
 	"\x06groups\x18\x01 \x03(\v2\x1a.torchwood.server.v1.GroupR\x06groups\x129\n" +
 	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"F\n" +
 	"\x15GetGroupPrefsResponse\x12-\n" +
-	"\x05prefs\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x05prefs\"X\n" +
+	"\x05prefs\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x05prefs\"`\n" +
 	"\x17UpdateGroupPrefsRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12-\n" +
-	"\x05prefs\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05prefs\"\xd9\x01\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x125\n" +
+	"\x05prefs\x18\x02 \x01(\v2\x17.google.protobuf.StructB\x06\xbaH\x03\xc8\x01\x01R\x05prefs\"\xd9\x01\n" +
 	"\x05Group\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +

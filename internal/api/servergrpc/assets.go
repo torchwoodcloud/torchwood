@@ -78,9 +78,7 @@ func (s *AssetsService) ListAssetDefs(ctx context.Context, req *sharedv1.ListReq
 }
 
 func (s *AssetsService) GetAssetDef(ctx context.Context, req *serverv1.GetAssetDefRequest) (*serverv1.AssetDef, error) {
-	if req == nil || req.GetDefId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "def_id is required")
-	}
+	// def_id required 由 buf.validate 注解在 validate 拦截器承担（09-api-guide §2.3）。
 	def, err := s.assets.GetDef(ctx, req.GetDefId())
 	if err != nil {
 		return nil, err
@@ -89,9 +87,7 @@ func (s *AssetsService) GetAssetDef(ctx context.Context, req *serverv1.GetAssetD
 }
 
 func (s *AssetsService) UpdateAssetDef(ctx context.Context, req *serverv1.UpdateAssetDefRequest) (*serverv1.AssetDef, error) {
-	if req == nil || req.GetDefId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "def_id is required")
-	}
+	// def_id required 同上，由 buf.validate 注解承担。
 	cmd := appassets.UpdateDefCommand{DefID: req.GetDefId()}
 	if req.Name != nil {
 		n := req.GetName()
@@ -148,9 +144,7 @@ func (s *AssetsService) UpdateAssetDef(ctx context.Context, req *serverv1.Update
 }
 
 func (s *AssetsService) DeleteAssetDef(ctx context.Context, req *serverv1.DeleteAssetDefRequest) (*sharedv1.Empty, error) {
-	if req == nil || req.GetDefId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "def_id is required")
-	}
+	// def_id required 同上，由 buf.validate 注解承担。
 	if err := s.assets.DeleteDef(withAuditResource(ctx, req.GetDefId()), req.GetDefId()); err != nil {
 		return nil, err
 	}
@@ -275,9 +269,7 @@ func (s *AssetsService) Expire(ctx context.Context, req *serverv1.ExpireRequest)
 }
 
 func (s *AssetsService) ListUserAssets(ctx context.Context, req *serverv1.ListUserAssetsRequest) (*serverv1.ListUserAssetsResponse, error) {
-	if req == nil || req.GetOwnerId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "owner_id is required")
-	}
+	// owner_id required 同上，由 buf.validate 注解承担。
 	before, err := decodeServerOrderCursor(req.GetPageToken())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid page token")
@@ -302,9 +294,7 @@ func (s *AssetsService) ListUserAssets(ctx context.Context, req *serverv1.ListUs
 }
 
 func (s *AssetsService) ListUserLedger(ctx context.Context, req *serverv1.ListUserLedgerRequest) (*serverv1.ListUserLedgerResponse, error) {
-	if req == nil || req.GetOwnerId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "owner_id is required")
-	}
+	// owner_id required 同上，由 buf.validate 注解承担。
 	before, err := decodeServerOrderCursor(req.GetPageToken())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid page token")

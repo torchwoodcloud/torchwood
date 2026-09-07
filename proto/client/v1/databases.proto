@@ -4,6 +4,7 @@ package torchwood.client.v1;
 
 option go_package = "github.com/torchwooddev/torchwood/genproto/client/v1;clientv1";
 
+import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
@@ -246,7 +247,7 @@ message ListChangesRequest {
   string collection_id = 2;
   // 续传游标：返回 seq > since_seq 的事件。0 = 从最老可用事件起（缺省）；
   // 早于最老可用事件 → FailedPrecondition EVENTS.RESUME_EXPIRED。
-  int64 since_seq = 3;
+  int64 since_seq = 3 [(buf.validate.field).int64.gte = 0];
   // 单页条数，缺省/上限 500。
   int32 limit = 4;
   string project_id = 5;

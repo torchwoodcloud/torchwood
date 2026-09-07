@@ -4,6 +4,7 @@ package torchwood.server.v1;
 
 option go_package = "github.com/torchwooddev/torchwood/genproto/server/v1;serverv1";
 
+import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
@@ -108,7 +109,7 @@ message ListDeadLettersResponse {
 
 // ReplayDeadLetterRequest 同上：项目上下文来自凭证，不做请求体寻址。
 message ReplayDeadLetterRequest {
-  string event_id = 1;
+  string event_id = 1 [(buf.validate.field).required = true];
 }
 
 message ReplayDeadLetterResponse {

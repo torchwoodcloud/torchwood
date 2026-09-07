@@ -63,9 +63,7 @@ func (s *OutboxService) ListDeadLetters(ctx context.Context, req *serverv1.ListD
 }
 
 func (s *OutboxService) ReplayDeadLetter(ctx context.Context, req *serverv1.ReplayDeadLetterRequest) (*serverv1.ReplayDeadLetterResponse, error) {
-	if req.GetEventId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "event_id is required")
-	}
+	// event_id required 由 buf.validate 注解在 validate 拦截器承担（09-api-guide §2.3）。
 	projectID, err := s.projectContext(ctx)
 	if err != nil {
 		return nil, err

@@ -4,6 +4,7 @@ package torchwood.server.v1;
 
 option go_package = "github.com/torchwooddev/torchwood/genproto/server/v1;serverv1";
 
+import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
@@ -340,7 +341,7 @@ service DatabasesService {
 }
 
 message CreateDatabaseRequest {
-  string id = 1;
+  string id = 1 [(buf.validate.field).required = true];
   string name = 2;
 }
 
@@ -640,7 +641,7 @@ message AggregateDocumentsRequest {
   reserved 3;
   reserved "queries";
   // 至少一项；UNSPECIFIED → InvalidArgument。
-  repeated AggregateSpec aggregations = 4;
+  repeated AggregateSpec aggregations = 4 [(buf.validate.field).repeated.min_items = 1];
   // 可选单键 group_by：须为已声明属性；键按 text 序列化且只来自可见行
   //（D1：不可见行的键不会出现）。
   optional string group_by = 5;
@@ -748,7 +749,7 @@ message TransactionOp {
 
 message ExecuteTransactionsRequest {
   string database_id = 1;
-  repeated TransactionOp ops = 2;
+  repeated TransactionOp ops = 2 [(buf.validate.field).repeated.min_items = 1];
   TransactionMode mode = 3;
   // 写幂等键，语义同 CreateDocumentRequest.request_id；幂等覆盖整批——
   // 重放返回首次完整结果（含 PARTIAL per-op 结果，§11-E2）。
@@ -785,7 +786,7 @@ message ListChangesRequest {
   string collection_id = 2;
   // 续传游标：返回 seq > since_seq 的事件。0 = 从最老可用事件起（缺省）；
   // 早于最老可用事件 → FailedPrecondition EVENTS.RESUME_EXPIRED。
-  int64 since_seq = 3;
+  int64 since_seq = 3 [(buf.validate.field).int64.gte = 0];
   // 单页条数，缺省/上限 500。
   int32 limit = 4;
 }

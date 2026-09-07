@@ -4,6 +4,7 @@ package torchwood.client.v1;
 
 option go_package = "github.com/torchwooddev/torchwood/genproto/client/v1;clientv1";
 
+import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
@@ -132,7 +133,7 @@ message CreateOrderResponse {
 }
 
 message GetMyOrderRequest {
-  string order_id = 1;
+  string order_id = 1 [(buf.validate.field).required = true];
 }
 
 message ListMyOrdersRequest {
@@ -149,8 +150,8 @@ message ListMyOrdersResponse {
 // VerifyReceiptRequest 是 iOS 验票请求：receipt 为 StoreKit base64 PKCS7
 // 或 StoreKit 2 signed transaction JWS；order_id 指向本人 ios_iap 订单。
 message VerifyReceiptRequest {
-  string order_id = 1;
-  string receipt = 2;
+  string order_id = 1 [(buf.validate.field).required = true];
+  string receipt = 2 [(buf.validate.field).required = true];
 }
 
 message VerifyReceiptResponse {

@@ -7,6 +7,7 @@
 package serverv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
 	v1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
@@ -3578,9 +3579,9 @@ var File_server_v1_databases_proto protoreflect.FileDescriptor
 
 const file_server_v1_databases_proto_rawDesc = "" +
 	"\n" +
-	"\x19server/v1/databases.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\x1a\x18shared/v1/document.proto\x1a\x15shared/v1/query.proto\";\n" +
-	"\x15CreateDatabaseRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x19server/v1/databases.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\x1a\x18shared/v1/document.proto\x1a\x15shared/v1/query.proto\"C\n" +
+	"\x15CreateDatabaseRequest\x12\x16\n" +
+	"\x02id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"$\n" +
 	"\x12GetDatabaseRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x8f\x01\n" +
@@ -3816,12 +3817,12 @@ const file_server_v1_databases_proto_rawDesc = "" +
 	"\x05count\x18\x01 \x01(\x03R\x05count\"i\n" +
 	"\rAggregateSpec\x12B\n" +
 	"\bfunction\x18\x01 \x01(\x0e2&.torchwood.server.v1.AggregateFunctionR\bfunction\x12\x14\n" +
-	"\x05field\x18\x02 \x01(\tR\x05field\"\x97\x02\n" +
+	"\x05field\x18\x02 \x01(\tR\x05field\"\xa1\x02\n" +
 	"\x19AggregateDocumentsRequest\x12\x1f\n" +
 	"\vdatabase_id\x18\x01 \x01(\tR\n" +
 	"databaseId\x12#\n" +
-	"\rcollection_id\x18\x02 \x01(\tR\fcollectionId\x12F\n" +
-	"\faggregations\x18\x04 \x03(\v2\".torchwood.server.v1.AggregateSpecR\faggregations\x12\x1e\n" +
+	"\rcollection_id\x18\x02 \x01(\tR\fcollectionId\x12P\n" +
+	"\faggregations\x18\x04 \x03(\v2\".torchwood.server.v1.AggregateSpecB\b\xbaH\x05\x92\x01\x02\b\x01R\faggregations\x12\x1e\n" +
 	"\bgroup_by\x18\x05 \x01(\tH\x00R\agroupBy\x88\x01\x01\x120\n" +
 	"\x05query\x18\x06 \x01(\v2\x1a.torchwood.shared.v1.QueryR\x05queryB\v\n" +
 	"\t_group_byJ\x04\b\x03\x10\x04R\aqueries\"\xc9\x01\n" +
@@ -3876,11 +3877,11 @@ const file_server_v1_databases_proto_rawDesc = "" +
 	"\x11ArrayUpdatesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x126\n" +
 	"\x05value\x18\x02 \x01(\v2 .torchwood.shared.v1.ArrayUpdateR\x05value:\x028\x01B\x13\n" +
-	"\x11_expected_version\"\xe0\x01\n" +
+	"\x11_expected_version\"\xea\x01\n" +
 	"\x1aExecuteTransactionsRequest\x12\x1f\n" +
 	"\vdatabase_id\x18\x01 \x01(\tR\n" +
-	"databaseId\x124\n" +
-	"\x03ops\x18\x02 \x03(\v2\".torchwood.server.v1.TransactionOpR\x03ops\x128\n" +
+	"databaseId\x12>\n" +
+	"\x03ops\x18\x02 \x03(\v2\".torchwood.server.v1.TransactionOpB\b\xbaH\x05\x92\x01\x02\b\x01R\x03ops\x128\n" +
 	"\x04mode\x18\x03 \x01(\x0e2$.torchwood.server.v1.TransactionModeR\x04mode\x12\"\n" +
 	"\n" +
 	"request_id\x18\x04 \x01(\tH\x00R\trequestId\x88\x01\x01B\r\n" +
@@ -3895,12 +3896,12 @@ const file_server_v1_databases_proto_rawDesc = "" +
 	"error_code\x18\x05 \x01(\tR\terrorCode\x12#\n" +
 	"\rerror_message\x18\x06 \x01(\tR\ferrorMessage\"a\n" +
 	"\x1bExecuteTransactionsResponse\x12B\n" +
-	"\aresults\x18\x01 \x03(\v2(.torchwood.server.v1.TransactionOpResultR\aresults\"\x8d\x01\n" +
+	"\aresults\x18\x01 \x03(\v2(.torchwood.server.v1.TransactionOpResultR\aresults\"\x96\x01\n" +
 	"\x12ListChangesRequest\x12\x1f\n" +
 	"\vdatabase_id\x18\x01 \x01(\tR\n" +
 	"databaseId\x12#\n" +
-	"\rcollection_id\x18\x02 \x01(\tR\fcollectionId\x12\x1b\n" +
-	"\tsince_seq\x18\x03 \x01(\x03R\bsinceSeq\x12\x14\n" +
+	"\rcollection_id\x18\x02 \x01(\tR\fcollectionId\x12$\n" +
+	"\tsince_seq\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\bsinceSeq\x12\x14\n" +
 	"\x05limit\x18\x04 \x01(\x05R\x05limit\"\x8d\x01\n" +
 	"\x13ListChangesResponse\x125\n" +
 	"\achanges\x18\x01 \x03(\v2\x1b.torchwood.shared.v1.ChangeR\achanges\x12\x19\n" +

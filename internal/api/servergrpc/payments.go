@@ -61,9 +61,7 @@ func (s *PaymentsService) ListOrders(ctx context.Context, req *sharedv1.ListRequ
 }
 
 func (s *PaymentsService) GetOrder(ctx context.Context, req *serverv1.GetOrderRequest) (*serverv1.PaymentOrder, error) {
-	if req == nil || req.GetOrderId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "order_id is required")
-	}
+	// order_id required 由 buf.validate 注解在 validate 拦截器承担（09-api-guide §2.3）。
 	order, err := s.payments.GetOrder(ctx, req.GetOrderId())
 	if err != nil {
 		return nil, err
@@ -72,9 +70,7 @@ func (s *PaymentsService) GetOrder(ctx context.Context, req *serverv1.GetOrderRe
 }
 
 func (s *PaymentsService) Refund(ctx context.Context, req *serverv1.RefundRequest) (*serverv1.PaymentOrder, error) {
-	if req == nil || req.GetOrderId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "order_id is required")
-	}
+	// order_id required 同上，由 buf.validate 注解承担。
 	var amount int64
 	if req.Amount != nil {
 		amount = req.GetAmount()
@@ -87,9 +83,7 @@ func (s *PaymentsService) Refund(ctx context.Context, req *serverv1.RefundReques
 }
 
 func (s *PaymentsService) ManualFulfill(ctx context.Context, req *serverv1.ManualFulfillRequest) (*serverv1.ManualFulfillResponse, error) {
-	if req == nil || req.GetOrderId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "order_id is required")
-	}
+	// order_id required 同上，由 buf.validate 注解承担。
 	order, fulfillment, err := s.payments.ManualFulfill(withAuditResource(ctx, req.GetOrderId()), req.GetOrderId(), req.GetReason())
 	if err != nil {
 		return nil, err

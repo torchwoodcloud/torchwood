@@ -73,7 +73,7 @@ func TestServerGRPC_ListChanges(t *testing.T) {
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 	require.Contains(t, err.Error(), "EVENTS.RESUME_EXPIRED")
 
-	// 负游标 → InvalidArgument。
-	_, err = svc.ListChanges(ctx, &serverv1.ListChangesRequest{DatabaseId: "app", CollectionId: "posts", SinceSeq: -1})
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	// 负游标 → InvalidArgument：形状校验已上收为 ListChangesRequest 的
+	// buf.validate gte 注解，由 validate 拦截器求值（直调 handler 绕过
+	// 拦截器，覆盖见 interceptor 包 TestValidateInterceptorRejectsShapeRules）。
 }

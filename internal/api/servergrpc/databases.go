@@ -82,9 +82,8 @@ func (s *DatabasesService) CreateDatabase(ctx context.Context, req *serverv1.Cre
 		return nil, status.Error(codes.Unauthenticated, "missing project context")
 	}
 	ctx = contexts.WithAuditResource(ctx, auditDatabaseResource(req.GetId()))
-	if req.GetId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "id is required")
-	}
+	// id required 由 CreateDatabaseRequest 的 buf.validate 注解在 validate
+	// 拦截器承担（09-api-guide §2.3）。
 	if err := s.databases.CreateDatabase(ctx, projectID, req.GetId(), req.GetName()); err != nil {
 		return nil, err
 	}
@@ -639,9 +638,9 @@ func (s *DatabasesService) ExecuteTransactions(ctx context.Context, req *serverv
 		return nil, status.Error(codes.Unauthenticated, "missing project context")
 	}
 	ctx = contexts.WithAuditResource(ctx, auditDatabaseResource(req.GetDatabaseId()))
-	if len(req.GetOps()) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "ops is required")
-	}
+	// ops 非空由 ExecuteTransactionsRequest 的 buf.validate min_items 注解
+	// 在 validate 拦截器承担（09-api-guide §2.3）；mode 的 UNSPECIFIED 容忍
+	// 语义保留在下方 switch（上收 defined_only 会拒绝省略 mode 的存量客户端）。
 	ops := make([]databases.TransactionOp, 0, len(req.GetOps()))
 	for i, protoOp := range req.GetOps() {
 		op, err := transactionOpFromProto(protoOp)
@@ -790,9 +789,8 @@ func (s *DatabasesService) ListChanges(ctx context.Context, req *serverv1.ListCh
 		return nil, status.Error(codes.Unauthenticated, "missing project context")
 	}
 	ctx = contexts.WithAuditResource(ctx, auditCollectionResource(req.GetDatabaseId(), req.GetCollectionId()))
-	if req.GetSinceSeq() < 0 {
-		return nil, status.Error(codes.InvalidArgument, "since_seq must be >= 0")
-	}
+	// since_seq >= 0 由 ListChangesRequest 的 buf.validate gte 注解在
+	// validate 拦截器承担（09-api-guide §2.3）。
 	changes, hasMore, nextSinceSeq, err := s.databases.ListChanges(ctx, projectID, req.GetDatabaseId(), req.GetCollectionId(),
 		databases.ListChangesOptions{SinceSeq: req.GetSinceSeq(), Limit: int(req.GetLimit())}, dbPrincipal(ctx))
 	if err != nil {
@@ -872,10 +870,9 @@ func (s *DatabasesService) AggregateDocuments(ctx context.Context, req *serverv1
 	if err != nil {
 		return nil, err
 	}
-	if len(req.GetAggregations()) == 0 {
-		return nil, shared.DomainStatusWithViolations(databases.ErrCodeInvalidArgument,
-			shared.FieldViolation{Field: "aggregations", Description: "at least one aggregation is required"})
-	}
+	// aggregations 非空由 AggregateDocumentsRequest 的 buf.validate
+	// min_items 注解在 validate 拦截器承担（09-api-guide §2.3）；逐项
+	// function/field 校验留在下方循环（嵌套项定位的 FieldViolation 形态）。
 	aggs := make([]databases.AggregateSpec, 0, len(req.GetAggregations()))
 	for i, spec := range req.GetAggregations() {
 		fn, ok := aggregateFunctionFromProto(spec.GetFunction())

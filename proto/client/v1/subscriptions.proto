@@ -4,6 +4,7 @@ package torchwood.client.v1;
 
 option go_package = "github.com/torchwooddev/torchwood/genproto/client/v1;clientv1";
 
+import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
@@ -162,5 +163,5 @@ message GetMySubscriptionRequest {
 }
 
 message CancelRequest {
-  string subscription_id = 1;
+  string subscription_id = 1 [(buf.validate.field).required = true];
 }

@@ -4,6 +4,7 @@ package torchwood.server.v1;
 
 option go_package = "github.com/torchwooddev/torchwood/genproto/server/v1;serverv1";
 
+import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
@@ -124,13 +125,13 @@ message PaymentOrder {
 }
 
 message GetOrderRequest {
-  string order_id = 1;
+  string order_id = 1 [(buf.validate.field).required = true];
 }
 
 // RefundRequest 对已支付订单发起退款（D12：一期只翻订单状态 + 事件，
 // 不回收已发放资产）。
 message RefundRequest {
-  string order_id = 1;
+  string order_id = 1 [(buf.validate.field).required = true];
   // 退款金额（最小货币单位）；缺省/0 = 全额退款。
   optional int64 amount = 2;
   // 备注（审计用途，可选）。
@@ -139,7 +140,7 @@ message RefundRequest {
 
 // ManualFulfillRequest 人工标记履约完成（订单已支付但履约异常时的兜底）。
 message ManualFulfillRequest {
-  string order_id = 1;
+  string order_id = 1 [(buf.validate.field).required = true];
   string reason = 2;
 }
 

@@ -7,6 +7,7 @@
 package clientv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
 	v1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
@@ -776,7 +777,7 @@ var File_client_v1_subscriptions_proto protoreflect.FileDescriptor
 
 const file_client_v1_subscriptions_proto_rawDesc = "" +
 	"\n" +
-	"\x1dclient/v1/subscriptions.proto\x12\x13torchwood.client.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"|\n" +
+	"\x1dclient/v1/subscriptions.proto\x12\x13torchwood.client.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"|\n" +
 	"\fBenefitGrant\x12\x1d\n" +
 	"\n" +
 	"asset_code\x18\x01 \x01(\tR\tassetCode\x12\x1a\n" +
@@ -841,9 +842,9 @@ const file_client_v1_subscriptions_proto_rawDesc = "" +
 	"paymentUrl\x12\x19\n" +
 	"\border_id\x18\x04 \x01(\tR\aorderId\"7\n" +
 	"\x18GetMySubscriptionRequest\x12\x1b\n" +
-	"\tplan_code\x18\x01 \x01(\tR\bplanCode\"8\n" +
-	"\rCancelRequest\x12'\n" +
-	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId2\xa4\x04\n" +
+	"\tplan_code\x18\x01 \x01(\tR\bplanCode\"@\n" +
+	"\rCancelRequest\x12/\n" +
+	"\x0fsubscription_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x0esubscriptionId2\xa4\x04\n" +
 	"\x14SubscriptionsService\x12{\n" +
 	"\tListPlans\x12%.torchwood.client.v1.ListPlansRequest\x1a&.torchwood.client.v1.ListPlansResponse\"\x1f\x82\xd3\xe4\x93\x02\x19\x12\x17/v1/subscriptions/plans\x12x\n" +
 	"\tSubscribe\x12%.torchwood.client.v1.SubscribeRequest\x1a&.torchwood.client.v1.SubscribeResponse\"\x1c\x82\xd3\xe4\x93\x02\x16:\x01*\"\x11/v1/subscriptions\x12\x83\x01\n" +

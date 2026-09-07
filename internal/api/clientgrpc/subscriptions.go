@@ -81,9 +81,8 @@ func (s *SubscriptionsService) GetMySubscription(ctx context.Context, req *clien
 }
 
 func (s *SubscriptionsService) Cancel(ctx context.Context, req *clientv1.CancelRequest) (*clientv1.Subscription, error) {
-	if req == nil || req.GetSubscriptionId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "subscription_id is required")
-	}
+	// subscription_id required 由 CancelRequest 的 buf.validate 注解在
+	// validate 拦截器承担（09-api-guide §2.3）。
 	sub, plan, err := s.subs.CancelAtPeriodEnd(ctx, req.GetSubscriptionId())
 	if err != nil {
 		return nil, err

@@ -4,6 +4,7 @@ package torchwood.server.v1;
 
 option go_package = "github.com/torchwooddev/torchwood/genproto/server/v1;serverv1";
 
+import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
@@ -179,7 +180,7 @@ message GetGroupPrefsResponse {
 
 message UpdateGroupPrefsRequest {
   string id = 1;
-  google.protobuf.Struct prefs = 2;
+  google.protobuf.Struct prefs = 2 [(buf.validate.field).required = true];
 }
 
 message Group {

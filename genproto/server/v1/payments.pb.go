@@ -7,6 +7,7 @@
 package serverv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
 	v1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
@@ -559,7 +560,7 @@ var File_server_v1_payments_proto protoreflect.FileDescriptor
 
 const file_server_v1_payments_proto_rawDesc = "" +
 	"\n" +
-	"\x18server/v1/payments.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xc4\x04\n" +
+	"\x18server/v1/payments.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xc4\x04\n" +
 	"\fPaymentOrder\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -579,16 +580,16 @@ const file_server_v1_payments_proto_rawDesc = "" +
 	"created_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x123\n" +
 	"\apaid_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x06paidAt\x129\n" +
 	"\n" +
-	"expires_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\",\n" +
-	"\x0fGetOrderRequest\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\"j\n" +
-	"\rRefundRequest\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1b\n" +
+	"expires_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"4\n" +
+	"\x0fGetOrderRequest\x12!\n" +
+	"\border_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aorderId\"r\n" +
+	"\rRefundRequest\x12!\n" +
+	"\border_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aorderId\x12\x1b\n" +
 	"\x06amount\x18\x02 \x01(\x03H\x00R\x06amount\x88\x01\x01\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reasonB\t\n" +
-	"\a_amount\"I\n" +
-	"\x14ManualFulfillRequest\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x16\n" +
+	"\a_amount\"Q\n" +
+	"\x14ManualFulfillRequest\x12!\n" +
+	"\border_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aorderId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x94\x01\n" +
 	"\x15ManualFulfillResponse\x127\n" +
 	"\x05order\x18\x01 \x01(\v2!.torchwood.server.v1.PaymentOrderR\x05order\x12B\n" +

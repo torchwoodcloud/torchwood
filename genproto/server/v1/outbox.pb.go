@@ -7,6 +7,7 @@
 package serverv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
 	v1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
@@ -333,7 +334,7 @@ var File_server_v1_outbox_proto protoreflect.FileDescriptor
 
 const file_server_v1_outbox_proto_rawDesc = "" +
 	"\n" +
-	"\x16server/v1/outbox.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"T\n" +
+	"\x16server/v1/outbox.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"T\n" +
 	"\x16ListDeadLettersRequest\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
@@ -353,9 +354,9 @@ const file_server_v1_outbox_proto_rawDesc = "" +
 	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x98\x01\n" +
 	"\x17ListDeadLettersResponse\x12B\n" +
 	"\fdead_letters\x18\x01 \x03(\v2\x1f.torchwood.server.v1.DeadLetterR\vdeadLetters\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"4\n" +
-	"\x17ReplayDeadLetterRequest\x12\x19\n" +
-	"\bevent_id\x18\x01 \x01(\tR\aeventId\"t\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"<\n" +
+	"\x17ReplayDeadLetterRequest\x12!\n" +
+	"\bevent_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aeventId\"t\n" +
 	"\x18ReplayDeadLetterResponse\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12=\n" +
 	"\favailable_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vavailableAt2\xf9\x02\n" +

@@ -7,6 +7,7 @@
 package clientv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
 	v1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
@@ -592,7 +593,7 @@ var File_client_v1_payments_proto protoreflect.FileDescriptor
 
 const file_client_v1_payments_proto_rawDesc = "" +
 	"\n" +
-	"\x18client/v1/payments.proto\x12\x13torchwood.client.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xd1\x03\n" +
+	"\x18client/v1/payments.proto\x12\x13torchwood.client.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xd1\x03\n" +
 	"\fPaymentOrder\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bprovider\x18\x02 \x01(\tR\bprovider\x12\x16\n" +
@@ -625,19 +626,19 @@ const file_client_v1_payments_proto_rawDesc = "" +
 	"\v_cancel_url\"{\n" +
 	"\x13CreateOrderResponse\x127\n" +
 	"\x05order\x18\x01 \x01(\v2!.torchwood.client.v1.PaymentOrderR\x05order\x12+\n" +
-	"\x11idempotent_replay\x18\x02 \x01(\bR\x10idempotentReplay\".\n" +
-	"\x11GetMyOrderRequest\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\"Q\n" +
+	"\x11idempotent_replay\x18\x02 \x01(\bR\x10idempotentReplay\"6\n" +
+	"\x11GetMyOrderRequest\x12!\n" +
+	"\border_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aorderId\"Q\n" +
 	"\x13ListMyOrdersRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\x02 \x01(\tR\tpageToken\"\x8c\x01\n" +
 	"\x14ListMyOrdersResponse\x129\n" +
 	"\x06orders\x18\x01 \x03(\v2!.torchwood.client.v1.PaymentOrderR\x06orders\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"K\n" +
-	"\x14VerifyReceiptRequest\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x18\n" +
-	"\areceipt\x18\x02 \x01(\tR\areceipt\"\xa4\x01\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"[\n" +
+	"\x14VerifyReceiptRequest\x12!\n" +
+	"\border_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aorderId\x12 \n" +
+	"\areceipt\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\areceipt\"\xa4\x01\n" +
 	"\x15VerifyReceiptResponse\x127\n" +
 	"\x05order\x18\x01 \x01(\v2!.torchwood.client.v1.PaymentOrderR\x05order\x12%\n" +
 	"\x0etransaction_id\x18\x02 \x01(\tR\rtransactionId\x12+\n" +

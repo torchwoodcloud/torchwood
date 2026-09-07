@@ -8,6 +8,7 @@ import (
 	"buf.build/go/protovalidate"
 	"github.com/stretchr/testify/require"
 	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
+	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -48,6 +49,53 @@ func TestValidateInterceptorRejectsShapeViolations(t *testing.T) {
 		})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.Equal(t, "prefs: value is required", status.Convert(err).Message())
+}
+
+// TestValidateInterceptorRejectsShapeRules：数值范围（gte）与 repeated
+// 数量（min_items）注解的求值（对应 client/server ListChanges.since_seq、
+// ExecuteTransactions.ops、AggregateDocuments.aggregations 的上收）。
+func TestValidateInterceptorRejectsShapeRules(t *testing.T) {
+	t.Parallel()
+	v := newValidateInterceptorForTest(t)
+
+	cases := []struct {
+		name    string
+		method  string
+		req     any
+		wantMsg string
+	}{
+		{
+			name:    "since_seq negative",
+			method:  "/torchwood.client.v1.DatabasesService/ListChanges",
+			req:     &clientv1.ListChangesRequest{SinceSeq: -1},
+			wantMsg: "since_seq: must be greater than or equal to 0",
+		},
+		{
+			name:    "ops empty",
+			method:  "/torchwood.server.v1.DatabasesService/ExecuteTransactions",
+			req:     &serverv1.ExecuteTransactionsRequest{},
+			wantMsg: "ops: must contain at least 1 item(s)",
+		},
+		{
+			name:    "aggregations empty",
+			method:  "/torchwood.server.v1.DatabasesService/AggregateDocuments",
+			req:     &serverv1.AggregateDocumentsRequest{},
+			wantMsg: "aggregations: must contain at least 1 item(s)",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := v.UnaryValidateMiddleware(context.Background(), tc.req,
+				&grpc.UnaryServerInfo{FullMethod: tc.method},
+				func(ctx context.Context, req any) (any, error) {
+					t.Fatal("handler must not be reached on violation")
+					return nil, nil
+				})
+			require.Equal(t, codes.InvalidArgument, status.Code(err))
+			require.Equal(t, tc.wantMsg, status.Convert(err).Message())
+		})
+	}
 }
 
 // TestValidateInterceptorPassesValidRequests：合规请求原样透传 handler。

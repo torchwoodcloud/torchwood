@@ -118,9 +118,8 @@ func (s *GroupsService) UpdateGroupPrefs(ctx context.Context, req *serverv1.Upda
 	if projectID == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing project context")
 	}
-	if req.GetPrefs() == nil {
-		return nil, status.Error(codes.InvalidArgument, "prefs is required")
-	}
+	// prefs required 由 UpdateGroupPrefsRequest 的 buf.validate 注解在
+	// validate 拦截器承担（09-api-guide §2.3）；app 层防线保留。
 	prefs, err := s.groups.UpdateGroupPrefs(ctx, projectID, req.GetId(), req.GetPrefs().AsMap(), dbPrincipal(ctx))
 	if err != nil {
 		return nil, err

@@ -4,6 +4,7 @@ package torchwood.server.v1;
 
 option go_package = "github.com/torchwooddev/torchwood/genproto/server/v1;serverv1";
 
+import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
@@ -198,11 +199,11 @@ message CreateAssetDefRequest {
 }
 
 message GetAssetDefRequest {
-  string def_id = 1;
+  string def_id = 1 [(buf.validate.field).required = true];
 }
 
 message UpdateAssetDefRequest {
-  string def_id = 1;
+  string def_id = 1 [(buf.validate.field).required = true];
   optional string name = 2;
   optional int32 decimals = 3;
   optional int64 max_quantity = 4;
@@ -215,7 +216,7 @@ message UpdateAssetDefRequest {
 }
 
 message DeleteAssetDefRequest {
-  string def_id = 1;
+  string def_id = 1 [(buf.validate.field).required = true];
 }
 
 message ListAssetDefsResponse {
@@ -328,7 +329,7 @@ message AssetHolding {
 }
 
 message ListUserAssetsRequest {
-  string owner_id = 1;
+  string owner_id = 1 [(buf.validate.field).required = true];
   int32 page_size = 2;
   string page_token = 3;
 }
@@ -339,7 +340,7 @@ message ListUserAssetsResponse {
 }
 
 message ListUserLedgerRequest {
-  string owner_id = 1;
+  string owner_id = 1 [(buf.validate.field).required = true];
   int32 page_size = 2;
   string page_token = 3;
   string def_code = 4;

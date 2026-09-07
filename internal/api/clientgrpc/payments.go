@@ -58,9 +58,8 @@ func (s *PaymentsService) CreateOrder(ctx context.Context, req *clientv1.CreateO
 }
 
 func (s *PaymentsService) GetMyOrder(ctx context.Context, req *clientv1.GetMyOrderRequest) (*clientv1.PaymentOrder, error) {
-	if req == nil || req.GetOrderId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "order_id is required")
-	}
+	// order_id required 由 GetMyOrderRequest 的 buf.validate 注解在 validate
+	// 拦截器承担（09-api-guide §2.3）。
 	order, err := s.payments.GetMyOrder(ctx, req.GetOrderId())
 	if err != nil {
 		return nil, err
@@ -69,9 +68,7 @@ func (s *PaymentsService) GetMyOrder(ctx context.Context, req *clientv1.GetMyOrd
 }
 
 func (s *PaymentsService) VerifyReceipt(ctx context.Context, req *clientv1.VerifyReceiptRequest) (*clientv1.VerifyReceiptResponse, error) {
-	if req == nil || req.GetOrderId() == "" || req.GetReceipt() == "" {
-		return nil, status.Error(codes.InvalidArgument, "order_id and receipt are required")
-	}
+	// order_id/receipt required 同上，由 buf.validate 注解承担。
 	result, err := s.payments.VerifyReceipt(ctx, req.GetOrderId(), []byte(req.GetReceipt()))
 	if err != nil {
 		return nil, err

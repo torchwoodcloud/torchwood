@@ -4,6 +4,7 @@ package torchwood.server.v1;
 
 option go_package = "github.com/torchwooddev/torchwood/genproto/server/v1;serverv1";
 
+import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
@@ -204,11 +205,11 @@ message CreatePlanRequest {
 }
 
 message GetPlanRequest {
-  string plan_id = 1;
+  string plan_id = 1 [(buf.validate.field).required = true];
 }
 
 message UpdatePlanRequest {
-  string plan_id = 1;
+  string plan_id = 1 [(buf.validate.field).required = true];
   optional string name = 2;
   optional int64 amount = 3;
   optional string currency = 4;
@@ -222,7 +223,7 @@ message UpdatePlanRequest {
 }
 
 message DeletePlanRequest {
-  string plan_id = 1;
+  string plan_id = 1 [(buf.validate.field).required = true];
 }
 
 message ListPlansResponse {
@@ -236,15 +237,15 @@ message ListSubscriptionsResponse {
 }
 
 message GetSubscriptionRequest {
-  string subscription_id = 1;
+  string subscription_id = 1 [(buf.validate.field).required = true];
 }
 
 message CancelSubscriptionRequest {
-  string subscription_id = 1;
+  string subscription_id = 1 [(buf.validate.field).required = true];
   string reason = 2;
 }
 
 message ExpireSubscriptionRequest {
-  string subscription_id = 1;
+  string subscription_id = 1 [(buf.validate.field).required = true];
   string reason = 2;
 }
