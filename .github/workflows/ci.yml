@@ -32,8 +32,9 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       minio:
-        # 与 docker/local/docker-compose.yml 的本地版本对齐（不追 latest）。
-        image: minio/minio:RELEASE.2024-11-07T00-52-20Z
+        # SILO（pgsty/silo，MinIO 社区延续分支），与 docker/local/docker-compose.yml
+        # 的本地版本对齐（不追 latest）。
+        image: pgsty/silo:RELEASE.2026-09-03T13-18-01Z
         command: server /data
         env:
           MINIO_ROOT_USER: minioadmin

@@ -26,7 +26,7 @@
 |------|------|----------|------|
 | PostgreSQL | `postgres:18-alpine` | 5432 | `torchwood-postgres` |
 | Redis | `redis:7-alpine` | 6379 | `torchwood-redis` |
-| MinIO | `minio/minio:RELEASE.2024-11-07T00-52-20Z` | 9000/9001 | `torchwood-minio` |
+| MinIO（SILO 分支） | `pgsty/silo:RELEASE.2026-09-03T13-18-01Z` | 9000/9001 | `torchwood-minio` |
 
 `.env` 覆盖键：`POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB`/`POSTGRES_PORT`/`REDIS_PORT`/`MINIO_API_PORT`/`MINIO_CONSOLE_PORT` 等。
 

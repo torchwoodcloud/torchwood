@@ -43,7 +43,7 @@ task dev:worker       # go run ./cmd/worker
 |------|------|------|------|----------|
 | PostgreSQL | `pgvector/pgvector:0.8.6-pg18`（pgvector 预装基座，锁 0.8.6 + PG18） | `5432` | 元数据静态表（`bun` + `golang-migrate`）与动态文档层（含 vector 列/HNSW） | `pg_isready` |
 | Redis | `redis:7-alpine` | `6379` | 队列/上传会话/ID 生成 | `redis-cli ping` |
-| MinIO | `minio:RELEASE.2024-11-07T00-52-20Z` | `9000`/`9001` | S3 兼容对象存储 | `exec 3<>/dev/tcp/127.0.0.1/9000` |
+| MinIO | `pgsty/silo:RELEASE.2026-09-03T13-18-01Z`（SILO，MinIO 社区延续分支，S3 API/变量/磁盘格式与 MinIO 兼容） | `9000`/`9001` | S3 兼容对象存储 | `exec 3<>/dev/tcp/127.0.0.1/9000` |
 
 - 均挂 `postgres_data`/`redis_data`/`minio_data` 卷；
 - 生产可将 `storage.provider: "s3"` 指向任意 S3 兼容服务；

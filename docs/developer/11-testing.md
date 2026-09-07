@@ -129,7 +129,7 @@ golangci-lint run --new-from-rev=origin/main ./...
 
 ### 5.1 `backend`（`ubuntu-latest`）
 
-Services：`postgres:18-alpine`（`torchwood:torchwood`）与 `minio:RELEASE.2024-11-07T00-52-20Z`（`minioadmin:minioadmin`），均带 healthcheck。
+Services：`postgres:18-alpine`（`torchwood:torchwood`）与 `pgsty/silo:RELEASE.2026-09-03T13-18-01Z`（`minioadmin:minioadmin`），均带 healthcheck。
 
 步骤（精简）：
 
