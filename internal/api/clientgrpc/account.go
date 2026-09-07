@@ -144,10 +144,9 @@ func (s *AccountService) ListSessions(ctx context.Context, _ *clientv1.ListSessi
 }
 
 func (s *AccountService) DeleteSession(ctx context.Context, req *clientv1.DeleteSessionRequest) (*sharedv1.Empty, error) {
-	// R04-P3-2：空 session_id 直接 InvalidArgument，不落到 use-case。
-	if req.GetSessionId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "session_id is required")
-	}
+	// R04-P3-2 不变量（空 session_id 直接 InvalidArgument，不落到 use-case）
+	// 由 DeleteSessionRequest 的 buf.validate required 注解在 validate
+	// 拦截器承担（docs/developer/09-api-guide.md §1.6）。
 	if err := s.account.DeleteSession(ctx, req.GetSessionId()); err != nil {
 		return nil, err
 	}
@@ -174,9 +173,8 @@ func (s *AccountService) GetPrefs(ctx context.Context, _ *clientv1.GetPrefsReque
 }
 
 func (s *AccountService) UpdatePrefs(ctx context.Context, req *clientv1.UpdatePrefsRequest) (*clientv1.GetPrefsResponse, error) {
-	if req.GetPrefs() == nil {
-		return nil, status.Error(codes.InvalidArgument, "prefs is required")
-	}
+	// prefs required 由 UpdatePrefsRequest 的 buf.validate 注解在 validate
+	// 拦截器承担；app 层保留自身防线（内部调用方不经过 gRPC 面）。
 	prefs, err := s.account.UpdatePrefs(ctx, req.GetPrefs().AsMap())
 	if err != nil {
 		return nil, err

@@ -472,7 +472,9 @@ func TestAccountService_ErrorCodeMapping(t *testing.T) {
 	userID := signUpViaHandler(t, ctx, s, projectID, "errors@torchwood.local")
 	authCtx := principalCtx(ctx, projectID, userID, "session-1")
 
-	// DeleteSession 空 session_id → InvalidArgument（handler 层，R04-P3-2）。
+	// DeleteSession 空 session_id → InvalidArgument（R04-P3-2）：形状校验
+	// 已上收到 validate 拦截器的 protovalidate 注解，此处直调 handler 绕过
+	// 拦截器，InvalidArgument 来自 use-case 层防线，不变量两层共同保持。
 	_, err := s.DeleteSession(authCtx, &clientv1.DeleteSessionRequest{SessionId: ""})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 

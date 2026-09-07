@@ -4,6 +4,7 @@ package torchwood.client.v1;
 
 option go_package = "github.com/torchwooddev/torchwood/genproto/client/v1;clientv1";
 
+import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
@@ -578,7 +579,9 @@ message ListSessionsResponse {
 }
 
 message DeleteSessionRequest {
-  string session_id = 1;
+  // proto3 隐式 presence 的标量字段：required 即"非零值"（空串视为未设置）。
+  // 求值方与层次边界见 09-api-guide §2.3。
+  string session_id = 1 [(buf.validate.field).required = true];
 }
 
 message DeleteSessionsRequest {
@@ -592,7 +595,9 @@ message GetPrefsResponse {
 }
 
 message UpdatePrefsRequest {
-  google.protobuf.Struct prefs = 1;
+  // 形状约束（buf.validate）由 validate 拦截器统一求值（09-api-guide §2.3）；
+  // 业务规则仍留在 app 用例层。
+  google.protobuf.Struct prefs = 1 [(buf.validate.field).required = true];
 }
 
 message CreateEmailOTPRequest {

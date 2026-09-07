@@ -82,6 +82,14 @@ func NewGRPCServer(
 	// domainauth.RateLimiter 端口的 Redis 固定窗口实现。
 	rateLimitInterceptor := interceptor.NewRateLimitInterceptor(rateLimiter, cfg)
 	usageInterceptor := interceptor.NewUsageInterceptor(usageMeter).WithLogger(app.Logger())
+	// 形状校验（protovalidate 注解，09-api-guide §1.6）：插在链尾——
+	// audit/usage 之后、handler 之前。校验失败请求与手写校验时期行为
+	// 完全一致（InvalidArgument 审计行照常落库、用量照常计数），只是把
+	// handler 开头的形状检查外提为 proto 声明。
+	validateInterceptor, err := interceptor.NewValidateInterceptor()
+	if err != nil {
+		return nil, err
+	}
 
 	srv := lynxgrpc.NewServer(
 		lynxgrpc.WithAddr(grpcCfg.GetAddr()),
@@ -95,6 +103,7 @@ func NewGRPCServer(
 			rateLimitInterceptor.UnaryRateLimitMiddleware,
 			auditInterceptor.UnaryAuditMiddleware,
 			usageInterceptor.UnaryUsageMiddleware,
+			validateInterceptor.UnaryValidateMiddleware,
 		),
 		// 允许 ≤1MiB 的 deployment 代码包走 gRPC（base64 膨胀后约 1.33x）。
 		lynxgrpc.WithServerOptions(grpc.MaxRecvMsgSize(8<<20)),

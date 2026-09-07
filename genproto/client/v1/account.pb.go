@@ -7,6 +7,7 @@
 package clientv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
 	v1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
@@ -961,8 +962,10 @@ func (x *ListSessionsResponse) GetSessions() []*Session {
 }
 
 type DeleteSessionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// proto3 隐式 presence 的标量字段：required 即"非零值"（空串视为未设置）。
+	// 求值方与层次边界见 09-api-guide §2.3。
+	SessionId     string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1129,8 +1132,10 @@ func (x *GetPrefsResponse) GetPrefs() *structpb.Struct {
 }
 
 type UpdatePrefsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Prefs         *structpb.Struct       `protobuf:"bytes,1,opt,name=prefs,proto3" json:"prefs,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 形状约束（buf.validate）由 validate 拦截器统一求值（09-api-guide §2.3）；
+	// 业务规则仍留在 app 用例层。
+	Prefs         *structpb.Struct `protobuf:"bytes,1,opt,name=prefs,proto3" json:"prefs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3019,7 +3024,7 @@ var File_client_v1_account_proto protoreflect.FileDescriptor
 
 const file_client_v1_account_proto_rawDesc = "" +
 	"\n" +
-	"\x17client/v1/account.proto\x12\x13torchwood.client.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"t\n" +
+	"\x17client/v1/account.proto\x12\x13torchwood.client.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"t\n" +
 	"\rSignUpRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x12\x12\n" +
@@ -3096,17 +3101,17 @@ const file_client_v1_account_proto_rawDesc = "" +
 	"\acurrent\x18\b \x01(\bR\acurrent\"\x15\n" +
 	"\x13ListSessionsRequest\"P\n" +
 	"\x14ListSessionsResponse\x128\n" +
-	"\bsessions\x18\x01 \x03(\v2\x1c.torchwood.client.v1.SessionR\bsessions\"5\n" +
-	"\x14DeleteSessionRequest\x12\x1d\n" +
+	"\bsessions\x18\x01 \x03(\v2\x1c.torchwood.client.v1.SessionR\bsessions\"=\n" +
+	"\x14DeleteSessionRequest\x12%\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\":\n" +
+	"session_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tsessionId\":\n" +
 	"\x15DeleteSessionsRequest\x12!\n" +
 	"\fkeep_current\x18\x01 \x01(\bR\vkeepCurrent\"\x11\n" +
 	"\x0fGetPrefsRequest\"A\n" +
 	"\x10GetPrefsResponse\x12-\n" +
-	"\x05prefs\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x05prefs\"C\n" +
-	"\x12UpdatePrefsRequest\x12-\n" +
-	"\x05prefs\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x05prefs\"L\n" +
+	"\x05prefs\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x05prefs\"K\n" +
+	"\x12UpdatePrefsRequest\x125\n" +
+	"\x05prefs\x18\x01 \x01(\v2\x17.google.protobuf.StructB\x06\xbaH\x03\xc8\x01\x01R\x05prefs\"L\n" +
 	"\x15CreateEmailOTPRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x14\n" +

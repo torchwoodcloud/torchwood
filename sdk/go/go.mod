@@ -8,8 +8,10 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/torchwooddev/torchwood/genproto v0.0.0-00010101000000-000000000000
 	google.golang.org/grpc v1.83.0
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 )
+
+require buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2 // indirect
 
 require (
 	github.com/coder/websocket v1.8.14

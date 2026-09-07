@@ -50,6 +50,25 @@ service ProjectsService {
 - 时间 `google.protobuf.Timestamp`（HTTP JSON RFC3339，`timestamppb.New`）。
 - 列表统一 `shared.v1.ListRequest`/`ListResponseMeta`（`proto/shared/v1/common.proto:7`），勿重造分页字段。
 
+### 2.3 形状校验注解（protovalidate）
+
+请求"形状约束"（required / 长度 / 正则 / 枚举 / 范围）用 `buf.validate` 注解声明在 proto 上，`ValidateInterceptor`（`internal/api/interceptor/validate.go`，拦截器链尾、audit/usage 之后）统一求值，handler 与 app 层不再重复此类检查。违规 → `InvalidArgument`，消息为 `字段路径: 文案`（多条以 "; " 连接）；CEL 编译/求值故障 → `Internal`（fail-closed，注解缺陷属服务端 bug）。跨字段与业务规则仍写在 app 用例层（P3-18 取舍不变：app 层可用 `status/codes`）。链尾插入保证校验失败的请求照常产生 InvalidArgument 审计行与用量计数，与手写校验时期行为一致。
+
+```proto
+import "buf/validate/validate.proto";
+
+message DeleteSessionRequest {
+  // proto3 隐式 presence 标量：required 即"非零值"（空串视为未设置）。
+  string session_id = 1 [(buf.validate.field).required = true];
+}
+```
+
+注意：
+- 消息字段（如 `google.protobuf.Struct`）的 `required` 为"必须设置"（非 nil）。
+- 共享消息（`shared.v1.ListRequest` 等 AIP-132 复用方）加规则会作用于全部复用 RPC，需全量评估影响面。
+- `grpc-ecosystem/openapiv2` 插件不把 `buf.validate` 规则映射为 OpenAPI 约束，对外字段约束仍按 §10 手工维护（`openapiv2_field`）。
+- 绕过 gRPC 拦截器链的入口（`internal/api/serverhttp`、realtime、console）不经过本拦截器，其入参校验维持原状。
+
 ## 3 步骤 2：生成
 
 ```bash
