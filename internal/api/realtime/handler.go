@@ -54,6 +54,11 @@ const (
 // 超出则订阅确认帧带 has_more=true，客户端走 :changes 以末条 seq 续传。
 const maxReplayChanges = 500
 
+// maxRevalidateInterval 是凭证周期复验的最大间隔（M5 C4）：实际间隔 =
+// min(距 exp 剩余/2, maxRevalidateInterval)——token 临期时加密复验，长会话
+// 至多 5min 复验一次撤销状态。
+const maxRevalidateInterval = 5 * time.Minute
+
 // CredentialValidator 是握手所需的凭证校验面（auth.Validator 满足；
 // 接口化便于单测）。
 type CredentialValidator interface {
@@ -187,6 +192,9 @@ type connState struct {
 	docPrincipal  databases.Principal
 	quotaKey      string
 	expiresAt     time.Time // JWT 到期时间；WS 只收 JWT 凭证（SDK access_token / console cookie 均为 JWT），正常不会为零值
+	// authn 是握手时的原始凭证（M5 C4）：周期复验用同一请求重放 Authenticate，
+	// 撤销/停用后连接被主动收回。
+	authn shared.AuthnRequest
 
 	hubConn *shared.RealtimeConn
 	subs    map[string]struct{} // 已订阅频道（去重 + 计数）
@@ -261,7 +269,7 @@ func (h *Handler) serveConn(r *http.Request, c *websocket.Conn) {
 		h.failHandshake(c, errCodeUnauthenticated, "missing or invalid hello frame")
 		return
 	}
-	principal, claims, err := h.authenticate(ctx, r, hello)
+	principal, claims, authn, err := h.authenticate(ctx, r, hello)
 	if err != nil {
 		RealtimeHandshakeTotal.WithLabelValues("unauthenticated").Inc()
 		h.failHandshake(c, errCodeUnauthenticated, err.Error())
@@ -276,6 +284,7 @@ func (h *Handler) serveConn(r *http.Request, c *websocket.Conn) {
 	RealtimeHandshakeTotal.WithLabelValues("ok").Inc()
 
 	st := newConnState(principal, hello.ProjectID, quotaKey, claims)
+	st.authn = authn
 	RealtimeConnections.WithLabelValues(st.projectID).Inc()
 
 	// hello_ok 出站后进入保活循环。
@@ -309,9 +318,53 @@ func (h *Handler) serveConn(r *http.Request, c *websocket.Conn) {
 		defer stop()
 		h.writeLoop(runCtx, c, st)
 	})
+	// 凭证周期复验（M5 C4）：撤销/停用后主动断连，不再只依赖 JWT 到期。
+	wg.Go(func() {
+		defer stop()
+		h.revalidateLoop(runCtx, c, st)
+	})
 	wg.Wait()
 	cancel()
 	h.cleanup(st)
+}
+
+// revalidateLoop 周期复验当前凭证（M5 C4）：以握手原始凭证重放 Authenticate
+// （会话/用户/管理员撤销判定都在验证路径内，含 C1 的 revoked_at 随行判定），
+// 失败即以策略违规 + 原因 credential_revoked 断连。间隔 = min(距 exp 剩余/2,
+// 5min)：token 临期加密复验，长会话至多 5min 一次。
+func (h *Handler) revalidateLoop(ctx context.Context, c *websocket.Conn, st *connState) {
+	for {
+		timer := time.NewTimer(st.revalidateInterval())
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+		principal, err := h.validator.Authenticate(ctx, st.authn)
+		if err != nil || principal == nil || !principal.IsAuthenticated() {
+			h.logger.Info("realtime credential revalidation failed",
+				"connection_id", st.id, "project_id", st.projectID)
+			h.closeWithReason(c, "credential_revoked")
+			return
+		}
+	}
+}
+
+// revalidateInterval 计算下一次复验间隔。
+func (st *connState) revalidateInterval() time.Duration {
+	if st.expiresAt.IsZero() {
+		return maxRevalidateInterval
+	}
+	remaining := time.Until(st.expiresAt)
+	if remaining <= 0 {
+		return time.Millisecond // 即将到期，expiryTimer 兜底收尾
+	}
+	half := remaining / 2
+	if half < maxRevalidateInterval {
+		return half
+	}
+	return maxRevalidateInterval
 }
 
 // cleanup 释放连接资源：从 Hub 摘除（扇出停止）、释放配额、更新指标。
@@ -373,17 +426,17 @@ func readFrame(ctx context.Context, c *websocket.Conn, v any) error {
 //   - admin：先 principal.ProjectID = hello.project_id（空则拒），
 //     再 ValidateAdminProjectAccess；非 platform admin 无项目访问权则拒
 //   - end_user：hello.project_id 必须与身份（claims pid / 会话 cookie pid）一致
-func (h *Handler) authenticate(ctx context.Context, r *http.Request, hello *helloFrame) (*shared.Principal, *jwtparser.Claims, error) {
+func (h *Handler) authenticate(ctx context.Context, r *http.Request, hello *helloFrame) (*shared.Principal, *jwtparser.Claims, shared.AuthnRequest, error) {
 	if hello.ProjectID == "" {
-		return nil, nil, errors.New("project_id is required")
+		return nil, nil, shared.AuthnRequest{}, errors.New("project_id is required")
 	}
 	// Grant：Realtime 禁止 API key（不是第三份解析器）。
 	if len(r.Header.Values("X-Api-Key")) > 0 {
-		return nil, nil, errors.New("api key credentials are not allowed")
+		return nil, nil, shared.AuthnRequest{}, errors.New("api key credentials are not allowed")
 	}
 	if raw := r.Header.Get("Authorization"); raw != "" {
 		if ct, _, ok := interceptor.ParseAuthorizationHeader(raw); ok && ct == shared.CredentialTypeAPIKey {
-			return nil, nil, errors.New("api key credentials are not allowed")
+			return nil, nil, shared.AuthnRequest{}, errors.New("api key credentials are not allowed")
 		}
 	}
 
@@ -396,14 +449,14 @@ func (h *Handler) authenticate(ctx context.Context, r *http.Request, hello *hell
 	if err != nil || principal == nil || !principal.IsAuthenticated() {
 		if _, _, parseErr := shared.ParseAuthnRequest(req); parseErr != nil {
 			if errors.Is(parseErr, shared.ErrMissingCredential) {
-				return nil, nil, errors.New("authentication required")
+				return nil, nil, req, errors.New("authentication required")
 			}
-			return nil, nil, parseErr
+			return nil, nil, req, parseErr
 		}
-		return nil, nil, errors.New("invalid or expired credential")
+		return nil, nil, req, errors.New("invalid or expired credential")
 	}
 	if principal.ActorKind == shared.ActorKindService || principal.IsSystem() {
-		return nil, nil, errors.New("api key credentials are not allowed")
+		return nil, nil, req, errors.New("api key credentials are not allowed")
 	}
 
 	// ttp / exp：读取 JWT claims 供握手后的到期断开用（SDK access_token
@@ -414,7 +467,7 @@ func (h *Handler) authenticate(ctx context.Context, r *http.Request, hello *hell
 		claims, _ = h.validator.ParseClaims(cred)
 	}
 	if claims != nil && claims.TokenType != "" && claims.TokenType != jwtparser.TokenTypeAccess {
-		return nil, nil, errors.New("access token required")
+		return nil, nil, req, errors.New("access token required")
 	}
 
 	switch principal.ActorKind {
@@ -423,16 +476,16 @@ func (h *Handler) authenticate(ctx context.Context, r *http.Request, hello *hell
 		// （空 ProjectID 时 ValidateAdminProjectAccess 直接成功）。
 		principal.ProjectID = hello.ProjectID
 		if err := h.validator.ValidateAdminProjectAccess(ctx, principal); err != nil {
-			return nil, nil, errors.New("admin has no access to this project")
+			return nil, nil, req, errors.New("admin has no access to this project")
 		}
 	case shared.ActorKindEndUser:
 		if principal.ProjectID != hello.ProjectID {
-			return nil, nil, errors.New("project_id does not match credential")
+			return nil, nil, req, errors.New("project_id does not match credential")
 		}
 	default:
-		return nil, nil, errors.New("credential type not allowed")
+		return nil, nil, req, errors.New("credential type not allowed")
 	}
-	return principal, claims, nil
+	return principal, claims, req, nil
 }
 
 // realtimeSessionCookieHeaders 收集 WS 握手可用的 cookie：

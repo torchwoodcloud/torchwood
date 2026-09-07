@@ -93,6 +93,13 @@ var (
 	errPermissionDenied = &fakeErr{msg: "permission denied"}
 )
 
+// setErr 供测试在握手后注入验证失败（模拟撤销，M5 C4）。
+func (v *fakeValidator) setErr(err error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.err = err
+}
+
 type fakeErr struct{ msg string }
 
 func (e *fakeErr) Error() string { return e.msg }
@@ -773,6 +780,40 @@ func TestHandshake_TokenExpiryDisconnects(t *testing.T) {
 	_, _, err := c.Read(ctx)
 	require.Error(t, err)
 	require.True(t, strings.Contains(err.Error(), "token_expired"), "got: %v", err)
+}
+
+// TestRevalidation_RevokedCredentialDisconnects（M5 C4）：握手后撤销凭证
+// （validator 转为拒绝），周期复验在 min(距 exp 剩余/2, 5min) 内发现并以
+// 策略违规 + 原因 credential_revoked 主动断连——不再等 JWT 到期。
+func TestRevalidation_RevokedCredentialDisconnects(t *testing.T) {
+	validator := &fakeValidator{
+		principal: endUserPrincipal("default", "u1"),
+		claims:    &jwtparser.Claims{TokenType: jwtparser.TokenTypeAccess, ExpiresAt: time.Now().Add(8 * time.Second).Unix()},
+	}
+	_, _, srv := testHandler(t, validator, &fakeDocDB{collections: map[string]*databases.Collection{}})
+
+	c := dial(t, srv)
+	sendJSON(t, c, hello("default", "jwt"))
+	discardHelloOK(t, c)
+
+	// 握手后撤销：下一次复验（剩余/2 ≈ 4s）即收连接。
+	validator.setErr(errUnauthenticated)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for {
+		_, _, err := c.Read(ctx)
+		require.Error(t, err)
+		if strings.Contains(err.Error(), "credential_revoked") {
+			return
+		}
+		if strings.Contains(err.Error(), "token_expired") {
+			t.Fatalf("应在 token 到期前由复验断连: %v", err)
+		}
+		if ctx.Err() != nil {
+			t.Fatalf("复验未在期限内断连: %v", err)
+		}
+	}
 }
 
 func discardHelloOK(t *testing.T, c *websocket.Conn) {
