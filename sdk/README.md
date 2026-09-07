@@ -137,7 +137,7 @@ await client.databases.createDocument("app", "notes", { data: { title: "Hi" } })
 
 **事务提示（Functions 开发者）**：函数代码运行在外部容器，不与服务端共享事务——函数内的多写原子批请调用 `documents:execute-tx`（`ExecuteTransactions`，Server 面；ATOMIC 模式任一失败整批回滚，批内事件序 = op 序，详见 `docs/developer/06-databases.md` §8.1 与 `08-functions.md` §4.1）。
 
-## 版本策略与兼容承诺（A10 决策 memo，2026-09-05 成文，待维护者拍板）
+## 版本策略与兼容承诺（A10 决策 memo，2026-09-05 成文；2026-09-06 维护者拍板：按推荐三项执行，决议回写 `docs/developer/15-exit-poc.md` A10）
 
 **现状（契约已分叉）**：npm `@torchwood/sdk` v0.1.0（2026-09-01）与 `sdk/go` v0.1.2（2026-08-26，genproto v0.1.2）已对外发布；此后 POC 期 proto 发生 reserved 级断裂——`queries` 双栈退役（client/server databases 两面 `reserved 3`）、`ListRequest.filter/order_by` reserved、错误码直换（域码体系、不可见文档 403→404 翻转、`expected_version=0` 改 InvalidArgument）、分页 token 换 keyset（`ka:/kb:`），并新增 execute-tx / aggregate / `:changes`（ListChanges）/ vectorSearch。**已发布 SDK 与服务端契约已分叉**（TS 合同测试在 R17 前红为证，`ee0d9ea` 转绿）。分叉中最危险的一档：reserved 前字段被 proto 运行时**静默忽略**——旧 SDK 的过滤条件失效、结果集语义错误而非法错（逐项矩阵见 `docs/design/poc-to-release-migration.md` §7）。
 
@@ -148,4 +148,4 @@ await client.databases.createDocument("app", "notes", { data: { title: "Hi" } })
 3. **migration note 义务**：0.2.0 起，凡 minor 含破坏性变更，`CHANGELOG.md` 该版本小节必须附**迁移说明**，内容对照 A5 §7 客户端契约升级矩阵逐项给出（旧形态 / 新形态 / 客户端症状 / 改法）；纯新增 minor 豁免。0.2.0 的迁移说明以该矩阵为唯一底稿，不再另行盘点。
 4. **兼容矩阵承诺**：**不承诺"旧 SDK × 新服务端"组合**（分叉教训：静默忽略比显式报错危害大，与其承诺兼容不如要求 SDK 与服务端同批升级）；服务端承诺支持**最近两个 SDK minor**（N 与 N-1，同 major），SDK 侧在 CHANGELOG 声明"最低服务端版本"。Go SDK 走 nested-module tag，SDK↔genproto 的版本对应由发布流水线的 require rewrite 锁定（v0.1.1 流水线修复后既有保证）。
 
-**待维护者拍板句**：SDK 下一版本号与兼容承诺是否按上述执行——① 0.2.0（minor 携带破坏性 + migration note）先行收拢分叉；② 1.0.0 与转出门禁绑定、自此冻结契约；③ 兼容矩阵 = 不承诺旧 SDK × 新服务端、服务端支持最近两个 SDK minor。决议回写 `docs/developer/15-exit-poc.md` A10 条目。
+**决议（2026-09-06，维护者，按推荐三项）**：① 0.2.0（minor 携带破坏性 + migration note）先行收拢分叉——**已于 2026-09-07 发布**（三面同 train，migration note 见 `CHANGELOG.md` 各 0.2.0 小节）；② 1.0.0 与转出门禁绑定、自此冻结契约（尚未触发）；③ 兼容矩阵 = 不承诺旧 SDK × 新服务端、服务端支持最近两个 SDK minor。
