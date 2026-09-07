@@ -726,3 +726,53 @@ func newFileHandlerTestAccount(cfg *config.AppConfig, projectRepo projects.Repos
 }
 
 // testPolicies 定义于 auth_test.go（同包共享）。
+
+// TestFileHandler_AdminUploadNoOwnerAttribution 回归测试：Console（admin 会话）
+// 上传曾把 AdminID 写入 owner_user_id，违反 files_owner_user_id_fkey（指向项目
+// 数据面 users(id)）报 SQLSTATE 23503。修复后 storage 归属仅接受 EndUser
+// （shared.StorageOwnerID），admin 创建的文件 owner 落 NULL。单发与分片
+// complete 两条路径都断言。
+func TestFileHandler_AdminUploadNoOwnerAttribution(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	f := setupStorageHTTPFixture(t)
+
+	admin, adminCleanup := testutil.CreateTestAdmin(context.Background(), f.db, "member")
+	defer adminCleanup()
+	require.NoError(t, testutil.GrantAdminProject(context.Background(), f.db, admin.ID, f.projectID))
+	cfg := &config.AppConfig{}
+	cfg.Security = &config.Security{Jwt: &config.Security_Jwt{Secret: "test-file-token-secret"}}
+	token, err := testutil.SignAdminToken(cfg, admin)
+	require.NoError(t, err)
+	adminHeaders := map[string]string{
+		"Authorization":       "Bearer " + token,
+		"X-Torchwood-Project": f.projectID,
+	}
+
+	// 单发：POST files（multipart）。
+	fileID, _, status := f.upload([]byte("admin upload"), adminHeaders, "")
+	require.Equal(t, http.StatusCreated, status)
+	file, err := bunrepo.NewFileRepository(f.db).GetByID(context.Background(), f.projectID, fileID)
+	require.NoError(t, err)
+	require.Empty(t, file.OwnerUserID, "admin 创建的文件不归属项目用户，owner_user_id 应为 NULL")
+
+	// 分片：create 会话 → 1 片 → complete（CompleteUpload 的 owner 回落路径）。
+	status, created := f.doJSON(http.MethodPost, "/v1/storage/buckets/"+f.bucketID+"/uploads", map[string]any{
+		"name": "admin-chunked.bin",
+		"size": 1024,
+	}, adminHeaders)
+	require.Equal(t, http.StatusCreated, status)
+	uploadID, _ := created["upload_id"].(string)
+	require.NotEmpty(t, uploadID)
+	chunkStatus, _ := f.uploadChunkViaHTTP(f.bucketID, uploadID, 1, make([]byte, 1024), adminHeaders)
+	require.Equal(t, http.StatusOK, chunkStatus)
+	status, completed := f.doJSON(http.MethodPost, "/v1/storage/buckets/"+f.bucketID+"/uploads/"+uploadID+"/complete", nil, adminHeaders)
+	require.Equal(t, http.StatusOK, status)
+	completedID, _ := completed["id"].(string)
+	require.NotEmpty(t, completedID)
+	file, err = bunrepo.NewFileRepository(f.db).GetByID(context.Background(), f.projectID, completedID)
+	require.NoError(t, err)
+	require.Empty(t, file.OwnerUserID)
+}

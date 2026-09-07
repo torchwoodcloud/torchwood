@@ -100,6 +100,17 @@ func (p *Principal) OwnerID() string {
 	}
 }
 
+// StorageOwnerID 是 storage.owner_user_id 的合法取值：仅 EndUser。
+// 该列带真实外键指向项目数据面 users(id)（files_owner_user_id_fkey），
+// AdminID 存于平台 admins 表、不在项目 users 内，写入必触发 23503；
+// admin/key/system 创建的文件不归属（owner 为 NULL），可见性走特权判定。
+func (p *Principal) StorageOwnerID() string {
+	if p == nil || p.ActorKind != ActorKindEndUser {
+		return ""
+	}
+	return p.UserID
+}
+
 // AdminLookupID 取 admin 查找键：优先 AdminID，测试桩可回退 ActorID。
 func (p *Principal) AdminLookupID() string {
 	if p == nil || p.ActorKind != ActorKindAdmin {

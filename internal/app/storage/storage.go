@@ -260,7 +260,8 @@ func (s *Storage) CreateFile(ctx context.Context, cmd CreateFileCommand, content
 		return nil, status.Error(codes.NotFound, "bucket not found")
 	}
 
-	// A8：OwnerUserID 从 principal 派生（EndUser 填 user:<id>），丢弃未落地的 Permissions 切片。
+	// A8：OwnerUserID 从 principal 派生（EndUser 填其 UserID，落库带
+	// files_owner_user_id_fkey 外键校验），丢弃未落地的 Permissions 切片。
 	// 非 EndUser（keys/admin/system）保持空或调用方传入的 OwnerUserID（admin 可能携带 AdminID 但无鉴权意义）。
 	ownerUserID := cmd.OwnerUserID
 	if uid := storageEndUserID(principal); uid != "" {

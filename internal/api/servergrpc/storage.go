@@ -128,7 +128,7 @@ func (s *StorageService) CreateFile(ctx context.Context, req *serverv1.CreateFil
 	p, ok := contexts.Principal(ctx)
 	ownerUserID := ""
 	if ok {
-		ownerUserID = p.OwnerID()
+		ownerUserID = p.StorageOwnerID()
 	}
 	file, err := s.storage.CreateFile(ctx, appstorage.CreateFileCommand{
 		ProjectID:   projectID,

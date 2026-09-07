@@ -67,6 +67,18 @@ func TestPrincipal_OwnerID(t *testing.T) {
 	require.Equal(t, "legacy", (&Principal{ActorKind: ActorKindAdmin, ActorID: "legacy"}).AdminLookupID())
 }
 
+// TestPrincipal_StorageOwnerID：storage.owner_user_id 带 files_owner_user_id_fkey
+// 外键（项目数据面 users(id)），AdminID 不在项目 users 内——归属只接受 EndUser，
+// 否则 Console/admin 上传必触发 SQLSTATE 23503。
+func TestPrincipal_StorageOwnerID(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "u1", (&Principal{ActorKind: ActorKindEndUser, UserID: "u1"}).StorageOwnerID())
+	require.Empty(t, (&Principal{ActorKind: ActorKindAdmin, AdminID: "a1"}).StorageOwnerID())
+	require.Empty(t, (&Principal{ActorKind: ActorKindService, APIKeyID: "k1"}).StorageOwnerID())
+	require.Empty(t, NewSystemPrincipal("p1").StorageOwnerID())
+	require.Empty(t, (*Principal)(nil).StorageOwnerID())
+}
+
 func TestPrincipal_DocPrincipal_DropsConsoleTag(t *testing.T) {
 	t.Parallel()
 	p := &Principal{

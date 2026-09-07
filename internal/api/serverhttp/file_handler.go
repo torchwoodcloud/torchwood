@@ -359,7 +359,7 @@ func (h *FileHandler) uploadChunk(w http.ResponseWriter, r *http.Request, pathPa
 	}
 	defer func() { _ = f.Close() }()
 
-	received, err := h.storage.UploadChunk(ctx, projectID, uploadID, partNumber, f, fh[0].Size, principal.OwnerID(), principal.DocPrincipal())
+	received, err := h.storage.UploadChunk(ctx, projectID, uploadID, partNumber, f, fh[0].Size, principal.StorageOwnerID(), principal.DocPrincipal())
 	if err != nil {
 		h.logOp(r, "upload-chunk", bucketID, uploadID, principal, err)
 		httpError(w, err)
@@ -402,7 +402,7 @@ func (h *FileHandler) completeUpload(w http.ResponseWriter, r *http.Request, pat
 		return
 	}
 
-	file, err := h.storage.CompleteUpload(ctx, projectID, uploadID, principal.OwnerID(), principal.DocPrincipal())
+	file, err := h.storage.CompleteUpload(ctx, projectID, uploadID, principal.StorageOwnerID(), principal.DocPrincipal())
 	if err != nil {
 		h.logOp(r, "complete-upload", bucketID, uploadID, principal, err)
 		httpError(w, err)
@@ -451,7 +451,7 @@ func (h *FileHandler) abortUpload(w http.ResponseWriter, r *http.Request, pathPa
 		return
 	}
 
-	if err := h.storage.AbortUpload(ctx, projectID, uploadID, principal.OwnerID(), principal.DocPrincipal()); err != nil {
+	if err := h.storage.AbortUpload(ctx, projectID, uploadID, principal.StorageOwnerID(), principal.DocPrincipal()); err != nil {
 		h.logOp(r, "abort-upload", bucketID, uploadID, principal, err)
 		httpError(w, err)
 		return
@@ -463,7 +463,7 @@ func (h *FileHandler) abortUpload(w http.ResponseWriter, r *http.Request, pathPa
 func (h *FileHandler) createFile(ctx context.Context, w http.ResponseWriter, r *http.Request, projectID, bucketID string, rd io.Reader, size int64, name, contentType string, principal *shared.Principal) {
 	file, err := h.storage.CreateFile(ctx, appstorage.CreateFileCommand{
 		ProjectID:   projectID,
-		OwnerUserID: principal.OwnerID(),
+		OwnerUserID: principal.StorageOwnerID(),
 		BucketID:    bucketID,
 		Name:        name,
 		MimeType:    contentType,
