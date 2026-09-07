@@ -93,7 +93,7 @@ func (h *OAuthHandler) callback(w http.ResponseWriter, r *http.Request, pathPara
 }
 
 // oauthNonceCookiePrefix 是 OAuth 发起时种的一次性 nonce cookie 前缀
-//（完整名 TORCHWOOD_oauth_nonce_<project>，M5 C5 login CSRF 绑定）。
+// （完整名 TORCHWOOD_oauth_nonce_<project>，M5 C5 login CSRF 绑定）。
 const oauthNonceCookiePrefix = "TORCHWOOD_oauth_nonce_"
 
 // oauthCookiesOf 按前缀抽取浏览器 cookie 为 project → value 映射；

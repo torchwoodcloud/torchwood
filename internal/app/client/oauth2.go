@@ -102,7 +102,7 @@ func (a *Account) CreateOAuth2LinkSession(ctx context.Context, cmd CreateOAuth2L
 // CreateOAuth2LinkTokenSession 以 code+state 完成 OAuth 身份 link（token 面）。
 // M5 C5（评审补偿控制）：state 归属必须与调用者一致——requireUser 之外，
 // 消费的 state.LinkUserID 必须等于 caller.UserID，否则 PermissionDenied
-//（堵"他人 state 冒名消费"与"login state 被当 link state 消费"）。
+// （堵"他人 state 冒名消费"与"login state 被当 link state 消费"）。
 func (a *Account) CreateOAuth2LinkTokenSession(ctx context.Context, cmd CreateOAuth2LinkTokenSessionCommand) (*User, error) {
 	p, err := a.requireUser(ctx)
 	if err != nil {

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/domain/audit"
+	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
 	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc"
@@ -79,7 +79,7 @@ func (i *AuthInterceptor) WithLogger(l *slog.Logger) *AuthInterceptor {
 // 拒绝原因类别与凭证类型，绝不记录 token 本体。M5 C6：并联 best-effort
 // 写一条拒绝审计行（Entry.Status="denied"，Metadata["denied"]=true、
 // Metadata["reason"]=拒绝原因），Actor/Project 从已解析 principal 取
-//（认证前拒绝为空）；复用 auditFromHTTP 的 3s + WithoutCancel 模式，
+// （认证前拒绝为空）；复用 auditFromHTTP 的 3s + WithoutCancel 模式，
 // 拒绝响应不被审计写阻塞或连带失败。
 func (i *AuthInterceptor) logAuthFailure(ctx context.Context, method, reason string, credentialType shared.CredentialType, principal *shared.Principal) {
 	ci := contexts.ClientInfoFrom(ctx)

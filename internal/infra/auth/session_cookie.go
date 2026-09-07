@@ -57,7 +57,7 @@ func (c *SessionCookieCodec) Verify(token string) (projectID, sessionID string, 
 
 // NewSessionCookieVerifier 提供 domainauth.SessionCookieVerifier（M5 C5）：
 // 密钥派生与 SessionService/Validator 的会话 cookie 编解码同源
-//（HMAC-SHA256(jwt.secret, purpose=session-cookie)）。
+// （HMAC-SHA256(jwt.secret, purpose=session-cookie)）。
 func NewSessionCookieVerifier(cfg *config.AppConfig) domainauth.SessionCookieVerifier {
 	return NewSessionCookieCodec(string(jwtparser.DeriveKey(cfg.GetSecurity().GetJwt().GetSecret(), jwtparser.PurposeSessionCookie)))
 }

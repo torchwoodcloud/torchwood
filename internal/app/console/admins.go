@@ -229,7 +229,7 @@ func (a *Admins) Delete(ctx context.Context, id, callerID string) error {
 }
 
 // runInTx 在可用的工作单元内执行 fn；runner 未装配时直接执行
-//（单语句自动提交，与事务内执行语义一致）。
+// （单语句自动提交，与事务内执行语义一致）。
 func (a *Admins) runInTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	if a.db == nil {
 		return fn(ctx)

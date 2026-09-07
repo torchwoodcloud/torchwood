@@ -152,7 +152,7 @@ func TestSessionService_CreateShortLivedSessionAndTokens_DefaultConfig(t *testin
 	require.NoError(t, err)
 	accessClaims, ok := jwtparser.Parse(jwtparser.DeriveKey(testSessionJWTSecret, jwtparser.PurposeEndUserJWT), bundle.AccessToken)
 	require.True(t, ok)
-	require.LessOrEqual(t, accessClaims.ExpiresAt-accessClaims.IssuedAt, int64((15*time.Minute+time.Minute).Seconds()))
+	require.LessOrEqual(t, accessClaims.ExpiresAt-accessClaims.IssuedAt, int64((15*time.Minute + time.Minute).Seconds()))
 }
 
 func TestProviderConstants(t *testing.T) {
