@@ -205,7 +205,7 @@ func testHandler(t *testing.T, validator *fakeValidator, docDB *fakeDocDB) (*Han
 	t.Helper()
 	cfg := &config.AppConfig{}
 	hub := realtime.NewHub(nil)
-	h, err := NewHandler(cfg, validator, docDB, hub, nil)
+	h, err := NewHandler(cfg, validator, docDB, hub, nil, nil)
 	require.NoError(t, err)
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)

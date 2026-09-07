@@ -61,7 +61,7 @@ func TestSubscribe_CollectionChannelRequiresRead(t *testing.T) {
 		}
 		setupCollection(docDB.fakeDocDB, "app", "posts", false, false)
 		hub := realtime.NewHub(nil)
-		handler, err := NewHandler(&config.AppConfig{}, validator, docDB, hub, nil)
+		handler, err := NewHandler(&config.AppConfig{}, validator, docDB, hub, nil, nil)
 		require.NoError(t, err)
 		srv := httptest.NewServer(handler)
 		t.Cleanup(srv.Close)
@@ -115,7 +115,7 @@ func TestSubscribe_CollectionChannelProbeFailClosed(t *testing.T) {
 	}
 	setupCollection(docDB.fakeDocDB, "app", "posts", false, false)
 	hub := realtime.NewHub(nil)
-	handler, err := NewHandler(&config.AppConfig{}, validator, docDB, hub, nil)
+	handler, err := NewHandler(&config.AppConfig{}, validator, docDB, hub, nil, nil)
 	require.NoError(t, err)
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)

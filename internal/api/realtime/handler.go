@@ -19,6 +19,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/torchwooddev/torchwood/internal/api/interceptor"
+	"github.com/torchwooddev/torchwood/internal/domain/audit"
 	"github.com/torchwooddev/torchwood/internal/domain/databases"
 	domainevents "github.com/torchwooddev/torchwood/internal/domain/events"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
@@ -78,6 +79,8 @@ type Handler struct {
 	hub       shared.RealtimeHub
 	conns     *connectionRegistry
 	logger    *slog.Logger
+	// audit 是可选的拒绝审计 sink（M5 C6：握手失败落 denied 审计行）。
+	audit audit.Repository
 }
 
 // NewHandler 构造 WS handler。
@@ -87,6 +90,7 @@ func NewHandler(
 	docDB databases.DocumentDB,
 	hub shared.RealtimeHub,
 	logger *slog.Logger,
+	auditRepo audit.Repository,
 ) (*Handler, error) {
 	if cfg == nil {
 		return nil, errors.New("config cannot be nil")
@@ -110,6 +114,7 @@ func NewHandler(
 		hub:       hub,
 		conns:     newConnectionRegistry(),
 		logger:    logger,
+		audit:     auditRepo,
 	}, nil
 }
 
@@ -272,6 +277,8 @@ func (h *Handler) serveConn(r *http.Request, c *websocket.Conn) {
 	principal, claims, authn, err := h.authenticate(ctx, r, hello)
 	if err != nil {
 		RealtimeHandshakeTotal.WithLabelValues("unauthenticated").Inc()
+		// M5 C6：握手失败补一条 deny 审计（best-effort）。
+		h.auditHandshakeDenial(r, err.Error())
 		h.failHandshake(c, errCodeUnauthenticated, err.Error())
 		return
 	}
@@ -392,6 +399,30 @@ func (h *Handler) cleanup(st *connState) {
 func (h *Handler) failHandshake(c *websocket.Conn, code, message string) {
 	_ = h.writeFrame(context.Background(), c, &outboundFrame{Type: "error", Code: code, Message: message})
 	_ = c.Close(websocket.StatusPolicyViolation, code)
+}
+
+// auditHandshakeDenial 把握手失败写入审计仓库（M5 C6，best-effort）：对齐
+// auditFromHTTP 的 3s + WithoutCancel 模式；audit 未装配时不做任何事。
+func (h *Handler) auditHandshakeDenial(r *http.Request, reason string) {
+	if h.audit == nil {
+		return
+	}
+	insertCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 3*time.Second)
+	defer cancel()
+	err := h.audit.Insert(insertCtx, &audit.Entry{
+		Action:    "/v1/realtime",
+		Status:    "denied",
+		IP:        r.RemoteAddr,
+		UserAgent: r.UserAgent(),
+		CreatedAt: time.Now().UTC(),
+		Metadata: map[string]any{
+			"denied": true,
+			"reason": reason,
+		},
+	})
+	if err != nil {
+		h.logger.Warn("realtime deny audit insert failed", slog.String("error", err.Error()))
+	}
 }
 
 // readHello 读取并校验首帧 hello（10s 时限）。

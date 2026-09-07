@@ -44,3 +44,29 @@ func auditFromHTTP(r *http.Request, ip string, repo audit.Repository, logger *sl
 		}
 	}
 }
+
+// auditDenyFromHTTP 把公开入口（oauth 回调 / 支付 webhook / realtime 握手）
+// 的验签/校验拒绝写入审计仓库（M5 C6）：复用 Entry.Metadata 承载
+// denied/reason，对齐 auditFromHTTP 的 3s + WithoutCancel best-effort 模式；
+// repo 未装配时不做任何事。
+func auditDenyFromHTTP(r *http.Request, ip string, repo audit.Repository, logger *slog.Logger, action, reason string) {
+	if repo == nil {
+		return
+	}
+	entry := &audit.Entry{
+		Action:    action,
+		Status:    "denied",
+		IP:        ip,
+		UserAgent: r.UserAgent(),
+		CreatedAt: time.Now().UTC(),
+		Metadata: map[string]any{
+			"denied": true,
+			"reason": reason,
+		},
+	}
+	insertCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 3*time.Second)
+	defer cancel()
+	if insertErr := repo.Insert(insertCtx, entry); insertErr != nil && logger != nil {
+		logger.Warn("http deny audit insert failed", slog.String("action", action), slog.String("error", insertErr.Error()))
+	}
+}

@@ -193,7 +193,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	oAuthHandler, err := serverhttp.NewOAuthHandler(account, appConfig)
+	oAuthHandler, err := serverhttp.NewOAuthHandler(account, appConfig, auditRepository)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -203,13 +203,13 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	paymentsHandler, err := serverhttp.NewPaymentsHandler(paymentsPayments, logger)
+	paymentsHandler, err := serverhttp.NewPaymentsHandler(paymentsPayments, logger, auditRepository)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
 	hub := realtime.NewHub(logger)
-	handler, err := realtime2.NewHandler(appConfig, validator, documentDB, hub, logger)
+	handler, err := realtime2.NewHandler(appConfig, validator, documentDB, hub, logger, auditRepository)
 	if err != nil {
 		cleanup()
 		return nil, nil, err

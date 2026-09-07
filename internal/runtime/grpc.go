@@ -69,6 +69,8 @@ func NewGRPCServer(
 		return nil, err
 	}
 	authInterceptor = authInterceptor.WithLogger(app.Logger())
+	// M5 C6：auth 拒绝并联审计（拦截器层拒绝到不了 audit 中间件，无双写）。
+	authInterceptor = authInterceptor.WithDenyAuditSink(auditRepo)
 	trustedProxies, err := interceptor.ParseTrustedProxies(cfg.GetSecurity().GetTrustedProxies())
 	if err != nil {
 		return nil, fmt.Errorf("parse security.trusted_proxies: %w", err)

@@ -46,7 +46,7 @@ func replayHarness(t *testing.T, docDB *replayDocDB) (*realtime.Hub, *httptest.S
 	}
 	cfg := &config.AppConfig{}
 	hub := realtime.NewHub(nil)
-	h, err := NewHandler(cfg, validator, docDB, hub, nil)
+	h, err := NewHandler(cfg, validator, docDB, hub, nil, nil)
 	require.NoError(t, err)
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)

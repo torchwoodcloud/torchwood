@@ -14,6 +14,7 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	apppayments "github.com/torchwooddev/torchwood/internal/app/payments"
+	"github.com/torchwooddev/torchwood/internal/domain/audit"
 	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
 )
 
@@ -24,14 +25,16 @@ const maxCallbackBody = 1 << 20
 type PaymentsHandler struct {
 	payments *apppayments.Payments
 	logger   *slog.Logger
+	// audit 是可选的拒绝审计 sink（M5 C6：验签失败落 denied 审计行）。
+	audit audit.Repository
 }
 
 // NewPaymentsHandler creates the payments callback handler.
-func NewPaymentsHandler(payments *apppayments.Payments, logger *slog.Logger) (*PaymentsHandler, error) {
+func NewPaymentsHandler(payments *apppayments.Payments, logger *slog.Logger, auditRepo audit.Repository) (*PaymentsHandler, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &PaymentsHandler{payments: payments, logger: logger}, nil
+	return &PaymentsHandler{payments: payments, logger: logger, audit: auditRepo}, nil
 }
 
 // Register 挂载泛化回调路由 POST /v1/payments/callbacks/{provider}。
@@ -48,6 +51,10 @@ func (h *PaymentsHandler) callback(w http.ResponseWriter, r *http.Request, pathP
 	}
 	if err := h.payments.HandleCallback(r.Context(), provider, r.Header, raw); err != nil {
 		if errors.Is(err, domainpayments.ErrSignatureInvalid) {
+			// M5 C6：验签失败补一条 deny 审计（IP 用对端地址：webhook 来源
+			// 由渠道网段决定，XFF 可伪造，不采纳）。
+			auditDenyFromHTTP(r, r.RemoteAddr, h.audit, h.logger,
+				"/v1/payments/callbacks/"+provider, "signature_invalid")
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}

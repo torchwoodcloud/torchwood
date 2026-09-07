@@ -5,8 +5,10 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 
 	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	"github.com/torchwooddev/torchwood/internal/domain/audit"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
 	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc"
@@ -27,10 +29,18 @@ type Validator interface {
 // （authz 注解），经 runtime.BuildMethodPolicies 收集为 domainauth.PolicySet
 // 注入本拦截器；admin 角色/API key scope/permissions 全部从 PolicySet 读取，
 // 本包不再持有任何手写策略表。
+// DenyAuditor 是认证拒绝审计的最小写入口（audit.Repository 的窄投影，
+// 复用 Entry.Metadata 承载 denied/reason，M5 C6）。
+type DenyAuditor interface {
+	Insert(ctx context.Context, entry *audit.Entry) error
+}
+
 type AuthInterceptor struct {
 	validator Validator
 	policies  *domainauth.PolicySet
 	logger    *slog.Logger
+	// denyAudit 是可选的拒绝审计 sink（WithDenyAuditSink 注入，nil 不写）。
+	denyAudit DenyAuditor
 }
 
 // NewAuthInterceptor 构造拦截器；policies 为策略注册表（nil 拒绝构造）。
@@ -48,6 +58,15 @@ func NewAuthInterceptor(validator Validator, policies *domainauth.PolicySet) (*A
 	}, nil
 }
 
+// WithDenyAuditSink 注入认证拒绝审计 sink（M5 C6）：best-effort，写失败仅
+// 告警不影响拒绝响应；nil（未装配）时保持纯日志行为，既有测试不受影响。
+func (i *AuthInterceptor) WithDenyAuditSink(repo DenyAuditor) *AuthInterceptor {
+	if repo != nil {
+		i.denyAudit = repo
+	}
+	return i
+}
+
 // WithLogger 替换认证失败留痕所用的 logger（默认 slog.Default()），返回自身便于链式。
 func (i *AuthInterceptor) WithLogger(l *slog.Logger) *AuthInterceptor {
 	if l != nil {
@@ -57,8 +76,12 @@ func (i *AuthInterceptor) WithLogger(l *slog.Logger) *AuthInterceptor {
 }
 
 // logAuthFailure 在认证/鉴权拒绝路径输出结构化告警日志，只记录方法名、
-// 拒绝原因类别与凭证类型，绝不记录 token 本体。
-func (i *AuthInterceptor) logAuthFailure(ctx context.Context, method, reason string, credentialType shared.CredentialType) {
+// 拒绝原因类别与凭证类型，绝不记录 token 本体。M5 C6：并联 best-effort
+// 写一条拒绝审计行（Entry.Status="denied"，Metadata["denied"]=true、
+// Metadata["reason"]=拒绝原因），Actor/Project 从已解析 principal 取
+//（认证前拒绝为空）；复用 auditFromHTTP 的 3s + WithoutCancel 模式，
+// 拒绝响应不被审计写阻塞或连带失败。
+func (i *AuthInterceptor) logAuthFailure(ctx context.Context, method, reason string, credentialType shared.CredentialType, principal *shared.Principal) {
 	ci := contexts.ClientInfoFrom(ctx)
 	i.logger.WarnContext(ctx, "grpc auth rejected",
 		slog.String("method", method),
@@ -67,6 +90,37 @@ func (i *AuthInterceptor) logAuthFailure(ctx context.Context, method, reason str
 		slog.String("ip", ci.IP),
 		slog.String("user_agent", ci.UserAgent),
 	)
+	i.writeDenyAudit(ctx, method, reason, credentialType, principal, ci)
+}
+
+// writeDenyAudit best-effort 落拒绝审计行；sink 未装配时不做任何事。
+func (i *AuthInterceptor) writeDenyAudit(ctx context.Context, method, reason string, credentialType shared.CredentialType, principal *shared.Principal, ci contexts.ClientInfo) {
+	if i.denyAudit == nil {
+		return
+	}
+	entry := &audit.Entry{
+		Action:    method,
+		Status:    "denied",
+		IP:        ci.IP,
+		UserAgent: ci.UserAgent,
+		CreatedAt: time.Now().UTC(),
+		Metadata: map[string]any{
+			"denied":          true,
+			"reason":          reason,
+			"credential_type": string(credentialType),
+		},
+	}
+	if principal != nil {
+		entry.ActorID = string(principal.ActorID)
+		entry.ActorKind = string(principal.ActorKind)
+		entry.ProjectID = principal.ProjectID
+	}
+	insertCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+	defer cancel()
+	if err := i.denyAudit.Insert(insertCtx, entry); err != nil {
+		i.logger.Warn("auth deny audit insert failed",
+			slog.String("method", method), slog.String("error", err.Error()))
+	}
 }
 
 func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
@@ -74,7 +128,7 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 	if !ok {
 		// fail-closed：未登记策略的方法一律拒绝（启动期另有
 		// assertRegisteredMethodsHaveAuthz 兜底，此处防御直接调用）。
-		i.logAuthFailure(ctx, info.FullMethod, "policy_missing", "")
+		i.logAuthFailure(ctx, info.FullMethod, "policy_missing", "", nil)
 		return nil, status.Error(codes.PermissionDenied, "no auth policy for method")
 	}
 
@@ -89,7 +143,7 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		i.logAuthFailure(ctx, info.FullMethod, "metadata_missing", "")
+		i.logAuthFailure(ctx, info.FullMethod, "metadata_missing", "", nil)
 		return nil, status.Error(codes.Unauthenticated, "metadata is not provided")
 	}
 
@@ -98,14 +152,14 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 	if err != nil {
 		ct, _, parseErr := shared.ParseAuthnRequest(authn)
 		if parseErr != nil {
-			i.logAuthFailure(ctx, info.FullMethod, parseFailureReason(parseErr), "")
+			i.logAuthFailure(ctx, info.FullMethod, parseFailureReason(parseErr), "", nil)
 			return nil, status.Error(codes.Unauthenticated, parseErr.Error())
 		}
-		i.logAuthFailure(ctx, info.FullMethod, "credential_invalid", ct)
+		i.logAuthFailure(ctx, info.FullMethod, "credential_invalid", ct, nil)
 		return nil, err
 	}
 	if principal == nil {
-		i.logAuthFailure(ctx, info.FullMethod, "credential_invalid", "")
+		i.logAuthFailure(ctx, info.FullMethod, "credential_invalid", "", nil)
 		return nil, status.Error(codes.Unauthenticated, "invalid or expired credential")
 	}
 	credentialType := principal.CredentialType
@@ -113,14 +167,14 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 	if policy.Access == domainauth.AccessServer {
 		// SERVER 面（原 ACCESS_API_KEY）：凭证族 = API key 或 admin 会话。
 		if principal.CredentialType != shared.CredentialTypeAPIKey && principal.ActorKind != shared.ActorKindAdmin {
-			i.logAuthFailure(ctx, info.FullMethod, "credential_type_not_allowed", credentialType)
+			i.logAuthFailure(ctx, info.FullMethod, "credential_type_not_allowed", credentialType, principal)
 			return nil, status.Error(codes.Unauthenticated, "developer API requires x-api-key header or admin session")
 		}
 		if principal.CredentialType == shared.CredentialTypeAPIKey {
 			// 平台专属面不声明 api_key_scope（AssertSemantic 保证），scope
 			// 匹配 fail-closed：未声明即拒绝（通配符不豁免）。
 			if !i.policies.AllowsAPIKey(info.FullMethod, principal.Permissions) {
-				i.logAuthFailure(ctx, info.FullMethod, "apikey_scope_missing", credentialType)
+				i.logAuthFailure(ctx, info.FullMethod, "apikey_scope_missing", credentialType, principal)
 				return nil, status.Error(codes.PermissionDenied, "api key missing required scope")
 			}
 		}
@@ -130,12 +184,12 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 	if principal.ActorKind == shared.ActorKindAdmin {
 		// 角色门（SERVER 面的 admin_roles；nil = 不限角色）。
 		if roles := policy.AdminRoles; len(roles) > 0 && !principal.HasAnyRole(adminRoleStrings(roles)) {
-			i.logAuthFailure(ctx, info.FullMethod, "admin_role_denied", credentialType)
+			i.logAuthFailure(ctx, info.FullMethod, "admin_role_denied", credentialType, principal)
 			return nil, status.Error(codes.PermissionDenied, "missing required admin role")
 		}
 		// P3-4：X-Torchwood-Project 多值拒绝（fail-closed，一致性缺口修复）。
 		if values := md.Get("x-torchwood-project"); len(values) > 1 {
-			i.logAuthFailure(ctx, info.FullMethod, "multi_project_header", credentialType)
+			i.logAuthFailure(ctx, info.FullMethod, "multi_project_header", credentialType, principal)
 			return nil, status.Error(codes.InvalidArgument, "multiple X-Torchwood-Project headers not allowed")
 		} else if len(values) == 1 {
 			if projectID := strings.TrimSpace(values[0]); projectID != "" {
@@ -143,7 +197,7 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 			}
 		}
 		if err := i.validator.ValidateAdminProjectAccess(ctx, principal); err != nil {
-			i.logAuthFailure(ctx, info.FullMethod, "admin_project_access_denied", credentialType)
+			i.logAuthFailure(ctx, info.FullMethod, "admin_project_access_denied", credentialType, principal)
 			return nil, err
 		}
 	}
@@ -153,11 +207,11 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 		// 门禁调用；console/owner 类权限是 admin 会话专属，scope * / all
 		// 也不得放行（安全评审 M7）。
 		if principal.CredentialType == shared.CredentialTypeAPIKey {
-			i.logAuthFailure(ctx, info.FullMethod, "apikey_permission_method_denied", credentialType)
+			i.logAuthFailure(ctx, info.FullMethod, "apikey_permission_method_denied", credentialType, principal)
 			return nil, status.Error(codes.PermissionDenied, "api key credentials not allowed on permission-gated methods")
 		}
 		if !principal.HasAnyRole(perms) {
-			i.logAuthFailure(ctx, info.FullMethod, "permission_denied", credentialType)
+			i.logAuthFailure(ctx, info.FullMethod, "permission_denied", credentialType, principal)
 			return nil, status.Error(codes.PermissionDenied, "missing required permission")
 		}
 	}

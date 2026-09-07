@@ -6,11 +6,14 @@ import (
 	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"google.golang.org/grpc/status"
+
 	"github.com/torchwooddev/torchwood/internal/api/interceptor"
 	"github.com/torchwooddev/torchwood/internal/app/client"
+	"github.com/torchwooddev/torchwood/internal/domain/audit"
+	"github.com/torchwooddev/torchwood/internal/domain/shared"
 	"github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
 )
 
 // OAuthHandler handles browser OAuth2 callback redirects.
@@ -18,9 +21,11 @@ type OAuthHandler struct {
 	account       *client.Account
 	trusted       *interceptor.TrustedProxies
 	secureCookies bool
+	// audit 是可选的拒绝审计 sink（M5 C6：回调校验失败落 denied 审计行）。
+	audit audit.Repository
 }
 
-func NewOAuthHandler(account *client.Account, cfg *config.AppConfig) (*OAuthHandler, error) {
+func NewOAuthHandler(account *client.Account, cfg *config.AppConfig, auditRepo audit.Repository) (*OAuthHandler, error) {
 	trusted, err := interceptor.ParseTrustedProxies(cfg.GetSecurity().GetTrustedProxies())
 	if err != nil {
 		return nil, fmt.Errorf("parse security.trusted_proxies: %w", err)
@@ -31,6 +36,7 @@ func NewOAuthHandler(account *client.Account, cfg *config.AppConfig) (*OAuthHand
 		account:       account,
 		trusted:       trusted,
 		secureCookies: strings.HasPrefix(cfg.GetServer().GetHttp().GetPublicUrl(), "https://"),
+		audit:         auditRepo,
 	}, nil
 }
 
@@ -60,6 +66,11 @@ func (h *OAuthHandler) callback(w http.ResponseWriter, r *http.Request, pathPara
 		oauthCookiesOf(r, shared.SessionCookiePrefix, shared.ConsoleSessionCookieName),
 		oauthCookiesOf(r, oauthNonceCookiePrefix, ""))
 	if err != nil {
+		// M5 C6：回调校验拒绝（state/nonce/link 归属等）补一条 deny 审计。
+		if st, ok := status.FromError(err); ok {
+			auditDenyFromHTTP(r, h.clientIP(r), h.audit, nil,
+				"/v1/account/oauth2/"+provider+"/callback", st.Code().String())
+		}
 		target := "/?error=oauth_failed"
 		if result != nil && result.RedirectURL != "" {
 			target = result.RedirectURL

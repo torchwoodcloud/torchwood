@@ -67,7 +67,7 @@ func postCallback(h *PaymentsHandler, provider, body string, hdr http.Header) *h
 
 func TestPaymentsHandler_ForgedSignatureReturns401(t *testing.T) {
 	uc, spy := newCallbackOnlyPayments(t)
-	h, err := NewPaymentsHandler(uc, nil)
+	h, err := NewPaymentsHandler(uc, nil, nil)
 	require.NoError(t, err)
 
 	body := `{"id":"evt_1","type":"checkout.session.completed","data":{"object":{"id":"cs_1"}}}`
@@ -81,7 +81,7 @@ func TestPaymentsHandler_ForgedSignatureReturns401(t *testing.T) {
 
 func TestPaymentsHandler_MissingSignatureHeaderReturns401(t *testing.T) {
 	uc, spy := newCallbackOnlyPayments(t)
-	h, err := NewPaymentsHandler(uc, nil)
+	h, err := NewPaymentsHandler(uc, nil, nil)
 	require.NoError(t, err)
 
 	rec := postCallback(h, "stripe", `{}`, nil)
@@ -93,7 +93,7 @@ func TestPaymentsHandler_UnconfiguredProviderReturns401(t *testing.T) {
 	adapter := stripe.New(stripe.Config{})
 	uc := apppayments.NewPayments(nil, nil, nil, nil, nil,
 		apppayments.NewRecordOnlyFulfiller(), infrapayments.NewRegistry(adapter), nil, nil, nil, nil, nil)
-	h, err := NewPaymentsHandler(uc, nil)
+	h, err := NewPaymentsHandler(uc, nil, nil)
 	require.NoError(t, err)
 
 	hdr := http.Header{}
@@ -104,7 +104,7 @@ func TestPaymentsHandler_UnconfiguredProviderReturns401(t *testing.T) {
 
 func TestPaymentsHandler_BodyTooLargeReturns401(t *testing.T) {
 	uc, spy := newCallbackOnlyPayments(t)
-	h, err := NewPaymentsHandler(uc, nil)
+	h, err := NewPaymentsHandler(uc, nil, nil)
 	require.NoError(t, err)
 
 	big := strings.Repeat("a", maxCallbackBody+2)
@@ -115,7 +115,7 @@ func TestPaymentsHandler_BodyTooLargeReturns401(t *testing.T) {
 
 func TestPaymentsHandler_RegisterRoute(t *testing.T) {
 	uc, _ := newCallbackOnlyPayments(t)
-	h, err := NewPaymentsHandler(uc, nil)
+	h, err := NewPaymentsHandler(uc, nil, nil)
 	require.NoError(t, err)
 	mux := runtime.NewServeMux()
 	h.Register(mux)
@@ -137,7 +137,7 @@ func TestPaymentsHandler_UnknownProvider(t *testing.T) {
 
 func TestPaymentsHandler_AckFormats(t *testing.T) {
 	uc, _ := newCallbackOnlyPayments(t)
-	h, err := NewPaymentsHandler(uc, nil)
+	h, err := NewPaymentsHandler(uc, nil, nil)
 	require.NoError(t, err)
 
 	// 处理失败（验签已过但内部错误）才走渠道回执；这里直接测 CallbackAck。
@@ -164,7 +164,7 @@ func TestPaymentsHandler_AckFormats(t *testing.T) {
 
 func TestPaymentsHandler_IndexMissReturns503FailBody(t *testing.T) {
 	uc, spy := newCallbackOnlyPayments(t)
-	h, err := NewPaymentsHandler(uc, nil)
+	h, err := NewPaymentsHandler(uc, nil, nil)
 	require.NoError(t, err)
 
 	body := `{"id":"evt_early","type":"checkout.session.completed","data":{"object":{"id":"cs_1","client_reference_id":"ord_1","payment_status":"paid","amount_total":100,"currency":"usd","metadata":{"order_id":"ord_1","project_id":"shop"}}}}`
@@ -185,7 +185,7 @@ func TestPaymentsHandler_IndexMissReturns503FailBody(t *testing.T) {
 // 不 503（重试三天）、不落库。
 func TestPaymentsHandler_NoPlatformRefReturns200(t *testing.T) {
 	uc, spy := newCallbackOnlyPayments(t)
-	h, err := NewPaymentsHandler(uc, nil)
+	h, err := NewPaymentsHandler(uc, nil, nil)
 	require.NoError(t, err)
 
 	body := `{"id":"evt_noise","type":"checkout.session.completed","data":{"object":{"id":"cs_other","payment_intent":"pi_other","payment_status":"paid","amount_total":100,"currency":"usd"}}}`
@@ -205,7 +205,7 @@ func TestPaymentsHandler_NoPlatformRefReturns200(t *testing.T) {
 // 微信 {"code":"FAIL"}、支付宝 fail、Stripe 空体——而不是 200 SUCCESS / 500。
 func TestPaymentsHandler_RetryFailBodyPerProvider(t *testing.T) {
 	uc, _ := newCallbackOnlyPayments(t)
-	h, err := NewPaymentsHandler(uc, nil)
+	h, err := NewPaymentsHandler(uc, nil, nil)
 	require.NoError(t, err)
 
 	cases := []struct {
