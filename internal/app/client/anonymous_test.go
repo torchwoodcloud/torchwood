@@ -34,13 +34,21 @@ func TestCheckAnonymousSessionRateLimit(t *testing.T) {
 	// 其他 IP 不受影响。
 	require.NoError(t, a.checkAnonymousSessionRateLimit(ctx, "203.0.113.2"))
 
-	// 空 IP 不做限制。
-	require.NoError(t, a.checkAnonymousSessionRateLimit(ctx, ""))
+	// 空 IP fail-closed（M5 C8）：无客户端 IP 无法记账，不再静默放行。
+	err = a.checkAnonymousSessionRateLimit(ctx, "")
+	require.Error(t, err)
+	st, _ = status.FromError(err)
+	require.Equal(t, codes.FailedPrecondition, st.Code())
 }
 
-func TestCheckAnonymousSessionRateLimit_NilTolerated(t *testing.T) {
+// M5 C8：限流器未装配时 fail-closed（匿名注册无频控即不应开放），
+// 不再 nil 容忍静默放行。
+func TestCheckAnonymousSessionRateLimit_NilLimiterFailsClosed(t *testing.T) {
 	t.Parallel()
 
 	a := &Account{}
-	require.NoError(t, a.checkAnonymousSessionRateLimit(context.Background(), "203.0.113.1"))
+	err := a.checkAnonymousSessionRateLimit(context.Background(), "203.0.113.1")
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	require.Equal(t, codes.FailedPrecondition, st.Code())
 }

@@ -11,7 +11,9 @@ import (
 	"github.com/torchwooddev/torchwood/internal/domain/projects"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
 	domainusers "github.com/torchwooddev/torchwood/internal/domain/users"
+	"github.com/torchwooddev/torchwood/internal/infra/auth"
 	"github.com/torchwooddev/torchwood/internal/infra/clients"
+	"github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
 	"github.com/torchwooddev/torchwood/pkg/crud"
 	"github.com/torchwooddev/torchwood/pkg/query"
@@ -329,7 +331,10 @@ func TestUsers_UpdateUserEmailUniqueness(t *testing.T) {
 	usersMem := newMemUserRepo()
 	usersMem.seed(&domainusers.User{ID: "user-a", Email: "a@torchwood.local"})
 	usersMem.seed(&domainusers.User{ID: "user-b", Email: "b@torchwood.local"})
-	uc := NewUsers(fakeProjectRepo{}, nil, &clients.Database{}, usersMem, newMemSessionRepo(), newMemGroupRepo(), newMemMembershipRepo())
+	// M5 C3：email/status 变更即撤会话，测试注入内存 session service
+	//（sessionRepo 桩同用一实例，DeleteByUser 幂等无副作用）。
+	sessions := auth.NewSessionService(&config.AppConfig{}, newMemSessionRepo(), nil, nil)
+	uc := NewUsers(fakeProjectRepo{}, sessions, &clients.Database{}, usersMem, newMemSessionRepo(), newMemGroupRepo(), newMemMembershipRepo())
 	// Round3 H1-3：UpdateUser 现在要求 Server 写主体（admin 会话 / API key）。
 	actorCtx := contexts.WithPrincipal(context.Background(), &shared.Principal{
 		ActorID: "key-1", ActorKind: shared.ActorKindService, Roles: []string{"keys"},

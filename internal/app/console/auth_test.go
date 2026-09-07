@@ -153,11 +153,13 @@ func TestAuth_ValidateCredential_ChecksRevokeStore(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// M5 C1 后撤销判定随 admins 行读出（GetAdmin 先行），测试注入含目标行
+	// 的桩仓库，revoked_at 零值时仅 Redis 快路径生效。
 	v := auth.NewValidator(
 		testConfig(),
 		nil,
 		nil,
-		nil,
+		newAdminRepo(mkAdmin("admin-1", "revoke@x.com", "owner")),
 		nil,
 		store,
 		nil,
@@ -166,6 +168,7 @@ func TestAuth_ValidateCredential_ChecksRevokeStore(t *testing.T) {
 	)
 	_, err = v.ValidateToken(ctx, token)
 	require.Error(t, err)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
 }
 
 // memRotationStore is an in-memory domainauth.RefreshRotationStore for tests.

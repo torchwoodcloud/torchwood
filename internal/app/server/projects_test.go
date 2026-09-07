@@ -527,8 +527,10 @@ func TestProjects_DeleteProject_RequiresPlatformAdmin(t *testing.T) {
 }
 
 // TestProjects_DeleteProject_CleansPublicRows 锁死设计 §4.3 第 3 步：
-// 级联删除必须清理 public 控制面里该项目的全部行（outbox / outbox_dead /
-// api_keys / audit_logs / admin_projects / provider_resource_index）。
+// 级联删除必须清理 public 控制面里该项目的全部派生行（outbox / outbox_dead /
+// api_keys / admin_projects / provider_resource_index）。
+// M5 C7（审计留存不变量）：audit_logs 不在清理面——项目删除不得追溯抹除
+// 历史审计轨迹，测试反向断言审计行保留。
 func TestProjects_DeleteProject_CleansPublicRows(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -578,7 +580,6 @@ func TestProjects_DeleteProject_CleansPublicRows(t *testing.T) {
 		"document_events_outbox",
 		"document_events_outbox_dead",
 		"api_keys",
-		"audit_logs",
 		"admin_projects",
 		"provider_resource_index",
 	} {
@@ -587,6 +588,12 @@ func TestProjects_DeleteProject_CleansPublicRows(t *testing.T) {
 			`SELECT COUNT(*) FROM `+table+` WHERE project_id = 'delrows'`).Scan(&n), table)
 		require.Zero(t, n, "%s rows must be cleaned by DeleteProjectInternal", table)
 	}
+
+	// M5 C7：审计行必须保留（留存不变量）。
+	var auditRows int
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM audit_logs WHERE project_id = 'delrows'`).Scan(&auditRows))
+	require.Equal(t, 1, auditRows, "audit_logs 必须随项目删除保留（审计留存不变量）")
 }
 
 // TestProjects_ListProjects_MemberGrantedProjects（B1）：member 在 admin_projects

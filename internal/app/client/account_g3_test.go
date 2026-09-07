@@ -65,7 +65,8 @@ func setupG3Account(t *testing.T) (context.Context, *Account, string, *failableS
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
-	ctx := context.Background()
+	// M5 C8：匿名会话限流 fail-closed，测试上下文统一注入 ClientInfo。
+	ctx := contexts.WithClientInfo(context.Background(), contexts.ClientInfo{IP: "203.0.113.10"})
 	db := testutil.SetupTestDB(t)
 	t.Cleanup(func() { _ = db.Close() })
 
