@@ -18,8 +18,9 @@ server:
       allow_credentials: true
       max_age: 3600
   grpc:
-    # 仅同进程 gateway 转发，不对外
-    addr: "127.0.0.1:9060"
+    # 监听全部网卡供 SDK/CLI 外部直连（compose env 覆盖同值）；gateway 同进程
+    # 转发目标自动回落 127.0.0.1:9060。明文 h2c，外部访问须配防火墙来源限制
+    addr: ":9060"
     timeout: "30s"
   metrics:
     # 无鉴权，仅回环；如需采集请走只读边车/VPN

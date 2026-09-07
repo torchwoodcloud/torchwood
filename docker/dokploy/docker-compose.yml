@@ -21,7 +21,9 @@ name: torchwood
 x-app-env: &app-env
   TORCHWOOD_ENV: production
   TORCHWOOD_SERVER_HTTP_ADDR: ":9080"
-  TORCHWOOD_SERVER_GRPC_ADDR: "127.0.0.1:9060"
+  # gRPC 对外可访问（SDK/CLI 直连，见 README「gRPC 对外暴露」）：监听全部网卡；
+  # 同进程 gateway 转发目标经 grpcEndpointFromAddr 回落 127.0.0.1:9060，不受影响
+  TORCHWOOD_SERVER_GRPC_ADDR: ":9060"
   TORCHWOOD_SERVER_METRICS_ADDR: "127.0.0.1:9040"
   # ≥32 字符强随机（openssl rand -hex 32）；弱子串（change-me/secret/…）拒绝启动
   TORCHWOOD_SECURITY_JWT_SECRET: ${TORCHWOOD_SECURITY_JWT_SECRET:?请在 Dokploy Environment 设置 openssl rand -hex 32}
@@ -157,8 +159,13 @@ services:
 
   server:
     <<: *app-build
-    # gRPC(127.0.0.1:9060) + grpc-gateway HTTP + Console SPA + Storage serverhttp + healthz
-    # 对外只需 9080（Dokploy「Domains」绑定 server 服务 / 9080，由 Traefik 终止 TLS）
+    # gRPC(:9060，明文 h2c，SDK/CLI 直连) + grpc-gateway HTTP + Console SPA + Storage
+    # serverhttp + healthz。HTTP 9080 走 Dokploy「Domains」（Traefik 终止 TLS）；
+    # gRPC 9060 无法过 Traefik HTTP 路由（SDK 默认明文拨号），直接发布宿主端口。
+    # 当前仅明文：config 无 gRPC TLS 字段，CLI --tls 为占位——务必用防火墙/安全组
+    # 限制 9060 的来源 IP（x-api-key 在明文链路上可被嗅探）。
+    ports:
+      - "${TORCHWOOD_GRPC_PORT:-9060}:9060"
     environment: *app-env
     volumes:
       - ./config.yaml:/app/configs/config.yaml:ro

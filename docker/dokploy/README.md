@@ -34,6 +34,7 @@
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | ✅ | 栈内 MinIO 凭据（同时作为应用 S3 凭据注入） |
 | `POSTGRES_USER` / `POSTGRES_DB` | | 默认 `torchwood` / `torchwood` |
 | `TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS` | | 外部浏览器端 SDK 来源（逗号分隔）；Console 与网关同源，无需配置 |
+| `TORCHWOOD_GRPC_PORT` | | 宿主侧 gRPC 端口，默认 `9060`（见 §4） |
 
 > **注意 1（密码字符集）**：口令会被拼进 `postgres://` DSN 与 psql 脚本，含 `@ : / # ? ' "` 等字符会直接破坏连接串。
 > 一律使用 hex/base62 长随机。
@@ -47,10 +48,40 @@ Compose 服务页 → **Domains** → Add Domain：
 
 - **Service**: `server`，**Port**: `9080`，填你的域名并启用 HTTPS（Let's Encrypt）。
 
-应用对 9080 端口暴露 gRPC-gateway HTTP + `/console/` + Storage 上传下载 + 健康端点；
-gRPC（回环 9060）与 metrics（回环 9040）不对外。
+应用对 9080 端口暴露 gRPC-gateway HTTP + `/console/` + Storage 上传下载 + 健康端点。
+gRPC（9060）走宿主端口发布而非域名（见 §4）；metrics（回环 9040）不对外。
 
-## 4. 首次引导（bootstrap）
+## 4. gRPC 对外暴露（SDK / CLI 直连）
+
+server 的 gRPC 监听 `:9060` 并由 compose 发布为宿主端口（`TORCHWOOD_GRPC_PORT`，默认 9060），
+供 `sdk/go/server` 与 CLI 直接拨号（HTTP/2 明文 h2c）。在宿主防火墙/云安全组放行该端口，
+**并只放行 SDK 部署来源的 IP**（见下方安全提示）。
+
+SDK（Go）用法——默认明文拨号，无需额外选项：
+
+```go
+client, err := sdkserver.New("tw.example.com:9060",
+    sdkserver.WithAPIKey("sk-..."),
+    sdkserver.WithDatabaseID("main"))
+```
+
+CLI 用法（全局旗标在子命令路径之后、位置参数之前）：
+
+```bash
+torchwood --endpoint tw.example.com:9060 --api-key sk-... health
+# 环境变量等价：TORCHWOOD_CLI_ENDPOINT / TORCHWOOD_CLI_API_KEY
+```
+
+**安全提示（明文）**：当前 gRPC 仅明文——config schema 无 gRPC TLS 字段，CLI `--tls` 为占位未支持，
+`x-api-key` 在明文链路上可被嗅探。因此：
+
+- 用防火墙/安全组把 9060 的来源限制为 SDK/Agent 的出口 IP；不要对公网裸开；
+- 如需 TLS：可手工在 Traefik 配 TCP+TLS 路由（经 `WithDialOptions(grpc.WithTransportCredentials(credentials.NewTLS(...)))` 拨号），或等待服务端 gRPC TLS 支持落地。
+
+gRPC 直连不受 `server.http.public_url` 与 CORS 影响（那是 HTTP/浏览器侧概念）；
+gRPC 侧认证即 API Key（`x-api-key` metadata），限流维度同理。
+
+## 5. 首次引导（bootstrap）
 
 部署完成后：
 
@@ -59,15 +90,16 @@ gRPC（回环 9060）与 metrics（回环 9040）不对外。
    `project_id` 与 `database_id`（将创建项目 + 系统 `default` 库 + 业务库）；
 3. 登录后在 Console 创建 API Key（secret 仅展示一次），供 CLI/Agent 调用 Server API。
 
-## 5. 验证
+## 6. 验证
 
 ```bash
 curl https://<域名>/healthz/readiness      # 200（依赖 PG/Redis/MinIO 全绿）
 curl https://<域名>/v1/server/health/version
 curl https://<域名>/v1/health              # 依赖明细
+torchwood --endpoint <服务器IP>:9060 --api-key sk-... health   # gRPC 直连冒烟
 ```
 
-## 6. 栈内行为说明
+## 7. 栈内行为说明
 
 - **一次性作业链**：`migrate → db-grants → roles-sig → server/worker`（`depends_on: service_completed_successfully`）。
   作业全部幂等：重部署（镜像变更触发重建）时自动重跑，同钥 `sync-roles-sig` 整体 no-op。
@@ -79,7 +111,7 @@ curl https://<域名>/v1/health              # 依赖明细
 - **Functions（可选）**：worker 常驻消费函数执行队列；启用 docker executor 需放开 compose 中
   `docker.sock` 挂载（⚠ 等同宿主 root 权限）。不用 Functions 可删除 worker 服务。
 
-## 7. 日常运维
+## 8. 日常运维
 
 | 操作 | 做法 |
 |------|------|
@@ -89,11 +121,12 @@ curl https://<域名>/v1/health              # 依赖明细
 | 看 pgvector | `SELECT extname, extversion FROM pg_extension WHERE extname='vector';`（Percona PG18 镜像自带 0.8.3，迁移 000005 自动启用） |
 | psql 终端 | Dokploy → postgres 服务 → Execute Shell：`psql -U torchwood -d torchwood` |
 
-## 8. 方案 B：复用外部依赖（不用栈内 PG/Redis/MinIO）
+## 9. 方案 B：复用外部依赖（不用栈内 PG/Redis/MinIO）
 
 若已有 Dokploy 模板部署的 Postgres/Redis/MinIO 或外部 S3，可将本栈拆为 **Application** 类型部署
 （build 方式选 Dockerfile，监听端口 9080），环境变量同 §2，另外：
 
+- gRPC 对外：`TORCHWOOD_SERVER_GRPC_ADDR=:9060`，并在 Application 的「Ports」里追加 `9060`（宿主:容器）；
 - `TORCHWOOD_DATA_DATABASE_SOURCE` 指向外部 PG 的 `tw_authenticator` DSN；
 - `TORCHWOOD_STORAGE_S3_ENDPOINT`/凭据指向外部 S3/MinIO；
 - 迁移与引导作业需手工执行一次（保持 owner/authenticator 双账号契约）：
@@ -110,7 +143,7 @@ docker run --rm torchwood-app:local torchwood admin sync-roles-sig --dsn "<owner
 
 首次 initdb 引导（创建 `tw_authenticator`）对应 `docker/dokploy/initdb/01-authenticator.sh` 中的 SQL，需以 superuser 手工执行一次。
 
-## 9. 文件清单
+## 10. 文件清单
 
 | 文件 | 用途 |
 |------|------|
