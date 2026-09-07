@@ -79,6 +79,12 @@ tasks:
       - task: generate:config
       - task: wire:all
 
+  gen:authz-matrix:
+    desc: 生成 docs/developer/authz-matrix.md（策略注册表派生，CI 字节级锁定）
+    dir: '{{.USER_WORKING_DIR}}'
+    cmds:
+      - go run ./internal/runtime/cmd/genauthzmatrix
+
   console:install:
     dir: '{{.USER_WORKING_DIR}}/console'
     cmds:
