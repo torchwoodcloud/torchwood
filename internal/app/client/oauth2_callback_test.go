@@ -15,7 +15,7 @@ func TestHandleOAuth2Callback_NilResultOnError(t *testing.T) {
 
 	// oauthState 为 nil 时 completeOAuth2Code 直接返回 nil result + error。
 	a := &Account{}
-	result, err := a.HandleOAuth2Callback(context.Background(), "wechat", "code", "state")
+	result, err := a.HandleOAuth2Callback(context.Background(), "wechat", "code", "state", nil, nil)
 	if err == nil {
 		t.Fatal("expected error when oauth2 is not configured")
 	}

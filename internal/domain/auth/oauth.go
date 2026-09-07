@@ -15,6 +15,16 @@ type OAuthState struct {
 	PKCEVerifier string
 	// LinkUserID, when set, binds the OAuth identity to an existing authenticated user.
 	LinkUserID string
+	// Nonce 是发起端点生成的一次性随机值（仅存服务端 state 记录，M5 C5）：
+	// HTTP 回调必须回带 TORCHWOOD_oauth_nonce_<project> cookie 且与本值一致
+	//（login CSRF 绑定浏览器，state 注入失效）。
+	Nonce string
+}
+
+// SessionCookieVerifier 校验端用户会话 cookie（HMAC）并解出其归属（M5 C5：
+// OAuth link 流回调面校验请求者身份）。实现位于 infra/auth.SessionCookieCodec。
+type SessionCookieVerifier interface {
+	Verify(value string) (projectID, sessionID string, err error)
 }
 
 // OAuthStateStore persists OAuth2 state and PKCE verifiers until callback.

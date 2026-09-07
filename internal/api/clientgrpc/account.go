@@ -219,7 +219,7 @@ func (s *AccountService) CreateEmailOTPSession(ctx context.Context, req *clientv
 }
 
 func (s *AccountService) CreateOAuth2Session(ctx context.Context, req *clientv1.CreateOAuth2SessionRequest) (*clientv1.CreateOAuth2SessionResponse, error) {
-	redirectURL, err := s.account.CreateOAuth2Session(ctx, client.CreateOAuth2SessionCommand{
+	redirectURL, nonce, err := s.account.CreateOAuth2Session(ctx, client.CreateOAuth2SessionCommand{
 		ProjectID: req.GetProjectId(),
 		Provider:  req.GetProvider(),
 		Success:   req.GetSuccess(),
@@ -228,6 +228,9 @@ func (s *AccountService) CreateOAuth2Session(ctx context.Context, req *clientv1.
 	if err != nil {
 		return nil, err
 	}
+	// M5 C5：nonce 种入浏览器（Set-Cookie 经 gateway metadata 透传），
+	// 回调端点与 state 配对校验（login CSRF）。
+	setOAuth2NonceCookie(ctx, s.account, req.GetProjectId(), nonce)
 	return &clientv1.CreateOAuth2SessionResponse{RedirectUrl: redirectURL}, nil
 }
 
@@ -307,7 +310,7 @@ func (s *AccountService) CreateAnonymousSession(ctx context.Context, req *client
 }
 
 func (s *AccountService) CreateOAuth2LinkSession(ctx context.Context, req *clientv1.CreateOAuth2LinkSessionRequest) (*clientv1.CreateOAuth2SessionResponse, error) {
-	redirectURL, err := s.account.CreateOAuth2LinkSession(ctx, client.CreateOAuth2LinkSessionCommand{
+	redirectURL, nonce, err := s.account.CreateOAuth2LinkSession(ctx, client.CreateOAuth2LinkSessionCommand{
 		ProjectID: req.GetProjectId(),
 		Provider:  req.GetProvider(),
 		Success:   req.GetSuccess(),
@@ -316,6 +319,15 @@ func (s *AccountService) CreateOAuth2LinkSession(ctx context.Context, req *clien
 	if err != nil {
 		return nil, err
 	}
+	// link 发起同样绑定 nonce cookie（M5 C5）；project 回退到调用者本人的
+	// 项目（与 use-case 内 projectID 缺省逻辑一致）。
+	projectID := req.GetProjectId()
+	if projectID == "" {
+		if p, ok := contexts.Principal(ctx); ok {
+			projectID = p.ProjectID
+		}
+	}
+	setOAuth2NonceCookie(ctx, s.account, projectID, nonce)
 	return &clientv1.CreateOAuth2SessionResponse{RedirectUrl: redirectURL}, nil
 }
 
@@ -687,6 +699,24 @@ func setEndUserSessionCookie(ctx context.Context, account *client.Account, proje
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   7 * 24 * 3600,
+	}
+	_ = grpc.SetHeader(ctx, metadata.Pairs("set-cookie", c.String()))
+}
+
+// setOAuth2NonceCookie 种 OAuth 发起一次性 nonce cookie（M5 C5 login CSRF）：
+// 回调端点要求与 state 记录配对；TTL 与 oauth state 的 10min 对齐。
+func setOAuth2NonceCookie(ctx context.Context, account *client.Account, projectID, nonce string) {
+	if projectID == "" || nonce == "" || account == nil {
+		return
+	}
+	c := &http.Cookie{
+		Name:     fmt.Sprintf("TORCHWOOD_oauth_nonce_%s", projectID),
+		Value:    nonce,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   account.SecureCookies(),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   600,
 	}
 	_ = grpc.SetHeader(ctx, metadata.Pairs("set-cookie", c.String()))
 }

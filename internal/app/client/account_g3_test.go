@@ -35,6 +35,10 @@ func (f *failableSessionService) CreateSessionAndTokens(ctx context.Context, pro
 	return f.real.CreateSessionAndTokens(ctx, projectID, userID, email, provider)
 }
 
+func (f *failableSessionService) CreateShortLivedSessionAndTokens(ctx context.Context, projectID, userID, email, provider string) (*domainauth.TokenBundle, string, error) {
+	return f.real.CreateShortLivedSessionAndTokens(ctx, projectID, userID, email, provider)
+}
+
 func (f *failableSessionService) IssueTokens(ctx context.Context, projectID, userID, email, sessionID string) (*domainauth.TokenBundle, string, error) {
 	return f.real.IssueTokens(ctx, projectID, userID, email, sessionID)
 }
@@ -113,6 +117,7 @@ func setupG3Account(t *testing.T) (context.Context, *Account, string, *failableS
 		auth.NewOAuthAuthenticatorFactory(),
 		auth.NewWeChatMiniProgramExchanger(),
 		auth.NewOTPGenerator(),
+		nil,
 	)
 	return ctx, account, projectID, sessions, mr, mailer
 }

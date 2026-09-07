@@ -2,9 +2,11 @@ package client
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/domain/projects"
@@ -56,17 +58,17 @@ type OAuth2CallbackResult struct {
 	MFA           *MFASignInChallenge
 }
 
-func (a *Account) CreateOAuth2Session(ctx context.Context, cmd CreateOAuth2SessionCommand) (string, error) {
+func (a *Account) CreateOAuth2Session(ctx context.Context, cmd CreateOAuth2SessionCommand) (string, string, error) {
 	if a.oauthState == nil {
-		return "", status.Error(codes.Unimplemented, "oauth2 is not configured")
+		return "", "", status.Error(codes.Unimplemented, "oauth2 is not configured")
 	}
 	projectID := strings.TrimSpace(cmd.ProjectID)
 	provider := normalizeOAuthProvider(cmd.Provider)
 	if projectID == "" {
-		return "", status.Error(codes.InvalidArgument, "project_id is required")
+		return "", "", status.Error(codes.InvalidArgument, "project_id is required")
 	}
 	if provider == "" {
-		return "", status.Error(codes.InvalidArgument, "provider is required")
+		return "", "", status.Error(codes.InvalidArgument, "provider is required")
 	}
 	return a.createOAuth2Session(ctx, createOAuth2SessionParams{
 		projectID: projectID,
@@ -76,17 +78,17 @@ func (a *Account) CreateOAuth2Session(ctx context.Context, cmd CreateOAuth2Sessi
 	})
 }
 
-func (a *Account) CreateOAuth2LinkSession(ctx context.Context, cmd CreateOAuth2LinkSessionCommand) (string, error) {
+func (a *Account) CreateOAuth2LinkSession(ctx context.Context, cmd CreateOAuth2LinkSessionCommand) (string, string, error) {
 	p, err := a.requireUser(ctx)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	projectID := strings.TrimSpace(cmd.ProjectID)
 	if projectID == "" {
 		projectID = p.ProjectID
 	}
 	if projectID != p.ProjectID {
-		return "", status.Error(codes.PermissionDenied, "cannot link oauth provider for another project")
+		return "", "", status.Error(codes.PermissionDenied, "cannot link oauth provider for another project")
 	}
 	return a.createOAuth2Session(ctx, createOAuth2SessionParams{
 		projectID:  projectID,
@@ -97,11 +99,22 @@ func (a *Account) CreateOAuth2LinkSession(ctx context.Context, cmd CreateOAuth2L
 	})
 }
 
+// CreateOAuth2LinkTokenSession 以 code+state 完成 OAuth 身份 link（token 面）。
+// M5 C5（评审补偿控制）：state 归属必须与调用者一致——requireUser 之外，
+// 消费的 state.LinkUserID 必须等于 caller.UserID，否则 PermissionDenied
+//（堵"他人 state 冒名消费"与"login state 被当 link state 消费"）。
 func (a *Account) CreateOAuth2LinkTokenSession(ctx context.Context, cmd CreateOAuth2LinkTokenSessionCommand) (*User, error) {
-	if _, err := a.requireUser(ctx); err != nil {
+	p, err := a.requireUser(ctx)
+	if err != nil {
 		return nil, err
 	}
-	result, err := a.completeOAuth2Code(ctx, completeOAuth2CodeCommand(cmd))
+	result, err := a.completeOAuth2Code(ctx, completeOAuth2CodeCommand{
+		ProjectID:    cmd.ProjectID,
+		Provider:     cmd.Provider,
+		Code:         cmd.Code,
+		State:        cmd.State,
+		CallerUserID: p.UserID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -119,34 +132,38 @@ type createOAuth2SessionParams struct {
 	linkUserID string
 }
 
-func (a *Account) createOAuth2Session(ctx context.Context, params createOAuth2SessionParams) (string, error) {
+// createOAuth2Session 生成 state 并返回 (authorize URL, nonce, error)。
+// nonce 由传输面种入 TORCHWOOD_oauth_nonce_<project> cookie（M5 C5 login
+// CSRF 绑定）；state 记录同值落库供回调配对。
+func (a *Account) createOAuth2Session(ctx context.Context, params createOAuth2SessionParams) (string, string, error) {
 	if a.oauthState == nil {
-		return "", status.Error(codes.Unimplemented, "oauth2 is not configured")
+		return "", "", status.Error(codes.Unimplemented, "oauth2 is not configured")
 	}
 	provider := normalizeOAuthProvider(params.provider)
 	if provider == "" {
-		return "", status.Error(codes.InvalidArgument, "provider is required")
+		return "", "", status.Error(codes.InvalidArgument, "provider is required")
 	}
 	if provider == domainauth.ProviderWeChatMiniProgram {
-		return "", status.Error(codes.InvalidArgument, "use CreateWeChatMiniProgramSession for wechat_miniprogram")
+		return "", "", status.Error(codes.InvalidArgument, "use CreateWeChatMiniProgramSession for wechat_miniprogram")
 	}
 	if err := validateRedirectURL(params.success); err != nil {
-		return "", status.Errorf(codes.InvalidArgument, "invalid success url: %v", err)
+		return "", "", status.Errorf(codes.InvalidArgument, "invalid success url: %v", err)
 	}
 	if err := validateRedirectURL(params.failure); err != nil {
-		return "", status.Errorf(codes.InvalidArgument, "invalid failure url: %v", err)
+		return "", "", status.Errorf(codes.InvalidArgument, "invalid failure url: %v", err)
 	}
 	if err := a.validateProjectOAuthRedirectURLs(ctx, params.projectID, params.success, params.failure); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if err := a.requireProject(ctx, params.projectID); err != nil {
-		return "", err
+		return "", "", err
 	}
 	oauthCfg, err := a.loadOAuthProvider(ctx, params.projectID, provider)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	stateID := idgen.UUID().String()
+	nonce := idgen.UUID().String()
 	verifier := ""
 	challenge := ""
 	if usesWeChatPKCE(provider) {
@@ -161,17 +178,18 @@ func (a *Account) createOAuth2Session(ctx context.Context, params createOAuth2Se
 		FailureURL:   params.failure,
 		PKCEVerifier: verifier,
 		LinkUserID:   params.linkUserID,
+		Nonce:        nonce,
 	}, 0); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if a.oauthFactory == nil {
-		return "", status.Error(codes.Unimplemented, "oauth factory is not configured")
+		return "", "", status.Error(codes.Unimplemented, "oauth factory is not configured")
 	}
 	authClient, err := a.oauthFactory.NewAuthenticator(provider, oauthCfg.ClientID, oauthCfg.ClientSecret, a.oauthCallbackURL(provider), oauthCfg.Scopes)
 	if err != nil {
-		return "", status.Errorf(codes.InvalidArgument, "%v", err)
+		return "", "", status.Errorf(codes.InvalidArgument, "%v", err)
 	}
-	return authClient.AuthorizeURL(stateID, challenge), nil
+	return authClient.AuthorizeURL(stateID, challenge), nonce, nil
 }
 
 func (a *Account) CreateOAuth2TokenSession(ctx context.Context, cmd CreateOAuth2TokenSessionCommand) (*User, *TokenBundle, string, *MFASignInChallenge, error) {
@@ -187,11 +205,18 @@ func (a *Account) CreateOAuth2TokenSession(ctx context.Context, cmd CreateOAuth2
 	return result.User, result.Tokens, result.SessionCookie, result.MFA, nil
 }
 
-func (a *Account) HandleOAuth2Callback(ctx context.Context, provider, code, state string) (*OAuth2CallbackResult, error) {
+// HandleOAuth2Callback 处理浏览器 GET 回调（公开端点）。M5 C5：link 流要求
+// 携带 state 对应项目的端用户会话 cookie 且会话本人 == LinkUserID；login 流
+// 要求 TORCHWOOD_oauth_nonce_<project> cookie 与 state 配对（防 CSRF/注入）。
+// sessionCookies/oauthNonces 为 project → cookie value（transport 从请求
+// cookie 中按前缀抽取）；两者恒非 nil（空 map 也强制校验，fail-closed）。
+func (a *Account) HandleOAuth2Callback(ctx context.Context, provider, code, state string, sessionCookies, oauthNonces map[string]string) (*OAuth2CallbackResult, error) {
 	result, err := a.completeOAuth2Code(ctx, completeOAuth2CodeCommand{
-		Provider: provider,
-		Code:     code,
-		State:    state,
+		Provider:       provider,
+		Code:           code,
+		State:          state,
+		SessionCookies: sessionCookies,
+		OAuthNonces:    oauthNonces,
 	})
 	if err != nil {
 		// completeOAuth2Code 在多数失败分支返回 nil result，这里必须兜底。
@@ -230,6 +255,16 @@ type completeOAuth2CodeCommand struct {
 	Provider  string
 	Code      string
 	State     string
+	// CallerUserID 是 token 面 link 消费者的登录用户（M5 C5）：非空时要求
+	// state.LinkUserID 与之相等，否则 PermissionDenied。
+	CallerUserID string
+	// SessionCookies 是 HTTP 回调面携带的端用户会话 cookie（project → cookie
+	// value，M5 C5）：非 nil 时 link 流要求其中含 state 对应项目且会话本人
+	// == LinkUserID。token 面传 nil。
+	SessionCookies map[string]string
+	// OAuthNonces 是 HTTP 回调面携带的 OAuth nonce cookie（project → value，
+	// M5 C5 login CSRF）：非 nil 时强制与 state.Nonce 配对，不匹配即拒。
+	OAuthNonces map[string]string
 }
 
 type completeOAuth2CodeResult struct {
@@ -272,6 +307,16 @@ func (a *Account) completeOAuth2Code(ctx context.Context, cmd completeOAuth2Code
 		return nil, status.Error(codes.Unauthenticated, "oauth project mismatch")
 	}
 
+	// M5 C5：login CSRF——HTTP 回调面必须回带与 state 配对的 nonce cookie
+	//（发起时种入、state 记录同值）。缺失/不匹配一律拒绝（fail-closed）。
+	if cmd.OAuthNonces != nil {
+		nonce := cmd.OAuthNonces[projectID]
+		if oauthState.Nonce == "" || nonce == "" ||
+			subtle.ConstantTimeCompare([]byte(nonce), []byte(oauthState.Nonce)) != 1 {
+			return nil, status.Error(codes.Unauthenticated, "oauth state nonce mismatch")
+		}
+	}
+
 	project, err := a.projectRepo.GetProject(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -298,6 +343,26 @@ func (a *Account) completeOAuth2Code(ctx context.Context, cmd completeOAuth2Code
 	}
 
 	if oauthState.LinkUserID != "" {
+		// M5 C5：link 流消费归属校验（fail-closed）——
+		//   token 面：CallerUserID 必须等于 LinkUserID；
+		//   回调面：必须携带 state 对应项目的端用户会话 cookie 且会话本人
+		//   == LinkUserID（堵"攻击者 code 注入受害者回调完成冒名 link"）。
+		// 两条通道皆无（含 login-token 方法消费 link state）一律拒绝。
+		callerMatched := cmd.CallerUserID != "" &&
+			subtle.ConstantTimeCompare([]byte(cmd.CallerUserID), []byte(oauthState.LinkUserID)) == 1
+		if !callerMatched {
+			if cmd.CallerUserID != "" {
+				return &completeOAuth2CodeResult{SuccessURL: oauthState.SuccessURL, FailureURL: oauthState.FailureURL},
+					status.Error(codes.PermissionDenied, "oauth link caller mismatch")
+			}
+			if cmd.SessionCookies == nil {
+				return &completeOAuth2CodeResult{SuccessURL: oauthState.SuccessURL, FailureURL: oauthState.FailureURL},
+					status.Error(codes.PermissionDenied, "oauth link caller mismatch")
+			}
+			if err := a.verifyLinkSessionCookie(ctx, projectID, oauthState.LinkUserID, cmd.SessionCookies); err != nil {
+				return &completeOAuth2CodeResult{SuccessURL: oauthState.SuccessURL, FailureURL: oauthState.FailureURL}, err
+			}
+		}
 		if err := a.linkOAuthIdentity(ctx, projectID, oauthState.LinkUserID, provider, profile); err != nil {
 			return &completeOAuth2CodeResult{SuccessURL: oauthState.SuccessURL, FailureURL: oauthState.FailureURL}, err
 		}
@@ -472,6 +537,34 @@ func mfaFactorTypes(factors []domainauth.Factor) string {
 		parts = append(parts, f.Type)
 	}
 	return strings.Join(parts, ",")
+}
+
+// verifyLinkSessionCookie 校验 link 流回调携带的端用户会话 cookie（M5 C5）：
+// cookie 必须为 state 对应项目、HMAC 验签通过，且解析出的会话存在、未过期、
+// 归属 link 目标用户。任一不满足即 PermissionDenied（不泄露具体原因，防探测）。
+func (a *Account) verifyLinkSessionCookie(ctx context.Context, projectID, linkUserID string, cookies map[string]string) error {
+	if a.sessionCookies == nil {
+		return status.Error(codes.PermissionDenied, "oauth link identity cannot be verified")
+	}
+	raw := cookies[projectID]
+	if raw == "" {
+		return status.Error(codes.PermissionDenied, "oauth link requires session cookie")
+	}
+	cookieProject, sessionID, err := a.sessionCookies.Verify(raw)
+	if err != nil || cookieProject != projectID || sessionID == "" {
+		return status.Error(codes.PermissionDenied, "oauth link requires session cookie")
+	}
+	if a.sessionRepo == nil {
+		return status.Error(codes.PermissionDenied, "oauth link identity cannot be verified")
+	}
+	sess, err := a.sessionRepo.GetByID(ctx, projectID, sessionID)
+	if err != nil || sess == nil {
+		return status.Error(codes.PermissionDenied, "oauth link requires session cookie")
+	}
+	if sess.ExpireAt.IsZero() || sess.ExpireAt.Before(time.Now()) || sess.UserID != linkUserID {
+		return status.Error(codes.PermissionDenied, "oauth link caller mismatch")
+	}
+	return nil
 }
 
 func (a *Account) requireProject(ctx context.Context, projectID string) error {

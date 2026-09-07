@@ -54,6 +54,8 @@ type Account struct {
 	oauthFactory    domainauth.OAuthAuthenticatorFactory
 	weChatExchanger domainauth.WeChatMiniProgramExchanger
 	otpGenerator    domainauth.OTPGenerator
+	// sessionCookies 校验并解出端用户会话 cookie（M5 C5 OAuth link 回调面）。
+	sessionCookies domainauth.SessionCookieVerifier
 }
 
 func NewAccount(
@@ -81,6 +83,7 @@ func NewAccount(
 	oauthFactory domainauth.OAuthAuthenticatorFactory,
 	weChatExchanger domainauth.WeChatMiniProgramExchanger,
 	otpGenerator domainauth.OTPGenerator,
+	sessionCookies domainauth.SessionCookieVerifier,
 ) *Account {
 	return &Account{
 		cfg:             cfg,
@@ -107,6 +110,7 @@ func NewAccount(
 		mfaChallenges:   normalizeMFAChallengeStore(mfaChallenges),
 		oneTimeTokens:   oneTimeTokens,
 		auditRepo:       auditRepo,
+		sessionCookies:  sessionCookies,
 	}
 }
 

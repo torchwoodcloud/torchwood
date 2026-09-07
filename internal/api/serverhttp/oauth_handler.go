@@ -10,6 +10,7 @@ import (
 	"github.com/torchwooddev/torchwood/internal/app/client"
 	"github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
+	"github.com/torchwooddev/torchwood/internal/domain/shared"
 )
 
 // OAuthHandler handles browser OAuth2 callback redirects.
@@ -51,7 +52,13 @@ func (h *OAuthHandler) callback(w http.ResponseWriter, r *http.Request, pathPara
 		UserAgent: r.UserAgent(),
 	})
 
-	result, err := h.account.HandleOAuth2Callback(ctx, provider, code, state)
+	// M5 C5：抽取浏览器 cookie 供 use-case 做归属/CSRF 校验——
+	//   TORCHWOOD_session_<project>（除 console 外）：link 流验本人；
+	//   TORCHWOOD_oauth_nonce_<project>：login 流与 state 配对。
+	// 两 map 恒非 nil 传入（空 map 也强制校验，fail-closed）。
+	result, err := h.account.HandleOAuth2Callback(ctx, provider, code, state,
+		oauthCookiesOf(r, shared.SessionCookiePrefix, shared.ConsoleSessionCookieName),
+		oauthCookiesOf(r, oauthNonceCookiePrefix, ""))
 	if err != nil {
 		target := "/?error=oauth_failed"
 		if result != nil && result.RedirectURL != "" {
@@ -72,6 +79,23 @@ func (h *OAuthHandler) callback(w http.ResponseWriter, r *http.Request, pathPara
 		})
 	}
 	http.Redirect(w, r, result.RedirectURL, http.StatusFound)
+}
+
+// oauthNonceCookiePrefix 是 OAuth 发起时种的一次性 nonce cookie 前缀
+//（完整名 TORCHWOOD_oauth_nonce_<project>，M5 C5 login CSRF 绑定）。
+const oauthNonceCookiePrefix = "TORCHWOOD_oauth_nonce_"
+
+// oauthCookiesOf 按前缀抽取浏览器 cookie 为 project → value 映射；
+// exclude 用于把 console 会话 cookie 挡在端用户 session 前缀之外。
+func oauthCookiesOf(r *http.Request, prefix, exclude string) map[string]string {
+	out := map[string]string{}
+	for _, c := range r.Cookies() {
+		if c.Value == "" || !strings.HasPrefix(c.Name, prefix) || (exclude != "" && c.Name == exclude) {
+			continue
+		}
+		out[strings.TrimPrefix(c.Name, prefix)] = c.Value
+	}
+	return out
 }
 
 // clientIP 与 gRPC ClientInfoInterceptor 走同一 trusted-proxy 规则：

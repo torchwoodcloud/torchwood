@@ -51,6 +51,7 @@ var ProviderSet = wire.NewSet(
 	auth.NewOAuthAuthenticatorFactory,
 	auth.NewWeChatMiniProgramExchanger,
 	auth.NewOTPGenerator,
+	auth.NewSessionCookieVerifier,
 	wire.Bind(new(domainauth.SessionService), new(*auth.SessionService)),
 	wire.Bind(new(domainauth.OTPChallengeStore), new(*auth.RedisOTPChallengeStore)),
 	wire.Bind(new(domainauth.OAuthStateStore), new(*auth.RedisOAuthStateStore)),

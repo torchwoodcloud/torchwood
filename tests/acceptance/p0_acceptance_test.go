@@ -311,5 +311,5 @@ func newAcceptanceTestAccount(cfg *config.AppConfig, projectRepo projects.Reposi
 	sessions := infrAuth.NewSessionService(cfg, sessionRepo, roles, nil)
 	mailer := inframessaging.NewMailer(cfg)
 	sms := inframessaging.NewSMSService(cfg)
-	return client.NewAccount(cfg, projectRepo, nil, sessions, nil, nil, nil, nil, nil, nil, mailer, sms, nil, roles, nil, nil, nil, nil, usersRepo, identities, sessionRepo, nil, nil, nil)
+	return client.NewAccount(cfg, projectRepo, nil, sessions, nil, nil, nil, nil, nil, nil, mailer, sms, nil, roles, nil, nil, nil, nil, usersRepo, identities, sessionRepo, nil, nil, nil, nil)
 }

@@ -59,6 +59,9 @@ type functionsAdminRepo struct {
 func (r *functionsAdminRepo) GetAdmin(_ context.Context, id string) (*projects.Admin, error) {
 	return r.admins[id], nil
 }
+func (r *functionsAdminRepo) RevokeCredentials(context.Context, string, time.Time) error {
+	return nil
+}
 func (r *functionsAdminRepo) GetAdminByEmail(context.Context, string) (*projects.Admin, error) {
 	return nil, nil
 }

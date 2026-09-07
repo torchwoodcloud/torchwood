@@ -124,6 +124,7 @@ func newAccountWithUserRepo(repo users.Repository, projectID string) *Account {
 		nil,
 		nil,
 		nil, nil, nil,
+		nil,
 	)
 }
 
@@ -215,6 +216,9 @@ func (signupProjectRepo) DeleteProject(context.Context, string) error           
 type stubSessionService struct{}
 
 func (stubSessionService) CreateSessionAndTokens(_ context.Context, _, _, _, _ string) (*domainauth.TokenBundle, string, error) {
+	return &domainauth.TokenBundle{AccessToken: "at", RefreshToken: "rt", ExpiresAt: 1}, "cookie", nil
+}
+func (stubSessionService) CreateShortLivedSessionAndTokens(_ context.Context, _, _, _, _ string) (*domainauth.TokenBundle, string, error) {
 	return &domainauth.TokenBundle{AccessToken: "at", RefreshToken: "rt", ExpiresAt: 1}, "cookie", nil
 }
 func (stubSessionService) IssueTokens(context.Context, string, string, string, string) (*domainauth.TokenBundle, string, error) {
