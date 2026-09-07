@@ -36,6 +36,10 @@ type UserRoleResolver interface {
 // SessionService creates sessions and issues JWT tokens for authenticated users.
 type SessionService interface {
 	CreateSessionAndTokens(ctx context.Context, projectID, userID, email, provider string) (*TokenBundle, string, error)
+	// CreateShortLivedSessionAndTokens 签发短时会话（CreateUserToken 服务端
+	// 登录桥接专用，M5 C2）：会话 TTL 不继承 7 天默认值，access/refresh TTL
+	// 被实现内的硬上限常量封顶，任何配置都无法突破。
+	CreateShortLivedSessionAndTokens(ctx context.Context, projectID, userID, email, provider string) (*TokenBundle, string, error)
 	IssueTokens(ctx context.Context, projectID, userID, email, sessionID string) (*TokenBundle, string, error)
 	// IssueTokensWithRefreshID issues tokens with a caller-provided refresh token id
 	// (jti) so the rotation store and the issued token stay in sync.

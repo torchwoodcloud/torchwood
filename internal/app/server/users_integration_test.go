@@ -17,10 +17,14 @@ import (
 	"github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/internal/testutil"
 	"github.com/torchwooddev/torchwood/pkg/idgen"
+	"github.com/torchwooddev/torchwood/pkg/jwtparser"
 	"github.com/torchwooddev/torchwood/pkg/password"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+// usersUCJWTSecret 是本文件集成测试用的固定 JWT 主密钥。
+const usersUCJWTSecret = "users-integration-test-secret"
 
 type documentRoles struct{}
 
@@ -32,7 +36,7 @@ func newUsersUC(ctx context.Context, t *testing.T) (*Users, *clients.Database, s
 	t.Helper()
 	db := testutil.SetupTestDB(t)
 	projectID, _, cleanup := testutil.CreateTestProject(ctx, db)
-	cfg := &config.AppConfig{}
+	cfg := &config.AppConfig{Security: &config.Security{Jwt: &config.Security_Jwt{Secret: usersUCJWTSecret}}}
 	sessions := auth.NewSessionService(cfg, bunrepo.NewSessionRepository(db), documentRoles{}, nil)
 	uc := NewUsers(bunrepo.NewProjectRepository(db), sessions, db, bunrepo.NewUserRepository(db), bunrepo.NewSessionRepository(db), bunrepo.NewGroupRepository(db), bunrepo.NewMembershipRepository(db))
 	return uc, db, projectID, cleanup
@@ -261,11 +265,19 @@ func TestServerUsers_CreateUserToken(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 模拟登录签发 token。
+	// 模拟登录签发 token（M5 C2：短时会话，exp-iat 不得超过 1h 硬上限）。
 	bundle, err := uc.CreateUserToken(ctx, projectID, doc.ID)
 	require.NoError(t, err)
 	require.NotEmpty(t, bundle.AccessToken)
 	require.NotEmpty(t, bundle.RefreshToken)
+
+	hardCap := int64(auth.CreateUserTokenMaxSessionTTL.Seconds())
+	accessClaims, ok := jwtparser.Parse(jwtparser.DeriveKey(usersUCJWTSecret, jwtparser.PurposeEndUserJWT), bundle.AccessToken)
+	require.True(t, ok)
+	require.LessOrEqual(t, accessClaims.ExpiresAt-accessClaims.IssuedAt, hardCap)
+	refreshClaims, ok := jwtparser.Parse(jwtparser.DeriveKey(usersUCJWTSecret, jwtparser.PurposeEndUserJWT), bundle.RefreshToken)
+	require.True(t, ok)
+	require.LessOrEqual(t, refreshClaims.ExpiresAt-refreshClaims.IssuedAt, hardCap)
 
 	// 签发后产生一条该用户的会话（可被管理员列出/删除）。
 	sessionsList, err := uc.ListUserSessions(ctx, projectID, doc.ID)

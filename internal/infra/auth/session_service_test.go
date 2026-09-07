@@ -106,6 +106,55 @@ func TestSessionService_CreateSessionStoresHashedSecret(t *testing.T) {
 	require.NotEqual(t, hash, claims.SessionID)
 }
 
+// M5 C2（评审 B-1 补偿控制）：短时会话通路——会话 15min；access/refresh 的
+// exp-iat 被 1h 硬上限常量封顶，敌意配置（access_ttl/refresh_ttl 拉长）无法突破。
+func TestSessionService_CreateShortLivedSessionAndTokens_HardCapsTTL(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	hostileCfg := testSessionJWTConfig()
+	hostileCfg.Security.Jwt.AccessTtl = "24h"
+	hostileCfg.Security.Jwt.RefreshTtl = "168h"
+	sessions := newStubSessionRepo()
+	svc := auth.NewSessionService(hostileCfg, sessions, stubRoleResolver{}, nil)
+
+	before := time.Now()
+	bundle, _, err := svc.CreateShortLivedSessionAndTokens(ctx, "proj-1", "user-1", "user@example.com", "server_token")
+	require.NoError(t, err)
+	require.NotEmpty(t, bundle.AccessToken)
+	require.NotEmpty(t, bundle.RefreshToken)
+
+	hardCap := int64(auth.CreateUserTokenMaxSessionTTL.Seconds())
+	accessClaims, ok := jwtparser.Parse(jwtparser.DeriveKey(testSessionJWTSecret, jwtparser.PurposeEndUserJWT), bundle.AccessToken)
+	require.True(t, ok)
+	require.LessOrEqual(t, accessClaims.ExpiresAt-accessClaims.IssuedAt, hardCap, "access exp-iat 不得超过 1h 硬上限")
+
+	refreshClaims, ok := jwtparser.Parse(jwtparser.DeriveKey(testSessionJWTSecret, jwtparser.PurposeEndUserJWT), bundle.RefreshToken)
+	require.True(t, ok)
+	require.LessOrEqual(t, refreshClaims.ExpiresAt-refreshClaims.IssuedAt, hardCap, "refresh exp-iat 不得超过 1h 硬上限")
+
+	// 会话行 TTL 目标 15min（允许小幅时钟偏移），远小于默认 7 天。
+	require.Len(t, sessions.ids("proj-1"), 1)
+	sess := sessions.get("proj-1", sessions.ids("proj-1")[0])
+	ttl := sess.ExpireAt.Sub(before)
+	require.Greater(t, ttl, 14*time.Minute)
+	require.LessOrEqual(t, ttl, auth.CreateUserTokenSessionTTL+time.Minute)
+	require.Equal(t, "server_token", sess.Provider)
+}
+
+// 短时会话在默认配置下 access 同样落在目标 TTL 一侧（不超 1h，且与配置一致时取配置值）。
+func TestSessionService_CreateShortLivedSessionAndTokens_DefaultConfig(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	sessions := newStubSessionRepo()
+	svc := auth.NewSessionService(testSessionJWTConfig(), sessions, stubRoleResolver{}, nil)
+
+	bundle, _, err := svc.CreateShortLivedSessionAndTokens(ctx, "proj-1", "user-1", "user@example.com", "")
+	require.NoError(t, err)
+	accessClaims, ok := jwtparser.Parse(jwtparser.DeriveKey(testSessionJWTSecret, jwtparser.PurposeEndUserJWT), bundle.AccessToken)
+	require.True(t, ok)
+	require.LessOrEqual(t, accessClaims.ExpiresAt-accessClaims.IssuedAt, int64((15*time.Minute+time.Minute).Seconds()))
+}
+
 func TestProviderConstants(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "email", domainauth.ProviderEmail)

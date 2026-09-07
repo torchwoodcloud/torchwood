@@ -19,6 +19,14 @@ import (
 
 const defaultSessionTTL = 7 * 24 * time.Hour
 
+// 短时会话（M5 C2，评审 B-1 补偿控制）：CreateUserToken 服务端登录桥接签发的
+// 会话目标 TTL 15min；硬上限 1h 是包级常量——access/refresh TTL 与会话
+// expireAt 一并被封顶，security.jwt.* 配置无法突破。
+const (
+	CreateUserTokenSessionTTL    = 15 * time.Minute
+	CreateUserTokenMaxSessionTTL = time.Hour
+)
+
 // defaultMaxSessionsPerUser 是 security.sessions.max_per_user 未配置（0）时的
 // 单用户会话上限默认值。
 const defaultMaxSessionsPerUser = 50
@@ -48,6 +56,35 @@ func NewSessionService(
 }
 
 func (s *SessionService) CreateSessionAndTokens(ctx context.Context, projectID, userID, email, provider string) (*domainauth.TokenBundle, string, error) {
+	sessionID, err := s.insertSession(ctx, projectID, userID, provider, defaultSessionTTL)
+	if err != nil {
+		return nil, "", err
+	}
+	return s.IssueTokens(ctx, projectID, userID, email, sessionID)
+}
+
+// CreateShortLivedSessionAndTokens 签发短时会话（M5 C2）：会话 15min；refresh
+// TTL 收敛为 min(配置值, 1h 硬上限)，access TTL 同样被 1h 硬上限封死——
+// 模拟登录铸造的凭证集合整体不超过 1h，刷新续命受会话 expireAt 二次门控。
+func (s *SessionService) CreateShortLivedSessionAndTokens(ctx context.Context, projectID, userID, email, provider string) (*domainauth.TokenBundle, string, error) {
+	ttl := CreateUserTokenSessionTTL
+	if ttl > CreateUserTokenMaxSessionTTL {
+		// 防御未来调整目标值越过硬上限。
+		ttl = CreateUserTokenMaxSessionTTL
+	}
+	sessionID, err := s.insertSession(ctx, projectID, userID, provider, ttl)
+	if err != nil {
+		return nil, "", err
+	}
+	refreshTTL := s.refreshTTL()
+	if refreshTTL > CreateUserTokenMaxSessionTTL {
+		refreshTTL = CreateUserTokenMaxSessionTTL
+	}
+	return s.issueTokensWithCaps(ctx, projectID, userID, email, sessionID, idgen.UUID().String(), refreshTTL, CreateUserTokenMaxSessionTTL)
+}
+
+// insertSession 落会话行（含单用户会话上限淘汰，R05-P1-6）并返回会话 ID。
+func (s *SessionService) insertSession(ctx context.Context, projectID, userID, provider string, sessionTTL time.Duration) (string, error) {
 	if provider == "" {
 		provider = domainauth.ProviderEmail
 	}
@@ -58,11 +95,10 @@ func (s *SessionService) CreateSessionAndTokens(ctx context.Context, projectID, 
 	// 保证并发登录不越界。
 	if max := s.maxSessionsPerUser(); max > 0 {
 		if err := s.evictOldestSessions(ctx, projectID, userID, max); err != nil {
-			return nil, "", err
+			return "", err
 		}
 	}
 
-	expireAt := time.Now().Add(defaultSessionTTL)
 	sessionID := idgen.UUID().String()
 	// UUID 高熵，可用无盐 SHA-256（HashOTP）。
 	sessionSecret := idgen.UUID().String()
@@ -73,11 +109,11 @@ func (s *SessionService) CreateSessionAndTokens(ctx context.Context, projectID, 
 		Provider:   provider,
 		UserAgent:  client.UserAgent,
 		IP:         client.IP,
-		ExpireAt:   expireAt,
+		ExpireAt:   time.Now().Add(sessionTTL),
 	}); err != nil {
-		return nil, "", err
+		return "", err
 	}
-	return s.IssueTokens(ctx, projectID, userID, email, sessionID)
+	return sessionID, nil
 }
 
 func (s *SessionService) IssueTokens(ctx context.Context, projectID, userID, email, sessionID string) (*domainauth.TokenBundle, string, error) {
@@ -85,13 +121,18 @@ func (s *SessionService) IssueTokens(ctx context.Context, projectID, userID, ema
 }
 
 func (s *SessionService) IssueTokensWithRefreshID(ctx context.Context, projectID, userID, email, sessionID, refreshTokenID string) (*domainauth.TokenBundle, string, error) {
+	return s.issueTokensWithCaps(ctx, projectID, userID, email, sessionID, refreshTokenID, s.refreshTTL(), 0)
+}
+
+// issueTokensWithCaps 签发 access/refresh 对：refreshTTL 显式传入；accessCap
+// > 0 时 access TTL 被硬上限封顶（短时会话路径防配置突破，M5 C2）。
+func (s *SessionService) issueTokensWithCaps(ctx context.Context, projectID, userID, email, sessionID, refreshTokenID string, refreshTTL, accessCap time.Duration) (*domainauth.TokenBundle, string, error) {
 	accessTTL := 15 * time.Minute
 	if d, err := time.ParseDuration(s.cfg.GetSecurity().GetJwt().GetAccessTtl()); err == nil {
 		accessTTL = d
 	}
-	refreshTTL := defaultSessionTTL
-	if d, err := time.ParseDuration(s.cfg.GetSecurity().GetJwt().GetRefreshTtl()); err == nil {
-		refreshTTL = d
+	if accessCap > 0 && accessTTL > accessCap {
+		accessTTL = accessCap
 	}
 
 	now := time.Now()
@@ -170,6 +211,15 @@ func (s *SessionService) DeleteSessionsByUser(ctx context.Context, projectID, us
 		return err
 	}
 	return nil
+}
+
+// refreshTTL 返回刷新令牌 TTL：配置值或默认 7 天会话 TTL。
+func (s *SessionService) refreshTTL() time.Duration {
+	refreshTTL := defaultSessionTTL
+	if d, err := time.ParseDuration(s.cfg.GetSecurity().GetJwt().GetRefreshTtl()); err == nil {
+		refreshTTL = d
+	}
+	return refreshTTL
 }
 
 // maxSessionsPerUser 返回单用户会话上限：未配置（0 值）回退默认 50；

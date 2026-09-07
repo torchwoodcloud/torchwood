@@ -306,8 +306,10 @@ func (u *Users) DeleteUserSession(ctx context.Context, projectID, userID, sessio
 // CreateUserToken 模拟登录：以指定用户身份创建会话并签发 token。用途：
 // 服务端登录桥接（自有 auth 体系验证后为用户铸造 Torchwood 会话，见
 // docs/developer/12-sdk.md §4.4 的 agent 典型流程）与客服/调试模拟登录。
-// 决策 v8：归一业务写档（member+users.write）；评审补偿控制（TTL 硬上限
-// 1h、改 email/status 撤会话）由 M5 落地。
+// 决策 v8：归一业务写档（member+users.write）。
+// M5 C2（评审 B-1 补偿控制）：签发走短时会话通路——会话 15min、access/
+// refresh TTL 被实现内 1h 硬上限常量封顶，不继承 7 天默认会话 TTL，任何
+// security.jwt.* 配置都无法突破。
 func (u *Users) CreateUserToken(ctx context.Context, projectID, userID string) (*domainauth.TokenBundle, error) {
 	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return nil, err
@@ -325,7 +327,7 @@ func (u *Users) CreateUserToken(ctx context.Context, projectID, userID string) (
 	if !found.CanAuthenticate() {
 		return nil, status.Error(codes.FailedPrecondition, "user account is not active")
 	}
-	bundle, _, err := u.sessions.CreateSessionAndTokens(ctx, projectID, userID, found.Email, "server_token")
+	bundle, _, err := u.sessions.CreateShortLivedSessionAndTokens(ctx, projectID, userID, found.Email, "server_token")
 	if err != nil {
 		return nil, err
 	}
