@@ -43,12 +43,12 @@ x-app-env: &app-env
   # 可选：外部浏览器端 SDK 的跨域来源，逗号分隔（Console 同源部署无需配置）
   TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS: ${TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS:-}
 
-# 应用镜像：仓库根 Dockerfile 多阶段构建（console SPA → Go 三二进制）
-x-app-build: &app-build
-  build:
-    context: ../..
-    dockerfile: Dockerfile
-  image: torchwood-app:local
+# 应用镜像：GitHub Actions 预构建推 GHCR（.github/workflows/image.yml），
+# 部署机仅 pull 不编译（小内存 VPS 上 go build 会 OOM，部署被杀表现为
+# cancelled）。默认 latest = main 最新；用 TORCHWOOD_IMAGE 钉版本可回滚。
+x-app-image: &app-image
+  image: ${TORCHWOOD_IMAGE:-ghcr.io/torchwooddev/torchwood:latest}
+  pull_policy: always
 
 # ---------- 依赖服务 ----------
 
@@ -143,7 +143,7 @@ services:
   roles-sig:
     # B15 部署时序：迁移完成后由 owner 引导账号落 roles_sig 密钥（tw_secrets）。
     # 未跑本作业前 server 也能启动，但文档查询 fail-closed（零角色不可见）。
-    <<: *app-build
+    <<: *app-image
     entrypoint: ["/usr/local/bin/torchwood"]
     command: ["admin", "sync-roles-sig"]
     environment:
@@ -158,7 +158,7 @@ services:
   # ---------- 常驻进程 ----------
 
   server:
-    <<: *app-build
+    <<: *app-image
     # gRPC(:9060，明文 h2c，SDK/CLI 直连) + grpc-gateway HTTP + Console SPA + Storage
     # serverhttp + healthz。HTTP 9080 走 Dokploy「Domains」（Traefik 终止 TLS）；
     # gRPC 9060 无法过 Traefik HTTP 路由（SDK 默认明文拨号），直接发布宿主端口。
@@ -187,7 +187,7 @@ services:
     restart: unless-stopped
 
   worker:
-    <<: *app-build
+    <<: *app-image
     # Functions 异步执行消费者；不启用 Functions 时可整段删除（纯空闲队列消费者）
     entrypoint: ["/usr/local/bin/worker"]
     environment: *app-env

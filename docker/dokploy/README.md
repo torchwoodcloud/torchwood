@@ -2,7 +2,8 @@
 
 本目录提供 Dokploy（自托管 PaaS，Traefik + Docker Compose）一键部署所需的全部文件：
 单 Compose 栈内含 **Postgres(pgvector 基座) + Redis + MinIO + 一次性作业链（迁移 → 三角色授权 → roles_sig 落库）+ server + worker**。
-镜像由仓库根 `Dockerfile` 多阶段构建（console SPA 经 go:embed 打进二进制）。
+应用镜像由 GitHub Actions 预构建并推送到 GHCR（见 §5），部署机只 pull 不编译——
+小内存 VPS 上跑 `go build` 会 OOM，部署被杀时状态表现为 cancelled。
 
 > 部署时序契约（`docs/developer/13-operations.md` §4.5/§6.1：迁移 → `torchwood admin sync-roles-sig` → server/worker 启动）
 > 由 compose `depends_on` 链自动保证，无需手工干预。
@@ -20,7 +21,8 @@
 3. **Compose Path** 填：`./docker/dokploy/docker-compose.yml`；
 4. 先别急着 Deploy——到 **Environment** 页签按下表添加变量，再回来点 **Deploy**。
 
-首次构建较慢（console pnpm install/build + Go 三二进制编译），属正常现象。
+部署只做镜像拉取 + 容器编排，一两分钟内完成。前提是镜像已存在：推送到 main 后
+GitHub Actions 会自动构建并推 GHCR（首次部署前确认 [image workflow](https://github.com/torchwooddev/torchwood/actions/workflows/image.yml) 至少成功过一次）。
 
 ## 2. 环境变量（Environment 页签）
 
@@ -81,7 +83,27 @@ torchwood --endpoint tw.example.com:9060 --api-key sk-... health
 gRPC 直连不受 `server.http.public_url` 与 CORS 影响（那是 HTTP/浏览器侧概念）；
 gRPC 侧认证即 API Key（`x-api-key` metadata），限流维度同理。
 
-## 5. 首次引导（bootstrap）
+## 5. 镜像与版本（GitHub Actions → GHCR）
+
+应用镜像由 [image workflow](https://github.com/torchwooddev/torchwood/actions/workflows/image.yml)
+在 GitHub Actions 上构建（console SPA + server/worker/torchwood 三二进制），推送到
+`ghcr.io/torchwooddev/torchwood`。compose 三个应用服务（server/worker/roles-sig）
+均声明 `pull_policy: always`，每次 Deploy/Redeploy 都会拉取最新并按需重建容器。
+
+| tag | 何时更新 | 用途 |
+|-----|----------|------|
+| `latest` | 每次 push 到 main | 默认；Redeploy 即升级到最新 main |
+| `sha-<短commit>` | 每次 push 到 main | 回滚锚点：把 `TORCHWOOD_IMAGE` 钉到它再 Redeploy |
+| `vX.Y.Z` / `vX.Y` | push `v*` tag | 语义版本发布 |
+
+- **钉版本/回滚**：Environment 加 `TORCHWOOD_IMAGE=ghcr.io/torchwooddev/torchwood:sha-abc1234` → Redeploy。
+- **版本元数据**：CI 注入 `version/commit/date`，`curl https://<域名>/v1/server/health/version` 可验证部署到的确切版本。
+- **GHCR 可见性**：首次发布后包默认**私有**，二选一：
+  - 改 Public：GitHub org → Packages → `torchwood` → Package settings → Danger Zone → Change visibility（推荐）；
+  - 保持私有：部署机 `docker login ghcr.io -u <用户名> -p <PAT(read:packages)>` 后再 Deploy。
+- **本地出镜像**：`task docker:build` 仍可用（同 Dockerfile，版本元数据为 dev/unknown）。
+
+## 6. 首次引导（bootstrap）
 
 部署完成后：
 
@@ -90,7 +112,7 @@ gRPC 侧认证即 API Key（`x-api-key` metadata），限流维度同理。
    `project_id` 与 `database_id`（将创建项目 + 系统 `default` 库 + 业务库）；
 3. 登录后在 Console 创建 API Key（secret 仅展示一次），供 CLI/Agent 调用 Server API。
 
-## 6. 验证
+## 7. 验证
 
 ```bash
 curl https://<域名>/healthz/readiness      # 200（依赖 PG/Redis/MinIO 全绿）
@@ -99,7 +121,7 @@ curl https://<域名>/v1/health              # 依赖明细
 torchwood --endpoint <服务器IP>:9060 --api-key sk-... health   # gRPC 直连冒烟
 ```
 
-## 7. 栈内行为说明
+## 8. 栈内行为说明
 
 - **一次性作业链**：`migrate → db-grants → roles-sig → server/worker`（`depends_on: service_completed_successfully`）。
   作业全部幂等：重部署（镜像变更触发重建）时自动重跑，同钥 `sync-roles-sig` 整体 no-op。
@@ -111,20 +133,21 @@ torchwood --endpoint <服务器IP>:9060 --api-key sk-... health   # gRPC 直连�
 - **Functions（可选）**：worker 常驻消费函数执行队列；启用 docker executor 需放开 compose 中
   `docker.sock` 挂载（⚠ 等同宿主 root 权限）。不用 Functions 可删除 worker 服务。
 
-## 8. 日常运维
+## 9. 日常运维
 
 | 操作 | 做法 |
 |------|------|
-| 升级 | Dokploy **Redeploy**：自动重建镜像 → 重跑迁移（增量）→ 授权/roles-sig 幂等 no-op → 滚动替换 server/worker。生产环境排水窗口 30s（`TORCHWOOD_ENV=production` 已设） |
+| 升级 | Dokploy **Redeploy**：拉取 latest 新镜像（`pull_policy: always`）→ 重跑迁移（增量）→ 授权/roles-sig 幂等 no-op → 滚动替换 server/worker。生产排水窗口 30s（`TORCHWOOD_ENV=production` 已设）。`/v1/server/health/version` 可验证版本 |
+| 回滚 | Environment 加 `TORCHWOOD_IMAGE=<sha- tag 或 vX.Y.Z>` → Redeploy（迁移只进不退，回滚不回退 schema） |
 | 备份 | 项目级：`docker exec <server容器> torchwood admin export --project <id> --out /backup/p1`（需持久化 `/backup` 卷或导出到 S3）；全实例：`pg_dump -Fc` 全库（覆盖 `public` 与全部 `tw_*` schema）+ MinIO `mc mirror` |
 | 换 JWT 密钥 | 改 Environment `TORCHWOOD_SECURITY_JWT_SECRET` → Redeploy（roles-sig 自动重落库，双钥窗口内旧 sig 不降级） |
 | 看 pgvector | `SELECT extname, extversion FROM pg_extension WHERE extname='vector';`（Percona PG18 镜像自带 0.8.3，迁移 000005 自动启用） |
 | psql 终端 | Dokploy → postgres 服务 → Execute Shell：`psql -U torchwood -d torchwood` |
 
-## 9. 方案 B：复用外部依赖（不用栈内 PG/Redis/MinIO）
+## 10. 方案 B：复用外部依赖（不用栈内 PG/Redis/MinIO）
 
 若已有 Dokploy 模板部署的 Postgres/Redis/MinIO 或外部 S3，可将本栈拆为 **Application** 类型部署
-（build 方式选 Dockerfile，监听端口 9080），环境变量同 §2，另外：
+（源选 **Docker Image**：`ghcr.io/torchwooddev/torchwood:latest`，监听端口 9080），环境变量同 §2，另外：
 
 - gRPC 对外：`TORCHWOOD_SERVER_GRPC_ADDR=:9060`，并在 Application 的「Ports」里追加 `9060`（宿主:容器）；
 - `TORCHWOOD_DATA_DATABASE_SOURCE` 指向外部 PG 的 `tw_authenticator` DSN；
@@ -137,13 +160,14 @@ docker run --rm -v "$PWD/db/migrations:/migrations" migrate/migrate:v4.18.1 \
   -path=/migrations -database "<owner DSN>" up
 # ② 授权补齐（psql 以 owner 连接）
 psql "<owner DSN>" -v ON_ERROR_STOP=1 -v dbname=<库名> -f docker/dokploy/bootstrap-roles.sql
-# ③ roles_sig 落库
-docker run --rm torchwood-app:local torchwood admin sync-roles-sig --dsn "<owner DSN>"
+# ③ roles_sig 落库（用 GHCR 镜像内置的 CLI）
+docker run --rm ghcr.io/torchwooddev/torchwood:latest \
+  torchwood admin sync-roles-sig --dsn "<owner DSN>"
 ```
 
 首次 initdb 引导（创建 `tw_authenticator`）对应 `docker/dokploy/initdb/01-authenticator.sh` 中的 SQL，需以 superuser 手工执行一次。
 
-## 10. 文件清单
+## 11. 文件清单
 
 | 文件 | 用途 |
 |------|------|

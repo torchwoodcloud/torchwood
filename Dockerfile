@@ -25,12 +25,17 @@ COPY . .
 COPY --from=console-builder /console/dist ./console/dist
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
+# 版本元数据：CI 构建注入（.github/workflows/image.yml），缺省 dev/unknown
+# 与 task build 的本地形态对齐；由 /v1/server/health/version 暴露
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG DATE=unknown
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags "-s -w" -o /out/server ./cmd/server && \
+    go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/server ./cmd/server && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags "-s -w" -o /out/worker ./cmd/worker && \
+    go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/worker ./cmd/worker && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags "-s -w" -o /out/torchwood ./cmd/client
+    go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/torchwood ./cmd/client
 
 # ---------- 3) 运行时 ----------
 FROM alpine:3.21

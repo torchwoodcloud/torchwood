@@ -1,0 +1,89 @@
+# 镜像发布流水线：GitHub Actions 构建仓库根 Dockerfile → 推 GHCR
+# （ghcr.io/torchwooddev/torchwood）。
+#
+# 背景：Dokploy/小内存 VPS 上 `docker compose build` 会在 go build 三个二进制
+# 时触发 OOM（部署进程被内核杀死，状态表现为 cancelled 而非 error）。改为
+# CI 预构建、部署机仅 pull（docker/dokploy/docker-compose.yml 的
+# pull_policy: always），Redeploy 即取 main 最新镜像。
+#
+# tag 策略（docker/metadata-action）：
+#   - main 分支每次构建 → latest + sha-<short>（sha tag 供回滚钉版本）
+#   - v* tag            → vX.Y.Z + vX.Y
+# 首次发布后 GHCR 包默认私有：改为 Public（org → Packages → torchwood →
+# Package settings），或让部署机 docker login ghcr.io（PAT read:packages）。
+#
+# 版本元数据经 build-args 注入 -ldflags（main.version/commit/date），由
+# GET /v1/server/health/version 暴露；本地 task docker:build 不传参时为
+# dev/unknown，行为不变。
+
+name: Image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: torchwooddev/torchwood
+
+jobs:
+  build-push:
+    name: Build & push to GHCR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 版本元数据：tag 构建用 tag 名（vX.Y.Z），分支构建用 sha-<short>；
+      # 与 task build 的 git describe/短 commit/UTC 时间戳形态对齐。
+      - id: meta
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            echo "version=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "commit=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+            echo "commit=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "date=$(date -u +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: tags
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: ${{ steps.tags.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            COMMIT=${{ steps.meta.outputs.commit }}
+            DATE=${{ steps.meta.outputs.date }}
