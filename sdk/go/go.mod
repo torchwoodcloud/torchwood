@@ -2,11 +2,9 @@ module github.com/torchwooddev/torchwood/sdk/go
 
 go 1.26.5
 
-replace github.com/torchwooddev/torchwood/genproto => ../../genproto
-
 require (
 	github.com/stretchr/testify v1.11.1
-	github.com/torchwooddev/torchwood/genproto v0.0.0-00010101000000-000000000000
+	github.com/torchwooddev/torchwood/genproto v0.2.0
 	google.golang.org/grpc v1.83.0
 	google.golang.org/protobuf v1.36.12
 )
