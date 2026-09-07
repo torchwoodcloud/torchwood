@@ -13,6 +13,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/pkg/config"
+	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
 	"github.com/torchwooddev/torchwood/pkg/idgen"
 	"github.com/torchwooddev/torchwood/pkg/jwtparser"
 	"google.golang.org/grpc/codes"
@@ -157,6 +158,13 @@ func (s *RedisOTPChallengeStore) createChallenge(ctx context.Context, projectID,
 }
 
 func (s *RedisOTPChallengeStore) verifyChallenge(ctx context.Context, projectID, challengeID, channel, target, code string) error {
+	// M5 C8：OTP verify 是公开消费口，按 IP 频控（对齐 account token 消费口
+	// 的 30 次/15min，共用同一计数桶防跨入口叠加预算）。
+	if ip := contexts.ClientInfoFrom(ctx).IP; ip != "" {
+		if err := checkTokenVerifyIPLimit(ctx, s.rdb, ip); err != nil {
+			return err
+		}
+	}
 	key := challengeKey(challengeID)
 	result, err := s.rdb.Eval(ctx, otpVerifyScript, []string{key},
 		projectID, channel, target, s.hashCode(code), otpMaxAttempts).Text()

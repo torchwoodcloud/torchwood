@@ -208,8 +208,15 @@ func accountTokenKey(purpose, projectID, userID string) string {
 // checkVerifyIPLimit 对公开消费口（Verify*）按 IP 做固定窗口限流，超过
 // accountTokenVerifyIPMaxPerWindow/15min 返回 ResourceExhausted（P3-2）。
 func (s *RedisAccountTokenStore) checkVerifyIPLimit(ctx context.Context, ip string) error {
+	return checkTokenVerifyIPLimit(ctx, s.rdb, ip)
+}
+
+// checkTokenVerifyIPLimit 是公开消费口（account token verify / OTP verify，
+// M5 C8）共用的 IP 维度固定窗口频控：30 次/15min，共用同一计数桶——
+// 防攻击者跨入口叠加尝试预算。
+func checkTokenVerifyIPLimit(ctx context.Context, rdb *redis.Client, ip string) error {
 	key := fmt.Sprintf("Torchwood:account:token:verify:ip:%s", ip)
-	count, err := incrWithTTL(ctx, s.rdb, key, accountTokenVerifyIPWindow)
+	count, err := incrWithTTL(ctx, rdb, key, accountTokenVerifyIPWindow)
 	if err != nil {
 		return status.Error(codes.Internal, "account token verify rate limit check failed")
 	}

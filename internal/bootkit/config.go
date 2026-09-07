@@ -23,6 +23,13 @@ func ValidateAppConfig(logger *slog.Logger, c *config.AppConfig) error {
 	} else if err := ValidateSecret("security.encryption_key", "TORCHWOOD_SECURITY_ENCRYPTION_KEY", key); err != nil {
 		return err
 	}
+	// M5 C8：setup_token 非空即套用主密钥强度下界（≥32 字节 + 弱子串拒绝）
+	// ——引导凭证与主密钥同一攻击面；空值表示未启用 setup 面，跳过。
+	if token := c.GetSecurity().GetSetupToken(); strings.TrimSpace(token) != "" {
+		if err := ValidateSecret("security.setup_token", "TORCHWOOD_SECURITY_SETUP_TOKEN", token); err != nil {
+			return err
+		}
+	}
 	return ValidateJWTSecret(c.GetSecurity().GetJwt().GetSecret())
 }
 

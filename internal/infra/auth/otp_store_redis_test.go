@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/torchwooddev/torchwood/internal/infra/auth"
 	"github.com/torchwooddev/torchwood/internal/pkg/config"
+	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -37,6 +38,28 @@ func requireGRPCCode(t *testing.T, err error, code codes.Code) {
 	st, ok := status.FromError(err)
 	require.True(t, ok, "expected grpc status error, got %v", err)
 	require.Equal(t, code, st.Code())
+}
+
+// M5 C8：OTP verify 公开消费口按 IP 频控（对齐 account token 的 30 次/
+// 15min，共用计数桶）；IP 缺省的上下文不受影响（fail-open 由传输层保证
+// ClientInfo 恒注入兜底）。
+func TestRedisOTPChallengeStore_VerifyIPLimited(t *testing.T) {
+	t.Parallel()
+
+	store, _ := newOTPTestStore(t, "otp-test-secret")
+	ctx := contexts.WithClientInfo(context.Background(), contexts.ClientInfo{IP: "198.51.100.7"})
+
+	for i := 0; i < 30; i++ {
+		err := store.VerifyEmailChallenge(ctx, "proj1", "ch", "user@example.com", "000000")
+		requireGRPCCode(t, err, codes.Unauthenticated)
+	}
+	err := store.VerifyEmailChallenge(ctx, "proj1", "ch", "user@example.com", "000000")
+	requireGRPCCode(t, err, codes.ResourceExhausted)
+
+	// 不同 IP 独立计数。
+	otherIP := contexts.WithClientInfo(context.Background(), contexts.ClientInfo{IP: "198.51.100.8"})
+	err = store.VerifyEmailChallenge(otherIP, "proj1", "ch", "user@example.com", "000000")
+	requireGRPCCode(t, err, codes.Unauthenticated)
 }
 
 func TestRedisOTPChallengeStore_VerifyFlow(t *testing.T) {

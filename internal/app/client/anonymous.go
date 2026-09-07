@@ -56,9 +56,14 @@ func (a *Account) CreateAnonymousSession(ctx context.Context, cmd CreateAnonymou
 }
 
 func (a *Account) checkAnonymousSessionRateLimit(ctx context.Context, ip string) error {
-	// nil 容忍：未装配限流器或拿不到客户端 IP 时不做限制。
-	if a.rateLimiter == nil || ip == "" {
-		return nil
+	// M5 C8（fail-closed）：匿名会话是无限刷用户文档/会话的入口，限流是
+	// 唯一闸门——限流器未装配或拿不到客户端 IP 时不再静默放行，直接拒绝
+	//（生产组合根恒注入 infra/auth 的 Redis 限流器，传输层恒注 ClientInfo）。
+	if a.rateLimiter == nil {
+		return status.Error(codes.FailedPrecondition, "anonymous session rate limiter is not configured")
+	}
+	if ip == "" {
+		return status.Error(codes.FailedPrecondition, "client ip is required for anonymous sessions")
 	}
 	return a.rateLimiter.Allow(ctx, "anonymous:ip:"+ip, anonymousSessionIPLimit, anonymousSessionIPWindow)
 }

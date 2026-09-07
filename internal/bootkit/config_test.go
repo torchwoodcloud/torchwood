@@ -55,6 +55,54 @@ func TestValidateJWTSecret_WeakSubstringNeverPasses(t *testing.T) {
 	}
 }
 
+// M5 C8：setup_token 非空时套用主密钥强度下界（≥32 字节 + 弱子串拒绝）；
+// 空值（未启用 setup 面）跳过。
+func TestValidateAppConfig_SetupToken(t *testing.T) {
+	t.Parallel()
+
+	// 40 字符的强随机串，不含任何弱子串。
+	const strong = "B9f2kQx7LmZp4RtW8vNc2hJ6xKq3sM5uA1eD7gYp"
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	t.Run("empty token allowed", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.AppConfig{Security: &config.Security{
+			Jwt: &config.Security_Jwt{Secret: strong},
+		}}
+		require.NoError(t, ValidateAppConfig(logger, cfg))
+	})
+
+	t.Run("short token rejected", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.AppConfig{Security: &config.Security{
+			SetupToken: "short-setup-token",
+			Jwt:        &config.Security_Jwt{Secret: strong},
+		}}
+		err := ValidateAppConfig(logger, cfg)
+		require.ErrorContains(t, err, "security.setup_token")
+		require.ErrorContains(t, err, "too short")
+	})
+
+	t.Run("weak token rejected", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.AppConfig{Security: &config.Security{
+			SetupToken: strong[:20] + "changeme" + strong[28:],
+			Jwt:        &config.Security_Jwt{Secret: strong},
+		}}
+		err := ValidateAppConfig(logger, cfg)
+		require.ErrorContains(t, err, "security.setup_token contains known weak value")
+	})
+
+	t.Run("strong token allowed", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.AppConfig{Security: &config.Security{
+			SetupToken: strong,
+			Jwt:        &config.Security_Jwt{Secret: strong},
+		}}
+		require.NoError(t, ValidateAppConfig(logger, cfg))
+	})
+}
+
 func TestValidateAppConfig_EncryptionKey(t *testing.T) {
 	t.Parallel()
 

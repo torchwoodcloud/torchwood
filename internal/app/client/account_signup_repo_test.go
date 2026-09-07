@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
@@ -11,9 +12,15 @@ import (
 	"github.com/torchwooddev/torchwood/internal/domain/projects"
 	"github.com/torchwooddev/torchwood/internal/domain/users"
 	"github.com/torchwooddev/torchwood/internal/pkg/config"
+	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+// allowRateLimiter 是始终放行的限流器桩（匿名会话 fail-closed 后测试注入）。
+type allowRateLimiter struct{}
+
+func (allowRateLimiter) Allow(context.Context, string, int, time.Duration) error { return nil }
 
 // 证明 SignUp 走 UserRepository.GetByEmail / Insert / User.Register，
 // 而不是 ListDocuments + query.BuildEqual("email") 薄包装。
@@ -103,7 +110,10 @@ func TestAccount_CreateAnonymousSession_UsesUserRepository(t *testing.T) {
 	repo := newRecordingUserRepo()
 	account := newAccountWithUserRepo(repo, "proj-1")
 
-	user, _, _, _, err := account.CreateAnonymousSession(context.Background(), CreateAnonymousSessionCommand{ProjectID: "proj-1"})
+	// M5 C8：匿名会话限流 fail-closed，测试注入允许型限流器与 ClientInfo。
+	account.rateLimiter = allowRateLimiter{}
+	ctx := contexts.WithClientInfo(context.Background(), contexts.ClientInfo{IP: "203.0.113.9"})
+	user, _, _, _, err := account.CreateAnonymousSession(ctx, CreateAnonymousSessionCommand{ProjectID: "proj-1"})
 	require.NoError(t, err)
 	require.NotNil(t, user)
 	require.Equal(t, []string{"Insert"}, repo.calls)
