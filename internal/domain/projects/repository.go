@@ -13,7 +13,8 @@ type Repository interface {
 	UpdateProject(ctx context.Context, p *Project) error
 	DeleteProject(ctx context.Context, id string) error
 	// DeleteProjectControlPlaneRows 清理 public 控制面中该项目的派生行
-	// （outbox/死信/api_keys/audit_logs/admin_projects/provider_resource_index）。
+	// （outbox/死信/api_keys/admin_projects/provider_resource_index；
+	// audit_logs 不在清理面——审计留存不随项目删除抹除，M5 C7）。
 	// 感知调用方事务：项目删除事务内执行，与 schema DROP 原子提交。
 	DeleteProjectControlPlaneRows(ctx context.Context, projectID string) error
 }

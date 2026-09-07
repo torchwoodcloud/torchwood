@@ -21,6 +21,11 @@ func NewProjectRepository(db *clients.Database) projects.Repository {
 
 // DeleteProjectControlPlaneRows 清理 public 控制面中该项目的派生行；感知
 // 调用方事务（项目删除事务内执行）。错误消息与既有删除流程保持一致。
+//
+// 审计留存不变量（M5 C7）：audit_logs 不随项目删除清理——审计是系统级
+// 追责/取证记录，项目生命周期终结不追溯抹除历史轨迹（项目删除本身已记
+// 审计，删除审计行等于销毁证据）。audit_logs 无项目 FK，行随时间自然保留；
+// retention/归档策略归运维面，不归业务删除路径。
 func (r *projectRepo) DeleteProjectControlPlaneRows(ctx context.Context, projectID string) error {
 	conn := r.db.Conn(ctx)
 	if _, err := conn.NewDelete().Model((*model.DocumentEventsOutbox)(nil)).Where("project_id = ?", projectID).Exec(ctx); err != nil {
@@ -31,9 +36,6 @@ func (r *projectRepo) DeleteProjectControlPlaneRows(ctx context.Context, project
 	}
 	if _, err := conn.NewDelete().Model((*model.APIKey)(nil)).Where("project_id = ?", projectID).Exec(ctx); err != nil {
 		return fmt.Errorf("delete api_keys: %w", err)
-	}
-	if _, err := conn.NewDelete().Model((*model.AuditLog)(nil)).Where("project_id = ?", projectID).Exec(ctx); err != nil {
-		return fmt.Errorf("delete audit_logs: %w", err)
 	}
 	if _, err := conn.NewDelete().Model((*model.AdminProject)(nil)).Where("project_id = ?", projectID).Exec(ctx); err != nil {
 		return fmt.Errorf("delete admin_projects: %w", err)
