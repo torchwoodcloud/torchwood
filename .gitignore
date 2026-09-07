@@ -1,5 +1,7 @@
 .env
 .env.local
+.env.*
+!.env.example
 configs/config.yaml
 *.log
 server.log

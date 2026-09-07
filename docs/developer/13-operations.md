@@ -81,6 +81,8 @@ task docker:build
 docker run --env-file .env -p 9099:9099 -p 9060:9060 torchwood:1.0.0-xxx-yyy
 ```
 
+**Dokploy 一键部署**（单 Compose 栈：PG/Redis/MinIO + 迁移→三角色授权→roles_sig 一次性作业链 + server/worker）见 `docker/dokploy/README.md`；其中 `sync-roles-sig` 作业依赖镜像内置的 `torchwood` CLI。
+
 ---
 
 ## 4. 生产配置要点

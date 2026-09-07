@@ -28,13 +28,17 @@ ARG TARGETARCH=amd64
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags "-s -w" -o /out/server ./cmd/server && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags "-s -w" -o /out/worker ./cmd/worker
+    go build -trimpath -ldflags "-s -w" -o /out/worker ./cmd/worker && \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags "-s -w" -o /out/torchwood ./cmd/client
 
 # ---------- 3) 运行时 ----------
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 torchwood
 COPY --from=go-builder /out/server /usr/local/bin/server
 COPY --from=go-builder /out/worker /usr/local/bin/worker
+# torchwood CLI：部署期 owner 作业（admin sync-roles-sig）与项目级备份（admin export/import）
+COPY --from=go-builder /out/torchwood /usr/local/bin/torchwood
 COPY configs/ /app/configs/
 WORKDIR /app
 USER torchwood

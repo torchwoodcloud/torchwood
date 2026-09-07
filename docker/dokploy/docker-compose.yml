@@ -1,0 +1,205 @@
+# Torchwood —— Dokploy 单 Compose 栈
+#
+# 拓扑：postgres(pgvector 基座) + redis + minio
+#       + migrate（golang-migrate 一次性）
+#       + db-grants（tw_authenticator 授权补齐，一次性，依赖迁移 000004）
+#       + roles-sig（torchwood admin sync-roles-sig，一次性，B15 部署时序）
+#       + server（gRPC/gateway/Console/healthz，:9080）+ worker（Functions 消费者）
+#
+# 部署时序契约（docs/developer/13-operations.md §4.5/§6.1）由 depends_on 链保证：
+#   迁移 → 三角色授权 → roles_sig 密钥落库 → server/worker 启动。
+# 全部一次性作业幂等，镜像变更触发重建时自动重跑。
+#
+# 必填环境变量（Dokploy「Environment」或 compose 同目录 .env）见 README.md。
+# 路径约定：本文件内的相对路径均相对本文件所在目录（compose 规范）。
+
+name: torchwood
+
+# ---------- 公共锚点 ----------
+
+# server/worker/roles-sig 共享的运行时环境变量（密钥经 Dokploy 变量插值注入）。
+x-app-env: &app-env
+  TORCHWOOD_ENV: production
+  TORCHWOOD_SERVER_HTTP_ADDR: ":9080"
+  TORCHWOOD_SERVER_GRPC_ADDR: "127.0.0.1:9060"
+  TORCHWOOD_SERVER_METRICS_ADDR: "127.0.0.1:9040"
+  # ≥32 字符强随机（openssl rand -hex 32）；弱子串（change-me/secret/…）拒绝启动
+  TORCHWOOD_SECURITY_JWT_SECRET: ${TORCHWOOD_SECURITY_JWT_SECRET:?请在 Dokploy Environment 设置 openssl rand -hex 32}
+  # Console 首个管理员引导令牌；未设置时 SignUp 被拒
+  TORCHWOOD_SECURITY_SETUP_TOKEN: ${TORCHWOOD_SECURITY_SETUP_TOKEN:?请在 Dokploy Environment 设置 openssl rand -hex 32}
+  # 对外绝对地址基准（OAuth/支付回调等），改成你的域名
+  TORCHWOOD_SERVER_HTTP_PUBLIC_URL: ${TORCHWOOD_SERVER_HTTP_PUBLIC_URL:?例如 https://tw.example.com}
+  # Dokploy Traefik 反代后恢复真实 IP：采信 docker 私网段 XFF 首跳；
+  # 127.0.0.1/32 供同进程 gateway→gRPC 转发（§4.2）
+  TORCHWOOD_SECURITY_TRUSTED_PROXIES: 127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+  # 运行态 DSN：非 superuser authenticator（initdb 引导创建；严禁 POSTGRES_USER superuser，见 §4.5）
+  # 密码请用 [A-Za-z0-9] 长随机（如 openssl rand -hex 24），避免 URL 特殊字符
+  TORCHWOOD_DATA_DATABASE_SOURCE: postgres://tw_authenticator:${TORCHWOOD_AUTH_PASSWORD:?请在 Dokploy Environment 设置 authenticator 口令}@postgres:5432/${POSTGRES_DB:-torchwood}?sslmode=disable
+  # 对象存储凭据（栈内 MinIO root；接外部 S3 时改 endpoint+独立子账号）
+  TORCHWOOD_STORAGE_S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?请在 Dokploy Environment 设置 MinIO 用户}
+  TORCHWOOD_STORAGE_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?请在 Dokploy Environment 设置 MinIO 口令}
+  # 可选：外部浏览器端 SDK 的跨域来源，逗号分隔（Console 同源部署无需配置）
+  TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS: ${TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS:-}
+
+# 应用镜像：仓库根 Dockerfile 多阶段构建（console SPA → Go 三二进制）
+x-app-build: &app-build
+  build:
+    context: ../..
+    dockerfile: Dockerfile
+  image: torchwood-app:local
+
+# ---------- 依赖服务 ----------
+
+services:
+  postgres:
+    # Percona PG18 发行版镜像自带 pgvector 0.8.3（≥0.8 满足 iterative scan 契约），
+    # 与 docker/local 保持一致；数据目录 /data/db（换镜像必须同步改挂载点）
+    image: percona/percona-distribution-postgresql:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-torchwood}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 Dokploy Environment 设置 owner 引导账号口令}
+      POSTGRES_DB: ${POSTGRES_DB:-torchwood}
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+      # initdb 首次建库时创建 tw_authenticator（见 initdb/01-authenticator.sh）
+      TORCHWOOD_AUTH_PASSWORD: ${TORCHWOOD_AUTH_PASSWORD:?}
+    volumes:
+      - postgres_data:/data/db
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-torchwood} -d ${POSTGRES_DB:-torchwood}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2024-11-07T00-52-20Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9000'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  # ---------- 一次性作业链（幂等，可重跑） ----------
+
+  migrate:
+    image: migrate/migrate:v4.18.1
+    volumes:
+      - ../../db/migrations:/migrations:ro
+    command:
+      - "-path=/migrations"
+      - "-database"
+      - "postgres://${POSTGRES_USER:-torchwood}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-torchwood}?sslmode=disable"
+      - "up"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  db-grants:
+    # 迁移 000004 之后补齐 tw_authenticator 授权面（三角色 membership/库级/静态表 DML）
+    image: percona/percona-distribution-postgresql:18
+    volumes:
+      - ./bootstrap-roles.sql:/bootstrap-roles.sql:ro
+    entrypoint: ["psql"]
+    command:
+      - "-v"
+      - "ON_ERROR_STOP=1"
+      - "-v"
+      - "dbname=${POSTGRES_DB:-torchwood}"
+      - "-f"
+      - "/bootstrap-roles.sql"
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: ${POSTGRES_USER:-torchwood}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-torchwood}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  roles-sig:
+    # B15 部署时序：迁移完成后由 owner 引导账号落 roles_sig 密钥（tw_secrets）。
+    # 未跑本作业前 server 也能启动，但文档查询 fail-closed（零角色不可见）。
+    <<: *app-build
+    entrypoint: ["/usr/local/bin/torchwood"]
+    command: ["admin", "sync-roles-sig"]
+    environment:
+      <<: *app-env
+      # 本作业必须持 owner/引导 DSN（非运行态 authenticator——000004 起其对 tw_secrets 零权限）
+      TORCHWOOD_DATA_DATABASE_SOURCE: postgres://${POSTGRES_USER:-torchwood}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-torchwood}?sslmode=disable
+    depends_on:
+      db-grants:
+        condition: service_completed_successfully
+    restart: "no"
+
+  # ---------- 常驻进程 ----------
+
+  server:
+    <<: *app-build
+    # gRPC(127.0.0.1:9060) + grpc-gateway HTTP + Console SPA + Storage serverhttp + healthz
+    # 对外只需 9080（Dokploy「Domains」绑定 server 服务 / 9080，由 Traefik 终止 TLS）
+    environment: *app-env
+    volumes:
+      - ./config.yaml:/app/configs/config.yaml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9080/healthz/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      roles-sig:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    <<: *app-build
+    # Functions 异步执行消费者；不启用 Functions 时可整段删除（纯空闲队列消费者）
+    entrypoint: ["/usr/local/bin/worker"]
+    environment: *app-env
+    volumes:
+      - ./config.yaml:/app/configs/config.yaml:ro
+      # 启用 Functions（docker executor）才放开：⚠ 等同宿主 root 权限，仅在可信环境
+      # - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      roles-sig:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

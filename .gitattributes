@@ -6,3 +6,6 @@
 *.yaml text eol=lf
 *.json text eol=lf
 *.md text eol=lf
+# docker/dokploy：.sh/.sql 会被 bind-mount 进 Linux 容器执行，必须 LF
+*.sh text eol=lf
+*.sql text eol=lf

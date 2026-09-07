@@ -1,0 +1,141 @@
+# Torchwood 运行时配置基线（docker/dokploy 栈）
+# 由 compose bind-mount 到 /app/configs/config.yaml；环境变量 TORCHWOOD_* 覆盖优先，
+# 密钥类（jwt secret / setup token / DB DSN / S3 凭据）一律由 compose 环境变量注入，不落此文件。
+# 完整键位说明见 configs/config.yaml.template 与 docs/developer/13-operations.md §4。
+
+server:
+  http:
+    addr: ":9080"
+    timeout: "60s"
+    # 对外绝对地址基准（OAuth/支付回调），由 env TORCHWOOD_SERVER_HTTP_PUBLIC_URL 覆盖
+    public_url: "https://change-me.example.com"
+    cors:
+      # 外部浏览器端来源由 env TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS 覆盖（逗号分隔）；
+      # Console 与网关同源，无需加入；allow_credentials=true 时不接受 "*"
+      allow_origins: []
+      allow_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+      allow_headers: ["Content-Type", "Authorization", "X-Api-Key", "X-Torchwood-Project", "X-Request-Id", "X-Correlation-Id"]
+      allow_credentials: true
+      max_age: 3600
+  grpc:
+    # 仅同进程 gateway 转发，不对外
+    addr: "127.0.0.1:9060"
+    timeout: "30s"
+  metrics:
+    # 无鉴权，仅回环；如需采集请走只读边车/VPN
+    addr: "127.0.0.1:9040"
+
+security:
+  jwt:
+    secret: ""              # 必填：env TORCHWOOD_SECURITY_JWT_SECRET
+    access_ttl: "15m"
+    refresh_ttl: "7d"
+  encryption_key: ""        # 可选：env TORCHWOOD_SECURITY_ENCRYPTION_KEY（未配置回退 jwt.secret）
+  api_key:
+    header: "x-api-key"
+  setup_token: ""           # 必填：env TORCHWOOD_SECURITY_SETUP_TOKEN
+  trusted_proxies: []       # compose 已注入 127.0.0.1/32 + docker 私网段
+  sessions:
+    max_per_user: 50
+  rate_limit:
+    enabled: true
+    ip:
+      limit: 300
+      window: "60s"
+    user:
+      limit: 1000
+      window: "60s"
+    api_key:
+      limit: 6000
+      window: "60s"
+
+data:
+  database:
+    # 运行态必须是非 superuser tw_authenticator（compose 注入），superuser 绕过 RLS
+    source: ""
+    debug: false
+    slow_query_threshold: "500ms"
+    pool:
+      max_idle_conns: 4
+      max_open_conns: 16
+      conn_max_lifetime: "1h"
+      conn_max_idle_time: "30m"
+  redis:
+    addr: "redis:6379"
+    password: ""            # 栈内网络默认免密；加固时同步改 redis 服务与 env TORCHWOOD_DATA_REDIS_PASSWORD
+    db: 0
+
+storage:
+  provider: "minio"
+  s3:
+    endpoint: "http://minio:9000"   # 接外部 S3 时改这里 + env 凭据；bucket 由应用启动时自动创建
+    region: "us-east-1"
+    bucket: "torchwood-storage"     # S3/MinIO 要求全小写
+    access_key_id: ""               # env TORCHWOOD_STORAGE_S3_ACCESS_KEY_ID
+    secret_access_key: ""           # env TORCHWOOD_STORAGE_S3_SECRET_ACCESS_KEY
+
+functions:
+  executor: "docker"
+  docker:
+    host: "unix:///var/run/docker.sock"
+    # 默认 per-project 隔离网络 tw-func-<project_id>；勿配全局网络（跨租户横向风险）
+    network: ""
+    registry: "torchwood-funcs"
+
+payments:
+  stripe:
+    api_base_url: ""
+  wechat:
+    mch_id: ""
+    app_id: ""
+    notify_url: ""
+    api_base_url: ""
+  alipay:
+    app_id: ""
+    notify_url: ""
+    gateway_url: ""
+  ios_iap:
+    bundle_id: ""
+    issuer_id: ""
+    key_id: ""
+    verify_receipt_url: ""
+    sandbox_verify_url: ""
+
+telemetry:
+  enabled: false
+  otlp_endpoint: ""
+  service_name: "Torchwood"
+
+messaging:
+  smtp:
+    host: ""
+    port: 587
+    username: ""
+    password: ""
+    from: "noreply@torchwood.local"
+    use_tls: true
+  # 生产环境发送路径在无 SMTP/SMS 配置时直接拒绝（防 OTP 泄漏日志），保持 false
+  dev_log_otp: false
+  dev_log_sms: false
+  sms:
+    provider: ""
+    twilio:
+      account_sid: ""
+      auth_token: ""
+      from: ""
+
+idgen:
+  default_strategy: uuid
+  random:
+    length: 10
+    charset: numeric
+    redis_key_prefix: Torchwood:id:random
+    max_retries: 10
+  snowflake:
+    node_id: 0
+  sequence:
+    redis_key_prefix: Torchwood:seq
+  resources:
+    users: uuid
+    sessions: uuid
+    documents: uuid
