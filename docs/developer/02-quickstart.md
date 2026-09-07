@@ -153,7 +153,7 @@ task dev:worker         # go run ./cmd/worker（独立进程）
 | Admin Console | `http://127.0.0.1:9080/console/` |
 | HTTP / grpc-gateway | `http://127.0.0.1:9080/v1/...`（如 `/v1/server/users`） |
 | gRPC（仅回环） | `127.0.0.1:9060`（`server.grpc.addr`） |
-| Metrics | `http://127.0.0.1:9040/metrics`（`server.metrics.addr` 为空回退同值，`internal/infra/server/metrics.go:18`） |
+| Metrics | `http://127.0.0.1:9040/metrics`（`server.metrics.addr` 为空回退同值，`internal/runtime/metrics.go`） |
 | 健康检查 | `http://127.0.0.1:9080/healthz/liveness`、`/healthz/readiness` |
 
 HTTP/Metrics 端口由 `server.http.addr` / `server.metrics.addr` 决定，非硬编码；`task console:dev` 的 Vite 代理指向同源 `/v1`。

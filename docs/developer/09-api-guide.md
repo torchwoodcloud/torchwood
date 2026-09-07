@@ -15,7 +15,7 @@ gRPC handler (internal/api/*grpc) → app use-case (internal/app/*) → domain p
 
 `proto/` 四组：`server/v1`（管理面，API Key / Admin）/`client/v1`（终端用户）/`console/v1`（Console 专用）/`shared/v1`（`authz.proto`/`common.proto`/`document.proto`/`error.proto`/`query.proto`）。生成到 `genproto/`（禁止手改）。
 
-以 `proto/server/v1/projects.proto:5` 为模板：
+以 `proto/server/v1/projects.proto` 为模板（节选，完整注解见 §2.1）：
 
 ```proto
 syntax="proto3";
@@ -28,20 +28,43 @@ option go_package="github.com/torchwooddev/torchwood/genproto/server/v1;serverv1
 option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   security_definitions:{ security:{key:"apiKey" value:{type:TYPE_API_KEY in:IN_HEADER name:"X-API-Key"}}}
   security:{security_requirement:{key:"apiKey" value:{}}}
-  extensions:{key:"x-torchwood-access" value:{string_value:"api_key"}}
+  extensions:{key:"x-torchwood-access" value:{string_value:"server"}}
 };
 service ProjectsService {
-  option (torchwood.shared.v1.service_auth)={default_access:ACCESS_API_KEY};
-  rpc CreateProject(CreateProjectRequest) returns (Project){ option (google.api.http)={post:"/v1/server/projects" body:"*"}; }
-  rpc ListProjects(shared.v1.ListRequest) returns (ListProjectsResponse){ option (google.api.http)={get:"/v1/server/projects"}; }
-  rpc GetProject(GetProjectRequest) returns (Project){ option (google.api.http)={get:"/v1/server/projects/{id}"}; }
-  rpc UpdateProject(UpdateProjectRequest) returns (Project){ option (google.api.http)={patch:"/v1/server/projects/{id}" body:"*"}; }
+  option (torchwood.shared.v1.service_auth)={default_access:ACCESS_SERVER};
+  rpc CreateProject(CreateProjectRequest) returns (Project){
+    option (google.api.http)={post:"/v1/server/projects" body:"*"};
+    option (torchwood.shared.v1.method_auth)={access:ACCESS_PERMISSION permissions:["owner","admin"]};
+  }
+  rpc ListProjects(shared.v1.ListRequest) returns (ListProjectsResponse){
+    option (google.api.http)={get:"/v1/server/projects"};
+    option (torchwood.shared.v1.method_auth)={api_key_scope:{resource:SCOPE_RESOURCE_PROJECTS op:SCOPE_OP_READ}};
+  }
+  rpc GetProject(GetProjectRequest) returns (Project){
+    option (google.api.http)={get:"/v1/server/projects/{id}"};
+    option (torchwood.shared.v1.method_auth)={api_key_scope:{resource:SCOPE_RESOURCE_PROJECTS op:SCOPE_OP_READ}};
+  }
+  rpc UpdateProject(UpdateProjectRequest) returns (Project){
+    option (google.api.http)={patch:"/v1/server/projects/{id}" body:"*"};
+    option (torchwood.shared.v1.method_auth)={admin_roles:[ADMIN_ROLE_MEMBER,ADMIN_ROLE_ADMIN,ADMIN_ROLE_OWNER]
+                                              api_key_scope:{resource:SCOPE_RESOURCE_PROJECTS op:SCOPE_OP_WRITE}};
+  }
 }
 ```
 
-### 2.1 鉴权注解（强制）
+### 2.1 鉴权注解（强制，策略唯一声明源）
 
-`proto/shared/v1/authz.proto:9`：`ACCESS_PUBLIC(1)`/`ACCESS_AUTHENTICATED(2)`/`ACCESS_PERMISSION(3)`/`ACCESS_API_KEY(4)`；`MethodAuth{access,permissions}` 扩展 `52001`，`ServiceAuth{default_access}` 扩展 `52002`。服务级 `service_auth` 可省略方法级，单方法可用 `method_auth` 覆盖（如 `console/v1/admins.proto:ListAdmins` `access:ACCESS_PERMISSION permissions:["owner","admin"]`）。未解析出 authz 的方法启动即 `missing auth policy`。
+`proto/shared/v1/authz.proto`：`AccessLevel = PUBLIC / END_USER / SERVER / PERMISSION / SYSTEM`（凭证族第一维）；`MethodAuth{access, permissions, admin_roles, api_key_scope}` 扩展 `52001`，`ServiceAuth{default_access}` 扩展 `52002`。语义：
+
+| Access | 凭证族 | 细粒度门 |
+|--------|--------|----------|
+| `ACCESS_PUBLIC` | 匿名可调 | —（client 面 PUBLIC 方法须显式登记白名单，防误标） |
+| `ACCESS_END_USER` | 端用户会话/JWT（Client 面专属） | `permissions` 归一 `["users"]` |
+| `ACCESS_SERVER` | admin 会话 **或** API key | `admin_roles`（viewer/member/admin/owner；空=不限角色）+ `api_key_scope`（缺省=不对 key 开放） |
+| `ACCESS_PERMISSION` | admin 会话专属 | `permissions`（如 `["owner","admin"]`）；API key 一律拒绝 |
+| `ACCESS_SYSTEM` | 内部预留 | 当前禁用（启动断言拒绝） |
+
+方法级 `method_auth` 优先，缺省回落服务级 `service_auth.default_access`；细粒度字段仅方法级携带。策略由 `internal/runtime` 启动期收集为 `PolicySet` 并过全量语义断言（档位/死 scope/值域/项目寻址——见 `05-authentication.md` §3/§7），未解析出 authz 的方法启动即 `missing auth policy`。每方法须同步 OpenAPI 扩展 `x-torchwood-access`（值域 `public/end_user/server/permission`，§10 一致性测试锁定）。
 
 ### 2.2 消息约定
 
@@ -75,7 +98,7 @@ message DeleteSessionRequest {
 task generate:proto # buf lint + buf generate（buf.gen.yaml v2：go/gateway/grpc/openapiv2 → genproto，paths=source_relative）
 ```
 
-产物：`*_grpc.pb.go`（`XxxServiceServer` + `Register`）、`*.pb.gw.go`（`RegisterXxxHandlerFromEndpoint`）、`*.swagger.json`（`json_names_for_fields`）、`* .pb.go` 描述符（供 `collectMethodsByAccess` 聚合鉴权）。
+产物：`*_grpc.pb.go`（`XxxServiceServer` + `Register`）、`*.pb.gw.go`（`RegisterXxxHandlerFromEndpoint`）、`*.swagger.json`（`json_names_for_fields`）、`*.pb.go` 描述符（供 `internal/runtime.BuildMethodPolicies` 收集鉴权策略）。
 
 ## 4 步骤 3：domain 端口
 
@@ -115,7 +138,7 @@ err := db.RunInTx(ctx, func(txCtx context.Context) error {
 
 元数据 `bun`：`internal/infra/bun/model/project.go` + `bunrepo/project_repo.go:NewSelect().Where("id=?").Scan`（`sql.ErrNoRows→nil`），构造器 `func NewXxxRepository(db *clients.Database) xxx.Repository`。
 
-动态文档仅业务集合走 `internal/infra/documentdb/postgres.go:NewPostgresDocumentDB(db,pub)`：`schema-per-database + _tenant + _perms`，`pkg/query` 优先（`equal/contains/search...`），字段白名单+敏感黑名单，未声明列→`InvalidArgument`；端口错误经 `internal/app/shared.MapDocumentDBError` 映射。
+动态文档仅业务集合走 `internal/infra/documentdb/postgres.go:NewPostgresDocumentDB(db,pub)`：`schema-per-database + _tenant + _acl`（文档 ACE 内嵌，判定执行点在 RLS policy——见 `06-databases.md` §7），查询走 `pkg/query` typed AST（DSL 串仅是 SDK/CLI 客户端糖），字段白名单+敏感黑名单，未声明列→`InvalidArgument`；端口错误经 `internal/app/shared.MapDocumentDBError` 映射。
 
 ## 7 步骤 6：api handler
 
@@ -154,13 +177,17 @@ if info.HasNext { meta.NextPageToken = crud.EncodePageToken(info.NextOffset) }
 if info.HasPrevious { meta.PrevPageToken = crud.EncodePageToken(info.PreviousOffset) }
 ```
 
-- 勿手拼 SQL `filter/order`；动态文档查询一律走 `pkg/query`（见下）。
-- `pkg/crud/filter.go`/`order.go` 供静态表列表复用，动态文档优先 `pkg/query`（见 `06-databases.md` §6）。
+- 勿手拼 SQL `filter/order`；动态文档查询一律走 `pkg/query` typed AST（见 `06-databases.md` §6）。
+- `pkg/crud/filter.go`/`order.go` 供静态表列表复用；动态文档过滤载体唯一是 `shared.v1.Query`。
 
-示例（documents 支持 `queries`（Appwrite 风格 DSL，见 06-databases.md §6）；storage buckets/files 列表携带 `queries` 会被 `InvalidArgument` 显式拒绝）：
+`shared.v1.ListRequest.queries`（Appwrite 风格 DSL 串）是**静态表面遗留通道**，按面分化：仅 `ListUsers` 经 `ParseUserList` 白名单解析（`equal/greaterThan/lessThan` + 白名单属性）；storage buckets/files 与 groups 携带即 `InvalidArgument`（显式拒绝）；documents 已将 `queries` **reserved**（服务端零字符串解析，DSL 只存活为 SDK/CLI 客户端糖）。
+
+文档列表：GET 面保留 `page_size/page_token`，过滤/排序/投影一律 `POST .../documents:list`，body 即 Query JSON：
 
 ```bash
-curl -H 'X-API-Key: <key>' 'http://127.0.0.1:9080/v1/databases/default/collections/<collection_id>/documents?page_size=20&queries=name%20eq%20%22a%22'
+curl -X POST -H 'X-API-Key: <key>' -H 'Content-Type: application/json' \
+  -d '{"filter":{"eq":{"attribute":"status","values":["published"]}},"orders":[{"attribute":"$createdAt","desc":true}],"pageSize":20}' \
+  'http://127.0.0.1:9080/v1/server/databases/default/collections/<collection_id>/documents:list'
 # 响应 {documents:[...], meta:{page_size:20,next_page_token:"...",total_count:42}}
 ```
 
@@ -181,13 +208,13 @@ wire.Bind(new(projects.Repository), new(*bunrepo.ProjectRepo))
 
 ### 注册
 
-`internal/infra/server/grpc.go:collectMethodsByAccess(descriptors...)` 聚合全部 `File_xxx_proto` 的 `method_auth/service_auth`，未覆盖服务增 file 后两处登记（此处 + `grpc_gateway.go:RegisterXxxHandlerFromEndpoint`），`assertRegisteredMethodsHaveAuthz` fail-closed。
+业务 proto 文件清单单一登记在 `internal/runtime/grpc.go` 的 `authzFileDescriptors()`（新增服务文件只登记此处）；`ProvideMethodPolicies` → `BuildMethodPolicies` 启动期收集策略并过语义断言，`assertRegisteredMethodsHaveAuthz` fail-closed（已注册方法必须命中 PolicySet）。gateway 侧在 `internal/runtime/grpc_gateway.go` 登记 `RegisterXxxHandlerFromEndpoint`。
 
 ## 9 错误与网关
 
 用例层 `codes.Unauthenticated/PermissionDenied/NotFound/InvalidArgument/AlreadyExists`；`FailedPrecondition/OutOfRange` 用于 `version_*`/`超限`。
 
-`internal/infra/server/errors.go:HTTPErrorHandler` 统转 JSON：
+`internal/runtime/errors.go:HTTPErrorHandler` 统转 JSON：
 
 ```json
 {"error":{"type":"invalid_request_error","code":"InvalidArgument","message":"...","error_id":"<uuid>","error_code":"ERROR_CODE_INVALID_REQUEST"}}
@@ -197,17 +224,17 @@ wire.Bind(new(projects.Repository), new(*bunrepo.ProjectRepo))
 
 ## 10 OpenAPI 与一致性断言
 
-每服务文件声明 `openapiv2_swagger`：`security_definitions{apiKey(X-API-Key),Bearer(Authorization: Bearer),cookie(Cookie: TORCHWOOD_session_console)}` + `security{apiKey}` + `extensions{x-torchwood-access: api_key/public/authenticated/permission}` + `responses{default → .torchwood.shared.v1.ErrorResponse}`。
+每服务文件声明 `openapiv2_swagger`：`security_definitions{apiKey(X-API-Key),Bearer(Authorization: Bearer),cookie(Cookie: TORCHWOOD_session_console)}` + `security{apiKey}` + `extensions{x-torchwood-access: public/end_user/server/permission（与 AccessLevel 对应，§2.1）}` + `responses{default → .torchwood.shared.v1.ErrorResponse}`。
 
 `method_auth` 与 `x-torchwood-access` 必须一致：未显式声明的 operation 继承 swagger 顶层（服务默认），`ACCESS_PUBLIC` 需 `security:[]`。
 
 default 错误响应建模为声明式：`buf.gen.yaml` 对 openapiv2 插件设置 `disable_default_errors=true` 关闭生成器自带的 `rpcStatus` 注入（该结构与运行时错误体不符）；每个 service proto 文件级声明的 `responses.default` 会自动填充到该文件全部 operation，并使 `Error/ErrorResponse/ErrorCode` 定义经 customRefs 原生产出（legacy 命名，当前为 `v1Error/v1ErrorCode/v1ErrorResponse`）。新增 service 文件必须携带同一段 `responses.default`，否则该文件的 operation 将缺失错误契约，测试即红。
 
-`internal/runtime/grpc_swagger_test.go` `TestSwaggerAccessExtensionMatchesCollectMethodsByAccess` 逐 `genproto/**/*.swagger.json` 断言：`businessFileDescriptors()`（与 `grpc.go` 同步）→ `collectMethodsByAccess` 推导 access → 比对 `doc.XAccess`（顶层=服务默认）与每 `operation.x-torchwood-access`（继承或显式）完全一致，同时断言每个 operation 的 default 响应引用 `v1ErrorResponse`；`TestSwaggerNoRpcStatus` 断言全部 swagger 无 `rpcStatus` 残留（`disable_default_errors` 回退即红）。新增服务后两处 file 列表同步更新，否则测试失败（≥14 文件、≥140 operation）。
+`internal/runtime/grpc_swagger_test.go` `TestSwaggerAccessExtensionMatchesCollectMethodsByAccess` 逐 `genproto/**/*.swagger.json` 断言：`businessFileDescriptors()`（复用 `grpc.go` 的 `authzFileDescriptors` 单一清单）→ `BuildMethodPolicies` 推导 access → 比对 `doc.XAccess`（顶层=服务默认）与每 `operation.x-torchwood-access`（继承或显式）完全一致，同时断言每个 operation 的 default 响应引用 `v1ErrorResponse`；`TestSwaggerNoRpcStatus` 断言全部 swagger 无 `rpcStatus` 残留（`disable_default_errors` 回退即红）。新增服务后 file 清单同步一处即可（swagger 测试复用同一清单），否则测试失败（≥14 文件、≥140 operation）。
 
 ## 11 OutboxService 示例（新增服务的完整参照）
 
-`proto/server/v1/outbox.proto:56`（`ACCESS_API_KEY` 默认，顶层 `x-torchwood-access=api_key`）：
+`proto/server/v1/outbox.proto`（`ACCESS_SERVER` 默认，顶层 `x-torchwood-access=server`；方法级 `admin_roles:[ADMIN_ROLE_ADMIN,ADMIN_ROLE_OWNER]` + `api_key_scope` 写门）：
 
 ```proto
 service OutboxService {

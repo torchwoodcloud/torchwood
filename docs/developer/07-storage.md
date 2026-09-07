@@ -63,7 +63,7 @@ MIME 归一化（`normalizeMimeType`）：`""` 与 `text/html`、`application/xh
 
 ## 5 API
 
-### 5.1 gRPC `StorageService`（`proto/server/v1/storage.proto:57`，`ACCESS_API_KEY` 默认）
+### 5.1 gRPC `StorageService`（`proto/server/v1/storage.proto:57`，`ACCESS_SERVER` 默认）
 
 | RPC | HTTP | 说明 |
 |---|---|---|
@@ -73,11 +73,11 @@ MIME 归一化（`normalizeMimeType`）：`""` 与 `text/html`、`application/xh
 | `UpdateBucket` | `PATCH /v1/server/storage/buckets/{id}` | `optional name/public` |
 | `DeleteBucket` | `DELETE /v1/server/storage/buckets/{id}` | 分页删文件对象+元数据，再前缀 `List+Delete` 清残留分片 |
 | `CreateFile` | `POST /v1/server/storage/buckets/{bucket_id}/files` | gRPC body `bytes data`；`permissions` `deprecated` 已废弃 |
-| `ListFiles` | `GET /v1/server/storage/buckets/{bucket_id}/files` | `queries/page_size/page_token`（过滤仅限权限后内存分页） |
+| `ListFiles` | `GET /v1/server/storage/buckets/{bucket_id}/files` | `page_size/page_token`（过滤仅限权限后内存分页；`queries` 携带即 `InvalidArgument` 显式拒绝） |
 | `GetFile` | `GET /v1/server/storage/buckets/{bucket_id}/files/{file_id}` | 仅元数据 |
 | `UpdateFile` | `PATCH .../files/{file_id}` | `optional name/mime_type` + `metadata` 整体替换 |
 | `DeleteFile` | `DELETE .../files/{file_id}` | 删对象 + 行 |
-| `CreateFileToken` | `POST .../files/{file_id}/tokens` | 显式 `method_auth=ACCESS_API_KEY`（敏感方法） |
+| `CreateFileToken` | `POST .../files/{file_id}/tokens` | 显式 `method_auth`（member+admin_roles + storage.write scope，敏感方法不依赖服务级默认） |
 | `GetStorageUsage` | `GET /v1/server/storage/usage` | `{buckets,files,total_size}`（`SUM(size)`，不走 DocumentDB 权限过滤） |
 
 `StorageService` 共 12 个 RPC（桶 5 + 文件 5 + Token/Usage 2）；per-statement 超时见 §8。

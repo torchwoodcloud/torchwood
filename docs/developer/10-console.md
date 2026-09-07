@@ -1,6 +1,6 @@
 # Torchwood Console 前端开发指南
 
-> 面向需在 Admin Console 新增页面的开发者。Console 为 React 19 + Vite 8 + TanStack Query + shadcn/ui 的管理后台，产物经 `go:embed` 打进二进制，由 `internal/infra/server/console.go` 在 `/console/` 下 serve。
+> 面向需在 Admin Console 新增页面的开发者。Console 为 React 19 + Vite 8 + TanStack Query + shadcn/ui 的管理后台，产物经 `go:embed` 打进二进制，由 `internal/runtime/console.go` 在 `/console/` 下 serve。
 > 目标读者：前端开发者。关联：`AGENTS.md`、`docs/developer/09-api-guide.md`。
 > 修订记录：2026-08-23 重写（以 `console/package.json`、`console/embed.go`、`console/src/api/client.ts`、`internal/api/consolegrpc/cookies.go` 为准）。
 
@@ -111,7 +111,7 @@ api.interceptors.request.use((config) => {
 | `TORCHWOOD_console_refresh` | `/v1/console/auth` | `HttpOnly` + `SameSite=Lax` | refresh token，仅发往刷新端点（`cookies.go:28`） |
 
 - 签发：`POST /v1/console/auth/sign-in`（`auth.go:23`）与 `POST /v1/console/auth/refresh` 成功后 `setSessionCookies`；
-- `Set-Cookie` 经 `internal/infra/server/grpc_gateway.go` 的 `authOutgoingHeaderMatcher` 透传；
+- `Set-Cookie` 经 `internal/runtime/grpc_gateway.go` 的 `authOutgoingHeaderMatcher` 透传；
 - CSRF 防护：`SameSite=Lax` 使跨站 POST 不携带 cookie；本服务变更类端点均为 POST，故无需额外 CSRF token（`console.go:32` 注释）；
 - `Secure` 由 `console.Auth.SecureCookies()` 决定（非本地环境自动启用）。
 
@@ -135,7 +135,7 @@ task build             # 依赖 console:build → go build ./cmd/server ./cmd/wo
 
 - `vite.config.ts:8`：`base: '/console/'`，`@` → `./src`（tsconfig + vite 双别名）；
 - `vite.config.ts:20`：`server.proxy['/v1'] → http://localhost:9099`（与 `configs/config.yaml.template` 的 `server.http.addr` 对齐），保证 dev 下 `/v1` 同源，HttpOnly cookie 正常工作；
-- `console/embed.go:8`：`//go:embed dist` → `console.Dist`，由 `internal/infra/server/console.go:7` 的 `NewConsoleHandler` 挂载，SPA fallback（未知路径回 `index.html`）+ 安全头（`X-Frame-Options: DENY` / CSP / `X-Content-Type-Options`）。
+- `console/embed.go:8`：`//go:embed dist` → `console.Dist`，由 `internal/runtime/console.go` 的 `NewConsoleHandler` 挂载，SPA fallback（未知路径回 `index.html`）+ 安全头（`X-Frame-Options: DENY` / CSP / `X-Content-Type-Options`）。
 
 > **必做**：修改 Console 后先 `task console:build` 再 `task build`，否则 `go:embed` 打包旧 `dist/`。
 

@@ -117,15 +117,14 @@ generate:all
 - **codegen 零漂移**：`task generate:all && git diff --exit-code`（CI `lint` job），本地验证同样执行；任何 `genproto/`、`config.pb.go`、`wire_gen.go` 未提交即失败；
 - **lint 棘轮**：`golangci-lint run --new-from-rev=origin/main` 仅拦新增（`Taskfile.yml:172`），全量 `golangci-lint run ./...` 零告警后渐进烧存量债（`docs/review/arch-review-2026-08-fix-plan.md:317`）；`go vet` + `gofmt` 为前置门禁。
 
-**新增 gRPC 方法清单**（fail-closed，`05-authentication.md §5`）：
+**新增 gRPC 方法清单**（fail-closed，`05-authentication.md §3/§7`）：
 
-1. 在 `proto/*/v1/*.proto` 为方法加 `(method_auth)`（或依赖 `service_auth` 默认），必填否则 `collectMethodsByAccess` 启动 `missing auth policy`；
-2. 若 `ACCESS_API_KEY`，在 `internal/api/interceptor/apikey_scope.go:25` 登记 `{resource, op}`，否则 `AssertAPIKeyScopeCoverage` panic；
-3. 若 `op==write`，在 `admin_roles.go:16` 登记允许角色，否则 `AssertAdminRoleWriteCoverage` panic；
-4. 在对应 `app/shared/authz.go` 选择 `RequireServerPrincipal`（业务写，API Key 可做）或 `RequirePlatformPrincipal`（平台级）做纵深防御；
-5. 运行 `task generate:all && task build && go vet ./...` 验证零漂移。
+1. 在 `proto/*/v1/*.proto` 为方法加 `(method_auth)`（或依赖 `service_auth` 默认），声明 `access` 与该面的细粒度门（SERVER 面 `admin_roles` + `api_key_scope`；PERMISSION 面 `permissions`）——策略唯一声明源在 proto，必填否则启动 `missing auth policy`；
+2. 同步 OpenAPI 扩展 `x-torchwood-access`（`public/end_user/server/permission`），一致性由 `internal/runtime/grpc_swagger_test.go` 断言；
+3. 在对应 `app/shared/authz.go` 选择 `RequireServerPrincipal`（业务写，API Key 可做）或 `RequirePlatformPrincipal`（平台级）做纵深防御；
+4. 运行 `task generate:all && task build && go vet ./...` 验证零漂移。
 
-`proto/shared/v1/authz.proto:18` 的 `AccessLevel` 与 `method_auth` 为鉴权唯一事实源，OpenAPI `x-torchwood-access` 扩展一致性由 `internal/runtime/grpc_swagger_test.go` 断言。
+`proto/shared/v1/authz.proto` 的 `AccessLevel`/`MethodAuth` 为鉴权唯一事实源（`internal/runtime.BuildMethodPolicies` 启动期收集并过 `AssertSemantic` 语义断言）。
 
 > 生成产物一律可重放：同一 commit 下重复 `task generate:all` 应零 diff；CI 以此为门禁，本地提交前必跑。
 

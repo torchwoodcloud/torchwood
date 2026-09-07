@@ -67,7 +67,7 @@ build:
     - go build -ldflags "..." -o ./bin/torchwood{{if eq .OS "Windows_NT"}}.exe{{end}} ./cmd/client
 ```
 
-- `console:build`（`Taskfile.yml:81`）为 `pnpm run build`（`tsc -b && vite build`），产物 `console/dist/` 再被 `console/embed.go:8` 的 `//go:embed dist` 打进二进制，由 `internal/infra/server/console.go:7` 的 `NewConsoleHandler` 在 `/console/` 下 serve（含 SPA fallback 与 `X-Frame-Options: DENY`/CSP 等安全头）；
+- `console:build`（`Taskfile.yml:81`）为 `pnpm run build`（`tsc -b && vite build`），产物 `console/dist/` 再被 `console/embed.go:8` 的 `//go:embed dist` 打进二进制，由 `internal/runtime/console.go` 的 `NewConsoleHandler` 在 `/console/` 下 serve（含 SPA fallback 与 `X-Frame-Options: DENY`/CSP 等安全头）；
 - 版本：`VERSION=$(git describe --tags --always)`、`COMMIT=$(git rev-parse --short HEAD)`、`DATE=$(date +%Y%m%d%H%M%S)`，注入 `main.version`/`main.commit`/`main.date`（全小写），由 `GET /v1/server/health/version` 暴露；
 - Windows 产物为 `bin/server.exe` / `bin/worker.exe` / `bin/torchwood.exe`；
 - **修改 Console 后必先 `task console:build` 再 `task build`**，否则 embed 旧 `dist/`。
@@ -265,7 +265,7 @@ torchwood admin sync-roles-sig \
 | `/healthz/readiness` | Lynx 驱动：全健康 200 / 任一失败 503 |
 | `grpc.health.v1.Health` | gRPC 侧 10s 轮询快照 |
 
-**Metrics**：`internal/infra/server/metrics.go` 独立 HTTP，`GET /metrics`（`promhttp.Handler()`），`server.metrics.addr`（默认 `127.0.0.1:9040`）。除 runtime 采集器外还有自定义业务指标（realtime Hub/Stream、documentdb 列授权 reconcile、projectschema ensure——规模预警线三指标见 §5.1）。
+**Metrics**：`internal/runtime/metrics.go` 独立 HTTP，`GET /metrics`（`promhttp.Handler()`），`server.metrics.addr`（默认 `127.0.0.1:9040`）。除 runtime 采集器外还有自定义业务指标（realtime Hub/Stream、documentdb 列授权 reconcile、projectschema ensure——规模预警线三指标见 §5.1）。
 
 **日志**：统一 `slog`（`lynx` + `lynxzap`），`--log-level` 控制；gateway 请求日志为 `Debug`（`lynxhttp.WithRequestLog(true)`，`grpc_gateway.go`），`RequestURL` 含完整 query（含 OAuth code），生产开 debug 前需评估；认证拒绝由 `internal/api/interceptor/jwt.go:logAuthFailure` 输出 Warn（无 token 明文）。
 
@@ -393,7 +393,7 @@ bin/torchwood admin import --project <project_id> --in /backup/p1 --dsn "$TORCHW
 
 **snapshot_seq 与增量续接**：导出在单一 `REPEATABLE READ` 快照事务内读取 outbox 全局 `max(seq)`（snapshot_seq）、catalog 两表与全部集合行——快照后提交的写入不在导出行中、其 seq 必大于 snapshot_seq。因此恢复后执行 `:changes?since_seq=<snapshot_seq>`（`import` 结束输出 ResumeHint）即无缝续接导出后的增量（文档 create/update/delete 事件，tombstone 语义见 `:changes` 契约），本地副本/下游可精确收敛；outbox 表在 `public`，不受 `DROP SCHEMA` 影响，重放窗口即 outbox 保留窗口。
 
-**物理名策略**：导入**沿用导出的 physical_name**（`c_<base32(8)>`），数据文件按逻辑 (database, collection) 寻址；集合表经与在线 `CreateCollection` 相同的 DDL 汇聚点重建（`_version` 列、默认时间索引、`_acl` GIN、RLS policy + FORCE、列级 GRANT 全走现役代码路径），行导入以 `tw_system` 身份直写（`_acl`/`_version`/时间戳原样保真，分批事务）。
+**物理名策略**：物理表名 = collectionID（2026-09-06 勘误后逻辑即物理），导入按 catalog 行重建表名 = collectionID，数据文件按逻辑 (database, collection) 寻址；集合表经与在线 `CreateCollection` 相同的 DDL 汇聚点重建（`_version` 列、默认时间索引、`_acl` GIN、RLS policy + FORCE、列级 GRANT 全走现役代码路径），行导入以 `tw_system` 身份直写（`_acl`/`_version`/时间戳原样保真，分批事务）。
 
 **工具身份要求**：运行账号需三角色 membership（`tw_system` 读行/写行、`tw_owner` DDL/catalog，同 §4.5 的 authenticator 形态即可）；vector 列恢复要求目标库已启用 pgvector（§6.6）。
 
@@ -404,7 +404,7 @@ bin/torchwood admin import --project <project_id> --in /backup/p1 --dsn "$TORCHW
 | 范围 | 一项目跨**全部业务库**（catalog 行 + 数据行） | 单个两段式 schema 的物理对象；多库项目需逐 schema dump，且 catalog 行在 `public`，**不在** dump 内 |
 | 恢复方式 | `import` 重建 catalog + 表 + 行（幂等清位重灌） | 需手工处理 catalog 两表的配套行，否则同名库/集合无法重建（F4-2） |
 | `_acl`/RLS | 行内 `_acl` 原样保真，RLS/列授权由现役 DDL 路径重建 | policy/GRANT 随 dump 还原，但对象属主/角色名需目标库一致 |
-| 物理名 | 沿用导出值（数据文件与物理名解耦） | 原样还原（含物理名） |
+| 物理名 | 表名 = collectionID（逻辑即物理，重建按 catalog 行） | 原样还原（含物理名） |
 | 增量续接 | snapshot_seq + `:changes` 闭合 | 无（配合逻辑复制/触发器自建） |
 | 适用场景 | 项目迁移、重建路径（`poc-to-release-migration.md` A5）、单项目时间点备份 | 整库快速快照、schema 结构审计、DBA 习惯的全量兜底 |
 

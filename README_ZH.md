@@ -9,7 +9,7 @@ Torchwood 是一个受 Appwrite 启发、**AI/Agent-Native** 的后端即服务�
 - **Agent 原生 API**：Protobuf 为单一事实来源，`buf generate` 产出 gRPC stub、grpc-gateway handler 与 OpenAPI（`genproto/`）；细粒度 scope 的 API Key（`x-api-key`）供 Agent/自动化调用 Server API。
 - **项目管理**：多项目隔离，每个 `(project.id, database.id)` 对应一个 PostgreSQL schema。
 - **用户认证**：邮箱注册/登录、JWT access/refresh（含轮换）、会话 Cookie、Email/Phone OTP、OAuth2（Google/GitHub/WeChat）、匿名会话、Magic URL、一次性 JWT、TOTP MFA 与邮箱变更二次确认。
-- **动态文档数据库**：schema-per-database，`_tenant` 隔离、`_perms` 文档级权限，兼容 Appwrite 风格的查询 DSL（`pkg/query`），支持批量操作与字段增量。
+- **动态文档数据库**：schema-per-database，`_tenant` 隔离、`_acl` 文档级权限（Postgres RLS policy 判定），typed 查询 AST（`pkg/query`，Appwrite 风格 DSL 仅作客户端糖），支持 keyset 分页、批量操作、字段增量与数组原子更新。
 - **文件存储**：S3/MinIO 兼容，上传/下载/在线预览、缩略图、公开 bucket、HMAC File Token、分片上传与断点续传。
 - **函数执行**：Docker 构建/运行执行器，同步/异步执行，异步 `cmd/worker` 与保留策略。
 - **Admin Console**：React SPA，嵌入 Go 二进制，路径 `/console/`。
@@ -148,9 +148,9 @@ API Key 不在注册时生成，登录后在 Console **API Keys** 页面创建�
 - **Clean Architecture 四层**：`internal/api`（传输层）→ `internal/app`（用例层）→ `internal/domain`（领域模型与端口）→ `internal/infra`（适配器层）。`domain` 定义接口，`infra` 实现。
 - **Wire 注入**：`cmd/server/provides.go` 声明 provider 集合，`cmd/server/wire_gen.go`（`cmd/worker` 同理）由 `task wire:all` 生成；provider 变更后需重新生成。
 - **三进程**：`server`（gRPC + gateway + 自定义 HTTP handler + metrics + 嵌入式 Console）、`worker`（函数执行队列消费者，独立 Wire 装配）、`CLI`（`bin/torchwood`，cobra + `sdk/go/server` 的 `InvokeJSON`，不直接 import `genproto`/gRPC，`rpc` 逃生舱自动覆盖新增 RPC）。
-- **三类数据库**：`public` 控制面与事件脊柱（`projects`、`admins`、`api_keys`、`audit_logs`、`outbox`/`outbox_dead`，bun + golang-migrate）；`tw_<project.id>` 项目数据面——系统静态表（`users`/`sessions`/`identities`/`groups`/`memberships`/`buckets`/`files`）+ 账本/Functions/OAuth/文档目录（`internal/infra/projectschema/`）；`tw_<project.id>_<database.id>` 业务文档面——仅放用户 collection（真实表，`_tenant` + `_perms`）。
-- **API 形态**：Protobuf 为单一事实来源（`proto/` → `genproto/`），REST 由 grpc-gateway 暴露，文件 multipart 与 OAuth 回调走 `internal/api/serverhttp`；gRPC 方法须带 `method_auth` 注解。
-- **认证**：end-user JWT/会话 Cookie、API Key（以 `keys` 角色参与 `_perms` 校验，不绕过文档权限）、Console admin JWT（`TORCHWOOD_session_console` HttpOnly Cookie）。Admin 通过 `X-Torchwood-Project` header 指定项目。
+- **三类数据库**：`public` 控制面与事件脊柱（`projects`、`admins`、`api_keys`、`audit_logs`、`outbox`/`outbox_dead`、全局 catalog 两表 `catalog_databases`/`catalog_collections`，bun + golang-migrate）；`tw_<project.id>` 项目数据面——系统静态表（`users`/`sessions`/`identities`/`groups`/`memberships`/`buckets`/`files`）+ 账本/Functions/OAuth（`internal/infra/projectschema/`）；`tw_<project.id>_<database.id>` 业务文档面——仅放用户 collection（真实表，表名 = collectionID，`_tenant` + `_acl` 内嵌 + RLS policy）。
+- **API 形态**：Protobuf 为单一事实来源（`proto/` → `genproto/`），REST 由 grpc-gateway 暴露，文件 multipart 与 OAuth 回调走 `internal/api/serverhttp`；gRPC 方法须带 `method_auth` 注解（启动期收集为策略注册表）。
+- **认证**：end-user JWT/会话 Cookie、API Key（以 `keys` + `key:<id>` 双角色参与 `_acl` 判定，不绕过文档权限）、Console admin JWT（`TORCHWOOD_session_console` HttpOnly Cookie）。Admin 通过 `X-Torchwood-Project` header 指定项目。
 - **近期加固（点到为止）**：outbox 死信重放 `torchwood admin outbox list-dead/replay`（`document_events_outbox_dead`）；全局 Redis 信号量 `pkg/semaphore`（build 4 / run 16，TTL 租约，内存回退）；仓储层 per-statement 5s/10s `context.WithTimeout`；`golangci-lint` 全量 0 告警、`--new-from-rev=origin/main` 棘轮；`buf breaking --against '.git#branch=origin/main'` 门禁。
 
 ## 测试
@@ -184,7 +184,7 @@ task sdk:demo   # http://localhost:5174
 | [03-configuration](docs/developer/03-configuration.md) | config.proto、`TORCHWOOD_` 环境变量映射 |
 | [04-codegen](docs/developer/04-codegen.md) | Task / Buf / Wire |
 | [05-authentication](docs/developer/05-authentication.md) | JWT / session / API Key / scopes |
-| [06-databases](docs/developer/06-databases.md) | 动态文档、`_tenant`/`_perms`、查询 DSL |
+| [06-databases](docs/developer/06-databases.md) | 动态文档、`_acl` + RLS 权限、查询 AST |
 | [07-storage](docs/developer/07-storage.md) | S3/MinIO、分片上传、File Token |
 | [08-functions](docs/developer/08-functions.md) | Docker 执行器、worker、生命周期 |
 | [09-api-guide](docs/developer/09-api-guide.md) | 新增 gRPC 方法、错误映射、分页 |

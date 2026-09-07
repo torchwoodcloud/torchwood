@@ -11,9 +11,9 @@
 | 层级 | 需真实 DB | 典型位置 | 示例 |
 |------|-----------|----------|------|
 | 纯单元 | 否（stub/mem） | `pkg/`、`internal/domain/`、`internal/api/*grpc/` | `pkg/crud/list_test.go`、`internal/api/servergrpc/projects_test.go`（`stubProjectRepo` + `contexts.WithPrincipal`） |
-| 拦截器 | 部分需 DB | `internal/api/interceptor/` | `jwt_auth_test.go`、`apikey_scope_test.go` |
+| 拦截器 | 部分需 DB | `internal/api/interceptor/` | `jwt_auth_test.go`、`policy_test_helper_test.go` |
 | 集成 | 是（`SetupTestDB`） | `internal/infra/*`、`internal/app/*` | `internal/infra/documentdb/postgres_test.go` |
-| 端到端 | 是 | `internal/infra/server/` | `grpc_gateway_test.go`、`healthz_test.go`（readiness 503） |
+| 端到端 | 是 | `internal/runtime/` | `grpc_gateway_test.go`、`healthz_test.go`（readiness 503）、`authz_matrix_test.go`（全方法 × 凭证档过真实拦截器） |
 
 通用约定：
 

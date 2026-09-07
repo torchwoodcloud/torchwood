@@ -19,7 +19,7 @@ HTTP multipart FunctionsHandler (internal/api/serverhttp/functions_handler.go, P
 
 ## 2 7 个写方法与鉴权
 
-`proto/server/v1/functions.proto:61` `FunctionsService` 共 13 RPC（`ACCESS_API_KEY` 默认），其中 **7 个写方法**在用例层以 `appshared.RequireServerPrincipal` 纵深防御（`internal/app/functions/*.go`）：
+`proto/server/v1/functions.proto:61` `FunctionsService` 共 13 RPC（`ACCESS_SERVER` 默认），其中 **7 个写方法**在用例层以 `appshared.RequireServerPrincipal` 纵深防御（`internal/app/functions/*.go`）：
 
 | RPC | HTTP | 写语义 |
 |---|---|---|
@@ -31,7 +31,7 @@ HTTP multipart FunctionsHandler (internal/api/serverhttp/functions_handler.go, P
 | `SetVariables` | `PUT .../{function_id}/variables` | 全量替换，`repeated Variable`，明文存储（`function_variables`） |
 | `CreateExecution` | `POST .../{function_id}/executions` | 同/异步二选一（见 §5） |
 
-`RequireServerPrincipal` 允许 `System`/`PlatformAdmin`/`keys`，拦截 `viewer` 等细粒度由 `grpc/interceptor` 的 `adminRoleMethodRules` 把关（`IsAPIKeysServiceMethod` 禁 API Key 自铸）。读方法（`List*/Get*`/`ListRuntimes/Specifications`/`GetVariables`）不强制写角色。
+`RequireServerPrincipal` 允许 `System`/`PlatformAdmin`/`keys`；`viewer` 等细粒度由拦截器按 proto `method_auth` 的 `admin_roles` 门禁把关（Functions 写方法为 delegated_platform 档 = admin/owner，见 `authz-matrix.md`）。读方法（`List*/Get*`/`ListRuntimes/Specifications`/`GetVariables`）不强制写角色。
 
 ## 3 运行时与构建
 

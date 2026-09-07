@@ -23,8 +23,8 @@
 
 **关键字段选摘**
 
-- `server.grpc.addr` 默认 `127.0.0.1:9060`（仅回环供 gateway 转发）；`server.http.addr` `:9080`；`server.metrics.addr` 空回退 `127.0.0.1:9040`（`internal/infra/server/metrics.go:18`）；`server.http.public_url` 决定 OAuth 回调与 cookie `Secure`；
-- `security.jwt.secret` **必填**，启动校验 ≥32 字符且不含弱子串（`cmd/server/provides.go:63`）；`security.encryption_key` 独立静态加密密钥，未配回退 `jwt.secret` 并告警（`internal/pkg/config/crypto.go:10`）；
+- `server.grpc.addr` 默认 `127.0.0.1:9060`（仅回环供 gateway 转发）；`server.http.addr` `:9080`；`server.metrics.addr` 空回退 `127.0.0.1:9040`（`internal/runtime/metrics.go`）；`server.http.public_url` 决定 OAuth 回调与 cookie `Secure`；
+- `security.jwt.secret` **必填**，启动校验 ≥32 字符且不含弱子串（`internal/bootkit/config.go`，server/worker 共享）；`security.encryption_key` 独立静态加密密钥，未配回退 `jwt.secret` 并告警（`internal/pkg/config/crypto.go:10`）；
 - `security.setup_token` 空则首个管理员注册 `FailedPrecondition`（`internal/app/console/setup.go`）；
 - `security.trusted_proxies` `repeated string` CIDR（逗号分隔环境覆盖，见 §4）；
 - `security.rate_limit` `optional bool enabled`（默认 true）+ 三维度 `ip`/`user`/`api_key` 固定窗口；

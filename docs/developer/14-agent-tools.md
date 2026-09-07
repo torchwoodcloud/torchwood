@@ -1,17 +1,17 @@
 # Agent 默认工具箱
 
-> Overlay，不是新 API。完整产品面仍是 **187 个 RPC**（Client 61 + Server 116 + Console 10），Agent 默认仅暴露 **18 个动词**。权威映射：`sdk/go/server/tools.go:42`（`Tools`）与 `sdk/typescript/src/server/tools.ts:34`（`agentTools`）；规格：`docs/review/wave3-e7-tool-catalog.md`。OpenAPI 以 `genproto/**/*.swagger.json`（`buf.gen.yaml:19` 的 `openapiv2`）为权威。
-> 修订记录：2026-08-23 重写（以 `sdk/go/server/tools.go`、`sdk/typescript/src/server/tools.ts` 的 18 条 `TOOL_*`/`Tool*` 为准，核对 187 总数与 `genproto` swagger）。
+> Overlay，不是新 API。完整产品面仍是 **195 个 RPC**（Client 62 + Server 123 + Console 10），Agent 默认仅暴露 **18 个动词**。权威映射：`sdk/go/server/tools.go:42`（`Tools`）与 `sdk/typescript/src/server/tools.ts:34`（`agentTools`）；规格：`docs/review/wave3-e7-tool-catalog.md`。OpenAPI 以 `genproto/**/*.swagger.json`（`buf.gen.yaml:19` 的 `openapiv2`）为权威。
+> 修订记录：2026-09-07 复核（authz 策略注册表化后 sync scope/计数表述；18 条 `TOOL_*`/`Tool*` 不变）。
 
 ---
 
 ## 1. 定位
 
-- **不是**第 186 个 RPC，也**不是**把产品面砍到 20 动词；
+- **不是**第 196 个 RPC，也**不是**把产品面砍到 20 动词；
 - Agent / 自动化默认只看见下表；Console、CLI、SDK 仍走完整 Server API；
 - 逃生舱仍是 `InvokeJSON(fullMethod, protojson)`（`sdk/go/server/invoke.go:20`）：覆盖全部 `torchwood.server.v1.*` unary，继续排除 `APIKeysService`；
 - 本 catalog **不含** create/list/get/delete API key——密钥只在 Console 或带合适 scope 的管理流程里创建，不交给普通 Agent 工具面；
-- 全量 187 的计数口径：`proto/client` + `proto/server` + `proto/console` 的全部 `rpc` 条目，见 `genproto/**/*.swagger.json` 的 `operationId`（`{Service}_{RPC}`）；
+- 全量 195 的计数口径：`proto/client` + `proto/server` + `proto/console` 的全部 `rpc` 条目，见 `genproto/**/*.swagger.json` 的 `operationId`（`{Service}_{RPC}`）与 `authz-matrix.md` 头部（PUBLIC 28 · END_USER 41 · SERVER 115 · PERMISSION 11）；
 - 新增 RPC 后，overlay 是否收录由产品决策，完整 API 由 `InvokeJSON` 自动覆盖，无需改动工具箱即可调用。
 
 ---
@@ -127,8 +127,8 @@ TS 不提供 `InvokeJSON`；catalog 仅提供名字与 `fullMethod`，实际执�
 
 - **Proto**：`proto/client/`、`proto/server/`、`proto/console/`、`proto/shared/`；
 - **OpenAPI**：`task generate:proto`（`buf generate`）后 `genproto/**/*.swagger.json`（`buf.gen.yaml` 的 `openapiv2` 插件，`json_names_for_fields=false` 输出 snake_case，时间一律 `google.protobuf.Timestamp` → RFC3339）；
-- **Scope**：每个 Server RPC 在 `internal/api/interceptor/apikey_scope.go`（映射重建自 `internal/domain/auth/scope.go` 单一事实来源）有显式 `databases:read/write` 等映射，`AssertAPIKeyScopeCoverage` 在 `internal/runtime/grpc.go` 启动期 fail-closed 校验；
-- **计数**：187 = Client 61 + Server 116 + Console 10（以 `proto/**/*.proto` 的 `rpc` 计数为准；`genproto/**/*.swagger.json` 的 `operationId` 为 192（含 additional_bindings 复用），`buf breaking` 保障不兼容变更必经 `reserved`）。
+- **Scope**：Server RPC 的 scope 门随 `method_auth` 的 `api_key_scope` 字段声明在 proto（策略唯一声明源），启动期经 `internal/runtime` 收集进 PolicySet 并由 `AssertSemantic`（含死 scope 检测）fail-closed 校验（见 `05-authentication.md` §3/§7）；
+- **计数**：195 = PUBLIC 28 · END_USER 41 · SERVER 115 · PERMISSION 11（以 `authz-matrix.md` 头部与 `proto/**/*.proto` 的 `rpc` 计数为准；`buf breaking` 保障不兼容变更必经 `reserved`）。
 > 计数复现：`grep -r "^\s*rpc " proto | wc -l`（数字随 API 演进变化，以命令实时结果为准）。
 
 Agent 集成建议：以 `genproto/**/*.swagger.json` 为 schema 权威生成工具 schema；`agentTools`/`Tools` 仅作默认 18 动词的便捷别名。
@@ -155,8 +155,8 @@ TS 属 `fetch` 层，`HttpTransport.request` 已支持 `auth:"apiKey"` 的任意
 
 **Q: 新增 RPC 后要改动哪里？**
 
-- Proto 层：按 `docs/developer/09-api-guide.md §1.4` 加 `method_auth` 与 `google.api.http`，字段删除必 `reserved`；
-- 拦截器层：`apikey_scope.go:25` 登记 scope，否则 `AssertAPIKeyScopeCoverage` panic；
+- Proto 层：按 `docs/developer/09-api-guide.md` §2 加 `method_auth`（access + admin_roles/api_key_scope）与 `google.api.http`，字段删除必 `reserved`；
+- 注解即策略：无需在任何 Go 侧登记 scope/角色——`internal/runtime` 启动期从 proto 收集并过语义断言，漏配直接启动失败；
 - 工具层（可选）：仅当产品决定收录为默认动词时，才在 `tools.go:42` / `tools.ts:34` 追加 `TOOL_*`；
 - 生成物：`task generate:proto` 后提交 `genproto/**/*.swagger.json`，`buf breaking` 会拦住不兼容变更。
 
