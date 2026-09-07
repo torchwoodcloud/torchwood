@@ -24,6 +24,7 @@
 | [13-operations.md](13-operations.md) | 部署与运维：运行形态、构建发布、生产配置要点（含 setup token、双账号、roles-sig 时序）、健康检查、备份与升级 | 运维 / 部署负责人 |
 | [14-agent-tools.md](14-agent-tools.md) | Agent 默认工具箱：overlay 动词映射现有 Server RPC；完整 API 覆盖见 `authz-matrix.md`（195 RPC） | Agent / SDK 集成方 |
 | [15-exit-poc.md](15-exit-poc.md) | 转出 POC 检查单：发布前门禁——A 区清零前不得对外发布；转出后挂账的活跃清单 | 维护者 / 发布负责人 |
+| [16-document-modeling.md](16-document-modeling.md) | 文档建模指南：跨集合引用模式（1:N 引用属性、M:N 数组/junction、ExecuteTransactions 原子写、删除卫生协议、查询陷阱清单，附 Agent 提示词规约） | Agent 构建者 / 后端开发者 |
 | [authz-matrix.md](authz-matrix.md) | 全方法授权矩阵（**生成物，勿手改**）：`task gen:authz-matrix` 从策略注册表渲染，含档位与威胁模型已知取舍 | 后端 / 安全评审 |
 
 ## 推荐阅读路径
@@ -31,7 +32,7 @@
 - **新开发者**：01 → 02 → 04 → 09 → 11
 - **后端功能开发**：03 → 04 → 05 → 06 → 09
 - **前端页面开发**：10（配合 05 §3 与 09 §8）
-- **Agent / SDK 集成**：12 → 14（配合 05 §4 与 roadmap §0）
+- **Agent / SDK 集成**：12 → 14 → 16（配合 05 §4 与 roadmap §0）
 - **部署上线**：13（配合 03 §5 与 11 §6）
 
 ## 相关文档
