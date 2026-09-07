@@ -195,6 +195,59 @@ func TestServerUsers_PasswordResetAndSessions(t *testing.T) {
 	require.Equal(t, codes.NotFound, st.Code())
 }
 
+// M5 C3（评审补偿控制）：UpdateUser 改 email/status 即撤销该用户全部端会话，
+// 旧 session 验证失败；改其他字段（name）与同值幂等写不撤。
+func TestServerUsers_UpdateUser_TakeoverFieldChangeRevokesSessions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	ctx := platformAdminCtx(context.Background())
+	uc, _, projectID, cleanup := newUsersUC(ctx, t)
+	defer cleanup()
+
+	doc, err := uc.CreateUser(ctx, projectID, CreateUserCommand{
+		Email: "takeover-test@torchwood.local", Password: "Pass@123",
+	})
+	require.NoError(t, err)
+	newSession := func() string {
+		bundle, _, err := uc.sessions.CreateSessionAndTokens(ctx, projectID, doc.ID, "takeover-test@torchwood.local", "email")
+		require.NoError(t, err)
+		return sessionIDFromBundle(t, bundle.AccessToken)
+	}
+
+	// 同值幂等：写入当前 email 不撤会话。
+	sessID := newSession()
+	_, err = uc.UpdateUser(ctx, projectID, doc.ID, map[string]any{"email": "takeover-test@torchwood.local"}, databases.Principal{Roles: []string{"keys"}})
+	require.NoError(t, err)
+	require.NoError(t, uc.sessions.EnsureActiveSession(ctx, projectID, sessID, doc.ID))
+
+	// 改 email：旧 session 验证失败（DeleteSessionsByUser 先撤后提交）。
+	_, err = uc.UpdateUser(ctx, projectID, doc.ID, map[string]any{"email": "takeover-moved@torchwood.local"}, databases.Principal{Roles: []string{"keys"}})
+	require.NoError(t, err)
+	require.Error(t, uc.sessions.EnsureActiveSession(ctx, projectID, sessID, doc.ID), "改 email 后旧 session 必须已撤销")
+
+	// 改 status：同样撤会话。
+	sessID = newSession()
+	_, err = uc.UpdateUser(ctx, projectID, doc.ID, map[string]any{"status": users.StatusBlocked}, databases.Principal{Roles: []string{"keys"}})
+	require.NoError(t, err)
+	require.Error(t, uc.sessions.EnsureActiveSession(ctx, projectID, sessID, doc.ID), "改 status 后旧 session 必须已撤销")
+
+	// 改非接管面字段（name）：不撤会话。
+	sessID = newSession()
+	_, err = uc.UpdateUser(ctx, projectID, doc.ID, map[string]any{"name": "Renamed"}, databases.Principal{Roles: []string{"keys"}})
+	require.NoError(t, err)
+	require.NoError(t, uc.sessions.EnsureActiveSession(ctx, projectID, sessID, doc.ID), "改 name 不得撤会话")
+}
+
+// sessionIDFromBundle 解析 access token 得到会话 ID。
+func sessionIDFromBundle(t *testing.T, accessToken string) string {
+	t.Helper()
+	claims, ok := jwtparser.Parse(jwtparser.DeriveKey(usersUCJWTSecret, jwtparser.PurposeEndUserJWT), accessToken)
+	require.True(t, ok)
+	return claims.SessionID
+}
+
 func TestServerUsers_DeleteUser_CascadeBeyondDefaultPage(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

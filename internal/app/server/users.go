@@ -160,6 +160,7 @@ func (u *Users) UpdateUser(ctx context.Context, projectID, userID string, update
 	// 必须由 Server 写主体（console admin 会话 / API key）调用；端用户/匿名
 	// 即使绕过拦截器也不得以 SystemPrincipal 改他人资料。owner/admin 角色
 	// 细粒度由拦截器 adminRoleMethodRules 把关。
+	// M5 C3（评审补偿控制）：email/status 实际变更时撤销该用户全部端会话。
 	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return nil, err
 	}
@@ -208,6 +209,29 @@ func (u *Users) UpdateUser(ctx context.Context, projectID, userID string, update
 	}
 	if len(filtered) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "no updatable fields supplied (password_hash is managed via the dedicated password endpoint)")
+	}
+	current, err := u.usersRepo.GetByID(ctx, projectID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if current == nil {
+		return nil, status.Error(codes.NotFound, "user not found")
+	}
+	// M5 C3（评审补偿控制）：email/status 是接管面字段，实际发生变更即撤销
+	// 该用户全部端会话——对齐端用户改密语义（DeleteSessionsByUser 先撤后
+	// 提交，G3 同源），堵住"被接管的旧会话在 email/status 变更后继续存活"
+	// 窗口；写入当前同值视为幂等无操作。email 变更保持 email_verified=false。
+	takeoverChanged := false
+	if email, ok := filtered["email"].(string); ok && email != current.Email {
+		takeoverChanged = true
+	}
+	if statusVal, ok := filtered["status"].(string); ok && statusVal != current.Status {
+		takeoverChanged = true
+	}
+	if takeoverChanged {
+		if err := u.sessions.DeleteSessionsByUser(ctx, projectID, userID); err != nil {
+			return nil, fmt.Errorf("revoke sessions after takeover-field change: %w", err)
+		}
 	}
 	if err := u.usersRepo.Update(ctx, projectID, userID, filtered); err != nil {
 		if mapped := appshared.MapUserError(err); mapped != err {
