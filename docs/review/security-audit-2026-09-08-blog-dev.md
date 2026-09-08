@@ -13,7 +13,7 @@
 | T-01 | 🟡 中 | 认证接口无限速/无锁定 | ✅ 已修复(dccd925),dev 实弹复验通过 |
 | T-02 | 🟡 中 | Server API 面公网暴露,API Key 为全项目库读写单一凭证 | ✅ 已修复(17f51b2);复扫发现的 bad-key 静默降级已修复(1fd643e) |
 | T-03 | 🟠 高(策略) | 账号注册完全开放,缺少项目级注册策略开关 | ✅ 已修复(0e368e9),dev 实弹复验通过 |
-| T-R1 | 🔴 P1 **回归** | **数据面故障:文档写入 500、既有数据全部不可见** | 🔍 已定位:roles_sig 验签 fail-closed(B15 部署时序缺步,非平台提交回归)——待 dev 重跑 `sync-roles-sig`,见文末平台侧分析 |
+| T-R1 | 🔴 P1 **回归** | **数据面故障:文档写入 500、既有数据全部不可见** | 🔍 已定位:blog 项目行被删除重建,internal_id 漂移(2)与数据面 `_tenant=1` 失配——单条 SQL 可修,见文末根因定位 |
 | — | ✅ | 存储响应头硬化、防用户枚举、文档 ACL、realtime 拒匿名、refresh 轮换重用检测 | 验收基线(均已实弹确认) |
 
 ---
@@ -150,38 +150,29 @@ dev 网关复验:① Console 将 blog 项目切 `closed` 后 `POST /v1/account/s
 
 > **✅ 已修复(`1fd643e`)**:PUBLIC 面显式携带的无效 X-API-Key 一律 401 并计入失败限速计数;无效 Bearer/cookie 保持匿名降级(过期会话不破坏公开页浏览),无凭证匿名放行不变。四个边界由本地测试锁定(`internal/api/interceptor/jwt_public_invalid_key_test.go`)。部署 `1fd643e` 后复验:带非法 key 读 `read:any` 应得 `401 invalid api key`,连续 11 次第 11 次 `429`。
 
-## T-R1 平台侧分析(2026-09-08,基于服务端日志 + 代码定位)
+## T-R1 根因定位(2026-09-08,日志 + 逐步判别实测)
 
-**根因判定:roles_sig 验签 fail-closed(B15 时序缺步),非平台提交代码回归。**
+> **✅ 已定位并给出修复(见下)——根因:blog 项目行被删除重建,`projects.internal_id` 漂移为 2,与数据面烤死的 `_tenant=1` 失配;非平台提交回归,非数据丢失。**
 
-日志证据(sha-8b38e10 容器,error_id `a712a3ef`/`1c534260` 可在日志逐条对应):
+### 判别过程(逐步实测,证据链完整)
 
-```
-/v1/server/databases/blog/collections/categories/documents → 500
-original_message: "create document: document not found after insert"
-```
+1. **服务端日志**(sha-8b38e10,error_id `a712a3ef`/`1c534260`):`POST /v1/server/databases/blog/collections/categories/documents → 500`,`original_message: "create document: document not found after insert"`——出自 `postgres_document_crud.go:131`,INSERT 成功后紧接的回读(以 `SystemPrincipal`/tw_system 执行)查不到刚插入的行。
+2. **物理数据完好**:`tw_blog_blog.posts` 存量 8 行、`categories` 3 行,`_acl`/内容原样;`SET LOCAL ROLE tw_system` 直查 `count(*)=8`——tw_system BYPASSRLS 生效,RLS 机制本身无恙。
+3. **roles_sig 假设被证伪**:`tw_secrets` 密钥与服务端派生一致(重跑 `sync-roles-sig` 为同钥幂等无操作),server 容器 env 的 `TORCHWOOD_SECURITY_JWT_SECRET` 与落库钥一致。
+4. **决定性证据**:`SELECT internal_id FROM projects WHERE id='blog'` = **2**,而 `posts`/`categories` 的 `DISTINCT _tenant` = **1**。文档表 DDL 将 `_tenant BIGINT NOT NULL DEFAULT <创建时 internal_id>` 烤进表定义(`postgres_collection_ddl.go:609`),全部数据行的 `_tenant=1`;server 实时解析 internal_id=2,所有读谓词 `WHERE _tenant = 2` 落空 → **全部读空**;写入本身成功(落 `_tenant=1`),回读按 `_tenant=2` 查不到 → **500 → 事务回滚**(故无当日残留行)。缺字段写入的 `23502` 是 `categories.name NOT NULL`,与根因正交。
 
-该错误出自 `postgres_document_crud.go:131`:INSERT 成功后,紧接的回读**以 `SystemPrincipal` 执行**仍查不到刚插入的行(`:126`)。"系统主体不可见 + 全部既有读取为空"是**可见性层对所有主体 fail-closed**的唯一签名——即 `app.roles_sig` 验签失败 → `tw_roles()` 返回零角色 → `tw_visible` 全隐藏。缺字段写入的 `23502` 是 NOT NULL 约束先于可见性触发,与根因正交(恰好证明写路径可达物理层)。
-
-**排除平台提交的依据**:`dccd925`/`17f51b2`/`0e368e9` 的改动面为认证面(登录频控、API key scope、邀请码、账号注销),不含 documentdb 读写路径、`clients` GUC 注入、catalog、`tw_roles`/`tw_visible` 的任何一行;scope 收紧只对带 `:` 的实例限定 scope 生效,blog 服务端 key 为裸 `databases`,走不变路径。而 roles_sig 机制属 B15(迁移 000004 时期,早于本轮提交),其文档明文:"**时序 = 迁移 → sync 作业 → 启动,未跑作业前文档查询 fail-closed 属预期**"。
-
-**判定性物理证据待取(dev 库 owner 只读)**——可进一步区分"roles_sig fail-closed"(数据完好,预期最可能)与"集合被重供给"(数据在旧物理表):
+### 修复(单条 SQL,立即生效,零数据迁移)
 
 ```sql
--- 1. blog 相关 schema 的物理行数(数据是否还在物理层)
-SELECT schemaname, relname, n_live_tup
-FROM pg_stat_user_tables WHERE schemaname LIKE 'tw_blog%' ORDER BY 1, 2;
+-- 前置确认:无其他项目占用 1,并留存"行被重建"的时间证据
+SELECT id, internal_id, created_at, updated_at FROM projects ORDER BY internal_id;
 
--- 2. roles_sig 密钥槽位(空/与当前服务端 jwt.secret 派生不符 = fail-closed 实锤)
-SELECT purpose, is_current, key_hex, created_at, updated_at FROM public.tw_secrets;
+UPDATE projects SET internal_id = 1 WHERE id = 'blog' AND internal_id = 2;
 ```
 
-**修复步骤(按 B15 时序补步)**:
+server 每请求实时解析 internal_id,改完即读回命中;重放写链路(`sec-rescan-write.mjs` 三层判定:JWT 写 → 站点 SSR 读 → 匿名 REST 读)即闭环。
 
-```bash
-# 以与 server 相同的 jwt.secret / owner DSN 重跑 roles_sig 同步作业
-# (双槽轮换,不破坏 previous;密钥一致即幂等)
-torchwood admin sync-roles-sig
-```
+### 防复发(两项,均待办)
 
-跑完后直接重放写链路(`sec-rescan-write.mjs` 三层判定:JWT 写 → 站点 SSR 读 → 匿名 REST 读)。若第 1 项查询显示物理层为空,则属 blog 供给脚本在复扫窗口重建了集合,回 blog 仓库处置。**部署管线建议**:把 sync-roles-sig 固化为"迁移之后、启动之前"的强制步骤,避免下次换镜像/换 secret 再次触发全量 fail-closed。
+1. **管线侧(必须)**:查明今天谁删除重建了 blog 项目行(blog 部署/供给脚本中的"删项目重建"或控制面重置)。该行为不消除,下次部署将漂移成 internal_id=3、再次全量读空。
+2. **平台侧(建议,待实现)**:`CreateProject` 增加"孤儿数据面护栏"——插入项目行前发现 `tw_<id>` 数据面 schema 已存在但项目行缺失即拒绝并告警,把"行重建、schema 幸存"的不一致从静默变成显式失败;同时评估将 internal_id 从可漂移的自增列收敛为项目不可变身份的方案。
