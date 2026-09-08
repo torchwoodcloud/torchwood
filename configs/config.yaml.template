@@ -8,7 +8,7 @@ server:
     cors:
       allow_origins: ["http://torchwood.local:9099"]  # set explicit origins; "*" is rejected when allow_credentials=true
       allow_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-      allow_headers: ["Content-Type", "Authorization", "X-Api-Key", "X-Torchwood-Project", "X-Request-Id", "X-Correlation-Id"]
+      allow_headers: ["Content-Type", "Authorization", "X-Api-Key", "X-Torchwood-Project", "X-Request-Id", "X-Correlation-Id", "Idempotency-Key"]
       allow_credentials: true
       max_age: 3600
   grpc:

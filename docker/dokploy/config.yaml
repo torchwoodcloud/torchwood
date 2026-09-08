@@ -14,7 +14,7 @@ server:
       # Console 与网关同源，无需加入；allow_credentials=true 时不接受 "*"
       allow_origins: []
       allow_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-      allow_headers: ["Content-Type", "Authorization", "X-Api-Key", "X-Torchwood-Project", "X-Request-Id", "X-Correlation-Id"]
+      allow_headers: ["Content-Type", "Authorization", "X-Api-Key", "X-Torchwood-Project", "X-Request-Id", "X-Correlation-Id", "Idempotency-Key"]
       allow_credentials: true
       max_age: 3600
   grpc:
