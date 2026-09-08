@@ -42,7 +42,7 @@ var ProviderSet = wire.NewSet(
 	auth.NewRedisOAuthStateStore,
 	auth.NewRedisAccountTokenStore,
 	auth.NewRedisAdminTokenRevokeStore,
-	auth.NewRedisLoginThrottle,
+	auth.NewRedisLoginThrottleFromConfig,
 	auth.NewRedisRefreshRotationStore,
 	auth.NewRedisRateLimiter,
 	auth.NewTOTPService,

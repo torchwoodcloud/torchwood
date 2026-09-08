@@ -208,10 +208,15 @@ type ConfirmEmailChangeCommand struct {
 	Secret    string
 }
 
-// SignUp 频控：每 IP 每小时最多 10 次。
+// SignUp 频控默认值：每 IP 每小时最多 10 次（可经 security.login_throttle
+// .signup_ip 配置覆盖）。
 const (
-	signUpIPWindow = time.Hour
-	signUpIPLimit  = 10
+	defaultSignUpIPWindow = time.Hour
+	defaultSignUpIPLimit  = 10
+
+	// auditActionSignIn 是登录频控审计行的 Action（与 AuditInterceptor 的
+	// full-method 口径一致；该行由用例层在拦截器之前写出，取不到运行时方法名）。
+	auditActionSignIn = "/torchwood.client.v1.AccountService/SignIn"
 )
 
 // dummyPasswordHash 是固定哑哈希，用户不存在时也执行一次 Verify，
@@ -233,7 +238,22 @@ func (a *Account) checkSignUpRateLimit(ctx context.Context, projectID, ip string
 	if a.rateLimiter == nil || ip == "" {
 		return nil
 	}
-	return a.rateLimiter.Allow(ctx, "signup:ip:"+projectID+":"+ip, signUpIPLimit, signUpIPWindow)
+	limit, window := a.signUpIPLimits()
+	return a.rateLimiter.Allow(ctx, "signup:ip:"+projectID+":"+ip, limit, window)
+}
+
+// signUpIPLimits 返回注册 IP 频控参数（T-01：可配置，未配置回落默认 10 次/小时）。
+func (a *Account) signUpIPLimits() (int, time.Duration) {
+	limit, window := defaultSignUpIPLimit, defaultSignUpIPWindow
+	if d := a.cfg.GetSecurity().GetLoginThrottle().GetSignupIp(); d != nil {
+		if d.GetLimit() > 0 {
+			limit = int(d.GetLimit())
+		}
+		if w, err := time.ParseDuration(d.GetWindow()); err == nil && w > 0 {
+			window = w
+		}
+	}
+	return limit, window
 }
 
 func (a *Account) SignUp(ctx context.Context, cmd SignUpCommand) (*User, *TokenBundle, string, *MFASignInChallenge, error) {
@@ -318,9 +338,6 @@ func (a *Account) SignIn(ctx context.Context, cmd SignInCommand) (*User, *TokenB
 		return nil, nil, "", nil, status.Error(codes.InvalidArgument, "password is required")
 	}
 	clientInfo := contexts.ClientInfoFrom(ctx)
-	if err := a.checkLoginThrottle(ctx, email, clientInfo.IP); err != nil {
-		return nil, nil, "", nil, err
-	}
 	invalidCredentials := func() (*User, *TokenBundle, string, *MFASignInChallenge, error) {
 		return nil, nil, "", nil, status.Error(codes.Unauthenticated, "invalid credentials")
 	}
@@ -331,6 +348,11 @@ func (a *Account) SignIn(ctx context.Context, cmd SignInCommand) (*User, *TokenB
 	if project == nil {
 		return nil, nil, "", nil, status.Error(codes.NotFound, "project not found")
 	}
+	// 频控检查放在 project 校验之后：无效 project 不消耗频控预算（与
+	// SignUp 的 R05-P3-11 同语义），审计行也能带上项目归属。
+	if err := a.checkLoginThrottle(ctx, project.ID, email, clientInfo.IP); err != nil {
+		return nil, nil, "", nil, err
+	}
 
 	found, err := a.usersRepo.GetByEmail(ctx, project.ID, email)
 	if err != nil {
@@ -340,12 +362,15 @@ func (a *Account) SignIn(ctx context.Context, cmd SignInCommand) (*User, *TokenB
 		// 用户不存在时对固定哑哈希执行一次 Verify，抹平"不存在"与"密码错误"
 		// 两条路径的响应时序差异（防枚举）。
 		_, _ = password.Verify(cmd.Password, dummyPasswordHash())
-		// 未注册邮箱不记录失败计数：既不影响真实用户邮箱键，也不污染 IP 键
-		// （R05-P1-5：未注册邮箱连续失败不得触发锁定）。
+		// 未注册邮箱也计入 IP 维度（T-01 裁决）：不写任何邮箱键（保留
+		// R05-P1-5 防"锁死任意邮箱"语义），但让 IP 维度计数与账号存在性
+		// 无关——探测存在/不存在账号在相同强度下同样触发 429，429 不构成
+		// 存在性 oracle。
+		a.recordLoginFailure(ctx, email, clientInfo.IP, false)
 		return invalidCredentials()
 	}
 	if ok, _ := password.Verify(cmd.Password, found.PasswordHash); !ok {
-		a.recordLoginFailure(ctx, email, clientInfo.IP)
+		a.recordLoginFailure(ctx, email, clientInfo.IP, true)
 		return invalidCredentials()
 	}
 
@@ -359,13 +384,43 @@ func (a *Account) SignIn(ctx context.Context, cmd SignInCommand) (*User, *TokenB
 // checkLoginThrottle / recordLoginFailure / resetLoginThrottle 不再判 nil
 // （Round4 J5-5）：构造期已把缺失依赖显式落为 NoopLoginThrottle（仅供测试），
 // 生产路径恒为 Redis 实现，频控不会因漏注入被静默关闭。
-func (a *Account) checkLoginThrottle(ctx context.Context, email, ip string) error {
-	return a.loginThrottle.Check(ctx, domainauth.LoginNamespaceEndUser, email, ip)
+func (a *Account) checkLoginThrottle(ctx context.Context, projectID, email, ip string) error {
+	if err := a.loginThrottle.Check(ctx, domainauth.LoginNamespaceEndUser, email, ip); err != nil {
+		a.writeThrottleAudit(ctx, projectID, err)
+		return err
+	}
+	return nil
 }
 
-func (a *Account) recordLoginFailure(ctx context.Context, email, ip string) {
+// writeThrottleAudit 在登录频控拒绝路径并联 best-effort 审计行（T-01）：
+// Status="throttled"，带项目/IP/UA；写失败只告警，不影响 429 响应。
+func (a *Account) writeThrottleAudit(ctx context.Context, projectID string, throttleErr error) {
+	if a.auditRepo == nil {
+		return
+	}
+	ci := contexts.ClientInfoFrom(ctx)
+	entry := &audit.Entry{
+		ProjectID: projectID,
+		Action:    auditActionSignIn,
+		Status:    "throttled",
+		IP:        ci.IP,
+		UserAgent: ci.UserAgent,
+		CreatedAt: time.Now().UTC(),
+		Metadata: map[string]any{
+			"throttle": "login",
+			"reason":   throttleErr.Error(),
+		},
+	}
+	insertCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+	defer cancel()
+	if err := a.auditRepo.Insert(insertCtx, entry); err != nil {
+		slog.Warn("login throttle audit insert failed", slog.String("error", err.Error()))
+	}
+}
+
+func (a *Account) recordLoginFailure(ctx context.Context, email, ip string, recordEmail bool) {
 	// intentionally ignored: throttle is best-effort, failure must not block login
-	_ = a.loginThrottle.RecordFailure(ctx, domainauth.LoginNamespaceEndUser, email, ip)
+	_ = a.loginThrottle.RecordFailure(ctx, domainauth.LoginNamespaceEndUser, email, ip, recordEmail)
 }
 
 func (a *Account) resetLoginThrottle(ctx context.Context, email, ip string) {

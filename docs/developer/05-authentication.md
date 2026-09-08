@@ -189,3 +189,38 @@ Functions DDL 与 Storage 已对齐 `RequireServerPrincipal` 口径（Databases 
 | `secretbox` | `pkg/secretbox/secretbox.go` | `sha256("torchwood-secretbox:"+secret)` → AES-256-GCM，`enc:v1:` 前缀，空透传兼容旧明文；OAuth `client_secret`（`bunrepo/oauth_provider_repo.go:24`）、TOTP `factor.Secret`（`infra/auth/totp.go:52`） |
 
 > 详见 `docs/developer/06-databases.md` §7（文档面 `_acl` 权限模型与 `keys`/`key:{id}` 角色、RLS 判定执行点、roles_sig 验签）、`docs/developer/authz-matrix.md`（全方法授权矩阵，生成物）、`09-api-guide.md` §2.1/§2.3（authz 注解与 protovalidate 校验写法）、`03-configuration.md` §6.2（会话 cookie）。
+
+---
+
+## 10. 认证面局部频控（T-01：登录/注册暴力破解防护）
+
+除 §5 的通用 API 限流（IP 300/min 量级）外，认证面另有一层**失败计数型**局部频控（`internal/infra/auth/login_throttle_redis.go`，安全审计 2026-09-08 T-01 整改）：
+
+### 10.1 SignIn：账号 + IP 双维失败计数
+
+- **邮箱维度**：按 email 小写规范化计数；**IP 维度**：按 trusted-proxy 校验后的来源 IP 计数。两维独立累计、任一触顶即拒。
+- **计数时机**：密码错误（账号存在）双维各 +1；**未注册邮箱只计 IP 维度，邮箱键永不落笔**（R05-P1-5：防"探测锁死任意邮箱"DoS；同时使 IP 维度计数与账号存在性无关——探测存在/不存在账号在相同强度下同样触发 429，**429 不构成账号存在性 oracle**）。
+- **成功重置**：登录成功（含 SignUp 完成后的首次登录）即清零该 email+IP 的计数。
+- **拒绝语义**：超限返回 `429 ResourceExhausted`，错误体为统一 `shared.v1.ErrorResponse`（`error.type=rate_limit_error`），文案恒为 `too many failed sign-in attempts, try again later`，**不区分触发维度与账号是否存在**；响应携带 `Retry-After` 头（由 status 的 `google.rpc.RetryInfo` detail 转译，秒向上取整）。
+- **审计**：触发限速时写一条 `status="throttled"` 审计行（action 为 SignIn 的 full method，带项目/IP/UA）。
+- **默认阈值**：双维各 **5 次失败 / 60s 窗口**。
+
+### 10.2 SignUp：按 IP 注册频控
+
+注册按 project+IP 计数，默认 **10 次/小时**；超限 429（含 Retry-After，语义同上）。无效 project 不消耗频控预算（与 SignIn 同序：project 校验先行）。
+
+### 10.3 配置（`security.login_throttle`）
+
+三个维度均可配置（复用 `RateLimit.Dimension` 形状：`limit` + `window` 时长串），未配置/非法值回落内置默认：
+
+```yaml
+security:
+  login_throttle:
+    email: { limit: 5, window: "60s" }      # 账号维度失败计数
+    ip: { limit: 5, window: "60s" }         # IP 维度失败计数
+    signup_ip: { limit: 10, window: "1h" }  # 注册 IP 频控
+```
+
+实现要点：窗口为 Redis 滑动窗口（`INCR`+首次 `EXPIRE` 原子化）；与通用限流拦截器的键空间不同，叠加生效；admin console 登录共用同一组件（`admin` namespace，双维计数）。
+
+---

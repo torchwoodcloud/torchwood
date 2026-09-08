@@ -83,6 +83,19 @@ message Security {
   // AES-256-GCM). Independent from jwt.secret; when empty the JWT secret is
   // used as fallback (startup warns). env: TORCHWOOD_SECURITY_ENCRYPTION_KEY
   string encryption_key = 7;
+  // 认证面局部频控（T-01）：登录失败双维计数 + 注册 IP 频控。均按"失败
+  // 计数 + 滑动窗口"语义，成功登录/注册重置相关键；未配置的维度使用
+  // 内置默认值（email/ip 各 5 次/60s，signup_ip 10 次/小时）。
+  LoginThrottle login_throttle = 8;
+
+  message LoginThrottle {
+    // 按账号（email 小写规范化）维度的失败计数上限与窗口。
+    RateLimit.Dimension email = 1;
+    // 按来源 IP 维度的失败计数上限与窗口（经 trusted-proxy 校验后的 IP）。
+    RateLimit.Dimension ip = 2;
+    // SignUp 按来源 IP 的注册频控上限与窗口。
+    RateLimit.Dimension signup_ip = 3;
+  }
 }
 
 message Database {

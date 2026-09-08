@@ -57,6 +57,22 @@ security:
       # API Key principal 按 key 计数（Agent/自动化调用量更高）。
       limit: 6000             # env: TORCHWOOD_SECURITY_RATE_LIMIT_API_KEY_LIMIT
       window: "60s"           # env: TORCHWOOD_SECURITY_RATE_LIMIT_API_KEY_WINDOW
+  # 认证面局部频控（登录失败双维计数 + 注册 IP 频控；T-01）。
+  # 失败计数语义：密码错误双维计数、未注册邮箱只计 IP 维度、登录成功清零。
+  # 超限 429 + Retry-After；维度未配置时使用内置默认值。
+  login_throttle:
+    email:
+      # 按账号（email 小写规范化）的失败计数上限。
+      limit: 5                # env: TORCHWOOD_SECURITY_LOGIN_THROTTLE_EMAIL_LIMIT
+      window: "60s"           # env: TORCHWOOD_SECURITY_LOGIN_THROTTLE_EMAIL_WINDOW
+    ip:
+      # 按来源 IP（trusted_proxies 校验后）的失败计数上限。
+      limit: 5                # env: TORCHWOOD_SECURITY_LOGIN_THROTTLE_IP_LIMIT
+      window: "60s"           # env: TORCHWOOD_SECURITY_LOGIN_THROTTLE_IP_WINDOW
+    signup_ip:
+      # 按来源 IP 的注册频控。
+      limit: 10               # env: TORCHWOOD_SECURITY_LOGIN_THROTTLE_SIGNUP_IP_LIMIT
+      window: "1h"            # env: TORCHWOOD_SECURITY_LOGIN_THROTTLE_SIGNUP_IP_WINDOW
 
 data:
   database:

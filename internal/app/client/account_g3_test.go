@@ -248,15 +248,16 @@ func TestAccount_UpdateRecovery_SessionRevocationFailureLeavesOldPassword(t *tes
 	require.NotEmpty(t, tokens.AccessToken)
 }
 
-// TestAccount_UnregisteredEmailFailuresDoNotTriggerLockout（R05-P1-5）：
-// 未注册邮箱连续失败不计数——同 IP 下已注册用户登录不受影响。
-func TestAccount_UnregisteredEmailFailuresDoNotTriggerLockout(t *testing.T) {
+// TestAccount_UnregisteredEmailFailuresIPOnlyThrottle（R05-P1-5 + T-01 裁决）：
+// 未注册邮箱的失败只计 IP 维度（邮箱键永不落笔）——前 5 次 401 统一语义，
+// 第 6 次经 IP 维度触发 429；其他 IP 上的已注册用户登录不受影响。
+func TestAccount_UnregisteredEmailFailuresIPOnlyThrottle(t *testing.T) {
 	ctx, account, projectID, _, _, _ := setupG3Account(t)
 
 	signUpG3User(t, ctx, account, projectID, "registered-user@torchwood.local")
 
 	attackerCtx := contexts.WithClientInfo(ctx, contexts.ClientInfo{IP: "198.51.100.77"})
-	for i := 0; i < 12; i++ {
+	for i := 0; i < 5; i++ {
 		_, _, _, _, err := account.SignIn(attackerCtx, SignInCommand{
 			ProjectID: projectID,
 			Email:     "no-such-user@torchwood.local",
@@ -264,11 +265,21 @@ func TestAccount_UnregisteredEmailFailuresDoNotTriggerLockout(t *testing.T) {
 		})
 		require.Error(t, err)
 		st, _ := status.FromError(err)
-		require.Equal(t, codes.Unauthenticated, st.Code(), "未注册邮箱失败必须是统一 Unauthenticated，而非 ResourceExhausted")
+		require.Equal(t, codes.Unauthenticated, st.Code(), "未触限前必须是统一 Unauthenticated")
 	}
+	// 第 6 次：IP 维度触发 429（未注册邮箱也计数，429 不构成存在性 oracle）。
+	_, _, _, _, err := account.SignIn(attackerCtx, SignInCommand{
+		ProjectID: projectID,
+		Email:     "no-such-user@torchwood.local",
+		Password:  "WrongPass@1",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	require.Equal(t, codes.ResourceExhausted, st.Code())
 
-	// 同一 IP 下已注册用户仍可正常登录（未计数 → 未锁定）。
-	_, tokens, _, _, err := account.SignIn(attackerCtx, SignInCommand{
+	// 其他 IP 上的已注册用户不受影响（邮箱键未被探测行为污染）。
+	userCtx := contexts.WithClientInfo(ctx, contexts.ClientInfo{IP: "198.51.100.78"})
+	_, tokens, _, _, err := account.SignIn(userCtx, SignInCommand{
 		ProjectID: projectID,
 		Email:     "registered-user@torchwood.local",
 		Password:  "User@123",

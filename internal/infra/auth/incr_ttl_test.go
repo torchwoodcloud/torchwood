@@ -25,15 +25,15 @@ func TestRateLimiters_FirstIncrSetsTTL(t *testing.T) {
 
 	t.Run("login throttle email counter", func(t *testing.T) {
 		throttle := auth.NewRedisLoginThrottle(rdb)
-		require.NoError(t, throttle.RecordFailure(ctx, "ns-1", "a@b.c", "1.2.3.4"))
+		require.NoError(t, throttle.RecordFailure(ctx, "ns-1", "a@b.c", "1.2.3.4", true))
 		ttl, err := rdb.TTL(ctx, "Torchwood:login:fail:ns-1:email:a@b.c").Result()
 		require.NoError(t, err)
-		require.Greater(t, ttl, time.Duration(0), "首次失败计数必须带 TTL（15min 窗口）")
+		require.Greater(t, ttl, time.Duration(0), "首次失败计数必须带 TTL（窗口内滑动）")
 	})
 
 	t.Run("login throttle ip counter", func(t *testing.T) {
 		throttle := auth.NewRedisLoginThrottle(rdb)
-		require.NoError(t, throttle.RecordFailure(ctx, "ns-2", "a@b.c", "5.6.7.8"))
+		require.NoError(t, throttle.RecordFailure(ctx, "ns-2", "a@b.c", "5.6.7.8", true))
 		ttl, err := rdb.TTL(ctx, "Torchwood:login:fail:ns-2:ip:5.6.7.8").Result()
 		require.NoError(t, err)
 		require.Greater(t, ttl, time.Duration(0), "首次 IP 失败计数必须带 TTL")

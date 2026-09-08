@@ -20,7 +20,7 @@ func (NoopLoginThrottle) Check(context.Context, string, string, string) error {
 	return nil
 }
 
-func (NoopLoginThrottle) RecordFailure(context.Context, string, string, string) error {
+func (NoopLoginThrottle) RecordFailure(context.Context, string, string, string, bool) error {
 	return nil
 }
 

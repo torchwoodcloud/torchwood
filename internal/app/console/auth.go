@@ -241,7 +241,7 @@ func (a *Auth) recordLoginFailure(ctx context.Context, email, ip string) {
 	if a.loginThrottle == nil {
 		return
 	}
-	_ = a.loginThrottle.RecordFailure(ctx, domainauth.LoginNamespaceAdmin, email, ip)
+	_ = a.loginThrottle.RecordFailure(ctx, domainauth.LoginNamespaceAdmin, email, ip, true)
 }
 
 func (a *Auth) resetLoginThrottle(ctx context.Context, email, ip string) {

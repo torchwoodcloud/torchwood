@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"math"
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -54,6 +57,14 @@ var HTTPErrorHandler runtime.ErrorHandlerFunc = func(ctx context.Context, mux *r
 		message = "internal server error"
 	}
 
+	// 429 携带 Retry-After（T-01）：从 status 的 RetryInfo detail 提取建议
+	// 退避（整秒向上取整）；无 detail 时不设头，由客户端退避。
+	if httpStatus == http.StatusTooManyRequests {
+		if retryAfter, ok := retryAfterSeconds(st); ok {
+			w.Header().Set("Retry-After", retryAfter)
+		}
+	}
+
 	resp := &sharedv1.ErrorResponse{
 		Error: &sharedv1.Error{
 			Type:      errorTypeForCode(st.Code()),
@@ -88,6 +99,21 @@ func errorTypeForCode(code codes.Code) string {
 	default:
 		return "server_error"
 	}
+}
+
+// retryAfterSeconds 从 status details 提取 RetryInfo 的建议退避秒数
+// (向上取整，至少 1s)；无 detail 或时长非法时返回 false。
+func retryAfterSeconds(st *status.Status) (string, bool) {
+	for _, d := range st.Details() {
+		if ri, ok := d.(*errdetails.RetryInfo); ok && ri.GetRetryDelay().AsDuration() > 0 {
+			secs := int64(math.Ceil(ri.GetRetryDelay().AsDuration().Seconds()))
+			if secs < 1 {
+				secs = 1
+			}
+			return strconv.FormatInt(secs, 10), true
+		}
+	}
+	return "", false
 }
 
 func grpcCodeToHTTP(code codes.Code) int {

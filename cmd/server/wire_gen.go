@@ -86,7 +86,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	redisOTPChallengeStore := auth.NewRedisOTPChallengeStore(redisClient, appConfig)
 	redisOAuthStateStore := auth.NewRedisOAuthStateStore(redisClient)
 	redisAccountTokenStore := auth.NewRedisAccountTokenStore(redisClient)
-	redisLoginThrottle := auth.NewRedisLoginThrottle(redisClient)
+	redisLoginThrottle := auth.NewRedisLoginThrottleFromConfig(redisClient, appConfig)
 	service, err := idgen.NewService(appConfig, redisClient, repository)
 	if err != nil {
 		cleanup()

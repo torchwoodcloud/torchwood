@@ -210,7 +210,7 @@ func TestAccount_SignUpRateLimit(t *testing.T) {
 	ctx, account, projectID, _ := setupAccountSecurity(t, true)
 
 	clientCtx := contexts.WithClientInfo(ctx, contexts.ClientInfo{IP: "203.0.113.7"})
-	for i := 0; i < signUpIPLimit; i++ {
+	for i := 0; i < defaultSignUpIPLimit; i++ {
 		_, _, _, _, err := account.SignUp(clientCtx, SignUpCommand{
 			ProjectID: projectID,
 			Email:     fmt.Sprintf("signup-%d@torchwood.local", i),
