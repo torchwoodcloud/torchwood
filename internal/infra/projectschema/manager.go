@@ -2,6 +2,8 @@ package projectschema
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -38,6 +40,25 @@ var _ domainprojects.SchemaManager = (*SchemaManager)(nil)
 // 事务时并入调用方事务且不写缓存）。
 func (m *SchemaManager) Ensure(ctx context.Context, projectID string) error {
 	return Apply(ctx, m.db, projectID)
+}
+
+// Exists 报告项目数据面 schema 当前是否物理存在（T-R1 护栏）。直查
+// pg_namespace 绕过就绪缓存——缓存只记"就绪"，不反映带外 DROP；
+// projectID 经 ident 白名单校验，杜绝 schema 名拼接注入。
+func (m *SchemaManager) Exists(ctx context.Context, projectID string) (bool, error) {
+	schema, err := ident.ProjectSchemaName(projectID)
+	if err != nil {
+		return false, err
+	}
+	var one int
+	if err := m.db.Conn(ctx).QueryRowContext(ctx,
+		`SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname = ?`, schema).Scan(&one); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("check project schema: %w", err)
+	}
+	return true, nil
 }
 
 // DropCascade 删除项目数据面 schema（CASCADE）。须在调用方事务内执行

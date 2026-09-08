@@ -97,6 +97,23 @@ func (s *Projects) CreateProjectInternal(ctx context.Context, cmd CreateProjectC
 	if len(cmd.Description) > maxProjectDescriptionLen {
 		return nil, status.Error(codes.InvalidArgument, "description must be at most 512 characters")
 	}
+	// 孤儿数据面护栏（T-R1，2026-09-08）：tw_<id> schema 已存在而项目行
+	// 缺失 = 控制面被重置/部分恢复的不一致状态。此时静默重建项目行会让
+	// 新 internal_id 与数据面烤死的 _tenant DEFAULT 失配（全部读空 + 写后
+	// 回读 500）——必须显式拒绝，由运维选择恢复控制面行或清理数据面。
+	// schema 为 nil 仅供不触达创建路径的单测装配（servergrpc 桩），跳过。
+	if s.schema != nil {
+		exists, err := s.schema.Exists(ctx, cmd.ID)
+		if err != nil {
+			return nil, fmt.Errorf("check orphan data plane: %w", err)
+		}
+		if exists {
+			return nil, status.Errorf(codes.FailedPrecondition,
+				"data plane schema for project %q already exists without a project row (orphan data plane); "+
+					"refusing to recreate the project — restore the control-plane row (keep its original internal_id) "+
+					"or drop schema tw_%s manually", cmd.ID, cmd.ID)
+		}
+	}
 	firstDBID := strings.TrimSpace(cmd.FirstDatabaseID)
 	if firstDBID == "" {
 		firstDBID = "default"

@@ -141,6 +141,49 @@ func TestProjects_CreateProject_RejectsInvalidID(t *testing.T) {
 	}
 }
 
+// TestProjects_CreateProject_RejectsOrphanDataPlane（T-R1 护栏，2026-09-08
+// dev 事故复刻）：tw_<id> schema 存在而项目行缺失（控制面被重置、数据面
+// 幸存）时，CreateProject 必须显式拒绝——静默重建会让新 internal_id 与
+// 数据面烤死的 _tenant DEFAULT 失配（全部读空 + 写后回读 500）。
+func TestProjects_CreateProject_RejectsOrphanDataPlane(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx := context.Background()
+	db := testutil.SetupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	repo := bunrepo.NewProjectRepository(db)
+	docDB := documentdb.NewPostgresDocumentDB(db, nil)
+	schemaMgr := projectschema.NewSchemaManager(db)
+	projectsUC := NewProjects(repo, docDB, db, schemaMgr, nil)
+
+	// 第一纪元：正常建项目（数据面就位）。
+	p, err := projectsUC.CreateProjectInternal(ctx, CreateProjectCommand{ID: "txorphan", Name: "Orphan Era"})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = projectsUC.DeleteProjectInternal(ctx, p.ID) })
+
+	// 复刻事故：带外删除项目行（仅控制面），数据面 schema 幸存。
+	require.NoError(t, repo.DeleteProject(ctx, p.ID))
+	exists, err := schemaMgr.Exists(ctx, p.ID)
+	require.NoError(t, err)
+	require.True(t, exists, "复刻前提：数据面 schema 必须仍存在")
+
+	// 护栏：同 ID 重建必须 FailedPrecondition，且不再写入项目行。
+	_, err = projectsUC.CreateProjectInternal(ctx, CreateProjectCommand{ID: p.ID, Name: "Recreated"})
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.Contains(t, status.Convert(err).Message(), "orphan data plane")
+	row, err := repo.GetProject(ctx, p.ID)
+	require.NoError(t, err)
+	require.Nil(t, row, "护栏拒绝后不得残留项目行")
+
+	// Exists 对不存在的项目恒 false（护栏不误伤全新创建）。
+	exists, err = schemaMgr.Exists(ctx, "nosuchproject")
+	require.NoError(t, err)
+	require.False(t, exists)
+}
+
 func TestProjects_CreateProject_RollsBackOnFailure(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")

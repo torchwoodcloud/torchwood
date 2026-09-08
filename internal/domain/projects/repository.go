@@ -25,6 +25,10 @@ type Repository interface {
 type SchemaManager interface {
 	// Ensure 幂等确保 tw_<projectID> schema 存在且迁移到最新版本。
 	Ensure(ctx context.Context, projectID string) error
+	// Exists 报告 tw_<projectID> schema 当前是否物理存在（T-R1 护栏：
+	// CreateProject 前置孤儿数据面检查——控制面被重置而数据面幸存的
+	// 不一致必须在创建时显式失败，不得静默收养）。
+	Exists(ctx context.Context, projectID string) (bool, error)
 	// DropCascade 删除项目数据面 schema（CASCADE，连带其全部对象）。
 	DropCascade(ctx context.Context, projectID string) error
 	// Invalidate 清除本进程的 schema 就绪缓存（DropCascade 后自动调用；
