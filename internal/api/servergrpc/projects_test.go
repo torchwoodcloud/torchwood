@@ -55,7 +55,7 @@ func (r *stubProjectRepo) DeleteProjectControlPlaneRows(context.Context, string)
 // docDB/db 传 nil）。
 func newTestProjectsService(repo *stubProjectRepo) *ProjectsService {
 	uc := appserver.NewProjects(repo, nil, nil, nil, nil)
-	return NewProjectsService(uc)
+	return NewProjectsService(uc, appserver.NewInviteCodes(nil))
 }
 
 func projectPrincipalCtx(projectID string, platformAdmin bool) context.Context {

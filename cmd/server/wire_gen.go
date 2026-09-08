@@ -80,6 +80,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 		return nil, nil, err
 	}
 	checkers := health.NewCheckers(database, redisClient, objectStore)
+	inviteCodeRepository := bunrepo.NewInviteCodeRepository(database)
 	oAuthProviderRepository := bunrepo.NewOAuthProviderRepository(database, appConfig)
 	redisRefreshRotationStore := auth.NewRedisRefreshRotationStore(redisClient)
 	sessionService := auth.NewSessionService(appConfig, sessionRepository, userRoles, redisRefreshRotationStore)
@@ -101,7 +102,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	weChatMiniProgramExchanger := auth.NewWeChatMiniProgramExchanger()
 	otpGenerator := auth.NewOTPGenerator()
 	sessionCookieVerifier := auth.NewSessionCookieVerifier(appConfig)
-	account := client.NewAccount(appConfig, repository, oAuthProviderRepository, sessionService, redisOTPChallengeStore, redisOAuthStateStore, redisAccountTokenStore, redisLoginThrottle, redisRefreshRotationStore, service, mailerService, smsService, redisRateLimiter, userRoles, mfaService, mfaChallengeStore, redisOneTimeTokenStore, auditRepository, userRepository, identityRepository, sessionRepository, oAuthAuthenticatorFactory, weChatMiniProgramExchanger, otpGenerator, sessionCookieVerifier)
+	account := client.NewAccount(appConfig, repository, inviteCodeRepository, oAuthProviderRepository, sessionService, redisOTPChallengeStore, redisOAuthStateStore, redisAccountTokenStore, redisLoginThrottle, redisRefreshRotationStore, service, mailerService, smsService, redisRateLimiter, userRoles, mfaService, mfaChallengeStore, redisOneTimeTokenStore, auditRepository, userRepository, identityRepository, sessionRepository, oAuthAuthenticatorFactory, weChatMiniProgramExchanger, otpGenerator, sessionCookieVerifier)
 	accountService := clientgrpc.NewAccountService(account)
 	eventOutbox := events.NewEventOutbox(database)
 	documentDB := documentdb.NewPostgresDocumentDB(database, eventOutbox)
@@ -139,7 +140,8 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	purger := storage.NewObjectPurger(objectStore)
 	v := NewProjectsOptions(purger, appConfig)
 	projects := server.NewProjects(repository, documentDB, database, schemaManager, adminProjectRepository, v...)
-	projectsService := servergrpc.NewProjectsService(projects)
+	inviteCodes := server.NewInviteCodes(inviteCodeRepository)
+	projectsService := servergrpc.NewProjectsService(projects, inviteCodes)
 	uploadSessionStore := storage.NewRedisUploadSessionStore(redisClient)
 	bucketRepository := bunrepo.NewBucketRepository(database)
 	fileRepository := bunrepo.NewFileRepository(database)

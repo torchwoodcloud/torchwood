@@ -208,3 +208,16 @@ task console:build && task build
 4. **错误消息**：从 `error.response.data.error.message` 读取；
 5. **绕过 `api` 实例**：仅 refresh 用裸 `axios`，其余一律走 `api` 以带 `X-Torchwood-Project` 与 401 刷新；
 6. **权限在页面/路由双 gating**：按钮用 `useAdminRole`，写路由用 `RequireRole`。
+
+---
+
+## 8. 项目治理面板（T-03/T-02 新增）
+
+项目详情页（`/console/projects/:id`，`src/routes/projects/pages.tsx`）在基础信息之下提供两块治理面板：
+
+| 面板 | 能力 | 后端 |
+|------|------|------|
+| **注册策略** | `open`（默认）/ `invite_only` / `closed` 三档切换，即改即存（PATCH UpdateProject.registration_policy） | `UpdateProject`（member+；写值域服务端校验） |
+| **邀请码** | 生成（次数 1..10000 或不限、可选过期时间）、列表回显（`twi_` 明文 + 已用次数 + 过期/吊销状态徽章）、复制、吊销 | `CreateInviteCode` / `ListInviteCodes` / `DeleteInviteCode`（owner/admin） |
+
+API Keys 页（`/console/api-keys`）在详情页新增**编辑**（name/scopes/enabled/expire_at，proto3 optional 只提交变更字段）与**轮换**引导（三步：新建同 scope 的 `-rotated` key → 应用切换 → 旧 key 设过期/吊销）对话框（T-02）。scope 输入支持资源级语法（如 `databases:blog.read`，见 `05-authentication.md` §6 语法表）。

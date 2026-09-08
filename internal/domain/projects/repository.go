@@ -49,6 +49,21 @@ type APIKeyRepository interface {
 	DeleteAPIKey(ctx context.Context, projectID, id string) error
 }
 
+type InviteCodeRepository interface {
+	// CreateInviteCode 新建邀请码（明文 code 由 use-case 生成传入）。
+	CreateInviteCode(ctx context.Context, code *InviteCode) error
+	// ListInviteCodes 按项目倒序列出（created_at DESC，limit ≤ 100）。
+	ListInviteCodes(ctx context.Context, projectID string, limit int) ([]InviteCode, error)
+	// GetInviteCode 单查（不存在返回 nil, nil）。
+	GetInviteCode(ctx context.Context, projectID, id string) (*InviteCode, error)
+	// RevokeInviteCode 软吊销：revoked_at 置位；不存在返回 false。
+	RevokeInviteCode(ctx context.Context, projectID, id string) (bool, error)
+	// ConsumeInviteCode 原子消费（T-03 验收：并发同码仅一个成功）：单语句
+	// UPDATE … WHERE code 匹配 AND 未吊销 AND 未过期 AND used_count < max_uses
+	// RETURNING——0 行即无效（无码/错码/过期/已耗尽/已吊销统一无效）。
+	ConsumeInviteCode(ctx context.Context, projectID, code string) (bool, error)
+}
+
 type AdminRepository interface {
 	GetAdmin(ctx context.Context, id string) (*Admin, error)
 	GetAdminByEmail(ctx context.Context, email string) (*Admin, error)

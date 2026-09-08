@@ -138,6 +138,21 @@ service AccountService {
     };
   }
 
+  // 注销当前登录账号（T-03）：匿名化软删——凭据立即失效（全部会话撤销 +
+  // 状态置 deleted，每次鉴权实时校验），email/name/手机号/凭据哈希就地
+  // 清洗，同邮箱可立即重新注册（不泄露"曾存在"）；其名下文档/文件/审计
+  // 行保留为孤儿数据（显式决策，不做级联删除）。
+  rpc DeleteAccount(DeleteAccountRequest) returns (shared.v1.Empty) {
+    option (google.api.http) = { delete: "/v1/account" };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      extensions: {
+        key: "x-torchwood-access"
+        value: { string_value: "end_user" }
+      }
+    };
+  }
+
   // 确认邮箱变更：消费邮件中的一次性 secret，验证通过后 email 才切换
   //（staging：验证前 email 保持旧值，旧邮箱仍可登录/找回）。
   // ACCESS_PUBLIC：邮件链接点开即完成（与 recovery 同一安全模型——256-bit
@@ -488,6 +503,8 @@ message SignUpRequest {
   string password = 2;
   string name = 3;
   string project_id = 4;
+  // 邀请码（T-03）：仅项目注册策略为 invite_only 时必填；open 项目忽略。
+  optional string invite_code = 5;
 }
 
 message SignInRequest {
@@ -554,6 +571,9 @@ message UpdateAccountRequest {
   // 改邮箱时必填：用于拼接新邮箱验证链接（语义同 CreateVerificationRequest.url）。
   string url = 5;
 }
+
+// DELETE /v1/account 无请求体（REST 不带 body）；目标 = 凭证主体自身。
+message DeleteAccountRequest {}
 
 message ConfirmEmailChangeRequest {
   string project_id = 1;

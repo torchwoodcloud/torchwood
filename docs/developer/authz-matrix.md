@@ -12,7 +12,7 @@
 >   SERVER admin 会话（admin_roles）或 API key（scope）；PERMISSION admin 会话
 >   专属（permissions），key 一律拒绝；SYSTEM 预留禁用。
 
-方法总数 196：PUBLIC 28 · END_USER 41 · SERVER 115 · PERMISSION 12 · SYSTEM 0。
+方法总数 200：PUBLIC 28 · END_USER 42 · SERVER 115 · PERMISSION 15 · SYSTEM 0。
 
 ## /torchwood.client.v1.AccountService
 
@@ -35,6 +35,7 @@
 | `/torchwood.client.v1.AccountService/CreateTOTPFactor` | END_USER | — | — | — | |
 | `/torchwood.client.v1.AccountService/CreateVerification` | END_USER | — | — | — | |
 | `/torchwood.client.v1.AccountService/CreateWeChatMiniProgramSession` | PUBLIC | — | — | — | |
+| `/torchwood.client.v1.AccountService/DeleteAccount` | END_USER | — | — | — | |
 | `/torchwood.client.v1.AccountService/DeleteFactor` | END_USER | — | — | — | |
 | `/torchwood.client.v1.AccountService/DeleteSession` | END_USER | — | — | — | |
 | `/torchwood.client.v1.AccountService/DeleteSessions` | END_USER | — | — | — | |
@@ -269,9 +270,12 @@
 
 | 方法 | Access | Admin 角色档 | Key Scope | 档位 | 说明 |
 | --- | --- | --- | --- | --- | --- |
+| `/torchwood.server.v1.ProjectsService/CreateInviteCode` | PERMISSION | owner, admin | — | platform_only | |
 | `/torchwood.server.v1.ProjectsService/CreateProject` | PERMISSION | owner, admin | — | platform_only | |
+| `/torchwood.server.v1.ProjectsService/DeleteInviteCode` | PERMISSION | owner, admin | — | platform_only | |
 | `/torchwood.server.v1.ProjectsService/DeleteProject` | PERMISSION | owner, admin | — | platform_only | |
 | `/torchwood.server.v1.ProjectsService/GetProject` | SERVER | 不限角色 | projects.read | read_only | |
+| `/torchwood.server.v1.ProjectsService/ListInviteCodes` | PERMISSION | owner, admin | — | platform_only | |
 | `/torchwood.server.v1.ProjectsService/ListProjects` | SERVER | 不限角色 | projects.read | read_only | |
 | `/torchwood.server.v1.ProjectsService/UpdateProject` | SERVER | member, admin, owner | projects.write | business_write | |
 

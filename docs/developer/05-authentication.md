@@ -246,3 +246,30 @@ security:
 实现要点：窗口为 Redis 滑动窗口（`INCR`+首次 `EXPIRE` 原子化）；与通用限流拦截器的键空间不同，叠加生效；admin console 登录共用同一组件（`admin` namespace，双维计数）。
 
 ---
+
+## 11. 项目注册策略与账号注销（T-03）
+
+### 11.1 注册策略（项目设置）
+
+`projects.registration_policy`（迁移 000007，默认 `open` 保持存量行为），经 `UpdateProject`（`registration_policy` optional 字段）切换，Console 项目详情页提供面板：
+
+| 策略 | SignUp 语义 |
+|------|-------------|
+| `open`（默认） | 现状不变，匿名自助注册 |
+| `invite_only` | 必须携带有效 `invite_code`；**无码/错码/过期码/已耗尽/已吊销统一 403 `ACCOUNT.INVITE_CODE_INVALID`**（不区分原因，无探测面） |
+| `closed` | 一律 403 `ACCOUNT.REGISTRATION_CLOSED` |
+
+- 错误码走 `"CODE: message"` 消息前缀约定（对齐 docdb 域码体系），HTTP 403 + `permission_error`。
+- **邀请码**：控制面 `public.invite_codes` 表（与 api_keys 同为平台管理的项目级凭证），`twi_` 前缀 128-bit 随机（无枚举面），一次性默认、可限次（1..10000）、可过期、可吊销（owner/admin 管理：`Create/List/DeleteInviteCode`，key 凭证禁入）。**消费原子**：单语句 `UPDATE … WHERE 有效性 AND used_count < max_uses RETURNING`，行锁串行化——并发同码恰好一个成功。
+- 未知策略值 fail-closed（按 closed 处理，防脏数据开注册口子）。
+
+### 11.2 DeleteAccount（`DELETE /v1/account`，端用户 JWT）
+
+注销当前登录账号，**匿名化软删**：
+
+1. **凭据立即失效**：全部会话撤销（refresh 失去锚点）+ `status=deleted`——validator 每次鉴权实时读库 `CanAuthenticate`，存量 access token 立即 401；
+2. **不泄露"曾存在"**：`email/pending_email/phone/name/prefs/factors/password_hash` 就地清洗（email 置 `deleted-<userID>@deleted.invalid` 项目内唯一占位值），**同邮箱可立即重新注册**；SignIn 依旧统一 `invalid credentials`；OAuth identities 一并删除；
+3. **数据保留（显式决策，不做级联删除）**：其名下文档、文件、memberships、审计行**保留为孤儿数据**——文档/文件按既有 ACL 收敛到不可见（owner 角色随之消失），审计是追责记录不随账号抹除（M5 C7 同语义）；物理清除归运维面保留策略；
+4. 软删行不得复生：`deleted` 状态仅删除路径写入，任何外部入参不可设置。
+
+---

@@ -293,6 +293,7 @@ func setupClientGRPC(t *testing.T) (context.Context, *AccountService, *fakeDocDB
 	account := client.NewAccount(
 		cfg,
 		projectRepo,
+		nil, // inviteRepo
 		fakeOAuthProviderRepo{},
 		sessions,
 		auth.NewRedisOTPChallengeStore(rdb, cfg),

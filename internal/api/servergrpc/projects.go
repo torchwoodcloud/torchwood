@@ -17,10 +17,11 @@ import (
 type ProjectsService struct {
 	serverv1.UnimplementedProjectsServiceServer
 	projects *appserver.Projects
+	invites  *appserver.InviteCodes
 }
 
-func NewProjectsService(projects *appserver.Projects) *ProjectsService {
-	return &ProjectsService{projects: projects}
+func NewProjectsService(projects *appserver.Projects, invites *appserver.InviteCodes) *ProjectsService {
+	return &ProjectsService{projects: projects, invites: invites}
 }
 
 func (s *ProjectsService) CreateProject(ctx context.Context, req *serverv1.CreateProjectRequest) (*serverv1.Project, error) {
@@ -88,6 +89,9 @@ func (s *ProjectsService) UpdateProject(ctx context.Context, req *serverv1.Updat
 	if req.Description != nil {
 		cmd.Description = req.Description
 	}
+	if req.RegistrationPolicy != nil {
+		cmd.RegistrationPolicy = req.RegistrationPolicy
+	}
 	p, err := s.projects.UpdateProject(ctx, cmd)
 	if err != nil {
 		return nil, err
@@ -108,11 +112,74 @@ func mapProject(p *projects.Project) *serverv1.Project {
 		return nil
 	}
 	return &serverv1.Project{
-		Id:          p.ID,
-		Name:        p.Name,
-		Description: p.Description,
-		Status:      p.Status,
-		CreatedAt:   timestamppb.New(p.CreatedAt),
-		UpdatedAt:   timestamppb.New(p.UpdatedAt),
+		Id:                 p.ID,
+		Name:               p.Name,
+		Description:        p.Description,
+		Status:             p.Status,
+		RegistrationPolicy: p.RegistrationPolicy,
+		CreatedAt:          timestamppb.New(p.CreatedAt),
+		UpdatedAt:          timestamppb.New(p.UpdatedAt),
 	}
+}
+
+// ---- 邀请码（T-03）----
+
+func (s *ProjectsService) CreateInviteCode(ctx context.Context, req *serverv1.CreateInviteCodeRequest) (*serverv1.InviteCode, error) {
+	ctx = contexts.WithAuditResource(ctx, req.GetProjectId()+"/invite-codes")
+	cmd := appserver.CreateInviteCodeCommand{ProjectID: req.GetProjectId()}
+	if req.MaxUses != nil {
+		cmd.MaxUses = req.MaxUses
+	}
+	if ts := req.GetExpireAt(); ts != nil {
+		t := ts.AsTime()
+		cmd.ExpireAt = &t
+	}
+	code, err := s.invites.Create(ctx, cmd)
+	if err != nil {
+		return nil, err
+	}
+	return mapInviteCode(code), nil
+}
+
+func (s *ProjectsService) ListInviteCodes(ctx context.Context, req *serverv1.ListInviteCodesRequest) (*serverv1.ListInviteCodesResponse, error) {
+	codes, err := s.invites.List(ctx, req.GetProjectId())
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*serverv1.InviteCode, len(codes))
+	for i := range codes {
+		out[i] = mapInviteCode(&codes[i])
+	}
+	return &serverv1.ListInviteCodesResponse{
+		InviteCodes: out,
+		Meta:        &sharedv1.ListResponseMeta{PageSize: int32(len(out))},
+	}, nil
+}
+
+func (s *ProjectsService) DeleteInviteCode(ctx context.Context, req *serverv1.DeleteInviteCodeRequest) (*sharedv1.Empty, error) {
+	ctx = contexts.WithAuditResource(ctx, req.GetProjectId()+"/invite-codes/"+req.GetId())
+	if err := s.invites.Delete(ctx, req.GetProjectId(), req.GetId()); err != nil {
+		return nil, err
+	}
+	return &sharedv1.Empty{}, nil
+}
+
+func mapInviteCode(c *projects.InviteCode) *serverv1.InviteCode {
+	if c == nil {
+		return nil
+	}
+	out := &serverv1.InviteCode{
+		Id:        c.ID,
+		ProjectId: c.ProjectID,
+		Code:      c.Code,
+		MaxUses:   int32(c.MaxUses),
+		UsedCount: int32(c.UsedCount),
+		Revoked:   c.Revoked(),
+		CreatedBy: c.CreatedBy,
+		CreatedAt: timestamppb.New(c.CreatedAt),
+	}
+	if c.ExpireAt != nil {
+		out.ExpireAt = timestamppb.New(*c.ExpireAt)
+	}
+	return out
 }

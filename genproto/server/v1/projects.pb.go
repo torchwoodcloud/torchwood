@@ -26,12 +26,15 @@ const (
 )
 
 type UpdateProjectRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          *string                `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"` // 空值不修改（proto3 optional 表达 presence）
-	Description   *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name        *string                `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"` // 空值不修改（proto3 optional 表达 presence）
+	Description *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	// 注册策略（T-03）：open（默认，现状）/ invite_only（凭有效邀请码注册）/
+	// closed（一律拒绝）；未设置 = 不修改。
+	RegistrationPolicy *string `protobuf:"bytes,4,opt,name=registration_policy,json=registrationPolicy,proto3,oneof" json:"registration_policy,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *UpdateProjectRequest) Reset() {
@@ -81,6 +84,13 @@ func (x *UpdateProjectRequest) GetName() string {
 func (x *UpdateProjectRequest) GetDescription() string {
 	if x != nil && x.Description != nil {
 		return *x.Description
+	}
+	return ""
+}
+
+func (x *UpdateProjectRequest) GetRegistrationPolicy() string {
+	if x != nil && x.RegistrationPolicy != nil {
+		return *x.RegistrationPolicy
 	}
 	return ""
 }
@@ -243,15 +253,17 @@ func (x *ListProjectsResponse) GetMeta() *v1.ListResponseMeta {
 }
 
 type Project struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name        string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Status      string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	CreatedAt   *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt   *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// 注册策略：open / invite_only / closed（T-03；默认 open）。
+	RegistrationPolicy string `protobuf:"bytes,7,opt,name=registration_policy,json=registrationPolicy,proto3" json:"registration_policy,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Project) Reset() {
@@ -326,17 +338,364 @@ func (x *Project) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Project) GetRegistrationPolicy() string {
+	if x != nil {
+		return x.RegistrationPolicy
+	}
+	return ""
+}
+
+// ---- 邀请码（T-03）----
+type CreateInviteCodeRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// 最大使用次数；不设置 = 1（一次性）。1..10000。
+	MaxUses *int32 `protobuf:"varint,2,opt,name=max_uses,json=maxUses,proto3,oneof" json:"max_uses,omitempty"`
+	// 过期时间；不设置 = 永不过期。
+	ExpireAt      *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expire_at,json=expireAt,proto3,oneof" json:"expire_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateInviteCodeRequest) Reset() {
+	*x = CreateInviteCodeRequest{}
+	mi := &file_server_v1_projects_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateInviteCodeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateInviteCodeRequest) ProtoMessage() {}
+
+func (x *CreateInviteCodeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_projects_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateInviteCodeRequest.ProtoReflect.Descriptor instead.
+func (*CreateInviteCodeRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_projects_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *CreateInviteCodeRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *CreateInviteCodeRequest) GetMaxUses() int32 {
+	if x != nil && x.MaxUses != nil {
+		return *x.MaxUses
+	}
+	return 0
+}
+
+func (x *CreateInviteCodeRequest) GetExpireAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpireAt
+	}
+	return nil
+}
+
+type InviteCode struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Id        string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ProjectId string                 `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// 明文邀请码（twi_ 前缀随机串）。创建响应返回全量；列表亦回显
+	// （邀请码是分发给被邀请者的明文凭证，管理端需可复制重发；
+	// 泄露风险由一次性/次数上限/过期/可吊销控制）。
+	Code          string                 `protobuf:"bytes,3,opt,name=code,proto3" json:"code,omitempty"`
+	MaxUses       int32                  `protobuf:"varint,4,opt,name=max_uses,json=maxUses,proto3" json:"max_uses,omitempty"`
+	UsedCount     int32                  `protobuf:"varint,5,opt,name=used_count,json=usedCount,proto3" json:"used_count,omitempty"`
+	ExpireAt      *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=expire_at,json=expireAt,proto3" json:"expire_at,omitempty"`
+	Revoked       bool                   `protobuf:"varint,7,opt,name=revoked,proto3" json:"revoked,omitempty"`
+	CreatedBy     string                 `protobuf:"bytes,8,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InviteCode) Reset() {
+	*x = InviteCode{}
+	mi := &file_server_v1_projects_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InviteCode) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InviteCode) ProtoMessage() {}
+
+func (x *InviteCode) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_projects_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InviteCode.ProtoReflect.Descriptor instead.
+func (*InviteCode) Descriptor() ([]byte, []int) {
+	return file_server_v1_projects_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *InviteCode) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *InviteCode) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *InviteCode) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *InviteCode) GetMaxUses() int32 {
+	if x != nil {
+		return x.MaxUses
+	}
+	return 0
+}
+
+func (x *InviteCode) GetUsedCount() int32 {
+	if x != nil {
+		return x.UsedCount
+	}
+	return 0
+}
+
+func (x *InviteCode) GetExpireAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpireAt
+	}
+	return nil
+}
+
+func (x *InviteCode) GetRevoked() bool {
+	if x != nil {
+		return x.Revoked
+	}
+	return false
+}
+
+func (x *InviteCode) GetCreatedBy() string {
+	if x != nil {
+		return x.CreatedBy
+	}
+	return ""
+}
+
+func (x *InviteCode) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+type ListInviteCodesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListInviteCodesRequest) Reset() {
+	*x = ListInviteCodesRequest{}
+	mi := &file_server_v1_projects_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListInviteCodesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListInviteCodesRequest) ProtoMessage() {}
+
+func (x *ListInviteCodesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_projects_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListInviteCodesRequest.ProtoReflect.Descriptor instead.
+func (*ListInviteCodesRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_projects_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ListInviteCodesRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *ListInviteCodesRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListInviteCodesRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListInviteCodesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	InviteCodes   []*InviteCode          `protobuf:"bytes,1,rep,name=invite_codes,json=inviteCodes,proto3" json:"invite_codes,omitempty"`
+	Meta          *v1.ListResponseMeta   `protobuf:"bytes,2,opt,name=meta,proto3" json:"meta,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListInviteCodesResponse) Reset() {
+	*x = ListInviteCodesResponse{}
+	mi := &file_server_v1_projects_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListInviteCodesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListInviteCodesResponse) ProtoMessage() {}
+
+func (x *ListInviteCodesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_projects_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListInviteCodesResponse.ProtoReflect.Descriptor instead.
+func (*ListInviteCodesResponse) Descriptor() ([]byte, []int) {
+	return file_server_v1_projects_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ListInviteCodesResponse) GetInviteCodes() []*InviteCode {
+	if x != nil {
+		return x.InviteCodes
+	}
+	return nil
+}
+
+func (x *ListInviteCodesResponse) GetMeta() *v1.ListResponseMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+type DeleteInviteCodeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteInviteCodeRequest) Reset() {
+	*x = DeleteInviteCodeRequest{}
+	mi := &file_server_v1_projects_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteInviteCodeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteInviteCodeRequest) ProtoMessage() {}
+
+func (x *DeleteInviteCodeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_projects_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteInviteCodeRequest.ProtoReflect.Descriptor instead.
+func (*DeleteInviteCodeRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_projects_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *DeleteInviteCodeRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *DeleteInviteCodeRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 var File_server_v1_projects_proto protoreflect.FileDescriptor
 
 const file_server_v1_projects_proto_rawDesc = "" +
 	"\n" +
-	"\x18server/v1/projects.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\x7f\n" +
+	"\x18server/v1/projects.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xcd\x01\n" +
 	"\x14UpdateProjectRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12%\n" +
-	"\vdescription\x18\x03 \x01(\tH\x01R\vdescription\x88\x01\x01B\a\n" +
+	"\vdescription\x18\x03 \x01(\tH\x01R\vdescription\x88\x01\x01\x124\n" +
+	"\x13registration_policy\x18\x04 \x01(\tH\x02R\x12registrationPolicy\x88\x01\x01B\a\n" +
 	"\x05_nameB\x0e\n" +
-	"\f_description\"\\\n" +
+	"\f_descriptionB\x16\n" +
+	"\x14_registration_policy\"\\\n" +
 	"\x14CreateProjectRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x0e\n" +
@@ -345,7 +704,7 @@ const file_server_v1_projects_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x8b\x01\n" +
 	"\x14ListProjectsResponse\x128\n" +
 	"\bprojects\x18\x01 \x03(\v2\x1c.torchwood.server.v1.ProjectR\bprojects\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\xdd\x01\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\x8e\x02\n" +
 	"\aProject\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -354,7 +713,44 @@ const file_server_v1_projects_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt2\x96\x06\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12/\n" +
+	"\x13registration_policy\x18\a \x01(\tR\x12registrationPolicy\"\xb1\x01\n" +
+	"\x17CreateInviteCodeRequest\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1e\n" +
+	"\bmax_uses\x18\x02 \x01(\x05H\x00R\amaxUses\x88\x01\x01\x12<\n" +
+	"\texpire_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampH\x01R\bexpireAt\x88\x01\x01B\v\n" +
+	"\t_max_usesB\f\n" +
+	"\n" +
+	"_expire_at\"\xb6\x02\n" +
+	"\n" +
+	"InviteCode\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x02 \x01(\tR\tprojectId\x12\x12\n" +
+	"\x04code\x18\x03 \x01(\tR\x04code\x12\x19\n" +
+	"\bmax_uses\x18\x04 \x01(\x05R\amaxUses\x12\x1d\n" +
+	"\n" +
+	"used_count\x18\x05 \x01(\x05R\tusedCount\x127\n" +
+	"\texpire_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\bexpireAt\x12\x18\n" +
+	"\arevoked\x18\a \x01(\bR\arevoked\x12\x1d\n" +
+	"\n" +
+	"created_by\x18\b \x01(\tR\tcreatedBy\x129\n" +
+	"\n" +
+	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"s\n" +
+	"\x16ListInviteCodesRequest\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\x98\x01\n" +
+	"\x17ListInviteCodesResponse\x12B\n" +
+	"\finvite_codes\x18\x01 \x03(\v2\x1f.torchwood.server.v1.InviteCodeR\vinviteCodes\x129\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"H\n" +
+	"\x17DeleteInviteCodeRequest\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id2\xa6\v\n" +
 	"\x0fProjectsService\x12\xb3\x01\n" +
 	"\rCreateProject\x12).torchwood.server.v1.CreateProjectRequest\x1a\x1c.torchwood.server.v1.Project\"Y\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
@@ -365,7 +761,16 @@ const file_server_v1_projects_proto_rawDesc = "" +
 	"\rUpdateProject\x12).torchwood.server.v1.UpdateProjectRequest\x1a\x1c.torchwood.server.v1.Project\"2\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x05\x10\x02\x82\xd3\xe4\x93\x02\x1d:\x01*2\x18/v1/server/projects/{id}\x12\xb0\x01\n" +
 	"\rDeleteProject\x12&.torchwood.server.v1.GetProjectRequest\x1a\x1a.torchwood.shared.v1.Empty\"[\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x1a*\x18/v1/server/projects/{id}\x1a\x06\x92\xb2\x19\x02\b\x03B\xd9\x03\x92A\x96\x03RR\n" +
+	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x1a*\x18/v1/server/projects/{id}\x12\xd6\x01\n" +
+	"\x10CreateInviteCode\x12,.torchwood.server.v1.CreateInviteCodeRequest\x1a\x1f.torchwood.server.v1.InviteCode\"s\x92A$j\"\n" +
+	"\x12x-torchwood-access\x12\f\x1a\n" +
+	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x022:\x01*\"-/v1/server/projects/{project_id}/invite-codes\x12\xde\x01\n" +
+	"\x0fListInviteCodes\x12+.torchwood.server.v1.ListInviteCodesRequest\x1a,.torchwood.server.v1.ListInviteCodesResponse\"p\x92A$j\"\n" +
+	"\x12x-torchwood-access\x12\f\x1a\n" +
+	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02/\x12-/v1/server/projects/{project_id}/invite-codes\x12\xd3\x01\n" +
+	"\x10DeleteInviteCode\x12,.torchwood.server.v1.DeleteInviteCodeRequest\x1a\x1a.torchwood.shared.v1.Empty\"u\x92A$j\"\n" +
+	"\x12x-torchwood-access\x12\f\x1a\n" +
+	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x024*2/v1/server/projects/{project_id}/invite-codes/{id}\x1a\x06\x92\xb2\x19\x02\b\x03B\xd9\x03\x92A\x96\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
@@ -392,38 +797,54 @@ func file_server_v1_projects_proto_rawDescGZIP() []byte {
 	return file_server_v1_projects_proto_rawDescData
 }
 
-var file_server_v1_projects_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_server_v1_projects_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_server_v1_projects_proto_goTypes = []any{
-	(*UpdateProjectRequest)(nil),  // 0: torchwood.server.v1.UpdateProjectRequest
-	(*CreateProjectRequest)(nil),  // 1: torchwood.server.v1.CreateProjectRequest
-	(*GetProjectRequest)(nil),     // 2: torchwood.server.v1.GetProjectRequest
-	(*ListProjectsResponse)(nil),  // 3: torchwood.server.v1.ListProjectsResponse
-	(*Project)(nil),               // 4: torchwood.server.v1.Project
-	(*v1.ListResponseMeta)(nil),   // 5: torchwood.shared.v1.ListResponseMeta
-	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
-	(*v1.ListRequest)(nil),        // 7: torchwood.shared.v1.ListRequest
-	(*v1.Empty)(nil),              // 8: torchwood.shared.v1.Empty
+	(*UpdateProjectRequest)(nil),    // 0: torchwood.server.v1.UpdateProjectRequest
+	(*CreateProjectRequest)(nil),    // 1: torchwood.server.v1.CreateProjectRequest
+	(*GetProjectRequest)(nil),       // 2: torchwood.server.v1.GetProjectRequest
+	(*ListProjectsResponse)(nil),    // 3: torchwood.server.v1.ListProjectsResponse
+	(*Project)(nil),                 // 4: torchwood.server.v1.Project
+	(*CreateInviteCodeRequest)(nil), // 5: torchwood.server.v1.CreateInviteCodeRequest
+	(*InviteCode)(nil),              // 6: torchwood.server.v1.InviteCode
+	(*ListInviteCodesRequest)(nil),  // 7: torchwood.server.v1.ListInviteCodesRequest
+	(*ListInviteCodesResponse)(nil), // 8: torchwood.server.v1.ListInviteCodesResponse
+	(*DeleteInviteCodeRequest)(nil), // 9: torchwood.server.v1.DeleteInviteCodeRequest
+	(*v1.ListResponseMeta)(nil),     // 10: torchwood.shared.v1.ListResponseMeta
+	(*timestamppb.Timestamp)(nil),   // 11: google.protobuf.Timestamp
+	(*v1.ListRequest)(nil),          // 12: torchwood.shared.v1.ListRequest
+	(*v1.Empty)(nil),                // 13: torchwood.shared.v1.Empty
 }
 var file_server_v1_projects_proto_depIdxs = []int32{
-	4, // 0: torchwood.server.v1.ListProjectsResponse.projects:type_name -> torchwood.server.v1.Project
-	5, // 1: torchwood.server.v1.ListProjectsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
-	6, // 2: torchwood.server.v1.Project.created_at:type_name -> google.protobuf.Timestamp
-	6, // 3: torchwood.server.v1.Project.updated_at:type_name -> google.protobuf.Timestamp
-	1, // 4: torchwood.server.v1.ProjectsService.CreateProject:input_type -> torchwood.server.v1.CreateProjectRequest
-	7, // 5: torchwood.server.v1.ProjectsService.ListProjects:input_type -> torchwood.shared.v1.ListRequest
-	2, // 6: torchwood.server.v1.ProjectsService.GetProject:input_type -> torchwood.server.v1.GetProjectRequest
-	0, // 7: torchwood.server.v1.ProjectsService.UpdateProject:input_type -> torchwood.server.v1.UpdateProjectRequest
-	2, // 8: torchwood.server.v1.ProjectsService.DeleteProject:input_type -> torchwood.server.v1.GetProjectRequest
-	4, // 9: torchwood.server.v1.ProjectsService.CreateProject:output_type -> torchwood.server.v1.Project
-	3, // 10: torchwood.server.v1.ProjectsService.ListProjects:output_type -> torchwood.server.v1.ListProjectsResponse
-	4, // 11: torchwood.server.v1.ProjectsService.GetProject:output_type -> torchwood.server.v1.Project
-	4, // 12: torchwood.server.v1.ProjectsService.UpdateProject:output_type -> torchwood.server.v1.Project
-	8, // 13: torchwood.server.v1.ProjectsService.DeleteProject:output_type -> torchwood.shared.v1.Empty
-	9, // [9:14] is the sub-list for method output_type
-	4, // [4:9] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	4,  // 0: torchwood.server.v1.ListProjectsResponse.projects:type_name -> torchwood.server.v1.Project
+	10, // 1: torchwood.server.v1.ListProjectsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	11, // 2: torchwood.server.v1.Project.created_at:type_name -> google.protobuf.Timestamp
+	11, // 3: torchwood.server.v1.Project.updated_at:type_name -> google.protobuf.Timestamp
+	11, // 4: torchwood.server.v1.CreateInviteCodeRequest.expire_at:type_name -> google.protobuf.Timestamp
+	11, // 5: torchwood.server.v1.InviteCode.expire_at:type_name -> google.protobuf.Timestamp
+	11, // 6: torchwood.server.v1.InviteCode.created_at:type_name -> google.protobuf.Timestamp
+	6,  // 7: torchwood.server.v1.ListInviteCodesResponse.invite_codes:type_name -> torchwood.server.v1.InviteCode
+	10, // 8: torchwood.server.v1.ListInviteCodesResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	1,  // 9: torchwood.server.v1.ProjectsService.CreateProject:input_type -> torchwood.server.v1.CreateProjectRequest
+	12, // 10: torchwood.server.v1.ProjectsService.ListProjects:input_type -> torchwood.shared.v1.ListRequest
+	2,  // 11: torchwood.server.v1.ProjectsService.GetProject:input_type -> torchwood.server.v1.GetProjectRequest
+	0,  // 12: torchwood.server.v1.ProjectsService.UpdateProject:input_type -> torchwood.server.v1.UpdateProjectRequest
+	2,  // 13: torchwood.server.v1.ProjectsService.DeleteProject:input_type -> torchwood.server.v1.GetProjectRequest
+	5,  // 14: torchwood.server.v1.ProjectsService.CreateInviteCode:input_type -> torchwood.server.v1.CreateInviteCodeRequest
+	7,  // 15: torchwood.server.v1.ProjectsService.ListInviteCodes:input_type -> torchwood.server.v1.ListInviteCodesRequest
+	9,  // 16: torchwood.server.v1.ProjectsService.DeleteInviteCode:input_type -> torchwood.server.v1.DeleteInviteCodeRequest
+	4,  // 17: torchwood.server.v1.ProjectsService.CreateProject:output_type -> torchwood.server.v1.Project
+	3,  // 18: torchwood.server.v1.ProjectsService.ListProjects:output_type -> torchwood.server.v1.ListProjectsResponse
+	4,  // 19: torchwood.server.v1.ProjectsService.GetProject:output_type -> torchwood.server.v1.Project
+	4,  // 20: torchwood.server.v1.ProjectsService.UpdateProject:output_type -> torchwood.server.v1.Project
+	13, // 21: torchwood.server.v1.ProjectsService.DeleteProject:output_type -> torchwood.shared.v1.Empty
+	6,  // 22: torchwood.server.v1.ProjectsService.CreateInviteCode:output_type -> torchwood.server.v1.InviteCode
+	8,  // 23: torchwood.server.v1.ProjectsService.ListInviteCodes:output_type -> torchwood.server.v1.ListInviteCodesResponse
+	13, // 24: torchwood.server.v1.ProjectsService.DeleteInviteCode:output_type -> torchwood.shared.v1.Empty
+	17, // [17:25] is the sub-list for method output_type
+	9,  // [9:17] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_server_v1_projects_proto_init() }
@@ -432,13 +853,14 @@ func file_server_v1_projects_proto_init() {
 		return
 	}
 	file_server_v1_projects_proto_msgTypes[0].OneofWrappers = []any{}
+	file_server_v1_projects_proto_msgTypes[5].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_server_v1_projects_proto_rawDesc), len(file_server_v1_projects_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

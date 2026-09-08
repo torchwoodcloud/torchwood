@@ -187,6 +187,7 @@ func newOAuthBindingAccount() (*Account, *memOAuthStateStore, *memBindingSession
 	a := NewAccount(
 		&config.AppConfig{},
 		stubOAuthProjectRepo{},
+		nil,
 		stubOAuthProviderRepo{},
 		stubSessionService{},
 		nil, states, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,

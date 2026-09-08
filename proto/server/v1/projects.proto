@@ -115,12 +115,61 @@ service ProjectsService {
       }
     };
   }
+
+  // ---- 邀请码（T-03，invite_only 注册策略）----
+  // 平台专属面（key 凭证禁入）：邀请码是注册凭证的逆向物，泄漏可绕过
+  // 注册策略，故管理权仅 owner/admin console 会话。
+  rpc CreateInviteCode(CreateInviteCodeRequest) returns (InviteCode) {
+    option (google.api.http) = { post: "/v1/server/projects/{project_id}/invite-codes", body: "*" };
+    option (torchwood.shared.v1.method_auth) = {
+      access: ACCESS_PERMISSION
+      permissions: ["owner", "admin"]
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      extensions: {
+        key: "x-torchwood-access"
+        value: { string_value: "permission" }
+      }
+    };
+  }
+
+  rpc ListInviteCodes(ListInviteCodesRequest) returns (ListInviteCodesResponse) {
+    option (google.api.http) = { get: "/v1/server/projects/{project_id}/invite-codes" };
+    option (torchwood.shared.v1.method_auth) = {
+      access: ACCESS_PERMISSION
+      permissions: ["owner", "admin"]
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      extensions: {
+        key: "x-torchwood-access"
+        value: { string_value: "permission" }
+      }
+    };
+  }
+
+  // 吊销邀请码（软删：revoked_at 置位，消费路径立即拒绝）。
+  rpc DeleteInviteCode(DeleteInviteCodeRequest) returns (shared.v1.Empty) {
+    option (google.api.http) = { delete: "/v1/server/projects/{project_id}/invite-codes/{id}" };
+    option (torchwood.shared.v1.method_auth) = {
+      access: ACCESS_PERMISSION
+      permissions: ["owner", "admin"]
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      extensions: {
+        key: "x-torchwood-access"
+        value: { string_value: "permission" }
+      }
+    };
+  }
 }
 
 message UpdateProjectRequest {
   string id = 1;
   optional string name = 2;         // 空值不修改（proto3 optional 表达 presence）
   optional string description = 3;
+  // 注册策略（T-03）：open（默认，现状）/ invite_only（凭有效邀请码注册）/
+  // closed（一律拒绝）；未设置 = 不修改。
+  optional string registration_policy = 4;
 }
 
 message CreateProjectRequest {
@@ -146,4 +195,46 @@ message Project {
   string status = 4;
   google.protobuf.Timestamp created_at = 5;
   google.protobuf.Timestamp updated_at = 6;
+  // 注册策略：open / invite_only / closed（T-03；默认 open）。
+  string registration_policy = 7;
+}
+
+// ---- 邀请码（T-03）----
+message CreateInviteCodeRequest {
+  string project_id = 1;
+  // 最大使用次数；不设置 = 1（一次性）。1..10000。
+  optional int32 max_uses = 2;
+  // 过期时间；不设置 = 永不过期。
+  optional google.protobuf.Timestamp expire_at = 3;
+}
+
+message InviteCode {
+  string id = 1;
+  string project_id = 2;
+  // 明文邀请码（twi_ 前缀随机串）。创建响应返回全量；列表亦回显
+  //（邀请码是分发给被邀请者的明文凭证，管理端需可复制重发；
+  // 泄露风险由一次性/次数上限/过期/可吊销控制）。
+  string code = 3;
+  int32 max_uses = 4;
+  int32 used_count = 5;
+  google.protobuf.Timestamp expire_at = 6;
+  bool revoked = 7;
+  string created_by = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+
+message ListInviteCodesRequest {
+  string project_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListInviteCodesResponse {
+  repeated InviteCode invite_codes = 1;
+  shared.v1.ListResponseMeta meta = 2;
+}
+
+message DeleteInviteCodeRequest {
+  string project_id = 1;
+  string id = 2;
 }

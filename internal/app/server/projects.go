@@ -331,6 +331,9 @@ type UpdateProjectCommand struct {
 	ProjectID   string // 目标项目 id
 	Name        *string
 	Description *string
+	// RegistrationPolicy（T-03）：nil = 不修改；非 nil = 更新为该策略
+	//（open/invite_only/closed，值域校验见 ValidateRegistrationPolicy）。
+	RegistrationPolicy *string
 	// 无 Principal 字段：use-case 内从 contexts.Principal(ctx) 取
 	// （与 CreateProject/GetProject/ListProjects 的仓库模式一致）。
 }
@@ -341,7 +344,7 @@ func (s *Projects) UpdateProject(ctx context.Context, cmd UpdateProjectCommand) 
 	}
 	// "nothing to update" 前置检查放在取数之前（对齐 storage.UpdateFile 先例），
 	// 避免"项目不存在 + 全空请求"返回 NotFound 的语义歧义。
-	if cmd.Name == nil && cmd.Description == nil {
+	if cmd.Name == nil && cmd.Description == nil && cmd.RegistrationPolicy == nil {
 		return nil, status.Error(codes.InvalidArgument, "nothing to update")
 	}
 	principal, ok := contexts.Principal(ctx)
@@ -383,6 +386,12 @@ func (s *Projects) UpdateProject(ctx context.Context, cmd UpdateProjectCommand) 
 			return nil, status.Error(codes.InvalidArgument, "description must be at most 512 characters")
 		}
 		project.Description = *cmd.Description
+	}
+	if cmd.RegistrationPolicy != nil {
+		if err := projects.ValidateRegistrationPolicy(*cmd.RegistrationPolicy); err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		project.RegistrationPolicy = *cmd.RegistrationPolicy
 	}
 	// repo 的 UpdateProject 是全列覆盖写，不置当前时间则 updated_at 永远停滞。
 	project.UpdatedAt = time.Now()

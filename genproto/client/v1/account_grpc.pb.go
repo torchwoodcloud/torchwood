@@ -26,6 +26,7 @@ const (
 	AccountService_RefreshToken_FullMethodName                   = "/torchwood.client.v1.AccountService/RefreshToken"
 	AccountService_Me_FullMethodName                             = "/torchwood.client.v1.AccountService/Me"
 	AccountService_UpdateAccount_FullMethodName                  = "/torchwood.client.v1.AccountService/UpdateAccount"
+	AccountService_DeleteAccount_FullMethodName                  = "/torchwood.client.v1.AccountService/DeleteAccount"
 	AccountService_ConfirmEmailChange_FullMethodName             = "/torchwood.client.v1.AccountService/ConfirmEmailChange"
 	AccountService_ListSessions_FullMethodName                   = "/torchwood.client.v1.AccountService/ListSessions"
 	AccountService_DeleteSession_FullMethodName                  = "/torchwood.client.v1.AccountService/DeleteSession"
@@ -67,6 +68,11 @@ type AccountServiceClient interface {
 	RefreshToken(ctx context.Context, in *RefreshTokenRequest, opts ...grpc.CallOption) (*RefreshTokenResponse, error)
 	Me(ctx context.Context, in *MeRequest, opts ...grpc.CallOption) (*Account, error)
 	UpdateAccount(ctx context.Context, in *UpdateAccountRequest, opts ...grpc.CallOption) (*Account, error)
+	// 注销当前登录账号（T-03）：匿名化软删——凭据立即失效（全部会话撤销 +
+	// 状态置 deleted，每次鉴权实时校验），email/name/手机号/凭据哈希就地
+	// 清洗，同邮箱可立即重新注册（不泄露"曾存在"）；其名下文档/文件/审计
+	// 行保留为孤儿数据（显式决策，不做级联删除）。
+	DeleteAccount(ctx context.Context, in *DeleteAccountRequest, opts ...grpc.CallOption) (*v1.Empty, error)
 	// 确认邮箱变更：消费邮件中的一次性 secret，验证通过后 email 才切换
 	// （staging：验证前 email 保持旧值，旧邮箱仍可登录/找回）。
 	// ACCESS_PUBLIC：邮件链接点开即完成（与 recovery 同一安全模型——256-bit
@@ -168,6 +174,16 @@ func (c *accountServiceClient) UpdateAccount(ctx context.Context, in *UpdateAcco
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Account)
 	err := c.cc.Invoke(ctx, AccountService_UpdateAccount_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *accountServiceClient) DeleteAccount(ctx context.Context, in *DeleteAccountRequest, opts ...grpc.CallOption) (*v1.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(v1.Empty)
+	err := c.cc.Invoke(ctx, AccountService_DeleteAccount_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -474,6 +490,11 @@ type AccountServiceServer interface {
 	RefreshToken(context.Context, *RefreshTokenRequest) (*RefreshTokenResponse, error)
 	Me(context.Context, *MeRequest) (*Account, error)
 	UpdateAccount(context.Context, *UpdateAccountRequest) (*Account, error)
+	// 注销当前登录账号（T-03）：匿名化软删——凭据立即失效（全部会话撤销 +
+	// 状态置 deleted，每次鉴权实时校验），email/name/手机号/凭据哈希就地
+	// 清洗，同邮箱可立即重新注册（不泄露"曾存在"）；其名下文档/文件/审计
+	// 行保留为孤儿数据（显式决策，不做级联删除）。
+	DeleteAccount(context.Context, *DeleteAccountRequest) (*v1.Empty, error)
 	// 确认邮箱变更：消费邮件中的一次性 secret，验证通过后 email 才切换
 	// （staging：验证前 email 保持旧值，旧邮箱仍可登录/找回）。
 	// ACCESS_PUBLIC：邮件链接点开即完成（与 recovery 同一安全模型——256-bit
@@ -538,6 +559,9 @@ func (UnimplementedAccountServiceServer) Me(context.Context, *MeRequest) (*Accou
 }
 func (UnimplementedAccountServiceServer) UpdateAccount(context.Context, *UpdateAccountRequest) (*Account, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateAccount not implemented")
+}
+func (UnimplementedAccountServiceServer) DeleteAccount(context.Context, *DeleteAccountRequest) (*v1.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteAccount not implemented")
 }
 func (UnimplementedAccountServiceServer) ConfirmEmailChange(context.Context, *ConfirmEmailChangeRequest) (*Account, error) {
 	return nil, status.Error(codes.Unimplemented, "method ConfirmEmailChange not implemented")
@@ -751,6 +775,24 @@ func _AccountService_UpdateAccount_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AccountServiceServer).UpdateAccount(ctx, req.(*UpdateAccountRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AccountService_DeleteAccount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteAccountRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccountServiceServer).DeleteAccount(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccountService_DeleteAccount_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccountServiceServer).DeleteAccount(ctx, req.(*DeleteAccountRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1307,6 +1349,10 @@ var AccountService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateAccount",
 			Handler:    _AccountService_UpdateAccount_Handler,
+		},
+		{
+			MethodName: "DeleteAccount",
+			Handler:    _AccountService_DeleteAccount_Handler,
 		},
 		{
 			MethodName: "ConfirmEmailChange",

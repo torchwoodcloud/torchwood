@@ -73,7 +73,7 @@ func NewTestAccountWithDeps(
 	if sms == nil {
 		sms = inframessaging.NewSMSService(cfg)
 	}
-	return NewAccount(cfg, projectRepo, oauthProviders, sessions, otp, oauthState, tokens, loginThrottle, rotation, nil, mailer, sms, rateLimiter, roles, mfa, mfaChallenges, oneTimeTokens, nil, usersRepo, identities, sessionRepo, infraauth.NewOAuthAuthenticatorFactory(), infraauth.NewWeChatMiniProgramExchanger(), infraauth.NewOTPGenerator(), nil)
+	return NewAccount(cfg, projectRepo, nil, oauthProviders, sessions, otp, oauthState, tokens, loginThrottle, rotation, nil, mailer, sms, rateLimiter, roles, mfa, mfaChallenges, oneTimeTokens, nil, usersRepo, identities, sessionRepo, infraauth.NewOAuthAuthenticatorFactory(), infraauth.NewWeChatMiniProgramExchanger(), infraauth.NewOTPGenerator(), nil)
 }
 
 // CaptureMailer records sent messages for tests.

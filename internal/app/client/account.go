@@ -32,6 +32,7 @@ import (
 type Account struct {
 	cfg             *config.AppConfig
 	projectRepo     projects.Repository
+	inviteRepo      projects.InviteCodeRepository
 	oauthProviders  projects.OAuthProviderRepository
 	usersRepo       users.Repository
 	identities      domainauth.IdentityRepository
@@ -61,6 +62,7 @@ type Account struct {
 func NewAccount(
 	cfg *config.AppConfig,
 	projectRepo projects.Repository,
+	inviteRepo projects.InviteCodeRepository,
 	oauthProviders projects.OAuthProviderRepository,
 	sessions domainauth.SessionService,
 	otp domainauth.OTPChallengeStore,
@@ -88,6 +90,7 @@ func NewAccount(
 	return &Account{
 		cfg:             cfg,
 		projectRepo:     projectRepo,
+		inviteRepo:      inviteRepo,
 		oauthProviders:  oauthProviders,
 		usersRepo:       usersRepo,
 		identities:      identities,
@@ -157,6 +160,9 @@ type SignUpCommand struct {
 	Email     string
 	Password  string
 	Name      string
+	// InviteCode（T-03）：invite_only 项目必填；open 项目忽略；closed 项目
+	// 一律拒绝。proto3 optional → 空串 = 未携带。
+	InviteCode string
 }
 
 type SignInCommand struct {
@@ -283,6 +289,11 @@ func (a *Account) SignUp(ctx context.Context, cmd SignUpCommand) (*User, *TokenB
 	if err := a.checkSignUpRateLimit(ctx, project.ID, clientInfo.IP); err != nil {
 		return nil, nil, "", nil, err
 	}
+	// 注册策略门（T-03）：closed 一律 403；invite_only 凭有效邀请码放行。
+	// 频控先行：邀请码枚举同样受 IP 频控约束（邀请码 128-bit 随机本无枚举面）。
+	if err := a.checkRegistrationPolicy(ctx, project, cmd.InviteCode); err != nil {
+		return nil, nil, "", nil, err
+	}
 
 	existing, err := a.usersRepo.GetByEmail(ctx, project.ID, email)
 	if err != nil {
@@ -320,6 +331,106 @@ func (a *Account) generateUserID(ctx context.Context, projectID string) (string,
 		return a.idGen.NewID(ctx, projectID, domainidgen.ResourceUsers)
 	}
 	return idgen.UUID().String(), nil
+}
+
+// T-03 域错误码（"CODE: message" 消息前缀约定，对齐 docdb 错误码体系）。
+const (
+	errCodeRegistrationClosed = "ACCOUNT.REGISTRATION_CLOSED"
+	errCodeInviteCodeInvalid  = "ACCOUNT.INVITE_CODE_INVALID"
+)
+
+// checkRegistrationPolicy 是项目注册策略门（T-03）：
+//   - open（默认/空值兜底）：放行，现状不变；
+//   - closed：一律 403（新错误码 ACCOUNT.REGISTRATION_CLOSED）；
+//   - invite_only：必须携带有效邀请码，原子消费（并发同码仅一次成功）；
+//     无码/错码/过期码/已耗尽/已吊销统一 403 ACCOUNT.INVITE_CODE_INVALID
+//     （不区分原因，不给探测面）。
+func (a *Account) checkRegistrationPolicy(ctx context.Context, project *projects.Project, inviteCode string) error {
+	switch project.RegistrationPolicy {
+	case "", projects.RegistrationOpen:
+		return nil
+	case projects.RegistrationClosed:
+		return status.Errorf(codes.PermissionDenied, "%s: registration is closed for this project", errCodeRegistrationClosed)
+	case projects.RegistrationInviteOnly:
+		if a.inviteRepo == nil {
+			return status.Error(codes.Internal, "invite code store is not configured")
+		}
+		if inviteCode == "" {
+			return status.Errorf(codes.PermissionDenied, "%s: a valid invite code is required", errCodeInviteCodeInvalid)
+		}
+		ok, err := a.inviteRepo.ConsumeInviteCode(ctx, project.ID, strings.TrimSpace(inviteCode))
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return status.Errorf(codes.PermissionDenied, "%s: a valid invite code is required", errCodeInviteCodeInvalid)
+		}
+		return nil
+	default:
+		// 未知策略值 fail-closed（防脏数据开注册口子）。
+		return status.Errorf(codes.PermissionDenied, "%s: registration is closed for this project", errCodeRegistrationClosed)
+	}
+}
+
+// DeleteAccount 注销当前登录账号（T-03，匿名化软删）：
+//   - 凭据立即失效：全部会话撤销（refresh 失去锚点）+ status=deleted
+//     （validator 每次鉴权实时读库，存量 access token 立即 401）；
+//   - email 不可被枚举出"曾存在"：email/pending_email/phone/name 就地清洗
+//     （email 置唯一占位值），同邮箱可立即重新注册；OAuth identities 与
+//     MFA 因子一并清除；
+//   - 数据保留为显式决策（见 05-authentication.md §11）：其名下文档/文件/
+//     审计行保留为孤儿数据，不做级联删除。
+func (a *Account) DeleteAccount(ctx context.Context) error {
+	p, err := a.requireUser(ctx)
+	if err != nil {
+		return err
+	}
+	found, err := a.usersRepo.GetByID(ctx, p.ProjectID, p.UserID)
+	if err != nil {
+		return err
+	}
+	if found == nil {
+		return status.Error(codes.NotFound, "user not found")
+	}
+
+	// 先撤会话、后提交：与 UpdateAccount 的"撤会话失败即返回，无
+	// 密码已改但旧会话仍存活窗口"同语义。
+	if err := a.sessions.DeleteSessionsByUser(ctx, p.ProjectID, p.UserID); err != nil {
+		return fmt.Errorf("delete sessions before account delete: %w", err)
+	}
+	// 清 OAuth identities（循环删除：identity 数通常 ≤ 个位数）。
+	if a.identities != nil {
+		ids, err := a.identities.ListByUser(ctx, p.ProjectID, p.UserID)
+		if err != nil {
+			return fmt.Errorf("list identities before account delete: %w", err)
+		}
+		for _, identity := range ids {
+			if err := a.identities.Delete(ctx, p.ProjectID, identity.ID); err != nil {
+				return fmt.Errorf("delete identity before account delete: %w", err)
+			}
+		}
+	}
+
+	// 匿名化软删：status=deleted + PII 就地清洗。email 占位值含 userID
+	//（项目内唯一，不与软删前/重注册邮箱冲突）；normalizeEmail 只小写，
+	// 不影响SignIn 按 email 查不到该行的事实。
+	scrubbedEmail := normalizeEmail("deleted-" + p.UserID + "@deleted.invalid")
+	updates := map[string]any{
+		"status":        users.StatusDeleted,
+		"email":         scrubbedEmail,
+		"pending_email": "",
+		"name":          "",
+		"phone":         "",
+		"prefs":         nil,
+		"factors":       nil,
+		// password_hash 清空（等同匿名用户形态；status=deleted 已阻断认证，
+		// 清空仅为进一步消除离线破解价值）。
+		"password_hash": "",
+	}
+	if err := a.usersRepo.Update(ctx, p.ProjectID, p.UserID, updates); err != nil {
+		return fmt.Errorf("delete account: %w", err)
+	}
+	return nil
 }
 
 func (a *Account) finishSignIn(ctx context.Context, projectID string, user *User) (*User, *TokenBundle, string, *MFASignInChallenge, error) {

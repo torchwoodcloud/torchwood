@@ -10,6 +10,7 @@ var ProviderSet = wire.NewSet(
 	bunrepo.NewProjectRepository,
 	bunrepo.NewOAuthProviderRepository,
 	bunrepo.NewAPIKeyRepository,
+	bunrepo.NewInviteCodeRepository,
 	bunrepo.NewIdempotencyStore,
 	wire.Bind(new(databases.IdempotencyStore), new(*bunrepo.IdempotencyStore)),
 	bunrepo.NewAdminRepository,

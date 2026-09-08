@@ -29,7 +29,8 @@ func TestApply_IdempotentCatalogAndOAuth(t *testing.T) {
 	var version int64
 	require.NoError(t, db.QueryRowContext(ctx,
 		"SELECT MAX(version) FROM "+quoted+".schema_migrations").Scan(&version))
-	require.Equal(t, int64(11), version)
+	// 000012（T-03）：users.status CHECK 放宽加入 'deleted'。
+	require.Equal(t, int64(12), version)
 
 	var dirty bool
 	require.NoError(t, db.QueryRowContext(ctx,

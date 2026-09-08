@@ -189,9 +189,145 @@
           "ProjectsService"
         ]
       }
+    },
+    "/v1/server/projects/{project_id}/invite-codes": {
+      "get": {
+        "operationId": "ProjectsService_ListInviteCodes",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListInviteCodesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "page_token",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ProjectsService"
+        ],
+        "x-torchwood-access": "permission"
+      },
+      "post": {
+        "summary": "---- 邀请码（T-03，invite_only 注册策略）----\n平台专属面（key 凭证禁入）：邀请码是注册凭证的逆向物，泄漏可绕过\n注册策略，故管理权仅 owner/admin console 会话。",
+        "operationId": "ProjectsService_CreateInviteCode",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1InviteCode"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ProjectsServiceCreateInviteCodeBody"
+            }
+          }
+        ],
+        "tags": [
+          "ProjectsService"
+        ],
+        "x-torchwood-access": "permission"
+      }
+    },
+    "/v1/server/projects/{project_id}/invite-codes/{id}": {
+      "delete": {
+        "summary": "吊销邀请码（软删：revoked_at 置位，消费路径立即拒绝）。",
+        "operationId": "ProjectsService_DeleteInviteCode",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Empty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ProjectsService"
+        ],
+        "x-torchwood-access": "permission"
+      }
     }
   },
   "definitions": {
+    "ProjectsServiceCreateInviteCodeBody": {
+      "type": "object",
+      "properties": {
+        "max_uses": {
+          "type": "integer",
+          "format": "int32",
+          "title": "最大使用次数；不设置 = 1（一次性）。1..10000。"
+        },
+        "expire_at": {
+          "type": "string",
+          "format": "date-time",
+          "title": "过期时间；不设置 = 永不过期。"
+        }
+      },
+      "title": "---- 邀请码（T-03）----"
+    },
     "ProjectsServiceUpdateProjectBody": {
       "type": "object",
       "properties": {
@@ -201,6 +337,10 @@
         },
         "description": {
           "type": "string"
+        },
+        "registration_policy": {
+          "type": "string",
+          "title": "注册策略（T-03）：open（默认，现状）/ invite_only（凭有效邀请码注册）/\nclosed（一律拒绝）；未设置 = 不修改。"
         }
       }
     },
@@ -271,6 +411,58 @@
         }
       }
     },
+    "v1InviteCode": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string",
+          "title": "明文邀请码（twi_ 前缀随机串）。创建响应返回全量；列表亦回显\n（邀请码是分发给被邀请者的明文凭证，管理端需可复制重发；\n泄露风险由一次性/次数上限/过期/可吊销控制）。"
+        },
+        "max_uses": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "used_count": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "expire_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "revoked": {
+          "type": "boolean"
+        },
+        "created_by": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "v1ListInviteCodesResponse": {
+      "type": "object",
+      "properties": {
+        "invite_codes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1InviteCode"
+          }
+        },
+        "meta": {
+          "$ref": "#/definitions/v1ListResponseMeta"
+        }
+      }
+    },
     "v1ListProjectsResponse": {
       "type": "object",
       "properties": {
@@ -328,6 +520,10 @@
         "updated_at": {
           "type": "string",
           "format": "date-time"
+        },
+        "registration_policy": {
+          "type": "string",
+          "title": "注册策略：open / invite_only / closed（T-03；默认 open）。"
         }
       }
     }

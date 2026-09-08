@@ -17,6 +17,28 @@
   ],
   "paths": {
     "/v1/account": {
+      "delete": {
+        "summary": "注销当前登录账号（T-03）：匿名化软删——凭据立即失效（全部会话撤销 +\n状态置 deleted，每次鉴权实时校验），email/name/手机号/凭据哈希就地\n清洗，同邮箱可立即重新注册（不泄露\"曾存在\"）；其名下文档/文件/审计\n行保留为孤儿数据（显式决策，不做级联删除）。",
+        "operationId": "AccountService_DeleteAccount",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Empty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "tags": [
+          "AccountService"
+        ],
+        "x-torchwood-access": "end_user"
+      },
       "patch": {
         "operationId": "AccountService_UpdateAccount",
         "responses": {
@@ -1358,6 +1380,10 @@
         },
         "project_id": {
           "type": "string"
+        },
+        "invite_code": {
+          "type": "string",
+          "title": "邀请码（T-03）：仅项目注册策略为 invite_only 时必填；open 项目忽略。"
         }
       }
     },

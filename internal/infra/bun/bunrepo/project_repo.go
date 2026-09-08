@@ -105,25 +105,27 @@ func (r *projectRepo) DeleteProject(ctx context.Context, id string) error {
 
 func mapProjectToModel(p *projects.Project) *model.Project {
 	return &model.Project{
-		ID:          p.ID,
-		Name:        p.Name,
-		Description: p.Description,
-		Status:      p.Status,
-		Settings:    p.Settings,
-		CreatedAt:   p.CreatedAt,
-		UpdatedAt:   p.UpdatedAt,
+		ID:                 p.ID,
+		Name:               p.Name,
+		Description:        p.Description,
+		Status:             p.Status,
+		Settings:           p.Settings,
+		RegistrationPolicy: p.RegistrationPolicy,
+		CreatedAt:          p.CreatedAt,
+		UpdatedAt:          p.UpdatedAt,
 	}
 }
 
 func mapProjectToDomain(m *model.Project) *projects.Project {
 	return &projects.Project{
-		ID:          m.ID,
-		InternalID:  m.InternalID,
-		Name:        m.Name,
-		Description: m.Description,
-		Status:      m.Status,
-		Settings:    m.Settings,
-		CreatedAt:   m.CreatedAt,
-		UpdatedAt:   m.UpdatedAt,
+		ID:                 m.ID,
+		InternalID:         m.InternalID,
+		Name:               m.Name,
+		Description:        m.Description,
+		Status:             m.Status,
+		Settings:           m.Settings,
+		RegistrationPolicy: m.RegistrationPolicy,
+		CreatedAt:          m.CreatedAt,
+		UpdatedAt:          m.UpdatedAt,
 	}
 }

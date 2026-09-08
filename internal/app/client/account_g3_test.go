@@ -96,6 +96,7 @@ func setupG3Account(t *testing.T) (context.Context, *Account, string, *failableS
 	account := NewAccount(
 		cfg,
 		projectRepo,
+		nil, // inviteRepo
 		nil,
 		sessions,
 		auth.NewRedisOTPChallengeStore(rdb, cfg),

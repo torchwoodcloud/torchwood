@@ -20,11 +20,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ProjectsService_CreateProject_FullMethodName = "/torchwood.server.v1.ProjectsService/CreateProject"
-	ProjectsService_ListProjects_FullMethodName  = "/torchwood.server.v1.ProjectsService/ListProjects"
-	ProjectsService_GetProject_FullMethodName    = "/torchwood.server.v1.ProjectsService/GetProject"
-	ProjectsService_UpdateProject_FullMethodName = "/torchwood.server.v1.ProjectsService/UpdateProject"
-	ProjectsService_DeleteProject_FullMethodName = "/torchwood.server.v1.ProjectsService/DeleteProject"
+	ProjectsService_CreateProject_FullMethodName    = "/torchwood.server.v1.ProjectsService/CreateProject"
+	ProjectsService_ListProjects_FullMethodName     = "/torchwood.server.v1.ProjectsService/ListProjects"
+	ProjectsService_GetProject_FullMethodName       = "/torchwood.server.v1.ProjectsService/GetProject"
+	ProjectsService_UpdateProject_FullMethodName    = "/torchwood.server.v1.ProjectsService/UpdateProject"
+	ProjectsService_DeleteProject_FullMethodName    = "/torchwood.server.v1.ProjectsService/DeleteProject"
+	ProjectsService_CreateInviteCode_FullMethodName = "/torchwood.server.v1.ProjectsService/CreateInviteCode"
+	ProjectsService_ListInviteCodes_FullMethodName  = "/torchwood.server.v1.ProjectsService/ListInviteCodes"
+	ProjectsService_DeleteInviteCode_FullMethodName = "/torchwood.server.v1.ProjectsService/DeleteInviteCode"
 )
 
 // ProjectsServiceClient is the client API for ProjectsService service.
@@ -36,6 +39,13 @@ type ProjectsServiceClient interface {
 	GetProject(ctx context.Context, in *GetProjectRequest, opts ...grpc.CallOption) (*Project, error)
 	UpdateProject(ctx context.Context, in *UpdateProjectRequest, opts ...grpc.CallOption) (*Project, error)
 	DeleteProject(ctx context.Context, in *GetProjectRequest, opts ...grpc.CallOption) (*v1.Empty, error)
+	// ---- 邀请码（T-03，invite_only 注册策略）----
+	// 平台专属面（key 凭证禁入）：邀请码是注册凭证的逆向物，泄漏可绕过
+	// 注册策略，故管理权仅 owner/admin console 会话。
+	CreateInviteCode(ctx context.Context, in *CreateInviteCodeRequest, opts ...grpc.CallOption) (*InviteCode, error)
+	ListInviteCodes(ctx context.Context, in *ListInviteCodesRequest, opts ...grpc.CallOption) (*ListInviteCodesResponse, error)
+	// 吊销邀请码（软删：revoked_at 置位，消费路径立即拒绝）。
+	DeleteInviteCode(ctx context.Context, in *DeleteInviteCodeRequest, opts ...grpc.CallOption) (*v1.Empty, error)
 }
 
 type projectsServiceClient struct {
@@ -96,6 +106,36 @@ func (c *projectsServiceClient) DeleteProject(ctx context.Context, in *GetProjec
 	return out, nil
 }
 
+func (c *projectsServiceClient) CreateInviteCode(ctx context.Context, in *CreateInviteCodeRequest, opts ...grpc.CallOption) (*InviteCode, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(InviteCode)
+	err := c.cc.Invoke(ctx, ProjectsService_CreateInviteCode_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *projectsServiceClient) ListInviteCodes(ctx context.Context, in *ListInviteCodesRequest, opts ...grpc.CallOption) (*ListInviteCodesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListInviteCodesResponse)
+	err := c.cc.Invoke(ctx, ProjectsService_ListInviteCodes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *projectsServiceClient) DeleteInviteCode(ctx context.Context, in *DeleteInviteCodeRequest, opts ...grpc.CallOption) (*v1.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(v1.Empty)
+	err := c.cc.Invoke(ctx, ProjectsService_DeleteInviteCode_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ProjectsServiceServer is the server API for ProjectsService service.
 // All implementations must embed UnimplementedProjectsServiceServer
 // for forward compatibility.
@@ -105,6 +145,13 @@ type ProjectsServiceServer interface {
 	GetProject(context.Context, *GetProjectRequest) (*Project, error)
 	UpdateProject(context.Context, *UpdateProjectRequest) (*Project, error)
 	DeleteProject(context.Context, *GetProjectRequest) (*v1.Empty, error)
+	// ---- 邀请码（T-03，invite_only 注册策略）----
+	// 平台专属面（key 凭证禁入）：邀请码是注册凭证的逆向物，泄漏可绕过
+	// 注册策略，故管理权仅 owner/admin console 会话。
+	CreateInviteCode(context.Context, *CreateInviteCodeRequest) (*InviteCode, error)
+	ListInviteCodes(context.Context, *ListInviteCodesRequest) (*ListInviteCodesResponse, error)
+	// 吊销邀请码（软删：revoked_at 置位，消费路径立即拒绝）。
+	DeleteInviteCode(context.Context, *DeleteInviteCodeRequest) (*v1.Empty, error)
 	mustEmbedUnimplementedProjectsServiceServer()
 }
 
@@ -129,6 +176,15 @@ func (UnimplementedProjectsServiceServer) UpdateProject(context.Context, *Update
 }
 func (UnimplementedProjectsServiceServer) DeleteProject(context.Context, *GetProjectRequest) (*v1.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteProject not implemented")
+}
+func (UnimplementedProjectsServiceServer) CreateInviteCode(context.Context, *CreateInviteCodeRequest) (*InviteCode, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateInviteCode not implemented")
+}
+func (UnimplementedProjectsServiceServer) ListInviteCodes(context.Context, *ListInviteCodesRequest) (*ListInviteCodesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListInviteCodes not implemented")
+}
+func (UnimplementedProjectsServiceServer) DeleteInviteCode(context.Context, *DeleteInviteCodeRequest) (*v1.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteInviteCode not implemented")
 }
 func (UnimplementedProjectsServiceServer) mustEmbedUnimplementedProjectsServiceServer() {}
 func (UnimplementedProjectsServiceServer) testEmbeddedByValue()                         {}
@@ -241,6 +297,60 @@ func _ProjectsService_DeleteProject_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ProjectsService_CreateInviteCode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateInviteCodeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProjectsServiceServer).CreateInviteCode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProjectsService_CreateInviteCode_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProjectsServiceServer).CreateInviteCode(ctx, req.(*CreateInviteCodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ProjectsService_ListInviteCodes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListInviteCodesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProjectsServiceServer).ListInviteCodes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProjectsService_ListInviteCodes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProjectsServiceServer).ListInviteCodes(ctx, req.(*ListInviteCodesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ProjectsService_DeleteInviteCode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteInviteCodeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProjectsServiceServer).DeleteInviteCode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProjectsService_DeleteInviteCode_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProjectsServiceServer).DeleteInviteCode(ctx, req.(*DeleteInviteCodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ProjectsService_ServiceDesc is the grpc.ServiceDesc for ProjectsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -267,6 +377,18 @@ var ProjectsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteProject",
 			Handler:    _ProjectsService_DeleteProject_Handler,
+		},
+		{
+			MethodName: "CreateInviteCode",
+			Handler:    _ProjectsService_CreateInviteCode_Handler,
+		},
+		{
+			MethodName: "ListInviteCodes",
+			Handler:    _ProjectsService_ListInviteCodes_Handler,
+		},
+		{
+			MethodName: "DeleteInviteCode",
+			Handler:    _ProjectsService_DeleteInviteCode_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

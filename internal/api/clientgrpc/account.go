@@ -32,12 +32,16 @@ func NewAccountService(account *client.Account) *AccountService {
 }
 
 func (s *AccountService) SignUp(ctx context.Context, req *clientv1.SignUpRequest) (*clientv1.SignUpResponse, error) {
-	user, tokens, cookie, mfa, err := s.account.SignUp(ctx, client.SignUpCommand{
+	cmd := client.SignUpCommand{
 		ProjectID: req.GetProjectId(),
 		Email:     req.GetEmail(),
 		Password:  req.GetPassword(),
 		Name:      req.GetName(),
-	})
+	}
+	if req.InviteCode != nil {
+		cmd.InviteCode = *req.InviteCode
+	}
+	user, tokens, cookie, mfa, err := s.account.SignUp(ctx, cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -71,6 +75,15 @@ func (s *AccountService) SignIn(ctx context.Context, req *clientv1.SignInRequest
 func (s *AccountService) SignOut(ctx context.Context, _ *clientv1.SignOutRequest) (*sharedv1.Empty, error) {
 	// R04-P2-4：use-case 已容忍无 principal（幂等登出），这里不再重复校验。
 	if err := s.account.SignOut(ctx); err != nil {
+		return nil, err
+	}
+	return &sharedv1.Empty{}, nil
+}
+
+// DeleteAccount 注销当前账号（T-03）：目标 = 凭证主体自身，user_id 不经
+// 请求体传入（防代删）。
+func (s *AccountService) DeleteAccount(ctx context.Context, _ *clientv1.DeleteAccountRequest) (*sharedv1.Empty, error) {
+	if err := s.account.DeleteAccount(ctx); err != nil {
 		return nil, err
 	}
 	return &sharedv1.Empty{}, nil

@@ -1,6 +1,25 @@
 package projects
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
+
+// 项目注册策略（T-03）。
+const (
+	RegistrationOpen       = "open"
+	RegistrationInviteOnly = "invite_only"
+	RegistrationClosed     = "closed"
+)
+
+// ValidateRegistrationPolicy 校验注册策略值。
+func ValidateRegistrationPolicy(p string) error {
+	switch p {
+	case RegistrationOpen, RegistrationInviteOnly, RegistrationClosed:
+		return nil
+	}
+	return fmt.Errorf("invalid registration_policy %q (allowed: open, invite_only, closed)", p)
+}
 
 type Project struct {
 	ID          string
@@ -8,9 +27,11 @@ type Project struct {
 	Description string
 	Status      string
 	Settings    map[string]any
-	InternalID  int64
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// RegistrationPolicy 注册策略（T-03）：默认 open 保持存量行为。
+	RegistrationPolicy string
+	InternalID         int64
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 type APIKey struct {
@@ -37,3 +58,19 @@ type Admin struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
+
+// InviteCode 邀请码（T-03，invite_only 注册策略）。
+type InviteCode struct {
+	ID        string
+	ProjectID string
+	Code      string
+	MaxUses   int
+	UsedCount int
+	ExpireAt  *time.Time
+	RevokedAt *time.Time
+	CreatedBy string
+	CreatedAt time.Time
+}
+
+// Revoked 报告邀请码是否已吊销。
+func (c *InviteCode) Revoked() bool { return c.RevokedAt != nil }
