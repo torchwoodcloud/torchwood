@@ -125,6 +125,10 @@ export class AccountService {
     });
   }
 
+  async deleteAccount(): Promise<void> {
+    await this.http.request<void>("DELETE", "/v1/account");
+  }
+
   async getPrefs(): Promise<Record<string, unknown>> {
     const res = await this.http.request<{ prefs: Record<string, unknown> }>(
       "GET",

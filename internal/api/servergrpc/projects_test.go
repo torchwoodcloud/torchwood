@@ -51,10 +51,37 @@ func (r *stubProjectRepo) UpdateProject(_ context.Context, p *projects.Project) 
 func (r *stubProjectRepo) DeleteProject(context.Context, string) error                 { return nil }
 func (r *stubProjectRepo) DeleteProjectControlPlaneRows(context.Context, string) error { return nil }
 
+// stubSettingsWriter 是最小 projects.SettingsWriter 桩（记录键值供断言）。
+type stubSettingsWriter struct {
+	saved map[string]map[string]any // projectID → key → value
+}
+
+func newStubSettingsWriter() *stubSettingsWriter {
+	return &stubSettingsWriter{saved: map[string]map[string]any{}}
+}
+
+func (w *stubSettingsWriter) SetProjectSetting(_ context.Context, projectID, key string, value any) error {
+	m, ok := w.saved[projectID]
+	if !ok {
+		m = map[string]any{}
+		w.saved[projectID] = m
+	}
+	if value == nil {
+		delete(m, key)
+		return nil
+	}
+	m[key] = value
+	return nil
+}
+
 // newTestProjectsService 组装 handler（UpdateProject 只依赖 projectRepo，
 // docDB/db 传 nil）。
 func newTestProjectsService(repo *stubProjectRepo) *ProjectsService {
-	uc := appserver.NewProjects(repo, nil, nil, nil, nil)
+	return newTestProjectsServiceWithSettings(repo, nil)
+}
+
+func newTestProjectsServiceWithSettings(repo *stubProjectRepo, settings projects.SettingsWriter) *ProjectsService {
+	uc := appserver.NewProjects(repo, nil, nil, nil, nil, settings)
 	return NewProjectsService(uc, appserver.NewInviteCodes(nil))
 }
 
@@ -151,4 +178,59 @@ func TestProjectsService_DeleteProject_Missing(t *testing.T) {
 	s := newTestProjectsService(&stubProjectRepo{})
 	_, err := s.DeleteProject(projectPrincipalCtx("", true), &serverv1.GetProjectRequest{Id: "missing"})
 	require.Equal(t, codes.NotFound, status.Code(err))
+}
+
+// ---- OAuth 重定向白名单 ----
+
+func TestProjectsService_UpdateOAuthRedirectAllowlist_HappyPath(t *testing.T) {
+	repo := &stubProjectRepo{project: &projects.Project{
+		ID: "p1", Name: "P1", Status: "active",
+		Settings: map[string]any{}, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}}
+	settings := newStubSettingsWriter()
+	s := newTestProjectsServiceWithSettings(repo, settings)
+
+	_, err := s.UpdateOAuthRedirectAllowlist(projectPrincipalCtx("", true),
+		&serverv1.UpdateOAuthRedirectAllowlistRequest{
+			ProjectId: "p1",
+			Urls:      []string{"https://app.example.com", " http://localhost:5173 "},
+		})
+	require.NoError(t, err)
+	// 写入通道：trim 后经 SettingsWriter 落库。
+	require.Equal(t, []string{"https://app.example.com", "http://localhost:5173"},
+		settings.saved["p1"][projects.SettingsKeyOAuthAllowedRedirectURLs])
+
+	// 投影通道：回读行带 settings 时 Project 响应含白名单（真实实现回读 DB）。
+	repo.project.Settings = map[string]any{
+		projects.SettingsKeyOAuthAllowedRedirectURLs: []any{"https://app.example.com", "http://localhost:5173"},
+	}
+	p, err := s.GetProject(projectPrincipalCtx("", true), &serverv1.GetProjectRequest{Id: "p1"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"https://app.example.com", "http://localhost:5173"},
+		p.OauthAllowedRedirectUrls)
+}
+
+func TestProjectsService_UpdateOAuthRedirectAllowlist_RequiresPlatformAdmin(t *testing.T) {
+	s := newTestProjectsServiceWithSettings(&stubProjectRepo{project: &projects.Project{
+		ID: "p1", Name: "P1", Status: "active",
+	}}, newStubSettingsWriter())
+	_, err := s.UpdateOAuthRedirectAllowlist(projectPrincipalCtx("p1", false),
+		&serverv1.UpdateOAuthRedirectAllowlistRequest{ProjectId: "p1", Urls: []string{"https://app.example.com"}})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestProjectsService_UpdateOAuthRedirectAllowlist_Missing(t *testing.T) {
+	s := newTestProjectsServiceWithSettings(&stubProjectRepo{}, newStubSettingsWriter())
+	_, err := s.UpdateOAuthRedirectAllowlist(projectPrincipalCtx("", true),
+		&serverv1.UpdateOAuthRedirectAllowlistRequest{ProjectId: "missing", Urls: []string{"https://app.example.com"}})
+	require.Equal(t, codes.NotFound, status.Code(err))
+}
+
+func TestProjectsService_UpdateOAuthRedirectAllowlist_InvalidURL(t *testing.T) {
+	s := newTestProjectsServiceWithSettings(&stubProjectRepo{project: &projects.Project{
+		ID: "p1", Name: "P1", Status: "active",
+	}}, newStubSettingsWriter())
+	_, err := s.UpdateOAuthRedirectAllowlist(projectPrincipalCtx("", true),
+		&serverv1.UpdateOAuthRedirectAllowlistRequest{ProjectId: "p1", Urls: []string{"ftp://evil.example.com"}})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }

@@ -4,6 +4,7 @@ package torchwood.server.v1;
 
 option go_package = "github.com/torchwooddev/torchwood/genproto/server/v1;serverv1";
 
+import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
@@ -161,6 +162,27 @@ service ProjectsService {
       }
     };
   }
+
+  // ---- OAuth 重定向白名单 ----
+  // 平台专属面（key 凭证禁入）：白名单是 OAuth2 登录/魔法链接/恢复/验证等
+  // 重定向流的可落点集合，篡改可用于钓鱼劫持端用户会话，管理权仅
+  // owner/admin console 会话。
+  rpc UpdateOAuthRedirectAllowlist(UpdateOAuthRedirectAllowlistRequest) returns (Project) {
+    option (google.api.http) = {
+      put: "/v1/server/projects/{project_id}/oauth-redirect-allowlist"
+      body: "*"
+    };
+    option (torchwood.shared.v1.method_auth) = {
+      access: ACCESS_PERMISSION
+      permissions: ["owner", "admin"]
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      extensions: {
+        key: "x-torchwood-access"
+        value: { string_value: "permission" }
+      }
+    };
+  }
 }
 
 message UpdateProjectRequest {
@@ -177,6 +199,17 @@ message CreateProjectRequest {
   string description = 2;
   // 必填；小写字母开头，仅小写字母与数字，最长 28（^[a-z][a-z0-9]{0,27}$）。
   string id = 3;
+}
+
+message UpdateOAuthRedirectAllowlistRequest {
+  string project_id = 1 [(buf.validate.field).required = true];
+  // 整表替换语义（PUT）：非空 = 替换为该列表；空 = 清空（回落默认白名单）。
+  // 条目形状（http/https 绝对 URL、host 非空）由 app 层校验，长度/条数上限
+  // 在此声明。
+  repeated string urls = 2 [
+    (buf.validate.field).repeated.max_items = 100,
+    (buf.validate.field).repeated.items.string.max_len = 2048
+  ];
 }
 
 message GetProjectRequest {
@@ -197,6 +230,10 @@ message Project {
   google.protobuf.Timestamp updated_at = 6;
   // 注册策略：open / invite_only / closed（T-03；默认 open）。
   string registration_policy = 7;
+  // OAuth 重定向白名单（settings key auth.oauth_allowed_redirect_urls 的
+  // 投影，仅投影该 key 不透出其余 settings）。空 = 未配置，回落默认白名单
+  // （localhost 系列 + 本站 public_url origin）。
+  repeated string oauth_allowed_redirect_urls = 8;
 }
 
 // ---- 邀请码（T-03）----

@@ -42,7 +42,7 @@ func TestProjects_CreateProject_Success(t *testing.T) {
 
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
 
 	p, err := projectsUC.CreateProject(platformAdminCtx(ctx), CreateProjectCommand{
 		ID:          "txapp",
@@ -99,7 +99,7 @@ func TestProjects_CreateProject_RequiresPlatformAdmin(t *testing.T) {
 
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
 
 	// API key 主体（ActorKind=service）被拒。
 	apiKeyCtx := contexts.WithPrincipal(ctx, &shared.Principal{
@@ -133,7 +133,7 @@ func TestProjects_CreateProject_RejectsInvalidID(t *testing.T) {
 
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
 
 	for _, id := range []string{"", "Bad_Name", "my-shop", "1shop", "MyShop"} {
 		_, err := projectsUC.CreateProject(platformAdminCtx(ctx), CreateProjectCommand{ID: id, Name: "App"})
@@ -156,7 +156,7 @@ func TestProjects_CreateProject_RejectsOrphanDataPlane(t *testing.T) {
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
 	schemaMgr := projectschema.NewSchemaManager(db)
-	projectsUC := NewProjects(repo, docDB, db, schemaMgr, nil)
+	projectsUC := NewProjects(repo, docDB, db, schemaMgr, nil, nil)
 
 	// 第一纪元：正常建项目（数据面就位）。
 	p, err := projectsUC.CreateProjectInternal(ctx, CreateProjectCommand{ID: "txorphan", Name: "Orphan Era"})
@@ -265,7 +265,7 @@ func TestProjects_UpdateProject_PlatformAdminSuccess(t *testing.T) {
 
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
 
 	created := createTestProject(t, repo, "alpha", "Alpha App")
 	time.Sleep(2 * time.Millisecond) // 保证 updated_at 严格递增
@@ -299,7 +299,7 @@ func TestProjects_UpdateProject_RestrictedAdminOwnProject(t *testing.T) {
 
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
 
 	createTestProject(t, repo, "own", "Own App")
 	got, err := projectsUC.UpdateProject(restrictedAdminCtx(ctx, "own"), UpdateProjectCommand{
@@ -320,7 +320,7 @@ func TestProjects_UpdateProject_RestrictedAdminOtherProjectNotFound(t *testing.T
 
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
 
 	createTestProject(t, repo, "own", "Own App")
 	createTestProject(t, repo, "other", "Other App")
@@ -350,7 +350,7 @@ func TestProjects_UpdateProject_ProjectNotFound(t *testing.T) {
 
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
 
 	_, err := projectsUC.UpdateProject(platformAdminCtx(ctx), UpdateProjectCommand{
 		ProjectID: "missing",
@@ -369,12 +369,167 @@ func TestProjects_UpdateProject_NothingToUpdate(t *testing.T) {
 
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
 
 	// 前置检查：name 与 description 均未提供 → InvalidArgument（先于取数/越权）。
 	_, err := projectsUC.UpdateProject(platformAdminCtx(ctx), UpdateProjectCommand{ProjectID: "alpha"})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.ErrorContains(t, err, "nothing to update")
+}
+
+func TestProjects_UpdateOAuthRedirectAllowlist_HappyPath(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx := context.Background()
+	db := testutil.SetupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	repo := bunrepo.NewProjectRepository(db)
+	docDB := documentdb.NewPostgresDocumentDB(db, nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil,
+		bunrepo.NewProjectSettingsWriter(db))
+
+	createTestProject(t, repo, "allow1", "Allowlist App")
+
+	got, err := projectsUC.UpdateOAuthRedirectAllowlist(platformAdminCtx(ctx), UpdateOAuthRedirectAllowlistCommand{
+		ProjectID: "allow1",
+		URLs:      []string{" https://app.example.com ", "http://localhost:5173", ""},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"https://app.example.com", "http://localhost:5173"},
+		projects.OAuthAllowedRedirectURLs(got.Settings), "trim 后落库并回读")
+
+	// 断言落库 + 其他列不触碰。
+	persisted, err := repo.GetProject(ctx, "allow1")
+	require.NoError(t, err)
+	require.Equal(t, []string{"https://app.example.com", "http://localhost:5173"},
+		projects.OAuthAllowedRedirectURLs(persisted.Settings))
+	require.Equal(t, "Allowlist App", persisted.Name)
+	require.Equal(t, "open", persisted.RegistrationPolicy)
+}
+
+func TestProjects_UpdateOAuthRedirectAllowlist_EmptyClearsKey(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx := context.Background()
+	db := testutil.SetupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	repo := bunrepo.NewProjectRepository(db)
+	docDB := documentdb.NewPostgresDocumentDB(db, nil)
+	writer := bunrepo.NewProjectSettingsWriter(db)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, writer)
+
+	createTestProject(t, repo, "allow2", "Allowlist Clear")
+
+	_, err := projectsUC.UpdateOAuthRedirectAllowlist(platformAdminCtx(ctx), UpdateOAuthRedirectAllowlistCommand{
+		ProjectID: "allow2",
+		URLs:      []string{"https://app.example.com"},
+	})
+	require.NoError(t, err)
+
+	// 空列表 = 删除键（回落默认白名单）。
+	got, err := projectsUC.UpdateOAuthRedirectAllowlist(platformAdminCtx(ctx), UpdateOAuthRedirectAllowlistCommand{
+		ProjectID: "allow2",
+	})
+	require.NoError(t, err)
+	require.Empty(t, projects.OAuthAllowedRedirectURLs(got.Settings))
+	require.NotContains(t, got.Settings, projects.SettingsKeyOAuthAllowedRedirectURLs)
+}
+
+func TestProjects_UpdateOAuthRedirectAllowlist_InvalidEntry(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx := context.Background()
+	db := testutil.SetupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	repo := bunrepo.NewProjectRepository(db)
+	docDB := documentdb.NewPostgresDocumentDB(db, nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil,
+		bunrepo.NewProjectSettingsWriter(db))
+	createTestProject(t, repo, "allow3", "Allowlist Invalid")
+
+	for _, bad := range []string{"ftp://evil.example.com", "https://", "not-a-url"} {
+		_, err := projectsUC.UpdateOAuthRedirectAllowlist(platformAdminCtx(ctx), UpdateOAuthRedirectAllowlistCommand{
+			ProjectID: "allow3",
+			URLs:      []string{"https://app.example.com", bad},
+		})
+		require.Equal(t, codes.InvalidArgument, status.Code(err), bad)
+	}
+
+	// 拒绝后不得半写。
+	persisted, err := repo.GetProject(ctx, "allow3")
+	require.NoError(t, err)
+	require.NotContains(t, persisted.Settings, projects.SettingsKeyOAuthAllowedRedirectURLs)
+}
+
+func TestProjects_UpdateOAuthRedirectAllowlist_Guards(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx := context.Background()
+	db := testutil.SetupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	repo := bunrepo.NewProjectRepository(db)
+	docDB := documentdb.NewPostgresDocumentDB(db, nil)
+	writer := bunrepo.NewProjectSettingsWriter(db)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, writer)
+	createTestProject(t, repo, "allow4", "Allowlist Guards")
+
+	// 无 principal → Unauthenticated（RequirePlatformPrincipal 深度防御）。
+	_, err := projectsUC.UpdateOAuthRedirectAllowlist(ctx, UpdateOAuthRedirectAllowlistCommand{
+		ProjectID: "allow4", URLs: []string{"https://app.example.com"},
+	})
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+
+	// 非平台 admin → PermissionDenied。
+	_, err = projectsUC.UpdateOAuthRedirectAllowlist(restrictedAdminCtx(ctx, "allow4"), UpdateOAuthRedirectAllowlistCommand{
+		ProjectID: "allow4", URLs: []string{"https://app.example.com"},
+	})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	// 项目不存在 → NotFound。
+	_, err = projectsUC.UpdateOAuthRedirectAllowlist(platformAdminCtx(ctx), UpdateOAuthRedirectAllowlistCommand{
+		ProjectID: "missing", URLs: []string{"https://app.example.com"},
+	})
+	require.Equal(t, codes.NotFound, status.Code(err))
+
+	// nil writer（旧单测装配）→ FailedPrecondition，不得 panic。
+	legacy := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
+	_, err = legacy.UpdateOAuthRedirectAllowlist(platformAdminCtx(ctx), UpdateOAuthRedirectAllowlistCommand{
+		ProjectID: "allow4", URLs: []string{"https://app.example.com"},
+	})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+func TestProjects_UpdateOAuthRedirectAllowlist_TooManyEntries(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx := context.Background()
+	db := testutil.SetupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	repo := bunrepo.NewProjectRepository(db)
+	docDB := documentdb.NewPostgresDocumentDB(db, nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil,
+		bunrepo.NewProjectSettingsWriter(db))
+	createTestProject(t, repo, "allow5", "Allowlist Cap")
+
+	urls := make([]string, projects.MaxAllowlistEntries+1)
+	for i := range urls {
+		urls[i] = fmt.Sprintf("https://host%d.example.com", i)
+	}
+	_, err := projectsUC.UpdateOAuthRedirectAllowlist(platformAdminCtx(ctx), UpdateOAuthRedirectAllowlistCommand{
+		ProjectID: "allow5", URLs: urls,
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.ErrorContains(t, err, "at most 100")
 }
 
 func TestProjects_UpdateProject_EmptyID(t *testing.T) {
@@ -387,7 +542,7 @@ func TestProjects_UpdateProject_EmptyID(t *testing.T) {
 
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
 
 	_, err := projectsUC.UpdateProject(platformAdminCtx(ctx), UpdateProjectCommand{
 		Name: strPtr("Whatever"),
@@ -405,7 +560,7 @@ func TestProjects_UpdateProject_BlankNameRejected(t *testing.T) {
 
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
 
 	createTestProject(t, repo, "alpha", "Alpha App")
 
@@ -428,7 +583,7 @@ func TestProjects_UpdateProject_NameCollision(t *testing.T) {
 
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
 
 	createTestProject(t, repo, "alpha", "Alpha App")
 	createTestProject(t, repo, "beta", "Beta App")
@@ -456,7 +611,7 @@ func TestProjects_CreateProject_RejectsLongDescription(t *testing.T) {
 
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
 
 	// 口径 a：CreateProject 与 UpdateProject 对 description 施加同一上限 512。
 	_, err := projectsUC.CreateProject(platformAdminCtx(ctx), CreateProjectCommand{
@@ -489,7 +644,7 @@ func TestProjects_DeleteProject_DropsSchemas(t *testing.T) {
 
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
 
 	p, err := projectsUC.CreateProject(platformAdminCtx(ctx), CreateProjectCommand{
 		ID:              "delme",
@@ -528,7 +683,7 @@ func TestProjects_DeleteProject_RequiresPlatformAdmin(t *testing.T) {
 
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
 
 	p, err := projectsUC.CreateProject(platformAdminCtx(ctx), CreateProjectCommand{
 		ID:   "delauth",
@@ -584,7 +739,7 @@ func TestProjects_DeleteProject_CleansPublicRows(t *testing.T) {
 
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
 
 	p, err := projectsUC.CreateProject(platformAdminCtx(ctx), CreateProjectCommand{
 		ID:   "delrows",
@@ -653,7 +808,7 @@ func TestProjects_ListProjects_MemberGrantedProjects(t *testing.T) {
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
 	adminProjectRepo := bunrepo.NewAdminProjectRepository(db)
 	adminRepo := bunrepo.NewAdminRepository(db)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), adminProjectRepo)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), adminProjectRepo, nil)
 	require.NoError(t, adminRepo.CreateAdmin(ctx, &projects.Admin{
 		ID:           "adm-member-1",
 		Email:        "member-grant@test.local",

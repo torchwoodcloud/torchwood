@@ -19,6 +19,16 @@ type Repository interface {
 	DeleteProjectControlPlaneRows(ctx context.Context, projectID string) error
 }
 
+// SettingsWriter 是项目 settings JSONB 的单键原子写端口。独立于 Repository
+// 声明（消费面最小接口）：settings 的写入只发生在配置管理路径，避免向全部
+// Repository 消费方/测试桩扩散方法。实现须保证：
+//   - key 为扁平点号 key（如 auth.oauth_allowed_redirect_urls，非嵌套路径）；
+//   - 单语句原子（jsonb_set / '-' 操作符），不同 key 并发写互不覆盖；
+//   - value 由实现负责 JSON 编码；无类型 nil = 删除该 key。
+type SettingsWriter interface {
+	SetProjectSetting(ctx context.Context, projectID, key string, value any) error
+}
+
 // SchemaManager 管理项目数据面 schema 的生命周期（infra/projectschema 适配）。
 // Ensure/DropCascade 感知调用方事务：ctx 携带事务时并入同一事务，
 // 与项目行写入/删除原子提交。

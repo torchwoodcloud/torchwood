@@ -9,6 +9,7 @@ import {
   createProject,
   updateProject,
   deleteProject,
+  updateOAuthRedirectAllowlist,
   listInviteCodes,
   createInviteCode,
   deleteInviteCode,
@@ -223,6 +224,7 @@ export function ProjectDetailPage() {
         ]}
       />
       <RegistrationPolicySection project={project} editable={editable} />
+      <RedirectAllowlistSection project={project} editable={editable} />
       <InviteCodesSection projectId={project.id} editable={editable} />
     </DetailPageWrapper>
   );
@@ -283,6 +285,131 @@ function RegistrationPolicySection({
           {REGISTRATION_POLICIES.find((p) => p.value === policy)?.hint}
         </p>
       </div>
+    </Card>
+  );
+}
+
+// RedirectAllowlistSection 重定向白名单（settings auth.oauth_allowed_redirect_urls）：
+// 约束 OAuth2 登录 / 魔法链接 / 恢复 / 验证等重定向流的可落点（钓鱼劫持面）。
+// 整表替换语义：空列表 = 未配置，回落默认白名单（localhost 系列 + 本站 origin）。
+// 条目匹配协议+主机（可含路径前缀）。
+function RedirectAllowlistSection({
+  project,
+  editable,
+}: {
+  project: Project;
+  editable: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [rows, setRows] = useState<string[]>(
+    () => project.oauth_allowed_redirect_urls ?? []
+  );
+  const [dirty, setDirty] = useState(false);
+
+  const save = useMutation({
+    mutationFn: (urls: string[]) =>
+      updateOAuthRedirectAllowlist(project.id, urls),
+    onSuccess: (p) => {
+      const next = p.oauth_allowed_redirect_urls ?? [];
+      toast.success(
+        next.length ? "重定向白名单已更新" : "重定向白名单已清空，回落默认白名单"
+      );
+      setRows(next);
+      setDirty(false);
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+
+  const onSave = () => {
+    const urls = rows.map((r) => r.trim()).filter(Boolean);
+    for (const u of urls) {
+      let ok = false;
+      try {
+        const parsed = new URL(u);
+        ok = parsed.protocol === "http:" || parsed.protocol === "https:";
+      } catch {
+        ok = false;
+      }
+      if (!ok) {
+        toast.error(`无效的白名单条目：${u}（须为 http/https 绝对地址）`);
+        return;
+      }
+    }
+    save.mutate(urls);
+  };
+
+  return (
+    <Card className="mt-4 p-5">
+      <h3 className="text-sm font-semibold">Redirect Allowlist</h3>
+      <p className="mt-1 text-xs text-muted-foreground">
+        重定向白名单：OAuth2 登录、魔法链接、恢复、验证等重定向流的允许落点；
+        未配置时回落默认白名单（localhost 系列 + 本站 origin）。条目按协议+主机匹配，可含路径前缀。
+      </p>
+      {!editable ? (
+        <div className="mt-4 space-y-1.5">
+          {(project.oauth_allowed_redirect_urls ?? []).length === 0 ? (
+            <p className="text-xs text-muted-foreground">未配置（使用默认白名单）。</p>
+          ) : (
+            (project.oauth_allowed_redirect_urls ?? []).map((u) => (
+              <code key={u} className="block rounded-md border px-3 py-1.5 font-mono text-xs break-all">
+                {u}
+              </code>
+            ))
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="mt-4 space-y-2">
+            {rows.map((row, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Input
+                  value={row}
+                  onChange={(e) => {
+                    setRows(rows.map((r, j) => (j === i ? e.target.value : r)));
+                    setDirty(true);
+                  }}
+                  placeholder="https://app.example.com"
+                  className="font-mono text-xs"
+                  disabled={save.isPending}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setRows(rows.filter((_, j) => j !== i));
+                    setDirty(true);
+                  }}
+                  disabled={save.isPending}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+            {rows.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                暂无条目：保存空列表即回落默认白名单。
+              </p>
+            )}
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setRows([...rows, ""]);
+                setDirty(true);
+              }}
+              disabled={save.isPending || rows.length >= 100}
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              添加条目
+            </Button>
+            <Button size="sm" onClick={onSave} disabled={save.isPending || !dirty}>
+              {save.isPending ? "保存中…" : "保存"}
+            </Button>
+          </div>
+        </>
+      )}
     </Card>
   );
 }

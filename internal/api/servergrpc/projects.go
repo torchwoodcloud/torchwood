@@ -107,18 +107,33 @@ func (s *ProjectsService) DeleteProject(ctx context.Context, req *serverv1.GetPr
 	return &sharedv1.Empty{}, nil
 }
 
+// UpdateOAuthRedirectAllowlist 更新项目重定向白名单（整表替换；空列表 =
+// 清空回落默认白名单）。
+func (s *ProjectsService) UpdateOAuthRedirectAllowlist(ctx context.Context, req *serverv1.UpdateOAuthRedirectAllowlistRequest) (*serverv1.Project, error) {
+	ctx = contexts.WithAuditResource(ctx, req.GetProjectId()+"/oauth-redirect-allowlist")
+	p, err := s.projects.UpdateOAuthRedirectAllowlist(ctx, appserver.UpdateOAuthRedirectAllowlistCommand{
+		ProjectID: req.GetProjectId(),
+		URLs:      req.GetUrls(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapProject(p), nil
+}
+
 func mapProject(p *projects.Project) *serverv1.Project {
 	if p == nil {
 		return nil
 	}
 	return &serverv1.Project{
-		Id:                 p.ID,
-		Name:               p.Name,
-		Description:        p.Description,
-		Status:             p.Status,
-		RegistrationPolicy: p.RegistrationPolicy,
-		CreatedAt:          timestamppb.New(p.CreatedAt),
-		UpdatedAt:          timestamppb.New(p.UpdatedAt),
+		Id:                       p.ID,
+		Name:                     p.Name,
+		Description:              p.Description,
+		Status:                   p.Status,
+		RegistrationPolicy:       p.RegistrationPolicy,
+		OauthAllowedRedirectUrls: projects.OAuthAllowedRedirectURLs(p.Settings),
+		CreatedAt:                timestamppb.New(p.CreatedAt),
+		UpdatedAt:                timestamppb.New(p.UpdatedAt),
 	}
 }
 

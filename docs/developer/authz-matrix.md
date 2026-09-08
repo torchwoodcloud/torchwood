@@ -12,7 +12,7 @@
 >   SERVER admin 会话（admin_roles）或 API key（scope）；PERMISSION admin 会话
 >   专属（permissions），key 一律拒绝；SYSTEM 预留禁用。
 
-方法总数 200：PUBLIC 28 · END_USER 42 · SERVER 115 · PERMISSION 15 · SYSTEM 0。
+方法总数 201：PUBLIC 28 · END_USER 42 · SERVER 115 · PERMISSION 16 · SYSTEM 0。
 
 ## /torchwood.client.v1.AccountService
 
@@ -277,6 +277,7 @@
 | `/torchwood.server.v1.ProjectsService/GetProject` | SERVER | 不限角色 | projects.read | read_only | |
 | `/torchwood.server.v1.ProjectsService/ListInviteCodes` | PERMISSION | owner, admin | — | platform_only | |
 | `/torchwood.server.v1.ProjectsService/ListProjects` | SERVER | 不限角色 | projects.read | read_only | |
+| `/torchwood.server.v1.ProjectsService/UpdateOAuthRedirectAllowlist` | PERMISSION | owner, admin | — | platform_only | |
 | `/torchwood.server.v1.ProjectsService/UpdateProject` | SERVER | member, admin, owner | projects.write | business_write | |
 
 ## /torchwood.server.v1.StorageService

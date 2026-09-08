@@ -37,6 +37,9 @@ type Projects struct {
 	tx               uow.Runner
 	schema           projects.SchemaManager
 	adminProjectRepo projects.AdminProjectRepository
+	// settings 是项目 settings JSONB 的单键写端口（配置管理路径专用，
+	// 独立小端口；nil 仅供不触达配置路径的旧单测装配，使用处 fail-closed）。
+	settings projects.SettingsWriter
 	// purger/cfg 由 WithObjectPurger 注入（组合根装配）：项目事务提交后异步
 	// 清空共享桶 {projectID}/ 前缀。未注入时跳过 purge（单测/旧构造路径）。
 	purger domainstorage.Purger
@@ -59,9 +62,10 @@ func WithObjectPurger(purger domainstorage.Purger, cfg *config.AppConfig) Projec
 }
 
 // NewProjects 构造项目用例。tx 注入 uow.Runner 端口（事务编排），schema
-// 注入 projects.SchemaManager 端口（数据面 schema 生命周期，infra 适配）。
-func NewProjects(projectRepo projects.Repository, docDB databases.DocumentDB, tx uow.Runner, schema projects.SchemaManager, adminProjectRepo projects.AdminProjectRepository, opts ...ProjectsOption) *Projects {
-	s := &Projects{projectRepo: projectRepo, docDB: docDB, tx: tx, schema: schema, adminProjectRepo: adminProjectRepo}
+// 注入 projects.SchemaManager 端口（数据面 schema 生命周期，infra 适配），
+// settings 注入 projects.SettingsWriter 端口（settings 单键原子写，infra 适配）。
+func NewProjects(projectRepo projects.Repository, docDB databases.DocumentDB, tx uow.Runner, schema projects.SchemaManager, adminProjectRepo projects.AdminProjectRepository, settings projects.SettingsWriter, opts ...ProjectsOption) *Projects {
+	s := &Projects{projectRepo: projectRepo, docDB: docDB, tx: tx, schema: schema, adminProjectRepo: adminProjectRepo, settings: settings}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -416,4 +420,59 @@ func (s *Projects) UpdateProject(ctx context.Context, cmd UpdateProjectCommand) 
 		return nil, err
 	}
 	return project, nil
+}
+
+type UpdateOAuthRedirectAllowlistCommand struct {
+	ProjectID string
+	// URLs 整表替换语义：非空 = 替换白名单；空 = 清空（回落默认白名单）。
+	URLs []string
+}
+
+// UpdateOAuthRedirectAllowlist 更新项目 OAuth 重定向白名单（PERMISSION
+// [owner,admin] 的 use-case 纵深防御，镜像 CreateProject/邀请码）。写入走
+// SettingsWriter 单键原子通道，不触碰其他 settings 键与其他列；写入后回读
+// 返回存储真值（OAuthProviders.Upsert 的 write-then-reread 先例）。
+func (s *Projects) UpdateOAuthRedirectAllowlist(ctx context.Context, cmd UpdateOAuthRedirectAllowlistCommand) (*projects.Project, error) {
+	if err := appshared.RequirePlatformPrincipal(ctx); err != nil {
+		return nil, err
+	}
+	if s.settings == nil {
+		return nil, status.Error(codes.FailedPrecondition, "project settings writer is not configured")
+	}
+	if cmd.ProjectID == "" {
+		return nil, status.Error(codes.InvalidArgument, "project_id is required")
+	}
+	urls := make([]string, 0, len(cmd.URLs))
+	for _, raw := range cmd.URLs {
+		entry := strings.TrimSpace(raw)
+		if entry == "" {
+			continue
+		}
+		if err := projects.ValidateAllowlistEntry(entry); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid redirect allowlist entry: %v", err)
+		}
+		urls = append(urls, entry)
+	}
+	if len(urls) > projects.MaxAllowlistEntries {
+		return nil, status.Errorf(codes.InvalidArgument, "at most %d allowlist entries", projects.MaxAllowlistEntries)
+	}
+
+	// NotFound 防枚举（与 UpdateProject 语义一致）。
+	project, err := s.projectRepo.GetProject(ctx, cmd.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	if project == nil {
+		return nil, status.Error(codes.NotFound, "project not found")
+	}
+
+	// 空列表 = 清空（删除键，回落默认白名单）。
+	var value any
+	if len(urls) > 0 {
+		value = urls
+	}
+	if err := s.settings.SetProjectSetting(ctx, cmd.ProjectID, projects.SettingsKeyOAuthAllowedRedirectURLs, value); err != nil {
+		return nil, err
+	}
+	return s.projectRepo.GetProject(ctx, cmd.ProjectID)
 }

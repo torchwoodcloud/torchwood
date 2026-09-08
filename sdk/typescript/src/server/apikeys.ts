@@ -28,4 +28,19 @@ export class APIKeysService {
   async delete(id: string): Promise<void> {
     await this.http.request<void>("DELETE", `/v1/server/api-keys/${id}`, { auth: "apiKey" });
   }
+
+  async update(
+    id: string,
+    input: {
+      name?: string;
+      scopes?: string[];
+      enabled?: boolean;
+      expire_at?: string;
+    }
+  ): Promise<APIKey> {
+    return this.http.request<APIKey>("PATCH", `/v1/server/api-keys/${id}`, {
+      auth: "apiKey",
+      body: input,
+    });
+  }
 }

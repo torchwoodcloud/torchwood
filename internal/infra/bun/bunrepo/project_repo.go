@@ -3,6 +3,7 @@ package bunrepo
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -16,6 +17,12 @@ type projectRepo struct {
 }
 
 func NewProjectRepository(db *clients.Database) projects.Repository {
+	return &projectRepo{db: db}
+}
+
+// NewProjectSettingsWriter 复用同一 projectRepo 结构体提供 settings 单键写
+// 端口（独立小接口，消费面仅配置管理用例，不扩散到 Repository 全量消费方）。
+func NewProjectSettingsWriter(db *clients.Database) projects.SettingsWriter {
 	return &projectRepo{db: db}
 }
 
@@ -106,6 +113,29 @@ func (r *projectRepo) UpdateProject(ctx context.Context, p *projects.Project) er
 
 func (r *projectRepo) DeleteProject(ctx context.Context, id string) error {
 	_, err := r.db.Conn(ctx).NewDelete().Model((*model.Project)(nil)).Where("id = ?", id).Exec(ctx)
+	return err
+}
+
+// SetProjectSetting 单语句原子写单个扁平点号 settings 键：不同 key 的并发写
+// 互不覆盖（无整 settings 读改写竞态）。raw SQL 与 DeleteProjectControlPlaneRows
+// 同范式——写列显式在语句里，天然满足 bun 更新写规范（update_guard 只扫
+// NewUpdate 链）；settings 列仍不进 UpdateProject 白名单，name/policy 等编辑
+// 永不触碰 settings。
+func (r *projectRepo) SetProjectSetting(ctx context.Context, projectID, key string, value any) error {
+	if value == nil {
+		_, err := r.db.Conn(ctx).ExecContext(ctx,
+			`UPDATE projects SET settings = COALESCE(settings, '{}'::jsonb) - ?, updated_at = now() WHERE id = ?`,
+			key, projectID)
+		return err
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("marshal setting %q: %w", key, err)
+	}
+	// raw 以 string 传递：pgdriver 对 []byte 走 bytea 二进制编码，jsonb 强转解析不了。
+	_, err = r.db.Conn(ctx).ExecContext(ctx,
+		`UPDATE projects SET settings = jsonb_set(COALESCE(settings, '{}'::jsonb), ARRAY[?]::text[], ?::jsonb, true), updated_at = now() WHERE id = ?`,
+		key, string(raw), projectID)
 	return err
 }
 

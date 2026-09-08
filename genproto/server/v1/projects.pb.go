@@ -7,6 +7,7 @@
 package serverv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
 	v1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
@@ -156,6 +157,61 @@ func (x *CreateProjectRequest) GetId() string {
 	return ""
 }
 
+type UpdateOAuthRedirectAllowlistRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// 整表替换语义（PUT）：非空 = 替换为该列表；空 = 清空（回落默认白名单）。
+	// 条目形状（http/https 绝对 URL、host 非空）由 app 层校验，长度/条数上限
+	// 在此声明。
+	Urls          []string `protobuf:"bytes,2,rep,name=urls,proto3" json:"urls,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateOAuthRedirectAllowlistRequest) Reset() {
+	*x = UpdateOAuthRedirectAllowlistRequest{}
+	mi := &file_server_v1_projects_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateOAuthRedirectAllowlistRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateOAuthRedirectAllowlistRequest) ProtoMessage() {}
+
+func (x *UpdateOAuthRedirectAllowlistRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_projects_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateOAuthRedirectAllowlistRequest.ProtoReflect.Descriptor instead.
+func (*UpdateOAuthRedirectAllowlistRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_projects_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *UpdateOAuthRedirectAllowlistRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *UpdateOAuthRedirectAllowlistRequest) GetUrls() []string {
+	if x != nil {
+		return x.Urls
+	}
+	return nil
+}
+
 type GetProjectRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -165,7 +221,7 @@ type GetProjectRequest struct {
 
 func (x *GetProjectRequest) Reset() {
 	*x = GetProjectRequest{}
-	mi := &file_server_v1_projects_proto_msgTypes[2]
+	mi := &file_server_v1_projects_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -177,7 +233,7 @@ func (x *GetProjectRequest) String() string {
 func (*GetProjectRequest) ProtoMessage() {}
 
 func (x *GetProjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_projects_proto_msgTypes[2]
+	mi := &file_server_v1_projects_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -190,7 +246,7 @@ func (x *GetProjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectRequest.ProtoReflect.Descriptor instead.
 func (*GetProjectRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_projects_proto_rawDescGZIP(), []int{2}
+	return file_server_v1_projects_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetProjectRequest) GetId() string {
@@ -210,7 +266,7 @@ type ListProjectsResponse struct {
 
 func (x *ListProjectsResponse) Reset() {
 	*x = ListProjectsResponse{}
-	mi := &file_server_v1_projects_proto_msgTypes[3]
+	mi := &file_server_v1_projects_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -222,7 +278,7 @@ func (x *ListProjectsResponse) String() string {
 func (*ListProjectsResponse) ProtoMessage() {}
 
 func (x *ListProjectsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_projects_proto_msgTypes[3]
+	mi := &file_server_v1_projects_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -235,7 +291,7 @@ func (x *ListProjectsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProjectsResponse.ProtoReflect.Descriptor instead.
 func (*ListProjectsResponse) Descriptor() ([]byte, []int) {
-	return file_server_v1_projects_proto_rawDescGZIP(), []int{3}
+	return file_server_v1_projects_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ListProjectsResponse) GetProjects() []*Project {
@@ -262,13 +318,17 @@ type Project struct {
 	UpdatedAt   *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	// 注册策略：open / invite_only / closed（T-03；默认 open）。
 	RegistrationPolicy string `protobuf:"bytes,7,opt,name=registration_policy,json=registrationPolicy,proto3" json:"registration_policy,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// OAuth 重定向白名单（settings key auth.oauth_allowed_redirect_urls 的
+	// 投影，仅投影该 key 不透出其余 settings）。空 = 未配置，回落默认白名单
+	// （localhost 系列 + 本站 public_url origin）。
+	OauthAllowedRedirectUrls []string `protobuf:"bytes,8,rep,name=oauth_allowed_redirect_urls,json=oauthAllowedRedirectUrls,proto3" json:"oauth_allowed_redirect_urls,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *Project) Reset() {
 	*x = Project{}
-	mi := &file_server_v1_projects_proto_msgTypes[4]
+	mi := &file_server_v1_projects_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -280,7 +340,7 @@ func (x *Project) String() string {
 func (*Project) ProtoMessage() {}
 
 func (x *Project) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_projects_proto_msgTypes[4]
+	mi := &file_server_v1_projects_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -293,7 +353,7 @@ func (x *Project) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Project.ProtoReflect.Descriptor instead.
 func (*Project) Descriptor() ([]byte, []int) {
-	return file_server_v1_projects_proto_rawDescGZIP(), []int{4}
+	return file_server_v1_projects_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Project) GetId() string {
@@ -345,6 +405,13 @@ func (x *Project) GetRegistrationPolicy() string {
 	return ""
 }
 
+func (x *Project) GetOauthAllowedRedirectUrls() []string {
+	if x != nil {
+		return x.OauthAllowedRedirectUrls
+	}
+	return nil
+}
+
 // ---- 邀请码（T-03）----
 type CreateInviteCodeRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
@@ -359,7 +426,7 @@ type CreateInviteCodeRequest struct {
 
 func (x *CreateInviteCodeRequest) Reset() {
 	*x = CreateInviteCodeRequest{}
-	mi := &file_server_v1_projects_proto_msgTypes[5]
+	mi := &file_server_v1_projects_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -371,7 +438,7 @@ func (x *CreateInviteCodeRequest) String() string {
 func (*CreateInviteCodeRequest) ProtoMessage() {}
 
 func (x *CreateInviteCodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_projects_proto_msgTypes[5]
+	mi := &file_server_v1_projects_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -384,7 +451,7 @@ func (x *CreateInviteCodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateInviteCodeRequest.ProtoReflect.Descriptor instead.
 func (*CreateInviteCodeRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_projects_proto_rawDescGZIP(), []int{5}
+	return file_server_v1_projects_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CreateInviteCodeRequest) GetProjectId() string {
@@ -428,7 +495,7 @@ type InviteCode struct {
 
 func (x *InviteCode) Reset() {
 	*x = InviteCode{}
-	mi := &file_server_v1_projects_proto_msgTypes[6]
+	mi := &file_server_v1_projects_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -440,7 +507,7 @@ func (x *InviteCode) String() string {
 func (*InviteCode) ProtoMessage() {}
 
 func (x *InviteCode) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_projects_proto_msgTypes[6]
+	mi := &file_server_v1_projects_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -453,7 +520,7 @@ func (x *InviteCode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InviteCode.ProtoReflect.Descriptor instead.
 func (*InviteCode) Descriptor() ([]byte, []int) {
-	return file_server_v1_projects_proto_rawDescGZIP(), []int{6}
+	return file_server_v1_projects_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *InviteCode) GetId() string {
@@ -530,7 +597,7 @@ type ListInviteCodesRequest struct {
 
 func (x *ListInviteCodesRequest) Reset() {
 	*x = ListInviteCodesRequest{}
-	mi := &file_server_v1_projects_proto_msgTypes[7]
+	mi := &file_server_v1_projects_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -542,7 +609,7 @@ func (x *ListInviteCodesRequest) String() string {
 func (*ListInviteCodesRequest) ProtoMessage() {}
 
 func (x *ListInviteCodesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_projects_proto_msgTypes[7]
+	mi := &file_server_v1_projects_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -555,7 +622,7 @@ func (x *ListInviteCodesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInviteCodesRequest.ProtoReflect.Descriptor instead.
 func (*ListInviteCodesRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_projects_proto_rawDescGZIP(), []int{7}
+	return file_server_v1_projects_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListInviteCodesRequest) GetProjectId() string {
@@ -589,7 +656,7 @@ type ListInviteCodesResponse struct {
 
 func (x *ListInviteCodesResponse) Reset() {
 	*x = ListInviteCodesResponse{}
-	mi := &file_server_v1_projects_proto_msgTypes[8]
+	mi := &file_server_v1_projects_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -601,7 +668,7 @@ func (x *ListInviteCodesResponse) String() string {
 func (*ListInviteCodesResponse) ProtoMessage() {}
 
 func (x *ListInviteCodesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_projects_proto_msgTypes[8]
+	mi := &file_server_v1_projects_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -614,7 +681,7 @@ func (x *ListInviteCodesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInviteCodesResponse.ProtoReflect.Descriptor instead.
 func (*ListInviteCodesResponse) Descriptor() ([]byte, []int) {
-	return file_server_v1_projects_proto_rawDescGZIP(), []int{8}
+	return file_server_v1_projects_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListInviteCodesResponse) GetInviteCodes() []*InviteCode {
@@ -641,7 +708,7 @@ type DeleteInviteCodeRequest struct {
 
 func (x *DeleteInviteCodeRequest) Reset() {
 	*x = DeleteInviteCodeRequest{}
-	mi := &file_server_v1_projects_proto_msgTypes[9]
+	mi := &file_server_v1_projects_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -653,7 +720,7 @@ func (x *DeleteInviteCodeRequest) String() string {
 func (*DeleteInviteCodeRequest) ProtoMessage() {}
 
 func (x *DeleteInviteCodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_projects_proto_msgTypes[9]
+	mi := &file_server_v1_projects_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -666,7 +733,7 @@ func (x *DeleteInviteCodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteInviteCodeRequest.ProtoReflect.Descriptor instead.
 func (*DeleteInviteCodeRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_projects_proto_rawDescGZIP(), []int{9}
+	return file_server_v1_projects_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *DeleteInviteCodeRequest) GetProjectId() string {
@@ -687,7 +754,7 @@ var File_server_v1_projects_proto protoreflect.FileDescriptor
 
 const file_server_v1_projects_proto_rawDesc = "" +
 	"\n" +
-	"\x18server/v1/projects.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xcd\x01\n" +
+	"\x18server/v1/projects.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xcd\x01\n" +
 	"\x14UpdateProjectRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12%\n" +
@@ -699,12 +766,16 @@ const file_server_v1_projects_proto_rawDesc = "" +
 	"\x14CreateProjectRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x0e\n" +
-	"\x02id\x18\x03 \x01(\tR\x02id\"#\n" +
+	"\x02id\x18\x03 \x01(\tR\x02id\"q\n" +
+	"#UpdateOAuthRedirectAllowlistRequest\x12%\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12#\n" +
+	"\x04urls\x18\x02 \x03(\tB\x0f\xbaH\f\x92\x01\t\x10d\"\x05r\x03\x18\x80\x10R\x04urls\"#\n" +
 	"\x11GetProjectRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x8b\x01\n" +
 	"\x14ListProjectsResponse\x128\n" +
 	"\bprojects\x18\x01 \x03(\v2\x1c.torchwood.server.v1.ProjectR\bprojects\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\x8e\x02\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\xcd\x02\n" +
 	"\aProject\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -714,7 +785,8 @@ const file_server_v1_projects_proto_rawDesc = "" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12/\n" +
-	"\x13registration_policy\x18\a \x01(\tR\x12registrationPolicy\"\xb1\x01\n" +
+	"\x13registration_policy\x18\a \x01(\tR\x12registrationPolicy\x12=\n" +
+	"\x1boauth_allowed_redirect_urls\x18\b \x03(\tR\x18oauthAllowedRedirectUrls\"\xb1\x01\n" +
 	"\x17CreateInviteCodeRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1e\n" +
@@ -750,7 +822,7 @@ const file_server_v1_projects_proto_rawDesc = "" +
 	"\x17DeleteInviteCodeRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id2\xa6\v\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id2\xa0\r\n" +
 	"\x0fProjectsService\x12\xb3\x01\n" +
 	"\rCreateProject\x12).torchwood.server.v1.CreateProjectRequest\x1a\x1c.torchwood.server.v1.Project\"Y\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
@@ -770,7 +842,10 @@ const file_server_v1_projects_proto_rawDesc = "" +
 	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02/\x12-/v1/server/projects/{project_id}/invite-codes\x12\xd3\x01\n" +
 	"\x10DeleteInviteCode\x12,.torchwood.server.v1.DeleteInviteCodeRequest\x1a\x1a.torchwood.shared.v1.Empty\"u\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x024*2/v1/server/projects/{project_id}/invite-codes/{id}\x1a\x06\x92\xb2\x19\x02\b\x03B\xd9\x03\x92A\x96\x03RR\n" +
+	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x024*2/v1/server/projects/{project_id}/invite-codes/{id}\x12\xf7\x01\n" +
+	"\x1cUpdateOAuthRedirectAllowlist\x128.torchwood.server.v1.UpdateOAuthRedirectAllowlistRequest\x1a\x1c.torchwood.server.v1.Project\"\x7f\x92A$j\"\n" +
+	"\x12x-torchwood-access\x12\f\x1a\n" +
+	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02>:\x01*\x1a9/v1/server/projects/{project_id}/oauth-redirect-allowlist\x1a\x06\x92\xb2\x19\x02\b\x03B\xd9\x03\x92A\x96\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
@@ -797,51 +872,54 @@ func file_server_v1_projects_proto_rawDescGZIP() []byte {
 	return file_server_v1_projects_proto_rawDescData
 }
 
-var file_server_v1_projects_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_server_v1_projects_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_server_v1_projects_proto_goTypes = []any{
-	(*UpdateProjectRequest)(nil),    // 0: torchwood.server.v1.UpdateProjectRequest
-	(*CreateProjectRequest)(nil),    // 1: torchwood.server.v1.CreateProjectRequest
-	(*GetProjectRequest)(nil),       // 2: torchwood.server.v1.GetProjectRequest
-	(*ListProjectsResponse)(nil),    // 3: torchwood.server.v1.ListProjectsResponse
-	(*Project)(nil),                 // 4: torchwood.server.v1.Project
-	(*CreateInviteCodeRequest)(nil), // 5: torchwood.server.v1.CreateInviteCodeRequest
-	(*InviteCode)(nil),              // 6: torchwood.server.v1.InviteCode
-	(*ListInviteCodesRequest)(nil),  // 7: torchwood.server.v1.ListInviteCodesRequest
-	(*ListInviteCodesResponse)(nil), // 8: torchwood.server.v1.ListInviteCodesResponse
-	(*DeleteInviteCodeRequest)(nil), // 9: torchwood.server.v1.DeleteInviteCodeRequest
-	(*v1.ListResponseMeta)(nil),     // 10: torchwood.shared.v1.ListResponseMeta
-	(*timestamppb.Timestamp)(nil),   // 11: google.protobuf.Timestamp
-	(*v1.ListRequest)(nil),          // 12: torchwood.shared.v1.ListRequest
-	(*v1.Empty)(nil),                // 13: torchwood.shared.v1.Empty
+	(*UpdateProjectRequest)(nil),                // 0: torchwood.server.v1.UpdateProjectRequest
+	(*CreateProjectRequest)(nil),                // 1: torchwood.server.v1.CreateProjectRequest
+	(*UpdateOAuthRedirectAllowlistRequest)(nil), // 2: torchwood.server.v1.UpdateOAuthRedirectAllowlistRequest
+	(*GetProjectRequest)(nil),                   // 3: torchwood.server.v1.GetProjectRequest
+	(*ListProjectsResponse)(nil),                // 4: torchwood.server.v1.ListProjectsResponse
+	(*Project)(nil),                             // 5: torchwood.server.v1.Project
+	(*CreateInviteCodeRequest)(nil),             // 6: torchwood.server.v1.CreateInviteCodeRequest
+	(*InviteCode)(nil),                          // 7: torchwood.server.v1.InviteCode
+	(*ListInviteCodesRequest)(nil),              // 8: torchwood.server.v1.ListInviteCodesRequest
+	(*ListInviteCodesResponse)(nil),             // 9: torchwood.server.v1.ListInviteCodesResponse
+	(*DeleteInviteCodeRequest)(nil),             // 10: torchwood.server.v1.DeleteInviteCodeRequest
+	(*v1.ListResponseMeta)(nil),                 // 11: torchwood.shared.v1.ListResponseMeta
+	(*timestamppb.Timestamp)(nil),               // 12: google.protobuf.Timestamp
+	(*v1.ListRequest)(nil),                      // 13: torchwood.shared.v1.ListRequest
+	(*v1.Empty)(nil),                            // 14: torchwood.shared.v1.Empty
 }
 var file_server_v1_projects_proto_depIdxs = []int32{
-	4,  // 0: torchwood.server.v1.ListProjectsResponse.projects:type_name -> torchwood.server.v1.Project
-	10, // 1: torchwood.server.v1.ListProjectsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
-	11, // 2: torchwood.server.v1.Project.created_at:type_name -> google.protobuf.Timestamp
-	11, // 3: torchwood.server.v1.Project.updated_at:type_name -> google.protobuf.Timestamp
-	11, // 4: torchwood.server.v1.CreateInviteCodeRequest.expire_at:type_name -> google.protobuf.Timestamp
-	11, // 5: torchwood.server.v1.InviteCode.expire_at:type_name -> google.protobuf.Timestamp
-	11, // 6: torchwood.server.v1.InviteCode.created_at:type_name -> google.protobuf.Timestamp
-	6,  // 7: torchwood.server.v1.ListInviteCodesResponse.invite_codes:type_name -> torchwood.server.v1.InviteCode
-	10, // 8: torchwood.server.v1.ListInviteCodesResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	5,  // 0: torchwood.server.v1.ListProjectsResponse.projects:type_name -> torchwood.server.v1.Project
+	11, // 1: torchwood.server.v1.ListProjectsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	12, // 2: torchwood.server.v1.Project.created_at:type_name -> google.protobuf.Timestamp
+	12, // 3: torchwood.server.v1.Project.updated_at:type_name -> google.protobuf.Timestamp
+	12, // 4: torchwood.server.v1.CreateInviteCodeRequest.expire_at:type_name -> google.protobuf.Timestamp
+	12, // 5: torchwood.server.v1.InviteCode.expire_at:type_name -> google.protobuf.Timestamp
+	12, // 6: torchwood.server.v1.InviteCode.created_at:type_name -> google.protobuf.Timestamp
+	7,  // 7: torchwood.server.v1.ListInviteCodesResponse.invite_codes:type_name -> torchwood.server.v1.InviteCode
+	11, // 8: torchwood.server.v1.ListInviteCodesResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
 	1,  // 9: torchwood.server.v1.ProjectsService.CreateProject:input_type -> torchwood.server.v1.CreateProjectRequest
-	12, // 10: torchwood.server.v1.ProjectsService.ListProjects:input_type -> torchwood.shared.v1.ListRequest
-	2,  // 11: torchwood.server.v1.ProjectsService.GetProject:input_type -> torchwood.server.v1.GetProjectRequest
+	13, // 10: torchwood.server.v1.ProjectsService.ListProjects:input_type -> torchwood.shared.v1.ListRequest
+	3,  // 11: torchwood.server.v1.ProjectsService.GetProject:input_type -> torchwood.server.v1.GetProjectRequest
 	0,  // 12: torchwood.server.v1.ProjectsService.UpdateProject:input_type -> torchwood.server.v1.UpdateProjectRequest
-	2,  // 13: torchwood.server.v1.ProjectsService.DeleteProject:input_type -> torchwood.server.v1.GetProjectRequest
-	5,  // 14: torchwood.server.v1.ProjectsService.CreateInviteCode:input_type -> torchwood.server.v1.CreateInviteCodeRequest
-	7,  // 15: torchwood.server.v1.ProjectsService.ListInviteCodes:input_type -> torchwood.server.v1.ListInviteCodesRequest
-	9,  // 16: torchwood.server.v1.ProjectsService.DeleteInviteCode:input_type -> torchwood.server.v1.DeleteInviteCodeRequest
-	4,  // 17: torchwood.server.v1.ProjectsService.CreateProject:output_type -> torchwood.server.v1.Project
-	3,  // 18: torchwood.server.v1.ProjectsService.ListProjects:output_type -> torchwood.server.v1.ListProjectsResponse
-	4,  // 19: torchwood.server.v1.ProjectsService.GetProject:output_type -> torchwood.server.v1.Project
-	4,  // 20: torchwood.server.v1.ProjectsService.UpdateProject:output_type -> torchwood.server.v1.Project
-	13, // 21: torchwood.server.v1.ProjectsService.DeleteProject:output_type -> torchwood.shared.v1.Empty
-	6,  // 22: torchwood.server.v1.ProjectsService.CreateInviteCode:output_type -> torchwood.server.v1.InviteCode
-	8,  // 23: torchwood.server.v1.ProjectsService.ListInviteCodes:output_type -> torchwood.server.v1.ListInviteCodesResponse
-	13, // 24: torchwood.server.v1.ProjectsService.DeleteInviteCode:output_type -> torchwood.shared.v1.Empty
-	17, // [17:25] is the sub-list for method output_type
-	9,  // [9:17] is the sub-list for method input_type
+	3,  // 13: torchwood.server.v1.ProjectsService.DeleteProject:input_type -> torchwood.server.v1.GetProjectRequest
+	6,  // 14: torchwood.server.v1.ProjectsService.CreateInviteCode:input_type -> torchwood.server.v1.CreateInviteCodeRequest
+	8,  // 15: torchwood.server.v1.ProjectsService.ListInviteCodes:input_type -> torchwood.server.v1.ListInviteCodesRequest
+	10, // 16: torchwood.server.v1.ProjectsService.DeleteInviteCode:input_type -> torchwood.server.v1.DeleteInviteCodeRequest
+	2,  // 17: torchwood.server.v1.ProjectsService.UpdateOAuthRedirectAllowlist:input_type -> torchwood.server.v1.UpdateOAuthRedirectAllowlistRequest
+	5,  // 18: torchwood.server.v1.ProjectsService.CreateProject:output_type -> torchwood.server.v1.Project
+	4,  // 19: torchwood.server.v1.ProjectsService.ListProjects:output_type -> torchwood.server.v1.ListProjectsResponse
+	5,  // 20: torchwood.server.v1.ProjectsService.GetProject:output_type -> torchwood.server.v1.Project
+	5,  // 21: torchwood.server.v1.ProjectsService.UpdateProject:output_type -> torchwood.server.v1.Project
+	14, // 22: torchwood.server.v1.ProjectsService.DeleteProject:output_type -> torchwood.shared.v1.Empty
+	7,  // 23: torchwood.server.v1.ProjectsService.CreateInviteCode:output_type -> torchwood.server.v1.InviteCode
+	9,  // 24: torchwood.server.v1.ProjectsService.ListInviteCodes:output_type -> torchwood.server.v1.ListInviteCodesResponse
+	14, // 25: torchwood.server.v1.ProjectsService.DeleteInviteCode:output_type -> torchwood.shared.v1.Empty
+	5,  // 26: torchwood.server.v1.ProjectsService.UpdateOAuthRedirectAllowlist:output_type -> torchwood.server.v1.Project
+	18, // [18:27] is the sub-list for method output_type
+	9,  // [9:18] is the sub-list for method input_type
 	9,  // [9:9] is the sub-list for extension type_name
 	9,  // [9:9] is the sub-list for extension extendee
 	0,  // [0:9] is the sub-list for field type_name
@@ -853,14 +931,14 @@ func file_server_v1_projects_proto_init() {
 		return
 	}
 	file_server_v1_projects_proto_msgTypes[0].OneofWrappers = []any{}
-	file_server_v1_projects_proto_msgTypes[5].OneofWrappers = []any{}
+	file_server_v1_projects_proto_msgTypes[6].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_server_v1_projects_proto_rawDesc), len(file_server_v1_projects_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

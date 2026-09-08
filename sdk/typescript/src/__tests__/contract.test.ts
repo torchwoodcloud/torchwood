@@ -168,6 +168,7 @@ const RPC_TO_METHOD: Record<string, Record<string, string>> = {
     ListAPIKeys: "list",
     GetAPIKey: "get",
     DeleteAPIKey: "delete",
+    UpdateAPIKey: "update",
   },
   OAuthProvidersService: {
     ListOAuthProviders: "list",
@@ -180,6 +181,10 @@ const RPC_TO_METHOD: Record<string, Record<string, string>> = {
     GetProject: "get",
     UpdateProject: "update",
     DeleteProject: "delete",
+    CreateInviteCode: "createInviteCode",
+    ListInviteCodes: "listInviteCodes",
+    DeleteInviteCode: "deleteInviteCode",
+    UpdateOAuthRedirectAllowlist: "updateOAuthRedirectAllowlist",
   },
   HealthService: {
     Check: "check",
@@ -197,6 +202,7 @@ const RPC_TO_METHOD: Record<string, Record<string, string>> = {
     ListSessions: "listSessions",
     DeleteSession: "deleteSession",
     DeleteSessions: "deleteSessions",
+    DeleteAccount: "deleteAccount",
     GetPrefs: "getPrefs",
     UpdatePrefs: "updatePrefs",
     CreateEmailOTP: "createEmailOTP",

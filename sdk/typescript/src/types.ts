@@ -125,9 +125,24 @@ export interface Membership {
 export interface Project {
   id: string;
   name: string;
+  description?: string;
   status: string;
+  registration_policy?: string;
+  oauth_allowed_redirect_urls?: string[];
   created_at: string;
   updated_at: string;
+}
+
+export interface InviteCode {
+  id: string;
+  project_id: string;
+  code: string;
+  max_uses: number;
+  used_count: number;
+  expire_at?: string;
+  revoked: boolean;
+  created_by: string;
+  created_at: string;
 }
 
 export interface APIKey {

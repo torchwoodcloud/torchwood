@@ -272,4 +272,13 @@ security:
 3. **数据保留（显式决策，不做级联删除）**：其名下文档、文件、memberships、审计行**保留为孤儿数据**——文档/文件按既有 ACL 收敛到不可见（owner 角色随之消失），审计是追责记录不随账号抹除（M5 C7 同语义）；物理清除归运维面保留策略；
 4. 软删行不得复生：`deleted` 状态仅删除路径写入，任何外部入参不可设置。
 
+### 11.3 OAuth 重定向白名单（项目设置）
+
+项目 settings JSONB 键 `auth.oauth_allowed_redirect_urls`（条目数组）是**全部端用户重定向流的落点白名单**，四处消费（同一校验器 `validateProjectOAuthRedirectURLs`）：OAuth2 浏览器回调发起（`CreateOAuth2Session/LinkSession`）、魔法链接、恢复、验证。
+
+- **匹配规则**（`projects.MatchRedirectURL`）：条目 = scheme+host（大小写不敏感）+ 可选路径前缀；条目无 path 放行该 host 全部路径。
+- **回落语义**：键缺失/为空 → 默认白名单 = `localhost/127.0.0.1`（http+https）+ 本站 `server.http.public_url` origin。跨域前端（如独立站点域名）必须显式配置，否则发起端 400 `success url is not allowed for this project`。
+- **管理入口**：`PUT /v1/server/projects/{project_id}/oauth-redirect-allowlist`（整表替换；空数组 = 清空回落默认）与 Console 项目详情页 Redirect Allowlist 卡片。PERMISSION `[owner,admin]` 平台专属面（key 凭证禁入）——白名单是钓鱼劫持面（可改写登录流落点）。读取走 `GET /v1/server/projects/{id}` 的 `oauth_allowed_redirect_urls` 投影（仅投影该键，不透出其余 settings）。
+- **持久化**：`SettingsWriter.SetProjectSetting` 单键原子写（`jsonb_set` / `'-'` 操作符），不同 settings 键并发写互不覆盖；`settings` 列仍不进 `UpdateProject` 白名单。
+
 ---

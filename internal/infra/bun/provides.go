@@ -8,6 +8,7 @@ import (
 
 var ProviderSet = wire.NewSet(
 	bunrepo.NewProjectRepository,
+	bunrepo.NewProjectSettingsWriter,
 	bunrepo.NewOAuthProviderRepository,
 	bunrepo.NewAPIKeyRepository,
 	bunrepo.NewInviteCodeRepository,

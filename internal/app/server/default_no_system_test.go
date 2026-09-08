@@ -26,7 +26,7 @@ func TestDefaultDatabase_NoSystemCollections(t *testing.T) {
 
 	repo := bunrepo.NewProjectRepository(db)
 	docDB := documentdb.NewPostgresDocumentDB(db, nil)
-	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil)
+	projectsUC := NewProjects(repo, docDB, db, projectschema.NewSchemaManager(db), nil, nil)
 	uc := NewDatabases(repo, docDB, nil)
 
 	p, err := projectsUC.CreateProject(ctx, CreateProjectCommand{

@@ -309,6 +309,46 @@
         ],
         "x-torchwood-access": "permission"
       }
+    },
+    "/v1/server/projects/{project_id}/oauth-redirect-allowlist": {
+      "put": {
+        "summary": "---- OAuth 重定向白名单 ----\n平台专属面（key 凭证禁入）：白名单是 OAuth2 登录/魔法链接/恢复/验证等\n重定向流的可落点集合，篡改可用于钓鱼劫持端用户会话，管理权仅\nowner/admin console 会话。",
+        "operationId": "ProjectsService_UpdateOAuthRedirectAllowlist",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Project"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ProjectsServiceUpdateOAuthRedirectAllowlistBody"
+            }
+          }
+        ],
+        "tags": [
+          "ProjectsService"
+        ],
+        "x-torchwood-access": "permission"
+      }
     }
   },
   "definitions": {
@@ -327,6 +367,18 @@
         }
       },
       "title": "---- 邀请码（T-03）----"
+    },
+    "ProjectsServiceUpdateOAuthRedirectAllowlistBody": {
+      "type": "object",
+      "properties": {
+        "urls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "整表替换语义（PUT）：非空 = 替换为该列表；空 = 清空（回落默认白名单）。\n条目形状（http/https 绝对 URL、host 非空）由 app 层校验，长度/条数上限\n在此声明。"
+        }
+      }
     },
     "ProjectsServiceUpdateProjectBody": {
       "type": "object",
@@ -524,6 +576,13 @@
         "registration_policy": {
           "type": "string",
           "title": "注册策略：open / invite_only / closed（T-03；默认 open）。"
+        },
+        "oauth_allowed_redirect_urls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "OAuth 重定向白名单（settings key auth.oauth_allowed_redirect_urls 的\n投影，仅投影该 key 不透出其余 settings）。空 = 未配置，回落默认白名单\n（localhost 系列 + 本站 public_url origin）。"
         }
       }
     }

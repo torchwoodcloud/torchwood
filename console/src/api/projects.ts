@@ -6,6 +6,7 @@ export interface Project {
   description?: string;
   status: string;
   registration_policy?: string;
+  oauth_allowed_redirect_urls?: string[];
   created_at: string;
   updated_at: string;
 }
@@ -44,6 +45,19 @@ export async function updateProject(
 
 export async function deleteProject(id: string): Promise<void> {
   await api.delete(`/server/projects/${id}`);
+}
+
+// ---- OAuth 重定向白名单（settings auth.oauth_allowed_redirect_urls）----
+
+export async function updateOAuthRedirectAllowlist(
+  projectId: string,
+  urls: string[]
+): Promise<Project> {
+  const res = await api.put<Project>(
+    `/server/projects/${projectId}/oauth-redirect-allowlist`,
+    { urls }
+  );
+  return res.data;
 }
 
 // ---- 邀请码（T-03，invite_only 注册策略）----

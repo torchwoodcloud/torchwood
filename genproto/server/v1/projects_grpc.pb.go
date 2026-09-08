@@ -20,14 +20,15 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ProjectsService_CreateProject_FullMethodName    = "/torchwood.server.v1.ProjectsService/CreateProject"
-	ProjectsService_ListProjects_FullMethodName     = "/torchwood.server.v1.ProjectsService/ListProjects"
-	ProjectsService_GetProject_FullMethodName       = "/torchwood.server.v1.ProjectsService/GetProject"
-	ProjectsService_UpdateProject_FullMethodName    = "/torchwood.server.v1.ProjectsService/UpdateProject"
-	ProjectsService_DeleteProject_FullMethodName    = "/torchwood.server.v1.ProjectsService/DeleteProject"
-	ProjectsService_CreateInviteCode_FullMethodName = "/torchwood.server.v1.ProjectsService/CreateInviteCode"
-	ProjectsService_ListInviteCodes_FullMethodName  = "/torchwood.server.v1.ProjectsService/ListInviteCodes"
-	ProjectsService_DeleteInviteCode_FullMethodName = "/torchwood.server.v1.ProjectsService/DeleteInviteCode"
+	ProjectsService_CreateProject_FullMethodName                = "/torchwood.server.v1.ProjectsService/CreateProject"
+	ProjectsService_ListProjects_FullMethodName                 = "/torchwood.server.v1.ProjectsService/ListProjects"
+	ProjectsService_GetProject_FullMethodName                   = "/torchwood.server.v1.ProjectsService/GetProject"
+	ProjectsService_UpdateProject_FullMethodName                = "/torchwood.server.v1.ProjectsService/UpdateProject"
+	ProjectsService_DeleteProject_FullMethodName                = "/torchwood.server.v1.ProjectsService/DeleteProject"
+	ProjectsService_CreateInviteCode_FullMethodName             = "/torchwood.server.v1.ProjectsService/CreateInviteCode"
+	ProjectsService_ListInviteCodes_FullMethodName              = "/torchwood.server.v1.ProjectsService/ListInviteCodes"
+	ProjectsService_DeleteInviteCode_FullMethodName             = "/torchwood.server.v1.ProjectsService/DeleteInviteCode"
+	ProjectsService_UpdateOAuthRedirectAllowlist_FullMethodName = "/torchwood.server.v1.ProjectsService/UpdateOAuthRedirectAllowlist"
 )
 
 // ProjectsServiceClient is the client API for ProjectsService service.
@@ -46,6 +47,11 @@ type ProjectsServiceClient interface {
 	ListInviteCodes(ctx context.Context, in *ListInviteCodesRequest, opts ...grpc.CallOption) (*ListInviteCodesResponse, error)
 	// 吊销邀请码（软删：revoked_at 置位，消费路径立即拒绝）。
 	DeleteInviteCode(ctx context.Context, in *DeleteInviteCodeRequest, opts ...grpc.CallOption) (*v1.Empty, error)
+	// ---- OAuth 重定向白名单 ----
+	// 平台专属面（key 凭证禁入）：白名单是 OAuth2 登录/魔法链接/恢复/验证等
+	// 重定向流的可落点集合，篡改可用于钓鱼劫持端用户会话，管理权仅
+	// owner/admin console 会话。
+	UpdateOAuthRedirectAllowlist(ctx context.Context, in *UpdateOAuthRedirectAllowlistRequest, opts ...grpc.CallOption) (*Project, error)
 }
 
 type projectsServiceClient struct {
@@ -136,6 +142,16 @@ func (c *projectsServiceClient) DeleteInviteCode(ctx context.Context, in *Delete
 	return out, nil
 }
 
+func (c *projectsServiceClient) UpdateOAuthRedirectAllowlist(ctx context.Context, in *UpdateOAuthRedirectAllowlistRequest, opts ...grpc.CallOption) (*Project, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Project)
+	err := c.cc.Invoke(ctx, ProjectsService_UpdateOAuthRedirectAllowlist_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ProjectsServiceServer is the server API for ProjectsService service.
 // All implementations must embed UnimplementedProjectsServiceServer
 // for forward compatibility.
@@ -152,6 +168,11 @@ type ProjectsServiceServer interface {
 	ListInviteCodes(context.Context, *ListInviteCodesRequest) (*ListInviteCodesResponse, error)
 	// 吊销邀请码（软删：revoked_at 置位，消费路径立即拒绝）。
 	DeleteInviteCode(context.Context, *DeleteInviteCodeRequest) (*v1.Empty, error)
+	// ---- OAuth 重定向白名单 ----
+	// 平台专属面（key 凭证禁入）：白名单是 OAuth2 登录/魔法链接/恢复/验证等
+	// 重定向流的可落点集合，篡改可用于钓鱼劫持端用户会话，管理权仅
+	// owner/admin console 会话。
+	UpdateOAuthRedirectAllowlist(context.Context, *UpdateOAuthRedirectAllowlistRequest) (*Project, error)
 	mustEmbedUnimplementedProjectsServiceServer()
 }
 
@@ -185,6 +206,9 @@ func (UnimplementedProjectsServiceServer) ListInviteCodes(context.Context, *List
 }
 func (UnimplementedProjectsServiceServer) DeleteInviteCode(context.Context, *DeleteInviteCodeRequest) (*v1.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteInviteCode not implemented")
+}
+func (UnimplementedProjectsServiceServer) UpdateOAuthRedirectAllowlist(context.Context, *UpdateOAuthRedirectAllowlistRequest) (*Project, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateOAuthRedirectAllowlist not implemented")
 }
 func (UnimplementedProjectsServiceServer) mustEmbedUnimplementedProjectsServiceServer() {}
 func (UnimplementedProjectsServiceServer) testEmbeddedByValue()                         {}
@@ -351,6 +375,24 @@ func _ProjectsService_DeleteInviteCode_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ProjectsService_UpdateOAuthRedirectAllowlist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateOAuthRedirectAllowlistRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProjectsServiceServer).UpdateOAuthRedirectAllowlist(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProjectsService_UpdateOAuthRedirectAllowlist_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProjectsServiceServer).UpdateOAuthRedirectAllowlist(ctx, req.(*UpdateOAuthRedirectAllowlistRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ProjectsService_ServiceDesc is the grpc.ServiceDesc for ProjectsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -389,6 +431,10 @@ var ProjectsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteInviteCode",
 			Handler:    _ProjectsService_DeleteInviteCode_Handler,
+		},
+		{
+			MethodName: "UpdateOAuthRedirectAllowlist",
+			Handler:    _ProjectsService_UpdateOAuthRedirectAllowlist_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
