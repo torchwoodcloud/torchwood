@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/uptrace/bun"
 	"google.golang.org/grpc/codes"
@@ -89,7 +90,14 @@ type postgresDocumentDB struct {
 	pub shared.EventPublisher // nil 视为 nop（单测）；写路径同事务写入 outbox
 
 	// in-process caches keyed by projectID; safe for concurrent use.
-	internalIDCache sync.Map // projectID -> int64
+	// internalIDCache 值为 internalIDEntry（租户号 + 核验时间，TTL 重验见
+	// resolveInternalID；T-R1 加固）。
+	internalIDCache sync.Map // projectID -> internalIDEntry
+	// internalIDReverify 是 internalIDCache 的回库核验间隔（T-R1 加固，
+	// 2026-09-08）：命中但过期则回库比对，漂移即 WARN 并切换新值——
+	// 控制面带外重置的暴露时间从"下次进程重启"提前到分钟级。可注入
+	// 短值供测试。
+	internalIDReverify time.Duration
 	// versionColumns 记录已确认 _version 为 bigint 的 "schema.collection" 键，
 	// 避免每次写/读重复查 information_schema；**只缓存已提交的列**。
 	versionColumns sync.Map // "schema.collection" -> struct{}
@@ -114,8 +122,12 @@ type postgresDocumentDB struct {
 }
 
 func NewPostgresDocumentDB(db *clients.Database, pub shared.EventPublisher) databases.DocumentDB {
-	return &postgresDocumentDB{db: db, pub: pub}
+	return &postgresDocumentDB{db: db, pub: pub, internalIDReverify: defaultInternalIDReverify}
 }
+
+// defaultInternalIDReverify 是 internalIDCache 的默认回库核验间隔
+// （T-R1 加固）：每项目每 30s 至多一次额外 PK 点查，换漂移分钟级暴露。
+const defaultInternalIDReverify = 30 * time.Second
 
 var _ databases.DocumentDB = (*postgresDocumentDB)(nil)
 

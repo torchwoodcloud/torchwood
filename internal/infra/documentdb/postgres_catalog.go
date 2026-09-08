@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -238,19 +239,59 @@ func (p *postgresDocumentDB) resolveInternalIDFresh(ctx context.Context, project
 	return p.resolveInternalID(ctx, projectID)
 }
 
+// internalIDEntry 是 internalIDCache 的值：租户号 + 最近一次回库核验时间
+// （T-R1 加固，2026-09-08）。此前缓存永不过期、仅项目删除路径失效——控制面
+// 被带外重置（projects 行删除重建、internal_id 漂移）时，长驻进程会无限期
+// 以旧租户号服务，漂移直到下次重启才暴露（2026-09-08 dev 事故：漂移存在
+// 30 小时被旧进程遮蔽，部署重启后炸出全量读空 + 写回读 500）。TTL 内命中
+// 直通；过期后回库核验，值变化即更新缓存并 WARN（暴露提前到分钟级）。
+type internalIDEntry struct {
+	id         int64
+	verifiedAt time.Time
+}
+
 func (p *postgresDocumentDB) resolveInternalID(ctx context.Context, projectID string) (int64, error) {
 	if cached, ok := p.internalIDCache.Load(projectID); ok {
-		return cached.(int64), nil
+		entry := cached.(internalIDEntry)
+		if time.Since(entry.verifiedAt) < p.internalIDReverify {
+			return entry.id, nil
+		}
+		// TTL 过期：回库核验。行仍在但值漂移 → 更新缓存并大声告警（此刻起
+		// 读写切到新租户号——若非有意变更，数据面 _tenant 与之失配会立即
+		// 显形，而不是静默用旧值苟到重启）。行已消失（带外删除）→ 报错
+		// （与首次解析同语义）；其余瞬时故障 → 回退旧值保可用。
+		id, err := p.fetchInternalID(ctx, projectID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return 0, fmt.Errorf("project not found: %s", projectID)
+			}
+			return entry.id, nil
+		}
+		if id != entry.id {
+			slog.Warn("project internal_id drift detected under running process; switching to fresh value "+
+				"(if unintended, control plane was reset out-of-band — verify data-plane _tenant alignment)",
+				"project_id", projectID, "cached", entry.id, "fresh", id)
+		}
+		p.internalIDCache.Store(projectID, internalIDEntry{id: id, verifiedAt: time.Now()})
+		return id, nil
 	}
-	var internalID int64
-	err := p.conn(ctx).NewSelect().Model((*model.Project)(nil)).Column("internal_id").Where("id = ?", projectID).Scan(ctx, &internalID)
+	id, err := p.fetchInternalID(ctx, projectID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, fmt.Errorf("project not found: %s", projectID)
 		}
 		return 0, p.mapError(err)
 	}
-	p.internalIDCache.Store(projectID, internalID)
+	p.internalIDCache.Store(projectID, internalIDEntry{id: id, verifiedAt: time.Now()})
+	return id, nil
+}
+
+func (p *postgresDocumentDB) fetchInternalID(ctx context.Context, projectID string) (int64, error) {
+	var internalID int64
+	err := p.conn(ctx).NewSelect().Model((*model.Project)(nil)).Column("internal_id").Where("id = ?", projectID).Scan(ctx, &internalID)
+	if err != nil {
+		return 0, err
+	}
 	return internalID, nil
 }
 
