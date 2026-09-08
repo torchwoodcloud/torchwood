@@ -7,6 +7,11 @@
 
 > 部署时序契约（`docs/developer/13-operations.md` §4.5/§6.1：迁移 → `torchwood admin sync-roles-sig` → server/worker 启动）
 > 由 compose `depends_on` 链自动保证，无需手工干预。
+>
+> ⚠️ **不要在 Dokploy 应用的「Command / 自定义命令」字段填任何内容**（包括
+> `torchwood admin sync-roles-sig`——那是 §10 外部镜像路径的手工步骤，且填入的
+> 必须是完整合法的 docker 命令；残缺形式如 `docker torchwood …` 会让每次部署
+> 直接失败 `unknown command`）。本 compose 路径留空即可，作业链随 `up` 自动执行。
 
 ## 0. 前置条件
 
@@ -152,7 +157,8 @@ torchwood --endpoint <服务器IP>:9060 --api-key sk-... health   # gRPC 直连�
 - gRPC 对外：`TORCHWOOD_SERVER_GRPC_ADDR=:9060`，并在 Application 的「Ports」里追加 `9060`（宿主:容器）；
 - `TORCHWOOD_DATA_DATABASE_SOURCE` 指向外部 PG 的 `tw_authenticator` DSN；
 - `TORCHWOOD_STORAGE_S3_ENDPOINT`/凭据指向外部 S3/MinIO；
-- 迁移与引导作业需手工执行一次（保持 owner/authenticator 双账号契约）：
+- 迁移与引导作业需手工执行一次（保持 owner/authenticator 双账号契约；**仅适用本节
+  外部路径**——单 Compose 栈路径的作业已内置，见文首警告）：
 
 ```bash
 # ① 迁移（owner 引导 DSN；可用一次性容器挂本仓库 db/migrations）
