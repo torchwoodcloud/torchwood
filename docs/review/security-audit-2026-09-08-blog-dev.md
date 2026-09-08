@@ -10,10 +10,11 @@
 
 | 编号 | 等级 | 问题 | 状态 |
 |---|---|---|---|
-| T-01 | 🟡 中 | 认证接口无限速/无锁定 | ✅ 已修复(dccd925) |
-| T-02 | 🟡 中 | Server API 面公网暴露,API Key 为全项目库读写单一凭证 | ✅ 已修复(17f51b2) |
-| T-03 | 🟠 高(策略) | 账号注册完全开放,缺少项目级注册策略开关 | ✅ 已修复(0e368e9) |
-| — | ✅ | 存储服务响应头硬化、防用户枚举、文档级 ACL、realtime 拒匿名 | 验收基线 |
+| T-01 | 🟡 中 | 认证接口无限速/无锁定 | ✅ 已修复(dccd925),dev 实弹复验通过 |
+| T-02 | 🟡 中 | Server API 面公网暴露,API Key 为全项目库读写单一凭证 | ✅ 已修复(17f51b2);复扫发现的 bad-key 静默降级已修复(1fd643e) |
+| T-03 | 🟠 高(策略) | 账号注册完全开放,缺少项目级注册策略开关 | ✅ 已修复(0e368e9),dev 实弹复验通过 |
+| T-R1 | 🔴 P1 **回归** | **数据面故障:文档写入 500、既有数据全部不可见** | 🔍 已定位:roles_sig 验签 fail-closed(B15 部署时序缺步,非平台提交回归)——待 dev 重跑 `sync-roles-sig`,见文末平台侧分析 |
+| — | ✅ | 存储响应头硬化、防用户枚举、文档 ACL、realtime 拒匿名、refresh 轮换重用检测 | 验收基线(均已实弹确认) |
 
 ---
 
@@ -60,8 +61,10 @@
 
 ## 残留事项
 
-- 测试账号 `sec-test-873c7230@test.local`(项目 `blog`):**待手动删除**——平台侧 `DELETE /v1/account`(T-03,匿名化软删)已具备自助删除能力,但本仓库环境无该账号密码与 dev Console 管理员凭据,无法代执行;可用以下任一方式勾销:① 以该账号凭据调 `DELETE /v1/account`;② dev Console 管理员在用户管理中删除;③ 项目若仅需清理,可在 Console 直接对该用户执行删除。删除后同邮箱可立即重新注册、SignIn 恒为统一 invalid credentials(无存在性泄露)。
-- 本次为 dev 环境结论;生产上线前建议对生产网关复跑一轮(Client 面 + Server 面 + 存储响应头基线)。**本报告的 dev 复验须先部署 `dccd925`/`17f51b2`/`0e368e9` 及迁移 000007/数据面 000012。**
+- ~~测试账号 `sec-test-873c7230@test.local` 待手动删除~~ ✅ 已于 2026-09-08 复扫中经 `DELETE /v1/account` 删除并验证(旧 token 401、登录拒绝)。
+- 🔴 **T-R1 数据面回归待修复**(见上文)——修复前 blog dev 不可写、T-02 端到端验收阻塞。
+- blog-media 桶遗留约 6 个复扫测试文件(`e2e.png/svg/pdf` 两轮,内容无害,存储沙箱隔离),可 Console 清理。
+- 本次为 dev 环境结论;生产上线前建议对生产网关复跑一轮(Client 面 + Server 面 + 存储响应头基线)。**本报告的 dev 复验已覆盖 `dccd925`/`17f51b2`/`0e368e9` 及迁移 000007/数据面 000012 部署后的状态。**
 
 ---
 
@@ -111,3 +114,74 @@ dev 网关复验:① 创建 `databases:blog` key → 读写 blog 文档 200、�
 | 报告状态与残留事项更新 | ✅ | 本节;测试账号删除待凭据(见残留事项) |
 
 dev 网关复验:① Console 将 blog 项目切 `closed` 后 `POST /v1/account/sign-up` 观察 `403` 且 `message` 前缀 `ACCOUNT.REGISTRATION_CLOSED`;② 切 `invite_only` 后无码注册 403、凭码注册 200 且二次用码 403;③ 注册临时账号 → 登录 → `DELETE /v1/account` → 原 token 请求立即 401。
+
+---
+
+## dev 网关实弹复验记录(2026-09-08,严格模式)
+
+修复部署后,经 blog dev 站点(`torchwood-blog-dev.deeploop.run`,镜像含 blog 侧安全修复)对 dev 网关整体实弹复扫。手段同首轮检测(SDK 直连 + REST),破坏性写入仅用自建/一次性资源,未做流量攻击。
+
+| 复验项(对应上表 dev 网关复验栏) | 结果 | 实测证据 |
+|---|---|---|
+| T-01:同邮箱连错观察 429 | ✅ | 连续错误登录:第 1–8 次 `401 invalid credentials`,**第 9 次 `429 too many failed sign-in attempts`**(实测阈值 8 次,与默认配置 5 次/60s 的差异疑似与"已删账号=未注册仅计 IP 维度"或环境配置有关,可在 Console 核对 `security.login_throttle.*`) |
+| T-03①:closed 项目 signUp | ✅ | `403 ACCOUNT.REGISTRATION_CLOSED: registration is closed for this project`(blog 项目当前为 closed) |
+| T-03③:DeleteAccount 链路 | ✅ | `DELETE /v1/account`(终端用户 JWT)→ `200`;原 access token 立即 `401`;原凭证 signIn 被拒 |
+| T-02①:细粒度 scope e2e | ⛔ 黑盒不可测 | 需 Console 创建 `databases:blog` key(无凭据);本地集成测试已覆盖 |
+| T-02③:错误 key 连续调用 → 429 | ⚠️ **行为不符** | 非法 `X-API-Key` 请求 **不返回 401,而是静默按匿名语义继续**(读 `read:any` 资源 8/8 全部 200)——key 认证失败路径根本未被触发,限速无从谈起。见下方新增发现 |
+| 正面:refresh 轮换重用检测 | ✅ | 刷新后旧 refresh token 重用 → `401 refresh token reuse detected`,且**整条会话链吊销**(刷新得到的新 token 同时失效)——严格模式,建议纳入验收基线 |
+
+## T-R1 🔴 P1 回归:数据面故障(复扫新发现,阻塞 T-02 端到端与 blog 写路径)
+
+**现象**(项目 `blog`,全部实测):
+
+1. **既有数据全部不可见**:`categories`/`posts`/`comments` 经匿名 REST(`GET …/documents?project_id=blog`)与站点 SSR(服务端 key)读取均为空;原种子文章/分类页 404。
+2. **文档写入失败**:终端用户 JWT `POST …/documents` 完整字段 → **`500 internal server error`**;故意缺字段 → `400 DOCUMENT.INVALID_ARGUMENT: postgres error (sqlstate 23502)`(not-null violation)。
+3. **对照组正常**:认证面(signIn/me/refresh/DeleteAccount)、存储服务(上传/下载/响应头)全部正常;23502 说明物理表与 NOT NULL 列约束仍在——写路径可达物理层,服务/目录层与物理层状态不一致。
+
+**推断**:17f51b2/0e368e9 部署窗口内,数据面迁移(000012)或 scope 收敛导致 catalog 与物理层失去一致性;既有数据行不可见且无法确认是否仍在物理层。首轮检测(同日早些时候)全部写路径正常,回归发生在部署窗口内。
+
+**影响**:blog dev 站点空态只读;T-02 的 dev 端到端验收(scope 隔离 403、审计落库查验)被阻塞。
+
+**建议**:优先排查迁移 000012 与 scope 拦截器对 blog 项目数据面的影响;确认物理层数据可否恢复;修复后 blog 侧重跑写入链路(`sec-rescan-write.mjs` 三层判定:JWT 写 → 站点 SSR 读 → 匿名 REST 读)。
+
+## T-02 复扫补充发现:无效 API Key 静默降级为匿名(低,新增)
+
+带非法 `X-API-Key` 请求 Server REST → 不 401,按匿名语义继续处理(可读 `read:any`,实测 8/8 全 200)。无权限提升,但:配置错误的 应用会以"数据变空"而非报错呈现;key 暴破无法从响应码区分,`api_key_auth` 限速/告警失去抓手。
+
+> **✅ 已修复(`1fd643e`)**:PUBLIC 面显式携带的无效 X-API-Key 一律 401 并计入失败限速计数;无效 Bearer/cookie 保持匿名降级(过期会话不破坏公开页浏览),无凭证匿名放行不变。四个边界由本地测试锁定(`internal/api/interceptor/jwt_public_invalid_key_test.go`)。部署 `1fd643e` 后复验:带非法 key 读 `read:any` 应得 `401 invalid api key`,连续 11 次第 11 次 `429`。
+
+## T-R1 平台侧分析(2026-09-08,基于服务端日志 + 代码定位)
+
+**根因判定:roles_sig 验签 fail-closed(B15 时序缺步),非平台提交代码回归。**
+
+日志证据(sha-8b38e10 容器,error_id `a712a3ef`/`1c534260` 可在日志逐条对应):
+
+```
+/v1/server/databases/blog/collections/categories/documents → 500
+original_message: "create document: document not found after insert"
+```
+
+该错误出自 `postgres_document_crud.go:131`:INSERT 成功后,紧接的回读**以 `SystemPrincipal` 执行**仍查不到刚插入的行(`:126`)。"系统主体不可见 + 全部既有读取为空"是**可见性层对所有主体 fail-closed**的唯一签名——即 `app.roles_sig` 验签失败 → `tw_roles()` 返回零角色 → `tw_visible` 全隐藏。缺字段写入的 `23502` 是 NOT NULL 约束先于可见性触发,与根因正交(恰好证明写路径可达物理层)。
+
+**排除平台提交的依据**:`dccd925`/`17f51b2`/`0e368e9` 的改动面为认证面(登录频控、API key scope、邀请码、账号注销),不含 documentdb 读写路径、`clients` GUC 注入、catalog、`tw_roles`/`tw_visible` 的任何一行;scope 收紧只对带 `:` 的实例限定 scope 生效,blog 服务端 key 为裸 `databases`,走不变路径。而 roles_sig 机制属 B15(迁移 000004 时期,早于本轮提交),其文档明文:"**时序 = 迁移 → sync 作业 → 启动,未跑作业前文档查询 fail-closed 属预期**"。
+
+**判定性物理证据待取(dev 库 owner 只读)**——可进一步区分"roles_sig fail-closed"(数据完好,预期最可能)与"集合被重供给"(数据在旧物理表):
+
+```sql
+-- 1. blog 相关 schema 的物理行数(数据是否还在物理层)
+SELECT schemaname, relname, n_live_tup
+FROM pg_stat_user_tables WHERE schemaname LIKE 'tw_blog%' ORDER BY 1, 2;
+
+-- 2. roles_sig 密钥槽位(空/与当前服务端 jwt.secret 派生不符 = fail-closed 实锤)
+SELECT purpose, is_current, key_hex, created_at, updated_at FROM public.tw_secrets;
+```
+
+**修复步骤(按 B15 时序补步)**:
+
+```bash
+# 以与 server 相同的 jwt.secret / owner DSN 重跑 roles_sig 同步作业
+# (双槽轮换,不破坏 previous;密钥一致即幂等)
+torchwood admin sync-roles-sig
+```
+
+跑完后直接重放写链路(`sec-rescan-write.mjs` 三层判定:JWT 写 → 站点 SSR 读 → 匿名 REST 读)。若第 1 项查询显示物理层为空,则属 blog 供给脚本在复扫窗口重建了集合,回 blog 仓库处置。**部署管线建议**:把 sync-roles-sig 固化为"迁移之后、启动之前"的强制步骤,避免下次换镜像/换 secret 再次触发全量 fail-closed。
