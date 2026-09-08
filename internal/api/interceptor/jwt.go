@@ -185,7 +185,27 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 
 	if policy.Access == domainauth.AccessPublic {
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
-			if principal, err := i.validator.Authenticate(ctx, authnRequestFromMD(md)); err == nil && principal != nil {
+			authn := authnRequestFromMD(md)
+			principal, authnErr := i.validator.Authenticate(ctx, authn)
+			if authnErr != nil {
+				// T-02 复扫:PUBLIC 面显式携带的无效 X-API-Key 不得静默降级
+				// 为匿名——按匿名继续会让误配的调用方以"数据变空"呈现、且
+				// key 暴破与正常匿名流量在响应码上不可区分。无效 key 一律
+				// 401 并进入失败限速计数。浏览器不携带 X-API-Key,零误伤;
+				// 无效 Bearer/cookie(如过期会话)保持匿名降级,不破坏公开页
+				// 的无凭证/过期凭证浏览语义。
+				if ct, _, parseErr := shared.ParseAuthnRequest(authn); parseErr == nil && ct == shared.CredentialTypeAPIKey {
+					if ci := contexts.ClientInfoFrom(ctx); ci.IP != "" {
+						if throttleErr := i.recordAPIKeyAuthFailure(ctx, ci.IP); throttleErr != nil {
+							i.logAuthFailure(ctx, info.FullMethod, "apikey_auth_throttled", ct, nil)
+							return nil, throttleErr
+						}
+					}
+					i.logAuthFailure(ctx, info.FullMethod, "credential_invalid", ct, nil)
+					return nil, status.Error(codes.Unauthenticated, "invalid api key")
+				}
+			}
+			if authnErr == nil && principal != nil {
 				ctx = contexts.WithPrincipal(ctx, principal)
 			}
 		}
