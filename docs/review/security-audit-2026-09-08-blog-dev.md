@@ -172,7 +172,7 @@ UPDATE projects SET internal_id = 1 WHERE id = 'blog' AND internal_id = 2;
 
 server 每请求实时解析 internal_id,改完即读回命中;重放写链路(`sec-rescan-write.mjs` 三层判定:JWT 写 → 站点 SSR 读 → 匿名 REST 读)即闭环。
 
-### 防复发(两项,均待办)
+### 防复发(两项)
 
-1. **管线侧(必须)**:查明今天谁删除重建了 blog 项目行(blog 部署/供给脚本中的"删项目重建"或控制面重置)。该行为不消除,下次部署将漂移成 internal_id=3、再次全量读空。
-2. **平台侧(建议,待实现)**:`CreateProject` 增加"孤儿数据面护栏"——插入项目行前发现 `tw_<id>` 数据面 schema 已存在但项目行缺失即拒绝并告警,把"行重建、schema 幸存"的不一致从静默变成显式失败;同时评估将 internal_id 从可漂移的自增列收敛为项目不可变身份的方案。
+1. **管线侧(待办)**:查明 9-07 13:33 之前 dev 库控制面被重置的环节(public schema 重置/数据库卷部分恢复等)。该行为不消除,下次重置仍会产生孤儿数据面——但平台护栏(下项)已能在重建时刻显式拦截。
+2. **平台侧(✅ 已实现,`815c528`)**:CreateProject 孤儿数据面护栏——`CreateProjectInternal` 前置检查 `tw_<id>` schema 是否已存在,存在即 `FailedPrecondition` 拒绝并给出恢复指引(恢复控制面行保原 internal_id,或手动清理数据面),不再静默收养。集成测试复刻事故形态锁定(建项目 → 带外删行 → 同 ID 重建必须拒绝且无残留行)。本次 dev 事故的精确命中场景:9-07 13:33 引导时 `tw_blog` 已存在,护栏会在部署时刻报错而非 30 小时后在业务路径炸开。
