@@ -157,30 +157,12 @@ func (s *PolicySet) HasAPIKeyScope(fullMethod string) *ScopeRule {
 	return p.Scope
 }
 
-// AllowsAPIKey 判定给定 scope 集合是否放行该方法（B2 匹配语义）：
-// * / all 全量放行；裸资源名放行该资源全部方法；<res>.read 仅读方法；
-// <res>.write 仅写方法。未声明 scope 的方法（非 SERVER 面或平台专属）
-// 一律拒绝——fail-closed，与通配符无关。
+// AllowsAPIKey 判定给定 scope 集合是否放行该方法（B2 匹配语义；T-02 起为
+// AllowsAPIKeyTargets 零目标的退化形态——无实例寻址时资源限定 scope 恒不
+// 匹配，裸资源/.op/通配符行为不变）。未声明 scope 的方法（非 SERVER 面或
+// 平台专属）一律拒绝——fail-closed，与通配符无关。
 func (s *PolicySet) AllowsAPIKey(fullMethod string, scopes []string) bool {
-	rule := s.HasAPIKeyScope(fullMethod)
-	if rule == nil {
-		return false
-	}
-	for _, sc := range scopes {
-		if sc == "*" || sc == "all" {
-			return true
-		}
-		if sc == string(rule.Resource) {
-			return true
-		}
-		if rule.Op == ScopeRead && sc == string(rule.Resource)+".read" {
-			return true
-		}
-		if rule.Op == ScopeWrite && sc == string(rule.Resource)+".write" {
-			return true
-		}
-	}
-	return false
+	return s.AllowsAPIKeyTargets(fullMethod, scopes, ScopeTargets{})
 }
 
 // ScopeVocabulary 是从 PolicySet 派生的合法 scope 词表（创建校验与
@@ -216,13 +198,31 @@ func VocabularyFromPolicies(set *PolicySet) *ScopeVocabulary {
 	return v
 }
 
-// Valid 报告 scope 字符串是否在词表内（key 创建校验用）。
+// Valid 报告 scope 字符串是否在词表内（key 创建校验用）。除既有精确形态
+// （{*, all} ∪ {资源, 资源.op}）外，接受可寻址资源（databases/storage）的
+// 实例限定形态 <res>:<id>[.op]——资源需在词表、方向需被声明、目标 ID 格式
+// 合法（T-02）。
 func (v *ScopeVocabulary) Valid(s string) bool {
 	if v == nil {
 		return false
 	}
-	_, ok := v.valid[s]
-	return ok
+	if _, ok := v.valid[s]; ok {
+		return true
+	}
+	tok, ok := ParseScopeToken(s)
+	if !ok || tok.TargetID == "" {
+		return false
+	}
+	if !ScopeAddressable(tok.Resource) {
+		return false
+	}
+	if _, ok := v.valid[string(tok.Resource)]; !ok {
+		return false
+	}
+	if tok.Op != "" && !v.HasOp(tok.Resource, tok.Op) {
+		return false
+	}
+	return ValidateScopeTargetID(tok.Resource, tok.TargetID) == nil
 }
 
 // Resources 返回被引用的资源清单（排序稳定，供下发与生成）。

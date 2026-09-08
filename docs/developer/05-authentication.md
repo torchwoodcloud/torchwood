@@ -141,9 +141,30 @@ clientInfo → auth → rateLimit → audit → usage → validate(protovalidate
 
 **词表单一来源**：`ProvideScopeVocabulary(PolicySet)`（`internal/runtime/provides.go:35`）从策略注册表派生合法 scope 词表——每个被方法引用的资源贡献 `{资源名, 资源名.read, 资源名.write}`，叠加 `*`/`all`。key 创建校验与 well-known 下发都消费同一词表（死 scope 断言保证词表内资源均被引用，见 §7）。
 
-**匹配语义**（`PolicySet.AllowsAPIKey`，`policy.go:164`）：方法门 = 该方法 `method_auth` 声明的 `api_key_scope`；key 的 scope 集合中 `*`/`all` 全量放行、裸资源名放行该资源全部方法、`<res>.read` 仅读方法、`<res>.write` 仅写方法。**未声明 `api_key_scope` 的方法（PERMISSION/END_USER/PUBLIC 面）一律拒绝——与通配符无关**。
+**scope 语法表（T-02 扩展，`internal/domain/auth/scope_target.go` 单一实现）**：
 
-**防护**：APIKeysService 是 PERMISSION 面（platform_only 档），API key 凭证天然禁入（防自铸提权）；API Key 以 `Roles=["keys", "key:<自身id>"]` 参与文档 `_acl`（不默认 bypass；仅 `SystemPrincipal`/平台 admin 绕过——见 `06-databases.md` §7）。**per-key 私有（B14，C6 决议）**：key 创建文档的空 ACE 种子绑 `read/update/delete:key:<自身id>`——其他 key 不可见（Get = NotFound 防枚举）；跨 key 协作需显式授予对方 `key:<id>` ACE；存量显式 `keys` ACE 保留有效（默认种子不再产生）。
+| scope 形态 | 语义 |
+|---|---|
+| `*` / `all` | 全量放行（通配） |
+| `<resource>` | 该资源族全项目读写（既有语义，行为不变） |
+| `<resource>.read` / `<resource>.write` | 该资源族全项目单向（既有语义，行为不变） |
+| `databases:<database_id>` | **限定单个 database** 的读写；访问其他 database 一律 403 |
+| `databases:<database_id>.read` / `.write` | 单个 database 的单向 |
+| `storage:<bucket_id>` / `storage:<bucket_id>.read` / `.write` | 限定单个 bucket |
+
+- **实例 ID 规则**：`database_id` = `^[a-z][a-z0-9]{0,27}$`（与物理命名同源）；`bucket_id` = `^[0-9a-zA-Z_-]{1,64}$`。
+- **可寻址资源**：目前仅 `databases` / `storage` 定义实例限定；其余资源携带 `:` 创建期即 400，执行期不匹配（fail-closed）。
+- **执行点**：`PolicySet.AllowsAPIKeyTargets`（gRPC 拦截器 `jwt.go` + serverhttp `auth.go`）——按方法声明的资源族从请求体提取目标实例（`database_id`/`bucket_id`；`CreateDatabase`/`GetBucket` 等取 `id`）。**无实例寻址的方法**（`ListDatabases`/`ListBuckets`/`GetStorageUsage`/`CreateBucket` 等）对实例限定 scope 一律 403：`databases:blog` 的 key 不能列出/创建其他库，也不能跨库寻址。
+- **DDL 归属**：server 面 DatabasesService 的 DDL（CreateDatabase/CreateCollection/CreateAttribute/CreateIndex…）与文档 CRUD 共用 `databases` 资源 scope——`databases:blog` 天然覆盖 blog 库的全部 DDL + 数据读写，**无需组合其他 scope**（建库本身 = `CreateDatabase(id:"blog")`，寻址 blog）。blog 供给最小组合示例：`scopes: ["databases:blog", "storage:blog-media"]`。
+- **创建/更新校验**：CreateAPIKey/UpdateAPIKey 对非法 scope（未知服务/不可寻址资源/非法实例 ID/非法方向）直接 400。
+
+**key 治理（T-02）**：`UpdateAPIKey`（PATCH `/v1/server/api-keys/{id}`，PERMISSION owner/admin）可改 `name`/`scopes`/`enabled`/`expire_at`（proto3 optional，未设置=不修改）；禁用/过期**立即生效**（`validateAPIKey` 每请求读库校验）。**secret 无原地轮换**——平滑轮换流程（Console 详情页「轮换」引导固化同一流程）：
+
+1. 创建新 key（相同 scopes，名称加 `-rotated` 后缀；secret 仅显示一次）；
+2. 双 key 并存，应用切换到新 key（旧 key 此期间继续可用）；
+3. 旧 key 经 `UpdateAPIKey` 设 `expire_at`（或直接禁用/删除）下线。
+
+**防护**：APIKeysService 是 PERMISSION 面（platform_only 档），API key 凭证天然禁入（防自铸提权）；API Key 以 `Roles=["keys", "key:<自身id>"]` 参与文档 `_acl`（不默认 bypass；仅 `SystemPrincipal`/平台 admin 绕过——见 `06-databases.md` §7）。**per-key 私有（B14，C6 决议）**：key 创建文档的空 ACE 种子绑 `read/update/delete:key:<自身id>`——其他 key 不可见（Get = NotFound 防枚举）；跨 key 协作需显式授予对方 `key:<id>` ACE；存量显式 `keys` ACE 保留有效（默认种子不再产生）。**key 认证失败限速（T-02）**：X-API-Key 认证失败（哈希不匹配/禁用/过期）按来源 IP 计数（`security.login_throttle.api_key_auth`，默认 10 次/60s），超限 429（gRPC 面拦截器统一执行；multipart HTTP 面暂仅拒绝审计）。**审计**：经 API key 的全部 RPC（含写操作）由 AuditInterceptor 统一落审计行——actor=key id、项目、full method、资源 ID（`WithAuditResource`）、结果，无需逐 handler 记录。
 
 ---
 
@@ -219,6 +240,7 @@ security:
     email: { limit: 5, window: "60s" }      # 账号维度失败计数
     ip: { limit: 5, window: "60s" }         # IP 维度失败计数
     signup_ip: { limit: 10, window: "1h" }  # 注册 IP 频控
+    api_key_auth: { limit: 10, window: "60s" } # X-API-Key 认证失败 IP 频控（T-02）
 ```
 
 实现要点：窗口为 Redis 滑动窗口（`INCR`+首次 `EXPIRE` 原子化）；与通用限流拦截器的键空间不同，叠加生效；admin console 登录共用同一组件（`admin` namespace，双维计数）。

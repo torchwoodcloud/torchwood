@@ -16,10 +16,11 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// API key scope 上限（B2）：每项 ≤64 字符、最多 32 项。
+// API key scope 上限（B2）：每项 ≤96 字符、最多 32 项。96 = 资源限定形态
+// 上限（storage: + 64 字符 bucket id + .write）留余量（T-02）。
 const (
 	maxAPIKeyScopes      = 32
-	maxAPIKeyScopeLength = 64
+	maxAPIKeyScopeLength = 96
 )
 
 type APIKeys struct {
@@ -85,8 +86,10 @@ func (a *APIKeys) CreateInternal(ctx context.Context, cmd CreateAPIKeyCommand) (
 		return nil, "", status.Errorf(codes.InvalidArgument, "scopes exceeds maximum of %d", maxAPIKeyScopes)
 	}
 	for _, s := range cmd.Scopes {
+		// 词表校验（T-02 扩展）：既有精确形态 + 可寻址资源（databases/storage）
+		// 的实例限定形态 <res>:<id>[.op]；未知服务/非法资源名/非法实例 ID 一律 400。
 		if len(s) > maxAPIKeyScopeLength || !a.vocab.Valid(s) {
-			return nil, "", status.Errorf(codes.InvalidArgument, "invalid scope %q (allowed: * | all | <resource> | <resource>.read | <resource>.write)", s)
+			return nil, "", status.Errorf(codes.InvalidArgument, "invalid scope %q (allowed: * | all | <resource> | <resource>.read | <resource>.write | databases:<database_id>[.read|.write] | storage:<bucket_id>[.read|.write])", s)
 		}
 	}
 	id := idgen.UUID().String()
@@ -138,4 +141,66 @@ func (a *APIKeys) Delete(ctx context.Context, projectID, id string) error {
 		return status.Error(codes.NotFound, "api key not found")
 	}
 	return a.repo.DeleteAPIKey(ctx, projectID, id)
+}
+
+// UpdateAPIKeyCommand 是 Update 的输入：proto3 optional 投影为指针，
+// nil = 不修改；非 nil（含零值）= 更新。
+type UpdateAPIKeyCommand struct {
+	ProjectID string
+	ID        string
+	Name      *string
+	Scopes    []string
+	Enabled   *bool
+	ExpireAt  *time.Time
+}
+
+// Update 修改 key 治理字段（T-02）：可改 name/scopes/enabled/expire_at，
+// secret 不可原地轮换（轮换 = 新建 + 旧 key 设 expire_at 的双 key 平滑
+// 过渡）。禁用/过期立即生效——validateAPIKey 每请求读库校验。
+func (a *APIKeys) Update(ctx context.Context, cmd UpdateAPIKeyCommand) (*projects.APIKey, error) {
+	if err := appshared.RequirePlatformPrincipal(ctx); err != nil {
+		return nil, err
+	}
+	if cmd.ID == "" {
+		return nil, status.Error(codes.InvalidArgument, "id is required")
+	}
+	cols := map[string]any{}
+	if cmd.Name != nil {
+		if *cmd.Name == "" {
+			return nil, status.Error(codes.InvalidArgument, "name cannot be empty")
+		}
+		cols["name"] = *cmd.Name
+	}
+	if cmd.Scopes != nil {
+		if len(cmd.Scopes) == 0 {
+			return nil, status.Error(codes.InvalidArgument, "scopes cannot be empty (delete the key instead)")
+		}
+		if len(cmd.Scopes) > maxAPIKeyScopes {
+			return nil, status.Errorf(codes.InvalidArgument, "scopes exceeds maximum of %d", maxAPIKeyScopes)
+		}
+		for _, s := range cmd.Scopes {
+			if len(s) > maxAPIKeyScopeLength || !a.vocab.Valid(s) {
+				return nil, status.Errorf(codes.InvalidArgument, "invalid scope %q (allowed: * | all | <resource> | <resource>.read | <resource>.write | databases:<database_id>[.read|.write] | storage:<bucket_id>[.read|.write])", s)
+			}
+		}
+		// G2-5 纵深防御：变更后的 scope 集合不得超出调用者自身权限。
+		if err := ensureScopesWithinCaller(ctx, cmd.Scopes); err != nil {
+			return nil, err
+		}
+		cols["scopes"] = cmd.Scopes
+	}
+	if cmd.Enabled != nil {
+		cols["enabled"] = *cmd.Enabled
+	}
+	if cmd.ExpireAt != nil {
+		cols["expire_at"] = cmd.ExpireAt
+	}
+	if len(cols) == 0 {
+		return a.Get(ctx, cmd.ProjectID, cmd.ID)
+	}
+	cols["updated_at"] = time.Now()
+	if err := a.repo.UpdateAPIKey(ctx, cmd.ProjectID, cmd.ID, cols); err != nil {
+		return nil, err
+	}
+	return a.Get(ctx, cmd.ProjectID, cmd.ID)
 }

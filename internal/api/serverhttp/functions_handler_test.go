@@ -50,6 +50,9 @@ func (r *functionsAPIKeyRepo) GetAPIKeyBySecretHash(_ context.Context, hash stri
 func (r *functionsAPIKeyRepo) ListAPIKeys(context.Context, string) ([]projects.APIKey, error) {
 	return nil, nil
 }
+func (r *functionsAPIKeyRepo) UpdateAPIKey(context.Context, string, string, map[string]any) error {
+	return nil
+}
 func (r *functionsAPIKeyRepo) DeleteAPIKey(context.Context, string, string) error { return nil }
 
 type functionsAdminRepo struct {

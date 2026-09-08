@@ -195,7 +195,7 @@ func (h *FunctionsHandler) upload(w http.ResponseWriter, r *http.Request, pathPa
 func (h *FunctionsHandler) authorize(r *http.Request) (*shared.Principal, error) {
 	principal, err := h.auth.authorize(r, func(*http.Request) string {
 		return FunctionsServiceCreateDeployment
-	})
+	}, domainauth.ScopeTargets{})
 	if err != nil {
 		return nil, err
 	}

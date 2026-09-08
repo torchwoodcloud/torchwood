@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"sort"
 
+	"github.com/lib/pq"
 	"github.com/torchwooddev/torchwood/internal/domain/projects"
 	"github.com/torchwooddev/torchwood/internal/infra/bun/model"
 	"github.com/torchwooddev/torchwood/internal/infra/clients"
@@ -59,6 +62,52 @@ func (r *apiKeyRepo) ListAPIKeys(ctx context.Context, projectID string) ([]proje
 		out[i] = *mapAPIKeyToDomain(&ms[i])
 	}
 	return out, nil
+}
+
+// apiKeyUpdateCols 是 UpdateAPIKey 的列白名单（T-02）：仅治理字段，
+// secret_hash/id/project_id/created_at 不可经此通道修改。
+var apiKeyUpdateCols = map[string]struct{}{
+	"name":       {},
+	"scopes":     {},
+	"enabled":    {},
+	"expire_at":  {},
+	"updated_at": {},
+}
+
+func (r *apiKeyRepo) UpdateAPIKey(ctx context.Context, projectID, id string, cols map[string]any) error {
+	if len(cols) == 0 {
+		return nil
+	}
+	for col := range cols {
+		if _, ok := apiKeyUpdateCols[col]; !ok {
+			return fmt.Errorf("api key update: column %q not updatable", col)
+		}
+	}
+	q := r.db.Conn(ctx).NewUpdate().Model((*model.APIKey)(nil)).
+		Where("project_id = ? AND id = ?", projectID, id)
+	for _, col := range colsToColumns(cols) {
+		val := cols[col]
+		if col == "scopes" {
+			// []string 不实现 driver.Valuer，bun Set 参数需要显式数组编码
+			//（model 通道由 `array` tag 处理，Set 通道不走）。
+			val = pq.StringArray(cols[col].([]string))
+		}
+		q = q.Set(col+" = ?", val)
+	}
+	if _, err := q.Exec(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+// colsToColumns 将白名单列映射展开为排序稳定的列名切片（确定性 SET 顺序）。
+func colsToColumns(cols map[string]any) []string {
+	out := make([]string, 0, len(cols))
+	for col := range cols {
+		out = append(out, col)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (r *apiKeyRepo) DeleteAPIKey(ctx context.Context, projectID, id string) error {

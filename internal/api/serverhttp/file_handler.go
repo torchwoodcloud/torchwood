@@ -146,7 +146,7 @@ const maxChunkUploadBytes = domainstorage.MaxChunkSize + (1 << 20)
 func (h *FileHandler) upload(w http.ResponseWriter, r *http.Request, pathParams map[string]string) {
 	ctx := r.Context()
 	bucketID := pathParams["bucketId"]
-	principal, err := h.authorize(r)
+	principal, err := h.authorize(r, bucketID)
 	if err != nil {
 		h.logOp(r, "upload", bucketID, "", nil, err)
 		httpError(w, err)
@@ -206,7 +206,7 @@ type createUploadRequest struct {
 func (h *FileHandler) createUpload(w http.ResponseWriter, r *http.Request, pathParams map[string]string) {
 	ctx := r.Context()
 	bucketID := pathParams["bucketId"]
-	principal, err := h.authorize(r)
+	principal, err := h.authorize(r, bucketID)
 	if err != nil {
 		h.logOp(r, "create-upload", bucketID, "", nil, err)
 		httpError(w, err)
@@ -260,7 +260,7 @@ func (h *FileHandler) getUpload(w http.ResponseWriter, r *http.Request, pathPara
 	ctx := r.Context()
 	bucketID := pathParams["bucketId"]
 	uploadID := pathParams["uploadId"]
-	principal, err := h.authorize(r)
+	principal, err := h.authorize(r, bucketID)
 	if err != nil {
 		h.logOp(r, "get-upload", bucketID, uploadID, nil, err)
 		httpError(w, err)
@@ -310,7 +310,7 @@ func (h *FileHandler) uploadChunk(w http.ResponseWriter, r *http.Request, pathPa
 		httpError(w, status.Error(codes.InvalidArgument, "invalid part number"))
 		return
 	}
-	principal, err := h.authorize(r)
+	principal, err := h.authorize(r, bucketID)
 	if err != nil {
 		h.logOp(r, "upload-chunk", bucketID, uploadID, nil, err)
 		httpError(w, err)
@@ -376,7 +376,7 @@ func (h *FileHandler) completeUpload(w http.ResponseWriter, r *http.Request, pat
 	ctx := r.Context()
 	bucketID := pathParams["bucketId"]
 	uploadID := pathParams["uploadId"]
-	principal, err := h.authorize(r)
+	principal, err := h.authorize(r, bucketID)
 	if err != nil {
 		h.logOp(r, "complete-upload", bucketID, uploadID, nil, err)
 		httpError(w, err)
@@ -425,7 +425,7 @@ func (h *FileHandler) abortUpload(w http.ResponseWriter, r *http.Request, pathPa
 	ctx := r.Context()
 	bucketID := pathParams["bucketId"]
 	uploadID := pathParams["uploadId"]
-	principal, err := h.authorize(r)
+	principal, err := h.authorize(r, bucketID)
 	if err != nil {
 		h.logOp(r, "abort-upload", bucketID, uploadID, nil, err)
 		httpError(w, err)
@@ -538,7 +538,7 @@ func (h *FileHandler) download(w http.ResponseWriter, r *http.Request, pathParam
 // 返回项目 ID、文档层 principal、用于日志的 actor（匿名路径为 nil）以及
 // isPublicBucket（仅公开 bucket 匿名路径为 true，用于 Cache-Control 决策）。
 func (h *FileHandler) resolveReadContext(ctx context.Context, r *http.Request, bucketID, fileID string) (string, databases.Principal, *shared.Principal, bool, error) {
-	principal, err := h.authorize(r)
+	principal, err := h.authorize(r, bucketID)
 	if err == nil {
 		projectID := h.auth.projectID(r, principal)
 		if projectID == "" {
@@ -803,20 +803,21 @@ func imagingFormat(mime string) imaging.Format {
 	}
 }
 
-// authorize 认证并做方法级授权（A9/C5 对齐）：
+// authorize 认证并做方法级授权（A9/C5 对齐），携带请求寻址的 bucket 目标
+// （T-02 资源级 scope：storage:<bucket> 仅放行该桶的请求）：
 //   - EndUser：允许 upload/download/view（含 preview/分片上传），受 A8 文件级 owner 校验约束（此处仅放行，文件层再判）
-//   - API key：按方法区分 CreateFile（POST/写）/ GetFile（GET/读）scope，与 gRPC StorageService 相同
+//   - API key：按方法区分 CreateFile（POST/写）/ GetFile（GET/读）scope，与 gRPC StorageService 相同；实例限定 scope 以 bucketID 强制
 //   - Admin：与 gRPC 相同（scope 已由 h.auth.authorize 完成项目绑定；此处额外校验写方法的 admin 角色——viewer 仅读，member/owner/admin 可写）
 //
 // 写操作的审计与 gRPC 一致：至少 slog 带 actor 的结构化日志（logOp）；若 handler 持有 audit.Repository 则额外 Insert（当前仅 slog）。
 // 认证/项目解析等公共逻辑见 httpAuth（auth.go）。
-func (h *FileHandler) authorize(r *http.Request) (*shared.Principal, error) {
+func (h *FileHandler) authorize(r *http.Request, bucketID string) (*shared.Principal, error) {
 	isRead := r.Method == http.MethodGet
 	method := domainauth.StorageServiceGetFile
 	if !isRead {
 		method = domainauth.StorageServiceCreateFile
 	}
-	p, err := h.auth.authorize(r, func(*http.Request) string { return method })
+	p, err := h.auth.authorize(r, func(*http.Request) string { return method }, domainauth.ScopeTargets{BucketID: bucketID})
 	if err != nil {
 		return nil, err
 	}

@@ -73,6 +73,10 @@ security:
       # 按来源 IP 的注册频控。
       limit: 10               # env: TORCHWOOD_SECURITY_LOGIN_THROTTLE_SIGNUP_IP_LIMIT
       window: "1h"            # env: TORCHWOOD_SECURITY_LOGIN_THROTTLE_SIGNUP_IP_WINDOW
+    api_key_auth:
+      # X-API-Key 认证失败按来源 IP 的频控（T-02）。
+      limit: 10               # env: TORCHWOOD_SECURITY_LOGIN_THROTTLE_API_KEY_AUTH_LIMIT
+      window: "60s"           # env: TORCHWOOD_SECURITY_LOGIN_THROTTLE_API_KEY_AUTH_WINDOW
 
 data:
   database:

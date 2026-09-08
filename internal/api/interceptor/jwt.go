@@ -41,6 +41,11 @@ type AuthInterceptor struct {
 	logger    *slog.Logger
 	// denyAudit 是可选的拒绝审计 sink（WithDenyAuditSink 注入，nil 不写）。
 	denyAudit DenyAuditor
+	// apiKeyFailThrottle 是 X-API-Key 认证失败的按 IP 频控（T-02，可选）：
+	// 认证失败时向 limiter 计一次失败，超限即 429；未注入不启用。
+	apiKeyFailLimiter domainauth.RateLimiter
+	apiKeyFailLimit   int
+	apiKeyFailWindow  time.Duration
 }
 
 // NewAuthInterceptor 构造拦截器；policies 为策略注册表（nil 拒绝构造）。
@@ -65,6 +70,52 @@ func (i *AuthInterceptor) WithDenyAuditSink(repo DenyAuditor) *AuthInterceptor {
 		i.denyAudit = repo
 	}
 	return i
+}
+
+// API key 认证失败频控默认值（T-02）：每 IP 10 次失败/60s 窗口。
+const (
+	defaultAPIKeyFailLimit  = 10
+	defaultAPIKeyFailWindow = time.Minute
+)
+
+// WithAPIKeyFailThrottle 注入 X-API-Key 认证失败的按 IP 频控（T-02）：
+// limiter 复用 domainauth.RateLimiter 端口；limit<=0 或 window<=0 时回落
+// 内置默认；limiter 为 nil 不启用。
+func (i *AuthInterceptor) WithAPIKeyFailThrottle(limiter domainauth.RateLimiter, limit int, window time.Duration) *AuthInterceptor {
+	if limiter == nil {
+		return i
+	}
+	if limit <= 0 {
+		limit = defaultAPIKeyFailLimit
+	}
+	if window <= 0 {
+		window = defaultAPIKeyFailWindow
+	}
+	i.apiKeyFailLimiter = limiter
+	i.apiKeyFailLimit = limit
+	i.apiKeyFailWindow = window
+	return i
+}
+
+// recordAPIKeyAuthFailure 在 API key 认证失败路径计数：超限返回 429
+// （带 RetryInfo detail），否则返回 nil 继续原有 401 语义。limiter 基础
+// 设施故障只告警不拦截（fail-open：限速器故障不放大认证面故障）。
+func (i *AuthInterceptor) recordAPIKeyAuthFailure(ctx context.Context, ip string) error {
+	if i.apiKeyFailLimiter == nil || ip == "" {
+		return nil
+	}
+	err := i.apiKeyFailLimiter.Allow(ctx, "apikeyauth:ip:"+ip, i.apiKeyFailLimit, i.apiKeyFailWindow)
+	if err == nil {
+		return nil
+	}
+	if status.Code(err) == codes.ResourceExhausted {
+		i.logger.WarnContext(ctx, "api key auth throttle tripped",
+			slog.String("ip", ip), slog.Int("limit", i.apiKeyFailLimit))
+		return withRetryInfoFallback(err, i.apiKeyFailWindow)
+	}
+	i.logger.WarnContext(ctx, "api key auth throttle limiter error (fail-open)",
+		slog.String("error", err.Error()))
+	return nil
 }
 
 // WithLogger 替换认证失败留痕所用的 logger（默认 slog.Default()），返回自身便于链式。
@@ -155,6 +206,16 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 			i.logAuthFailure(ctx, info.FullMethod, parseFailureReason(parseErr), "", nil)
 			return nil, status.Error(codes.Unauthenticated, parseErr.Error())
 		}
+		// T-02：API key 认证失败按来源 IP 计数，超限 429（在 401 之后判定
+		// 顺序：只对"失败"计数，不惩罚携带有效 key 的请求）。
+		if ct == shared.CredentialTypeAPIKey {
+			if ci := contexts.ClientInfoFrom(ctx); ci.IP != "" {
+				if throttleErr := i.recordAPIKeyAuthFailure(ctx, ci.IP); throttleErr != nil {
+					i.logAuthFailure(ctx, info.FullMethod, "apikey_auth_throttled", ct, nil)
+					return nil, throttleErr
+				}
+			}
+		}
 		i.logAuthFailure(ctx, info.FullMethod, "credential_invalid", ct, nil)
 		return nil, err
 	}
@@ -173,7 +234,16 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 		if principal.CredentialType == shared.CredentialTypeAPIKey {
 			// 平台专属面不声明 api_key_scope（AssertSemantic 保证），scope
 			// 匹配 fail-closed：未声明即拒绝（通配符不豁免）。
-			if !i.policies.AllowsAPIKey(info.FullMethod, principal.Permissions) {
+			rule := i.policies.HasAPIKeyScope(info.FullMethod)
+			if rule == nil {
+				i.logAuthFailure(ctx, info.FullMethod, "apikey_scope_missing", credentialType, principal)
+				return nil, status.Error(codes.PermissionDenied, "api key missing required scope")
+			}
+			// 资源级 scope（T-02）：按方法声明的资源族从请求体提取目标实例
+			//（database_id/bucket_id；CreateDatabase/GetBucket 等以 id 寻址），
+			// `databases:blog` 只放行寻址 blog 的请求，全集型方法（List 等
+			// 无目标）对实例限定 scope 一律 403。
+			if !i.policies.AllowsAPIKeyTargets(info.FullMethod, principal.Permissions, apiKeyScopeTargets(rule, req)) {
 				i.logAuthFailure(ctx, info.FullMethod, "apikey_scope_missing", credentialType, principal)
 				return nil, status.Error(codes.PermissionDenied, "api key missing required scope")
 			}
@@ -228,6 +298,41 @@ func adminRoleStrings(roles []domainauth.AdminRole) []string {
 		out = append(out, string(r))
 	}
 	return out
+}
+
+// scopeTargetGetter 是 genproto 请求消息的实例寻址 getter（生成代码恒有）。
+type scopeTargetGetter interface{ GetId() string }
+
+// apiKeyScopeTargets 按方法 scope 声明的资源族从请求消息提取目标实例：
+//   - databases：优先 GetDatabaseId()（绝大多数方法），CreateDatabase 以
+//     GetId() 寻址被创建的库；
+//   - storage：优先 GetBucketId()（文件族），GetBucket/UpdateBucket 等
+//     以 GetId() 寻址；
+//   - 其余资源族不做实例寻址（零值 targets，资源限定 scope 恒不匹配）。
+func apiKeyScopeTargets(rule *domainauth.ScopeRule, req any) domainauth.ScopeTargets {
+	var targets domainauth.ScopeTargets
+	if rule == nil || req == nil {
+		return targets
+	}
+	switch rule.Resource {
+	case domainauth.ScopeDatabases:
+		if g, ok := req.(interface{ GetDatabaseId() string }); ok {
+			targets.DatabaseID = g.GetDatabaseId()
+			return targets
+		}
+		if g, ok := req.(scopeTargetGetter); ok {
+			targets.DatabaseID = g.GetId()
+		}
+	case domainauth.ScopeStorage:
+		if g, ok := req.(interface{ GetBucketId() string }); ok {
+			targets.BucketID = g.GetBucketId()
+			return targets
+		}
+		if g, ok := req.(scopeTargetGetter); ok {
+			targets.BucketID = g.GetId()
+		}
+	}
+	return targets
 }
 
 func parseFailureReason(err error) string {

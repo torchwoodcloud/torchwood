@@ -38,15 +38,17 @@ func (a *httpAuth) authenticate(r *http.Request) (*shared.Principal, error) {
 
 // authorize 对已认证主体做方法级授权：
 //   - API key 必须持有 apiKeyScope(r) 返回的 scope（按方法区分读写权限）；
+//     targets 携带请求寻址的目标实例（T-02 资源级 scope 强制；不可寻址的
+//     方法传零值——实例限定 scope 对其恒不匹配）；
 //   - admin 主体可经 X-Torchwood-Project 指定项目，并校验项目访问权。
-func (a *httpAuth) authorize(r *http.Request, apiKeyScope func(*http.Request) string) (*shared.Principal, error) {
+func (a *httpAuth) authorize(r *http.Request, apiKeyScope func(*http.Request) string, targets domainauth.ScopeTargets) (*shared.Principal, error) {
 	ctx := r.Context()
 	principal, err := a.authenticate(r)
 	if err != nil {
 		return nil, err
 	}
 	if principal.CredentialType == shared.CredentialTypeAPIKey {
-		if !a.policies.AllowsAPIKey(apiKeyScope(r), principal.Permissions) {
+		if !a.policies.AllowsAPIKeyTargets(apiKeyScope(r), principal.Permissions, targets) {
 			return nil, status.Error(codes.PermissionDenied, "api key missing required scope")
 		}
 	}

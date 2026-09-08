@@ -23,6 +23,7 @@ const (
 	APIKeysService_CreateAPIKey_FullMethodName = "/torchwood.server.v1.APIKeysService/CreateAPIKey"
 	APIKeysService_ListAPIKeys_FullMethodName  = "/torchwood.server.v1.APIKeysService/ListAPIKeys"
 	APIKeysService_GetAPIKey_FullMethodName    = "/torchwood.server.v1.APIKeysService/GetAPIKey"
+	APIKeysService_UpdateAPIKey_FullMethodName = "/torchwood.server.v1.APIKeysService/UpdateAPIKey"
 	APIKeysService_DeleteAPIKey_FullMethodName = "/torchwood.server.v1.APIKeysService/DeleteAPIKey"
 )
 
@@ -33,6 +34,11 @@ type APIKeysServiceClient interface {
 	CreateAPIKey(ctx context.Context, in *CreateAPIKeyRequest, opts ...grpc.CallOption) (*APIKeyWithSecret, error)
 	ListAPIKeys(ctx context.Context, in *v1.ListRequest, opts ...grpc.CallOption) (*ListAPIKeysResponse, error)
 	GetAPIKey(ctx context.Context, in *GetAPIKeyRequest, opts ...grpc.CallOption) (*APIKey, error)
+	// 更新 key 治理字段（T-02）：可改 name/scopes/enabled/expire_at；
+	// secret 无原地轮换——平滑轮换 = 新建 key + 双 key 并存过渡 + 旧 key
+	// 经本方法设 expire_at 下线（见 09-api-guide.md 轮换流程）。禁用/过期
+	// 立即生效（每请求鉴权读库校验）。
+	UpdateAPIKey(ctx context.Context, in *UpdateAPIKeyRequest, opts ...grpc.CallOption) (*APIKey, error)
 	DeleteAPIKey(ctx context.Context, in *GetAPIKeyRequest, opts ...grpc.CallOption) (*v1.Empty, error)
 }
 
@@ -74,6 +80,16 @@ func (c *aPIKeysServiceClient) GetAPIKey(ctx context.Context, in *GetAPIKeyReque
 	return out, nil
 }
 
+func (c *aPIKeysServiceClient) UpdateAPIKey(ctx context.Context, in *UpdateAPIKeyRequest, opts ...grpc.CallOption) (*APIKey, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(APIKey)
+	err := c.cc.Invoke(ctx, APIKeysService_UpdateAPIKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *aPIKeysServiceClient) DeleteAPIKey(ctx context.Context, in *GetAPIKeyRequest, opts ...grpc.CallOption) (*v1.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(v1.Empty)
@@ -91,6 +107,11 @@ type APIKeysServiceServer interface {
 	CreateAPIKey(context.Context, *CreateAPIKeyRequest) (*APIKeyWithSecret, error)
 	ListAPIKeys(context.Context, *v1.ListRequest) (*ListAPIKeysResponse, error)
 	GetAPIKey(context.Context, *GetAPIKeyRequest) (*APIKey, error)
+	// 更新 key 治理字段（T-02）：可改 name/scopes/enabled/expire_at；
+	// secret 无原地轮换——平滑轮换 = 新建 key + 双 key 并存过渡 + 旧 key
+	// 经本方法设 expire_at 下线（见 09-api-guide.md 轮换流程）。禁用/过期
+	// 立即生效（每请求鉴权读库校验）。
+	UpdateAPIKey(context.Context, *UpdateAPIKeyRequest) (*APIKey, error)
 	DeleteAPIKey(context.Context, *GetAPIKeyRequest) (*v1.Empty, error)
 	mustEmbedUnimplementedAPIKeysServiceServer()
 }
@@ -110,6 +131,9 @@ func (UnimplementedAPIKeysServiceServer) ListAPIKeys(context.Context, *v1.ListRe
 }
 func (UnimplementedAPIKeysServiceServer) GetAPIKey(context.Context, *GetAPIKeyRequest) (*APIKey, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetAPIKey not implemented")
+}
+func (UnimplementedAPIKeysServiceServer) UpdateAPIKey(context.Context, *UpdateAPIKeyRequest) (*APIKey, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateAPIKey not implemented")
 }
 func (UnimplementedAPIKeysServiceServer) DeleteAPIKey(context.Context, *GetAPIKeyRequest) (*v1.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteAPIKey not implemented")
@@ -189,6 +213,24 @@ func _APIKeysService_GetAPIKey_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _APIKeysService_UpdateAPIKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateAPIKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(APIKeysServiceServer).UpdateAPIKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: APIKeysService_UpdateAPIKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(APIKeysServiceServer).UpdateAPIKey(ctx, req.(*UpdateAPIKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _APIKeysService_DeleteAPIKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetAPIKeyRequest)
 	if err := dec(in); err != nil {
@@ -225,6 +267,10 @@ var APIKeysService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetAPIKey",
 			Handler:    _APIKeysService_GetAPIKey_Handler,
+		},
+		{
+			MethodName: "UpdateAPIKey",
+			Handler:    _APIKeysService_UpdateAPIKey_Handler,
 		},
 		{
 			MethodName: "DeleteAPIKey",

@@ -86,6 +86,84 @@ func (x *CreateAPIKeyRequest) GetExpireAt() *timestamppb.Timestamp {
 	return nil
 }
 
+type UpdateAPIKeyRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// 以下字段 proto3 optional：未设置 = 不修改；设置（含 enabled=false）= 更新。
+	Name    *string  `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	Scopes  []string `protobuf:"bytes,3,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	Enabled *bool    `protobuf:"varint,4,opt,name=enabled,proto3,oneof" json:"enabled,omitempty"`
+	// 新过期时间；设置 = 更新（不提供"清除过期"语义——永不过期请删除重建）。
+	ExpireAt      *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=expire_at,json=expireAt,proto3,oneof" json:"expire_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateAPIKeyRequest) Reset() {
+	*x = UpdateAPIKeyRequest{}
+	mi := &file_server_v1_apikeys_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateAPIKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateAPIKeyRequest) ProtoMessage() {}
+
+func (x *UpdateAPIKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_apikeys_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateAPIKeyRequest.ProtoReflect.Descriptor instead.
+func (*UpdateAPIKeyRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_apikeys_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *UpdateAPIKeyRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UpdateAPIKeyRequest) GetName() string {
+	if x != nil && x.Name != nil {
+		return *x.Name
+	}
+	return ""
+}
+
+func (x *UpdateAPIKeyRequest) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+func (x *UpdateAPIKeyRequest) GetEnabled() bool {
+	if x != nil && x.Enabled != nil {
+		return *x.Enabled
+	}
+	return false
+}
+
+func (x *UpdateAPIKeyRequest) GetExpireAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpireAt
+	}
+	return nil
+}
+
 type GetAPIKeyRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -95,7 +173,7 @@ type GetAPIKeyRequest struct {
 
 func (x *GetAPIKeyRequest) Reset() {
 	*x = GetAPIKeyRequest{}
-	mi := &file_server_v1_apikeys_proto_msgTypes[1]
+	mi := &file_server_v1_apikeys_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -107,7 +185,7 @@ func (x *GetAPIKeyRequest) String() string {
 func (*GetAPIKeyRequest) ProtoMessage() {}
 
 func (x *GetAPIKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_apikeys_proto_msgTypes[1]
+	mi := &file_server_v1_apikeys_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -120,7 +198,7 @@ func (x *GetAPIKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAPIKeyRequest.ProtoReflect.Descriptor instead.
 func (*GetAPIKeyRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_apikeys_proto_rawDescGZIP(), []int{1}
+	return file_server_v1_apikeys_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *GetAPIKeyRequest) GetId() string {
@@ -140,7 +218,7 @@ type ListAPIKeysResponse struct {
 
 func (x *ListAPIKeysResponse) Reset() {
 	*x = ListAPIKeysResponse{}
-	mi := &file_server_v1_apikeys_proto_msgTypes[2]
+	mi := &file_server_v1_apikeys_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -152,7 +230,7 @@ func (x *ListAPIKeysResponse) String() string {
 func (*ListAPIKeysResponse) ProtoMessage() {}
 
 func (x *ListAPIKeysResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_apikeys_proto_msgTypes[2]
+	mi := &file_server_v1_apikeys_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -165,7 +243,7 @@ func (x *ListAPIKeysResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAPIKeysResponse.ProtoReflect.Descriptor instead.
 func (*ListAPIKeysResponse) Descriptor() ([]byte, []int) {
-	return file_server_v1_apikeys_proto_rawDescGZIP(), []int{2}
+	return file_server_v1_apikeys_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ListAPIKeysResponse) GetApiKeys() []*APIKey {
@@ -194,7 +272,7 @@ type APIKeyWithSecret struct {
 
 func (x *APIKeyWithSecret) Reset() {
 	*x = APIKeyWithSecret{}
-	mi := &file_server_v1_apikeys_proto_msgTypes[3]
+	mi := &file_server_v1_apikeys_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -206,7 +284,7 @@ func (x *APIKeyWithSecret) String() string {
 func (*APIKeyWithSecret) ProtoMessage() {}
 
 func (x *APIKeyWithSecret) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_apikeys_proto_msgTypes[3]
+	mi := &file_server_v1_apikeys_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -219,7 +297,7 @@ func (x *APIKeyWithSecret) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use APIKeyWithSecret.ProtoReflect.Descriptor instead.
 func (*APIKeyWithSecret) Descriptor() ([]byte, []int) {
-	return file_server_v1_apikeys_proto_rawDescGZIP(), []int{3}
+	return file_server_v1_apikeys_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *APIKeyWithSecret) GetApiKey() *APIKey {
@@ -251,7 +329,7 @@ type APIKey struct {
 
 func (x *APIKey) Reset() {
 	*x = APIKey{}
-	mi := &file_server_v1_apikeys_proto_msgTypes[4]
+	mi := &file_server_v1_apikeys_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -263,7 +341,7 @@ func (x *APIKey) String() string {
 func (*APIKey) ProtoMessage() {}
 
 func (x *APIKey) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_apikeys_proto_msgTypes[4]
+	mi := &file_server_v1_apikeys_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -276,7 +354,7 @@ func (x *APIKey) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use APIKey.ProtoReflect.Descriptor instead.
 func (*APIKey) Descriptor() ([]byte, []int) {
-	return file_server_v1_apikeys_proto_rawDescGZIP(), []int{4}
+	return file_server_v1_apikeys_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *APIKey) GetId() string {
@@ -338,6 +416,17 @@ const file_server_v1_apikeys_proto_rawDesc = "" +
 	"\x06scopes\x18\x02 \x03(\tR\x06scopes\x12<\n" +
 	"\texpire_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\bexpireAt\x88\x01\x01B\f\n" +
 	"\n" +
+	"_expire_at\"\xd6\x01\n" +
+	"\x13UpdateAPIKeyRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
+	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12\x16\n" +
+	"\x06scopes\x18\x03 \x03(\tR\x06scopes\x12\x1d\n" +
+	"\aenabled\x18\x04 \x01(\bH\x01R\aenabled\x88\x01\x01\x12<\n" +
+	"\texpire_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampH\x02R\bexpireAt\x88\x01\x01B\a\n" +
+	"\x05_nameB\n" +
+	"\n" +
+	"\b_enabledB\f\n" +
+	"\n" +
 	"_expire_at\"\"\n" +
 	"\x10GetAPIKeyRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x88\x01\n" +
@@ -356,11 +445,12 @@ const file_server_v1_apikeys_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt2\xcd\x04\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt2\xde\x05\n" +
 	"\x0eAPIKeysService\x12\x93\x01\n" +
 	"\fCreateAPIKey\x12(.torchwood.server.v1.CreateAPIKeyRequest\x1a%.torchwood.server.v1.APIKeyWithSecret\"2\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x18:\x01*\"\x13/v1/server/api-keys\x12\x8a\x01\n" +
 	"\vListAPIKeys\x12 .torchwood.shared.v1.ListRequest\x1a(.torchwood.server.v1.ListAPIKeysResponse\"/\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/server/api-keys\x12\x85\x01\n" +
-	"\tGetAPIKey\x12%.torchwood.server.v1.GetAPIKeyRequest\x1a\x1b.torchwood.server.v1.APIKey\"4\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/server/api-keys/{id}\x12\x87\x01\n" +
+	"\tGetAPIKey\x12%.torchwood.server.v1.GetAPIKeyRequest\x1a\x1b.torchwood.server.v1.APIKey\"4\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/server/api-keys/{id}\x12\x8e\x01\n" +
+	"\fUpdateAPIKey\x12(.torchwood.server.v1.UpdateAPIKeyRequest\x1a\x1b.torchwood.server.v1.APIKey\"7\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x1d:\x01*2\x18/v1/server/api-keys/{id}\x12\x87\x01\n" +
 	"\fDeleteAPIKey\x12%.torchwood.server.v1.GetAPIKeyRequest\x1a\x1a.torchwood.shared.v1.Empty\"4\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x1a*\x18/v1/server/api-keys/{id}\x1a\x06\x92\xb2\x19\x02\b\x04B\xdd\x03\x92A\x9a\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
@@ -389,39 +479,43 @@ func file_server_v1_apikeys_proto_rawDescGZIP() []byte {
 	return file_server_v1_apikeys_proto_rawDescData
 }
 
-var file_server_v1_apikeys_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_server_v1_apikeys_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_server_v1_apikeys_proto_goTypes = []any{
 	(*CreateAPIKeyRequest)(nil),   // 0: torchwood.server.v1.CreateAPIKeyRequest
-	(*GetAPIKeyRequest)(nil),      // 1: torchwood.server.v1.GetAPIKeyRequest
-	(*ListAPIKeysResponse)(nil),   // 2: torchwood.server.v1.ListAPIKeysResponse
-	(*APIKeyWithSecret)(nil),      // 3: torchwood.server.v1.APIKeyWithSecret
-	(*APIKey)(nil),                // 4: torchwood.server.v1.APIKey
-	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
-	(*v1.ListResponseMeta)(nil),   // 6: torchwood.shared.v1.ListResponseMeta
-	(*v1.ListRequest)(nil),        // 7: torchwood.shared.v1.ListRequest
-	(*v1.Empty)(nil),              // 8: torchwood.shared.v1.Empty
+	(*UpdateAPIKeyRequest)(nil),   // 1: torchwood.server.v1.UpdateAPIKeyRequest
+	(*GetAPIKeyRequest)(nil),      // 2: torchwood.server.v1.GetAPIKeyRequest
+	(*ListAPIKeysResponse)(nil),   // 3: torchwood.server.v1.ListAPIKeysResponse
+	(*APIKeyWithSecret)(nil),      // 4: torchwood.server.v1.APIKeyWithSecret
+	(*APIKey)(nil),                // 5: torchwood.server.v1.APIKey
+	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
+	(*v1.ListResponseMeta)(nil),   // 7: torchwood.shared.v1.ListResponseMeta
+	(*v1.ListRequest)(nil),        // 8: torchwood.shared.v1.ListRequest
+	(*v1.Empty)(nil),              // 9: torchwood.shared.v1.Empty
 }
 var file_server_v1_apikeys_proto_depIdxs = []int32{
-	5,  // 0: torchwood.server.v1.CreateAPIKeyRequest.expire_at:type_name -> google.protobuf.Timestamp
-	4,  // 1: torchwood.server.v1.ListAPIKeysResponse.api_keys:type_name -> torchwood.server.v1.APIKey
-	6,  // 2: torchwood.server.v1.ListAPIKeysResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
-	4,  // 3: torchwood.server.v1.APIKeyWithSecret.api_key:type_name -> torchwood.server.v1.APIKey
-	5,  // 4: torchwood.server.v1.APIKey.expire_at:type_name -> google.protobuf.Timestamp
-	5,  // 5: torchwood.server.v1.APIKey.created_at:type_name -> google.protobuf.Timestamp
-	5,  // 6: torchwood.server.v1.APIKey.updated_at:type_name -> google.protobuf.Timestamp
-	0,  // 7: torchwood.server.v1.APIKeysService.CreateAPIKey:input_type -> torchwood.server.v1.CreateAPIKeyRequest
-	7,  // 8: torchwood.server.v1.APIKeysService.ListAPIKeys:input_type -> torchwood.shared.v1.ListRequest
-	1,  // 9: torchwood.server.v1.APIKeysService.GetAPIKey:input_type -> torchwood.server.v1.GetAPIKeyRequest
-	1,  // 10: torchwood.server.v1.APIKeysService.DeleteAPIKey:input_type -> torchwood.server.v1.GetAPIKeyRequest
-	3,  // 11: torchwood.server.v1.APIKeysService.CreateAPIKey:output_type -> torchwood.server.v1.APIKeyWithSecret
-	2,  // 12: torchwood.server.v1.APIKeysService.ListAPIKeys:output_type -> torchwood.server.v1.ListAPIKeysResponse
-	4,  // 13: torchwood.server.v1.APIKeysService.GetAPIKey:output_type -> torchwood.server.v1.APIKey
-	8,  // 14: torchwood.server.v1.APIKeysService.DeleteAPIKey:output_type -> torchwood.shared.v1.Empty
-	11, // [11:15] is the sub-list for method output_type
-	7,  // [7:11] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	6,  // 0: torchwood.server.v1.CreateAPIKeyRequest.expire_at:type_name -> google.protobuf.Timestamp
+	6,  // 1: torchwood.server.v1.UpdateAPIKeyRequest.expire_at:type_name -> google.protobuf.Timestamp
+	5,  // 2: torchwood.server.v1.ListAPIKeysResponse.api_keys:type_name -> torchwood.server.v1.APIKey
+	7,  // 3: torchwood.server.v1.ListAPIKeysResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	5,  // 4: torchwood.server.v1.APIKeyWithSecret.api_key:type_name -> torchwood.server.v1.APIKey
+	6,  // 5: torchwood.server.v1.APIKey.expire_at:type_name -> google.protobuf.Timestamp
+	6,  // 6: torchwood.server.v1.APIKey.created_at:type_name -> google.protobuf.Timestamp
+	6,  // 7: torchwood.server.v1.APIKey.updated_at:type_name -> google.protobuf.Timestamp
+	0,  // 8: torchwood.server.v1.APIKeysService.CreateAPIKey:input_type -> torchwood.server.v1.CreateAPIKeyRequest
+	8,  // 9: torchwood.server.v1.APIKeysService.ListAPIKeys:input_type -> torchwood.shared.v1.ListRequest
+	2,  // 10: torchwood.server.v1.APIKeysService.GetAPIKey:input_type -> torchwood.server.v1.GetAPIKeyRequest
+	1,  // 11: torchwood.server.v1.APIKeysService.UpdateAPIKey:input_type -> torchwood.server.v1.UpdateAPIKeyRequest
+	2,  // 12: torchwood.server.v1.APIKeysService.DeleteAPIKey:input_type -> torchwood.server.v1.GetAPIKeyRequest
+	4,  // 13: torchwood.server.v1.APIKeysService.CreateAPIKey:output_type -> torchwood.server.v1.APIKeyWithSecret
+	3,  // 14: torchwood.server.v1.APIKeysService.ListAPIKeys:output_type -> torchwood.server.v1.ListAPIKeysResponse
+	5,  // 15: torchwood.server.v1.APIKeysService.GetAPIKey:output_type -> torchwood.server.v1.APIKey
+	5,  // 16: torchwood.server.v1.APIKeysService.UpdateAPIKey:output_type -> torchwood.server.v1.APIKey
+	9,  // 17: torchwood.server.v1.APIKeysService.DeleteAPIKey:output_type -> torchwood.shared.v1.Empty
+	13, // [13:18] is the sub-list for method output_type
+	8,  // [8:13] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_server_v1_apikeys_proto_init() }
@@ -430,13 +524,14 @@ func file_server_v1_apikeys_proto_init() {
 		return
 	}
 	file_server_v1_apikeys_proto_msgTypes[0].OneofWrappers = []any{}
+	file_server_v1_apikeys_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_server_v1_apikeys_proto_rawDesc), len(file_server_v1_apikeys_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

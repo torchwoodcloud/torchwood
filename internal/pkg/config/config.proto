@@ -95,6 +95,8 @@ message Security {
     RateLimit.Dimension ip = 2;
     // SignUp 按来源 IP 的注册频控上限与窗口。
     RateLimit.Dimension signup_ip = 3;
+    // X-API-Key 认证失败按来源 IP 的频控（T-02；默认 10 次/60s）。
+    RateLimit.Dimension api_key_auth = 4;
   }
 }
 

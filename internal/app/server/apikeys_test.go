@@ -7,12 +7,15 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/domain/projects"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
+	infraauth "github.com/torchwooddev/torchwood/internal/infra/auth"
 	"github.com/torchwooddev/torchwood/internal/infra/bun/bunrepo"
+	"github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
 	"github.com/torchwooddev/torchwood/internal/testutil"
 	"github.com/torchwooddev/torchwood/pkg/idgen"
@@ -59,6 +62,9 @@ func (f *fakeAPIKeyRepository) GetAPIKeyBySecretHash(ctx context.Context, hash s
 }
 func (f *fakeAPIKeyRepository) ListAPIKeys(ctx context.Context, projectID string) ([]projects.APIKey, error) {
 	return nil, nil
+}
+func (f *fakeAPIKeyRepository) UpdateAPIKey(ctx context.Context, projectID, id string, cols map[string]any) error {
+	return nil
 }
 func (f *fakeAPIKeyRepository) DeleteAPIKey(ctx context.Context, projectID, id string) error {
 	return nil
@@ -114,9 +120,9 @@ func TestAPIKeys_Create_ScopeValidation(t *testing.T) {
 	_, _, err := uc.Create(ctx, CreateAPIKeyCommand{Name: "k", Scopes: overCount})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	// 单项超过 64 字符拒绝。
+	// 单项超过 96 字符拒绝（T-02：96 = 实例限定形态上限）。
 	scope := "databases.read"
-	for len(scope) <= 64 {
+	for len(scope) <= maxAPIKeyScopeLength {
 		scope += "x"
 	}
 	_, _, err = uc.Create(ctx, CreateAPIKeyCommand{Name: "k", Scopes: []string{scope}})
@@ -126,6 +132,100 @@ func TestAPIKeys_Create_ScopeValidation(t *testing.T) {
 	_, _, err = uc.Create(ctx, CreateAPIKeyCommand{Name: "k"})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
+
+// TestAPIKeys_Create_ScopedScopes（T-02）：实例限定 scope 创建校验——合法
+// 形态接受；非法资源名/不可寻址资源/非法实例 ID/非法方向一律 400。
+func TestAPIKeys_Create_ScopedScopes(t *testing.T) {
+	uc := NewAPIKeys(&fakeAPIKeyRepository{}, testScopeVocabulary())
+	ctx := platformAdminCtx(context.Background())
+
+	for _, scopes := range [][]string{
+		{"databases:blog"},
+		{"databases:blog.read", "databases:cms.write"},
+		{"storage:media"},
+		{"storage:My_Bucket-01.read"},
+		{"databases", "storage:media.write"},
+	} {
+		_, _, err := uc.Create(ctx, CreateAPIKeyCommand{Name: "k", Scopes: scopes})
+		require.NoError(t, err, "scopes %v should be accepted", scopes)
+	}
+
+	for _, scopes := range [][]string{
+		{"databases:Blog"},           // 实例 ID 非法（大写）
+		{"databases:blog_id"},        // 实例 ID 非法（下划线）
+		{"databases:"},               // 空目标
+		{"users:u123"},               // 不可寻址资源
+		{"projects:blog"},            // 不可寻址资源
+		{"databases:blog.readwrite"}, // 非法方向
+		{"nosuch:blog"},              // 未知服务
+	} {
+		_, _, err := uc.Create(ctx, CreateAPIKeyCommand{Name: "k", Scopes: scopes})
+		require.Equal(t, codes.InvalidArgument, status.Code(err), "scopes %v should be rejected", scopes)
+	}
+}
+
+// TestAPIKeys_Update_DisableExpireAndScopes（T-02 验收）：Update 可禁用
+// （立即 401 由 validateAPIKey 读库 enabled 判定保证）、可设过期、可改
+// scopes；非法 scope 400。
+func TestAPIKeys_Update_DisableExpireAndScopes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	ctx := platformAdminCtx(context.Background())
+	db := testutil.SetupTestDB(t)
+	defer func() { _ = db.Close() }()
+
+	projectID, _, cleanup := testutil.CreateTestProject(ctx, db)
+	defer cleanup()
+
+	uc := NewAPIKeys(bunrepo.NewAPIKeyRepository(db), testScopeVocabulary())
+	key, secret, err := uc.Create(ctx, CreateAPIKeyCommand{ProjectID: projectID, Name: "k", Scopes: []string{"databases"}})
+	require.NoError(t, err)
+
+	// 改名 + 收窄 scope 到实例限定。
+	updated, err := uc.Update(ctx, UpdateAPIKeyCommand{
+		ProjectID: projectID,
+		ID:        key.ID,
+		Name:      strPtrAPIKey("blog-key"),
+		Scopes:    []string{"databases:blog"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "blog-key", updated.Name)
+	require.Equal(t, []string{"databases:blog"}, updated.Scopes)
+	require.True(t, updated.Enabled)
+
+	// 非法 scope → 400。
+	_, err = uc.Update(ctx, UpdateAPIKeyCommand{ProjectID: projectID, ID: key.ID, Scopes: []string{"databases:Blog"}})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	// 禁用 → enabled=false 落库（validator 每请求读库 → 立即 401）。
+	disabled := false
+	updated, err = uc.Update(ctx, UpdateAPIKeyCommand{ProjectID: projectID, ID: key.ID, Enabled: &disabled})
+	require.NoError(t, err)
+	require.False(t, updated.Enabled)
+	validator := infraauth.NewValidator(
+		&config.AppConfig{Security: &config.Security{Jwt: &config.Security_Jwt{Secret: "apikeys-update-test"}}},
+		bunrepo.NewAPIKeyRepository(db), bunrepo.NewProjectRepository(db),
+		nil, nil, nil, nil, nil, nil,
+	)
+	_, err = validator.ValidateCredential(ctx, secret, shared.CredentialTypeAPIKey)
+	require.Equal(t, codes.Unauthenticated, status.Code(err), "禁用后的 key 必须立即 401")
+
+	// 重新启用 + 设过期（过去时刻）→ 401。
+	enabled := true
+	past := time.Now().Add(-time.Hour)
+	updated, err = uc.Update(ctx, UpdateAPIKeyCommand{ProjectID: projectID, ID: key.ID, Enabled: &enabled, ExpireAt: &past})
+	require.NoError(t, err)
+	require.True(t, updated.Enabled)
+	_, err = validator.ValidateCredential(ctx, secret, shared.CredentialTypeAPIKey)
+	require.Equal(t, codes.Unauthenticated, status.Code(err), "过期 key 必须立即 401")
+
+	// 不存在的 key → 404。
+	_, err = uc.Update(ctx, UpdateAPIKeyCommand{ProjectID: projectID, ID: "no-such", Name: strPtrAPIKey("x")})
+	require.Equal(t, codes.NotFound, status.Code(err))
+}
+
+func strPtrAPIKey(s string) *string { return &s }
 
 // TestAPIKeys_Create_RequiresPlatformAdmin（F2-2 纵深防御）：受限 admin
 // （viewer/member）与 API key 主体调用 Create 必须 PermissionDenied。

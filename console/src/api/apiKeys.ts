@@ -37,6 +37,23 @@ export async function createAPIKey(input: {
   return res.data;
 }
 
+// UpdateAPIKeyInput 与 proto3 optional 对齐：仅携带要修改的字段（未携带 =
+// 不修改）；enabled: false 即禁用（禁用后立即 401）。
+export interface UpdateAPIKeyInput {
+  name?: string;
+  scopes?: string[];
+  enabled?: boolean;
+  expire_at?: string;
+}
+
+export async function updateAPIKey(
+  id: string,
+  input: UpdateAPIKeyInput
+): Promise<APIKey> {
+  const res = await api.patch<APIKey>(`/server/api-keys/${id}`, input);
+  return res.data;
+}
+
 export async function deleteAPIKey(id: string, config?: ApiRequestConfig): Promise<void> {
   await api.delete(`/server/api-keys/${id}`, config);
 }

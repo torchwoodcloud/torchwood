@@ -94,6 +94,18 @@ service APIKeysService {
     };
   }
 
+  // 更新 key 治理字段（T-02）：可改 name/scopes/enabled/expire_at；
+  // secret 无原地轮换——平滑轮换 = 新建 key + 双 key 并存过渡 + 旧 key
+  // 经本方法设 expire_at 下线（见 09-api-guide.md 轮换流程）。禁用/过期
+  // 立即生效（每请求鉴权读库校验）。
+  rpc UpdateAPIKey(UpdateAPIKeyRequest) returns (APIKey) {
+    option (google.api.http) = { patch: "/v1/server/api-keys/{id}", body: "*" };
+    option (torchwood.shared.v1.method_auth) = {
+      access: ACCESS_PERMISSION
+      permissions: ["owner", "admin"]
+    };
+  }
+
   rpc DeleteAPIKey(GetAPIKeyRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/api-keys/{id}" };
     option (torchwood.shared.v1.method_auth) = {
@@ -108,6 +120,16 @@ message CreateAPIKeyRequest {
   repeated string scopes = 2;
   // 过期时间；不设置 = 永不过期（RFC3339，经 gateway 序列化为字符串）。
   optional google.protobuf.Timestamp expire_at = 3;
+}
+
+message UpdateAPIKeyRequest {
+  string id = 1;
+  // 以下字段 proto3 optional：未设置 = 不修改；设置（含 enabled=false）= 更新。
+  optional string name = 2;
+  repeated string scopes = 3;
+  optional bool enabled = 4;
+  // 新过期时间；设置 = 更新（不提供"清除过期"语义——永不过期请删除重建）。
+  optional google.protobuf.Timestamp expire_at = 5;
 }
 
 message GetAPIKeyRequest {

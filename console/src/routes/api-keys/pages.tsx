@@ -2,11 +2,12 @@ import { useCallback, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Copy } from "lucide-react";
+import { Plus, Copy, Pencil, RefreshCw } from "lucide-react";
 import {
   listAPIKeys,
   getAPIKey,
   createAPIKey,
+  updateAPIKey,
   deleteAPIKey,
   type APIKey,
 } from "@/api/apiKeys";
@@ -17,7 +18,15 @@ import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { ColumnDef } from "@/components/list/DataTable";
 import {
   FormPageWrapper,
@@ -366,6 +375,8 @@ export function ApiKeyDetailPage() {
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
   const { role } = useAdminRole();
+  const [editOpen, setEditOpen] = useState(false);
+  const [rotateOpen, setRotateOpen] = useState(false);
 
   const { data: key, isLoading } = useQuery({
     queryKey: ["api-keys", id],
@@ -385,15 +396,27 @@ export function ApiKeyDetailPage() {
   if (isLoading) return <DetailSkeleton />;
   if (!key) return <NotFound backTo="/console/api-keys" />;
 
+  const editable = isPlatformAdmin(role);
+
   return (
     <DetailPageWrapper
       title={key.name}
       description="API Key 详情"
       backTo="/console/api-keys"
       actions={
-        // 与列表页一致：仅平台 admin 可删除 API Key（G8-5，R11-P1-2）。
-        isPlatformAdmin(role) ? (
-          <DeleteButton onConfirm={() => remove.mutate(key.id)} loading={remove.isPending} />
+        // 与列表页一致：仅平台 admin 可编辑/轮换/删除 API Key（G8-5，R11-P1-2）。
+        editable ? (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setEditOpen(true)}>
+              <Pencil className="h-4 w-4 mr-2" />
+              编辑
+            </Button>
+            <Button variant="outline" onClick={() => setRotateOpen(true)}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              轮换
+            </Button>
+            <DeleteButton onConfirm={() => remove.mutate(key.id)} loading={remove.isPending} />
+          </div>
         ) : undefined
       }
     >
@@ -408,6 +431,257 @@ export function ApiKeyDetailPage() {
           { label: "更新时间", value: new Date(key.updated_at).toLocaleString() },
         ]}
       />
+      <ApiKeyEditDialog
+        key_={key}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+      />
+      <ApiKeyRotateDialog
+        key_={key}
+        open={rotateOpen}
+        onOpenChange={setRotateOpen}
+      />
     </DetailPageWrapper>
   );
+}
+
+// ApiKeyEditDialog 编辑 key 治理字段（T-02 UpdateAPIKey）：name/scopes/
+// enabled/expire_at。proto3 optional 语义：仅提交被修改的字段。
+function ApiKeyEditDialog({
+  key_,
+  open,
+  onOpenChange,
+}: {
+  key_: APIKey;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState(key_.name);
+  const [scopes, setScopes] = useState(key_.scopes.join(", "));
+  const [enabled, setEnabled] = useState(key_.enabled);
+  const [expireAt, setExpireAt] = useState(
+    key_.expire_at ? toDatetimeLocal(key_.expire_at) : ""
+  );
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const input: Parameters<typeof updateAPIKey>[1] = {};
+      if (name !== key_.name) input.name = name;
+      const nextScopes = scopes
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (nextScopes.join(",") !== key_.scopes.join(",")) input.scopes = nextScopes;
+      if (enabled !== key_.enabled) input.enabled = enabled;
+      if (expireAt) {
+        const iso = new Date(expireAt).toISOString();
+        if (!key_.expire_at || iso !== new Date(key_.expire_at).toISOString()) {
+          input.expire_at = iso;
+        }
+      }
+      return updateAPIKey(key_.id, input);
+    },
+    onSuccess: () => {
+      toast.success("API Key 已更新");
+      queryClient.invalidateQueries({ queryKey: ["api-keys"] });
+      onOpenChange(false);
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>编辑 API Key</DialogTitle>
+          <DialogDescription>
+            禁用与过期立即生效（每次请求鉴权实时校验）；Secret 不可修改。
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            mutation.mutate();
+          }}
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-name">名称</Label>
+            <Input id="edit-name" value={name} onChange={(e) => setName(e.target.value)} required />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-scopes">Scopes（逗号分隔）</Label>
+            <Input
+              id="edit-scopes"
+              value={scopes}
+              onChange={(e) => setScopes(e.target.value)}
+              placeholder="databases:blog.read, storage:media"
+              className="font-mono text-xs"
+            />
+            <p className="text-xs text-muted-foreground">
+              支持资源级限定（如 <code>databases:blog</code> 限定单个库，
+              <code>databases:blog.read</code> 单库只读）；清空 Scopes 请删除重建。
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="edit-enabled"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+            />
+            <Label htmlFor="edit-enabled" className="font-normal">
+              启用（取消勾选 = 立即禁用，所有请求返回 401）
+            </Label>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-expire">过期时间（留空 = 保持不变/永不过期）</Label>
+            <Input
+              id="edit-expire"
+              type="datetime-local"
+              value={expireAt}
+              onChange={(e) => setExpireAt(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">过期后该 Key 立即失效（401）。</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              取消
+            </Button>
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? "保存中…" : "保存"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ApiKeyRotateDialog 轮换引导（T-02）：不提供原地换 secret——平滑轮换 =
+// 新建 key（预填同名 -rotated 后缀 + 相同 scopes）→ 切换应用 → 旧 key 设
+// 过期下线。
+function ApiKeyRotateDialog({
+  key_,
+  open,
+  onOpenChange,
+}: {
+  key_: APIKey;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { projectId } = useAuth();
+  const [step, setStep] = useState<"intro" | "created">("intro");
+  const [newKey, setNewKey] = useState<APIKey | null>(null);
+  const [newSecret, setNewSecret] = useState("");
+
+  const create = useMutation({
+    mutationFn: () =>
+      createAPIKey({
+        name: `${key_.name}-rotated`.slice(0, 120),
+        scopes: key_.scopes,
+      }),
+    onSuccess: (data) => {
+      setNewKey(data.api_key);
+      setNewSecret(data.secret);
+      setStep("created");
+      queryClient.invalidateQueries({ queryKey: ["api-keys", projectId] });
+    },
+  });
+
+  const expireOld = useMutation({
+    mutationFn: () =>
+      updateAPIKey(key_.id, { expire_at: new Date().toISOString() }),
+    onSuccess: () => {
+      toast.success("旧 Key 已设置立即过期，轮换完成");
+      queryClient.invalidateQueries({ queryKey: ["api-keys"] });
+      onOpenChange(false);
+    },
+  });
+
+  const close = (o: boolean) => {
+    if (!o) {
+      setStep("intro");
+      setNewSecret("");
+      setNewKey(null);
+    }
+    onOpenChange(o);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={close}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>轮换 API Key</DialogTitle>
+          <DialogDescription>
+            Secret 不支持原地更换；平滑轮换 = 双 Key 并存过渡。
+          </DialogDescription>
+        </DialogHeader>
+        {step === "intro" ? (
+          <div className="space-y-4 text-sm">
+            <ol className="list-decimal list-inside space-y-1.5 text-muted-foreground">
+              <li>创建新 Key（自动预填相同 Scopes，名称加 -rotated 后缀）</li>
+              <li>将应用切换到新 Key（旧 Key 在此期间继续可用）</li>
+              <li>回到本页为旧 Key 设置过期时间，完成下线</li>
+            </ol>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => close(false)}>
+                取消
+              </Button>
+              <Button onClick={() => create.mutate()} disabled={create.isPending}>
+                {create.isPending ? "创建中…" : "① 创建新 Key"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-md bg-muted p-3 flex items-center justify-between gap-3">
+              <code className="break-all text-xs flex-1">{newSecret}</code>
+              <Button
+                variant="secondary"
+                size="sm"
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(newSecret);
+                  toast.success("Secret 已复制");
+                }}
+              >
+                <Copy className="h-4 w-4 mr-1" />
+                复制
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              新 Key <span className="font-mono">{newKey?.id}</span> 的 Secret 仅显示这一次。
+              切换应用后，可为旧 Key 设置过期（也可稍后在旧 Key 详情页操作）。
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => close(false)}>
+                稍后手动下线
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  close(false);
+                  navigate(`/console/api-keys/${key_.id}`);
+                }}
+              >
+                前往旧 Key 设置过期
+              </Button>
+              <Button onClick={() => expireOld.mutate()} disabled={expireOld.isPending}>
+                {expireOld.isPending ? "处理中…" : "② 旧 Key 立即过期"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// toDatetimeLocal 把 RFC3339 时间串转成 <input type="datetime-local"> 值。
+function toDatetimeLocal(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

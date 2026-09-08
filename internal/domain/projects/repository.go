@@ -42,6 +42,10 @@ type APIKeyRepository interface {
 	GetAPIKey(ctx context.Context, projectID, id string) (*APIKey, error)
 	GetAPIKeyBySecretHash(ctx context.Context, hash string) (*APIKey, error)
 	ListAPIKeys(ctx context.Context, projectID string) ([]APIKey, error)
+	// UpdateAPIKey 只 SET cols 白名单列（name/scopes/enabled/expire_at/
+	// updated_at），禁止整行覆盖；secret_hash 不可经此通道修改（轮换 =
+	// 新建 + 旧 key 设 expire_at，无原地换 secret）。
+	UpdateAPIKey(ctx context.Context, projectID, id string, cols map[string]any) error
 	DeleteAPIKey(ctx context.Context, projectID, id string) error
 }
 

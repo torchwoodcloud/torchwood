@@ -1411,7 +1411,9 @@ type Security_LoginThrottle struct {
 	// 按来源 IP 维度的失败计数上限与窗口（经 trusted-proxy 校验后的 IP）。
 	Ip *Security_RateLimit_Dimension `protobuf:"bytes,2,opt,name=ip,proto3" json:"ip,omitempty"`
 	// SignUp 按来源 IP 的注册频控上限与窗口。
-	SignupIp      *Security_RateLimit_Dimension `protobuf:"bytes,3,opt,name=signup_ip,json=signupIp,proto3" json:"signup_ip,omitempty"`
+	SignupIp *Security_RateLimit_Dimension `protobuf:"bytes,3,opt,name=signup_ip,json=signupIp,proto3" json:"signup_ip,omitempty"`
+	// X-API-Key 认证失败按来源 IP 的频控（T-02；默认 10 次/60s）。
+	ApiKeyAuth    *Security_RateLimit_Dimension `protobuf:"bytes,4,opt,name=api_key_auth,json=apiKeyAuth,proto3" json:"api_key_auth,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1463,6 +1465,13 @@ func (x *Security_LoginThrottle) GetIp() *Security_RateLimit_Dimension {
 func (x *Security_LoginThrottle) GetSignupIp() *Security_RateLimit_Dimension {
 	if x != nil {
 		return x.SignupIp
+	}
+	return nil
+}
+
+func (x *Security_LoginThrottle) GetApiKeyAuth() *Security_RateLimit_Dimension {
+	if x != nil {
+		return x.ApiKeyAuth
 	}
 	return nil
 }
@@ -2467,7 +2476,8 @@ const file_config_proto_rawDesc = "" +
 	"\rallow_headers\x18\x03 \x03(\tR\fallowHeaders\x12%\n" +
 	"\x0eexpose_headers\x18\x04 \x03(\tR\rexposeHeaders\x12+\n" +
 	"\x11allow_credentials\x18\x05 \x01(\bR\x10allowCredentials\x12\x17\n" +
-	"\amax_age\x18\x06 \x01(\x05R\x06maxAge\"\xc1\t\n" +
+	"\amax_age\x18\x06 \x01(\x05R\x06maxAge\"\x97\n" +
+	"\n" +
 	"\bSecurity\x124\n" +
 	"\x03jwt\x18\x01 \x01(\v2\".torchwood.api.config.Security.JwtR\x03jwt\x12>\n" +
 	"\aapi_key\x18\x02 \x01(\v2%.torchwood.api.config.Security.ApiKeyR\x06apiKey\x12'\n" +
@@ -2499,11 +2509,13 @@ const file_config_proto_rawDesc = "" +
 	"\x05limit\x18\x01 \x01(\x05R\x05limit\x12\x16\n" +
 	"\x06window\x18\x02 \x01(\tR\x06windowB\n" +
 	"\n" +
-	"\b_enabled\x1a\xee\x01\n" +
+	"\b_enabled\x1a\xc4\x02\n" +
 	"\rLoginThrottle\x12H\n" +
 	"\x05email\x18\x01 \x01(\v22.torchwood.api.config.Security.RateLimit.DimensionR\x05email\x12B\n" +
 	"\x02ip\x18\x02 \x01(\v22.torchwood.api.config.Security.RateLimit.DimensionR\x02ip\x12O\n" +
-	"\tsignup_ip\x18\x03 \x01(\v22.torchwood.api.config.Security.RateLimit.DimensionR\bsignupIp\"\xd1\x02\n" +
+	"\tsignup_ip\x18\x03 \x01(\v22.torchwood.api.config.Security.RateLimit.DimensionR\bsignupIp\x12T\n" +
+	"\fapi_key_auth\x18\x04 \x01(\v22.torchwood.api.config.Security.RateLimit.DimensionR\n" +
+	"apiKeyAuth\"\xd1\x02\n" +
 	"\bDatabase\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x14\n" +
 	"\x05debug\x18\x02 \x01(\bR\x05debug\x127\n" +
@@ -2721,11 +2733,12 @@ var file_config_proto_depIdxs = []int32{
 	22, // 38: torchwood.api.config.Security.LoginThrottle.email:type_name -> torchwood.api.config.Security.RateLimit.Dimension
 	22, // 39: torchwood.api.config.Security.LoginThrottle.ip:type_name -> torchwood.api.config.Security.RateLimit.Dimension
 	22, // 40: torchwood.api.config.Security.LoginThrottle.signup_ip:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	41, // [41:41] is the sub-list for method output_type
-	41, // [41:41] is the sub-list for method input_type
-	41, // [41:41] is the sub-list for extension type_name
-	41, // [41:41] is the sub-list for extension extendee
-	0,  // [0:41] is the sub-list for field type_name
+	22, // 41: torchwood.api.config.Security.LoginThrottle.api_key_auth:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	42, // [42:42] is the sub-list for method output_type
+	42, // [42:42] is the sub-list for method input_type
+	42, // [42:42] is the sub-list for extension type_name
+	42, // [42:42] is the sub-list for extension extendee
+	0,  // [0:42] is the sub-list for field type_name
 }
 
 func init() { file_config_proto_init() }

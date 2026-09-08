@@ -71,6 +71,14 @@ func NewGRPCServer(
 	authInterceptor = authInterceptor.WithLogger(app.Logger())
 	// M5 C6：auth 拒绝并联审计（拦截器层拒绝到不了 audit 中间件，无双写）。
 	authInterceptor = authInterceptor.WithDenyAuditSink(auditRepo)
+	// T-02：X-API-Key 认证失败按来源 IP 频控（security.login_throttle
+	// .api_key_auth，默认 10 次/60s；未配置维度时 WithAPIKeyFailThrottle
+	// 回落内置默认）。
+	authInterceptor = authInterceptor.WithAPIKeyFailThrottle(
+		rateLimiter,
+		int(cfg.GetSecurity().GetLoginThrottle().GetApiKeyAuth().GetLimit()),
+		parseDuration(cfg.GetSecurity().GetLoginThrottle().GetApiKeyAuth().GetWindow(), 0),
+	)
 	trustedProxies, err := interceptor.ParseTrustedProxies(cfg.GetSecurity().GetTrustedProxies())
 	if err != nil {
 		return nil, fmt.Errorf("parse security.trusted_proxies: %w", err)

@@ -66,6 +66,8 @@ service ProjectsService {
 
 方法级 `method_auth` 优先，缺省回落服务级 `service_auth.default_access`；细粒度字段仅方法级携带。策略由 `internal/runtime` 启动期收集为 `PolicySet` 并过全量语义断言（档位/死 scope/值域/项目寻址——见 `05-authentication.md` §3/§7），未解析出 authz 的方法启动即 `missing auth policy`。每方法须同步 OpenAPI 扩展 `x-torchwood-access`（值域 `public/end_user/server/permission`，§10 一致性测试锁定）。
 
+**API key scope 语法（key 持有侧）**：`*`/`all`、`<resource>`、`<resource>.read/.write` 为既有形态；T-02 起可寻址资源（`databases`/`storage`）支持实例限定 `databases:<database_id>[.read|.write]`、`storage:<bucket_id>[.read|.write]`——请求按方法声明的资源族提取目标实例强制匹配，无实例寻址的方法（List/CreateBucket 等全集型）对实例限定 scope 一律 403。完整语法表、DDL 归属与创建校验规则见 `05-authentication.md` §6。
+
 ### 2.2 消息约定
 
 - 更新类 `optional` 表达 presence：`optional string name=2;` 未传=不修改（`HasName()` 判别）；空串语义由 `UpdateCollectionRequest` 注释显式说明。

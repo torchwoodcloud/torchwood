@@ -99,6 +99,9 @@ func (r *stubAPIKeyRepo) GetAPIKeyBySecretHash(_ context.Context, hash string) (
 func (r *stubAPIKeyRepo) ListAPIKeys(context.Context, string) ([]projects.APIKey, error) {
 	return nil, nil
 }
+func (r *stubAPIKeyRepo) UpdateAPIKey(context.Context, string, string, map[string]any) error {
+	return nil
+}
 func (r *stubAPIKeyRepo) DeleteAPIKey(context.Context, string, string) error { return nil }
 
 type stubAdminRepo struct {

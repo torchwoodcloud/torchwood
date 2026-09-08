@@ -133,6 +133,40 @@ func (s *APIKeysService) DeleteAPIKey(ctx context.Context, req *serverv1.GetAPIK
 	return &sharedv1.Empty{}, nil
 }
 
+// UpdateAPIKey 修改 key 治理字段（T-02）：proto3 optional 投影为指针，
+// 未设置 = 不修改。
+func (s *APIKeysService) UpdateAPIKey(ctx context.Context, req *serverv1.UpdateAPIKeyRequest) (*serverv1.APIKey, error) {
+	projectID := s.projectID(ctx)
+	if projectID == "" {
+		return nil, status.Error(codes.Unauthenticated, "missing project context")
+	}
+	cmd := appserver.UpdateAPIKeyCommand{
+		ProjectID: projectID,
+		ID:        req.GetId(),
+	}
+	if req.Name != nil {
+		cmd.Name = req.Name
+	}
+	// repeated 字段无 presence：nil 判别不可能经 JSON 到达（gateway 总是
+	// 解出切片）；以"字段在消息上出现即传空切片"的语义不可表达，故
+	// scopes 仅在非空时视为修改，清空 scope 请删除重建。
+	if len(req.Scopes) > 0 {
+		cmd.Scopes = req.Scopes
+	}
+	if req.Enabled != nil {
+		cmd.Enabled = req.Enabled
+	}
+	if ts := req.GetExpireAt(); ts != nil {
+		t := ts.AsTime()
+		cmd.ExpireAt = &t
+	}
+	key, err := s.apiKeys.Update(ctx, cmd)
+	if err != nil {
+		return nil, err
+	}
+	return mapAPIKey(key), nil
+}
+
 func mapAPIKey(k *projects.APIKey) *serverv1.APIKey {
 	if k == nil {
 		return nil

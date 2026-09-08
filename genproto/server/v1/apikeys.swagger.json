@@ -150,10 +150,70 @@
         "tags": [
           "APIKeysService"
         ]
+      },
+      "patch": {
+        "summary": "更新 key 治理字段（T-02）：可改 name/scopes/enabled/expire_at；\nsecret 无原地轮换——平滑轮换 = 新建 key + 双 key 并存过渡 + 旧 key\n经本方法设 expire_at 下线（见 09-api-guide.md 轮换流程）。禁用/过期\n立即生效（每请求鉴权读库校验）。",
+        "operationId": "APIKeysService_UpdateAPIKey",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1APIKey"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/APIKeysServiceUpdateAPIKeyBody"
+            }
+          }
+        ],
+        "tags": [
+          "APIKeysService"
+        ]
       }
     }
   },
   "definitions": {
+    "APIKeysServiceUpdateAPIKeyBody": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "以下字段 proto3 optional：未设置 = 不修改；设置（含 enabled=false）= 更新。"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "expire_at": {
+          "type": "string",
+          "format": "date-time",
+          "title": "新过期时间；设置 = 更新（不提供\"清除过期\"语义——永不过期请删除重建）。"
+        }
+      }
+    },
     "v1APIKey": {
       "type": "object",
       "properties": {
