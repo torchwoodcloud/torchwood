@@ -94,7 +94,13 @@ func (r *projectRepo) ListProjects(ctx context.Context) ([]projects.Project, err
 
 func (r *projectRepo) UpdateProject(ctx context.Context, p *projects.Project) error {
 	m := mapProjectToModel(p)
-	_, err := r.db.NewUpdate().Model(m).WherePK().Exec(ctx)
+	// 列白名单（bun 更新写规范）：internal_id 是 identity 列（对 UPDATE 只读，
+	// 2026-09-08 事故：全列覆盖写把它渲染成 DEFAULT = nextval，每次更新烧号
+	// 并改写数据面租户号）；created_at/status/settings 无更新入口。迁移后加列
+	// 默认不进 UPDATE——新可变列在此显式登记，漏登记是"改不动"而非"静默清零"。
+	_, err := r.db.NewUpdate().Model(m).
+		Column("name", "description", "registration_policy", "updated_at").
+		WherePK().Exec(ctx)
 	return err
 }
 
@@ -106,6 +112,7 @@ func (r *projectRepo) DeleteProject(ctx context.Context, id string) error {
 func mapProjectToModel(p *projects.Project) *model.Project {
 	return &model.Project{
 		ID:                 p.ID,
+		InternalID:         p.InternalID,
 		Name:               p.Name,
 		Description:        p.Description,
 		Status:             p.Status,

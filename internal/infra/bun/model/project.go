@@ -9,8 +9,14 @@ import (
 type Project struct {
 	bun.BaseModel `bun:"table:projects,alias:p"`
 
-	ID          string         `bun:"id,pk"`
-	InternalID  int64          `bun:"internal_id,autoincrement"`
+	ID string `bun:"id,pk"`
+	// InternalID 是 identity 列（迁移 000001），数据面 _tenant 租户号与
+	// roles_sig Tenant 的唯一来源。skipupdate 是 UPDATE 侧防线：bun 对
+	// autoincrement 隐式置 NullZero，pgdialect 的 DefaultPlaceholder 会把
+	// 零值渲染成 SET internal_id = DEFAULT（= nextval，烧号并改写租户号，
+	// 2026-09-08 dev 事故）。对 UPDATE 只读；INSERT 侧排除 + RETURNING 行为
+	// 不变。仓库更新必须列白名单（bunrepo update_guard_test 兜底）。
+	InternalID  int64          `bun:"internal_id,autoincrement,skipupdate"`
 	Name        string         `bun:"name,notnull,unique"`
 	Description string         `bun:"description"`
 	Status      string         `bun:"status,notnull,default:'active'"`

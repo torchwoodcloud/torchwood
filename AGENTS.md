@@ -59,6 +59,7 @@
   OpenAPI 建模约定见 `docs/developer/09-api-guide.md` §10（swagger 扩展与
   `method_auth` 一致性由 `internal/runtime/grpc_swagger_test.go` 断言）。
 - 列表查询复用 `pkg/crud` 或等价的 AIP-132/158/160 抽象，不要手拼 SQL filter/order；动态文档优先使用 `pkg/query`。
+- **bun 更新写规范（2026-09-08 事故，护栏见 `update_guard_test`）**：bun 的 UPDATE 一律显式声明写入列——struct 模型走 `.Column(白名单)`，nil 模型走 `.Set(...)`；**禁止裸全模型覆盖 UPDATE**（struct + `WherePK()` 全列写）：bun 对零值/nil 字段渲染 `SET col = DEFAULT`，identity 列（`projects.internal_id`）会烧号并改值，导致数据面 `_tenant` 分裂与 roles_sig 失配。identity/DB 生成列对 UPDATE 只读（模型侧 `skipupdate`）。新可变列必须显式登记进对应白名单（漏登记 = "改不动"，不是静默清零）。SQL 形状断言与静态扫描护栏在 `internal/infra/bun/bunrepo/`；存量 internal_id 漂移修复 runbook 见 `docs/developer/17-update-write-guard.md`。
 - JWT claims 保持与 `pkg/jwtparser` 的映射兼容。
 - Console 前端组件放在 `console/src/components/ui/`，样式基于 Tailwind + shadcn/ui。
 - **文件 I/O 工具选择**：普通文件的读写与小幅修改一律用内置 Read/Write/Edit 工具（diff 可审阅、`file:line` 引用可点击、Edit 精确匹配是安全网），不要绕道 Python/shell 脚本（Git Bash 下内联脚本还有引号转义坑）。仅以下场景允许用脚本处理文件：批量同构操作（多文件正则替换/重命名/格式转换）、写入内容为计算产物（聚合/派生数据，无需全文进上下文）、超大文件或超长行、编码/换行符敏感（GBK/BOM/CRLF/LF）需显式控制。

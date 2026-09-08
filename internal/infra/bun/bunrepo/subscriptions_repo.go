@@ -113,7 +113,12 @@ func (r *subscriptionPlanRepo) Update(ctx context.Context, plan *subscriptions.P
 	if err != nil {
 		return err
 	}
+	// 列白名单（bun 更新写规范）：id/project_id/code/created_at 不可变
+	//（code 是对外计费标识）。指针列 nil 经 DefaultPlaceholder 渲染为
+	// DEFAULT（= NULL，无非平凡默认）。
 	_, err = conn.NewUpdate().Model(mapPlanToModel(plan)).ModelTableExpr(expr, sch).
+		Column("name", "amount", "currency", "interval", "interval_days",
+			"grace_days", "trial_days", "benefits", "provider_overrides", "status", "updated_at").
 		WherePK().
 		Where("sp.project_id = ?", plan.ProjectID).
 		Exec(ctx2)
@@ -334,7 +339,13 @@ func (r *subscriptionRepo) Update(ctx context.Context, sub *subscriptions.Subscr
 	if err != nil {
 		return err
 	}
+	// 列白名单（bun 更新写规范）：id/project_id/idempotency_key/created_at
+	// 不可变；status 保留 expectStatus CAS（并发修改返回 Aborted）。指针列
+	// nil 渲染为 DEFAULT（= NULL，无非平凡默认）。
 	res, err := conn.NewUpdate().Model(m).ModelTableExpr(expr, sch).
+		Column("user_id", "plan_id", "mode", "provider", "provider_sub_id",
+			"status", "current_period_start", "current_period_end", "cancel_at_period_end",
+			"grace_until", "billing_asset_code", "benefits", "updated_at").
 		WherePK().
 		Where("ss.project_id = ?", sub.ProjectID).
 		Where("ss.status = ?", string(expectStatus)).

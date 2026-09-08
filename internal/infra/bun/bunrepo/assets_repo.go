@@ -109,7 +109,12 @@ func (r *assetDefRepo) Update(ctx context.Context, def *assets.Def) error {
 	if err != nil {
 		return err
 	}
+	// 列白名单（bun 更新写规范）：id/project_id/code/class/created_at 不可变。
+	// 指针列 nil 经 DefaultPlaceholder 渲染为 DEFAULT（= NULL，各指针列无
+	// 非平凡默认），语义与显式 NULL 一致；新可变列在此显式登记。
 	_, err = conn.NewUpdate().Model(mapDefToModel(def)).ModelTableExpr(expr, sch).
+		Column("name", "decimals", "max_quantity", "expires_in",
+			"tradable", "unique_per_owner", "upgradeable", "metadata", "status", "updated_at").
 		WherePK().
 		Where("ad.project_id = ?", def.ProjectID).
 		Exec(ctx2)

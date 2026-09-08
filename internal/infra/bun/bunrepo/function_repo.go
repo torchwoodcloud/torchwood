@@ -80,7 +80,10 @@ func (r *functionRepo) UpdateFunction(ctx context.Context, fn *domainfunctions.F
 		return err
 	}
 	m := mapFunctionToModel(fn)
-	_, err = conn.NewUpdate().Model(m).ModelTableExpr(expr, sch).WherePK().
+	// 列白名单（bun 更新写规范）：id/project_id/runtime/created_at 不可变。
+	_, err = conn.NewUpdate().Model(m).ModelTableExpr(expr, sch).
+		Column("name", "entrypoint", "timeout_seconds", "spec", "enabled", "updated_at").
+		WherePK().
 		Where("f.project_id = ?", fn.ProjectID).
 		Exec(ctx)
 	return err
@@ -155,7 +158,12 @@ func (r *functionRepo) UpdateDeployment(ctx context.Context, d *domainfunctions.
 		return err
 	}
 	m := mapDeploymentToModel(d)
-	_, err = conn.NewUpdate().Model(m).ModelTableExpr(expr, sch).WherePK().
+	// 列白名单（bun 更新写规范）：id/function_id/project_id/size/created_at
+	// 不可变。不设状态 CAS——语义由既有集成测试锚定（跨项目误写静默 no-op、
+	// ready→failed 合法），生产唯一写方 buildDeployment 串行推进状态。
+	_, err = conn.NewUpdate().Model(m).ModelTableExpr(expr, sch).
+		Column("status", "error", "updated_at").
+		WherePK().
 		Where("fd.project_id = ?", d.ProjectID).
 		Where("fd.function_id = ?", d.FunctionID).
 		Exec(ctx)
@@ -283,7 +291,12 @@ func (r *functionRepo) UpdateExecution(ctx context.Context, e *domainfunctions.E
 		return err
 	}
 	m := mapExecutionToModel(e)
-	_, err = conn.NewUpdate().Model(m).ModelTableExpr(expr, sch).WherePK().
+	// 列白名单（bun 更新写规范）：id/function_id/project_id/deployment_id/
+	// created_at 不可变。
+	_, err = conn.NewUpdate().Model(m).ModelTableExpr(expr, sch).
+		Column("status", "response", "response_truncated", "stdout", "stdout_truncated",
+			"stderr", "stderr_truncated", "status_code", "duration_ms", "error", "updated_at").
+		WherePK().
 		Where("fe.project_id = ?", e.ProjectID).
 		Exec(ctx)
 	return err
