@@ -196,7 +196,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	oAuthHandler, err := serverhttp.NewOAuthHandler(account, appConfig, auditRepository)
+	oAuthHandler, err := serverhttp.NewOAuthHandler(account, appConfig, auditRepository, redisRateLimiter)
 	if err != nil {
 		cleanup()
 		return nil, nil, err

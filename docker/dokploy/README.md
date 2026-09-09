@@ -40,7 +40,7 @@ GitHub Actions 会自动构建并推 GHCR（首次部署前确认 [image workflo
 | `TORCHWOOD_AUTH_PASSWORD` | ✅ | 运行态 `tw_authenticator`（非 superuser）口令；**仅用 `[A-Za-z0-9]`**，如 `openssl rand -hex 24` |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | ✅ | 栈内 MinIO 凭据（同时作为应用 S3 凭据注入） |
 | `POSTGRES_USER` / `POSTGRES_DB` | | 默认 `torchwood` / `torchwood` |
-| `TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS` | | 外部浏览器端 SDK 来源（逗号分隔）；Console 与网关同源，无需配置 |
+| `TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS` | | 浏览器端跨域来源，**默认 `*`**（非凭据放开：SDK/前端以 Bearer token 调 API）。仅跨站携带会话 cookie 的特殊形态需改为显式列出 origin 并开 `allow_credentials`（config.yaml） |
 | `TORCHWOOD_GRPC_PORT` | | 宿主侧 gRPC 端口，默认 `9060`（见 §4） |
 
 > **注意 1（密码字符集）**：口令会被拼进 `postgres://` DSN 与 psql 脚本，含 `@ : / # ? ' "` 等字符会直接破坏连接串。
@@ -57,6 +57,31 @@ Compose 服务页 → **Domains** → Add Domain：
 
 应用对 9080 端口暴露 gRPC-gateway HTTP + `/console/` + Storage 上传下载 + 健康端点。
 gRPC（9060）走宿主端口发布而非域名（见 §4）；metrics（回环 9040）不对外。
+
+## 3.1 OAuth 第三方登录（浏览器流）
+
+为你的客户前端（任意域名，含独立站点）接入 GitHub 等 OAuth 登录：
+
+1. **Provider 侧**（以 GitHub App 为例）：
+   - 回调 URL 填 `https://<你的域名>/v1/account/oauth2/github/callback`——**全部署共享**，
+     多项目由 OAuth `state` 区分，无需按项目注册；
+   - Permissions → Account permissions → **Email addresses 设为 Read-only**
+     （GitHub App 忽略 authorize 的 scope 参数，取邮箱走 App 权限；经典 OAuth App 不需要）；
+   - 配置用 Client ID（`Iv1.` 开头），不是纯数字的 App ID。
+2. **Torchwood 侧**：Console → Settings → OAuth 启用 github 并填 Client ID/Secret（每项目独立配置）；
+   Console → 项目详情 → **Redirect Allowlist** 把客户前端域名加入白名单（success/failure 落点校验）。
+3. **前端发起**（一行跳转，无需任何 CORS/凭据配置）：
+
+```js
+window.location.href =
+  `https://<你的域名>/v1/account/oauth2/github/authorize?project_id=<项目id>` +
+  `&success=${encodeURIComponent("https://<前端域名>/auth/callback")}` +
+  `&failure=${encodeURIComponent("https://<前端域名>/login?oauth=failed")}`;
+```
+
+authorize 端点校验白名单后 `Set-Cookie` nonce 并 302 到授权页；授权完成回调自动落到
+success 地址（token 在 URL fragment）。失败时回 failure 地址带 `error=oauth_failed`。
+CORS 基线 `*` 只服务普通 API 调用（Bearer token），OAuth 流不经 CORS。
 
 ## 4. gRPC 对外暴露（SDK / CLI 直连）
 

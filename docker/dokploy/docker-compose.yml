@@ -40,8 +40,12 @@ x-app-env: &app-env
   # 对象存储凭据（栈内 MinIO root；接外部 S3 时改 endpoint+独立子账号）
   TORCHWOOD_STORAGE_S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?请在 Dokploy Environment 设置 MinIO 用户}
   TORCHWOOD_STORAGE_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?请在 Dokploy Environment 设置 MinIO 口令}
-  # 可选：外部浏览器端 SDK 的跨域来源，逗号分隔（Console 同源部署无需配置）
-  TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS: ${TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS:-}
+  # 浏览器端跨域来源，默认 "*"（非凭据放开）：SDK/前端以 Bearer token 调 API，
+  # CORS 不是授权边界，BaaS 客户前端域不可枚举。OAuth 浏览器流走 302 发起端点
+  # /v1/account/oauth2/{provider}/authorize，不经 CORS、无需任何来源配置；
+  # 如需跨站携带会话 cookie 的特殊形态，显式列出来源并把 config.yaml 的
+  # allow_credentials 改回 true（带凭据时不接受 "*"，见 runtime/cors.go）
+  TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS: ${TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS:-*}
 
 # 应用镜像：GitHub Actions 预构建推 GHCR（.github/workflows/image.yml），
 # 部署机仅 pull 不编译（小内存 VPS 上 go build 会 OOM，部署被杀表现为

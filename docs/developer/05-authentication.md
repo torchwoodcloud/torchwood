@@ -278,6 +278,7 @@ security:
 
 - **匹配规则**（`projects.MatchRedirectURL`）：条目 = scheme+host（大小写不敏感）+ 可选路径前缀；条目无 path 放行该 host 全部路径。
 - **回落语义**：键缺失/为空 → 默认白名单 = `localhost/127.0.0.1`（http+https）+ 本站 `server.http.public_url` origin。跨域前端（如独立站点域名）必须显式配置，否则发起端 400 `success url is not allowed for this project`。
+- **发起**：推荐浏览器流走 **302 发起端点** `GET /v1/account/oauth2/{provider}/authorize?project_id=&success=&failure=`（`serverhttp/oauth_handler.go`，命名对齐 Auth0/Supabase 等主流与 RFC 6749 的授权入口心智，与 callback 同组注册）：服务端完成与 JSON 发起面同一套校验后 `Set-Cookie` nonce 并 302 到 provider 授权页。发起是 **top-level 导航**，nonce cookie 落在 API 域第一方上下文、回调（同为 top-level 导航）必然携带——**任意客户前端域零 CORS 配置、不受第三方 cookie 政策影响**（BaaS 形态下 JSON 发起面的跨源 fetch 会丢失 `Set-Cookie`，除非前端 `credentials:"include"` 且 CORS 对该 origin 放行凭据）。端点自带 per-IP 限流（复用 `security.rate_limit.ip` 维度，limiter 故障 fail-open）；全部响应 `Cache-Control: no-store`；失败分层——白名单校验前失败（项目不存在/URL 未过白名单）返回 400 纯文本不跳转（failure URL 尚不可信），校验后失败（provider 未启用）302 回 `failure?error=oauth_failed`。JSON 发起面 `GET /v1/account/sessions/oauth2/{provider}` 保留（token 面/服务端调用），浏览器流建议全部迁移到 authorize。
 - **管理入口**：`PUT /v1/server/projects/{project_id}/oauth-redirect-allowlist`（整表替换；空数组 = 清空回落默认）与 Console 项目详情页 Redirect Allowlist 卡片。PERMISSION `[owner,admin]` 平台专属面（key 凭证禁入）——白名单是钓鱼劫持面（可改写登录流落点）。读取走 `GET /v1/server/projects/{id}` 的 `oauth_allowed_redirect_urls` 投影（仅投影该键，不透出其余 settings）。
 - **持久化**：`SettingsWriter.SetProjectSetting` 单键原子写（`jsonb_set` / `'-'` 操作符），不同 settings 键并发写互不覆盖；`settings` 列仍不进 `UpdateProject` 白名单。
 
