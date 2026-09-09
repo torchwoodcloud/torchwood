@@ -8,6 +8,15 @@ TypeScript SDK 以 npm 包 `@torchwood/sdk` 分发（`sdk/typescript/`，`task s
 
 ## @torchwood/sdk
 
+### v0.2.1 — 2026-09-09
+
+内部清理版本（无 API 变化）：项目曾用名 graviton 残留清零。门面文件
+`src/graviton.ts` 更名 `src/torchwood.ts`（`Torchwood` 类实现早已在此文件，
+纯文件名遗留），`index.ts` 与测试的内部 import/注释同步更新；发布产物
+`dist/` 内部文件名随之变化。公开入口（`index` 导出）、类型、方法签名零
+变化，升级无迁移义务。本版起 TS SDK 发布补齐 `sdk/typescript/vX.Y.Z` git
+tag 与 GitHub Release（此前仅发 npm）。
+
 ### v0.2.0 — 2026-09-07
 
 **破坏性版本（0.x minor 携带破坏性，A10 决议）**：收拢 npm 0.1.0（2026-09-01）以来服务端发生的全部契约断裂。**请与 0.2.0 世代服务端同批升级**（兼容承诺见迁移说明末尾）。
