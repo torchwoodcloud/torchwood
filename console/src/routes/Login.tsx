@@ -18,7 +18,7 @@ export function Login() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [setupToken, setSetupToken] = useState("");
   const [projectId, setProjectId] = useState("");
-  const [databaseId, setDatabaseId] = useState("");
+  const [databaseId, setDatabaseId] = useState("app");
   const [setupTokenRequired, setSetupTokenRequired] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -174,7 +174,7 @@ export function Login() {
                   placeholder="app"
                 />
                 <p className="text-xs text-muted-foreground">
-                  规则同上。将作为项目自动创建的第一业务库（可填 default 或其它合法
+                  规则同上。缺省 app，将作为项目自动创建的第一业务库（可改为其它合法
                   id）。系统用户 / 文件 / 组不在此库，走 Users / Storage / Groups。
                 </p>
               </div>

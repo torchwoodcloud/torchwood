@@ -96,7 +96,7 @@ func IsTwoSegmentSchema(name string) bool                          // 供 DDL �
 
 | id | 结果 |
 |---|---|
-| `default` | 合法（bootstrap 项目、CreateProject 第一业务库） |
+| `default` | 合法（用户自选 id；2026-09 前亦是 CreateProject 第一业务库的缺省名，现缺省名为 `app`） |
 | `shop` / `app` / `cms` | 合法 |
 | `acmeprodshop2026` | 合法（16 字符） |
 | `Shop` / `my-shop` / `my_shop` | 非法 |
@@ -139,7 +139,7 @@ id must match ^[a-z][a-z0-9]{0,27}$
 
 | 资源 | id | 规则 |
 |---|---|---|
-| database（业务库） | `default` | 普通业务库：CreateProject 自动建（缺省第一库 id），`CreateDatabase`/`DeleteDatabase` 与其它业务库同等（见 `docs/design/project-data-plane-schema.md` §4 / PR7，已落地解禁） |
+| database（业务库） | `app` | CreateProject 自动建的缺省第一库（2026-09 前为 `default`，存量库不受影响），`CreateDatabase`/`DeleteDatabase` 与其它业务库同等（见 `docs/design/project-data-plane-schema.md` §4 / PR7，已落地解禁） |
 | database（内部 sentinel） | `_`（`ident.ProjectDataPlaneID`） | 非法 SchemaResourceID（charset 拒绝）。仅供系统集合寻址项目数据面；对外 database_id 走 `RejectExternalDatabaseID` 拒绝；DDL 分叉 `businessSchema` 显式拒绝。见 project-data-plane-schema.md §3.1 |
 | project | `default` | bootstrap 显式使用；其它创建路径允许同名失败于 PK，不额外保留 |
 

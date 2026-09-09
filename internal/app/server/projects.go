@@ -76,7 +76,7 @@ type CreateProjectCommand struct {
 	ID              string
 	Name            string
 	Description     string
-	FirstDatabaseID string // 缺省 "default"；CreateProject 内部调 infra 建空业务库
+	FirstDatabaseID string // 缺省 "app"；CreateProject 内部调 infra 建空业务库
 }
 
 func (s *Projects) CreateProject(ctx context.Context, cmd CreateProjectCommand) (*projects.Project, error) {
@@ -120,7 +120,7 @@ func (s *Projects) CreateProjectInternal(ctx context.Context, cmd CreateProjectC
 	}
 	firstDBID := strings.TrimSpace(cmd.FirstDatabaseID)
 	if firstDBID == "" {
-		firstDBID = "default"
+		firstDBID = "app"
 	}
 	if err := ident.ValidateSchemaResourceID(firstDBID); err != nil {
 		return nil, appshared.MapIdentError(err)

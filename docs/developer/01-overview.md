@@ -117,7 +117,7 @@ torchwood/
 | 业务文档面 | `tw_<project.id>_<database.id>` | 用户 collection 真表，**物理表名 = collectionID**；每表 `_tenant` 隔离 + `_acl` 内嵌 ACE + **RLS policy 判定**（`tw_visible`/`tw_can`，`SET LOCAL ROLE` + roles_sig 注入），`pkg/query` typed AST 查询 | documentdb | 每 `(project,database)` 一 schema |
 
 - sentinel `_`（`ident.ProjectDataPlaneID`）仅内部寻址，对外 `RejectExternalDatabaseID`；
-- `default` 为普通首库可删可重建；
+- `app` 为 CreateProject 缺省创建的普通首库，可删可重建；
 - DDL 只走两段式 `businessSchema`，永不解析一段式；
 - 文档面权限判定唯一执行点是 RLS policy（业务集合）；应用 `Principal` 经每请求事务 `SET LOCAL ROLE` + `app.roles`(+roles_sig 验签) 注入，漏注入 fail-closed；
 - `project.id` / `database.id` 规则见 `docs/developer/06-databases.md`。

@@ -59,9 +59,9 @@ func TestProjects_CreateProject_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, coll, "cut 后 catalog 无 sentinel users")
 
-	def, err := docDB.GetDatabase(ctx, p.ID, "default")
+	def, err := docDB.GetDatabase(ctx, p.ID, "app")
 	require.NoError(t, err)
-	require.NotNil(t, def, "CreateProject 应建第一业务库 default")
+	require.NotNil(t, def, "CreateProject 应建缺省第一业务库 app")
 
 	sentinel, err := docDB.GetDatabase(ctx, p.ID, databases.SystemDatabaseID)
 	require.NoError(t, err)
