@@ -656,10 +656,11 @@ func (f *Functions) mintExecutionToken(ctx context.Context, fn *domainfunctions.
 	}
 	ttl := time.Duration(fn.TimeoutSeconds)*time.Second + executionTokenGrace
 	token, err := f.execTokens.Mint(ctx, domainfunctions.ExecutionTokenInfo{
-		ProjectID:   fn.ProjectID,
-		FunctionID:  fn.ID,
-		ExecutionID: rec.ID,
-		Scopes:      fn.DeclaredScopes,
+		ProjectID:      fn.ProjectID,
+		FunctionID:     fn.ID,
+		ExecutionID:    rec.ID,
+		Scopes:         fn.DeclaredScopes,
+		InvokingUserID: rec.InvokingUserID,
 	}, ttl)
 	if err != nil {
 		slog.WarnContext(ctx, "mint execution token failed; function runs without platform identity",
