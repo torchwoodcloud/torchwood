@@ -106,11 +106,16 @@ func NewGRPCGatewayServer(
 		return nil, err
 	}
 
+	// / 站点首页 landing 页（精确匹配，不影响其余路径的 404 语义）。
+	landingHandler := NewLandingHandler()
+
 	// /v1/realtime 是长连接 WebSocket：不套 TimeoutHandler（下放
 	// 握手超时与 ping 滑窗自行管理）；其余路径统一 60s TimeoutHandler
 	// 兜底慢 handler。
 	var routed http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.URL.Path == "/":
+			landingHandler.ServeHTTP(w, r)
 		case r.URL.Path == "/v1/realtime":
 			realtimeHandler.ServeHTTP(w, r)
 		case strings.HasPrefix(r.URL.Path, "/console/") || r.URL.Path == "/console":

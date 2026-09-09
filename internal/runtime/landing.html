@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Torchwood — AI-Native Backend as a Service</title>
+<meta name="description" content="Torchwood 是一个 AI/Agent-Native 的开源后端即服务（BaaS）平台：用户认证、文档数据库、文件存储、函数执行与实时事件开箱即用，Protobuf + OpenAPI 定义的机器可读 API 让 LLM Agent 与自动化直接调用。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%23FFE08A' d='M32 6 18 22h14z'/%3E%3Cpath fill='%23FFB020' d='M32 6l14 16H18z'/%3E%3Cpath fill='%23FF8A00' d='M18 22h28l-2 14H20z'/%3E%3Cpath fill='%23E05010' d='M20 36h24l-8 8-8-8z'/%3E%3Cpath fill='%231E2740' d='M27 44h10l-1.5 12h-7z'/%3E%3Cpath fill='%23161E30' d='M37 44l2.5 1-2.5 11.5h-2.5L32 45z'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --bg-soft: #101627;
+    --card: #121828;
+    --border: #1f2740;
+    --text: #e6eaf2;
+    --text-dim: #8a93a6;
+    --amber: #ffb020;
+    --orange: #ff8a00;
+    --ember: #e05010;
+    --grad: linear-gradient(135deg, #ffd166 0%, #ffb020 35%, #ff8a00 70%, #e05010 100%);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: Inter, "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration: none; }
+  .container { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  .mono { font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace; }
+
+  /* ── 导航 ─────────────────────────────── */
+  .nav {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(10, 14, 26, .82);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: -.02em; }
+  .brand svg { display: block; }
+  .nav nav { display: flex; align-items: center; gap: 28px; font-size: 14px; color: var(--text-dim); }
+  .nav nav a { transition: color .15s; }
+  .nav nav a:hover { color: var(--text); }
+  .nav nav a.cta-mini {
+    color: var(--bg); background: var(--grad);
+    padding: 7px 16px; border-radius: 8px; font-weight: 600;
+  }
+
+  /* ── Hero ─────────────────────────────── */
+  .hero { position: relative; padding: 110px 0 90px; overflow: hidden; }
+  .hero::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(600px 320px at 50% -60px, rgba(255, 176, 32, .16), transparent 70%),
+      radial-gradient(900px 500px at 85% 110%, rgba(224, 80, 16, .08), transparent 70%);
+  }
+  .hero .container { position: relative; text-align: center; }
+  .badge {
+    display: inline-block; font-size: 13px; font-weight: 600; letter-spacing: .08em;
+    color: var(--amber); border: 1px solid rgba(255, 176, 32, .35);
+    background: rgba(255, 176, 32, .07);
+    border-radius: 999px; padding: 6px 16px; margin-bottom: 28px;
+  }
+  h1 {
+    font-size: clamp(38px, 6vw, 60px); font-weight: 800;
+    letter-spacing: -.03em; line-height: 1.15;
+  }
+  h1 .grad {
+    background: var(--grad);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero .sub {
+    max-width: 680px; margin: 24px auto 0;
+    color: var(--text-dim); font-size: 17px;
+  }
+  .cta { display: flex; gap: 14px; justify-content: center; margin-top: 40px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 13px 26px; border-radius: 10px; font-size: 15px; font-weight: 600;
+    transition: transform .15s, box-shadow .15s, border-color .15s;
+  }
+  .btn.primary { background: var(--grad); color: #1a0e00; box-shadow: 0 6px 24px rgba(255, 138, 0, .25); }
+  .btn.primary:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(255, 138, 0, .35); }
+  .btn.ghost { border: 1px solid var(--border); color: var(--text); background: var(--bg-soft); }
+  .btn.ghost:hover { border-color: var(--amber); color: var(--amber); }
+  .tagline {
+    margin-top: 56px; font-size: 12px; font-weight: 600;
+    letter-spacing: .35em; color: var(--ember);
+  }
+
+  /* ── 特性 ─────────────────────────────── */
+  .features { padding: 40px 24px 90px; }
+  .section-head { text-align: center; margin-bottom: 48px; }
+  h2 { font-size: clamp(26px, 4vw, 34px); font-weight: 800; letter-spacing: -.02em; }
+  .section-head p { color: var(--text-dim); margin-top: 12px; font-size: 15px; }
+  .grid {
+    display: grid; gap: 18px;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 26px;
+    transition: border-color .2s, transform .2s;
+  }
+  .card:hover { border-color: rgba(255, 176, 32, .45); transform: translateY(-3px); }
+  .card .icon {
+    width: 42px; height: 42px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--amber); background: rgba(255, 176, 32, .09);
+    border: 1px solid rgba(255, 176, 32, .22); margin-bottom: 18px;
+  }
+  .card h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+  .card p { color: var(--text-dim); font-size: 14px; }
+
+  /* ── Agent 区块 ───────────────────────── */
+  .agent { padding: 0 24px 100px; }
+  .agent-panel {
+    position: relative; overflow: hidden;
+    background: var(--bg-soft); border: 1px solid var(--border);
+    border-radius: 18px; padding: 52px 40px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 36px; flex-wrap: wrap;
+  }
+  .agent-panel::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(420px 220px at 12% 0%, rgba(255, 176, 32, .1), transparent 70%);
+  }
+  .agent-panel h2 { margin-bottom: 12px; }
+  .agent-panel p { color: var(--text-dim); max-width: 560px; }
+  .agent-panel p code {
+    font-size: 13px; color: var(--amber);
+    background: rgba(255, 176, 32, .08);
+    border: 1px solid rgba(255, 176, 32, .2);
+    border-radius: 6px; padding: 2px 7px;
+  }
+
+  /* ── 页脚 ─────────────────────────────── */
+  footer { border-top: 1px solid var(--border); padding: 32px 0; }
+  .footer-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+    color: var(--text-dim); font-size: 13px;
+  }
+  .footer-inner nav { display: flex; gap: 22px; }
+  .footer-inner nav a:hover { color: var(--amber); }
+
+  @media (max-width: 640px) {
+    .hero { padding: 70px 0 60px; }
+    .agent-panel { padding: 40px 26px; }
+    .nav nav { gap: 18px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="container nav-inner">
+    <a class="brand" href="/">
+      <svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true">
+        <defs>
+          <linearGradient id="tw-bg-nav" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#141A2C"/><stop offset="1" stop-color="#0C111F"/>
+          </linearGradient>
+        </defs>
+        <rect width="64" height="64" rx="14" fill="url(#tw-bg-nav)" stroke="#1F2740"/>
+        <path fill="#FFE08A" d="M32 8 19 23h13z"/>
+        <path fill="#FFB020" d="M32 8l13 15H19z"/>
+        <path fill="#FF8A00" d="M19 23h26l-2 13H21z"/>
+        <path fill="#E05010" d="M21 36h22l-7.5 7.5h-7z"/>
+        <path fill="#1E2740" d="M27.5 43.5h9L35 55h-6.5z"/>
+        <path fill="#161E30" d="M36.5 43.5l2.4 1L36.5 55H34z"/>
+      </svg>
+      <span>Torchwood</span>
+    </a>
+    <nav>
+      <a href="https://github.com/torchwoodcloud/torchwood" target="_blank" rel="noopener">GitHub</a>
+      <a class="cta-mini" href="/console/">Console</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="container">
+      <p class="badge mono">开源 · AI / AGENT-NATIVE</p>
+      <h1>为 <span class="grad">Agent</span> 而生的<br>开源后端平台</h1>
+      <p class="sub">
+        Torchwood 是一个 AI/Agent-Native 的后端即服务（BaaS）平台：用户认证、文档数据库、
+        文件存储、函数执行与实时事件开箱即用。Protobuf + OpenAPI 定义的机器可读 API，
+        让 LLM Agent 与自动化从第一天起就是一等公民。
+      </p>
+      <div class="cta">
+        <a class="btn primary" href="/console/">打开 Admin Console →</a>
+        <a class="btn ghost mono" href="/.well-known/torchwood">/.well-known/torchwood</a>
+      </div>
+      <p class="tagline mono">AI-NATIVE BACKEND AS A SERVICE</p>
+    </div>
+  </section>
+
+  <section class="features container">
+    <div class="section-head">
+      <h2>一个平台，后端全栈</h2>
+      <p>自设计的 API 与工具链同时面向人与机器——控制台点得动，Agent 也调得通。</p>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <div class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        </div>
+        <h3>Agent 原生 API</h3>
+        <p>Protobuf 是唯一事实来源，自动产出 gRPC、HTTP 与 OpenAPI；细粒度 scope 的 API Key 供 Agent 与自动化安全调用 Server API。</p>
+      </div>
+      <div class="card">
+        <div class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h3>用户认证</h3>
+        <p>邮箱、OAuth2、OTP、Magic URL、匿名会话与 TOTP MFA；JWT access/refresh 轮换与会话管理开箱即用。</p>
+      </div>
+      <div class="card">
+        <div class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/></svg>
+        </div>
+        <h3>文档数据库</h3>
+        <p>schema-per-database 的 PostgreSQL 文档存储：行级 RLS 权限、文档级 _acl、Appwrite 风格查询与向量近邻检索。</p>
+      </div>
+      <div class="card">
+        <div class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+        </div>
+        <h3>文件存储</h3>
+        <p>S3/MinIO 兼容：上传下载、在线预览与缩略图、分片断点续传、公开 bucket 与 HMAC File Token。</p>
+      </div>
+      <div class="card">
+        <div class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <h3>函数执行</h3>
+        <p>Docker 构建与运行，同步/异步执行；事件触发器把平台事件接进业务逻辑，保留策略自动清理历史。</p>
+      </div>
+      <div class="card">
+        <div class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        </div>
+        <h3>实时事件</h3>
+        <p>基于 outbox 的全局有序事件流：WebSocket 订阅、断线重连与游标续传，UI 与 Agent 永远追得上数据。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="agent container">
+    <div class="agent-panel">
+      <div>
+        <h2>为机器而建，也为人类所用</h2>
+        <p>
+          每个 Torchwood 实例都在 <code>/.well-known/torchwood</code> 公开能力目录，
+          配合 OpenAPI 描述，Agent 一次抓取即可发现全部 Server API 并以 scoped API Key 直接调用——
+          无需人肉翻文档。
+        </p>
+      </div>
+      <a class="btn ghost mono" href="/.well-known/torchwood">查看 Agent 目录</a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container footer-inner">
+    <span>© 2026 Torchwood Contributors · AI-Native Backend as a Service</span>
+    <nav>
+      <a href="/console/">Console</a>
+      <a href="/.well-known/torchwood">Agent 目录</a>
+      <a href="https://github.com/torchwoodcloud/torchwood" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</footer>
+
+</body>
+</html>
