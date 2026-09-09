@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	appassets "github.com/torchwooddev/torchwood/internal/app/assets"
-	domainassets "github.com/torchwooddev/torchwood/internal/domain/assets"
-	domainsubs "github.com/torchwooddev/torchwood/internal/domain/subscriptions"
+	appassets "github.com/torchwoodcloud/torchwood/internal/app/assets"
+	domainassets "github.com/torchwoodcloud/torchwood/internal/domain/assets"
+	domainsubs "github.com/torchwoodcloud/torchwood/internal/domain/subscriptions"
 )
 
 // fulfillBenefits 在当前事务内调资产 Grant/Mutate（设计 §3.2）。

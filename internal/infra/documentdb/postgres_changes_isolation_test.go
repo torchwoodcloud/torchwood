@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	"github.com/torchwooddev/torchwood/internal/infra/events"
-	"github.com/torchwooddev/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/internal/infra/events"
+	"github.com/torchwoodcloud/torchwood/internal/testutil"
 )
 
 // isolationEnv 建项目 A / B 双项目环境：各建 default 库 + 同名集合 foo

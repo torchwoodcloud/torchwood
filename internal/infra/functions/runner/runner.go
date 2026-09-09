@@ -16,7 +16,7 @@ import (
 	_ "embed"
 	"fmt"
 
-	domainfunctions "github.com/torchwooddev/torchwood/internal/domain/functions"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 )
 
 //go:embed runner.js

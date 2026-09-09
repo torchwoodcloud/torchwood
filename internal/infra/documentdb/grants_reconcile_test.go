@@ -14,10 +14,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	"github.com/torchwooddev/torchwood/internal/infra/bun/model"
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
-	"github.com/torchwooddev/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/internal/infra/bun/model"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
+	"github.com/torchwoodcloud/torchwood/internal/testutil"
 )
 
 // captureColumnPrivileges 抓取 tw_app 在表上的列级授权（information_schema.

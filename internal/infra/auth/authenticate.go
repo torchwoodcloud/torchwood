@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

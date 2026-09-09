@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	domainfunctions "github.com/torchwooddev/torchwood/internal/domain/functions"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
 // fakeExecTokens 记录铸造/吊销调用（执行身份 P0 的 app 层集成断言）。

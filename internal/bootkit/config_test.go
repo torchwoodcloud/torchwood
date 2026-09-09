@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	config "github.com/torchwooddev/torchwood/internal/pkg/config"
+	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
 func TestValidateJWTSecret(t *testing.T) {

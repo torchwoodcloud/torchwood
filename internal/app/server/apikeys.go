@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"time"
 
-	appshared "github.com/torchwooddev/torchwood/internal/app/shared"
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
-	"github.com/torchwooddev/torchwood/internal/domain/projects"
-	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
-	"github.com/torchwooddev/torchwood/pkg/idgen"
+	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
+	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

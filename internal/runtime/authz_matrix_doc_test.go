@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
 
 // TestAuthzMatrixDoc_NoDrift CI 锁：重新渲染的授权矩阵文档必须与磁盘上的

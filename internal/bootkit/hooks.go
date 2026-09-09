@@ -9,9 +9,9 @@ import (
 
 	"github.com/lynx-go/lynx"
 	"github.com/lynx-go/lynx/boot"
-	"github.com/torchwooddev/torchwood/internal/domain/projects"
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
-	"github.com/torchwooddev/torchwood/internal/infra/projectschema"
+	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
+	"github.com/torchwoodcloud/torchwood/internal/infra/projectschema"
 )
 
 // NewLogger 暴露 app 装配的 *slog.Logger（zap 后端），供各层构造器注入。

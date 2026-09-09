@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	domainsubs "github.com/torchwooddev/torchwood/internal/domain/subscriptions"
+	domainsubs "github.com/torchwoodcloud/torchwood/internal/domain/subscriptions"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

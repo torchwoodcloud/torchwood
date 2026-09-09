@@ -15,8 +15,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	"github.com/torchwooddev/torchwood/pkg/query"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/pkg/query"
 )
 
 // efQuery 构造带/不带 ef_search 的 vector_search domain Query。

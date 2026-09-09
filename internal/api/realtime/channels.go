@@ -3,7 +3,7 @@ package realtime
 import (
 	"strings"
 
-	"github.com/torchwooddev/torchwood/pkg/ident"
+	"github.com/torchwoodcloud/torchwood/pkg/ident"
 )
 
 // channelKind 区分 Realtime 频道族（v3 设计 §5.2：parseChannel 改派发表）。

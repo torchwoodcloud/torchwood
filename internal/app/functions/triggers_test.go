@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	domainfunctions "github.com/torchwooddev/torchwood/internal/domain/functions"
-	domainprojects "github.com/torchwooddev/torchwood/internal/domain/projects"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
+	domainprojects "github.com/torchwoodcloud/torchwood/internal/domain/projects"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

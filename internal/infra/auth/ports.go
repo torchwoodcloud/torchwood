@@ -3,7 +3,7 @@ package auth
 import (
 	"context"
 
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
 
 // NewOAuthAuthenticatorFactory 提供 domain OAuthAuthenticatorFactory 的默认实现。

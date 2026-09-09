@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
-	"github.com/torchwooddev/torchwood/pkg/semaphore"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/semaphore"
 )
 
 // Semaphores 持有 Functions 的两类全局配额信号量。

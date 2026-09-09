@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
-	domainusers "github.com/torchwooddev/torchwood/internal/domain/users"
-	infraauth "github.com/torchwooddev/torchwood/internal/infra/auth"
-	"github.com/torchwooddev/torchwood/internal/infra/bun/bunrepo"
-	"github.com/torchwooddev/torchwood/internal/testutil"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
+	domainusers "github.com/torchwoodcloud/torchwood/internal/domain/users"
+	infraauth "github.com/torchwoodcloud/torchwood/internal/infra/auth"
+	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
+	"github.com/torchwoodcloud/torchwood/internal/testutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

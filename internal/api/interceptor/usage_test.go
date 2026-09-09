@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	domainbilling "github.com/torchwooddev/torchwood/internal/domain/billing"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
-	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
+	domainbilling "github.com/torchwoodcloud/torchwood/internal/domain/billing"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc"
 )
 

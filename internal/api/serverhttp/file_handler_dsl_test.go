@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/pkg/query"
+	"github.com/torchwoodcloud/torchwood/pkg/query"
 )
 
 // TestPublicBucketDSLBuildEqual 公开桶匿名读路径的 bucketID DSL 必须经

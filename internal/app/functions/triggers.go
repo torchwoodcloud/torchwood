@@ -7,9 +7,9 @@ import (
 	"encoding/json"
 	"time"
 
-	appshared "github.com/torchwooddev/torchwood/internal/app/shared"
-	domainfunctions "github.com/torchwooddev/torchwood/internal/domain/functions"
-	"github.com/torchwooddev/torchwood/pkg/idgen"
+	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
+	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

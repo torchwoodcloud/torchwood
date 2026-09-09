@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	domainsubs "github.com/torchwooddev/torchwood/internal/domain/subscriptions"
-	"github.com/torchwooddev/torchwood/internal/infra/bun/bunrepo"
-	"github.com/torchwooddev/torchwood/internal/testutil"
+	domainsubs "github.com/torchwoodcloud/torchwood/internal/domain/subscriptions"
+	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
+	"github.com/torchwoodcloud/torchwood/internal/testutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

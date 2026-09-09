@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/torchwooddev/torchwood/internal/domain/audit"
+	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
 	"google.golang.org/grpc"
 )
 

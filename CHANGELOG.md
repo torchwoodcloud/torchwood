@@ -1,8 +1,8 @@
 # Changelog
 
 本文件记录独立分发的子模块版本。模块遵循 Go nested-module tagging：
-`genproto/vX.Y.Z` tag 承载 `github.com/torchwooddev/torchwood/genproto`，
-`sdk/go/vX.Y.Z` tag 承载 `github.com/torchwooddev/torchwood/sdk/go`。
+`genproto/vX.Y.Z` tag 承载 `github.com/torchwoodcloud/torchwood/genproto`，
+`sdk/go/vX.Y.Z` tag 承载 `github.com/torchwoodcloud/torchwood/sdk/go`。
 TypeScript SDK 以 npm 包 `@torchwood/sdk` 分发（`sdk/typescript/`，`task sdk:publish` 发布）。
 发布流程见 `.github/workflows/release.yml`（workflow_dispatch）。
 
@@ -109,7 +109,7 @@ go.sum 条目，直接 build 缺传递 sum）。下游可按需停留在 v0.1.1�
 
 首次经 `.github/workflows/release.yml` 成功发布的版本（tag `sdk/go/v0.1.1`，
 genproto @ `genproto/v0.1.1`）：require 改写为真实 genproto 版本并移除本地
-相对路径 replace，下游 `go get github.com/torchwooddev/torchwood/sdk/go@v0.1.1`
+相对路径 replace，下游 `go get github.com/torchwoodcloud/torchwood/sdk/go@v0.1.1`
 可正常解析编译（干净目录验收通过）。
 
 - 修复 v0.1.0 的分发断裂：v0.1.0 为手动 tag，go.mod 仍含本地 replace 与

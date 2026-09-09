@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
-	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

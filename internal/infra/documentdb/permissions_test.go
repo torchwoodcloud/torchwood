@@ -7,9 +7,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	"github.com/torchwooddev/torchwood/internal/testutil"
-	"github.com/torchwooddev/torchwood/pkg/query"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/query"
 )
 
 // TestPermissions_ListFilterTenantIsolation (A5): 列表权限过滤与租户隔离——

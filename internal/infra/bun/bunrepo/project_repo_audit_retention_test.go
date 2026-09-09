@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/torchwooddev/torchwood/internal/infra/bun/bunrepo"
-	"github.com/torchwooddev/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
+	"github.com/torchwoodcloud/torchwood/internal/testutil"
 )
 
 // M5 C7（审计留存不变量）：项目控制面清理不再删除 audit_logs——项目删除

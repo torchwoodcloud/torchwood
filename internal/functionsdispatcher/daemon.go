@@ -19,9 +19,9 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
-	infrafunctions "github.com/torchwooddev/torchwood/internal/infra/functions"
-	"github.com/torchwooddev/torchwood/internal/infra/functions/runner"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
+	infrafunctions "github.com/torchwoodcloud/torchwood/internal/infra/functions"
+	"github.com/torchwoodcloud/torchwood/internal/infra/functions/runner"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

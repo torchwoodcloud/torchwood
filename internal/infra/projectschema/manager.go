@@ -8,9 +8,9 @@ import (
 	"log/slog"
 	"strings"
 
-	domainprojects "github.com/torchwooddev/torchwood/internal/domain/projects"
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
-	"github.com/torchwooddev/torchwood/pkg/ident"
+	domainprojects "github.com/torchwoodcloud/torchwood/internal/domain/projects"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
+	"github.com/torchwoodcloud/torchwood/pkg/ident"
 )
 
 // SchemaManager 实现 projects.SchemaManager 端口：schema 生命周期的

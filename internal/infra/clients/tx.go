@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/torchwooddev/torchwood/pkg/uow"
+	"github.com/torchwoodcloud/torchwood/pkg/uow"
 	"github.com/uptrace/bun"
 )
 

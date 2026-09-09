@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 )
 
 // TestBuilders_ConstructFilterArms：每个构造器产出正确的 oneof 分支与值。

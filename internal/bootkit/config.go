@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
-	config "github.com/torchwooddev/torchwood/internal/pkg/config"
-	"github.com/torchwooddev/torchwood/pkg/crud"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
+	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/crud"
 )
 
 // ValidateAppConfig 校验安全相关配置并按需告警，server 与 worker 共用同一

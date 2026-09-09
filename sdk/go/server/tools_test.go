@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 )
 
 func TestToolsCatalogResolvesFullMethods(t *testing.T) {

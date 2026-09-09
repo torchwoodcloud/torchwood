@@ -7,10 +7,10 @@ import (
 	"regexp"
 	"strings"
 
-	appshared "github.com/torchwooddev/torchwood/internal/app/shared"
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
-	"github.com/torchwooddev/torchwood/internal/domain/users"
-	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
+	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
+	"github.com/torchwoodcloud/torchwood/internal/domain/users"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

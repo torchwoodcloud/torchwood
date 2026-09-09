@@ -3,8 +3,8 @@ package runtime
 import (
 	"fmt"
 
-	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )

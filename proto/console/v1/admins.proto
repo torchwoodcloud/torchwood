@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package torchwood.console.v1;
 
-option go_package = "github.com/torchwooddev/torchwood/genproto/console/v1;consolev1";
+option go_package = "github.com/torchwoodcloud/torchwood/genproto/console/v1;consolev1";
 
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";

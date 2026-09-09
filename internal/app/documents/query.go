@@ -1,10 +1,10 @@
 package documents
 
 import (
-	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	"github.com/torchwooddev/torchwood/pkg/query"
-	queryproto "github.com/torchwooddev/torchwood/pkg/query/proto"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/pkg/query"
+	queryproto "github.com/torchwoodcloud/torchwood/pkg/query/proto"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

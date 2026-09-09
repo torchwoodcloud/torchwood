@@ -3,7 +3,7 @@ package databases
 import (
 	"time"
 
-	"github.com/torchwooddev/torchwood/pkg/query"
+	"github.com/torchwoodcloud/torchwood/pkg/query"
 )
 
 type Attribute struct {

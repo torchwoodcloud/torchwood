@@ -9,7 +9,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/infra/auth"
+	"github.com/torchwoodcloud/torchwood/internal/infra/auth"
 )
 
 func TestRedisAccountTokenStore_Verification(t *testing.T) {

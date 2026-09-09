@@ -10,8 +10,8 @@ import (
 	"net/url"
 	"strings"
 
-	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
-	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 )
 
 // StorageService 封装 Server API 的 Storage 服务（元数据操作；

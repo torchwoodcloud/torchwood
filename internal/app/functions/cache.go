@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	domainfunctions "github.com/torchwooddev/torchwood/internal/domain/functions"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 )
 
 // ——函数/变量短 TTL 进程内缓存（P0.5 热路径 DB 清账，设计 §6 约束③）——

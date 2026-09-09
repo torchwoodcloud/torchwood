@@ -3,7 +3,7 @@ package assets
 import (
 	"context"
 
-	domainassets "github.com/torchwooddev/torchwood/internal/domain/assets"
+	domainassets "github.com/torchwoodcloud/torchwood/internal/domain/assets"
 )
 
 type (

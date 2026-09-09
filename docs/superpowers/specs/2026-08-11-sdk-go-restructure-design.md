@@ -19,7 +19,7 @@
 
 ```
 sdk/go/
-├── go.mod                  # module github.com/torchwooddev/torchwood/sdk/go
+├── go.mod                  # module github.com/torchwoodcloud/torchwood/sdk/go
 ├── client/                 # Client API Client（end-user 认证）
 │   ├── client.go           # Client、Option、拨号、Close
 │   ├── token.go            # TokenStore 接口、MemoryTokenStore、FileTokenStore
@@ -137,9 +137,9 @@ respJSON, err := c.InvokeJSON(ctx, "/torchwood.server.v1.UsersService/CreateUser
 
 ## CLI 切换（cmd/client/）
 
-**module 关系**：`cmd/client` 不是独立 module，属于根 module `github.com/torchwooddev/torchwood`。因此：
+**module 关系**：`cmd/client` 不是独立 module，属于根 module `github.com/torchwoodcloud/torchwood`。因此：
 
-- 根 `go.mod` 新增 `require github.com/torchwooddev/torchwood/sdk/go` 与 `replace github.com/torchwooddev/torchwood/sdk/go => ./sdk/go`。
+- 根 `go.mod` 新增 `require github.com/torchwoodcloud/torchwood/sdk/go` 与 `replace github.com/torchwoodcloud/torchwood/sdk/go => ./sdk/go`。
 - 目标是 **`cmd/client` 包源码不再 import genproto / grpc / protobuf**（用测试或 CI grep 兜底）；根 module 的其他包（`internal/`、`cmd/server` 等）继续直接使用 genproto/grpc，根 `go.mod` 的这些依赖保留。
 
 **代码改动**：

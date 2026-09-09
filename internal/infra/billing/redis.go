@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	domainbilling "github.com/torchwooddev/torchwood/internal/domain/billing"
+	domainbilling "github.com/torchwoodcloud/torchwood/internal/domain/billing"
 )
 
 const (

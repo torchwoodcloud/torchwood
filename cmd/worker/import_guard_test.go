@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-const modulePath = "github.com/torchwooddev/torchwood"
+const modulePath = "github.com/torchwoodcloud/torchwood"
 
 // barrel 精确匹配：禁止把整个 app/infra 桶包拉进 worker。
 var forbiddenExact = []string{

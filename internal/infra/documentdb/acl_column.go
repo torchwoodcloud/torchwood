@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 )
 
 // aclEntries 把权限集编码为 _acl 数组元素（"type:role"，FormatPermissionString）。

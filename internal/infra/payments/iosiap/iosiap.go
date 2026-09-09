@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/torchwooddev/torchwood/internal/domain/payments"
+	"github.com/torchwoodcloud/torchwood/internal/domain/payments"
 )
 
 const (

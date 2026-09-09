@@ -2,7 +2,7 @@ package runtime
 
 import (
 	"github.com/google/wire"
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
 
 // ProviderSet 收纳组装根的运行时服务（Round4 J4-4）：

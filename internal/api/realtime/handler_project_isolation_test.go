@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	domainevents "github.com/torchwooddev/torchwood/internal/domain/events"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
 )
 
 // TestSubscribe_CrossProjectEventNotDelivered（B-1 端到端回归）：频道是

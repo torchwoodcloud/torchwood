@@ -3,7 +3,7 @@ package auth
 import (
 	"context"
 
-	"github.com/torchwooddev/torchwood/internal/domain/users"
+	"github.com/torchwoodcloud/torchwood/internal/domain/users"
 )
 
 // Session provider identifiers stored on session documents.

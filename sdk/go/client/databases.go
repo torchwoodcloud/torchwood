@@ -3,8 +3,8 @@ package client
 import (
 	"context"
 
-	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
-	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 

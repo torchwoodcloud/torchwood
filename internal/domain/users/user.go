@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/torchwooddev/torchwood/pkg/password"
+	"github.com/torchwoodcloud/torchwood/pkg/password"
 )
 
 const (

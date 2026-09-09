@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
 
 // TestAssertSemantic_RealProtoRegistry：以真实 proto registry（与

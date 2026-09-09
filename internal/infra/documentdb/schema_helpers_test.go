@@ -6,9 +6,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/torchwooddev/torchwood/internal/infra/bun/model"
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
-	"github.com/torchwooddev/torchwood/pkg/ident"
+	"github.com/torchwoodcloud/torchwood/internal/infra/bun/model"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
+	"github.com/torchwoodcloud/torchwood/pkg/ident"
 )
 
 func testSchema(t *testing.T, projectID, databaseID string) string {

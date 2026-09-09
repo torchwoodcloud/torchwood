@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/lynx-go/lynx"
-	appassets "github.com/torchwooddev/torchwood/internal/app/assets"
+	appassets "github.com/torchwoodcloud/torchwood/internal/app/assets"
 )
 
 const assetExpirerInterval = time.Minute

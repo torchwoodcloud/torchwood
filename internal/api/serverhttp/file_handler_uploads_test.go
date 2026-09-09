@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/testutil"
 )
 
 // doJSON 发送 JSON 请求并解析响应（仅 2xx 时解析 payload）。

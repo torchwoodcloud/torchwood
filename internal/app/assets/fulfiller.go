@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	domainassets "github.com/torchwooddev/torchwood/internal/domain/assets"
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
+	domainassets "github.com/torchwoodcloud/torchwood/internal/domain/assets"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

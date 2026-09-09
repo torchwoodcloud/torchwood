@@ -7,13 +7,13 @@ import (
 	"strings"
 
 	"github.com/google/wire"
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
-	domainsubs "github.com/torchwooddev/torchwood/internal/domain/subscriptions"
-	"github.com/torchwooddev/torchwood/internal/infra/payments/alipay"
-	"github.com/torchwooddev/torchwood/internal/infra/payments/iosiap"
-	"github.com/torchwooddev/torchwood/internal/infra/payments/stripe"
-	"github.com/torchwooddev/torchwood/internal/infra/payments/wechat"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
+	domainsubs "github.com/torchwoodcloud/torchwood/internal/domain/subscriptions"
+	"github.com/torchwoodcloud/torchwood/internal/infra/payments/alipay"
+	"github.com/torchwoodcloud/torchwood/internal/infra/payments/iosiap"
+	"github.com/torchwoodcloud/torchwood/internal/infra/payments/stripe"
+	"github.com/torchwoodcloud/torchwood/internal/infra/payments/wechat"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
 // ProviderSet 装配渠道注册表。

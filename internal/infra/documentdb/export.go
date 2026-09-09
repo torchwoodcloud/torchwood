@@ -25,9 +25,9 @@ import (
 
 	"github.com/uptrace/bun"
 
-	"github.com/torchwooddev/torchwood/internal/infra/bun/model"
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
-	"github.com/torchwooddev/torchwood/pkg/ident"
+	"github.com/torchwoodcloud/torchwood/internal/infra/bun/model"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
+	"github.com/torchwoodcloud/torchwood/pkg/ident"
 )
 
 // ExportFormatVersion 是导出 manifest 的格式版本：不兼容变更递增，导入器

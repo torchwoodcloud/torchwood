@@ -19,9 +19,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	domainevents "github.com/torchwooddev/torchwood/internal/domain/events"
-	"github.com/torchwooddev/torchwood/pkg/idgen"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
+	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 )
 
 func (p *postgresDocumentDB) ExecuteTransactions(

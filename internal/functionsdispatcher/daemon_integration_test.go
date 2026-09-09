@@ -11,7 +11,7 @@ import (
 
 	"github.com/docker/docker/client"
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
 // dockerAvailable 探测本机 docker daemon（不可达则跳过；CI 与本地均可能无 daemon）。

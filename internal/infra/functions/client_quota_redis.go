@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	domainfunctions "github.com/torchwooddev/torchwood/internal/domain/functions"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 )
 
 // clientQuotaWindowScript 原子执行 INCR + 首次 EXPIRE 并返回 [count, ttl]

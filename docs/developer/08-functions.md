@@ -297,7 +297,7 @@ TORCHWOOD_RUN_DOCKER_TESTS=1 go test ./internal/infra/functions -run TestDockerB
 ### 13.6 客户端接入示例
 
 ```ts
-import { Torchwood } from "@torchwooddev/sdk";
+import { Torchwood } from "@torchwoodcloud/sdk";
 
 const tw = Torchwood.withAccessToken(endpoint, projectId, accessToken);
 // 签到（day 窗口限频由平台强制；幂等键防网络重试重复发奖）

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

@@ -10,7 +10,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/torchwooddev/torchwood/pkg/jwtparser"
+	"github.com/torchwoodcloud/torchwood/pkg/jwtparser"
 )
 
 const prefix = "enc:v1:"

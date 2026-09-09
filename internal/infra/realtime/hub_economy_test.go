@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/domain/events"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/domain/events"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 )
 
 // economyFrame 从连接缓冲收一帧并断言频道。

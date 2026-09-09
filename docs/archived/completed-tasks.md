@@ -14,7 +14,7 @@
 
 | 任务 | 状态 | 关键文件 |
 |------|------|----------|
-| 初始化 Go module | 完成 | `go.mod`（`github.com/torchwooddev/torchwood`，Go 1.25） |
+| 初始化 Go module | 完成 | `go.mod`（`github.com/torchwoodcloud/torchwood`，Go 1.25） |
 | 配置 Buf 与 protobuf 生成 | 完成 | `buf.yaml`、`buf.gen.yaml`、`genproto/` |
 | 定义 Task 工作流 | 完成 | `Taskfile.yml`：install-tools / up / down / migrate / generate-proto / generate-config / wire-all / generate-all / console-install / console-build / console-dev / dev-server / test / build |
 | 本地基础设施编排 | 完成 | `docker/local/docker-compose.yml`（PostgreSQL 5433、Redis 6380、MinIO 9000/9001） |

@@ -91,7 +91,7 @@ TS SDK 尚无 `documents:list` 封装；需 AST 时直接 `fetch` 该路径或�
 ### 4.1 Go（`sdk/go/server/tools.go:144` + `invoke.go:20`）
 
 ```go
-import "github.com/torchwooddev/torchwood/sdk/go/server"
+import "github.com/torchwoodcloud/torchwood/sdk/go/server"
 
 srv, _ := server.New("127.0.0.1:9060", server.WithAPIKey(key), server.WithProjectID("default"))
 

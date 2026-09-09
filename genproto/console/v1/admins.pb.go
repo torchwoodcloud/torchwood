@@ -8,7 +8,7 @@ package consolev1
 
 import (
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	v1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -444,7 +444,7 @@ const file_console_v1_admins_proto_rawDesc = "" +
 	"ListAdmins\x12'.torchwood.console.v1.ListAdminsRequest\x1a(.torchwood.console.v1.ListAdminsResponse\".\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x14\x12\x12/v1/console/admins\x12\x80\x01\n" +
 	"\vCreateAdmin\x12(.torchwood.console.v1.CreateAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"*\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x17:\x01*\"\x12/v1/console/admins\x12\x85\x01\n" +
 	"\vUpdateAdmin\x12(.torchwood.console.v1.UpdateAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"/\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x1c:\x01*2\x17/v1/console/admins/{id}\x12\x81\x01\n" +
-	"\vDeleteAdmin\x12(.torchwood.console.v1.DeleteAdminRequest\x1a\x1a.torchwood.shared.v1.Empty\",\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x19*\x17/v1/console/admins/{id}\x1a\x06\x92\xb2\x19\x02\b\x04B\xdf\x03\x92A\x9a\x03RR\n" +
+	"\vDeleteAdmin\x12(.torchwood.console.v1.DeleteAdminRequest\x1a\x1a.torchwood.shared.v1.Empty\",\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x19*\x17/v1/console/admins/{id}\x1a\x06\x92\xb2\x19\x02\b\x04B\xe1\x03\x92A\x9a\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
@@ -458,7 +458,7 @@ const file_console_v1_admins_proto_rawDesc = "" +
 	"\n" +
 	"\x06cookie\x12\x00z\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permissionZ?github.com/torchwooddev/torchwood/genproto/console/v1;consolev1b\x06proto3"
+	"permissionZAgithub.com/torchwoodcloud/torchwood/genproto/console/v1;consolev1b\x06proto3"
 
 var (
 	file_console_v1_admins_proto_rawDescOnce sync.Once

@@ -9,7 +9,7 @@ import (
 
 	"github.com/lynx-go/commands"
 
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 )
 
 // adminJWTSecretFlagEnv 是 roles 签名主密钥（security.jwt.secret）的环境

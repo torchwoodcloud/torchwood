@@ -12,11 +12,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	domainevents "github.com/torchwooddev/torchwood/internal/domain/events"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
-	"github.com/torchwooddev/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
+	"github.com/torchwoodcloud/torchwood/internal/testutil"
 )
 
 // ---------------------------------------------------------------------------

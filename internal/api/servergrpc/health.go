@@ -3,8 +3,8 @@ package servergrpc
 import (
 	"context"
 
-	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
-	"github.com/torchwooddev/torchwood/internal/pkg/buildinfo"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/buildinfo"
 )
 
 // HealthCheckers 是健康检查所需的最小依赖探测面（infra/health.Checkers 满足；

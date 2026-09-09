@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/torchwooddev/torchwood/internal/domain/payments"
-	domainsubs "github.com/torchwooddev/torchwood/internal/domain/subscriptions"
+	"github.com/torchwoodcloud/torchwood/internal/domain/payments"
+	domainsubs "github.com/torchwoodcloud/torchwood/internal/domain/subscriptions"
 )
 
 const (

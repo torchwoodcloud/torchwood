@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	consolev1 "github.com/torchwooddev/torchwood/genproto/console/v1"
-	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
-	"github.com/torchwooddev/torchwood/internal/app/console"
+	consolev1 "github.com/torchwoodcloud/torchwood/genproto/console/v1"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	"github.com/torchwoodcloud/torchwood/internal/app/console"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

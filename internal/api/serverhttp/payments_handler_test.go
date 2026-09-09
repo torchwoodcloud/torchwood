@@ -15,13 +15,13 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/stretchr/testify/require"
-	apppayments "github.com/torchwooddev/torchwood/internal/app/payments"
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
-	infrapayments "github.com/torchwooddev/torchwood/internal/infra/payments"
-	"github.com/torchwooddev/torchwood/internal/infra/payments/alipay"
-	"github.com/torchwooddev/torchwood/internal/infra/payments/iosiap"
-	"github.com/torchwooddev/torchwood/internal/infra/payments/stripe"
-	"github.com/torchwooddev/torchwood/internal/infra/payments/wechat"
+	apppayments "github.com/torchwoodcloud/torchwood/internal/app/payments"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
+	infrapayments "github.com/torchwoodcloud/torchwood/internal/infra/payments"
+	"github.com/torchwoodcloud/torchwood/internal/infra/payments/alipay"
+	"github.com/torchwoodcloud/torchwood/internal/infra/payments/iosiap"
+	"github.com/torchwoodcloud/torchwood/internal/infra/payments/stripe"
+	"github.com/torchwoodcloud/torchwood/internal/infra/payments/wechat"
 )
 
 // writeSpyCallbackRepo 记录 InsertIfAbsent 调用次数：验签失败路径

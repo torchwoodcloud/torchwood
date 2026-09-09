@@ -54,7 +54,7 @@ x-app-env: &app-env
 # 部署机仅 pull 不编译（小内存 VPS 上 go build 会 OOM，部署被杀表现为
 # cancelled）。默认 latest = main 最新；用 TORCHWOOD_IMAGE 钉版本可回滚。
 x-app-image: &app-image
-  image: ${TORCHWOOD_IMAGE:-ghcr.io/torchwooddev/torchwood:latest}
+  image: ${TORCHWOOD_IMAGE:-ghcr.io/torchwoodcloud/torchwood:latest}
   pull_policy: always
 
 # ---------- 依赖服务 ----------

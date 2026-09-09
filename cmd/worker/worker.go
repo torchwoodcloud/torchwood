@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/lynx-go/lynx"
-	appfunctions "github.com/torchwooddev/torchwood/internal/app/functions"
-	domainshared "github.com/torchwooddev/torchwood/internal/domain/shared"
+	appfunctions "github.com/torchwoodcloud/torchwood/internal/app/functions"
+	domainshared "github.com/torchwoodcloud/torchwood/internal/domain/shared"
 )
 
 // workerConcurrency 是单进程并发消费 goroutine 数（BRPOP 多消费者互斥由

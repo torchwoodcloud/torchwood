@@ -8,7 +8,7 @@ package serverv1
 
 import (
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	_ "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	_ "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -290,7 +290,7 @@ const file_server_v1_health_proto_rawDesc = "" +
 	"\x05Check\x12'.torchwood.server.v1.HealthCheckRequest\x1a(.torchwood.server.v1.HealthCheckResponse\"'\x82\xd3\xe4\x93\x02!Z\x13\x12\x11/v1/server/health\x12\n" +
 	"/v1/health\x12\x80\x01\n" +
 	"\n" +
-	"GetVersion\x12&.torchwood.server.v1.GetVersionRequest\x1a'.torchwood.server.v1.GetVersionResponse\"!\x82\xd3\xe4\x93\x02\x1b\x12\x19/v1/server/health/version\x1a\x06\x92\xb2\x19\x02\b\x01B\xcb\x03\x92A\x88\x03RR\n" +
+	"GetVersion\x12&.torchwood.server.v1.GetVersionRequest\x1a'.torchwood.server.v1.GetVersionResponse\"!\x82\xd3\xe4\x93\x02\x1b\x12\x19/v1/server/health/version\x1a\x06\x92\xb2\x19\x02\b\x01B\xcd\x03\x92A\x88\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
@@ -300,7 +300,7 @@ const file_server_v1_health_proto_rawDesc = "" +
 	"\x06apiKey\x12|\b\x02\x12k项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。\x1a\tX-API-Key \x02\n" +
 	"Q\n" +
 	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02z\x1e\n" +
-	"\x12x-torchwood-access\x12\b\x1a\x06publicZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
+	"\x12x-torchwood-access\x12\b\x1a\x06publicZ?github.com/torchwoodcloud/torchwood/genproto/server/v1;serverv1b\x06proto3"
 
 var (
 	file_server_v1_health_proto_rawDescOnce sync.Once

@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/lynx-go/lynx"
-	infraevents "github.com/torchwooddev/torchwood/internal/infra/events"
+	infraevents "github.com/torchwoodcloud/torchwood/internal/infra/events"
 )
 
 // OutboxWorkerService 是 OutboxWorker 的 lynx.Service 壳：Start 启动

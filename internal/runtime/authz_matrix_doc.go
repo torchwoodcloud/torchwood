@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
 
 // 本文件是授权矩阵文档的渲染层（机制重设计 Phase B）：从 domainauth.PolicySet

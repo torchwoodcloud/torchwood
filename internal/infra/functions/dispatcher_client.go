@@ -12,8 +12,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/torchwooddev/torchwood/internal/domain/functions"
-	config "github.com/torchwooddev/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/internal/domain/functions"
+	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

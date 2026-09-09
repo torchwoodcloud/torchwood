@@ -12,8 +12,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	domainevents "github.com/torchwooddev/torchwood/internal/domain/events"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
 )
 
 func (p *postgresDocumentDB) ensureCollectionAccessible(coll *databases.Collection, principal databases.Principal) error {

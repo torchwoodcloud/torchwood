@@ -9,10 +9,10 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/stretchr/testify/require"
-	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
-	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
-	"github.com/torchwooddev/torchwood/internal/domain/auth"
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	"github.com/torchwoodcloud/torchwood/internal/domain/auth"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )

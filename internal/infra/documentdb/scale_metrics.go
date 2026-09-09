@@ -33,7 +33,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 )
 
 // ScaleTablesTotal 物理表计数（relkind r/p，不含视图/物化视图/索引/TOAST/

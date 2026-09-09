@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/pkg/password"
+	"github.com/torchwoodcloud/torchwood/pkg/password"
 )
 
 func TestRegister_PasswordUser(t *testing.T) {

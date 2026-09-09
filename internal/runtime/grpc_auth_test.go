@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"google.golang.org/grpc"
 )
 

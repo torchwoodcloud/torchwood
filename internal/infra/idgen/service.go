@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	domainidgen "github.com/torchwooddev/torchwood/internal/domain/idgen"
-	"github.com/torchwooddev/torchwood/internal/domain/projects"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
-	pkgidgen "github.com/torchwooddev/torchwood/pkg/idgen"
+	domainidgen "github.com/torchwoodcloud/torchwood/internal/domain/idgen"
+	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	pkgidgen "github.com/torchwoodcloud/torchwood/pkg/idgen"
 )
 
 // strategyCacheTTL 是项目 ID 生成策略查询结果的缓存时长：生成路径高频调用

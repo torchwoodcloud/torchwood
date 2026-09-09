@@ -3,7 +3,7 @@ package client
 import (
 	"context"
 
-	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
+	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 )
 
 // SubscriptionsService 封装 Client API 的订阅服务。

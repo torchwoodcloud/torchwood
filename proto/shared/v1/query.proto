@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package torchwood.shared.v1;
 
-option go_package = "github.com/torchwooddev/torchwood/genproto/shared/v1;sharedv1";
+option go_package = "github.com/torchwoodcloud/torchwood/genproto/shared/v1;sharedv1";
 
 // DistanceMetric 是向量近邻查询的距离度量（会话 #10，与 hnsw 索引的
 // distance_metric 同一枚举域）。

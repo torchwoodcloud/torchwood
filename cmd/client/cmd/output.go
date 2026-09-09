@@ -9,7 +9,7 @@ import (
 
 	"github.com/lynx-go/commands"
 
-	"github.com/torchwooddev/torchwood/sdk/go/server"
+	"github.com/torchwoodcloud/torchwood/sdk/go/server"
 )
 
 // invoke 建立连接并以全局超时发起一次 InvokeJSON 调用。

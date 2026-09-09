@@ -19,7 +19,7 @@
 | 路径 | 说明 |
 |------|------|
 | `typescript/` | SDK 包 `@torchwood/sdk`（TypeScript） |
-| `go/` | 官方 Go SDK（模块 `github.com/torchwooddev/torchwood/sdk/go`） |
+| `go/` | 官方 Go SDK（模块 `github.com/torchwoodcloud/torchwood/sdk/go`） |
 | `demo/` | Web 演示站点（注册/登录 + SDK 功能演示） |
 
 ## Go SDK
@@ -32,8 +32,8 @@ Go SDK 是 gRPC 直连的薄封装（默认本地走 insecure，生产用 `WithD
 import (
     "context"
 
-    "github.com/torchwooddev/torchwood/sdk/go/client"
-    "github.com/torchwooddev/torchwood/sdk/go/server"
+    "github.com/torchwoodcloud/torchwood/sdk/go/client"
+    "github.com/torchwoodcloud/torchwood/sdk/go/server"
 )
 
 // Server API：以 API Key 管理用户/用户组/文档库

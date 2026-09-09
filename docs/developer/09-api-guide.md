@@ -24,7 +24,7 @@ import "google/api/annotations.proto";
 import "google/google/protobuf/timestamp.proto";
 import "shared/v1/authz.proto";
 import "shared/v1/common.proto";
-option go_package="github.com/torchwooddev/torchwood/genproto/server/v1;serverv1";
+option go_package="github.com/torchwoodcloud/torchwood/genproto/server/v1;serverv1";
 option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   security_definitions:{ security:{key:"apiKey" value:{type:TYPE_API_KEY in:IN_HEADER name:"X-API-Key"}}}
   security:{security_requirement:{key:"apiKey" value:{}}}

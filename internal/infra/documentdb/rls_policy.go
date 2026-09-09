@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
-	"github.com/torchwooddev/torchwood/pkg/ident"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
+	"github.com/torchwoodcloud/torchwood/pkg/ident"
 )
 
 // policyCatalogLookup 生成按 (project, database, 物理名) 点查 catalog_collections

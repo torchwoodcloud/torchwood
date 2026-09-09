@@ -3,7 +3,7 @@ package assets
 import (
 	"context"
 
-	domainassets "github.com/torchwooddev/torchwood/internal/domain/assets"
+	domainassets "github.com/torchwoodcloud/torchwood/internal/domain/assets"
 )
 
 // LiveHoldingForUpdate 返回业主某定义下未过期的第一行持有（FOR UPDATE）。

@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
-	"github.com/torchwooddev/torchwood/internal/domain/projects"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
+	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

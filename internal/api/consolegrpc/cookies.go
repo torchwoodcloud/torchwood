@@ -15,7 +15,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/torchwooddev/torchwood/internal/app/console"
+	"github.com/torchwoodcloud/torchwood/internal/app/console"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )

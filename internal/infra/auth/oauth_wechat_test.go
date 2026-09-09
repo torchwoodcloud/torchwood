@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
 
 func TestWeChatOAuth_AuthorizeURL(t *testing.T) {

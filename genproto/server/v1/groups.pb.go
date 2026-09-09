@@ -9,7 +9,7 @@ package serverv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	v1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -941,7 +941,7 @@ const file_server_v1_groups_proto_rawDesc = "" +
 	"\rGetMembership\x12).torchwood.server.v1.GetMembershipRequest\x1a\x1f.torchwood.server.v1.Membership\"J\x8a\xb2\x19\x06\"\x04\b\x03\x10\x01\x82\xd3\xe4\x93\x02:\x128/v1/server/groups/{group_id}/memberships/{membership_id}\x12\xb5\x01\n" +
 	"\x10UpdateMembership\x12,.torchwood.server.v1.UpdateMembershipRequest\x1a\x1f.torchwood.server.v1.Membership\"R\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x03\x10\x02\x82\xd3\xe4\x93\x02=:\x01*28/v1/server/groups/{group_id}/memberships/{membership_id}\x12\xc8\x01\n" +
 	"\x16UpdateMembershipStatus\x122.torchwood.server.v1.UpdateMembershipStatusRequest\x1a\x1f.torchwood.server.v1.Membership\"Y\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x03\x10\x02\x82\xd3\xe4\x93\x02D:\x01*2?/v1/server/groups/{group_id}/memberships/{membership_id}/status\x12\xaa\x01\n" +
-	"\x10DeleteMembership\x12).torchwood.server.v1.GetMembershipRequest\x1a\x1a.torchwood.shared.v1.Empty\"O\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x03\x10\x02\x82\xd3\xe4\x93\x02:*8/v1/server/groups/{group_id}/memberships/{membership_id}\x1a\x06\x92\xb2\x19\x02\b\x03B\xd9\x03\x92A\x96\x03RR\n" +
+	"\x10DeleteMembership\x12).torchwood.server.v1.GetMembershipRequest\x1a\x1a.torchwood.shared.v1.Empty\"O\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x03\x10\x02\x82\xd3\xe4\x93\x02:*8/v1/server/groups/{group_id}/memberships/{membership_id}\x1a\x06\x92\xb2\x19\x02\b\x03B\xdb\x03\x92A\x96\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
@@ -954,7 +954,7 @@ const file_server_v1_groups_proto_rawDesc = "" +
 	"\n" +
 	"\n" +
 	"\x06apiKey\x12\x00z\x1e\n" +
-	"\x12x-torchwood-access\x12\b\x1a\x06serverZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
+	"\x12x-torchwood-access\x12\b\x1a\x06serverZ?github.com/torchwoodcloud/torchwood/genproto/server/v1;serverv1b\x06proto3"
 
 var (
 	file_server_v1_groups_proto_rawDescOnce sync.Once

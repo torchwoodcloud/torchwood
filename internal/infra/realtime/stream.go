@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/torchwooddev/torchwood/internal/domain/events"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
-	infraevents "github.com/torchwooddev/torchwood/internal/infra/events"
+	"github.com/torchwoodcloud/torchwood/internal/domain/events"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
+	infraevents "github.com/torchwoodcloud/torchwood/internal/infra/events"
 )
 
 const (

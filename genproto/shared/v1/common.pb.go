@@ -208,7 +208,7 @@ const file_shared_v1_common_proto_rawDesc = "" +
 	"\x0fprev_page_token\x18\x03 \x01(\tR\rprevPageToken\x12\x1f\n" +
 	"\vtotal_count\x18\x04 \x01(\x05R\n" +
 	"totalCount\"\a\n" +
-	"\x05EmptyB?Z=github.com/torchwooddev/torchwood/genproto/shared/v1;sharedv1b\x06proto3"
+	"\x05EmptyBAZ?github.com/torchwoodcloud/torchwood/genproto/shared/v1;sharedv1b\x06proto3"
 
 var (
 	file_shared_v1_common_proto_rawDescOnce sync.Once

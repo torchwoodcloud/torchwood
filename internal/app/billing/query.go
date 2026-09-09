@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	domainbilling "github.com/torchwooddev/torchwood/internal/domain/billing"
+	domainbilling "github.com/torchwoodcloud/torchwood/internal/domain/billing"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

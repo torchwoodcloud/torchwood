@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	appshared "github.com/torchwooddev/torchwood/internal/app/shared"
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
-	"github.com/torchwooddev/torchwood/internal/domain/projects"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
-	"github.com/torchwooddev/torchwood/pkg/idgen"
-	"github.com/torchwooddev/torchwood/pkg/uow"
+	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
+	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/idgen"
+	"github.com/torchwoodcloud/torchwood/pkg/uow"
 )
 
 const (

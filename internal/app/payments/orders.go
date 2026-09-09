@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
-	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

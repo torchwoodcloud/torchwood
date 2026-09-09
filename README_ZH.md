@@ -166,7 +166,7 @@ task test   # lint:go + sdk/go + sdk/typescript + go test -v ./... -cover
 详见 [`sdk/README.md`](sdk/README.md)：
 
 - **TypeScript**（`sdk/typescript`，`@torchwood/sdk`）—— 基于 HTTP（grpc-gateway）的 Client + Server API，含 `sdk/demo` 演示。
-- **Go**（`sdk/go`，`github.com/torchwooddev/torchwood/sdk/go`）—— gRPC 直连薄封装：`client`（终端用户认证，自动刷新 token）与 `server`（API Key + `InvokeJSON` 动态分发，CLI 即基于此）。
+- **Go**（`sdk/go`，`github.com/torchwoodcloud/torchwood/sdk/go`）—— gRPC 直连薄封装：`client`（终端用户认证，自动刷新 token）与 `server`（API Key + `InvokeJSON` 动态分发，CLI 即基于此）。
 
 ```bash
 task sdk:install && task sdk:build

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/domain/groups"
+	"github.com/torchwoodcloud/torchwood/internal/domain/groups"
 )
 
 // TestDocRole_ConstructorParseRoundTrip：构造器产物必须能被解析回同一

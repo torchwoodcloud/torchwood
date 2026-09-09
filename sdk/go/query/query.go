@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 )
 
 // ---------------------------------------------------------------------------

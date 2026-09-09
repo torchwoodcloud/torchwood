@@ -8,7 +8,7 @@ package clientv1
 
 import (
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	v1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -697,7 +697,7 @@ const file_client_v1_groups_proto_rawDesc = "" +
 	"\x10CreateMembership\x12,.torchwood.client.v1.CreateMembershipRequest\x1a\x1f.torchwood.client.v1.Membership\",\x82\xd3\xe4\x93\x02&:\x01*\"!/v1/groups/{group_id}/memberships\x12\x97\x01\n" +
 	"\x0fListMemberships\x12+.torchwood.client.v1.ListMembershipsRequest\x1a,.torchwood.client.v1.ListMembershipsResponse\")\x82\xd3\xe4\x93\x02#\x12!/v1/groups/{group_id}/memberships\x12\xb2\x01\n" +
 	"\x16UpdateMembershipStatus\x122.torchwood.client.v1.UpdateMembershipStatusRequest\x1a\x1f.torchwood.client.v1.Membership\"C\x82\xd3\xe4\x93\x02=:\x01*28/v1/groups/{group_id}/memberships/{membership_id}/status\x12\x94\x01\n" +
-	"\x10DeleteMembership\x12).torchwood.client.v1.GetMembershipRequest\x1a\x1a.torchwood.shared.v1.Empty\"9\x82\xd3\xe4\x93\x023*1/v1/groups/{group_id}/memberships/{membership_id}\x1a\x06\x92\xb2\x19\x02\b\x02B\xf5\x03\x92A\xb2\x03RR\n" +
+	"\x10DeleteMembership\x12).torchwood.client.v1.GetMembershipRequest\x1a\x1a.torchwood.shared.v1.Empty\"9\x82\xd3\xe4\x93\x023*1/v1/groups/{group_id}/memberships/{membership_id}\x1a\x06\x92\xb2\x19\x02\b\x02B\xf7\x03\x92A\xb2\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xab\x02\n" +
@@ -711,7 +711,7 @@ const file_client_v1_groups_proto_rawDesc = "" +
 	"\n" +
 	"\x06Bearer\x12\x00z \n" +
 	"\x12x-torchwood-access\x12\n" +
-	"\x1a\bend_userZ=github.com/torchwooddev/torchwood/genproto/client/v1;clientv1b\x06proto3"
+	"\x1a\bend_userZ?github.com/torchwoodcloud/torchwood/genproto/client/v1;clientv1b\x06proto3"
 
 var (
 	file_client_v1_groups_proto_rawDescOnce sync.Once

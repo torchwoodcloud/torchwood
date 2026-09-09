@@ -22,12 +22,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
-	"github.com/torchwooddev/torchwood/internal/infra/bun/bunrepo"
-	infraevents "github.com/torchwooddev/torchwood/internal/infra/events"
-	infrapayments "github.com/torchwooddev/torchwood/internal/infra/payments"
-	"github.com/torchwooddev/torchwood/internal/infra/payments/wechat"
-	"github.com/torchwooddev/torchwood/internal/testutil"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
+	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
+	infraevents "github.com/torchwoodcloud/torchwood/internal/infra/events"
+	infrapayments "github.com/torchwoodcloud/torchwood/internal/infra/payments"
+	"github.com/torchwoodcloud/torchwood/internal/infra/payments/wechat"
+	"github.com/torchwoodcloud/torchwood/internal/testutil"
 )
 
 // 本文件锁设计 §9.2 / PR6 验收「微信式 OrderID=本地 ULID、无 Stripe session

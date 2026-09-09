@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/lynx-go/lynx"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 )
 
 // RealtimeSubscriberService 是 RealtimeFanout 的 lynx.Service 壳：

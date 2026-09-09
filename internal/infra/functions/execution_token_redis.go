@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	domainfunctions "github.com/torchwooddev/torchwood/internal/domain/functions"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 )
 
 // 执行 token（P0 执行身份，设计 §1；owner 拍板：Redis 不透明 token，主动 DEL

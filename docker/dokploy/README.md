@@ -27,7 +27,7 @@
 4. 先别急着 Deploy——到 **Environment** 页签按下表添加变量，再回来点 **Deploy**。
 
 部署只做镜像拉取 + 容器编排，一两分钟内完成。前提是镜像已存在：推送到 main 后
-GitHub Actions 会自动构建并推 GHCR（首次部署前确认 [image workflow](https://github.com/torchwooddev/torchwood/actions/workflows/image.yml) 至少成功过一次）。
+GitHub Actions 会自动构建并推 GHCR（首次部署前确认 [image workflow](https://github.com/torchwoodcloud/torchwood/actions/workflows/image.yml) 至少成功过一次）。
 
 ## 2. 环境变量（Environment 页签）
 
@@ -115,9 +115,9 @@ gRPC 侧认证即 API Key（`x-api-key` metadata），限流维度同理。
 
 ## 5. 镜像与版本（GitHub Actions → GHCR）
 
-应用镜像由 [image workflow](https://github.com/torchwooddev/torchwood/actions/workflows/image.yml)
+应用镜像由 [image workflow](https://github.com/torchwoodcloud/torchwood/actions/workflows/image.yml)
 在 GitHub Actions 上构建（console SPA + server/worker/torchwood 三二进制），推送到
-`ghcr.io/torchwooddev/torchwood`。compose 三个应用服务（server/worker/roles-sig）
+`ghcr.io/torchwoodcloud/torchwood`。compose 三个应用服务（server/worker/roles-sig）
 均声明 `pull_policy: always`，每次 Deploy/Redeploy 都会拉取最新并按需重建容器。
 
 | tag | 何时更新 | 用途 |
@@ -126,7 +126,7 @@ gRPC 侧认证即 API Key（`x-api-key` metadata），限流维度同理。
 | `sha-<短commit>` | 每次 push 到 main | 回滚锚点：把 `TORCHWOOD_IMAGE` 钉到它再 Redeploy |
 | `vX.Y.Z` / `vX.Y` | push `v*` tag | 语义版本发布 |
 
-- **钉版本/回滚**：Environment 加 `TORCHWOOD_IMAGE=ghcr.io/torchwooddev/torchwood:sha-abc1234` → Redeploy。
+- **钉版本/回滚**：Environment 加 `TORCHWOOD_IMAGE=ghcr.io/torchwoodcloud/torchwood:sha-abc1234` → Redeploy。
 - **版本元数据**：CI 注入 `version/commit/date`，`curl https://<域名>/v1/server/health/version` 可验证部署到的确切版本。
 - **GHCR 可见性**：首次发布后包默认**私有**，二选一：
   - 改 Public：GitHub org → Packages → `torchwood` → Package settings → Danger Zone → Change visibility（推荐）；
@@ -177,7 +177,7 @@ torchwood --endpoint <服务器IP>:9060 --api-key sk-... health   # gRPC 直连�
 ## 10. 方案 B：复用外部依赖（不用栈内 PG/Redis/MinIO）
 
 若已有 Dokploy 模板部署的 Postgres/Redis/MinIO 或外部 S3，可将本栈拆为 **Application** 类型部署
-（源选 **Docker Image**：`ghcr.io/torchwooddev/torchwood:latest`，监听端口 9080），环境变量同 §2，另外：
+（源选 **Docker Image**：`ghcr.io/torchwoodcloud/torchwood:latest`，监听端口 9080），环境变量同 §2，另外：
 
 - gRPC 对外：`TORCHWOOD_SERVER_GRPC_ADDR=:9060`，并在 Application 的「Ports」里追加 `9060`（宿主:容器）；
 - `TORCHWOOD_DATA_DATABASE_SOURCE` 指向外部 PG 的 `tw_authenticator` DSN；
@@ -192,7 +192,7 @@ docker run --rm -v "$PWD/db/migrations:/migrations" migrate/migrate:v4.18.1 \
 # ② 授权补齐（psql 以 owner 连接）
 psql "<owner DSN>" -v ON_ERROR_STOP=1 -v dbname=<库名> -f docker/dokploy/bootstrap-roles.sql
 # ③ roles_sig 落库（用 GHCR 镜像内置的 CLI）
-docker run --rm ghcr.io/torchwooddev/torchwood:latest \
+docker run --rm ghcr.io/torchwoodcloud/torchwood:latest \
   torchwood admin sync-roles-sig --dsn "<owner DSN>"
 ```
 

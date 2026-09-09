@@ -8,9 +8,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	domainevents "github.com/torchwooddev/torchwood/internal/domain/events"
-	infraevents "github.com/torchwooddev/torchwood/internal/infra/events"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
+	infraevents "github.com/torchwoodcloud/torchwood/internal/infra/events"
 )
 
 const (

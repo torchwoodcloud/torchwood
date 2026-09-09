@@ -9,9 +9,9 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/torchwooddev/torchwood/internal/domain/audit"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
-	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 )
 
 // memDenyAudit 是拦截器拒绝审计的内存 sink（M5 C6 测试用）。

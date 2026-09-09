@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 )
 
 // EnsureTimeout 是启动自愈的软超时：超时项目记失败指标，不卡死进程。

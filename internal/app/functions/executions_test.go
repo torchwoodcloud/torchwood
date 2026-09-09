@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	domainbilling "github.com/torchwooddev/torchwood/internal/domain/billing"
-	domainfunctions "github.com/torchwooddev/torchwood/internal/domain/functions"
-	domainprojects "github.com/torchwooddev/torchwood/internal/domain/projects"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
-	"github.com/torchwooddev/torchwood/pkg/semaphore"
+	domainbilling "github.com/torchwoodcloud/torchwood/internal/domain/billing"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
+	domainprojects "github.com/torchwoodcloud/torchwood/internal/domain/projects"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/semaphore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

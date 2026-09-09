@@ -3,7 +3,7 @@ package payments
 import (
 	"context"
 
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
 )
 
 // recordOnlyFulfiller 是 PR1 的履约占位（设计 §1.5 / 执行计划 PR1：

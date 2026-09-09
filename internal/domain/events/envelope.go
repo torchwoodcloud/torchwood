@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 )
 
 const (

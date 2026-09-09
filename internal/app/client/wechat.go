@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
-	"github.com/torchwooddev/torchwood/internal/domain/users"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
+	"github.com/torchwoodcloud/torchwood/internal/domain/users"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

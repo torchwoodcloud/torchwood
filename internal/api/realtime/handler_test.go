@@ -15,14 +15,14 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	domainevents "github.com/torchwooddev/torchwood/internal/domain/events"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
-	infraauth "github.com/torchwooddev/torchwood/internal/infra/auth"
-	"github.com/torchwooddev/torchwood/internal/infra/realtime"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
-	"github.com/torchwooddev/torchwood/pkg/idgen"
-	"github.com/torchwooddev/torchwood/pkg/jwtparser"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
+	infraauth "github.com/torchwoodcloud/torchwood/internal/infra/auth"
+	"github.com/torchwoodcloud/torchwood/internal/infra/realtime"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/idgen"
+	"github.com/torchwoodcloud/torchwood/pkg/jwtparser"
 )
 
 var _ CredentialValidator = (*infraauth.Validator)(nil)

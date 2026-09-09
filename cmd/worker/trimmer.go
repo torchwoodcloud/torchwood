@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/lynx-go/lynx"
-	domainshared "github.com/torchwooddev/torchwood/internal/domain/shared"
+	domainshared "github.com/torchwoodcloud/torchwood/internal/domain/shared"
 )
 
 // streamTrimInterval 是队列 stream 裁剪周期。

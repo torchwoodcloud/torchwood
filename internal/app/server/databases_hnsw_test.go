@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 )
 
 // TestValidateIndex_HNSWMetric（会话 #10 预决策 2）：hnsw 索引的 metric

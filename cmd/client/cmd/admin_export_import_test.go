@@ -10,11 +10,11 @@ import (
 	"github.com/lynx-go/commands"
 	"github.com/stretchr/testify/require"
 
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	"github.com/torchwooddev/torchwood/internal/infra/bun/model"
-	"github.com/torchwooddev/torchwood/internal/infra/documentdb"
-	"github.com/torchwooddev/torchwood/internal/infra/events"
-	"github.com/torchwooddev/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/internal/infra/bun/model"
+	"github.com/torchwoodcloud/torchwood/internal/infra/documentdb"
+	"github.com/torchwoodcloud/torchwood/internal/infra/events"
+	"github.com/torchwoodcloud/torchwood/internal/testutil"
 )
 
 // executeAdminCmd 设置 flags 并执行（CLI 子命令集成路径：verb → Run →

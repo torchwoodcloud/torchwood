@@ -3,7 +3,7 @@ package contexts
 import (
 	"context"
 
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 )
 
 func WithPrincipal(ctx context.Context, p *shared.Principal) context.Context {

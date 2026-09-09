@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
 
 // DeclaredScopes 词表（P0 执行身份，设计 §1「危险资源排除」）：函数执行

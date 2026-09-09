@@ -8,9 +8,9 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	domainfunctions "github.com/torchwooddev/torchwood/internal/domain/functions"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
-	infrafunctions "github.com/torchwooddev/torchwood/internal/infra/functions"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
+	infrafunctions "github.com/torchwoodcloud/torchwood/internal/infra/functions"
 )
 
 func TestRedisExecutionTokenService_Lifecycle(t *testing.T) {

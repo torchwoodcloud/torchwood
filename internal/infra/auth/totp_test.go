@@ -10,10 +10,10 @@ import (
 	"github.com/pquerna/otp/totp"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/infra/auth"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
-	"github.com/torchwooddev/torchwood/pkg/jwtparser"
-	"github.com/torchwooddev/torchwood/pkg/secretbox"
+	"github.com/torchwoodcloud/torchwood/internal/infra/auth"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/jwtparser"
+	"github.com/torchwoodcloud/torchwood/pkg/secretbox"
 )
 
 func totpTestConfig() *config.AppConfig {

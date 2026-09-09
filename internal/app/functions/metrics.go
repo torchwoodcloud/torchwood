@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	domainfunctions "github.com/torchwooddev/torchwood/internal/domain/functions"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 )
 
 // ——观测补全（P0.5 子步骤 4；包内自注册，projectschema/dispatcher 同模式）——

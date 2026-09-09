@@ -2,8 +2,8 @@ package bun
 
 import (
 	"github.com/google/wire"
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	"github.com/torchwooddev/torchwood/internal/infra/bun/bunrepo"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 )
 
 var ProviderSet = wire.NewSet(

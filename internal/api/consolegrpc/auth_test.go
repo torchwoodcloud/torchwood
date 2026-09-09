@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	consolev1 "github.com/torchwooddev/torchwood/genproto/console/v1"
-	"github.com/torchwooddev/torchwood/internal/app/console"
-	"github.com/torchwooddev/torchwood/internal/domain/projects"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
-	"github.com/torchwooddev/torchwood/pkg/jwtparser"
-	"github.com/torchwooddev/torchwood/pkg/password"
+	consolev1 "github.com/torchwoodcloud/torchwood/genproto/console/v1"
+	"github.com/torchwoodcloud/torchwood/internal/app/console"
+	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/jwtparser"
+	"github.com/torchwoodcloud/torchwood/pkg/password"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )

@@ -3,9 +3,9 @@ package client
 import (
 	"context"
 
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	"github.com/torchwooddev/torchwood/internal/domain/groups"
-	"github.com/torchwooddev/torchwood/internal/domain/users"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/internal/domain/groups"
+	"github.com/torchwoodcloud/torchwood/internal/domain/users"
 )
 
 // UserRoles resolves JWT role claims for a user from static system tables.

@@ -1,7 +1,7 @@
 package interceptor
 
 import (
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
 
 // newTestInterceptor 按三桶语义构造小策略注册表（单测接线用）。

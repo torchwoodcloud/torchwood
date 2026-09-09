@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
-	domaingroups "github.com/torchwooddev/torchwood/internal/domain/groups"
-	domainusers "github.com/torchwooddev/torchwood/internal/domain/users"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
+	domaingroups "github.com/torchwoodcloud/torchwood/internal/domain/groups"
+	domainusers "github.com/torchwoodcloud/torchwood/internal/domain/users"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

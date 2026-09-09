@@ -3,9 +3,9 @@ package subscriptions
 import (
 	"context"
 
-	appshared "github.com/torchwooddev/torchwood/internal/app/shared"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
-	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
+	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 )
 
 func requireServerWrite(ctx context.Context) error {

@@ -2,11 +2,11 @@ package api
 
 import (
 	"github.com/google/wire"
-	"github.com/torchwooddev/torchwood/internal/api/clientgrpc"
-	"github.com/torchwooddev/torchwood/internal/api/consolegrpc"
-	apirealtime "github.com/torchwooddev/torchwood/internal/api/realtime"
-	"github.com/torchwooddev/torchwood/internal/api/servergrpc"
-	"github.com/torchwooddev/torchwood/internal/api/serverhttp"
+	"github.com/torchwoodcloud/torchwood/internal/api/clientgrpc"
+	"github.com/torchwoodcloud/torchwood/internal/api/consolegrpc"
+	apirealtime "github.com/torchwoodcloud/torchwood/internal/api/realtime"
+	"github.com/torchwoodcloud/torchwood/internal/api/servergrpc"
+	"github.com/torchwoodcloud/torchwood/internal/api/serverhttp"
 )
 
 var ProviderSet = wire.NewSet(

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/torchwooddev/torchwood/console"
+	"github.com/torchwoodcloud/torchwood/console"
 )
 
 // NewConsoleHandler serves the embedded Admin Console SPA.

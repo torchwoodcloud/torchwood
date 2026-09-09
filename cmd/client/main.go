@@ -8,7 +8,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/lynx-go/commands"
 
-	"github.com/torchwooddev/torchwood/cmd/client/cmd"
+	"github.com/torchwoodcloud/torchwood/cmd/client/cmd"
 )
 
 // version/commit/date 由 Taskfile build 的 ldflags 注入（与 cmd/server、cmd/worker 一致）。

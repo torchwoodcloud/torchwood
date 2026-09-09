@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	domainassets "github.com/torchwooddev/torchwood/internal/domain/assets"
-	domainevents "github.com/torchwooddev/torchwood/internal/domain/events"
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
-	"github.com/torchwooddev/torchwood/internal/domain/projects"
-	domainshared "github.com/torchwooddev/torchwood/internal/domain/shared"
-	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
+	domainassets "github.com/torchwoodcloud/torchwood/internal/domain/assets"
+	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
+	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
+	domainshared "github.com/torchwoodcloud/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

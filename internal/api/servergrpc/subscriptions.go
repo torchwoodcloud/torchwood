@@ -3,10 +3,10 @@ package servergrpc
 import (
 	"context"
 
-	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
-	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
-	appsubs "github.com/torchwooddev/torchwood/internal/app/subscriptions"
-	domainsubs "github.com/torchwooddev/torchwood/internal/domain/subscriptions"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	appsubs "github.com/torchwoodcloud/torchwood/internal/app/subscriptions"
+	domainsubs "github.com/torchwoodcloud/torchwood/internal/domain/subscriptions"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"

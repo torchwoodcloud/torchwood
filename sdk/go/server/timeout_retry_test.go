@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
-	"github.com/torchwooddev/torchwood/sdk/go/internal/conn"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
+	"github.com/torchwoodcloud/torchwood/sdk/go/internal/conn"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

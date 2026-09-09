@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package torchwood.shared.v1;
 
-option go_package = "github.com/torchwooddev/torchwood/genproto/shared/v1;sharedv1";
+option go_package = "github.com/torchwoodcloud/torchwood/genproto/shared/v1;sharedv1";
 
 message ListRequest {
   int32 page_size = 1;

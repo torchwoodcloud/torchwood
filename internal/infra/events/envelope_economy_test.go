@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	domainevents "github.com/torchwooddev/torchwood/internal/domain/events"
+	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
 )
 
 // TestEconomyEnvelopeRoundTrip 验证经济事件信封（domain/channel/attrs）

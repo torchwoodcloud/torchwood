@@ -11,8 +11,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/torchwooddev/torchwood/internal/app/shared"
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/internal/app/shared"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

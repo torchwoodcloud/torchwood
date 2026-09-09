@@ -11,7 +11,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/stretchr/testify/require"
-	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
+	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

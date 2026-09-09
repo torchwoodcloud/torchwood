@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
-	"github.com/torchwooddev/torchwood/pkg/query"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	"github.com/torchwoodcloud/torchwood/pkg/query"
 )
 
 func TestFromProto_EqMatchesParseEqual(t *testing.T) {

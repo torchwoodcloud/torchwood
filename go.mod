@@ -1,4 +1,4 @@
-module github.com/torchwooddev/torchwood
+module github.com/torchwoodcloud/torchwood
 
 go 1.26.5
 
@@ -30,8 +30,8 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
-	github.com/torchwooddev/torchwood/genproto v0.0.0-00010101000000-000000000000
-	github.com/torchwooddev/torchwood/sdk/go v0.0.0-00010101000000-000000000000
+	github.com/torchwoodcloud/torchwood/genproto v0.0.0-00010101000000-000000000000
+	github.com/torchwoodcloud/torchwood/sdk/go v0.0.0-00010101000000-000000000000
 	github.com/uptrace/bun v1.2.18
 	github.com/uptrace/bun/dialect/pgdialect v1.2.18
 	github.com/uptrace/bun/driver/pgdriver v1.2.18
@@ -125,6 +125,6 @@ require (
 	mellium.im/sasl v0.3.2 // indirect
 )
 
-replace github.com/torchwooddev/torchwood/genproto => ./genproto
+replace github.com/torchwoodcloud/torchwood/genproto => ./genproto
 
-replace github.com/torchwooddev/torchwood/sdk/go => ./sdk/go
+replace github.com/torchwoodcloud/torchwood/sdk/go => ./sdk/go

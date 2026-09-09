@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 
-	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 )
 
 // HealthService 封装 Server API 的 Health 服务。

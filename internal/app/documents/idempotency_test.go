@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/app/shared"
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/internal/app/shared"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"

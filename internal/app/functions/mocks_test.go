@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	domainfunctions "github.com/torchwooddev/torchwood/internal/domain/functions"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 )
 
 // mockRepo 是 FunctionRepo 的内存实现（测试用）。

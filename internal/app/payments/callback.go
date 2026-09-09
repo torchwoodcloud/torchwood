@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	domainevents "github.com/torchwooddev/torchwood/internal/domain/events"
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
+	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

@@ -126,7 +126,7 @@
 - 步骤：
   1. release job：以 genproto tag 为输入，临时改写 sdk/go/go.mod 的 require 为真实 genproto 版本（去掉 replace 生效问题——replace 仅主模块生效，下游拉取时失效），打 `sdk/go/vX.Y.Z` tag；genproto 同理出 tag；
   2. 建 CHANGELOG.md（sdk/genproto 两节）。
-- 验收：干净外部目录 `go get github.com/torchwooddev/torchwood/sdk/go@latest` 成功可编译。
+- 验收：干净外部目录 `go get github.com/torchwoodcloud/torchwood/sdk/go@latest` 成功可编译。
 
 ### J3-2 SDK 默认超时与可选重试
 

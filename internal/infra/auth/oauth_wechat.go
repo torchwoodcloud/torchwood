@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
 
 // weChatAPIBase is overridable in tests to point at httptest servers.

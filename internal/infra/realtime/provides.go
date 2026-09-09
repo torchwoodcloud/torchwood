@@ -2,7 +2,7 @@ package realtime
 
 import (
 	"github.com/google/wire"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 )
 
 // ProviderSet 供 cmd/server（Hub + Subscriber）与 cmd/worker

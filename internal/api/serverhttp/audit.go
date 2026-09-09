@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/torchwooddev/torchwood/internal/domain/audit"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"google.golang.org/grpc/status"
 )
 

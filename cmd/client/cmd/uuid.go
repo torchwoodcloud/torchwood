@@ -5,7 +5,7 @@ import (
 
 	"github.com/lynx-go/commands"
 
-	"github.com/torchwooddev/torchwood/pkg/idgen"
+	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 )
 
 // newUUIDCmd 生成本地 UUID v4（与服务端 idgen.UUID 同源），无需 API key。

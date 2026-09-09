@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	domaingroups "github.com/torchwooddev/torchwood/internal/domain/groups"
-	"github.com/torchwooddev/torchwood/internal/infra/bun/model"
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
+	domaingroups "github.com/torchwoodcloud/torchwood/internal/domain/groups"
+	"github.com/torchwoodcloud/torchwood/internal/infra/bun/model"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

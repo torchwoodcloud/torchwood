@@ -3,7 +3,7 @@ package client
 import (
 	"context"
 
-	"github.com/torchwooddev/torchwood/internal/domain/audit"
+	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

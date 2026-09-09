@@ -10,9 +10,9 @@ import (
 
 	"github.com/lynx-go/lynx"
 	"github.com/redis/go-redis/v9"
-	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
-	"github.com/torchwooddev/torchwood/internal/domain/storage"
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
+	"github.com/torchwoodcloud/torchwood/internal/domain/storage"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 )
 
 // DefaultTimeout 是未显式指定超时时的探测超时。

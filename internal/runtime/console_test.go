@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/runtime"
+	"github.com/torchwoodcloud/torchwood/internal/runtime"
 )
 
 func TestConsoleHandler_SecurityHeaders(t *testing.T) {

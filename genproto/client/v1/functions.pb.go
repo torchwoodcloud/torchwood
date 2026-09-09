@@ -9,7 +9,7 @@ package clientv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	_ "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	_ "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -176,7 +176,7 @@ const file_client_v1_functions_proto_rawDesc = "" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12\x1a\n" +
 	"\bresponse\x18\x03 \x01(\tR\bresponse2\xb5\x01\n" +
 	"\x10FunctionsService\x12\x98\x01\n" +
-	"\x0eInvokeFunction\x12*.torchwood.client.v1.InvokeFunctionRequest\x1a+.torchwood.client.v1.InvokeFunctionResponse\"-\x82\xd3\xe4\x93\x02':\x01*\"\"/v1/functions/{function_id}:invoke\x1a\x06\x92\xb2\x19\x02\b\x02B\xf5\x03\x92A\xb2\x03RR\n" +
+	"\x0eInvokeFunction\x12*.torchwood.client.v1.InvokeFunctionRequest\x1a+.torchwood.client.v1.InvokeFunctionResponse\"-\x82\xd3\xe4\x93\x02':\x01*\"\"/v1/functions/{function_id}:invoke\x1a\x06\x92\xb2\x19\x02\b\x02B\xf7\x03\x92A\xb2\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xab\x02\n" +
@@ -190,7 +190,7 @@ const file_client_v1_functions_proto_rawDesc = "" +
 	"\n" +
 	"\x06Bearer\x12\x00z \n" +
 	"\x12x-torchwood-access\x12\n" +
-	"\x1a\bend_userZ=github.com/torchwooddev/torchwood/genproto/client/v1;clientv1b\x06proto3"
+	"\x1a\bend_userZ?github.com/torchwoodcloud/torchwood/genproto/client/v1;clientv1b\x06proto3"
 
 var (
 	file_client_v1_functions_proto_rawDescOnce sync.Once

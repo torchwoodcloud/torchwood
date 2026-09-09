@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/torchwooddev/torchwood/internal/domain/audit"
-	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"

@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
-	domainsubs "github.com/torchwooddev/torchwood/internal/domain/subscriptions"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
+	domainsubs "github.com/torchwoodcloud/torchwood/internal/domain/subscriptions"
 )
 
 // HandleHostedCallback 处理 Stripe Billing webhook 镜像迁移（设计 §3.1）。

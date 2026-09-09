@@ -13,7 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 )
 
 func TestRolesSig_KeyNotSeeded_FailClosed(t *testing.T) {

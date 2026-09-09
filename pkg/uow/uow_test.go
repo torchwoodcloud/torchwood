@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/pkg/uow"
+	"github.com/torchwoodcloud/torchwood/pkg/uow"
 )
 
 type stubRunner struct {

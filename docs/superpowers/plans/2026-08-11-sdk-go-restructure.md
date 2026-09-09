@@ -12,8 +12,8 @@
 
 ## Global Constraints
 
-- sdk/go module 为 `github.com/torchwooddev/torchwood/sdk/go`，其 go.mod 已有 `replace github.com/torchwooddev/torchwood/genproto => ../../genproto`，不要改动。
-- 根 module `github.com/torchwooddev/torchwood` 已有 genproto 的 require + `replace => ./genproto`；本计划只新增 sdk/go 的 require + replace。
+- sdk/go module 为 `github.com/torchwoodcloud/torchwood/sdk/go`，其 go.mod 已有 `replace github.com/torchwoodcloud/torchwood/genproto => ../../genproto`，不要改动。
+- 根 module `github.com/torchwoodcloud/torchwood` 已有 genproto 的 require + `replace => ./genproto`；本计划只新增 sdk/go 的 require + replace。
 - SDK 所有类型化方法签名直接使用 genproto 类型，不定义自定义 DTO。
 - InvokeJSON 响应编码必须是 `protojson.MarshalOptions{Multiline: true, Indent: "  "}`（不开 EmitUnpopulated），与 CLI 现有输出逐字节一致。
 - InvokeJSON 仅允许 `torchwood.server.v1.*` 且排除 `APIKeysService`；错误形态：`torchwood: unknown method "<method>"`。
@@ -134,7 +134,7 @@ import (
 	"net"
 	"testing"
 
-	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -217,7 +217,7 @@ package server
 import (
 	"context"
 
-	"github.com/torchwooddev/torchwood/sdk/go/internal/conn"
+	"github.com/torchwoodcloud/torchwood/sdk/go/internal/conn"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -306,7 +306,7 @@ package server
 import (
 	"context"
 
-	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 )
 
 // HealthService 封装 Server API 的 Health 服务。
@@ -361,7 +361,7 @@ import (
 	"strings"
 	"testing"
 
-	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -656,7 +656,7 @@ package server
 import (
 	"context"
 
-	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 )
 
 // ProjectsService 封装 Server API 的 Projects 服务。
@@ -718,7 +718,7 @@ import (
 	"sync"
 	"testing"
 
-	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
+	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -807,7 +807,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
+	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -953,7 +953,7 @@ import (
 	"testing"
 	"time"
 
-	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
+	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -1049,8 +1049,8 @@ import (
 	"sync"
 	"time"
 
-	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
-	"github.com/torchwooddev/torchwood/sdk/go/internal/conn"
+	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
+	"github.com/torchwoodcloud/torchwood/sdk/go/internal/conn"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -1170,7 +1170,7 @@ import (
 	"context"
 	"time"
 
-	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
+	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -1279,7 +1279,7 @@ package client
 import (
 	"context"
 
-	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
+	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 )
 
 // AccountService 封装 Client API 的 Account 服务。
@@ -1475,9 +1475,9 @@ Expected: FAIL（invoke 签名变化导致编译错误）。
 根 `go.mod` 追加（随后 `go mod tidy`）：
 
 ```go
-require github.com/torchwooddev/torchwood/sdk/go v0.0.0-00010101000000-000000000000
+require github.com/torchwoodcloud/torchwood/sdk/go v0.0.0-00010101000000-000000000000
 
-replace github.com/torchwooddev/torchwood/sdk/go => ./sdk/go
+replace github.com/torchwoodcloud/torchwood/sdk/go => ./sdk/go
 ```
 
 `cmd/client/output.go` 重写核心：
@@ -1493,7 +1493,7 @@ import (
 	"io"
 
 	"github.com/spf13/cobra"
-	"github.com/torchwooddev/torchwood/sdk/go/server"
+	"github.com/torchwoodcloud/torchwood/sdk/go/server"
 	"google.golang.org/grpc/codes"   // 注：formatRPCError 仍需 status/codes，
 	"google.golang.org/grpc/status" // 见下方说明
 )
@@ -1950,7 +1950,7 @@ import (
 // TestNoProtoGRPCImports 兜底：CLI 源码不得直接 import genproto/grpc/protobuf。
 func TestNoProtoGRPCImports(t *testing.T) {
 	forbidden := []string{
-		"github.com/torchwooddev/torchwood/genproto",
+		"github.com/torchwoodcloud/torchwood/genproto",
 		"google.golang.org/grpc",
 		"google.golang.org/protobuf",
 	}

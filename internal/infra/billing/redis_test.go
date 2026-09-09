@@ -8,7 +8,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	domainbilling "github.com/torchwooddev/torchwood/internal/domain/billing"
+	domainbilling "github.com/torchwoodcloud/torchwood/internal/domain/billing"
 )
 
 func newTestCounter(t *testing.T) (*miniredis.Miniredis, *RedisCounter) {

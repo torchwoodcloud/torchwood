@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	"github.com/torchwooddev/torchwood/internal/domain/users"
-	"github.com/torchwooddev/torchwood/pkg/password"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/internal/domain/users"
+	"github.com/torchwoodcloud/torchwood/pkg/password"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

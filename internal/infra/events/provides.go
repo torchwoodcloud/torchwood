@@ -2,7 +2,7 @@ package events
 
 import (
 	"github.com/google/wire"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 )
 
 var ProviderSet = wire.NewSet(

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package torchwood.shared.v1;
 
-option go_package = "github.com/torchwooddev/torchwood/genproto/shared/v1;sharedv1";
+option go_package = "github.com/torchwoodcloud/torchwood/genproto/shared/v1;sharedv1";
 
 // ErrorCode 与 gRPC code 的映射（HTTPErrorHandler 单一事实来源，
 // 见 internal/infra/server/errors.go）：

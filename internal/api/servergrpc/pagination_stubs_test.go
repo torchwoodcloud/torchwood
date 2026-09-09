@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"time"
 
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
-	domaingroups "github.com/torchwooddev/torchwood/internal/domain/groups"
-	domainstorage "github.com/torchwooddev/torchwood/internal/domain/storage"
-	domainusers "github.com/torchwooddev/torchwood/internal/domain/users"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
+	domaingroups "github.com/torchwoodcloud/torchwood/internal/domain/groups"
+	domainstorage "github.com/torchwoodcloud/torchwood/internal/domain/storage"
+	domainusers "github.com/torchwoodcloud/torchwood/internal/domain/users"
 )
 
 type paginationUserRepo struct{}

@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
-	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"

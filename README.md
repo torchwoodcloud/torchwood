@@ -168,7 +168,7 @@ Integration tests (`internal/infra/documentdb/postgres_test.go`, `internal/app/c
 See [`sdk/README.md`](sdk/README.md):
 
 - **TypeScript** (`sdk/typescript`, `@torchwood/sdk`) — Client + Server API over HTTP (grpc-gateway), with `sdk/demo`.
-- **Go** (`sdk/go`, `github.com/torchwooddev/torchwood/sdk/go`) — gRPC-direct thin wrappers: `client` (end-user auth, auto token refresh) and `server` (API Key + `InvokeJSON` dynamic dispatch; CLI is built on it).
+- **Go** (`sdk/go`, `github.com/torchwoodcloud/torchwood/sdk/go`) — gRPC-direct thin wrappers: `client` (end-user auth, auto token refresh) and `server` (API Key + `InvokeJSON` dynamic dispatch; CLI is built on it).
 
 ```bash
 task sdk:install && task sdk:build

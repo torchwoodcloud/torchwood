@@ -3,7 +3,7 @@ package interceptor
 import (
 	"context"
 
-	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )

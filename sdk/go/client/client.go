@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
-	"github.com/torchwooddev/torchwood/sdk/go/internal/conn"
+	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
+	"github.com/torchwoodcloud/torchwood/sdk/go/internal/conn"
 	"google.golang.org/grpc"
 )
 

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
 // NewRedisClient 构造仅依赖 Redis 的客户端（functions-dispatcher 独立进程

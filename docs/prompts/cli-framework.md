@@ -13,7 +13,7 @@
 ## 关键现状（已调研核实，实施时复核）
 
 - 服务端 gRPC 明文监听 `127.0.0.1:9060`（仅回环），无 TLS。
-- 生成代码：`genproto/server/v1`（包名 `serverv1`），含全部 `NewXxxServiceClient`；模块名 `github.com/torchwooddev/torchwood`。
+- 生成代码：`genproto/server/v1`（包名 `serverv1`），含全部 `NewXxxServiceClient`；模块名 `github.com/torchwoodcloud/torchwood`。
 - 认证：outgoing metadata `x-api-key: <secret>`；**不要传** `X-Torchwood-Project`（仅对 admin console session 有效）。
 - API Key 无法调用的面（CLI 不提供对应命令）：`APIKeysService`（拦截器禁止）、`CreateProject`（use-case 限平台 admin）。
 - `pkg/grpc/` 下只有 interceptor，无现成 client 封装，需自行拨号。

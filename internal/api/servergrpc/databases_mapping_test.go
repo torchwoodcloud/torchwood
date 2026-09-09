@@ -7,9 +7,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
-	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 )
 
 // TestMapCollection_AttributeDefaultValue：GetCollection/ListCollections 响应必须

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/pkg/query"
+	"github.com/torchwoodcloud/torchwood/pkg/query"
 )
 
 func TestParseUserList_AllowsWhitelist(t *testing.T) {

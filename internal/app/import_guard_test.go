@@ -38,7 +38,7 @@ func TestNoInfraImports(t *testing.T) {
 		}
 		for _, imp := range f.Imports {
 			p := strings.Trim(imp.Path.Value, `"`)
-			if !strings.HasPrefix(p, "github.com/torchwooddev/torchwood/internal/infra") {
+			if !strings.HasPrefix(p, "github.com/torchwoodcloud/torchwood/internal/infra") {
 				continue
 			}
 			rel := filepath.ToSlash(path)

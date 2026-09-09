@@ -12,7 +12,7 @@ import (
 )
 
 var forbiddenImportPrefixes = []string{
-	"github.com/torchwooddev/torchwood/genproto",
+	"github.com/torchwoodcloud/torchwood/genproto",
 	"google.golang.org/grpc",
 	"google.golang.org/protobuf",
 }

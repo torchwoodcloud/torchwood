@@ -1,8 +1,8 @@
 package shared
 
 import (
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	"github.com/torchwooddev/torchwood/pkg/idgen"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 )
 
 type ActorKind string

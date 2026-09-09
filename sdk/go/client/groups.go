@@ -3,8 +3,8 @@ package client
 import (
 	"context"
 
-	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
-	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 )
 
 // GroupsService 封装 Client API 的 Groups 服务。

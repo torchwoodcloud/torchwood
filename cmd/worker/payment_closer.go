@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/lynx-go/lynx"
-	apppayments "github.com/torchwooddev/torchwood/internal/app/payments"
+	apppayments "github.com/torchwoodcloud/torchwood/internal/app/payments"
 )
 
 // paymentCloserInterval 是超时未付关单的扫描间隔（每分钟一次）。

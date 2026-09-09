@@ -264,7 +264,7 @@ const file_shared_v1_error_proto_rawDesc = "" +
 	"\x12\x1d\n" +
 	"\x19ERROR_CODE_INTERNAL_ERROR\x10\v\x12\"\n" +
 	"\x1eERROR_CODE_SERVICE_UNAVAILABLE\x10\f\x12\x16\n" +
-	"\x12ERROR_CODE_TIMEOUT\x10\rB?Z=github.com/torchwooddev/torchwood/genproto/shared/v1;sharedv1b\x06proto3"
+	"\x12ERROR_CODE_TIMEOUT\x10\rBAZ?github.com/torchwoodcloud/torchwood/genproto/shared/v1;sharedv1b\x06proto3"
 
 var (
 	file_shared_v1_error_proto_rawDescOnce sync.Once

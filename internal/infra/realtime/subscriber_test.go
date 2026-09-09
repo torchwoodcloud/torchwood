@@ -8,11 +8,11 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	"github.com/torchwooddev/torchwood/internal/infra/bun/model"
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
-	infraevents "github.com/torchwooddev/torchwood/internal/infra/events"
-	"github.com/torchwooddev/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/internal/infra/bun/model"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
+	infraevents "github.com/torchwoodcloud/torchwood/internal/infra/events"
+	"github.com/torchwoodcloud/torchwood/internal/testutil"
 )
 
 // newSubscriberEnv 组装 subscriber 集成测试环境：真实 Postgres（迁移含

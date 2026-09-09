@@ -3,7 +3,7 @@ package interceptor
 import (
 	"testing"
 
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 )
 
 func TestPrincipalHasAnyRole_FailClosed(t *testing.T) {

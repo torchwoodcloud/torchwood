@@ -3,9 +3,9 @@ package assets
 import (
 	"context"
 
-	appshared "github.com/torchwooddev/torchwood/internal/app/shared"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
-	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
+	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

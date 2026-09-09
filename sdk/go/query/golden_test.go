@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 )
 
 // R11 共享 golden 语料（SDK 侧）：与根模块 pkg/query 的 golden_test.go 消费

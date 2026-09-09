@@ -1,6 +1,6 @@
 # @torchwood/sdk
 
-Torchwood 的官方 TypeScript SDK，封装 **Client API**（用户 JWT）与 **Server API**（scoped API Key + `X-Torchwood-Project`），以类型安全的方式调用 [Torchwood](https://github.com/torchwooddev/torchwood) 后端——适合前端应用、自动化脚本与 LLM Agent 集成。
+Torchwood 的官方 TypeScript SDK，封装 **Client API**（用户 JWT）与 **Server API**（scoped API Key + `X-Torchwood-Project`），以类型安全的方式调用 [Torchwood](https://github.com/torchwoodcloud/torchwood) 后端——适合前端应用、自动化脚本与 LLM Agent 集成。
 
 ## 安装
 
@@ -69,12 +69,12 @@ import { agentTools, lookupAgentTool } from "@torchwood/sdk";
 const tool = lookupAgentTool("list_users"); // { name, description, method, schema }
 ```
 
-完整工具清单见 [`docs/developer/14-agent-tools.md`](https://github.com/torchwooddev/torchwood/blob/main/docs/developer/14-agent-tools.md)。
+完整工具清单见 [`docs/developer/14-agent-tools.md`](https://github.com/torchwoodcloud/torchwood/blob/main/docs/developer/14-agent-tools.md)。
 
 ## 更多文档
 
-- SDK 总览与 Web 演示站点：[`sdk/README.md`](https://github.com/torchwooddev/torchwood/blob/main/sdk/README.md)
-- SDK 开发指南：[`docs/developer/12-sdk.md`](https://github.com/torchwooddev/torchwood/blob/main/docs/developer/12-sdk.md)
+- SDK 总览与 Web 演示站点：[`sdk/README.md`](https://github.com/torchwoodcloud/torchwood/blob/main/sdk/README.md)
+- SDK 开发指南：[`docs/developer/12-sdk.md`](https://github.com/torchwoodcloud/torchwood/blob/main/docs/developer/12-sdk.md)
 - OpenAPI 定义：`task generate:proto` 后在 `genproto/**/*.swagger.json` 获取
 
 ## License

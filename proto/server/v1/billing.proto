@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package torchwood.server.v1;
 
-option go_package = "github.com/torchwooddev/torchwood/genproto/server/v1;serverv1";
+option go_package = "github.com/torchwoodcloud/torchwood/genproto/server/v1;serverv1";
 
 import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";

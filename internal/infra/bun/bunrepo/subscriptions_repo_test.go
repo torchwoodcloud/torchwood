@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	domainsubs "github.com/torchwooddev/torchwood/internal/domain/subscriptions"
-	"github.com/torchwooddev/torchwood/internal/infra/bun/bunrepo"
-	"github.com/torchwooddev/torchwood/internal/testutil"
+	domainsubs "github.com/torchwoodcloud/torchwood/internal/domain/subscriptions"
+	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
+	"github.com/torchwoodcloud/torchwood/internal/testutil"
 )
 
 // newLiveSub 构造一张订阅行（Status 决定是否占 live unique 位）。

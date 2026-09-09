@@ -906,7 +906,7 @@ const file_shared_v1_query_proto_rawDesc = "" +
 	"\x1bDISTANCE_METRIC_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16DISTANCE_METRIC_COSINE\x10\x01\x12\x16\n" +
 	"\x12DISTANCE_METRIC_L2\x10\x02\x12!\n" +
-	"\x1dDISTANCE_METRIC_INNER_PRODUCT\x10\x03B?Z=github.com/torchwooddev/torchwood/genproto/shared/v1;sharedv1b\x06proto3"
+	"\x1dDISTANCE_METRIC_INNER_PRODUCT\x10\x03BAZ?github.com/torchwoodcloud/torchwood/genproto/shared/v1;sharedv1b\x06proto3"
 
 var (
 	file_shared_v1_query_proto_rawDescOnce sync.Once

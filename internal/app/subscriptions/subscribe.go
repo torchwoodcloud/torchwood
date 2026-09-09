@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	appassets "github.com/torchwooddev/torchwood/internal/app/assets"
-	apppayments "github.com/torchwooddev/torchwood/internal/app/payments"
-	domainassets "github.com/torchwooddev/torchwood/internal/domain/assets"
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
-	domainsubs "github.com/torchwooddev/torchwood/internal/domain/subscriptions"
+	appassets "github.com/torchwoodcloud/torchwood/internal/app/assets"
+	apppayments "github.com/torchwoodcloud/torchwood/internal/app/payments"
+	domainassets "github.com/torchwoodcloud/torchwood/internal/domain/assets"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
+	domainsubs "github.com/torchwoodcloud/torchwood/internal/domain/subscriptions"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

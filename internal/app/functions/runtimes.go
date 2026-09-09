@@ -1,6 +1,6 @@
 package functions
 
-import domainfunctions "github.com/torchwooddev/torchwood/internal/domain/functions"
+import domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 
 // runtimes 静态运行时表：node-18.0 → node:18-alpine（入口 index.js 的 main）；
 // python-3.11 → python:3.11-alpine（入口 main.py 的 main）。entrypoint 字段 MVP

@@ -3,7 +3,7 @@ package users
 import (
 	"fmt"
 
-	"github.com/torchwooddev/torchwood/pkg/query"
+	"github.com/torchwoodcloud/torchwood/pkg/query"
 )
 
 var (

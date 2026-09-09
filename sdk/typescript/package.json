@@ -33,12 +33,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/torchwooddev/torchwood.git",
+    "url": "git+https://github.com/torchwoodcloud/torchwood.git",
     "directory": "sdk/typescript"
   },
-  "homepage": "https://github.com/torchwooddev/torchwood/tree/main/sdk/typescript#readme",
+  "homepage": "https://github.com/torchwoodcloud/torchwood/tree/main/sdk/typescript#readme",
   "bugs": {
-    "url": "https://github.com/torchwooddev/torchwood/issues"
+    "url": "https://github.com/torchwoodcloud/torchwood/issues"
   },
   "publishConfig": {
     "access": "public"

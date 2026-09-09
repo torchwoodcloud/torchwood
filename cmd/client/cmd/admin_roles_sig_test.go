@@ -12,8 +12,8 @@ import (
 	"github.com/lynx-go/commands"
 	"github.com/stretchr/testify/require"
 
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
-	"github.com/torchwooddev/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
+	"github.com/torchwoodcloud/torchwood/internal/testutil"
 )
 
 // rolesSigKeyHexFor 独立重算派生钥（不触碰进程全局态）：key =

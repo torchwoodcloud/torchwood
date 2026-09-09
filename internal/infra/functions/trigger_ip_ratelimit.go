@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
 // triggerIPWindowScript 原子执行 INCR + 首次 EXPIRE 并返回 [count, ttl]

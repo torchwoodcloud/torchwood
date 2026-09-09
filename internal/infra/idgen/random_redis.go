@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	domainidgen "github.com/torchwooddev/torchwood/internal/domain/idgen"
-	pkgidgen "github.com/torchwooddev/torchwood/pkg/idgen"
+	domainidgen "github.com/torchwoodcloud/torchwood/internal/domain/idgen"
+	pkgidgen "github.com/torchwoodcloud/torchwood/pkg/idgen"
 )
 
 // randomSetTTL 是 random 策略保留集合的 TTL：集合只增不减，长期运行会

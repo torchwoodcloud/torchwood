@@ -5,13 +5,13 @@ import (
 	"log/slog"
 	"strings"
 
-	appshared "github.com/torchwooddev/torchwood/internal/app/shared"
-	domainbilling "github.com/torchwooddev/torchwood/internal/domain/billing"
-	"github.com/torchwooddev/torchwood/internal/domain/functions"
-	"github.com/torchwooddev/torchwood/internal/domain/projects"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
-	"github.com/torchwooddev/torchwood/pkg/semaphore"
+	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
+	domainbilling "github.com/torchwoodcloud/torchwood/internal/domain/billing"
+	"github.com/torchwoodcloud/torchwood/internal/domain/functions"
+	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/semaphore"
 )
 
 // Functions 是 Functions 服务的 use-case 聚合。

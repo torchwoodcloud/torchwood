@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	appshared "github.com/torchwooddev/torchwood/internal/app/shared"
-	domainfunctions "github.com/torchwooddev/torchwood/internal/domain/functions"
-	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
+	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

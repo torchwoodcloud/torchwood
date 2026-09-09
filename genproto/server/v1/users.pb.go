@@ -8,7 +8,7 @@ package serverv1
 
 import (
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	v1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -842,7 +842,7 @@ const file_server_v1_users_proto_rawDesc = "" +
 	"DeleteUser\x12#.torchwood.server.v1.GetUserRequest\x1a\x1a.torchwood.shared.v1.Empty\",\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x02\x10\x02\x82\xd3\xe4\x93\x02\x17*\x15/v1/server/users/{id}\x12\x98\x01\n" +
 	"\x10ListUserSessions\x12#.torchwood.server.v1.GetUserRequest\x1a-.torchwood.server.v1.ListUserSessionsResponse\"0\x8a\xb2\x19\x06\"\x04\b\x02\x10\x01\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/users/{id}/sessions\x12\xa2\x01\n" +
 	"\x11DeleteUserSession\x12-.torchwood.server.v1.DeleteUserSessionRequest\x1a\x1a.torchwood.shared.v1.Empty\"B\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x02\x10\x02\x82\xd3\xe4\x93\x02-*+/v1/server/users/{id}/sessions/{session_id}\x12\x99\x01\n" +
-	"\x0fCreateUserToken\x12#.torchwood.server.v1.GetUserRequest\x1a,.torchwood.server.v1.CreateUserTokenResponse\"3\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x02\x10\x02\x82\xd3\xe4\x93\x02\x1e\"\x1c/v1/server/users/{id}/tokens\x1a\x06\x92\xb2\x19\x02\b\x03B\xd9\x03\x92A\x96\x03RR\n" +
+	"\x0fCreateUserToken\x12#.torchwood.server.v1.GetUserRequest\x1a,.torchwood.server.v1.CreateUserTokenResponse\"3\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x02\x10\x02\x82\xd3\xe4\x93\x02\x1e\"\x1c/v1/server/users/{id}/tokens\x1a\x06\x92\xb2\x19\x02\b\x03B\xdb\x03\x92A\x96\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
@@ -855,7 +855,7 @@ const file_server_v1_users_proto_rawDesc = "" +
 	"\n" +
 	"\n" +
 	"\x06apiKey\x12\x00z\x1e\n" +
-	"\x12x-torchwood-access\x12\b\x1a\x06serverZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
+	"\x12x-torchwood-access\x12\b\x1a\x06serverZ?github.com/torchwoodcloud/torchwood/genproto/server/v1;serverv1b\x06proto3"
 
 var (
 	file_server_v1_users_proto_rawDescOnce sync.Once

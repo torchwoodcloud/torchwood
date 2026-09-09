@@ -9,7 +9,7 @@ import (
 
 	"github.com/lynx-go/commands"
 
-	"github.com/torchwooddev/torchwood/sdk/go/server"
+	"github.com/torchwoodcloud/torchwood/sdk/go/server"
 )
 
 // globalFlags 是贯穿全部 RPC 子命令的全局参数（设计文档 §4.3）。

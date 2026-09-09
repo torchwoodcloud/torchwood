@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"strings"
 
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
-	"github.com/torchwooddev/torchwood/pkg/jwtparser"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/jwtparser"
 )
 
 // SessionCookieCodec signs and verifies opaque session cookie values.

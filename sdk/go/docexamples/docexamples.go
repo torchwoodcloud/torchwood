@@ -10,9 +10,9 @@ import (
 	"context"
 	"os"
 
-	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
-	"github.com/torchwooddev/torchwood/sdk/go/client"
-	"github.com/torchwooddev/torchwood/sdk/go/server"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
+	"github.com/torchwoodcloud/torchwood/sdk/go/client"
+	"github.com/torchwoodcloud/torchwood/sdk/go/server"
 )
 
 // DocSDKGuideServerAPI 对应 docs/developer/12-sdk.md §4.4「典型用法」的

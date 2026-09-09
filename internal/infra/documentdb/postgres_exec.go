@@ -8,8 +8,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 )
 
 // execIdentityFor 把文档主体映射为执行身份（§3.2 #8：系统/平台管理员旁路走

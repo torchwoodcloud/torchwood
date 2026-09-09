@@ -5,8 +5,8 @@ package queryproto
 import (
 	"fmt"
 
-	sharedv1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
-	"github.com/torchwooddev/torchwood/pkg/query"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	"github.com/torchwoodcloud/torchwood/pkg/query"
 )
 
 // FromProto decodes a proto Query into the AST（C7 单 AST：proto Query 是

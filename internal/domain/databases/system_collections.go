@@ -1,6 +1,6 @@
 package databases
 
-import "github.com/torchwooddev/torchwood/pkg/ident"
+import "github.com/torchwoodcloud/torchwood/pkg/ident"
 
 // SystemDatabaseID 是系统集合的内部 database 寻址 id（项目数据面 sentinel `_`）。
 // 与 ident.ProjectDataPlaneID 同值；对外 API 必须经 RejectExternalDatabaseID 拒绝。

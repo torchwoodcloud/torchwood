@@ -1,5 +1,5 @@
 # 镜像发布流水线：GitHub Actions 构建仓库根 Dockerfile → 推 GHCR
-# （ghcr.io/torchwooddev/torchwood）。
+# （ghcr.io/torchwoodcloud/torchwood）。
 #
 # 背景：Dokploy/小内存 VPS 上 `docker compose build` 会在 go build 三个二进制
 # 时触发 OOM（部署进程被内核杀死，状态表现为 cancelled 而非 error）。改为
@@ -34,7 +34,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: torchwooddev/torchwood
+  IMAGE_NAME: torchwoodcloud/torchwood
 
 jobs:
   build-push:

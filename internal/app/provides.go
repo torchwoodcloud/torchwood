@@ -2,18 +2,18 @@ package app
 
 import (
 	"github.com/google/wire"
-	"github.com/torchwooddev/torchwood/internal/app/assets"
-	"github.com/torchwooddev/torchwood/internal/app/billing"
-	"github.com/torchwooddev/torchwood/internal/app/client"
-	"github.com/torchwooddev/torchwood/internal/app/console"
-	"github.com/torchwooddev/torchwood/internal/app/events"
-	"github.com/torchwooddev/torchwood/internal/app/functions"
-	"github.com/torchwooddev/torchwood/internal/app/payments"
-	"github.com/torchwooddev/torchwood/internal/app/server"
-	"github.com/torchwooddev/torchwood/internal/app/storage"
-	"github.com/torchwooddev/torchwood/internal/app/subscriptions"
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
+	"github.com/torchwoodcloud/torchwood/internal/app/assets"
+	"github.com/torchwoodcloud/torchwood/internal/app/billing"
+	"github.com/torchwoodcloud/torchwood/internal/app/client"
+	"github.com/torchwoodcloud/torchwood/internal/app/console"
+	"github.com/torchwoodcloud/torchwood/internal/app/events"
+	"github.com/torchwoodcloud/torchwood/internal/app/functions"
+	"github.com/torchwoodcloud/torchwood/internal/app/payments"
+	"github.com/torchwoodcloud/torchwood/internal/app/server"
+	"github.com/torchwoodcloud/torchwood/internal/app/storage"
+	"github.com/torchwoodcloud/torchwood/internal/app/subscriptions"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
 )
 
 var ProviderSet = wire.NewSet(

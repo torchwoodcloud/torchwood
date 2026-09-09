@@ -18,14 +18,14 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/torchwooddev/torchwood/internal/api/interceptor"
-	"github.com/torchwooddev/torchwood/internal/domain/audit"
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
-	domainevents "github.com/torchwooddev/torchwood/internal/domain/events"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
-	"github.com/torchwooddev/torchwood/pkg/idgen"
-	"github.com/torchwooddev/torchwood/pkg/jwtparser"
+	"github.com/torchwoodcloud/torchwood/internal/api/interceptor"
+	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/idgen"
+	"github.com/torchwoodcloud/torchwood/pkg/jwtparser"
 )
 
 // 保活与超时（v2 设计 §4.1 / §4.3）：http.Server 读写超时已由 gateway

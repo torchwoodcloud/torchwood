@@ -8,8 +8,8 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/infra/auth"
-	"github.com/torchwooddev/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/internal/infra/auth"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
 // Round3 H6-4：INCR + 首次 EXPIRE 原子化——三个限流器首次计数后键必须带

@@ -5,8 +5,8 @@ import (
 	"context"
 	"time"
 
-	serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1"
-	"github.com/torchwooddev/torchwood/sdk/go/internal/conn"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
+	"github.com/torchwoodcloud/torchwood/sdk/go/internal/conn"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )

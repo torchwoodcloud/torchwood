@@ -3,9 +3,9 @@ package clientgrpc
 import (
 	"context"
 
-	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
-	appfunctions "github.com/torchwooddev/torchwood/internal/app/functions"
-	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
+	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
+	appfunctions "github.com/torchwoodcloud/torchwood/internal/app/functions"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

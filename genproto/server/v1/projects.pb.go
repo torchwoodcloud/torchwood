@@ -9,7 +9,7 @@ package serverv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	v1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -845,7 +845,7 @@ const file_server_v1_projects_proto_rawDesc = "" +
 	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x024*2/v1/server/projects/{project_id}/invite-codes/{id}\x12\xf7\x01\n" +
 	"\x1cUpdateOAuthRedirectAllowlist\x128.torchwood.server.v1.UpdateOAuthRedirectAllowlistRequest\x1a\x1c.torchwood.server.v1.Project\"\x7f\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02>:\x01*\x1a9/v1/server/projects/{project_id}/oauth-redirect-allowlist\x1a\x06\x92\xb2\x19\x02\b\x03B\xd9\x03\x92A\x96\x03RR\n" +
+	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02>:\x01*\x1a9/v1/server/projects/{project_id}/oauth-redirect-allowlist\x1a\x06\x92\xb2\x19\x02\b\x03B\xdb\x03\x92A\x96\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
@@ -858,7 +858,7 @@ const file_server_v1_projects_proto_rawDesc = "" +
 	"\n" +
 	"\n" +
 	"\x06apiKey\x12\x00z\x1e\n" +
-	"\x12x-torchwood-access\x12\b\x1a\x06serverZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
+	"\x12x-torchwood-access\x12\b\x1a\x06serverZ?github.com/torchwoodcloud/torchwood/genproto/server/v1;serverv1b\x06proto3"
 
 var (
 	file_server_v1_projects_proto_rawDescOnce sync.Once

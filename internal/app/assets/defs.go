@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	domainassets "github.com/torchwooddev/torchwood/internal/domain/assets"
+	domainassets "github.com/torchwoodcloud/torchwood/internal/domain/assets"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

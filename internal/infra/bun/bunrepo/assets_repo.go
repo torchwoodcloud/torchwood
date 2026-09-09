@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/torchwooddev/torchwood/internal/domain/assets"
-	"github.com/torchwooddev/torchwood/internal/infra/bun/model"
-	"github.com/torchwooddev/torchwood/internal/infra/clients"
+	"github.com/torchwoodcloud/torchwood/internal/domain/assets"
+	"github.com/torchwoodcloud/torchwood/internal/infra/bun/model"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 	"github.com/uptrace/bun/driver/pgdriver"
 )
 

@@ -3,9 +3,9 @@ package subscriptions
 import (
 	"context"
 
-	appassets "github.com/torchwooddev/torchwood/internal/app/assets"
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
-	domainsubs "github.com/torchwooddev/torchwood/internal/domain/subscriptions"
+	appassets "github.com/torchwoodcloud/torchwood/internal/app/assets"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
+	domainsubs "github.com/torchwoodcloud/torchwood/internal/domain/subscriptions"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

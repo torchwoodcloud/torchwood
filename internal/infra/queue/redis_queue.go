@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	domainshared "github.com/torchwooddev/torchwood/internal/domain/shared"
+	domainshared "github.com/torchwoodcloud/torchwood/internal/domain/shared"
 )
 
 // redisQueue 是 shared.Queue 的 Redis Stream 实现（至少一次，XADD/XREADGROUP/XACK）。

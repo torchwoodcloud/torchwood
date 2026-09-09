@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	appshared "github.com/torchwooddev/torchwood/internal/app/shared"
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
+	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

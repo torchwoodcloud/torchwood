@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/torchwooddev/torchwood/internal/domain/events"
-	"github.com/torchwooddev/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/domain/events"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 )
 
 // dedupWindow 是 Hub 按 event_id 去重的时间窗（回收重放 / 崩溃重投

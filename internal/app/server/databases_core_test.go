@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwooddev/torchwood/internal/app/documents"
-	"github.com/torchwooddev/torchwood/internal/domain/databases"
+	"github.com/torchwoodcloud/torchwood/internal/app/documents"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

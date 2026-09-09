@@ -6,7 +6,7 @@ import (
 
 	"github.com/lynx-go/commands"
 
-	"github.com/torchwooddev/torchwood/pkg/query"
+	"github.com/torchwoodcloud/torchwood/pkg/query"
 )
 
 const (

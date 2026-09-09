@@ -3,7 +3,7 @@ package client
 import (
 	"context"
 
-	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
+	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 )
 
 // AssetsService 封装 Client API 的只读资产查询（终端用户无写入口，红线 D6）。

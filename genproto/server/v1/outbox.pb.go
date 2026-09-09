@@ -9,7 +9,7 @@ package serverv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	v1 "github.com/torchwooddev/torchwood/genproto/shared/v1"
+	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -364,7 +364,7 @@ const file_server_v1_outbox_proto_rawDesc = "" +
 	"\x0fListDeadLetters\x12+.torchwood.server.v1.ListDeadLettersRequest\x1a,.torchwood.server.v1.ListDeadLettersResponse\"4\x8a\xb2\x19\n" +
 	"\x1a\x02\x03\x04\"\x04\b\f\x10\x01\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/outbox/dead-letters\x12\xba\x01\n" +
 	"\x10ReplayDeadLetter\x12,.torchwood.server.v1.ReplayDeadLetterRequest\x1a-.torchwood.server.v1.ReplayDeadLetterResponse\"I\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\f\x10\x02\x82\xd3\xe4\x93\x025:\x01*\"0/v1/server/outbox/dead-letters/{event_id}:replay\x1a\x06\x92\xb2\x19\x02\b\x03B\xd2\x02\x92A\x8f\x02RR\n" +
+	"\x1a\x02\x03\x04\"\x04\b\f\x10\x02\x82\xd3\xe4\x93\x025:\x01*\"0/v1/server/outbox/dead-letters/{event_id}:replay\x1a\x06\x92\xb2\x19\x02\b\x03B\xd4\x02\x92A\x8f\x02RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x8a\x01\n" +
@@ -377,7 +377,7 @@ const file_server_v1_outbox_proto_rawDesc = "" +
 	"\n" +
 	"\n" +
 	"\x06apiKey\x12\x00z\x1e\n" +
-	"\x12x-torchwood-access\x12\b\x1a\x06serverZ=github.com/torchwooddev/torchwood/genproto/server/v1;serverv1b\x06proto3"
+	"\x12x-torchwood-access\x12\b\x1a\x06serverZ?github.com/torchwoodcloud/torchwood/genproto/server/v1;serverv1b\x06proto3"
 
 var (
 	file_server_v1_outbox_proto_rawDescOnce sync.Once

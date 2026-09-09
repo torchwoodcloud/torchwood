@@ -3,7 +3,7 @@ package client
 import (
 	"context"
 
-	clientv1 "github.com/torchwooddev/torchwood/genproto/client/v1"
+	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 )
 
 // FunctionsService 封装 Client API 的客户端调用面（P2）：终端用户按

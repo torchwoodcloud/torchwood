@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

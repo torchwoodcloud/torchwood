@@ -8,8 +8,8 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	domainidgen "github.com/torchwooddev/torchwood/internal/domain/idgen"
-	pkgidgen "github.com/torchwooddev/torchwood/pkg/idgen"
+	domainidgen "github.com/torchwoodcloud/torchwood/internal/domain/idgen"
+	pkgidgen "github.com/torchwoodcloud/torchwood/pkg/idgen"
 )
 
 const capTestSetKey = "Torchwood:id:random:proj-1:users"

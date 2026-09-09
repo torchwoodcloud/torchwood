@@ -9,7 +9,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	infraevents "github.com/torchwooddev/torchwood/internal/infra/events"
+	infraevents "github.com/torchwoodcloud/torchwood/internal/infra/events"
 )
 
 // newStreamEnv 组装 miniredis Stream 测试环境。

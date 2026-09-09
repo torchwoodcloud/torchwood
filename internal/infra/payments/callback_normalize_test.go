@@ -25,11 +25,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
-	"github.com/torchwooddev/torchwood/internal/infra/payments/alipay"
-	"github.com/torchwooddev/torchwood/internal/infra/payments/iosiap"
-	"github.com/torchwooddev/torchwood/internal/infra/payments/stripe"
-	"github.com/torchwooddev/torchwood/internal/infra/payments/wechat"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
+	"github.com/torchwoodcloud/torchwood/internal/infra/payments/alipay"
+	"github.com/torchwoodcloud/torchwood/internal/infra/payments/iosiap"
+	"github.com/torchwoodcloud/torchwood/internal/infra/payments/stripe"
+	"github.com/torchwoodcloud/torchwood/internal/infra/payments/wechat"
 )
 
 // TestFourProviders_VerifyCallbackSameShape 验收：四渠道 VerifyCallback

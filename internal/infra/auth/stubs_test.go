@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
-	domainusers "github.com/torchwooddev/torchwood/internal/domain/users"
+	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
+	domainusers "github.com/torchwoodcloud/torchwood/internal/domain/users"
 )
 
 type stubUserRepo struct {

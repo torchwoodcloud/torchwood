@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	goruntime "runtime"
 
-	intruntime "github.com/torchwooddev/torchwood/internal/runtime"
+	intruntime "github.com/torchwoodcloud/torchwood/internal/runtime"
 )
 
 func main() {

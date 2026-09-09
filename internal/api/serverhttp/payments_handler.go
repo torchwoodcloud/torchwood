@@ -13,9 +13,9 @@ import (
 	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	apppayments "github.com/torchwooddev/torchwood/internal/app/payments"
-	"github.com/torchwooddev/torchwood/internal/domain/audit"
-	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
+	apppayments "github.com/torchwoodcloud/torchwood/internal/app/payments"
+	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
+	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
 )
 
 // maxCallbackBody 是渠道回调体上限（1 MiB）。

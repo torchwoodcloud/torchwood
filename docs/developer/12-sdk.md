@@ -44,7 +44,7 @@ task sdk:demo      # 依赖 sdk:build 后 vite dev（http://localhost:5174）
 
 - 对外用户直接安装已发布包：`npm install @torchwood/sdk`（npm 公共 registry，发布走 `task sdk:publish`）；
 - TS SDK 零运行时依赖，仅 `typescript`（dev），HTTP 走全局 `fetch`（`TorchwoodConfig.fetch` 可注入）；
-- Go SDK 为独立 module：`github.com/torchwooddev/torchwood/sdk/go`（`require` + `replace` 本地开发）。
+- Go SDK 为独立 module：`github.com/torchwoodcloud/torchwood/sdk/go`（`require` + `replace` 本地开发）。
 
 ---
 
@@ -185,7 +185,7 @@ respJSON, err := c.InvokeJSON(ctx, "/torchwood.server.v1.UsersService/CreateUser
 ### 4.4 典型用法
 
 ```go
-import ("context"; "github.com/torchwooddev/torchwood/sdk/go/client"; "github.com/torchwooddev/torchwood/sdk/go/server"; serverv1 "github.com/torchwooddev/torchwood/genproto/server/v1")
+import ("context"; "github.com/torchwoodcloud/torchwood/sdk/go/client"; "github.com/torchwoodcloud/torchwood/sdk/go/server"; serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1")
 
 // Server API（管理面）
 srv, _ := server.New("127.0.0.1:9060", server.WithAPIKey(os.Getenv("TORCHWOOD_API_KEY")), server.WithDatabaseID("app"))

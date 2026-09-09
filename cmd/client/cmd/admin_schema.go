@@ -9,7 +9,7 @@ import (
 
 	"github.com/lynx-go/commands"
 
-	"github.com/torchwooddev/torchwood/internal/infra/documentdb"
+	"github.com/torchwoodcloud/torchwood/internal/infra/documentdb"
 )
 
 // newAdminSchemaCmd 提供 schema 漂移对账命令（转出 POC 门禁 B3，redesign

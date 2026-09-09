@@ -2,7 +2,7 @@ package billing
 
 import (
 	"github.com/google/wire"
-	domainbilling "github.com/torchwooddev/torchwood/internal/domain/billing"
+	domainbilling "github.com/torchwoodcloud/torchwood/internal/domain/billing"
 )
 
 // ProviderSet 装配 Redis 用量计数器。

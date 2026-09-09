@@ -415,7 +415,7 @@ const file_shared_v1_document_proto_rawDesc = "" +
 	"\x19ARRAY_UPDATE_OP_INTERSECT\x10\x05\x12\x18\n" +
 	"\x14ARRAY_UPDATE_OP_DIFF\x10\x06\x12\x1a\n" +
 	"\x16ARRAY_UPDATE_OP_INSERT\x10\a\x12\x1a\n" +
-	"\x16ARRAY_UPDATE_OP_FILTER\x10\bB?Z=github.com/torchwooddev/torchwood/genproto/shared/v1;sharedv1b\x06proto3"
+	"\x16ARRAY_UPDATE_OP_FILTER\x10\bBAZ?github.com/torchwoodcloud/torchwood/genproto/shared/v1;sharedv1b\x06proto3"
 
 var (
 	file_shared_v1_document_proto_rawDescOnce sync.Once
