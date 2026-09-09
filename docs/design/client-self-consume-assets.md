@@ -1,6 +1,6 @@
 # 客户端可消费资产（Self-Consume）设计草案
 
-> 状态：**草案（2026-09-09，待 owner 评审拍板；Open Questions 清零前不得实施）**
+> 状态：**归档参考（2026-09-09 两次决策收敛：①路线后置于函数平台补全 `functions-execution-identity-and-triggers.md`；②产品定位确认为通用型 BaaS——增强基础能力、组合实现具体需求，广告奖励等垂直场景由 B 稿水平原语组合覆盖（HTTP 触发器=SSV、client invoke+可配窗口限频=isEnded 暂发、cron=重置），资产域专用端点**不再独立立项**。本稿保留为「组合方案被数据证明不足时，设计声明式限频动作水平原语」的应用层参考；重启前提复核 `economy-client-write-competitive-analysis.md` §五/§八）**
 > 动机：纯客户端游戏（无自建服务器）需要服务端权威的奖励核销通道（激励视频复活奖励等）
 > 前置：`docs/design/v3-payments-economy.md`（本稿包含对红线 D6 的修订，随本稿一并拍板）
 > 执行计划：本稿 §Rollout 的 PR 切片，批准后按仓库惯例派发

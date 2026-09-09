@@ -112,6 +112,8 @@ torchwood 的资产子系统（D1：静态表 + 行锁 + 唯一约束 + 追加�
 
 ## 七、对 torchwood 决策的映射
 
+> 2026-09-09 定位更新：产品方向确认为**通用型 BaaS——增强基础能力、组合实现具体需求**。本节早期建议（「A 照评审推进」「A' 优先」）以 `functions-execution-identity-and-triggers.md` 的最终路线为准：A/A' 场景由函数平台水平原语组合实现，资产域专用端点不立项。
+
 1. **方案 A（self-consume）**：有 PlayFab Rewarded Ads 这个成熟产品先例，设计逐项同构（含 UTC 窗口）；D6-v2 修订把 torchwood 从「比 PlayFab 更严」带到「与 PlayFab 产品化位置对齐、保持硬隔离骨架」。在不接 SSV 或 SSV 不可用（基础库 < v3.10.3）的场景，这是行业验证过的正确形态。
 2. **方案 B（客户端可调用函数）**：行业通用骨干；微信云函数就是本生态（微信小游戏）的事实标准。做 B 的前置 = execution principal + per-user/per-function 限流（行业入场券，见 §三）；现状「函数内零注入 + variables 明文塞 key」是行业之外的状态，无论是否开 client 面，都应先补 execution principal（同时修复已有凭证风险，对标 PC-6）。
 3. **新出现的方案 A'（广告奖励回调接收器）**：若用户游戏可接微信 SSV，黄金链路是「SSV 回调 → torchwood 验签（复用 payments webhook 的 serverhttp/D7 模式）去重 → 服务端发放」。先例充分（Firebase AdMob SSV + Functions 官方闭环、uni-ad 的 uniAdCallback 云函数、ironSource S2S → Cloud Code）。代价：按广告平台逐一做适配器，平台绑定性强；且回调 URL 需要平台提供公网端点（等价于 B 的「HTTP 触发器」设施，即评审 04-platform-capabilities.md PC-5 的触发器模块）。
@@ -121,6 +123,37 @@ torchwood 的资产子系统（D1：静态表 + 行锁 + 唯一约束 + 追加�
    - 接 SSV → 优先 A'（或 B 的 HTTP 触发器 + 函数内验签），isEnded 仅作 UX 即时反馈 + SSV 对账兜底（微信官方自己建议的策略）；self-consume 降级为「SSV 前即时暂发 + SSV 后核销」的可选增强。
    - 不接 SSV → 方案 A 成立（PlayFab 同款），A 稿照评审推进；B 的第一步（execution principal）并行排期。
    - 无论哪条路：execution principal + 触发器模块是共同地基（PC-5/PC-6），先做不亏。
+
+## 八、验证：纯客户端游戏的 serverless 化完整性对照
+
+> 判定标准：一个纯客户端游戏（以微信小游戏为基准客户，最严苛形态）接入 torchwood 后，**是否还需要任何自建后端组件**（常驻服务、自有域名、密钥托管）才能把游戏跑完整。逐项对照（2026-09-09 代码核实）：
+
+| 游戏后端需求 | torchwood 现状 | 判定 |
+|---|---|---|
+| 账号/登录 | 匿名会话 + 微信全系 OAuth（`internal/domain/auth/wechat.go`：Web/MP/**小程序 code2Session**/App 四 provider，unionid 优先归一） | ✅ |
+| 云存档 | 文档库 + per-user ACL（RLS），客户端 SDK 直读写本人数据 | ✅ |
+| 关卡/商店等配置数据 | 只读集合 | ✅ |
+| 经济（货币/物品/权益） | assets（defs/holdings/ledger 五动词） | ✅ |
+| 支付买币 | stripe/wechat/alipay/ios_iap 四渠道 + 履约同事务；**米大师虚拟支付（小游戏 Android 道具内购）未支持**（全仓零命中，需核实是否排期） | ✅/⚠️ |
+| 广告奖励 / 客户端花币 / 自定义服务端逻辑 / HTTP 回调（SSV、第三方 webhook）/ 定时任务（每日重置、赛季结算） | **整层缺失**（函数执行器有，触发面/客户端面/凭证注入无；全仓无 cron） | ❌ → B |
+| 排行榜 | **全仓零实现**（proto/domain/docs 均无 leaderboard）；可 DIY（文档库 + 函数防作弊校验）但非一等公民，高规模需专门结构 | ❌（DIY 可撑） |
+| 实时（广播/聊天/回合同步） | WS 订阅 + 事件重放（last_seq）；权威实时对战任何 BaaS 均不做（需真游戏服务器） | ✅（对战超界） |
+| 好友/公会 | groups | ✅ |
+| 对象存储（UGC/头像） | buckets/files（MinIO） | ✅ |
+| 远程配置/功能开关（广告次数 N、活动开关） | 无专设服务；只读集合 + Console 修改可 DIY，无按用户/分段定向 | ⚠️（DIY） |
+| 推送/订阅消息 | messaging 仅 mailer/sms（认证 OTP/事务消息），非推送 | ❌（小程序订阅消息需平台件） |
+| 埋点/分析 | 仅平台 billing 计量；可经 B 的 HTTP 触发器 DIY 摄入文档库 | ❌（DIY 可撑） |
+| 封禁/审计 | Console 用户管理 + audit_logs | ✅（基础） |
+
+**判定**：
+
+1. **现状覆盖约 60–70%，且断点高度集中**：账号/数据/经济/支付/实时/存储/组队全部就绪，唯一结构性断点是「服务端逻辑整层缺失」——广告奖励、客户端花币、SSV 回调、定时结算、排行榜防作弊、埋点摄入全部卡在同一个缺口上。
+2. **B（执行身份 + HTTP/cron 触发器 + 调用配额）是 serverless 化的完整性原语**：它把上表每一个 ❌ 从「平台 feature request」转化为「客户代码」（函数写文档=排行榜、HTTP 触发器=SSV/webhook/埋点摄入、cron=每日重置/赛季）。没有 B，serverless 化没有完成路径；有 B，覆盖度升至约 90%。这从平台完整性角度再次支持「B 是普适投资」的结论，并给 B 的触发器模块圈定**必须含 HTTP 与 cron 两类**。
+3. **B 不能覆盖的残余（诚实清单）**：
+   - **高频轻量操作的成本/延迟模型**：容器 per-invocation 对「每次看广告/签到」类高频调用既慢（秒级冷启动）又贵；A 类毫秒级声明式原语在成本上不可替代——PlayFab「Rewarded Ads（声明式）+ CloudScript（代码式）」双轨正是为此。这是 A 作为 B 之上/之外的声明式快路径保留独立价值的硬理由。
+   - **垂直加速器**：排行榜（游戏刚需，建议独立 roadmap 条目）、远程配置/定向、推送/订阅消息——行业里均为平台件（Firebase Remote Config/FCM），DIY 只能撑过渡。
+   - **米大师虚拟支付**：小游戏 Android 道具内购的实际通道，未支持；iOS 小游戏本就禁止虚拟支付。需作为支付渠道条目核实排期。
+   - **权威实时对战**：超出 BaaS 边界，应显式列为 non-goal。
 
 ## 来源清单
 
