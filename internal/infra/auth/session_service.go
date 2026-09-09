@@ -9,6 +9,7 @@ import (
 
 	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
+	"github.com/torchwooddev/torchwood/internal/infra/auth/principalcache"
 	"github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
 	"github.com/torchwooddev/torchwood/pkg/idgen"
@@ -38,6 +39,14 @@ type SessionService struct {
 	sessionCodec *SessionCookieCodec
 	roles        domainauth.UserRoleResolver
 	rotation     domainauth.RefreshRotationStore
+	// principalCache 是端用户 principal 缓存（P0.5；登出/封禁删除会话时写
+	// 失效标记——nil 安全，见 SetPrincipalCache）。
+	principalCache *principalcache.Cache
+}
+
+// SetPrincipalCache 注入 principal 缓存（组合根装配；nil 安全）。
+func (s *SessionService) SetPrincipalCache(c *principalcache.Cache) {
+	s.principalCache = c
 }
 
 func NewSessionService(
@@ -136,7 +145,9 @@ func (s *SessionService) issueTokensWithCaps(ctx context.Context, projectID, use
 	}
 
 	now := time.Now()
-	baseRoles, err := s.roles.LoadUserRoles(ctx, projectID, userID)
+	// 签发路径手头无 users 行，传 nil 由解析器兜底单查（查询次数与修复前
+	// 一致；热路径的省查在 validator 侧完成）。
+	baseRoles, err := s.roles.LoadUserRoles(ctx, projectID, userID, nil)
 	if err != nil {
 		return nil, "", err
 	}
@@ -204,11 +215,19 @@ func (s *SessionService) EnsureActiveSession(ctx context.Context, projectID, ses
 	return nil
 }
 
-// DeleteSessionsByUser 删除该用户全部会话（FK 级联之外的显式清会话）。
+// DeleteSessionsByUser 删除该用户全部会话（FK 级联之外的显式清会话：
+// 登出全部/改密/封禁的单一咽喉）。成功后写 principal 缓存失效标记（P0.5：
+// 缓存命中最坏吊销延迟 = TTL 30s，主动标记把本进程与跨实例都收敛到即时）。
 func (s *SessionService) DeleteSessionsByUser(ctx context.Context, projectID, userID string) error {
 	if err := s.sessions.DeleteByUser(ctx, projectID, userID); err != nil {
 		slog.Warn("delete sessions by user failed", "project_id", projectID, "user_id", userID, "error", err)
 		return err
+	}
+	if s.principalCache != nil {
+		if err := s.principalCache.InvalidateUser(ctx, projectID, userID); err != nil {
+			// 标记写失败不回滚删除：仍有 TTL 30s 上界兜底（注释见 principalcache）。
+			slog.Warn("invalidate principal cache failed", "project_id", projectID, "user_id", userID, "error", err)
+		}
 	}
 	return nil
 }

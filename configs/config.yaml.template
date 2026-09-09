@@ -57,6 +57,13 @@ security:
       # API Key principal 按 key 计数（Agent/自动化调用量更高）。
       limit: 6000             # env: TORCHWOOD_SECURITY_RATE_LIMIT_API_KEY_LIMIT
       window: "60s"           # env: TORCHWOOD_SECURITY_RATE_LIMIT_API_KEY_WINDOW
+    functions_execution:
+      # 函数执行身份维度（P0）：按 project:function 计数，默认对齐 api-key
+      # 档 6000/60s。函数回访流量的全部容器经 bridge NAT 呈现同一来源 IP、
+      # 且每次执行 ActorID 独立——故必须走独立维度（落 IP 维度互相击穿、
+      # 落 user 维度实质不限流）。
+      limit: 6000             # env: TORCHWOOD_SECURITY_RATE_LIMIT_FUNCTIONS_EXECUTION_LIMIT
+      window: "60s"           # env: TORCHWOOD_SECURITY_RATE_LIMIT_FUNCTIONS_EXECUTION_WINDOW
   # 认证面局部频控（登录失败双维计数 + 注册 IP 频控；T-01）。
   # 失败计数语义：密码错误双维计数、未注册邮箱只计 IP 维度、登录成功清零。
   # 超限 429 + Retry-After；维度未配置时使用内置默认值。
@@ -109,6 +116,14 @@ storage:
     path: "./data/files"
 
 functions:
+  # executor 二选一（不同时启用）：
+  #   "docker"      v1 回退模式：每请求一容器、进程内执行（server/worker 需挂
+  #                 docker.sock）。默认值——未配置时生效。
+  #   "dispatcher"  v2 默认执行模型（P0.5 执行器 v2）：常驻 runner 容器池 +
+  #                 独立 functions-dispatcher 进程分发；server/worker 零
+  #                 daemon 依赖，docker.sock 只挂给 dispatcher。python 函数
+  #                 v2 暂不支持（构建期明确报错），请对 python 函数保持 v1。
+  # env: TORCHWOOD_FUNCTIONS_EXECUTOR
   executor: "docker"
   docker:
     host: "unix:///var/run/docker.sock"
@@ -117,7 +132,65 @@ functions:
     # 显式配置全局网络为 opt-in：所有项目的函数容器同网互通、可互相解析
     # IP，存在跨租户横向访问风险！仅在单租户/完全可信环境使用。
     network: ""                       # env: TORCHWOOD_FUNCTIONS_DOCKER_NETWORK
-    registry: "torchwood-funcs"      # 必须小写（docker build -t 校验）
+    registry: "torchwood-funcs"       # 必须小写（docker build -t 校验）
+  execution:
+    # P0 执行身份（TW_API_BASE_URL 注入）：函数容器回访 Server API 的可达
+    # 地址。**dokploy compose 已接好**：dispatcher 按 callback_container 把
+    # server 容器 attach 进 tw-func-<project>[-int]，此处填容器名地址即可——
+    #   api_base_url: "http://torchwood-server:9080"
+    # 手动部署的两个一致性要求：①该地址必须是函数网络内可达的 server 地址
+    # （不可信函数挂 internal 隔离网络 tw-func-<project>-int，出网全 deny、
+    # 无 NAT 出口，外部域名/IP 均不可达——需自行把 server attach 进函数
+    # 网络）；②server/worker 两进程配置同值（都经 buildExecution 注入）。
+    # 留空 = 不注入 TW_API_BASE_URL（函数无法回访平台 API）。
+    api_base_url: ""                  # env: TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL
+  dispatcher:
+    # P0.5 执行器 v2 分发通路（executor="dispatcher" 时生效）。
+    # url 指向 functions-dispatcher 的内网 HTTP 端点（compose 拓扑：
+    # http://functions-dispatcher:9070）。
+    # env: TORCHWOOD_FUNCTIONS_DISPATCHER_URL
+    url: ""
+    # 内网共享密钥（可选；与 dispatcher 进程配置同值，空 = 不校验，仅限
+    # 可信内网）。env: TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN
+    shared_token: ""
+    # ——以下仅 functions-dispatcher 进程消费——
+    # 每 daemon 常驻实例总量上限（防单项目耗尽宿主内存；Q11 默认 8）。
+    # env: TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES
+    max_resident_instances: 8
+    # 单函数有界排队深度上限（超限立即 ResourceExhausted）。
+    # env: TORCHWOOD_FUNCTIONS_DISPATCHER_QUEUE_DEPTH
+    queue_depth: 32
+    # 队首超时：等待空闲实例的最长时间（超限 ResourceExhausted）。
+    # env: TORCHWOOD_FUNCTIONS_DISPATCHER_QUEUE_HEAD_TIMEOUT
+    queue_head_timeout: "10s"
+    # 实例启动健康探针等待上限（runner 加载用户模块超时则回收并报错）。
+    # env: TORCHWOOD_FUNCTIONS_DISPATCHER_BOOT_TIMEOUT
+    boot_timeout: "60s"
+    # dispatcher HTTP 监听地址（仅内网）。
+    # env: TORCHWOOD_FUNCTIONS_DISPATCHER_ADDR
+    addr: ":9070"
+    # 回访容器：join 项目网络（含 internal 变体）时把该容器名的容器一并
+    # attach，使函数经容器名 DNS 回访平台 API（配合 execution.api_base_url
+    # = http://<该名字>:<端口>）。须与 server 的 container_name 严格一致
+    # （dokploy compose 已配 torchwood-server）。attach 失败仅告警不阻断。
+    # env: TORCHWOOD_FUNCTIONS_DISPATCHER_CALLBACK_CONTAINER
+    callback_container: ""
+  trigger:
+    # P1 触发器模块：HTTP 触发器公开端点（/f/{project}/{token}）的 per-IP
+    # 固定窗口限频（次/分钟，默认 3000）。独立更高默认：微信等回调出口 IP
+    # 段集中，沿用全局 300/min 会在发奖风暴下 429 → 重试耗尽 → 事件丢失。
+    # env: TORCHWOOD_FUNCTIONS_TRIGGER_HTTP_IP_PER_MINUTE
+    http_ip_per_minute: 3000
+  client_invoke:
+    # P2 客户端调用面平台级参数（per-function 的配额/窗口在 functions 表
+    # 策略列上，Console「客户端调用」卡片管理）。
+    # 每用户并发闸门上限（进程内 keyed 信号量——多实例部署下为近似全局，
+    # 全局上限 = 上限 × 实例数）。
+    # env: TORCHWOOD_FUNCTIONS_CLIENT_INVOKE_PER_USER_CONCURRENCY
+    per_user_concurrency: 2
+    # 并发闸门排队队首超时（超时 ResourceExhausted，同步调用方不无界等待）。
+    # env: TORCHWOOD_FUNCTIONS_CLIENT_INVOKE_QUEUE_HEAD_TIMEOUT
+    queue_head_timeout: "5s"
 
 payments:
   stripe:

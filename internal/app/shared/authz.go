@@ -55,16 +55,19 @@ func RequireConsolePrincipal(ctx context.Context) error {
 
 // RequireServerPrincipal 校验调用者具备经 Server API 调用业务写方法的资格
 // （纵深防御第二层）：console admin 会话（ActorKind=admin，角色细粒度由
-// 拦截器 adminRoleMethodRules 把关）或 API key 主体（ActorKind=service，
-// scope 细粒度由拦截器 PolicySet.AllowsAPIKey 把关）。匿名与端用户一律拒绝——
-// use-case 直接调用（绕过拦截器）时不得以 SystemPrincipal 执行写操作。
+// 拦截器 adminRoleMethodRules 把关）、API key 主体（ActorKind=service，scope
+// 细粒度由拦截器 PolicySet.AllowsAPIKey 把关）或函数执行主体（ActorKind=
+// execution，P0 执行身份——Functions 是 D6 设计内的经济写通道，declared
+// scopes 已投影为 API key 同款权限串并经同一 scope 门求值）。匿名与端用户
+// 一律拒绝——use-case 直接调用（绕过拦截器）时不得以 SystemPrincipal 执行
+// 写操作。
 func RequireServerPrincipal(ctx context.Context) error {
 	principal, ok := contexts.Principal(ctx)
 	if !ok {
 		return status.Error(codes.Unauthenticated, "unauthenticated")
 	}
 	switch principal.ActorKind {
-	case shared.ActorKindAdmin, shared.ActorKindService:
+	case shared.ActorKindAdmin, shared.ActorKindService, shared.ActorKindExecution:
 		return nil
 	default:
 		return status.Error(codes.PermissionDenied, "server api write not allowed for this principal")

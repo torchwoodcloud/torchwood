@@ -14,16 +14,18 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	"github.com/torchwooddev/torchwood/internal/domain/shared"
 	"github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
 )
 
 // 通用 API 限流默认值（roadmap §3.4）：固定窗口，60s 量级。
 const (
-	defaultRateLimitWindow = 60 * time.Second
-	defaultIPRateLimit     = 300  // per-IP：每分钟几百
-	defaultUserRateLimit   = 1000 // per-user：每分钟千级
-	defaultAPIKeyRateLimit = 6000 // per-API-key：每分钟数千
+	defaultRateLimitWindow    = 60 * time.Second
+	defaultIPRateLimit        = 300  // per-IP：每分钟几百
+	defaultUserRateLimit      = 1000 // per-user：每分钟千级
+	defaultAPIKeyRateLimit    = 6000 // per-API-key：每分钟数千
+	defaultExecutionRateLimit = 6000 // 函数执行身份（P0）：对齐 api-key 档
 )
 
 // 熔断降级参数（Round4 J5-1，产品决策 E-1：熔断短窗放行 + 观测分离）。
@@ -54,11 +56,12 @@ var rateLimitExemptPrefixes = []string{
 // 计数，未认证请求按客户端 IP 计数；同一请求只按命中的一个维度计数。
 // 与注册/匿名会话/MFA/OTP 发送 4 处局部限流的键空间不同，互不冲突、叠加生效。
 type RateLimitInterceptor struct {
-	limiter domainauth.RateLimiter
-	enabled bool
-	ip      rateLimitDimension
-	user    rateLimitDimension
-	apiKey  rateLimitDimension
+	limiter   domainauth.RateLimiter
+	enabled   bool
+	ip        rateLimitDimension
+	user      rateLimitDimension
+	apiKey    rateLimitDimension
+	execution rateLimitDimension // 函数执行身份维度（P0，按 project:function 计数）
 
 	// 熔断器状态（Round4 J5-1）。brMu 保护下列字段；进程级单实例
 	// （Redis 故障是全局的，不分维度熔断）。
@@ -92,6 +95,9 @@ func NewRateLimitInterceptor(limiter domainauth.RateLimiter, cfg *config.AppConf
 		ip:      resolveRateLimitDimension("api:ip:", rl.GetIp(), defaultIPRateLimit),
 		user:    resolveRateLimitDimension("api:user:", rl.GetUser(), defaultUserRateLimit),
 		apiKey:  resolveRateLimitDimension("api:apikey:", rl.GetApiKey(), defaultAPIKeyRateLimit),
+		// P0 执行身份：独立维度 + 可配（security.rate_limit.functions_execution），
+		// 默认对齐 api-key 档 6000/min。
+		execution: resolveRateLimitDimension("api:execution:", rl.GetFunctionsExecution(), defaultExecutionRateLimit),
 	}
 }
 
@@ -247,8 +253,8 @@ func (r *RateLimitInterceptor) onLimiterSuccess() {
 	r.brOpenUntil = time.Time{}
 }
 
-// dimension 按优先级选择限流维度：API Key principal > user/session
-// principal > 客户端 IP。同一请求只命中一个维度（不做叠加计数）。
+// dimension 按优先级选择限流维度：API Key principal > execution principal >
+// user/session principal > 客户端 IP。同一请求只命中一个维度（不做叠加计数）。
 func (r *RateLimitInterceptor) dimension(ctx context.Context) (*rateLimitDimension, string) {
 	if p, ok := contexts.Principal(ctx); ok && p != nil {
 		if p.APIKeyID != "" {
@@ -256,6 +262,13 @@ func (r *RateLimitInterceptor) dimension(ctx context.Context) (*rateLimitDimensi
 				return &r.apiKey, r.apiKey.key(id)
 			}
 			return &r.apiKey, r.apiKey.key(p.APIKeyID)
+		}
+		// 执行身份（P0）：必须在 user 维度回落之前特判——每次执行的 ActorID
+		// 独立（先命中 user 维度 = 实质不限流），且全部容器经 bridge NAT 呈现
+		// 同一来源 IP（落 IP 维度 = 项目间互相击穿）。键 = project:function，
+		// 单函数的回访流量共享同一配额桶。
+		if p.ActorKind == shared.ActorKindExecution {
+			return &r.execution, r.execution.key(p.ProjectID + ":" + p.FunctionID)
 		}
 		if id := string(p.ActorID); id != "" {
 			return &r.user, r.user.key(id)

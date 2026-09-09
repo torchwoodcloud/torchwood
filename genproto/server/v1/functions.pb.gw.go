@@ -680,6 +680,251 @@ func local_request_FunctionsService_GetExecution_0(ctx context.Context, marshale
 	return msg, metadata, err
 }
 
+func request_FunctionsService_SetFunctionScopes_0(ctx context.Context, marshaler runtime.Marshaler, client FunctionsServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq SetFunctionScopesRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	val, ok := pathParams["function_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "function_id")
+	}
+	protoReq.FunctionId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "function_id", err)
+	}
+	msg, err := client.SetFunctionScopes(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_FunctionsService_SetFunctionScopes_0(ctx context.Context, marshaler runtime.Marshaler, server FunctionsServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq SetFunctionScopesRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["function_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "function_id")
+	}
+	protoReq.FunctionId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "function_id", err)
+	}
+	msg, err := server.SetFunctionScopes(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+func request_FunctionsService_CreateFunctionTrigger_0(ctx context.Context, marshaler runtime.Marshaler, client FunctionsServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq CreateFunctionTriggerRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	val, ok := pathParams["function_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "function_id")
+	}
+	protoReq.FunctionId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "function_id", err)
+	}
+	msg, err := client.CreateFunctionTrigger(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_FunctionsService_CreateFunctionTrigger_0(ctx context.Context, marshaler runtime.Marshaler, server FunctionsServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq CreateFunctionTriggerRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["function_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "function_id")
+	}
+	protoReq.FunctionId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "function_id", err)
+	}
+	msg, err := server.CreateFunctionTrigger(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+func request_FunctionsService_ListFunctionTriggers_0(ctx context.Context, marshaler runtime.Marshaler, client FunctionsServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq GetFunctionRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	val, ok := pathParams["function_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "function_id")
+	}
+	protoReq.FunctionId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "function_id", err)
+	}
+	msg, err := client.ListFunctionTriggers(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_FunctionsService_ListFunctionTriggers_0(ctx context.Context, marshaler runtime.Marshaler, server FunctionsServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq GetFunctionRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	val, ok := pathParams["function_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "function_id")
+	}
+	protoReq.FunctionId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "function_id", err)
+	}
+	msg, err := server.ListFunctionTriggers(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+func request_FunctionsService_DeleteFunctionTrigger_0(ctx context.Context, marshaler runtime.Marshaler, client FunctionsServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq DeleteFunctionTriggerRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	val, ok := pathParams["function_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "function_id")
+	}
+	protoReq.FunctionId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "function_id", err)
+	}
+	val, ok = pathParams["trigger_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "trigger_id")
+	}
+	protoReq.TriggerId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "trigger_id", err)
+	}
+	msg, err := client.DeleteFunctionTrigger(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_FunctionsService_DeleteFunctionTrigger_0(ctx context.Context, marshaler runtime.Marshaler, server FunctionsServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq DeleteFunctionTriggerRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	val, ok := pathParams["function_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "function_id")
+	}
+	protoReq.FunctionId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "function_id", err)
+	}
+	val, ok = pathParams["trigger_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "trigger_id")
+	}
+	protoReq.TriggerId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "trigger_id", err)
+	}
+	msg, err := server.DeleteFunctionTrigger(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+func request_FunctionsService_RotateFunctionTriggerToken_0(ctx context.Context, marshaler runtime.Marshaler, client FunctionsServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq RotateFunctionTriggerTokenRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	val, ok := pathParams["function_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "function_id")
+	}
+	protoReq.FunctionId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "function_id", err)
+	}
+	val, ok = pathParams["trigger_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "trigger_id")
+	}
+	protoReq.TriggerId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "trigger_id", err)
+	}
+	msg, err := client.RotateFunctionTriggerToken(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_FunctionsService_RotateFunctionTriggerToken_0(ctx context.Context, marshaler runtime.Marshaler, server FunctionsServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq RotateFunctionTriggerTokenRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	val, ok := pathParams["function_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "function_id")
+	}
+	protoReq.FunctionId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "function_id", err)
+	}
+	val, ok = pathParams["trigger_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "trigger_id")
+	}
+	protoReq.TriggerId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "trigger_id", err)
+	}
+	msg, err := server.RotateFunctionTriggerToken(ctx, &protoReq)
+	return msg, metadata, err
+}
+
 // RegisterFunctionsServiceHandlerServer registers the http handlers for service FunctionsService to "mux".
 // UnaryRPC     :call FunctionsServiceServer directly.
 // StreamingRPC :currently unsupported pending https://github.com/grpc/grpc-go/issues/906.
@@ -1006,6 +1251,106 @@ func RegisterFunctionsServiceHandlerServer(ctx context.Context, mux *runtime.Ser
 		}
 		forward_FunctionsService_GetExecution_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodPut, pattern_FunctionsService_SetFunctionScopes_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/torchwood.server.v1.FunctionsService/SetFunctionScopes", runtime.WithHTTPPathPattern("/v1/server/functions/{function_id}/scopes"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_FunctionsService_SetFunctionScopes_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_FunctionsService_SetFunctionScopes_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_FunctionsService_CreateFunctionTrigger_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/torchwood.server.v1.FunctionsService/CreateFunctionTrigger", runtime.WithHTTPPathPattern("/v1/server/functions/{function_id}/triggers"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_FunctionsService_CreateFunctionTrigger_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_FunctionsService_CreateFunctionTrigger_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodGet, pattern_FunctionsService_ListFunctionTriggers_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/torchwood.server.v1.FunctionsService/ListFunctionTriggers", runtime.WithHTTPPathPattern("/v1/server/functions/{function_id}/triggers"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_FunctionsService_ListFunctionTriggers_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_FunctionsService_ListFunctionTriggers_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodDelete, pattern_FunctionsService_DeleteFunctionTrigger_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/torchwood.server.v1.FunctionsService/DeleteFunctionTrigger", runtime.WithHTTPPathPattern("/v1/server/functions/{function_id}/triggers/{trigger_id}"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_FunctionsService_DeleteFunctionTrigger_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_FunctionsService_DeleteFunctionTrigger_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_FunctionsService_RotateFunctionTriggerToken_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/torchwood.server.v1.FunctionsService/RotateFunctionTriggerToken", runtime.WithHTTPPathPattern("/v1/server/functions/{function_id}/triggers/{trigger_id}:rotate-token"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_FunctionsService_RotateFunctionTriggerToken_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_FunctionsService_RotateFunctionTriggerToken_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
 
 	return nil
 }
@@ -1318,43 +1663,138 @@ func RegisterFunctionsServiceHandlerClient(ctx context.Context, mux *runtime.Ser
 		}
 		forward_FunctionsService_GetExecution_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodPut, pattern_FunctionsService_SetFunctionScopes_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/torchwood.server.v1.FunctionsService/SetFunctionScopes", runtime.WithHTTPPathPattern("/v1/server/functions/{function_id}/scopes"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_FunctionsService_SetFunctionScopes_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_FunctionsService_SetFunctionScopes_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_FunctionsService_CreateFunctionTrigger_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/torchwood.server.v1.FunctionsService/CreateFunctionTrigger", runtime.WithHTTPPathPattern("/v1/server/functions/{function_id}/triggers"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_FunctionsService_CreateFunctionTrigger_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_FunctionsService_CreateFunctionTrigger_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodGet, pattern_FunctionsService_ListFunctionTriggers_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/torchwood.server.v1.FunctionsService/ListFunctionTriggers", runtime.WithHTTPPathPattern("/v1/server/functions/{function_id}/triggers"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_FunctionsService_ListFunctionTriggers_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_FunctionsService_ListFunctionTriggers_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodDelete, pattern_FunctionsService_DeleteFunctionTrigger_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/torchwood.server.v1.FunctionsService/DeleteFunctionTrigger", runtime.WithHTTPPathPattern("/v1/server/functions/{function_id}/triggers/{trigger_id}"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_FunctionsService_DeleteFunctionTrigger_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_FunctionsService_DeleteFunctionTrigger_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_FunctionsService_RotateFunctionTriggerToken_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/torchwood.server.v1.FunctionsService/RotateFunctionTriggerToken", runtime.WithHTTPPathPattern("/v1/server/functions/{function_id}/triggers/{trigger_id}:rotate-token"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_FunctionsService_RotateFunctionTriggerToken_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_FunctionsService_RotateFunctionTriggerToken_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
 	return nil
 }
 
 var (
-	pattern_FunctionsService_ListRuntimes_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "server", "functions"}, "runtimes"))
-	pattern_FunctionsService_ListSpecifications_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "server", "functions"}, "specifications"))
-	pattern_FunctionsService_CreateFunction_0     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "server", "functions"}, ""))
-	pattern_FunctionsService_ListFunctions_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "server", "functions"}, ""))
-	pattern_FunctionsService_GetFunction_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"v1", "server", "functions", "function_id"}, ""))
-	pattern_FunctionsService_UpdateFunction_0     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"v1", "server", "functions", "function_id"}, ""))
-	pattern_FunctionsService_DeleteFunction_0     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"v1", "server", "functions", "function_id"}, ""))
-	pattern_FunctionsService_CreateDeployment_0   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"v1", "server", "functions", "function_id", "deployments"}, ""))
-	pattern_FunctionsService_ListDeployments_0    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"v1", "server", "functions", "function_id", "deployments"}, ""))
-	pattern_FunctionsService_GetDeployment_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4, 1, 0, 4, 1, 5, 5}, []string{"v1", "server", "functions", "function_id", "deployments", "deployment_id"}, ""))
-	pattern_FunctionsService_DeleteDeployment_0   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4, 1, 0, 4, 1, 5, 5}, []string{"v1", "server", "functions", "function_id", "deployments", "deployment_id"}, ""))
-	pattern_FunctionsService_SetVariables_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"v1", "server", "functions", "function_id", "variables"}, ""))
-	pattern_FunctionsService_GetVariables_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"v1", "server", "functions", "function_id", "variables"}, ""))
-	pattern_FunctionsService_CreateExecution_0    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"v1", "server", "functions", "function_id", "executions"}, ""))
-	pattern_FunctionsService_ListExecutions_0     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"v1", "server", "functions", "function_id", "executions"}, ""))
-	pattern_FunctionsService_GetExecution_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4, 1, 0, 4, 1, 5, 5}, []string{"v1", "server", "functions", "function_id", "executions", "execution_id"}, ""))
+	pattern_FunctionsService_ListRuntimes_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "server", "functions"}, "runtimes"))
+	pattern_FunctionsService_ListSpecifications_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "server", "functions"}, "specifications"))
+	pattern_FunctionsService_CreateFunction_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "server", "functions"}, ""))
+	pattern_FunctionsService_ListFunctions_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "server", "functions"}, ""))
+	pattern_FunctionsService_GetFunction_0                = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"v1", "server", "functions", "function_id"}, ""))
+	pattern_FunctionsService_UpdateFunction_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"v1", "server", "functions", "function_id"}, ""))
+	pattern_FunctionsService_DeleteFunction_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"v1", "server", "functions", "function_id"}, ""))
+	pattern_FunctionsService_CreateDeployment_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"v1", "server", "functions", "function_id", "deployments"}, ""))
+	pattern_FunctionsService_ListDeployments_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"v1", "server", "functions", "function_id", "deployments"}, ""))
+	pattern_FunctionsService_GetDeployment_0              = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4, 1, 0, 4, 1, 5, 5}, []string{"v1", "server", "functions", "function_id", "deployments", "deployment_id"}, ""))
+	pattern_FunctionsService_DeleteDeployment_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4, 1, 0, 4, 1, 5, 5}, []string{"v1", "server", "functions", "function_id", "deployments", "deployment_id"}, ""))
+	pattern_FunctionsService_SetVariables_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"v1", "server", "functions", "function_id", "variables"}, ""))
+	pattern_FunctionsService_GetVariables_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"v1", "server", "functions", "function_id", "variables"}, ""))
+	pattern_FunctionsService_CreateExecution_0            = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"v1", "server", "functions", "function_id", "executions"}, ""))
+	pattern_FunctionsService_ListExecutions_0             = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"v1", "server", "functions", "function_id", "executions"}, ""))
+	pattern_FunctionsService_GetExecution_0               = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4, 1, 0, 4, 1, 5, 5}, []string{"v1", "server", "functions", "function_id", "executions", "execution_id"}, ""))
+	pattern_FunctionsService_SetFunctionScopes_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"v1", "server", "functions", "function_id", "scopes"}, ""))
+	pattern_FunctionsService_CreateFunctionTrigger_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"v1", "server", "functions", "function_id", "triggers"}, ""))
+	pattern_FunctionsService_ListFunctionTriggers_0       = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4}, []string{"v1", "server", "functions", "function_id", "triggers"}, ""))
+	pattern_FunctionsService_DeleteFunctionTrigger_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4, 1, 0, 4, 1, 5, 5}, []string{"v1", "server", "functions", "function_id", "triggers", "trigger_id"}, ""))
+	pattern_FunctionsService_RotateFunctionTriggerToken_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 2, 4, 1, 0, 4, 1, 5, 5}, []string{"v1", "server", "functions", "function_id", "triggers", "trigger_id"}, "rotate-token"))
 )
 
 var (
-	forward_FunctionsService_ListRuntimes_0       = runtime.ForwardResponseMessage
-	forward_FunctionsService_ListSpecifications_0 = runtime.ForwardResponseMessage
-	forward_FunctionsService_CreateFunction_0     = runtime.ForwardResponseMessage
-	forward_FunctionsService_ListFunctions_0      = runtime.ForwardResponseMessage
-	forward_FunctionsService_GetFunction_0        = runtime.ForwardResponseMessage
-	forward_FunctionsService_UpdateFunction_0     = runtime.ForwardResponseMessage
-	forward_FunctionsService_DeleteFunction_0     = runtime.ForwardResponseMessage
-	forward_FunctionsService_CreateDeployment_0   = runtime.ForwardResponseMessage
-	forward_FunctionsService_ListDeployments_0    = runtime.ForwardResponseMessage
-	forward_FunctionsService_GetDeployment_0      = runtime.ForwardResponseMessage
-	forward_FunctionsService_DeleteDeployment_0   = runtime.ForwardResponseMessage
-	forward_FunctionsService_SetVariables_0       = runtime.ForwardResponseMessage
-	forward_FunctionsService_GetVariables_0       = runtime.ForwardResponseMessage
-	forward_FunctionsService_CreateExecution_0    = runtime.ForwardResponseMessage
-	forward_FunctionsService_ListExecutions_0     = runtime.ForwardResponseMessage
-	forward_FunctionsService_GetExecution_0       = runtime.ForwardResponseMessage
+	forward_FunctionsService_ListRuntimes_0               = runtime.ForwardResponseMessage
+	forward_FunctionsService_ListSpecifications_0         = runtime.ForwardResponseMessage
+	forward_FunctionsService_CreateFunction_0             = runtime.ForwardResponseMessage
+	forward_FunctionsService_ListFunctions_0              = runtime.ForwardResponseMessage
+	forward_FunctionsService_GetFunction_0                = runtime.ForwardResponseMessage
+	forward_FunctionsService_UpdateFunction_0             = runtime.ForwardResponseMessage
+	forward_FunctionsService_DeleteFunction_0             = runtime.ForwardResponseMessage
+	forward_FunctionsService_CreateDeployment_0           = runtime.ForwardResponseMessage
+	forward_FunctionsService_ListDeployments_0            = runtime.ForwardResponseMessage
+	forward_FunctionsService_GetDeployment_0              = runtime.ForwardResponseMessage
+	forward_FunctionsService_DeleteDeployment_0           = runtime.ForwardResponseMessage
+	forward_FunctionsService_SetVariables_0               = runtime.ForwardResponseMessage
+	forward_FunctionsService_GetVariables_0               = runtime.ForwardResponseMessage
+	forward_FunctionsService_CreateExecution_0            = runtime.ForwardResponseMessage
+	forward_FunctionsService_ListExecutions_0             = runtime.ForwardResponseMessage
+	forward_FunctionsService_GetExecution_0               = runtime.ForwardResponseMessage
+	forward_FunctionsService_SetFunctionScopes_0          = runtime.ForwardResponseMessage
+	forward_FunctionsService_CreateFunctionTrigger_0      = runtime.ForwardResponseMessage
+	forward_FunctionsService_ListFunctionTriggers_0       = runtime.ForwardResponseMessage
+	forward_FunctionsService_DeleteFunctionTrigger_0      = runtime.ForwardResponseMessage
+	forward_FunctionsService_RotateFunctionTriggerToken_0 = runtime.ForwardResponseMessage
 )

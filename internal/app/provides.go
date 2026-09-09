@@ -33,7 +33,8 @@ var ProviderSet = wire.NewSet(
 	console.NewAdmins,
 	console.NewSetup,
 	storage.NewStorage,
-	functions.NewFunctionsWithUsage,
+	// P2 客户端调用面：Wire 装配入口换为带每用户限频端口的版本。
+	functions.NewFunctionsWithClientQuota,
 	functions.ProvideSemaphores,
 	events.NewOutboxAdmin,
 	payments.NewPayments,

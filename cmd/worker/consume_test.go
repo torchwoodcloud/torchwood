@@ -45,7 +45,11 @@ func (r *retryRepo) ListDeployments(context.Context, string, string) ([]domainfu
 	return nil, nil
 }
 func (r *retryRepo) UpdateDeployment(context.Context, *domainfunctions.Deployment) error { return nil }
-func (r *retryRepo) DeleteDeployment(context.Context, string, string, string) error      { return nil }
+
+func (r *retryRepo) ActivateDeployment(context.Context, *domainfunctions.Deployment) error {
+	return nil
+}
+func (r *retryRepo) DeleteDeployment(context.Context, string, string, string) error { return nil }
 func (r *retryRepo) SetVariables(context.Context, string, string, map[string]string) error {
 	return nil
 }
@@ -104,6 +108,15 @@ func (r *retryRepo) RecoverOrphanExecutionsInProject(context.Context, string, ti
 }
 func (r *retryRepo) PruneOldExecutionsInProject(context.Context, string, string, int) error {
 	return nil
+}
+func (r *retryRepo) PruneTriggerExecutionsInProject(context.Context, string, string, time.Time) error {
+	return nil
+}
+func (r *retryRepo) GetExecutionByIdempotencyKey(context.Context, string, string, string, string) (*domainfunctions.ExecutionRecord, error) {
+	return nil, nil
+}
+func (r *retryRepo) CountClientInvocations(context.Context, string, string, string, time.Time) (int, error) {
+	return 0, nil
 }
 
 // retryExecutor 是 functions.Executor 的零值桩（重试路径在 GetFunction 即

@@ -8,15 +8,16 @@ import (
 type ActorKind string
 
 const (
-	ActorKindEndUser ActorKind = "end_user"
-	ActorKindAdmin   ActorKind = "admin"
-	ActorKindService ActorKind = "service" // 项目 API key
-	ActorKindSystem  ActorKind = "system"
+	ActorKindEndUser   ActorKind = "end_user"
+	ActorKindAdmin     ActorKind = "admin"
+	ActorKindService   ActorKind = "service"   // 项目 API key
+	ActorKindExecution ActorKind = "execution" // 函数执行身份（短期 token，P0 执行身份）
+	ActorKindSystem    ActorKind = "system"
 )
 
 func (k ActorKind) IsValid() bool {
 	switch k {
-	case ActorKindEndUser, ActorKindAdmin, ActorKindService, ActorKindSystem:
+	case ActorKindEndUser, ActorKindAdmin, ActorKindService, ActorKindExecution, ActorKindSystem:
 		return true
 	}
 	return false
@@ -25,9 +26,10 @@ func (k ActorKind) IsValid() bool {
 type CredentialType string
 
 const (
-	CredentialTypeToken   CredentialType = "token"
-	CredentialTypeSession CredentialType = "session"
-	CredentialTypeAPIKey  CredentialType = "api_key"
+	CredentialTypeToken     CredentialType = "token"
+	CredentialTypeSession   CredentialType = "session"
+	CredentialTypeAPIKey    CredentialType = "api_key"
+	CredentialTypeExecution CredentialType = "execution" // 函数执行 token（twx_ 前缀）
 )
 
 const (
@@ -47,6 +49,9 @@ type Principal struct {
 	UserID          string // 仅 EndUser
 	AdminID         string // 仅 Admin；禁止把 admin id 塞进 UserID
 	APIKeyID        string // 仅 Service
+	FunctionID      string // 仅 Execution：发起执行的函数
+	ExecutionID     string // 仅 Execution：本次执行记录 ID
+	InvokingUserID  string // 仅 Execution（可选）：触发执行的端用户（P2 客户端调用面起填充）
 	SessionID       string
 	Roles           []string // 文档 ACL / console RBAC，不是 API scope
 	Permissions     []string // API key scopes
@@ -77,6 +82,8 @@ func (p *Principal) IsAuthenticated() bool {
 		return p.AdminID != ""
 	case ActorKindService:
 		return p.APIKeyID != ""
+	case ActorKindExecution:
+		return p.FunctionID != "" && p.ExecutionID != ""
 	case ActorKindSystem:
 		return true
 	default:

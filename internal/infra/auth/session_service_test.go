@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
+	"github.com/torchwooddev/torchwood/internal/domain/users"
 	"github.com/torchwooddev/torchwood/internal/infra/auth"
 	"github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/internal/pkg/contexts"
@@ -30,7 +31,7 @@ func testSessionJWTConfig() *config.AppConfig {
 
 type stubRoleResolver struct{}
 
-func (stubRoleResolver) LoadUserRoles(_ context.Context, _, userID string) ([]string, error) {
+func (stubRoleResolver) LoadUserRoles(_ context.Context, _, userID string, _ *users.User) ([]string, error) {
 	return []string{"users", "user:" + userID}, nil
 }
 

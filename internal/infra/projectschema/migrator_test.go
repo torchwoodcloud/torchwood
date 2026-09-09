@@ -29,8 +29,10 @@ func TestApply_IdempotentCatalogAndOAuth(t *testing.T) {
 	var version int64
 	require.NoError(t, db.QueryRowContext(ctx,
 		"SELECT MAX(version) FROM "+quoted+".schema_migrations").Scan(&version))
-	// 000012（T-03）：users.status CHECK 放宽加入 'deleted'。
-	require.Equal(t, int64(12), version)
+	// 000016（P2 客户端调用面）：functions 策略四列 + function_executions
+	// invoking_user_id/client_idempotency_key（partial 唯一索引 + 限频计数
+	// partial 索引）。
+	require.Equal(t, int64(16), version)
 
 	var dirty bool
 	require.NoError(t, db.QueryRowContext(ctx,
@@ -39,6 +41,7 @@ func TestApply_IdempotentCatalogAndOAuth(t *testing.T) {
 
 	for _, table := range []string{
 		"project_oauth_providers", "functions", "function_deployments", "function_variables", "function_executions",
+		"function_triggers",
 		"payment_orders", "asset_defs", "subscriptions", "usage_rollups", "billing_statements",
 		"users", "sessions", "identities", "groups", "memberships", "buckets", "files",
 	} {

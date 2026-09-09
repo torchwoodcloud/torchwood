@@ -276,7 +276,9 @@ func TestFunctionRepository_RecoverOrphanExecutions(t *testing.T) {
 	got, err := repo.GetExecution(ctx, projectID, fn.ID, "exe_stale")
 	require.NoError(t, err)
 	require.Equal(t, domainfunctions.ExecutionStatusFailed, got.Status)
-	require.Equal(t, "worker restarted", got.Error)
+	// P0.5：恢复错误文案统一为孤儿恢复语义（v1 曾为 "worker restarted"——
+	// 同步快路径孤儿由 server 侧产生，文案不再绑定 worker）。
+	require.Equal(t, "orphaned execution recovered", got.Error)
 
 	got, err = repo.GetExecution(ctx, projectID, fn.ID, "exe_fresh")
 	require.NoError(t, err)

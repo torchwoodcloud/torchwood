@@ -79,6 +79,7 @@ type Client struct {
 	payments      clientv1.PaymentsServiceClient
 	assets        clientv1.AssetsServiceClient
 	subscriptions clientv1.SubscriptionsServiceClient
+	functions     clientv1.FunctionsServiceClient
 
 	// Account 提供注册/登录/账户管理。
 	Account *AccountService
@@ -92,6 +93,8 @@ type Client struct {
 	Assets *AssetsService
 	// Subscriptions 提供计划列表、订阅与期末取消。
 	Subscriptions *SubscriptionsService
+	// Functions 提供客户端调用面（P2：按 per-function 策略同步调用函数）。
+	Functions *FunctionsService
 }
 
 // New 建立 Client API 连接。target 为 gRPC 目标地址，不能为空。
@@ -128,12 +131,14 @@ func New(target string, opts ...Option) (*Client, error) {
 	c.payments = clientv1.NewPaymentsServiceClient(gc)
 	c.assets = clientv1.NewAssetsServiceClient(gc)
 	c.subscriptions = clientv1.NewSubscriptionsServiceClient(gc)
+	c.functions = clientv1.NewFunctionsServiceClient(gc)
 	c.Account = &AccountService{c: c}
 	c.Groups = &GroupsService{c: c}
 	c.Databases = c.UseDatabase(cfg.DatabaseID)
 	c.Payments = &PaymentsService{c: c}
 	c.Assets = &AssetsService{c: c}
 	c.Subscriptions = &SubscriptionsService{c: c}
+	c.Functions = &FunctionsService{c: c}
 	return c, nil
 }
 

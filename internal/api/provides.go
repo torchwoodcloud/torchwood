@@ -16,6 +16,7 @@ var ProviderSet = wire.NewSet(
 	clientgrpc.NewPaymentsService,
 	clientgrpc.NewAssetsService,
 	clientgrpc.NewSubscriptionsService,
+	clientgrpc.NewFunctionsService,
 	servergrpc.NewHealthService,
 	servergrpc.NewProjectsService,
 	servergrpc.NewStorageService,
@@ -34,6 +35,8 @@ var ProviderSet = wire.NewSet(
 	serverhttp.NewOAuthHandler,
 	serverhttp.NewFunctionsHandler,
 	serverhttp.NewPaymentsHandler,
+	// P1 触发器模块：/f/{project_id}/{trigger_token} 公开入口。
+	serverhttp.NewFunctionTriggersHandler,
 	consolegrpc.NewAuthService,
 	consolegrpc.NewAdminsService,
 	apirealtime.NewHandler,

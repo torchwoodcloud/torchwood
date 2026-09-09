@@ -68,10 +68,17 @@ tasks:
       - go mod tidy
       - go run -mod=mod github.com/google/wire/cmd/wire
 
+  wire:dispatcher:
+    dir: '{{.USER_WORKING_DIR}}/cmd/functions-dispatcher'
+    cmds:
+      - go mod tidy
+      - go run -mod=mod github.com/google/wire/cmd/wire
+
   wire:all:
     cmds:
       - task: wire:server
       - task: wire:worker
+      - task: wire:dispatcher
 
   generate:all:
     cmds:
@@ -148,6 +155,8 @@ tasks:
     cmds:
       - go build -ldflags "-X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.date={{.DATE}}" -o ./bin/ ./cmd/server
       - go build -ldflags "-X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.date={{.DATE}}" -o ./bin/ ./cmd/worker
+      # functions-dispatcher：执行器 v2 独立分发进程（P0.5，compose 单独服务）
+      - go build -ldflags "-X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.date={{.DATE}}" -o ./bin/ ./cmd/functions-dispatcher
       - go build -ldflags "-X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.date={{.DATE}}" -o ./bin/torchwood{{if eq .OS "Windows_NT"}}.exe{{end}} ./cmd/client
     vars:
       VERSION:

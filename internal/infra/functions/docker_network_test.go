@@ -17,7 +17,7 @@ import (
 )
 
 // netTestExecutor 构造指定网络配置的执行器。
-func netTestExecutor(t *testing.T, network string) *dockerExecutor {
+func netTestExecutor(t *testing.T, network string) *DockerExecutor {
 	t.Helper()
 	cfg := &config.AppConfig{
 		Functions: &config.Functions{
@@ -29,8 +29,8 @@ func netTestExecutor(t *testing.T, network string) *dockerExecutor {
 			},
 		},
 	}
-	d, ok := NewDockerExecutor(cfg).(*dockerExecutor)
-	require.True(t, ok)
+	d := NewDockerExecutor(cfg)
+	require.NotNil(t, d)
 	return d
 }
 
@@ -68,6 +68,28 @@ func TestResolveNetwork_FailClosed(t *testing.T) {
 	_, err = d.resolveNetwork("Bad_ID")
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+// TestResolveInternalNetworkName（P2 egress 默认 deny）：internal 变体网络名
+// = 常规网络名 + "-int"；校验与常规解析同源（fail-closed）。
+func TestResolveInternalNetworkName(t *testing.T) {
+	d := netTestExecutor(t, "")
+
+	name, err := ResolveInternalNetworkName(d.cfg, "shop")
+	require.NoError(t, err)
+	require.Equal(t, perProjectNetworkPrefix+"shop"+perProjectInternalNetworkSuffix, name)
+
+	// 显式全局网络配置同样加后缀（trusted/untrusted 分网不因 opt-in 失效）。
+	d2 := netTestExecutor(t, "torchwood-functions-global")
+	name, err = ResolveInternalNetworkName(d2.cfg, "shop")
+	require.NoError(t, err)
+	require.Equal(t, "torchwood-functions-global-int", name)
+
+	// 非法 projectID 拒绝（fail-closed 与常规解析一致）。
+	_, err = ResolveInternalNetworkName(d.cfg, "")
+	require.Error(t, err)
+	_, err = ResolveInternalNetworkName(d.cfg, "Bad_ID")
+	require.Error(t, err)
 }
 
 // TestDockerExecutor_PerProjectNetworkIsolation：项目 A 与项目 B 的函数容器

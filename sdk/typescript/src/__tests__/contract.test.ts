@@ -8,6 +8,7 @@ import { Torchwood } from "../torchwood.js";
 import { AccountService } from "../client/account.js";
 import { ClientAssetsService } from "../client/assets.js";
 import { ClientDatabasesService } from "../client/databases.js";
+import { ClientFunctionsService } from "../client/functions.js";
 import { ClientPaymentsService } from "../client/payments.js";
 import { ClientSubscriptionsService } from "../client/subscriptions.js";
 import { ClientGroupsService } from "../client/groups.js";
@@ -63,6 +64,7 @@ const SDK_SERVICES: Record<string, ClassLike> = {
   "client.PaymentsService": ClientPaymentsService,
   "client.AssetsService": ClientAssetsService,
   "client.SubscriptionsService": ClientSubscriptionsService,
+  "client.FunctionsService": ClientFunctionsService,
 };
 
 // RPC 名 → TS SDK 方法名（SDK 使用简短命名，与 proto 非一一对应，显式登记）。
@@ -120,9 +122,14 @@ const RPC_TO_METHOD: Record<string, Record<string, string>> = {
     DeleteDeployment: "deleteDeployment",
     SetVariables: "setVariables",
     GetVariables: "getVariables",
+    SetFunctionScopes: "setScopes",
     CreateExecution: "createExecution",
     ListExecutions: "listExecutions",
     GetExecution: "getExecution",
+    CreateFunctionTrigger: "createTrigger",
+    ListFunctionTriggers: "listTriggers",
+    DeleteFunctionTrigger: "deleteTrigger",
+    RotateFunctionTriggerToken: "rotateTriggerToken",
   },
   StorageService: {
     CreateBucket: "createBucket",
@@ -308,6 +315,9 @@ const RPC_TO_METHOD: Record<string, Record<string, string>> = {
     Subscribe: "subscribe",
     GetMySubscription: "getMySubscription",
     Cancel: "cancel",
+  },
+  "client.FunctionsService": {
+    InvokeFunction: "invokeFunction",
   },
 };
 
@@ -559,6 +569,7 @@ it("Torchwood.server 门面可达全部 Server swagger 服务（含 functions）
       payments: new ClientPaymentsService(h),
       assets: new ClientAssetsService(h),
       subscriptions: new ClientSubscriptionsService(h),
+      functions: new ClientFunctionsService(h),
     });
 
     // 覆盖各服务的 Create/Update/Delete 写方法（及代表性 Get/其他写方法）。
@@ -595,6 +606,11 @@ it("Torchwood.server 门面可达全部 Server swagger 服务（含 functions）
       { side: "server", operationId: "FunctionsService_DeleteFunction", invoke: (h) => server(h).functions.delete("fn1") },
       { side: "server", operationId: "FunctionsService_SetVariables", invoke: (h) => server(h).functions.setVariables("fn1", [{ key: "K", value: "V" }]) },
       { side: "server", operationId: "FunctionsService_GetVariables", invoke: (h) => server(h).functions.getVariables("fn1") },
+      { side: "server", operationId: "FunctionsService_SetFunctionScopes", invoke: (h) => server(h).functions.setScopes("fn1", ["assets:write", "databases:read"]) },
+      { side: "server", operationId: "FunctionsService_CreateFunctionTrigger", invoke: (h) => server(h).functions.createTrigger("fn1", { type: "http", response_mode: "async_ack", ack_body: "{\"is_valid\":true}", handshake: "echo", body_limit_bytes: 65536 }) },
+      { side: "server", operationId: "FunctionsService_ListFunctionTriggers", invoke: (h) => server(h).functions.listTriggers("fn1") },
+      { side: "server", operationId: "FunctionsService_DeleteFunctionTrigger", invoke: (h) => server(h).functions.deleteTrigger("fn1", "t1") },
+      { side: "server", operationId: "FunctionsService_RotateFunctionTriggerToken", invoke: (h) => server(h).functions.rotateTriggerToken("fn1", "t1") },
       { side: "server", operationId: "GroupsService_CreateGroup", invoke: (h) => server(h).groups.create({ name: "T", permissions: ["read"] }) },
       { side: "server", operationId: "GroupsService_DeleteGroup", invoke: (h) => server(h).groups.delete("t1") },
       { side: "server", operationId: "GroupsService_UpdateGroupPrefs", invoke: (h) => server(h).groups.updatePrefs("t1", { locale: "zh" }) },
@@ -638,7 +654,8 @@ it("Torchwood.server 门面可达全部 Server swagger 服务（含 functions）
       { side: "server", operationId: "SubscriptionsService_ExpireSubscription", invoke: (h) => server(h).subscriptions.expireSubscription("s1", "demo") },
       { side: "client", operationId: "PaymentsService_CreateOrder", invoke: (h) => client(h).payments.createOrder({ idempotency_key: "idem-1", provider: "stripe", amount: "1999", currency: "USD", purpose_kind: "topup", purpose: { currency_code: "gold", amount: "100" } }) },
       { side: "client", operationId: "SubscriptionsService_Subscribe", invoke: (h) => client(h).subscriptions.subscribe({ plan_code: "pro", mode: "platform", idempotency_key: "s1" }) },
-      { side: "client", operationId: "SubscriptionsService_Cancel", invoke: (h) => client(h).subscriptions.cancel("sub-1") }
+      { side: "client", operationId: "SubscriptionsService_Cancel", invoke: (h) => client(h).subscriptions.cancel("sub-1") },
+      { side: "client", operationId: "FunctionsService_InvokeFunction", invoke: (h) => client(h).functions.invokeFunction("sign_in", { data: "{\"day\":\"2026-09-09\"}", idempotency_key: "idem-1" }) }
     );
     assert.ok(cases.length >= 40, `HTTP 绑定用例不足（当前 ${cases.length}）`);
 

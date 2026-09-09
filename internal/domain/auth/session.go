@@ -1,6 +1,10 @@
 package auth
 
-import "context"
+import (
+	"context"
+
+	"github.com/torchwooddev/torchwood/internal/domain/users"
+)
 
 // Session provider identifiers stored on session documents.
 const (
@@ -28,9 +32,12 @@ type TokenBundle struct {
 	RefreshTokenID string
 }
 
-// UserRoleResolver loads JWT role claims for a user at token issuance time.
+// UserRoleResolver loads JWT role claims (at token issuance, or per-request
+// in the validator). u 是调用方已取回的 users 行（可 nil——实现侧兜底单查；
+// 手头已有 user 的调用方必须传入，避免重复 users.GetByID——P0.5 热路径
+// 清账项：客户端鉴权一次原本 4 次 DB 往返，本修复去掉其中一次重复）。
 type UserRoleResolver interface {
-	LoadUserRoles(ctx context.Context, projectID, userID string) ([]string, error)
+	LoadUserRoles(ctx context.Context, projectID, userID string, u *users.User) ([]string, error)
 }
 
 // SessionService creates sessions and issues JWT tokens for authenticated users.

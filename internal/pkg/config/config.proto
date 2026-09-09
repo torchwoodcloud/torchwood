@@ -68,6 +68,11 @@ message Security {
     Dimension ip = 2;
     Dimension user = 3;
     Dimension api_key = 4;
+    // 函数执行身份维度（P0）：按 project:function 计数，默认对齐 api-key
+    // 档 6000/min；必须在 user 维度回落之前特判（每次执行独立 ActorID，
+    // 落 user 维度 = 实质不限流；全部容器经 bridge NAT 同 IP，落 IP 维度
+    // = 互相击穿）。见 internal/api/interceptor/ratelimit.go。
+    Dimension functions_execution = 5;
   }
   Jwt jwt = 1;
   ApiKey api_key = 2;
@@ -148,8 +153,71 @@ message Functions {
     string network = 2;
     string registry = 3;
   }
+  // Execution 是执行身份（P0）相关配置：函数容器经 bridge NAT 回访
+  // Server API 只能走外部端点（server 不在 tw-func-<project> 网络上），
+  // 平台经 TW_API_BASE_URL env 注入可达地址；空 = 不注入该变量（函数
+  // 需自行解析，自托管部署文档要求显式配置）。
+  message Execution {
+    string api_base_url = 1;
+  }
+  // Dispatcher 是执行器 v2 的分发通路配置（P0.5，owner 拍板方案③：独立
+  // functions-dispatcher 进程专职持有 docker.sock、join 项目网络、承接
+  // Build/Execute/RemoveImage 全部 daemon 操作；server/worker 零 daemon
+  // 依赖）。executor="docker"（v1 回退）时本节不生效。
+  message Dispatcher {
+    // dispatcher 的内网 HTTP 基址（server/worker 侧消费），如
+    // http://functions-dispatcher:9070。executor="dispatcher" 时必填。
+    string url = 1;
+    // 静态共享密钥（内网专用可选认证；空 = 不校验，仅限可信内网）。
+    string shared_token = 2;
+    // ——以下仅 functions-dispatcher 进程消费（池策略全局参数）——
+    // 每 daemon 常驻实例总量上限（设计 Q11 拍板：默认 8；防单项目耗尽宿主内存）。
+    int32 max_resident_instances = 3;
+    // 单函数有界排队深度上限（超限立即 ResourceExhausted；默认 32）。
+    int32 queue_depth = 4;
+    // 队首超时：等待空闲实例的最长时间（如 "10s"；默认 10s，超时
+    // ResourceExhausted——同步调用方不得无界等在 30s ctx 上）。
+    string queue_head_timeout = 5;
+    // 实例启动健康探针等待上限（如 "60s"；默认 60s，超时回收并报错）。
+    string boot_timeout = 6;
+    // dispatcher HTTP 监听地址（仅内网；默认 ":9070"）。
+    string addr = 7;
+    // 函数网络内需可达的 server 容器名（如 compose 的 container_name）。
+    // 非空时，dispatcher 在 join 项目网络（含 internal 变体）的同时把该
+    // 容器一并 attach——函数经容器名 DNS 回访平台 API
+    // （functions.execution.api_base_url = http://<该名字>:<端口>）。
+    // 不可信函数在 internal 网络（无 NAT 出口），这是其回访平台的唯一通路；
+    // 容器名 DNS 在 user-defined 网络（含 internal）上由内置 DNS 解析。
+    // attach 失败不阻断执行（函数可能无需回访），但会记警告——部署时应
+    // 在首次执行前修正。空 = 不 attach（api_base_url 须另行保证可达）。
+    string callback_container = 8;
+  }
+  // executor 是执行器选择：默认 "docker"（v1 每请求一容器，进程内执行，
+  // 回退模式）；"dispatcher"（v2 常驻 runner 为默认执行模型，经
+  // functions-dispatcher 分发）。二选一，不同时启用。
   string executor = 1;
   Docker docker = 2;
+  Execution execution = 3;
+  Dispatcher dispatcher = 4;
+  // Trigger 是触发器模块平台级配置（P1 触发器模块）。
+  message Trigger {
+    // HTTP 触发器 per-IP 固定窗口限频（次/分钟；默认 3000）。独立更高默认：
+    // 微信等回调出口 IP 段集中，沿用全局 300/min 会在发奖风暴下 429 →
+    // 重试耗尽 → 事件丢失（设计 §3 三轮复核）。
+    int32 http_ip_per_minute = 1;
+  }
+  Trigger trigger = 5;
+  // ClientInvoke 是客户端调用面平台级配置（P2 客户端调用面；per-function 的
+  // 限频配额/窗口在 functions 表策略列上，不在本节）。
+  message ClientInvoke {
+    // 每用户并发闸门上限（默认 2，防单用户挤占执行槽）。进程内 keyed
+    // 信号量——多实例部署下为近似全局（每实例各 2）。
+    int32 per_user_concurrency = 1;
+    // 并发闸门排队队首超时（如 "5s"；默认 5s，超时 ResourceExhausted——
+    // 同步调用方不得无界等待）。
+    string queue_head_timeout = 2;
+  }
+  ClientInvoke client_invoke = 6;
 }
 
 message Telemetry {

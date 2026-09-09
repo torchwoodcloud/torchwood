@@ -66,17 +66,28 @@ func (s *FunctionsService) CreateFunction(ctx context.Context, req *serverv1.Cre
 	}
 	ctx = contexts.WithAuditResource(ctx, req.GetId())
 	cmd := appfunctions.CreateFunctionCommand{
-		ID:         req.GetId(),
-		ProjectID:  projectID,
-		Name:       req.GetName(),
-		Runtime:    req.GetRuntime(),
-		Entrypoint: req.GetEntrypoint(),
-		Spec:       req.GetSpec(),
-		Enabled:    req.Enabled,
+		ID:             req.GetId(),
+		ProjectID:      projectID,
+		Name:           req.GetName(),
+		Runtime:        req.GetRuntime(),
+		Entrypoint:     req.GetEntrypoint(),
+		Spec:           req.GetSpec(),
+		Enabled:        req.Enabled,
+		DeclaredScopes: req.GetDeclaredScopes(),
+		// 客户端调用面策略（P2，设计 §4）。
+		ClientCallable:         req.ClientCallable,
+		ClientAnonymousAllowed: req.ClientAnonymousAllowed,
 	}
 	if req.TimeoutSeconds != nil {
 		t := int(req.GetTimeoutSeconds())
 		cmd.TimeoutSeconds = &t
+	}
+	if req.ClientPerUserLimit != nil {
+		l := int(req.GetClientPerUserLimit())
+		cmd.ClientPerUserLimit = &l
+	}
+	if req.ClientLimitWindow != nil {
+		cmd.ClientLimitWindow = req.ClientLimitWindow
 	}
 	fn, err := s.functions.CreateFunction(ctx, cmd)
 	if err != nil {
@@ -172,6 +183,20 @@ func (s *FunctionsService) UpdateFunction(ctx context.Context, req *serverv1.Upd
 	}
 	if req.Enabled != nil {
 		cmd.Enabled = req.Enabled
+	}
+	// 客户端调用面策略（P2）：proto3 optional 的 presence 语义——未设置不修改。
+	if req.ClientCallable != nil {
+		cmd.ClientCallable = req.ClientCallable
+	}
+	if req.ClientAnonymousAllowed != nil {
+		cmd.ClientAnonymousAllowed = req.ClientAnonymousAllowed
+	}
+	if req.ClientPerUserLimit != nil {
+		l := int(req.GetClientPerUserLimit())
+		cmd.ClientPerUserLimit = &l
+	}
+	if req.ClientLimitWindow != nil {
+		cmd.ClientLimitWindow = req.ClientLimitWindow
 	}
 	fn, err := s.functions.UpdateFunction(ctx, cmd)
 	if err != nil {
@@ -341,6 +366,138 @@ func (s *FunctionsService) GetExecution(ctx context.Context, req *serverv1.GetEx
 	return mapExecution(rec), nil
 }
 
+// SetFunctionScopes 全量替换函数 declared_scopes（P0 执行身份）。
+func (s *FunctionsService) SetFunctionScopes(ctx context.Context, req *serverv1.SetFunctionScopesRequest) (*serverv1.Function, error) {
+	projectID, err := s.projectID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ctx = contexts.WithAuditResource(ctx, req.GetFunctionId()+"/scopes")
+	fn, err := s.functions.SetFunctionScopes(ctx, projectID, req.GetFunctionId(), req.GetDeclaredScopes())
+	if err != nil {
+		return nil, err
+	}
+	return mapFunction(fn), nil
+}
+
+// ——触发器管理（P1 触发器模块）——
+
+func (s *FunctionsService) CreateFunctionTrigger(ctx context.Context, req *serverv1.CreateFunctionTriggerRequest) (*serverv1.FunctionTrigger, error) {
+	projectID, err := s.projectID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ctx = contexts.WithAuditResource(ctx, req.GetFunctionId()+"/triggers")
+	cmd := appfunctions.CreateTriggerCommand{
+		ProjectID:  projectID,
+		FunctionID: req.GetFunctionId(),
+		Type:       req.GetType(),
+		HTTP:       mapHTTPTriggerConfig(req.GetHttp()),
+		Cron:       mapCronTriggerConfig(req.GetCron()),
+		Enabled:    nil, // 创建恒启用；启停经删除重建（P1 无 UpdateFunctionTrigger RPC）。
+	}
+	trg, err := s.functions.CreateFunctionTrigger(ctx, cmd)
+	if err != nil {
+		return nil, err
+	}
+	return mapFunctionTrigger(trg), nil
+}
+
+func (s *FunctionsService) ListFunctionTriggers(ctx context.Context, req *serverv1.GetFunctionRequest) (*serverv1.ListFunctionTriggersResponse, error) {
+	projectID, err := s.projectID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	trgs, err := s.functions.ListFunctionTriggers(ctx, projectID, req.GetFunctionId())
+	if err != nil {
+		return nil, err
+	}
+	resp := &serverv1.ListFunctionTriggersResponse{Triggers: make([]*serverv1.FunctionTrigger, len(trgs))}
+	for i := range trgs {
+		resp.Triggers[i] = mapFunctionTrigger(&trgs[i])
+	}
+	return resp, nil
+}
+
+func (s *FunctionsService) DeleteFunctionTrigger(ctx context.Context, req *serverv1.DeleteFunctionTriggerRequest) (*sharedv1.Empty, error) {
+	projectID, err := s.projectID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ctx = contexts.WithAuditResource(ctx, req.GetFunctionId()+"/triggers/"+req.GetTriggerId())
+	if err := s.functions.DeleteFunctionTrigger(ctx, projectID, req.GetFunctionId(), req.GetTriggerId()); err != nil {
+		return nil, err
+	}
+	return &sharedv1.Empty{}, nil
+}
+
+func (s *FunctionsService) RotateFunctionTriggerToken(ctx context.Context, req *serverv1.RotateFunctionTriggerTokenRequest) (*serverv1.FunctionTrigger, error) {
+	projectID, err := s.projectID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ctx = contexts.WithAuditResource(ctx, req.GetFunctionId()+"/triggers/"+req.GetTriggerId()+":rotate-token")
+	trg, err := s.functions.RotateFunctionTriggerToken(ctx, projectID, req.GetFunctionId(), req.GetTriggerId())
+	if err != nil {
+		return nil, err
+	}
+	return mapFunctionTrigger(trg), nil
+}
+
+func mapHTTPTriggerConfig(cfg *serverv1.HttpTriggerConfig) domainfunctions.TriggerConfig {
+	if cfg == nil {
+		return domainfunctions.TriggerConfig{}
+	}
+	out := domainfunctions.TriggerConfig{ResponseMode: cfg.GetResponseMode()}
+	if cfg.AckBody != nil {
+		out.AckBody = *cfg.AckBody
+	}
+	if cfg.Handshake != nil {
+		out.Handshake = *cfg.Handshake
+	}
+	if cfg.BodyLimitBytes != nil {
+		out.BodyLimitBytes = int(*cfg.BodyLimitBytes)
+	}
+	return out
+}
+
+func mapCronTriggerConfig(cfg *serverv1.CronTriggerConfig) domainfunctions.TriggerConfig {
+	if cfg == nil {
+		return domainfunctions.TriggerConfig{}
+	}
+	return domainfunctions.TriggerConfig{Expr: cfg.GetExpr(), Misfire: cfg.GetMisfire()}
+}
+
+func mapFunctionTrigger(trg *domainfunctions.Trigger) *serverv1.FunctionTrigger {
+	if trg == nil {
+		return nil
+	}
+	out := &serverv1.FunctionTrigger{
+		Id:         trg.ID,
+		FunctionId: trg.FunctionID,
+		Type:       trg.Type,
+		Enabled:    trg.Enabled,
+		CreatedAt:  timestamppb.New(trg.CreatedAt),
+		UpdatedAt:  timestamppb.New(trg.UpdatedAt),
+	}
+	switch trg.Type {
+	case domainfunctions.TriggerTypeHTTP:
+		out.ResponseMode = trg.Config.ResponseMode
+		out.AckBody = trg.Config.AckBody
+		out.Handshake = trg.Config.Handshake
+		out.BodyLimitBytes = int32(trg.Config.EffectiveBodyLimit())
+		out.Token = trg.Token
+		out.InvokePath = "/f/" + trg.ProjectID + "/" + trg.Token
+	case domainfunctions.TriggerTypeCron:
+		out.Expr = trg.Config.Expr
+		out.Misfire = trg.Config.Misfire
+		if trg.NextRunAt != nil {
+			out.NextRunAt = timestamppb.New(*trg.NextRunAt)
+		}
+	}
+	return out
+}
+
 func mapFunction(fn *domainfunctions.Function) *serverv1.Function {
 	if fn == nil {
 		return nil
@@ -354,8 +511,14 @@ func mapFunction(fn *domainfunctions.Function) *serverv1.Function {
 		TimeoutSeconds: int32(fn.TimeoutSeconds),
 		Spec:           fn.Spec,
 		Enabled:        fn.Enabled,
-		CreatedAt:      timestamppb.New(fn.CreatedAt),
-		UpdatedAt:      timestamppb.New(fn.UpdatedAt),
+		DeclaredScopes: fn.DeclaredScopes,
+		// 客户端调用面策略（P2，设计 §4）。
+		ClientCallable:         fn.ClientCallable,
+		ClientAnonymousAllowed: fn.ClientAnonymousAllowed,
+		ClientPerUserLimit:     int32(fn.ClientPerUserLimit),
+		ClientLimitWindow:      fn.ClientLimitWindow,
+		CreatedAt:              timestamppb.New(fn.CreatedAt),
+		UpdatedAt:              timestamppb.New(fn.UpdatedAt),
 	}
 }
 

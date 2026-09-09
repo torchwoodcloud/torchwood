@@ -60,8 +60,13 @@ func TestInvokeJSONBadJSON(t *testing.T) {
 // ——B4 schema 演进生命周期 §4.6，wrapper 同名三方法）；
 // 119 → 123（2026-09-08，本次 generate:proto 把此前未传播的生成物刷新到位：
 // projects.proto 邀请码 Create/List/DeleteInviteCode（T-03）补 wrapper，
-// 新增 UpdateOAuthRedirectAllowlist——OAuth 重定向白名单，wrapper 同名）。
-const expectedServerMethodCount = 123
+// 新增 UpdateOAuthRedirectAllowlist——OAuth 重定向白名单，wrapper 同名）；
+// 123 → 124（2026-09-09，functions.proto 新增 SetFunctionScopes——P0 执行
+// 身份 declared_scopes 全量替换，wrapper：FunctionsService.SetFunctionScopes）；
+// 124 → 128（2026-09-09，functions.proto 新增触发器管理四方法——P1 触发器
+// 模块，wrapper：FunctionsService.CreateFunctionTrigger / ListFunctionTriggers /
+// DeleteFunctionTrigger / RotateFunctionTriggerToken）。
+const expectedServerMethodCount = 128
 
 // TestInvokeJSONCompleteness 遍历 protoregistry.GlobalFiles 中 torchwood.server.v1
 // 包的全部方法（排除 APIKeysService），断言每个方法都能被解析并用空 JSON 构造

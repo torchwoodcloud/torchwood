@@ -178,6 +178,17 @@ func operatorFrom(ctx context.Context) json.RawMessage {
 	if !ok || p == nil {
 		return domainassets.MarshalOperator(domainassets.OperatorSnapshot{IsSystem: true})
 	}
+	// 执行主体（P0 执行身份）：账本 operator 溯源到 function + 触发用户
+	// （对标 PlayFab currentPlayerId 审计语义）。actor_id = function_id，
+	// user_id = InvokingUserID（Server 面触发为空）；缺的字段如实留空。
+	if p.ActorKind == shared.ActorKindExecution {
+		return domainassets.MarshalOperator(domainassets.OperatorSnapshot{
+			ActorKind:      string(p.ActorKind),
+			ActorID:        p.FunctionID,
+			UserID:         p.InvokingUserID,
+			CredentialType: string(p.CredentialType),
+		})
+	}
 	return domainassets.MarshalOperator(domainassets.OperatorSnapshot{
 		ActorKind:      string(p.ActorKind),
 		ActorID:        string(p.ActorID),

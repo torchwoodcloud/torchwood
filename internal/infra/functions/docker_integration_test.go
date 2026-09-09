@@ -39,7 +39,7 @@ func dockerAvailable(t *testing.T) bool {
 	return true
 }
 
-func testExecutor(t *testing.T) *dockerExecutor {
+func testExecutor(t *testing.T) *DockerExecutor {
 	cfg := &config.AppConfig{
 		Functions: &config.Functions{
 			Executor: "docker",
@@ -50,8 +50,8 @@ func testExecutor(t *testing.T) *dockerExecutor {
 			},
 		},
 	}
-	d, ok := NewDockerExecutor(cfg).(*dockerExecutor)
-	require.True(t, ok)
+	d := NewDockerExecutor(cfg)
+	require.NotNil(t, d)
 	return d
 }
 

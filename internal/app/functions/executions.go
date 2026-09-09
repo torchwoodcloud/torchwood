@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -22,10 +23,32 @@ const (
 	maxExecutionDataBytes = 32 << 10 // data ≤ 32KB（execve 单变量硬限制余量）
 	maxEnvBytes           = 32 << 10 // env vars 总量 ≤ 32KB
 	maxOutputBytes        = 64 << 10 // stdout/stderr/response 截断上限
-	pruneKeepRecent       = 100      // 保留策略：每函数最多保留最近 100 条
-	recoverOrphanBatch    = 500      // worker 启动对账全局预算（K22）
+	// maxTriggerDataBytes 是触发器路径 data（封套）绝对上限（v2 dispatcher
+	// body 通道）：封套同时携带 body（best-effort UTF-8 字符串）与
+	// body_base64（无损），1MB body 双编码 ≈ 2.4MB，取 4MB 覆盖。
+	maxTriggerDataBytes = 4 << 20
+	pruneKeepRecent     = 100 // 保留策略：每函数最多保留最近 100 条
+	recoverOrphanBatch  = 500 // worker 启动对账全局预算（K22）
+	// pruneTriggerRetention 是 client/http/cron 来源执行记录的时间窗保留
+	// （P2 Q7 保留分级）：48h ≥ 2× 最长限频窗口（day=24h），保证限频 DB 降级
+	// 路径在最长窗口内的计数行不被 prune 裁掉（少计超发，设计 §5 交互修正）。
+	pruneTriggerRetention = 48 * time.Hour
 	// workerRebuildTimeout 是 worker 补构建的最长耗时（防挂死的 daemon 卡住消费）。
 	workerRebuildTimeout = 5 * time.Minute
+)
+
+// 执行身份 env（P0）：注入容器的是 token 原值与 Server API 可达地址。两者
+// 计入 env+data ≤32KB 预算（token ≈ 60B、URL 典型 ≤100B，量级无碍；合并
+// 预算兜底在 infra/functions docker.go maxExecEnvBudgetBytes）。
+const (
+	twExecutionTokenEnv = "TW_EXECUTION_TOKEN"
+	twAPIBaseURLEnv     = "TW_API_BASE_URL"
+	// executionTokenGrace 是 token TTL 的宽限余量：TTL = 函数超时 + 60s，
+	// 仅作崩溃兜底（正常路径执行结束即主动吊销，见 revokeExecutionToken）。
+	executionTokenGrace = 60 * time.Second
+	// executionTokenRevokeTimeout 是执行结束后主动吊销的独立超时：吊销不得
+	// 继承已取消/超时的执行 ctx，也不能无超时阻塞调用链。
+	executionTokenRevokeTimeout = 5 * time.Second
 )
 
 // ErrInvalidQueuePayload 标识无法解析或缺失 ID 的队列消息（worker 不应重试）。
@@ -40,11 +63,46 @@ const (
 )
 
 type CreateExecutionCommand struct {
-	ProjectID    string
-	FunctionID   string
-	DeploymentID string // 缺省用最新 ready deployment
+	ProjectID  string
+	FunctionID string
+	// DeploymentID 缺省用最新 ready deployment。
+	DeploymentID string
 	Data         string
 	Async        bool
+	// ——触发器路径扩展（P1；Server 面 CreateExecution 不设置）——
+	// Source 是触发来源（trigger_source 列）：http:{trigger_id} /
+	// cron:{trigger_id} / client；空 = server 面。INSERT 期写入、之后不可变。
+	Source string
+	// SourceIP 是 HTTP 触发的来源 IP 摘要（source_ip 列）。
+	SourceIP string
+	// DataLimitBytes 覆盖默认 32KB data 上限（InvokeTrigger 专用：v2
+	// dispatcher 走 body 通道可放宽至触发器 body 上限 ≤1MB；v1 env 通道
+	// 保持 32KB 硬上限）。0 = 默认。客户端调用面（P2）不放宽：严格 32KB。
+	DataLimitBytes int
+	// ——客户端调用面扩展（P2；设计 §4）——
+	// InvokingUserID 是调用用户（执行记录 invoking_user_id 列；执行身份
+	// token info 携带 invoking_user → 账本 operator 溯源 function+user）。
+	InvokingUserID string
+	// IdempotencyKey 是客户端幂等键（执行记录 client_idempotency_key 列；
+	// partial 唯一索引 (project, function, user, key) WHERE key <> '' 去重，
+	// 冲突时调用方回读既有行原样返回）。空 = 不参与幂等。
+	IdempotencyKey string
+}
+
+// effectiveDataLimit 计算本次执行的 data 上限：默认 32KB（execve 单变量
+// 硬限制余量）；触发器路径在 v2（dispatcher body 通道）下放宽到调用方
+// 上限（≤1MB，封套校验），v1（env 通道）保持 32KB。
+func (f *Functions) effectiveDataLimit(override int) int {
+	if override <= 0 {
+		return maxExecutionDataBytes
+	}
+	if !f.executorV2() {
+		return maxExecutionDataBytes
+	}
+	if override > maxTriggerDataBytes {
+		return maxTriggerDataBytes
+	}
+	return override
 }
 
 // queueMessage 是入队 payload：execution_id + function_id + project_id + data。
@@ -63,10 +121,18 @@ type queueMessage struct {
 
 func (f *Functions) CreateExecution(ctx context.Context, cmd CreateExecutionCommand) (*domainfunctions.ExecutionRecord, error) {
 	// 纵深防御（G2-1/R06-P0，G12 调整）：执行创建允许 admin 会话与 API key。
+	// 触发器路径（InvokeTrigger）token 门禁在 handler 完成，不经此处。
 	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return nil, err
 	}
-	fn, err := f.repo.GetFunction(ctx, cmd.ProjectID, cmd.FunctionID)
+	return f.createExecution(ctx, cmd)
+}
+
+// createExecution 是执行创建核心（Server 面与触发器路径共用）：两写预占
+// 同步快路径 / 异步队列状态机、执行身份铸造、观测指标全部一致。
+func (f *Functions) createExecution(ctx context.Context, cmd CreateExecutionCommand) (*domainfunctions.ExecutionRecord, error) {
+	// 热路径清账（P0.5）：GetFunction/GetVariables 走 30s 进程内缓存。
+	fn, err := f.getCachedFunction(ctx, cmd.ProjectID, cmd.FunctionID)
 	if err != nil {
 		return nil, err
 	}
@@ -77,13 +143,14 @@ func (f *Functions) CreateExecution(ctx context.Context, cmd CreateExecutionComm
 		return nil, status.Error(codes.FailedPrecondition, "function is disabled")
 	}
 
-	dep, err := f.selectDeployment(ctx, cmd.ProjectID, cmd.FunctionID, cmd.DeploymentID)
+	dep, err := f.selectDeployment(ctx, fn, cmd.DeploymentID)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(cmd.Data) > maxExecutionDataBytes {
-		return nil, status.Errorf(codes.InvalidArgument, "data exceeds maximum size of %d bytes", maxExecutionDataBytes)
+	dataLimit := f.effectiveDataLimit(cmd.DataLimitBytes)
+	if len(cmd.Data) > dataLimit {
+		return nil, status.Errorf(codes.InvalidArgument, "data exceeds maximum size of %d bytes", dataLimit)
 	}
 	// data 必须是 JSON object（R07-P3-7）：数组/标量/字面量 null 一律拒绝——
 	// 执行体以 JSON object 语义读取 TW_DATA，非 object 会导致运行时解析异常。
@@ -93,14 +160,17 @@ func (f *Functions) CreateExecution(ctx context.Context, cmd CreateExecutionComm
 			return nil, status.Error(codes.InvalidArgument, "data must be a JSON object")
 		}
 	}
-	vars, err := f.repo.GetVariables(ctx, cmd.ProjectID, cmd.FunctionID)
+	vars, err := f.getCachedVariables(ctx, cmd.ProjectID, cmd.FunctionID)
 	if err != nil {
 		return nil, err
 	}
 	if envSize(vars) > maxEnvBytes {
 		return nil, status.Errorf(codes.InvalidArgument, "environment variables exceed maximum total size of %d bytes", maxEnvBytes)
 	}
-	if envSize(vars)+len(cmd.Data) > maxEnvBytes {
+	// env+data 合并预算只约束 v1 env 通道（TW_DATA 是环境变量）；v2 dispatcher
+	// 把 data 走 body 通道与 env 分离，触发器封套（≤1MB）不受 32KB env 预算
+	// 连坐（P1 触发器 body 可配至 1MB 的前提）。
+	if dataLimit <= maxExecutionDataBytes && envSize(vars)+len(cmd.Data) > maxEnvBytes {
 		return nil, status.Errorf(codes.InvalidArgument, "data and environment variables exceed combined maximum of %d bytes", maxEnvBytes)
 	}
 
@@ -110,19 +180,30 @@ func (f *Functions) CreateExecution(ctx context.Context, cmd CreateExecutionComm
 
 	now := time.Now()
 	rec := &domainfunctions.ExecutionRecord{
-		ID:           idgen.UUID().String(),
-		FunctionID:   cmd.FunctionID,
-		ProjectID:    cmd.ProjectID,
-		DeploymentID: dep.ID,
-		Status:       domainfunctions.ExecutionStatusQueued,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-	if err := f.repo.CreateExecution(ctx, rec); err != nil {
-		return nil, err
+		ID:            idgen.UUID().String(),
+		FunctionID:    cmd.FunctionID,
+		ProjectID:     cmd.ProjectID,
+		DeploymentID:  dep.ID,
+		TriggerSource: cmd.Source,
+		SourceIP:      cmd.SourceIP,
+		// 客户端调用面（P2）：INSERT 期写入、之后不可变。
+		InvokingUserID:       cmd.InvokingUserID,
+		ClientIdempotencyKey: cmd.IdempotencyKey,
+		CreatedAt:            now,
+		UpdatedAt:            now,
 	}
 
+	// egress 分类（P2 安全切片，设计 Security #6）：不可信函数（client_callable
+	// 或存在 http/cron 触发器）容器走 internal 变体网络（出网全 deny）。
+	// 分类是函数属性，对所有触发来源一致生效。
+	untrusted := fn.ClientCallable || f.hasTriggersCached(ctx, cmd.ProjectID, cmd.FunctionID)
+
 	if cmd.Async {
+		// 异步路径状态机原样保留：queued 入队 → worker CAS 领取。
+		rec.Status = domainfunctions.ExecutionStatusQueued
+		if err := f.repo.CreateExecution(ctx, rec); err != nil {
+			return nil, err
+		}
 		payload, err := json.Marshal(queueMessage{
 			ExecutionID: rec.ID,
 			FunctionID:  rec.FunctionID,
@@ -140,20 +221,31 @@ func (f *Functions) CreateExecution(ctx context.Context, cmd CreateExecutionComm
 			_ = f.repo.UpdateExecution(ctx, rec)
 			return nil, status.Errorf(codes.Unavailable, "enqueue execution: %v", err)
 		}
-	} else {
-		rec, err = f.runExecution(ctx, fn, rec, vars, cmd.Data)
-		if err != nil {
-			return nil, err
-		}
+		return rec, nil
 	}
 
-	// 保留策略：清理该函数超过最近 100 条的更旧记录（失败仅记日志）。
-	_ = f.repo.PruneOldExecutionsInProject(ctx, cmd.ProjectID, cmd.FunctionID, pruneKeepRecent)
-	return rec, nil
+	// 同步快路径两写预占记账（P0.5，§6 约束①/K9）：跳过 queued/building
+	// 中间态，INSERT (status=running, timeout_seconds 快照) 直接预占——
+	// 预占行即刻成为审计/限频计数依据；并发/重复由调用方幂等（P2 客户端
+	// 幂等键）与本行无关；执行中崩溃行留在 running，由周期孤儿恢复按
+	// staleAfter = timeout_seconds + 120s 判 failed。
+	timeoutSnapshot := fn.TimeoutSeconds
+	rec.Status = domainfunctions.ExecutionStatusRunning
+	rec.TimeoutSeconds = &timeoutSnapshot
+	if err := f.repo.CreateExecution(ctx, rec); err != nil {
+		return nil, err
+	}
+	return f.runExecution(ctx, fn, rec, vars, cmd.Data, untrusted)
 }
 
 // selectDeployment 选定部署：显式指定（必须 ready）或最新 ready。
-func (f *Functions) selectDeployment(ctx context.Context, projectID, functionID, deploymentID string) (*domainfunctions.Deployment, error) {
+//
+// 热路径清账（P0.5，§6 约束③）：优先读函数行的 latest_ready_deployment_id
+// 冗余指针（CreateExecution 已取回 fn，指针命中时仅一次 GetDeployment 单行
+// 查询）；指针为 NULL（存量数据）或失效（指向行被并发删除/非 ready）时
+// 回退既有全量列表逻辑——指针只加速不裁剪正确性。
+func (f *Functions) selectDeployment(ctx context.Context, fn *domainfunctions.Function, deploymentID string) (*domainfunctions.Deployment, error) {
+	projectID, functionID := fn.ProjectID, fn.ID
 	if deploymentID != "" {
 		dep, err := f.repo.GetDeployment(ctx, projectID, functionID, deploymentID)
 		if err != nil {
@@ -166,6 +258,13 @@ func (f *Functions) selectDeployment(ctx context.Context, projectID, functionID,
 			return nil, status.Error(codes.FailedPrecondition, "deployment is not ready")
 		}
 		return dep, nil
+	}
+	if fn.LatestReadyDeploymentID != "" {
+		dep, err := f.repo.GetDeployment(ctx, projectID, functionID, fn.LatestReadyDeploymentID)
+		if err == nil && dep != nil && dep.Status == domainfunctions.DeploymentStatusReady {
+			return dep, nil
+		}
+		// 指针失效：回退全量列表（下一轮 Activate/Delete 会修复指针）。
 	}
 	deps, err := f.repo.ListDeployments(ctx, projectID, functionID)
 	if err != nil {
@@ -180,23 +279,38 @@ func (f *Functions) selectDeployment(ctx context.Context, projectID, functionID,
 	return nil, status.Error(codes.FailedPrecondition, "no ready deployment")
 }
 
-// runExecution 同步执行：占执行信号量 → executor → 写回结果（含截断）。
-// 超时等执行错误会写回 failed 记录并返回错误（映射 DeadlineExceeded/HTTP 504）。
-func (f *Functions) runExecution(ctx context.Context, fn *domainfunctions.Function, rec *domainfunctions.ExecutionRecord, vars map[string]string, data string) (*domainfunctions.ExecutionRecord, error) {
-	ok, release, err := f.getRunSemaphore().TryAcquire(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "acquire run semaphore: %v", err)
+// runExecution 同步执行（两写预占的第二写）：执行身份铸造 → executor →
+// 终态 UPDATE（completed/failed + outputs + duration_ms）。执行结束（成功/
+// 失败/panic）主动吊销 token；超时等执行错误会写回 failed 记录并返回错误
+// （映射 DeadlineExceeded/HTTP 504）。
+//
+// 信号量：v2（dispatcher）路径跳过全局 run 信号量——常驻实例池由
+// dispatcher 内部管控（池上限/有界排队），全局 16 槽是 per-execution 预算，
+// 双重限流会互相饿死（设计 §6）；v1 回退模式保留信号量。
+func (f *Functions) runExecution(ctx context.Context, fn *domainfunctions.Function, rec *domainfunctions.ExecutionRecord, vars map[string]string, data string, egressUntrusted bool) (*domainfunctions.ExecutionRecord, error) {
+	if !f.executorV2() {
+		ok, release, err := f.getRunSemaphore().TryAcquire(ctx)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "acquire run semaphore: %v", err)
+		}
+		if !ok {
+			rec.Status = domainfunctions.ExecutionStatusFailed
+			rec.Error = "too many concurrent executions"
+			rec.UpdatedAt = time.Now()
+			_ = f.repo.UpdateExecution(ctx, rec)
+			return nil, status.Error(codes.ResourceExhausted, "too many concurrent executions")
+		}
+		defer release()
 	}
-	if !ok {
-		rec.Status = domainfunctions.ExecutionStatusFailed
-		rec.Error = "too many concurrent executions"
-		rec.UpdatedAt = time.Now()
-		_ = f.repo.UpdateExecution(ctx, rec)
-		return nil, status.Error(codes.ResourceExhausted, "too many concurrent executions")
-	}
-	defer release()
 
-	result, err := f.executor.Execute(ctx, buildExecution(fn, rec, vars, data))
+	started := time.Now()
+	// 执行身份（P0）：铸造短期 token 并注入 env（v2 下由 dispatcher 客户端
+	// 摘出经分发 header 传递，语义不变）；defer 覆盖成功/失败/panic 三条
+	// 路径的主动吊销（TTL 只是崩溃兜底）——常驻的是容器不是凭证。
+	token := f.mintExecutionToken(ctx, fn, rec)
+	defer f.revokeExecutionToken(token)
+
+	result, err := f.executor.Execute(ctx, buildExecution(fn, rec, vars, data, token, f.executionAPIBaseURL(), egressUntrusted))
 	now := time.Now()
 	rec.UpdatedAt = now
 	if err != nil {
@@ -212,6 +326,7 @@ func (f *Functions) runExecution(ctx context.Context, fn *domainfunctions.Functi
 		}
 		_ = f.repo.UpdateExecution(ctx, rec)
 		f.meterDuration(ctx, rec.ProjectID, rec.DurationMS)
+		f.observeExecution(rec.ProjectID, rec.FunctionID, metricSource(rec.TriggerSource), started, rec.Status)
 		return rec, err
 	}
 	rec.StatusCode = result.StatusCode
@@ -231,6 +346,7 @@ func (f *Functions) runExecution(ctx context.Context, fn *domainfunctions.Functi
 		return nil, err
 	}
 	f.meterDuration(ctx, rec.ProjectID, rec.DurationMS)
+	f.observeExecution(rec.ProjectID, rec.FunctionID, metricSource(rec.TriggerSource), started, rec.Status)
 	return rec, nil
 }
 
@@ -266,7 +382,9 @@ func (f *Functions) ProcessExecution(ctx context.Context, msg queueMessage) erro
 			domainfunctions.ExecutionStatusBuilding, domainfunctions.ExecutionStatusQueued)
 	}
 
-	fn, err := f.repo.GetFunction(ctx, msg.ProjectID, msg.FunctionID)
+	// 热路径清账（P0.5）：GetFunction/GetVariables 走 30s 进程内缓存（worker
+	// 进程同享失效语义——跨进程 30s 收敛）。
+	fn, err := f.getCachedFunction(ctx, msg.ProjectID, msg.FunctionID)
 	if err != nil {
 		release()
 		return err
@@ -292,7 +410,7 @@ func (f *Functions) ProcessExecution(ctx context.Context, msg queueMessage) erro
 		return nil
 	}
 
-	vars, err := f.repo.GetVariables(ctx, msg.ProjectID, msg.FunctionID)
+	vars, err := f.getCachedVariables(ctx, msg.ProjectID, msg.FunctionID)
 	if err != nil {
 		release()
 		return err
@@ -320,25 +438,47 @@ func (f *Functions) ProcessExecution(ctx context.Context, msg queueMessage) erro
 	if err := f.repo.UpdateExecution(ctx, rec); err != nil {
 		return err
 	}
+	claimedAt := time.Now()
+
+	// 排队时长观测（P0.5 观测补全）：queued→running 的耗时（异步路径；
+	// source 枚举位 client/http/cron 随 P1/P2 打开，server 路径不记排队）。
+	observeQueueWait(msg.ProjectID, msg.FunctionID, claimedAt.Sub(rec.CreatedAt))
 
 	// 执行超时=fn.TimeoutSeconds；超时写回 failed（不把 DeadlineExceeded 上抛，
 	// worker 单任务失败不影响消费循环）。
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(fn.TimeoutSeconds)*time.Second)
 	defer cancel()
-	ok, release, err := f.getRunSemaphore().TryAcquire(ctx)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		rec.Status = domainfunctions.ExecutionStatusFailed
-		rec.Error = "too many concurrent executions"
-		rec.UpdatedAt = time.Now()
-		_ = f.repo.UpdateExecution(ctx, rec)
-		return nil
-	}
-	defer release()
 
-	result, err := f.executor.Execute(runCtx, buildExecution(fn, rec, vars, msg.Data))
+	// 信号量：v2（dispatcher）路径跳过全局 run 信号量（同 runExecution 注释
+	// ——池由 dispatcher 内部管控，避免双重限流）；v1 回退模式保留。
+	var runRelease func()
+	if !f.executorV2() {
+		ok, rel, err := f.getRunSemaphore().TryAcquire(ctx)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			rec.Status = domainfunctions.ExecutionStatusFailed
+			rec.Error = "too many concurrent executions"
+			rec.UpdatedAt = time.Now()
+			_ = f.repo.UpdateExecution(ctx, rec)
+			return nil
+		}
+		runRelease = rel
+	}
+	if runRelease != nil {
+		defer runRelease()
+	}
+
+	// 执行身份（P0）：与同步路径同一铸造/注入/主动吊销语义（进程无关）。
+	token := f.mintExecutionToken(ctx, fn, rec)
+	defer f.revokeExecutionToken(token)
+
+	// egress 分类（P2）：异步路径（http async_ack / cron）的函数按同一分类
+	// 规则判定——存在 http/cron 触发器即不可信（与 createExecution 同口径）。
+	untrusted := fn.ClientCallable || f.hasTriggersCached(ctx, msg.ProjectID, msg.FunctionID)
+	result, err := f.executor.Execute(runCtx, buildExecution(fn, rec, vars, msg.Data, token, f.executionAPIBaseURL(), untrusted))
+	execStart := time.Now()
 	now := time.Now()
 	rec.UpdatedAt = now
 	if err != nil {
@@ -355,6 +495,7 @@ func (f *Functions) ProcessExecution(ctx context.Context, msg queueMessage) erro
 		}
 		_ = f.repo.UpdateExecution(ctx, rec)
 		f.meterDuration(ctx, rec.ProjectID, rec.DurationMS)
+		f.observeExecution(rec.ProjectID, rec.FunctionID, metricSource(rec.TriggerSource), execStart, rec.Status)
 		return nil
 	}
 	rec.StatusCode = result.StatusCode
@@ -374,6 +515,7 @@ func (f *Functions) ProcessExecution(ctx context.Context, msg queueMessage) erro
 		return err
 	}
 	f.meterDuration(ctx, rec.ProjectID, rec.DurationMS)
+	f.observeExecution(rec.ProjectID, rec.FunctionID, metricSource(rec.TriggerSource), execStart, rec.Status)
 	_ = f.repo.PruneOldExecutionsInProject(ctx, msg.ProjectID, msg.FunctionID, pruneKeepRecent)
 	return nil
 }
@@ -417,10 +559,13 @@ func (f *Functions) MarkExecutionFailed(ctx context.Context, projectID, function
 	return f.repo.FailExecutionIfActive(ctx, projectID, functionID, executionID, reason)
 }
 
-// RecoverOrphanExecutions 按 public.projects 枚举 active 项目，将停留
-// building/running 超过 staleAfter 的记录标记为 failed（worker 启动对账）。
-// 全局预算 recoverOrphanBatch（K22），foreach 项目扣减 remaining；项目遍历
-// 按轮转游标起始（队尾饥饿防护）。
+// RecoverOrphanExecutions 按 public.projects 枚举 active 项目，将停留未终态
+// （queued/building/running——P0.5 起纳入 queued）超过 staleAfter 的记录
+// 标记为 failed。P0.5 起由 worker 周期 ticker（1min）驱动（原「启动跑一次」
+// 升级）；staleAfter 是 timeout_seconds 为 NULL 的存量行的回退口径，非空行
+// 按行内快照 + 120s 宽限判定（repo 侧 SQL 同源）。全局预算
+// recoverOrphanBatch（K22），foreach 项目扣减 remaining；项目遍历按轮转
+// 游标起始（队尾饥饿防护）。
 func (f *Functions) RecoverOrphanExecutions(ctx context.Context, staleAfter time.Duration) (int64, error) {
 	if f.projects == nil {
 		return 0, nil
@@ -466,8 +611,22 @@ func (f *Functions) ListExecutions(ctx context.Context, projectID, functionID st
 	return f.repo.ListExecutions(ctx, projectID, functionID, pruneKeepRecent)
 }
 
-// buildExecution 组装 executor 入参。
-func buildExecution(fn *domainfunctions.Function, rec *domainfunctions.ExecutionRecord, vars map[string]string, data string) domainfunctions.Execution {
+// buildExecution 组装 executor 入参。池策略（P0.5）从函数记录透传——
+// dispatcher 无 DB 依赖，策略随执行规格携带；v1 executor 忽略。
+// egressUntrusted 由调用方按函数分类（P2 安全切片：client_callable 或存在
+// http/cron 触发器 = 不可信，容器 attach internal 变体网络）。
+func buildExecution(fn *domainfunctions.Function, rec *domainfunctions.ExecutionRecord, vars map[string]string, data, execToken, apiBaseURL string, egressUntrusted bool) domainfunctions.Execution {
+	env := sanitizeEnv(vars)
+	// 执行身份 env（P0）：为空则不注入对应变量（api_base_url 未配置时函数
+	// 需自行解析平台地址；token 为空 = 无平台身份）。v2 路径下 dispatcher
+	// 客户端把 TW_EXECUTION_TOKEN 从 env 摘出经分发 header 传递（通道切换，
+	// 语义不变）。
+	if execToken != "" {
+		env[twExecutionTokenEnv] = execToken
+	}
+	if apiBaseURL != "" {
+		env[twAPIBaseURLEnv] = apiBaseURL
+	}
 	return domainfunctions.Execution{
 		FunctionID:   fn.ID,
 		DeploymentID: rec.DeploymentID,
@@ -475,9 +634,62 @@ func buildExecution(fn *domainfunctions.Function, rec *domainfunctions.Execution
 		Runtime:      fn.Runtime,
 		Spec:         fn.Spec,
 		Timeout:      int64(fn.TimeoutSeconds),
-		Env:          sanitizeEnv(vars),
+		Env:          env,
 		Data:         data,
+		// 池策略（v2 常驻执行模型）：平台默认 + per-function 覆盖。
+		MinInstances:           fn.MinInstances,
+		MaxInstances:           fn.MaxInstances,
+		IdleTTLSeconds:         fn.IdleTTLSeconds,
+		MaxRequestsPerInstance: fn.MaxRequestsPerInstance,
+		// egress 分类（P2 安全切片）：infra 据此选择常规/internal 网络。
+		EgressUntrusted: egressUntrusted,
 	}
+}
+
+// mintExecutionToken 铸造本次执行的短期 token（P0 执行身份）。TTL = 函数
+// 超时 + 60s 宽限（崩溃兜底）；铸造失败 best-effort 不阻断执行——返回空
+// token 即不注入 TW_EXECUTION_TOKEN，函数内平台调用将以 401 呈现（与
+// declared_scopes 为空的默认语义一致），故障仅记告警日志。
+func (f *Functions) mintExecutionToken(ctx context.Context, fn *domainfunctions.Function, rec *domainfunctions.ExecutionRecord) string {
+	if f.execTokens == nil {
+		return ""
+	}
+	ttl := time.Duration(fn.TimeoutSeconds)*time.Second + executionTokenGrace
+	token, err := f.execTokens.Mint(ctx, domainfunctions.ExecutionTokenInfo{
+		ProjectID:   fn.ProjectID,
+		FunctionID:  fn.ID,
+		ExecutionID: rec.ID,
+		Scopes:      fn.DeclaredScopes,
+	}, ttl)
+	if err != nil {
+		slog.WarnContext(ctx, "mint execution token failed; function runs without platform identity",
+			"project_id", fn.ProjectID, "function_id", fn.ID, "execution_id", rec.ID, "error", err)
+		return ""
+	}
+	return token
+}
+
+// revokeExecutionToken 在执行结束（成功/失败/panic——调用方以 defer 挂载）
+// 后主动吊销 token：「执行结束即失效」是主动语义。独立 context（Background
+// + 短超时）：执行 ctx 可能已取消/超时，吊销不得连带失败或无限阻塞。
+func (f *Functions) revokeExecutionToken(token string) {
+	if token == "" || f.execTokens == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), executionTokenRevokeTimeout)
+	defer cancel()
+	if err := f.execTokens.Revoke(ctx, token); err != nil {
+		slog.Warn("revoke execution token failed", "error", err)
+	}
+}
+
+// executionAPIBaseURL 读取 functions.execution.api_base_url（函数容器经
+// bridge NAT 回访 Server API 的可达地址；空 = 不注入 TW_API_BASE_URL）。
+func (f *Functions) executionAPIBaseURL() string {
+	if f.cfg == nil {
+		return ""
+	}
+	return f.cfg.GetFunctions().GetExecution().GetApiBaseUrl()
 }
 
 func envSize(vars map[string]string) int {

@@ -180,6 +180,7 @@ func TestAccount_CreateJWT_SecondUseRejected(t *testing.T) {
 		bunrepo.NewUserRepository(db),
 		nil,
 		auth.NewRedisOneTimeTokenStore(rdb),
+		nil,
 	)
 
 	// 第一次验证放行。

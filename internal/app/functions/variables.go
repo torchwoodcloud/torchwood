@@ -55,6 +55,8 @@ func (f *Functions) SetVariables(ctx context.Context, projectID, functionID stri
 	if err := f.repo.SetVariables(ctx, projectID, functionID, merged); err != nil {
 		return nil, err
 	}
+	// 缓存失效（P0.5）：变量变更即时失效本进程缓存（跨实例 30s 收敛）。
+	f.cache.invalidate(projectID, functionID)
 	// 响应返回掩码视图：非空值一律脱敏，避免回显旧 secret。
 	resp := make(map[string]string, len(merged))
 	for k, v := range merged {

@@ -48,7 +48,9 @@ func (r *stubRepo) ListDeployments(context.Context, string, string) ([]domainfun
 	return nil, nil
 }
 func (r *stubRepo) UpdateDeployment(context.Context, *domainfunctions.Deployment) error { return nil }
-func (r *stubRepo) DeleteDeployment(context.Context, string, string, string) error      { return nil }
+
+func (r *stubRepo) ActivateDeployment(context.Context, *domainfunctions.Deployment) error { return nil }
+func (r *stubRepo) DeleteDeployment(context.Context, string, string, string) error        { return nil }
 func (r *stubRepo) SetVariables(context.Context, string, string, map[string]string) error {
 	return nil
 }
@@ -72,6 +74,15 @@ func (r *stubRepo) RecoverOrphanExecutionsInProject(context.Context, string, tim
 }
 func (r *stubRepo) PruneOldExecutionsInProject(context.Context, string, string, int) error {
 	return nil
+}
+func (r *stubRepo) PruneTriggerExecutionsInProject(context.Context, string, string, time.Time) error {
+	return nil
+}
+func (r *stubRepo) GetExecutionByIdempotencyKey(context.Context, string, string, string, string) (*domainfunctions.ExecutionRecord, error) {
+	return nil, nil
+}
+func (r *stubRepo) CountClientInvocations(context.Context, string, string, string, time.Time) (int, error) {
+	return 0, nil
 }
 func (r *stubRepo) TransitionExecutionStatus(context.Context, string, string, string, string, string) (bool, error) {
 	return false, nil

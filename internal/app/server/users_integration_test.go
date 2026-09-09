@@ -28,7 +28,7 @@ const usersUCJWTSecret = "users-integration-test-secret"
 
 type documentRoles struct{}
 
-func (documentRoles) LoadUserRoles(ctx context.Context, projectID, userID string) ([]string, error) {
+func (documentRoles) LoadUserRoles(ctx context.Context, projectID, userID string, _ *users.User) ([]string, error) {
 	return []string{"users", "user:" + userID}, nil
 }
 

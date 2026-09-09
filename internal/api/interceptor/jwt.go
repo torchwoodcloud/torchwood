@@ -246,12 +246,19 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 	credentialType := principal.CredentialType
 
 	if policy.Access == domainauth.AccessServer {
-		// SERVER 面（原 ACCESS_API_KEY）：凭证族 = API key 或 admin 会话。
-		if principal.CredentialType != shared.CredentialTypeAPIKey && principal.ActorKind != shared.ActorKindAdmin {
+		// SERVER 面（原 ACCESS_API_KEY）：凭证族 = API key、admin 会话或
+		// 函数执行 principal（P0 执行身份——Functions 是 D6 设计内的平台
+		// 写通道，细粒度由 scope 门约束）。
+		allowed := principal.CredentialType == shared.CredentialTypeAPIKey ||
+			principal.ActorKind == shared.ActorKindAdmin ||
+			principal.ActorKind == shared.ActorKindExecution
+		if !allowed {
 			i.logAuthFailure(ctx, info.FullMethod, "credential_type_not_allowed", credentialType, principal)
 			return nil, status.Error(codes.Unauthenticated, "developer API requires x-api-key header or admin session")
 		}
-		if principal.CredentialType == shared.CredentialTypeAPIKey {
+		// scope 门：API key 与 execution principal 同一求值路径（declared
+		// scopes 已投影为 API key 同款权限串；资源实例寻址语义一致）。
+		if principal.CredentialType == shared.CredentialTypeAPIKey || principal.CredentialType == shared.CredentialTypeExecution {
 			// 平台专属面不声明 api_key_scope（AssertSemantic 保证），scope
 			// 匹配 fail-closed：未声明即拒绝（通配符不豁免）。
 			rule := i.policies.HasAPIKeyScope(info.FullMethod)

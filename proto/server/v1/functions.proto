@@ -6,6 +6,7 @@ option go_package = "github.com/torchwooddev/torchwood/genproto/server/v1;server
 
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
 import "shared/v1/authz.proto";
 import "shared/v1/common.proto";
@@ -177,6 +178,53 @@ service FunctionsService {
       api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_READ }
     };
   }
+  // SetFunctionScopes 全量替换函数 declared_scopes（P0 执行身份）。独立 RPC
+  // 而非并入 UpdateFunctionRequest：repeated 字段无法表达「未设置=不修改」
+  // 的 presence 语义（proto 规范：更新类可选字段用 proto3 optional）。
+  rpc SetFunctionScopes(SetFunctionScopesRequest) returns (Function) {
+    option (google.api.http) = { put: "/v1/server/functions/{function_id}/scopes", body: "*" };
+    // 镜像 SetVariables 先例：敏感方法显式声明 method_auth（R10-P1-1）。
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_WRITE }
+    };
+  }
+
+  // ——触发器管理（P1 触发器模块；K4/K10）——
+  //
+  // CreateFunctionTrigger 创建 HTTP 或 cron 触发器。http 的 token 由服务端
+  // 生成（128bit，URL 即鉴权）、不收入参；公开调用路由为
+  // /f/{project_id}/{token}（FunctionTrigger.invoke_path）。
+  rpc CreateFunctionTrigger(CreateFunctionTriggerRequest) returns (FunctionTrigger) {
+    option (google.api.http) = { post: "/v1/server/functions/{function_id}/triggers", body: "*" };
+    // 镜像 SetFunctionScopes 先例：functions.write + admin/owner。
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_WRITE }
+    };
+  }
+  rpc ListFunctionTriggers(GetFunctionRequest) returns (ListFunctionTriggersResponse) {
+    option (google.api.http) = { get: "/v1/server/functions/{function_id}/triggers" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_READ }
+    };
+  }
+  rpc DeleteFunctionTrigger(DeleteFunctionTriggerRequest) returns (shared.v1.Empty) {
+    option (google.api.http) = { delete: "/v1/server/functions/{function_id}/triggers/{trigger_id}" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_WRITE }
+    };
+  }
+  // RotateFunctionTriggerToken 轮换 http 触发器 token（URL 含 token 会被
+  // 代理/访问日志记录；轮换后旧 token 立即失效），返回带新 token 的触发器。
+  rpc RotateFunctionTriggerToken(RotateFunctionTriggerTokenRequest) returns (FunctionTrigger) {
+    option (google.api.http) = { post: "/v1/server/functions/{function_id}/triggers/{trigger_id}:rotate-token", body: "*" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_WRITE }
+    };
+  }
 }
 
 message Function {
@@ -190,6 +238,21 @@ message Function {
   bool enabled = 8;
   google.protobuf.Timestamp created_at = 9;
   google.protobuf.Timestamp updated_at = 10;
+  // 函数执行 principal 的平台访问声明（P0 执行身份）：每项形如
+  // "<resource>:<op>"（如 "assets:write"），词表见
+  // docs/developer/08-functions.md「执行身份」；空集 = 无平台访问权限
+  // （fail-closed 默认）。管理经 SetFunctionScopes 全量替换。
+  repeated string declared_scopes = 11;
+  // ——客户端调用面策略（P2，设计 §4）——
+  bool client_callable = 12;
+  // 字段保留、一期禁用：置 true 会被服务端显式拒绝（Q4 拍板：匿名 IP 兜底
+  // 限频做好后再开）。
+  bool client_anonymous_allowed = 13;
+  // 每用户限频配额（client_limit_window 窗口内）；client_callable=true
+  // 要求 >= 1。
+  int32 client_per_user_limit = 14;
+  // 限频窗口：minute | hour | day（day 按 UTC 日期）。
+  string client_limit_window = 15;
 }
 
 message RuntimeInfo {
@@ -255,6 +318,15 @@ message CreateFunctionRequest {
   optional int32 timeout_seconds = 5;
   optional string spec = 6;
   optional bool enabled = 7;
+  // 执行身份声明（P0）：词表校验/去重在服务端（app 层），空集合法。
+  repeated string declared_scopes = 8;
+  // ——客户端调用面策略（P2，设计 §4）——
+  optional bool client_callable = 9;
+  // 字段保留、一期禁用：置 true 显式报错「一期未开放」。
+  optional bool client_anonymous_allowed = 10;
+  // client_callable=true 时必须 >= 1。
+  optional int32 client_per_user_limit = 11 [(buf.validate.field).int32.gte = 0];
+  optional string client_limit_window = 12 [(buf.validate.field).string = { in: ["minute", "hour", "day"] }];
 }
 
 message UpdateFunctionRequest {
@@ -264,6 +336,12 @@ message UpdateFunctionRequest {
   optional int32 timeout_seconds = 4;
   optional string spec = 5;
   optional bool enabled = 6;
+  // ——客户端调用面策略（P2，设计 §4；未设置 = 不修改）——
+  optional bool client_callable = 7;
+  // 字段保留、一期禁用：置 true 显式报错「一期未开放」。
+  optional bool client_anonymous_allowed = 8;
+  optional int32 client_per_user_limit = 9 [(buf.validate.field).int32.gte = 0];
+  optional string client_limit_window = 10 [(buf.validate.field).string = { in: ["minute", "hour", "day"] }];
 }
 
 message GetFunctionRequest {
@@ -298,6 +376,102 @@ message GetExecutionRequest {
 message SetVariablesRequest {
   string function_id = 1;
   repeated Variable variables = 2;
+}
+
+// SetFunctionScopesRequest 全量替换函数 declared_scopes（P0 执行身份；
+// 空集 = 撤销全部平台访问）。
+message SetFunctionScopesRequest {
+  string function_id = 1;
+  repeated string declared_scopes = 2;
+}
+
+// ——触发器管理（P1）——
+
+// CreateFunctionTriggerRequest 创建触发器：type 选择 http / cron，二选一
+// 填 http / cron 配置段。token 服务端生成，不收入参。
+message CreateFunctionTriggerRequest {
+  string function_id = 1 [(buf.validate.field).required = true];
+  // 触发器类型：http | cron（大小写敏感）。
+  string type = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = { in: ["http", "cron"] }
+  ];
+  // type=http 时必填。
+  HttpTriggerConfig http = 3;
+  // type=cron 时必填。
+  CronTriggerConfig cron = 4;
+}
+
+// HttpTriggerConfig 是 HTTP 触发器配置。
+message HttpTriggerConfig {
+  // 双响应模式（二轮复审：微信 SSV 回调 1s 超时，纯同步大概率超时丢事件）：
+  //   sync      同步执行（≤30s）并透传函数响应；
+  //   async_ack 立即 200 + ack_body，函数走异步队列（200 是「已受理」语义）。
+  string response_mode = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = { in: ["sync", "async_ack"] }
+  ];
+  // async_ack 模式下的 200 响应体（≤1KB，防带宽放大）；sync 模式忽略。
+  optional string ack_body = 2 [(buf.validate.field).string.max_len = 1024];
+  // GET 握手：echo = 平台直接回 {"echostr": <query.echostr>}，不 invoke。
+  // 空 = GET 一律 405。
+  optional string handshake = 3 [(buf.validate.field).string = { in: ["echo"] }];
+  // 请求体上限（字节）：缺省 65536（64KB），上限 1048576（1MB）。
+  optional int32 body_limit_bytes = 4 [
+    (buf.validate.field).int32.gte = 1,
+    (buf.validate.field).int32.lte = 1048576
+  ];
+}
+
+// CronTriggerConfig 是 cron 触发器配置（K10：一期 UTC）。
+message CronTriggerConfig {
+  // 5 字段 cron 表达式（分 时 日 月 周，UTC；支持 * , - / 数字；周 0-7 且
+  // 7=0）。解析校验在服务端（领域层 cronexpr）。
+  string expr = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 9,
+    (buf.validate.field).string.max_len = 64
+  ];
+  // 错过策略：skip（只推进不补跑）| catch_up_once（补跑一次；默认）。
+  string misfire = 2 [(buf.validate.field).string = { in: ["skip", "catch_up_once"] }];
+}
+
+// FunctionTrigger 是触发器视图。http 专有字段（token/invoke_path/response_mode/
+// ack_body/handshake/body_limit_bytes）与 cron 专有字段（expr/misfire/
+// next_run_at）按 type 取用；token 明文仅在管理面返回。
+message FunctionTrigger {
+  string id = 1;
+  string function_id = 2;
+  string type = 3;
+  bool enabled = 4;
+  // ——http——
+  string response_mode = 5;
+  string ack_body = 6;
+  string handshake = 7;
+  int32 body_limit_bytes = 8;
+  string token = 9;
+  // 公开调用路径 /f/{project_id}/{token}（host 侧自行拼接）。
+  string invoke_path = 10;
+  // ——cron——
+  string expr = 11;
+  string misfire = 12;
+  google.protobuf.Timestamp next_run_at = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+}
+
+message ListFunctionTriggersResponse {
+  repeated FunctionTrigger triggers = 1;
+}
+
+message DeleteFunctionTriggerRequest {
+  string function_id = 1 [(buf.validate.field).required = true];
+  string trigger_id = 2 [(buf.validate.field).required = true];
+}
+
+message RotateFunctionTriggerTokenRequest {
+  string function_id = 1 [(buf.validate.field).required = true];
+  string trigger_id = 2 [(buf.validate.field).required = true];
 }
 
 message ListRuntimesResponse {

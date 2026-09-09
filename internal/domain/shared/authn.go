@@ -81,7 +81,16 @@ func ParseAuthnRequest(req AuthnRequest) (CredentialType, string, error) {
 	return "", "", ErrMissingCredential
 }
 
+// ExecutionTokenPrefix 是函数执行 token 的保留前缀（P0 执行身份）：
+// `Authorization: Bearer twx_...` 在凭证解析层即判定为独立凭证族
+// （CredentialTypeExecution），不进入 JWT 解析路径；前缀由随机 32 字节
+// base64url token（infra/auth.RedisExecutionTokenService）保证与 JWT
+// （"eyJ" 开头）无撞形。
+const ExecutionTokenPrefix = "twx_"
+
 // ParseAuthorizationHeader 解析 Authorization 头，支持 Bearer / Session / ApiKey 三种 scheme。
+// Bearer 值带 ExecutionTokenPrefix 前缀时返回 CredentialTypeExecution
+// （先前缀判断，避免执行 token 被当作 JWT 解析报错）。
 func ParseAuthorizationHeader(raw string) (CredentialType, string, bool) {
 	parts := strings.Fields(raw)
 	if len(parts) != 2 {
@@ -89,6 +98,9 @@ func ParseAuthorizationHeader(raw string) (CredentialType, string, bool) {
 	}
 	switch strings.ToLower(parts[0]) {
 	case "bearer":
+		if strings.HasPrefix(parts[1], ExecutionTokenPrefix) {
+			return CredentialTypeExecution, parts[1], true
+		}
 		return CredentialTypeToken, parts[1], true
 	case "session":
 		return CredentialTypeSession, parts[1], true

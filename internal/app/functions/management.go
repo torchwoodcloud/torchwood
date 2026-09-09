@@ -38,16 +38,28 @@ type CreateFunctionCommand struct {
 	TimeoutSeconds *int
 	Spec           string
 	Enabled        *bool
+	DeclaredScopes []string
+	// ——客户端调用面策略（P2，设计 §4；nil = 未设置）——
+	ClientCallable         *bool
+	ClientAnonymousAllowed *bool
+	ClientPerUserLimit     *int
+	ClientLimitWindow      *string
 }
 
 type UpdateFunctionCommand struct {
-	ProjectID      string
-	FunctionID     string
-	Name           *string
-	Entrypoint     *string
+	ProjectID  string
+	FunctionID string
+	Name       *string
+	Entrypoint *string
+	// TimeoutSeconds 范围 [1,300]（Create 同）。
 	TimeoutSeconds *int
 	Spec           *string
 	Enabled        *bool
+	// ——客户端调用面策略（P2，设计 §4；nil = 未设置，不修改）——
+	ClientCallable         *bool
+	ClientAnonymousAllowed *bool
+	ClientPerUserLimit     *int
+	ClientLimitWindow      *string
 }
 
 func (f *Functions) CreateFunction(ctx context.Context, cmd CreateFunctionCommand) (*domainfunctions.Function, error) {
@@ -89,6 +101,12 @@ func (f *Functions) CreateFunction(ctx context.Context, cmd CreateFunctionComman
 	if cmd.Enabled != nil {
 		enabled = *cmd.Enabled
 	}
+	// 执行身份声明（P0）：词表/形态校验 + 去重排序；空集合法（= 无平台
+	// 访问权限，fail-closed 默认）。
+	declaredScopes, err := domainfunctions.NormalizeDeclaredScopes(cmd.DeclaredScopes)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 	now := time.Now()
 	fn := &domainfunctions.Function{
 		ID:             cmd.ID,
@@ -99,12 +117,19 @@ func (f *Functions) CreateFunction(ctx context.Context, cmd CreateFunctionComman
 		TimeoutSeconds: timeoutSeconds,
 		Spec:           cmd.Spec,
 		Enabled:        enabled,
+		DeclaredScopes: declaredScopes,
 		CreatedAt:      now,
 		UpdatedAt:      now,
+	}
+	// 客户端调用面策略（P2）：anonymous 一期禁用、callable 要求 limit>=1、
+	// 窗口词表校验（设计 §4；存量全 FALSE ⇒ fail-closed）。
+	if err := applyClientPolicy(fn, cmd.ClientCallable, cmd.ClientAnonymousAllowed, cmd.ClientPerUserLimit, cmd.ClientLimitWindow); err != nil {
+		return nil, err
 	}
 	if err := f.repo.CreateFunction(ctx, fn); err != nil {
 		return nil, err
 	}
+	f.cache.invalidate(cmd.ProjectID, cmd.ID)
 	return fn, nil
 }
 
@@ -158,11 +183,57 @@ func (f *Functions) UpdateFunction(ctx context.Context, cmd UpdateFunctionComman
 	if cmd.Enabled != nil {
 		fn.Enabled = *cmd.Enabled
 	}
+	// 客户端调用面策略（P2）：未设置字段不修改；anonymous 一期禁用。
+	if err := applyClientPolicy(fn, cmd.ClientCallable, cmd.ClientAnonymousAllowed, cmd.ClientPerUserLimit, cmd.ClientLimitWindow); err != nil {
+		return nil, err
+	}
 	fn.UpdatedAt = time.Now()
 	if err := f.repo.UpdateFunction(ctx, fn); err != nil {
 		return nil, err
 	}
+	// 缓存失效（P0.5）：同进程即时、跨实例 30s 收敛（cache.go 注释）。
+	f.cache.invalidate(cmd.ProjectID, cmd.FunctionID)
 	return fn, nil
+}
+
+// applyClientPolicy 校验并把客户端调用面策略应用到函数记录（P2，设计 §4）：
+//   - client_anonymous_allowed=true 一期显式报错（Q4 拍板：匿名会话可无限
+//     新造，per-user 限频对匿名形同虚设；字段保留，匿名 IP 兜底做好后再开）；
+//   - client_callable=true 要求有效配额 client_per_user_limit >= 1
+//     （无配额限频的公开调用面等于不限）；
+//   - client_limit_window 词表 minute|hour|day（DB CHECK 与 proto 校验之外的
+//     app 层兜底）；未设置时缺省 day。
+//
+// nil 字段 = 未设置（不修改现有值；Create 路径现有值即零值 FALSE）。
+func applyClientPolicy(fn *domainfunctions.Function, callable, anonymous *bool, limit *int, window *string) error {
+	if anonymous != nil && *anonymous {
+		return status.Error(codes.InvalidArgument, "client_anonymous_allowed is not open in this release (一期未开放)")
+	}
+	if limit != nil {
+		if *limit < 0 {
+			return status.Error(codes.InvalidArgument, "client_per_user_limit must be >= 0")
+		}
+		fn.ClientPerUserLimit = *limit
+	}
+	if window != nil {
+		if !domainfunctions.IsValidClientLimitWindow(*window) {
+			return status.Errorf(codes.InvalidArgument, "client_limit_window must be one of %q, %q, %q",
+				domainfunctions.ClientLimitWindowMinute, domainfunctions.ClientLimitWindowHour, domainfunctions.ClientLimitWindowDay)
+		}
+		fn.ClientLimitWindow = *window
+	}
+	if callable != nil {
+		fn.ClientCallable = *callable
+	}
+	if fn.ClientCallable {
+		if fn.ClientPerUserLimit < 1 {
+			return status.Error(codes.InvalidArgument, "client_callable requires client_per_user_limit >= 1")
+		}
+		if fn.ClientLimitWindow == "" {
+			fn.ClientLimitWindow = domainfunctions.ClientLimitWindowDay
+		}
+	}
+	return nil
 }
 
 func (f *Functions) DeleteFunction(ctx context.Context, projectID, functionID string) error {
@@ -184,9 +255,38 @@ func (f *Functions) DeleteFunction(ctx context.Context, projectID, functionID st
 	if err := f.repo.DeleteFunction(ctx, projectID, functionID); err != nil {
 		return err
 	}
+	f.cache.invalidate(projectID, functionID)
 	for i := range deps {
 		_ = f.executor.RemoveImage(ctx, deps[i].FunctionID, deps[i].ID)
 		_ = removeZip(deps[i].ProjectID, deps[i].FunctionID, deps[i].ID)
 	}
 	return nil
+}
+
+// SetFunctionScopes 全量替换函数 declared_scopes（P0 执行身份，镜像
+// SetVariables 的 PUT 全量替换先例；UpdateFunctionRequest 无 repeated 字段
+// 的未设置语义，故独立 RPC）。校验与去重同 CreateFunction；空集合法
+// （撤销全部平台访问）。
+func (f *Functions) SetFunctionScopes(ctx context.Context, projectID, functionID string, scopes []string) (*domainfunctions.Function, error) {
+	if err := appshared.RequireServerPrincipal(ctx); err != nil {
+		return nil, err
+	}
+	fn, err := f.repo.GetFunction(ctx, projectID, functionID)
+	if err != nil {
+		return nil, err
+	}
+	if fn == nil {
+		return nil, status.Error(codes.NotFound, "function not found")
+	}
+	normalized, err := domainfunctions.NormalizeDeclaredScopes(scopes)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	fn.DeclaredScopes = normalized
+	fn.UpdatedAt = time.Now()
+	if err := f.repo.UpdateFunction(ctx, fn); err != nil {
+		return nil, err
+	}
+	f.cache.invalidate(projectID, functionID)
+	return fn, nil
 }

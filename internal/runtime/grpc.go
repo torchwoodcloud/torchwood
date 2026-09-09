@@ -41,6 +41,7 @@ func NewGRPCServer(
 	clientPayments *clientgrpc.PaymentsService,
 	clientAssets *clientgrpc.AssetsService,
 	clientSubscriptions *clientgrpc.SubscriptionsService,
+	clientFunctions *clientgrpc.FunctionsService,
 	health *servergrpc.HealthService,
 	projects *servergrpc.ProjectsService,
 	storage *servergrpc.StorageService,
@@ -124,6 +125,7 @@ func NewGRPCServer(
 	clientv1.RegisterPaymentsServiceServer(grpcSrv, clientPayments)
 	clientv1.RegisterAssetsServiceServer(grpcSrv, clientAssets)
 	clientv1.RegisterSubscriptionsServiceServer(grpcSrv, clientSubscriptions)
+	clientv1.RegisterFunctionsServiceServer(grpcSrv, clientFunctions)
 	serverv1.RegisterHealthServiceServer(grpcSrv, health)
 	serverv1.RegisterProjectsServiceServer(grpcSrv, projects)
 	serverv1.RegisterStorageServiceServer(grpcSrv, storage)
@@ -199,6 +201,7 @@ func authzFileDescriptors() []protoreflect.FileDescriptor {
 		clientv1.File_client_v1_payments_proto,
 		clientv1.File_client_v1_assets_proto,
 		clientv1.File_client_v1_subscriptions_proto,
+		clientv1.File_client_v1_functions_proto,
 		serverv1.File_server_v1_projects_proto,
 		serverv1.File_server_v1_health_proto,
 		serverv1.File_server_v1_storage_proto,

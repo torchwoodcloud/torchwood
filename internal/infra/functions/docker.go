@@ -91,8 +91,25 @@ var specResources = map[string]struct {
 	"shared-2x": {cpu: 1.0, memory: 512 << 20},
 }
 
-// dockerExecutor 是真实 Docker 执行器：Build（zip → 镜像）+ Execute（run 容器）。
-type dockerExecutor struct {
+// ResourceSpec 是资源规格的配额投影（functions-dispatcher 复用同一映射）。
+type ResourceSpec struct {
+	Memory   int64
+	NanoCPUs int64
+}
+
+// SpecResources 把规格名映射为容器配额；未知规格回落 shared-1x。
+func SpecResources(spec string) ResourceSpec {
+	res := specResources[spec]
+	if res.cpu <= 0 {
+		res = specResources["shared-1x"]
+	}
+	return ResourceSpec{Memory: res.memory, NanoCPUs: int64(res.cpu * 1e9)}
+}
+
+// DockerExecutor 是真实 Docker 执行器（v1：每请求一容器，回退执行模型）：
+// Build（zip → 镜像）+ Execute（run 容器）。类型导出供组合根按
+// functions.executor 配置选择 v1/v2 实现（ProvideExecutor）。
+type DockerExecutor struct {
 	cfg *config.AppConfig
 	cli *client.Client
 
@@ -109,9 +126,16 @@ type dockerExecutor struct {
 // ident 白名单（^[a-z][a-z0-9]{0,27}$），可直接用作网络名后缀。
 const perProjectNetworkPrefix = "tw-func-"
 
-// NewDockerExecutor creates a Docker-based functions executor.
-func NewDockerExecutor(cfg *config.AppConfig) functions.Executor {
-	d := &dockerExecutor{cfg: cfg, netReady: map[string]bool{}}
+// perProjectInternalNetworkSuffix 是 internal 变体网络的后缀（P2 egress
+// 默认 deny，设计 Security #6）：tw-func-<project.id>-int，docker
+// internal: true——阻断外网出口、网内互通保留（dispatcher/平台回访地址
+// 仍可达）。不可信函数（client_callable 或存在 http/cron 触发器）容器
+// attach 该网络而非常规网络。
+const perProjectInternalNetworkSuffix = "-int"
+
+// NewDockerExecutor creates a Docker-based functions executor (v1).
+func NewDockerExecutor(cfg *config.AppConfig) *DockerExecutor {
+	d := &DockerExecutor{cfg: cfg, netReady: map[string]bool{}}
 	host := cfg.GetFunctions().GetDocker().GetHost()
 	// WithAPIVersionNegotiation：与 daemon 协商 API 版本，避免客户端默认
 	// 版本高于 daemon（如 CI runner 上 daemon 1.48 vs 客户端 1.51）导致
@@ -126,15 +150,22 @@ func NewDockerExecutor(cfg *config.AppConfig) functions.Executor {
 }
 
 // client 返回 docker client；构造失败时返回 initErr。
-func (d *dockerExecutor) client() (*client.Client, error) {
+func (d *DockerExecutor) client() (*client.Client, error) {
 	if d.cli == nil {
 		return nil, d.initErr
 	}
 	return d.cli, nil
 }
 
-func (d *dockerExecutor) imageName(functionID, deploymentID string) string {
-	registry := d.cfg.GetFunctions().GetDocker().GetRegistry()
+// imageName 组装镜像名（转发导出版 ImageName，dispatcher 复用同一约定）。
+func (d *DockerExecutor) imageName(functionID, deploymentID string) string {
+	return ImageName(d.cfg, functionID, deploymentID)
+}
+
+// ImageName 返回函数部署镜像名：{registry}/func-{functionID}-{deploymentID}
+// （registry 取 functions.docker.registry，默认 torchwood-funcs）。
+func ImageName(cfg *config.AppConfig, functionID, deploymentID string) string {
+	registry := cfg.GetFunctions().GetDocker().GetRegistry()
 	if registry == "" {
 		registry = "torchwood-funcs"
 	}
@@ -142,15 +173,16 @@ func (d *dockerExecutor) imageName(functionID, deploymentID string) string {
 	return fmt.Sprintf("%s/func-%s-%s", registry, strings.ToLower(functionID), deploymentID)
 }
 
-// resolveNetwork 解析执行容器所属网络（Round4 J5-4）：
+// ResolveNetworkName 解析函数执行容器网络名（Round4 J5-4；导出供
+// functions-dispatcher 与 v1 执行器保持同一约定）：
 //   - 显式配置 functions.docker.network 时使用该全局网络（opt-in；跨项目
 //     函数容器同网互通，存在横向访问风险，见 config.yaml.template 警告）；
 //   - 未配置（默认）时使用 per-project 网络 tw-func-<project.id>，项目间
 //     容器互不可达，实现租户网络隔离。
 //
 // projectID 为空且未配置全局网络时返回错误（fail-closed，不回落共享网络）。
-func (d *dockerExecutor) resolveNetwork(projectID string) (string, error) {
-	if name := d.cfg.GetFunctions().GetDocker().GetNetwork(); name != "" {
+func ResolveNetworkName(cfg *config.AppConfig, projectID string) (string, error) {
+	if name := cfg.GetFunctions().GetDocker().GetNetwork(); name != "" {
 		return name, nil
 	}
 	if projectID == "" {
@@ -163,11 +195,29 @@ func (d *dockerExecutor) resolveNetwork(projectID string) (string, error) {
 	return perProjectNetworkPrefix + projectID, nil
 }
 
+// resolveNetwork 转发到导出版 ResolveNetworkName。
+func (d *DockerExecutor) resolveNetwork(projectID string) (string, error) {
+	return ResolveNetworkName(d.cfg, projectID)
+}
+
+// ResolveInternalNetworkName 解析 internal 变体网络名（P2 egress 默认 deny；
+// 导出供 functions-dispatcher 与 v1 执行器保持同一约定）：常规网络名 +
+// "-int" 后缀（tw-func-<project>-int；显式全局网络配置同样加后缀）。
+// projectID 校验与 ResolveNetworkName 同源。
+func ResolveInternalNetworkName(cfg *config.AppConfig, projectID string) (string, error) {
+	base, err := ResolveNetworkName(cfg, projectID)
+	if err != nil {
+		return "", err
+	}
+	return base + perProjectInternalNetworkSuffix, nil
+}
+
 // ensureNetwork 检查指定 bridge 网络存在，不存在则创建（幂等；失败不缓存）。
+// internal=true 时创建 docker internal 网络（无外网出口，网内互通保留）。
 // 网络创建后保留不删：函数容器按执行即起即毁，但并发/排队中的容器可能仍挂载
 // 在该网络上，删除会打断在途执行；docker 网络本身无状态、开销可忽略，
 // 生命周期随 daemon，无需清理任务。
-func (d *dockerExecutor) ensureNetwork(ctx context.Context, name string) error {
+func (d *DockerExecutor) ensureNetwork(ctx context.Context, name string, internal bool) error {
 	cli, err := d.client()
 	if err != nil {
 		return err
@@ -181,7 +231,11 @@ func (d *dockerExecutor) ensureNetwork(ctx context.Context, name string) error {
 		d.netReady[name] = true
 		return nil
 	}
-	if _, createErr := cli.NetworkCreate(ctx, name, network.CreateOptions{Driver: "bridge"}); createErr != nil {
+	opts := network.CreateOptions{Driver: "bridge"}
+	if internal {
+		opts.Internal = true
+	}
+	if _, createErr := cli.NetworkCreate(ctx, name, opts); createErr != nil {
 		// 创建失败但网络可能已被并发创建。
 		if _, inspectErr := cli.NetworkInspect(ctx, name, network.InspectOptions{}); inspectErr == nil {
 			d.netReady[name] = true
@@ -194,7 +248,7 @@ func (d *dockerExecutor) ensureNetwork(ctx context.Context, name string) error {
 }
 
 // Build 将 zip 代码包解压校验后构建为镜像 {registry}/func-{functionID}-{deploymentID}。
-func (d *dockerExecutor) Build(ctx context.Context, functionID, deploymentID, zipPath string) error {
+func (d *DockerExecutor) Build(ctx context.Context, functionID, deploymentID, zipPath string) error {
 	cli, err := d.client()
 	if err != nil {
 		return err
@@ -243,7 +297,7 @@ func (d *dockerExecutor) Build(ctx context.Context, functionID, deploymentID, zi
 }
 
 // Execute 运行构建产物镜像（安全基线 + TW_DATA 环境变量注入 + 超时清理）。
-func (d *dockerExecutor) Execute(ctx context.Context, exec functions.Execution) (*functions.ExecutionResult, error) {
+func (d *DockerExecutor) Execute(ctx context.Context, exec functions.Execution) (*functions.ExecutionResult, error) {
 	if exec.DeploymentID == "" {
 		return nil, status.Error(codes.InvalidArgument, "deployment id is required")
 	}
@@ -251,11 +305,23 @@ func (d *dockerExecutor) Execute(ctx context.Context, exec functions.Execution) 
 	if err != nil {
 		return nil, err
 	}
+	// egress 分类选网（P2 安全切片）：不可信函数（client_callable / 存在
+	// http/cron 触发器，分类在 app 层完成）容器走 internal 变体网络——出网
+	// 全 deny、网内互通保留；可信（server key 触发）保持常规网络。
 	networkName, err := d.resolveNetwork(exec.ProjectID)
 	if err != nil {
 		return nil, err
 	}
-	if err := d.ensureNetwork(ctx, networkName); err != nil {
+	networkInternal := false
+	if exec.EgressUntrusted {
+		networkName, err = ResolveInternalNetworkName(d.cfg, exec.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		networkInternal = true
+	}
+	observeEgressClass(exec.ProjectID, exec.EgressUntrusted)
+	if err := d.ensureNetwork(ctx, networkName, networkInternal); err != nil {
 		return nil, err
 	}
 
@@ -376,7 +442,7 @@ func (d *dockerExecutor) Execute(ctx context.Context, exec functions.Execution) 
 }
 
 // RemoveImage 删除构建产物镜像（幂等）。
-func (d *dockerExecutor) RemoveImage(ctx context.Context, functionID, deploymentID string) error {
+func (d *DockerExecutor) RemoveImage(ctx context.Context, functionID, deploymentID string) error {
 	cli, err := d.client()
 	if err != nil {
 		return err
@@ -391,6 +457,12 @@ func (d *dockerExecutor) RemoveImage(ctx context.Context, functionID, deployment
 // extractZip 解压 zip 到 destDir（防 zip 炸弹与路径穿越），返回 runtime ID。
 func extractZip(zipPath, destDir string) (string, error) {
 	return extractZipWithLimits(zipPath, destDir, defaultZipExtractLimits)
+}
+
+// ExtractZip 是 extractZip 的导出版（functions-dispatcher 的 v2 构建复用
+// 同一防 zip 炸弹/路径穿越预算）。
+func ExtractZip(zipPath, destDir string) (string, error) {
+	return extractZip(zipPath, destDir)
 }
 
 // extractZipWithLimits 是 extractZip 的可注入预算版本（测试用）：除声明侧
@@ -613,6 +685,12 @@ func readBuildOutput(r io.Reader) (string, error) {
 	return log.String(), buildErr
 }
 
+// ReadBuildOutput 是 readBuildOutput 的导出版（functions-dispatcher 的 v2
+// 构建复用同一 BuildKit error 流解析）。
+func ReadBuildOutput(r io.Reader) (string, error) {
+	return readBuildOutput(r)
+}
+
 // buildError 组合构建失败错误：错误消息在前，日志尾部按总预算 64KB 裁剪在后。
 func buildError(buildErr error, log string) error {
 	msg := truncateLog(buildErr.Error())
@@ -633,6 +711,9 @@ func truncateLog(s string) string {
 	}
 	return s[:maxBuildLogBytes]
 }
+
+// TruncateBuildLog 是 truncateLog 的导出版（构建日志裁剪口径共用）。
+func TruncateBuildLog(s string) string { return truncateLog(s) }
 
 func timeoutFromExec(exec functions.Execution) time.Duration {
 	if exec.Timeout <= 0 {

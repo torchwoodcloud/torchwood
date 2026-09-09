@@ -29,7 +29,10 @@ func (a *Account) CreateJWT(ctx context.Context) (string, error) {
 
 	var roles []string
 	if a.roles != nil {
-		roles, err = a.roles.LoadUserRoles(ctx, p.ProjectID, p.UserID)
+		// 签发路径手头是 app 层投影（*client.User）而非 domain users 行，
+		// 传 nil 由解析器兜底单查（查询次数与修复前一致；热路径省查在
+		// validator 侧完成——P0.5 LoadUserRoles 重复查询修复的主战场）。
+		roles, err = a.roles.LoadUserRoles(ctx, p.ProjectID, p.UserID, nil)
 		if err != nil {
 			return "", err
 		}

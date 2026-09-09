@@ -13,6 +13,7 @@ import (
 	appstorage "github.com/torchwooddev/torchwood/internal/app/storage"
 	"github.com/torchwooddev/torchwood/internal/app/subscriptions"
 	"github.com/torchwooddev/torchwood/internal/bootkit"
+	domainfunctions "github.com/torchwooddev/torchwood/internal/domain/functions"
 	domainpayments "github.com/torchwooddev/torchwood/internal/domain/payments"
 	domainstorage "github.com/torchwooddev/torchwood/internal/domain/storage"
 	infrabilling "github.com/torchwooddev/torchwood/internal/infra/billing"
@@ -71,8 +72,15 @@ var ProviderSet = wire.NewSet(
 	clients.NewRedis,
 	wire.Bind(new(uow.Runner), new(*clients.Database)),
 	wire.Bind(new(uow.Isolator), new(*clients.Database)),
+	// P0 执行身份：worker 的 ProcessExecution 与 server 同步路径共用
+	// Redis 执行 token 服务（铸造/主动吊销）。实现在 infra/functions——
+	// worker 依赖图禁入 infra/auth（import guard）。
+	infrafunctions.NewRedisExecutionTokenService,
+	wire.Bind(new(domainfunctions.ExecutionTokenService), new(*infrafunctions.RedisExecutionTokenService)),
 	bunrepo.NewProjectRepository,
 	bunrepo.NewFunctionRepository,
+	// P1 触发器模块：cron 调度循环经 Functions 聚合领取到期触发器。
+	bunrepo.NewFunctionTriggerRepository,
 	bunrepo.NewBucketRepository,
 	bunrepo.NewFileRepository,
 	bunrepo.NewPaymentOrderRepository,
@@ -89,7 +97,12 @@ var ProviderSet = wire.NewSet(
 	wire.Bind(new(domainstorage.BucketRepository), new(*bunrepo.BucketRepository)),
 	wire.Bind(new(domainstorage.FileRepository), new(*bunrepo.FileRepository)),
 	infraevents.ProviderSet,
+	// 执行器按 functions.executor 配置择一绑定（P0.5）："docker"（默认，
+	// v1 回退）| "dispatcher"（v2 常驻 runner，经 functions-dispatcher 分发，
+	// worker 零 docker.sock 依赖）。
 	infrafunctions.NewDockerExecutor,
+	infrafunctions.NewDispatcherExecutor,
+	infrafunctions.ProvideExecutor,
 	infrapayments.ProviderSet,
 	infrabilling.ProviderSet,
 	infraqueue.ProviderSet,

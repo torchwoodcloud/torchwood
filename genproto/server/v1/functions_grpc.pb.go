@@ -20,22 +20,27 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	FunctionsService_ListRuntimes_FullMethodName       = "/torchwood.server.v1.FunctionsService/ListRuntimes"
-	FunctionsService_ListSpecifications_FullMethodName = "/torchwood.server.v1.FunctionsService/ListSpecifications"
-	FunctionsService_CreateFunction_FullMethodName     = "/torchwood.server.v1.FunctionsService/CreateFunction"
-	FunctionsService_ListFunctions_FullMethodName      = "/torchwood.server.v1.FunctionsService/ListFunctions"
-	FunctionsService_GetFunction_FullMethodName        = "/torchwood.server.v1.FunctionsService/GetFunction"
-	FunctionsService_UpdateFunction_FullMethodName     = "/torchwood.server.v1.FunctionsService/UpdateFunction"
-	FunctionsService_DeleteFunction_FullMethodName     = "/torchwood.server.v1.FunctionsService/DeleteFunction"
-	FunctionsService_CreateDeployment_FullMethodName   = "/torchwood.server.v1.FunctionsService/CreateDeployment"
-	FunctionsService_ListDeployments_FullMethodName    = "/torchwood.server.v1.FunctionsService/ListDeployments"
-	FunctionsService_GetDeployment_FullMethodName      = "/torchwood.server.v1.FunctionsService/GetDeployment"
-	FunctionsService_DeleteDeployment_FullMethodName   = "/torchwood.server.v1.FunctionsService/DeleteDeployment"
-	FunctionsService_SetVariables_FullMethodName       = "/torchwood.server.v1.FunctionsService/SetVariables"
-	FunctionsService_GetVariables_FullMethodName       = "/torchwood.server.v1.FunctionsService/GetVariables"
-	FunctionsService_CreateExecution_FullMethodName    = "/torchwood.server.v1.FunctionsService/CreateExecution"
-	FunctionsService_ListExecutions_FullMethodName     = "/torchwood.server.v1.FunctionsService/ListExecutions"
-	FunctionsService_GetExecution_FullMethodName       = "/torchwood.server.v1.FunctionsService/GetExecution"
+	FunctionsService_ListRuntimes_FullMethodName               = "/torchwood.server.v1.FunctionsService/ListRuntimes"
+	FunctionsService_ListSpecifications_FullMethodName         = "/torchwood.server.v1.FunctionsService/ListSpecifications"
+	FunctionsService_CreateFunction_FullMethodName             = "/torchwood.server.v1.FunctionsService/CreateFunction"
+	FunctionsService_ListFunctions_FullMethodName              = "/torchwood.server.v1.FunctionsService/ListFunctions"
+	FunctionsService_GetFunction_FullMethodName                = "/torchwood.server.v1.FunctionsService/GetFunction"
+	FunctionsService_UpdateFunction_FullMethodName             = "/torchwood.server.v1.FunctionsService/UpdateFunction"
+	FunctionsService_DeleteFunction_FullMethodName             = "/torchwood.server.v1.FunctionsService/DeleteFunction"
+	FunctionsService_CreateDeployment_FullMethodName           = "/torchwood.server.v1.FunctionsService/CreateDeployment"
+	FunctionsService_ListDeployments_FullMethodName            = "/torchwood.server.v1.FunctionsService/ListDeployments"
+	FunctionsService_GetDeployment_FullMethodName              = "/torchwood.server.v1.FunctionsService/GetDeployment"
+	FunctionsService_DeleteDeployment_FullMethodName           = "/torchwood.server.v1.FunctionsService/DeleteDeployment"
+	FunctionsService_SetVariables_FullMethodName               = "/torchwood.server.v1.FunctionsService/SetVariables"
+	FunctionsService_GetVariables_FullMethodName               = "/torchwood.server.v1.FunctionsService/GetVariables"
+	FunctionsService_CreateExecution_FullMethodName            = "/torchwood.server.v1.FunctionsService/CreateExecution"
+	FunctionsService_ListExecutions_FullMethodName             = "/torchwood.server.v1.FunctionsService/ListExecutions"
+	FunctionsService_GetExecution_FullMethodName               = "/torchwood.server.v1.FunctionsService/GetExecution"
+	FunctionsService_SetFunctionScopes_FullMethodName          = "/torchwood.server.v1.FunctionsService/SetFunctionScopes"
+	FunctionsService_CreateFunctionTrigger_FullMethodName      = "/torchwood.server.v1.FunctionsService/CreateFunctionTrigger"
+	FunctionsService_ListFunctionTriggers_FullMethodName       = "/torchwood.server.v1.FunctionsService/ListFunctionTriggers"
+	FunctionsService_DeleteFunctionTrigger_FullMethodName      = "/torchwood.server.v1.FunctionsService/DeleteFunctionTrigger"
+	FunctionsService_RotateFunctionTriggerToken_FullMethodName = "/torchwood.server.v1.FunctionsService/RotateFunctionTriggerToken"
 )
 
 // FunctionsServiceClient is the client API for FunctionsService service.
@@ -65,6 +70,21 @@ type FunctionsServiceClient interface {
 	CreateExecution(ctx context.Context, in *CreateExecutionRequest, opts ...grpc.CallOption) (*Execution, error)
 	ListExecutions(ctx context.Context, in *GetFunctionRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error)
 	GetExecution(ctx context.Context, in *GetExecutionRequest, opts ...grpc.CallOption) (*Execution, error)
+	// SetFunctionScopes 全量替换函数 declared_scopes（P0 执行身份）。独立 RPC
+	// 而非并入 UpdateFunctionRequest：repeated 字段无法表达「未设置=不修改」
+	// 的 presence 语义（proto 规范：更新类可选字段用 proto3 optional）。
+	SetFunctionScopes(ctx context.Context, in *SetFunctionScopesRequest, opts ...grpc.CallOption) (*Function, error)
+	// ——触发器管理（P1 触发器模块；K4/K10）——
+	//
+	// CreateFunctionTrigger 创建 HTTP 或 cron 触发器。http 的 token 由服务端
+	// 生成（128bit，URL 即鉴权）、不收入参；公开调用路由为
+	// /f/{project_id}/{token}（FunctionTrigger.invoke_path）。
+	CreateFunctionTrigger(ctx context.Context, in *CreateFunctionTriggerRequest, opts ...grpc.CallOption) (*FunctionTrigger, error)
+	ListFunctionTriggers(ctx context.Context, in *GetFunctionRequest, opts ...grpc.CallOption) (*ListFunctionTriggersResponse, error)
+	DeleteFunctionTrigger(ctx context.Context, in *DeleteFunctionTriggerRequest, opts ...grpc.CallOption) (*v1.Empty, error)
+	// RotateFunctionTriggerToken 轮换 http 触发器 token（URL 含 token 会被
+	// 代理/访问日志记录；轮换后旧 token 立即失效），返回带新 token 的触发器。
+	RotateFunctionTriggerToken(ctx context.Context, in *RotateFunctionTriggerTokenRequest, opts ...grpc.CallOption) (*FunctionTrigger, error)
 }
 
 type functionsServiceClient struct {
@@ -235,6 +255,56 @@ func (c *functionsServiceClient) GetExecution(ctx context.Context, in *GetExecut
 	return out, nil
 }
 
+func (c *functionsServiceClient) SetFunctionScopes(ctx context.Context, in *SetFunctionScopesRequest, opts ...grpc.CallOption) (*Function, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Function)
+	err := c.cc.Invoke(ctx, FunctionsService_SetFunctionScopes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *functionsServiceClient) CreateFunctionTrigger(ctx context.Context, in *CreateFunctionTriggerRequest, opts ...grpc.CallOption) (*FunctionTrigger, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FunctionTrigger)
+	err := c.cc.Invoke(ctx, FunctionsService_CreateFunctionTrigger_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *functionsServiceClient) ListFunctionTriggers(ctx context.Context, in *GetFunctionRequest, opts ...grpc.CallOption) (*ListFunctionTriggersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListFunctionTriggersResponse)
+	err := c.cc.Invoke(ctx, FunctionsService_ListFunctionTriggers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *functionsServiceClient) DeleteFunctionTrigger(ctx context.Context, in *DeleteFunctionTriggerRequest, opts ...grpc.CallOption) (*v1.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(v1.Empty)
+	err := c.cc.Invoke(ctx, FunctionsService_DeleteFunctionTrigger_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *functionsServiceClient) RotateFunctionTriggerToken(ctx context.Context, in *RotateFunctionTriggerTokenRequest, opts ...grpc.CallOption) (*FunctionTrigger, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FunctionTrigger)
+	err := c.cc.Invoke(ctx, FunctionsService_RotateFunctionTriggerToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FunctionsServiceServer is the server API for FunctionsService service.
 // All implementations must embed UnimplementedFunctionsServiceServer
 // for forward compatibility.
@@ -262,6 +332,21 @@ type FunctionsServiceServer interface {
 	CreateExecution(context.Context, *CreateExecutionRequest) (*Execution, error)
 	ListExecutions(context.Context, *GetFunctionRequest) (*ListExecutionsResponse, error)
 	GetExecution(context.Context, *GetExecutionRequest) (*Execution, error)
+	// SetFunctionScopes 全量替换函数 declared_scopes（P0 执行身份）。独立 RPC
+	// 而非并入 UpdateFunctionRequest：repeated 字段无法表达「未设置=不修改」
+	// 的 presence 语义（proto 规范：更新类可选字段用 proto3 optional）。
+	SetFunctionScopes(context.Context, *SetFunctionScopesRequest) (*Function, error)
+	// ——触发器管理（P1 触发器模块；K4/K10）——
+	//
+	// CreateFunctionTrigger 创建 HTTP 或 cron 触发器。http 的 token 由服务端
+	// 生成（128bit，URL 即鉴权）、不收入参；公开调用路由为
+	// /f/{project_id}/{token}（FunctionTrigger.invoke_path）。
+	CreateFunctionTrigger(context.Context, *CreateFunctionTriggerRequest) (*FunctionTrigger, error)
+	ListFunctionTriggers(context.Context, *GetFunctionRequest) (*ListFunctionTriggersResponse, error)
+	DeleteFunctionTrigger(context.Context, *DeleteFunctionTriggerRequest) (*v1.Empty, error)
+	// RotateFunctionTriggerToken 轮换 http 触发器 token（URL 含 token 会被
+	// 代理/访问日志记录；轮换后旧 token 立即失效），返回带新 token 的触发器。
+	RotateFunctionTriggerToken(context.Context, *RotateFunctionTriggerTokenRequest) (*FunctionTrigger, error)
 	mustEmbedUnimplementedFunctionsServiceServer()
 }
 
@@ -319,6 +404,21 @@ func (UnimplementedFunctionsServiceServer) ListExecutions(context.Context, *GetF
 }
 func (UnimplementedFunctionsServiceServer) GetExecution(context.Context, *GetExecutionRequest) (*Execution, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetExecution not implemented")
+}
+func (UnimplementedFunctionsServiceServer) SetFunctionScopes(context.Context, *SetFunctionScopesRequest) (*Function, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetFunctionScopes not implemented")
+}
+func (UnimplementedFunctionsServiceServer) CreateFunctionTrigger(context.Context, *CreateFunctionTriggerRequest) (*FunctionTrigger, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateFunctionTrigger not implemented")
+}
+func (UnimplementedFunctionsServiceServer) ListFunctionTriggers(context.Context, *GetFunctionRequest) (*ListFunctionTriggersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListFunctionTriggers not implemented")
+}
+func (UnimplementedFunctionsServiceServer) DeleteFunctionTrigger(context.Context, *DeleteFunctionTriggerRequest) (*v1.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteFunctionTrigger not implemented")
+}
+func (UnimplementedFunctionsServiceServer) RotateFunctionTriggerToken(context.Context, *RotateFunctionTriggerTokenRequest) (*FunctionTrigger, error) {
+	return nil, status.Error(codes.Unimplemented, "method RotateFunctionTriggerToken not implemented")
 }
 func (UnimplementedFunctionsServiceServer) mustEmbedUnimplementedFunctionsServiceServer() {}
 func (UnimplementedFunctionsServiceServer) testEmbeddedByValue()                          {}
@@ -629,6 +729,96 @@ func _FunctionsService_GetExecution_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _FunctionsService_SetFunctionScopes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetFunctionScopesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FunctionsServiceServer).SetFunctionScopes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FunctionsService_SetFunctionScopes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FunctionsServiceServer).SetFunctionScopes(ctx, req.(*SetFunctionScopesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FunctionsService_CreateFunctionTrigger_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateFunctionTriggerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FunctionsServiceServer).CreateFunctionTrigger(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FunctionsService_CreateFunctionTrigger_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FunctionsServiceServer).CreateFunctionTrigger(ctx, req.(*CreateFunctionTriggerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FunctionsService_ListFunctionTriggers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetFunctionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FunctionsServiceServer).ListFunctionTriggers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FunctionsService_ListFunctionTriggers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FunctionsServiceServer).ListFunctionTriggers(ctx, req.(*GetFunctionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FunctionsService_DeleteFunctionTrigger_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteFunctionTriggerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FunctionsServiceServer).DeleteFunctionTrigger(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FunctionsService_DeleteFunctionTrigger_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FunctionsServiceServer).DeleteFunctionTrigger(ctx, req.(*DeleteFunctionTriggerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FunctionsService_RotateFunctionTriggerToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RotateFunctionTriggerTokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FunctionsServiceServer).RotateFunctionTriggerToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FunctionsService_RotateFunctionTriggerToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FunctionsServiceServer).RotateFunctionTriggerToken(ctx, req.(*RotateFunctionTriggerTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // FunctionsService_ServiceDesc is the grpc.ServiceDesc for FunctionsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -699,6 +889,26 @@ var FunctionsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetExecution",
 			Handler:    _FunctionsService_GetExecution_Handler,
+		},
+		{
+			MethodName: "SetFunctionScopes",
+			Handler:    _FunctionsService_SetFunctionScopes_Handler,
+		},
+		{
+			MethodName: "CreateFunctionTrigger",
+			Handler:    _FunctionsService_CreateFunctionTrigger_Handler,
+		},
+		{
+			MethodName: "ListFunctionTriggers",
+			Handler:    _FunctionsService_ListFunctionTriggers_Handler,
+		},
+		{
+			MethodName: "DeleteFunctionTrigger",
+			Handler:    _FunctionsService_DeleteFunctionTrigger_Handler,
+		},
+		{
+			MethodName: "RotateFunctionTriggerToken",
+			Handler:    _FunctionsService_RotateFunctionTriggerToken_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -13,6 +13,17 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// auditExemptMethods 是审计豁免方法清单：这些 RPC 的审计载体不是本拦截器的
+// audit_logs 行，而是业务记录本身——重复写审计只会双轨冗余。
+//
+//   - /torchwood.client.v1.FunctionsService/InvokeFunction（P2 客户端调用面）：
+//     审计载体 = function_executions 行（含 trigger_source='client'、
+//     invoking_user_id、idempotency key；设计 §6 约束③ / §4）——同步审计写
+//     在热路径上的成本也已由 P0.5 清账约束排除。
+var auditExemptMethods = map[string]bool{
+	"/torchwood.client.v1.FunctionsService/InvokeFunction": true,
+}
+
 type AuditInterceptor struct {
 	repo    audit.Repository
 	logger  *slog.Logger
@@ -39,6 +50,11 @@ func (a *AuditInterceptor) WithTrustedProxies(trusted *TrustedProxies) *AuditInt
 }
 
 func (a *AuditInterceptor) UnaryAuditMiddleware(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	// 审计豁免清单：载体在业务记录的方法直接透传（WithAuditResource 仍写入，
+	// 供 handler 内其他用途）。
+	if auditExemptMethods[info.FullMethod] {
+		return handler(ctx, req)
+	}
 	// 预置审计资源可变持有者：handler 内的 WithAuditResource 原地写入后，
 	// 本中间件在 handler 返回后仍能读取（context 值不可变，需共享可变槽）。
 	ctx = contexts.WithAuditResourceHolder(ctx)

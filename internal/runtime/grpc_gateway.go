@@ -34,6 +34,7 @@ func NewGRPCGatewayServer(
 	oauthHandler *serverhttp.OAuthHandler,
 	functionsHandler *serverhttp.FunctionsHandler,
 	paymentsHandler *serverhttp.PaymentsHandler,
+	functionTriggersHandler *serverhttp.FunctionTriggersHandler,
 	realtimeHandler *apirealtime.Handler,
 	policySet *domainauth.PolicySet,
 ) (*GRPCGatewayServer, error) {
@@ -75,6 +76,7 @@ func NewGRPCGatewayServer(
 		serverv1.RegisterSubscriptionsServiceHandlerFromEndpoint,
 		clientv1.RegisterAssetsServiceHandlerFromEndpoint,
 		clientv1.RegisterSubscriptionsServiceHandlerFromEndpoint,
+		clientv1.RegisterFunctionsServiceHandlerFromEndpoint,
 		consolev1.RegisterConsoleAuthServiceHandlerFromEndpoint,
 		consolev1.RegisterAdminsServiceHandlerFromEndpoint,
 	}
@@ -89,6 +91,9 @@ func NewGRPCGatewayServer(
 	oauthHandler.Register(mux)
 	functionsHandler.Register(mux)
 	paymentsHandler.Register(mux)
+	// /f/{project_id}/{trigger_token}（P1 触发器模块）：公开触发路由，
+	// token 即鉴权，不经 gRPC 拦截器链。
+	functionTriggersHandler.Register(mux)
 	// /.well-known/torchwood（B10）：Agent 可发现性目录——纯 HTTP 面静态
 	// 路由（无 gRPC 对应物、公开端点），payload 构造期直读单一事实源。
 	wellKnown := serverhttp.NewWellKnownHandler(policySet)

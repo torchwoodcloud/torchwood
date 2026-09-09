@@ -426,6 +426,194 @@
         ]
       }
     },
+    "/v1/server/functions/{function_id}/scopes": {
+      "put": {
+        "summary": "SetFunctionScopes 全量替换函数 declared_scopes（P0 执行身份）。独立 RPC\n而非并入 UpdateFunctionRequest：repeated 字段无法表达「未设置=不修改」\n的 presence 语义（proto 规范：更新类可选字段用 proto3 optional）。",
+        "operationId": "FunctionsService_SetFunctionScopes",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Function"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "function_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/FunctionsServiceSetFunctionScopesBody"
+            }
+          }
+        ],
+        "tags": [
+          "FunctionsService"
+        ]
+      }
+    },
+    "/v1/server/functions/{function_id}/triggers": {
+      "get": {
+        "operationId": "FunctionsService_ListFunctionTriggers",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListFunctionTriggersResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "function_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "FunctionsService"
+        ]
+      },
+      "post": {
+        "summary": "——触发器管理（P1 触发器模块；K4/K10）——",
+        "description": "CreateFunctionTrigger 创建 HTTP 或 cron 触发器。http 的 token 由服务端\n生成（128bit，URL 即鉴权）、不收入参；公开调用路由为\n/f/{project_id}/{token}（FunctionTrigger.invoke_path）。",
+        "operationId": "FunctionsService_CreateFunctionTrigger",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1FunctionTrigger"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "function_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/FunctionsServiceCreateFunctionTriggerBody"
+            }
+          }
+        ],
+        "tags": [
+          "FunctionsService"
+        ]
+      }
+    },
+    "/v1/server/functions/{function_id}/triggers/{trigger_id}": {
+      "delete": {
+        "operationId": "FunctionsService_DeleteFunctionTrigger",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Empty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "function_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "trigger_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "FunctionsService"
+        ]
+      }
+    },
+    "/v1/server/functions/{function_id}/triggers/{trigger_id}:rotate-token": {
+      "post": {
+        "summary": "RotateFunctionTriggerToken 轮换 http 触发器 token（URL 含 token 会被\n代理/访问日志记录；轮换后旧 token 立即失效），返回带新 token 的触发器。",
+        "operationId": "FunctionsService_RotateFunctionTriggerToken",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1FunctionTrigger"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "function_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "trigger_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/FunctionsServiceRotateFunctionTriggerTokenBody"
+            }
+          }
+        ],
+        "tags": [
+          "FunctionsService"
+        ]
+      }
+    },
     "/v1/server/functions/{function_id}/variables": {
       "get": {
         "operationId": "FunctionsService_GetVariables",
@@ -564,6 +752,39 @@
         }
       }
     },
+    "FunctionsServiceCreateFunctionTriggerBody": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "title": "触发器类型：http | cron（大小写敏感）。"
+        },
+        "http": {
+          "$ref": "#/definitions/v1HttpTriggerConfig",
+          "title": "type=http 时必填。"
+        },
+        "cron": {
+          "$ref": "#/definitions/v1CronTriggerConfig",
+          "title": "type=cron 时必填。"
+        }
+      },
+      "title": "CreateFunctionTriggerRequest 创建触发器：type 选择 http / cron，二选一\n填 http / cron 配置段。token 服务端生成，不收入参。"
+    },
+    "FunctionsServiceRotateFunctionTriggerTokenBody": {
+      "type": "object"
+    },
+    "FunctionsServiceSetFunctionScopesBody": {
+      "type": "object",
+      "properties": {
+        "declared_scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "title": "SetFunctionScopesRequest 全量替换函数 declared_scopes（P0 执行身份；\n空集 = 撤销全部平台访问）。"
+    },
     "FunctionsServiceSetVariablesBody": {
       "type": "object",
       "properties": {
@@ -595,6 +816,21 @@
         },
         "enabled": {
           "type": "boolean"
+        },
+        "client_callable": {
+          "type": "boolean",
+          "title": "——客户端调用面策略（P2，设计 §4；未设置 = 不修改）——"
+        },
+        "client_anonymous_allowed": {
+          "type": "boolean",
+          "title": "字段保留、一期禁用：置 true 显式报错「一期未开放」。"
+        },
+        "client_per_user_limit": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "client_limit_window": {
+          "type": "string"
         }
       }
     },
@@ -623,8 +859,45 @@
         },
         "enabled": {
           "type": "boolean"
+        },
+        "declared_scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "执行身份声明（P0）：词表校验/去重在服务端（app 层），空集合法。"
+        },
+        "client_callable": {
+          "type": "boolean",
+          "title": "——客户端调用面策略（P2，设计 §4）——"
+        },
+        "client_anonymous_allowed": {
+          "type": "boolean",
+          "title": "字段保留、一期禁用：置 true 显式报错「一期未开放」。"
+        },
+        "client_per_user_limit": {
+          "type": "integer",
+          "format": "int32",
+          "title": "client_callable=true 时必须 \u003e= 1。"
+        },
+        "client_limit_window": {
+          "type": "string"
         }
       }
+    },
+    "v1CronTriggerConfig": {
+      "type": "object",
+      "properties": {
+        "expr": {
+          "type": "string",
+          "title": "5 字段 cron 表达式（分 时 日 月 周，UTC；支持 * , - / 数字；周 0-7 且\n7=0）。解析校验在服务端（领域层 cronexpr）。"
+        },
+        "misfire": {
+          "type": "string",
+          "title": "错过策略：skip（只推进不补跑）| catch_up_once（补跑一次；默认）。"
+        }
+      },
+      "title": "CronTriggerConfig 是 cron 触发器配置（K10：一期 UTC）。"
     },
     "v1Deployment": {
       "type": "object",
@@ -796,8 +1069,113 @@
         "updated_at": {
           "type": "string",
           "format": "date-time"
+        },
+        "declared_scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "函数执行 principal 的平台访问声明（P0 执行身份）：每项形如\n\"\u003cresource\u003e:\u003cop\u003e\"（如 \"assets:write\"），词表见\ndocs/developer/08-functions.md「执行身份」；空集 = 无平台访问权限\n（fail-closed 默认）。管理经 SetFunctionScopes 全量替换。"
+        },
+        "client_callable": {
+          "type": "boolean",
+          "title": "——客户端调用面策略（P2，设计 §4）——"
+        },
+        "client_anonymous_allowed": {
+          "type": "boolean",
+          "title": "字段保留、一期禁用：置 true 会被服务端显式拒绝（Q4 拍板：匿名 IP 兜底\n限频做好后再开）。"
+        },
+        "client_per_user_limit": {
+          "type": "integer",
+          "format": "int32",
+          "title": "每用户限频配额（client_limit_window 窗口内）；client_callable=true\n要求 \u003e= 1。"
+        },
+        "client_limit_window": {
+          "type": "string",
+          "title": "限频窗口：minute | hour | day（day 按 UTC 日期）。"
         }
       }
+    },
+    "v1FunctionTrigger": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "function_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "response_mode": {
+          "type": "string",
+          "title": "——http——"
+        },
+        "ack_body": {
+          "type": "string"
+        },
+        "handshake": {
+          "type": "string"
+        },
+        "body_limit_bytes": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "token": {
+          "type": "string"
+        },
+        "invoke_path": {
+          "type": "string",
+          "title": "公开调用路径 /f/{project_id}/{token}（host 侧自行拼接）。"
+        },
+        "expr": {
+          "type": "string",
+          "title": "——cron——"
+        },
+        "misfire": {
+          "type": "string"
+        },
+        "next_run_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "title": "FunctionTrigger 是触发器视图。http 专有字段（token/invoke_path/response_mode/\nack_body/handshake/body_limit_bytes）与 cron 专有字段（expr/misfire/\nnext_run_at）按 type 取用；token 明文仅在管理面返回。"
+    },
+    "v1HttpTriggerConfig": {
+      "type": "object",
+      "properties": {
+        "response_mode": {
+          "type": "string",
+          "title": "双响应模式（二轮复审：微信 SSV 回调 1s 超时，纯同步大概率超时丢事件）：\n  sync      同步执行（≤30s）并透传函数响应；\n  async_ack 立即 200 + ack_body，函数走异步队列（200 是「已受理」语义）。"
+        },
+        "ack_body": {
+          "type": "string",
+          "title": "async_ack 模式下的 200 响应体（≤1KB，防带宽放大）；sync 模式忽略。"
+        },
+        "handshake": {
+          "type": "string",
+          "title": "GET 握手：echo = 平台直接回 {\"echostr\": \u003cquery.echostr\u003e}，不 invoke。\n空 = GET 一律 405。"
+        },
+        "body_limit_bytes": {
+          "type": "integer",
+          "format": "int32",
+          "title": "请求体上限（字节）：缺省 65536（64KB），上限 1048576（1MB）。"
+        }
+      },
+      "title": "HttpTriggerConfig 是 HTTP 触发器配置。"
     },
     "v1ListDeploymentsResponse": {
       "type": "object",
@@ -824,6 +1202,18 @@
         }
       },
       "title": "MVP 不分页（返回最近 100 条）。"
+    },
+    "v1ListFunctionTriggersResponse": {
+      "type": "object",
+      "properties": {
+        "triggers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1FunctionTrigger"
+          }
+        }
+      }
     },
     "v1ListFunctionsResponse": {
       "type": "object",

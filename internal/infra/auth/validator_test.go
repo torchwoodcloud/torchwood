@@ -724,7 +724,7 @@ func oneTimeJWTValidator(t *testing.T, store domainauth.OneTimeTokenStore, proje
 	t.Helper()
 	users := newStubUserRepo()
 	users.seed(projectID, activeUser(userID))
-	return auth.NewValidatorWithOneTimeTokens(testValidatorConfig(), &stubAPIKeyRepo{}, nil, &stubAdminRepo{}, &stubAdminProjectRepo{}, nil, nil, users, nil, store)
+	return auth.NewValidatorWithOneTimeTokens(testValidatorConfig(), &stubAPIKeyRepo{}, nil, &stubAdminRepo{}, &stubAdminProjectRepo{}, nil, nil, users, nil, store, nil)
 }
 
 func oneTimeJWTSign(t *testing.T, projectID, userID, jti string) string {

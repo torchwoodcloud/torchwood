@@ -1,6 +1,8 @@
 export { AccountService } from "./account.js";
 export { ClientAssetsService } from "./assets.js";
 export { ClientDatabasesService } from "./databases.js";
+export { ClientFunctionsService } from "./functions.js";
+export type { InvokeFunctionInput } from "./functions.js";
 export { ClientPaymentsService } from "./payments.js";
 export { RealtimeService } from "./realtime.js";
 export { ClientSubscriptionsService } from "./subscriptions.js";

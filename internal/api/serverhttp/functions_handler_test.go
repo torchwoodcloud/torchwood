@@ -435,6 +435,10 @@ func (r *functionsTestRepo) GetDeployment(context.Context, string, string, strin
 func (r *functionsTestRepo) ListDeployments(context.Context, string, string) ([]domainfunctions.Deployment, error) {
 	return nil, nil
 }
+func (r *functionsTestRepo) ActivateDeployment(context.Context, *domainfunctions.Deployment) error {
+	return nil
+}
+
 func (r *functionsTestRepo) UpdateDeployment(context.Context, *domainfunctions.Deployment) error {
 	return nil
 }
@@ -464,6 +468,15 @@ func (r *functionsTestRepo) RecoverOrphanExecutionsInProject(context.Context, st
 }
 func (r *functionsTestRepo) PruneOldExecutionsInProject(context.Context, string, string, int) error {
 	return nil
+}
+func (r *functionsTestRepo) PruneTriggerExecutionsInProject(context.Context, string, string, time.Time) error {
+	return nil
+}
+func (r *functionsTestRepo) GetExecutionByIdempotencyKey(context.Context, string, string, string, string) (*domainfunctions.ExecutionRecord, error) {
+	return nil, nil
+}
+func (r *functionsTestRepo) CountClientInvocations(context.Context, string, string, string, time.Time) (int, error) {
+	return 0, nil
 }
 func (r *functionsTestRepo) TransitionExecutionStatus(context.Context, string, string, string, string, string) (bool, error) {
 	return false, nil

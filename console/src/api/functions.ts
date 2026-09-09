@@ -10,6 +10,15 @@ export interface FunctionItem {
   timeout_seconds: number;
   spec: string;
   enabled: boolean;
+  // 执行身份声明（P0）：每项形如 "<resource>:<op>"（如 "assets:write"），
+  // 词表校验在服务端；空数组 = 无平台访问权限（fail-closed）。
+  declared_scopes: string[];
+  // ——客户端调用面策略（P2）——
+  client_callable: boolean;
+  // 字段保留、一期禁用（服务端遇 true 显式报错）。
+  client_anonymous_allowed: boolean;
+  client_per_user_limit: number;
+  client_limit_window: "minute" | "hour" | "day";
   created_at: string;
   updated_at: string;
 }
@@ -107,6 +116,11 @@ export async function updateFunction(
     timeout_seconds?: number;
     spec?: string;
     enabled?: boolean;
+    // 客户端调用面策略（P2）。
+    client_callable?: boolean;
+    client_anonymous_allowed?: boolean;
+    client_per_user_limit?: number;
+    client_limit_window?: "minute" | "hour" | "day";
   }
 ): Promise<FunctionItem> {
   const res = await api.patch<FunctionItem>(`/server/functions/${id}`, input);
@@ -165,6 +179,18 @@ export async function setVariables(
   return res.data.variables ?? [];
 }
 
+// 全量替换函数 declared_scopes（执行身份，P0）。空数组 = 撤销全部平台访问。
+export async function setFunctionScopes(
+  functionId: string,
+  declaredScopes: string[]
+): Promise<FunctionItem> {
+  const res = await api.put<FunctionItem>(
+    `/server/functions/${functionId}/scopes`,
+    { declared_scopes: declaredScopes }
+  );
+  return res.data;
+}
+
 export async function createExecution(
   functionId: string,
   input: { deployment_id?: string; data?: string; async?: boolean }
@@ -189,6 +215,83 @@ export async function getExecution(
 ): Promise<Execution> {
   const res = await api.get<Execution>(
     `/server/functions/${functionId}/executions/${executionId}`
+  );
+  return res.data;
+}
+
+// ——触发器管理（P1 触发器模块）——
+
+export interface FunctionTrigger {
+  id: string;
+  function_id: string;
+  type: "http" | "cron";
+  enabled: boolean;
+  // http 专有
+  response_mode?: string;
+  ack_body?: string;
+  handshake?: string;
+  body_limit_bytes?: number;
+  // token 明文仅在管理面返回。
+  token?: string;
+  invoke_path?: string;
+  // cron 专有
+  expr?: string;
+  misfire?: string;
+  next_run_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTriggerInput {
+  type: "http" | "cron";
+  http?: {
+    response_mode: string;
+    ack_body?: string;
+    handshake?: string;
+    body_limit_bytes?: number;
+  };
+  cron?: {
+    expr: string;
+    misfire?: string;
+  };
+}
+
+export async function listFunctionTriggers(
+  functionId: string
+): Promise<FunctionTrigger[]> {
+  const res = await api.get<{ triggers: FunctionTrigger[] }>(
+    `/server/functions/${functionId}/triggers`
+  );
+  return res.data.triggers ?? [];
+}
+
+export async function createFunctionTrigger(
+  functionId: string,
+  input: CreateTriggerInput
+): Promise<FunctionTrigger> {
+  const res = await api.post<FunctionTrigger>(
+    `/server/functions/${functionId}/triggers`,
+    { function_id: functionId, ...input }
+  );
+  return res.data;
+}
+
+export async function deleteFunctionTrigger(
+  functionId: string,
+  triggerId: string
+): Promise<void> {
+  await api.delete(
+    `/server/functions/${functionId}/triggers/${triggerId}`
+  );
+}
+
+export async function rotateFunctionTriggerToken(
+  functionId: string,
+  triggerId: string
+): Promise<FunctionTrigger> {
+  const res = await api.post<FunctionTrigger>(
+    `/server/functions/${functionId}/triggers/${triggerId}:rotate-token`,
+    {}
   );
   return res.data;
 }

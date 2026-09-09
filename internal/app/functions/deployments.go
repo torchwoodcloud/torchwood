@@ -57,8 +57,11 @@ func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCo
 		ProjectID:  cmd.ProjectID,
 		Size:       int64(len(cmd.Code)),
 		Status:     domainfunctions.DeploymentStatusPending,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		// 模板版本化（P0.5）：记录构建所用 runner 模板版本（存量 deployment
+		// 据此判定按新模板重建）。
+		TemplateVersion: domainfunctions.RunnerTemplateVersion,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 	if err := f.repo.CreateDeployment(ctx, dep); err != nil {
 		return nil, err
@@ -112,9 +115,14 @@ func (f *Functions) buildDeployment(ctx context.Context, dep *domainfunctions.De
 	}
 	dep.Status = domainfunctions.DeploymentStatusReady
 	dep.Error = ""
-	if err := f.repo.UpdateDeployment(ctx, dep); err != nil {
+	// ready 转移走 ActivateDeployment：同一事务内维护
+	// functions.latest_ready_deployment_id（热路径清账，P0.5——
+	// selectDeployment 优先读指针，消灭 ListDeployments 全量拉取）。
+	if err := f.repo.ActivateDeployment(ctx, dep); err != nil {
 		return err
 	}
+	// 缓存失效：latest 指针投影随函数记录缓存（P0.5）。
+	f.cache.invalidate(dep.ProjectID, dep.FunctionID)
 	return nil
 }
 
@@ -166,6 +174,8 @@ func (f *Functions) DeleteDeployment(ctx context.Context, projectID, functionID,
 	if err := f.repo.DeleteDeployment(ctx, projectID, functionID, deploymentID); err != nil {
 		return err
 	}
+	// 缓存失效：删除可能清掉 latest 指针（P0.5）。
+	f.cache.invalidate(projectID, functionID)
 	_ = f.executor.RemoveImage(ctx, functionID, deploymentID)
 	_ = removeZip(projectID, functionID, deploymentID)
 	return nil

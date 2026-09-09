@@ -9,9 +9,11 @@ import (
 
 	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
 	"github.com/torchwooddev/torchwood/internal/domain/databases"
+	domainfunctions "github.com/torchwooddev/torchwood/internal/domain/functions"
 	"github.com/torchwooddev/torchwood/internal/domain/projects"
 	"github.com/torchwooddev/torchwood/internal/domain/shared"
 	"github.com/torchwooddev/torchwood/internal/domain/users"
+	"github.com/torchwooddev/torchwood/internal/infra/auth/principalcache"
 	"github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/pkg/idgen"
 	"github.com/torchwooddev/torchwood/pkg/jwtparser"
@@ -31,6 +33,18 @@ type Validator struct {
 	roleResolver     domainauth.UserRoleResolver
 	sessionCodec     *SessionCookieCodec
 	oneTimeTokens    domainauth.OneTimeTokenStore
+	// execTokens 是函数执行 token 校验端口（P0 执行身份；nil = 未装配，
+	// twx_ token 一律拒绝——fail-closed）。
+	execTokens domainfunctions.ExecutionTokenService
+	// principalCache 是端用户 principal 短 TTL 缓存（P0.5 热路径清账；nil =
+	// 直连 DB 实时校验，语义不变）。最坏吊销延迟 = TTL 30s（失效标记主动
+	// 失效 + TTL 兜底），取舍见 principalcache 包注释。
+	principalCache *principalcache.Cache
+}
+
+// SetPrincipalCache 注入端用户 principal 缓存（组合根装配；nil 安全）。
+func (v *Validator) SetPrincipalCache(c *principalcache.Cache) {
+	v.principalCache = c
 }
 
 func NewValidator(
@@ -44,11 +58,12 @@ func NewValidator(
 	usersRepo users.Repository,
 	roleResolver domainauth.UserRoleResolver,
 ) *Validator {
-	return NewValidatorWithOneTimeTokens(cfg, apiKeyRepo, projectRepo, adminRepo, adminProjectRepo, adminRevokeStore, sessions, usersRepo, roleResolver, nil)
+	return NewValidatorWithOneTimeTokens(cfg, apiKeyRepo, projectRepo, adminRepo, adminProjectRepo, adminRevokeStore, sessions, usersRepo, roleResolver, nil, nil)
 }
 
 // NewValidatorWithOneTimeTokens 额外装配一次性 token 消费存储（CreateJWT
 // 签发的一次性 JWT 验证时必须原子消费，防重放；未装配时此类 token 一律拒绝）。
+// execTokens 为函数执行 token 服务（P0 执行身份；nil 时 twx_ token 一律拒绝）。
 func NewValidatorWithOneTimeTokens(
 	cfg *config.AppConfig,
 	apiKeyRepo projects.APIKeyRepository,
@@ -60,6 +75,7 @@ func NewValidatorWithOneTimeTokens(
 	usersRepo users.Repository,
 	roleResolver domainauth.UserRoleResolver,
 	oneTimeTokens domainauth.OneTimeTokenStore,
+	execTokens domainfunctions.ExecutionTokenService,
 ) *Validator {
 	return &Validator{
 		cfg:              cfg,
@@ -73,6 +89,7 @@ func NewValidatorWithOneTimeTokens(
 		roleResolver:     roleResolver,
 		sessionCodec:     NewSessionCookieCodec(string(jwtparser.DeriveKey(cfg.GetSecurity().GetJwt().GetSecret(), jwtparser.PurposeSessionCookie))),
 		oneTimeTokens:    oneTimeTokens,
+		execTokens:       execTokens,
 	}
 }
 
@@ -84,6 +101,8 @@ func (v *Validator) ValidateCredential(ctx context.Context, raw string, credenti
 	switch credentialType {
 	case shared.CredentialTypeAPIKey:
 		return v.validateAPIKey(ctx, raw)
+	case shared.CredentialTypeExecution:
+		return v.validateExecutionToken(ctx, raw)
 	case shared.CredentialTypeToken:
 		claims, ok := v.parseJWT(raw)
 		if !ok {
@@ -158,6 +177,42 @@ func (v *Validator) validateAPIKey(ctx context.Context, raw string) (*shared.Pri
 	}, nil
 }
 
+// validateExecutionToken 校验函数执行 token 并构造 execution principal
+// （P0 执行身份，设计 §1）。Permissions 按 declared_scopes 投影为 API key
+// 同款权限串（"<res>.<op>"），scope 门（PolicySet.AllowsAPIKeyTargets）原样
+// 生效；Roles 复用 B14 key 族模型（keys + key:function:<id>）——数据面可见
+// 性由开发者把集合/桶授予 key:function:<id> 角色决定（scope 过门但角色未
+// 授予 = 数据不可见，fail-closed）。
+func (v *Validator) validateExecutionToken(ctx context.Context, raw string) (*shared.Principal, error) {
+	if v.execTokens == nil {
+		return nil, status.Error(codes.Unauthenticated, "execution token validation unavailable")
+	}
+	info, err := v.execTokens.Validate(ctx, raw)
+	if err != nil {
+		// Redis 不可用 = 拒绝（fail-closed，设计 Q1 拍板）；
+		// Internal 与 401 区分，便于观测是基础设施故障还是凭证无效。
+		return nil, status.Error(codes.Internal, "execution token validation failed")
+	}
+	if info == nil {
+		return nil, status.Error(codes.Unauthenticated, "invalid or expired execution token")
+	}
+	functionID := info.FunctionID
+	// 数据面角色形态取自 DocRole 词表（key:function:<id> 经 RoleKey 构造，
+	// 禁止裸串拼接——key 段身份为 "function:<function_id>"）。
+	roles := []string{databases.RoleKeys, databases.RoleKey("function:" + functionID)}
+	return &shared.Principal{
+		ActorID:        idgen.ID(functionID),
+		ActorKind:      shared.ActorKindExecution,
+		CredentialType: shared.CredentialTypeExecution,
+		ProjectID:      info.ProjectID,
+		FunctionID:     functionID,
+		ExecutionID:    info.ExecutionID,
+		InvokingUserID: info.InvokingUserID,
+		Roles:          roles,
+		Permissions:    domainfunctions.DeclaredScopePermissions(info.Scopes),
+	}, nil
+}
+
 func (v *Validator) principalFromJWT(ctx context.Context, claims *jwtparser.Claims) (*shared.Principal, error) {
 	switch claims.ActorKind {
 	case "admin":
@@ -198,6 +253,16 @@ func (v *Validator) principalFromJWT(ctx context.Context, claims *jwtparser.Clai
 				return nil, status.Error(codes.Unauthenticated, "invalid or expired token")
 			}
 		}
+		// P0.5 principal 短 TTL 缓存（热路径清账）：命中时一次 Redis 失效
+		// 标记检查替代 4 次 DB 往返（session 校验 + users.GetByID ×2 +
+		// memberships）。一次性 JWT 不缓存（消费即失效的语义不走本通道）。
+		cacheKey := principalcache.Key{}
+		if !claims.OneTime && claims.SessionID != "" && claims.ProjectID != "" && v.principalCache != nil {
+			cacheKey = principalcache.Key{ProjectID: claims.ProjectID, SessionID: claims.SessionID, IAT: claims.IssuedAt}
+			if p := v.principalCache.Get(ctx, cacheKey); p != nil && p.UserID == claims.UserID {
+				return p, nil
+			}
+		}
 		if claims.SessionID != "" && claims.ProjectID != "" {
 			if err := v.validateEndUserSession(ctx, claims.ProjectID, claims.SessionID, claims.UserID); err != nil {
 				return nil, err
@@ -206,14 +271,17 @@ func (v *Validator) principalFromJWT(ctx context.Context, claims *jwtparser.Clai
 		if claims.TokenType != "" && claims.TokenType != jwtparser.TokenTypeAccess {
 			return nil, status.Error(codes.Unauthenticated, "invalid token type")
 		}
-		if err := v.ensureUserCanAuthenticate(ctx, claims.ProjectID, claims.UserID); err != nil {
-			return nil, err
-		}
-		roles, err := v.resolveEndUserRoles(ctx, claims.ProjectID, claims.UserID)
+		// ensureUserCanAuthenticate 取回的 user 原样传入角色解析
+		// （P0.5：删掉 LoadUserRoles 内的第二次 users.GetByID）。
+		user, err := v.ensureUserCanAuthenticate(ctx, claims.ProjectID, claims.UserID)
 		if err != nil {
 			return nil, err
 		}
-		return &shared.Principal{
+		roles, err := v.resolveEndUserRoles(ctx, claims.ProjectID, claims.UserID, user)
+		if err != nil {
+			return nil, err
+		}
+		p := &shared.Principal{
 			ActorID:        idgen.ID(claims.UserID),
 			ActorKind:      shared.ActorKindEndUser,
 			CredentialType: shared.CredentialTypeToken,
@@ -222,13 +290,24 @@ func (v *Validator) principalFromJWT(ctx context.Context, claims *jwtparser.Clai
 			SessionID:      claims.SessionID,
 			Email:          claims.Username,
 			Roles:          roles,
-		}, nil
+		}
+		if cacheKey.SessionID != "" && v.principalCache != nil {
+			v.principalCache.Put(cacheKey, p)
+		}
+		return p, nil
 	}
 }
 
 func (v *Validator) principalFromSession(ctx context.Context, projectID, sessionID string) (*shared.Principal, error) {
 	if v.sessions == nil {
 		return nil, status.Error(codes.Internal, "session lookup failed")
+	}
+	// P0.5 principal 短 TTL 缓存（session-cookie 路径；无 iat，键 IAT=0）。
+	cacheKey := principalcache.Key{ProjectID: projectID, SessionID: sessionID}
+	if v.principalCache != nil {
+		if p := v.principalCache.Get(ctx, cacheKey); p != nil {
+			return p, nil
+		}
 	}
 	sess, err := v.sessions.GetByID(ctx, projectID, sessionID)
 	if err != nil {
@@ -244,14 +323,15 @@ func (v *Validator) principalFromSession(ctx context.Context, projectID, session
 	if userID == "" {
 		return nil, status.Error(codes.Unauthenticated, "invalid session")
 	}
-	if err := v.ensureUserCanAuthenticate(ctx, projectID, userID); err != nil {
-		return nil, err
-	}
-	roles, err := v.resolveEndUserRoles(ctx, projectID, userID)
+	user, err := v.ensureUserCanAuthenticate(ctx, projectID, userID)
 	if err != nil {
 		return nil, err
 	}
-	return &shared.Principal{
+	roles, err := v.resolveEndUserRoles(ctx, projectID, userID, user)
+	if err != nil {
+		return nil, err
+	}
+	p := &shared.Principal{
 		ActorID:        idgen.ID(userID),
 		ActorKind:      shared.ActorKindEndUser,
 		CredentialType: shared.CredentialTypeSession,
@@ -259,7 +339,11 @@ func (v *Validator) principalFromSession(ctx context.Context, projectID, session
 		UserID:         userID,
 		SessionID:      sessionID,
 		Roles:          roles,
-	}, nil
+	}
+	if v.principalCache != nil {
+		v.principalCache.Put(cacheKey, p)
+	}
+	return p, nil
 }
 
 func (v *Validator) validateEndUserSession(ctx context.Context, projectID, sessionID, userID string) error {
@@ -283,36 +367,39 @@ func (v *Validator) validateEndUserSession(ctx context.Context, projectID, sessi
 }
 
 // resolveEndUserRoles 实时解析用户角色；解析失败按拒绝处理（fail-closed），
-// 避免 JWT claims 中的旧角色残留。
-func (v *Validator) resolveEndUserRoles(ctx context.Context, projectID, userID string) ([]string, error) {
+// 避免 JWT claims 中的旧角色残留。user 是调用方已取回的行（P0.5 清账：
+// 免去解析器内的第二次 users.GetByID）。
+func (v *Validator) resolveEndUserRoles(ctx context.Context, projectID, userID string, user *users.User) ([]string, error) {
 	if v.roleResolver == nil {
 		return []string{databases.RoleUsers, databases.RoleUser(userID)}, nil
 	}
-	resolved, err := v.roleResolver.LoadUserRoles(ctx, projectID, userID)
+	resolved, err := v.roleResolver.LoadUserRoles(ctx, projectID, userID, user)
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "role resolution failed")
 	}
 	return resolved, nil
 }
 
-func (v *Validator) ensureUserCanAuthenticate(ctx context.Context, projectID, userID string) error {
+// ensureUserCanAuthenticate 校验用户可认证并返回行（P0.5：取回的行供角色
+// 解析复用）。
+func (v *Validator) ensureUserCanAuthenticate(ctx context.Context, projectID, userID string) (*users.User, error) {
 	if projectID == "" || userID == "" {
-		return nil
+		return nil, nil
 	}
 	if v.users == nil {
-		return status.Error(codes.Unauthenticated, "user lookup failed")
+		return nil, status.Error(codes.Unauthenticated, "user lookup failed")
 	}
 	found, err := v.users.GetByID(ctx, projectID, userID)
 	if err != nil {
-		return status.Error(codes.Unauthenticated, "user lookup failed")
+		return nil, status.Error(codes.Unauthenticated, "user lookup failed")
 	}
 	if found == nil {
-		return status.Error(codes.Unauthenticated, "user not found")
+		return nil, status.Error(codes.Unauthenticated, "user not found")
 	}
 	if !found.CanAuthenticate() {
-		return status.Error(codes.Unauthenticated, "user account is not active")
+		return nil, status.Error(codes.Unauthenticated, "user account is not active")
 	}
-	return nil
+	return found, nil
 }
 
 func (v *Validator) ValidateAdminProjectAccess(ctx context.Context, principal *shared.Principal) error {

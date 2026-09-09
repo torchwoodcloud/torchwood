@@ -3,11 +3,14 @@ package infra
 import (
 	"github.com/google/wire"
 	domainauth "github.com/torchwooddev/torchwood/internal/domain/auth"
+	domainfunctions "github.com/torchwooddev/torchwood/internal/domain/functions"
 	domaingroups "github.com/torchwooddev/torchwood/internal/domain/groups"
 	domainidgen "github.com/torchwooddev/torchwood/internal/domain/idgen"
+	"github.com/torchwooddev/torchwood/internal/domain/projects"
 	domainstorage "github.com/torchwooddev/torchwood/internal/domain/storage"
 	domainusers "github.com/torchwooddev/torchwood/internal/domain/users"
 	"github.com/torchwooddev/torchwood/internal/infra/auth"
+	"github.com/torchwooddev/torchwood/internal/infra/auth/principalcache"
 	infrabilling "github.com/torchwooddev/torchwood/internal/infra/billing"
 	"github.com/torchwooddev/torchwood/internal/infra/bun"
 	"github.com/torchwooddev/torchwood/internal/infra/bun/bunrepo"
@@ -22,8 +25,44 @@ import (
 	infraqueue "github.com/torchwooddev/torchwood/internal/infra/queue"
 	infrarealtime "github.com/torchwooddev/torchwood/internal/infra/realtime"
 	infrastorage "github.com/torchwooddev/torchwood/internal/infra/storage"
+	"github.com/torchwooddev/torchwood/internal/pkg/config"
 	"github.com/torchwooddev/torchwood/pkg/uow"
 )
+
+// NewSessionServiceWithCache 构造会话服务并注入 principal 缓存（P0.5：
+// 登出/封禁路径写失效标记的单一咽喉在 DeleteSessionsByUser）。
+func NewSessionServiceWithCache(
+	cfg *config.AppConfig,
+	sessions domainauth.SessionRepository,
+	roles domainauth.UserRoleResolver,
+	rotation domainauth.RefreshRotationStore,
+	pcache *principalcache.Cache,
+) *auth.SessionService {
+	s := auth.NewSessionService(cfg, sessions, roles, rotation)
+	s.SetPrincipalCache(pcache)
+	return s
+}
+
+// NewValidatorWithCache 构造凭证校验器并注入 principal 缓存（P0.5 热路径
+// 清账；nil 缓存 = 直连 DB 实时校验，测试侧直接构造不受影响）。
+func NewValidatorWithCache(
+	cfg *config.AppConfig,
+	apiKeyRepo projects.APIKeyRepository,
+	projectRepo projects.Repository,
+	adminRepo projects.AdminRepository,
+	adminProjectRepo projects.AdminProjectRepository,
+	adminRevokeStore domainauth.AdminTokenRevokeStore,
+	sessions domainauth.SessionRepository,
+	usersRepo domainusers.Repository,
+	roleResolver domainauth.UserRoleResolver,
+	oneTimeTokens domainauth.OneTimeTokenStore,
+	execTokens domainfunctions.ExecutionTokenService,
+	pcache *principalcache.Cache,
+) *auth.Validator {
+	v := auth.NewValidatorWithOneTimeTokens(cfg, apiKeyRepo, projectRepo, adminRepo, adminProjectRepo, adminRevokeStore, sessions, usersRepo, roleResolver, oneTimeTokens, execTokens)
+	v.SetPrincipalCache(pcache)
+	return v
+}
 
 var ProviderSet = wire.NewSet(
 	clients.NewDataClients,
@@ -36,8 +75,12 @@ var ProviderSet = wire.NewSet(
 	// internalIDCache 失效回调）。
 	health.NewCheckers,
 
-	auth.NewValidatorWithOneTimeTokens,
-	auth.NewSessionService,
+	// P0.5 热路径清账：端用户 principal 短 TTL 缓存（validator 命中时 1 次
+	// Redis 失效标记检查替代 4 次 DB 往返；登出/封禁经 SessionService 写失效
+	// 标记）。组合根经包装 provider 注入，测试侧直接构造的调用点不受影响。
+	principalcache.New,
+	NewSessionServiceWithCache,
+	NewValidatorWithCache,
 	auth.NewRedisOTPChallengeStore,
 	auth.NewRedisOAuthStateStore,
 	auth.NewRedisAccountTokenStore,
@@ -61,6 +104,12 @@ var ProviderSet = wire.NewSet(
 	wire.Bind(new(domainauth.RefreshRotationStore), new(*auth.RedisRefreshRotationStore)),
 	wire.Bind(new(domainauth.RateLimiter), new(*auth.RedisRateLimiter)),
 	wire.Bind(new(domainauth.OneTimeTokenStore), new(*auth.RedisOneTimeTokenStore)),
+	// P0 执行身份：铸造/校验/吊销端口（实现在 infra/functions——worker 依赖
+	// 图禁入 infra/auth，见 cmd/worker/import_guard_test.go；server 与 worker
+	// 都已依赖 infra/functions）。
+	wire.Bind(new(domainfunctions.ExecutionTokenService), new(*infrafunctions.RedisExecutionTokenService)),
+	// P2 客户端调用面：每用户限频（Redis 固定窗口；故障降级由 app 层裁决）。
+	wire.Bind(new(domainfunctions.ClientQuotaLimiter), new(*infrafunctions.ClientQuotaLimiter)),
 
 	infraidgen.ProviderSet,
 	wire.Bind(new(domainidgen.Generator), new(*infraidgen.Service)),

@@ -110,6 +110,18 @@ func (r *mockRepo) UpdateDeployment(_ context.Context, d *domainfunctions.Deploy
 	return nil
 }
 
+func (r *mockRepo) ActivateDeployment(_ context.Context, d *domainfunctions.Deployment) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	d2 := *d
+	d2.Status = domainfunctions.DeploymentStatusReady
+	r.deployments[d.ID] = &d2
+	if fn := r.functions[d.FunctionID]; fn != nil && fn.ProjectID == d.ProjectID {
+		fn.LatestReadyDeploymentID = d.ID
+	}
+	return nil
+}
+
 func (r *mockRepo) DeleteDeployment(_ context.Context, projectID, functionID, deploymentID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -225,6 +237,35 @@ func (r *mockRepo) RecoverOrphanExecutionsInProject(_ context.Context, projectID
 
 func (r *mockRepo) PruneOldExecutionsInProject(_ context.Context, projectID, functionID string, keepRecent int) error {
 	return nil
+}
+
+func (r *mockRepo) PruneTriggerExecutionsInProject(_ context.Context, projectID, functionID string, olderThan time.Time) error {
+	return nil
+}
+
+func (r *mockRepo) GetExecutionByIdempotencyKey(_ context.Context, projectID, functionID, userID, key string) (*domainfunctions.ExecutionRecord, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, e := range r.executions {
+		if e.ProjectID == projectID && e.FunctionID == functionID && e.InvokingUserID == userID && e.ClientIdempotencyKey == key {
+			cp := *e
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
+
+func (r *mockRepo) CountClientInvocations(_ context.Context, projectID, functionID, userID string, since time.Time) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for _, e := range r.executions {
+		if e.ProjectID == projectID && e.FunctionID == functionID && e.InvokingUserID == userID &&
+			e.TriggerSource == domainfunctions.TriggerSourceClient && !e.CreatedAt.Before(since) {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // mockQueue 是 shared.Queue 的内存实现（测试用）。

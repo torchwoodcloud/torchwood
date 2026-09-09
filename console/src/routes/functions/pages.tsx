@@ -16,6 +16,7 @@ import {
   deleteDeployment,
   getVariables,
   setVariables,
+  setFunctionScopes,
   SECRET_MASK,
   createExecution,
   listExecutions,
@@ -58,6 +59,8 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite, isPlatformAdmin } from "@/hooks/useAdminRole";
 import type { ColumnDef } from "@/components/list/DataTable";
+import { FunctionTriggersCard } from "./triggers-card";
+import { FunctionClientPolicyCard } from "./client-policy-card";
 
 const functionColumns: ColumnDef<FunctionItem>[] = [
   {
@@ -423,6 +426,7 @@ export function FunctionDetailPage() {
   const [asyncExec, setAsyncExec] = useState(true);
   const [selectedExecution, setSelectedExecution] = useState<Execution | null>(null);
   const [variables, setVariablesState] = useState<Variable[]>([]);
+  const [scopesText, setScopesText] = useState("");
 
   const { data: fn, isLoading } = useQuery({
     queryKey: ["functions", projectId, functionId],
@@ -461,6 +465,7 @@ export function FunctionDetailPage() {
     setTimeoutSeconds(String(fn.timeout_seconds));
     setSpec(fn.spec);
     setEnabled(fn.enabled);
+    setScopesText((fn.declared_scopes ?? []).join("\n"));
   }, [fn]);
 
   useEffect(() => {
@@ -487,6 +492,26 @@ export function FunctionDetailPage() {
       toast.success("环境变量已保存");
       // 响应为掩码视图（非空值一律脱敏），回填后仍显示占位符。
       setVariablesState(vars);
+    },
+  });
+
+  // 执行身份 scopes（P0）：每行一条 "<resource>:<op>"，空 = 无平台访问。
+  // 词表校验在服务端（assets/databases/users/groups/storage/subscriptions/
+  // payments + read/write）；保存成功后同步输入框与查询缓存。
+  const saveScopes = useMutation({
+    mutationFn: () => {
+      const declaredScopes = scopesText
+        .split("\n")
+        .map((s) => s.trim())
+        .filter((s) => s !== "");
+      return setFunctionScopes(functionId!, declaredScopes);
+    },
+    onSuccess: (fnItem) => {
+      toast.success("执行身份 Scopes 已保存");
+      setScopesText((fnItem.declared_scopes ?? []).join("\n"));
+      queryClient.invalidateQueries({
+        queryKey: ["functions", projectId, functionId],
+      });
     },
   });
 
@@ -649,10 +674,53 @@ export function FunctionDetailPage() {
 
       <Card>
         <CardHeader className="space-y-0 pb-3">
+          <CardTitle className="text-sm">执行身份 Scopes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2 max-w-3xl">
+            <p className="text-xs text-muted-foreground">
+              函数执行时平台注入短期 token（TW_EXECUTION_TOKEN /
+              TW_API_BASE_URL），按下方声明访问平台能力；每行一条
+              &lt;resource&gt;:&lt;op&gt;（如 assets:write），resource 仅限
+              assets / databases / users / groups / storage / subscriptions /
+              payments，op 为 read 或 write，留空 = 无平台访问。注意：声明
+              databases/storage 后，还需把对应集合/桶的权限授予角色
+              <code className="font-mono">key:function:{fn.id}</code>
+              ，否则请求通过但读不到数据。
+            </p>
+            <textarea
+              className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder={"assets:write\ndatabases:read"}
+              value={scopesText}
+              onChange={(e) => setScopesText(e.target.value)}
+              disabled={!writeable}
+            />
+            <Button
+              type="button"
+              size="sm"
+              disabled={!writeable || saveScopes.isPending}
+              onClick={() => saveScopes.mutate()}
+            >
+              {saveScopes.isPending ? "保存中..." : "保存 Scopes"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <FunctionTriggersCard functionId={functionId!} writeable={writeable} />
+
+      {fn && <FunctionClientPolicyCard fn={fn} writeable={writeable} />}
+
+      <Card>
+        <CardHeader className="space-y-0 pb-3">
           <CardTitle className="text-sm">环境变量</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              仅存放第三方服务密钥。平台能力（资产/数据库/存储等）请使用上方
+              「执行身份 Scopes」，不要再把平台 API key 存在这里。
+            </p>
             {variables.map((v, idx) => (
               <div key={idx} className="flex gap-2">
                 <Input

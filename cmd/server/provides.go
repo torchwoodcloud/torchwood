@@ -15,6 +15,7 @@ import (
 	"github.com/torchwooddev/torchwood/internal/api/serverhttp"
 	"github.com/torchwooddev/torchwood/internal/app"
 	appserver "github.com/torchwooddev/torchwood/internal/app/server"
+	appfunctions "github.com/torchwooddev/torchwood/internal/app/functions"
 	appstorage "github.com/torchwooddev/torchwood/internal/app/storage"
 	"github.com/torchwooddev/torchwood/internal/bootkit"
 	"github.com/torchwooddev/torchwood/internal/domain"
@@ -25,6 +26,7 @@ import (
 	"github.com/torchwooddev/torchwood/internal/infra/auth"
 	"github.com/torchwooddev/torchwood/internal/infra/clients"
 	"github.com/torchwooddev/torchwood/internal/infra/documentdb"
+	infrafunctions "github.com/torchwooddev/torchwood/internal/infra/functions"
 	"github.com/torchwooddev/torchwood/internal/infra/health"
 	"github.com/torchwooddev/torchwood/internal/infra/projectschema"
 	"github.com/torchwooddev/torchwood/internal/pkg/buildinfo"
@@ -63,6 +65,11 @@ var ProviderSet = wire.NewSet(
 	// Realtime 握手校验复用 auth.Validator（api.ProviderSet 与
 	// infra.ProviderSet 在此组合，Bind 放组合根）。
 	wire.Bind(new(apirealtime.CredentialValidator), new(*auth.Validator)),
+	// 触发器 per-IP 限频端口（P1）：实现 infra/functions Redis 固定窗口，
+	// handler 消费窄接口（与 AuthValidator 同模式）——NewTriggerIPLimiter
+	// 适配器把具体类型收敛在组合根；调用面窄接口直接 Bind 到 Functions 聚合。
+	NewTriggerIPLimiter,
+	wire.Bind(new(serverhttp.TriggerInvoker), new(*appfunctions.Functions)),
 	// HTTP / gRPC handler 窄接口绑定（J4-5）：消费端仅依赖最小方法集，
 	// 具体类型 *auth.Validator / *health.Checkers 仅在组合根出现。
 	wire.Bind(new(serverhttp.AuthValidator), new(*auth.Validator)),
@@ -245,3 +252,9 @@ func NewProjectsOptions(purger domainstorage.Purger, cfg *config.AppConfig) []ap
 
 // NewStorageOptions 返回生产默认的空选项集（WithClock 等仅供测试注入）。
 func NewStorageOptions() []appstorage.StorageOption { return nil }
+
+// NewTriggerIPLimiter 桥接触发器 per-IP 限频实现到 handler 窄接口
+// （P1 触发器模块）：infra/functions 具体类型仅在组合根出现。
+func NewTriggerIPLimiter(l *infrafunctions.TriggerIPRateLimiter) serverhttp.TriggerIPLimiter {
+	return l
+}

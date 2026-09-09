@@ -80,6 +80,33 @@ func (s *FunctionsService) GetVariables(ctx context.Context, req *serverv1.GetFu
 	return s.api.GetVariables(ctx, req)
 }
 
+// SetFunctionScopes 全量替换函数 declared_scopes（执行身份，P0）。
+func (s *FunctionsService) SetFunctionScopes(ctx context.Context, req *serverv1.SetFunctionScopesRequest) (*serverv1.Function, error) {
+	return s.api.SetFunctionScopes(ctx, req)
+}
+
+// CreateFunctionTrigger 创建函数触发器（P1）：type=http 需带 http 配置段
+// （token 服务端生成）；type=cron 需带 cron 配置段。
+func (s *FunctionsService) CreateFunctionTrigger(ctx context.Context, req *serverv1.CreateFunctionTriggerRequest) (*serverv1.FunctionTrigger, error) {
+	return s.api.CreateFunctionTrigger(ctx, req)
+}
+
+// ListFunctionTriggers 列出函数触发器。
+func (s *FunctionsService) ListFunctionTriggers(ctx context.Context, req *serverv1.GetFunctionRequest) (*serverv1.ListFunctionTriggersResponse, error) {
+	return s.api.ListFunctionTriggers(ctx, req)
+}
+
+// DeleteFunctionTrigger 删除函数触发器。
+func (s *FunctionsService) DeleteFunctionTrigger(ctx context.Context, req *serverv1.DeleteFunctionTriggerRequest) error {
+	_, err := s.api.DeleteFunctionTrigger(ctx, req)
+	return err
+}
+
+// RotateFunctionTriggerToken 轮换 http 触发器 token（旧 token 立即失效）。
+func (s *FunctionsService) RotateFunctionTriggerToken(ctx context.Context, req *serverv1.RotateFunctionTriggerTokenRequest) (*serverv1.FunctionTrigger, error) {
+	return s.api.RotateFunctionTriggerToken(ctx, req)
+}
+
 // CreateExecution 创建函数执行（同步或异步）。
 func (s *FunctionsService) CreateExecution(ctx context.Context, req *serverv1.CreateExecutionRequest) (*serverv1.Execution, error) {
 	return s.api.CreateExecution(ctx, req)

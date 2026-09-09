@@ -46,13 +46,21 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	schemaReconcileHook := NewSchemaReconcileHook()
 	onStartHooks := bootkit.NewOnStarts(repository, database, logger, grantsReconcileHook, scaleMetricsHook, schemaReconcileHook)
 	onStopHooks := bootkit.NewOnStops()
-	executor := functions.NewDockerExecutor(appConfig)
+	dockerExecutor := functions.NewDockerExecutor(appConfig)
+	dispatcherExecutor := functions.NewDispatcherExecutor(appConfig)
+	executor, err := functions.ProvideExecutor(appConfig, dockerExecutor, dispatcherExecutor)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
 	functionRepo := bunrepo.NewFunctionRepository(database)
 	client := clients.NewRedis(dataClients)
 	sharedQueue := queue.NewRedisQueue(client)
 	redisCounter := billing.NewRedisCounter(client)
 	semaphores := functions2.ProvideSemaphores(client, appConfig)
-	functionsFunctions := functions2.NewFunctionsWithUsage(appConfig, executor, functionRepo, sharedQueue, redisCounter, repository, semaphores)
+	redisExecutionTokenService := functions.NewRedisExecutionTokenService(client)
+	triggerRepo := bunrepo.NewFunctionTriggerRepository(database)
+	functionsFunctions := functions2.NewFunctionsWithUsage(appConfig, executor, functionRepo, sharedQueue, redisCounter, repository, semaphores, redisExecutionTokenService, triggerRepo)
 	worker := NewWorker(functionsFunctions, sharedQueue, logger)
 	objectStore, err := storage.NewMinioObjectStore(appConfig)
 	if err != nil {

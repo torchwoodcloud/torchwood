@@ -332,6 +332,48 @@ export interface Execution {
   updated_at: string;
 }
 
+// ——函数触发器（P1 触发器模块）——
+
+export interface HttpTriggerConfig {
+  // 双响应模式：sync 同步透传；async_ack 立即 200 + ack_body（已受理语义）。
+  response_mode: "sync" | "async_ack";
+  // async_ack 模式 200 响应体（≤1KB）。
+  ack_body?: string;
+  // GET 握手：echo = 平台回 {"echostr": <query.echostr>}，不 invoke。
+  handshake?: "echo";
+  // 请求体上限（字节）：缺省 64KB，上限 1MB。
+  body_limit_bytes?: number;
+}
+
+export interface CronTriggerConfig {
+  // 5 字段 cron 表达式（分 时 日 月 周，UTC；周 0-7 且 7=0）。
+  expr: string;
+  // 错过策略：skip 只推进不补跑；catch_up_once 补跑一次（默认）。
+  misfire?: "skip" | "catch_up_once";
+}
+
+export interface FunctionTrigger {
+  id: string;
+  function_id: string;
+  type: "http" | "cron";
+  enabled: boolean;
+  // ——http 专有——
+  response_mode?: string;
+  ack_body?: string;
+  handshake?: string;
+  body_limit_bytes?: number;
+  // token 明文仅在管理面返回。
+  token?: string;
+  // 公开调用路径 /f/{project_id}/{token}。
+  invoke_path?: string;
+  // ——cron 专有——
+  expr?: string;
+  misfire?: string;
+  next_run_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface LogEntry {
   id: string;
   action: string;
@@ -436,6 +478,15 @@ export interface AssetLedgerEntry {
 export interface AssetOpResponse {
   entries: AssetLedgerEntry[];
   idempotent_replay?: boolean;
+}
+
+/** InvokeFunctionResponse 是客户端调用面的函数调用结果（P2）。 */
+export interface InvokeFunctionResponse {
+  execution_id: string;
+  /** completed | failed | running（幂等命中且执行仍在进行时）。 */
+  status: string;
+  /** 函数响应：stdout 末行 JSON（无合法 JSON 时为空）。 */
+  response?: string;
 }
 
 export interface AssetDrift {

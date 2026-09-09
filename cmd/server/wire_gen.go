@@ -25,7 +25,9 @@ import (
 	storage2 "github.com/torchwooddev/torchwood/internal/app/storage"
 	"github.com/torchwooddev/torchwood/internal/app/subscriptions"
 	"github.com/torchwooddev/torchwood/internal/bootkit"
+	"github.com/torchwooddev/torchwood/internal/infra"
 	"github.com/torchwooddev/torchwood/internal/infra/auth"
+	"github.com/torchwooddev/torchwood/internal/infra/auth/principalcache"
 	"github.com/torchwooddev/torchwood/internal/infra/billing"
 	"github.com/torchwooddev/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwooddev/torchwood/internal/infra/clients"
@@ -71,7 +73,9 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	membershipRepository := bunrepo.NewMembershipRepository(database)
 	userRoles := client.NewUserRoles(userRepository, membershipRepository)
 	redisOneTimeTokenStore := auth.NewRedisOneTimeTokenStore(redisClient)
-	validator := auth.NewValidatorWithOneTimeTokens(appConfig, apiKeyRepository, repository, adminRepository, adminProjectRepository, redisAdminTokenRevokeStore, sessionRepository, userRepository, userRoles, redisOneTimeTokenStore)
+	redisExecutionTokenService := functions.NewRedisExecutionTokenService(redisClient)
+	cache := principalcache.New(redisClient)
+	validator := infra.NewValidatorWithCache(appConfig, apiKeyRepository, repository, adminRepository, adminProjectRepository, redisAdminTokenRevokeStore, sessionRepository, userRepository, userRoles, redisOneTimeTokenStore, redisExecutionTokenService, cache)
 	auditRepository := bunrepo.NewAuditRepository(database)
 	redisRateLimiter := auth.NewRedisRateLimiter(redisClient)
 	objectStore, err := storage.NewMinioObjectStore(appConfig)
@@ -83,7 +87,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	inviteCodeRepository := bunrepo.NewInviteCodeRepository(database)
 	oAuthProviderRepository := bunrepo.NewOAuthProviderRepository(database, appConfig)
 	redisRefreshRotationStore := auth.NewRedisRefreshRotationStore(redisClient)
-	sessionService := auth.NewSessionService(appConfig, sessionRepository, userRoles, redisRefreshRotationStore)
+	sessionService := infra.NewSessionServiceWithCache(appConfig, sessionRepository, userRoles, redisRefreshRotationStore, cache)
 	redisOTPChallengeStore := auth.NewRedisOTPChallengeStore(redisClient, appConfig)
 	redisOAuthStateStore := auth.NewRedisOAuthStateStore(redisClient)
 	redisAccountTokenStore := auth.NewRedisAccountTokenStore(redisClient)
@@ -134,6 +138,21 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	paymentsService := clientgrpc.NewPaymentsService(paymentsPayments)
 	assetsService := clientgrpc.NewAssetsService(assetsAssets)
 	subscriptionsService := clientgrpc.NewSubscriptionsService(subscriptionsSubscriptions)
+	dockerExecutor := functions.NewDockerExecutor(appConfig)
+	dispatcherExecutor := functions.NewDispatcherExecutor(appConfig)
+	executor, err := functions.ProvideExecutor(appConfig, dockerExecutor, dispatcherExecutor)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	functionRepo := bunrepo.NewFunctionRepository(database)
+	sharedQueue := queue.NewRedisQueue(redisClient)
+	redisCounter := billing.NewRedisCounter(redisClient)
+	semaphores := functions2.ProvideSemaphores(redisClient, appConfig)
+	triggerRepo := bunrepo.NewFunctionTriggerRepository(database)
+	clientQuotaLimiter := functions.NewClientQuotaLimiter(redisClient)
+	functionsFunctions := functions2.NewFunctionsWithClientQuota(appConfig, executor, functionRepo, sharedQueue, redisCounter, repository, semaphores, redisExecutionTokenService, triggerRepo, clientQuotaLimiter)
+	functionsService := clientgrpc.NewFunctionsService(functionsFunctions)
 	buildInfo := NewBuildInfo()
 	healthService := servergrpc.NewHealthService(checkers, buildInfo)
 	schemaManager := NewSchemaManager(database, documentDB)
@@ -164,13 +183,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	servergrpcGroupsService := servergrpc.NewGroupsService(groups)
 	serverDatabases := server.NewDatabases(repository, documentDB, idempotencyStore)
 	servergrpcDatabasesService := servergrpc.NewDatabasesService(serverDatabases)
-	executor := functions.NewDockerExecutor(appConfig)
-	functionRepo := bunrepo.NewFunctionRepository(database)
-	sharedQueue := queue.NewRedisQueue(redisClient)
-	redisCounter := billing.NewRedisCounter(redisClient)
-	semaphores := functions2.ProvideSemaphores(redisClient, appConfig)
-	functionsFunctions := functions2.NewFunctionsWithUsage(appConfig, executor, functionRepo, sharedQueue, redisCounter, repository, semaphores)
-	functionsService := servergrpc.NewFunctionsService(functionsFunctions)
+	servergrpcFunctionsService := servergrpc.NewFunctionsService(functionsFunctions)
 	servergrpcPaymentsService := servergrpc.NewPaymentsService(paymentsPayments)
 	servergrpcAssetsService := servergrpc.NewAssetsService(assetsAssets)
 	servergrpcSubscriptionsService := servergrpc.NewSubscriptionsService(subscriptionsSubscriptions)
@@ -186,7 +199,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	outboxRepository := bunrepo.NewOutboxRepository(database)
 	outboxAdmin := events2.NewOutboxAdmin(outboxRepository, repository)
 	outboxService := servergrpc.NewOutboxService(outboxAdmin)
-	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, healthService, projectsService, storageService, usersService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, functionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, authService, adminsService, outboxService, policySet)
+	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, healthService, projectsService, storageService, usersService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, authService, adminsService, outboxService, policySet)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -211,13 +224,20 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
+	triggerIPRateLimiter := functions.NewTriggerIPRateLimiter(redisClient, appConfig)
+	triggerIPLimiter := NewTriggerIPLimiter(triggerIPRateLimiter)
+	functionTriggersHandler, err := serverhttp.NewFunctionTriggersHandler(functionsFunctions, triggerIPLimiter, appConfig, logger)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
 	hub := realtime.NewHub(logger)
 	handler, err := realtime2.NewHandler(appConfig, validator, documentDB, hub, logger, auditRepository)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	grpcGatewayServer, err := runtime.NewGRPCGatewayServer(app, appConfig, checkers, fileHandler, oAuthHandler, functionsHandler, paymentsHandler, handler, policySet)
+	grpcGatewayServer, err := runtime.NewGRPCGatewayServer(app, appConfig, checkers, fileHandler, oAuthHandler, functionsHandler, paymentsHandler, functionTriggersHandler, handler, policySet)
 	if err != nil {
 		cleanup()
 		return nil, nil, err

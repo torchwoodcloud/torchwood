@@ -14,6 +14,18 @@ type Execution struct {
 	Timeout      int64  // seconds
 	Env          map[string]string
 	Data         string // JSON payload
+	// ——池策略（P0.5 执行器 v2）：dispatcher executor 用其管理常驻实例池；
+	// v1 docker executor 忽略。零值时 dispatcher 侧取平台默认。
+	MinInstances           int
+	MaxInstances           int
+	IdleTTLSeconds         int
+	MaxRequestsPerInstance int
+	// EgressUntrusted 是 egress 分类结果（P2 安全切片，设计 Security #6）：
+	// true = 不可信函数（client_callable 或存在 http/cron 触发器），容器
+	// attach internal 变体网络（tw-func-<project>-int，出网全 deny）；
+	// false = 可信（server key 触发），保持常规网络。分类在 app 层完成
+	// （函数属性而非单次调用属性），executor 只消费。
+	EgressUntrusted bool
 }
 
 // ExecutionResult is the output of a function invocation.

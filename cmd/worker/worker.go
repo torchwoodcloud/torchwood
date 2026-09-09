@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -23,6 +22,28 @@ const dequeuePollInterval = time.Second
 
 // maxProcessAttempts 是消费瞬时失败的最大重试次数（超限后兜底标 failed）。
 const maxProcessAttempts = 3
+
+// orphanRecoverInterval 是孤儿恢复的周期（P0.5：从「启动跑一次」升级为
+// 周期任务）。扫描范围 queued/building/running，staleAfter 按行内
+// timeout_seconds + 120s 宽限判定（NULL 回退 1h）。
+const orphanRecoverInterval = time.Minute
+
+// orphanStaleFallback 是 timeout_seconds 为 NULL 的存量行的回退口径
+// （v1 兼容；P0.5 起新行均带快照）。
+const orphanStaleFallback = time.Hour
+
+// pruneInterval 是执行记录保留策略的周期清理间隔（P0.5：同步热路径的
+// Prune 调用移除后，由本 ticker 低频驱动；失败仅记日志）。
+const pruneInterval = 10 * time.Minute
+
+// cronScanInterval 是 cron 触发器调度循环的扫描周期（P1 触发器模块）：
+// 每分钟 ClaimDueCron（先 CAS 后入队）——misfire 判定宽限 90s 与本周期
+// 同源（domainfunctions.CronMisfireGrace）。
+const cronScanInterval = time.Minute
+
+// cronClaimBudget 是单轮 cron 领取的全局预算（跨项目扣减，镜像
+// recoverOrphanBatch 的轮转游标模式；补跑风暴由异步通道 + run 信号量兜底）。
+const cronClaimBudget = 100
 
 // Worker 消费函数异步执行队列（torchwood:queue:functions-executions）。
 type Worker struct {
@@ -56,20 +77,22 @@ func (w *Worker) Init(ctx lynx.AppContext) error {
 }
 
 func (w *Worker) Start(ctx context.Context) error {
-	// 启动对账：按项目枚举，将停留 building/running 超过 1h 的记录标记 failed
-	// （兜底 Redis 重启丢任务、worker 崩溃孤儿；queued 仍在 Redis 队列）。
-	recovered, err := w.functions.RecoverOrphanExecutions(ctx, time.Hour)
-	if err != nil {
-		return fmt.Errorf("recover orphan executions: %w", err)
-	}
-	if recovered > 0 {
-		w.logger.Info("recovered orphan executions", "count", recovered)
-	}
-
 	runCtx, cancel := context.WithCancel(ctx)
 	w.mu.Lock()
 	w.cancel = cancel
 	w.mu.Unlock()
+
+	// 孤儿恢复（P0.5 周期任务）：启动即跑一轮，随后每分钟对账——
+	// queued/building/running 超 staleAfter 判 failed（兜底 Redis 重启丢
+	// 任务、server/worker 崩溃孤儿；含 v1 既有洞：同步快路径崩溃留 queued
+	// 永不入队）。全局预算 recoverOrphanBatch + 轮转游标由 app 层持有。
+	w.wg.Go(func() { w.recoverLoop(runCtx) })
+
+	// 保留策略周期清理（P0.5：Prune 移出同步热路径后的低频驱动）。
+	w.wg.Go(func() { w.pruneLoop(runCtx) })
+
+	// cron 触发器调度循环（P1）：每分钟领取到期触发并入队异步执行。
+	w.wg.Go(func() { w.cronLoop(runCtx) })
 
 	for i := 0; i < w.workers; i++ {
 		w.wg.Go(func() {
@@ -82,6 +105,85 @@ func (w *Worker) Start(ctx context.Context) error {
 	// 立即返回会被判定为服务完成而触发关停）。
 	<-ctx.Done()
 	return nil
+}
+
+// recoverLoop 周期孤儿恢复（启动即跑一轮；间隔 orphanRecoverInterval）。
+func (w *Worker) recoverLoop(ctx context.Context) {
+	runOnce := func() {
+		recoverCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		recovered, err := w.functions.RecoverOrphanExecutions(recoverCtx, orphanStaleFallback)
+		if err != nil {
+			w.logger.Warn("recover orphan executions failed", "error", err)
+			return
+		}
+		if recovered > 0 {
+			w.logger.Info("recovered orphan executions", "count", recovered)
+		}
+	}
+	runOnce()
+	ticker := time.NewTicker(orphanRecoverInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runOnce()
+		}
+	}
+}
+
+// pruneLoop 周期执行记录保留策略清理（跨全部 active 项目的函数；低频）。
+func (w *Worker) pruneLoop(ctx context.Context) {
+	ticker := time.NewTicker(pruneInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			pruneCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
+			pruned, err := w.functions.PruneOldExecutions(pruneCtx)
+			cancel()
+			if err != nil {
+				w.logger.Warn("prune old executions failed", "error", err)
+				continue
+			}
+			if pruned > 0 {
+				w.logger.Info("pruned old executions", "functions", pruned)
+			}
+		}
+	}
+}
+
+// cronLoop 周期 cron 触发器调度（启动即跑一轮——worker 重启后 catch_up_once
+// 在首轮扫描即收敛；间隔 cronScanInterval）。单轮失败仅记日志，下一轮
+// 重试；领取/CAS 语义见 domainfunctions.TriggerRepo.ClaimDueCron。
+func (w *Worker) cronLoop(ctx context.Context) {
+	runOnce := func() {
+		cronCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 50*time.Second)
+		defer cancel()
+		dispatched, err := w.functions.DispatchDueCronTriggers(cronCtx, time.Now(), cronClaimBudget)
+		if err != nil {
+			w.logger.Warn("cron trigger dispatch failed", "error", err)
+			return
+		}
+		if dispatched > 0 {
+			w.logger.Info("dispatched cron trigger executions", "count", dispatched)
+		}
+	}
+	runOnce()
+	ticker := time.NewTicker(cronScanInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runOnce()
+		}
+	}
 }
 
 func (w *Worker) Stop(ctx context.Context) error {

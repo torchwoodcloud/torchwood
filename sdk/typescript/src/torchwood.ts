@@ -2,6 +2,7 @@ import {
   AccountService,
   ClientAssetsService,
   ClientDatabasesService,
+  ClientFunctionsService,
   ClientPaymentsService,
   ClientSubscriptionsService,
   ClientGroupsService,
@@ -48,6 +49,7 @@ export class Torchwood {
   readonly payments: ClientPaymentsService;
   readonly assets: ClientAssetsService;
   readonly subscriptions: ClientSubscriptionsService;
+  readonly functions: ClientFunctionsService;
 
   readonly server: {
     health: HealthService;
@@ -77,6 +79,7 @@ export class Torchwood {
     this.payments = new ClientPaymentsService(this.transport);
     this.assets = new ClientAssetsService(this.transport);
     this.subscriptions = new ClientSubscriptionsService(this.transport);
+    this.functions = new ClientFunctionsService(this.transport);
     this.server = {
       health: new HealthService(this.transport),
       projects: new ProjectsService(this.transport),

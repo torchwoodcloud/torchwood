@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+package torchwood.client.v1;
+
+option go_package = "github.com/torchwooddev/torchwood/genproto/client/v1;clientv1";
+
+import "google/api/annotations.proto";
+import "buf/validate/validate.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "shared/v1/authz.proto";
+
+// 服务默认 access=end_user：swagger 顶层声明 Bearer security
+// （详见 docs/developer/09-api-guide.md §1.4 的 OpenAPI 建模约定；本服务全部方法继承）。
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  security_definitions: {
+    security: {
+      key: "apiKey"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "X-API-Key"
+        description: "项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。"
+      }
+    }
+    security: {
+      key: "Bearer"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "格式: Bearer <jwt>（Client API 登录态）"
+      }
+    }
+    security: {
+      key: "cookie"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Cookie"
+        description: "TORCHWOOD_session_console=<sid>（Console admin 会话）"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "Bearer"
+      value: {}
+    }
+  }
+  extensions: {
+    key: "x-torchwood-access"
+    value: { string_value: "end_user" }
+  }
+  // 统一 default 错误响应（运行时错误体即 shared.v1.ErrorResponse），
+  // 文件级声明自动填充到本文件全部 operation。
+  responses: {
+    key: "default"
+    value: {
+      description: "An unexpected error response."
+      schema: { json_schema: { ref: ".torchwood.shared.v1.ErrorResponse" } }
+    }
+  }
+};
+
+// FunctionsService 是客户端调用面（P2，docs/design/
+// functions-execution-identity-and-triggers.md §4/§5）：终端用户按 per-function
+// 策略（client_callable + 每用户限频）同步调用函数。这不是 Server 面
+// CreateExecution 的放开——带独立策略门的新入口；执行身份与审计语义
+// 与触发器路径一致（执行记录 invoking_user_id 即审计载体）。
+service FunctionsService {
+  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_END_USER };
+
+  // InvokeFunction 同步调用一个 client_callable 函数。
+  //
+  // 错误形态：
+  //   - PERMISSION_DENIED：函数未开启 client_callable（存量默认，fail-closed）；
+  //   - RESOURCE_EXHAUSTED：每用户限频超限（ErrorInfo.Reason =
+  //     FUNCTIONS.INVOKE_QUOTA_EXCEEDED + RetryInfo 指向窗口结束时刻）或
+  //     每用户并发闸门排队超时——两者都不是响应字段；
+  //   - FAILED_PRECONDITION：函数已禁用。
+  rpc InvokeFunction(InvokeFunctionRequest) returns (InvokeFunctionResponse) {
+    option (google.api.http) = { post: "/v1/functions/{function_id}:invoke", body: "*" };
+  }
+}
+
+message InvokeFunctionRequest {
+  string function_id = 1 [(buf.validate.field).required = true];
+  // 函数入参：JSON object 字符串（≤32KB，服务端校验形状与字节上限）。
+  string data = 2 [(buf.validate.field).string.max_len = 32768];
+  // 可选：指定 deployment（必须 ready）；缺省用最新 ready。
+  optional string deployment_id = 3;
+  // 可选客户端幂等键：网络超时重试防重复执行。(project, function, user, key)
+  // 唯一去重，命中返回既有 execution 原样（进行中返回 running）。
+  string idempotency_key = 4 [(buf.validate.field).string.max_len = 128];
+}
+
+message InvokeFunctionResponse {
+  string execution_id = 1;
+  // completed | failed | running（幂等命中且执行仍在进行时）。
+  string status = 2;
+  // 函数响应：stdout 末行 JSON（无合法 JSON 时为空）。
+  string response = 3;
+}
+
+// 配额超额走 ResourceExhausted 错误（ErrorInfo.Reason + RetryInfo），不是
+// 响应字段；容器 exit 的 status_code 对客户端无语义，不暴露。
