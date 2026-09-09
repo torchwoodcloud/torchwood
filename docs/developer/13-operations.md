@@ -361,6 +361,8 @@ DSN 优先级：`TORCHWOOD_DATA_DATABASE_SOURCE` → `postgres://torchwood:torch
 
 **B15 部署时序契约**：迁移（含 000004）→ `torchwood admin sync-roles-sig`（owner/引导 DSN，§4.5「部署时序契约」）→ server/worker 启动。首次部署或换钥后未跑 sync 作业前，文档查询 fail-closed（零角色不可见）属预期，跑完作业即恢复。换钥流程：改运行态 `security.jwt.secret` → 重跑 sync 作业 → 滚动重启（previous 槽保换钥窗口，门禁 A4）。
 
+**Console/端用户 refresh 轮换与 Redis 易失性**：两类会话的 refresh token 逐次轮换，轮换记录存 Redis（`Torchwood:refresh:*`，宽限槽 `*:prev`）。Redis 数据丢失（无持久化卷重启、换实例）= 轮换记录全丢，全部已登录会话在下一次刷新时报 "session expired" 失效，**重新登录即恢复，不是故障**；换 `security.jwt.secret` 等价全量失效。部署建议给 Redis 配持久化卷（AOF/RDB）。多标签页并发刷新与刷新响应丢失后的重试由宽限窗口兜底（`infra/auth.GraceWindow`，60s）：窗口内旧 token id 按当前链续签（不判重用、不连坐撤销）；窗口外恢复重放判定（mismatch → 撤销该用户全部 token / 删会话）。新登录（sign-in/sign-up）开新链并清宽限槽。前端侧，401 强制跳转带 `?expired=1` 标记，Login 页看到该标记不自动跳回 Console，必须显式重新登录——防止存在持续 401 源（如陈旧 cookie 副本）时 console↔login 无限弹跳。
+
 **双账号契约（§4.5）**：迁移 DSN 必须是 **owner 引导账号**（superuser/bootstrap）——`CREATE EXTENSION vector`（§6.6）与 public schema 建表等引导面只有它可执行，authenticator 跑迁移会在最早期即失败（fail-safe）；生产中迁移作业与 server/worker 运行时的 `TORCHWOOD_DATA_DATABASE_SOURCE` 分别注入，运行态配置永不使用引导账号。
 
 ### 6.2 首次引导（bootstrap）

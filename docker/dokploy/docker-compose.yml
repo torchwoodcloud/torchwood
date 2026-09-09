@@ -83,6 +83,9 @@ services:
 
   redis:
     image: redis:7-alpine
+    # AOF 必开:refresh 轮换记录存 Redis,无持久化时容器重启 = 全部已登录
+    # 会话下次刷新即失效(docs/developer/13-operations.md §6.1)。
+    command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
     healthcheck:

@@ -76,7 +76,9 @@ function forceReLogin() {
   authRedirecting = true;
   toast.error("会话已过期，请重新登录");
   setProjectID(null);
-  window.location.href = "/console/login";
+  // expired 标记是弹跳断路器:Login 页看到它就不再"探测成功自动跳回 console",
+  // 必须显式重新登录——否则一旦存在持续的 401 源,console↔login 会无限互跳。
+  window.location.href = "/console/login?expired=1";
 }
 
 api.interceptors.response.use(

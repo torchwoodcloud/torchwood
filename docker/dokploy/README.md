@@ -160,6 +160,9 @@ torchwood --endpoint <服务器IP>:9060 --api-key sk-... health   # gRPC 直连�
   之后改 `TORCHWOOD_AUTH_PASSWORD` 不会同步数据库角色口令，需在 Dokploy 打开 postgres 终端手工执行：
   `ALTER ROLE tw_authenticator PASSWORD '<新口令>';`（同步改 Environment 后重启 server/worker）。
 - **MinIO bucket**：应用启动时自动创建（`torchwood-storage`，小写），无需 mc 初始化。
+- **Redis AOF**：compose 已带 `--appendonly yes`——refresh 轮换记录存 Redis，
+  无持久化时容器重启 = 全部已登录会话下次刷新即失效（重新登录即恢复，非故障）。
+  换 Redis 实例同理（`docs/developer/13-operations.md` §6.1）。
 - **Functions（可选）**：worker 常驻消费函数执行队列；启用 docker executor 需放开 compose 中
   `docker.sock` 挂载（⚠ 等同宿主 root 权限）。不用 Functions 可删除 worker 服务。
 

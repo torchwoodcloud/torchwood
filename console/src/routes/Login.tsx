@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,11 @@ export function Login() {
   const [setupProbeError, setSetupProbeError] = useState<string | null>(null);
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  // expired=1 由 API 层 401 强制跳转携带(见 api/client.ts forceReLogin)。
+  // 此时不能凭探测成功的 isAuthenticated 自动跳回 console——那正是
+  // console↔login 无限弹跳的根源;必须显式重新登录。
+  const [searchParams] = useSearchParams();
+  const sessionExpired = searchParams.get("expired") === "1";
 
   const probeSetup = useCallback(() => {
     setSetupProbeError(null);
@@ -52,12 +57,12 @@ export function Login() {
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !sessionExpired) {
       navigate("/console", { replace: true });
       return;
     }
     return probeSetup();
-  }, [isAuthenticated, navigate, probeSetup]);
+  }, [isAuthenticated, sessionExpired, navigate, probeSetup]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,6 +70,8 @@ export function Login() {
     setLoading(true);
     try {
       await login(email, password);
+      // 显式进入 Console:带 expired 标记时 useEffect 的自动跳转被抑制。
+      navigate("/console", { replace: true });
     } catch (err) {
       const msg = extractErrorMessage(err);
       setError(msg || "登录失败");
@@ -204,6 +211,9 @@ export function Login() {
                   重试
                 </Button>
               </div>
+            )}
+            {sessionExpired && !error && (
+              <p className="text-sm text-muted-foreground">会话已过期，请重新登录</p>
             )}
             {error && <p className="text-sm text-destructive">{error}</p>}
             {isSetup && (

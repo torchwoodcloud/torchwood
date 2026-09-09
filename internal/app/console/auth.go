@@ -118,13 +118,17 @@ func (a *Auth) RefreshToken(ctx context.Context, cmd RefreshTokenCommand) (*Toke
 
 	refreshTTL := a.refreshTTL()
 	newRefreshTokenID := idgen.UUID().String()
-	result, err := a.rotation.Rotate(ctx, domainauth.RefreshRotationKey("admin", claims.UserID), claims.TokenID, newRefreshTokenID, refreshTTL)
+	result, currentTokenID, err := a.rotation.Rotate(ctx, domainauth.RefreshRotationKey("admin", claims.UserID), claims.TokenID, newRefreshTokenID, refreshTTL)
 	if err != nil {
 		return nil, err
 	}
 	switch result {
 	case domainauth.RotateOK:
 		return a.issueAdminTokensWithRefreshID(ctx, admin.ID, admin.Email, admin.Role, newRefreshTokenID)
+	case domainauth.RotateGraceReuse:
+		// 宽限命中(多标签页并发刷新/刷新响应丢失后的重试):以当前链重签,
+		// 链不推进;判重用会连坐撤销该 admin 全部 token,把好会话一起杀掉。
+		return a.issueAdminTokensWithRefreshID(ctx, admin.ID, admin.Email, admin.Role, currentTokenID)
 	case domainauth.RotateMismatch:
 		// 旧 refresh token 被再次使用：判定为重用，撤销该 admin 此前签发的全部 token。
 		if a.adminRevokeStore != nil {

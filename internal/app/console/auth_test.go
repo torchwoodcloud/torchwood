@@ -175,31 +175,41 @@ func TestAuth_ValidateCredential_ChecksRevokeStore(t *testing.T) {
 type memRotationStore struct {
 	mu     sync.Mutex
 	values map[string]string
+	prev   map[string]string
 }
 
 func newMemRotationStore() *memRotationStore {
-	return &memRotationStore{values: map[string]string{}}
+	return &memRotationStore{values: map[string]string{}, prev: map[string]string{}}
 }
 
 func (s *memRotationStore) Register(_ context.Context, key, tokenID string, _ time.Duration) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// 与 Redis 实现同语义:幂等重写同值(轮换签发路径)保留宽限槽,换值(新链)清宽限。
+	if cur, ok := s.values[key]; ok && cur != tokenID {
+		delete(s.prev, key)
+	}
 	s.values[key] = tokenID
 	return nil
 }
 
-func (s *memRotationStore) Rotate(_ context.Context, key, presentedTokenID, newTokenID string, _ time.Duration) (domainauth.RotateResult, error) {
+func (s *memRotationStore) Rotate(_ context.Context, key, presentedTokenID, newTokenID string, _ time.Duration) (domainauth.RotateResult, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cur, ok := s.values[key]
 	if !ok {
-		return domainauth.RotateMissing, nil
+		return domainauth.RotateMissing, "", nil
 	}
-	if cur != presentedTokenID {
-		return domainauth.RotateMismatch, nil
+	if cur == presentedTokenID {
+		s.prev[key] = cur
+		s.values[key] = newTokenID
+		return domainauth.RotateOK, "", nil
 	}
-	s.values[key] = newTokenID
-	return domainauth.RotateOK, nil
+	if s.prev[key] == presentedTokenID {
+		// 宽限命中:链不推进,回传当前 id。
+		return domainauth.RotateGraceReuse, cur, nil
+	}
+	return domainauth.RotateMismatch, "", nil
 }
 
 func (s *memRotationStore) current(key string) string {
@@ -288,6 +298,38 @@ func TestAuth_RefreshToken_ReuseRevokesAllAdminTokens(t *testing.T) {
 
 	// The stored rotation value was not overwritten by the attacker.
 	require.Equal(t, "tid-new", rotation.current(key))
+}
+
+func TestAuth_RefreshToken_GraceReuseReissuesCurrentChain(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	revokeStore := newMemAdminRevokeStore()
+	rotation := newMemRotationStore()
+	key := domainauth.RefreshRotationKey("admin", "admin-1")
+	require.NoError(t, rotation.Register(ctx, key, "tid-a", time.Hour))
+
+	authUC := console.NewAuth(testConfig(), newAdminRepo(mkAdmin("admin-1", "admin@torchwood.local", "admin")), revokeStore, nil, rotation)
+
+	// Tab A 轮换 tid-a -> <new>(随机 jti)后,Tab B 仍持 tid-a 刷新:宽限命中,
+	// 以当前链重签,不得判重用连坐撤销(否则好会话被一起杀掉)。
+	pair, err := authUC.RefreshToken(ctx, console.RefreshTokenCommand{
+		RefreshToken: adminRefreshToken(t, "admin-1", "tid-a"),
+	})
+	require.NoError(t, err)
+	rotatedID := parseAdminToken(t, pair.RefreshToken).TokenID
+	require.Equal(t, rotatedID, rotation.current(key))
+
+	pair, err = authUC.RefreshToken(ctx, console.RefreshTokenCommand{
+		RefreshToken: adminRefreshToken(t, "admin-1", "tid-a"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, rotatedID, parseAdminToken(t, pair.RefreshToken).TokenID)
+	require.Equal(t, rotatedID, rotation.current(key))
+
+	// 宽限续签不产生撤销标记。
+	revoked, err := revokeStore.RevokedBefore(ctx, "admin-1")
+	require.NoError(t, err)
+	require.True(t, revoked.IsZero())
 }
 
 func TestAuth_RefreshToken_DeletedAdminUnauthenticated(t *testing.T) {
