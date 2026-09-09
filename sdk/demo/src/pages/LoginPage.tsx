@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { parseOAuth2CallbackFragment, type OAuth2CallbackFragment } from "@torchwood/sdk";
 import { useTorchwood } from "@/lib/torchwood-context";
 
 type LoginTab = "password" | "email_otp" | "phone_otp" | "oauth" | "wechat";
@@ -64,15 +65,15 @@ function useSignInSuccess() {
   const navigate = useNavigate();
   return (res: {
     account: { id: string; email: string; name: string };
-    tokens?: { access_token: string; refresh_token: string };
+    tokens?: { access_token: string };
   }) => {
     if (!res.tokens) {
       // MFA 分支无 tokens：引导二次认证（demo 暂不实现，直接返回）。
       return;
     }
+    // 只存 access_token：过期即视为登出，引导重新登录。
     setAuth({
       accessToken: res.tokens.access_token,
-      refreshToken: res.tokens.refresh_token,
       email: res.account.email,
       name: res.account.name,
       userId: res.account.id,
@@ -264,36 +265,25 @@ function PhoneOTPLoginForm() {
 }
 
 function OAuthLoginPanel() {
-  const { client, run } = useTorchwood();
-  const [loading, setLoading] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { client } = useTorchwood();
 
   const callbackBase = useMemo(
     () => `${window.location.origin}/login/oauth/callback`,
     []
   );
 
-  async function startOAuth(provider: string) {
-    setLoading(provider);
-    setError(null);
-    try {
-      const res = await run(() =>
-        client.account.createOAuth2Session({
-          provider,
-          success: callbackBase,
-          failure: `${window.location.origin}/login?error=oauth_${provider}`,
-        })
-      );
-      window.location.href = res.redirect_url;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setLoading(null);
-    }
+  // 整页跳转到网关 authorize 端点（同步拼 URL，不发请求）：网关种 nonce
+  // cookie 后 302 到 provider 授权页；跨源 fetch 会丢弃该 cookie，回调必败。
+  function startOAuth(provider: string) {
+    window.location.href = client.account.buildOAuth2AuthorizeURL({
+      provider,
+      success: callbackBase,
+      failure: `${window.location.origin}/login?error=oauth_${provider}`,
+    });
   }
 
   return (
     <div className="space-y-3">
-      <ErrorBox error={error} />
       <p className="text-xs text-Torchwood-muted">
         请先在 Console Settings 配置 OAuth Provider，并将回调地址注册到对应平台。
       </p>
@@ -307,10 +297,9 @@ function OAuthLoginPanel() {
             key={p.id}
             type="button"
             className="btn-secondary w-full"
-            disabled={loading !== null}
             onClick={() => startOAuth(p.id)}
           >
-            {loading === p.id ? "跳转中…" : p.label}
+            {p.label}
           </button>
         ))}
       </div>
@@ -362,23 +351,31 @@ export function OAuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    const accessToken = hash.get("access_token");
-    const refreshToken = hash.get("refresh_token");
-    const userId = hash.get("userId");
-
-    if (!accessToken || !refreshToken) {
+    let parsed: OAuth2CallbackFragment | null;
+    try {
+      parsed = parseOAuth2CallbackFragment(window.location.hash);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    if (!parsed) {
       setError("OAuth 回调缺少 token，请重试。");
       return;
     }
-
+    if (parsed.type === "mfa_required") {
+      // MFA 账号无会话，需二次认证（demo 暂不实现挑战页）。
+      setError("该账号已启用 MFA，demo 暂不支持 OAuth 二次认证，请用密码登录。");
+      return;
+    }
+    // 网关已完成会话建立；fragment 只带 access_token（无 refresh_token），
+    // 过期即视为登出。
     setAuth({
-      accessToken,
-      refreshToken,
-      userId: userId ?? "",
+      accessToken: parsed.accessToken,
+      userId: parsed.userId,
       email: "",
       name: "",
     });
+    // 清掉地址栏 fragment，避免 token 留在浏览器历史。
     window.history.replaceState({}, "", "/login/oauth/callback");
     navigate("/app", { replace: true });
   }, [navigate, setAuth]);

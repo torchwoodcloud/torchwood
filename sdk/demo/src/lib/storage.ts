@@ -11,7 +11,9 @@ export interface AppSettings {
 
 export interface AuthState {
   accessToken: string;
-  refreshToken: string;
+  // 仅密码/OTP 等服务端直接签发的会话携带；OAuth 浏览器流回调 fragment
+  // 刻意不含 refresh_token，此类会话 access_token 过期即视为登出。
+  refreshToken?: string;
   email: string;
   name: string;
   userId: string;

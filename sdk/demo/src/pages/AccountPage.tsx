@@ -76,7 +76,12 @@ export function AccountPage() {
           disabled={loading || !auth?.refreshToken}
           onClick={() =>
             exec("account.refresh()", async () => {
-              const tokens = await client.account.refresh(auth!.refreshToken);
+              const refreshToken = auth?.refreshToken;
+              if (!refreshToken) {
+                // OAuth 会话无 refresh_token：过期即视为登出。
+                return null;
+              }
+              const tokens = await client.account.refresh(refreshToken);
               setAuth({ ...auth!, accessToken: tokens.access_token, refreshToken: tokens.refresh_token });
               return tokens;
             })

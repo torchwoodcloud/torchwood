@@ -29,10 +29,12 @@ export function GroupsPage() {
     try {
       const group = await run(() => client.groups.createGroup(groupName));
       setSelectedGroupId(group.id);
-      if (auth?.refreshToken) {
-        const tokens = await run(() => client.account.refresh(auth.refreshToken));
+      // OAuth 会话无 refresh_token：过期即视为登出，不做静默刷新分支。
+      const refreshToken = auth?.refreshToken;
+      if (refreshToken) {
+        const tokens = await run(() => client.account.refresh(refreshToken));
         setAuth({
-          ...auth,
+          ...auth!,
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token,
         });

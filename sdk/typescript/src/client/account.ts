@@ -1,4 +1,5 @@
 import type { HttpTransport } from "../http.js";
+import { TorchwoodError } from "../errors.js";
 import type {
   Account,
   AuthResult,
@@ -146,6 +147,33 @@ export class AccountService {
     return res.prefs ?? {};
   }
 
+  /**
+   * 构建 OAuth2 浏览器流发起地址：调用方整页跳转（`window.location.href =
+   * 返回值`），由网关 authorize 端点种回调 nonce cookie 后 302 到 provider
+   * 授权页。同步方法，不发网络请求。浏览器场景必须用它替代已废弃的
+   * createOAuth2Session——跨源 fetch 会丢弃网关种下的 nonce cookie，回调校验必败。
+   */
+  buildOAuth2AuthorizeURL(input: {
+    provider: string;
+    success: string;
+    failure: string;
+  }): string {
+    const query = new URLSearchParams({
+      project_id: this.http.getProjectId(),
+      success: input.success,
+      failure: input.failure,
+    });
+    const endpoint = this.http.getEndpoint().replace(/\/+$/, "");
+    return `${endpoint}/v1/account/oauth2/${encodeURIComponent(input.provider)}/authorize?${query.toString()}`;
+  }
+
+  /**
+   * @deprecated 浏览器流已不可用：本方法经跨源 fetch 调用网关，响应种下的
+   * 回调 nonce cookie（`TORCHWOOD_oauth_nonce_<project>`）会被浏览器在跨源
+   * fetch 中丢弃，回调 nonce 校验必败（fail-closed 302 到 `?error=oauth_failed`）。
+   * 浏览器场景改用 buildOAuth2AuthorizeURL 整页跳转 + parseOAuth2CallbackFragment。
+   * 方法保留仅为向后兼容。
+   */
   async createOAuth2Session(input: {
     provider: string;
     success: string;
@@ -161,6 +189,11 @@ export class AccountService {
     });
   }
 
+  /**
+   * 用 OAuth 回调 code 换会话。适用边界：仅限定制流程——state 由调用方自行
+   * 保管、未被网关 GET 回调端点消费。浏览器标准流中 state 已被网关回调以
+   * GETDEL 一次性消费，此方法不可用；标准浏览器流见 buildOAuth2AuthorizeURL。
+   */
   async createOAuth2TokenSession(input: {
     provider: string;
     code: string;
@@ -286,7 +319,12 @@ export class AccountService {
     return res;
   }
 
-  // 生成第三方账号绑定授权链接（需已登录）。
+  /**
+   * 生成第三方账号绑定授权链接（需已登录）。
+   * @deprecated 与 createOAuth2Session 同源的跨源 fetch 丢 Set-Cookie 问题；
+   * 后端尚无 link 流的 authorize 端点，暂无替代——维持现状，待网关补齐
+   * link 流浏览器端点后迁移。方法保留仅为向后兼容。
+   */
   async createOAuth2LinkSession(input: {
     provider: string;
     success: string;
@@ -482,4 +520,53 @@ export class AccountService {
     });
     return res.logs ?? [];
   }
+}
+
+/**
+ * OAuth2 回调重定向 fragment 的两种形态：
+ * - `signed_in`：网关已完成 code 换发并建会话，fragment 携带 `access_token`
+ *   与 `userId`（刻意不含 refresh_token，过期请引导重新登录）；
+ * - `mfa_required`：账号启用了 MFA，无会话，需携带 `challengeToken` 走
+ *   createMFASession 二次认证。
+ */
+export type OAuth2CallbackFragment =
+  | { type: "signed_in"; accessToken: string; userId: string }
+  | {
+      type: "mfa_required";
+      userId: string;
+      challengeToken: string;
+      factorTypes: string[];
+    };
+
+/**
+ * 解析网关 OAuth2 回调重定向带来的 URL fragment（`#access_token=…&userId=…`，
+ * 与 window.location.hash 同形）。返回 null 表示不是回调跳转；fragment 声称
+ * 是回调但必填字段缺失时抛 TorchwoodError。建会话后建议调用方用
+ * history.replaceState 清掉地址栏 fragment，避免 token 留在浏览器历史。
+ */
+export function parseOAuth2CallbackFragment(
+  fragment: string
+): OAuth2CallbackFragment | null {
+  const params = new URLSearchParams(fragment.replace(/^#/, ""));
+  const userId = params.get("userId") ?? "";
+  const accessToken = params.get("access_token");
+  if (accessToken) {
+    if (!userId) {
+      throw new TorchwoodError("OAuth2 回调 fragment 缺少 userId", 0);
+    }
+    return { type: "signed_in", accessToken, userId };
+  }
+  if (params.get("mfaRequired") === "true") {
+    const challengeToken = params.get("challengeToken");
+    if (!challengeToken) {
+      throw new TorchwoodError("OAuth2 回调 fragment 缺少 challengeToken", 0);
+    }
+    // mfaFactorTypes 为逗号分隔串（网关 url.Values.Encode 输出，值经百分号编码）。
+    const factorTypes = (params.get("mfaFactorTypes") ?? "")
+      .split(",")
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+    return { type: "mfa_required", userId, challengeToken, factorTypes };
+  }
+  return null;
 }
