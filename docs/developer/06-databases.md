@@ -182,7 +182,13 @@ CREATE INDEX idx_c_ab12cd34_acl ON tw_shop_app.c_ab12cd34 USING gin (_acl);
 
 **`_acl` 写入路径（PG 18 实证修正；阶段③-b 收口为唯一函数通道）**：UPDATE/ON CONFLICT 修改 SELECT policy 引用的列（`_acl`）会触发 SELECT policy 对**新行**的复检——`WITH CHECK(true)` 无法单独保自锁；`_acl` 变更通道唯一化为 **`tw_set_document_acl(p_schema, p_table, p_tenant, p_doc, p_acl)`**（迁移 000004，SECURITY DEFINER owner=`tw_system` BYPASSRLS 绕开新行复检，语义承袭原 tw_system 第二语句）：create/upsert 插入支的 INSERT 不再携带 `_acl`（行内 DEFAULT '{}' 兜底，非空权限集同事务函数补设），update/upsert 更新支/bulk 的替换改调函数（同事务、当前 tw_app 身份，EXECUTE 仅授 tw_app）；`p_table` 经 catalog physical_name 白名单校验（防注入）。同理 ON CONFLICT 推测插入要求拟插入行过 SELECT policy——upsert 拆预查分支 + 普通 INSERT/UPDATE（advisory lock 保证同冲突键串行；与并发普通 Create 撞唯一键改报 DuplicateKey，可重试）。**列级 GRANT**：`tw_app` SELECT 全列 + INSERT/UPDATE 数据列与除 `_tenant`/`_acl` 外系统列（`_tenant` 锁死不可写；`_acl` 双向锁死——应用身份直改的旁路从列权限封死，R13a 的 UPDATE 移除 + 阶段③-b 的 INSERT 移除）；`tw_system` 表级 ALL。`_version` 不锁列（CAS 守卫 `WHERE _version=?` 已足，写错只会让自己失败）。
 
-`ValidateGrantablePermissions`：普通用户不可授予未持有角色与 `any` 写权限（`keys`/`System`/`PlatformAdmin` 跳过）。
+**授予治理与可见范围归属（`ValidateGrantablePermissions`，`internal/domain/databases/permissions.go`）**：普通用户不可授予未持有角色与 `any` 写权限（`keys`/`System`/`PlatformAdmin` 跳过）；覆盖 create/upsert/update/bulk 全部写路径（`internal/app/documents/documents.go` 各写路径统一过 `applyGrant`，Client 侧 `WriteOptions.AllowPrivilegedGrant=false`）。`create` 类 ACE 例外放行——行级 create ACE 在 INSERT 后无判定语义（INSERT WITH CHECK 仅集合级），不构成提权面。端用户可见范围归属的安全语义三问：
+
+- **定向共享给特定用户 → 拒绝**：用户 A 不持有 `user:B`，无法给自己的文档挂 `read:user:B`；`label:`/`group:` 同理，只有自身也持有（属于该组/标签）才能授——**组内共享是组语义本身，不是越权**。模板 `user:`/`group:` 只展开为调用者自身首个匹配角色，无法借模板指名他人。
+- **广播公开 → 合法（Appwrite 同款）**：`read:any`（读类合成角色授予放行；`any` 经 `ExpandPermissionRoles` 无条件注入数据面角色集，`postgres_exec.go`）= 凡走数据面判定的主体均可见；`read:users` = 所有登录端用户可见（API key 主体不含 `users` 角色）。写类对 `any` 一律拒绝。**默认收口**：Client 创建不带 permissions 时包装层盖 owner ACE `read/update/delete:user:<自身>`（`internal/app/client/databases.go` `ownerDocumentPermissions`），key 主体种子见 B14——不显式公开就只有自己可见。
+- **写到他人名下 → 不可能**：`_created_by`/`_updated_by` 由服务端从 Principal 戳入（`userIDFromPrincipal`：端用户存裸 user id、API key 存 `key:<id>`，请求不可传）；`_tenant` 列锁死不可写；改他人文档需目标行 `tw_can(update/delete)`；`_acl` 替换唯一通道 `tw_set_document_acl` 复核目标行 `tw_visible`（堵"改他人 ACL 提权"）。
+
+**两条应用侧边界**：① `documentSecurity=false` 是总开关——集合级权限模式下文档级 `_acl` 完全不参与判定（`tw_visible` ELSE 分支），可见范围由开发者配置的集合级权限决定，端用户请求中的 permissions 字段无效。② 权限内核管"谁能读写哪些行"，不校验行内数据字段的语义归属——`userId` 类自声明属性属不可信输入，应用须服务端派生（`Me`/JWT）或查询收口（`eq("userId", 当前用户)` + 集合级权限）。业务不允许用户私自公开内容时：关 `documentSecurity` 走集合级权限，或在入口层过滤请求中的 permissions。
 
 ## 8 OCC（`_version`）
 

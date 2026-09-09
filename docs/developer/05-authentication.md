@@ -2,7 +2,7 @@
 
 > 四凭证、Principal 注入、**策略注册表**（proto 注解唯一声明 → `PolicySet` 收集 → 拦截器执行）与纵深防御。
 > 以代码为准：`proto/shared/v1/authz.proto`、`internal/runtime/authz_policy.go`（收集）、`internal/domain/auth/policy.go`（策略类型与断言）、`internal/api/interceptor/jwt.go`（执行）、`internal/infra/auth/`（凭证校验）。
-> 最新更新：2026-09-07
+> 最新更新：2026-09-09
 
 ---
 
@@ -281,5 +281,18 @@ security:
 - **发起**：推荐浏览器流走 **302 发起端点** `GET /v1/account/oauth2/{provider}/authorize?project_id=&success=&failure=`（`serverhttp/oauth_handler.go`，命名对齐 Auth0/Supabase 等主流与 RFC 6749 的授权入口心智，与 callback 同组注册）：服务端完成与 JSON 发起面同一套校验后 `Set-Cookie` nonce 并 302 到 provider 授权页。发起是 **top-level 导航**，nonce cookie 落在 API 域第一方上下文、回调（同为 top-level 导航）必然携带——**任意客户前端域零 CORS 配置、不受第三方 cookie 政策影响**（BaaS 形态下 JSON 发起面的跨源 fetch 会丢失 `Set-Cookie`，除非前端 `credentials:"include"` 且 CORS 对该 origin 放行凭据）。端点自带 per-IP 限流（复用 `security.rate_limit.ip` 维度，limiter 故障 fail-open）；全部响应 `Cache-Control: no-store`；失败分层——白名单校验前失败（项目不存在/URL 未过白名单）返回 400 纯文本不跳转（failure URL 尚不可信），校验后失败（provider 未启用）302 回 `failure?error=oauth_failed`。JSON 发起面 `GET /v1/account/sessions/oauth2/{provider}` 保留（token 面/服务端调用），浏览器流建议全部迁移到 authorize。
 - **管理入口**：`PUT /v1/server/projects/{project_id}/oauth-redirect-allowlist`（整表替换；空数组 = 清空回落默认）与 Console 项目详情页 Redirect Allowlist 卡片。PERMISSION `[owner,admin]` 平台专属面（key 凭证禁入）——白名单是钓鱼劫持面（可改写登录流落点）。读取走 `GET /v1/server/projects/{id}` 的 `oauth_allowed_redirect_urls` 投影（仅投影该键，不透出其余 settings）。
 - **持久化**：`SettingsWriter.SetProjectSetting` 单键原子写（`jsonb_set` / `'-'` 操作符），不同 settings 键并发写互不覆盖；`settings` 列仍不进 `UpdateProject` 白名单。
+
+---
+
+## 12. 公开认证面威胁模型（project_id 不是机密）
+
+**`project_id` 与 endpoint 是公开标识，不是机密**——与 OAuth 的 client_id 同构，本来就内嵌在所有前端应用里。`SignUp`/`SignIn`/`RefreshToken` 在 proto 上显式声明 `ACCESS_PUBLIC`、请求体携带 `project_id`（`proto/client/v1/account.proto`），TS SDK 侧对应 `X-Torchwood-Project` 头。因此"知道 endpoint + project_id 就能调登录注册"是 BaaS 公开注册模式的固有形态，**安全边界不依赖隐藏 project_id**，而由四层独立承担：
+
+1. **注册策略（§11.1）**：`closed` 一律 403、`invite_only` 凭一次性邀请码放行、未知策略值 fail-closed——不想公开注册的项目必须显式收口，而非指望 project_id 保密；
+2. **认证面频控（§10）+ 通用限流**：登录失败按 email+IP 双维计数、注册按 project+IP 计数，公开端点的撞库/枚举/批量注册被限速压制（429 不构成账号存在性 oracle）；通用 IP 限流（300/min 量级）叠加生效；
+3. **project_id 只选租户、不授权**：登录签发的端用户 JWT 绑定 `pid` claim（`pkg/jwtparser/jwt.go`）；请求期 `X-Torchwood-Project` 头**仅对 Console admin 会话生效**（`internal/api/interceptor/jwt.go`，多值/越权走审计失败路径），端用户无法借该头跨项目访问；
+4. **数据安全与注册可达性解耦**：注册接口可调不意味着数据可碰——数据面按 `docs/developer/06-databases.md` §7 的权限内核（集合/文档两级 ACL + RLS fail-closed）判定，新注册账号默认对既有数据零可见面。
+
+**运维取舍**：`open` 策略下垃圾账号是固有残余风险（频控是缓解不是杜绝），需要收紧时切 `invite_only`/`closed`，或按产品需要叠加邮箱验证等流程。泄露 project_id 无需轮换——它不是凭证；需要保密与轮换的是 API key（§6）与 `security.jwt.secret`。
 
 ---
