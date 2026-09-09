@@ -4,7 +4,10 @@
 #       + migrate（golang-migrate 一次性）
 #       + db-grants（tw_authenticator 授权补齐，一次性，依赖迁移 000004）
 #       + roles-sig（torchwood admin sync-roles-sig，一次性，B15 部署时序）
-#       + server（gRPC/gateway/Console/healthz，:9080）+ worker（Functions 消费者）
+#       + server（gRPC/gateway/Console/healthz，:9080，container_name
+#         torchwood-server——函数网络 DNS 回访锚点）+ worker（Functions 消费者）
+#       + functions-dispatcher（执行器 v2：唯一 docker.sock 持有方，join
+#         tw-func-<project>[-int] 网络并同步 attach server，承接全部分发）
 #
 # 部署时序契约（docs/developer/13-operations.md §4.5/§6.1）由 depends_on 链保证：
 #   迁移 → 三角色授权 → roles_sig 密钥落库 → server/worker 启动。
@@ -165,6 +168,9 @@ services:
 
   server:
     <<: *app-image
+    # 容器名钉死：函数网络（tw-func-<project>[-int]，dispatcher 动态 attach）
+    # 上的 DNS 以容器名解析——functions.execution.api_base_url 即指向它。
+    container_name: torchwood-server
     # gRPC(:9060，明文 h2c，SDK/CLI 直连) + grpc-gateway HTTP + Console SPA + Storage
     # serverhttp + healthz。HTTP 9080 走 Dokploy「Domains」（Traefik 终止 TLS）；
     # gRPC 9060 无法过 Traefik HTTP 路由（SDK 默认明文拨号），直接发布宿主端口。
@@ -172,7 +178,18 @@ services:
     # 限制 9060 的来源 IP（x-api-key 在明文链路上可被嗅探）。
     ports:
       - "${TORCHWOOD_GRPC_PORT:-9060}:9060"
-    environment: *app-env
+    environment:
+      <<: *app-env
+      # executor=dispatcher（v2 常驻执行模型）时同步执行经 dispatcher 分发；
+      # 回退 v1（executor=docker）改回 docker 并给 server 挂 docker.sock。
+      TORCHWOOD_FUNCTIONS_EXECUTOR: ${TORCHWOOD_FUNCTIONS_EXECUTOR:-dispatcher}
+      TORCHWOOD_FUNCTIONS_DISPATCHER_URL: http://functions-dispatcher:9070
+      TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN: ${TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN:?请在 Dokploy Environment 设置 openssl rand -hex 32}
+      # 函数回访平台 API 的地址（注入执行容器 TW_API_BASE_URL）。必须是
+      # 函数网络内可达地址：dispatcher 按 callback_container 把本容器
+      # attach 进 tw-func-<project>[-int]，容器名 DNS 直接解析（internal
+      # 网络无 NAT 出口，公网地址对不可信函数不可达）。
+      TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL: http://torchwood-server:9080
     volumes:
       - ./config.yaml:/app/configs/config.yaml:ro
     healthcheck:
@@ -196,11 +213,17 @@ services:
     <<: *app-image
     # Functions 异步执行消费者；不启用 Functions 时可整段删除（纯空闲队列消费者）
     entrypoint: ["/usr/local/bin/worker"]
-    environment: *app-env
+    environment:
+      <<: *app-env
+      # executor=dispatcher（v2 常驻执行模型）时指向 dispatcher 内网端点；
+      # 回退 v1（executor=docker）删除本两行并自行给 worker 挂 docker.sock。
+      TORCHWOOD_FUNCTIONS_EXECUTOR: ${TORCHWOOD_FUNCTIONS_EXECUTOR:-dispatcher}
+      TORCHWOOD_FUNCTIONS_DISPATCHER_URL: http://functions-dispatcher:9070
+      TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN: ${TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN:?请在 Dokploy Environment 设置 openssl rand -hex 32}
+      # 异步执行同样经 buildExecution 注入回访地址（与 server 保持一致）
+      TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL: http://torchwood-server:9080
     volumes:
       - ./config.yaml:/app/configs/config.yaml:ro
-      # 启用 Functions（docker executor）才放开：⚠ 等同宿主 root 权限，仅在可信环境
-      # - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy
@@ -210,6 +233,40 @@ services:
         condition: service_healthy
       roles-sig:
         condition: service_completed_successfully
+    restart: unless-stopped
+
+  functions-dispatcher:
+    <<: *app-image
+    # 执行器 v2 独立分发进程（P0.5 方案③）：全栈唯一 docker.sock 持有方——
+    # 承接 Build/Execute/RemoveImage 全部 daemon 操作、join tw-func-<project>
+    # 网络（自 attach）后按容器 IP 直分 runner。server/worker 零 daemon 依赖，
+    # host-root 等价凭证收敛到非 API 面进程。
+    # ⚠ docker.sock 等同宿主 root 权限，仅在可信环境启用。
+    entrypoint: ["/usr/local/bin/functions-dispatcher"]
+    environment:
+      <<: *app-env
+      TORCHWOOD_FUNCTIONS_EXECUTOR: ${TORCHWOOD_FUNCTIONS_EXECUTOR:-dispatcher}
+      TORCHWOOD_FUNCTIONS_DISPATCHER_ADDR: ":9070"
+      TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN: ${TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN:?请在 Dokploy Environment 设置 openssl rand -hex 32}
+      # 每 daemon 常驻实例总量上限（Q11 默认 8；防单项目耗尽宿主内存）
+      TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES: ${TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES:-8}
+      # join 项目网络时把 server 容器一并 attach：函数经容器名 DNS 回访
+      # 平台 API（internal 网络无 NAT 出口，这是不可信函数回访的唯一通路）。
+      # 与 server 的 container_name 严格一致；attach 失败仅告警不阻断执行。
+      TORCHWOOD_FUNCTIONS_DISPATCHER_CALLBACK_CONTAINER: torchwood-server
+    volumes:
+      - ./config.yaml:/app/configs/config.yaml:ro
+      # 唯一挂载点：dispatcher 专职持有 docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9070/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
