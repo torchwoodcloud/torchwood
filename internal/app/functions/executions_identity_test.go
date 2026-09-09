@@ -2,6 +2,7 @@ package functions
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -27,7 +28,7 @@ func (f *fakeExecTokens) Mint(_ context.Context, info domainfunctions.ExecutionT
 	f.minted = append(f.minted, info)
 	f.ttls = append(f.ttls, ttl)
 	f.mintSeq++
-	token := "twx_test-" + string(rune('a'+f.mintSeq))
+	token := fmt.Sprintf("twx_test-%d", f.mintSeq)
 	f.tokens = append(f.tokens, token)
 	return token, nil
 }
