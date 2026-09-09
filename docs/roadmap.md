@@ -254,7 +254,7 @@ Sprint 1 已完成 Server/Client Document CRUD；批量操作与 attribute/index
 | Groups Memberships | 管理用户组邀请与成员 | `console/src/routes/groups/` | ✅ 完成 |
 | Functions 管理 | Functions / Deployments / Executions 页面 | 新增 `Functions.tsx` | 待办 |
 | 项目设置区 | 项目配置统一收敛至 `/console/projects/:id/settings`（显式项目作用域：基本信息编辑 `PATCH /v1/server/projects/{id}`、注册与登录（注册策略/邀请码/SMTP 说明）、OAuth（Providers/重定向白名单）、危险区（删除项目））；旧全局 `/console/settings` 重定向退役 | `console/src/routes/projects/settings.tsx` | ✅ 完成 |
-| 侧边栏菜单分组 | Dashboard 置顶；Develop（API Keys/Databases/Storage）、Auth（Users/Groups）、System（Projects/Admins/Settings 捷径）分组 | `console/src/components/Layout.tsx` | ✅ 完成 |
+| 侧边栏菜单分组 | Dashboard 置顶；Develop（API Keys/Databases/Storage）、Auth（Users/Groups）、System（Projects/Admins）分组；项目设置入口在项目详情页与 Dashboard（侧边栏 Settings 捷径已移除） | `console/src/components/Layout.tsx` | ✅ 完成 |
 
 **验收标准**：
 
