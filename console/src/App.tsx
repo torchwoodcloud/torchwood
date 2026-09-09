@@ -22,6 +22,12 @@ const ProjectNewPage = lazy(() =>
 const ProjectDetailPage = lazy(() =>
   import("@/routes/projects/pages").then((m) => ({ default: m.ProjectDetailPage }))
 );
+const ProjectSettingsPage = lazy(() =>
+  import("@/routes/projects/settings").then((m) => ({ default: m.ProjectSettingsPage }))
+);
+const SettingsRedirect = lazy(() =>
+  import("@/routes/settings/pages").then((m) => ({ default: m.SettingsRedirect }))
+);
 const ApiKeysListPage = lazy(() =>
   import("@/routes/api-keys/pages").then((m) => ({ default: m.ApiKeysListPage }))
 );
@@ -99,9 +105,6 @@ const CollectionLayout = lazy(() =>
 );
 const ListenPanel = lazy(() =>
   import("@/routes/databases/ListenPanel").then((m) => ({ default: m.ListenPanel }))
-);
-const SettingsPage = lazy(() =>
-  import("@/routes/settings/pages").then((m) => ({ default: m.SettingsPage }))
 );
 const AdminsListPage = lazy(() =>
   import("@/routes/admins/pages").then((m) => ({ default: m.AdminsListPage }))
@@ -244,12 +247,20 @@ function AppRoutes() {
             </RouteErrorBoundary>
           }
         />
+        <Route
+          path="projects/:id/settings"
+          element={
+            <RouteErrorBoundary>
+              <ProjectSettingsPage />
+            </RouteErrorBoundary>
+          }
+        />
 
         <Route
           path="settings"
           element={
             <RouteErrorBoundary>
-              <SettingsPage />
+              <SettingsRedirect />
             </RouteErrorBoundary>
           }
         />

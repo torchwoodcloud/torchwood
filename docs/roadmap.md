@@ -253,8 +253,8 @@ Sprint 1 已完成 Server/Client Document CRUD；批量操作与 attribute/index
 | Attributes / Indexes 管理 | 在 collection 详情中增删属性与索引（含 Attribute/Index 行内删除） | Databases 子页面 | ✅ 完成 |
 | Groups Memberships | 管理用户组邀请与成员 | `console/src/routes/groups/` | ✅ 完成 |
 | Functions 管理 | Functions / Deployments / Executions 页面 | 新增 `Functions.tsx` | 待办 |
-| Settings 页面 | 项目基本信息编辑（`PATCH /v1/server/projects/{id}`）、OAuth Providers 配置、SMTP 只读说明 | `console/src/routes/settings/pages.tsx` | ✅ 完成 |
-| 侧边栏菜单分组 | Dashboard 置顶；Develop（API Keys/Databases/Storage）、Auth（Users/Groups）、System（Projects/Admins/Settings）分组 | `console/src/components/Layout.tsx` | ✅ 完成 |
+| 项目设置区 | 项目配置统一收敛至 `/console/projects/:id/settings`（显式项目作用域：基本信息编辑 `PATCH /v1/server/projects/{id}`、注册与登录（注册策略/邀请码/SMTP 说明）、OAuth（Providers/重定向白名单）、危险区（删除项目））；旧全局 `/console/settings` 重定向退役 | `console/src/routes/projects/settings.tsx` | ✅ 完成 |
+| 侧边栏菜单分组 | Dashboard 置顶；Develop（API Keys/Databases/Storage）、Auth（Users/Groups）、System（Projects/Admins/Settings 捷径）分组 | `console/src/components/Layout.tsx` | ✅ 完成 |
 
 **验收标准**：
 
@@ -477,7 +477,7 @@ v2 **不是**「把 Appwrite 剩下的模块搬过来」。Agent 叙事（MCP、
 - [x] Admin Console 覆盖 Database 文档编辑、Groups 页面。
 - [x] Admin Console 覆盖系统管理员管理（Admins 页面，owner 权限保护）。
 - [x] Admin Console 覆盖 Functions 页面。
-- [x] Admin Console 覆盖 Settings 页面（项目基本信息编辑、OAuth Providers、Messaging 只读说明）。
+- [x] Admin Console 覆盖项目设置区（项目基本信息编辑、OAuth Providers、Messaging 只读说明；2026-09 起统一收敛至 `/console/projects/:id/settings`）。
 - [x] CI 绿，集成测试覆盖核心流程。
 
 ### M2：P2 / v2 内测可用（中期结束）

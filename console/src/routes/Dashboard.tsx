@@ -59,12 +59,14 @@ export function Dashboard() {
         title="Dashboard"
         description="Overview of your Torchwood workspace. Switch the active project from the sidebar."
         actions={
-          <Button asChild variant="outline" size="sm">
-            <Link to="/console/settings">
-              <SettingsIcon className="h-4 w-4 mr-2" />
-              设置
-            </Link>
-          </Button>
+          projectId ? (
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/console/projects/${projectId}/settings`}>
+                <SettingsIcon className="h-4 w-4 mr-2" />
+                设置
+              </Link>
+            </Button>
+          ) : undefined
         }
       />
 
