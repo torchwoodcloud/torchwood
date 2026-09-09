@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { Torchwood } from "../graviton.js";
+import { Torchwood } from "../torchwood.js";
 import type { RealtimeWebSocket } from "../client/realtime.js";
 
 // MockWebSocket 模拟服务端一侧：记录客户端发出的帧，测试可手动触发

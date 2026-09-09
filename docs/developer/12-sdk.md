@@ -1,8 +1,8 @@
 # Torchwood SDK 指南
 
-> 覆盖 TypeScript `@torchwood/sdk`（`sdk/typescript/`）与 Go 双 SDK（`sdk/go/client`、`sdk/go/server`）。符号与签名以源码为准：TS 门面见 `sdk/typescript/src/graviton.ts:42`，Go Server 见 `sdk/go/server/client.go`，Go Client 见 `sdk/go/client/client.go`。
+> 覆盖 TypeScript `@torchwood/sdk`（`sdk/typescript/`）与 Go 双 SDK（`sdk/go/client`、`sdk/go/server`）。符号与签名以源码为准：TS 门面见 `sdk/typescript/src/torchwood.ts:42`，Go Server 见 `sdk/go/server/client.go`，Go Client 见 `sdk/go/client/client.go`。
 > 关联：`docs/developer/09-api-guide.md`（API 约定）、`docs/developer/14-agent-tools.md`（Agent 工具箱）、`sdk/README.md`。
-> 修订记录：2026-08-23 重写（核对 `graviton.ts:42` 的 `Torchwood` 类、13 个 Server 服务、`outbox` 的 `listDeadLetters`/`replayDeadLetter`、`FileTokenStore`、`InvokeJSON`）。
+> 修订记录：2026-08-23 重写（核对 `torchwood.ts:42` 的 `Torchwood` 类、13 个 Server 服务、`outbox` 的 `listDeadLetters`/`replayDeadLetter`、`FileTokenStore`、`InvokeJSON`）。
 
 ---
 
@@ -24,7 +24,7 @@
 | 路径 | 说明 |
 |------|------|
 | `sdk/typescript/` | `@torchwood/sdk`，`type: module`，`main` → `dist/index.js` |
-| `sdk/typescript/src/graviton.ts` | `Torchwood` 门面（`export class Torchwood` 在 `:42`） |
+| `sdk/typescript/src/torchwood.ts` | `Torchwood` 门面（`export class Torchwood` 在 `:42`） |
 | `sdk/typescript/src/http.ts` | `HttpTransport` + `TorchwoodConfig` |
 | `sdk/typescript/src/server/` | 13 个 Server 服务（见 §3.3） |
 | `sdk/typescript/src/client/` | Client 服务（Account / Databases / Groups / Payments / Assets / Subscriptions / Realtime） |
@@ -73,10 +73,10 @@ interface TorchwoodConfig {
 | `Torchwood.withAccessToken(ep, pid, token)` | 静态工厂 | Client API |
 | `setAccessToken(token?)` / `getAccessToken()` / `getProjectId()` | 实例方法 | 访存/清理 token |
 
-### 3.2 入口：`graviton.ts:42`
+### 3.2 入口：`torchwood.ts:42`
 
 ```ts
-// sdk/typescript/src/graviton.ts:42
+// sdk/typescript/src/torchwood.ts:42
 export class Torchwood {
   readonly account: AccountService;          // Client
   readonly databases: ClientDatabasesService;

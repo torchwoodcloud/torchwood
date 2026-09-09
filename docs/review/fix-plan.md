@@ -333,7 +333,7 @@ docker 集成测试需 F10 修复后的 CI。
   **需与 F11 协调 generate-proto**（若 F11 后置，可先由本批次直接修改 proto + 重新生成）。
 
 ### F8-3 🟠 Web demo 构建被破坏（P1，审查 12）
-- 位置：`sdk/demo/src/lib/graviton-context.tsx`（文件存在）vs 10 处 import `@/lib/torchwood-context`
+- 位置：`sdk/demo/src/lib/` 的 context 文件（当时文件名仍沿用项目旧名）vs 10 处 import `@/lib/torchwood-context`
 - 方案：重命名文件为 `torchwood-context.tsx`；跑 `task sdk-demo-build` 验证。
 
 ### F8-4 🟡 补强项（P2）

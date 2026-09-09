@@ -32,7 +32,7 @@
 2. **F8-1 int64 类型与运行时不符** — `sdk/typescript/src/types.ts:95`：count/affected/size/expires_at 等 int64 字段类型是否改为 `string | number` 或统一 string，运行时精度是否得到保持。
 3. **F8-1 MFA 分支崩溃** — `sdk/typescript/src/client/account.ts:25,45`：signIn/signUp 是否增加 `if (res.mfa_required) return res` 分支，类型是否补 mfa_required/challenge_token。
 4. **F8-2 TS deleteSessions keepCurrent 无法传递** — `sdk/typescript/src/client/account.ts:92-96`、`proto/client/v1/account.proto:56-57`：proto 是否给 DeleteSessions 加 `body: "*"` 或改 query 绑定并重新生成；TS SDK 能否正确传递 keepCurrent。
-5. **F8-3 Web demo 构建被破坏** — `sdk/demo/src/lib/graviton-context.tsx` vs 10 处 import `@/lib/torchwood-context`：文件是否重命名为 `torchwood-context.tsx`；demo 是否能通过 `task sdk-demo-build`。
+5. **F8-3 Web demo 构建被破坏** — `sdk/demo/src/lib/` 的 context 文件名（当时沿用项目旧名）vs 10 处 import `@/lib/torchwood-context`：文件是否重命名为 `torchwood-context.tsx`；demo 是否能通过 `task sdk-demo-build`。
 6. **F8-4 Go SDK 补 8 个缺失类型化方法** — `sdk/go/server/*`：UpdateUserPassword、DeleteTeam、GetTeamPrefs/UpdateTeamPrefs、UpdateCollection/DeleteCollection/DeleteAttribute/DeleteIndex 是否已补齐并带 bufconn 测试。
 7. **F8-4 gRPC 客户端默认接收上限提升** — `sdk/go/internal/conn/conn.go:17-18`：默认 4MiB 是否改为 8MiB，CLI 与 SDK 是否一致生效。
 8. **F8-4 CLI deployments create 上限与 help 文案** — `cmd/client/cmd/functions.go:225,432-434`：上限与 help 是否改为 8MiB/1MiB，并与服务端实际限制一致。

@@ -34,7 +34,7 @@
      然后执行 `task generate-proto` 重新生成（**需要 buf 可用；若环境无法生成，
      修改 proto 后标注“待 CI/本地 generate-proto”**）；SDK 侧同步确认请求体发送正确。
 3. **Web demo 构建被破坏**（P1）：
-   - 位置：`sdk/demo/src/lib/graviton-context.tsx`（文件名）vs 全部 import
+   - 位置：`sdk/demo/src/lib/` 的 context 文件（当时文件名仍沿用项目旧名）vs 全部 import
      `@/lib/torchwood-context`（App.tsx、LoginPage.tsx、DatabasesPage.tsx 等约 10 处）。
    - 修复：将文件重命名为 `torchwood-context.tsx`；在 `sdk/demo` 目录运行
      `npm install`（若 node_modules 已存在则跳过）与 `npm run build` 验证。

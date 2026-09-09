@@ -45,7 +45,7 @@
 
 | ID | 项 | 状态 | 证据（文件:行） | 验证命令 |
 |----|----|------|-----------------|----------|
-| H4-1 | TS `server.functions` 挂到门面 + 契约测试门面可达 | ✅ | `sdk/typescript/src/graviton.ts:6-9,26-33,47-53`；`__tests__/contract.test.ts:Test "Torchwood.server 门面可达全部 Server swagger 服务（含 functions）"`（全部 server 服务逐一断言） | `cd sdk/typescript && npm test` |
+| H4-1 | TS `server.functions` 挂到门面 + 契约测试门面可达 | ✅ | `sdk/typescript/src/torchwood.ts:6-9,26-33,47-53`；`__tests__/contract.test.ts:Test "Torchwood.server 门面可达全部 Server swagger 服务（含 functions）"`（全部 server 服务逐一断言） | `cd sdk/typescript && npm test` |
 | H4-2 | `noRefreshMethods` 名副其实 + TS `auth:"none"` + 注释对齐 | ✅（含偏差 C） | `sdk/go/client/auth.go:14-38`（19 个 Account 公开方法 + SignOut + 3 个 client databases 公开方法）；`sdk/go/client/account.go:94-96`；`sdk/typescript/src/client/account.ts:96-108` | `go test ./sdk/go/client/...`；`npm test` |
 | H4-3 | Go Client 补 `DeleteTeam` + bufconn 测试 | ✅ | `sdk/go/client/teams.go:52-56`；`services_test.go:fakeTeams.DeleteTeam` + `TestClientTeams_DeleteTeam`（断言 Bearer 头） | `go test ./sdk/go/client/...` |
 

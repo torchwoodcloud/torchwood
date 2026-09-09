@@ -100,10 +100,10 @@ Round 2 的 F8 / F11-2 主体仍在：TS 契约测试已扩展到 HTTP method/pa
    - 建议：把全部 ACCESS_PUBLIC 方法（至少 ConfirmEmailChange / UpdateVerification / UpdateRecovery / Create*OTP* / CreateMFASession / MagicURL / Anonymous / OAuth 换票）加入 `noRefreshMethods`；Go/TS 注释改为「公开：凭 user_id+secret，无需登录」；TS `confirmEmailChange` 设 `auth: "none"`。
 
 2. **TS SDK `FunctionsService` 未挂到门面，发布入口也导不出，16 个 Functions RPC 对常规调用方不可达**
-   - 位置：`sdk/typescript/src/graviton.ts:24-51`、`sdk/typescript/src/index.ts:1-3`、`sdk/typescript/package.json:8-12`。
+   - 位置：`sdk/typescript/src/torchwood.ts:24-51`、`sdk/typescript/src/index.ts:1-3`、`sdk/typescript/package.json:8-12`。
    - 问题：`src/server/functions.ts` 实现了 ListRuntimes…GetExecution；`contract.test.ts` 直接 `import { FunctionsService } from "../server/index.js"` 所以测试通过。`Torchwood.server` 只有 health/projects/users/teams/databases/apiKeys/oauthProviders/storage。`index.ts` 只导出 `Torchwood` / `TorchwoodError` / types；`exports` 仅 `"."`。
    - 影响：按 `docs/developer/12-sdk.md` §3.3 用 `Torchwood.withApiKey()` 的 Agent **调不到 Functions**。契约测试漏报「类在、门面无」。
-   - 建议：`graviton.ts` 增加 `server.functions`；根入口再导出 `FunctionsService`（或至少保证门面可达）；契约测试断言 `Torchwood` 实例属性覆盖 Server swagger 服务。
+   - 建议：`torchwood.ts` 增加 `server.functions`；根入口再导出 `FunctionsService`（或至少保证门面可达）；契约测试断言 `Torchwood` 实例属性覆盖 Server swagger 服务。
 
 3. **Go Client SDK 未封装 `TeamsService.DeleteTeam`**
    - 位置：`sdk/go/client/teams.go:14-59`（7 个方法）；对照 `proto/client/v1/teams.proto:72-74`。

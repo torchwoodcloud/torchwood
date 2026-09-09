@@ -1,4 +1,4 @@
-export { Torchwood, TorchwoodError, accountsChannel } from "./graviton.js";
+export { Torchwood, TorchwoodError, accountsChannel } from "./torchwood.js";
 export type { TorchwoodConfig } from "./http.js";
 export type {
   RealtimeConnectOptions,
@@ -8,7 +8,7 @@ export type {
   RealtimeStatus,
   RealtimeSubscription,
   RealtimeWebSocket,
-} from "./graviton.js";
+} from "./torchwood.js";
 export * from "./types.js";
 // 文档查询 typed AST 构造器（C7 单 AST）。
 export * from "./query.js";

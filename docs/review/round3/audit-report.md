@@ -84,7 +84,7 @@
 
 ### P1-5（SDK / Agent-Native）TS `FunctionsService` 未挂到 `Torchwood.server`
 
-- **位置**：`sdk/typescript/src/graviton.ts:24-51`；`src/index.ts` 不导出 `FunctionsService`。实现本身在 `src/server/functions.ts`，契约测试直接 import 类所以仍绿。
+- **位置**：`sdk/typescript/src/torchwood.ts:24-51`；`src/index.ts` 不导出 `FunctionsService`。实现本身在 `src/server/functions.ts`，契约测试直接 import 类所以仍绿。
 - **核实**：`Torchwood.server` 只有 health/projects/users/teams/databases/apiKeys/oauthProviders/storage。按文档 `Torchwood.withApiKey()` 的 Agent **调不到 Functions**。
 - **修复**：门面增加 `server.functions`；契约测试断言实例属性覆盖 Server swagger 服务。
 
@@ -162,5 +162,5 @@
 ## 子代理与主代理分工
 
 - 子代理：12 个 `general-purpose` 审查员，按 `docs/review/prompts/01`–`12` 通读当前源码，各自写入 `docs/review/round3/reports/`。
-- 主代理：独立阅读 ConfirmEmailChange、`admin_roles.go`、`apikey_scope.go`、`functions_handler.go`、`users.go` `UpdateUser`、`authz.go`、`graviton.ts`、`file_handler.go` `resolveReadContext`，对全部 P1 做采纳 / 降级 / 合并。
+- 主代理：独立阅读 ConfirmEmailChange、`admin_roles.go`、`apikey_scope.go`、`functions_handler.go`、`users.go` `UpdateUser`、`authz.go`、`torchwood.ts`、`file_handler.go` `resolveReadContext`，对全部 P1 做采纳 / 降级 / 合并。
 - 本文件中的 P1-1、P1-2、P1-3、P1-5、P1-7 均经主代理亲自读代码确认，不是转述。

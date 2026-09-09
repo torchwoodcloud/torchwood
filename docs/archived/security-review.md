@@ -390,7 +390,7 @@ http.SetCookie(w, &http.Cookie{
 |---|------|------|-----------|
 | P2-1 | 默认集合权限开放 | `internal/domain/databases/permissions.go:14-29` | 新建集合默认 `read:any`（匿名可读全部）+ `update:users/delete:users`（docSecurity=false 时任意认证用户可改删任意文档）。产品决策：保持 Appwrite 兼容，但须在文档与 Console 新建集合 UI 中明示风险，并建议默认 `documentSecurity: true` |
 | P2-2 | OAuth fragment 携带 access_token | `internal/app/client/oauth2.go:426-440` | token 进浏览器历史、可能经 Referer 外泄。已有 HttpOnly session cookie，建议移除 fragment token（SDK 无 cookie 场景改走 token 端点） |
-| P2-3 | TS SDK 包入口损坏 | `sdk/typescript/src/index.ts:1` | 导出不存在的 `./torchwood.js`（实现在 `graviton.ts`），无法编译发布。修正为 `./graviton.js` 并补构建验证 |
+| P2-3 | TS SDK 包入口损坏 | `sdk/typescript/src/index.ts:1` | 导出不存在的 `./torchwood.js`（实现在门面文件，当时文件名仍沿用项目旧名），无法编译发布。修正为门面实际路径并补构建验证 |
 | P2-4 | SDK demo localStorage 存 token | `sdk/demo/src/lib/storage.ts` | 官方示例引导不安全实践；建议改内存/sessionStorage 并注释风险 |
 | P2-5 | seed 硬编码凭据 | `cmd/seed/main.go:48,81` | admin 密码 `Admin@123` + 明文打印 API key；生产误跑即失守。加环境变量覆盖 + 明确"仅限开发"输出 |
 | P2-6 | SignUp 无速率限制 | `internal/app/client/account.go:127` | 注册风暴 + 放大 P0-1。按 IP 增加与匿名会话一致的限流（`anonymous.go:17-21` 范本） |

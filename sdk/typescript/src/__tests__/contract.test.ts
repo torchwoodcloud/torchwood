@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { Torchwood } from "../graviton.js";
+import { Torchwood } from "../torchwood.js";
 import { AccountService } from "../client/account.js";
 import { ClientAssetsService } from "../client/assets.js";
 import { ClientDatabasesService } from "../client/databases.js";
@@ -436,7 +436,7 @@ describe("contract: swagger ↔ TS SDK", () => {
     assert.ok(rpcCount >= 110, `RPC 总数异常（当前 ${rpcCount}），请核对 genproto 产物`);
   });
 
-// Server swagger 服务名 → Torchwood.server 门面属性名（graviton.ts）。
+// Server swagger 服务名 → Torchwood.server 门面属性名（torchwood.ts）。
 const FACADE_SERVICES: Record<string, string> = {
   DatabasesService: "databases",
   FunctionsService: "functions",

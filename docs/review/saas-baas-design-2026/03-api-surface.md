@@ -199,7 +199,7 @@ API Key 的资源范围与 admin 写角色不在 proto 里。新增一个 Server
 
 ### AS-12 · Client 没有 Storage / Functions 产品面；上传是漏出来的缝
 
-**事实。** `proto/client/v1/` 无 storage、无 functions。TS Client 对象有 account/databases/groups/realtime/payments/assets/subscriptions，没有 `storage` / `functions`（`sdk/typescript/src/graviton.ts:42-49`）。Functions `CreateExecution` 要求 `RequireServerWriteActor`（`internal/app/functions/executions.go:67-70`），端用户不能调。存储上传却经裸 HTTP 接受任意通过 `Authenticate` 的主体（AS-3），SDK 只包装了 `auth: "apiKey"` 的 `uploadFile`（`sdk/typescript/src/server/storage.ts:108-120`）。
+**事实。** `proto/client/v1/` 无 storage、无 functions。TS Client 对象有 account/databases/groups/realtime/payments/assets/subscriptions，没有 `storage` / `functions`（`sdk/typescript/src/torchwood.ts:42-49`）。Functions `CreateExecution` 要求 `RequireServerWriteActor`（`internal/app/functions/executions.go:67-70`），端用户不能调。存储上传却经裸 HTTP 接受任意通过 `Authenticate` 的主体（AS-3），SDK 只包装了 `auth: "apiKey"` 的 `uploadFile`（`sdk/typescript/src/server/storage.ts:108-120`）。
 
 Server `CreateUserToken`（`proto/server/v1/users.proto:93-97`）能签发端用户令牌——这是 impersonation，不是「以用户身份调函数」的产品动词。
 

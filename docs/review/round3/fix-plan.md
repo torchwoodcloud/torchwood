@@ -158,7 +158,7 @@ ctx = contexts.WithPrincipal(r.Context(), principal)
 
 ### H4-1 TS `FunctionsService` 挂到门面
 
-- `sdk/typescript/src/graviton.ts`：`server` 增加 `functions: FunctionsService`，构造时 `new FunctionsService(this.transport)`。
+- `sdk/typescript/src/torchwood.ts`：`server` 增加 `functions: FunctionsService`，构造时 `new FunctionsService(this.transport)`。
 - 从 `./server/index.js` 补 import（该文件已 `export { FunctionsService }`）。
 - `sdk/typescript/src/index.ts`：至少保证经 `Torchwood.server.functions` 可达。若现有导出策略是「只导出门面」，不要为了导出类而打乱；门面可达即可。
 - 契约测试：断言 `new Torchwood({endpoint:"http://x", projectId:"p"}).server.functions` 存在，且 Server swagger 里 `FunctionsService_*` 的方法都能在实例上找到。现有 `contract.test.ts` 直接 import 类会漏这个洞，必须补门面断言。
@@ -287,7 +287,7 @@ handler 用 `_` 丢掉 use-case 第三返回值的，全部改成写入 `Meta.Ne
 | H1 | `pkg/grpc/interceptor/admin_roles.go`、`admin_roles_test.go`、（可）`jwt` 测试、`apikey_scope.go` 旁新增 assert、`internal/infra/server/grpc.go`、`internal/app/server/apikeys.go`、`users.go`、对应 `*_test.go` | functions_handler、console/src、sdk、databases.go DDL 守卫（H3） |
 | H2 | `internal/api/serverhttp/functions_handler.go`、`functions_handler_test.go` | `RequireServerWriteActor` 实现、deployments 业务逻辑 |
 | H3 | `internal/app/server/databases.go`、`authz_test.go` 或新建 DDL 守卫测试 | documentdb adapter、系统集合拒绝逻辑 |
-| H4 | `sdk/typescript/src/graviton.ts`、`index.ts`、`client/account.ts`、`__tests__/contract.test.ts`、`sdk/go/client/auth.go`、`account.go`、`teams.go`、对应测试 | proto/、cmd/client、console |
+| H4 | `sdk/typescript/src/torchwood.ts`、`index.ts`、`client/account.ts`、`__tests__/contract.test.ts`、`sdk/go/client/auth.go`、`account.go`、`teams.go`、对应测试 | proto/、cmd/client、console |
 | H5 | `console/src/api/storage.ts`、`routes/storage/pages.tsx`、`hooks/useAdminRole.ts`、`routes/functions/pages.tsx`、`internal/app/server/teams.go`、`system_collection_specs.go`（仅当能安全加 unique）、对应测试 | file_handler 鉴权语义、Client teams 传输层 |
 | H6 | `clientgrpc/teams.go`、`servergrpc/{users,teams,storage}.go`、`account_token_redis.go`、`login_throttle_redis.go`、`ratelimit_redis.go`、`otp_store_redis.go`、`internal/app/client/account.go`、对应测试 | admin_roles.go（H1）、functions_handler（H2） |
 
