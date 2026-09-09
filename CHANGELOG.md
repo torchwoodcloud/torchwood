@@ -8,6 +8,29 @@ TypeScript SDK 以 npm 包 `@torchwood/sdk` 分发（`sdk/typescript/`，`task s
 
 ## @torchwood/sdk
 
+### v0.3.0 — 2026-09-09
+
+跟随网关 OAuth2 浏览器流改造（`6149734` authorize 302 发起端点 + `bd1c030`
+回调 fragment 安全加固）：
+
+- **新增 `AccountService.buildOAuth2AuthorizeURL()`**：同步拼接浏览器流发起
+  地址（`GET /v1/account/oauth2/{provider}/authorize?project_id=&success=&failure=`，
+  三个 query 必填），调用方整页跳转——网关在该域种回调 nonce cookie 后 302
+  到 provider 授权页。替代浏览器场景的 `createOAuth2Session`（跨源 fetch 丢
+  Set-Cookie，回调 nonce 校验必败）。
+- **新增 `parseOAuth2CallbackFragment()`**（包根导出，类型
+  `OAuth2CallbackFragment`）：解析回调重定向 fragment 的两种形态——
+  `signed_in`（`access_token` + `userId`）与 `mfa_required`（`challengeToken`
+  + 逗号分隔 `mfaFactorTypes`）；非回调 fragment 返回 null，声称回调但缺必填
+  字段抛 `TorchwoodError`。fragment 刻意不含 refresh_token。
+- **废弃 `createOAuth2Session` / `createOAuth2LinkSession`**（`@deprecated`
+  标注、不删除，向后兼容）：前者浏览器场景必败改用 buildOAuth2AuthorizeURL；
+  后者因后端尚无 link 流 authorize 端点暂无替代、维持现状。
+  `createOAuth2TokenSession` 保留并注明适用边界（仅限 state 未被网关 GET
+  回调以 GETDEL 消费的定制流程）。
+- demo（`sdk/demo`）同步切换新流程：发起改整页跳转、回调改 fragment 解析，
+  `AuthState.refreshToken` 改可选（OAuth 会话 access_token 过期即视为登出）。
+
 ### v0.2.1 — 2026-09-09
 
 内部清理版本（无 API 变化）：项目曾用名 graviton 残留清零。门面文件
