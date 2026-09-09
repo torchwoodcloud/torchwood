@@ -174,7 +174,7 @@ export function EconomyPage() {
         )}
       </section>
 
-      <JsonPanel value={result} />
+      <JsonPanel title="SDK 响应" data={result} />
     </div>
   );
 }
