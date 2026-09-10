@@ -46,8 +46,21 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        # 函数实例注册表（torchwood:fninst:*）真 Redis 集成测试用
+        # （functionsdispatcher/registry_redis_integration_test.go），
+        # 版本对齐 docker/local/docker-compose.yml（不追 latest）。
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       TORCHWOOD_TEST_DATABASE_SOURCE: postgres://torchwood:torchwood@localhost:5432/TORCHWOOD_test?sslmode=disable
+      TORCHWOOD_TEST_REDIS_ADDR: localhost:6379
       TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE: postgres://torchwood:torchwood@localhost:5432/postgres?sslmode=disable
       TORCHWOOD_TEST_MINIO_ENDPOINT: http://localhost:9000
       TORCHWOOD_RUN_DOCKER_TESTS: "1"

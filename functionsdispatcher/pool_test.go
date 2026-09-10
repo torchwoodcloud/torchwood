@@ -132,7 +132,7 @@ func (r *fakeRegistry) ClaimIdle(_ context.Context, ref FunctionRef, deploymentI
 	for _, rec := range r.pools[regKey(ref)] {
 		if !rec.Busy && !rec.Draining && rec.DeploymentID == deploymentID {
 			rec.Busy = true
-			rec.LeaseUntil = leaseUntil
+			rec.LeaseUntilMS = leaseUntil.UnixMilli()
 			out := *rec
 			return &out, nil
 		}
@@ -507,13 +507,13 @@ func TestPoolReaper_BusyNotKilledByLeaseExpiry(t *testing.T) {
 	rec, err := pool.spawnInstance(ctx, dispatchReq(), pool.applyDefaults(PoolPolicy{}))
 	require.NoError(t, err)
 	rec.Busy = true
-	rec.LeaseUntil = time.Now().Add(time.Minute)
+	rec.LeaseUntilMS = time.Now().Add(time.Minute).UnixMilli()
 	require.NoError(t, reg.Save(ctx, FunctionRef{ProjectID: "p1", FunctionID: "fn1"}, *rec))
 
 	// 伪造「租约已过期但在宽限内」：直接改记录的租约为刚刚过期。
 	expiredWithinGrace := time.Now().Add(-stuckBusyGrace / 2)
 	_, _ = reg.Update(ctx, FunctionRef{ProjectID: "p1", FunctionID: "fn1"}, rec.InstanceID, func(r *InstanceRecord) {
-		r.LeaseUntil = expiredWithinGrace
+		r.LeaseUntilMS = expiredWithinGrace.UnixMilli()
 	})
 	pool.Reaper(ctx)
 	records, _ := reg.List(ctx, FunctionRef{ProjectID: "p1", FunctionID: "fn1"})
@@ -522,7 +522,7 @@ func TestPoolReaper_BusyNotKilledByLeaseExpiry(t *testing.T) {
 	// 租约过期超过 stuckBusyGrace：请求方已消失，强杀。
 	expiredBeyondGrace := time.Now().Add(-2 * stuckBusyGrace)
 	_, _ = reg.Update(ctx, FunctionRef{ProjectID: "p1", FunctionID: "fn1"}, rec.InstanceID, func(r *InstanceRecord) {
-		r.LeaseUntil = expiredBeyondGrace
+		r.LeaseUntilMS = expiredBeyondGrace.UnixMilli()
 	})
 	pool.Reaper(ctx)
 	records, _ = reg.List(ctx, FunctionRef{ProjectID: "p1", FunctionID: "fn1"})
@@ -571,12 +571,13 @@ func TestDrainForDeployment(t *testing.T) {
 
 	now := time.Now()
 	ref := FunctionRef{ProjectID: "p1", FunctionID: "fn1"}
+	lease := now.Add(time.Minute).UnixMilli()
 	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "old-idle", ContainerID: "old-idle", IP: "10.9.0.1",
-		DeploymentID: "dep-old", SpawnedAt: now, IdleSince: now, LeaseUntil: now.Add(time.Minute)}))
+		DeploymentID: "dep-old", SpawnedAt: now, IdleSince: now, LeaseUntilMS: lease}))
 	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "old-busy", ContainerID: "old-busy", IP: "10.9.0.2",
-		DeploymentID: "dep-old", Busy: true, SpawnedAt: now, IdleSince: now, LeaseUntil: now.Add(time.Minute)}))
+		DeploymentID: "dep-old", Busy: true, SpawnedAt: now, IdleSince: now, LeaseUntilMS: lease}))
 	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "new-1", ContainerID: "new-1", IP: "10.9.0.3",
-		DeploymentID: "dep-new", SpawnedAt: now, IdleSince: now, LeaseUntil: now.Add(time.Minute)}))
+		DeploymentID: "dep-new", SpawnedAt: now, IdleSince: now, LeaseUntilMS: lease}))
 	d.spawned["old-idle"], d.spawned["old-busy"], d.spawned["new-1"] = "10.9.0.1", "10.9.0.2", "10.9.0.3"
 	d.running["old-idle"], d.running["old-busy"], d.running["new-1"] = true, true, true
 

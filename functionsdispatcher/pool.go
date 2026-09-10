@@ -471,7 +471,7 @@ func (p *PoolManager) spawnInstance(ctx context.Context, req ExecuteRequest, pol
 		Busy:           false,
 		SpawnedAt:      now,
 		IdleSince:      now,
-		LeaseUntil:     now.Add(p.cfg.LeaseTTL),
+		LeaseUntilMS:   now.Add(p.cfg.LeaseTTL).UnixMilli(),
 		MinInstances:   policy.MinInstances,
 		IdleTTLSeconds: policy.IdleTTLSeconds,
 		MaxRequests:    policy.MaxRequestsPerInstance,
@@ -508,7 +508,7 @@ func (p *PoolManager) executeOn(ctx context.Context, req ExecuteRequest, policy 
 		now := p.clock()
 		r.Busy = false
 		r.IdleSince = now
-		r.LeaseUntil = now.Add(p.cfg.LeaseTTL)
+		r.LeaseUntilMS = now.Add(p.cfg.LeaseTTL).UnixMilli()
 		r.Requests++
 		if policy.MaxRequestsPerInstance > 0 && r.Requests >= int64(policy.MaxRequestsPerInstance) {
 			r.Draining = true
@@ -627,7 +627,7 @@ func (p *PoolManager) Reaper(ctx context.Context) {
 				// 判活规则：busy 实例不因心跳缺失被回收（dispatch 续租 +
 				// busy 标记）；仅当租约过期超过 stuckBusyGrace（请求方已
 				// 消失，如 dispatcher 重启）才强杀。
-				if now.After(rec.LeaseUntil.Add(stuckBusyGrace)) {
+				if now.UnixMilli() > rec.LeaseUntilMS+stuckBusyGrace.Milliseconds() {
 					p.killInstance(ctx, ref, &rec)
 					continue
 				}

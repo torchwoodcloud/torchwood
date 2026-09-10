@@ -12,6 +12,11 @@ import (
 
 // InstanceRecord 是注册表成员：一个常驻实例的投影（instance_id/容器 IP/
 // lease/busy 标记等；设计 §6 池策略）。
+//
+// 时间字段约定（不变量）：Lua 侧原位改写的字段必须是数值形态——
+// claimIdleLua 做 cjson 往返重写整条记录，time.Time 的 RFC3339 字符串一旦
+// 被 tonumber 改写即毒化记录（Go 侧 decode 必败 → claim 500 + 记录成账外
+// 幽灵）。spawned_at/idle_since 只由 Go 读改写，Lua 不触碰。
 type InstanceRecord struct {
 	InstanceID   string    `json:"instance_id"`
 	ContainerID  string    `json:"container_id"`
@@ -22,9 +27,11 @@ type InstanceRecord struct {
 	Requests     int64     `json:"requests"`
 	SpawnedAt    time.Time `json:"spawned_at"`
 	IdleSince    time.Time `json:"idle_since"`
-	// LeaseUntil 是判活租约：dispatch 认领时续租；busy 实例不因租约过期
-	// 被 reaper 误杀（超期过 stuckBusyGrace 视为请求方残留，强杀）。
-	LeaseUntil time.Time `json:"lease_until"`
+	// LeaseUntilMS 是判活租约（Unix 毫秒）：dispatch 认领时续租；busy 实例
+	// 不因租约过期被 reaper 误杀（超期过 stuckBusyGrace 视为请求方残留，
+	// 强杀）。数值毫秒形态供 Lua 原位改写（cjson encode 整数无精度损失，
+	// 毫秒时间戳 < 2^53）。
+	LeaseUntilMS int64 `json:"lease_until_ms"`
 	// ——池策略落账（dispatcher 无 DB 依赖：spawn 时随记录固化，reaper
 	// 依据其执行 idle 回收与保温保底）——
 	MinInstances   int `json:"min_instances"`
@@ -81,7 +88,9 @@ func spawnLockKey(ref FunctionRef) string {
 }
 
 // claimIdleLua 在 Redis 侧原子完成「找空闲 → 置 busy → 续租」：一期串行
-// 执行（1 并发/实例）依赖认领的互斥性，脚本失败即无实例返回。
+// 执行（1 并发/实例）依赖认领的互斥性，脚本失败即无实例返回。租约字段只写
+// 数值 lease_until_ms，不触碰任何 RFC3339 时间字符串（不变量：cjson 往返
+// 不得改写时间字段形态）。
 var claimIdleLua = redis.NewScript(`
 local vals = redis.call('HVALS', KEYS[1])
 for i = 1, #vals do
@@ -89,7 +98,7 @@ for i = 1, #vals do
   if ok and type(rec) == 'table' then
     if rec.busy == false and rec.draining == false and rec.deployment_id == ARGV[1] then
       rec.busy = true
-      rec.lease_until = tonumber(ARGV[2])
+      rec.lease_until_ms = tonumber(ARGV[2])
       redis.call('HSET', KEYS[1], rec.instance_id, cjson.encode(rec))
       return cjson.encode(rec)
     end
