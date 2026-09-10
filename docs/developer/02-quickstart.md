@@ -204,4 +204,26 @@ HTTP/Metrics 端口由 `server.http.addr` / `server.metrics.addr` 决定，非�
 ./bin/torchwood rpc /torchwood.server.v1.UsersService/ListUsers --data '{"pageSize":10}' --api-key <secret>
 ```
 
-全局 flag：`--endpoint`（`TORCHWOOD_CLI_ENDPOINT=127.0.0.1:9060`）、`--api-key`、`--timeout`、`--output`、`--tls`（系统根证书校验，用于反向代理终结 TLS 的场景，需代理以 h2c 转发后端）。
+全局 flag：`--endpoint`（`TORCHWOOD_CLI_ENDPOINT=127.0.0.1:9060`）、`--api-key`、`--timeout`、`--output`、`--tls`（系统根证书校验，用于反向代理终结 TLS 的场景，需代理以 h2c 转发后端）、`--profile`。
+
+### 7.1 配置文件与多项目 profile（`~/.torchwood/config.yaml`）
+
+API Key 等连接配置可落在本地配置文件（路径可用 `TORCHWOOD_CLI_CONFIG` 覆盖），
+一个 profile 对应一个项目上下文（endpoint + 该项目 scoped API Key），多项目各占
+一个 profile 实现隔离；Agent / 脚本只需 `--profile <name>`，密钥本体不进对话与代码：
+
+```bash
+./bin/torchwood config init                          # 生成带注释的模板（已存在则报错不覆盖）
+./bin/torchwood config set local api-key --stdin     # 密钥经 stdin 注入，不进 shell 历史
+./bin/torchwood config set prod endpoint grpc.example.com:443
+./bin/torchwood config set prod tls true
+./bin/torchwood config use prod                      # 设为缺省 profile
+./bin/torchwood config list                          # 列出 profile（API Key 打码，JSON）
+./bin/torchwood config show prod && ./bin/torchwood config remove prod && ./bin/torchwood config path
+./bin/torchwood users list --profile local           # 显式选择 profile；缺省用 config 的 default 键
+```
+
+取值优先级（每字段独立）：**显式 flag > `TORCHWOOD_CLI_*` 环境变量 > 配置 profile 值 > 内建默认**；
+profile 选择优先级：**`--profile` flag > `TORCHWOOD_CLI_PROFILE` > 配置 `default` 键**。
+配置严格解析（未知键、悬空 `default`、非法字段值均报错，不静默忽略）；文件以 0600 落盘，
+所有 config 命令输出不回显密钥本体（`config list/show` 打码为 `****` + 末 4 位）。

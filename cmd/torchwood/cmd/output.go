@@ -85,7 +85,7 @@ func formatRPCError(err error) string {
 		return fmt.Sprintf("rpc failed: %v\nhint: check the API key's scopes (e.g. users.read / users.write, or * / all), or regenerate the key in the Console", err)
 	}
 	if server.IsUnauthenticated(err) {
-		return fmt.Sprintf("rpc failed: %v\nhint: credential rejected — make sure TORCHWOOD_CLI_API_KEY (or --api-key) is set and not expired/deleted; the key must belong to the instance the endpoint points to; use `torchwood health` to verify connectivity", err)
+		return fmt.Sprintf("rpc failed: %v\nhint: credential rejected — make sure the API key is set (--api-key, TORCHWOOD_CLI_API_KEY, or the api-key field of the config profile) and not expired/deleted; the key must belong to the instance the endpoint points to; use `torchwood health` to verify connectivity", err)
 	}
 	return fmt.Sprintf("rpc failed: %v", err)
 }

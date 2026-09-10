@@ -14,6 +14,7 @@ import (
 )
 
 func TestValidateMissingAPIKey(t *testing.T) {
+	isolateConfig(t)
 	g := &globalFlags{output: "json", timeout: "30s"}
 
 	// 非豁免命令缺 key 报错
@@ -34,6 +35,7 @@ func TestValidateMissingAPIKey(t *testing.T) {
 }
 
 func TestValidateOutputAndTimeout(t *testing.T) {
+	isolateConfig(t)
 	g := &globalFlags{output: "yaml", timeout: "30s", apiKey: "k"}
 	if err := g.validate(true); err == nil || !strings.Contains(err.Error(), "unsupported output format") {
 		t.Fatalf("非法 output 应报错，got %v", err)
@@ -59,7 +61,7 @@ func TestFormatRPCError(t *testing.T) {
 		{
 			name: "Unauthenticated 附加 API Key 自诊断提示",
 			err:  status.Error(codes.Unauthenticated, "invalid or expired credential"),
-			want: []string{"Unauthenticated", "invalid or expired credential", "TORCHWOOD_CLI_API_KEY", "--api-key", "expired", "torchwood health"},
+			want: []string{"Unauthenticated", "invalid or expired credential", "TORCHWOOD_CLI_API_KEY", "--api-key", "config profile", "expired", "torchwood health"},
 		},
 		{
 			name: "非 status 错误原样输出",
@@ -155,6 +157,7 @@ func TestPrintJSON(t *testing.T) {
 // 面板：帮助 0 / 未知动词 1（附帮助面）/ 缺 key 1 / 拨号失败（5xx 类）3，
 // 以及裸分组命令打子命令帮助退 0。
 func TestAppRunExitCodes(t *testing.T) {
+	isolateConfig(t)
 	t.Setenv("TORCHWOOD_CLI_API_KEY", "")
 	t.Setenv("TORCHWOOD_CLI_ENDPOINT", "127.0.0.1:1")
 	t.Setenv("TORCHWOOD_CLI_TIMEOUT", "300ms")
