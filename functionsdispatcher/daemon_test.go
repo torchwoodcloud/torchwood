@@ -21,11 +21,14 @@ func TestTarDir_NormalizesModesIndependentOfUmask(t *testing.T) {
 	defer setTestUmask(old)
 
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".tw-runner.js"), []byte("runner"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.js"), []byte("code"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "lib"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib", "util.js"), []byte("util"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM x"), 0o644))
+	// 写盘用收紧 mode（0600/0750）：直接模拟生产 umask 掩蔽后的磁盘状态
+	// （0644 声明值被 umask 0077 掩蔽成 0600 的形态），断言 tarDir 归一化能
+	// 向上收回 0644/0755——镜像内权限不依赖磁盘上的实际 mode。
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".tw-runner.js"), []byte("runner"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.js"), []byte("code"), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "lib"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib", "util.js"), []byte("util"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM x"), 0o600))
 
 	rd, err := tarDir(dir)
 	require.NoError(t, err)
