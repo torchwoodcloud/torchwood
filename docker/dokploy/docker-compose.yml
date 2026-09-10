@@ -49,6 +49,13 @@ x-app-env: &app-env
   # 如需跨站携带会话 cookie 的特殊形态，显式列出来源并把 config.yaml 的
   # allow_credentials 改回 true（带凭据时不接受 "*"，见 runtime/cors.go）
   TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS: ${TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS:-*}
+  # 浏览器端预检放行的自定义请求头（逗号分隔）。未设置时不输出 Allow-Headers，
+  # 带 X-Api-Key 等自定义头的浏览器预检会被浏览器拦截
+  TORCHWOOD_SERVER_HTTP_CORS_ALLOW_HEADERS: ${TORCHWOOD_SERVER_HTTP_CORS_ALLOW_HEADERS:-}
+  # 静态数据加密密钥（OAuth client secret / TOTP secret 的 secretbox 加密；与
+  # JWT 签名密钥分离）。未设置回退 jwt.secret（启动告警 W-I）；设置后读取侧
+  # 双密钥兼容存量密文（oauth_provider_repo / totp 三级回退），写入即新钥重加密
+  TORCHWOOD_SECURITY_ENCRYPTION_KEY: ${TORCHWOOD_SECURITY_ENCRYPTION_KEY:-}
 
 # 应用镜像：GitHub Actions 预构建推 GHCR（.github/workflows/image.yml），
 # 部署机仅 pull 不编译（小内存 VPS 上 go build 会 OOM，部署被杀表现为

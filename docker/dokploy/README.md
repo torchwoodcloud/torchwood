@@ -42,6 +42,8 @@ GitHub Actions 会自动构建并推 GHCR（首次部署前确认 [image workflo
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | ✅ | 栈内 MinIO 凭据（同时作为应用 S3 凭据注入） |
 | `POSTGRES_USER` / `POSTGRES_DB` | | 默认 `torchwood` / `torchwood` |
 | `TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS` | | 浏览器端跨域来源，**默认 `*`**（非凭据放开：SDK/前端以 Bearer token 调 API）。仅跨站携带会话 cookie 的特殊形态需改为显式列出 origin 并开 `allow_credentials`（config.yaml） |
+| `TORCHWOOD_SERVER_HTTP_CORS_ALLOW_HEADERS` | | 浏览器预检放行的自定义请求头（逗号分隔），如 `Content-Type,Authorization,X-Api-Key,X-Torchwood-Project`。未设置时不输出 Allow-Headers——SDK 在浏览器直连（带自定义头）必须设置 |
+| `TORCHWOOD_SECURITY_ENCRYPTION_KEY` | | 静态数据加密密钥（OAuth client secret/TOTP secret，与 JWT 签名密钥分离），`openssl rand -hex 32`。未设置回退 jwt.secret（启动告警）；设置后读取侧双密钥兼容存量密文，无需迁移 |
 | `TORCHWOOD_HTTP_DOMAIN` | ✅ | HTTP 域名（gateway/Console/Storage），如 `tw.example.com`；Traefik label 路由，见 §3 |
 | `TORCHWOOD_GRPC_DOMAIN` | ✅ | gRPC 域名（Traefik 终结 TLS → h2c），如 `grpc.tw.example.com`，见 §4 |
 | `TORCHWOOD_GRPC_PORT` | | 宿主侧 gRPC 端口，默认 `9060`；**仅绑回环**，供 SSH 隧道兜底（见 §4） |
