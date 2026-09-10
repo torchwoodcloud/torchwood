@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -17,10 +18,11 @@ import (
 //	POST /v1/dispatch/executions    执行分发（池管理热路径）
 //	POST /v1/dispatch/images/remove 删除镜像（幂等）
 //	GET  /healthz                   进程存活
+//	GET  /metrics                   Prometheus 指标（只读观测面）
 //
 // 认证：可选静态共享密钥 header（x-tw-dispatcher-token，constant time 比对；
-// config 空 = 不校验，仅限可信内网）；GET /healthz 豁免（liveness 静态探针，
-// 编排健康检查不带凭据）。其余端点接受调用方 ctx 超时。
+// config 空 = 不校验，仅限可信内网）；GET /healthz 与 GET /metrics 豁免
+// （liveness 静态探针与指标抓取器不带凭据）。其余端点接受调用方 ctx 超时。
 type dispatchServer struct {
 	pool   *PoolManager
 	daemon Daemon
@@ -39,15 +41,17 @@ func (s *dispatchServer) routes() *http.ServeMux {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})
+	mux.Handle("GET /metrics", promhttp.Handler())
 	return mux
 }
 
 // ServeHTTP 挂认证中间件。
 func (s *dispatchServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// /healthz 豁免 token 校验：liveness 静态探针（固定 200，零信息泄露），
-	// 编排健康检查命令行不应携带密钥（docker inspect 可见）。豁免面仅
-	// GET /healthz——其余方法/路径（含 dispatch 端点）一律走校验。
-	if r.Method == http.MethodGet && r.URL.Path == "/healthz" {
+	// /healthz 与 /metrics 豁免 token 校验（内网绑定不变）：前者是 liveness
+	// 静态探针（固定 200，零信息泄露），后者是 Prometheus 只读抓取面；编排
+	// 健康检查与抓取器的命令行不应携带密钥（docker inspect 可见）。豁免面
+	// 仅这两条 GET 路径——其余方法/路径（含 dispatch 端点）一律走校验。
+	if r.Method == http.MethodGet && (r.URL.Path == "/healthz" || r.URL.Path == "/metrics") {
 		s.routes().ServeHTTP(w, r)
 		return
 	}

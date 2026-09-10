@@ -125,3 +125,25 @@ func TestServer_HealthzExemptFromToken(t *testing.T) {
 	rec = postJSON(t, srv, "/v1/dispatch/executions", "", dispatchReq())
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
+
+// /metrics 与 /healthz 同口径豁免 token：Prometheus 只读观测面，抓取器不带
+// 共享密钥；豁免面仅 GET（POST /metrics 与 dispatch 端点仍 401）。
+func TestServer_MetricsExemptFromToken(t *testing.T) {
+	srv, _, _ := newTestServer(t, "sekrit")
+
+	for _, token := range []string{"", "sekrit"} {
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		if token != "" {
+			req.Header.Set("X-Tw-Dispatcher-Token", token)
+		}
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code, "token=%q", token)
+		require.Contains(t, rec.Body.String(), "torchwood_functions_")
+	}
+
+	// 非 GET 打到 /metrics 不在豁免面内（mux 之前就被 token 校验拦截）。
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/metrics", nil))
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
