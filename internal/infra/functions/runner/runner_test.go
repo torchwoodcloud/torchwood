@@ -91,9 +91,11 @@ module.exports.main = function (data) {
 	base := "http://127.0.0.1:18099"
 	client := &http.Client{Timeout: 5 * time.Second}
 
-	// health 探针（模块同步 require，应立即可用）。
+	// health 探针：deadline 驱动（node 冷启动在 CI 慢环境可超 2s，
+	// 固定 50×50ms 窗口曾导致 CI 必败）。
 	ready := false
-	for i := 0; i < 50; i++ {
+	deadline := time.Now().Add(15 * time.Second)
+	for !ready && time.Now().Before(deadline) {
 		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, base+"/_tw/health", nil)
 		resp, err := client.Do(req)
 		if err == nil {

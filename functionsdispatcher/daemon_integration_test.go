@@ -89,8 +89,11 @@ func TestIntegration_DispatcherBuildSpawnDispatch(t *testing.T) {
 	d := NewDockerDaemon(cfg)
 	reg := newFakeRegistry()
 	pool := NewPoolManager(d, reg, PoolConfig{
-		BootTimeout:      90 * time.Second,
-		QueueHeadTimeout: 30 * time.Second,
+		BootTimeout: 90 * time.Second,
+		// 队首超时须 ≥ BootTimeout：Dispatch 的冷启动（build 后容器启动 +
+		// node 模块加载）阻塞在 trySpawn，CI 慢环境 30s 窗口会先于健康
+		// 握手到点（曾致 CI 必败）。
+		QueueHeadTimeout: 90 * time.Second,
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
