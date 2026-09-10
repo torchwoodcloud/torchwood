@@ -8,6 +8,25 @@ TypeScript SDK 以 npm 包 `@torchwood/sdk` 分发（`sdk/typescript/`，`task s
 
 ## @torchwood/sdk
 
+### v0.4.0 — 2026-09-11
+
+函数内执行身份（Functions v3 支柱，设计 `docs/design/functions-v3.md` §5.1）：
+
+- **新增 `Torchwood.fromExecution(apiBaseUrl, opts?)`**：函数内以执行身份
+  （execution principal）构造 client，方法面 = server 服务类全量（assets
+  grant / databases / users / functions ...）。executionToken 来源优先级
+  显式参数 > `process.env.TW_EXECUTION_TOKEN`，两者皆缺抛错（fail-closed）。
+  `opts.executionToken` 是并发函数（concurrency > 1）的安全通道——env 仅
+  同步段读取安全，async main / fetch 风格应从 `ctx.executionToken` /
+  `env.EXECUTION_TOKEN` 显式传入。
+- **新增 execution auth 模式**：`TorchwoodConfig.executionToken` +
+  `setExecutionToken()/getExecutionToken()`；execution transport 下 server
+  服务类硬编码的 `auth:"apiKey"` 自动切换为 `Authorization: Bearer
+  <executionToken>`（Client API 面不受影响）。
+- 平台配套（Functions v3 已落地）：函数包声明 `@torchwood/sdk` 依赖 +
+  lockfile，构建期平台代装（`npm ci --omit=dev --ignore-scripts`）；用法
+  见 `sdk/typescript/README.md`「函数内使用」。
+
 ### v0.3.0 — 2026-09-09
 
 跟随网关 OAuth2 浏览器流改造（`6149734` authorize 302 发起端点 + `bd1c030`

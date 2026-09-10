@@ -1,6 +1,6 @@
 {
   "name": "@torchwood/sdk",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Torchwood Client API and Server API TypeScript SDK",
   "type": "module",
   "main": "./dist/index.js",
