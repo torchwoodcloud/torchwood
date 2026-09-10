@@ -326,11 +326,13 @@ func (d *dockerDaemon) BuildImage(ctx context.Context, functionID, deploymentID 
 	if err != nil {
 		return err
 	}
-	// 构建产物（runner 脚本 + Dockerfile）非机密，仅 daemon 同用户读取，0o600 收紧。
-	if err := os.WriteFile(filepath.Join(buildDir, runner.RunnerFileName), runner.NodeRunnerJS(), 0o600); err != nil {
+	// 构建产物（runner 脚本 + Dockerfile）经 COPY 进入镜像后须被镜像内
+	// USER node（非 root）读取——权限必须保持 world-readable（G306 误报：
+	// 非机密，且收紧曾致容器秒退、健康握手永不 ready，CI e2e 实证）。
+	if err := os.WriteFile(filepath.Join(buildDir, runner.RunnerFileName), runner.NodeRunnerJS(), 0o644); err != nil { // #nosec G306 -- 镜像内 USER node 须可读
 		return fmt.Errorf("write runner: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(buildDir, "Dockerfile"), []byte(dockerfile), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(buildDir, "Dockerfile"), []byte(dockerfile), 0o644); err != nil { // #nosec G306 -- 镜像内 USER node 须可读
 		return fmt.Errorf("write dockerfile: %w", err)
 	}
 
