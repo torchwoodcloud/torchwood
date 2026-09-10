@@ -112,6 +112,30 @@ func TestIntegration_DispatcherBuildSpawnDispatch(t *testing.T) {
 		Data:           `{"n":41}`,
 		ExecutionToken: "twx_it-token",
 	}
+
+	// ——诊断段：绕过 Dispatch 的吞错路径，暴露冷启动每一步的真实结果——
+	diagPolicy := pool.applyDefaults(PoolPolicy{})
+	diagRec, diagErr := pool.spawnInstance(ctx, req, diagPolicy)
+	if diagErr != nil {
+		t.Logf("diag: spawnInstance failed: %v", diagErr)
+	} else {
+		t.Logf("diag: spawned id=%s ip=%s", diagRec.ContainerID, diagRec.IP)
+		probeStart := time.Now()
+		for i := 0; i < 8; i++ {
+			pctx, pcancel := context.WithTimeout(ctx, 2*time.Second)
+			perr := newHTTPRunner().Health(pctx, diagRec.IP)
+			pcancel()
+			t.Logf("diag: host->container health probe #%d (%.1fs): err=%v", i+1, time.Since(probeStart).Seconds(), perr)
+			if perr == nil {
+				break
+			}
+			time.Sleep(1 * time.Second)
+		}
+		running, ip, ierr := d.InspectInstance(ctx, diagRec.ContainerID)
+		t.Logf("diag: inspect running=%v ip=%q err=%v", running, ip, ierr)
+		pool.killInstance(ctx, FunctionRef{ProjectID: req.ProjectID, FunctionID: req.FunctionID}, diagRec)
+	}
+
 	resp, err := pool.Dispatch(ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, "ok", resp.Status)
