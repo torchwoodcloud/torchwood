@@ -4,7 +4,8 @@
 > 收敛至项目设置区 `/console/projects/:id/settings`（显式项目作用域，四 tab：
 > 基本信息 / 注册与登录 / OAuth / 危险区，见 `console/src/routes/projects/settings.tsx`；
 > OAuth Providers 与项目详情页的注册策略/邀请码/重定向白名单同址合并，
-> 侧边栏 Settings 变更为当前项目的设置捷径，旧路径重定向）。本文保留作为
+> 旧路径重定向保留；侧边栏 Settings 捷径后续已移除，入口收敛至项目详情页
+> 与 Dashboard）。本文保留作为
 > 当年「项目」Tab 能力的历史实现方案存档，其余内容不再反映现状。
 >
 > 状态：**已实现**（2026-08-09 验收通过：UpdateProject 全链路 + Console「项目」Tab +

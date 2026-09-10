@@ -592,13 +592,17 @@ func (a *Account) RefreshToken(ctx context.Context, cmd RefreshTokenCommand) (*T
 	}
 	rotationKey := domainauth.RefreshRotationKey(projectID, claims.SessionID)
 	newRefreshTokenID := idgen.UUID().String()
-	result, err := a.rotation.Rotate(ctx, rotationKey, claims.TokenID, newRefreshTokenID, refreshTTL)
+	result, currentTokenID, err := a.rotation.Rotate(ctx, rotationKey, claims.TokenID, newRefreshTokenID, refreshTTL)
 	if err != nil {
 		return nil, "", err
 	}
 	switch result {
 	case domainauth.RotateOK:
 		return a.sessions.IssueTokensWithRefreshID(ctx, projectID, claims.UserID, claims.Username, claims.SessionID, newRefreshTokenID)
+	case domainauth.RotateGraceReuse:
+		// 宽限命中(多标签页并发刷新/刷新响应丢失后的重试):以当前链重签,
+		// 链不推进;判重用会删除会话,把好会话一起杀掉。
+		return a.sessions.IssueTokensWithRefreshID(ctx, projectID, claims.UserID, claims.Username, claims.SessionID, currentTokenID)
 	case domainauth.RotateMismatch:
 		if a.sessionRepo != nil {
 			_ = a.sessionRepo.Delete(ctx, projectID, claims.SessionID)

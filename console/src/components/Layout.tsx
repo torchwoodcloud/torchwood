@@ -4,16 +4,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { ProjectBootstrap } from "@/components/ProjectBootstrap";
 import { ProjectSelector } from "@/components/ProjectSelector";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Key, Users, Database, HardDrive, LogOut, Menu, X, UsersRound, Settings, ShieldCheck, FolderKanban, FunctionSquare, Receipt, Coins, CreditCard, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Key, Users, Database, HardDrive, LogOut, Menu, X, UsersRound, ShieldCheck, FolderKanban, FunctionSquare, Receipt, Coins, CreditCard, type LucideIcon } from "lucide-react";
 
-// projectScoped 项是当前选中项目的设置捷径：渲染时把 to 改写为显式路径
-// /console/projects/:id/settings（旧全局 /console/settings 已退役为重定向），
-// 未选中项目时隐藏该项。
 interface NavItem {
   to: string;
   label: string;
   icon: LucideIcon;
-  projectScoped?: boolean;
 }
 
 const navSections: { title?: string; items: NavItem[] }[] = [
@@ -49,7 +45,6 @@ const navSections: { title?: string; items: NavItem[] }[] = [
     items: [
       { to: "/console/projects", label: "Projects", icon: FolderKanban },
       { to: "/console/admins", label: "Admins", icon: ShieldCheck },
-      { to: "/console/settings", label: "Settings", icon: Settings, projectScoped: true },
     ],
   },
 ];
@@ -115,18 +110,6 @@ function SidebarContent({
   onNavigate: () => void;
   onLogout: () => void;
 }) {
-  const { projectId } = useAuth();
-  const sections = navSections.map((section) => ({
-    ...section,
-    items: section.items
-      .filter((item) => !item.projectScoped || projectId)
-      .map((item) =>
-        item.projectScoped && projectId
-          ? { ...item, to: `/console/projects/${projectId}/settings` }
-          : item
-      ),
-  }));
-
   return (
     <>
       <div className="flex items-center justify-between p-6 border-b">
@@ -141,7 +124,7 @@ function SidebarContent({
         <ProjectSelector />
       </div>
       <nav className="flex-1 p-4 space-y-1">
-        {sections.map((section) => (
+        {navSections.map((section) => (
           <div key={section.title ?? "main"} className="space-y-1">
             {section.title && (
               <div className="px-3 pt-4 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">

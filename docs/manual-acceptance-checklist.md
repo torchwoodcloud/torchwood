@@ -301,7 +301,7 @@ LIMIT 10;
 | 13.5 | 删除管理员 | `DELETE /v1/console/admins/{id}` | 仅 owner；删除自己返回 400 | [ ] |
 | 13.6 | 最后 owner 保护 | 唯一 owner 尝试删除/降级自己 | `FailedPrecondition`（无法移除最后一个 owner） | [ ] |
 | 13.7 | Console 页面 | 侧边栏 System 分组 → Admins 页面 | 列表、新建、编辑、删除可用；非 owner 不显示增删改入口 | [ ] |
-| 13.8 | 侧边栏菜单分组 | 打开 Console | Dashboard 置顶；Develop / Auth / System 分组；Projects、Admins、Settings 在 System 分组 | [ ] |
+| 13.8 | 侧边栏菜单分组 | 打开 Console | Dashboard 置顶；Develop / Auth / System 分组；Projects、Admins 在 System 分组 | [ ] |
 
 ---
 
