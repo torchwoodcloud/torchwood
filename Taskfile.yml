@@ -179,7 +179,10 @@ tasks:
 
   test:
     deps:
+      # lint:golangci 与 CI Backend job 同拦（gosec 曾只被 CI 拦下，本地裸跑
+      # go test 全绿仍翻车）；vet/gofmt 归 lint:go。
       - task: lint:go
+      - task: lint:golangci
       - task: test:sdk-go
       - task: test:sdk-ts
     dir: '{{.USER_WORKING_DIR}}'
