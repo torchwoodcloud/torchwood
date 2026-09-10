@@ -395,9 +395,23 @@ func tarDir(dir string) (io.Reader, error) {
 			return err
 		}
 		hdr.Name = filepath.ToSlash(rel)
+		// 权限坏档修复（EACCES 秒退事故）：镜像内文件 mode 不得依赖 dispatcher
+		// 进程状态。上游 os.WriteFile/OpenFile 声明的 0644 会先被进程 umask 掩蔽
+		// （0644 & ~umask，umask 0077 时落盘 0600），而 FileInfoHeader 忠实保留
+		// 磁盘实际 mode，经 COPY . . 原样进镜像——模板 USER node 读 .tw-runner.js
+		// 即 EACCES、容器秒退（同构建代码先后产出坏/好镜像 = 进程 umask 随栈
+		// redeploy 漂移的状态依赖）。在此单一收口点归一化：文件恒 0644、目录恒
+		// 0755（x 位不可省，子目录用户代码要靠它遍历）、属主归零，镜像权限与
+		// dispatcher 以何用户/何 umask 运行彻底解耦。不用模板 COPY --chmod：
+		// 它对文件与目录只能给同一个 mode，顾此失彼。
 		if d.IsDir() {
+			hdr.Mode = 0o755
 			hdr.Name += "/"
+		} else {
+			hdr.Mode = 0o644
 		}
+		hdr.Uid = 0
+		hdr.Gid = 0
 		if err := tw.WriteHeader(hdr); err != nil {
 			return err
 		}

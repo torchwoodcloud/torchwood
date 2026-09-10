@@ -608,9 +608,18 @@ func tarDir(dir string) (io.Reader, error) {
 			return err
 		}
 		hdr.Name = filepath.ToSlash(rel)
+		// 镜像内文件 mode 不得依赖构建进程状态（与 functionsdispatcher/daemon.go
+		// tarDir 同约定、同事故链）：上游 0644 写盘先被进程 umask 掩蔽，FileInfoHeader
+		// 保留磁盘实际 mode 经 COPY 进镜像，模板 USER node（非 root）读用户代码
+		// 即 EACCES。文件恒 0644、目录恒 0755（x 位供子目录遍历）、属主归零。
 		if d.IsDir() {
+			hdr.Mode = 0o755
 			hdr.Name += "/"
+		} else {
+			hdr.Mode = 0o644
 		}
+		hdr.Uid = 0
+		hdr.Gid = 0
 		if err := tw.WriteHeader(hdr); err != nil {
 			return err
 		}
