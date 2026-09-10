@@ -15,7 +15,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 	inframessaging "github.com/torchwoodcloud/torchwood/internal/infra/messaging"
-	"github.com/torchwoodcloud/torchwood/pkg/config"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
 func NewTestAccount(cfg *config.AppConfig, projectRepo projects.Repository, db *clients.Database) *Account {

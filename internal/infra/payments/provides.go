@@ -13,7 +13,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/payments/iosiap"
 	"github.com/torchwoodcloud/torchwood/internal/infra/payments/stripe"
 	"github.com/torchwoodcloud/torchwood/internal/infra/payments/wechat"
-	"github.com/torchwoodcloud/torchwood/pkg/config"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
 // ProviderSet 装配渠道注册表。

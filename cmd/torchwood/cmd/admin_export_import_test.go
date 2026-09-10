@@ -14,7 +14,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/model"
 	"github.com/torchwoodcloud/torchwood/internal/infra/documentdb"
 	"github.com/torchwoodcloud/torchwood/internal/infra/events"
-	"github.com/torchwoodcloud/torchwood/pkg/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 )
 
 // executeAdminCmd 设置 flags 并执行（CLI 子命令集成路径：verb → Run →

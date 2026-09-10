@@ -15,8 +15,8 @@ import (
 
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
-	"github.com/torchwoodcloud/torchwood/pkg/config"
-	"github.com/torchwoodcloud/torchwood/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 )
 
 // 通用 API 限流默认值（roadmap §3.4）：固定窗口，60s 量级。

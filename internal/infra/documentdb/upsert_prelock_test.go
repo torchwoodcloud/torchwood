@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
-	"github.com/torchwoodcloud/torchwood/pkg/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 )
 
 // isPGDeadlock 报告错误链是否携带 PG 40P01（deadlock_detected）。

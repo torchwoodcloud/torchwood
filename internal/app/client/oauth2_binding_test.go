@@ -14,8 +14,8 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"github.com/torchwoodcloud/torchwood/internal/domain/users"
-	"github.com/torchwoodcloud/torchwood/pkg/config"
-	"github.com/torchwoodcloud/torchwood/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 )
 
 // M5 C5（评审补偿控制）三支路单测：login nonce 成对、link 本人、link 冒名拒绝。

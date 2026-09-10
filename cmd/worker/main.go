@@ -9,7 +9,7 @@ import (
 	"github.com/lynx-go/lynx"
 	lynxzap "github.com/lynx-go/lynx/contrib/zap"
 	"github.com/spf13/pflag"
-	"github.com/torchwoodcloud/torchwood/pkg/config"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
 var version, commit, date string

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package torchwood.api.config;
 
-option go_package = "github.com/torchwoodcloud/torchwood/pkg/config";
+option go_package = "github.com/torchwoodcloud/torchwood/internal/pkg/config";
 
 message AppConfig {
   Server server = 1;

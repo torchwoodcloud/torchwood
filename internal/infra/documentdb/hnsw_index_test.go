@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
-	"github.com/torchwoodcloud/torchwood/pkg/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 )
 
 func setupHNSWCollection(ctx context.Context, t *testing.T) (databases.DocumentDB, string) {

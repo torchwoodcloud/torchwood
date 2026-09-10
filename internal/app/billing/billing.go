@@ -11,7 +11,7 @@ import (
 	domainbilling "github.com/torchwoodcloud/torchwood/internal/domain/billing"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	domainstorage "github.com/torchwoodcloud/torchwood/internal/domain/storage"
-	"github.com/torchwoodcloud/torchwood/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

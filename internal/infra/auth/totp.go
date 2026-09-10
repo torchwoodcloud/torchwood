@@ -11,7 +11,7 @@ import (
 	"github.com/pquerna/otp/totp"
 	"github.com/redis/go-redis/v9"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
-	"github.com/torchwoodcloud/torchwood/pkg/config"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 	"github.com/torchwoodcloud/torchwood/pkg/jwtparser"
 	"github.com/torchwoodcloud/torchwood/pkg/secretbox"

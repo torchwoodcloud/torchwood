@@ -12,7 +12,7 @@ import (
 	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	appfunctions "github.com/torchwoodcloud/torchwood/internal/app/functions"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
-	"github.com/torchwoodcloud/torchwood/pkg/config"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
 // ---- handler 层薄桩（use-case 全量语义在 internal/app/functions 测试覆盖）----

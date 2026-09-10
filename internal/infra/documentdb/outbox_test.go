@@ -13,7 +13,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/model"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 	"github.com/torchwoodcloud/torchwood/internal/infra/events"
-	"github.com/torchwoodcloud/torchwood/pkg/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 )
 
 // outboxTestProject 创建带 EventPublisher 的 DocumentDB 测试环境：

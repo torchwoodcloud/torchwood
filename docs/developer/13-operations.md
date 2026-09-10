@@ -1,6 +1,6 @@
 # Torchwood 部署与运维指南
 
-> 基于当前实现编写（以 `cmd/server/main.go`、`Taskfile.yml`、`docker/local/docker-compose.yml`、`pkg/config/config.proto`、`internal/infra/health/checks.go` 为准）。
+> 基于当前实现编写（以 `cmd/server/main.go`、`Taskfile.yml`、`docker/local/docker-compose.yml`、`internal/pkg/config/config.proto`、`internal/infra/health/checks.go` 为准）。
 > 关联：`docs/developer/11-testing.md`（测试与门禁）、`AGENTS.md`。
 > 修订记录：2026-08-23 重写（核对 Lynx 三进程、compose 三件套、`task build` 含 `console:build`、`TORCHWOOD_SECURITY_*`、`TORCHWOOD_ENV` 排水、`/healthz`/`/metrics`/`migrate`/`backup`）；2026-09-05 增补 §6.6 vector（pgvector）启用 runbook（转出门禁 A3：镜像预装/superuser 引导两路径 + 验证 SQL + 实测记录），§2 镜像行同步 pgvector 基座。
 
@@ -87,7 +87,7 @@ docker run --env-file .env -p 9099:9099 -p 9060:9060 torchwood:1.0.0-xxx-yyy
 
 ## 4. 生产配置要点
 
-配置 schema `pkg/config/config.proto`，模板 `configs/config.yaml.template`。`cmd/server/main.go:8` 先 `godotenv.Load()` 再 `config.NewBindConfigFunc()` 从 `./configs` 绑定；环境变量前缀 `TORCHWOOD_`，点号路径转下划线大写（如 `data.database.source` → `TORCHWOOD_DATA_DATABASE_SOURCE`）。
+配置 schema `internal/pkg/config/config.proto`，模板 `configs/config.yaml.template`。`cmd/server/main.go:8` 先 `godotenv.Load()` 再 `config.NewBindConfigFunc()` 从 `./configs` 绑定；环境变量前缀 `TORCHWOOD_`，点号路径转下划线大写（如 `data.database.source` → `TORCHWOOD_DATA_DATABASE_SOURCE`）。
 
 ### 4.1 必配项
 
@@ -221,7 +221,7 @@ psql "<authenticator DSN>" -c "CREATE TABLE public.tw_nope (x int);"
 # 期望：ERROR: permission denied for schema public
 ```
 
-实测记录（2026-09-05，本地 docker `pgvector/pgvector:0.8.6-pg18`）：临时库按序应用全部 30 个 up 迁移（psql）后按上述 SQL 引导，`rolsuper=f` 五特权位全 f、membership 三行、`SET ROLE` 三角色可达、两反例如期报错；roles_sig 密钥落库由 owner 引导账号完成（B15 部署期作业形态）+ 建项目/业务库/集合 + 文档读写（tw_system 写、tw_app+sig RLS 读）冒烟。集成测试锁定：`pkg/testutil/nonsuperuser_test.go::TestNonSuperuserAuthenticator_MigrateAndSmoke`（PASS，count=1；B15 起含 tw_secrets 七特权位全 false 断言）。
+实测记录（2026-09-05，本地 docker `pgvector/pgvector:0.8.6-pg18`）：临时库按序应用全部 30 个 up 迁移（psql）后按上述 SQL 引导，`rolsuper=f` 五特权位全 f、membership 三行、`SET ROLE` 三角色可达、两反例如期报错；roles_sig 密钥落库由 owner 引导账号完成（B15 部署期作业形态）+ 建项目/业务库/集合 + 文档读写（tw_system 写、tw_app+sig RLS 读）冒烟。集成测试锁定：`internal/pkg/testutil/nonsuperuser_test.go::TestNonSuperuserAuthenticator_MigrateAndSmoke`（PASS，count=1；B15 起含 tw_secrets 七特权位全 false 断言）。
 
 #### 授权面边界（迁移账号 vs 运行账号，B15 后）
 

@@ -382,7 +382,7 @@ func repoRoot() (string, error) {
 	if !ok {
 		return "", fmt.Errorf("cannot locate testutil package")
 	}
-	return filepath.Abs(filepath.Join(filepath.Dir(file), "..", ".."))
+	return filepath.Abs(filepath.Join(filepath.Dir(file), "..", "..", ".."))
 }
 
 // CreateTestProject inserts a test project, applies all project schema migrations, and returns its public id, internal id, and cleanup func.

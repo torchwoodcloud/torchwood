@@ -1,7 +1,7 @@
 # 动态文档 Schema 命名方案
 
 > 状态：已实施。不保留向后兼容：本地/测试库以重建为准，不做 `ALTER SCHEMA RENAME`，不识别旧名 `TORCHWOOD_<internal_id>_*`。
-> 相关代码：`internal/infra/documentdb/`、`internal/app/server/projects.go`、`internal/app/server/databases.go`、`internal/api/realtime/`、`pkg/testutil/db.go`、`docs/developer/06-databases.md`。
+> 相关代码：`internal/infra/documentdb/`、`internal/app/server/projects.go`、`internal/app/server/databases.go`、`internal/api/realtime/`、`internal/pkg/testutil/db.go`、`docs/developer/06-databases.md`。
 
 ---
 
@@ -272,7 +272,7 @@ Realtime `parseDatabasesChannel`：`dbID` 改 `ident.ValidateSchemaResourceID`�
 
 ### 5.5 测试夹具
 
-`pkg/testutil.CreateTestProject` 今日生成 `test-%d`（含 `-`，且可能超过 28）。改为合法 id，例如：
+`internal/pkg/testutil.CreateTestProject` 今日生成 `test-%d`（含 `-`，且可能超过 28）。改为合法 id，例如：
 
 ```go
 ID: fmt.Sprintf("t%x", time.Now().UnixNano()) // t + hex(nano) ≤ 16 字符量级

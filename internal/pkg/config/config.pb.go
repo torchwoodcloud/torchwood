@@ -2987,7 +2987,7 @@ const file_config_proto_rawDesc = "" +
 	"privateKey\x12&\n" +
 	"\x0fapple_root_cert\x18\x06 \x01(\tR\rappleRootCert\x12,\n" +
 	"\x12verify_receipt_url\x18\a \x01(\tR\x10verifyReceiptUrl\x12,\n" +
-	"\x12sandbox_verify_url\x18\b \x01(\tR\x10sandboxVerifyUrlB0Z.github.com/torchwoodcloud/torchwood/pkg/configb\x06proto3"
+	"\x12sandbox_verify_url\x18\b \x01(\tR\x10sandboxVerifyUrlB9Z7github.com/torchwoodcloud/torchwood/internal/pkg/configb\x06proto3"
 
 var (
 	file_config_proto_rawDescOnce sync.Once

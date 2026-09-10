@@ -1,7 +1,7 @@
 # AGENTS 指南
 
 ## 总体说明
-- 本仓库使用 Lynx + Clean Architecture：`internal/api`（传输层）、`internal/app`（用例层）、`internal/domain`（领域与端口）、`internal/infra`（适配器层）。**`internal/` 只含这四层**：共享内核（`bootkit` 启动钩子、`config`、`contexts`、`buildinfo`、`testutil` 及可复用库）放 `pkg/`；各二进制私有组件放 `cmd/<app>/internal/`（server 运行时装配在 `cmd/server/internal/runtime`，函数分发器实现在 `cmd/functions-dispatcher/internal/functionsdispatcher`）。
+- 本仓库使用 Lynx + Clean Architecture：`internal/api`（传输层）、`internal/app`（用例层）、`internal/domain`（领域与端口）、`internal/infra`（适配器层）。目录约定：`internal/` = 四层 + 业务共享内核 `internal/pkg/`（`config`/`contexts`/`bootkit`/`testutil`）；`pkg/` = 通用可复用库（`buildinfo`/`query`/`crud` 等）；server 专属运行时装配在 `cmd/server/internal/runtime`；函数分发器实现为仓库根顶层包 `functionsdispatcher/`（入口 `cmd/functions-dispatcher`）。
 - Torchwood 产品定位包含 **AI/Agent-Native**：Protobuf + OpenAPI 定义可机器读取的 API；Server API 通过 scoped API Key 供 Agent/自动化调用；详见 `docs/roadmap.md` §0 与 `sdk/README.md`。
 - 运行时组合通过 Wire 注入：`cmd/server/provides.go` -> `cmd/server/wire_gen.go`。
 - 服务器组件由 `cmd/server/provides.go` 启动，包含 gRPC、grpc-gateway、独立 HTTP handler、metrics、Admin Console SPA。
@@ -14,7 +14,7 @@
 - `cmd/torchwood/`：Torchwood CLI 二进制（`bin/torchwood`），基于 `github.com/lynx-go/commands`（零依赖子命令 CLI 框架）实现，通过 sdk/go（server 包 InvokeJSON）以 API Key 调用 Server API；CLI 源码不直接 import genproto/grpc（有 import_guard_test 兜底），方法覆盖完整性由 `sdk/go/server` 的测试保证，新增 RPC 无需在 CLI 登记。全局旗标在子命令路径之后、位置参数之前给出（环境变量 `TORCHWOOD_CLI_*` 优先）；退出码契约 0/1/2=40x/3=5xx/4=429 经 `commands.ExitCode` 钩子注入（`cmd/torchwood/cmd/root.go` rpcExitCode）。
 - `internal/api/serverhttp/`：自定义 HTTP handler，例如 Storage multipart 上传下载。
 - `pkg/query/`：Appwrite 风格查询 DSL 解析器，供动态文档层使用。
-- `pkg/testutil/`：集成测试数据库辅助工具。
+- `internal/pkg/testutil/`：集成测试数据库辅助工具。
 
 ## 开发流程
 - 以 Task 作为主要工作流执行器（`Taskfile.yml`）。常用任务：
@@ -31,7 +31,7 @@
 - 修改 Console 代码后需先 `task console:build` 再 `task build`，否则 Go embed 会打包旧版本。
 
 ## 配置与环境约定
-- 配置 schema 由 `pkg/config/config.proto` 定义，运行时绑定位于 `pkg/config/bind.go`。
+- 配置 schema 由 `internal/pkg/config/config.proto` 定义，运行时绑定位于 `internal/pkg/config/bind.go`。
 - 环境变量覆盖前缀为 `TORCHWOOD_`；键名会从点号路径映射而来，例如 `data.database.source` -> `TORCHWOOD_DATA_DATABASE_SOURCE`。
 - `TORCHWOOD_ENV`（development/production）决定关停排水窗口：development 为 0，production 默认 30s；可被 `TORCHWOOD_SERVER_DRAIN_TIMEOUT` 覆盖。Lynx 在绑定 YAML 之前就需要该值，因此不进 `config.proto`。
 - MinIO 凭据请使用 `TORCHWOOD_STORAGE_S3_ACCESS_KEY_ID` 和 `TORCHWOOD_STORAGE_S3_SECRET_ACCESS_KEY`。

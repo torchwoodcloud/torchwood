@@ -16,7 +16,7 @@ import (
 
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
-	"github.com/torchwoodcloud/torchwood/pkg/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 )
 
 func TestExecIdentity_InjectionScopedToTx(t *testing.T) {

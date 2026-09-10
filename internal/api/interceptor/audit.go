@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
-	"github.com/torchwoodcloud/torchwood/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"

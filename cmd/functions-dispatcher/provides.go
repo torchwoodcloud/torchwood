@@ -4,10 +4,10 @@ import (
 	"github.com/google/wire"
 	"github.com/lynx-go/lynx"
 	"github.com/lynx-go/lynx/boot"
-	"github.com/torchwoodcloud/torchwood/pkg/bootkit"
-	"github.com/torchwoodcloud/torchwood/cmd/functions-dispatcher/internal/functionsdispatcher"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/bootkit"
+	"github.com/torchwoodcloud/torchwood/functionsdispatcher"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
-	config "github.com/torchwoodcloud/torchwood/pkg/config"
+	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
 //go:generate wire

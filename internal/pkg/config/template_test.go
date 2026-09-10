@@ -14,7 +14,7 @@ import (
 func TestConfigTemplateValid(t *testing.T) {
 	t.Parallel()
 
-	raw, err := os.ReadFile("../../configs/config.yaml.template")
+	raw, err := os.ReadFile("../../../configs/config.yaml.template")
 	require.NoError(t, err)
 
 	var doc map[string]any

@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
-	"github.com/torchwoodcloud/torchwood/pkg/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 	"github.com/torchwoodcloud/torchwood/pkg/query"
 )
 

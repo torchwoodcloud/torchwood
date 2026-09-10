@@ -13,7 +13,7 @@ import (
 	domainprojects "github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	infrabilling "github.com/torchwoodcloud/torchwood/internal/infra/billing"
-	"github.com/torchwoodcloud/torchwood/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 )
 
 type memRollups struct {

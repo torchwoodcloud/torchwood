@@ -30,7 +30,7 @@
 
 `.env` 覆盖键：`POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB`/`POSTGRES_PORT`/`REDIS_PORT`/`MINIO_API_PORT`/`MINIO_CONSOLE_PORT` 等。
 
-应用侧连接走 `TORCHWOOD_` 前缀（`pkg/config/config.proto:8` + `bind.go:14`）。**应用 DSN 使用非 superuser authenticator**（`docker/local` 的 `POSTGRES_USER` 是 initdb 引导账号，仅用于 bootstrap/迁移，见 `13-operations.md` §4.5 双账号契约）：
+应用侧连接走 `TORCHWOOD_` 前缀（`internal/pkg/config/config.proto:8` + `bind.go:14`）。**应用 DSN 使用非 superuser authenticator**（`docker/local` 的 `POSTGRES_USER` 是 initdb 引导账号，仅用于 bootstrap/迁移，见 `13-operations.md` §4.5 双账号契约）：
 
 ```env
 # 运行态：非 superuser authenticator（完成下方「步骤 2.5」一次性引导后可用；生产换强口令并走密管）
@@ -118,7 +118,7 @@ task generate:all  # generate:proto → generate:config → wire:all
 | 任务 | 产物 |
 |------|------|
 | `generate:proto` | `buf lint` + `buf generate` → `genproto/` |
-| `generate:config` | `protoc -I. --go_out=.` 在 `pkg/config` 内产出 `config.pb.go` |
+| `generate:config` | `protoc -I. --go_out=.` 在 `internal/pkg/config` 内产出 `config.pb.go` |
 | `wire:all` | `cmd/server/wire_gen.go` + `cmd/worker/wire_gen.go` |
 
 全量零漂移校验见 `04-codegen.md §5`。

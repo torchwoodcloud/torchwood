@@ -24,8 +24,8 @@ import (
 	infraevents "github.com/torchwoodcloud/torchwood/internal/infra/events"
 	infrapayments "github.com/torchwoodcloud/torchwood/internal/infra/payments"
 	"github.com/torchwoodcloud/torchwood/internal/infra/payments/stripe"
-	"github.com/torchwoodcloud/torchwood/pkg/contexts"
-	"github.com/torchwoodcloud/torchwood/pkg/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

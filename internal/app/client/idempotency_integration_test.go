@@ -10,8 +10,8 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwoodcloud/torchwood/internal/infra/documentdb"
-	"github.com/torchwoodcloud/torchwood/pkg/contexts"
-	"github.com/torchwoodcloud/torchwood/pkg/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 )
 
 // Client 面写幂等（redesign §4.1/§10.1）：EndUser 主体同 key 重放返回原响应。

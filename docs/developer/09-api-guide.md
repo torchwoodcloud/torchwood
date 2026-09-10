@@ -255,7 +255,7 @@ CLI 调用：`torchwood outbox list-dead --project <id>` / `torchwood rpc /torch
 
 ## 12 自检清单
 
-1. `task generate:proto && go build ./...` 通过，`genproto/` 无手改；2. `task wire:all` 已重生成；3. `go vet` + `gofmt -l` 空；4. 错误码/分页符合 §7/§9；5. `TestSwaggerAccessExtensionMatches...` 通过；6. 集成测试参照 `internal/api/servergrpc/projects_test.go`（`stub repo + contexts.WithPrincipal`）与 `pkg/testutil` 真库。
+1. `task generate:proto && go build ./...` 通过，`genproto/` 无手改；2. `task wire:all` 已重生成；3. `go vet` + `gofmt -l` 空；4. 错误码/分页符合 §7/§9；5. `TestSwaggerAccessExtensionMatches...` 通过；6. 集成测试参照 `internal/api/servergrpc/projects_test.go`（`stub repo + contexts.WithPrincipal`）与 `internal/pkg/testutil` 真库。
 
 ## 13 参考
 

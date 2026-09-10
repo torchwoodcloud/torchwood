@@ -46,7 +46,7 @@ Starts PostgreSQL (5432), Redis (6379) and MinIO (9000/9001). Ports are overrida
 cp .env.example .env
 ```
 
-Key vars (`TORCHWOOD_` prefix, see `pkg/config/config.proto` + `pkg/config/bind.go`):
+Key vars (`TORCHWOOD_` prefix, see `internal/pkg/config/config.proto` + `internal/pkg/config/bind.go`):
 
 ```env
 # Runtime DSN: non-superuser authenticator (see docs/developer/13-operations.md §4.5;

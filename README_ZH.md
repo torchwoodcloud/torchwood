@@ -46,7 +46,7 @@ task docker:up
 cp .env.example .env
 ```
 
-关键变量（`TORCHWOOD_` 前缀，schema 见 `pkg/config/config.proto`，绑定见 `pkg/config/bind.go`）：
+关键变量（`TORCHWOOD_` 前缀，schema 见 `internal/pkg/config/config.proto`，绑定见 `internal/pkg/config/bind.go`）：
 
 ```env
 TORCHWOOD_DATA_DATABASE_SOURCE=postgres://torchwood:torchwood@127.0.0.1:5432/torchwood?sslmode=disable

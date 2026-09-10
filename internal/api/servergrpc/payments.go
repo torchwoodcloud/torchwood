@@ -10,7 +10,7 @@ import (
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	apppayments "github.com/torchwoodcloud/torchwood/internal/app/payments"
 	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
-	"github.com/torchwoodcloud/torchwood/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"

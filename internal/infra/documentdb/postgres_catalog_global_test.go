@@ -17,7 +17,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/app/shared"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/model"
-	"github.com/torchwoodcloud/torchwood/pkg/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 )
 
 // TestCatalogCodec_RoundTrip 锁 JSONB 合一编解码的全字段契约（default 的

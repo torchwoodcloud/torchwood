@@ -10,7 +10,7 @@ import (
 
 	"github.com/lynx-go/lynx"
 	"github.com/redis/go-redis/v9"
-	"github.com/torchwoodcloud/torchwood/pkg/config"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
 // Service 是 functions-dispatcher 的 lynx 服务装配：HTTP API + reaper 周期

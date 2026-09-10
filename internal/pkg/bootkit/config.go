@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
-	config "github.com/torchwoodcloud/torchwood/pkg/config"
+	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/crud"
 )
 

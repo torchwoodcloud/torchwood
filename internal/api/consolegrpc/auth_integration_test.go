@@ -19,8 +19,8 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwoodcloud/torchwood/internal/infra/documentdb"
 	"github.com/torchwoodcloud/torchwood/internal/infra/projectschema"
-	"github.com/torchwoodcloud/torchwood/pkg/config"
-	"github.com/torchwoodcloud/torchwood/pkg/testutil"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/torchwoodcloud/torchwood/internal/domain/functions"
-	config "github.com/torchwoodcloud/torchwood/pkg/config"
+	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

@@ -10,7 +10,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/idgen"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	infraidgen "github.com/torchwoodcloud/torchwood/internal/infra/idgen"
-	"github.com/torchwoodcloud/torchwood/pkg/config"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
 type stubProjectRepo struct {

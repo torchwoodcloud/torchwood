@@ -1,8 +1,8 @@
 # Torchwood 测试与质量保障
 
-> 说明测试分层、`pkg/testutil` 集成库约定、CI 门禁与代码质量棘轮。
+> 说明测试分层、`internal/pkg/testutil` 集成库约定、CI 门禁与代码质量棘轮。
 > 目标读者：所有提交代码的开发者。关联：`AGENTS.md`、`Taskfile.yml`、`.github/workflows/ci.yml`。
-> 修订记录：2026-08-23 重写（以 `pkg/testutil/db.go`、`Taskfile.yml:154` 的 `test` 任务、CI `buf breaking`/`golangci-lint --new-from-rev`/`wire` 漂移检查为准）。
+> 修订记录：2026-08-23 重写（以 `internal/pkg/testutil/db.go`、`Taskfile.yml:154` 的 `test` 任务、CI `buf breaking`/`golangci-lint --new-from-rev`/`wire` 漂移检查为准）。
 
 ---
 
@@ -53,7 +53,7 @@ test:
 
 ---
 
-## 3. 集成测试数据库（`pkg/testutil/`）
+## 3. 集成测试数据库（`internal/pkg/testutil/`）
 
 ### 3.1 环境变量
 
@@ -62,9 +62,9 @@ test:
 | `TORCHWOOD_TEST_DATABASE_SOURCE` | `postgres://torchwood:torchwood@127.0.0.1:5432/TORCHWOOD_test?sslmode=disable` | 测试 DSN 模板，**库名会被替换** |
 | `TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE` | `postgres://torchwood:torchwood@127.0.0.1:5432/postgres?sslmode=disable` | 维护库 DSN（建库/删库） |
 
-无硬编码回退，缺失时 `SetupTestDB` 直接 `t.Fatal` 提示 `run via task test`（`pkg/testutil/db.go:48`）。两个测试 DSN 保持 **owner 引导账号**（superuser）：testutil 的建隔离库 + 跑全量迁移是 §4.5 双账号契约的迁移侧（`CREATE EXTENSION vector`、public 建表、membership GRANT 都是引导面）；非 superuser 运行态形态由 `TestNonSuperuserAuthenticator_MigrateAndSmoke`（`pkg/testutil/nonsuperuser_test.go`，门禁 A2）以独立临时库端到端锁定——owner 跑迁移 + 建 authenticator，再以 authenticator 完成 roles_sig 同步、项目/业务库/集合创建与文档读写冒烟，并断言 `rolsuper=false`。
+无硬编码回退，缺失时 `SetupTestDB` 直接 `t.Fatal` 提示 `run via task test`（`internal/pkg/testutil/db.go:48`）。两个测试 DSN 保持 **owner 引导账号**（superuser）：testutil 的建隔离库 + 跑全量迁移是 §4.5 双账号契约的迁移侧（`CREATE EXTENSION vector`、public 建表、membership GRANT 都是引导面）；非 superuser 运行态形态由 `TestNonSuperuserAuthenticator_MigrateAndSmoke`（`internal/pkg/testutil/nonsuperuser_test.go`，门禁 A2）以独立临时库端到端锁定——owner 跑迁移 + 建 authenticator，再以 authenticator 完成 roles_sig 同步、项目/业务库/集合创建与文档读写冒烟，并断言 `rolsuper=false`。
 
-### 3.2 `SetupTestDB(t)` 生命周期（`pkg/testutil/db.go:43`）
+### 3.2 `SetupTestDB(t)` 生命周期（`internal/pkg/testutil/db.go:43`）
 
 ```go
 db := testutil.SetupTestDB(t)
@@ -140,7 +140,7 @@ Services：`postgres:18-alpine`（`torchwood:torchwood`）与 `pgsty/silo:RELEAS
 5. `test -z "$(gofmt -l .)"` → `mkdir -p console/dist && touch console/dist/index.html`（保证 `console/embed.go` 可编译）；
 6. `go vet ./...` → `golangci-lint run --new-from-rev=origin/main`；
 7. `go test -race ./...`（单元+集成）→ `sdk/go: go test -race ./...`；
-8. **Codegen 漂移门禁**（`ci.yml:101`）：`buf generate` + `protoc config.proto` + `task wire:all` 后 `git diff --exit-code -- genproto pkg/config cmd go.mod go.sum`，任何生成物漂移直接失败；
+8. **Codegen 漂移门禁**（`ci.yml:101`）：`buf generate` + `protoc config.proto` + `task wire:all` 后 `git diff --exit-code -- genproto internal/pkg/config cmd go.mod go.sum`，任何生成物漂移直接失败；
 9. `pnpm@11.20.0` + `node@22` → `sdk/typescript: npm ci && npm run test` → `task sdk:demo-build` → `task build`（含 `console:build` 的 embed 链路验证）。
 
 ### 5.2 `frontend`（`working-directory: console`）
@@ -155,14 +155,14 @@ Services：`postgres:18-alpine`（`torchwood:torchwood`）与 `pgsty/silo:RELEAS
 |------|------|----------|
 | Proto 兼容性 | `buf breaking --against '.git#branch=origin/main'`（`buf.yaml` 规则） | 删除/改类型字段未 `reserved`、改字段号等破坏性变更 |
 | Lint 棘轮 | `golangci-lint run --new-from-rev=origin/main` | 相对基线新增 lint 问题 |
-| 生成物一致性 | `buf generate` + `protoc` + `task wire:all` 后 `git diff --exit-code` | `genproto/`、`pkg/config/*.pb.go`、`cmd/*/wire_gen.go` 未提交或手改生成物 |
+| 生成物一致性 | `buf generate` + `protoc` + `task wire:all` 后 `git diff --exit-code` | `genproto/`、`internal/pkg/config/*.pb.go`、`cmd/*/wire_gen.go` 未提交或手改生成物 |
 
 本地复现：
 
 ```bash
 buf breaking --against '.git#branch=origin/main'
 golangci-lint run --new-from-rev=origin/main ./...
-task generate:all && git diff --exit-code -- genproto pkg/config cmd
+task generate:all && git diff --exit-code -- genproto internal/pkg/config cmd
 ```
 
 ---

@@ -13,7 +13,7 @@
 |------|------|------|
 | `tools:install` | `go install protoc-gen-go / migrate / buf@v1.65.0 / wire / golangci-lint@v2.12.2` | 首次安装工具链 |
 | `generate:proto` | `buf lint` + `buf generate` | 生成 gRPC/gateway/Swagger（§2） |
-| `generate:config` | `protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto`（`pkg/config` 内执行） | 生成 `config.pb.go` |
+| `generate:config` | `protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto`（`internal/pkg/config` 内执行） | 生成 `config.pb.go` |
 | `wire:server` / `wire:worker` | `go mod tidy && go run -mod=mod github.com/google/wire/cmd/wire` | 各自重算 `wire_gen.go` |
 | `wire:all` | `wire:server` + `wire:worker` | 全量 Wire |
 | `generate:all` | `generate:proto` → `generate:config` → `wire:all` | 一键全量（§5） |
@@ -69,13 +69,13 @@ breaking: {use: [FILE]}
 
 ## 3. generate:config
 
-`Taskfile.yml:14` 在 `pkg/config` 内执行：
+`Taskfile.yml:14` 在 `internal/pkg/config` 内执行：
 
 ```bash
 protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto
 ```
 
-产出 `pkg/config/config.pb.go`（仅 message/getter，供 `bind.go` 反射与 `NewAppConfig` 校验）。
+产出 `internal/pkg/config/config.pb.go`（仅 message/getter，供 `bind.go` 反射与 `NewAppConfig` 校验）。
 
 ---
 
@@ -146,6 +146,6 @@ generate:all
 - `proto/client|server|console|shared` 唯一事实来源
 - `genproto/` 生成产物（禁手改）
 - `cmd/server|worker/provides.go` / `wire.go` / `wire_gen.go`
-- `pkg/config/config.proto`
+- `internal/pkg/config/config.proto`
 - `AGENTS.md` 生成约定
 - `cmd/server/internal/runtime/grpc_swagger_test.go` swagger/`method_auth` 一致性断言

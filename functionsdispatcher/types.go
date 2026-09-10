@@ -15,8 +15,9 @@ package functionsdispatcher
 import "time"
 
 const (
-	// runnerPort 是 runner 在容器内监听的 HTTP 端口（与 runner 包常量一致；
-	// 本包不 import infra/functions/runner 以保持部署面最小，注释互指）。
+	// runnerPort 是 runner 在容器内监听的 HTTP 端口（与 infra/functions/runner
+	// 包常量一致，本地重复定义避免仅为取常量而拉入 runner 依赖；构建与
+	// health/invoke 另经 daemon/pool 使用该包，注释互指）。
 	runnerPort = 18080
 
 	// registryKeyPrefix 是实例注册表键前缀：torchwood:fninst:{project}:{function}
