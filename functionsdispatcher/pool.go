@@ -151,18 +151,22 @@ func (h *httpRunner) Invoke(ctx context.Context, ip string, data, token string, 
 	if err != nil {
 		return nil, fmt.Errorf("read runner response: %w", err)
 	}
+	// result 是用户 main 的任意 JSON 返回值（对象/数组/标量），必须用
+	// RawMessage 承接：声明为 string 时对象返回值触发 UnmarshalTypeError
+	// 且被静默忽略——ok 已部分解析为 true、result 丢失，执行结果静默变空
+	//（CI e2e 实证）。Response 对外契约是 string（JSON 文本透传）。
 	var envelope struct {
-		Ok     bool   `json:"ok"`
-		Result string `json:"result"`
-		Stdout string `json:"stdout"`
-		Stderr string `json:"stderr"`
-		Error  string `json:"error"`
+		Ok     bool            `json:"ok"`
+		Result json.RawMessage `json:"result"`
+		Stdout string          `json:"stdout"`
+		Stderr string          `json:"stderr"`
+		Error  string          `json:"error"`
 	}
 	_ = json.Unmarshal(body, &envelope)
 	return &invokeResult{
 		HTTPStatus: resp.StatusCode,
 		Ok:         envelope.Ok,
-		Result:     envelope.Result,
+		Result:     string(envelope.Result),
 		Stdout:     envelope.Stdout,
 		Stderr:     envelope.Stderr,
 		Error:      envelope.Error,
