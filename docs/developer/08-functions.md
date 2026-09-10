@@ -38,16 +38,35 @@ HTTP multipart FunctionsHandler (internal/api/serverhttp/functions_handler.go, P
 
 支持 `runtimes.go`：`node-18.0`（`index.js:main`）/`python-3.11`（`main.py:main`），`spec`: `shared-1x(0.5CPU/256MB)`/`shared-2x(1CPU/512MB)`。
 
-`dockerfileFor`：
+`dockerfileFor`（无依赖形态；python 同构）：
 
 ```dockerfile
 FROM node:18-alpine
+WORKDIR /app
 COPY . .; USER node
 CMD ["node","-e","const {main}=require('./index');Promise.resolve(main(JSON.parse(process.env.TW_DATA||'{}'))).then(r=>console.log(JSON.stringify(r)))"]
 # python: FROM python:3.11-alpine; python -c "import json,os,main;print(json.dumps(main.main(...)))"
 ```
 
-流程（`internal/app/functions/deployments.go`）：校验 zip 魔数 `PK\x03\x04` + 50MiB 限制 → 落库 `pending` → 占构建信号量 → `building` → `executor.Build`（解压≤1000 条/单条≤100MiB/总量≤200MiB，拒绝符号链接与 `zip slip`）→ `ready`/`failed`。镜像名 `<registry>/func-<fid>-<did>`（`storage: functions.docker.registry`，默认 `torchwood-funcs`）。
+**平台代装依赖（v3 切片 E，设计 `functions-v3.md` §3/D11，node 运行时）**：zip 根含 `package.json` 且 `dependencies` 非空时，node 构建改用经典分层模板，依赖由平台在构建期安装，用户代码包不再携带 `node_modules`：
+
+```dockerfile
+FROM node:18-alpine
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci --omit=dev --ignore-scripts
+COPY . .
+USER node
+# CMD 与无依赖模板一致（构建管道变化、产物等价，模板版本不 bump）
+```
+
+- **lockfile 强制**：有 `dependencies` 但缺 `package-lock.json` → 构建失败（deployment failed），错误信息：「检测到 dependencies 但缺少 package-lock.json——请提交 lockfile 以保证确定性构建（npm install 会生成）」。无锁安装不可复现，与「构建是平台确定性操作」不变量对齐。
+- **`node_modules` 拒收**：代码包中任意条目路径第一段为 `node_modules`（含目录与文件条目）→ 构建失败：「请勿在代码包中携带 node_modules——平台将在构建期代装依赖（对齐 Appwrite；跨平台二进制不兼容）」。CLI deploy 已同步剔除（`cmd/torchwood` 打包排除 `node_modules/.git`）。
+- **`--ignore-scripts` 恒定**（一期不提供 opt-in，OQ4 收口）：不变量「构建期不执行用户代码/第三方脚本」——npm 生命周期脚本（postinstall）可执行任意代码。代价：依赖原生编译（node-gyp）或 postinstall 下载二进制的包**不可用**（如 esbuild/swc 的安装版——安装期二进制落盘步骤被跳过，函数执行时报「找不到可执行文件/模块」类错误即此原因；改用纯 JS 等价物或浏览器/WASM 构建）。残余风险（lockfile 为用户可控输入、npm 解析器漏洞）经 lockfile integrity hash 固定 + 构建容器既有 hardening 兜底，构建出网白名单后置（OQ5 收口：一期不限制，registry 拉包必需）。
+- **层缓存加速**：`package.json`/`package-lock.json` 不变的重新部署直接命中 Docker 层缓存，跳过 `npm ci` 拉包，只有代码层重建。
+- 探测与拒收实现在 zip 解压校验层（`internal/infra/functions/docker.go` `extractZipWithLimits`，与 zip slip/符号链接校验同处逐条判定）；模板决策在 `dockerfileFor`（v1）与 `runner.DockerfileFor`（v2/v3 常驻路径），两模板仅 CMD/ENV 差异。python 代装（`requirements.txt` + pip）随 python v2 支持落地。
+
+流程（`internal/app/functions/deployments.go`）：校验 zip 魔数 `PK\x03\x04` + 50MiB 限制 → 落库 `pending` → 占构建信号量 → `building` → `executor.Build`/dispatcher `BuildImage`（解压≤1000 条/单条≤100MiB/总量≤200MiB，拒绝符号链接与 `zip slip`，拒收 `node_modules`，探测 `package.json`/lockfile 决定分层模板并强制 lockfile）→ `ready`/`failed`。镜像名 `<registry>/func-<fid>-<did>`（`storage: functions.docker.registry`，默认 `torchwood-funcs`）。
 
 ## 4 执行（同步/异步）
 
@@ -92,7 +111,7 @@ CMD ["node","-e","const {main}=require('./index');Promise.resolve(main(JSON.pars
 
 设计：`docs/design/functions-execution-identity-and-triggers.md` §6（本节唯一事实源）；owner 裁决：CGI 形态（每请求一容器）为设计缺陷，常驻 runner 升级为默认执行模型，冷启动 = 池 0→1 扩容的单一代码路径。
 
-**模型**：函数镜像 CMD 换为平台 runner（`internal/infra/functions/runner/`，node 先行；模板版本常量 `RunnerTemplateVersion=2` 落 `function_deployments.template_version`，构建期不执行用户代码的不变量不变）。runner 启动即加载用户模块（约定 `index.js` 导出 `main(TW_DATA)`），加载完成前 `/_tw/health` 返回 not-ready；加载后监听容器内 HTTP `:18080`（仅 per-project 桥网络可达）：`POST /` body = TW_DATA JSON + header `x-tw-execution-token`（每请求写入 `process.env.TW_EXECUTION_TOKEN` 再调 main——一期串行执行 1 并发/实例使逐请求覆盖安全），响应 200 `{"ok":true,"result":...}` / 500 `{"ok":false,"error":...}`（附加 stdout/stderr 字段为 console.* 尾部环缓冲）；达 `TW_MAX_REQUESTS` 自退出、SIGTERM 排空在途后退出。
+**模型**：函数镜像 CMD 换为平台 runner（`internal/infra/functions/runner/`，node 先行；模板版本常量 `RunnerTemplateVersion` 落 `function_deployments.template_version`，v2 时为 2、v3 起为 3（见 §4.3.1），构建期不执行用户代码的不变量不变）。runner 启动即加载用户模块（约定 `index.js` 导出 `main(TW_DATA)`），加载完成前 `/_tw/health` 返回 not-ready；加载后监听容器内 HTTP `:18080`（仅 per-project 桥网络可达）：`POST /` body = TW_DATA JSON + header `x-tw-execution-token`（每请求写入 `process.env.TW_EXECUTION_TOKEN` 再调 main——一期串行执行 1 并发/实例使逐请求覆盖安全），响应 200 `{"ok":true,"result":...}` / 500 `{"ok":false,"error":...}`（附加 stdout/stderr 字段为 console.* 尾部环缓冲）；达 `TW_MAX_REQUESTS` 自退出、SIGTERM 排空在途后退出。
 
 **分发拓扑（owner 拍板方案③）**：独立 `functions-dispatcher` 进程（`cmd/functions-dispatcher` + `functionsdispatcher/`）专职持有 docker.sock（compose 唯一挂载点；dokploy 编排下 dispatcher 以 `user: root` 运行——镜像缺省 torchwood 用户读不了宿主 `root:docker` 的 sock，server/worker 不挂 sock 不受影响），按需 join `tw-func-<project>` 网络（自身容器 NetworkConnect 自 attach；宿主进程模式跳过——Linux 桥 IP 宿主可直达，Docker Desktop for Windows/macOS 的 VM 拓扑下容器 bridge IP 对宿主不可路由，v2 分发通路要求 Linux/dokploy compose 拓扑）。server/worker 经 HTTP API 分发（`internal/infra/functions/dispatcher_client.go` 适配 Executor 端口），零 daemon 依赖；zip 构建以 base64 内联传输（无共享文件系统假设）。API 面（内网专用 + 可选 `x-tw-dispatcher-token` 静态共享密钥）：
 
@@ -112,6 +131,56 @@ CMD ["node","-e","const {main}=require('./index');Promise.resolve(main(JSON.pars
 - **idle reaper**：15s 周期 docker inspect 与注册表 diff 幽灵对账；idle > idle_ttl 且实例数 > min_instances 回收；draining（max_requests 到期/部署更替）实例兜底清理；`function_resident_uptime_ms` 按实例存活累计（保温成本显式计费口径）。
 
 **执行路径切换与回退**：`functions.executor` 二选一——`"docker"`（默认，v1 回退：每请求一容器、进程内执行、保留 run 信号量）或 `"dispatcher"`（v2：常驻 runner，**v2 路径跳过全局 run 信号量**——池上限/排队由 dispatcher 内部管控，双重限流会互相饿死）。不同时启用；python 函数 v2 暂不支持（构建期明确报错），对 python 保持 v1。**切换前须重新部署存量函数**：存量 deployment 的镜像是 v1 模板（CMD 跑完即退、`template_version` 为空），v2 分发会在健康探针处失败（boot timeout）——重新 `CreateDeployment` 即获得 runner 模板镜像（`template_version=2`）。SLA 口径：**热路径同步分发简单函数端到端 P99 ≤ 100ms（平台开销 ≤ 25ms）**；冷启动与异步队列路径显式不在 SLA 内。配套清账：同步快路径两写预占记账（见 §4.4）、principal 短 TTL 缓存、`latest_ready_deployment_id` 热路径指针、function/variables 30s 缓存、Prune 移出热路径。
+
+### 4.3.1 执行器 v3：实例内多路复用（runner v3，`functions-v3.md` §1）
+
+设计：`docs/design/functions-v3.md` §1.1–§1.6（本节锚点；owner 拍板 D1–D7）。执行器 v2 的「1 并发/实例串行」是吞吐天花板（8 实例 × 常驻内存下唯一低成本放大器，Cloud Run 默认 80 并发/实例、Lambda 2024-25 打破单环境串行同款动机）；v3 不推翻 v2 底座，打开单实例并发复用——**concurrency=1 时与 v2 行为逐步等价**。
+
+**并发模型与可重入契约（红线）**：单 Node 事件循环内多请求交错（非多进程/worker_threads，D1）——**函数作者必须保证 `main` 可重入：模块级可变全局状态在并发下有竞态**，与 Lambda / Cloud Run 同款契约。平台责任 = 默认 `concurrency=1`（不 opt-in 即无暴露，fail-closed）+ 本文档明示 + max_requests/崩溃重建兜底。迁移 000017 落 `functions.concurrency`（`INTEGER NOT NULL DEFAULT 1`，CHECK `1..16`——上限 16 为 2026-09-10 拍板：8 实例 × 16 = 128 并发对单机拓扑够用；管理 API 面随池策略管理切片开放，见 §11 未落地）。池语义变化仅认领条件一处：`ClaimIdle` 从「实例空闲」变为 `inflight < concurrency`（实例记录 inflight 化，释放路径 Lua 原子化防并发 claim/release 交错丢更新），背压顺序不变（认领 → trySpawn → 有界排队 → 超限 429，§4.3）。
+
+**`main(data, ctx)` 第二参数**：runner v3 以 `node:async_hooks` 的 `AsyncLocalStorage` 圈住每次调用，`ctx = { executionToken, apiBaseUrl, executionId }`。**含 await 的 main 必须读 `ctx.executionToken`**：`process.env.TW_EXECUTION_TOKEN` 仍设置（同步 main 与模块顶层读取兼容），但 async 函数在 await 恢复后 env 可能已被并发请求覆盖（凭证串号——A 以 B 的身份干活）；ctx 是并发下唯一安全通道。执行 ID 经分发 header `x-tw-execution-id` 透传进 `ctx.executionId`（日志关联）。
+
+**per-request 日志分桶**：console 捕获按请求环缓冲（`als.getStore().logs`，模块加载期落实例级兜底）——执行记录 `stdout`/`stderr` 语义从「实例级混流尾部」变为「**本请求** console 输出尾部」（审计口径更准，排障改善）。
+
+**超时语义变更（有意变更）**：超时/调用方取消只失败该请求、**不再杀实例**——并发下一个慢请求不得误杀同实例健康在途请求（Cloud Run 同款）；传输层错误（连接拒绝/reset）仍杀实例（容器崩溃判定）。配套**超时熔断**堵住「超时不杀」打开的僵尸负载通道：实例累计超时达阈值（默认 5，可配 `functions.dispatcher.timeout_budget`）→ 杀实例重建 + `torchwood_functions_instance_timeout_fuse_total` 指标；正常函数偶发超时不会连续累积。诚实声明（Lambda 同款）：超时后用户 main 可能仍在事件循环里跑至实例回收，inflight 按请求生命周期释放、不追踪用户代码生命周期。
+
+**降级保护（fail-safe 不 fail-closed，§1.5）**：函数 `concurrency > 1` 而执行所用 deployment 的 `template_version < 3` 时**静默按并发 1 执行** + `torchwood_functions_concurrency_downgraded_total{project,function}` 计数（`internal/app/functions/executions.go` `buildExecution`）——存量函数不因新列拒绝执行；重新 `CreateDeployment` 获 v3 模板后自然生效。
+
+**生效时机（D6）**：concurrency 在 spawn 时固化进实例记录（与 min/max_instances 传播语义一致，避免 claim 时多请求携带异值的判定歧义）——**调大后存量实例按旧值服务至 idle 回收/部署更替**，不热生效。
+
+### 4.3.2 Web 标准 fetch 入口（runner v4，`functions-v3.md` §2）
+
+设计：`docs/design/functions-v3.md` §2.1–§2.4（本节锚点；D9 双轨 / D10 透传）。runner 加载用户模块时按固定优先级探测导出：`mod.fetch` 为 function → fetch 风格；否则 `mod.main` → main 风格（既有路径，零改动继续可跑）；两者皆无 → 加载错误「index.js must export main or fetch」（加载失败常驻 not-ready）。
+
+**CJS 约定**：runner 以 `require` 消费用户模块（纯 CJS）——fetch 风格写法是 `module.exports = { fetch }` 或 `exports.fetch = async (request, env) => {...}`。设计文档里的 ESM 示例（`export default { fetch }`）需经打包/互操作落成 CJS 导出后才能被 runner 识别。
+
+```js
+// index.js —— fetch 风格（Node 18+ 原生全局 Request/Response，undici）
+exports.fetch = async (request, env) => {
+  const { userId } = await request.json();
+  return Response.json({ ok: true, userId });
+};
+
+// main 风格（v1 起既有）：main(data, ctx)，双轨并存（D9）
+exports.main = async (data, ctx) => ({ ok: true });
+```
+
+**env 三件**：fetch 风格的 `env` 是每次调用的**参数**（非 process.env），恒为 `{ EXECUTION_TOKEN, API_BASE_URL, EXECUTION_ID }`——token 经参数传递，并发下串号问题在该风格下结构性不存在（对照 §4.3.1 的 ctx）。functionVariables 仍固化在容器 `process.env`（函数级非请求级，第三方库读 env 照常工作）；`env` 参数与 data 同计 32KB 预算（token/baseUrl 约 200B 量级）。
+
+**触发器 sync 完整透传示例**（D10：HTTP 触发器 + fetch 风格 = 标准 Web 处理器）：
+
+```js
+// 微信 SSV 验签（对照 §12.3 配方的 fetch 风格重写）：
+exports.fetch = async (request, env) => {
+  const url = new URL(request.url);              // query 回到该在的位置
+  const signature = url.searchParams.get("signature");
+  const body = await request.text();              // 原始 body 无需解析封套
+  // …sha256(sort(query)+body+app_secret) 验签、AES 解密…
+  return Response.json({ is_valid: true });       // status/headers/body 全透传
+};
+```
+
+sync 模式下函数返回的 `Response` 完整透传给调用方：HTTP status（`ExecutionResult.StatusCode` ≥ 100 即函数 HTTP status）、headers（runner 侧已过滤 hop-by-hop 与 date/server/host 等平台头；handler 侧第二层白名单过滤，见 `function_triggers_handler.go` transparentHeaderBlocklist）、body（>64KB 截断，超限头/体不回传）。自定义状态码、二进制（`body_base64` 无损）、302 重定向从此可达。main 风格封套照旧进 TW_DATA（双轨并存到 main 退役）。一期限制：invoke 路径（server/client）不回传 headers、body 全缓冲不流式（OQ7 收口）；`waitUntil` 后台任务不做。
 
 ## 4.4 同步快路径两写预占记账（§6 约束①，K9）
 
@@ -147,6 +216,7 @@ defer release()
 - 重试：`queueMessage.Attempt` 持久化于 payload，瞬时失败 `requeue` 时 `+1 LPUSH`，`>maxProcessAttempts=3` 则 `FailExecutionIfActive` 标记 `failed`；`ErrInvalidQueuePayload` 丢弃不重试。
 - 启动对账：`RecoverOrphanExecutions(1h)` 按 `public.projects` 轮转扫描，将 `queued/building/running>1h` 标 `failed`（全局预算 `500`，`scanCursor` 轮转防饥饿）。
 - cron 调度循环（P1，`worker.go cronLoop`）：每分钟 `DispatchDueCronTriggers(now, 100)` 领取到期 cron 触发器并入队异步执行（见 §12.5）。
+- 事件触发器消费循环（v3 切片 D，`worker/event_triggers.go`）：`functions-triggers` 消费组 XREADGROUP `torchwood:events` + 订阅匹配器 15s 快照 + 停机补投（见 §12.5）。
 - 优雅退出：`Stop` 取消 `BRPOP` 上下文。
 
 `StreamTrimmer`（`worker/trimmer.go:14`）：每 10min `XTRIM APPROX torchwood:queue:functions-executions MAXLEN 100000`（`XADD` 不设 `MaxLen` 保未投递，裁剪低频 `Trim`，`context.WithTimeout(10s, WithoutCancel)`）。
@@ -192,7 +262,7 @@ TORCHWOOD_RUN_DOCKER_TESTS=1 go test ./internal/infra/functions -run TestDockerB
 
 - 同步执行 `runExecution` 外层 `grpc/interceptor` 已设 `lynxgrpc.WithTimeout`，内层 `executor.Execute` 以 `fn.TimeoutSeconds` 为 `context.WithTimeout`，`servergrpc/functions.go:304` 额外 `+60s` 余量覆盖镜像清理。
 - 指标 `torchwood_outbox_*`（`outbox_worker.go`）与 `torchwood_function_duration_ms`（`meterDuration` 以 `200ms` `WithoutCancel` 异步 `Incr` 到 `usage` 表）均 best-effort。
-- **P0.5 观测补全（Prometheus，包内自注册）**：`torchwood_functions_execution_duration_seconds{project,function,source,status}` 与 `torchwood_functions_executions_total{...,source,status}`（`internal/app/functions/metrics.go`；source=server|http|cron|client）、`torchwood_functions_queue_wait_seconds`（异步 queued→running）、`torchwood_functions_invoke_total{project,function,source,result}`（P1 触发器 + P2 客户端入口计数，§12.1/§13.2）。执行器 v2 侧（`functionsdispatcher/metrics.go`）：`torchwood_functions_cold_starts_total`（池 0→1 计数）、`torchwood_functions_init_duration_seconds`（对标 Lambda initializationDuration）、池水位 `torchwood_functions_pool_{ready,booting,draining}`、`torchwood_function_resident_uptime_ms`（保温成本计费口径）、`torchwood_functions_dispatch_duration_seconds` / `torchwood_functions_dispatch_queue_wait_seconds` / `torchwood_functions_dispatch_queue_{dropped,timeouts}_total`。SLA burn 告警锚点：热路径端到端 P99 > 100ms 或平台开销 > 25ms（狗粮期实测，§4.3 SLA 口径）。P2 新增：`torchwood_functions_egress_class_total{project,class=trusted|untrusted}`（容器创建 egress 分类计数，§13.5）。
+- **P0.5 观测补全（Prometheus，包内自注册）**：`torchwood_functions_execution_duration_seconds{project,function,source,status}` 与 `torchwood_functions_executions_total{...,source,status}`（`internal/app/functions/metrics.go`；source=server|http|cron|client|event）、`torchwood_functions_queue_wait_seconds`（异步 queued→running）、`torchwood_functions_invoke_total{project,function,source,result}`（P1 触发器 + P2 客户端入口计数，§12.1/§13.2）。执行器 v2 侧（`functionsdispatcher/metrics.go`）：`torchwood_functions_cold_starts_total`（池 0→1 计数）、`torchwood_functions_init_duration_seconds`（对标 Lambda initializationDuration）、池水位 `torchwood_functions_pool_{ready,booting,draining}`、`torchwood_function_resident_uptime_ms`（保温成本计费口径）、`torchwood_functions_dispatch_duration_seconds` / `torchwood_functions_dispatch_queue_wait_seconds` / `torchwood_functions_dispatch_queue_{dropped,timeouts}_total`。SLA burn 告警锚点：热路径端到端 P99 > 100ms 或平台开销 > 25ms（狗粮期实测，§4.3 SLA 口径）。P2 新增：`torchwood_functions_egress_class_total{project,class=trusted|untrusted}`（容器创建 egress 分类计数，§13.5）。v3 新增：`torchwood_functions_concurrency_downgraded_total{project,function}`（旧模板并发降级计数，§4.3.1）、`torchwood_functions_instance_timeout_fuse_total`（超时熔断触发计数）、`torchwood_functions_instance_inflight{project,function}`（在途请求水位 Gauge，§4.3.1）、`torchwood_functions_event_deliveries_total{project,function,result}` 与 `torchwood_functions_event_backfill_total{project,result}`（事件触发器投递/停机补投计数，§12.5）。
 - 日志 `stdout/stderr` 容器侧缓冲 `1MiB`，`executionErrorMessage` 优先取 `status.Message`，`error` 列截断 `64KB`。
 
 ## 11 测试与边界
@@ -200,11 +270,11 @@ TORCHWOOD_RUN_DOCKER_TESTS=1 go test ./internal/infra/functions -run TestDockerB
 - 单元：`internal/app/functions/functions_test.go`/`executions_test.go`/`mocks_test.go`（`maxConcurrentBuilds/Runs`、截断、队列 payload 校验、`RequireServerPrincipal` 分支）；`internal/infra/queue/redis_queue_test.go`（`LPUSH/BRPOP`、`Trim`）。
 - 安全：`security_test.go` 校验代码包 `zip slip`/符号链接/size 上限；`authz_test.go` 校验写方法鉴权；`semaphore_test.go` 校验 `SETNX+Lua` 互斥。
 - 集成：`internal/infra/functions/docker_integration_test.go`（`TORCHWOOD_RUN_DOCKER_TESTS=1`，CI 预拉 `node:18-alpine`/`python:3.11-alpine`）；`worker/consume_test.go` / `worker/requeue_test.go`（`attempt` 持久化、死信未落、`Transition` CAS）。
-- 未落地：独立构建队列（`CreateDeployment` 同步构建，Worker 消费前补构建兜底）；重试无死信队列（超限 `FailExecutionIfActive`）；变量明文；`entrypoint` 固定入口；多机需对象存储承载 zip。
+- 未落地：独立构建队列（`CreateDeployment` 同步构建，Worker 消费前补构建兜底）；重试无死信队列（超限 `FailExecutionIfActive`）；变量明文；`entrypoint` 固定入口；多机需对象存储承载 zip；池策略管理 API 面（`UpdateFunction` proto3 optional ×5——min/max_instances、idle_ttl、max_requests、concurrency + Console「池策略」卡片，v3 B 切片）——**concurrency 现无管理入口，恒为列默认 1**，行为与 v2 串行等价。
 
-## 12 触发器（P1：HTTP + cron，设计 `functions-execution-identity-and-triggers.md` §3）
+## 12 触发器（P1：HTTP + cron；v3 切片 D 增 DB 事件，设计 `functions-execution-identity-and-triggers.md` §3 与 `functions-v3.md` §4）
 
-实体 `function_triggers`（迁移 000015；`internal/domain/functions/triggers.go` 端口 + `bunrepo/function_trigger_repo.go`）：`type ∈ {http, cron}`，config JSONB 存分类型配置；http 的 token 提为独立列（`UNIQUE(token)` 支撑查找，cron 为 NULL——UNIQUE 不去重 NULL）。管理面走 Server RPC（镜像 SetFunctionScopes 的 method_auth：functions.write + admin/owner）：`CreateFunctionTrigger` / `ListFunctionTriggers` / `DeleteFunctionTrigger` / `RotateFunctionTriggerToken`；函数删除经 FK `ON DELETE CASCADE` 级联清理触发器（dispatcher 不需通知，靠 idle TTL 收敛——P0.5 既定）。
+实体 `function_triggers`（迁移 000015 + 000018；`internal/domain/functions/triggers.go` 端口 + `bunrepo/function_trigger_repo.go`）：`type ∈ {http, cron, event}`，config JSONB 存分类型配置；http 的 token 提为独立列（`UNIQUE(token)` 支撑查找，cron/event 为 NULL——UNIQUE 不去重 NULL）。管理面走 Server RPC（镜像 SetFunctionScopes 的 method_auth：functions.write + admin/owner）：`CreateFunctionTrigger` / `ListFunctionTriggers` / `DeleteFunctionTrigger` / `RotateFunctionTriggerToken`（token 轮换仅 http）；函数删除经 FK `ON DELETE CASCADE` 级联清理触发器（dispatcher 不需通知，靠 idle TTL 收敛——P0.5 既定）。
 
 ### 12.1 HTTP 触发器（公开 URL）
 
@@ -257,6 +327,35 @@ TORCHWOOD_RUN_DOCKER_TESTS=1 go test ./internal/infra/functions -run TestDockerB
 
 每日/赛季重置建 `type=cron` 触发器（如 `0 3 * * *`），验证：宕机 2 天后 worker 恢复，`catch_up_once` 恰补跑 1 次（`scheduled_for` 为原计划时刻）且 `next_run_at` 直接指向下一日 03:00；`skip` 模式只推进不补跑。
 
+### 12.5 事件触发器（v3 切片 D，设计 `functions-v3.md` §4/D12/D13）
+
+数据库文档写事件（create/update/delete）触发函数异步执行。链路：文档写事务内 outbox 行（既有事件脊柱，零改动）→ `OutboxWorker` XADD Redis Stream `torchwood:events` → **`functions-triggers` 消费组**（worker 进程，`worker/event_triggers.go`）→ 进程内订阅匹配器 → 命中触发器逐条异步入队（与 cron 同一 `InvokeTrigger` 通道，执行记录 `trigger_source = event:{trigger_id}`）。outbox 主投递路径（WS 实时扇出）零侵入。
+
+- **订阅串格式（Appwrite 风格）**：`databases.{database_id}.collections.{collection_id}.documents.{op}`，op ∈ {create, update, delete}。一期通配语义：collection 段与 op 段可为 `*`（规范通配形态 `collections.*.documents.*` = 任一集合任一事件）；**database 段必须精确**（database 级通配后置）。解析/校验/匹配实现于 `internal/domain/functions/eventmatch.go`（创建期与匹配器构建共用同一解析——存储侧无第二套宽松口径）。一个触发器可带多条订阅串（≤64 条，protovalidate 形状校验 + 服务端逐条格式校验，错误文案携带具体条目）；同一事件命中同一触发器的多条订阅串会**多次投递**，函数幂等吸收。
+- **存在性 best-effort**：创建时不强制校验 database/collection 存在（use-case 未注入跨域仓储端口）——订阅不存在的集合合法（事件永不命中，静默无投递）。
+- **data 投影与回读（32KB 预算的关键设计）**：事件信封可达 1MiB 而执行 data 上限 32KB——data 只带投影：
+
+  ```json
+  {
+    "type": "event",
+    "event": "databases.documents.update",
+    "event_id": "01J…", "seq": 42,
+    "database_id": "app", "collection_id": "notes",
+    "document_id": "doc_1", "version": 7,
+    "envelope_truncated": false,
+    "data": { "id": "doc_1", "data": {…}, "permissions": […], "created_at": "…", "updated_at": "…", "version": 7 }
+  }
+  ```
+
+  文档投影「尽力塞入剩余预算」，超限剥掉 data 并标 `data_truncated: true`；`envelope_truncated` 是信封自身在 outbox 序列化期的 1MiB 预算截断（**两级截断分名**，语义不混）。函数按 `document_id` 用 **`databases:read` scope 回读全量**——「ID + 摘要进 data，全量靠回读」与 HTTP 触发器封套同一哲学。delete 事件无 data 键。
+- **权限不豁免（v3 Security #4，重要）**：回读走 execution principal + RLS 完整链路（§4.2）——函数需 `databases:read` declared scope，**且目标集合 ACL 授予 `key:function:<id>` 角色**，否则 scope 过门但回读为空（错误形态与 §4.2 一致）。
+- **投递保证与幂等键**：at-least-once——补投与正常路径的重叠投递由函数幂等吸收；**幂等键推荐来源 = data 的 `event_id` / `seq`**（seq 是 outbox 全局分配序、集合内有空洞，仅当游标与去重辅助用，勿当全局提交序）。消费组 `XACK` 在入队成功后；XACK 前崩溃的在途条目由 XAUTOCLAIM（1min idle）重投。
+- **停机补投（D12 对抗审查升格，一期必做）**：`XTRIM`（~100k 条水位）不理会消费组进度——worker 停机超过 Stream 裁剪窗口后，消费组会静默跳到现存最老条目。worker 启动时（消费循环起来前）以 Redis 自管水位键 `torchwood:fnevent:lastseq`（每批 ACK 后 Lua 单调推进）与 Stream 现存首条的信封 seq 比较（Stream 条目 ID 自动生成、不含 seq 语义），`first_seq > lastseq+1` 即存在裁剪缺口 → 从 outbox 表按 `seq ∈ (lastseq, first_seq_in_stream]` 分批（500/批）补投，走同一匹配+投递路径；上界收在 Stream 现存首条（上界条目与恢复后的正常消费重叠投递一次，幂等吸收）。**诚实边界：outbox 行 24h 清理窗口之外的极端停机（>24h）才真正丢失**（与 WS 订阅 `EVENTS.RESUME_EXPIRED` 同一口径）。
+- **风暴兜底（OQ9 收口：一期不做精确限流）**：三层既有机制兜底——异步通道 run 信号量 + dispatcher 有界排队（429 ResourceExhausted → enqueue_error）+ 补投分批推进。
+- **自环警告（D13：无硬防护）**：函数订阅自己写入的集合 → 写 → 事件 → 再触发循环会无限放大。平台一期**不做递归硬防护**（Appwrite 官方同款处理：文档警告）——Console 订阅编辑处展示警告文案；链式调用多个函数成环同样危险。观测兜底见下。
+- **触发器生效延迟**：订阅匹配器是 15s 周期全量快照（`RefreshEventTriggerIndex`，任一项目扫描失败保留旧快照不换入）——创建/启停触发器到生效有一个刷新周期的传播窗口，窗口内的事件对**新**触发器不补投（快照语义）；重启即全量重建。
+- **指标**：`torchwood_functions_invoke_total{source="event"}`（入口计数，复用）、`torchwood_functions_event_deliveries_total{project, function, result=ok|enqueue_error}`（**只记命中的触发器**，no_match 不记——本指标速率即风暴/自环告警锚点）、`torchwood_functions_event_backfill_total{project, result=ok|error}`（**补投计数非零即告警锚点：停机窗口可视**）。
+
 ## 13 客户端调用（P2：END_USER 按 per-function 策略同步调用，设计 `functions-execution-identity-and-triggers.md` §4/§5）
 
 客户端调用面是带独立策略门的**新入口**，不是 Server 面 `CreateExecution` 的放开：终端用户（Client API Bearer 登录态）可调用显式开启 `client_callable` 的函数，身份（project/user）取自 Principal、请求体不携带身份。执行走既有参数化核心路径（`internal/app/functions/clientinvoke.go` → `createExecution`），执行身份铸造（§4.2）、两写预占记账、账本 operator 溯源（function+user，§4.2）全部自动生效。审计载体 = `function_executions` 行（`trigger_source='client'` + `invoking_user_id`，设计 §6 约束③），该 RPC 在 `AuditInterceptor` 跳过清单内（`internal/api/interceptor/audit.go`）。
@@ -289,7 +388,7 @@ TORCHWOOD_RUN_DOCKER_TESTS=1 go test ./internal/infra/functions -run TestDockerB
 
 ### 13.5 egress 策略与部署要求（不可信函数默认 deny）
 
-- **分类**：不可信 = `client_callable == true` **或** 存在 http/cron 触发器（含禁用——可随时重新启用，按行存在性分类更保守）；可信 = 其余（仅 server key 触发）。分类是**函数属性**，对该函数的所有触发来源一致生效，在 app 层完成（30s 缓存摊薄触发器查询），随执行规格传给 executor。
+- **分类**：不可信 = `client_callable == true` **或** 存在 http/cron/event 触发器（含禁用——可随时重新启用，按行存在性分类更保守；event 触发与 http/cron 同属不可信触发面——事件源是终端用户写入，函数回访平台走函数网络内的 server 容器不受 internal 网络影响）；可信 = 其余（仅 server key 触发）。分类是**函数属性**，对该函数的所有触发来源一致生效，在 app 层完成（30s 缓存摊薄触发器查询），随执行规格传给 executor。
 - **实现**：不可信函数容器 attach **internal 变体网络** `tw-func-<project>-int`（docker `internal: true`——阻断外网出口、网内互通保留）而非常规网络；v1 执行器与 v2 dispatcher 同分类（`internal/infra/functions/docker.go ResolveInternalNetworkName`、`functionsdispatcher` `EnsureProjectNetwork(…, untrusted)`）。dispatcher 随执行分布逐渐 join 两类网络（自身容器 NetworkConnect，幂等）。指标 `torchwood_functions_egress_class_total{project, class=trusted|untrusted}`。
 - **一期语义（诚实偏离）**：per-function 域名级白名单需要 egress 代理原语，一期不实现——语义退化为 **trusted/untrusted 二分类**：不可信函数出网**全 deny**（含第三方 API），可信函数保持放开。需要外呼第三方（如支付网关）的函数不要开启 client_callable/触发器，或等待 egress 代理立项。
 - **部署要求（dokploy compose 已接好；手动部署必读）**：`functions.execution.api_base_url` 必须填**函数网络内可达**的 Server API 地址——不可信函数在 internal 网络上无 NAT 出口，外部域名/IP 均不可达。compose 的接线：dispatcher 配置 `TORCHWOOD_FUNCTIONS_DISPATCHER_CALLBACK_CONTAINER=torchwood-server`，在 join 每个函数网络时把 server 容器（`container_name: torchwood-server`）一并 attach，`api_base_url = http://torchwood-server:9080`（容器名 DNS 内网解析）。attach 失败仅告警不阻断执行（函数可能无需回访），但不可信函数的平台调用（assets grant 等）将连接失败——部署后用一条带 declared_scopes 的函数实跑验证回访连通性。
