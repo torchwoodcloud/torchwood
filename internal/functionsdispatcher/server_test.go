@@ -100,3 +100,28 @@ func TestServer_Healthz(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 }
+
+// healthz 豁免 token 校验（liveness 静态探针，编排健康检查不带凭据），
+// 且豁免面仅 GET /healthz：其余方法与 dispatch 端点仍一律 401。
+func TestServer_HealthzExemptFromToken(t *testing.T) {
+	srv, _, _ := newTestServer(t, "sekrit")
+
+	for _, token := range []string{"", "sekrit"} {
+		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+		if token != "" {
+			req.Header.Set("X-Tw-Dispatcher-Token", token)
+		}
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code, "token=%q", token)
+	}
+
+	// 非 GET 打到 /healthz 不在豁免面内（mux 之前就被 token 校验拦截）。
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/healthz", nil))
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+
+	// dispatch 端点无 token 依旧 401。
+	rec = postJSON(t, srv, "/v1/dispatch/executions", "", dispatchReq())
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}

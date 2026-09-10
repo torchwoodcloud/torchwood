@@ -19,7 +19,8 @@ import (
 //	GET  /healthz                   进程存活
 //
 // 认证：可选静态共享密钥 header（x-tw-dispatcher-token，constant time 比对；
-// config 空 = 不校验，仅限可信内网）。全部端点接受调用方 ctx 超时。
+// config 空 = 不校验，仅限可信内网）；GET /healthz 豁免（liveness 静态探针，
+// 编排健康检查不带凭据）。其余端点接受调用方 ctx 超时。
 type dispatchServer struct {
 	pool   *PoolManager
 	daemon Daemon
@@ -43,6 +44,13 @@ func (s *dispatchServer) routes() *http.ServeMux {
 
 // ServeHTTP 挂认证中间件。
 func (s *dispatchServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// /healthz 豁免 token 校验：liveness 静态探针（固定 200，零信息泄露），
+	// 编排健康检查命令行不应携带密钥（docker inspect 可见）。豁免面仅
+	// GET /healthz——其余方法/路径（含 dispatch 端点）一律走校验。
+	if r.Method == http.MethodGet && r.URL.Path == "/healthz" {
+		s.routes().ServeHTTP(w, r)
+		return
+	}
 	if s.token != "" {
 		got := r.Header.Get("X-Tw-Dispatcher-Token")
 		if got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(s.token)) != 1 {
