@@ -174,13 +174,38 @@ services:
     # 容器名钉死：函数网络（tw-func-<project>[-int]，dispatcher 动态 attach）
     # 上的 DNS 以容器名解析——functions.execution.api_base_url 即指向它。
     container_name: torchwood-server
-    # gRPC(:9060，明文 h2c，SDK/CLI 直连) + grpc-gateway HTTP + Console SPA + Storage
-    # serverhttp + healthz。HTTP 9080 走 Dokploy「Domains」（Traefik 终止 TLS）；
-    # gRPC 9060 无法过 Traefik HTTP 路由（SDK 默认明文拨号），直接发布宿主端口。
-    # 当前仅明文：config 无 gRPC TLS 字段，CLI --tls 为占位——务必用防火墙/安全组
-    # 限制 9060 的来源 IP（x-api-key 在明文链路上可被嗅探）。
+    # gRPC(:9060，明文 h2c) + grpc-gateway HTTP + Console SPA + Storage serverhttp
+    # + healthz。对外两条域名路由直接以 Traefik label 声明在本文件（不用 Dokploy
+    # 「Domains」UI——生成名带随机后缀无法变量化）：Traefik 终止 TLS，HTTP 直达
+    # 9080；gRPC 以 h2c 转发 9060（gRPC 要求端到端 HTTP/2，scheme=h2c 必须）。
+    # 客户端经域名 + --tls/WithTLS（系统根证书）连接；变量值在 Dokploy Environment。
+    networks:
+      - dokploy-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      # —— HTTP：gateway/Console/Storage/healthz，80 整站 301 → https ——
+      - "traefik.http.routers.torchwood-http.rule=Host(`${TORCHWOOD_HTTP_DOMAIN:?请在 Dokploy Environment 设置 HTTP 域名}`)"
+      - "traefik.http.routers.torchwood-http.entrypoints=websecure"
+      - "traefik.http.routers.torchwood-http.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.torchwood-http.service=torchwood-http-svc"
+      - "traefik.http.services.torchwood-http-svc.loadbalancer.server.port=9080"
+      - "traefik.http.routers.torchwood-http-web.rule=Host(`${TORCHWOOD_HTTP_DOMAIN:?请在 Dokploy Environment 设置 HTTP 域名}`)"
+      - "traefik.http.routers.torchwood-http-web.entrypoints=web"
+      - "traefik.http.routers.torchwood-http-web.middlewares=redirect-to-https@file"
+      - "traefik.http.routers.torchwood-http-web.service=torchwood-http-svc"
+      # —— gRPC：TLS 终结 → h2c ——
+      - "traefik.http.routers.torchwood-grpc.rule=Host(`${TORCHWOOD_GRPC_DOMAIN:?请在 Dokploy Environment 设置 gRPC 域名}`)"
+      - "traefik.http.routers.torchwood-grpc.entrypoints=websecure"
+      - "traefik.http.routers.torchwood-grpc.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.torchwood-grpc.service=torchwood-grpc-svc"
+      - "traefik.http.services.torchwood-grpc-svc.loadbalancer.server.port=9060"
+      - "traefik.http.services.torchwood-grpc-svc.loadbalancer.server.scheme=h2c"
+    # 宿主端口只绑回环：留给 SSH 隧道明文直连兜底（见 README §4）。公网 gRPC
+    # 一律走上方域名 TLS。如需恢复远程明文，去掉 127.0.0.1: 前缀并务必继续用
+    # 防火墙/安全组限制来源（x-api-key 在明文链路上可被嗅探）。
     ports:
-      - "${TORCHWOOD_GRPC_PORT:-9060}:9060"
+      - "127.0.0.1:${TORCHWOOD_GRPC_PORT:-9060}:9060"
     environment:
       <<: *app-env
       # executor=dispatcher（v2 常驻执行模型）时同步执行经 dispatcher 分发；
@@ -276,3 +301,9 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+
+networks:
+  # Dokploy 内置网络（其 Traefik 容器所在）：server 加入后 Traefik 经
+  # traefik.docker.network label 从该网络回源容器。external 指向 Dokploy 托管的同名网络。
+  dokploy-network:
+    external: true

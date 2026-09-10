@@ -17,7 +17,8 @@
 
 - 一台装好 Docker 的服务器 + Dokploy（≥ v0.10）；
 - 本仓库可被 Dokploy 访问（GitHub/GitLab/直接 Git URL；私有仓库需在 Dokploy 配置凭证）；
-- 一个指向服务器的域名（如 `tw.example.com`），用于 HTTPS 反代与 `public_url`。
+- 一个指向服务器的域名（如 `tw.example.com`），用于 HTTPS 反代与 `public_url`；
+  HTTP 与 gRPC 建议各一个子域（如 `tw.example.com` / `grpc.tw.example.com`），见 §3。
 
 ## 1. 创建 Compose 服务
 
@@ -41,7 +42,9 @@ GitHub Actions 会自动构建并推 GHCR（首次部署前确认 [image workflo
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | ✅ | 栈内 MinIO 凭据（同时作为应用 S3 凭据注入） |
 | `POSTGRES_USER` / `POSTGRES_DB` | | 默认 `torchwood` / `torchwood` |
 | `TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS` | | 浏览器端跨域来源，**默认 `*`**（非凭据放开：SDK/前端以 Bearer token 调 API）。仅跨站携带会话 cookie 的特殊形态需改为显式列出 origin 并开 `allow_credentials`（config.yaml） |
-| `TORCHWOOD_GRPC_PORT` | | 宿主侧 gRPC 端口，默认 `9060`（见 §4） |
+| `TORCHWOOD_HTTP_DOMAIN` | ✅ | HTTP 域名（gateway/Console/Storage），如 `tw.example.com`；Traefik label 路由，见 §3 |
+| `TORCHWOOD_GRPC_DOMAIN` | ✅ | gRPC 域名（Traefik 终结 TLS → h2c），如 `grpc.tw.example.com`，见 §4 |
+| `TORCHWOOD_GRPC_PORT` | | 宿主侧 gRPC 端口，默认 `9060`；**仅绑回环**，供 SSH 隧道兜底（见 §4） |
 
 > **注意 1（密码字符集）**：口令会被拼进 `postgres://` DSN 与 psql 脚本，含 `@ : / # ? ' "` 等字符会直接破坏连接串。
 > 一律使用 hex/base62 长随机。
@@ -49,14 +52,25 @@ GitHub Actions 会自动构建并推 GHCR（首次部署前确认 [image workflo
 > **注意 2**：`POSTGRES_USER` 是基础设施引导账号（superuser），**只**用于迁移/引导作业；
 > 运行态 DSN 固定走 `tw_authenticator`（compose 已配好，superuser 会绕过文档面 RLS，见 ops 文档 §4.5）。
 
-## 3. 绑定域名
+## 3. 绑定域名（compose Traefik label，不用 Domains UI）
 
-Compose 服务页 → **Domains** → Add Domain：
+域名路由**不走 Dokploy「Domains」UI**——两条 Traefik router/service 已直接以 label
+声明在本目录 compose 的 `server` 服务上，改域名/换环境只动 Environment 变量：
 
-- **Service**: `server`，**Port**: `9080`，填你的域名并启用 HTTPS（Let's Encrypt）。
+| 变量 | 承载 | 入口 |
+|------|------|------|
+| `TORCHWOOD_HTTP_DOMAIN` | gRPC-gateway REST + `/console/` + Storage 上传下载 + 健康端点（9080） | `https://<域名>/…`；80 自动 301 → https |
+| `TORCHWOOD_GRPC_DOMAIN` | gRPC（9060，Traefik 终结 TLS 后以 **h2c** 转发——gRPC 要求端到端 HTTP/2） | `--endpoint <域名>:443 --tls`（见 §4） |
 
-应用对 9080 端口暴露 gRPC-gateway HTTP + `/console/` + Storage 上传下载 + 健康端点。
-gRPC（9060）走宿主端口发布而非域名（见 §4）；metrics（回环 9040）不对外。
+两条 Host 规则互斥、互不影响；HTTPS 同用 Dokploy 内置的 `letsencrypt` 证书解析器。
+
+> ⚠️ **Dokploy「Domains」UI 里不要再保留本服务的域名条目**（包括历史添加的）：
+> UI 生成的 router 与 label 声明的 router 规则相同，并存时 Traefik 二选一不可控
+> （可能间歇落到无 h2c 的后端，表现为 gRPC 间歇 500）。UI 只留空即可；
+> DNS 记录照常指向服务器，与本配置无关。
+>
+> 环境变量的插值与 compose 内其它 `${VAR}`（如 `TORCHWOOD_SECURITY_JWT_SECRET`）同源，
+> 无需额外开关；插值落空（规则渲染成空 Host）时先检查变量拼写。
 
 ## 3.1 OAuth 第三方登录（浏览器流）
 
@@ -85,30 +99,37 @@ CORS 基线 `*` 只服务普通 API 调用（Bearer token），OAuth 流不经 C
 
 ## 4. gRPC 对外暴露（SDK / CLI 直连）
 
-server 的 gRPC 监听 `:9060` 并由 compose 发布为宿主端口（`TORCHWOOD_GRPC_PORT`，默认 9060），
-供 `sdk/go/server` 与 CLI 直接拨号（HTTP/2 明文 h2c）。在宿主防火墙/云安全组放行该端口，
-**并只放行 SDK 部署来源的 IP**（见下方安全提示）。
+server 的 gRPC 监听 `:9060`（明文 h2c）。对外标准路径走 **Traefik TLS 终结域名**
+（§3 的 `TORCHWOOD_GRPC_DOMAIN`）：label 以 `loadbalancer.server.scheme=h2c` 满足
+gRPC 端到端 HTTP/2 要求，客户端用系统根证书连接：
 
-SDK（Go）用法——默认明文拨号，无需额外选项：
+SDK（Go）——`WithTLS` 启用 TLS（自定义 CA/mTLS 用 `WithDialOptions` 传凭据）：
 
 ```go
-client, err := sdkserver.New("tw.example.com:9060",
+client, err := sdkserver.New("grpc.tw.example.com:443",
     sdkserver.WithAPIKey("sk-..."),
+    sdkserver.WithTLS(),
     sdkserver.WithDatabaseID("main"))
 ```
 
-CLI 用法（全局旗标在子命令路径之后、位置参数之前）：
+CLI（`--tls` 用系统根证书；全局旗标在子命令路径之后、位置参数之前）：
 
 ```bash
-torchwood --endpoint tw.example.com:9060 --api-key sk-... health
+torchwood health get --endpoint grpc.tw.example.com:443 --tls
+torchwood users list --endpoint grpc.tw.example.com:443 --tls --api-key sk-...
 # 环境变量等价：TORCHWOOD_CLI_ENDPOINT / TORCHWOOD_CLI_API_KEY
 ```
 
-**安全提示（明文）**：当前 gRPC 仅明文——config schema 无 gRPC TLS 字段，CLI `--tls` 为占位未支持，
-`x-api-key` 在明文链路上可被嗅探。因此：
+**回环兜底通道**：compose 仍以 `127.0.0.1:${TORCHWOOD_GRPC_PORT:-9060}:9060` 发布宿主端口
+（只绑回环，不进公网），供 SSH 隧道明文直连：
 
-- 用防火墙/安全组把 9060 的来源限制为 SDK/Agent 的出口 IP；不要对公网裸开；
-- 如需 TLS：可手工在 Traefik 配 TCP+TLS 路由（经 `WithDialOptions(grpc.WithTransportCredentials(credentials.NewTLS(...)))` 拨号），或等待服务端 gRPC TLS 支持落地。
+```bash
+ssh -L 9060:127.0.0.1:9060 <服务器>
+torchwood health get --endpoint 127.0.0.1:9060   # 隧道内明文，等价 443+--tls
+```
+
+如确需远程明文直连（不推荐），去掉 ports 的 `127.0.0.1:` 前缀恢复 0.0.0.0 发布，
+**并务必用防火墙/安全组限制来源 IP**——`x-api-key` 在明文链路上可被嗅探。
 
 gRPC 直连不受 `server.http.public_url` 与 CORS 影响（那是 HTTP/浏览器侧概念）；
 gRPC 侧认证即 API Key（`x-api-key` metadata），限流维度同理。
@@ -145,10 +166,11 @@ gRPC 侧认证即 API Key（`x-api-key` metadata），限流维度同理。
 ## 7. 验证
 
 ```bash
-curl https://<域名>/healthz/readiness      # 200（依赖 PG/Redis/MinIO 全绿）
-curl https://<域名>/v1/server/health/version
-curl https://<域名>/v1/health              # 依赖明细
-torchwood --endpoint <服务器IP>:9060 --api-key sk-... health   # gRPC 直连冒烟
+curl https://<HTTP域名>/healthz/readiness      # 200（依赖 PG/Redis/MinIO 全绿）
+curl https://<HTTP域名>/v1/server/health/version
+curl https://<HTTP域名>/v1/health              # 依赖明细
+curl -I http://<HTTP域名>/                     # 301 → https（80 重定向路由）
+torchwood health get --endpoint <gRPC域名>:443 --tls   # gRPC 经 Traefik TLS（无需 API key）
 ```
 
 ## 8. 栈内行为说明
