@@ -277,6 +277,11 @@ services:
 
   functions-dispatcher:
     <<: *app-image
+    # 镜像缺省 USER torchwood（非 root），读不了宿主 root:docker(660) 的
+    # docker.sock（connect: permission denied，函数构建必失败）。显式以 root
+    # 运行；group_add+宿主 docker GID 方案否——GID 跨机器不移植。sock 等同
+    # 宿主 root 权限，与下方「⚠ 仅在可信环境启用」注释同一前提。
+    user: root
     # 执行器 v2 独立分发进程（P0.5 方案③）：全栈唯一 docker.sock 持有方——
     # 承接 Build/Execute/RemoveImage 全部 daemon 操作、join tw-func-<project>
     # 网络（自 attach）后按容器 IP 直分 runner。server/worker 零 daemon 依赖，
@@ -296,7 +301,7 @@ services:
       TORCHWOOD_FUNCTIONS_DISPATCHER_CALLBACK_CONTAINER: torchwood-server
     volumes:
       - ./config.yaml:/app/configs/config.yaml:ro
-      # 唯一挂载点：dispatcher 专职持有 docker.sock
+      # 唯一挂载点：dispatcher 专职持有 docker.sock（user: root 才可读）
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9070/healthz"]

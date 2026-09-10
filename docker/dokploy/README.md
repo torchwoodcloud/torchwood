@@ -188,7 +188,9 @@ torchwood health get --endpoint <gRPC域名>:443 --tls   # gRPC 经 Traefik TLS�
   无持久化时容器重启 = 全部已登录会话下次刷新即失效（重新登录即恢复，非故障）。
   换 Redis 实例同理（`docs/developer/13-operations.md` §6.1）。
 - **Functions（可选）**：worker 常驻消费函数执行队列；启用 docker executor 需放开 compose 中
-  `docker.sock` 挂载（⚠ 等同宿主 root 权限）。不用 Functions 可删除 worker 服务。
+  `docker.sock` 挂载（⚠ 等同宿主 root 权限）。functions-dispatcher 以 `user: root` 运行
+  （镜像缺省 torchwood 用户读不了宿主 `root:docker` 的 sock）；server/worker 不挂 sock 不受影响。
+  不用 Functions 可删除 worker 服务。
 
 ## 9. 日常运维
 
