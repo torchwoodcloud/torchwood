@@ -102,7 +102,10 @@ func TestIntegration_DispatcherBuildSpawnDispatch(t *testing.T) {
 	require.NoError(t, d.BuildImage(ctx, "fnit", "depit", zip))
 
 	req := ExecuteRequest{
-		ProjectID:      "dispatch-it",
+		// ProjectID 须满足 ^[a-z][a-z0-9]{0,27}$（diag 诊断段曾实证：连字符
+		// 触发 EnsureProjectNetwork 的 ID 校验拒绝，被 Dispatch 吞错路径
+		// 包装成"无实例可领"）。
+		ProjectID:      "dispatchit",
 		FunctionID:     "fnit",
 		DeploymentID:   "depit",
 		Runtime:        "node-18.0",
