@@ -1,7 +1,7 @@
 export { Torchwood, TorchwoodError, accountsChannel } from "./torchwood.js";
 export { parseOAuth2CallbackFragment } from "./client/account.js";
 export type { OAuth2CallbackFragment } from "./client/account.js";
-export type { TorchwoodConfig } from "./http.js";
+export type { TorchwoodConfig, AuthMode } from "./http.js";
 export type {
   RealtimeConnectOptions,
   RealtimeConnection,

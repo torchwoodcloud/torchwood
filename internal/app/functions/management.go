@@ -27,6 +27,16 @@ const (
 	// defaultTimeoutSeconds 是创建函数未显式指定 timeout_seconds 时的服务端默认值
 	// （与 Console 前端默认值 15 及 DB 列 DEFAULT 15 保持一致）。
 	defaultTimeoutSeconds = 15
+
+	// ——池策略值域（P0.5 执行器 v2 + v3 多路复用；与 DB CHECK 约束同源，
+	// 迁移 000014/000017；docs/design/functions-v3.md §5/OQ2）——
+	minMinInstances    = 0
+	minMaxInstances    = 1
+	minIdleTTLSeconds  = 30
+	minMaxRequests     = 1
+	minConcurrency     = 1
+	maxConcurrency     = 16 // DB CHECK 与迁移 000017 同源（D2：8×16=128 够单机拓扑）
+	defaultConcurrency = 1
 )
 
 type CreateFunctionCommand struct {
@@ -60,6 +70,12 @@ type UpdateFunctionCommand struct {
 	ClientAnonymousAllowed *bool
 	ClientPerUserLimit     *int
 	ClientLimitWindow      *string
+	// ——池策略（v3 §5/OQ2；nil = 未设置，不修改）——
+	MinInstances           *int
+	MaxInstances           *int
+	IdleTTLSeconds         *int
+	MaxRequestsPerInstance *int
+	Concurrency            *int
 }
 
 func (f *Functions) CreateFunction(ctx context.Context, cmd CreateFunctionCommand) (*domainfunctions.Function, error) {
@@ -187,6 +203,11 @@ func (f *Functions) UpdateFunction(ctx context.Context, cmd UpdateFunctionComman
 	if err := applyClientPolicy(fn, cmd.ClientCallable, cmd.ClientAnonymousAllowed, cmd.ClientPerUserLimit, cmd.ClientLimitWindow); err != nil {
 		return nil, err
 	}
+	// 池策略（v3 §5/OQ2）：未设置字段不修改；值域兜底 + min≤max 跨字段校验
+	// （protovalidate 管形状，业务规则在 app 层）。
+	if err := applyPoolPolicy(fn, cmd.MinInstances, cmd.MaxInstances, cmd.IdleTTLSeconds, cmd.MaxRequestsPerInstance, cmd.Concurrency); err != nil {
+		return nil, err
+	}
 	fn.UpdatedAt = time.Now()
 	if err := f.repo.UpdateFunction(ctx, fn); err != nil {
 		return nil, err
@@ -232,6 +253,58 @@ func applyClientPolicy(fn *domainfunctions.Function, callable, anonymous *bool, 
 		if fn.ClientLimitWindow == "" {
 			fn.ClientLimitWindow = domainfunctions.ClientLimitWindowDay
 		}
+	}
+	return nil
+}
+
+// applyPoolPolicy 校验并把池策略应用到函数记录（v3 多路复用 §5/OQ2；
+// P0.5 执行器 v2 五列语义见迁移 000014/000017 与 functions-v3.md §1.5）：
+//   - 单字段值域与 DB CHECK 同源：min>=0、max>=1、idle_ttl>=30、
+//     max_requests>=1、concurrency 1..16（protovalidate 已在 API 边界拦截，
+//     此处兜底防绕过传输层的直接调用）；
+//   - 跨字段：min_instances <= max_instances（Update 的跨字段比较对象是
+//     应用后的终值——单独调 min 时也要与存量 max 比较，反之亦然）；
+//   - concurrency>1 要求函数可重入（契约文档化，不做平台硬校验，D1/D2）；
+//     旧模板部署按 1 降级执行（D7，运行时语义）。
+//
+// nil 字段 = 未设置（不修改现有值）。
+func applyPoolPolicy(fn *domainfunctions.Function, minInstances, maxInstances, idleTTL, maxRequests, concurrency *int) error {
+	if minInstances != nil {
+		if *minInstances < minMinInstances {
+			return status.Errorf(codes.InvalidArgument, "min_instances must be >= %d", minMinInstances)
+		}
+		fn.MinInstances = *minInstances
+	}
+	if maxInstances != nil {
+		if *maxInstances < minMaxInstances {
+			return status.Errorf(codes.InvalidArgument, "max_instances must be >= %d", minMaxInstances)
+		}
+		fn.MaxInstances = *maxInstances
+	}
+	if idleTTL != nil {
+		if *idleTTL < minIdleTTLSeconds {
+			return status.Errorf(codes.InvalidArgument, "idle_ttl_seconds must be >= %d", minIdleTTLSeconds)
+		}
+		fn.IdleTTLSeconds = *idleTTL
+	}
+	if maxRequests != nil {
+		if *maxRequests < minMaxRequests {
+			return status.Errorf(codes.InvalidArgument, "max_requests_per_instance must be >= %d", minMaxRequests)
+		}
+		fn.MaxRequestsPerInstance = *maxRequests
+	}
+	if concurrency != nil {
+		if *concurrency < minConcurrency || *concurrency > maxConcurrency {
+			return status.Errorf(codes.InvalidArgument, "concurrency must be between %d and %d", minConcurrency, maxConcurrency)
+		}
+		fn.Concurrency = *concurrency
+	}
+	if fn.MinInstances > fn.MaxInstances {
+		return status.Errorf(codes.InvalidArgument, "min_instances (%d) must be <= max_instances (%d)", fn.MinInstances, fn.MaxInstances)
+	}
+	if fn.Concurrency < minConcurrency {
+		// 存量零值防御（理论不可达：建列带 DEFAULT 1）；保持 DB CHECK 对齐。
+		fn.Concurrency = defaultConcurrency
 	}
 	return nil
 }

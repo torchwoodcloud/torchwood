@@ -1,12 +1,31 @@
 import { TorchwoodError, parseErrorResponse } from "./errors.js";
 
-export type AuthMode = "apiKey" | "user" | "none";
+/**
+ * AuthMode 说明：
+ * - "apiKey"：`X-Api-Key` + `X-Torchwood-Project` 头（Server API 项目密钥）。
+ * - "user"：`Authorization: Bearer <accessToken>`（Client API 终端用户登录态）。
+ * - "execution"：`Authorization: Bearer <executionToken>`（函数执行身份；
+ *   docs/design/functions-v3.md §5.1——函数内 SDK 经 TW_EXECUTION_TOKEN 获得的
+ *   短期凭证调用 Server API，项目绑定在 token 内，无需 X-Torchwood-Project）。
+ * - "none"：匿名（health 等公开端点）。
+ *
+ * 兼容规则：transport 配置了 executionToken 时，"apiKey" 模式的请求改走
+ * execution Bearer（server 服务类统一硬编码 auth:"apiKey"；fromExecution()
+ * 返回的 client 复用同一批服务类，凭据此一处切换即可全量可用，无需逐类改）。
+ */
+export type AuthMode = "apiKey" | "user" | "execution" | "none";
 
 export interface TorchwoodConfig {
   endpoint: string;
-  projectId: string;
+  /**
+   * 项目 ID：apiKey 模式经 `X-Torchwood-Project` 头发送；execution 模式
+   * 可省略（执行凭证已携带项目绑定）。
+   */
+  projectId?: string;
   apiKey?: string;
   accessToken?: string;
+  /** 函数执行身份短期凭证（functions-v3.md §5.1；优先经 fromExecution 注入）。 */
+  executionToken?: string;
   fetch?: typeof fetch;
 }
 
@@ -18,9 +37,10 @@ export interface RequestOptions {
 
 export class HttpTransport {
   private endpoint: string;
-  private projectId: string;
+  private projectId?: string;
   private apiKey?: string;
   private accessToken?: string;
+  private executionToken?: string;
   private fetchImpl: typeof fetch;
 
   constructor(config: TorchwoodConfig) {
@@ -28,11 +48,12 @@ export class HttpTransport {
     this.projectId = config.projectId;
     this.apiKey = config.apiKey;
     this.accessToken = config.accessToken;
+    this.executionToken = config.executionToken;
     this.fetchImpl = config.fetch ?? ((input, init) => globalThis.fetch(input, init));
   }
 
   getProjectId(): string {
-    return this.projectId;
+    return this.projectId ?? "";
   }
 
   getEndpoint(): string {
@@ -49,6 +70,30 @@ export class HttpTransport {
 
   setApiKey(key: string | undefined): void {
     this.apiKey = key;
+  }
+
+  getExecutionToken(): string | undefined {
+    return this.executionToken;
+  }
+
+  setExecutionToken(token: string | undefined): void {
+    this.executionToken = token;
+  }
+
+  /** execution 凭证是否就绪（server 服务类的 auth:"apiKey" 将解析为 execution）。 */
+  private get executionMode(): boolean {
+    return this.executionToken !== undefined && this.executionToken !== "";
+  }
+
+  /**
+   * applyExecutionAuth 写入执行身份 Bearer 头；凭证缺失即抛错（fail-closed，
+   * 与 apiKey 模式缺 key 同款）。
+   */
+  private applyExecutionAuth(headers: Record<string, string>): void {
+    if (!this.executionToken) {
+      throw new TorchwoodError("Execution token is required for this request (函数内请用 Torchwood.fromExecution 注入)", 0);
+    }
+    headers.Authorization = `Bearer ${this.executionToken}`;
   }
 
   async request<T>(method: string, path: string, options: RequestOptions = {}): Promise<T> {
@@ -74,13 +119,23 @@ export class HttpTransport {
     }
 
     const auth = options.auth ?? "user";
-    if (auth === "apiKey") {
-      if (!this.apiKey) {
-        throw new TorchwoodError("API key is required for this request", 0);
+    if (auth === "execution") {
+      this.applyExecutionAuth(headers);
+    } else if (auth === "apiKey") {
+      // execution transport（fromExecution client）复用 server 服务类：其
+      // 硬编码的 auth:"apiKey" 在此切换为执行身份 Bearer（见 AuthMode 注释）。
+      if (this.executionMode) {
+        this.applyExecutionAuth(headers);
+      } else {
+        if (!this.apiKey) {
+          throw new TorchwoodError("API key is required for this request", 0);
+        }
+        headers["X-Api-Key"] = this.apiKey;
+        headers["X-Torchwood-Project"] = this.projectId ?? "";
       }
-      headers["X-Api-Key"] = this.apiKey;
-      headers["X-Torchwood-Project"] = this.projectId;
     } else if (auth === "user") {
+      // user 模式不做 execution 切换：函数执行身份的方法面 = Server API
+      // （server 服务类全量）；Client API 终端用户语义不适用。
       if (this.accessToken) {
         headers.Authorization = `Bearer ${this.accessToken}`;
       }
@@ -115,12 +170,20 @@ export class HttpTransport {
   ): Promise<T> {
     const url = `${this.endpoint}${path.startsWith("/") ? path : `/${path}`}`;
     const headers: Record<string, string> = {};
-    if (auth === "apiKey") {
-      if (!this.apiKey) {
-        throw new TorchwoodError("API key is required for this request", 0);
+    if (auth === "execution") {
+      this.applyExecutionAuth(headers);
+    } else if (auth === "apiKey") {
+      // 与 request() 同规则：execution transport 下 server 服务类的
+      // auth:"apiKey" 切换为执行身份 Bearer。
+      if (this.executionMode) {
+        this.applyExecutionAuth(headers);
+      } else {
+        if (!this.apiKey) {
+          throw new TorchwoodError("API key is required for this request", 0);
+        }
+        headers["X-Api-Key"] = this.apiKey;
+        headers["X-Torchwood-Project"] = this.projectId ?? "";
       }
-      headers["X-Api-Key"] = this.apiKey;
-      headers["X-Torchwood-Project"] = this.projectId;
     } else if (auth === "user" && this.accessToken) {
       headers.Authorization = `Bearer ${this.accessToken}`;
     }

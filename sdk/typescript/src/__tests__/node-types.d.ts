@@ -8,6 +8,8 @@ declare module "node:test" {
     options: unknown,
     fn: () => void | Promise<void>
   ): void;
+  export function beforeEach(fn: () => void | Promise<void>): void;
+  export function afterEach(fn: () => void | Promise<void>): void;
 }
 
 declare module "node:assert/strict" {
@@ -15,6 +17,8 @@ declare module "node:assert/strict" {
     ok(value: unknown, message?: string): void;
     equal(actual: unknown, expected: unknown, message?: string): void;
     deepEqual(actual: unknown, expected: unknown, message?: string): void;
+    throws(fn: () => void, error?: unknown): void;
+    rejects(fn: () => Promise<unknown>, error?: unknown): Promise<void>;
   }
   const assert: Assert;
   export default assert;
@@ -34,3 +38,8 @@ declare module "node:path" {
 declare module "node:url" {
   export function fileURLToPath(url: string): string;
 }
+
+// Node 运行时全局（测试需要读 TW_EXECUTION_TOKEN env）。
+declare var process: {
+  env: Record<string, string | undefined>;
+};

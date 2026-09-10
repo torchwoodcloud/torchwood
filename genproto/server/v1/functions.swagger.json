@@ -757,7 +757,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "title": "触发器类型：http | cron（大小写敏感）。"
+          "title": "触发器类型：http | cron | event（大小写敏感）。"
         },
         "http": {
           "$ref": "#/definitions/v1HttpTriggerConfig",
@@ -766,9 +766,13 @@
         "cron": {
           "$ref": "#/definitions/v1CronTriggerConfig",
           "title": "type=cron 时必填。"
+        },
+        "event": {
+          "$ref": "#/definitions/v1EventTriggerConfig",
+          "title": "type=event 时必填（v3 切片 D，functions-v3.md §4.1）。"
         }
       },
-      "title": "CreateFunctionTriggerRequest 创建触发器：type 选择 http / cron，二选一\n填 http / cron 配置段。token 服务端生成，不收入参。"
+      "title": "CreateFunctionTriggerRequest 创建触发器：type 选择 http / cron / event，\n三选一填 http / cron / event 配置段。token 服务端生成，不收入参。"
     },
     "FunctionsServiceRotateFunctionTriggerTokenBody": {
       "type": "object"
@@ -831,6 +835,31 @@
         },
         "client_limit_window": {
           "type": "string"
+        },
+        "min_instances": {
+          "type": "integer",
+          "format": "int32",
+          "title": "——池策略（P0.5 执行器 v2 + v3 多路复用，docs/design/functions-v3.md\n§5/Key Decisions D15/OQ2 收口；未设置 = 不修改）——\n范围注解与 DB CHECK 约束同源（迁移 000014/000017）：\nmin\u003e=0、max\u003e=1、idle_ttl\u003e=30、max_requests\u003e=1、concurrency 1..16。\nmin_instances ≤ max_instances 的跨字段校验在 app 用例层。\n保温下限（0 = 纯 scale-from-zero）。"
+        },
+        "max_instances": {
+          "type": "integer",
+          "format": "int32",
+          "title": "突发并发上限（超限有界排队）。"
+        },
+        "idle_ttl_seconds": {
+          "type": "integer",
+          "format": "int32",
+          "title": "空闲回收阈值（秒；实例数 \u003e min 时）。"
+        },
+        "max_requests_per_instance": {
+          "type": "integer",
+          "format": "int32",
+          "title": "实例请求数到期排空替换（防内存泄漏，Lambda 同款）。"
+        },
+        "concurrency": {
+          "type": "integer",
+          "format": "int32",
+          "title": "单实例并发上限（v3 实例内多路复用；默认 1 = v2 串行等价，\u003e1 要求函数\n可重入；CHECK 上限 16）。"
         }
       }
     },
@@ -980,6 +1009,19 @@
         }
       }
     },
+    "v1EventTriggerConfig": {
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "订阅串列表（1..64 条，单条 ≤200 字节；服务端逐条格式校验）。"
+        }
+      },
+      "title": "EventTriggerConfig 是数据库事件触发器配置（v3 切片 D，functions-v3.md\n§4.1/D12）。订阅串格式（Appwrite 风格）：\n  databases.{database_id}.collections.{collection_id}.documents.{op}\nop ∈ {create, update, delete, *}；collection 段可为 `*`；database 段一期\n必须精确（database 级通配后置）。格式校验在服务端（领域层 eventmatch）。\n自环警告（D13）：订阅本函数自身写入的集合会形成「写→事件→再触发」循环，\n平台一期不做硬防护，Console 编辑处文案警告。"
+    },
     "v1Execution": {
       "type": "object",
       "properties": {
@@ -1093,6 +1135,28 @@
         "client_limit_window": {
           "type": "string",
           "title": "限频窗口：minute | hour | day（day 按 UTC 日期）。"
+        },
+        "min_instances": {
+          "type": "integer",
+          "format": "int32",
+          "title": "——池策略（只读视图；管理经 UpdateFunctionRequest optional ×5，\ndocs/design/functions-v3.md §5/OQ2）——"
+        },
+        "max_instances": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "idle_ttl_seconds": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "max_requests_per_instance": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "concurrency": {
+          "type": "integer",
+          "format": "int32",
+          "title": "单实例并发上限（1..16；\u003e1 要求函数可重入）。"
         }
       }
     },
@@ -1150,6 +1214,13 @@
         "updated_at": {
           "type": "string",
           "format": "date-time"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "——event——订阅串列表（type=event 时非空）。"
         }
       },
       "title": "FunctionTrigger 是触发器视图。http 专有字段（token/invoke_path/response_mode/\nack_body/handshake/body_limit_bytes）与 cron 专有字段（expr/misfire/\nnext_run_at）按 type 取用；token 明文仅在管理面返回。"

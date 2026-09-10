@@ -20,6 +20,12 @@ func funcFlagsDecl(fs *flag.FlagSet) {
 	fs.String("entrypoint", "", "")
 	fs.String("deployment-id", "", "")
 	fs.Bool("async", false, "")
+	// 池策略五列（v3 §5/OQ2）。
+	fs.Int("min-instances", 0, "")
+	fs.Int("max-instances", 0, "")
+	fs.Int("idle-ttl-seconds", 0, "")
+	fs.Int("max-requests-per-instance", 0, "")
+	fs.Int("concurrency", 0, "")
 }
 
 func TestBuildCreateFunctionReq(t *testing.T) {
@@ -106,7 +112,7 @@ func TestBuildUpdateFunctionReq(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req, err := buildUpdateFunctionReq(newPresenceVerb(t, funcFlagsDecl, tt.set), tt.functionID, tt.newName, tt.entrypoint,
-				tt.timeoutSeconds, tt.spec, tt.enabled)
+				tt.timeoutSeconds, tt.spec, tt.enabled, 0, 0, 0, 0, 0)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("want error containing %q, got %v", tt.wantErr, err)

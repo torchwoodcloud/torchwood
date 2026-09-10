@@ -48,6 +48,8 @@ func newFunctionsCmd(g *globalFlags) *group {
 			newFunctionsDeploymentsCmd(g),
 			newFunctionsVariablesCmd(g),
 			newFunctionsExecutionsCmd(g),
+			newFunctionsDevCmd(g),
+			newFunctionsDeployCmd(g),
 		)
 	})
 }
@@ -117,19 +119,27 @@ func newFunctionsUpdateCmd(g *globalFlags) *verb {
 	var name, entrypoint, spec string
 	var timeoutSeconds int
 	var enabled bool
-	return newVerb(g, "update", "update a function (only explicitly passed fields)", "functions update <function-id> [--name] [--entrypoint] [--timeout-seconds] [--spec] [--enabled]",
+	var minInstances, maxInstances, idleTTLSeconds, maxRequests, concurrency int
+	return newVerb(g, "update", "update a function (only explicitly passed fields)", "functions update <function-id> [--name] [--entrypoint] [--timeout-seconds] [--spec] [--enabled] [--min-instances] [--max-instances] [--idle-ttl-seconds] [--max-requests-per-instance] [--concurrency]",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&name, "name", "", "function name")
 			fs.StringVar(&entrypoint, "entrypoint", "", "entrypoint file")
 			fs.IntVar(&timeoutSeconds, "timeout-seconds", 0, "timeout in seconds (1-300)")
 			fs.StringVar(&spec, "spec", "", "resource specification")
 			fs.BoolVar(&enabled, "enabled", false, "whether enabled (pass --enabled=true/false explicitly to take effect)")
+			// 池策略（v3 §5/OQ2；proto3 optional——显式传入才生效）。
+			fs.IntVar(&minInstances, "min-instances", 0, "pool warm-up floor (>= 0; 0 = pure scale-from-zero)")
+			fs.IntVar(&maxInstances, "max-instances", 0, "pool burst ceiling (>= 1)")
+			fs.IntVar(&idleTTLSeconds, "idle-ttl-seconds", 0, "idle reclaim threshold in seconds (>= 30)")
+			fs.IntVar(&maxRequests, "max-requests-per-instance", 0, "requests per instance before drain-replace (>= 1)")
+			fs.IntVar(&concurrency, "concurrency", 0, "per-instance in-flight request cap (1-16; >1 requires reentrant code, v3 templates only)")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
 				return err
 			}
-			req, err := buildUpdateFunctionReq(v, args[0], name, entrypoint, timeoutSeconds, spec, enabled)
+			req, err := buildUpdateFunctionReq(v, args[0], name, entrypoint, timeoutSeconds, spec, enabled,
+				minInstances, maxInstances, idleTTLSeconds, maxRequests, concurrency)
 			if err != nil {
 				return err
 			}
@@ -306,8 +316,10 @@ func buildCreateFunctionReq(v *verb, id, name, runtime, entrypoint string, timeo
 	return req, nil
 }
 
-// buildUpdateFunctionReq 构造 UpdateFunctionRequest：仅设置显式传入的字段。
-func buildUpdateFunctionReq(v *verb, functionID string, name, entrypoint string, timeoutSeconds int, spec string, enabled bool) (map[string]any, error) {
+// buildUpdateFunctionReq 构造 UpdateFunctionRequest：仅设置显式传入的字段
+// （含池策略五列——v3 §5/OQ2；min/max/…/concurrency 显式传入才生效）。
+func buildUpdateFunctionReq(v *verb, functionID string, name, entrypoint string, timeoutSeconds int, spec string, enabled bool,
+	minInstances, maxInstances, idleTTLSeconds, maxRequests, concurrency int) (map[string]any, error) {
 	if functionID == "" {
 		return nil, fmt.Errorf("missing function-id")
 	}
@@ -317,6 +329,11 @@ func buildUpdateFunctionReq(v *verb, functionID string, name, entrypoint string,
 	setChanged(v, "timeout-seconds", req, "timeoutSeconds", timeoutSeconds)
 	setChanged(v, "spec", req, "spec", spec)
 	setChanged(v, "enabled", req, "enabled", enabled)
+	setChanged(v, "min-instances", req, "minInstances", minInstances)
+	setChanged(v, "max-instances", req, "maxInstances", maxInstances)
+	setChanged(v, "idle-ttl-seconds", req, "idleTtlSeconds", idleTTLSeconds)
+	setChanged(v, "max-requests-per-instance", req, "maxRequestsPerInstance", maxRequests)
+	setChanged(v, "concurrency", req, "concurrency", concurrency)
 	return req, nil
 }
 

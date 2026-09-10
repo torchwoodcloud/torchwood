@@ -24,6 +24,10 @@ type Function struct {
 	MaxInstances           int `bun:"max_instances,notnull,default:2"`
 	IdleTTLSeconds         int `bun:"idle_ttl_seconds,notnull,default:300"`
 	MaxRequestsPerInstance int `bun:"max_requests_per_instance,notnull,default:1000"`
+	// Concurrency 是单实例并发上限（v3 实例内多路复用，迁移 000017；CHECK
+	// 1..16 与迁移同源，docs/design/functions-v3.md §1.1/§1.5）。默认 1 =
+	// v2 串行等价，显式 opt-in。
+	Concurrency int `bun:"concurrency,notnull,default:1"`
 	// LatestReadyDeploymentID 是最新 ready 部署的冗余投影（热路径清账）；
 	// 可空，NULL 回退全量列表逻辑。
 	LatestReadyDeploymentID string `bun:"latest_ready_deployment_id,nullzero"`
@@ -78,9 +82,12 @@ type FunctionExecution struct {
 	StdoutTruncated   bool   `bun:"stdout_truncated,notnull,default:false"`
 	Stderr            string `bun:"stderr,notnull,default:''"`
 	StderrTruncated   bool   `bun:"stderr_truncated,notnull,default:false"`
-	StatusCode        int    `bun:"status_code,notnull,default:0"`
-	DurationMS        int64  `bun:"duration_ms,notnull,default:0"`
-	Error             string `bun:"error,notnull,default:''"`
+	// StatusCode 语义随模板演进（列迁移 000003；v1 退出码语义位）：v1 =
+	// 容器退出码（非零 = failed）；v2/v3 dispatcher = ok 恒 0、失败置 1；
+	// v4 fetch 风格（functions-v3.md §2.2）= 函数返回的 HTTP status。
+	StatusCode int    `bun:"status_code,notnull,default:0"`
+	DurationMS int64  `bun:"duration_ms,notnull,default:0"`
+	Error      string `bun:"error,notnull,default:''"`
 	// TimeoutSeconds 是函数超时的行内快照（P0.5 两写预占；NULL = 旧行，
 	// 孤儿恢复回退 1h）。
 	TimeoutSeconds *int `bun:"timeout_seconds"`

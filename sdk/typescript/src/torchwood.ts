@@ -10,6 +10,7 @@ import {
 } from "./client/index.js";
 import type { TorchwoodConfig } from "./http.js";
 import { HttpTransport } from "./http.js";
+import { TorchwoodError } from "./errors.js";
 import {
   APIKeysService,
   FunctionsService,
@@ -112,6 +113,34 @@ export class Torchwood {
     return new Torchwood({ endpoint, projectId, accessToken });
   }
 
+  /**
+   * 函数内入口（docs/design/functions-v3.md §5.1）：以函数执行身份
+   * （execution principal）构造 client，方法面 = server 服务类全量
+   * （assets grant / databases / users / functions ...）。
+   *
+   * executionToken 来源优先级：显式参数 > `process.env.TW_EXECUTION_TOKEN`
+   * （runner 在执行期注入；D4——env 仅同步段读取安全，并发函数请改用
+   * fetch 风格 `new Torchwood({ executionToken })` 的参数通道）。
+   * 两者皆缺时抛错（fail-closed，不做无身份调用）。
+   */
+  static fromExecution(
+    apiBaseUrl: string,
+    opts?: { executionToken?: string; fetch?: typeof fetch }
+  ): Torchwood {
+    const token = opts?.executionToken ?? readEnvExecutionToken();
+    if (!token) {
+      throw new TorchwoodError(
+        "Execution token is required: pass opts.executionToken or set TW_EXECUTION_TOKEN (functions-v3.md §5.1)",
+        0
+      );
+    }
+    return new Torchwood({
+      endpoint: apiBaseUrl,
+      executionToken: token,
+      fetch: opts?.fetch,
+    });
+  }
+
   setAccessToken(token: string | undefined): void {
     this.transport.setAccessToken(token);
   }
@@ -120,7 +149,25 @@ export class Torchwood {
     return this.transport.getAccessToken();
   }
 
+  setExecutionToken(token: string | undefined): void {
+    this.transport.setExecutionToken(token);
+  }
+
+  getExecutionToken(): string | undefined {
+    return this.transport.getExecutionToken();
+  }
+
   getProjectId(): string {
     return this.transport.getProjectId();
   }
+}
+
+/**
+ * readEnvExecutionToken 读取 TW_EXECUTION_TOKEN（runner 注入的执行身份凭证）。
+ * 独立函数便于测试注入；浏览器环境（无 process）返回 undefined。
+ */
+function readEnvExecutionToken(): string | undefined {
+  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  const token = proc?.env?.TW_EXECUTION_TOKEN;
+  return token !== undefined && token !== "" ? token : undefined;
 }

@@ -253,6 +253,14 @@ message Function {
   int32 client_per_user_limit = 14;
   // 限频窗口：minute | hour | day（day 按 UTC 日期）。
   string client_limit_window = 15;
+  // ——池策略（只读视图；管理经 UpdateFunctionRequest optional ×5，
+  // docs/design/functions-v3.md §5/OQ2）——
+  int32 min_instances = 16;
+  int32 max_instances = 17;
+  int32 idle_ttl_seconds = 18;
+  int32 max_requests_per_instance = 19;
+  // 单实例并发上限（1..16；>1 要求函数可重入）。
+  int32 concurrency = 20;
 }
 
 message RuntimeInfo {
@@ -342,6 +350,25 @@ message UpdateFunctionRequest {
   optional bool client_anonymous_allowed = 8;
   optional int32 client_per_user_limit = 9 [(buf.validate.field).int32.gte = 0];
   optional string client_limit_window = 10 [(buf.validate.field).string = { in: ["minute", "hour", "day"] }];
+  // ——池策略（P0.5 执行器 v2 + v3 多路复用，docs/design/functions-v3.md
+  // §5/Key Decisions D15/OQ2 收口；未设置 = 不修改）——
+  // 范围注解与 DB CHECK 约束同源（迁移 000014/000017）：
+  // min>=0、max>=1、idle_ttl>=30、max_requests>=1、concurrency 1..16。
+  // min_instances ≤ max_instances 的跨字段校验在 app 用例层。
+  // 保温下限（0 = 纯 scale-from-zero）。
+  optional int32 min_instances = 11 [(buf.validate.field).int32.gte = 0];
+  // 突发并发上限（超限有界排队）。
+  optional int32 max_instances = 12 [(buf.validate.field).int32.gte = 1];
+  // 空闲回收阈值（秒；实例数 > min 时）。
+  optional int32 idle_ttl_seconds = 13 [(buf.validate.field).int32.gte = 30];
+  // 实例请求数到期排空替换（防内存泄漏，Lambda 同款）。
+  optional int32 max_requests_per_instance = 14 [(buf.validate.field).int32.gte = 1];
+  // 单实例并发上限（v3 实例内多路复用；默认 1 = v2 串行等价，>1 要求函数
+  // 可重入；CHECK 上限 16）。
+  optional int32 concurrency = 15 [
+    (buf.validate.field).int32.gte = 1,
+    (buf.validate.field).int32.lte = 16
+  ];
 }
 
 message GetFunctionRequest {
@@ -387,19 +414,21 @@ message SetFunctionScopesRequest {
 
 // ——触发器管理（P1）——
 
-// CreateFunctionTriggerRequest 创建触发器：type 选择 http / cron，二选一
-// 填 http / cron 配置段。token 服务端生成，不收入参。
+// CreateFunctionTriggerRequest 创建触发器：type 选择 http / cron / event，
+// 三选一填 http / cron / event 配置段。token 服务端生成，不收入参。
 message CreateFunctionTriggerRequest {
   string function_id = 1 [(buf.validate.field).required = true];
-  // 触发器类型：http | cron（大小写敏感）。
+  // 触发器类型：http | cron | event（大小写敏感）。
   string type = 2 [
     (buf.validate.field).required = true,
-    (buf.validate.field).string = { in: ["http", "cron"] }
+    (buf.validate.field).string = { in: ["http", "cron", "event"] }
   ];
   // type=http 时必填。
   HttpTriggerConfig http = 3;
   // type=cron 时必填。
   CronTriggerConfig cron = 4;
+  // type=event 时必填（v3 切片 D，functions-v3.md §4.1）。
+  EventTriggerConfig event = 5;
 }
 
 // HttpTriggerConfig 是 HTTP 触发器配置。
@@ -436,6 +465,22 @@ message CronTriggerConfig {
   string misfire = 2 [(buf.validate.field).string = { in: ["skip", "catch_up_once"] }];
 }
 
+// EventTriggerConfig 是数据库事件触发器配置（v3 切片 D，functions-v3.md
+// §4.1/D12）。订阅串格式（Appwrite 风格）：
+//   databases.{database_id}.collections.{collection_id}.documents.{op}
+// op ∈ {create, update, delete, *}；collection 段可为 `*`；database 段一期
+// 必须精确（database 级通配后置）。格式校验在服务端（领域层 eventmatch）。
+// 自环警告（D13）：订阅本函数自身写入的集合会形成「写→事件→再触发」循环，
+// 平台一期不做硬防护，Console 编辑处文案警告。
+message EventTriggerConfig {
+  // 订阅串列表（1..64 条，单条 ≤200 字节；服务端逐条格式校验）。
+  repeated string events = 1 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 64,
+    (buf.validate.field).repeated.items.string.max_len = 200
+  ];
+}
+
 // FunctionTrigger 是触发器视图。http 专有字段（token/invoke_path/response_mode/
 // ack_body/handshake/body_limit_bytes）与 cron 专有字段（expr/misfire/
 // next_run_at）按 type 取用；token 明文仅在管理面返回。
@@ -458,6 +503,8 @@ message FunctionTrigger {
   google.protobuf.Timestamp next_run_at = 13;
   google.protobuf.Timestamp created_at = 14;
   google.protobuf.Timestamp updated_at = 15;
+  // ——event——订阅串列表（type=event 时非空）。
+  repeated string events = 16;
 }
 
 message ListFunctionTriggersResponse {

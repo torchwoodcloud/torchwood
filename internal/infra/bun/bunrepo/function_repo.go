@@ -84,10 +84,12 @@ func (r *functionRepo) UpdateFunction(ctx context.Context, fn *domainfunctions.F
 	// declared_scopes 为 P0 执行身份可变列（SetFunctionScopes 全量替换）；
 	// 池策略五列为 P0.5 可变列（latest_ready_deployment_id 由
 	// ActivateDeployment/DeleteDeployment 事务维护，应用层更新不直写）；
+	// concurrency 为 v3 可变列（迁移 000017，docs/design/functions-v3.md §1.5）；
 	// client 四列为 P2 客户端调用面策略列。
 	_, err = conn.NewUpdate().Model(m).ModelTableExpr(expr, sch).
 		Column("name", "entrypoint", "timeout_seconds", "spec", "enabled", "declared_scopes",
 			"min_instances", "max_instances", "idle_ttl_seconds", "max_requests_per_instance",
+			"concurrency",
 			"client_callable", "client_anonymous_allowed", "client_per_user_limit", "client_limit_window",
 			"updated_at").
 		WherePK().
@@ -598,6 +600,7 @@ func mapFunctionToModel(fn *domainfunctions.Function) *model.Function {
 	// 与 INSERT 侧 bun default tag 语义一致。下限值与迁移 CHECK 同源。
 	minInstances, maxInstances := fn.MinInstances, fn.MaxInstances
 	idleTTL, maxRequests := fn.IdleTTLSeconds, fn.MaxRequestsPerInstance
+	concurrency := fn.Concurrency
 	if maxInstances < 1 {
 		maxInstances = 2
 	}
@@ -609,6 +612,12 @@ func mapFunctionToModel(fn *domainfunctions.Function) *model.Function {
 	}
 	if minInstances > maxInstances {
 		minInstances = maxInstances
+	}
+	// concurrency 零值归一为平台默认 1（迁移 000017 列 DEFAULT 同值；v3
+	// §1.1 fail-closed：不 opt-in 即串行）。上界 16 由 DB CHECK 兜底——超限
+	// 报错而非静默截断（管理面校验随 B 切片 proto API 落地）。
+	if concurrency < 1 {
+		concurrency = 1
 	}
 	// client_limit_window 零值归一为平台默认 'day'（与迁移 000016 列 DEFAULT
 	// 一致；UPDATE 是显式列白名单全模型写，空串会违反 CHECK）。
@@ -630,6 +639,7 @@ func mapFunctionToModel(fn *domainfunctions.Function) *model.Function {
 		MaxInstances:            maxInstances,
 		IdleTTLSeconds:          idleTTL,
 		MaxRequestsPerInstance:  maxRequests,
+		Concurrency:             concurrency,
 		LatestReadyDeploymentID: fn.LatestReadyDeploymentID,
 		ClientCallable:          fn.ClientCallable,
 		ClientAnonymousAllowed:  fn.ClientAnonymousAllowed,
@@ -655,6 +665,7 @@ func mapFunctionToDomain(m *model.Function) *domainfunctions.Function {
 		MaxInstances:            m.MaxInstances,
 		IdleTTLSeconds:          m.IdleTTLSeconds,
 		MaxRequestsPerInstance:  m.MaxRequestsPerInstance,
+		Concurrency:             m.Concurrency,
 		LatestReadyDeploymentID: m.LatestReadyDeploymentID,
 		ClientCallable:          m.ClientCallable,
 		ClientAnonymousAllowed:  m.ClientAnonymousAllowed,
