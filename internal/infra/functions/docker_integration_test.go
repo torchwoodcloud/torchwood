@@ -189,3 +189,94 @@ func TestDockerExecutor_RejectsMissingEntrypoint(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.ErrorContains(t, err, "missing entrypoint")
 }
+
+// depPackageJSON / depLockfile 是带依赖函数的最小清单（v3 §3.1 平台代装集成
+// 用例）。lockfile 为 npm ci 兼容的 lockfileVersion 3 最小形态；ms@2.1.3 为
+// 零依赖纯 JS 包（无生命周期脚本，与 --ignore-scripts 恒定语义兼容），
+// integrity 取自 registry 真实值。
+const depPackageJSON = `{
+  "name": "torchwood-fn-deps",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": { "ms": "2.1.3" }
+}
+`
+
+const depLockfile = `{
+  "name": "torchwood-fn-deps",
+  "version": "1.0.0",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "torchwood-fn-deps",
+      "version": "1.0.0",
+      "dependencies": { "ms": "2.1.3" }
+    },
+    "node_modules/ms": {
+      "version": "2.1.3",
+      "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+      "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA=="
+    }
+  }
+}
+`
+
+// depIndexJS 用户代码 require 平台代装的依赖——执行结果证明 npm ci 真装上了。
+const depIndexJS = `
+const ms = require("ms");
+exports.main = (data) => {
+  return { parsed: ms(data.duration), isFn: typeof ms === "function" };
+};
+`
+
+// TestDockerExecutor_BuildAndRunWithDependencies 带依赖 + lockfile 端到端
+// （v3 §3.1/D11 平台代装）：分层模板构建（构建期 npm ci --omit=dev
+// --ignore-scripts 真实拉包）→ 执行结果证明依赖在镜像内可用；用户代码不
+// 携带 node_modules（构建期拒收，单元测试覆盖）。
+func TestDockerExecutor_BuildAndRunWithDependencies(t *testing.T) {
+	if !dockerAvailable(t) {
+		t.Skip("docker not available")
+	}
+	d := testExecutor(t)
+	ctx := context.Background()
+
+	zipPath := writeZipTemp(t, makeZip(t, map[string]string{
+		"index.js":          depIndexJS,
+		"package.json":      depPackageJSON,
+		"package-lock.json": depLockfile,
+	}))
+	require.NoError(t, d.Build(ctx, "fn_deps", "dep_1", zipPath),
+		"带依赖 + lockfile 的部署必须构建成功（平台代装）")
+	defer func() { _ = d.RemoveImage(ctx, "fn_deps", "dep_1") }()
+
+	res, err := d.Execute(ctx, domainfunctions.Execution{
+		FunctionID:   "fn_deps",
+		DeploymentID: "dep_1",
+		Runtime:      "node-18.0",
+		Spec:         "shared-1x",
+		Timeout:      60,
+		Data:         `{"duration":"100ms"}`,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, res.StatusCode)
+	require.JSONEq(t, `{"parsed":100,"isFn":true}`, res.Response)
+}
+
+// TestDockerExecutor_RejectsDepsWithoutLockfile lockfile 强制端到端：带依赖
+// 无 package-lock.json → 构建失败（deployment failed），错误信息指向提交
+// lockfile（v3 §3.1；错误在模板决策层产生，不触碰 docker build）。
+func TestDockerExecutor_RejectsDepsWithoutLockfile(t *testing.T) {
+	if !dockerAvailable(t) {
+		t.Skip("docker not available")
+	}
+	d := testExecutor(t)
+
+	zipPath := writeZipTemp(t, makeZip(t, map[string]string{
+		"index.js":     depIndexJS,
+		"package.json": depPackageJSON,
+	}))
+	err := d.Build(context.Background(), "fn_nolock", "dep_1", zipPath)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "检测到 dependencies 但缺少 package-lock.json")
+}

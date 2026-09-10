@@ -63,6 +63,21 @@ var (
 		Name: "torchwood_functions_dispatch_queue_timeouts_total",
 		Help: "Dispatch requests that exhausted the queue head timeout without an instance.",
 	}, []string{"project", "function"})
+
+	// InstanceInflight 是在途请求水位（v3 Observability）：reaper 周期从注册
+	// 表聚合各实例 inflight 总和，与 PoolReady 水位同路。
+	InstanceInflight = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "torchwood_functions_instance_inflight",
+		Help: "Sum of in-flight requests across resident instances, per function.",
+	}, []string{"project", "function"})
+
+	// TimeoutFuseTotal 是超时熔断触发计数（v3 §1.4 对抗审查补充）：实例累计
+	// 超时达 TimeoutBudget 阈值被杀重建时递增——告警锚点（频发 = 函数有
+	// 慢性超时 bug 或超时预算过低）。
+	TimeoutFuseTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "torchwood_functions_instance_timeout_fuse_total",
+		Help: "Instances killed by the per-instance timeout fuse (cumulative timeouts reached the budget).",
+	}, []string{"project", "function"})
 )
 
 func init() {
@@ -77,5 +92,7 @@ func init() {
 		QueueWaitSeconds,
 		DispatchQueueDropped,
 		DispatchQueueTimeouts,
+		InstanceInflight,
+		TimeoutFuseTotal,
 	)
 }

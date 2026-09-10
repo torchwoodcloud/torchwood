@@ -12,7 +12,11 @@
 // 时双副本 + Redis 仲裁（设计 §6）。
 package functionsdispatcher
 
-import "time"
+import (
+	"time"
+
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
+)
 
 const (
 	// runnerPort 是 runner 在容器内监听的 HTTP 端口（与 infra/functions/runner
@@ -52,9 +56,26 @@ const (
 	// 64KB 输出截断口径）。
 	maxLogTailBytes = 64 << 10
 
+	// maxInvokeResponseBytes 是单次 runner invoke 响应的读取上限：v4 fetch
+	// 风格封套 = stdout 64KB + stderr 64KB + body_base64（64KB body → 88KB）
+	// + headers + JSON 开销，64KB 级旧上限会截断 JSON 导致解析静默归零——
+	// 取 1MB 覆盖（v3 §2.4：Response body 一期 64KB 截断）。
+	maxInvokeResponseBytes = 1 << 20
+
+	// maxTriggerEnvelopeHeaderBytes 是触发器封套分发 header（base64 JSON，
+	// 不含 body）的编码后上限（v3 §2.3 对抗审查修正：Node http 解析默认
+	// 16KB，base64 膨胀后须显式限界；封套正常体积 <4KB，超限 400）。
+	maxTriggerEnvelopeHeaderBytes = 12 << 10
+
 	// spawnWarnInterval 是 spawn 失败告警的限频窗口（per function）：排队
 	// 请求按 PollInterval 反复重试 trySpawn，失败现场告警按窗口收敛。
 	spawnWarnInterval = 5 * time.Second
+
+	// defaultTimeoutBudget 是实例累计超时熔断阈值默认值（v3 §1.4 超时熔断：
+	// 「超时不杀」拆掉了串行模型顺带消灭僵尸负载的保护，累计超时达阈值的
+	// 实例杀掉重建；config functions.dispatcher.timeout_budget 可覆盖，
+	// <=0 取本默认）。
+	defaultTimeoutBudget = 5
 )
 
 // BuildRequest 是 POST /v1/dispatch/builds 入参：zip 字节内联（base64）——
@@ -82,6 +103,10 @@ type PoolPolicy struct {
 	MaxInstances           int `json:"max_instances,omitempty"`
 	IdleTTLSeconds         int `json:"idle_ttl_seconds,omitempty"`
 	MaxRequestsPerInstance int `json:"max_requests_per_instance,omitempty"`
+	// Concurrency 是单实例并发上限（v3 §1.1；spawn 时固化进 InstanceRecord）。
+	// 本切片（v3 切片一）恒 1：DB 列/proto/透传链在切片二（A2）接入，本切片
+	// 不做 DB 迁移、不动 proto，<=0 归一化为 1。
+	Concurrency int `json:"concurrency,omitempty"`
 }
 
 // ExecuteRequest 是 POST /v1/dispatch/executions 入参：执行规格（镜像名、
@@ -97,9 +122,27 @@ type ExecuteRequest struct {
 	Env            map[string]string `json:"env,omitempty"`
 	// ExecutionToken 是本次执行的短期平台凭证（P0 链路不变、只换注入通道：
 	// v2 经分发 header 传给 runner，不再进容器 env；常驻的是容器不是凭证）。
-	ExecutionToken string     `json:"execution_token,omitempty"`
-	Data           string     `json:"data"`
-	Pool           PoolPolicy `json:"pool"`
+	ExecutionToken string `json:"execution_token,omitempty"`
+	// ExecutionID 是平台执行 ID（v3 §1.2/§1.5：经分发 header
+	// x-tw-execution-id 透传给 runner，供 ctx.executionId / 日志关联）。
+	// A2 才从 app 侧传入，本切片零值即不发 header。
+	ExecutionID string     `json:"execution_id,omitempty"`
+	Data        string     `json:"data"`
+	Pool        PoolPolicy `json:"pool"`
+	// ——HTTP 触发器封套通道（v3 §2.3/D10）——TriggerEnvelope 非空 = 分发
+	// 请求改走封套模式：①封套元数据经分发 header `x-tw-trigger-envelope`
+	//（base64 JSON，不含 body；编码后 ≤12KB，Dispatch 入口校验超限
+	// InvalidArgument）；②HTTP body 改发 RawBody（忽略 Data）——runner v4
+	// fetch 风格据此还原 Request（url = http://trigger{path}?{raw_query}），
+	// main 风格重组 TW_DATA（与现状等价，D9 双轨）。曾考虑 body 外层包装
+	// `{"_tw_trigger":...}`，否决——键空间污染破坏「TW_DATA 即用户数据」
+	// 契约（v3 §2.3）。
+	TriggerEnvelope *domainfunctions.TriggerEnvelope `json:"trigger_envelope,omitempty"`
+	// RawBody 是触发器原始 body（app 层从已过 413 校验的请求体填充；
+	// RawBodyIsB64 = RawBody 携带 base64 文本、分发前需解码——调用方手持
+	// body_base64 免先解码的场景）。仅 TriggerEnvelope 非空时消费。
+	RawBody      []byte `json:"raw_body,omitempty"`
+	RawBodyIsB64 bool   `json:"raw_body_is_b64,omitempty"`
 	// EgressUntrusted 是 egress 分类结果（P2 安全切片，设计 Security #6）：
 	// true = 不可信函数容器挂 internal 变体网络（tw-func-<project>-int，
 	// docker internal: true——出网全 deny）；false = 常规网络。分类在 app 层
@@ -116,9 +159,19 @@ type ExecuteResponse struct {
 	StdoutTail string `json:"stdout_tail,omitempty"`
 	StderrTail string `json:"stderr_tail,omitempty"`
 	DurationMS int64  `json:"duration_ms"`
-	// StatusCode 保留容器退出码语义位（v1 兼容；v2 runner 正常应答恒 0）。
+	// StatusCode 语义随模板演进：v1 = 容器退出码（v2/v3 ok 恒 0、失败置 1）；
+	// v4 fetch 风格（v3 §2.2）承载函数 HTTP status（非零 = 合法结果，
+	// TriggerEnvelope 请求且 runner ok 时 ≥200）。main 风格保持 0。
 	StatusCode int    `json:"status_code"`
 	Error      string `json:"error,omitempty"`
+	// ——fetch 风格扩展（v3 §2.2，TriggerEnvelope 请求且 runner ok 时填充；
+	// main 风格恒空）——HTTPHeaders 是函数设置的响应头（runner 已滤
+	// hop-by-hop/date/server），供触发器 sync 模式透传（OQ7：仅此路径回传，
+	// invoke 路径不回传）；ResponseB64 是无损响应 body（base64，64KB 截断在
+	// runner，truncated 随截断发生）。Response 恒为 body 的解码文本
+	//（best-effort），文本场景照旧可用。
+	HTTPHeaders map[string]string `json:"http_headers,omitempty"`
+	ResponseB64 string            `json:"response_b64,omitempty"`
 }
 
 // RemoveImageRequest 是 POST /v1/dispatch/images/remove 入参（幂等）。

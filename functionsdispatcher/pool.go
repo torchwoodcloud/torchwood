@@ -3,6 +3,7 @@ package functionsdispatcher
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,9 +11,11 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	infrafunctions "github.com/torchwoodcloud/torchwood/internal/infra/functions"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"google.golang.org/grpc/codes"
@@ -31,6 +34,10 @@ type PoolConfig struct {
 	IdleTTLDefault       time.Duration // idle_ttl 缺省值（300s，策略零值时）
 	MaxRequestsDefault   int           // max_requests 缺省值（1000）
 	MaxInstancesDefault  int           // max_instances 缺省值（2）
+	// TimeoutBudget 是实例累计超时熔断阈值（v3 §1.4；默认 5）：超时释放路径
+	// 累加 timeouts 计数，达阈值杀实例重建（堵住「超时不杀」打开的僵尸负载
+	// 通道——毒化实例慢性塞满事件循环而 health 仍响应、永不回收）。
+	TimeoutBudget int
 }
 
 // DefaultPoolConfig 返回平台默认池参数（设计 §6 池策略 + Q11 拍板）。
@@ -46,6 +53,7 @@ func DefaultPoolConfig() PoolConfig {
 		IdleTTLDefault:       300 * time.Second,
 		MaxRequestsDefault:   1000,
 		MaxInstancesDefault:  2,
+		TimeoutBudget:        defaultTimeoutBudget,
 	}
 }
 
@@ -72,6 +80,9 @@ func PoolConfigFromConfig(cfg *config.AppConfig) PoolConfig {
 			pc.BootTimeout = dur
 		}
 	}
+	if d.GetTimeoutBudget() > 0 {
+		pc.TimeoutBudget = int(d.GetTimeoutBudget())
+	}
 	return pc
 }
 
@@ -86,15 +97,25 @@ type invokeResult struct {
 	Stdout string
 	Stderr string
 	Error  string
+	// ——fetch 风格扩展（v3 §2.2；main 风格封套不含这些字段，恒零值）——
+	// FnStatus 是函数返回的 HTTP status（恒 ≥200）；Headers/BodyB64 是函数
+	// 设置的响应头与无损 body（64KB 截断在 runner 完成）。
+	FnStatus int
+	Headers  map[string]string
+	BodyB64  string
 }
 
 // runnerClient 是 runner 容器内 HTTP 协议的抽象。
 type runnerClient interface {
 	// Health 探针：实例就绪（ready）返回 nil。
 	Health(ctx context.Context, ip string) error
-	// Invoke 分发一次执行：body = TW_DATA JSON、header 带执行 token；
-	// 超时/连接失败返回 error（调用方据此杀实例）。
-	Invoke(ctx context.Context, ip string, data, token string, timeout time.Duration) (*invokeResult, error)
+	// Invoke 分发一次执行：body = TW_DATA JSON（封套模式 = 触发器原始
+	// body，v3 §2.3）；header 带执行 token + execution id（v3 §1.2
+	// ctx.executionId 来源，空则不发）+ 函数超时（v3 per-request 超时
+	// header，runner 缺省 30s）+ 触发器封套元数据（x-tw-trigger-envelope，
+	// TriggerEnvelope 非空时）；超时/连接失败返回 error（调用方据此分类
+	// 处置——超时不杀实例，传输错误杀实例，v3 §1.4）。
+	Invoke(ctx context.Context, ip string, req ExecuteRequest, timeout time.Duration) (*invokeResult, error)
 }
 
 // httpRunner 是 runnerClient 的真实实现。
@@ -130,25 +151,81 @@ func (h *httpRunner) Health(ctx context.Context, ip string) error {
 	return nil
 }
 
-func (h *httpRunner) Invoke(ctx context.Context, ip string, data, token string, timeout time.Duration) (*invokeResult, error) {
+// triggerEnvelopeHeader 编码触发器封套元数据为分发 header 值（base64 JSON，
+// v3 §2.3 对抗审查修正：封套经独立 header 传递、不含 body；编码后上限
+// maxTriggerEnvelopeHeaderBytes，超限 InvalidArgument——Node http 解析默认
+// 16KB，base64 膨胀后须显式限界）。Dispatch 入口先行校验，此处防御性复用。
+func triggerEnvelopeHeader(env *domainfunctions.TriggerEnvelope) (string, error) {
+	meta, err := json.Marshal(env)
+	if err != nil {
+		return "", status.Errorf(codes.InvalidArgument, "marshal trigger envelope: %v", err)
+	}
+	enc := base64.StdEncoding.EncodeToString(meta)
+	if len(enc) > maxTriggerEnvelopeHeaderBytes {
+		return "", status.Errorf(codes.InvalidArgument, "trigger envelope header exceeds %d bytes (max %d)", len(enc), maxTriggerEnvelopeHeaderBytes)
+	}
+	return enc, nil
+}
+
+func (h *httpRunner) Invoke(ctx context.Context, ip string, req ExecuteRequest, timeout time.Duration) (*invokeResult, error) {
+	// v3 §2.3 封套模式：HTTP body 改发触发器原始 body（RawBody；base64 形态
+	// 先解码），封套元数据走独立 header；忽略 Data（封套 JSON 不再上分发
+	// 通道——body_base64 已无损直达，省一层封套解析）。
+	body := []byte(req.Data)
+	contentType := "application/json"
+	var envelopeHeader string
+	if req.TriggerEnvelope != nil {
+		raw := req.RawBody
+		if req.RawBodyIsB64 {
+			decoded, err := base64.StdEncoding.DecodeString(string(req.RawBody))
+			if err != nil {
+				return nil, status.Errorf(codes.InvalidArgument, "raw_body is not valid base64: %v", err)
+			}
+			raw = decoded
+		}
+		body = raw
+		contentType = ""
+		var err error
+		if envelopeHeader, err = triggerEnvelopeHeader(req.TriggerEnvelope); err != nil {
+			return nil, err
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, runnerURL(ip, "/"), bytes.NewReader([]byte(data)))
+	req2, err := http.NewRequestWithContext(ctx, http.MethodPost, runnerURL(ip, "/"), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	if token != "" {
-		// 执行身份注入通道（P0.5 切换）：token 经分发 header 传递，runner
-		// 侧逐请求写入 process.env（一期串行执行保证覆盖安全，见 runner 注释）。
-		req.Header.Set("X-Tw-Execution-Token", token)
+	if contentType != "" {
+		req2.Header.Set("Content-Type", contentType)
 	}
-	resp, err := h.hc.Do(req)
+	if token := req.ExecutionToken; token != "" {
+		// 执行身份注入通道（P0.5 切换）：token 经分发 header 传递，runner
+		// 侧逐请求同步写入 process.env（同步 main 兼容；并发下 async 函数
+		// 必须读 ctx，见 runner v3 文件头注释，v3 §1.2）。
+		req2.Header.Set("X-Tw-Execution-Token", token)
+	}
+	if executionID := req.ExecutionID; executionID != "" {
+		// v3 §1.2：平台执行 ID 透传，runner 侧进 ctx.executionId（日志关联）。
+		req2.Header.Set("X-Tw-Execution-Id", executionID)
+	}
+	if envelopeHeader != "" {
+		// v3 §2.3：触发器封套元数据（base64 JSON，不含 body）。
+		req2.Header.Set("X-Tw-Trigger-Envelope", envelopeHeader)
+	}
+	// v3 §1.2：per-request 超时随分发 header 下发（runner 按此起定时器，
+	// 到点回 500 封套并放弃等待；header 与本 ctx 超时同源同值——ctx 起点
+	// 更早，故 dispatcher 侧几乎总是先行超时收场，runner 封套是兜底）。
+	if timeout > 0 {
+		req2.Header.Set("X-Tw-Timeout-Seconds", strconv.FormatInt(int64(timeout/time.Second), 10))
+	}
+	resp, err := h.hc.Do(req2)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxLogTailBytes*2+4096))
+	body2, err := io.ReadAll(io.LimitReader(resp.Body, maxInvokeResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read runner response: %w", err)
 	}
@@ -156,14 +233,19 @@ func (h *httpRunner) Invoke(ctx context.Context, ip string, data, token string, 
 	// RawMessage 承接：声明为 string 时对象返回值触发 UnmarshalTypeError
 	// 且被静默忽略——ok 已部分解析为 true、result 丢失，执行结果静默变空
 	//（CI e2e 实证）。Response 对外契约是 string（JSON 文本透传）。
+	// status/headers/body_base64/truncated 是 v4 fetch 风格扩展（v3 §2.2）。
 	var envelope struct {
-		Ok     bool            `json:"ok"`
-		Result json.RawMessage `json:"result"`
-		Stdout string          `json:"stdout"`
-		Stderr string          `json:"stderr"`
-		Error  string          `json:"error"`
+		Ok        bool              `json:"ok"`
+		Result    json.RawMessage   `json:"result"`
+		Stdout    string            `json:"stdout"`
+		Stderr    string            `json:"stderr"`
+		Error     string            `json:"error"`
+		Status    int               `json:"status"`
+		Headers   map[string]string `json:"headers"`
+		BodyB64   string            `json:"body_base64"`
+		Truncated bool              `json:"truncated"`
 	}
-	_ = json.Unmarshal(body, &envelope)
+	_ = json.Unmarshal(body2, &envelope)
 	return &invokeResult{
 		HTTPStatus: resp.StatusCode,
 		Ok:         envelope.Ok,
@@ -171,6 +253,9 @@ func (h *httpRunner) Invoke(ctx context.Context, ip string, data, token string, 
 		Stdout:     envelope.Stdout,
 		Stderr:     envelope.Stderr,
 		Error:      envelope.Error,
+		FnStatus:   envelope.Status,
+		Headers:    envelope.Headers,
+		BodyB64:    envelope.BodyB64,
 	}, nil
 }
 
@@ -224,6 +309,9 @@ func newPoolManager(daemon Daemon, registry Registry, runner runnerClient, cfg P
 	}
 	if cfg.MaxInstancesDefault <= 0 {
 		cfg.MaxInstancesDefault = 2
+	}
+	if cfg.TimeoutBudget <= 0 {
+		cfg.TimeoutBudget = defaultTimeoutBudget
 	}
 	return &PoolManager{
 		daemon:          daemon,
@@ -305,11 +393,18 @@ func (p *PoolManager) applyDefaults(policy PoolPolicy) PoolPolicy {
 	if minInstances > maxInstances {
 		minInstances = maxInstances
 	}
+	// v3 切片一：concurrency 恒 1（<=0 归一化；>1 入口在切片二 A2 接
+	// DB/proto 透传链后才可达）。
+	concurrency := policy.Concurrency
+	if concurrency <= 0 {
+		concurrency = 1
+	}
 	return PoolPolicy{
 		MinInstances:           minInstances,
 		MaxInstances:           maxInstances,
 		IdleTTLSeconds:         idleTTL,
 		MaxRequestsPerInstance: maxReq,
+		Concurrency:            concurrency,
 	}
 }
 
@@ -318,6 +413,13 @@ func (p *PoolManager) applyDefaults(policy PoolPolicy) PoolPolicy {
 func (p *PoolManager) Dispatch(ctx context.Context, req ExecuteRequest) (*ExecuteResponse, error) {
 	if req.ProjectID == "" || req.FunctionID == "" || req.DeploymentID == "" || req.Image == "" {
 		return nil, status.Error(codes.InvalidArgument, "project/function/deployment/image are required")
+	}
+	// v3 §2.3：触发器封套元数据 header 上限（编码后 12KB）在入口校验——
+	// 先于实例认领，超限 InvalidArgument 不产生任何实例副作用。
+	if req.TriggerEnvelope != nil {
+		if _, err := triggerEnvelopeHeader(req.TriggerEnvelope); err != nil {
+			return nil, err
+		}
 	}
 	ref := FunctionRef{ProjectID: req.ProjectID, FunctionID: req.FunctionID}
 	policy := p.applyDefaults(req.Pool)
@@ -358,7 +460,7 @@ func (p *PoolManager) Dispatch(ctx context.Context, req ExecuteRequest) (*Execut
 			return nil, err
 		}
 		if rec != nil {
-			return p.executeOn(ctx, req, policy, *rec, started)
+			return p.executeOn(ctx, req, *rec, started)
 		}
 
 		if err := p.trySpawn(ctx, req, policy); err != nil {
@@ -510,13 +612,16 @@ func (p *PoolManager) spawnInstance(ctx context.Context, req ExecuteRequest, pol
 	InitDurationSeconds.WithLabelValues(req.ProjectID, req.FunctionID).Observe(p.clock().Sub(bootStart).Seconds())
 	now := p.clock()
 	return &InstanceRecord{
-		InstanceID:     inst.ContainerID,
-		ContainerID:    inst.ContainerID,
-		IP:             inst.IP,
-		DeploymentID:   req.DeploymentID,
-		Busy:           false,
-		SpawnedAt:      now,
-		IdleSince:      now,
+		InstanceID:   inst.ContainerID,
+		ContainerID:  inst.ContainerID,
+		IP:           inst.IP,
+		DeploymentID: req.DeploymentID,
+		Inflight:     0,
+		// 并发上限 spawn 时固化（v3 §1.1「生效时机」）：实例终生按 spawn 时
+		// 策略服务，函数调大后存量实例按旧值服务至 idle 回收/部署更替。
+		Concurrency:    policy.Concurrency,
+		SpawnedAtMS:    now.UnixMilli(),
+		IdleSinceMS:    now.UnixMilli(),
 		LeaseUntilMS:   now.Add(p.cfg.LeaseTTL).UnixMilli(),
 		MinInstances:   policy.MinInstances,
 		IdleTTLSeconds: policy.IdleTTLSeconds,
@@ -524,8 +629,9 @@ func (p *PoolManager) spawnInstance(ctx context.Context, req ExecuteRequest, pol
 	}, nil
 }
 
-// executeOn 在已认领实例上分发请求并负责释放/回收。
-func (p *PoolManager) executeOn(ctx context.Context, req ExecuteRequest, policy PoolPolicy, rec InstanceRecord, queuedAt time.Time) (*ExecuteResponse, error) {
+// executeOn 在已认领实例上分发请求并负责释放/回收。max_requests 判 draining
+// 已移入释放 Lua（按记录固化值，v3 §1.3），此处不再消费池策略。
+func (p *PoolManager) executeOn(ctx context.Context, req ExecuteRequest, rec InstanceRecord, queuedAt time.Time) (*ExecuteResponse, error) {
 	ref := FunctionRef{ProjectID: req.ProjectID, FunctionID: req.FunctionID}
 	QueueWaitSeconds.WithLabelValues(req.ProjectID, req.FunctionID).Observe(p.clock().Sub(queuedAt).Seconds())
 	started := p.clock()
@@ -534,40 +640,62 @@ func (p *PoolManager) executeOn(ctx context.Context, req ExecuteRequest, policy 
 		timeout = 15 * time.Second
 	}
 
-	res, invokeErr := p.runner.Invoke(ctx, rec.IP, req.Data, req.ExecutionToken, timeout)
+	res, invokeErr := p.runner.Invoke(ctx, rec.IP, req, timeout)
 	duration := p.clock().Sub(started)
 	DispatchDurationSeconds.WithLabelValues(req.ProjectID, req.FunctionID).Observe(duration.Seconds())
 
-	if invokeErr != nil {
-		// 请求超时/调用方取消/容器崩溃 → 杀整个实例（隔离粒度 = 实例级，
-		// 设计 §6 生命周期与故障语义）。清账用独立 ctx（执行 ctx 可能已死）。
-		p.killInstance(context.WithoutCancel(ctx), ref, &rec)
-		if ctx.Err() != nil || isTimeoutErr(invokeErr) {
-			return nil, status.Error(codes.DeadlineExceeded, "execution timed out")
+	if invokeErr != nil && (ctx.Err() != nil || isTimeoutErr(invokeErr)) {
+		// 超时/调用方取消（v3 §1.4 表格）：不杀实例——并发下一个慢请求不得
+		// 误杀同实例健康在途请求；走释放 Lua（幂等，timedOut=true 累加熔断
+		// 计数），请求照旧以 DeadlineExceeded 收场，runner per-request timer
+		// 兜底 abandon。清账用独立 ctx（执行 ctx 可能已死）。
+		noCancel := context.WithoutCancel(ctx)
+		released, rerr := p.registry.Release(noCancel, ref, rec.InstanceID, p.clock(), p.clock().Add(p.cfg.LeaseTTL), true)
+		if rerr == nil && released != nil && released.Timeouts >= p.cfg.TimeoutBudget {
+			// 超时熔断（v3 §1.4 对抗审查修正）：累计超时达阈值 → 杀实例重建，
+			// 堵住「超时不杀」打开的僵尸负载通道（有 bug 的函数留下永不决议的
+			// async 操作慢性塞满事件循环，health 仍响应、实例永不回收）。误
+			// 熔断一次也只是 drain 语义重建，无害。
+			TimeoutFuseTotal.WithLabelValues(req.ProjectID, req.FunctionID).Inc()
+			p.killInstance(noCancel, ref, &rec)
 		}
+		return nil, status.Error(codes.DeadlineExceeded, "execution timed out")
+	}
+	if invokeErr != nil {
+		// 传输层错误（连接拒绝/reset 等，非超时）＝容器崩溃判定（v3 §1.4
+		// 表格，Cloud Run 同款）：仍杀整个实例（实例级隔离粒度，设计 §6
+		// 生命周期与故障语义）。清账用独立 ctx（执行 ctx 可能已死）。
+		p.killInstance(context.WithoutCancel(ctx), ref, &rec)
 		return nil, status.Errorf(codes.Unavailable, "resident instance failed: %v", invokeErr)
 	}
 
-	// 释放：busy=false + 请求数 + 续租；达 max_requests 标记 draining
-	// （runner 响应后自退出，reaper 幽灵对账负责容器清理与计数回退）。
-	_, _ = p.registry.Update(ctx, ref, rec.InstanceID, func(r *InstanceRecord) {
-		now := p.clock()
-		r.Busy = false
-		r.IdleSince = now
-		r.LeaseUntilMS = now.Add(p.cfg.LeaseTTL).UnixMilli()
-		r.Requests++
-		if policy.MaxRequestsPerInstance > 0 && r.Requests >= int64(policy.MaxRequestsPerInstance) {
-			r.Draining = true
-		}
-	})
+	// 正常完成（含函数报错封套——实例本身健康，保留复用）：释放 Lua 原子
+	// 收账（inflight-1 + requests+1 + 续租；inflight==0 落 idle_since_ms 并
+	// 按记录固化 max_requests 判 draining，v3 §1.3——runner 自退出后由
+	// reaper 幽灵对账负责容器清理与计数回退）。
+	_, _ = p.registry.Release(ctx, ref, rec.InstanceID, p.clock(), p.clock().Add(p.cfg.LeaseTTL), false)
 	if res.Ok {
-		return &ExecuteResponse{
+		resp := &ExecuteResponse{
 			Status:     "ok",
-			Response:   res.Result,
 			StdoutTail: truncateTail(res.Stdout),
 			StderrTail: truncateTail(res.Stderr),
 			DurationMS: duration.Milliseconds(),
-		}, nil
+		}
+		if res.FnStatus > 0 {
+			// fetch 风格（v3 §2.2 invoke 语义映射）：StatusCode 承载函数
+			// HTTP status（v1/v2 为退出码语义位、恒 0）；body 双通道——
+			// Response 为解码后文本（best-effort），ResponseB64 无损（64KB
+			// 截断已在 runner 完成）；headers 随响应透传（仅触发器 sync
+			// 路径消费，OQ7）。FnStatus 恒 ≥200：fetch 封套的 status 由
+			// Response 构造器保证（200–599），main 风格封套无此字段。
+			resp.StatusCode = res.FnStatus
+			resp.Response = decodeB64BestEffort(res.BodyB64)
+			resp.ResponseB64 = res.BodyB64
+			resp.HTTPHeaders = res.Headers
+		} else {
+			resp.Response = res.Result
+		}
+		return resp, nil
 	}
 	// 函数报错（runner 500 封套）：实例本身健康，保留复用。
 	return &ExecuteResponse{
@@ -619,9 +747,10 @@ func (p *PoolManager) DrainForDeployment(ctx context.Context, projectID, functio
 		_, _ = p.registry.Update(ctx, ref, rec.InstanceID, func(r *InstanceRecord) {
 			r.Draining = true
 		})
-		if rec.Busy {
-			// 在途：宽限到点强杀（旧池 drain 上限 ≤ 函数超时；在途请求的
-			// 分发连接被切断后由 executeOn 错误路径收场）。
+		if rec.Inflight > 0 {
+			// 在途：宽限到点强杀（v3 §1.4：busy 布尔判定 → inflight>0；
+			// 旧池 drain 上限 ≤ 函数超时；在途请求的分发连接被切断后由
+			// executeOn 错误路径收场）。
 			busy := rec
 			// 宽限杀必须脱离请求 ctx 存活（请求方早已返回）——G118 误报。
 			go func() { // #nosec G118 -- 宽限到点强杀须脱离请求 ctx 存活
@@ -651,9 +780,11 @@ func (p *PoolManager) Reaper(ctx context.Context) {
 		var idleCandidates []InstanceRecord
 		alive := 0
 		draining := 0
+		inflightTotal := 0
 		var uptimeMS float64
 		for i := range records {
 			rec := records[i]
+			inflightTotal += rec.Inflight
 			running, _, err := p.daemon.InspectInstance(ctx, rec.ContainerID)
 			if err != nil || !running {
 				// 幽灵/已退出实例（runner 达 max_requests 自退出也在此收敛）：
@@ -666,14 +797,14 @@ func (p *PoolManager) Reaper(ctx context.Context) {
 			case rec.Draining:
 				draining++
 				// runner 应自退出；仍存活超 30s 兜底强杀。
-				if now.Sub(rec.IdleSince) > 30*time.Second {
+				if now.Sub(time.UnixMilli(rec.IdleSinceMS)) > 30*time.Second {
 					p.killInstance(ctx, ref, &rec)
 					draining--
 				}
-			case rec.Busy:
-				// 判活规则：busy 实例不因心跳缺失被回收（dispatch 续租 +
-				// busy 标记）；仅当租约过期超过 stuckBusyGrace（请求方已
-				// 消失，如 dispatcher 重启）才强杀。
+			case rec.Inflight > 0:
+				// 判活规则：在途实例不因租约过期被回收（dispatch 认领 + 每次
+				// 释放续租，v3 §1.4）；仅当租约过期超过 stuckBusyGrace（请求方
+				// 已消失，如 dispatcher 重启）才强杀。
 				if now.UnixMilli() > rec.LeaseUntilMS+stuckBusyGrace.Milliseconds() {
 					p.killInstance(ctx, ref, &rec)
 					continue
@@ -696,7 +827,7 @@ func (p *PoolManager) Reaper(ctx context.Context) {
 			if idleTTL <= 0 {
 				idleTTL = p.cfg.IdleTTLDefault
 			}
-			if now.Sub(rec.IdleSince) <= idleTTL {
+			if now.Sub(time.UnixMilli(rec.IdleSinceMS)) <= idleTTL {
 				continue
 			}
 			p.killInstance(ctx, ref, &rec)
@@ -711,6 +842,9 @@ func (p *PoolManager) Reaper(ctx context.Context) {
 		PoolBooting.WithLabelValues(ref.ProjectID, ref.FunctionID).Set(float64(booting))
 		PoolDraining.WithLabelValues(ref.ProjectID, ref.FunctionID).Set(float64(draining))
 		ResidentUptimeMS.WithLabelValues(ref.ProjectID, ref.FunctionID).Add(uptimeMS)
+		// 在途水位（v3 Observability：reaper 周期从注册表聚合 inflight 总和，
+		// 与 PoolReady 同路）。
+		InstanceInflight.WithLabelValues(ref.ProjectID, ref.FunctionID).Set(float64(inflightTotal))
 	}
 }
 
@@ -740,6 +874,16 @@ func isTimeoutErr(err error) bool {
 	}
 	var ne net.Error
 	return errors.As(err, &ne) && ne.Timeout()
+}
+
+// decodeB64BestEffort 解码 base64 为文本（失败原样返回——响应封套的
+// body_base64 由 runner 生成，失败形态仅防御异常 runner）。
+func decodeB64BestEffort(s string) string {
+	b, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return s
+	}
+	return string(b)
 }
 
 func firstNonEmpty(vals ...string) string {

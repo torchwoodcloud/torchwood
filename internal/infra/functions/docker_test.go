@@ -295,13 +295,15 @@ func TestExtractZipWithLimits_ValidZipWithinBudget(t *testing.T) {
 	zipPath := filepath.Join(t.TempDir(), "ok.zip")
 	require.NoError(t, os.WriteFile(zipPath, buf.Bytes(), 0o600))
 
-	runtime, err := extractZipWithLimits(zipPath, filepath.Join(t.TempDir(), "out"), zipExtractLimits{
+	contents, err := extractZipWithLimits(zipPath, filepath.Join(t.TempDir(), "out"), zipExtractLimits{
 		maxEntries:    1000,
 		maxEntryBytes: 4096,
 		maxTotalBytes: 1 << 20,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "node-18.0", runtime)
+	require.Equal(t, "node-18.0", contents.Runtime)
+	require.False(t, contents.NodeDeps)
+	require.False(t, contents.HasLockfile)
 }
 
 // TestReadBuildOutput_LongLineWithinLimit 单行超过旧 512KB 上限（< 4MB）不再
@@ -342,4 +344,223 @@ func TestExtractZip_RejectsSymlink(t *testing.T) {
 	})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.ErrorContains(t, err, "symlink")
+}
+
+// ---- 平台代装依赖（v3 §3.1/D11，functions-v3.md）：zip 校验层探测与拒收 ----
+
+// TestExtractZip_RejectsNodeModulesEntry node_modules 文件条目拒收（v3 §3.1）：
+// 任意条目路径第一段为 node_modules 即拒绝，错误信息对齐设计文案。
+func TestExtractZip_RejectsNodeModulesEntry(t *testing.T) {
+	for _, name := range []string{
+		"node_modules/ms/index.js",
+		"node_modules",           // node_modules 自身（文件条目形态）
+		"./node_modules/ms/x.js", // 前导 ./ 归一化后第一段命中
+	} {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		f, err := zw.Create(name)
+		require.NoError(t, err)
+		_, err = f.Write([]byte("exports.x = 1;"))
+		require.NoError(t, err)
+		f2, err := zw.Create("index.js")
+		require.NoError(t, err)
+		_, err = f2.Write([]byte("exports.main = () => ({});"))
+		require.NoError(t, err)
+		require.NoError(t, zw.Close())
+		zipPath := filepath.Join(t.TempDir(), "nm.zip")
+		require.NoError(t, os.WriteFile(zipPath, buf.Bytes(), 0o600))
+
+		_, err = extractZipWithLimits(zipPath, filepath.Join(t.TempDir(), "out"), zipExtractLimits{
+			maxEntries:    1000,
+			maxEntryBytes: 4096,
+			maxTotalBytes: 1 << 20,
+		})
+		require.Error(t, err, "entry %q must be rejected", name)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+		require.ErrorContains(t, err, "请勿在代码包中携带 node_modules")
+	}
+}
+
+// TestExtractZip_RejectsNodeModulesDirEntry node_modules 目录条目（zip 显式
+// 目录记录）同样拒收——目录条目在 IsDir continue 之前判定，不留漏网。
+func TestExtractZip_RejectsNodeModulesDirEntry(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	_, err := zw.Create("node_modules/")
+	require.NoError(t, err)
+	f, err := zw.Create("index.js")
+	require.NoError(t, err)
+	_, err = f.Write([]byte("exports.main = () => ({});"))
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+	zipPath := filepath.Join(t.TempDir(), "nm-dir.zip")
+	require.NoError(t, os.WriteFile(zipPath, buf.Bytes(), 0o600))
+
+	_, err = extractZipWithLimits(zipPath, filepath.Join(t.TempDir(), "out"), zipExtractLimits{
+		maxEntries:    1000,
+		maxEntryBytes: 4096,
+		maxTotalBytes: 1 << 20,
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.ErrorContains(t, err, "请勿在代码包中携带 node_modules")
+}
+
+// TestExtractZip_AllowsNestedNodeModulesDirName 拒收只针对 zip 根第一段：
+// 子目录中的同名目录（如测试夹具）不拒（v3 §3.1 按条目路径第一段判定）。
+func TestExtractZip_AllowsNestedNodeModulesDirName(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	f, err := zw.Create("test/fixtures/node_modules-helper.js")
+	require.NoError(t, err)
+	_, err = f.Write([]byte("// not a real node_modules entry"))
+	require.NoError(t, err)
+	f2, err := zw.Create("index.js")
+	require.NoError(t, err)
+	_, err = f2.Write([]byte("exports.main = () => ({});"))
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+	zipPath := filepath.Join(t.TempDir(), "nested.zip")
+	require.NoError(t, os.WriteFile(zipPath, buf.Bytes(), 0o600))
+
+	contents, err := extractZipWithLimits(zipPath, filepath.Join(t.TempDir(), "out"), zipExtractLimits{
+		maxEntries:    1000,
+		maxEntryBytes: 4096,
+		maxTotalBytes: 1 << 20,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "node-18.0", contents.Runtime)
+}
+
+// TestExtractZip_PackageJSONManifest 探测收集：dependencies 非空 → NodeDeps；
+// 仅 devDependencies / 空依赖 → false；package-lock.json 存在 → HasLockfile。
+func TestExtractZip_PackageJSONManifest(t *testing.T) {
+	cases := []struct {
+		name        string
+		packageJSON string
+		withLock    bool
+		wantDeps    bool
+	}{
+		{"deps non-empty", `{"name":"fn","dependencies":{"ms":"2.1.3"}}`, true, true},
+		{"devDependencies only", `{"name":"fn","devDependencies":{"tap":"21.0.0"}}`, false, false},
+		{"empty deps", `{"name":"fn","dependencies":{}}`, false, false},
+		{"null deps", `{"name":"fn","dependencies":null}`, false, false},
+		{"no package.json", "", false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			files := map[string]string{"index.js": "exports.main = () => ({});"}
+			if tc.packageJSON != "" {
+				files["package.json"] = tc.packageJSON
+			}
+			if tc.withLock {
+				files["package-lock.json"] = `{"name":"fn","lockfileVersion":3,"packages":{}}`
+			}
+			contents, err := extractZipFromFiles(t, files)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantDeps, contents.NodeDeps)
+			require.Equal(t, tc.withLock, contents.HasLockfile)
+		})
+	}
+}
+
+// TestExtractZip_InvalidPackageJSON 坏 package.json 是明确错误（不静默按
+// 无依赖处理），错误信息携带解析错误（v3 §3.1）。
+func TestExtractZip_InvalidPackageJSON(t *testing.T) {
+	_, err := extractZipFromFiles(t, map[string]string{
+		"index.js":     "exports.main = () => ({});",
+		"package.json": `{"name":"fn","dependencies":`,
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.ErrorContains(t, err, "invalid package.json")
+
+	// 依赖值非法 JSON 形状（string 而非 object）同样报错。
+	_, err = extractZipFromFiles(t, map[string]string{
+		"index.js":     "exports.main = () => ({});",
+		"package.json": `{"dependencies":"ms"}`,
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "invalid package.json")
+}
+
+// extractZipFromFiles 测试辅助：files 打进内存 zip 并走 extractZip 全链路。
+func extractZipFromFiles(t *testing.T, files map[string]string) (ZipContents, error) {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, content := range files {
+		f, err := zw.Create(name)
+		require.NoError(t, err)
+		_, err = f.Write([]byte(content))
+		require.NoError(t, err)
+	}
+	require.NoError(t, zw.Close())
+	zipPath := filepath.Join(t.TempDir(), "code.zip")
+	require.NoError(t, os.WriteFile(zipPath, buf.Bytes(), 0o600))
+	return extractZip(zipPath, filepath.Join(t.TempDir(), "out"))
+}
+
+// ---- dockerfileFor 三形态（v3 §3.1/D11）：分层模板 / 旧模板 / lockfile 强制 ----
+
+// TestDockerfileFor_NodeLayeredWithDeps 带依赖 + lockfile → 分层模板：
+// 清单先行 COPY、npm ci 代装、再 COPY 全部代码（lockfile 不变命中层缓存）；
+// CMD/USER 与旧模板一致（本切片不改 runner 协议、不 bump 模板版本）。
+func TestDockerfileFor_NodeLayeredWithDeps(t *testing.T) {
+	df, err := dockerfileFor("node-18.0", true, true)
+	require.NoError(t, err)
+	require.Contains(t, df, "FROM node:18-alpine\nWORKDIR /app\n")
+	require.Contains(t, df, "COPY package.json package-lock.json* ./\n")
+	require.Contains(t, df, "RUN npm ci --omit=dev --ignore-scripts\n")
+	// 分层顺序：清单 COPY → npm ci → 全量 COPY（层缓存正确性）。
+	require.Less(t, strings.Index(df, "npm ci"), strings.Index(df, "COPY . ."))
+	require.Contains(t, df, "USER node\n")
+	// CMD 与无依赖模板逐字节一致（产物等价，模板版本不 bump 的前提）。
+	legacy, err := dockerfileFor("node-18.0", false, false)
+	require.NoError(t, err)
+	require.Equal(t, tailAfterCopy(legacy), tailAfterCopy(df), "CMD/USER 行两形态必须一致")
+	// --ignore-scripts 恒定（D11）。
+	require.Contains(t, df, "--ignore-scripts")
+	require.NotContains(t, strings.ToUpper(df), "ENTRYPOINT")
+}
+
+// tailAfterCopy 取 Dockerfile 中 "COPY . ." 之后的内容（USER + CMD），用于
+// 断言分层模板与旧模板在这些行上逐字节一致。
+func tailAfterCopy(df string) string {
+	i := strings.Index(df, "COPY . .\n")
+	if i < 0 {
+		panic("COPY . . not found in dockerfile: " + df)
+	}
+	return df[i+len("COPY . .\n"):]
+}
+
+// TestDockerfileFor_NodeNoDepsLegacy 无依赖 → 维持旧模板（无 npm ci，
+// 无依赖函数零变化、不白跑 npm ci）。
+func TestDockerfileFor_NodeNoDepsLegacy(t *testing.T) {
+	df, err := dockerfileFor("node-18.0", false, false)
+	require.NoError(t, err)
+	require.NotContains(t, df, "npm ci")
+	require.Contains(t, df, "COPY . .\n")
+	require.Contains(t, df, "USER node\n")
+}
+
+// TestDockerfileFor_NodeDepsWithoutLockfile 带依赖无 lockfile → 构建期报错，
+// 错误信息指向提交 lockfile（v3 §3.1 lockfile 强制）。
+func TestDockerfileFor_NodeDepsWithoutLockfile(t *testing.T) {
+	_, err := dockerfileFor("node-18.0", true, false)
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.ErrorContains(t, err, "检测到 dependencies 但缺少 package-lock.json")
+	require.ErrorContains(t, err, "npm install 会生成")
+}
+
+// TestDockerfileFor_PythonIgnoresNodeDeps python 分支不受 node 依赖探测影响
+// （代装随 python v2 支持，v3 §3.2 末）：zip 里附带 package.json 不改变 python
+// 模板。
+func TestDockerfileFor_PythonIgnoresNodeDeps(t *testing.T) {
+	base, err := dockerfileFor("python-3.11", false, false)
+	require.NoError(t, err)
+	withDeps, err := dockerfileFor("python-3.11", true, true)
+	require.NoError(t, err)
+	require.Equal(t, base, withDeps)
+	require.NotContains(t, base, "npm ci")
 }

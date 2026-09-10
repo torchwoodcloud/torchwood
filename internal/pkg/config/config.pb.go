@@ -1913,8 +1913,11 @@ type Functions_Dispatcher struct {
 	// attach 失败不阻断执行（函数可能无需回访），但会记警告——部署时应
 	// 在首次执行前修正。空 = 不 attach（api_base_url 须另行保证可达）。
 	CallbackContainer string `protobuf:"bytes,8,opt,name=callback_container,json=callbackContainer,proto3" json:"callback_container,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// 实例累计超时熔断阈值（functions v3 §1.4：超时不杀实例后，实例累计
+	// 超时达到该阈值即杀实例重建，防僵尸负载慢性塞满事件循环；默认 5）。
+	TimeoutBudget uint32 `protobuf:"varint,9,opt,name=timeout_budget,json=timeoutBudget,proto3" json:"timeout_budget,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Functions_Dispatcher) Reset() {
@@ -2001,6 +2004,13 @@ func (x *Functions_Dispatcher) GetCallbackContainer() string {
 		return x.CallbackContainer
 	}
 	return ""
+}
+
+func (x *Functions_Dispatcher) GetTimeoutBudget() uint32 {
+	if x != nil {
+		return x.TimeoutBudget
+	}
+	return 0
 }
 
 // Trigger 是触发器模块平台级配置（P1 触发器模块）。
@@ -2869,7 +2879,7 @@ const file_config_proto_rawDesc = "" +
 	"\x11secret_access_key\x18\x05 \x01(\tR\x0fsecretAccessKey\x12\x17\n" +
 	"\ause_ssl\x18\x06 \x01(\bR\x06useSsl\x1a\x1b\n" +
 	"\x05Local\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\"\xec\a\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\"\x93\b\n" +
 	"\tFunctions\x12\x1a\n" +
 	"\bexecutor\x18\x01 \x01(\tR\bexecutor\x12>\n" +
 	"\x06docker\x18\x02 \x01(\v2&.torchwood.api.config.Functions.DockerR\x06docker\x12G\n" +
@@ -2885,7 +2895,7 @@ const file_config_proto_rawDesc = "" +
 	"\bregistry\x18\x03 \x01(\tR\bregistry\x1a-\n" +
 	"\tExecution\x12 \n" +
 	"\fapi_base_url\x18\x01 \x01(\tR\n" +
-	"apiBaseUrl\x1a\xac\x02\n" +
+	"apiBaseUrl\x1a\xd3\x02\n" +
 	"\n" +
 	"Dispatcher\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12!\n" +
@@ -2896,7 +2906,8 @@ const file_config_proto_rawDesc = "" +
 	"\x12queue_head_timeout\x18\x05 \x01(\tR\x10queueHeadTimeout\x12!\n" +
 	"\fboot_timeout\x18\x06 \x01(\tR\vbootTimeout\x12\x12\n" +
 	"\x04addr\x18\a \x01(\tR\x04addr\x12-\n" +
-	"\x12callback_container\x18\b \x01(\tR\x11callbackContainer\x1a6\n" +
+	"\x12callback_container\x18\b \x01(\tR\x11callbackContainer\x12%\n" +
+	"\x0etimeout_budget\x18\t \x01(\rR\rtimeoutBudget\x1a6\n" +
 	"\aTrigger\x12+\n" +
 	"\x12http_ip_per_minute\x18\x01 \x01(\x05R\x0fhttpIpPerMinute\x1an\n" +
 	"\fClientInvoke\x120\n" +

@@ -41,6 +41,9 @@ const (
 	maxContainerOutSize = 1 << 20   // stdout/stderr 缓冲上限（结果在 app 层再截断 64KB）
 	// maxExecEnvBudgetBytes 是 data + env 合并预算（execve 32KiB 单参数硬限制）。
 	maxExecEnvBudgetBytes = 32 << 10
+	// maxPackageJSONBytes 是 package.json 依赖探测的读取上限（v3 §3.1）。
+	// 合法 package.json 远小于此，防御恶意巨型条目撑探测内存。
+	maxPackageJSONBytes = 4 << 20
 	// dockerCleanupTimeout 是容器停止/删除等清理操作的独立超时：清理不继承
 	// 已超时的 runCtx，也不能用无超时的 Background（daemon 挂起会无限阻塞）。
 	dockerCleanupTimeout = 30 * time.Second
@@ -260,11 +263,11 @@ func (d *DockerExecutor) Build(ctx context.Context, functionID, deploymentID, zi
 	}
 	defer func() { _ = os.RemoveAll(buildDir) }()
 
-	runtime, err := extractZip(zipPath, buildDir)
+	contents, err := extractZip(zipPath, buildDir)
 	if err != nil {
 		return err
 	}
-	dockerfile, err := dockerfileFor(runtime)
+	dockerfile, err := dockerfileFor(contents.Runtime, contents.NodeDeps, contents.HasLockfile)
 	if err != nil {
 		return err
 	}
@@ -454,28 +457,43 @@ func (d *DockerExecutor) RemoveImage(ctx context.Context, functionID, deployment
 	return err
 }
 
-// extractZip 解压 zip 到 destDir（防 zip 炸弹与路径穿越），返回 runtime ID。
-func extractZip(zipPath, destDir string) (string, error) {
+// ZipContents 是 zip 解压校验的产出：runtime 判定 + 平台代装依赖的探测
+// 结果（v3 §3.1，functions-v3.md），供 dockerfileFor / runner.DockerfileFor
+// 做模板分层与 lockfile 强制决策。
+type ZipContents struct {
+	// Runtime 是运行时 ID（node-18.0 / python-3.11）。
+	Runtime string
+	// NodeDeps 表示 zip 根 package.json 的 dependencies 键非空（探测条件；
+	// devDependencies 不触发代装）。
+	NodeDeps bool
+	// HasLockfile 表示 zip 根含 package-lock.json。
+	HasLockfile bool
+}
+
+// extractZip 解压 zip 到 destDir（防 zip 炸弹与路径穿越），返回内容探测结果。
+func extractZip(zipPath, destDir string) (ZipContents, error) {
 	return extractZipWithLimits(zipPath, destDir, defaultZipExtractLimits)
 }
 
-// ExtractZip 是 extractZip 的导出版（functions-dispatcher 的 v2 构建复用
-// 同一防 zip 炸弹/路径穿越预算）。
-func ExtractZip(zipPath, destDir string) (string, error) {
+// ExtractZip 是 extractZip 的导出版（functions-dispatcher 的 v2/v3 构建复用
+// 同一防 zip 炸弹/路径穿越预算与依赖探测）。
+func ExtractZip(zipPath, destDir string) (ZipContents, error) {
 	return extractZip(zipPath, destDir)
 }
 
 // extractZipWithLimits 是 extractZip 的可注入预算版本（测试用）：除声明侧
 // UncompressedSize64 预检外，写入侧按实际字节计数强制预算，超限清理半成品。
-func extractZipWithLimits(zipPath, destDir string, limits zipExtractLimits) (string, error) {
+// 同处逐条收集平台代装依赖探测信息（v3 §3.1）：node_modules 拒收、zip 根
+// package.json 的 dependencies 非空判定、package-lock.json 存在性。
+func extractZipWithLimits(zipPath, destDir string, limits zipExtractLimits) (ZipContents, error) {
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
-		return "", status.Error(codes.InvalidArgument, "invalid zip file")
+		return ZipContents{}, status.Error(codes.InvalidArgument, "invalid zip file")
 	}
 	defer func() { _ = zr.Close() }()
 
 	if len(zr.File) > limits.maxEntries {
-		return "", status.Errorf(codes.InvalidArgument, "zip contains too many entries (max %d)", limits.maxEntries)
+		return ZipContents{}, status.Errorf(codes.InvalidArgument, "zip contains too many entries (max %d)", limits.maxEntries)
 	}
 	// declaredTotal 基于声明大小快速预检（低成本拒绝明显超限）；
 	// actualTotal 按实际写入字节累计（防御声明大小与实际不符的伪造 zip）。
@@ -483,45 +501,55 @@ func extractZipWithLimits(zipPath, destDir string, limits zipExtractLimits) (str
 	var actualTotal int64
 	hasIndexJS := false
 	hasMainPy := false
+	hasLockfile := false
+	nodeDeps := false
 	root := filepath.Clean(destDir)
 
 	for _, f := range zr.File {
 		if f.Mode()&os.ModeSymlink != 0 {
-			return "", status.Error(codes.InvalidArgument, "zip entry is a symlink")
+			return ZipContents{}, status.Error(codes.InvalidArgument, "zip entry is a symlink")
+		}
+		// node_modules 拒收（v3 §3.1/D11，对齐 Appwrite）：用户 zip 携带
+		// node_modules 存在跨平台二进制不兼容与包体膨胀问题，依赖改由平台
+		// 构建期代装（CLI deploy 侧 B 切片已同步剔除）。判定条目路径第一段
+		// （含 node_modules 自身与 node_modules/...，目录与文件条目一并拒绝，
+		// 逐条判定即可，无需等解压完成）；子目录中的同名目录不受影响。
+		if firstPathSegment(f.Name) == "node_modules" {
+			return ZipContents{}, status.Error(codes.InvalidArgument, "请勿在代码包中携带 node_modules——平台将在构建期代装依赖（对齐 Appwrite；跨平台二进制不兼容）")
 		}
 		if f.FileInfo().IsDir() {
 			continue
 		}
 		if f.UncompressedSize64 > uint64(limits.maxEntryBytes) {
 			_ = os.RemoveAll(destDir)
-			return "", status.Errorf(codes.InvalidArgument, "zip entry %q exceeds %d bytes", f.Name, limits.maxEntryBytes)
+			return ZipContents{}, status.Errorf(codes.InvalidArgument, "zip entry %q exceeds %d bytes", f.Name, limits.maxEntryBytes)
 		}
 		declaredTotal += f.UncompressedSize64
 		if declaredTotal > uint64(limits.maxTotalBytes) {
 			_ = os.RemoveAll(destDir)
-			return "", status.Errorf(codes.InvalidArgument, "zip total uncompressed size exceeds %d bytes", limits.maxTotalBytes)
+			return ZipContents{}, status.Errorf(codes.InvalidArgument, "zip total uncompressed size exceeds %d bytes", limits.maxTotalBytes)
 		}
 
 		// zip slip：Clean 后必须仍位于解压根目录内。
 		name := filepath.Clean(strings.ReplaceAll(f.Name, "\\", "/"))
 		if name == "." || name == ".." || filepath.IsAbs(name) || strings.HasPrefix(name, ".."+string(os.PathSeparator)) {
-			return "", status.Errorf(codes.InvalidArgument, "zip entry %q escapes root", f.Name)
+			return ZipContents{}, status.Errorf(codes.InvalidArgument, "zip entry %q escapes root", f.Name)
 		}
 		target := filepath.Join(root, name)
 		if !strings.HasPrefix(target, root+string(os.PathSeparator)) {
-			return "", status.Errorf(codes.InvalidArgument, "zip entry %q escapes root", f.Name)
+			return ZipContents{}, status.Errorf(codes.InvalidArgument, "zip entry %q escapes root", f.Name)
 		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return "", fmt.Errorf("create zip entry dir: %w", err)
+			return ZipContents{}, fmt.Errorf("create zip entry dir: %w", err)
 		}
 		src, err := f.Open()
 		if err != nil {
-			return "", fmt.Errorf("open zip entry %q: %w", f.Name, err)
+			return ZipContents{}, fmt.Errorf("open zip entry %q: %w", f.Name, err)
 		}
 		dst, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 		if err != nil {
 			_ = src.Close()
-			return "", fmt.Errorf("write zip entry %q: %w", f.Name, err)
+			return ZipContents{}, fmt.Errorf("write zip entry %q: %w", f.Name, err)
 		}
 		// 写入侧按实际字节计数（不再仅信任 UncompressedSize64 声明值），
 		// 预算（单条目或总预算）超限报错并清理整个解压目标目录——RemoveAll
@@ -534,16 +562,16 @@ func extractZipWithLimits(zipPath, destDir string, limits zipExtractLimits) (str
 		if copyErr != nil {
 			_ = os.RemoveAll(destDir)
 			if errors.Is(copyErr, errZipBudgetExceeded) {
-				return "", status.Errorf(codes.InvalidArgument, "zip entry %q exceeds %d byte extraction budget", f.Name, limits.maxEntryBytes)
+				return ZipContents{}, status.Errorf(codes.InvalidArgument, "zip entry %q exceeds %d byte extraction budget", f.Name, limits.maxEntryBytes)
 			}
-			return "", fmt.Errorf("extract zip entry %q: %w", f.Name, copyErr)
+			return ZipContents{}, fmt.Errorf("extract zip entry %q: %w", f.Name, copyErr)
 		}
 		if actualTotal > limits.maxTotalBytes {
 			_ = os.RemoveAll(destDir)
-			return "", status.Errorf(codes.InvalidArgument, "zip total uncompressed size exceeds %d bytes", limits.maxTotalBytes)
+			return ZipContents{}, status.Errorf(codes.InvalidArgument, "zip total uncompressed size exceeds %d bytes", limits.maxTotalBytes)
 		}
 		if closeErr != nil {
-			return "", fmt.Errorf("close zip entry %q: %w", f.Name, closeErr)
+			return ZipContents{}, fmt.Errorf("close zip entry %q: %w", f.Name, closeErr)
 		}
 
 		switch name {
@@ -551,23 +579,100 @@ func extractZipWithLimits(zipPath, destDir string, limits zipExtractLimits) (str
 			hasIndexJS = true
 		case "main.py":
 			hasMainPy = true
+		case "package-lock.json":
+			hasLockfile = true
+		case "package.json":
+			// 依赖探测（v3 §3.1）：只读根 package.json 的 dependencies 键。
+			deps, parseErr := packageJSONHasDeps(f)
+			if parseErr != nil {
+				return ZipContents{}, parseErr
+			}
+			nodeDeps = deps
 		}
 	}
 
 	switch {
 	case hasIndexJS:
-		return "node-18.0", nil
+		return ZipContents{Runtime: "node-18.0", NodeDeps: nodeDeps, HasLockfile: hasLockfile}, nil
 	case hasMainPy:
-		return "python-3.11", nil
+		return ZipContents{Runtime: "python-3.11", NodeDeps: nodeDeps, HasLockfile: hasLockfile}, nil
 	default:
-		return "", status.Error(codes.InvalidArgument, "missing entrypoint file: expected index.js (node) or main.py (python)")
+		return ZipContents{}, status.Error(codes.InvalidArgument, "missing entrypoint file: expected index.js (node) or main.py (python)")
 	}
 }
 
+// packageJSONHasDeps 只读 zip 条目（根 package.json）的 dependencies 键并
+// 判定非空（v3 §3.1 探测条件；devDependencies 不触发代装）。坏 JSON 是
+// 用户代码包的明确错误——报错并携带解析错误，不静默按无依赖处理。
+func packageJSONHasDeps(f *zip.File) (bool, error) {
+	src, err := f.Open()
+	if err != nil {
+		return false, status.Errorf(codes.InvalidArgument, "open package.json: %v", err)
+	}
+	defer func() { _ = src.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(src, maxPackageJSONBytes+1))
+	if err != nil {
+		return false, status.Errorf(codes.InvalidArgument, "read package.json: %v", err)
+	}
+	if len(raw) > maxPackageJSONBytes {
+		return false, status.Errorf(codes.InvalidArgument, "package.json exceeds %d bytes", maxPackageJSONBytes)
+	}
+	// 值用 RawMessage 承接（官方依赖值为 string，但对象简写等历史形态合法）
+	// ——只判键非空，不做 schema 校验。
+	var pkg struct {
+		Dependencies map[string]json.RawMessage `json:"dependencies"`
+	}
+	if err := json.Unmarshal(raw, &pkg); err != nil {
+		return false, status.Errorf(codes.InvalidArgument, "invalid package.json: %v", err)
+	}
+	return len(pkg.Dependencies) > 0, nil
+}
+
+// firstPathSegment 返回 zip 条目名的第一段（归一化反斜杠与前导 "./"）。
+func firstPathSegment(name string) string {
+	name = strings.ReplaceAll(name, "\\", "/")
+	for strings.HasPrefix(name, "./") {
+		name = name[2:]
+	}
+	if i := strings.Index(name, "/"); i >= 0 {
+		name = name[:i]
+	}
+	return name
+}
+
 // dockerfileFor 生成运行时 Dockerfile（data 经 TW_DATA 环境变量传递，禁止拼接进命令）。
-func dockerfileFor(runtime string) (string, error) {
+//
+// node 分支支持平台代装依赖（v3 §3.1/D11，functions-v3.md）：nodeDeps=true
+// （zip 根 package.json dependencies 非空，探测在 zip 校验层）时改用经典分层
+// 模板——先 COPY 清单并 npm ci，再 COPY 全部代码，lockfile 不变即命中 Docker
+// 层缓存（二次部署免费获得增量构建）；lockfile 强制在此决策。无依赖函数维持
+// 一次性 COPY 模板（零变化、不白跑 npm ci）。python 分支不动（代装随 python
+// v2 支持落地，v3 §3.2 末）。
+func dockerfileFor(runtime string, nodeDeps, hasLockfile bool) (string, error) {
 	switch runtime {
 	case "node-18.0":
+		if nodeDeps {
+			// lockfile 强制（v3 §3.1）：无锁安装不可复现，与「构建是平台
+			// 确定性操作」不变量对齐。
+			if !hasLockfile {
+				return "", status.Error(codes.InvalidArgument, "检测到 dependencies 但缺少 package-lock.json——请提交 lockfile 以保证确定性构建（npm install 会生成）")
+			}
+			// --ignore-scripts 恒定（v3 §3.2/D11：一期不提供 opt-in）。不变量：
+			// 构建期不执行用户代码/第三方脚本（npm 生命周期脚本如 postinstall
+			// 可执行任意代码含出网）。残余风险声明：--ignore-scripts 不消除供应
+			// 链面本身——lockfile 是用户可控输入，npm 解析器漏洞仍可能在构建
+			// 容器内执行代码；缓解 = lockfile integrity hash 固定 + 构建容器
+			// 既有 hardening（非 root、无 sock、资源限额），见 functions-v3.md
+			// §3.2。代价：依赖原生编译/postinstall 下载二进制的包不可用（如
+			// esbuild/swc 安装版），文档明示（docs/developer/08-functions.md §3）。
+			return "FROM node:18-alpine\n" +
+				"WORKDIR /app\n" +
+				"COPY package.json package-lock.json* ./\n" +
+				"RUN npm ci --omit=dev --ignore-scripts\n" +
+				"COPY . .\n" +
+				"USER node\n" +
+				`CMD ["node","-e","const {main}=require('./index');Promise.resolve(main(JSON.parse(process.env.TW_DATA||'{}'))).then(r=>console.log(JSON.stringify(r))).catch(e=>{console.error(e);process.exit(1)})"]` + "\n", nil
+		}
 		return "FROM node:18-alpine\n" +
 			"WORKDIR /app\n" +
 			"COPY . .\n" +

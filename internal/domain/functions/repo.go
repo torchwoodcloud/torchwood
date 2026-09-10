@@ -41,11 +41,21 @@ func IsTriggerSource(triggerSource string) bool {
 		strings.HasPrefix(triggerSource, TriggerTypeCron+":")
 }
 
-// RunnerTemplateVersion 是平台 runner 镜像模板版本（P0.5 执行器 v2，端口级
-// 契约单一事实源）：模板任何语义变更递增；infra/functions/runner 的模板资产
-// 与本常量同步（编译期断言），构建时写入 function_deployments.template_version，
-// 存量 deployment 据此按新模板重建。0 = v1 模板或未知。
-const RunnerTemplateVersion int32 = 2
+// RunnerTemplateVersion 是平台 runner 镜像模板版本（P0.5 执行器 v2 → v3
+// 实例内多路复用 §1.2 → v4 Web 标准 fetch 接口 §2.1，docs/design/
+// functions-v3.md，端口级契约单一事实源）：模板任何语义变更递增；
+// infra/functions/runner 的模板资产与本常量同步（编译期断言），构建时写入
+// function_deployments.template_version，存量 deployment 据此按新模板重建。
+// 0 = v1 模板或未知。
+const RunnerTemplateVersion int32 = 4
+
+// MinConcurrencyTemplateVersion 是支持实例内并发的最低模板版本（v3 §1.5
+// 降级保护的判定基准）：v3 引入 per-request 基建（ctx/分桶/per-request
+// 超时），并发语义自此成立；v4（§2.1）仅扩展接口面（fetch 双轨），并发
+// 语义不变。降级判定按「template_version < 本值」固定——**不得**改用
+// RunnerTemplateVersion 比较，否则 v4 版本 bump 会把存量 v3 deployment
+// 误降级（重部署才能恢复并发）。
+const MinConcurrencyTemplateVersion int32 = 3
 
 // ErrExecutionIdempotencyConflict 表示客户端幂等键冲突（P2）：并发同键的
 // 第二次预占 INSERT 撞 partial 唯一索引——调用方应回读既有行原样返回。
@@ -139,6 +149,10 @@ type Function struct {
 	MaxInstances           int // 突发并发上限（超限有界排队）
 	IdleTTLSeconds         int // 空闲回收阈值（实例数 > min 时）
 	MaxRequestsPerInstance int // 实例请求数到期排空替换（防内存泄漏，Lambda 同款）
+	// Concurrency 是单实例并发上限（v3 实例内多路复用，迁移 000017，
+	// docs/design/functions-v3.md §1.1/§1.5）：默认 1（v2 串行等价）、上限 16
+	//（DB CHECK 兜底），显式 opt-in 承诺 main 可重入。v1 docker executor 忽略。
+	Concurrency int
 	// LatestReadyDeploymentID 是最新 ready 部署的冗余投影（热路径清账，
 	// 设计 §6 约束③）：selectDeployment 优先读该列，NULL 回退全量列表逻辑；
 	// 由 CreateDeployment ready / DeleteDeployment 同事务维护。
@@ -223,4 +237,12 @@ type ExecutionRecord struct {
 	ClientIdempotencyKey string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
+	// ——sync 完整透传（v3 §2.2 表「HTTP 触发器」行 / D10；运行期字段，
+	// **不落库**）——HTTPHeaders 是 fetch 风格函数设置的响应头（runner 已滤
+	// hop-by-hop/date/server）；ResponseB64 是无损响应 body（base64，≤64KB，
+	// 截断发生在 runner）。仅 executor 链路（dispatcher v4 fetch 风格）填充，
+	// 供 HTTP 触发器 sync 模式完整回写 HTTP 响应；bun 映射与 gRPC 投影均为
+	// 显式字段拷贝，二者天然排除（OQ7：headers 不持久化、流式后置）。
+	HTTPHeaders map[string]string
+	ResponseB64 string
 }

@@ -175,6 +175,10 @@ functions:
     # （dokploy compose 已配 torchwood-server）。attach 失败仅告警不阻断。
     # env: TORCHWOOD_FUNCTIONS_DISPATCHER_CALLBACK_CONTAINER
     callback_container: ""
+    # 实例累计超时熔断阈值（functions v3 §1.4：超时不杀实例后，实例累计
+    # 超时达到该阈值即杀实例重建，防僵尸负载；默认 5）。
+    # env: TORCHWOOD_FUNCTIONS_DISPATCHER_TIMEOUT_BUDGET
+    timeout_budget: 5
   trigger:
     # P1 触发器模块：HTTP 触发器公开端点（/f/{project}/{token}）的 per-IP
     # 固定窗口限频（次/分钟，默认 3000）。独立更高默认：微信等回调出口 IP

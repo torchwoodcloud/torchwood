@@ -23,6 +23,12 @@ import (
 // header 传递）。
 const twExecutionTokenEnv = "TW_EXECUTION_TOKEN"
 
+// maxExecuteResponseBytes 是 executions 端点响应的读取上限：v4 fetch 风格
+// 响应含 stdout/stderr 尾部 + 无损 body_base64 + headers（≈230KB 量级），
+// 构建 64KB 日志上限会截断 JSON——执行响应放宽到 1MB（dispatcher 侧读取
+// runner 响应同口径）。
+const maxExecuteResponseBytes = 1 << 20
+
 // DispatcherExecutor 是 Executor 端口的 v2 适配实现：经 functions-dispatcher
 // 的内网 HTTP API 承接 Build/Execute/RemoveImage（docker.sock 收敛到
 // dispatcher 进程，server/worker 零 daemon 依赖，设计 §6 分发通路方案③）。
@@ -56,7 +62,9 @@ func NewDispatcherExecutor(cfg *config.AppConfig) *DispatcherExecutor {
 
 // do POST JSON 并解析响应体；非 2xx 时按 dispatcher 的状态码映射还原
 // grpc status（ResourceExhausted → 429、DeadlineExceeded → 504 等）。
-func (d *DispatcherExecutor) do(ctx context.Context, path string, in any, out any) error {
+// respLimit 是响应体读取上限（executions 端点响应含无损 body/headers，
+// 需要高于构建日志的上限，见 maxExecuteResponseBytes）。
+func (d *DispatcherExecutor) do(ctx context.Context, path string, in any, out any, respLimit int64) error {
 	if d.baseURL == "" {
 		return status.Error(codes.FailedPrecondition, "functions.dispatcher.url is not configured (executor=dispatcher requires it)")
 	}
@@ -78,7 +86,7 @@ func (d *DispatcherExecutor) do(ctx context.Context, path string, in any, out an
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBuildLogBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, respLimit))
 	if err != nil {
 		return status.Errorf(codes.Internal, "read dispatcher response: %v", err)
 	}
@@ -124,8 +132,13 @@ type dispatchExecuteResponse struct {
 	StdoutTail string `json:"stdout_tail,omitempty"`
 	StderrTail string `json:"stderr_tail,omitempty"`
 	DurationMS int64  `json:"duration_ms"`
+	// StatusCode：main 风格 = 退出码语义位（ok 恒 0）；fetch 风格 = 函数
+	// HTTP status（v3 §2.2）。
 	StatusCode int    `json:"status_code"`
 	Error      string `json:"error,omitempty"`
+	// fetch 风格扩展（v3 §2.2）：函数设置的响应头与无损 body（main 风格恒空）。
+	HTTPHeaders map[string]string `json:"http_headers,omitempty"`
+	ResponseB64 string            `json:"response_b64,omitempty"`
 }
 
 // Build 将 zip 代码包经 dispatcher 构建为镜像（v2 runner 模板在 dispatcher
@@ -140,7 +153,7 @@ func (d *DispatcherExecutor) Build(ctx context.Context, functionID, deploymentID
 		"function_id":   functionID,
 		"deployment_id": deploymentID,
 		"zip_base64":    base64.StdEncoding.EncodeToString(zip),
-	}, &out)
+	}, &out, maxBuildLogBytes)
 	if err != nil {
 		return err
 	}
@@ -167,16 +180,19 @@ func (d *DispatcherExecutor) Execute(ctx context.Context, exec functions.Executi
 		env[k] = v
 	}
 	var out dispatchExecuteResponse
-	err := d.do(ctx, "/v1/dispatch/executions", map[string]any{
-		"image":            ImageName(d.cfg, exec.FunctionID, exec.DeploymentID),
-		"project_id":       exec.ProjectID,
-		"function_id":      exec.FunctionID,
-		"deployment_id":    exec.DeploymentID,
-		"runtime":          exec.Runtime,
-		"spec":             exec.Spec,
-		"timeout_seconds":  exec.Timeout,
-		"env":              env,
-		"execution_token":  token,
+	reqBody := map[string]any{
+		"image":           ImageName(d.cfg, exec.FunctionID, exec.DeploymentID),
+		"project_id":      exec.ProjectID,
+		"function_id":     exec.FunctionID,
+		"deployment_id":   exec.DeploymentID,
+		"runtime":         exec.Runtime,
+		"spec":            exec.Spec,
+		"timeout_seconds": exec.Timeout,
+		"env":             env,
+		"execution_token": token,
+		// 执行 ID（v3 §1.2/§1.5）：经分发 header x-tw-execution-id 透传给
+		// runner（ctx.executionId / 日志关联）；空则 dispatcher 不发 header。
+		"execution_id":     exec.ExecutionID,
 		"data":             exec.Data,
 		"egress_untrusted": exec.EgressUntrusted,
 		"pool": map[string]any{
@@ -184,20 +200,38 @@ func (d *DispatcherExecutor) Execute(ctx context.Context, exec functions.Executi
 			"max_instances":             exec.MaxInstances,
 			"idle_ttl_seconds":          exec.IdleTTLSeconds,
 			"max_requests_per_instance": exec.MaxRequestsPerInstance,
+			// 单实例并发（v3 §1.1；<=0 由 dispatcher applyDefaults 归一化 1）。
+			"concurrency": exec.Concurrency,
 		},
-	}, &out)
+	}
+	// HTTP 触发器封套通道（v3 §2.3/D10）：封套元数据 + 原始 body 随分发
+	// 请求透传（[]byte 经 JSON 自动 base64）；无封套（invoke/cron/main 风格
+	// 触发器以外的来源）不发这些键。
+	if exec.TriggerEnvelope != nil {
+		reqBody["trigger_envelope"] = exec.TriggerEnvelope
+		reqBody["raw_body"] = exec.RawBody
+		reqBody["raw_body_is_b64"] = exec.RawBodyIsB64
+	}
+	err := d.do(ctx, "/v1/dispatch/executions", reqBody, &out, maxExecuteResponseBytes)
 	if err != nil {
 		return nil, err
 	}
 	failed := out.Status != "ok"
+	// StatusCode 语义（v3 §2.2）：fetch 风格 = dispatcher 透传的函数 HTTP
+	// status（≥100）；否则维持退出码语义位（ok=0 / 失败=1，与 v1「非零退出
+	// 码 = failed」的记录语义对齐）。
+	statusCode := exitCodeOf(failed)
+	if out.StatusCode > 0 {
+		statusCode = out.StatusCode
+	}
 	result := &functions.ExecutionResult{
-		// v2 runner 正常应答无容器退出码语义：ok=true → 0，函数报错 → 1
-		// （与 v1「非零退出码 = failed」的记录语义对齐）。
-		StatusCode: exitCodeOf(failed),
-		Stdout:     out.StdoutTail,
-		Stderr:     out.StderrTail,
-		Response:   out.Response,
-		DurationMS: out.DurationMS,
+		StatusCode:  statusCode,
+		Stdout:      out.StdoutTail,
+		Stderr:      out.StderrTail,
+		Response:    out.Response,
+		ResponseB64: out.ResponseB64,
+		Headers:     out.HTTPHeaders,
+		DurationMS:  out.DurationMS,
 	}
 	if failed {
 		msg := out.Error
@@ -218,7 +252,7 @@ func (d *DispatcherExecutor) RemoveImage(ctx context.Context, functionID, deploy
 	return d.do(ctx, "/v1/dispatch/images/remove", map[string]any{
 		"function_id":   functionID,
 		"deployment_id": deploymentID,
-	}, nil)
+	}, nil, maxBuildLogBytes)
 }
 
 func exitCodeOf(failed bool) int {

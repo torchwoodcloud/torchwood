@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/containerd/errdefs"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -131,14 +133,53 @@ func (r *fakeRegistry) ClaimIdle(_ context.Context, ref FunctionRef, deploymentI
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, rec := range r.pools[regKey(ref)] {
-		if !rec.Busy && !rec.Draining && rec.DeploymentID == deploymentID {
-			rec.Busy = true
-			rec.LeaseUntilMS = leaseUntil.UnixMilli()
-			out := *rec
-			return &out, nil
+		// inflight 语义（v3 §1.1）：可服务 = inflight < concurrency 且非
+		// draining 且部署匹配；concurrency 零值按 1 兜底（与 Lua 同款）。
+		if rec.Draining || rec.DeploymentID != deploymentID {
+			continue
 		}
+		concurrency := rec.Concurrency
+		if concurrency <= 0 {
+			concurrency = 1
+		}
+		if rec.Inflight >= concurrency {
+			continue
+		}
+		rec.Inflight++
+		rec.LeaseUntilMS = leaseUntil.UnixMilli()
+		out := *rec
+		return &out, nil
 	}
 	return nil, nil
+}
+
+// Release 复刻 releaseInstanceLua 的语义（fake 无法真验 Lua 原子性，计数
+// 收敛语义在此对齐；Lua 原子性由 registry_redis_integration_test.go 用
+// miniredis 真脚本求值覆盖）。
+func (r *fakeRegistry) Release(_ context.Context, ref FunctionRef, instanceID string, now time.Time, leaseUntil time.Time, timedOut bool) (*InstanceRecord, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	pool := r.pools[regKey(ref)]
+	rec := pool[instanceID]
+	if rec == nil {
+		return nil, nil
+	}
+	if rec.Inflight > 0 {
+		rec.Inflight--
+	}
+	rec.Requests++
+	rec.LeaseUntilMS = leaseUntil.UnixMilli()
+	if timedOut {
+		rec.Timeouts++
+	}
+	if rec.Inflight == 0 {
+		rec.IdleSinceMS = now.UnixMilli()
+		if rec.MaxRequests > 0 && rec.Requests >= int64(rec.MaxRequests) {
+			rec.Draining = true
+		}
+	}
+	out := *rec
+	return &out, nil
 }
 
 func (r *fakeRegistry) Save(_ context.Context, ref FunctionRef, rec InstanceRecord) error {
@@ -205,14 +246,17 @@ func (r *fakeRegistry) AcquireSpawnLock(_ context.Context, ref FunctionRef, _ ti
 }
 
 type fakeRunner struct {
-	mu           sync.Mutex
-	healthy      bool
-	invokeFn     func(ip string, data string) (*invokeResult, error)
-	inFlight     int
-	maxInFlight  int
-	invokeCount  int
-	invokedToken string
-	invokedData  string
+	mu               sync.Mutex
+	healthy          bool
+	invokeFn         func(ip string, data string) (*invokeResult, error)
+	inFlight         int
+	maxInFlight      int
+	invokeCount      int
+	invokedToken     string
+	invokedData      string
+	invokedExecution string
+	invokedEnvelope  *domainfunctions.TriggerEnvelope
+	invokedRawBody   []byte
 }
 
 func (r *fakeRunner) Health(_ context.Context, _ string) error {
@@ -224,7 +268,7 @@ func (r *fakeRunner) Health(_ context.Context, _ string) error {
 	return nil
 }
 
-func (r *fakeRunner) Invoke(_ context.Context, ip string, data, token string, _ time.Duration) (*invokeResult, error) {
+func (r *fakeRunner) Invoke(_ context.Context, ip string, req ExecuteRequest, _ time.Duration) (*invokeResult, error) {
 	r.mu.Lock()
 	r.inFlight++
 	r.invokeCount++
@@ -232,8 +276,11 @@ func (r *fakeRunner) Invoke(_ context.Context, ip string, data, token string, _ 
 		r.maxInFlight = r.inFlight
 	}
 	fn := r.invokeFn
-	r.invokedToken = token
-	r.invokedData = data
+	r.invokedToken = req.ExecutionToken
+	r.invokedData = req.Data
+	r.invokedExecution = req.ExecutionID
+	r.invokedEnvelope = req.TriggerEnvelope
+	r.invokedRawBody = req.RawBody
 	r.mu.Unlock()
 	defer func() {
 		r.mu.Lock()
@@ -241,7 +288,7 @@ func (r *fakeRunner) Invoke(_ context.Context, ip string, data, token string, _ 
 		r.mu.Unlock()
 	}()
 	if fn != nil {
-		return fn(ip, data)
+		return fn(ip, req.Data)
 	}
 	return &invokeResult{HTTPStatus: 200, Ok: true, Result: `{"ok":1}`}, nil
 }
@@ -473,9 +520,94 @@ func TestPoolDispatch_QueueTimeoutCarriesLastSpawnError(t *testing.T) {
 	require.Equal(t, 1, warns, "spawn 失败告警在限频窗口内只落一条: %v", records.snapshot())
 }
 
-// TestPoolDispatch_TimeoutKillsInstance 请求超时 → 杀整个实例（实例级隔离
-// 粒度，设计 §6）并返回 DeadlineExceeded 语义。
-func TestPoolDispatch_TimeoutKillsInstance(t *testing.T) {
+// TestPoolDispatch_TimeoutKeepsInstance 超时不杀实例（v3 §1.4，本切片唯一
+// 有意变更）：invoke 超时 → 实例保留在注册表且 inflight 已释放、timeouts
+// 累加（熔断计数）、其他请求可继续认领。
+func TestPoolDispatch_TimeoutKeepsInstance(t *testing.T) {
+	d := newFakeDaemon()
+	reg := newFakeRegistry()
+	runner := &fakeRunner{}
+	runner.healthy = true
+	timeoutOnce := true
+	runner.invokeFn = func(string, string) (*invokeResult, error) {
+		if timeoutOnce {
+			timeoutOnce = false
+			return nil, context.DeadlineExceeded
+		}
+		return &invokeResult{HTTPStatus: 200, Ok: true, Result: `{}`}, nil
+	}
+	pool := newTestPool(d, reg, runner, nil)
+	ctx := context.Background()
+
+	_, err := pool.Dispatch(ctx, dispatchReq())
+	require.Equal(t, codes.DeadlineExceeded, status.Code(err))
+
+	ref := FunctionRef{ProjectID: "p1", FunctionID: "fn1"}
+	records, err := reg.List(ctx, ref)
+	require.NoError(t, err)
+	require.Len(t, records, 1, "超时后实例必须保留（不杀实例）")
+	require.Zero(t, records[0].Inflight, "inflight 必须已随超时释放")
+	require.Equal(t, 1, records[0].Timeouts, "超时释放路径必须累加熔断计数")
+	require.Empty(t, d.stopped, "实例不得被强杀")
+	require.Equal(t, 1, pool.ResidentTotal())
+
+	// 其他请求可继续认领同实例。
+	resp, err := pool.Dispatch(ctx, dispatchReq())
+	require.NoError(t, err)
+	require.Equal(t, "ok", resp.Status)
+	require.Equal(t, 1, d.spawnCount, "复用存活实例，不重新 spawn")
+}
+
+// TestPoolDispatch_CallerCancelReleases caller 取消：不杀实例、走超时释放
+// 路径（v3 §1.4 表格「ctx 超时 / 调用方取消」同行）。
+func TestPoolDispatch_CallerCancelReleases(t *testing.T) {
+	d := newFakeDaemon()
+	reg := newFakeRegistry()
+	runner := &fakeRunner{}
+	runner.healthy = true
+	pool := newTestPool(d, reg, runner, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// 模拟调用方在途取消：invoke 期间 ctx 被取消（ctx.Err() != nil 分类，
+	// v3 §1.4 表格「ctx 超时 / 调用方取消」同行）。
+	runner.invokeFn = func(string, string) (*invokeResult, error) {
+		cancel()
+		return nil, context.Canceled
+	}
+
+	_, err := pool.Dispatch(ctx, dispatchReq())
+	require.Equal(t, codes.DeadlineExceeded, status.Code(err))
+
+	records, _ := reg.List(ctx, FunctionRef{ProjectID: "p1", FunctionID: "fn1"})
+	require.Len(t, records, 1, "取消路径不得杀实例")
+	require.Zero(t, records[0].Inflight, "inflight 必须已释放")
+	require.Equal(t, 1, records[0].Timeouts)
+	require.Empty(t, d.stopped)
+}
+
+// TestPoolDispatch_TransportErrorKillsInstance 传输层错误（连接拒绝等，非
+// 超时）＝容器崩溃判定：仍杀实例（v3 §1.4 表格既有语义）。
+func TestPoolDispatch_TransportErrorKillsInstance(t *testing.T) {
+	d := newFakeDaemon()
+	reg := newFakeRegistry()
+	runner := &fakeRunner{}
+	runner.healthy = true
+	runner.invokeFn = func(string, string) (*invokeResult, error) {
+		return nil, fmt.Errorf("dial tcp: connection refused")
+	}
+	pool := newTestPool(d, reg, runner, nil)
+	ctx := context.Background()
+
+	_, err := pool.Dispatch(ctx, dispatchReq())
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.Empty(t, reg.pools[regKey(FunctionRef{ProjectID: "p1", FunctionID: "fn1"})], "实例必须从注册表清除")
+	require.Len(t, d.stopped, 1, "实例必须被强杀")
+	require.Equal(t, 0, pool.ResidentTotal(), "常驻计数必须回退")
+}
+
+// TestPoolDispatch_TimeoutFuse 超时熔断（v3 §1.4 对抗审查修正）：累计
+// timeouts 达阈值 → 杀实例重建 + 指标递增；正常函数偶发超时不触发。
+func TestPoolDispatch_TimeoutFuse(t *testing.T) {
 	d := newFakeDaemon()
 	reg := newFakeRegistry()
 	runner := &fakeRunner{}
@@ -483,14 +615,27 @@ func TestPoolDispatch_TimeoutKillsInstance(t *testing.T) {
 	runner.invokeFn = func(string, string) (*invokeResult, error) {
 		return nil, context.DeadlineExceeded
 	}
-	pool := newTestPool(d, reg, runner, nil)
+	pool := newTestPool(d, reg, runner, func(c *PoolConfig) {
+		c.TimeoutBudget = 2
+	})
 	ctx := context.Background()
+	ref := FunctionRef{ProjectID: "p1", FunctionID: "fn1"}
 
+	// 第 1 次超时：计数 1 < 2，不熔断。
 	_, err := pool.Dispatch(ctx, dispatchReq())
 	require.Equal(t, codes.DeadlineExceeded, status.Code(err))
-	require.Empty(t, reg.pools[regKey(FunctionRef{ProjectID: "p1", FunctionID: "fn1"})], "实例必须从注册表清除")
-	require.Len(t, d.stopped, 1, "实例必须被强杀")
-	require.Equal(t, 0, pool.ResidentTotal(), "常驻计数必须回退")
+	records, _ := reg.List(ctx, ref)
+	require.Len(t, records, 1, "未达阈值不得杀实例")
+	require.Empty(t, d.stopped)
+
+	// 第 2 次超时：计数 2 >= 2 → 杀实例重建。
+	_, err = pool.Dispatch(ctx, dispatchReq())
+	require.Equal(t, codes.DeadlineExceeded, status.Code(err))
+	require.Empty(t, reg.pools[regKey(ref)], "达熔断阈值实例必须被杀")
+	require.Len(t, d.stopped, 1, "达熔断阈值实例必须被强杀")
+	require.Equal(t, 0, pool.ResidentTotal())
+	require.Equal(t, float64(1), testutil.ToFloat64(TimeoutFuseTotal.WithLabelValues("p1", "fn1")),
+		"熔断指标必须递增")
 }
 
 // TestPoolReaper_IdleReclaim 空闲回收：idle > TTL 且实例数 > min_instances。
@@ -558,8 +703,8 @@ func TestPoolReaper_GhostReconcile(t *testing.T) {
 	require.Empty(t, reg.pools[regKey(FunctionRef{ProjectID: "p1", FunctionID: "fn1"})], "幽灵条目必须清理")
 }
 
-// TestPoolReaper_BusyNotKilledByLeaseExpiry 判活规则：busy 实例不因租约过期
-// 被误杀；仅租约过期超过 stuckBusyGrace（请求方残留）才强杀。
+// TestPoolReaper_BusyNotKilledByLeaseExpiry 判活规则：在途（inflight>0）实例
+// 不因租约过期被误杀；仅租约过期超过 stuckBusyGrace（请求方残留）才强杀。
 func TestPoolReaper_BusyNotKilledByLeaseExpiry(t *testing.T) {
 	d := newFakeDaemon()
 	reg := newFakeRegistry()
@@ -570,7 +715,7 @@ func TestPoolReaper_BusyNotKilledByLeaseExpiry(t *testing.T) {
 
 	rec, err := pool.spawnInstance(ctx, dispatchReq(), pool.applyDefaults(PoolPolicy{}))
 	require.NoError(t, err)
-	rec.Busy = true
+	rec.Inflight = 1
 	rec.LeaseUntilMS = time.Now().Add(time.Minute).UnixMilli()
 	require.NoError(t, reg.Save(ctx, FunctionRef{ProjectID: "p1", FunctionID: "fn1"}, *rec))
 
@@ -581,7 +726,7 @@ func TestPoolReaper_BusyNotKilledByLeaseExpiry(t *testing.T) {
 	})
 	pool.Reaper(ctx)
 	records, _ := reg.List(ctx, FunctionRef{ProjectID: "p1", FunctionID: "fn1"})
-	require.Len(t, records, 1, "busy 实例不因心跳缺失被回收")
+	require.Len(t, records, 1, "在途实例不因心跳缺失被回收")
 
 	// 租约过期超过 stuckBusyGrace：请求方已消失，强杀。
 	expiredBeyondGrace := time.Now().Add(-2 * stuckBusyGrace)
@@ -590,7 +735,7 @@ func TestPoolReaper_BusyNotKilledByLeaseExpiry(t *testing.T) {
 	})
 	pool.Reaper(ctx)
 	records, _ = reg.List(ctx, FunctionRef{ProjectID: "p1", FunctionID: "fn1"})
-	require.Empty(t, records, "stuck-busy 残留实例必须强杀")
+	require.Empty(t, records, "stuck 残留实例必须强杀")
 }
 
 // TestPoolExecute_MaxRequestsDrains max_requests 到期实例响应后排空替换。
@@ -637,11 +782,11 @@ func TestDrainForDeployment(t *testing.T) {
 	ref := FunctionRef{ProjectID: "p1", FunctionID: "fn1"}
 	lease := now.Add(time.Minute).UnixMilli()
 	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "old-idle", ContainerID: "old-idle", IP: "10.9.0.1",
-		DeploymentID: "dep-old", SpawnedAt: now, IdleSince: now, LeaseUntilMS: lease}))
+		DeploymentID: "dep-old", SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.UnixMilli(), LeaseUntilMS: lease}))
 	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "old-busy", ContainerID: "old-busy", IP: "10.9.0.2",
-		DeploymentID: "dep-old", Busy: true, SpawnedAt: now, IdleSince: now, LeaseUntilMS: lease}))
+		DeploymentID: "dep-old", Inflight: 1, SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.UnixMilli(), LeaseUntilMS: lease}))
 	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "new-1", ContainerID: "new-1", IP: "10.9.0.3",
-		DeploymentID: "dep-new", SpawnedAt: now, IdleSince: now, LeaseUntilMS: lease}))
+		DeploymentID: "dep-new", SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.UnixMilli(), LeaseUntilMS: lease}))
 	d.spawned["old-idle"], d.spawned["old-busy"], d.spawned["new-1"] = "10.9.0.1", "10.9.0.2", "10.9.0.3"
 	d.running["old-idle"], d.running["old-busy"], d.running["new-1"] = true, true, true
 
@@ -649,12 +794,12 @@ func TestDrainForDeployment(t *testing.T) {
 
 	ids := recordIDs(t, reg, ref)
 	require.False(t, ids["old-idle"], "空闲旧实例立即回收")
-	require.True(t, ids["old-busy"], "busy 旧实例宽限后回收")
+	require.True(t, ids["old-busy"], "在途旧实例宽限后回收")
 	require.True(t, ids["new-1"], "新 deployment 实例保留")
 
 	time.Sleep(60 * time.Millisecond) // 宽限到点强杀
 	ids = recordIDs(t, reg, ref)
-	require.False(t, ids["old-busy"], "busy 旧实例宽限到点强杀")
+	require.False(t, ids["old-busy"], "在途旧实例宽限到点强杀")
 }
 
 func recordIDs(t *testing.T, reg *fakeRegistry, ref FunctionRef) map[string]bool {
@@ -675,6 +820,7 @@ func TestApplyDefaults(t *testing.T) {
 	require.Equal(t, 2, got.MaxInstances)
 	require.Equal(t, 1000, got.MaxRequestsPerInstance)
 	require.Equal(t, 300, got.IdleTTLSeconds)
+	require.Equal(t, 1, got.Concurrency, "v3 切片一：concurrency 恒归一化为 1")
 
 	got = pool.applyDefaults(PoolPolicy{MaxInstances: 5, MinInstances: 9, IdleTTLSeconds: 10, MaxRequestsPerInstance: 3})
 	require.Equal(t, 5, got.MaxInstances)
@@ -697,7 +843,7 @@ func markIdleOld(t *testing.T, reg *fakeRegistry, idle time.Duration, minInstanc
 	ctx := context.Background()
 	ref := FunctionRef{ProjectID: "p1", FunctionID: "fn1"}
 	ok, err := reg.Update(ctx, ref, "cid-1", func(r *InstanceRecord) {
-		r.IdleSince = time.Now().Add(-idle)
+		r.IdleSinceMS = time.Now().Add(-idle).UnixMilli()
 		r.IdleTTLSeconds = 300
 		r.MinInstances = minInstances
 	})
@@ -733,4 +879,88 @@ func TestPoolDispatch_EgressNetworkSelection(t *testing.T) {
 	require.Equal(t, "ok", resp.Status)
 	require.False(t, d.networkFlags["p1"])
 	require.Equal(t, "tw-func-p1", d.lastNetwork)
+}
+
+// TestRegistryClaimRelease_ConcurrencyCap 并发 claim/release 计数收敛
+// （v3 §1.1/§1.3，表驱动）：同实例并发认领恰好收敛到 concurrency 上限；
+// N 次 claim + N 次 release 后 inflight==0、requests==N（fake 无法真验
+// Lua 原子性，计数收敛语义在此对齐；Lua 原子性由
+// registry_redis_integration_test.go 用 miniredis 真脚本求值覆盖）。
+func TestRegistryClaimRelease_ConcurrencyCap(t *testing.T) {
+	cases := []struct {
+		name        string
+		concurrency int
+		claimers    int
+		wantClaims  int
+	}{
+		{name: "concurrency=1 串行互斥（本切片恒定）", concurrency: 1, claimers: 8, wantClaims: 1},
+		{name: "concurrency=4 并发上限", concurrency: 4, claimers: 12, wantClaims: 4},
+		{name: "concurrency 缺省按 1 兜底（旧记录兼容）", concurrency: 0, claimers: 4, wantClaims: 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := newFakeRegistry()
+			ctx := context.Background()
+			ref := FunctionRef{ProjectID: "p1", FunctionID: "fn1"}
+			require.NoError(t, reg.Save(ctx, ref, InstanceRecord{
+				InstanceID:   "inst-1",
+				ContainerID:  "inst-1",
+				IP:           "10.0.0.1",
+				DeploymentID: "dep-1",
+				Concurrency:  tc.concurrency,
+			}))
+
+			var mu sync.Mutex
+			var claimed []*InstanceRecord
+			var wg sync.WaitGroup
+			start := make(chan struct{})
+			for i := 0; i < tc.claimers; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					<-start
+					rec, err := reg.ClaimIdle(ctx, ref, "dep-1", time.Now().Add(leaseTTL))
+					require.NoError(t, err)
+					if rec != nil {
+						mu.Lock()
+						claimed = append(claimed, rec)
+						mu.Unlock()
+					}
+				}()
+			}
+			close(start)
+			wg.Wait()
+			require.Len(t, claimed, tc.wantClaims, "并发认领必须恰好收敛到 concurrency 上限")
+
+			// N claim + N release：计数收敛。
+			for _, rec := range claimed {
+				out, err := reg.Release(ctx, ref, rec.InstanceID, time.Now(), time.Now().Add(leaseTTL), false)
+				require.NoError(t, err)
+				require.NotNil(t, out)
+			}
+			records, err := reg.List(ctx, ref)
+			require.NoError(t, err)
+			require.Len(t, records, 1)
+			require.Zero(t, records[0].Inflight, "N claim + N release 后 inflight 必须归零")
+			require.Equal(t, int64(tc.wantClaims), records[0].Requests, "requests 必须等于 release 次数")
+			require.False(t, records[0].IdleSinceMS == 0, "inflight 归零时必须落 idle_since_ms")
+		})
+	}
+}
+
+// TestPoolDispatch_ExecutionIDHeader ExecutionID 透传断言（v3 §1.2）：
+// 非空经 runnerClient.Invoke 下发，零值（本切片常态）不产生副作用。
+func TestPoolDispatch_ExecutionIDHeader(t *testing.T) {
+	d := newFakeDaemon()
+	reg := newFakeRegistry()
+	runner := &fakeRunner{}
+	runner.healthy = true
+	pool := newTestPool(d, reg, runner, nil)
+	ctx := context.Background()
+
+	req := dispatchReq()
+	req.ExecutionID = "exec-42"
+	_, err := pool.Dispatch(ctx, req)
+	require.NoError(t, err)
+	require.Equal(t, "exec-42", runner.invokedExecution)
 }

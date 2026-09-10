@@ -191,6 +191,9 @@ message Functions {
     // attach 失败不阻断执行（函数可能无需回访），但会记警告——部署时应
     // 在首次执行前修正。空 = 不 attach（api_base_url 须另行保证可达）。
     string callback_container = 8;
+    // 实例累计超时熔断阈值（functions v3 §1.4：超时不杀实例后，实例累计
+    // 超时达到该阈值即杀实例重建，防僵尸负载慢性塞满事件循环；默认 5）。
+    uint32 timeout_budget = 9;
   }
   // executor 是执行器选择：默认 "docker"（v1 每请求一容器，进程内执行，
   // 回退模式）；"dispatcher"（v2 常驻 runner 为默认执行模型，经

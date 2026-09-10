@@ -8,10 +8,12 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
@@ -253,6 +255,98 @@ func TestIntegration_DispatcherBuild_PythonRejected(t *testing.T) {
 	err := d.BuildImage(ctx, "fnpy", "deppy", zip)
 	require.Error(t, err, "python on v2 must fail explicitly at build time")
 	t.Logf("python build error (expected): %v", err)
+}
+
+// dispatcherDeps* 与 v1 集成用例（internal/infra/functions
+// docker_integration_test.go）同源的最小依赖清单：ms@2.1.3 零依赖纯 JS 包
+// （无生命周期脚本，与 --ignore-scripts 恒定语义兼容），integrity 取自
+// registry 真实值；测试夹具跨包不可导出，各自持有一份。
+const dispatcherDepsIndexJS = "module.exports.main = (data) => ({ ok: true });\n"
+
+const dispatcherDepsPackageJSON = `{
+  "name": "torchwood-fn-deps",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": { "ms": "2.1.3" }
+}
+`
+
+const dispatcherDepsLockfile = `{
+  "name": "torchwood-fn-deps",
+  "version": "1.0.0",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "torchwood-fn-deps",
+      "version": "1.0.0",
+      "dependencies": { "ms": "2.1.3" }
+    },
+    "node_modules/ms": {
+      "version": "2.1.3",
+      "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+      "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA=="
+    }
+  }
+}
+`
+
+// TestIntegration_DispatcherBuild_WithDependencies 带依赖 + lockfile 走 v3
+// 默认构建路径（dockerDaemon.BuildImage → 分层模板）端到端真跑（v3 §3.1/D11
+// 平台代装）：镜像 history 必须含真实执行的 `npm ci --omit=dev
+// --ignore-scripts` 层——证明分层模板被选用且 npm ci 真实拉包，而非模板选错
+// 静默走旧模板。依赖在容器内的可执行性由 v1 端到端用例覆盖（同源 extractZip
+// 校验与同构模板）。
+func TestIntegration_DispatcherBuild_WithDependencies(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	if !dockerAvailable(t) {
+		t.Skip("docker daemon unavailable")
+	}
+	cfg := testDispatcherConfig(t)
+	d := NewDockerDaemon(cfg)
+	cli := requireDockerClient(t)
+
+	fnID := "fndeps"
+	depID := fmt.Sprintf("dep%d", time.Now().UnixNano())
+	imageRef := infrafunctions.ImageName(cfg, fnID, depID)
+	t.Cleanup(func() {
+		rmCtx, rmCancel := context.WithTimeout(context.Background(), dockerCleanupTimeout)
+		defer rmCancel()
+		_ = d.RemoveImage(rmCtx, fnID, depID)
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer cancel()
+	zip := makeEntryZipFiles(t, map[string]string{
+		"index.js":          dispatcherDepsIndexJS,
+		"package.json":      dispatcherDepsPackageJSON,
+		"package-lock.json": dispatcherDepsLockfile,
+	})
+	require.NoError(t, d.BuildImage(ctx, fnID, depID, zip),
+		"带依赖 + lockfile 的 dispatcher 构建必须成功（平台代装）")
+
+	history, err := cli.ImageHistory(ctx, imageRef)
+	require.NoError(t, err)
+	foundNPMLayer := false
+	for _, h := range history {
+		if strings.Contains(h.CreatedBy, "npm ci --omit=dev --ignore-scripts") {
+			foundNPMLayer = true
+			break
+		}
+	}
+	require.True(t, foundNPMLayer, "镜像必须包含 npm ci 分层（平台代装模板），history:\n%s", layerCommands(history))
+}
+
+// layerCommands 汇总镜像各层命令（测试断言失败时的诊断输出）。
+func layerCommands(history []image.HistoryResponseItem) string {
+	var sb strings.Builder
+	for _, h := range history {
+		sb.WriteString(h.CreatedBy)
+		sb.WriteString("\n")
+	}
+	return sb.String()
 }
 
 // TestIntegration_ImageReadableAsTemplateUser 镜像权限坏档回归（EACCES 秒退
