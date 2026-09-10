@@ -186,7 +186,12 @@ services:
     # 「Domains」UI——生成名带随机后缀无法变量化）：Traefik 终止 TLS，HTTP 直达
     # 9080；gRPC 以 h2c 转发 9060（gRPC 要求端到端 HTTP/2，scheme=h2c 必须）。
     # 客户端经域名 + --tls/WithTLS（系统根证书）连接；变量值在 Dokploy Environment。
+    # 双网络缺一不可：default 承载栈内互通（postgres/redis/minio 的 DNS 与
+    # 连接；服务一旦显式声明 networks 即失去隐式 default，只挂 dokploy-network
+    # 会让 lookup postgres i/o timeout 崩溃循环——404 事故的教训）；dokploy-network
+    # 供 Traefik 回源（traefik.docker.network 指定回源网段）。
     networks:
+      - default
       - dokploy-network
     labels:
       - traefik.enable=true
