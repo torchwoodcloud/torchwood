@@ -19,11 +19,11 @@ func TestBuildCreateUserReq(t *testing.T) {
 		data     string
 		wantErr  string
 	}{
-		{name: "必填校验", email: "", password: "", wantErr: "--email 与 --password 必填"},
+		{name: "必填校验", email: "", password: "", wantErr: "--email and --password are required"},
 		{name: "最小字段", email: "a@b.c", password: "pw", wantErr: ""},
 		{name: "全字段", email: "a@b.c", password: "pw", nameArg: "Alice", status: "active", wantErr: ""},
 		{name: "data 合并 labels", email: "a@b.c", password: "pw", data: `{"labels":{"x":1}}`, wantErr: ""},
-		{name: "data 非法 JSON", email: "a@b.c", password: "pw", data: `{invalid`, wantErr: "--data 解析失败"},
+		{name: "data 非法 JSON", email: "a@b.c", password: "pw", data: `{invalid`, wantErr: "failed to parse --data"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -73,14 +73,14 @@ func TestBuildUpdateUserReq(t *testing.T) {
 		wantErr       string
 		wantVerified  bool
 	}{
-		{name: "缺 id", wantErr: "缺少用户 ID"},
+		{name: "缺 id", wantErr: "missing user id"},
 		{name: "仅 id", id: "u1", wantErr: ""},
 		{name: "email-verified 未显式设置", id: "u1", wantErr: ""},
 		{name: "email-verified 显式设置", id: "u1", emailVerified: true, wantVerified: true, wantErr: ""},
 		{name: "全字段", id: "u1", emailVerified: true, nameArg: "Bob", email: "b@c.d", status: "inactive",
 			wantVerified: true, wantErr: ""},
 		{name: "data 合并 prefs", id: "u1", data: `{"prefs":{"theme":"dark"}}`, wantErr: ""},
-		{name: "data 非法", id: "u1", data: `{`, wantErr: "--data 解析失败"},
+		{name: "data 非法", id: "u1", data: `{`, wantErr: "failed to parse --data"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -25,7 +25,7 @@ const (
 // 不做文件上传/下载（独立 HTTP handler）与分片上传会话；CreateFile（bytes
 // 上传）与 CreateFileToken 亦不提供（token 用途为 HTTP 下载签名）。
 func newStorageCmd(g *globalFlags) *group {
-	return newGroup(g, "storage", "存储管理（StorageService 元数据操作；上传/下载走独立 HTTP handler，CLI 不提供）", func(sub *commands.App) {
+	return newGroup(g, "storage", "storage management (StorageService metadata operations; upload/download go through dedicated HTTP handlers, not exposed via CLI)", func(sub *commands.App) {
 		sub.Register(
 			newStorageBucketsCmd(g),
 			newStorageFilesCmd(g),
@@ -36,7 +36,7 @@ func newStorageCmd(g *globalFlags) *group {
 
 // newStorageBucketsCmd: storage buckets create/list/get/update/delete。
 func newStorageBucketsCmd(g *globalFlags) *group {
-	return newGroup(g, "buckets", "存储桶管理", func(sub *commands.App) {
+	return newGroup(g, "buckets", "bucket management", func(sub *commands.App) {
 		sub.Register(
 			newStorageBucketsCreateCmd(g),
 			newStorageBucketsListCmd(g),
@@ -50,11 +50,11 @@ func newStorageBucketsCmd(g *globalFlags) *group {
 func newStorageBucketsCreateCmd(g *globalFlags) *verb {
 	var name, permissions string
 	var public bool
-	return newVerb(g, "create", "创建存储桶", "storage buckets create --name <name>",
+	return newVerb(g, "create", "create a bucket", "storage buckets create --name <name>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&name, "name", "", "存储桶名称（必填）")
-			fs.StringVar(&permissions, "permissions", "", "权限 JSON 数组")
-			fs.BoolVar(&public, "public", false, "是否公开可读")
+			fs.StringVar(&name, "name", "", "bucket name (required)")
+			fs.StringVar(&permissions, "permissions", "", "permissions JSON array")
+			fs.BoolVar(&public, "public", false, "whether the bucket is publicly readable")
 		},
 		func(v *verb, env *commands.Environment, _ []string) error {
 			req, err := buildCreateBucketReq(name, permissions, public)
@@ -68,10 +68,10 @@ func newStorageBucketsCreateCmd(g *globalFlags) *verb {
 func newStorageBucketsListCmd(g *globalFlags) *verb {
 	var pageSize int
 	var pageToken string
-	return newVerb(g, "list", "列出存储桶", "storage buckets list",
+	return newVerb(g, "list", "list buckets", "storage buckets list",
 		func(fs *flag.FlagSet) {
-			fs.IntVar(&pageSize, "page-size", 0, "每页条数（服务端默认 50，上限 1000）")
-			fs.StringVar(&pageToken, "page-token", "", "上一页返回的 next_page_token")
+			fs.IntVar(&pageSize, "page-size", 0, "page size (server default 50, max 1000)")
+			fs.StringVar(&pageToken, "page-token", "", "next_page_token returned by the previous page")
 		},
 		func(v *verb, env *commands.Environment, _ []string) error {
 			return call(g, env, methodStorageListBuckets, listJSON(pageSize, pageToken))
@@ -79,7 +79,7 @@ func newStorageBucketsListCmd(g *globalFlags) *verb {
 }
 
 func newStorageBucketsGetCmd(g *globalFlags) *verb {
-	return newVerb(g, "get", "按 ID 获取存储桶", "storage buckets get <id>", nil,
+	return newVerb(g, "get", "get a bucket by ID", "storage buckets get <id>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
 				return err
@@ -91,10 +91,10 @@ func newStorageBucketsGetCmd(g *globalFlags) *verb {
 func newStorageBucketsUpdateCmd(g *globalFlags) *verb {
 	var name string
 	var public bool
-	return newVerb(g, "update", "更新存储桶（仅更新显式传入的字段）", "storage buckets update <id> [--name] [--public]",
+	return newVerb(g, "update", "update a bucket (only explicitly passed fields)", "storage buckets update <id> [--name] [--public]",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&name, "name", "", "新名称")
-			fs.BoolVar(&public, "public", false, "公开可读开关（显式传 --public=true/false 才生效）")
+			fs.StringVar(&name, "name", "", "new name")
+			fs.BoolVar(&public, "public", false, "public-read switch (pass --public=true/false explicitly to take effect)")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
@@ -109,7 +109,7 @@ func newStorageBucketsUpdateCmd(g *globalFlags) *verb {
 }
 
 func newStorageBucketsDeleteCmd(g *globalFlags) *verb {
-	return newVerb(g, "delete", "删除存储桶", "storage buckets delete <id>", nil,
+	return newVerb(g, "delete", "delete a bucket", "storage buckets delete <id>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
 				return err
@@ -120,7 +120,7 @@ func newStorageBucketsDeleteCmd(g *globalFlags) *verb {
 
 // newStorageFilesCmd: storage files list/get/update/delete。
 func newStorageFilesCmd(g *globalFlags) *group {
-	return newGroup(g, "files", "文件元数据管理（上传/下载走独立 HTTP handler，CLI 不提供）", func(sub *commands.App) {
+	return newGroup(g, "files", "file metadata management (upload/download go through dedicated HTTP handlers, not exposed via CLI)", func(sub *commands.App) {
 		sub.Register(
 			newStorageFilesListCmd(g),
 			newStorageFilesGetCmd(g),
@@ -134,11 +134,11 @@ func newStorageFilesListCmd(g *globalFlags) *verb {
 	var queries string
 	var pageSize int
 	var pageToken string
-	return newVerb(g, "list", "列出桶内文件", "storage files list <bucket-id>",
+	return newVerb(g, "list", "list files in a bucket", "storage files list <bucket-id>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&queries, "queries", "", "Appwrite 风格查询 JSON 数组")
-			fs.IntVar(&pageSize, "page-size", 0, "每页条数（服务端默认 50，上限 1000）")
-			fs.StringVar(&pageToken, "page-token", "", "上一页返回的 next_page_token")
+			fs.StringVar(&queries, "queries", "", "Appwrite-style queries JSON array")
+			fs.IntVar(&pageSize, "page-size", 0, "page size (server default 50, max 1000)")
+			fs.StringVar(&pageToken, "page-token", "", "next_page_token returned by the previous page")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
@@ -153,7 +153,7 @@ func newStorageFilesListCmd(g *globalFlags) *verb {
 }
 
 func newStorageFilesGetCmd(g *globalFlags) *verb {
-	return newVerb(g, "get", "按 ID 获取文件元数据", "storage files get <bucket-id> <file-id>", nil,
+	return newVerb(g, "get", "get file metadata by ID", "storage files get <bucket-id> <file-id>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 2); err != nil {
 				return err
@@ -164,11 +164,11 @@ func newStorageFilesGetCmd(g *globalFlags) *verb {
 
 func newStorageFilesUpdateCmd(g *globalFlags) *verb {
 	var name, mimeType, metadata string
-	return newVerb(g, "update", "更新文件元数据（仅更新显式传入的字段）", "storage files update <bucket-id> <file-id> [--name] [--mime-type] [--metadata]",
+	return newVerb(g, "update", "update file metadata (only explicitly passed fields)", "storage files update <bucket-id> <file-id> [--name] [--mime-type] [--metadata]",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&name, "name", "", "新文件名")
-			fs.StringVar(&mimeType, "mime-type", "", "新 MIME 类型")
-			fs.StringVar(&metadata, "metadata", "", "元数据 JSON 对象（如 '{\"author\":\"x\"}'）")
+			fs.StringVar(&name, "name", "", "new file name")
+			fs.StringVar(&mimeType, "mime-type", "", "new MIME type")
+			fs.StringVar(&metadata, "metadata", "", "metadata JSON object (e.g. '{\"author\":\"x\"}')")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 2); err != nil {
@@ -183,7 +183,7 @@ func newStorageFilesUpdateCmd(g *globalFlags) *verb {
 }
 
 func newStorageFilesDeleteCmd(g *globalFlags) *verb {
-	return newVerb(g, "delete", "删除文件", "storage files delete <bucket-id> <file-id>", nil,
+	return newVerb(g, "delete", "delete a file", "storage files delete <bucket-id> <file-id>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 2); err != nil {
 				return err
@@ -193,7 +193,7 @@ func newStorageFilesDeleteCmd(g *globalFlags) *verb {
 }
 
 func newStorageUsageCmd(g *globalFlags) *verb {
-	return newVerb(g, "usage", "获取存储用量（桶数/文件数/总大小）", "storage usage", nil,
+	return newVerb(g, "usage", "get storage usage (buckets/files/total size)", "storage usage", nil,
 		func(v *verb, env *commands.Environment, _ []string) error {
 			return call(g, env, methodStorageUsage, nil)
 		})
@@ -202,7 +202,7 @@ func newStorageUsageCmd(g *globalFlags) *verb {
 // buildCreateBucketReq 构造 CreateBucketRequest（name 必填）。
 func buildCreateBucketReq(name, permissions string, public bool) (map[string]any, error) {
 	if name == "" {
-		return nil, fmt.Errorf("--name 必填")
+		return nil, fmt.Errorf("--name is required")
 	}
 	req := map[string]any{"name": name, "public": public}
 	if permissions != "" {
@@ -219,7 +219,7 @@ func buildCreateBucketReq(name, permissions string, public bool) (map[string]any
 // name 非空即设置，public 依赖 flag presence。
 func buildUpdateBucketReq(v *verb, id, name string, public bool) (map[string]any, error) {
 	if id == "" {
-		return nil, fmt.Errorf("缺少存储桶 ID")
+		return nil, fmt.Errorf("missing bucket id")
 	}
 	req := map[string]any{"id": id}
 	if name != "" {
@@ -232,7 +232,7 @@ func buildUpdateBucketReq(v *verb, id, name string, public bool) (map[string]any
 // buildListFilesReq 构造 ListFilesRequest。
 func buildListFilesReq(bucketID, queries string, pageSize int, pageToken string) (map[string]any, error) {
 	if bucketID == "" {
-		return nil, fmt.Errorf("缺少 bucket-id")
+		return nil, fmt.Errorf("missing bucket-id")
 	}
 	req := map[string]any{"bucketId": bucketID}
 	if queries != "" {
@@ -254,13 +254,13 @@ func buildListFilesReq(bucketID, queries string, pageSize int, pageToken string)
 // buildUpdateFileReq 构造 UpdateFileRequest（name/mime-type/metadata 至少一个）。
 func buildUpdateFileReq(v *verb, bucketID, fileID, name, mimeType, metadata string) (map[string]any, error) {
 	if bucketID == "" {
-		return nil, fmt.Errorf("缺少 bucket-id")
+		return nil, fmt.Errorf("missing bucket-id")
 	}
 	if fileID == "" {
-		return nil, fmt.Errorf("缺少 file-id")
+		return nil, fmt.Errorf("missing file-id")
 	}
 	if name == "" && mimeType == "" && metadata == "" {
-		return nil, fmt.Errorf("--name/--mime-type/--metadata 至少提供一个")
+		return nil, fmt.Errorf("provide at least one of --name/--mime-type/--metadata")
 	}
 	req := map[string]any{"bucketId": bucketID, "fileId": fileID}
 	setChanged(v, "name", req, "name", name)

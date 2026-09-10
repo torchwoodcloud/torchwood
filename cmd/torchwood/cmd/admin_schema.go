@@ -18,7 +18,7 @@ import (
 // DDL。逻辑与 server 启动钩子的后台 reconcile 同源（documentdb.
 // ReconcileSchemaDrift），CLI 形态对齐 admin export/import（直连 DB）。
 func newAdminSchemaCmd() *group {
-	return newGroup(nil, "schema", "schema 漂移对账（缺列 / INVALID 索引 / 幽灵表，B3）", func(sub *commands.App) {
+	return newGroup(nil, "schema", "schema drift reconciliation (missing columns / INVALID indexes / ghost tables, B3)", func(sub *commands.App) {
 		sub.Register(newAdminSchemaRepairCmd())
 	})
 }
@@ -26,10 +26,10 @@ func newAdminSchemaCmd() *group {
 func newAdminSchemaRepairCmd() *verb {
 	var dsn string
 	var dryRun bool
-	return newVerb(nil, "repair", "扫描并修复 schema 漂移（--dry-run 只报告不修复）", "admin schema repair [--dry-run]",
+	return newVerb(nil, "repair", "scan and repair schema drift (--dry-run reports without repairing)", "admin schema repair [--dry-run]",
 		func(fs *flag.FlagSet) {
-			fs.BoolVar(&dryRun, "dry-run", false, "只报告漂移 diff，不执行修复 DDL")
-			fs.StringVar(&dsn, "dsn", os.Getenv(adminDBFlagDsn), "Postgres DSN（缺省读 "+adminDBFlagDsn+"）")
+			fs.BoolVar(&dryRun, "dry-run", false, "report the drift diff only, without executing repair DDL")
+			fs.StringVar(&dsn, "dsn", os.Getenv(adminDBFlagDsn), "Postgres DSN (defaults to "+adminDBFlagDsn+")")
 		},
 		func(v *verb, env *commands.Environment, _ []string) error {
 			db, closeDB, err := openAdminProjectDB(dsn)
@@ -48,10 +48,10 @@ func newAdminSchemaRepairCmd() *verb {
 				return err
 			}
 			if dryRun {
-				fmt.Fprintf(env.Stderr, "漂移扫描（dry-run，未修复）：%d 集合 / %d 项检出 / %d 失败\n",
+				fmt.Fprintf(env.Stderr, "drift scan (dry-run, not repaired): %d collections / %d items detected / %d failed\n",
 					report.Scanned, len(report.Items), report.Failed)
 			} else {
-				fmt.Fprintf(env.Stderr, "漂移修复完成：%d 集合 / %d 项修复 / %d 失败\n",
+				fmt.Fprintf(env.Stderr, "drift repair finished: %d collections / %d items fixed / %d failed\n",
 					report.Scanned, report.Fixed, report.Failed)
 			}
 			return printJSON(env.Stdout, out)

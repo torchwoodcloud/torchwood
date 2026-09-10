@@ -113,7 +113,7 @@ func newGroup(g *globalFlags, name, synopsis string, register func(sub *commands
 // 附 usage 行；退出码由 app.ExitCode 钩子归一为 1，对齐迁移前契约。
 func exactArgs(v *verb, args []string, n int) error {
 	if len(args) != n {
-		return &commands.UsageError{Usage: v.usage, Err: fmt.Errorf("需要 %d 个位置参数，收到 %d 个", n, len(args))}
+		return &commands.UsageError{Usage: v.usage, Err: fmt.Errorf("expects %d positional argument(s), got %d", n, len(args))}
 	}
 	return nil
 }
@@ -121,7 +121,7 @@ func exactArgs(v *verb, args []string, n int) error {
 // noArgs 拒绝一切位置参数（等价迁移前 cobra.NoArgs）。
 func noArgs(v *verb, args []string) error {
 	if len(args) != 0 {
-		return &commands.UsageError{Usage: v.usage, Err: fmt.Errorf("不接受位置参数：%v", args)}
+		return &commands.UsageError{Usage: v.usage, Err: fmt.Errorf("does not accept positional arguments: %v", args)}
 	}
 	return nil
 }

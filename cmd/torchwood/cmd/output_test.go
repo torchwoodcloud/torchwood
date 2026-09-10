@@ -17,7 +17,7 @@ func TestValidateMissingAPIKey(t *testing.T) {
 	g := &globalFlags{output: "json", timeout: "30s"}
 
 	// 非豁免命令缺 key 报错
-	if err := g.validate(true); err == nil || !strings.Contains(err.Error(), "缺少 API key") {
+	if err := g.validate(true); err == nil || !strings.Contains(err.Error(), "missing API key") {
 		t.Fatalf("非豁免命令缺 key 应报错，got %v", err)
 	}
 
@@ -35,12 +35,12 @@ func TestValidateMissingAPIKey(t *testing.T) {
 
 func TestValidateOutputAndTimeout(t *testing.T) {
 	g := &globalFlags{output: "yaml", timeout: "30s", apiKey: "k"}
-	if err := g.validate(true); err == nil || !strings.Contains(err.Error(), "不支持的输出格式") {
+	if err := g.validate(true); err == nil || !strings.Contains(err.Error(), "unsupported output format") {
 		t.Fatalf("非法 output 应报错，got %v", err)
 	}
 	g.output = "json"
 	g.timeout = "abc"
-	if err := g.validate(true); err == nil || !strings.Contains(err.Error(), "无效的 --timeout") {
+	if err := g.validate(true); err == nil || !strings.Contains(err.Error(), "invalid --timeout") {
 		t.Fatalf("非法 timeout 应报错，got %v", err)
 	}
 }
@@ -59,12 +59,12 @@ func TestFormatRPCError(t *testing.T) {
 		{
 			name: "Unauthenticated 附加 API Key 自诊断提示",
 			err:  status.Error(codes.Unauthenticated, "invalid or expired credential"),
-			want: []string{"Unauthenticated", "invalid or expired credential", "TORCHWOOD_CLI_API_KEY", "--api-key", "过期", "torchwood health"},
+			want: []string{"Unauthenticated", "invalid or expired credential", "TORCHWOOD_CLI_API_KEY", "--api-key", "expired", "torchwood health"},
 		},
 		{
 			name: "非 status 错误原样输出",
-			err:  errors.New("dial 失败"),
-			want: []string{"dial 失败"},
+			err:  errors.New("dial failed"),
+			want: []string{"dial failed"},
 		},
 	}
 	for _, tt := range tests {
@@ -87,8 +87,8 @@ func TestRPCExitCode(t *testing.T) {
 		err  error
 		want int
 	}{
-		{name: "非 RPC 错误（参数校验等）为 1", err: errors.New("无效的 --timeout"), want: 1},
-		{name: "UsageError（位置参数不符）为 1", err: &commands.UsageError{Err: errors.New("需要 1 个位置参数")}, want: 1},
+		{name: "非 RPC 错误（参数校验等）为 1", err: errors.New("invalid --timeout"), want: 1},
+		{name: "UsageError（位置参数不符）为 1", err: &commands.UsageError{Err: errors.New("expects 1 positional argument(s)")}, want: 1},
 		{name: "Unauthenticated(401) 为 2", err: &rpcError{cause: status.Error(codes.Unauthenticated, "401")}, want: 2},
 		{name: "PermissionDenied(403) 为 2", err: &rpcError{cause: status.Error(codes.PermissionDenied, "403")}, want: 2},
 		{name: "NotFound(404) 为 2", err: &rpcError{cause: status.Error(codes.NotFound, "404")}, want: 2},
@@ -125,11 +125,18 @@ func TestInvokeMapsGRPCErrors(t *testing.T) {
 	}
 }
 
-func TestInvokeTLSNotSupported(t *testing.T) {
-	g := &globalFlags{tls: true}
+// TestInvokeTLSDials 验证 --tls 不再短路报错，而是把 TLS 凭据接进拨号：
+// 对本机关闭端口表现为连接失败（Unknown → 5xx 类退出码 3），而非
+// 「未支持」参数错误。
+func TestInvokeTLSDials(t *testing.T) {
+	g := &globalFlags{endpoint: "127.0.0.1:1", tls: true, timeoutDur: 300 * time.Millisecond}
 	_, err := invoke(g, "/torchwood.server.v1.HealthService/Check", nil)
-	if err == nil || !strings.Contains(err.Error(), "--tls 尚未支持") {
-		t.Fatalf("--tls 应返回未支持错误，got %v", err)
+	re, ok := err.(*rpcError)
+	if !ok {
+		t.Fatalf("invoke 应返回 *rpcError，got %T", err)
+	}
+	if rpcExitCode(re) != 3 {
+		t.Errorf("--tls 连接失败应归入 5xx 类（退出码 3），got %d", rpcExitCode(re))
 	}
 }
 
@@ -203,7 +210,7 @@ func TestAppRunExitCodes(t *testing.T) {
 	if code := run("users", "list"); code != commands.ExitError {
 		t.Fatalf("缺 key 退出码 = %d, want 1", code)
 	}
-	if !strings.Contains(errOut.String(), "缺少 API key") {
+	if !strings.Contains(errOut.String(), "missing API key") {
 		t.Fatalf("缺 key 应渲染校验错误：%q", errOut.String())
 	}
 

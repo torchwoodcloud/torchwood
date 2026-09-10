@@ -30,8 +30,8 @@ func TestBuildCreateDatabaseReq(t *testing.T) {
 		label   string
 		wantErr string
 	}{
-		{name: "缺 id", wantErr: "--id 必填"},
-		{name: "缺 name", id: "app", wantErr: "--name 必填"},
+		{name: "缺 id", wantErr: "--id is required"},
+		{name: "缺 name", id: "app", wantErr: "--name is required"},
 		{name: "全字段", id: "app", label: "应用库", wantErr: ""},
 	}
 	for _, tt := range tests {
@@ -59,9 +59,9 @@ func TestBuildCreateCollectionReq(t *testing.T) {
 		docSec         string
 		wantErr        string
 	}{
-		{name: "缺 database-id", wantErr: "缺少 database-id"},
-		{name: "缺 id", databaseID: "app", wantErr: "--id 必填"},
-		{name: "缺 name", databaseID: "app", id: "notes", wantErr: "--name 必填"},
+		{name: "缺 database-id", wantErr: "missing database-id"},
+		{name: "缺 id", databaseID: "app", wantErr: "--id is required"},
+		{name: "缺 name", databaseID: "app", id: "notes", wantErr: "--name is required"},
 		{name: "未传 document-security", databaseID: "app", id: "notes", collectionName: "笔记", wantErr: ""},
 		{name: "显式 true", databaseID: "app", id: "notes", collectionName: "笔记",
 			docSec: "true", wantErr: ""},
@@ -70,7 +70,7 @@ func TestBuildCreateCollectionReq(t *testing.T) {
 		{name: "权限与安全", databaseID: "app", id: "notes", collectionName: "笔记",
 			permissions: `["read(\"users\")"]`, docSec: "true", wantErr: ""},
 		{name: "permissions 非法 JSON", databaseID: "app", id: "notes", collectionName: "笔记",
-			permissions: `[not-json`, wantErr: "--permissions 解析失败"},
+			permissions: `[not-json`, wantErr: "failed to parse --permissions"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -119,8 +119,8 @@ func TestBuildUpdateCollectionReq(t *testing.T) {
 		disabled       string
 		wantErr        string
 	}{
-		{name: "缺 database-id", wantErr: "缺少 database-id"},
-		{name: "缺 collection-id", databaseID: "app", wantErr: "缺少 collection-id"},
+		{name: "缺 database-id", wantErr: "missing database-id"},
+		{name: "缺 collection-id", databaseID: "app", wantErr: "missing collection-id"},
 		{name: "仅 id", databaseID: "app", collectionID: "c1", wantErr: ""},
 		{name: "改名", databaseID: "app", collectionID: "c1", collectionName: "新名", wantErr: ""},
 		{name: "权限替换", databaseID: "app", collectionID: "c1",
@@ -128,7 +128,7 @@ func TestBuildUpdateCollectionReq(t *testing.T) {
 		{name: "optional bool", databaseID: "app", collectionID: "c1",
 			docSec: "false", disabled: "true", wantErr: ""},
 		{name: "permissions 非法", databaseID: "app", collectionID: "c1",
-			permissions: `nope`, wantErr: "--permissions 解析失败"},
+			permissions: `nope`, wantErr: "failed to parse --permissions"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -194,8 +194,8 @@ func TestBuildCreateAttributeReq(t *testing.T) {
 		defaultValue string
 		wantErr      string
 	}{
-		{name: "缺 key", databaseID: "app", collectionID: "c1", typ: "string", wantErr: "--key 必填"},
-		{name: "缺 type", databaseID: "app", collectionID: "c1", key: "title", wantErr: "--type 必填"},
+		{name: "缺 key", databaseID: "app", collectionID: "c1", typ: "string", wantErr: "--key is required"},
+		{name: "缺 type", databaseID: "app", collectionID: "c1", key: "title", wantErr: "--type is required"},
 		{name: "最小字段", databaseID: "app", collectionID: "c1", key: "title", typ: "string", wantErr: ""},
 		{name: "全字段", databaseID: "app", collectionID: "c1", key: "tags", typ: "string",
 			size: 64, required: true, array: true, defaultValue: `["a"]`, wantErr: ""},
@@ -238,15 +238,15 @@ func TestBuildCreateIndexReq(t *testing.T) {
 		orders       string
 		wantErr      string
 	}{
-		{name: "缺 id", databaseID: "app", collectionID: "c1", typ: "key", attributes: `["title"]`, wantErr: "--id 必填"},
-		{name: "缺 type", databaseID: "app", collectionID: "c1", id: "ix1", attributes: `["title"]`, wantErr: "--type 必填"},
-		{name: "缺 attributes", databaseID: "app", collectionID: "c1", id: "ix1", typ: "key", wantErr: "--attributes 必填"},
+		{name: "缺 id", databaseID: "app", collectionID: "c1", typ: "key", attributes: `["title"]`, wantErr: "--id is required"},
+		{name: "缺 type", databaseID: "app", collectionID: "c1", id: "ix1", attributes: `["title"]`, wantErr: "--type is required"},
+		{name: "缺 attributes", databaseID: "app", collectionID: "c1", id: "ix1", typ: "key", wantErr: "--attributes is required"},
 		{name: "最小字段", databaseID: "app", collectionID: "c1", id: "ix1", typ: "key",
 			attributes: `["title"]`, wantErr: ""},
 		{name: "全字段", databaseID: "app", collectionID: "c1", id: "ix1", typ: "unique",
 			attributes: `["title","author"]`, orders: `["asc","desc"]`, wantErr: ""},
 		{name: "orders 非法", databaseID: "app", collectionID: "c1", id: "ix1", typ: "key",
-			attributes: `["title"]`, orders: `oops`, wantErr: "--orders 解析失败"},
+			attributes: `["title"]`, orders: `oops`, wantErr: "failed to parse --orders"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -286,12 +286,12 @@ func TestBuildListDocumentsReq(t *testing.T) {
 		pageToken    string
 		wantErr      string
 	}{
-		{name: "缺 database-id", collectionID: "c1", wantErr: "缺少 database-id"},
-		{name: "缺 collection-id", databaseID: "app", wantErr: "缺少 collection-id"},
+		{name: "缺 database-id", collectionID: "c1", wantErr: "missing database-id"},
+		{name: "缺 collection-id", databaseID: "app", wantErr: "missing collection-id"},
 		{name: "成功路径", databaseID: "app", collectionID: "c1",
 			queries: `["equal(\"title\",\"hi\")"]`, pageSize: 10, pageToken: "tok", wantErr: ""},
 		{name: "queries 非法 JSON", databaseID: "app", collectionID: "c1",
-			queries: `oops`, wantErr: "--queries 解析失败"},
+			queries: `oops`, wantErr: "failed to parse --queries"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -342,14 +342,14 @@ func TestBuildCreateDocumentReq(t *testing.T) {
 		permissions  string
 		wantErr      string
 	}{
-		{name: "缺 data", databaseID: "app", collectionID: "c1", wantErr: "--data 必填"},
-		{name: "data 非对象", databaseID: "app", collectionID: "c1", data: `[1,2]`, wantErr: "--data 解析失败"},
-		{name: "data 非法 JSON", databaseID: "app", collectionID: "c1", data: `{`, wantErr: "--data 解析失败"},
+		{name: "缺 data", databaseID: "app", collectionID: "c1", wantErr: "--data is required"},
+		{name: "data 非对象", databaseID: "app", collectionID: "c1", data: `[1,2]`, wantErr: "failed to parse --data"},
+		{name: "data 非法 JSON", databaseID: "app", collectionID: "c1", data: `{`, wantErr: "failed to parse --data"},
 		{name: "最小字段", databaseID: "app", collectionID: "c1", data: `{"title":"hi"}`, wantErr: ""},
 		{name: "指定 id 与权限", databaseID: "app", collectionID: "c1", documentID: "doc1",
 			data: `{"title":"hi"}`, permissions: `["read(\"all\")"]`, wantErr: ""},
 		{name: "permissions 非法", databaseID: "app", collectionID: "c1", data: `{"title":"hi"}`,
-			permissions: `x`, wantErr: "--permissions 解析失败"},
+			permissions: `x`, wantErr: "failed to parse --permissions"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -392,9 +392,9 @@ func TestBuildUpdateDocumentReq(t *testing.T) {
 		wantErr      string
 	}{
 		{name: "缺 version", databaseID: "app", collectionID: "c1", documentID: "d1",
-			data: `{"title":"new"}`, version: 0, wantErr: "--version 必填"},
+			data: `{"title":"new"}`, version: 0, wantErr: "--version is required"},
 		{name: "无可更新字段", databaseID: "app", collectionID: "c1", documentID: "d1", version: 1,
-			wantErr: "--data/--permissions/--increment 至少提供一个"},
+			wantErr: "provide at least one of --data/--permissions/--increment"},
 		{name: "仅 data", databaseID: "app", collectionID: "c1", documentID: "d1", version: 1,
 			data: `{"title":"new"}`, wantErr: ""},
 		{name: "仅 increment", databaseID: "app", collectionID: "c1", documentID: "d1", version: 2,
@@ -402,7 +402,7 @@ func TestBuildUpdateDocumentReq(t *testing.T) {
 		{name: "全字段", databaseID: "app", collectionID: "c1", documentID: "d1", version: 3,
 			data: `{"title":"new"}`, permissions: `["read(\"all\")"]`, increment: `{"views":1}`, wantErr: ""},
 		{name: "increment 非法", databaseID: "app", collectionID: "c1", documentID: "d1", version: 1,
-			increment: `{"views":"x"}`, wantErr: "--increment 解析失败"},
+			increment: `{"views":"x"}`, wantErr: "failed to parse --increment"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -464,15 +464,15 @@ func TestBuildDeleteDocumentReq(t *testing.T) {
 		wantErr      string
 	}{
 		{name: "缺 database-id", collectionID: "c1", documentID: "d1", version: 1,
-			wantErr: "缺少 database-id"},
+			wantErr: "missing database-id"},
 		{name: "缺 collection-id", databaseID: "app", documentID: "d1", version: 1,
-			wantErr: "缺少 collection-id"},
+			wantErr: "missing collection-id"},
 		{name: "缺 document-id", databaseID: "app", collectionID: "c1", version: 1,
-			wantErr: "缺少 document-id"},
+			wantErr: "missing document-id"},
 		{name: "缺 version", databaseID: "app", collectionID: "c1", documentID: "d1", version: 0,
-			wantErr: "--version 必填"},
+			wantErr: "--version is required"},
 		{name: "version 为负", databaseID: "app", collectionID: "c1", documentID: "d1", version: -1,
-			wantErr: "--version 必填"},
+			wantErr: "--version is required"},
 		{name: "全字段", databaseID: "app", collectionID: "c1", documentID: "d1", version: 3, wantErr: ""},
 	}
 	for _, tt := range tests {
@@ -504,9 +504,9 @@ func TestBuildUpsertDocumentReq(t *testing.T) {
 		wantErr         string
 	}{
 		{name: "缺 data", databaseID: "app", collectionID: "c1", documentID: "d1",
-			conflictColumns: `["email"]`, wantErr: "--data 必填"},
+			conflictColumns: `["email"]`, wantErr: "--data is required"},
 		{name: "缺 conflict-columns", databaseID: "app", collectionID: "c1", documentID: "d1",
-			data: `{"email":"a@b.c"}`, wantErr: "--conflict-columns 必填"},
+			data: `{"email":"a@b.c"}`, wantErr: "--conflict-columns is required"},
 		{name: "全字段", databaseID: "app", collectionID: "c1", documentID: "d1",
 			data: `{"email":"a@b.c"}`, permissions: `["read(\"all\")"]`,
 			conflictColumns: `["email"]`, wantErr: ""},
@@ -544,15 +544,15 @@ func TestBuildBulkDocumentsReq(t *testing.T) {
 		bulkDelete   bool
 		wantErr      string
 	}{
-		{name: "缺 document-ids", databaseID: "app", collectionID: "c1", data: `{}`, wantErr: "--document-ids 必填"},
+		{name: "缺 document-ids", databaseID: "app", collectionID: "c1", data: `{}`, wantErr: "--document-ids is required"},
 		{name: "bulk-update 缺 data", databaseID: "app", collectionID: "c1",
-			documentIDs: `["d1","d2"]`, wantErr: "--data 必填"},
+			documentIDs: `["d1","d2"]`, wantErr: "--data is required"},
 		{name: "bulk-update 全字段", databaseID: "app", collectionID: "c1",
 			documentIDs: `["d1","d2"]`, data: `{"status":"x"}`, permissions: `["read(\"all\")"]`, wantErr: ""},
 		{name: "bulk-delete", databaseID: "app", collectionID: "c1",
 			documentIDs: `["d1","d2"]`, bulkDelete: true, wantErr: ""},
 		{name: "document-ids 非法", databaseID: "app", collectionID: "c1",
-			documentIDs: `d1`, data: `{}`, wantErr: "--document-ids 解析失败"},
+			documentIDs: `d1`, data: `{}`, wantErr: "failed to parse --document-ids"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

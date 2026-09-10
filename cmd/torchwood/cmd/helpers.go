@@ -21,7 +21,7 @@ func jsonStringList(s, flagName string) ([]string, error) {
 	}
 	var out []string
 	if err := decodeJSON(s, &out); err != nil {
-		return nil, fmt.Errorf("%s 解析失败：%v", flagName, err)
+		return nil, fmt.Errorf("failed to parse %s: %v", flagName, err)
 	}
 	return out, nil
 }
@@ -33,7 +33,7 @@ func jsonStringMap(s, flagName string) (map[string]string, error) {
 	}
 	var out map[string]string
 	if err := decodeJSON(s, &out); err != nil {
-		return nil, fmt.Errorf("%s 解析失败：%v", flagName, err)
+		return nil, fmt.Errorf("failed to parse %s: %v", flagName, err)
 	}
 	return out, nil
 }
@@ -46,7 +46,7 @@ func jsonInt64Map(s, flagName string) (map[string]json.Number, error) {
 	}
 	var out map[string]json.Number
 	if err := decodeJSON(s, &out); err != nil {
-		return nil, fmt.Errorf("%s 解析失败：%v", flagName, err)
+		return nil, fmt.Errorf("failed to parse %s: %v", flagName, err)
 	}
 	return out, nil
 }
@@ -58,7 +58,7 @@ func jsonObject(s, flagName string) (map[string]any, error) {
 	}
 	var out map[string]any
 	if err := decodeJSON(s, &out); err != nil {
-		return nil, fmt.Errorf("%s 解析失败：%v", flagName, err)
+		return nil, fmt.Errorf("failed to parse %s: %v", flagName, err)
 	}
 	return out, nil
 }
@@ -70,7 +70,7 @@ func mergeJSON(m map[string]any, data string) error {
 	}
 	var dm map[string]any
 	if err := decodeJSON(data, &dm); err != nil {
-		return fmt.Errorf("--data 解析失败：%v", err)
+		return fmt.Errorf("failed to parse --data: %v", err)
 	}
 	for k, v := range dm {
 		m[k] = v

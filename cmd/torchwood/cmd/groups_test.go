@@ -13,10 +13,10 @@ func TestBuildCreateGroupReq(t *testing.T) {
 		permissions string
 		wantErr     string
 	}{
-		{name: "缺 name", wantErr: "--name 必填"},
+		{name: "缺 name", wantErr: "--name is required"},
 		{name: "最小字段", groupName: "核心组", wantErr: ""},
 		{name: "带权限", groupName: "核心组", permissions: `["read(\"groups\")"]`, wantErr: ""},
-		{name: "permissions 非法", groupName: "核心组", permissions: `oops`, wantErr: "--permissions 解析失败"},
+		{name: "permissions 非法", groupName: "核心组", permissions: `oops`, wantErr: "failed to parse --permissions"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -43,9 +43,9 @@ func TestBuildUpdateGroupPrefsReq(t *testing.T) {
 		data    string
 		wantErr string
 	}{
-		{name: "缺 id", wantErr: "缺少用户组 ID"},
-		{name: "缺 data", id: "t1", wantErr: "--data 必填"},
-		{name: "data 非对象", id: "t1", data: `"str"`, wantErr: "--data 解析失败"},
+		{name: "缺 id", wantErr: "missing group id"},
+		{name: "缺 data", id: "t1", wantErr: "--data is required"},
+		{name: "data 非对象", id: "t1", data: `"str"`, wantErr: "failed to parse --data"},
 		{name: "正常", id: "t1", data: `{"theme":"dark"}`, wantErr: ""},
 	}
 	for _, tt := range tests {
@@ -75,11 +75,11 @@ func TestBuildCreateMembershipReq(t *testing.T) {
 		status     string
 		wantErr    string
 	}{
-		{name: "缺 group-id", wantErr: "缺少 group-id"},
-		{name: "user-id/email 全缺", groupID: "t1", wantErr: "--user-id 与 --email 至少提供一个"},
+		{name: "缺 group-id", wantErr: "missing group-id"},
+		{name: "user-id/email 全缺", groupID: "t1", wantErr: "provide at least one of --user-id and --email"},
 		{name: "按 user-id", groupID: "t1", userID: "u1", roles: `["admin"]`, status: "active", wantErr: ""},
 		{name: "按 email 邀请", groupID: "t1", email: "a@b.c", memberName: "Alice", wantErr: ""},
-		{name: "roles 非法", groupID: "t1", userID: "u1", roles: `x`, wantErr: "--roles 解析失败"},
+		{name: "roles 非法", groupID: "t1", userID: "u1", roles: `x`, wantErr: "failed to parse --roles"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -128,9 +128,9 @@ func TestBuildListMembershipsReq(t *testing.T) {
 		pageToken string
 		wantErr   string
 	}{
-		{name: "缺 group-id", wantErr: "缺少 group-id"},
+		{name: "缺 group-id", wantErr: "missing group-id"},
 		{name: "最小字段", groupID: "t1", wantErr: ""},
-		{name: "queries 非法", groupID: "t1", queries: `x`, wantErr: "--queries 解析失败"},
+		{name: "queries 非法", groupID: "t1", queries: `x`, wantErr: "failed to parse --queries"},
 		{name: "全字段", groupID: "t1", queries: `["equal(\"status\",\"active\")"]`, pageSize: 10, pageToken: "tok", wantErr: ""},
 	}
 	for _, tt := range tests {
@@ -169,8 +169,8 @@ func TestBuildUpdateMembershipReq(t *testing.T) {
 		roles        string
 		wantErr      string
 	}{
-		{name: "缺 membership-id", groupID: "t1", roles: `["admin"]`, wantErr: "缺少 membership-id"},
-		{name: "缺 roles", groupID: "t1", membershipID: "m1", wantErr: "--roles 必填"},
+		{name: "缺 membership-id", groupID: "t1", roles: `["admin"]`, wantErr: "missing membership-id"},
+		{name: "缺 roles", groupID: "t1", membershipID: "m1", wantErr: "--roles is required"},
 		{name: "正常", groupID: "t1", membershipID: "m1", roles: `["admin","viewer"]`, wantErr: ""},
 	}
 	for _, tt := range tests {
@@ -196,7 +196,7 @@ func TestBuildUpdateMembershipStatusReq(t *testing.T) {
 		status       string
 		wantErr      string
 	}{
-		{name: "缺 status", groupID: "t1", membershipID: "m1", wantErr: "--status 必填"},
+		{name: "缺 status", groupID: "t1", membershipID: "m1", wantErr: "--status is required"},
 		{name: "正常", groupID: "t1", membershipID: "m1", status: "blocked", wantErr: ""},
 	}
 	for _, tt := range tests {

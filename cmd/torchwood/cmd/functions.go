@@ -36,7 +36,7 @@ const (
 // （bytes code，≤1MiB 建议；gRPC 通道上限 8MiB，与服务端 MaxRecvMsgSize
 // 对齐），更大的代码包走 multipart 上传（独立 HTTP handler，CLI 不提供）。
 func newFunctionsCmd(g *globalFlags) *group {
-	return newGroup(g, "functions", "函数管理（FunctionsService 全部方法）", func(sub *commands.App) {
+	return newGroup(g, "functions", "function management (all FunctionsService methods)", func(sub *commands.App) {
 		sub.Register(
 			newFunctionsRuntimesCmd(g),
 			newFunctionsSpecificationsCmd(g),
@@ -53,14 +53,14 @@ func newFunctionsCmd(g *globalFlags) *group {
 }
 
 func newFunctionsRuntimesCmd(g *globalFlags) *verb {
-	return newVerb(g, "runtimes", "列出支持的运行时", "functions runtimes", nil,
+	return newVerb(g, "runtimes", "list supported runtimes", "functions runtimes", nil,
 		func(v *verb, env *commands.Environment, _ []string) error {
 			return call(g, env, methodFunctionsRuntimes, nil)
 		})
 }
 
 func newFunctionsSpecificationsCmd(g *globalFlags) *verb {
-	return newVerb(g, "specifications", "列出支持的资源配置（spec）", "functions specifications", nil,
+	return newVerb(g, "specifications", "list supported resource specifications (spec)", "functions specifications", nil,
 		func(v *verb, env *commands.Environment, _ []string) error {
 			return call(g, env, methodFunctionsSpecifications, nil)
 		})
@@ -69,10 +69,10 @@ func newFunctionsSpecificationsCmd(g *globalFlags) *verb {
 func newFunctionsListCmd(g *globalFlags) *verb {
 	var pageSize int
 	var pageToken string
-	return newVerb(g, "list", "列出函数", "functions list",
+	return newVerb(g, "list", "list functions", "functions list",
 		func(fs *flag.FlagSet) {
-			fs.IntVar(&pageSize, "page-size", 0, "每页条数（服务端默认 50，上限 1000）")
-			fs.StringVar(&pageToken, "page-token", "", "上一页返回的 next_page_token")
+			fs.IntVar(&pageSize, "page-size", 0, "page size (server default 50, max 1000)")
+			fs.StringVar(&pageToken, "page-token", "", "next_page_token returned by the previous page")
 		},
 		func(v *verb, env *commands.Environment, _ []string) error {
 			return call(g, env, methodFunctionsList, listJSON(pageSize, pageToken))
@@ -84,15 +84,15 @@ func newFunctionsCreateCmd(g *globalFlags) *verb {
 	var timeoutSeconds int
 	var spec string
 	var enabled bool
-	return newVerb(g, "create", "创建函数", "functions create --id <id> --name <name> --runtime <runtime>",
+	return newVerb(g, "create", "create a function", "functions create --id <id> --name <name> --runtime <runtime>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&id, "id", "", "函数 ID（必填）")
-			fs.StringVar(&name, "name", "", "函数名称（必填）")
-			fs.StringVar(&runtime, "runtime", "", "运行时（必填，见 runtimes 命令）")
-			fs.StringVar(&entrypoint, "entrypoint", "", "入口文件（缺省按运行时取默认值）")
-			fs.IntVar(&timeoutSeconds, "timeout-seconds", 0, "超时秒数（1-300，缺省服务端默认）")
-			fs.StringVar(&spec, "spec", "", "资源配置（缺省 shared-1x，见 specifications 命令）")
-			fs.BoolVar(&enabled, "enabled", false, "是否启用（显式传 --enabled=true/false 才生效）")
+			fs.StringVar(&id, "id", "", "function ID (required)")
+			fs.StringVar(&name, "name", "", "function name (required)")
+			fs.StringVar(&runtime, "runtime", "", "runtime (required, see the runtimes command)")
+			fs.StringVar(&entrypoint, "entrypoint", "", "entrypoint file (defaults to the runtime default)")
+			fs.IntVar(&timeoutSeconds, "timeout-seconds", 0, "timeout in seconds (1-300, server default when omitted)")
+			fs.StringVar(&spec, "spec", "", "resource specification (defaults to shared-1x, see the specifications command)")
+			fs.BoolVar(&enabled, "enabled", false, "whether enabled (pass --enabled=true/false explicitly to take effect)")
 		},
 		func(v *verb, env *commands.Environment, _ []string) error {
 			req, err := buildCreateFunctionReq(v, id, name, runtime, entrypoint, timeoutSeconds, spec, enabled)
@@ -104,7 +104,7 @@ func newFunctionsCreateCmd(g *globalFlags) *verb {
 }
 
 func newFunctionsGetCmd(g *globalFlags) *verb {
-	return newVerb(g, "get", "按 ID 获取函数", "functions get <function-id>", nil,
+	return newVerb(g, "get", "get a function by ID", "functions get <function-id>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
 				return err
@@ -117,13 +117,13 @@ func newFunctionsUpdateCmd(g *globalFlags) *verb {
 	var name, entrypoint, spec string
 	var timeoutSeconds int
 	var enabled bool
-	return newVerb(g, "update", "更新函数（仅更新显式传入的字段）", "functions update <function-id> [--name] [--entrypoint] [--timeout-seconds] [--spec] [--enabled]",
+	return newVerb(g, "update", "update a function (only explicitly passed fields)", "functions update <function-id> [--name] [--entrypoint] [--timeout-seconds] [--spec] [--enabled]",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&name, "name", "", "函数名称")
-			fs.StringVar(&entrypoint, "entrypoint", "", "入口文件")
-			fs.IntVar(&timeoutSeconds, "timeout-seconds", 0, "超时秒数（1-300）")
-			fs.StringVar(&spec, "spec", "", "资源配置")
-			fs.BoolVar(&enabled, "enabled", false, "是否启用（显式传 --enabled=true/false 才生效）")
+			fs.StringVar(&name, "name", "", "function name")
+			fs.StringVar(&entrypoint, "entrypoint", "", "entrypoint file")
+			fs.IntVar(&timeoutSeconds, "timeout-seconds", 0, "timeout in seconds (1-300)")
+			fs.StringVar(&spec, "spec", "", "resource specification")
+			fs.BoolVar(&enabled, "enabled", false, "whether enabled (pass --enabled=true/false explicitly to take effect)")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
@@ -138,7 +138,7 @@ func newFunctionsUpdateCmd(g *globalFlags) *verb {
 }
 
 func newFunctionsDeleteCmd(g *globalFlags) *verb {
-	return newVerb(g, "delete", "删除函数", "functions delete <function-id>", nil,
+	return newVerb(g, "delete", "delete a function", "functions delete <function-id>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
 				return err
@@ -149,7 +149,7 @@ func newFunctionsDeleteCmd(g *globalFlags) *verb {
 
 // newFunctionsDeploymentsCmd: functions deployments create/list/get/delete。
 func newFunctionsDeploymentsCmd(g *globalFlags) *group {
-	return newGroup(g, "deployments", "函数部署管理（code 为 zip 代码包）", func(sub *commands.App) {
+	return newGroup(g, "deployments", "function deployment management (code is a zip archive)", func(sub *commands.App) {
 		sub.Register(
 			newFunctionsDeploymentsCreateCmd(g),
 			newFunctionsDeploymentsListCmd(g),
@@ -161,9 +161,9 @@ func newFunctionsDeploymentsCmd(g *globalFlags) *group {
 
 func newFunctionsDeploymentsCreateCmd(g *globalFlags) *verb {
 	var code string
-	return newVerb(g, "create", "上传 zip 代码包创建部署（gRPC 纯消息通道，上限 8MiB）", "functions deployments create <function-id> --code <zip-file>",
+	return newVerb(g, "create", "create a deployment by uploading a zip archive (gRPC message channel, 8MiB max)", "functions deployments create <function-id> --code <zip-file>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&code, "code", "", "zip 代码包路径（必填；gRPC 消息通道上限 8MiB，建议单包 ≤1MiB；更大的代码包请走 multipart 上传接口，上限 50MiB）")
+			fs.StringVar(&code, "code", "", "path to the zip archive (required; gRPC message channel caps at 8MiB, single package ≤1MiB recommended; for larger packages use the multipart upload API, 50MiB max)")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
@@ -178,7 +178,7 @@ func newFunctionsDeploymentsCreateCmd(g *globalFlags) *verb {
 }
 
 func newFunctionsDeploymentsListCmd(g *globalFlags) *verb {
-	return newVerb(g, "list", "列出函数部署", "functions deployments list <function-id>", nil,
+	return newVerb(g, "list", "list function deployments", "functions deployments list <function-id>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
 				return err
@@ -188,7 +188,7 @@ func newFunctionsDeploymentsListCmd(g *globalFlags) *verb {
 }
 
 func newFunctionsDeploymentsGetCmd(g *globalFlags) *verb {
-	return newVerb(g, "get", "按 ID 获取部署", "functions deployments get <function-id> <deployment-id>", nil,
+	return newVerb(g, "get", "get a deployment by ID", "functions deployments get <function-id> <deployment-id>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 2); err != nil {
 				return err
@@ -198,7 +198,7 @@ func newFunctionsDeploymentsGetCmd(g *globalFlags) *verb {
 }
 
 func newFunctionsDeploymentsDeleteCmd(g *globalFlags) *verb {
-	return newVerb(g, "delete", "删除部署", "functions deployments delete <function-id> <deployment-id>", nil,
+	return newVerb(g, "delete", "delete a deployment", "functions deployments delete <function-id> <deployment-id>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 2); err != nil {
 				return err
@@ -209,10 +209,10 @@ func newFunctionsDeploymentsDeleteCmd(g *globalFlags) *verb {
 
 // newFunctionsVariablesCmd: functions variables set/get。
 func newFunctionsVariablesCmd(g *globalFlags) *group {
-	return newGroup(g, "variables", "函数环境变量管理", func(sub *commands.App) {
+	return newGroup(g, "variables", "function environment variable management", func(sub *commands.App) {
 		sub.Register(
 			newFunctionsVariablesSetCmd(g),
-			newVerb(g, "get", "获取函数环境变量", "functions variables get <function-id>", nil,
+			newVerb(g, "get", "get function environment variables", "functions variables get <function-id>", nil,
 				func(v *verb, env *commands.Environment, args []string) error {
 					if err := exactArgs(v, args, 1); err != nil {
 						return err
@@ -225,9 +225,9 @@ func newFunctionsVariablesCmd(g *globalFlags) *group {
 
 func newFunctionsVariablesSetCmd(g *globalFlags) *verb {
 	var vars string
-	return newVerb(g, "set", "全量替换环境变量（--vars 为 JSON 对象）", "functions variables set <function-id> --vars '{...}'",
+	return newVerb(g, "set", "replace environment variables (--vars is a JSON object)", "functions variables set <function-id> --vars '{...}'",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&vars, "vars", "", "环境变量 JSON 对象（必填，如 '{\"FOO\":\"bar\"}'）")
+			fs.StringVar(&vars, "vars", "", "environment variables JSON object (required, e.g. '{\"FOO\":\"bar\"}')")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
@@ -243,17 +243,17 @@ func newFunctionsVariablesSetCmd(g *globalFlags) *verb {
 
 // newFunctionsExecutionsCmd: functions executions create/list/get。
 func newFunctionsExecutionsCmd(g *globalFlags) *group {
-	return newGroup(g, "executions", "函数执行管理", func(sub *commands.App) {
+	return newGroup(g, "executions", "function execution management", func(sub *commands.App) {
 		sub.Register(
 			newFunctionsExecutionsCreateCmd(g),
-			newVerb(g, "list", "列出执行记录（最近 100 条）", "functions executions list <function-id>", nil,
+			newVerb(g, "list", "list execution records (latest 100)", "functions executions list <function-id>", nil,
 				func(v *verb, env *commands.Environment, args []string) error {
 					if err := exactArgs(v, args, 1); err != nil {
 						return err
 					}
 					return call(g, env, methodFunctionsListExecutions, map[string]any{"functionId": args[0]})
 				}),
-			newVerb(g, "get", "按 ID 获取执行记录", "functions executions get <function-id> <execution-id>", nil,
+			newVerb(g, "get", "get an execution record by ID", "functions executions get <function-id> <execution-id>", nil,
 				func(v *verb, env *commands.Environment, args []string) error {
 					if err := exactArgs(v, args, 2); err != nil {
 						return err
@@ -267,11 +267,11 @@ func newFunctionsExecutionsCmd(g *globalFlags) *group {
 func newFunctionsExecutionsCreateCmd(g *globalFlags) *verb {
 	var input, deploymentID string
 	var async bool
-	return newVerb(g, "create", "创建执行（缺省用最新 ready 部署）", "functions executions create <function-id> --input <json>",
+	return newVerb(g, "create", "create an execution (latest ready deployment by default)", "functions executions create <function-id> --input <json>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&input, "input", "", "执行输入（必填，须为合法 JSON 字符串，≤64KB）")
-			fs.StringVar(&deploymentID, "deployment-id", "", "指定部署（缺省用最新 ready 部署）")
-			fs.BoolVar(&async, "async", false, "异步执行（显式传 --async=true 才生效）")
+			fs.StringVar(&input, "input", "", "execution input (required, must be a valid JSON string, ≤64KB)")
+			fs.StringVar(&deploymentID, "deployment-id", "", "target deployment (latest ready deployment by default)")
+			fs.BoolVar(&async, "async", false, "run asynchronously (only takes effect when --async=true is passed explicitly)")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
@@ -288,13 +288,13 @@ func newFunctionsExecutionsCreateCmd(g *globalFlags) *verb {
 // buildCreateFunctionReq 构造 CreateFunctionRequest（id/name/runtime 必填）。
 func buildCreateFunctionReq(v *verb, id, name, runtime, entrypoint string, timeoutSeconds int, spec string, enabled bool) (map[string]any, error) {
 	if id == "" {
-		return nil, fmt.Errorf("--id 必填")
+		return nil, fmt.Errorf("--id is required")
 	}
 	if name == "" {
-		return nil, fmt.Errorf("--name 必填")
+		return nil, fmt.Errorf("--name is required")
 	}
 	if runtime == "" {
-		return nil, fmt.Errorf("--runtime 必填（可用 runtimes 命令查看）")
+		return nil, fmt.Errorf("--runtime is required (see the runtimes command)")
 	}
 	req := map[string]any{"id": id, "name": name, "runtime": runtime}
 	if entrypoint != "" {
@@ -309,7 +309,7 @@ func buildCreateFunctionReq(v *verb, id, name, runtime, entrypoint string, timeo
 // buildUpdateFunctionReq 构造 UpdateFunctionRequest：仅设置显式传入的字段。
 func buildUpdateFunctionReq(v *verb, functionID string, name, entrypoint string, timeoutSeconds int, spec string, enabled bool) (map[string]any, error) {
 	if functionID == "" {
-		return nil, fmt.Errorf("缺少 function-id")
+		return nil, fmt.Errorf("missing function-id")
 	}
 	req := map[string]any{"functionId": functionID}
 	setChanged(v, "name", req, "name", name)
@@ -324,20 +324,20 @@ func buildUpdateFunctionReq(v *verb, functionID string, name, entrypoint string,
 // （code 为 bytes 字段，CLI 负责读文件后 base64 编码，不让用户手写）。
 func buildCreateDeploymentReq(functionID, codePath string) (map[string]any, error) {
 	if functionID == "" {
-		return nil, fmt.Errorf("缺少 function-id")
+		return nil, fmt.Errorf("missing function-id")
 	}
 	if codePath == "" {
-		return nil, fmt.Errorf("--code 必填（zip 代码包路径）")
+		return nil, fmt.Errorf("--code is required (path to the zip archive)")
 	}
 	code, err := os.ReadFile(codePath)
 	if err != nil {
-		return nil, fmt.Errorf("读取 --code 失败：%v", err)
+		return nil, fmt.Errorf("failed to read --code: %v", err)
 	}
 	if len(code) == 0 {
-		return nil, fmt.Errorf("--code 为空文件")
+		return nil, fmt.Errorf("--code is an empty file")
 	}
 	if len(code) > 8<<20 {
-		return nil, fmt.Errorf("--code 超过 8MiB（gRPC 消息通道上限，与服务端 MaxRecvMsgSize 对齐）；更大的代码包请走 multipart 上传接口（上限 50MiB）")
+		return nil, fmt.Errorf("--code exceeds 8MiB (gRPC message channel limit, aligned with the server MaxRecvMsgSize); for larger packages use the multipart upload API (50MiB max)")
 	}
 	return map[string]any{"functionId": functionID, "code": base64.StdEncoding.EncodeToString(code)}, nil
 }
@@ -345,14 +345,14 @@ func buildCreateDeploymentReq(functionID, codePath string) (map[string]any, erro
 // buildSetVariablesReq 构造 SetVariablesRequest（--vars 为 JSON 对象）。
 func buildSetVariablesReq(functionID, vars string) (map[string]any, error) {
 	if functionID == "" {
-		return nil, fmt.Errorf("缺少 function-id")
+		return nil, fmt.Errorf("missing function-id")
 	}
 	kv, err := jsonStringMap(vars, "--vars")
 	if err != nil {
 		return nil, err
 	}
 	if len(kv) == 0 {
-		return nil, fmt.Errorf("--vars 必填（环境变量 JSON 对象）")
+		return nil, fmt.Errorf("--vars is required (environment variables JSON object)")
 	}
 	list := make([]map[string]string, 0, len(kv))
 	for k, v := range kv {
@@ -365,10 +365,10 @@ func buildSetVariablesReq(functionID, vars string) (map[string]any, error) {
 // 校验一致）。
 func buildCreateExecutionReq(v *verb, functionID, input, deploymentID string, async bool) (map[string]any, error) {
 	if functionID == "" {
-		return nil, fmt.Errorf("缺少 function-id")
+		return nil, fmt.Errorf("missing function-id")
 	}
 	if input == "" {
-		return nil, fmt.Errorf("--input 必填（执行输入 JSON 字符串）")
+		return nil, fmt.Errorf("--input is required (execution input JSON string)")
 	}
 	req := map[string]any{"functionId": functionID, "data": input}
 	setChanged(v, "deployment-id", req, "deploymentId", deploymentID)

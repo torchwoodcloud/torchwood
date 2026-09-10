@@ -35,9 +35,9 @@ func TestBuildCreateFunctionReq(t *testing.T) {
 		set            map[string]string
 		wantErr        string
 	}{
-		{name: "缺 id", functionName: "f", runtime: "nodejs18", wantErr: "--id 必填"},
-		{name: "缺 name", id: "f1", runtime: "nodejs18", wantErr: "--name 必填"},
-		{name: "缺 runtime", id: "f1", functionName: "f", wantErr: "--runtime 必填"},
+		{name: "缺 id", functionName: "f", runtime: "nodejs18", wantErr: "--id is required"},
+		{name: "缺 name", id: "f1", runtime: "nodejs18", wantErr: "--name is required"},
+		{name: "缺 runtime", id: "f1", functionName: "f", wantErr: "--runtime is required"},
 		{name: "最小字段", id: "f1", functionName: "f", runtime: "nodejs18", wantErr: ""},
 		{name: "全字段", id: "f1", functionName: "f", runtime: "nodejs18", entrypoint: "index.js",
 			timeoutSeconds: 30, spec: "shared-2x", enabled: true,
@@ -97,7 +97,7 @@ func TestBuildUpdateFunctionReq(t *testing.T) {
 		set            map[string]string
 		wantErr        string
 	}{
-		{name: "缺 function-id", wantErr: "缺少 function-id"},
+		{name: "缺 function-id", wantErr: "missing function-id"},
 		{name: "仅 name", functionID: "f1", newName: "new", set: map[string]string{"name": "new"}, wantErr: ""},
 		{name: "全字段", functionID: "f1", newName: "new", entrypoint: "main.py",
 			timeoutSeconds: 60, spec: "shared-1x", enabled: false,
@@ -161,10 +161,10 @@ func TestBuildCreateDeploymentReq(t *testing.T) {
 		codePath   string
 		wantErr    string
 	}{
-		{name: "缺 function-id", codePath: good, wantErr: "缺少 function-id"},
-		{name: "缺 code", functionID: "f1", wantErr: "--code 必填"},
+		{name: "缺 function-id", codePath: good, wantErr: "missing function-id"},
+		{name: "缺 code", functionID: "f1", wantErr: "--code is required"},
 		{name: "文件不存在", functionID: "f1", codePath: filepath.Join(dir, "nope.zip"),
-			wantErr: "读取 --code 失败"},
+			wantErr: "failed to read --code"},
 		{name: "正常", functionID: "f1", codePath: good, wantErr: ""},
 	}
 	for _, tt := range tests {
@@ -189,8 +189,8 @@ func TestBuildSetVariablesReq(t *testing.T) {
 		vars       string
 		wantErr    string
 	}{
-		{name: "缺 vars", functionID: "f1", wantErr: "--vars 必填"},
-		{name: "vars 非法", functionID: "f1", vars: `[1]`, wantErr: "--vars 解析失败"},
+		{name: "缺 vars", functionID: "f1", wantErr: "--vars is required"},
+		{name: "vars 非法", functionID: "f1", vars: `[1]`, wantErr: "failed to parse --vars"},
 		{name: "正常", functionID: "f1", vars: `{"FOO":"bar"}`, wantErr: ""},
 	}
 	for _, tt := range tests {
@@ -219,7 +219,7 @@ func TestBuildCreateExecutionReq(t *testing.T) {
 		set          map[string]string
 		wantErr      string
 	}{
-		{name: "缺 input", functionID: "f1", wantErr: "--input 必填"},
+		{name: "缺 input", functionID: "f1", wantErr: "--input is required"},
 		{name: "同步最小字段", functionID: "f1", input: `{"a":1}`, wantErr: ""},
 		{name: "异步指定部署", functionID: "f1", input: `{}`, deploymentID: "d1", async: true,
 			set: map[string]string{"deployment-id": "d1", "async": "true"}, wantErr: ""},

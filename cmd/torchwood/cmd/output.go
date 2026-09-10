@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 
@@ -15,12 +14,12 @@ import (
 // invoke 建立连接并以全局超时发起一次 InvokeJSON 调用。
 // req 为 nil / string（原始 JSON，如 --data）/ map[string]any。
 func invoke(g *globalFlags, method string, req any) ([]byte, error) {
-	if g.tls {
-		return nil, errors.New("--tls 尚未支持：服务端当前为明文 gRPC")
-	}
 	var opts []server.Option
 	if g.apiKey != "" {
 		opts = append(opts, server.WithAPIKey(g.apiKey))
+	}
+	if g.tls {
+		opts = append(opts, server.WithTLS())
 	}
 	c, err := server.New(g.endpoint, opts...)
 	if err != nil {
@@ -43,7 +42,7 @@ func invoke(g *globalFlags, method string, req any) ([]byte, error) {
 	default:
 		b, err := json.Marshal(v)
 		if err != nil {
-			return nil, fmt.Errorf("请求编码失败：%v", err)
+			return nil, fmt.Errorf("failed to encode request: %v", err)
 		}
 		reqJSON = b
 	}
@@ -83,10 +82,10 @@ func (e *rpcError) Unwrap() error { return e.cause }
 // Unauthenticated 提示 API Key 自诊断。
 func formatRPCError(err error) string {
 	if server.IsPermissionDenied(err) {
-		return fmt.Sprintf("rpc failed: %v\n提示：请检查 API Key 的 scope（如 users.read / users.write，或 * / all），或用 Console 重新生成 key", err)
+		return fmt.Sprintf("rpc failed: %v\nhint: check the API key's scopes (e.g. users.read / users.write, or * / all), or regenerate the key in the Console", err)
 	}
 	if server.IsUnauthenticated(err) {
-		return fmt.Sprintf("rpc failed: %v\n提示：凭证被拒——请确认 TORCHWOOD_CLI_API_KEY（或 --api-key）已设置且未过期/未删除，key 需属于目标 endpoint 对应实例；可用 `torchwood health` 验证连通性", err)
+		return fmt.Sprintf("rpc failed: %v\nhint: credential rejected — make sure TORCHWOOD_CLI_API_KEY (or --api-key) is set and not expired/deleted; the key must belong to the instance the endpoint points to; use `torchwood health` to verify connectivity", err)
 	}
 	return fmt.Sprintf("rpc failed: %v", err)
 }

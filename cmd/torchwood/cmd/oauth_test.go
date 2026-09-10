@@ -16,14 +16,14 @@ func TestBuildUpsertOAuthProviderReq(t *testing.T) {
 		scopes       string
 		wantErr      string
 	}{
-		{name: "缺 provider", clientID: "cid", wantErr: "缺少 provider"},
-		{name: "缺 client-id", provider: "google", wantErr: "--client-id 必填"},
+		{name: "缺 provider", clientID: "cid", wantErr: "missing provider"},
+		{name: "缺 client-id", provider: "google", wantErr: "--client-id is required"},
 		{name: "禁用最小字段", provider: "google", clientID: "cid", wantErr: ""},
 		{name: "启用无 secret 放行（服务端按既有 secret 兜底）", provider: "google", enabled: true, clientID: "cid", wantErr: ""},
 		{name: "启用全字段", provider: "google", enabled: true, clientID: "cid",
 			clientSecret: "sec", scopes: `["email","profile"]`, wantErr: ""},
 		{name: "scopes 非法", provider: "google", clientID: "cid", scopes: `x`,
-			wantErr: "--scopes 解析失败"},
+			wantErr: "failed to parse --scopes"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

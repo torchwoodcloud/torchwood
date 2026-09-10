@@ -13,7 +13,7 @@ const (
 
 // newOutboxCmd 提供 outbox 死信管理（admin）。
 func newOutboxCmd(g *globalFlags) *group {
-	return newGroup(g, "outbox", "outbox 死信管理（list-dead/replay）", func(sub *commands.App) {
+	return newGroup(g, "outbox", "outbox dead-letter management (list-dead/replay)", func(sub *commands.App) {
 		sub.Register(
 			newOutboxListDeadCmd(g),
 			newOutboxReplayCmd(g),
@@ -26,10 +26,10 @@ func newOutboxCmd(g *globalFlags) *group {
 func newOutboxListDeadCmd(g *globalFlags) *verb {
 	var pageSize int
 	var pageToken string
-	return newVerb(g, "list-dead", "列出死信", "admin outbox list-dead",
+	return newVerb(g, "list-dead", "list dead letters", "admin outbox list-dead",
 		func(fs *flag.FlagSet) {
-			fs.IntVar(&pageSize, "page-size", 0, "每页条数")
-			fs.StringVar(&pageToken, "page-token", "", "上一页 next_page_token")
+			fs.IntVar(&pageSize, "page-size", 0, "page size")
+			fs.StringVar(&pageToken, "page-token", "", "next_page_token of the previous page")
 		},
 		func(v *verb, env *commands.Environment, _ []string) error {
 			payload := map[string]any{}
@@ -44,7 +44,7 @@ func newOutboxListDeadCmd(g *globalFlags) *verb {
 }
 
 func newOutboxReplayCmd(g *globalFlags) *verb {
-	return newVerb(g, "replay", "重放单条死信", "admin outbox replay <event-id>",
+	return newVerb(g, "replay", "replay a single dead letter", "admin outbox replay <event-id>",
 		func(fs *flag.FlagSet) {},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {

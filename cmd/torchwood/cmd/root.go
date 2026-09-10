@@ -19,7 +19,7 @@ type globalFlags struct {
 	timeout    string // 原始字符串，validate 校验后写入 timeoutDur
 	timeoutDur time.Duration
 	output     string // 输出格式（MVP 仅 json）
-	tls        bool   // 占位：服务端当前为明文 gRPC，使用时报未支持
+	tls        bool   // --tls：经 TLS 连接（系统根证书校验；反向代理终结 TLS 场景）
 
 	defaultsApplied bool // 环境变量缺省只在进程内首次注册时写入（见 register）
 }
@@ -45,26 +45,26 @@ func (g *globalFlags) register(fs *flag.FlagSet) {
 		g.output = envOr("TORCHWOOD_CLI_OUTPUT", "json")
 		g.defaultsApplied = true
 	}
-	fs.StringVar(&g.endpoint, "endpoint", g.endpoint, "gRPC 服务地址")
-	fs.StringVar(&g.apiKey, "api-key", g.apiKey, "API Key secret（亦可用 TORCHWOOD_CLI_API_KEY 环境变量；health / uuid 除外必填）")
-	fs.StringVar(&g.timeout, "timeout", g.timeout, "单次调用超时（如 30s、1m）")
-	fs.StringVar(&g.output, "output", g.output, "输出格式（MVP 仅 json）")
-	fs.BoolVar(&g.tls, "tls", g.tls, "使用 TLS（占位，暂未支持）")
+	fs.StringVar(&g.endpoint, "endpoint", g.endpoint, "gRPC server address")
+	fs.StringVar(&g.apiKey, "api-key", g.apiKey, "API key secret (or set TORCHWOOD_CLI_API_KEY; required except for health / uuid)")
+	fs.StringVar(&g.timeout, "timeout", g.timeout, "per-call timeout (e.g. 30s, 1m)")
+	fs.StringVar(&g.output, "output", g.output, "output format (MVP: json only)")
+	fs.BoolVar(&g.tls, "tls", g.tls, "use TLS (system root CAs; for TLS-terminating proxies)")
 }
 
 // validate 校验全局参数；needKey 为 false 时豁免 api-key 必填
 // （health / uuid / version 等公开或本地命令）。
 func (g *globalFlags) validate(needKey bool) error {
 	if g.output != "json" {
-		return fmt.Errorf("不支持的输出格式 %q：MVP 仅支持 json", g.output)
+		return fmt.Errorf("unsupported output format %q: MVP supports json only", g.output)
 	}
 	d, err := time.ParseDuration(g.timeout)
 	if err != nil {
-		return fmt.Errorf("无效的 --timeout %q：%v", g.timeout, err)
+		return fmt.Errorf("invalid --timeout %q: %v", g.timeout, err)
 	}
 	g.timeoutDur = d
 	if needKey && g.apiKey == "" {
-		return fmt.Errorf("缺少 API key：请通过 --api-key 或 TORCHWOOD_CLI_API_KEY 提供（health / uuid 除外）")
+		return fmt.Errorf("missing API key: provide it via --api-key or TORCHWOOD_CLI_API_KEY (except for health / uuid)")
 	}
 	return nil
 }
@@ -73,11 +73,15 @@ func (g *globalFlags) validate(needKey bool) error {
 func NewApp(version string) *commands.App {
 	g := &globalFlags{}
 	app := commands.New()
-	app.HelpHeader = `Torchwood CLI 通过 gRPC（非 HTTP gateway）调用 Server API，认证一律使用
-x-api-key metadata（scope 见 API Key 的 scopes）。默认连接 127.0.0.1:9060
-（服务端 gRPC 仅监听回环，远程使用需走 SSH 隧道或调整 server.grpc.addr）。
-全局旗标（--endpoint/--api-key/--timeout/--output/--tls）在任何子命令路径
-之后、位置参数之前给出；环境变量 TORCHWOOD_CLI_* 提供缺省。`
+	app.HelpHeader = `Torchwood CLI calls the Server API over gRPC (not the HTTP gateway);
+authentication always uses the x-api-key metadata (scopes follow the API
+key's scopes). Defaults to 127.0.0.1:9060 (the server gRPC listens on
+loopback only; for remote use go through an SSH tunnel, change
+server.grpc.addr, or terminate TLS on a reverse proxy that forwards h2c
+to the backend and pass --tls).
+Global flags (--endpoint/--api-key/--timeout/--output/--tls) go after the
+subcommand path and before positional arguments; TORCHWOOD_CLI_*
+environment variables provide defaults.`
 	app.HelpFooter = "torchwood " + version
 	app.ExitCode = rpcExitCode
 	app.Register(
@@ -99,7 +103,7 @@ x-api-key metadata（scope 见 API Key 的 scopes）。默认连接 127.0.0.1:90
 
 // newVersionCmd 打印 CLI 版本（`torchwood` 裸调用的帮助面 HelpFooter 亦带版本串）。
 func newVersionCmd(g *globalFlags, version string) *verb {
-	return newPublicVerb(g, "version", "打印 CLI 版本", "version", nil, func(v *verb, env *commands.Environment, args []string) error {
+	return newPublicVerb(g, "version", "print the CLI version", "version", nil, func(v *verb, env *commands.Environment, args []string) error {
 		if err := noArgs(v, args); err != nil {
 			return err
 		}

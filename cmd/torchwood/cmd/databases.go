@@ -40,7 +40,7 @@ const (
 // update/upsert/delete/count/bulk-update/bulk-delete）。
 // 复杂结构（document data、queries、permissions 等）一律接受 JSON 字符串 flag。
 func newDatabasesCmd(g *globalFlags) *group {
-	return newGroup(g, "databases", "数据库管理（DatabasesService 全部方法：库/集合/属性/索引/文档）", func(sub *commands.App) {
+	return newGroup(g, "databases", "database management (all DatabasesService methods: databases/collections/attributes/indexes/documents)", func(sub *commands.App) {
 		sub.Register(
 			newDatabasesCreateCmd(g),
 			newDatabasesListCmd(g),
@@ -56,10 +56,10 @@ func newDatabasesCmd(g *globalFlags) *group {
 
 func newDatabasesCreateCmd(g *globalFlags) *verb {
 	var id, name string
-	return newVerb(g, "create", "创建数据库", "databases create --id <id> --name <name>",
+	return newVerb(g, "create", "create a database", "databases create --id <id> --name <name>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&id, "id", "", "数据库 ID（必填，小写字母/数字/下划线）")
-			fs.StringVar(&name, "name", "", "数据库名称（必填）")
+			fs.StringVar(&id, "id", "", "database ID (required, lowercase letters/digits/underscores)")
+			fs.StringVar(&name, "name", "", "database name (required)")
 		},
 		func(v *verb, env *commands.Environment, _ []string) error {
 			req, err := buildCreateDatabaseReq(id, name)
@@ -73,10 +73,10 @@ func newDatabasesCreateCmd(g *globalFlags) *verb {
 func newDatabasesListCmd(g *globalFlags) *verb {
 	var pageSize int
 	var pageToken string
-	return newVerb(g, "list", "列出数据库", "databases list",
+	return newVerb(g, "list", "list databases", "databases list",
 		func(fs *flag.FlagSet) {
-			fs.IntVar(&pageSize, "page-size", 0, "每页条数（服务端默认 50，上限 1000）")
-			fs.StringVar(&pageToken, "page-token", "", "上一页返回的 next_page_token")
+			fs.IntVar(&pageSize, "page-size", 0, "page size (server default 50, max 1000)")
+			fs.StringVar(&pageToken, "page-token", "", "next_page_token returned by the previous page")
 		},
 		func(v *verb, env *commands.Environment, _ []string) error {
 			return call(g, env, methodDBListDatabases, listJSON(pageSize, pageToken))
@@ -84,7 +84,7 @@ func newDatabasesListCmd(g *globalFlags) *verb {
 }
 
 func newDatabasesGetCmd(g *globalFlags) *verb {
-	return newVerb(g, "get", "按 ID 获取数据库", "databases get <id>", nil,
+	return newVerb(g, "get", "get a database by ID", "databases get <id>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
 				return err
@@ -94,7 +94,7 @@ func newDatabasesGetCmd(g *globalFlags) *verb {
 }
 
 func newDatabasesDeleteCmd(g *globalFlags) *verb {
-	return newVerb(g, "delete", "删除数据库（default 库不可删除）", "databases delete <id>", nil,
+	return newVerb(g, "delete", "delete a database (the default database cannot be deleted)", "databases delete <id>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
 				return err
@@ -105,7 +105,7 @@ func newDatabasesDeleteCmd(g *globalFlags) *verb {
 
 // newDatabasesCollectionsCmd: databases collections create/list/get/update/delete。
 func newDatabasesCollectionsCmd(g *globalFlags) *group {
-	return newGroup(g, "collections", "集合管理", func(sub *commands.App) {
+	return newGroup(g, "collections", "collection management", func(sub *commands.App) {
 		sub.Register(
 			newDatabasesCollectionsCreateCmd(g),
 			newDatabasesCollectionsListCmd(g),
@@ -119,12 +119,12 @@ func newDatabasesCollectionsCmd(g *globalFlags) *group {
 func newDatabasesCollectionsCreateCmd(g *globalFlags) *verb {
 	var id, name, permissions string
 	var documentSecurity bool
-	return newVerb(g, "create", "创建集合", "databases collections create <database-id> --id <id> --name <name>",
+	return newVerb(g, "create", "create a collection", "databases collections create <database-id> --id <id> --name <name>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&id, "id", "", "集合 ID（必填）")
-			fs.StringVar(&name, "name", "", "集合名称（必填）")
-			fs.StringVar(&permissions, "permissions", "", "权限 JSON 数组（如 '[\"read(\\\"users\\\")\"]'）")
-			fs.BoolVar(&documentSecurity, "document-security", false, "文档级安全开关（显式传 --document-security=true/false 才生效）")
+			fs.StringVar(&id, "id", "", "collection ID (required)")
+			fs.StringVar(&name, "name", "", "collection name (required)")
+			fs.StringVar(&permissions, "permissions", "", "permissions JSON array (e.g. '[\"read(\\\"users\\\")\"]')")
+			fs.BoolVar(&documentSecurity, "document-security", false, "document-level security switch (pass --document-security=true/false explicitly to take effect)")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
@@ -142,11 +142,11 @@ func newDatabasesCollectionsListCmd(g *globalFlags) *verb {
 	var queries string
 	var pageSize int
 	var pageToken string
-	return newVerb(g, "list", "列出集合", "databases collections list <database-id>",
+	return newVerb(g, "list", "list collections", "databases collections list <database-id>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&queries, "queries", "", "Appwrite 风格查询 JSON 数组（如 '[\"equal(\\\"status\\\",\\\"active\\\")\"]'）")
-			fs.IntVar(&pageSize, "page-size", 0, "每页条数（服务端默认 50，上限 1000）")
-			fs.StringVar(&pageToken, "page-token", "", "上一页返回的 next_page_token")
+			fs.StringVar(&queries, "queries", "", "Appwrite-style queries JSON array (e.g. '[\"equal(\\\"status\\\",\\\"active\\\")\"]')")
+			fs.IntVar(&pageSize, "page-size", 0, "page size (server default 50, max 1000)")
+			fs.StringVar(&pageToken, "page-token", "", "next_page_token returned by the previous page")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
@@ -161,7 +161,7 @@ func newDatabasesCollectionsListCmd(g *globalFlags) *verb {
 }
 
 func newDatabasesCollectionsGetCmd(g *globalFlags) *verb {
-	return newVerb(g, "get", "按 ID 获取集合", "databases collections get <database-id> <collection-id>", nil,
+	return newVerb(g, "get", "get a collection by ID", "databases collections get <database-id> <collection-id>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 2); err != nil {
 				return err
@@ -173,12 +173,12 @@ func newDatabasesCollectionsGetCmd(g *globalFlags) *verb {
 func newDatabasesCollectionsUpdateCmd(g *globalFlags) *verb {
 	var name, permissions string
 	var documentSecurity, disabled bool
-	return newVerb(g, "update", "更新集合（仅更新显式传入的字段）", "databases collections update <database-id> <collection-id> [--name] [--permissions] [--document-security] [--disabled]",
+	return newVerb(g, "update", "update a collection (only explicitly passed fields)", "databases collections update <database-id> <collection-id> [--name] [--permissions] [--document-security] [--disabled]",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&name, "name", "", "集合名称")
-			fs.StringVar(&permissions, "permissions", "", "权限 JSON 数组（全量替换）")
-			fs.BoolVar(&documentSecurity, "document-security", false, "文档级安全开关（显式传 --document-security=true/false 才生效）")
-			fs.BoolVar(&disabled, "disabled", false, "禁用集合（显式传 --disabled=true/false 才生效）")
+			fs.StringVar(&name, "name", "", "collection name")
+			fs.StringVar(&permissions, "permissions", "", "permissions JSON array (full replacement)")
+			fs.BoolVar(&documentSecurity, "document-security", false, "document-level security switch (pass --document-security=true/false explicitly to take effect)")
+			fs.BoolVar(&disabled, "disabled", false, "disable the collection (pass --disabled=true/false explicitly to take effect)")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 2); err != nil {
@@ -193,7 +193,7 @@ func newDatabasesCollectionsUpdateCmd(g *globalFlags) *verb {
 }
 
 func newDatabasesCollectionsDeleteCmd(g *globalFlags) *verb {
-	return newVerb(g, "delete", "删除集合", "databases collections delete <database-id> <collection-id>", nil,
+	return newVerb(g, "delete", "delete a collection", "databases collections delete <database-id> <collection-id>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 2); err != nil {
 				return err
@@ -204,7 +204,7 @@ func newDatabasesCollectionsDeleteCmd(g *globalFlags) *verb {
 
 // newDatabasesAttributesCmd: databases attributes create/delete。
 func newDatabasesAttributesCmd(g *globalFlags) *group {
-	return newGroup(g, "attributes", "集合属性管理", func(sub *commands.App) {
+	return newGroup(g, "attributes", "collection attribute management", func(sub *commands.App) {
 		sub.Register(
 			newDatabasesAttributesCreateCmd(g),
 			newDatabasesAttributesDeleteCmd(g),
@@ -216,14 +216,14 @@ func newDatabasesAttributesCreateCmd(g *globalFlags) *verb {
 	var key, typ, defaultValue string
 	var size int
 	var required, array bool
-	return newVerb(g, "create", "创建属性（类型：string/integer/float/boolean/datetime）", "databases attributes create <database-id> <collection-id> --key <key> --type <type>",
+	return newVerb(g, "create", "create an attribute (types: string/integer/float/boolean/datetime)", "databases attributes create <database-id> <collection-id> --key <key> --type <type>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&key, "key", "", "属性名（必填）")
-			fs.StringVar(&typ, "type", "", "属性类型（必填）")
-			fs.IntVar(&size, "size", 0, "长度上限（string 属性）")
-			fs.BoolVar(&required, "required", false, "是否必填")
-			fs.BoolVar(&array, "array", false, "是否为数组")
-			fs.StringVar(&defaultValue, "default-value", "", "默认值（JSON 文本）")
+			fs.StringVar(&key, "key", "", "attribute key (required)")
+			fs.StringVar(&typ, "type", "", "attribute type (required)")
+			fs.IntVar(&size, "size", 0, "max length (string attributes)")
+			fs.BoolVar(&required, "required", false, "whether the attribute is required")
+			fs.BoolVar(&array, "array", false, "whether the attribute is an array")
+			fs.StringVar(&defaultValue, "default-value", "", "default value (JSON text)")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 2); err != nil {
@@ -238,7 +238,7 @@ func newDatabasesAttributesCreateCmd(g *globalFlags) *verb {
 }
 
 func newDatabasesAttributesDeleteCmd(g *globalFlags) *verb {
-	return newVerb(g, "delete", "删除属性", "databases attributes delete <database-id> <collection-id> <key>", nil,
+	return newVerb(g, "delete", "delete an attribute", "databases attributes delete <database-id> <collection-id> <key>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 3); err != nil {
 				return err
@@ -249,7 +249,7 @@ func newDatabasesAttributesDeleteCmd(g *globalFlags) *verb {
 
 // newDatabasesIndexesCmd: databases indexes create/delete。
 func newDatabasesIndexesCmd(g *globalFlags) *group {
-	return newGroup(g, "indexes", "集合索引管理", func(sub *commands.App) {
+	return newGroup(g, "indexes", "collection index management", func(sub *commands.App) {
 		sub.Register(
 			newDatabasesIndexesCreateCmd(g),
 			newDatabasesIndexesDeleteCmd(g),
@@ -259,12 +259,12 @@ func newDatabasesIndexesCmd(g *globalFlags) *group {
 
 func newDatabasesIndexesCreateCmd(g *globalFlags) *verb {
 	var id, typ, attributes, orders string
-	return newVerb(g, "create", "创建索引（类型：key/unique/fulltext）", "databases indexes create <database-id> <collection-id> --id <id> --type <type> --attributes '[...]'",
+	return newVerb(g, "create", "create an index (types: key/unique/fulltext)", "databases indexes create <database-id> <collection-id> --id <id> --type <type> --attributes '[...]'",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&id, "id", "", "索引 ID（必填）")
-			fs.StringVar(&typ, "type", "", "索引类型（必填：key/unique/fulltext）")
-			fs.StringVar(&attributes, "attributes", "", "索引属性 JSON 数组（必填）")
-			fs.StringVar(&orders, "orders", "", "排序 JSON 数组（如 '[\"asc\",\"desc\"]'）")
+			fs.StringVar(&id, "id", "", "index ID (required)")
+			fs.StringVar(&typ, "type", "", "index type (required: key/unique/fulltext)")
+			fs.StringVar(&attributes, "attributes", "", "index attributes JSON array (required)")
+			fs.StringVar(&orders, "orders", "", "orders JSON array (e.g. '[\"asc\",\"desc\"]')")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 2); err != nil {
@@ -279,7 +279,7 @@ func newDatabasesIndexesCreateCmd(g *globalFlags) *verb {
 }
 
 func newDatabasesIndexesDeleteCmd(g *globalFlags) *verb {
-	return newVerb(g, "delete", "删除索引", "databases indexes delete <database-id> <collection-id> <index-id>", nil,
+	return newVerb(g, "delete", "delete an index", "databases indexes delete <database-id> <collection-id> <index-id>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 3); err != nil {
 				return err
@@ -291,7 +291,7 @@ func newDatabasesIndexesDeleteCmd(g *globalFlags) *verb {
 // newDatabasesDocumentsCmd: databases documents create/list/get/update/upsert/
 // delete/count/bulk-update/bulk-delete。
 func newDatabasesDocumentsCmd(g *globalFlags) *group {
-	return newGroup(g, "documents", "文档管理", func(sub *commands.App) {
+	return newGroup(g, "documents", "document management", func(sub *commands.App) {
 		sub.Register(
 			newDatabasesDocumentsCreateCmd(g),
 			newDatabasesDocumentsListCmd(g),
@@ -308,11 +308,11 @@ func newDatabasesDocumentsCmd(g *globalFlags) *group {
 
 func newDatabasesDocumentsCreateCmd(g *globalFlags) *verb {
 	var documentID, data, permissions string
-	return newVerb(g, "create", "创建文档（--data 为文档数据 JSON 对象）", "databases documents create <database-id> <collection-id> --data '{...}'",
+	return newVerb(g, "create", "create a document (--data is the document data JSON object)", "databases documents create <database-id> <collection-id> --data '{...}'",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&documentID, "document-id", "", "文档 ID（缺省自动生成）")
-			fs.StringVar(&data, "data", "", "文档数据 JSON 对象（必填，如 '{\"title\":\"hi\"}'）")
-			fs.StringVar(&permissions, "permissions", "", "权限 JSON 数组")
+			fs.StringVar(&documentID, "document-id", "", "document ID (auto-generated by default)")
+			fs.StringVar(&data, "data", "", "document data JSON object (required, e.g. '{\"title\":\"hi\"}')")
+			fs.StringVar(&permissions, "permissions", "", "permissions JSON array")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 2); err != nil {
@@ -330,11 +330,11 @@ func newDatabasesDocumentsListCmd(g *globalFlags) *verb {
 	var queries string
 	var pageSize int
 	var pageToken string
-	return newVerb(g, "list", "列出文档", "databases documents list <database-id> <collection-id>",
+	return newVerb(g, "list", "list documents", "databases documents list <database-id> <collection-id>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&queries, "queries", "", "Appwrite 风格查询 JSON 数组")
-			fs.IntVar(&pageSize, "page-size", 0, "每页条数（服务端默认 50，上限 1000）")
-			fs.StringVar(&pageToken, "page-token", "", "上一页返回的 next_page_token")
+			fs.StringVar(&queries, "queries", "", "Appwrite-style queries JSON array")
+			fs.IntVar(&pageSize, "page-size", 0, "page size (server default 50, max 1000)")
+			fs.StringVar(&pageToken, "page-token", "", "next_page_token returned by the previous page")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 2); err != nil {
@@ -349,7 +349,7 @@ func newDatabasesDocumentsListCmd(g *globalFlags) *verb {
 }
 
 func newDatabasesDocumentsGetCmd(g *globalFlags) *verb {
-	return newVerb(g, "get", "按 ID 获取文档", "databases documents get <database-id> <collection-id> <document-id>", nil,
+	return newVerb(g, "get", "get a document by ID", "databases documents get <database-id> <collection-id> <document-id>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 3); err != nil {
 				return err
@@ -361,12 +361,12 @@ func newDatabasesDocumentsGetCmd(g *globalFlags) *verb {
 func newDatabasesDocumentsUpdateCmd(g *globalFlags) *verb {
 	var data, permissions, increment string
 	var version int64
-	return newVerb(g, "update", "更新文档（--version 必填；--data/--permissions/--increment 至少一个）", "databases documents update <database-id> <collection-id> <document-id> --version <n> [--data] [--permissions] [--increment]",
+	return newVerb(g, "update", "update a document (--version required; at least one of --data/--permissions/--increment)", "databases documents update <database-id> <collection-id> <document-id> --version <n> [--data] [--permissions] [--increment]",
 		func(fs *flag.FlagSet) {
-			fs.Int64Var(&version, "version", 0, "当前文档版本（用户集合 OCC 必填，来自 get 的 version 字段）")
-			fs.StringVar(&data, "data", "", "文档数据 JSON 对象（全量替换）")
-			fs.StringVar(&permissions, "permissions", "", "权限 JSON 数组（全量替换）")
-			fs.StringVar(&increment, "increment", "", "自增字段 JSON 对象（如 '{\"views\":1}'）")
+			fs.Int64Var(&version, "version", 0, "current document version (required for OCC on user collections, from the version field returned by get)")
+			fs.StringVar(&data, "data", "", "document data JSON object (full replacement)")
+			fs.StringVar(&permissions, "permissions", "", "permissions JSON array (full replacement)")
+			fs.StringVar(&increment, "increment", "", "increment fields JSON object (e.g. '{\"views\":1}')")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 3); err != nil {
@@ -382,11 +382,11 @@ func newDatabasesDocumentsUpdateCmd(g *globalFlags) *verb {
 
 func newDatabasesDocumentsUpsertCmd(g *globalFlags) *verb {
 	var data, permissions, conflictColumns string
-	return newVerb(g, "upsert", "按 document-id 存在则更新、否则创建", "databases documents upsert <database-id> <collection-id> <document-id> --data '{...}' --conflict-columns '[...]'",
+	return newVerb(g, "upsert", "upsert a document: update if the document-id exists, create otherwise", "databases documents upsert <database-id> <collection-id> <document-id> --data '{...}' --conflict-columns '[...]'",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&data, "data", "", "文档数据 JSON 对象（必填）")
-			fs.StringVar(&permissions, "permissions", "", "权限 JSON 数组")
-			fs.StringVar(&conflictColumns, "conflict-columns", "", "冲突列 JSON 数组（必填）")
+			fs.StringVar(&data, "data", "", "document data JSON object (required)")
+			fs.StringVar(&permissions, "permissions", "", "permissions JSON array")
+			fs.StringVar(&conflictColumns, "conflict-columns", "", "conflict columns JSON array (required)")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 3); err != nil {
@@ -402,9 +402,9 @@ func newDatabasesDocumentsUpsertCmd(g *globalFlags) *verb {
 
 func newDatabasesDocumentsDeleteCmd(g *globalFlags) *verb {
 	var version int64
-	return newVerb(g, "delete", "删除文档（--version 必填，用户集合 OCC）", "databases documents delete <database-id> <collection-id> <document-id> --version <n>",
+	return newVerb(g, "delete", "delete a document (--version required, OCC on user collections)", "databases documents delete <database-id> <collection-id> <document-id> --version <n>",
 		func(fs *flag.FlagSet) {
-			fs.Int64Var(&version, "version", 0, "当前文档版本（用户集合 OCC 必填，来自 get 的 version 字段）")
+			fs.Int64Var(&version, "version", 0, "current document version (required for OCC on user collections, from the version field returned by get)")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 3); err != nil {
@@ -422,16 +422,16 @@ func newDatabasesDocumentsDeleteCmd(g *globalFlags) *verb {
 // 与服务端 OCC 校验一致）。
 func buildDeleteDocumentReq(databaseID, collectionID, documentID string, version int64) (map[string]any, error) {
 	if databaseID == "" {
-		return nil, fmt.Errorf("缺少 database-id")
+		return nil, fmt.Errorf("missing database-id")
 	}
 	if collectionID == "" {
-		return nil, fmt.Errorf("缺少 collection-id")
+		return nil, fmt.Errorf("missing collection-id")
 	}
 	if documentID == "" {
-		return nil, fmt.Errorf("缺少 document-id")
+		return nil, fmt.Errorf("missing document-id")
 	}
 	if version <= 0 {
-		return nil, fmt.Errorf("--version 必填（正整数，来自 get 的 version 字段）")
+		return nil, fmt.Errorf("--version is required (positive integer, from the version field returned by get)")
 	}
 	return map[string]any{
 		"databaseId":   databaseID,
@@ -443,9 +443,9 @@ func buildDeleteDocumentReq(databaseID, collectionID, documentID string, version
 
 func newDatabasesDocumentsCountCmd(g *globalFlags) *verb {
 	var queries string
-	return newVerb(g, "count", "统计匹配查询的文档数", "databases documents count <database-id> <collection-id>",
+	return newVerb(g, "count", "count documents matching the query", "databases documents count <database-id> <collection-id>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&queries, "queries", "", "Appwrite 风格查询 JSON 数组")
+			fs.StringVar(&queries, "queries", "", "Appwrite-style queries JSON array")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 2); err != nil {
@@ -461,11 +461,11 @@ func newDatabasesDocumentsCountCmd(g *globalFlags) *verb {
 
 func newDatabasesDocumentsBulkUpdateCmd(g *globalFlags) *verb {
 	var documentIDs, data, permissions string
-	return newVerb(g, "bulk-update", "批量更新文档（共享同一份 data/permissions）", "databases documents bulk-update <database-id> <collection-id> --document-ids '[...]' --data '{...}'",
+	return newVerb(g, "bulk-update", "bulk update documents (sharing one set of data/permissions)", "databases documents bulk-update <database-id> <collection-id> --document-ids '[...]' --data '{...}'",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&documentIDs, "document-ids", "", "文档 ID JSON 数组（必填）")
-			fs.StringVar(&data, "data", "", "共享更新数据 JSON 对象（必填）")
-			fs.StringVar(&permissions, "permissions", "", "权限 JSON 数组")
+			fs.StringVar(&documentIDs, "document-ids", "", "document IDs JSON array (required)")
+			fs.StringVar(&data, "data", "", "shared update data JSON object (required)")
+			fs.StringVar(&permissions, "permissions", "", "permissions JSON array")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 2); err != nil {
@@ -481,9 +481,9 @@ func newDatabasesDocumentsBulkUpdateCmd(g *globalFlags) *verb {
 
 func newDatabasesDocumentsBulkDeleteCmd(g *globalFlags) *verb {
 	var documentIDs string
-	return newVerb(g, "bulk-delete", "批量删除文档", "databases documents bulk-delete <database-id> <collection-id> --document-ids '[...]'",
+	return newVerb(g, "bulk-delete", "bulk delete documents", "databases documents bulk-delete <database-id> <collection-id> --document-ids '[...]'",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&documentIDs, "document-ids", "", "文档 ID JSON 数组（必填）")
+			fs.StringVar(&documentIDs, "document-ids", "", "document IDs JSON array (required)")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 2); err != nil {
@@ -501,10 +501,10 @@ func newDatabasesDocumentsBulkDeleteCmd(g *globalFlags) *verb {
 // 与服务端校验一致）。
 func buildCreateDatabaseReq(id, name string) (map[string]any, error) {
 	if id == "" {
-		return nil, fmt.Errorf("--id 必填")
+		return nil, fmt.Errorf("--id is required")
 	}
 	if name == "" {
-		return nil, fmt.Errorf("--name 必填")
+		return nil, fmt.Errorf("--name is required")
 	}
 	return map[string]any{"id": id, "name": name}, nil
 }
@@ -513,13 +513,13 @@ func buildCreateDatabaseReq(id, name string) (map[string]any, error) {
 // documentSecurity 依赖 flag presence（proto3 optional 语义用键存在性表达）。
 func buildCreateCollectionReq(v *verb, databaseID, id, name, permissions string, documentSecurity bool) (map[string]any, error) {
 	if databaseID == "" {
-		return nil, fmt.Errorf("缺少 database-id")
+		return nil, fmt.Errorf("missing database-id")
 	}
 	if id == "" {
-		return nil, fmt.Errorf("--id 必填")
+		return nil, fmt.Errorf("--id is required")
 	}
 	if name == "" {
-		return nil, fmt.Errorf("--name 必填")
+		return nil, fmt.Errorf("--name is required")
 	}
 	req := map[string]any{
 		"databaseId": databaseID,
@@ -540,7 +540,7 @@ func buildCreateCollectionReq(v *verb, databaseID, id, name, permissions string,
 // buildListCollectionsReq 构造 ListCollectionsRequest JSON map（queries 数组 + 分页）。
 func buildListCollectionsReq(databaseID, queries string, pageSize int, pageToken string) (map[string]any, error) {
 	if databaseID == "" {
-		return nil, fmt.Errorf("缺少 database-id")
+		return nil, fmt.Errorf("missing database-id")
 	}
 	req := map[string]any{"databaseId": databaseID}
 	if queries != "" {
@@ -562,10 +562,10 @@ func buildListCollectionsReq(databaseID, queries string, pageSize int, pageToken
 // buildUpdateCollectionReq 构造 UpdateCollectionRequest JSON map：仅设置显式传入的字段。
 func buildUpdateCollectionReq(v *verb, databaseID, collectionID, name, permissions string, documentSecurity, disabled bool) (map[string]any, error) {
 	if databaseID == "" {
-		return nil, fmt.Errorf("缺少 database-id")
+		return nil, fmt.Errorf("missing database-id")
 	}
 	if collectionID == "" {
-		return nil, fmt.Errorf("缺少 collection-id")
+		return nil, fmt.Errorf("missing collection-id")
 	}
 	req := map[string]any{
 		"databaseId":   databaseID,
@@ -589,16 +589,16 @@ func buildUpdateCollectionReq(v *verb, databaseID, collectionID, name, permissio
 // buildCreateAttributeReq 构造 CreateAttributeRequest JSON map（key/type 必填）。
 func buildCreateAttributeReq(databaseID, collectionID, key, typ string, size int, required, array bool, defaultValue string) (map[string]any, error) {
 	if databaseID == "" {
-		return nil, fmt.Errorf("缺少 database-id")
+		return nil, fmt.Errorf("missing database-id")
 	}
 	if collectionID == "" {
-		return nil, fmt.Errorf("缺少 collection-id")
+		return nil, fmt.Errorf("missing collection-id")
 	}
 	if key == "" {
-		return nil, fmt.Errorf("--key 必填")
+		return nil, fmt.Errorf("--key is required")
 	}
 	if typ == "" {
-		return nil, fmt.Errorf("--type 必填")
+		return nil, fmt.Errorf("--type is required")
 	}
 	req := map[string]any{
 		"databaseId":   databaseID,
@@ -618,23 +618,23 @@ func buildCreateAttributeReq(databaseID, collectionID, key, typ string, size int
 // buildCreateIndexReq 构造 CreateIndexRequest JSON map（id/type/attributes 必填）。
 func buildCreateIndexReq(databaseID, collectionID, id, typ, attributes, orders string) (map[string]any, error) {
 	if databaseID == "" {
-		return nil, fmt.Errorf("缺少 database-id")
+		return nil, fmt.Errorf("missing database-id")
 	}
 	if collectionID == "" {
-		return nil, fmt.Errorf("缺少 collection-id")
+		return nil, fmt.Errorf("missing collection-id")
 	}
 	if id == "" {
-		return nil, fmt.Errorf("--id 必填")
+		return nil, fmt.Errorf("--id is required")
 	}
 	if typ == "" {
-		return nil, fmt.Errorf("--type 必填")
+		return nil, fmt.Errorf("--type is required")
 	}
 	attrs, err := jsonStringList(attributes, "--attributes")
 	if err != nil {
 		return nil, err
 	}
 	if len(attrs) == 0 {
-		return nil, fmt.Errorf("--attributes 必填")
+		return nil, fmt.Errorf("--attributes is required")
 	}
 	req := map[string]any{
 		"databaseId":   databaseID,
@@ -656,17 +656,17 @@ func buildCreateIndexReq(databaseID, collectionID, id, typ, attributes, orders s
 // buildCreateDocumentReq 构造 CreateDocumentRequest JSON map（--data 为文档数据本体）。
 func buildCreateDocumentReq(databaseID, collectionID, documentID, data, permissions string) (map[string]any, error) {
 	if databaseID == "" {
-		return nil, fmt.Errorf("缺少 database-id")
+		return nil, fmt.Errorf("missing database-id")
 	}
 	if collectionID == "" {
-		return nil, fmt.Errorf("缺少 collection-id")
+		return nil, fmt.Errorf("missing collection-id")
 	}
 	docData, err := jsonObject(data, "--data")
 	if err != nil {
 		return nil, err
 	}
 	if docData == nil {
-		return nil, fmt.Errorf("--data 必填（文档数据 JSON 对象）")
+		return nil, fmt.Errorf("--data is required (document data JSON object)")
 	}
 	req := map[string]any{
 		"databaseId":   databaseID,
@@ -691,10 +691,10 @@ func buildCreateDocumentReq(databaseID, collectionID, documentID, data, permissi
 // 以 "query" 字段发送（服务端零 DSL 消费）。
 func buildListDocumentsReq(databaseID, collectionID, queries string, pageSize int, pageToken string) (map[string]any, error) {
 	if databaseID == "" {
-		return nil, fmt.Errorf("缺少 database-id")
+		return nil, fmt.Errorf("missing database-id")
 	}
 	if collectionID == "" {
-		return nil, fmt.Errorf("缺少 collection-id")
+		return nil, fmt.Errorf("missing collection-id")
 	}
 	req := map[string]any{
 		"databaseId":   databaseID,
@@ -707,7 +707,7 @@ func buildListDocumentsReq(databaseID, collectionID, queries string, pageSize in
 		}
 		ast, err := query.ParseMany(qs)
 		if err != nil {
-			return nil, fmt.Errorf("--queries 解析失败: %w", err)
+			return nil, fmt.Errorf("failed to parse --queries: %w", err)
 		}
 		req["query"] = ast.ToWireJSON()
 	}
@@ -725,19 +725,19 @@ func buildListDocumentsReq(databaseID, collectionID, queries string, pageSize in
 // json.Number 保持 int64 精度）。
 func buildUpdateDocumentReq(databaseID, collectionID, documentID, data, permissions, increment string, version int64) (map[string]any, error) {
 	if databaseID == "" {
-		return nil, fmt.Errorf("缺少 database-id")
+		return nil, fmt.Errorf("missing database-id")
 	}
 	if collectionID == "" {
-		return nil, fmt.Errorf("缺少 collection-id")
+		return nil, fmt.Errorf("missing collection-id")
 	}
 	if documentID == "" {
-		return nil, fmt.Errorf("缺少 document-id")
+		return nil, fmt.Errorf("missing document-id")
 	}
 	if version <= 0 {
-		return nil, fmt.Errorf("--version 必填（正整数，来自 get 的 version 字段）")
+		return nil, fmt.Errorf("--version is required (positive integer, from the version field returned by get)")
 	}
 	if data == "" && permissions == "" && increment == "" {
-		return nil, fmt.Errorf("--data/--permissions/--increment 至少提供一个")
+		return nil, fmt.Errorf("provide at least one of --data/--permissions/--increment")
 	}
 	req := map[string]any{
 		"databaseId":   databaseID,
@@ -772,27 +772,27 @@ func buildUpdateDocumentReq(databaseID, collectionID, documentID, data, permissi
 // buildUpsertDocumentReq 构造 UpsertDocumentRequest JSON map（data/conflict-columns 必填）。
 func buildUpsertDocumentReq(databaseID, collectionID, documentID, data, permissions, conflictColumns string) (map[string]any, error) {
 	if databaseID == "" {
-		return nil, fmt.Errorf("缺少 database-id")
+		return nil, fmt.Errorf("missing database-id")
 	}
 	if collectionID == "" {
-		return nil, fmt.Errorf("缺少 collection-id")
+		return nil, fmt.Errorf("missing collection-id")
 	}
 	if documentID == "" {
-		return nil, fmt.Errorf("缺少 document-id")
+		return nil, fmt.Errorf("missing document-id")
 	}
 	docData, err := jsonObject(data, "--data")
 	if err != nil {
 		return nil, err
 	}
 	if docData == nil {
-		return nil, fmt.Errorf("--data 必填（文档数据 JSON 对象）")
+		return nil, fmt.Errorf("--data is required (document data JSON object)")
 	}
 	cols, err := jsonStringList(conflictColumns, "--conflict-columns")
 	if err != nil {
 		return nil, err
 	}
 	if len(cols) == 0 {
-		return nil, fmt.Errorf("--conflict-columns 必填")
+		return nil, fmt.Errorf("--conflict-columns is required")
 	}
 	req := map[string]any{
 		"databaseId":      databaseID,
@@ -814,24 +814,24 @@ func buildUpsertDocumentReq(databaseID, collectionID, documentID, data, permissi
 // buildBulkUpdateDocumentsReq 构造 BulkUpdateDocumentsRequest JSON map。
 func buildBulkUpdateDocumentsReq(databaseID, collectionID, documentIDs, data, permissions string) (map[string]any, error) {
 	if databaseID == "" {
-		return nil, fmt.Errorf("缺少 database-id")
+		return nil, fmt.Errorf("missing database-id")
 	}
 	if collectionID == "" {
-		return nil, fmt.Errorf("缺少 collection-id")
+		return nil, fmt.Errorf("missing collection-id")
 	}
 	ids, err := jsonStringList(documentIDs, "--document-ids")
 	if err != nil {
 		return nil, err
 	}
 	if len(ids) == 0 {
-		return nil, fmt.Errorf("--document-ids 必填")
+		return nil, fmt.Errorf("--document-ids is required")
 	}
 	docData, err := jsonObject(data, "--data")
 	if err != nil {
 		return nil, err
 	}
 	if docData == nil {
-		return nil, fmt.Errorf("--data 必填（共享更新数据 JSON 对象）")
+		return nil, fmt.Errorf("--data is required (shared update data JSON object)")
 	}
 	req := map[string]any{
 		"databaseId":   databaseID,
@@ -852,17 +852,17 @@ func buildBulkUpdateDocumentsReq(databaseID, collectionID, documentIDs, data, pe
 // buildBulkDeleteDocumentsReq 构造 BulkDeleteDocumentsRequest JSON map。
 func buildBulkDeleteDocumentsReq(databaseID, collectionID, documentIDs string) (map[string]any, error) {
 	if databaseID == "" {
-		return nil, fmt.Errorf("缺少 database-id")
+		return nil, fmt.Errorf("missing database-id")
 	}
 	if collectionID == "" {
-		return nil, fmt.Errorf("缺少 collection-id")
+		return nil, fmt.Errorf("missing collection-id")
 	}
 	ids, err := jsonStringList(documentIDs, "--document-ids")
 	if err != nil {
 		return nil, err
 	}
 	if len(ids) == 0 {
-		return nil, fmt.Errorf("--document-ids 必填")
+		return nil, fmt.Errorf("--document-ids is required")
 	}
 	return map[string]any{
 		"databaseId":   databaseID,

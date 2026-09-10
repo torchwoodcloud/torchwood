@@ -38,12 +38,12 @@ const adminJWTSecretFlagEnv = "TORCHWOOD_SECURITY_JWT_SECRET"
 func newAdminSyncRolesSigCmd() *verb {
 	var dsn string
 	var jwtSecret string
-	return newVerb(nil, "sync-roles-sig", "roles 签名密钥落库 tw_secrets（部署期 owner 作业，B15）", "admin sync-roles-sig",
+	return newVerb(nil, "sync-roles-sig", "persist the roles signing key into tw_secrets (deployment-time owner job, B15)", "admin sync-roles-sig",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&dsn, "dsn", os.Getenv(adminDBFlagDsn),
-				"Postgres DSN（owner/引导账号，非运行态 authenticator；缺省读 "+adminDBFlagDsn+"）")
+				"Postgres DSN (owner/bootstrap account, not the runtime authenticator; defaults to "+adminDBFlagDsn+")")
 			fs.StringVar(&jwtSecret, "jwt-secret", os.Getenv(adminJWTSecretFlagEnv),
-				"主密钥 security.jwt.secret（须与运行态一致；缺省读 "+adminJWTSecretFlagEnv+"）")
+				"master key security.jwt.secret (must match the runtime value; defaults to "+adminJWTSecretFlagEnv+")")
 		},
 		func(v *verb, env *commands.Environment, _ []string) error {
 			secret := strings.TrimSpace(jwtSecret)

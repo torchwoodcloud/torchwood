@@ -12,18 +12,18 @@ import (
 func newRPCCmd(g *globalFlags) *verb {
 	var data string
 	return newVerb(g, "rpc",
-		"通用调用：按完整 gRPC 方法名调用任意 Server API 方法（逃生舱）",
+		"generic call: invoke any Server API method by full gRPC method name (escape hatch)",
 		`rpc <full-method> [--data '<json>']
 
-按完整 gRPC 方法名调用 Server API 的任意 unary 方法（APIKeysService 除外——
-API Key 凭证被服务端禁止调用）。--data 为请求的 protojson（camelCase 字段名，
-可省略字段）。
+Invoke any unary Server API method by its full gRPC method name (except
+APIKeysService — API key credentials are forbidden by the server). --data
+is the request protojson (camelCase field names, fields optional).
 
-示例：
+Examples:
   torchwood rpc /torchwood.server.v1.UsersService/ListUsers --data '{"pageSize": 10}'
   torchwood rpc /torchwood.server.v1.HealthService/Check`,
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&data, "data", "", "请求 JSON（protojson，camelCase 字段名）")
+			fs.StringVar(&data, "data", "", "request JSON (protojson, camelCase field names)")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {

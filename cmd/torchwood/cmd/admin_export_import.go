@@ -60,15 +60,15 @@ func openAdminProjectDB(dsn string) (*clients.Database, func(), error) {
 
 func newAdminExportCmd() *verb {
 	var projectID, outDir, dsn string
-	return newVerb(nil, "export", "导出项目文档面（catalog 快照 + 集合 NDJSON + snapshot_seq，转出 POC B5）", "admin export --project <id> --out <dir>",
+	return newVerb(nil, "export", "export a project's document plane (catalog snapshot + collection NDJSON + snapshot_seq, exit POC B5)", "admin export --project <id> --out <dir>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&projectID, "project", "", "项目 ID（必填）")
-			fs.StringVar(&outDir, "out", "", "导出目录（必填，写入 manifest.json 与 data/*.ndjson）")
-			fs.StringVar(&dsn, "dsn", os.Getenv(adminDBFlagDsn), "Postgres DSN（缺省读 "+adminDBFlagDsn+"）")
+			fs.StringVar(&projectID, "project", "", "project ID (required)")
+			fs.StringVar(&outDir, "out", "", "output directory (required, writes manifest.json and data/*.ndjson)")
+			fs.StringVar(&dsn, "dsn", os.Getenv(adminDBFlagDsn), "Postgres DSN (defaults to "+adminDBFlagDsn+")")
 		},
 		func(v *verb, env *commands.Environment, _ []string) error {
 			if projectID == "" || outDir == "" {
-				return fmt.Errorf("--project 与 --out 必填")
+				return fmt.Errorf("--project and --out are required")
 			}
 			db, closeDB, err := openAdminProjectDB(dsn)
 			if err != nil {
@@ -83,23 +83,23 @@ func newAdminExportCmd() *verb {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(env.Stderr, "导出完成：%d 库 / %d 集合 → %s\n", len(manifest.Databases), len(manifest.Collections), outDir)
-			fmt.Fprintf(env.Stderr, "snapshot_seq=%d；增量续接：:changes?since_seq=%d\n", manifest.SnapshotSeq, manifest.SnapshotSeq)
+			fmt.Fprintf(env.Stderr, "export finished: %d databases / %d collections -> %s\n", len(manifest.Databases), len(manifest.Collections), outDir)
+			fmt.Fprintf(env.Stderr, "snapshot_seq=%d; incremental resume: :changes?since_seq=%d\n", manifest.SnapshotSeq, manifest.SnapshotSeq)
 			return printJSON(env.Stdout, out)
 		})
 }
 
 func newAdminImportCmd() *verb {
 	var projectID, inDir, dsn string
-	return newVerb(nil, "import", "导入项目文档面（catalog 重建 + 行保真导入，转出 POC B5）", "admin import --project <id> --in <dir>",
+	return newVerb(nil, "import", "import a project's document plane (catalog rebuild + row-faithful import, exit POC B5)", "admin import --project <id> --in <dir>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&projectID, "project", "", "项目 ID（必填，须与导出时一致）")
-			fs.StringVar(&inDir, "in", "", "导入目录（必填，须含 manifest.json）")
-			fs.StringVar(&dsn, "dsn", os.Getenv(adminDBFlagDsn), "Postgres DSN（缺省读 "+adminDBFlagDsn+"）")
+			fs.StringVar(&projectID, "project", "", "project ID (required, must match the export)")
+			fs.StringVar(&inDir, "in", "", "input directory (required, must contain manifest.json)")
+			fs.StringVar(&dsn, "dsn", os.Getenv(adminDBFlagDsn), "Postgres DSN (defaults to "+adminDBFlagDsn+")")
 		},
 		func(v *verb, env *commands.Environment, _ []string) error {
 			if projectID == "" || inDir == "" {
-				return fmt.Errorf("--project 与 --in 必填")
+				return fmt.Errorf("--project and --in are required")
 			}
 			db, closeDB, err := openAdminProjectDB(dsn)
 			if err != nil {
@@ -114,7 +114,7 @@ func newAdminImportCmd() *verb {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(env.Stderr, "导入完成：%d 库 / %d 集合 / %d 行\n",
+			fmt.Fprintf(env.Stderr, "import finished: %d databases / %d collections / %d rows\n",
 				len(report.DatabasesRestored), len(report.CollectionsRestored), report.RowsImported)
 			fmt.Fprintln(env.Stderr, report.ResumeHint)
 			return printJSON(env.Stdout, out)

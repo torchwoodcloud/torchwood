@@ -24,10 +24,10 @@ func TestBuildCreateBucketReq(t *testing.T) {
 		public      bool
 		wantErr     string
 	}{
-		{name: "缺 name", wantErr: "--name 必填"},
+		{name: "缺 name", wantErr: "--name is required"},
 		{name: "最小字段", bucketName: "assets", wantErr: ""},
 		{name: "公开桶", bucketName: "assets", public: true, permissions: `["read(\"all\")"]`, wantErr: ""},
-		{name: "permissions 非法", bucketName: "assets", permissions: `x`, wantErr: "--permissions 解析失败"},
+		{name: "permissions 非法", bucketName: "assets", permissions: `x`, wantErr: "failed to parse --permissions"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -59,7 +59,7 @@ func TestBuildUpdateBucketReq(t *testing.T) {
 		set     map[string]string
 		wantErr string
 	}{
-		{name: "缺 id", wantErr: "缺少存储桶 ID"},
+		{name: "缺 id", wantErr: "missing bucket id"},
 		{name: "仅改名", id: "b1", newName: "new", set: map[string]string{"name": "new"}, wantErr: ""},
 		{name: "仅 public", id: "b1", set: map[string]string{"public": "true"}, wantErr: ""},
 		{name: "全字段", id: "b1", newName: "new", set: map[string]string{"name": "new", "public": "false"}, wantErr: ""},
@@ -101,13 +101,13 @@ func TestBuildUpdateFileReq(t *testing.T) {
 		set      map[string]string
 		wantErr  string
 	}{
-		{name: "无可更新字段", bucketID: "b1", fileID: "f1", wantErr: "--name/--mime-type/--metadata 至少提供一个"},
+		{name: "无可更新字段", bucketID: "b1", fileID: "f1", wantErr: "provide at least one of --name/--mime-type/--metadata"},
 		{name: "仅改名", bucketID: "b1", fileID: "f1", fileName: "new.png", set: map[string]string{"name": "new.png"}, wantErr: ""},
 		{name: "仅 metadata", bucketID: "b1", fileID: "f1", metadata: `{"author":"x"}`,
 			set: map[string]string{"metadata": `{"author":"x"}`}, wantErr: ""},
 		{name: "全字段", bucketID: "b1", fileID: "f1", fileName: "new.png", mimeType: "image/png",
 			metadata: `{"author":"x"}`, set: map[string]string{"name": "new.png", "mime-type": "image/png", "metadata": `{"author":"x"}`}, wantErr: ""},
-		{name: "metadata 非法", bucketID: "b1", fileID: "f1", metadata: `[1]`, set: map[string]string{"metadata": `[1]`}, wantErr: "--metadata 解析失败"},
+		{name: "metadata 非法", bucketID: "b1", fileID: "f1", metadata: `[1]`, set: map[string]string{"metadata": `[1]`}, wantErr: "failed to parse --metadata"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
