@@ -15,14 +15,15 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        # 与 docker/local/docker-compose.yml 对齐：pgvector 0.8.6 + PG18
-        # （vector 列 + HNSW 索引，iterative scan 需 ≥0.8）。locale=C 对齐
-        # 原 alpine 镜像的排序语义（Debian 基座默认 en_US.utf8）。
-        # locale=C 时 initdb 默认服务端编码是 SQL_ASCII，而 pgdriver（bun
-        # ≥1.2.16）握手期校验 ParameterStatus，client_encoding≠UTF8 直接拒
-        # 连，故必须显式 --encoding=UTF8（与本地 compose 同款；编码只在首
-        # 次 initdb 生效，CI 每轮全新容器必踩）。
-        image: pgvector/pgvector:0.8.6-pg18
+        # 与 docker/local/docker-compose.yml 对齐：Percona Distribution for
+        # PostgreSQL 18（内置 pgvector 0.8.3，≥0.8 满足 iterative scan 契约）。
+        # 曾用 pgvector/pgvector:0.8.6-pg18——iterative scan 行为与 0.8.3 有
+        # 差异（HNSW 高 ef 召回反而空结果，vector_ef_search 单调性断言
+        # CI 必败本地绿），且 locale=C 时 initdb 默认服务端编码是 SQL_ASCII，
+        # pgdriver（bun ≥1.2.16）握手期校验 client_encoding=UTF8 直接拒连，
+        # 故必须显式 --encoding=UTF8（编码只在首次 initdb 生效，CI 每轮全新
+        # 容器必踩）。
+        image: percona/percona-distribution-postgresql:18
         env:
           POSTGRES_USER: torchwood
           POSTGRES_PASSWORD: torchwood
