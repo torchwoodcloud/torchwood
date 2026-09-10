@@ -1,7 +1,7 @@
 # AGENTS 指南
 
 ## 总体说明
-- 本仓库使用 Lynx + Clean Architecture：`internal/api`（传输层）、`internal/app`（用例层）、`internal/domain`（领域与端口）、`internal/infra`（适配器层）。目录约定：`internal/` = 四层 + 业务共享内核 `internal/pkg/`（`config`/`contexts`/`bootkit`/`testutil`）；`pkg/` = 通用可复用库（`buildinfo`/`query`/`crud` 等）；server 专属运行时装配在 `cmd/server/internal/runtime`；函数分发器实现为仓库根顶层包 `functionsdispatcher/`（入口 `cmd/functions-dispatcher`）。
+- 本仓库使用 Lynx + Clean Architecture：`internal/api`（传输层）、`internal/app`（用例层）、`internal/domain`（领域与端口）、`internal/infra`（适配器层）。目录约定：`internal/` = 四层 + 业务共享内核 `internal/pkg/`（`config`/`contexts`/`bootkit`/`testutil`）；`pkg/` = 通用可复用库（`buildinfo`/`query`/`crud` 等）；server 专属运行时装配在 `cmd/server/internal/runtime`；仓库根顶层组件包：`functionsdispatcher/`（函数分发器，入口 `cmd/functions-dispatcher`）、`worker/`（后台作业实现，入口 `cmd/worker` 只留 main + Wire 装配骨架）。
 - Torchwood 产品定位包含 **AI/Agent-Native**：Protobuf + OpenAPI 定义可机器读取的 API；Server API 通过 scoped API Key 供 Agent/自动化调用；详见 `docs/roadmap.md` §0 与 `sdk/README.md`。
 - 运行时组合通过 Wire 注入：`cmd/server/provides.go` -> `cmd/server/wire_gen.go`。
 - 服务器组件由 `cmd/server/provides.go` 启动，包含 gRPC、grpc-gateway、独立 HTTP handler、metrics、Admin Console SPA。

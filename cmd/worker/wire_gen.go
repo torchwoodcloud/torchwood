@@ -25,6 +25,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/realtime"
 	"github.com/torchwoodcloud/torchwood/internal/infra/storage"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/bootkit"
+	"github.com/torchwoodcloud/torchwood/worker"
 )
 
 // Injectors from wire.go:
@@ -61,7 +62,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	redisExecutionTokenService := functions.NewRedisExecutionTokenService(client)
 	triggerRepo := bunrepo.NewFunctionTriggerRepository(database)
 	functionsFunctions := functions2.NewFunctionsWithUsage(appConfig, executor, functionRepo, sharedQueue, redisCounter, repository, semaphores, redisExecutionTokenService, triggerRepo)
-	worker := NewWorker(functionsFunctions, sharedQueue, logger)
+	workerWorker := worker.NewWorker(functionsFunctions, sharedQueue, logger)
 	objectStore, err := storage.NewMinioObjectStore(appConfig)
 	if err != nil {
 		cleanup()
@@ -72,11 +73,11 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	fileRepository := bunrepo.NewFileRepository(database)
 	v := NewStorageOptions()
 	storageStorage := storage2.NewStorage(appConfig, repository, objectStore, uploadSessionStore, bucketRepository, fileRepository, v...)
-	mainChunkCleaner := NewChunkCleaner(storageStorage, logger)
-	streamTrimmer := NewStreamTrimmer(sharedQueue, logger)
+	chunkCleaner := worker.NewChunkCleaner(storageStorage, logger)
+	streamTrimmer := worker.NewStreamTrimmer(sharedQueue, logger)
 	realtimeTransport := realtime.NewStreamTransport(client)
 	outboxWorker := events.NewOutboxWorker(database, realtimeTransport, logger)
-	outboxWorkerService := NewOutboxWorkerService(outboxWorker, logger)
+	outboxWorkerService := worker.NewOutboxWorkerService(outboxWorker, logger)
 	orderRepo := bunrepo.NewPaymentOrderRepository(database)
 	callbackEventRepo := bunrepo.NewPaymentCallbackEventRepository(database)
 	fulfillmentRepo := bunrepo.NewPaymentFulfillmentRepository(database)
@@ -96,14 +97,14 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	subscriptionsSubscriptions := subscriptions.NewSubscriptions(appConfig, database, planRepo, subscriptionRepo, assetsAssets, orderRepo, registry, adapter, eventOutbox, logger, repository, providerIndexRepo)
 	fulfiller := subscriptions.NewOrderFulfiller(assetsAssets, subscriptionsSubscriptions)
 	paymentsPayments := payments2.NewPayments(appConfig, database, orderRepo, callbackEventRepo, fulfillmentRepo, fulfiller, registry, eventOutbox, logger, subscriptionsSubscriptions, repository, providerIndexRepo)
-	paymentCloser := NewPaymentCloser(paymentsPayments, logger)
-	assetExpirer := NewAssetExpirer(assetsAssets, logger)
-	subscriptionBiller := NewSubscriptionBiller(subscriptionsSubscriptions, logger)
+	paymentCloser := worker.NewPaymentCloser(paymentsPayments, logger)
+	assetExpirer := worker.NewAssetExpirer(assetsAssets, logger)
+	subscriptionBiller := worker.NewSubscriptionBiller(subscriptionsSubscriptions, logger)
 	usageRepo := bunrepo.NewUsageRepository(database)
 	statementRepo := bunrepo.NewBillingStatementRepository(database)
 	billingBilling := billing2.NewBilling(redisCounter, usageRepo, statementRepo, repository, fileRepository, logger)
-	usageRollupWorker := NewUsageRollupWorker(billingBilling, logger)
-	v2 := NewComponents(worker, mainChunkCleaner, streamTrimmer, outboxWorkerService, paymentCloser, assetExpirer, subscriptionBiller, usageRollupWorker)
+	usageRollupWorker := worker.NewUsageRollupWorker(billingBilling, logger)
+	v2 := NewComponents(workerWorker, chunkCleaner, streamTrimmer, outboxWorkerService, paymentCloser, assetExpirer, subscriptionBiller, usageRollupWorker)
 	v3 := bootkit.NewComponentBuilders()
 	bootstrap := boot.New(onStartHooks, onStopHooks, v2, v3)
 	return bootstrap, func() {

@@ -149,7 +149,7 @@ defer release()
 - cron 调度循环（P1，`worker.go cronLoop`）：每分钟 `DispatchDueCronTriggers(now, 100)` 领取到期 cron 触发器并入队异步执行（见 §12.5）。
 - 优雅退出：`Stop` 取消 `BRPOP` 上下文。
 
-`StreamTrimmer`（`cmd/worker/trimmer.go:14`）：每 10min `XTRIM APPROX torchwood:queue:functions-executions MAXLEN 100000`（`XADD` 不设 `MaxLen` 保未投递，裁剪低频 `Trim`，`context.WithTimeout(10s, WithoutCancel)`）。
+`StreamTrimmer`（`worker/trimmer.go:14`）：每 10min `XTRIM APPROX torchwood:queue:functions-executions MAXLEN 100000`（`XADD` 不设 `MaxLen` 保未投递，裁剪低频 `Trim`，`context.WithTimeout(10s, WithoutCancel)`）。
 
 ## 7 per-statement 超时（Functions 侧）
 
@@ -199,7 +199,7 @@ TORCHWOOD_RUN_DOCKER_TESTS=1 go test ./internal/infra/functions -run TestDockerB
 
 - 单元：`internal/app/functions/functions_test.go`/`executions_test.go`/`mocks_test.go`（`maxConcurrentBuilds/Runs`、截断、队列 payload 校验、`RequireServerPrincipal` 分支）；`internal/infra/queue/redis_queue_test.go`（`LPUSH/BRPOP`、`Trim`）。
 - 安全：`security_test.go` 校验代码包 `zip slip`/符号链接/size 上限；`authz_test.go` 校验写方法鉴权；`semaphore_test.go` 校验 `SETNX+Lua` 互斥。
-- 集成：`internal/infra/functions/docker_integration_test.go`（`TORCHWOOD_RUN_DOCKER_TESTS=1`，CI 预拉 `node:18-alpine`/`python:3.11-alpine`）；`cmd/worker/consume_test.go` / `requeue_test.go`（`attempt` 持久化、死信未落、`Transition` CAS）。
+- 集成：`internal/infra/functions/docker_integration_test.go`（`TORCHWOOD_RUN_DOCKER_TESTS=1`，CI 预拉 `node:18-alpine`/`python:3.11-alpine`）；`worker/consume_test.go` / `worker/requeue_test.go`（`attempt` 持久化、死信未落、`Transition` CAS）。
 - 未落地：独立构建队列（`CreateDeployment` 同步构建，Worker 消费前补构建兜底）；重试无死信队列（超限 `FailExecutionIfActive`）；变量明文；`entrypoint` 固定入口；多机需对象存储承载 zip。
 
 ## 12 触发器（P1：HTTP + cron，设计 `functions-execution-identity-and-triggers.md` §3）
@@ -235,7 +235,7 @@ TORCHWOOD_RUN_DOCKER_TESTS=1 go test ./internal/infra/functions -run TestDockerB
 ### 12.2 cron 触发器
 
 - 表达式：5 字段（分 时 日 月 周），**UTC**（K10；触发器级时区后置）；支持 `* , - /` 与数字；周 0-7 且 7≡0（周日）；越界一律解析报错（fail-closed）。解析器自实现于 `internal/domain/functions/cronexpr.go`（零第三方依赖），语义对齐 vixie cron：DOM 与 DOW 均受限时取并集。
-- 调度：worker 每分钟 ticker（`cmd/worker/worker.go cronLoop`）→ `DispatchDueCronTriggers(now, 100)`：按 active 项目轮转扫描（镜像孤儿恢复模式）→ `ClaimDueCron` 原子领取。
+- 调度：worker 每分钟 ticker（`worker/worker.go cronLoop`）→ `DispatchDueCronTriggers(now, 100)`：按 active 项目轮转扫描（镜像孤儿恢复模式）→ `ClaimDueCron` 原子领取。
 - **先 CAS 后入队（红线）**：候选无锁扫描后逐条 `UPDATE ... SET next_run_at=新 WHERE id=$1 AND next_run_at=旧` 判 rows=1——多实例并发只有赢家（先入队后 CAS 在多实例下双入队；执行行 queued→building 的 CAS 防不了两条不同 execution）。推进目标恒 `> now`（否则下一轮扫描立即重复领取）。
 - **misfire 语义**（默认 `catch_up_once`）：错过（到期早于 now-90s 宽限）时 `next_run_at` 直接推进到 now 之后的下一计划时刻——宕机 N 个周期只补跑 1 次（风暴由异步通道 + 信号量兜底，**异步路径无队列深度上限，run 信号量兜底**）；`skip` 同样推进但不补跑。入队失败把 `next_run_at` 回滚到原到期值（best-effort），下轮扫描按 catch_up 语义重领。
 - 入队 data 为 `{"type":"cron","trigger_id":"...","scheduled_for":"<RFC3339>"}`——`scheduled_for` 是函数做幂等键的推荐来源。

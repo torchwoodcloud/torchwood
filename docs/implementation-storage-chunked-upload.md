@@ -144,7 +144,7 @@ func (m *minioObjectStore) Compose(ctx context.Context, bucket, dstKey string, s
   不要依赖 ctx 取消中断该阶段（可接受）。
 - 分片对象 key：`objectKey(projectID, bucketID, fileID) + "/chunks/{partNumber:03d}"`。
 
-**`internal/testutil/memstore.go`** 追加 `Compose`（按序拼接字节写 dstKey，无
+**`internal/pkg/testutil/memstore.go`** 追加 `Compose`（按序拼接字节写 dstKey，无
 5MiB/10000 约束——测试语义）。
 
 **`internal/infra/storage/redis_upload_session.go`**（新建）：

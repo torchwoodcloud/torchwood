@@ -143,7 +143,7 @@ func (c *Checkers) Details(ctx context.Context) []DependencyStatus
 
 ### 3.2 版本端点与 ldflags
 
-- **BuildInfo 类型必须放 `internal/pkg/buildinfo/buildinfo.go`**（评审修正：cmd/server
+- **BuildInfo 类型必须放 `pkg/buildinfo/buildinfo.go`**（评审修正：cmd/server
   是 package main，api 层无法 import 其类型）：
 
 ```go
@@ -192,7 +192,7 @@ DATE:
 - **统一 logger 注入**：
   - `file_handler.go:63`、`functions_handler.go:47`：构造函数增加 `logger *slog.Logger`
     参数，删除 `slog.Default()`。
-  - **`cmd/worker/worker.go:39`**：`NewWorker` 增加 logger 参数（评审补充——方案 v1 遗漏）。
+  - **`worker/worker.go:39`**：`NewWorker` 增加 logger 参数（评审补充——方案 v1 遗漏）。
   - `pkg/grpc/interceptor/jwt.go:41`：**复用现成 `WithLogger(l)` 链式方法**
     （jwt.go:56-61），在 `internal/infra/server/grpc.go:71` 处
     `.WithLogger(app.Logger())`——不改签名、不动 wire。
@@ -327,7 +327,7 @@ func (h *SlowQueryHook) AfterQuery(ctx context.Context, e *bun.QueryEvent) {
    nil）——不要用类型断言（minioObjectStore 未导出，断言必失败）。
 6. **Check 响应兼容**：`dependencies` 为 proto3 追加字段；`status` 保持 `ok`/`unavailable`
    （200 语义），503 由 readiness 承担；gRPC 不可达时 gateway 503 属进程级故障路径。
-7. **BuildInfo 包位置**：类型必须放 `internal/pkg/buildinfo`（package main 无法被 api
+7. **BuildInfo 包位置**：类型必须放 `pkg/buildinfo`（package main 无法被 api
    层 import）。
 8. **hook 挂载点**：`newDatabase`（database.go:58）内、`NewDataClients(cfg, logger)` 链；
    `NewDatabase` 访问器不动；testutil 不受影响。

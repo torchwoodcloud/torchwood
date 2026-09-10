@@ -237,7 +237,7 @@ torchwood rpc <full-method> [--data '<json>']   # 逃生舱：覆盖全部 83 �
 ### 4.6 测试
 
 - 单元测试：各命令的「flag → request message」构造函数（table-driven），`rpc` 的 method 注册表完整性（遍历注册表，确认每个方法都能构造请求类型）。
-- 集成测试（可选，`internal/testutil` 或起真实 server）：用 bootstrap 得到的 key 跑 `health get` 与 `users list` 冒烟。
+- 集成测试（可选，`internal/pkg/testutil` 或起真实 server）：用 bootstrap 得到的 key 跑 `health get` 与 `users list` 冒烟。
 
 ## 5. 实施拆分（分派 prompt）
 

@@ -27,6 +27,7 @@ import (
 	infrastorage "github.com/torchwoodcloud/torchwood/internal/infra/storage"
 	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/uow"
+	workerpkg "github.com/torchwoodcloud/torchwood/worker"
 )
 
 //go:generate wire
@@ -57,15 +58,10 @@ var ProviderSet = wire.NewSet(
 	NewSchemaReconcileHook,
 	NewAppConfig,
 	NewComponents,
-	NewWorker,
-	NewChunkCleaner,
-	NewStreamTrimmer,
-	NewOutboxWorkerService,
-	NewPaymentCloser,
-	NewAssetExpirer,
-	NewSubscriptionBiller,
-	NewUsageRollupWorker,
-	wire.Bind(new(chunkCleaner), new(*appstorage.Storage)),
+	workerpkg.ProviderSet,
+	// OrphanChunkCleaner（worker 包导出的清理端口）绑定到 app 层 Storage
+	// 实现；Bind 须与具体类型 provider 同集求值，故留在此处。
+	wire.Bind(new(workerpkg.OrphanChunkCleaner), new(*appstorage.Storage)),
 
 	clients.NewDataClients,
 	clients.NewDatabase,
@@ -153,7 +149,7 @@ func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 	return &c, nil
 }
 
-func NewComponents(worker *Worker, cleaner *ChunkCleaner, trimmer *StreamTrimmer, outbox *OutboxWorkerService, paymentCloser *PaymentCloser, assetExpirer *AssetExpirer, subscriptionBiller *SubscriptionBiller, usageRollup *UsageRollupWorker) []lynx.Service {
+func NewComponents(worker *workerpkg.Worker, cleaner *workerpkg.ChunkCleaner, trimmer *workerpkg.StreamTrimmer, outbox *workerpkg.OutboxWorkerService, paymentCloser *workerpkg.PaymentCloser, assetExpirer *workerpkg.AssetExpirer, subscriptionBiller *workerpkg.SubscriptionBiller, usageRollup *workerpkg.UsageRollupWorker) []lynx.Service {
 	return []lynx.Service{worker, cleaner, trimmer, outbox, paymentCloser, assetExpirer, subscriptionBiller, usageRollup}
 }
 

@@ -1,4 +1,4 @@
-package main
+package worker
 
 import (
 	"context"
@@ -8,9 +8,10 @@ import (
 	"github.com/lynx-go/lynx"
 )
 
-// chunkCleaner 抽象 Storage 的孤儿分片清理能力（wire 绑定到
-// *storage.Storage；测试可用 fake 替换）。
-type chunkCleaner interface {
+// OrphanChunkCleaner 抽象 Storage 的孤儿分片清理能力（wire 绑定到
+// *storage.Storage；测试可用 fake 替换）。导出是为了 cmd/worker 装配处
+// 跨包 wire.Bind。
+type OrphanChunkCleaner interface {
 	CleanupOrphanChunks(ctx context.Context) (int, error)
 }
 
@@ -23,14 +24,14 @@ const chunkCleanerInitialDelay = time.Minute
 // ChunkCleaner 周期清理孤儿分片对象（会话过期/abort/complete 删除失败残留，
 // 见 internal/app/storage/cleanup.go 的 CleanupOrphanChunks，48h 阈值）。
 type ChunkCleaner struct {
-	cleaner      chunkCleaner
+	cleaner      OrphanChunkCleaner
 	logger       *slog.Logger
 	interval     time.Duration
 	initialDelay time.Duration
 }
 
 // NewChunkCleaner creates the orphan chunk cleanup service.
-func NewChunkCleaner(cleaner chunkCleaner, logger *slog.Logger) *ChunkCleaner {
+func NewChunkCleaner(cleaner OrphanChunkCleaner, logger *slog.Logger) *ChunkCleaner {
 	if logger == nil {
 		logger = slog.Default()
 	}

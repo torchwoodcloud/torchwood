@@ -32,7 +32,7 @@ P1 MVP 已交付用户 collection 的文档 CRUD / Increment / Bulk / Upsert，�
 | 乐观并发 | **无**。`UPDATE … WHERE _id = ? AND _tenant = ?`，后写覆盖 | `updateDocument` L769–777 |
 | 系统列 | `_id` `_tenant` `_created_at` `_updated_at` `_created_by` `_updated_by` | `createCollectionTable` L1330–1356 |
 | 系统 vs 用户集合 | `databases.IsSystemCollection` = `databaseID=="default"` 且 id ∈ `{users,sessions,identities,groups,memberships,buckets,files}`；元数据列 `document_collections.is_system` | `internal/domain/databases/system_collections.go`；migration `000009` |
-| 事件 / Queue | `shared.Queue` 只服务 Functions：`torchwood:queue:functions-executions`（Redis List BRPOP） | `internal/domain/shared/ports.go`；`cmd/worker/worker.go` |
+| 事件 / Queue | `shared.Queue` 只服务 Functions：`torchwood:queue:functions-executions`（Redis List BRPOP） | `internal/domain/shared/ports.go`；`worker/worker.go` |
 | HTTP mux | grpc-gateway + File/OAuth/Functions handler + `/console/` 前缀分流 | `internal/infra/server/grpc_gateway.go` `NewGRPCGatewayServer` |
 | Document proto | `id=1 data=2 created_at=3 updated_at=4 permissions=5`，**无 version** | 两边 `databases.proto` |
 | Console 保存 | `updateDocument` 只发 `data`/`increment`，删除无 query | `console/src/routes/databases/pages.tsx` L1676；`console/src/api/databases.ts` L240–264 |
@@ -1692,7 +1692,7 @@ Go Client 对等。不把 Realtime 放进 Server SDK（API Key 不能连）。
 - `cmd/torchwood/cmd/databases.go`
 - `pkg/jwtparser/jwt.go`
 - `pkg/idgen/ulid.go`
-- `cmd/worker/{worker.go,provides.go}`
+- `worker/worker.go`、`cmd/worker/provides.go`
 - `console/src/routes/databases/{pages.tsx,CollectionLayout.tsx}`
 - `console/src/api/databases.ts`
 - `sdk/typescript/src/{types.ts,client/databases.ts}`
