@@ -152,7 +152,9 @@ func TestIntegration_DispatcherBuildSpawnDispatch(t *testing.T) {
 	require.NoError(t, err)
 
 	// 收尾：清空池（idle 回收在 TTL 之前主动触发，避免测试容器残留）。
-	pool.DrainForDeployment(ctx, "p", "fnit", "none", 5*time.Second)
+	// ProjectID 必须与执行请求一致（曾误写 "p"——drain 扫不到实际池，
+	// 实例残留致 ResidentTotal 清零断言失败）。
+	pool.DrainForDeployment(ctx, req.ProjectID, req.FunctionID, "none", 5*time.Second)
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		if pool.ResidentTotal() == 0 {
