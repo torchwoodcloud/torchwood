@@ -65,7 +65,9 @@ func (s *Service) Start(ctx context.Context) error {
 	s.cancel = cancel
 	s.mu.Unlock()
 
-	ln, err := net.Listen("tcp", s.http.Addr)
+	// ListenConfig.Listen（noctx）：ctx 取消即关监听，与 Stop 的 http.Shutdown
+	// 双保险收口。
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", s.http.Addr)
 	if err != nil {
 		cancel()
 		return err

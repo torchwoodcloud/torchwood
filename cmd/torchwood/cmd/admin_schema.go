@@ -48,10 +48,10 @@ func newAdminSchemaRepairCmd() *verb {
 				return err
 			}
 			if dryRun {
-				fmt.Fprintf(env.Stderr, "drift scan (dry-run, not repaired): %d collections / %d items detected / %d failed\n",
+				_, _ = fmt.Fprintf(env.Stderr, "drift scan (dry-run, not repaired): %d collections / %d items detected / %d failed\n",
 					report.Scanned, len(report.Items), report.Failed)
 			} else {
-				fmt.Fprintf(env.Stderr, "drift repair finished: %d collections / %d items fixed / %d failed\n",
+				_, _ = fmt.Fprintf(env.Stderr, "drift repair finished: %d collections / %d items fixed / %d failed\n",
 					report.Scanned, report.Fixed, report.Failed)
 			}
 			return printJSON(env.Stdout, out)

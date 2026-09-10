@@ -11,6 +11,9 @@ import (
 // triggerIPWindowScript 原子执行 INCR + 首次 EXPIRE 并返回 [count, ttl]
 // （与 infra/auth ratelimit_redis 同一固定窗口模式；拒绝时 ttl 即窗口剩余
 // 秒数，供 Retry-After）。崩溃安全：不存在「计数已增但 TTL 未设」中间态。
+// triggerIPWindowScript 原子执行 INCR + 首次 EXPIRE 并返回 [count, ttl]
+// （与 infra/auth ratelimit_redis 同一固定窗口模式；拒绝时 ttl 即窗口剩余
+// 秒数，供 Retry-After）。崩溃安全：不存在「计数已增但 TTL 未设」中间态。
 const triggerIPWindowScript = `
 local count = redis.call('INCR', KEYS[1])
 if count == 1 then

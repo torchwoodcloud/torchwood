@@ -326,10 +326,11 @@ func (d *dockerDaemon) BuildImage(ctx context.Context, functionID, deploymentID 
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(buildDir, runner.RunnerFileName), runner.NodeRunnerJS(), 0o644); err != nil {
+	// 构建产物（runner 脚本 + Dockerfile）非机密，仅 daemon 同用户读取，0o600 收紧。
+	if err := os.WriteFile(filepath.Join(buildDir, runner.RunnerFileName), runner.NodeRunnerJS(), 0o600); err != nil {
 		return fmt.Errorf("write runner: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(buildDir, "Dockerfile"), []byte(dockerfile), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(buildDir, "Dockerfile"), []byte(dockerfile), 0o600); err != nil {
 		return fmt.Errorf("write dockerfile: %w", err)
 	}
 
@@ -399,7 +400,7 @@ func tarDir(dir string) (io.Reader, error) {
 			return err
 		}
 		if !d.IsDir() {
-			f, err := os.Open(path)
+			f, err := os.Open(path) // #nosec G304 -- path 由 WalkDir 从自有构建目录枚举（非用户输入）
 			if err != nil {
 				return err
 			}

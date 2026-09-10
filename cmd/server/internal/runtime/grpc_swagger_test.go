@@ -224,7 +224,7 @@ func TestSwaggerPropertyNamesAreSnakeCase(t *testing.T) {
 			if i == 0 && ch >= '0' && ch <= '9' {
 				return false
 			}
-			if !(ch == '_' || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
+			if ch != '_' && (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') {
 				return false
 			}
 		}

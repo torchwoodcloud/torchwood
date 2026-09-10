@@ -256,7 +256,7 @@ type idemRepo struct {
 
 func (r *idemRepo) CreateExecution(_ context.Context, e *domainfunctions.ExecutionRecord) error {
 	if e.ClientIdempotencyKey != "" {
-		for _, existing := range r.mockRepo.executions {
+		for _, existing := range r.executions {
 			if existing.ProjectID == e.ProjectID && existing.FunctionID == e.FunctionID &&
 				existing.InvokingUserID == e.InvokingUserID && existing.ClientIdempotencyKey == e.ClientIdempotencyKey {
 				return domainfunctions.ErrExecutionIdempotencyConflict

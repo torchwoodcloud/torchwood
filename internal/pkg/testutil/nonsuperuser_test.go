@@ -161,7 +161,7 @@ func TestNonSuperuserAuthenticator_MigrateAndSmoke(t *testing.T) {
 		memberships = append(memberships, name)
 	}
 	require.NoError(t, rows.Err())
-	require.NoError(t, rows.Close())
+	defer func() { require.NoError(t, rows.Close()) }()
 	require.Equal(t, []string{"tw_app", "tw_owner", "tw_system"}, memberships,
 		"authenticator 应持有 000004 三角色 membership")
 

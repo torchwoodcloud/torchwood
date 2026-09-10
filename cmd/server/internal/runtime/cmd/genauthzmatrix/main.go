@@ -18,10 +18,10 @@ func main() {
 	}
 	// 输出路径锚定仓库根（本文件位于 <root>/cmd/server/internal/runtime/cmd/genauthzmatrix）。
 	target := filepath.Join(repoRoot(), "docs", "developer", "authz-matrix.md")
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 		fail(err)
 	}
-	if err := os.WriteFile(target, payload, 0o644); err != nil {
+	if err := os.WriteFile(target, payload, 0o600); err != nil {
 		fail(err)
 	}
 	fmt.Printf("authz-matrix 文档已生成：%s（%d 字节）\n", target, len(payload))

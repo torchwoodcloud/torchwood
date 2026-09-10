@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -144,7 +145,7 @@ func TestAccount_SignUp_InviteCodeConcurrent(t *testing.T) {
 			defer wg.Done()
 			_, _, _, _, errs[i] = account.SignUp(ctx, SignUpCommand{
 				ProjectID:  projectID,
-				Email:      "race-" + string(rune('a'+i)) + "@torchwood.local",
+				Email:      fmt.Sprintf("race-%c@torchwood.local", 'a'+i),
 				Password:   "User@123",
 				InviteCode: "twi_race",
 			})

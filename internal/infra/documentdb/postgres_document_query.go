@@ -83,7 +83,7 @@ func (p *postgresDocumentDB) listDocuments(ctx context.Context, projectID, datab
 		}
 	}
 
-	filterWhere, filterArgs, orderSQL, err := buildAppwriteQuery(parsed, arrayTypesOf(coll))
+	filterWhere, filterArgs, _, err := buildAppwriteQuery(parsed, arrayTypesOf(coll))
 	if err != nil {
 		return nil, p.mapError(err)
 	}
@@ -163,7 +163,7 @@ func (p *postgresDocumentDB) listDocuments(ctx context.Context, projectID, datab
 		orderParts = append(orderParts, fmt.Sprintf("d.%s %s", quoteIdent(k.field), k.dir))
 	}
 	orderParts = append(orderParts, fmt.Sprintf("d._id %s", sortKeys[0].dir))
-	orderSQL = "ORDER BY " + strings.Join(orderParts, ", ")
+	orderSQL := "ORDER BY " + strings.Join(orderParts, ", ")
 
 	if cursor != "" {
 		if err := validateDocID(cursor); err != nil {
@@ -600,16 +600,17 @@ func buildKeysetPredicate(sortKeys []sortKey, values []any, cursorID, cursorKind
 	}
 	// 混合方向：OR 展开。第 i 项谓词前缀是 k1..k{i-1} 的等值链；末项是
 	// _id tiebreaker（方向随首键）。占位符顺序与 args 严格对应。
+	// G602 误报：入口已断言 len(sortKeys) == len(values)，range 索引安全。
 	var terms []string
 	var outArgs []any
 	for i := range sortKeys {
 		var parts []string
 		for j := 0; j < i; j++ {
-			parts = append(parts, fmt.Sprintf("d.%s = ?", quoteIdent(sortKeys[j].field)))
-			outArgs = append(outArgs, values[j])
+			parts = append(parts, fmt.Sprintf("d.%s = ?", quoteIdent(sortKeys[j].field))) // #nosec G602 -- 入口已校验等长
+			outArgs = append(outArgs, values[j])                                          // #nosec G602 -- 入口已校验等长
 		}
-		parts = append(parts, fmt.Sprintf("d.%s %s ?", quoteIdent(sortKeys[i].field), keyOp(sortKeys[i].dir)))
-		outArgs = append(outArgs, values[i])
+		parts = append(parts, fmt.Sprintf("d.%s %s ?", quoteIdent(sortKeys[i].field), keyOp(sortKeys[i].dir))) // #nosec G602 -- range 索引
+		outArgs = append(outArgs, values[i])                                                                   // #nosec G602 -- 入口已校验等长
 		terms = append(terms, "("+strings.Join(parts, " AND ")+")")
 	}
 	var idParts []string

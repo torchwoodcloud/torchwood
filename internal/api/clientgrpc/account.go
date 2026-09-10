@@ -514,14 +514,14 @@ func (s *AccountService) ListLogs(ctx context.Context, req *clientv1.ListLogsReq
 	// P3-9：ListLogs 补分页（page_size/page_token/meta），兼容旧 limit。
 	pageSize := req.GetPageSize()
 	if pageSize == 0 {
-		pageSize = req.GetLimit()
+		pageSize = req.GetLimit() //nolint:staticcheck // SA1019：过渡期兼容旧 SDK 的 deprecated limit（proto 规范 §2）
 	}
 	params, err := s.parseLogsListParams(pageSize, req.GetPageToken())
 	if err != nil {
 		return nil, err
 	}
 	// 过度拉取以支持 offset（audit 仅支持 limit，不支持 offset，内存分页足够，limit≤100）。
-	fetchLimit := int32(params.Offset + int(params.PageSize))
+	fetchLimit := int32(params.Offset + int(params.PageSize)) // #nosec G115 -- Offset ≤ MaxQueryOffset、PageSize ≤100（crud clamp），和远小于 int32
 	if fetchLimit > 100 {
 		fetchLimit = 100
 	}

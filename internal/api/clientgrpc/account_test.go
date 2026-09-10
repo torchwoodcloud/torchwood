@@ -18,7 +18,6 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/messaging"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
-	"github.com/torchwoodcloud/torchwood/internal/domain/users"
 	domainusers "github.com/torchwoodcloud/torchwood/internal/domain/users"
 	"github.com/torchwoodcloud/torchwood/internal/infra/auth"
 	inframessaging "github.com/torchwoodcloud/torchwood/internal/infra/messaging"
@@ -257,7 +256,7 @@ var _ messaging.Mailer = (*clientgrpcCaptureMailer)(nil)
 
 type stubRoleResolver struct{}
 
-func (stubRoleResolver) LoadUserRoles(_ context.Context, _, userID string, _ *users.User) ([]string, error) {
+func (stubRoleResolver) LoadUserRoles(_ context.Context, _, userID string, _ *domainusers.User) ([]string, error) {
 	return []string{"users", "user:" + userID}, nil
 }
 

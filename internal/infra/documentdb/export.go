@@ -91,7 +91,8 @@ func ExportProject(ctx context.Context, db *clients.Database, projectID, outDir 
 	if err := ident.ValidateSchemaResourceID(projectID); err != nil {
 		return nil, fmt.Errorf("export: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Join(outDir, "data"), 0o755); err != nil {
+	// 导出物含项目数据行，目录权限收紧（gosec G301）。
+	if err := os.MkdirAll(filepath.Join(outDir, "data"), 0o750); err != nil {
 		return nil, fmt.Errorf("export: create out dir: %w", err)
 	}
 
@@ -107,7 +108,7 @@ func ExportProject(ctx context.Context, db *clients.Database, projectID, outDir 
 	// 两表与集合行读自同一快照——一致性窗口语义见包注释。身份 tw_system：
 	// catalog/outbox SELECT + BYPASSRLS 全行读（§3.2 #8：平台侧旁路走
 	// tw_system，不进 GUC 白名单）。
-	tx, err := db.DB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		return nil, fmt.Errorf("export: begin snapshot tx: %w", err)
 	}
@@ -203,7 +204,7 @@ type exportRow struct {
 // exportCollectionRows 把一个集合物理表逐页 keyset 导出为 NDJSON
 // （行 = to_jsonb(d.*)，含 _acl/_version/_id 等系统列与用户列），返回行数。
 func exportCollectionRows(ctx context.Context, tx bun.Tx, schema, physical, path string) (int64, error) {
-	f, err := os.Create(path)
+	f, err := os.Create(path) // #nosec G304 -- path 由 ExportProject 以 outDir+固定名拼装（非用户可控）
 	if err != nil {
 		return 0, fmt.Errorf("export: create data file %s: %w", path, err)
 	}
@@ -258,7 +259,7 @@ func exportCollectionRows(ctx context.Context, tx bun.Tx, schema, physical, path
 // writeFileAtomic 先写临时文件再 rename 覆盖，避免 manifest 半行被读到。
 func writeFileAtomic(path string, data []byte) error {
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)

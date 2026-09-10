@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
-	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 	"github.com/uptrace/bun/driver/pgdriver"
 )
@@ -171,5 +170,5 @@ func TestOutboxWorker_EnqueueCarriesSeq(t *testing.T) {
 	require.Positive(t, rec.enqueued[0].Seq, "worker dispatch 必须把行 seq 回填进出站信封")
 	require.Equal(t, ev.EventID, rec.enqueued[0].EventID)
 
-	var _ *clients.Database = w.db // 保持与既有 worker 测试同款引用
+	_ = w.db // 保持与既有 worker 测试同款引用
 }

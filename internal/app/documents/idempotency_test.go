@@ -73,15 +73,7 @@ func (m *memIdemStore) Release(_ context.Context, key databases.IdempotencyKey, 
 	return nil
 }
 
-// hold 把已有行改回 in_flight，模拟同 key 请求执行中。
-func (m *memIdemStore) holdAll() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, row := range m.rows {
-		row.state = databases.IdempotencyClaimInFlight
-	}
-}
-
+// keyPrincipal 返回幂等键测试用的固定 principal。
 func keyPrincipal() databases.Principal {
 	return databases.Principal{Roles: []string{"users", "user:u1"}}
 }

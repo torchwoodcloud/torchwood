@@ -166,18 +166,20 @@ func TestVectorSearch_EfSearch_RecallAndLatency(t *testing.T) {
 	db := docDB.(*postgresDocumentDB)
 	phys := knPhysical(ctx, t, docDB, projectID)
 	for qi, qv := range queries {
-		rows, err := db.conn(ctx).QueryContext(ctx, fmt.Sprintf(
-			`SELECT _id FROM tw_%s_app.%s WHERE _id IN ('va','vb','vc','vd','ve')
-			 ORDER BY emb <-> ?::vector`, projectID, phys,
-		), pgVectorFloatLiteral(qv))
-		require.NoError(t, err)
-		for rows.Next() {
-			var id string
-			require.NoError(t, rows.Scan(&id))
-			truth[qi] = append(truth[qi], id)
-		}
-		require.NoError(t, rows.Err())
-		_ = rows.Close()
+		func() {
+			rows, err := db.conn(ctx).QueryContext(ctx, fmt.Sprintf(
+				`SELECT _id FROM tw_%s_app.%s WHERE _id IN ('va','vb','vc','vd','ve')
+				 ORDER BY emb <-> ?::vector`, projectID, phys,
+			), pgVectorFloatLiteral(qv))
+			require.NoError(t, err)
+			defer func() { _ = rows.Close() }()
+			for rows.Next() {
+				var id string
+				require.NoError(t, rows.Scan(&id))
+				truth[qi] = append(truth[qi], id)
+			}
+			require.NoError(t, rows.Err())
+		}()
 		require.Len(t, truth[qi], 5)
 	}
 

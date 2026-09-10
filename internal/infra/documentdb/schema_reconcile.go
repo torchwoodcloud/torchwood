@@ -420,7 +420,7 @@ func (p *postgresDocumentDB) backfillActive(ctx context.Context, e reconcileEntr
 	found, err := p.indexSetStatus(ctx, e.projectID, e.databaseID, e.collection, indexID, databases.IndexStatusActive)
 	if err != nil || !found {
 		schemaReconcileFailures.Inc()
-		detail := "mark active failed"
+		var detail string
 		if err != nil {
 			detail = err.Error()
 		} else {

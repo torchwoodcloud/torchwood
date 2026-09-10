@@ -21,10 +21,13 @@ var version, commit, date string
 func main() {
 	_ = godotenv.Load()
 
-	// commit 注入时拼进版本串，便于日志定位构建来源。
+	// commit/date 注入时拼进版本串，便于日志定位构建来源。
 	buildVersion := version
 	if commit != "" {
 		buildVersion = version + " (" + commit + ")"
+	}
+	if date != "" {
+		buildVersion += " built " + date
 	}
 
 	var cleanup func()

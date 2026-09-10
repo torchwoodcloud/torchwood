@@ -83,8 +83,8 @@ func newAdminExportCmd() *verb {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(env.Stderr, "export finished: %d databases / %d collections -> %s\n", len(manifest.Databases), len(manifest.Collections), outDir)
-			fmt.Fprintf(env.Stderr, "snapshot_seq=%d; incremental resume: :changes?since_seq=%d\n", manifest.SnapshotSeq, manifest.SnapshotSeq)
+			_, _ = fmt.Fprintf(env.Stderr, "export finished: %d databases / %d collections -> %s\n", len(manifest.Databases), len(manifest.Collections), outDir)
+			_, _ = fmt.Fprintf(env.Stderr, "snapshot_seq=%d; incremental resume: :changes?since_seq=%d\n", manifest.SnapshotSeq, manifest.SnapshotSeq)
 			return printJSON(env.Stdout, out)
 		})
 }
@@ -114,9 +114,9 @@ func newAdminImportCmd() *verb {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(env.Stderr, "import finished: %d databases / %d collections / %d rows\n",
+			_, _ = fmt.Fprintf(env.Stderr, "import finished: %d databases / %d collections / %d rows\n",
 				len(report.DatabasesRestored), len(report.CollectionsRestored), report.RowsImported)
-			fmt.Fprintln(env.Stderr, report.ResumeHint)
+			_, _ = fmt.Fprintln(env.Stderr, report.ResumeHint)
 			return printJSON(env.Stdout, out)
 		})
 }

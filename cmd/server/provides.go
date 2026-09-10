@@ -229,7 +229,9 @@ func NewScaleMetricsHook(db *clients.Database, logger *slog.Logger) bootkit.Scal
 			logger.Info("documentdb scale metrics collected",
 				"catalog", res.Catalog, "project_schema", res.ProjectSchema, "business", res.Business)
 		}
-		go func() {
+		// 周期刷新独立于 hook 调用生命周期（hook 返回后持续在后台对账），
+		// 故意脱离请求 ctx——G118 误报。
+		go func() { // #nosec G118 -- 后台周期任务须脱离请求 ctx 存活
 			ticker := time.NewTicker(scaleMetricsRefreshInterval)
 			defer ticker.Stop()
 			for range ticker.C {

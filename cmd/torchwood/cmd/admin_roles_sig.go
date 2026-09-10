@@ -16,7 +16,7 @@ import (
 // 变量缺省来源——与运行态 server/worker 同源同值：密钥 = HMAC-SHA256(主密钥,
 // "tw-roles-guc-v1")，两侧不一致时 tw_roles() 验签 fail-closed（文档查询
 // 不可用而非静默放行）。
-const adminJWTSecretFlagEnv = "TORCHWOOD_SECURITY_JWT_SECRET"
+const adminJWTSecretFlagEnv = "TORCHWOOD_SECURITY_JWT_SECRET" // #nosec G101 -- 环境变量名，非凭证
 
 // newAdminSyncRolesSigCmd 提供部署期 roles 签名密钥落库作业（转出 POC 门禁
 // B15）：`torchwood admin sync-roles-sig`——把 HMAC-SHA256(主密钥,
@@ -61,7 +61,7 @@ func newAdminSyncRolesSigCmd() *verb {
 			if err := clients.SyncRolesSigKey(context.Background(), db); err != nil {
 				return err
 			}
-			fmt.Fprintln(env.Stderr, "roles sig key synced into public.tw_secrets (current slot; dual-key rotation preserved)")
+			_, _ = fmt.Fprintln(env.Stderr, "roles sig key synced into public.tw_secrets (current slot; dual-key rotation preserved)")
 			return nil
 		})
 }

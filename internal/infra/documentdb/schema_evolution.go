@@ -161,9 +161,10 @@ func maskDeprecatedData(attrs []databases.Attribute, docs []databases.Document) 
 		return
 	}
 	for i := range docs {
-		for k := range docs[i].Data {
+		data := docs[i].Data
+		for k := range data {
 			if _, bad := deprecated[k]; bad {
-				delete(docs[i].Data, k)
+				delete(data, k)
 			}
 		}
 	}
@@ -502,19 +503,17 @@ func (p *postgresDocumentDB) backfillBatch(ctx context.Context, task backfillTas
 		if err != nil {
 			return err
 		}
+		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var id string
 			if err := rows.Scan(&id); err != nil {
-				_ = rows.Close()
 				return err
 			}
 			ids = append(ids, id)
 		}
 		if err := rows.Err(); err != nil {
-			_ = rows.Close()
 			return err
 		}
-		_ = rows.Close()
 		if len(ids) == 0 {
 			return nil
 		}

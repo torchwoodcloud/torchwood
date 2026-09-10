@@ -63,7 +63,7 @@ func TestRunnerSmoke_MainContract(t *testing.T) {
 	}
 	dir := t.TempDir()
 	// runner.js 落到临时目录（模拟构建期 COPY），旁边放用户模块。
-	if err := os.WriteFile(filepath.Join(dir, ".tw-runner.js"), NodeRunnerJS(), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".tw-runner.js"), NodeRunnerJS(), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	indexJS := `let lastToken = null;
@@ -74,11 +74,11 @@ module.exports.main = function (data) {
   if (data.n === 3) { return new Promise((resolve) => setTimeout(() => resolve({ async: true }), 20)); }
   return {};
 };`
-	if err := os.WriteFile(filepath.Join(dir, "index.js"), []byte(indexJS), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "index.js"), []byte(indexJS), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command(nodePath, ".tw-runner.js")
+	cmd := exec.CommandContext(context.Background(), nodePath, ".tw-runner.js") // #nosec G204 -- nodePath 来自 exec.LookPath("node")，测试自建 runner
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "TW_RUNNER_PORT=0")
 	// 固定端口（子进程独立网络栈，18080 冲突概率低；重试绑定由用例重跑兜底）。
@@ -94,7 +94,8 @@ module.exports.main = function (data) {
 	// health 探针（模块同步 require，应立即可用）。
 	ready := false
 	for i := 0; i < 50; i++ {
-		resp, err := client.Get(base + "/_tw/health")
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, base+"/_tw/health", nil)
+		resp, err := client.Do(req)
 		if err == nil {
 			if resp.StatusCode == http.StatusOK {
 				_ = resp.Body.Close()
@@ -153,7 +154,8 @@ module.exports.main = function (data) {
 	}
 
 	// 4) health 在服务过请求后仍 ready（进程未因用户错误退出）。
-	resp, err := client.Get(base + "/_tw/health")
+	hreq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, base+"/_tw/health", nil)
+	resp, err := client.Do(hreq)
 	if err != nil || resp.StatusCode != 200 {
 		t.Fatalf("health after errors: %v %v", err, resp)
 	}

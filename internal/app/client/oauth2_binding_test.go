@@ -322,7 +322,7 @@ func TestOAuth2Link_CallbackAsImpostor(t *testing.T) {
 
 	// ② 无会话 cookie 同样拒绝。
 	stateID = startLinkSession(t, a, "user-victim")
-	result, err = a.HandleOAuth2Callback(context.Background(), "google", "code-a2", stateID,
+	_, err = a.HandleOAuth2Callback(context.Background(), "google", "code-a2", stateID,
 		map[string]string{}, nil)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 

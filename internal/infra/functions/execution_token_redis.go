@@ -26,7 +26,7 @@ import (
 //
 // fail-closed：Mint/Validate/Revoke 的 Redis 故障原样上抛为 error，由调用方
 // 区分（Validate 基础设施故障 ≠ token 不存在，前者 Internal 拒绝而非 401）。
-const executionTokenKeyPrefix = "torchwood:exec-token:"
+const executionTokenKeyPrefix = "torchwood:exec-token:" // #nosec G101 -- Redis 键前缀非凭证
 
 // executionTokenRandomBytes 是 token 随机段长度：32 字节 = 256 bit 熵。
 const executionTokenRandomBytes = 32

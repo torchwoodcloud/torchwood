@@ -407,11 +407,10 @@ func CreateTestProjectThrough(ctx context.Context, db *clients.Database, maxVers
 	if err := db.NewSelect().Model((*model.Project)(nil)).Column("internal_id").Where("id = ?", project.ID).Scan(ctx, &internalID); err != nil {
 		panic(err)
 	}
-	var err error
 	// 项目 schema apply 对集群瞬时过载（i/o timeout 等）退避重试：apply 不在
 	// lifecycle 锁内（库内语句），-p 4 满负载下实测偶发单语句 i/o timeout；
 	// Apply 按版本表断点续跑（已应用版本跳过），整体重试幂等。
-	err = retryOnClusterContention(ctx, func() error {
+	err := retryOnClusterContention(ctx, func() error {
 		if maxVersion > 0 {
 			return projectschema.ApplyUpTo(ctx, db, project.ID, maxVersion)
 		}

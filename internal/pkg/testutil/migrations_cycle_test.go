@@ -47,10 +47,10 @@ func TestMigrations_UpDownUpCycle(t *testing.T) {
 	// 建库 + up→down→up 全程持集群级 lifecycle 锁（并行安全契约见 db.go 包注释）。
 	// fn 内 require 失败走 FailNow/Goexit，锁由 runInDBLifecycleLock 的 defer 释放，
 	// t.Cleanup 的删库仍会执行。
-	runInDBLifecycleLock(ctx, adminDB, func(ctx context.Context) error {
+	require.NoError(t, runInDBLifecycleLock(ctx, adminDB, func(ctx context.Context) error {
 		runMigrationCycle(ctx, t, adminDB, baseDSN, wantLatest)
 		return nil
-	})
+	}))
 }
 
 // runMigrationCycle 在 lifecycle 锁内创建临时库并执行完整 up→down(全部)→up 循环。

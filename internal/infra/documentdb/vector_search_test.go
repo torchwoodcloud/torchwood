@@ -377,7 +377,7 @@ func knnPaginateAll(ctx context.Context, t *testing.T, docDB databases.DocumentD
 	for page := 0; ; page++ {
 		require.Less(t, page, 64, "pagination did not terminate")
 		list := knnPage(ctx, t, docDB, projectID, collection, q, token)
-		require.LessOrEqual(t, int32(len(list.Documents)), k, "page %d overflows k", page)
+		require.LessOrEqual(t, len(list.Documents), int(k), "page %d overflows k", page)
 		for i, d := range list.Documents {
 			require.Falsef(t, seen[d.ID], "duplicate document %s across pages", d.ID)
 			seen[d.ID] = true

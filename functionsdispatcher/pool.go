@@ -284,10 +284,6 @@ func (p *PoolManager) Dispatch(ctx context.Context, req ExecuteRequest) (*Execut
 	}
 	ref := FunctionRef{ProjectID: req.ProjectID, FunctionID: req.FunctionID}
 	policy := p.applyDefaults(req.Pool)
-	timeout := time.Duration(req.TimeoutSeconds) * time.Second
-	if timeout <= 0 {
-		timeout = 15 * time.Second
-	}
 
 	// 有界排队：深度上限 + 队首超时（超限 ResourceExhausted——同步调用方
 	// 不得无界等在 30s ctx 上，设计 §6 边界补全）。
@@ -577,7 +573,8 @@ func (p *PoolManager) DrainForDeployment(ctx context.Context, projectID, functio
 			// 在途：宽限到点强杀（旧池 drain 上限 ≤ 函数超时；在途请求的
 			// 分发连接被切断后由 executeOn 错误路径收场）。
 			busy := rec
-			go func() {
+			// 宽限杀必须脱离请求 ctx 存活（请求方早已返回）——G118 误报。
+			go func() { // #nosec G118 -- 宽限到点强杀须脱离请求 ctx 存活
 				p.sleep(context.Background(), grace)
 				p.killInstance(context.Background(), ref, &busy)
 			}()

@@ -70,7 +70,7 @@ func (p *postgresDocumentDB) ListChanges(
 	// 扫描多取一条可见事件：collect limit+1，截断到 limit——has_more 由
 	// 第 limit+1 条是否存在决定（退出 (a)）。
 	out := make([]databases.DocumentChange, 0, opts.Limit+1)
-	var lastSeq int64 = opts.SinceSeq
+	lastSeq := opts.SinceSeq
 	scanned := 0
 	scanCapped := false
 	for len(out) <= opts.Limit {
