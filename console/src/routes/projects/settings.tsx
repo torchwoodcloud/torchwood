@@ -361,7 +361,7 @@ function RedirectAllowlistSection({
   const onSave = () => {
     const urls = rows.map((r) => r.trim()).filter(Boolean);
     for (const u of urls) {
-      let ok = false;
+      let ok: boolean;
       try {
         const parsed = new URL(u);
         ok = parsed.protocol === "http:" || parsed.protocol === "https:";
@@ -516,8 +516,11 @@ function InviteCodeRow({
   canRevoke: boolean;
   onRevoke: () => void;
 }) {
+  // 过期展示按行加载时刻判定：render 内不得调用 Date.now（react-hooks/purity），
+  // useState 初始化器是 React 认可的一次性求值点。
+  const [loadedAt] = useState(() => Date.now());
   const exhausted = code.used_count >= code.max_uses;
-  const expired = code.expire_at ? new Date(code.expire_at).getTime() < Date.now() : false;
+  const expired = code.expire_at ? new Date(code.expire_at).getTime() < loadedAt : false;
   const dead = code.revoked || exhausted || expired;
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border px-3 py-2">

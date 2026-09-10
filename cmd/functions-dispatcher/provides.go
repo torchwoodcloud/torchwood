@@ -4,9 +4,9 @@ import (
 	"github.com/google/wire"
 	"github.com/lynx-go/lynx"
 	"github.com/lynx-go/lynx/boot"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/bootkit"
 	"github.com/torchwoodcloud/torchwood/functionsdispatcher"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/bootkit"
 	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 

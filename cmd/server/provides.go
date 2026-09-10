@@ -9,6 +9,7 @@ import (
 	"github.com/lynx-go/lynx"
 	"github.com/lynx-go/lynx/boot"
 	lynxgrpc "github.com/lynx-go/lynx/server/grpc"
+	"github.com/torchwoodcloud/torchwood/cmd/server/internal/runtime"
 	"github.com/torchwoodcloud/torchwood/internal/api"
 	apirealtime "github.com/torchwoodcloud/torchwood/internal/api/realtime"
 	"github.com/torchwoodcloud/torchwood/internal/api/servergrpc"
@@ -17,7 +18,6 @@ import (
 	appfunctions "github.com/torchwoodcloud/torchwood/internal/app/functions"
 	appserver "github.com/torchwoodcloud/torchwood/internal/app/server"
 	appstorage "github.com/torchwoodcloud/torchwood/internal/app/storage"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/bootkit"
 	"github.com/torchwoodcloud/torchwood/internal/domain"
 	databases "github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
@@ -29,9 +29,9 @@ import (
 	infrafunctions "github.com/torchwoodcloud/torchwood/internal/infra/functions"
 	"github.com/torchwoodcloud/torchwood/internal/infra/health"
 	"github.com/torchwoodcloud/torchwood/internal/infra/projectschema"
-	"github.com/torchwoodcloud/torchwood/pkg/buildinfo"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/bootkit"
 	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
-	"github.com/torchwoodcloud/torchwood/cmd/server/internal/runtime"
+	"github.com/torchwoodcloud/torchwood/pkg/buildinfo"
 )
 
 //go:generate wire

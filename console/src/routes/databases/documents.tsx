@@ -67,10 +67,7 @@ import {
 } from "@/components/resource/shared";
 import { PermissionEditor } from "@/components/resource/PermissionEditor";
 
-import {
-  documentToValues,
-  MAX_BULK_OPERATIONS,
-} from "./components";
+import { documentToValues, MAX_BULK_OPERATIONS } from "./collectionMeta";
 
 const documentColumns: ColumnDef<Document>[] = [
   {
