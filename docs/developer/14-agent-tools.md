@@ -127,7 +127,7 @@ TS 不提供 `InvokeJSON`；catalog 仅提供名字与 `fullMethod`，实际执�
 
 - **Proto**：`proto/client/`、`proto/server/`、`proto/console/`、`proto/shared/`；
 - **OpenAPI**：`task generate:proto`（`buf generate`）后 `genproto/**/*.swagger.json`（`buf.gen.yaml` 的 `openapiv2` 插件，`json_names_for_fields=false` 输出 snake_case，时间一律 `google.protobuf.Timestamp` → RFC3339）；
-- **Scope**：Server RPC 的 scope 门随 `method_auth` 的 `api_key_scope` 字段声明在 proto（策略唯一声明源），启动期经 `internal/runtime` 收集进 PolicySet 并由 `AssertSemantic`（含死 scope 检测）fail-closed 校验（见 `05-authentication.md` §3/§7）；
+- **Scope**：Server RPC 的 scope 门随 `method_auth` 的 `api_key_scope` 字段声明在 proto（策略唯一声明源），启动期经 `cmd/server/internal/runtime` 收集进 PolicySet 并由 `AssertSemantic`（含死 scope 检测）fail-closed 校验（见 `05-authentication.md` §3/§7）；
 - **计数**：195 = PUBLIC 28 · END_USER 41 · SERVER 115 · PERMISSION 11（以 `authz-matrix.md` 头部与 `proto/**/*.proto` 的 `rpc` 计数为准；`buf breaking` 保障不兼容变更必经 `reserved`）。
 > 计数复现：`grep -r "^\s*rpc " proto | wc -l`（数字随 API 演进变化，以命令实时结果为准）。
 
@@ -156,7 +156,7 @@ TS 属 `fetch` 层，`HttpTransport.request` 已支持 `auth:"apiKey"` 的任意
 **Q: 新增 RPC 后要改动哪里？**
 
 - Proto 层：按 `docs/developer/09-api-guide.md` §2 加 `method_auth`（access + admin_roles/api_key_scope）与 `google.api.http`，字段删除必 `reserved`；
-- 注解即策略：无需在任何 Go 侧登记 scope/角色——`internal/runtime` 启动期从 proto 收集并过语义断言，漏配直接启动失败；
+- 注解即策略：无需在任何 Go 侧登记 scope/角色——`cmd/server/internal/runtime` 启动期从 proto 收集并过语义断言，漏配直接启动失败；
 - 工具层（可选）：仅当产品决定收录为默认动词时，才在 `tools.go:42` / `tools.ts:34` 追加 `TOOL_*`；
 - 生成物：`task generate:proto` 后提交 `genproto/**/*.swagger.json`，`buf breaking` 会拦住不兼容变更。
 

@@ -10,7 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	domainidgen "github.com/torchwoodcloud/torchwood/internal/domain/idgen"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 	pkgidgen "github.com/torchwoodcloud/torchwood/pkg/idgen"
 )
 

@@ -33,7 +33,7 @@ gRPC StorageService (gateway)─┘                        └→ domain/storage
 
 ## 3 配置
 
-`internal/pkg/config/config.proto` `Storage.S3`（`internal/pkg/config/bind.go` 映射）：
+`pkg/config/config.proto` `Storage.S3`（`pkg/config/bind.go` 映射）：
 
 | 路径 | 环境变量 | 默认 | 说明 |
 |---|---|---|---|
@@ -134,7 +134,7 @@ Redis：`torchwood:upload:{id}` Hash + `:parts` Set，`Create/MarkChunk` 刷新 
 - `internal/api/serverhttp/file_handler_integration_test.go` + `file_handler_uploads_test.go` 端到端（multipart、download/view/preview、Token、public 匿名、分片全流程/scope 校验）；
 - `internal/app/storage/*_integration_test.go` 用例层（桶 CRUD、文件更新、usage 聚合、分片互斥/续传）；
 - `internal/infra/storage/redis_upload_session_test.go`（`miniredis` 往返/TTL/锁）与 `minio_integration_test.go`（真实 `ComposeObject`，`TORCHWOOD_TEST_MINIO_ENDPOINT` 未设跳过）；
-- 均用 `internal/testutil/db.go:SetupTestDB`（`TORCHWOOD_TEST_DATABASE_SOURCE`/`TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE`）。
+- 均用 `pkg/testutil/db.go:SetupTestDB`（`TORCHWOOD_TEST_DATABASE_SOURCE`/`TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE`）。
 
 ## 11 已知边界
 

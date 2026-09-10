@@ -1,7 +1,7 @@
 # AGENTS 指南
 
 ## 总体说明
-- 本仓库使用 Lynx + Clean Architecture：`internal/api`（传输层）、`internal/app`（用例层）、`internal/domain`（领域与端口）、`internal/infra`（适配器层）。
+- 本仓库使用 Lynx + Clean Architecture：`internal/api`（传输层）、`internal/app`（用例层）、`internal/domain`（领域与端口）、`internal/infra`（适配器层）。**`internal/` 只含这四层**：共享内核（`bootkit` 启动钩子、`config`、`contexts`、`buildinfo`、`testutil` 及可复用库）放 `pkg/`；各二进制私有组件放 `cmd/<app>/internal/`（server 运行时装配在 `cmd/server/internal/runtime`，函数分发器实现在 `cmd/functions-dispatcher/internal/functionsdispatcher`）。
 - Torchwood 产品定位包含 **AI/Agent-Native**：Protobuf + OpenAPI 定义可机器读取的 API；Server API 通过 scoped API Key 供 Agent/自动化调用；详见 `docs/roadmap.md` §0 与 `sdk/README.md`。
 - 运行时组合通过 Wire 注入：`cmd/server/provides.go` -> `cmd/server/wire_gen.go`。
 - 服务器组件由 `cmd/server/provides.go` 启动，包含 gRPC、grpc-gateway、独立 HTTP handler、metrics、Admin Console SPA。
@@ -14,7 +14,7 @@
 - `cmd/torchwood/`：Torchwood CLI 二进制（`bin/torchwood`），基于 `github.com/lynx-go/commands`（零依赖子命令 CLI 框架）实现，通过 sdk/go（server 包 InvokeJSON）以 API Key 调用 Server API；CLI 源码不直接 import genproto/grpc（有 import_guard_test 兜底），方法覆盖完整性由 `sdk/go/server` 的测试保证，新增 RPC 无需在 CLI 登记。全局旗标在子命令路径之后、位置参数之前给出（环境变量 `TORCHWOOD_CLI_*` 优先）；退出码契约 0/1/2=40x/3=5xx/4=429 经 `commands.ExitCode` 钩子注入（`cmd/torchwood/cmd/root.go` rpcExitCode）。
 - `internal/api/serverhttp/`：自定义 HTTP handler，例如 Storage multipart 上传下载。
 - `pkg/query/`：Appwrite 风格查询 DSL 解析器，供动态文档层使用。
-- `internal/testutil/`：集成测试数据库辅助工具。
+- `pkg/testutil/`：集成测试数据库辅助工具。
 
 ## 开发流程
 - 以 Task 作为主要工作流执行器（`Taskfile.yml`）。常用任务：
@@ -31,7 +31,7 @@
 - 修改 Console 代码后需先 `task console:build` 再 `task build`，否则 Go embed 会打包旧版本。
 
 ## 配置与环境约定
-- 配置 schema 由 `internal/pkg/config/config.proto` 定义，运行时绑定位于 `internal/pkg/config/bind.go`。
+- 配置 schema 由 `pkg/config/config.proto` 定义，运行时绑定位于 `pkg/config/bind.go`。
 - 环境变量覆盖前缀为 `TORCHWOOD_`；键名会从点号路径映射而来，例如 `data.database.source` -> `TORCHWOOD_DATA_DATABASE_SOURCE`。
 - `TORCHWOOD_ENV`（development/production）决定关停排水窗口：development 为 0，production 默认 30s；可被 `TORCHWOOD_SERVER_DRAIN_TIMEOUT` 覆盖。Lynx 在绑定 YAML 之前就需要该值，因此不进 `config.proto`。
 - MinIO 凭据请使用 `TORCHWOOD_STORAGE_S3_ACCESS_KEY_ID` 和 `TORCHWOOD_STORAGE_S3_SECRET_ACCESS_KEY`。
@@ -57,7 +57,7 @@
   时间字段一律 `google.protobuf.Timestamp`（HTTP JSON 为 RFC3339）；
   请求形状校验（required/长度/正则/枚举/范围）用 protovalidate 注解（`buf.validate`）声明在 proto 上，由 `ValidateInterceptor` 链尾统一求值，handler/app 层不再重复此类检查；跨字段与业务规则仍写在 app 用例层（详见 `docs/developer/09-api-guide.md` §2.3）；
   OpenAPI 建模约定见 `docs/developer/09-api-guide.md` §10（swagger 扩展与
-  `method_auth` 一致性由 `internal/runtime/grpc_swagger_test.go` 断言）。
+  `method_auth` 一致性由 `cmd/server/internal/runtime/grpc_swagger_test.go` 断言）。
 - 列表查询复用 `pkg/crud` 或等价的 AIP-132/158/160 抽象，不要手拼 SQL filter/order；动态文档优先使用 `pkg/query`。
 - **bun 更新写规范（2026-09-08 事故，护栏见 `update_guard_test`）**：bun 的 UPDATE 一律显式声明写入列——struct 模型走 `.Column(白名单)`，nil 模型走 `.Set(...)`；**禁止裸全模型覆盖 UPDATE**（struct + `WherePK()` 全列写）：bun 对零值/nil 字段渲染 `SET col = DEFAULT`，identity 列（`projects.internal_id`）会烧号并改值，导致数据面 `_tenant` 分裂与 roles_sig 失配。identity/DB 生成列对 UPDATE 只读（模型侧 `skipupdate`）。新可变列必须显式登记进对应白名单（漏登记 = "改不动"，不是静默清零）。SQL 形状断言与静态扫描护栏在 `internal/infra/bun/bunrepo/`；存量 internal_id 漂移修复 runbook 见 `docs/developer/17-update-write-guard.md`。
 - JWT claims 保持与 `pkg/jwtparser` 的映射兼容。

@@ -17,7 +17,7 @@ import (
 	appfunctions "github.com/torchwoodcloud/torchwood/internal/app/functions"
 	appserver "github.com/torchwoodcloud/torchwood/internal/app/server"
 	appstorage "github.com/torchwoodcloud/torchwood/internal/app/storage"
-	"github.com/torchwoodcloud/torchwood/internal/bootkit"
+	"github.com/torchwoodcloud/torchwood/pkg/bootkit"
 	"github.com/torchwoodcloud/torchwood/internal/domain"
 	databases "github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
@@ -29,9 +29,9 @@ import (
 	infrafunctions "github.com/torchwoodcloud/torchwood/internal/infra/functions"
 	"github.com/torchwoodcloud/torchwood/internal/infra/health"
 	"github.com/torchwoodcloud/torchwood/internal/infra/projectschema"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/buildinfo"
-	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
-	"github.com/torchwoodcloud/torchwood/internal/runtime"
+	"github.com/torchwoodcloud/torchwood/pkg/buildinfo"
+	config "github.com/torchwoodcloud/torchwood/pkg/config"
+	"github.com/torchwoodcloud/torchwood/cmd/server/internal/runtime"
 )
 
 //go:generate wire

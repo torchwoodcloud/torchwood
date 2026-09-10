@@ -10,7 +10,7 @@ import (
 	consolev1 "github.com/torchwoodcloud/torchwood/genproto/console/v1"
 	"github.com/torchwoodcloud/torchwood/internal/app/console"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/jwtparser"
 	"github.com/torchwoodcloud/torchwood/pkg/password"
 	"google.golang.org/grpc"

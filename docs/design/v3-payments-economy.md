@@ -490,7 +490,7 @@ subscriptions.activated | renewed | past_due | canceled | expired
 - `internal/infra/realtime/subscriber.go`（Stream 消费循环）
 - `internal/api/realtime/handler.go`（`parseChannel` 频道 seam）
 - `internal/api/serverhttp/`（裸 HTTP handler 先例：Storage 上传下载）
-- `internal/pkg/config/config.proto`（Payments 配置落点）
+- `pkg/config/config.proto`（Payments 配置落点）
 - `cmd/worker/worker.go`（consumer 注册点）
 - PlayFab Economy / Steam Inventory Service（资产分类与 FEFO 的业界参照）
 - Stripe / 微信支付 / 支付宝 / Apple App Store Server API 官方文档（adapter 实施时引用）

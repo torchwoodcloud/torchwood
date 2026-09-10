@@ -16,7 +16,7 @@ import (
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/infra/auth"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

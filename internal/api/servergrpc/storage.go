@@ -9,7 +9,7 @@ import (
 	appstorage "github.com/torchwoodcloud/torchwood/internal/app/storage"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	domainstorage "github.com/torchwoodcloud/torchwood/internal/domain/storage"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
 	"github.com/torchwoodcloud/torchwood/pkg/query"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/torchwoodcloud/torchwood/internal/api/interceptor"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"

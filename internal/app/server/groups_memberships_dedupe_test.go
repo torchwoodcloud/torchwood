@@ -9,7 +9,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/groups"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	domainusers "github.com/torchwoodcloud/torchwood/internal/domain/users"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

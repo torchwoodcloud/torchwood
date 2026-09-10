@@ -2,7 +2,7 @@ package functions
 
 import (
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 )
 
 // executor 值域（functions.executor；config.yaml.template 注释引导）。

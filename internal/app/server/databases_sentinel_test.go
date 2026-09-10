@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwoodcloud/torchwood/internal/infra/documentdb"
-	"github.com/torchwoodcloud/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/testutil"
 	"github.com/torchwoodcloud/torchwood/pkg/ident"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

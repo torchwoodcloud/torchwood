@@ -1,13 +1,13 @@
 # Torchwood 配置体系
 
-> `config.proto` 为单一事实源，`bind.go` 完成 `TORCHWOOD_` 环境覆盖。以代码为准：`internal/pkg/config/config.proto`、`internal/pkg/config/bind.go`、`internal/pkg/config/runtime_env.go`、`configs/config.yaml.template`、`.env.example`。
+> `config.proto` 为单一事实源，`bind.go` 完成 `TORCHWOOD_` 环境覆盖。以代码为准：`pkg/config/config.proto`、`pkg/config/bind.go`、`pkg/config/runtime_env.go`、`configs/config.yaml.template`、`.env.example`。
 > 最新更新：2026-08-23
 
 ---
 
 ## 1. config.proto 单一事实源
 
-`internal/pkg/config/config.proto:7` 定义顶层 `AppConfig`，proto 生成 `config.pb.go`（`task generate:config`，见 `04-codegen.md §3`），避免 YAML 与结构体两处维护。
+`pkg/config/config.proto:7` 定义顶层 `AppConfig`，proto 生成 `config.pb.go`（`task generate:config`，见 `04-codegen.md §3`），避免 YAML 与结构体两处维护。
 
 | 分组 | message | 说明 |
 |------|---------|------|
@@ -23,20 +23,20 @@
 
 **关键字段选摘**
 
-- `server.grpc.addr` 默认 `127.0.0.1:9060`（仅回环供 gateway 转发）；`server.http.addr` `:9080`；`server.metrics.addr` 空回退 `127.0.0.1:9040`（`internal/runtime/metrics.go`）；`server.http.public_url` 决定 OAuth 回调与 cookie `Secure`；
-- `security.jwt.secret` **必填**，启动校验 ≥32 字符且不含弱子串（`internal/bootkit/config.go`，server/worker 共享）；`security.encryption_key` 独立静态加密密钥，未配回退 `jwt.secret` 并告警（`internal/pkg/config/crypto.go:10`）；
+- `server.grpc.addr` 默认 `127.0.0.1:9060`（仅回环供 gateway 转发）；`server.http.addr` `:9080`；`server.metrics.addr` 空回退 `127.0.0.1:9040`（`cmd/server/internal/runtime/metrics.go`）；`server.http.public_url` 决定 OAuth 回调与 cookie `Secure`；
+- `security.jwt.secret` **必填**，启动校验 ≥32 字符且不含弱子串（`pkg/bootkit/config.go`，server/worker 共享）；`security.encryption_key` 独立静态加密密钥，未配回退 `jwt.secret` 并告警（`pkg/config/crypto.go:10`）；
 - `security.setup_token` 空则首个管理员注册 `FailedPrecondition`（`internal/app/console/setup.go`）；
 - `security.trusted_proxies` `repeated string` CIDR（逗号分隔环境覆盖，见 §4）；
 - `security.rate_limit` `optional bool enabled`（默认 true）+ 三维度 `ip`/`user`/`api_key` 固定窗口；
 - `data.database.slow_query_threshold` 空=500ms，`0`=禁用。
 
-关停排水窗口不在 proto：`TORCHWOOD_ENV` + `TORCHWOOD_SERVER_DRAIN_TIMEOUT` 在 Lynx `NewRunner` 前读取（`internal/pkg/config/runtime_env.go:12`）。
+关停排水窗口不在 proto：`TORCHWOOD_ENV` + `TORCHWOOD_SERVER_DRAIN_TIMEOUT` 在 Lynx `NewRunner` 前读取（`pkg/config/runtime_env.go:12`）。
 
 ---
 
 ## 2. 运行时绑定（bind.go）
 
-`internal/pkg/config/bind.go:21` 的 `ConfigureViper` 流程：
+`pkg/config/bind.go:21` 的 `ConfigureViper` 流程：
 
 1. `lynx.DefaultBindConfigFunc` 设搜索路径；
 2. 追加 `extraPaths`（默认 `./configs`）；
@@ -86,7 +86,7 @@ MinIO 凭据变量名由字段 `access_key_id`/`secret_access_key` 映射而来�
 
 ## 4. TORCHWOOD_ENV 与排水
 
-`internal/pkg/config/runtime_env.go:28` 归一化：
+`pkg/config/runtime_env.go:28` 归一化：
 
 | `TORCHWOOD_ENV` | 归一化 | 默认 `DrainTimeout` |
 |-----------------|--------|---------------------|
@@ -143,15 +143,15 @@ security:
 
 ### 6.3 测试 DSN
 
-`TORCHWOOD_TEST_DATABASE_SOURCE` / `TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE` **不在 `AppConfig`**，由 `internal/testutil/db.go` `os.Getenv` 直读：每个测试建独立 `TORCHWOOD_test_<pid>_<seq>` 库，`task test` 自动从 `.env` 加载，`testing.Short` 时跳过集成测试。
+`TORCHWOOD_TEST_DATABASE_SOURCE` / `TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE` **不在 `AppConfig`**，由 `pkg/testutil/db.go` `os.Getenv` 直读：每个测试建独立 `TORCHWOOD_test_<pid>_<seq>` 库，`task test` 自动从 `.env` 加载，`testing.Short` 时跳过集成测试。
 
 ---
 
 ## 7. 参考
 
-- `internal/pkg/config/config.proto` schema 唯一定位
-- `internal/pkg/config/bind.go` 绑定与解码
-- `internal/pkg/config/runtime_env.go` 环境与排水
-- `internal/pkg/config/crypto.go:10` 独立加密密钥
+- `pkg/config/config.proto` schema 唯一定位
+- `pkg/config/bind.go` 绑定与解码
+- `pkg/config/runtime_env.go` 环境与排水
+- `pkg/config/crypto.go:10` 独立加密密钥
 - `cmd/server/provides.go:55` / `cmd/worker/provides.go:108` 启动校验
 - `configs/config.yaml.template`、`.env.example`

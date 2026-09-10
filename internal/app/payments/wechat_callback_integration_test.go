@@ -27,7 +27,7 @@ import (
 	infraevents "github.com/torchwoodcloud/torchwood/internal/infra/events"
 	infrapayments "github.com/torchwoodcloud/torchwood/internal/infra/payments"
 	"github.com/torchwoodcloud/torchwood/internal/infra/payments/wechat"
-	"github.com/torchwoodcloud/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/testutil"
 )
 
 // 本文件锁设计 §9.2 / PR6 验收「微信式 OrderID=本地 ULID、无 Stripe session

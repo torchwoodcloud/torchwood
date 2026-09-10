@@ -47,7 +47,7 @@ x-app-env: &app-env
   # CORS 不是授权边界，BaaS 客户前端域不可枚举。OAuth 浏览器流走 302 发起端点
   # /v1/account/oauth2/{provider}/authorize，不经 CORS、无需任何来源配置；
   # 如需跨站携带会话 cookie 的特殊形态，显式列出来源并把 config.yaml 的
-  # allow_credentials 改回 true（带凭据时不接受 "*"，见 runtime/cors.go）
+  # allow_credentials 改回 true（带凭据时不接受 "*"，见 cmd/server/internal/runtime/cors.go）
   TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS: ${TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS:-*}
   # 浏览器端预检放行的自定义请求头（逗号分隔）。未设置时不输出 Allow-Headers，
   # 带 X-Api-Key 等自定义头的浏览器预检会被浏览器拦截

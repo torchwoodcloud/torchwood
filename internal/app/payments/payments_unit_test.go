@@ -23,7 +23,7 @@ import (
 	domainshared "github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	infrapayments "github.com/torchwoodcloud/torchwood/internal/infra/payments"
 	"github.com/torchwoodcloud/torchwood/internal/infra/payments/stripe"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

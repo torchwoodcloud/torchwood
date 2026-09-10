@@ -12,7 +12,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/groups"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/domain/users"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 	"github.com/torchwoodcloud/torchwood/pkg/password"
 	"github.com/torchwoodcloud/torchwood/pkg/uow"

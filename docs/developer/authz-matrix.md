@@ -3,10 +3,10 @@
 > **本文件由策略注册表生成（`task gen:authz-matrix`），勿手改。**
 >
 > - 声明源：`proto/shared/v1/authz.proto` 的 `method_auth`/`service_auth` 注解 →
->   `internal/runtime.BuildMethodPolicies`（启动期经 `ProvideMethodPolicies` 注入执行点）。
+>   `cmd/server/internal/runtime.BuildMethodPolicies`（启动期经 `ProvideMethodPolicies` 注入执行点）。
 > - 策略变更后重新生成：`task gen:authz-matrix`；漂移由
->   `internal/runtime/authz_matrix_doc_test.go` 字节级锁定（重渲染 ≠ 磁盘即红）。
-> - 执行器消费同一策略的行为一致性证明见 `internal/runtime/authz_matrix_test.go`
+>   `cmd/server/internal/runtime/authz_matrix_doc_test.go` 字节级锁定（重渲染 ≠ 磁盘即红）。
+> - 执行器消费同一策略的行为一致性证明见 `cmd/server/internal/runtime/authz_matrix_test.go`
 >   （全方法 × 凭证档过真实拦截器，与独立推导全量比对）。
 > - Access 语义：PUBLIC 匿名可调；END_USER 端用户会话专属（client 面）；
 >   SERVER admin 会话（admin_roles）或 API key（scope）；PERMISSION admin 会话

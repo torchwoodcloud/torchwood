@@ -7,7 +7,7 @@ import (
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	"github.com/torchwoodcloud/torchwood/internal/app/events"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"

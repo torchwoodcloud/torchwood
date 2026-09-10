@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appfunctions "github.com/torchwoodcloud/torchwood/internal/app/functions"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 )
 
 // retryRepo 是 FunctionRepo 的测试桩：GetExecution 返回固定记录，GetFunction

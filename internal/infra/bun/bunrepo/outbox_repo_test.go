@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
-	"github.com/torchwoodcloud/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/testutil"
 )
 
 func TestOutboxRepo_ListDeadLetters(t *testing.T) {

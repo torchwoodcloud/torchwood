@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 )
 
 type mockExecutor struct {

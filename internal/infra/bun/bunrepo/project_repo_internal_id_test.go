@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
-	"github.com/torchwoodcloud/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/testutil"
 )
 
 // TestUpdateProject_PreservesInternalID（2026-09-08 dev 事故回归锚点）：

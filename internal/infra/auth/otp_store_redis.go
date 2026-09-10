@@ -12,8 +12,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 	"github.com/torchwoodcloud/torchwood/pkg/jwtparser"
 	"google.golang.org/grpc/codes"

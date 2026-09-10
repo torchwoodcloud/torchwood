@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
-	"github.com/torchwoodcloud/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/testutil"
 )
 
 // seedP05Function 构造带池策略的函数（P0.5 列回读断言用）。

@@ -9,8 +9,8 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"github.com/torchwoodcloud/torchwood/internal/infra/auth"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

@@ -5,7 +5,7 @@ import (
 )
 
 // newTestInterceptor 按三桶语义构造小策略注册表（单测接线用）。
-// 真实策略（proto 声明 → AssertSemantic）的语义断言由 internal/runtime
+// 真实策略（proto 声明 → AssertSemantic）的语义断言由 cmd/server/internal/runtime
 // 测试与矩阵测试（Phase B）承担；此处只验证拦截器执行逻辑本身。
 //
 //	server: SERVER 面方法（不开放 key 通道——AllowsAPIKey fail-closed；

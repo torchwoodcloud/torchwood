@@ -11,7 +11,7 @@ import (
 	domainbilling "github.com/torchwoodcloud/torchwood/internal/domain/billing"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	domainprojects "github.com/torchwoodcloud/torchwood/internal/domain/projects"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/semaphore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

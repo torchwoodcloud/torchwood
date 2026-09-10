@@ -9,7 +9,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"github.com/torchwoodcloud/torchwood/internal/infra/realtime"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/jwtparser"
 )
 

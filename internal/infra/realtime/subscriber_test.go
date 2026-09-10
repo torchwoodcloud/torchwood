@@ -12,7 +12,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/model"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 	infraevents "github.com/torchwoodcloud/torchwood/internal/infra/events"
-	"github.com/torchwoodcloud/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/testutil"
 )
 
 // newSubscriberEnv 组装 subscriber 集成测试环境：真实 Postgres（迁移含

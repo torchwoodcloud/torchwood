@@ -14,7 +14,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"github.com/torchwoodcloud/torchwood/internal/domain/users"
 	"github.com/torchwoodcloud/torchwood/internal/infra/auth/principalcache"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 	"github.com/torchwoodcloud/torchwood/pkg/jwtparser"
 	"google.golang.org/grpc/codes"

@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"

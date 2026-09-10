@@ -14,7 +14,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
 	"github.com/torchwoodcloud/torchwood/internal/infra/realtime"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/jwtparser"
 )
 

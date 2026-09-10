@@ -13,8 +13,8 @@ import (
 	domainshared "github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 	infraevents "github.com/torchwoodcloud/torchwood/internal/infra/events"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
-	"github.com/torchwoodcloud/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/testutil"
 )
 
 func TestIntegration_PaidTopupGrantsInSameTx(t *testing.T) {

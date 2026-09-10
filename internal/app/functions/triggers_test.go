@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	domainprojects "github.com/torchwoodcloud/torchwood/internal/domain/projects"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

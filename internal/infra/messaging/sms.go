@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 )
 
 // SMSService delivers outbound SMS using Twilio or development logging.

@@ -12,8 +12,8 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
-	"github.com/torchwoodcloud/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/testutil"
 )
 
 // TestMFAFullFlowIntegration 覆盖 MFA 全流程：注册 → 创建因子 → 激活 →

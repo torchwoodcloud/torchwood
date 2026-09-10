@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
-	"github.com/torchwoodcloud/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/testutil"
 )
 
 // TestSetProjectSetting 验证 settings 单键原子写端口：写入/删除/其余键保留，

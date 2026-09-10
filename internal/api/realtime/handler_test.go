@@ -20,7 +20,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	infraauth "github.com/torchwoodcloud/torchwood/internal/infra/auth"
 	"github.com/torchwoodcloud/torchwood/internal/infra/realtime"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 	"github.com/torchwoodcloud/torchwood/pkg/jwtparser"
 )

@@ -64,7 +64,7 @@ tw_shop_app                     真正的业务库
 | `cleanupKeysWritePerms` 的 catalog UPDATE 横跨**所有项目**的 default 库行 | `postgres.go:1473-1475` |
 | 无项目头定位：`locateOrder` 先 `GetByID("", event.OrderID)`（微信/支付宝 `out_trade_no` = 本地 ULID，**国内主路径**），再 `GetByProviderRef("", …)`；订阅 `GetByIDForUpdate("")`（本地 ID）与 `GetByProviderSubIDForUpdate` 均无项目；iOS `VerifyReceipt` 三次空 projectID | `payments/callback.go:269-281`；`payments_repo.go:77-85` `projectID==""` 不滤；`internal/infra/payments/wechat/wechat.go` / `alipay/alipay.go` `out_trade_no`；`subscriptions/hosted.go:63,69`；`receipt.go:52,104,128` |
 | `DeleteProject` 只删 `public.projects` 行 | `bunrepo/project_repo.go:73-76`；setup 回滚同病 |
-| 全局 migrate 仅 CLI `task migrate`；进程内无 golang-migrate 库；`db/` 不被任何二进制 embed；SQL 驱动为 bun/pgdriver | `Taskfile.yml`；`internal/infra/clients/database.go`；`internal/testutil/db.go` |
+| 全局 migrate 仅 CLI `task migrate`；进程内无 golang-migrate 库；`db/` 不被任何二进制 embed；SQL 驱动为 bun/pgdriver | `Taskfile.yml`；`internal/infra/clients/database.go`；`pkg/testutil/db.go` |
 
 ### 痛点
 
@@ -487,7 +487,7 @@ func EnsureAll(ctx context.Context, db *clients.Database, projectIDs []string) e
 5. 按版本读 `migrations/*.up.sql`（包内 embed），把占位符 `{{schema}}` 替换为 `quoteIdent(schema)`，在 **同一 Tx** `Exec`。引用平台表写 `public.projects(id)`。
 6. 每文件成功后 `INSERT schema_migrations`。中途失败：CreateProject 路径靠外层 ROLLBACK；EnsureAll 路径标记 `dirty=true` 并返回错误，**不**在脏项目上继续跑后续版本。落地备注：事务内的标记会随 ROLLBACK 撤销，失败后由 `Apply` 经**独立池连接**补写 dirty 行持久化（CreateProject 整体回滚后 schema 不存在，补写失败属预期、best-effort 忽略）。
 
-执行约束：驱动是 **bun/pgdriver**（非 pgx / lib/pq）。无参数 `Exec` 走 simple protocol、可整文件多语句执行（`internal/testutil/db.go` 的 `runMigrations` 已有先例）——`Apply` 在替换 `{{schema}}` 后必须保持**零查询参数**，禁止占位符与 SQL 参数混用。
+执行约束：驱动是 **bun/pgdriver**（非 pgx / lib/pq）。无参数 `Exec` 走 simple protocol、可整文件多语句执行（`pkg/testutil/db.go` 的 `runMigrations` 已有先例）——`Apply` 在替换 `{{schema}}` 后必须保持**零查询参数**，禁止占位符与 SQL 参数混用。
 
 **项目 DDL 纪律**（`Apply` 在事务内 Exec、跨 N 个 schema 扇出，逐条硬约束）：
 1. **`CREATE INDEX CONCURRENTLY` 不可用**（PG 禁止事务块内执行）。项目 DDL 只允许秒级操作：建表、加列（常量 DEFAULT，PG 11+ 为元数据级）、小表索引。
@@ -1197,7 +1197,7 @@ owner 2026-08-20 决策：不执行。`_tenant` 全保留，待系统表化整�
 - `internal/app/client/{jwt,user_roles}.go`、`internal/app/server/users.go:435-439` — §8.2 补充清单与变量集合名陷阱
 - `pkg/grpc/interceptor/audit.go` — audit 写点（全局拦截器；留 public，无需路由）
 - `internal/app/console/setup.go` — bootstrap project/database id（K23）
-- `internal/infra/clients/database.go`（pgdriver）、`internal/testutil/db.go`（整文件 Exec 先例）、`console/embed.go`（今日唯一 embed） — K8 实现约束
+- `internal/infra/clients/database.go`（pgdriver）、`pkg/testutil/db.go`（整文件 Exec 先例）、`console/embed.go`（今日唯一 embed） — K8 实现约束
 - `db/migrations/000003_document_catalog_composite_keys.up.sql` — catalog 复合 PK
 - `db/migrations/000013`–`000017` — 全局唯一索引语义
 - `docs/design/schema-naming.md` — PR1 必改

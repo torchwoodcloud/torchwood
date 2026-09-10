@@ -24,7 +24,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	domainstorage "github.com/torchwoodcloud/torchwood/internal/domain/storage"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"

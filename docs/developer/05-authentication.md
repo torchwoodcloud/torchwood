@@ -1,7 +1,7 @@
 # Torchwood 认证与授权
 
 > 四凭证、Principal 注入、**策略注册表**（proto 注解唯一声明 → `PolicySet` 收集 → 拦截器执行）与纵深防御。
-> 以代码为准：`proto/shared/v1/authz.proto`、`internal/runtime/authz_policy.go`（收集）、`internal/domain/auth/policy.go`（策略类型与断言）、`internal/api/interceptor/jwt.go`（执行）、`internal/infra/auth/`（凭证校验）。
+> 以代码为准：`proto/shared/v1/authz.proto`、`cmd/server/internal/runtime/authz_policy.go`（收集）、`internal/domain/auth/policy.go`（策略类型与断言）、`internal/api/interceptor/jwt.go`（执行）、`internal/infra/auth/`（凭证校验）。
 > 最新更新：2026-09-09
 
 ---
@@ -80,7 +80,7 @@ message ServiceAuth { AccessLevel default_access = 1; }  // 服务级默认（�
 - scope 资源词表是 proto enum `ScopeResource`（databases/users/groups/storage/projects/oauthproviders/functions/payments/**assets**/subscriptions/billing/outbox）；`apikeys` 资源已删除（APIKeysService 为 PERMISSION 面，key 凭证禁入），`economy` 已更名 `assets`。
 - console 面 me 型方法的会话标签 `"console"` 不是角色，经 `permissions` 字符串值域登记。
 
-**收集与注入**：`internal/runtime` 的 `BuildMethodPolicies(fileDescs...)`（`authz_policy.go:85`）从业务 proto 文件清单（`authzFileDescriptors()`，`grpc.go:186` 单一清单）构造 `domainauth.PolicySet`——经 Wire provider `ProvideMethodPolicies`（`internal/runtime/provides.go:22`）成为唯一注入点。`PolicySet` 的消费面：
+**收集与注入**：`cmd/server/internal/runtime` 的 `BuildMethodPolicies(fileDescs...)`（`authz_policy.go:85`）从业务 proto 文件清单（`authzFileDescriptors()`，`grpc.go:186` 单一清单）构造 `domainauth.PolicySet`——经 Wire provider `ProvideMethodPolicies`（`cmd/server/internal/runtime/provides.go:22`）成为唯一注入点。`PolicySet` 的消费面：
 
 | 消费方 | 用途 |
 |--------|------|
@@ -118,7 +118,7 @@ permissions 非空（PERMISSION/END_USER 面）：
 
 ---
 
-## 5. 拦截器链全景（`internal/runtime/grpc.go:100`）
+## 5. 拦截器链全景（`cmd/server/internal/runtime/grpc.go:100`）
 
 ```
 clientInfo → auth → rateLimit → audit → usage → validate(protovalidate) → handler
@@ -139,7 +139,7 @@ clientInfo → auth → rateLimit → audit → usage → validate(protovalidate
 
 **存储**：`secret = uuid()+uuid()`，库中仅 `sha256(secret)` hex（`internal/app/server/apikeys.go`），明文只在创建响应出现一次。
 
-**词表单一来源**：`ProvideScopeVocabulary(PolicySet)`（`internal/runtime/provides.go:35`）从策略注册表派生合法 scope 词表——每个被方法引用的资源贡献 `{资源名, 资源名.read, 资源名.write}`，叠加 `*`/`all`。key 创建校验与 well-known 下发都消费同一词表（死 scope 断言保证词表内资源均被引用，见 §7）。
+**词表单一来源**：`ProvideScopeVocabulary(PolicySet)`（`cmd/server/internal/runtime/provides.go:35`）从策略注册表派生合法 scope 词表——每个被方法引用的资源贡献 `{资源名, 资源名.read, 资源名.write}`，叠加 `*`/`all`。key 创建校验与 well-known 下发都消费同一词表（死 scope 断言保证词表内资源均被引用，见 §7）。
 
 **scope 语法表（T-02 扩展，`internal/domain/auth/scope_target.go` 单一实现）**：
 
@@ -182,7 +182,7 @@ clientInfo → auth → rateLimit → audit → usage → validate(protovalidate
 2. **档位断言**（`ClassifyTier`，`policy.go:289`——档位是从声明派生的分类，不进 proto，避免第二策略源）：SERVER/PERMISSION 面方法必须落入四个已声明档位之一，否则启动失败。档位语义见 `authz-matrix.md` 档位列：`read_only`（read + 不限角色）/ `business_write`（write + member,admin,owner）/ `delegated_platform`（admin,owner）/ `platform_only`（PERMISSION 面 permissions ⊆ {admin,owner}）。
 3. **注册完备断言**（`assertRegisteredMethodsHaveAuthz`，`grpc.go:157`）：每个已注册 gRPC 方法必须命中 PolicySet，缺失即 `registered grpc methods missing authz annotation`；`grpc.health.v1`/`grpc.reflection.` 框架服务豁免（部署层网络策略保护）。
 
-当前矩阵规模见 `authz-matrix.md` 头部（方法总数与四 Access 分布）；策略变更后 `task gen:authz-matrix` 重新生成，漂移由 `internal/runtime/authz_matrix_doc_test.go` 字节级锁定。
+当前矩阵规模见 `authz-matrix.md` 头部（方法总数与四 Access 分布）；策略变更后 `task gen:authz-matrix` 重新生成，漂移由 `cmd/server/internal/runtime/authz_matrix_doc_test.go` 字节级锁定。
 
 ---
 

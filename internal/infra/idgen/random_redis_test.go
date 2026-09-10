@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/torchwoodcloud/torchwood/internal/domain/idgen"
 	infraidgen "github.com/torchwoodcloud/torchwood/internal/infra/idgen"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 	pkgidgen "github.com/torchwoodcloud/torchwood/pkg/idgen"
 )
 

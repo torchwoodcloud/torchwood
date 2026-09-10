@@ -12,7 +12,7 @@ import (
 	apppayments "github.com/torchwoodcloud/torchwood/internal/app/payments"
 	appstorage "github.com/torchwoodcloud/torchwood/internal/app/storage"
 	"github.com/torchwoodcloud/torchwood/internal/app/subscriptions"
-	"github.com/torchwoodcloud/torchwood/internal/bootkit"
+	"github.com/torchwoodcloud/torchwood/pkg/bootkit"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
 	domainstorage "github.com/torchwoodcloud/torchwood/internal/domain/storage"
@@ -25,7 +25,7 @@ import (
 	infraqueue "github.com/torchwoodcloud/torchwood/internal/infra/queue"
 	"github.com/torchwoodcloud/torchwood/internal/infra/realtime"
 	infrastorage "github.com/torchwoodcloud/torchwood/internal/infra/storage"
-	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	config "github.com/torchwoodcloud/torchwood/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/uow"
 )
 

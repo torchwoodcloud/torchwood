@@ -1,0 +1,342 @@
+syntax = "proto3";
+
+package torchwood.api.config;
+
+option go_package = "github.com/torchwoodcloud/torchwood/pkg/config";
+
+message AppConfig {
+  Server server = 1;
+  Security security = 2;
+  Data data = 3;
+  Storage storage = 4;
+  Functions functions = 5;
+  Telemetry telemetry = 6;
+  Messaging messaging = 7;
+  IdGen idgen = 8;
+  Payments payments = 9;
+}
+
+message Server {
+  GRPC grpc = 1;
+  Http http = 2;
+  Http metrics = 3;
+}
+
+message GRPC {
+  string addr = 1;
+  string timeout = 2;
+}
+
+message Http {
+  message Cors {
+    repeated string allow_origins = 1;
+    repeated string allow_methods = 2;
+    repeated string allow_headers = 3;
+    repeated string expose_headers = 4;
+    bool allow_credentials = 5;
+    int32 max_age = 6;
+  }
+  string addr = 1;
+  string timeout = 2;
+  Cors cors = 3;
+  // Public base URL used to construct OAuth redirect URIs, e.g. https://api.example.com
+  string public_url = 4;
+}
+
+message Security {
+  message Jwt {
+    string secret = 1;
+    string access_ttl = 2;
+    string refresh_ttl = 3;
+  }
+  message ApiKey {
+    string header = 1;
+  }
+  message Sessions {
+    // 单用户最大并发会话数（end-user sessions）；未配置/0 = 默认 50；-1 = 不限。
+    int32 max_per_user = 1;
+  }
+  message RateLimit {
+    message Dimension {
+      // 每窗口允许的最大请求数；未配置/<=0 使用拦截器内置默认值。
+      int32 limit = 1;
+      // 窗口时长字符串（如 "60s"）；未配置/非法格式使用拦截器内置默认值。
+      string window = 2;
+    }
+    // 通用 API 限流总开关；默认 true（未显式配置为 false 即开启）。
+    optional bool enabled = 1;
+    Dimension ip = 2;
+    Dimension user = 3;
+    Dimension api_key = 4;
+    // 函数执行身份维度（P0）：按 project:function 计数，默认对齐 api-key
+    // 档 6000/min；必须在 user 维度回落之前特判（每次执行独立 ActorID，
+    // 落 user 维度 = 实质不限流；全部容器经 bridge NAT 同 IP，落 IP 维度
+    // = 互相击穿）。见 internal/api/interceptor/ratelimit.go。
+    Dimension functions_execution = 5;
+  }
+  Jwt jwt = 1;
+  ApiKey api_key = 2;
+  // Trusted proxy CIDRs (e.g. 10.0.0.0/8). Only peers matching these ranges
+  // may supply X-Forwarded-For / X-Real-Ip; otherwise the peer address is used.
+  repeated string trusted_proxies = 3;
+  // Console bootstrap token required to sign up the first admin. When empty,
+  // Console SignUp is rejected (prevents setup takeover).
+  string setup_token = 4;
+  Sessions sessions = 5;
+  RateLimit rate_limit = 6;
+  // Static data-encryption key (OAuth client secrets / TOTP secrets, secretbox
+  // AES-256-GCM). Independent from jwt.secret; when empty the JWT secret is
+  // used as fallback (startup warns). env: TORCHWOOD_SECURITY_ENCRYPTION_KEY
+  string encryption_key = 7;
+  // 认证面局部频控（T-01）：登录失败双维计数 + 注册 IP 频控。均按"失败
+  // 计数 + 滑动窗口"语义，成功登录/注册重置相关键；未配置的维度使用
+  // 内置默认值（email/ip 各 5 次/60s，signup_ip 10 次/小时）。
+  LoginThrottle login_throttle = 8;
+
+  message LoginThrottle {
+    // 按账号（email 小写规范化）维度的失败计数上限与窗口。
+    RateLimit.Dimension email = 1;
+    // 按来源 IP 维度的失败计数上限与窗口（经 trusted-proxy 校验后的 IP）。
+    RateLimit.Dimension ip = 2;
+    // SignUp 按来源 IP 的注册频控上限与窗口。
+    RateLimit.Dimension signup_ip = 3;
+    // X-API-Key 认证失败按来源 IP 的频控（T-02；默认 10 次/60s）。
+    RateLimit.Dimension api_key_auth = 4;
+  }
+}
+
+message Database {
+  message Pool {
+    int32 max_idle_conns = 1;
+    int32 max_open_conns = 2;
+    string conn_max_lifetime = 3;
+    string conn_max_idle_time = 4;
+  }
+  string source = 1;
+  bool debug = 2;
+  Pool pool = 3;
+  // 慢查询日志阈值（如 "500ms"）；空字符串 = 默认 500ms；"0" = 禁用。
+  string slow_query_threshold = 4;
+}
+
+message Redis {
+  string addr = 1;
+  string password = 2;
+  int32 db = 3;
+}
+
+message Data {
+  Database database = 1;
+  Redis redis = 2;
+}
+
+message Storage {
+  message S3 {
+    string endpoint = 1;
+    string region = 2;
+    string bucket = 3;
+    string access_key_id = 4;
+    string secret_access_key = 5;
+    bool use_ssl = 6;
+  }
+  message Local {
+    string path = 1;
+  }
+  string provider = 1;
+  S3 s3 = 2;
+  Local local = 3;
+}
+
+message Functions {
+  message Docker {
+    string host = 1;
+    string network = 2;
+    string registry = 3;
+  }
+  // Execution 是执行身份（P0）相关配置：函数容器经 bridge NAT 回访
+  // Server API 只能走外部端点（server 不在 tw-func-<project> 网络上），
+  // 平台经 TW_API_BASE_URL env 注入可达地址；空 = 不注入该变量（函数
+  // 需自行解析，自托管部署文档要求显式配置）。
+  message Execution {
+    string api_base_url = 1;
+  }
+  // Dispatcher 是执行器 v2 的分发通路配置（P0.5，owner 拍板方案③：独立
+  // functions-dispatcher 进程专职持有 docker.sock、join 项目网络、承接
+  // Build/Execute/RemoveImage 全部 daemon 操作；server/worker 零 daemon
+  // 依赖）。executor="docker"（v1 回退）时本节不生效。
+  message Dispatcher {
+    // dispatcher 的内网 HTTP 基址（server/worker 侧消费），如
+    // http://functions-dispatcher:9070。executor="dispatcher" 时必填。
+    string url = 1;
+    // 静态共享密钥（内网专用可选认证；空 = 不校验，仅限可信内网）。
+    string shared_token = 2;
+    // ——以下仅 functions-dispatcher 进程消费（池策略全局参数）——
+    // 每 daemon 常驻实例总量上限（设计 Q11 拍板：默认 8；防单项目耗尽宿主内存）。
+    int32 max_resident_instances = 3;
+    // 单函数有界排队深度上限（超限立即 ResourceExhausted；默认 32）。
+    int32 queue_depth = 4;
+    // 队首超时：等待空闲实例的最长时间（如 "10s"；默认 10s，超时
+    // ResourceExhausted——同步调用方不得无界等在 30s ctx 上）。
+    string queue_head_timeout = 5;
+    // 实例启动健康探针等待上限（如 "60s"；默认 60s，超时回收并报错）。
+    string boot_timeout = 6;
+    // dispatcher HTTP 监听地址（仅内网；默认 ":9070"）。
+    string addr = 7;
+    // 函数网络内需可达的 server 容器名（如 compose 的 container_name）。
+    // 非空时，dispatcher 在 join 项目网络（含 internal 变体）的同时把该
+    // 容器一并 attach——函数经容器名 DNS 回访平台 API
+    // （functions.execution.api_base_url = http://<该名字>:<端口>）。
+    // 不可信函数在 internal 网络（无 NAT 出口），这是其回访平台的唯一通路；
+    // 容器名 DNS 在 user-defined 网络（含 internal）上由内置 DNS 解析。
+    // attach 失败不阻断执行（函数可能无需回访），但会记警告——部署时应
+    // 在首次执行前修正。空 = 不 attach（api_base_url 须另行保证可达）。
+    string callback_container = 8;
+  }
+  // executor 是执行器选择：默认 "docker"（v1 每请求一容器，进程内执行，
+  // 回退模式）；"dispatcher"（v2 常驻 runner 为默认执行模型，经
+  // functions-dispatcher 分发）。二选一，不同时启用。
+  string executor = 1;
+  Docker docker = 2;
+  Execution execution = 3;
+  Dispatcher dispatcher = 4;
+  // Trigger 是触发器模块平台级配置（P1 触发器模块）。
+  message Trigger {
+    // HTTP 触发器 per-IP 固定窗口限频（次/分钟；默认 3000）。独立更高默认：
+    // 微信等回调出口 IP 段集中，沿用全局 300/min 会在发奖风暴下 429 →
+    // 重试耗尽 → 事件丢失（设计 §3 三轮复核）。
+    int32 http_ip_per_minute = 1;
+  }
+  Trigger trigger = 5;
+  // ClientInvoke 是客户端调用面平台级配置（P2 客户端调用面；per-function 的
+  // 限频配额/窗口在 functions 表策略列上，不在本节）。
+  message ClientInvoke {
+    // 每用户并发闸门上限（默认 2，防单用户挤占执行槽）。进程内 keyed
+    // 信号量——多实例部署下为近似全局（每实例各 2）。
+    int32 per_user_concurrency = 1;
+    // 并发闸门排队队首超时（如 "5s"；默认 5s，超时 ResourceExhausted——
+    // 同步调用方不得无界等待）。
+    string queue_head_timeout = 2;
+  }
+  ClientInvoke client_invoke = 6;
+}
+
+message Telemetry {
+  bool enabled = 1;
+  string otlp_endpoint = 2;
+  string service_name = 3;
+}
+
+message Messaging {
+  message SMTP {
+    string host = 1;
+    int32 port = 2;
+    string username = 3;
+    string password = 4;
+    string from = 5;
+    bool use_tls = 6;
+  }
+  SMTP smtp = 1;
+  // When true and SMTP host is empty, OTP codes are written to the application log (development only).
+  bool dev_log_otp = 2;
+  SMS sms = 3;
+  // When true and SMS provider is empty, OTP codes are written to the application log (development only).
+  bool dev_log_sms = 4;
+}
+
+message SMS {
+  string provider = 1; // twilio
+  Twilio twilio = 2;
+}
+
+message Twilio {
+  string account_sid = 1;
+  string auth_token = 2;
+  string from = 3;
+}
+
+message IdGen {
+  message Random {
+    int32 length = 1;
+    string charset = 2; // numeric | alphanumeric
+    string redis_key_prefix = 3;
+    int32 max_retries = 4;
+  }
+  message Snowflake {
+    int32 node_id = 1;
+  }
+  message Sequence {
+    string redis_key_prefix = 1;
+  }
+  message Resources {
+    string users = 1;
+    string sessions = 2;
+    string documents = 3;
+  }
+  string default_strategy = 1; // uuid | ulid | snowflake | sequence | random
+  Random random = 2;
+  Snowflake snowflake = 3;
+  Sequence sequence = 4;
+  Resources resources = 5;
+}
+
+// Payments 是 v3 支付子域配置（设计 §1.2）。渠道 secret 一律走
+// TORCHWOOD_ 环境变量，不写入 config.yaml；未配置时服务可启动，
+// 相关操作 fail-closed。
+message Payments {
+  message Stripe {
+    // Secret key (sk_...). env: TORCHWOOD_PAYMENTS_STRIPE_SECRET_KEY
+    string secret_key = 1;
+    // Webhook signing secret (whsec_...). env: TORCHWOOD_PAYMENTS_STRIPE_WEBHOOK_SECRET
+    string webhook_secret = 2;
+    // REST API base URL; empty = https://api.stripe.com (tests may override).
+    string api_base_url = 3;
+  }
+  message WeChat {
+    string mch_id = 1;
+    string app_id = 2;
+    // APIv3 密钥（32 字节，回调 AES-256-GCM 解密）。env: TORCHWOOD_PAYMENTS_WECHAT_API_V3_KEY
+    string api_v3_key = 3;
+    // 商户 API 证书序列号。env: TORCHWOOD_PAYMENTS_WECHAT_MERCHANT_SERIAL_NO
+    string merchant_serial_no = 4;
+    // 商户 API 私钥 PEM。env: TORCHWOOD_PAYMENTS_WECHAT_MERCHANT_PRIVATE_KEY
+    string merchant_private_key = 5;
+    // 微信支付平台证书 PEM（验签）。env: TORCHWOOD_PAYMENTS_WECHAT_PLATFORM_CERT
+    string platform_cert = 6;
+    // 可选：覆盖回调 URL；空则用 server.http.public_url + /v1/payments/callbacks/wechat。
+    string notify_url = 7;
+    // REST API base URL; empty = https://api.mch.weixin.qq.com（tests may override）。
+    string api_base_url = 8;
+  }
+  message Alipay {
+    string app_id = 1;
+    // 应用私钥 PEM。env: TORCHWOOD_PAYMENTS_ALIPAY_APP_PRIVATE_KEY
+    string app_private_key = 2;
+    // 支付宝公钥 PEM。env: TORCHWOOD_PAYMENTS_ALIPAY_ALIPAY_PUBLIC_KEY
+    string alipay_public_key = 3;
+    // 可选：覆盖回调 URL；空则用 server.http.public_url + /v1/payments/callbacks/alipay。
+    string notify_url = 4;
+    // 开放平台网关; empty = https://openapi.alipay.com/gateway.do。
+    string gateway_url = 5;
+  }
+  message IosIap {
+    string bundle_id = 1;
+    // verifyReceipt shared secret。env: TORCHWOOD_PAYMENTS_IOS_IAP_SHARED_SECRET
+    string shared_secret = 2;
+    // App Store Connect API（StoreKit 2 / ASN 备用）issuer。
+    string issuer_id = 3;
+    string key_id = 4;
+    // App Store Connect API .p8 PEM。env: TORCHWOOD_PAYMENTS_IOS_IAP_PRIVATE_KEY
+    string private_key = 5;
+    // Apple Root CA PEM（可多张）；空则使用内置 Apple Root CA - G3。
+    // env: TORCHWOOD_PAYMENTS_IOS_IAP_APPLE_ROOT_CERT
+    string apple_root_cert = 6;
+    // verifyReceipt 生产地址；空 = https://buy.itunes.apple.com/verifyReceipt。
+    string verify_receipt_url = 7;
+    // verifyReceipt 沙盒地址；空 = https://sandbox.itunes.apple.com/verifyReceipt。
+    string sandbox_verify_url = 8;
+  }
+  Stripe stripe = 1;
+  WeChat wechat = 2;
+  Alipay alipay = 3;
+  IosIap ios_iap = 4;
+}

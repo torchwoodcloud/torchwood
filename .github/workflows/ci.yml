@@ -140,9 +140,9 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq protobuf-compiler
           go build -o "$(go env GOPATH)/bin/protoc-gen-go" google.golang.org/protobuf/cmd/protoc-gen-go
           buf generate
-          (cd internal/pkg/config && protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto)
+          (cd pkg/config && protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto)
           task wire:all
-          git diff --exit-code -- genproto internal/pkg/config cmd go.mod go.sum
+          git diff --exit-code -- genproto pkg/config cmd go.mod go.sum
 
       - uses: pnpm/action-setup@v4
         with:

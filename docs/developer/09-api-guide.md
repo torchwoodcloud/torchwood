@@ -1,7 +1,7 @@
 # 09 后端 API 开发指南
 
 > 面向后端开发者：以 `ProjectsService` 为范例，走完 `proto→genproto→domain→app→infra→api→Wire` 全流程，并约定分页、错误与 OpenAPI 一致性。
-> 源码：`proto/server/v1/projects.proto`、`internal/api/servergrpc/`、`internal/app/server/`、`pkg/crud/`、`internal/runtime/grpc_swagger_test.go`。
+> 源码：`proto/server/v1/projects.proto`、`internal/api/servergrpc/`、`internal/app/server/`、`pkg/crud/`、`cmd/server/internal/runtime/grpc_swagger_test.go`。
 
 ## 1 调用链总览
 
@@ -64,7 +64,7 @@ service ProjectsService {
 | `ACCESS_PERMISSION` | admin 会话专属 | `permissions`（如 `["owner","admin"]`）；API key 一律拒绝 |
 | `ACCESS_SYSTEM` | 内部预留 | 当前禁用（启动断言拒绝） |
 
-方法级 `method_auth` 优先，缺省回落服务级 `service_auth.default_access`；细粒度字段仅方法级携带。策略由 `internal/runtime` 启动期收集为 `PolicySet` 并过全量语义断言（档位/死 scope/值域/项目寻址——见 `05-authentication.md` §3/§7），未解析出 authz 的方法启动即 `missing auth policy`。每方法须同步 OpenAPI 扩展 `x-torchwood-access`（值域 `public/end_user/server/permission`，§10 一致性测试锁定）。
+方法级 `method_auth` 优先，缺省回落服务级 `service_auth.default_access`；细粒度字段仅方法级携带。策略由 `cmd/server/internal/runtime` 启动期收集为 `PolicySet` 并过全量语义断言（档位/死 scope/值域/项目寻址——见 `05-authentication.md` §3/§7），未解析出 authz 的方法启动即 `missing auth policy`。每方法须同步 OpenAPI 扩展 `x-torchwood-access`（值域 `public/end_user/server/permission`，§10 一致性测试锁定）。
 
 **API key scope 语法（key 持有侧）**：`*`/`all`、`<resource>`、`<resource>.read/.write` 为既有形态；T-02 起可寻址资源（`databases`/`storage`）支持实例限定 `databases:<database_id>[.read|.write]`、`storage:<bucket_id>[.read|.write]`——请求按方法声明的资源族提取目标实例强制匹配，无实例寻址的方法（List/CreateBucket 等全集型）对实例限定 scope 一律 403。完整语法表、DDL 归属与创建校验规则见 `05-authentication.md` §6。
 
@@ -100,7 +100,7 @@ message DeleteSessionRequest {
 task generate:proto # buf lint + buf generate（buf.gen.yaml v2：go/gateway/grpc/openapiv2 → genproto，paths=source_relative）
 ```
 
-产物：`*_grpc.pb.go`（`XxxServiceServer` + `Register`）、`*.pb.gw.go`（`RegisterXxxHandlerFromEndpoint`）、`*.swagger.json`（`json_names_for_fields`）、`*.pb.go` 描述符（供 `internal/runtime.BuildMethodPolicies` 收集鉴权策略）。
+产物：`*_grpc.pb.go`（`XxxServiceServer` + `Register`）、`*.pb.gw.go`（`RegisterXxxHandlerFromEndpoint`）、`*.swagger.json`（`json_names_for_fields`）、`*.pb.go` 描述符（供 `cmd/server/internal/runtime.BuildMethodPolicies` 收集鉴权策略）。
 
 ## 4 步骤 3：domain 端口
 
@@ -210,13 +210,13 @@ wire.Bind(new(projects.Repository), new(*bunrepo.ProjectRepo))
 
 ### 注册
 
-业务 proto 文件清单单一登记在 `internal/runtime/grpc.go` 的 `authzFileDescriptors()`（新增服务文件只登记此处）；`ProvideMethodPolicies` → `BuildMethodPolicies` 启动期收集策略并过语义断言，`assertRegisteredMethodsHaveAuthz` fail-closed（已注册方法必须命中 PolicySet）。gateway 侧在 `internal/runtime/grpc_gateway.go` 登记 `RegisterXxxHandlerFromEndpoint`。
+业务 proto 文件清单单一登记在 `cmd/server/internal/runtime/grpc.go` 的 `authzFileDescriptors()`（新增服务文件只登记此处）；`ProvideMethodPolicies` → `BuildMethodPolicies` 启动期收集策略并过语义断言，`assertRegisteredMethodsHaveAuthz` fail-closed（已注册方法必须命中 PolicySet）。gateway 侧在 `cmd/server/internal/runtime/grpc_gateway.go` 登记 `RegisterXxxHandlerFromEndpoint`。
 
 ## 9 错误与网关
 
 用例层 `codes.Unauthenticated/PermissionDenied/NotFound/InvalidArgument/AlreadyExists`；`FailedPrecondition/OutOfRange` 用于 `version_*`/`超限`。
 
-`internal/runtime/errors.go:HTTPErrorHandler` 统转 JSON：
+`cmd/server/internal/runtime/errors.go:HTTPErrorHandler` 统转 JSON：
 
 ```json
 {"error":{"type":"invalid_request_error","code":"InvalidArgument","message":"...","error_id":"<uuid>","error_code":"ERROR_CODE_INVALID_REQUEST"}}
@@ -232,7 +232,7 @@ wire.Bind(new(projects.Repository), new(*bunrepo.ProjectRepo))
 
 default 错误响应建模为声明式：`buf.gen.yaml` 对 openapiv2 插件设置 `disable_default_errors=true` 关闭生成器自带的 `rpcStatus` 注入（该结构与运行时错误体不符）；每个 service proto 文件级声明的 `responses.default` 会自动填充到该文件全部 operation，并使 `Error/ErrorResponse/ErrorCode` 定义经 customRefs 原生产出（legacy 命名，当前为 `v1Error/v1ErrorCode/v1ErrorResponse`）。新增 service 文件必须携带同一段 `responses.default`，否则该文件的 operation 将缺失错误契约，测试即红。
 
-`internal/runtime/grpc_swagger_test.go` `TestSwaggerAccessExtensionMatchesCollectMethodsByAccess` 逐 `genproto/**/*.swagger.json` 断言：`businessFileDescriptors()`（复用 `grpc.go` 的 `authzFileDescriptors` 单一清单）→ `BuildMethodPolicies` 推导 access → 比对 `doc.XAccess`（顶层=服务默认）与每 `operation.x-torchwood-access`（继承或显式）完全一致，同时断言每个 operation 的 default 响应引用 `v1ErrorResponse`；`TestSwaggerNoRpcStatus` 断言全部 swagger 无 `rpcStatus` 残留（`disable_default_errors` 回退即红）。新增服务后 file 清单同步一处即可（swagger 测试复用同一清单），否则测试失败（≥14 文件、≥140 operation）。
+`cmd/server/internal/runtime/grpc_swagger_test.go` `TestSwaggerAccessExtensionMatchesCollectMethodsByAccess` 逐 `genproto/**/*.swagger.json` 断言：`businessFileDescriptors()`（复用 `grpc.go` 的 `authzFileDescriptors` 单一清单）→ `BuildMethodPolicies` 推导 access → 比对 `doc.XAccess`（顶层=服务默认）与每 `operation.x-torchwood-access`（继承或显式）完全一致，同时断言每个 operation 的 default 响应引用 `v1ErrorResponse`；`TestSwaggerNoRpcStatus` 断言全部 swagger 无 `rpcStatus` 残留（`disable_default_errors` 回退即红）。新增服务后 file 清单同步一处即可（swagger 测试复用同一清单），否则测试失败（≥14 文件、≥140 operation）。
 
 ## 11 OutboxService 示例（新增服务的完整参照）
 
@@ -255,7 +255,7 @@ CLI 调用：`torchwood outbox list-dead --project <id>` / `torchwood rpc /torch
 
 ## 12 自检清单
 
-1. `task generate:proto && go build ./...` 通过，`genproto/` 无手改；2. `task wire:all` 已重生成；3. `go vet` + `gofmt -l` 空；4. 错误码/分页符合 §7/§9；5. `TestSwaggerAccessExtensionMatches...` 通过；6. 集成测试参照 `internal/api/servergrpc/projects_test.go`（`stub repo + contexts.WithPrincipal`）与 `internal/testutil` 真库。
+1. `task generate:proto && go build ./...` 通过，`genproto/` 无手改；2. `task wire:all` 已重生成；3. `go vet` + `gofmt -l` 空；4. 错误码/分页符合 §7/§9；5. `TestSwaggerAccessExtensionMatches...` 通过；6. 集成测试参照 `internal/api/servergrpc/projects_test.go`（`stub repo + contexts.WithPrincipal`）与 `pkg/testutil` 真库。
 
 ## 13 参考
 

@@ -14,7 +14,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/model"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
-	"github.com/torchwoodcloud/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/testutil"
 )
 
 // recordingTransport 记录 Enqueue 收到的信封（测试 transport 桩）。

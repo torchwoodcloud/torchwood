@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	"github.com/torchwoodcloud/torchwood/internal/infra/health"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/buildinfo"
+	"github.com/torchwoodcloud/torchwood/pkg/buildinfo"
 )
 
 func fakeCheckers(results map[string]error) *health.Checkers {

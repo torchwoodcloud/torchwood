@@ -13,8 +13,8 @@ import (
 	infraauth "github.com/torchwoodcloud/torchwood/internal/infra/auth"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
-	"github.com/torchwoodcloud/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/testutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

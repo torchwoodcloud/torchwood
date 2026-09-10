@@ -5,7 +5,7 @@ import (
 
 	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	appfunctions "github.com/torchwoodcloud/torchwood/internal/app/functions"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

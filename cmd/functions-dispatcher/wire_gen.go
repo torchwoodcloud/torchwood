@@ -9,9 +9,9 @@ package main
 import (
 	"github.com/lynx-go/lynx"
 	"github.com/lynx-go/lynx/boot"
-	"github.com/torchwoodcloud/torchwood/internal/bootkit"
-	"github.com/torchwoodcloud/torchwood/internal/functionsdispatcher"
+	"github.com/torchwoodcloud/torchwood/cmd/functions-dispatcher/internal/functionsdispatcher"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
+	"github.com/torchwoodcloud/torchwood/pkg/bootkit"
 )
 
 // Injectors from wire.go:

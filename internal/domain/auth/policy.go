@@ -8,7 +8,7 @@ import (
 
 // 本文件是授权策略注册表的 domain 纯类型层（机制重设计 M2）：
 // 策略唯一声明在 proto（authz.proto method_auth/service_auth），由
-// internal/runtime 的收集器（BuildMethodPolicies）从 descriptor 构造
+// cmd/server/internal/runtime 的收集器（BuildMethodPolicies）从 descriptor 构造
 // PolicySet 注入各执行点。domain 不依赖 genproto（AGENTS.md 分层约定），
 // 因此这里只定义类型、档位分类与语义断言——全部是输入 PolicySet 的纯函数。
 

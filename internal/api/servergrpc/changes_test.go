@@ -14,7 +14,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
 )
 
 // changesDocDB：仅覆写 ListChanges/GetCollection（其余经嵌入接口 nil 兜底，

@@ -9,7 +9,7 @@ import (
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	domainusers "github.com/torchwoodcloud/torchwood/internal/domain/users"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
-	"github.com/torchwoodcloud/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/testutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

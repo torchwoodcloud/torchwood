@@ -1,6 +1,6 @@
 # Torchwood 架构总览
 
-> 面向后端开发者的分层、进程与存储总览。以代码为事实源：`AGENTS.md`、`README.md`、`cmd/server/provides.go`、`internal/pkg/config/config.proto`、`proto/`。
+> 面向后端开发者的分层、进程与存储总览。以代码为事实源：`AGENTS.md`、`README.md`、`cmd/server/provides.go`、`pkg/config/config.proto`、`proto/`。
 > 最新更新：2026-09-07
 
 ---
@@ -48,9 +48,9 @@ internal/api  ──→  internal/app  ──→  internal/domain  ←──  in
 | 用例层 | `internal/app` | 业务规则与事务编排，不感知 gRPC/HTTP（`app/client`/`console`/`server`/`storage`/`functions`/`documents`） | → `domain` |
 | 领域层 | `internal/domain` | 模型与端口接口（`*Repo`、`auth.PolicySet` 策略类型），无外部依赖 | — |
 | 适配器层 | `internal/infra` | 端口实现：`bun/bunrepo`、`documentdb`、`storage`、`queue`、`messaging`、`auth`、`projectschema` | 实现 `domain` |
-| 装配/运行时 | `internal/runtime` + `cmd/*` | gRPC/gateway/Console SPA/metrics 装配、authz 策略收集（`BuildMethodPolicies`）、CORS、健康检查 | → `api`/`app`/`infra` |
+| 装配/运行时 | `cmd/server/internal/runtime` + `cmd/*` | gRPC/gateway/Console SPA/metrics 装配、authz 策略收集（`BuildMethodPolicies`）、CORS、健康检查 | → `api`/`app`/`infra` |
 
-公共包：`internal/pkg`（`config`/`database`/`contexts`/`buildinfo`）进程内共享；`pkg/`（`query`/`crud`/`jwtparser`/`password`/`secretbox`/`idgen`/`semaphore`）可复用库。
+共享内核 `pkg/`（`config`/`contexts`/`buildinfo`/`bootkit`/`testutil` + `query`/`crud`/`jwtparser`/`password`/`secretbox`/`idgen`/`semaphore`/`uow`/`ident`）；`internal/` 只放四层，各独立二进制的私有组件放 `cmd/<app>/internal/`。
 
 规则：
 
@@ -64,27 +64,24 @@ internal/api  ──→  internal/app  ──→  internal/domain  ←──  in
 
 ```
 torchwood/
-├── cmd/server/        # 主服务入口：main.go + provides.go + wire.go → wire_gen.go
+├── cmd/server/        # 主服务入口：main.go + provides.go + wire.go → wire_gen.go；internal/runtime/ 为其私有运行时装配（grpc/gateway/Console SPA/CORS/metrics、authz 策略收集与 authz-matrix 文档生成）
 ├── cmd/worker/        # 异步 worker 入口：独立 Wire 装配（同构）
+├── cmd/functions-dispatcher/  # 函数执行分发器入口（独立进程，专职持有 docker.sock）；internal/functionsdispatcher/ 为其私有实现
 ├── cmd/torchwood/        # CLI（lynx-go/commands，sdk/go InvokeJSON，不直连 genproto；import_guard_test 兜底）
 ├── console/           # React SPA，embed.go //go:embed dist；Vite 代理 /v1
 ├── proto/             # client/v1 · server/v1 · console/v1 · shared/v1（唯一事实源）
 ├── genproto/          # 生成产物 *.pb.go / *_grpc.pb.go / *.pb.gw.go / *.swagger.json（禁手改）
-├── internal/
+├── internal/          # 只含 server 主调用链四层（DDD）
 │   ├── api/           # clientgrpc | consolegrpc | servergrpc | serverhttp | realtime | interceptor
 │   │   ├── clientgrpc/   # Account、Databases、Groups、Payments、Assets、Subscriptions（Client 面）
 │   │   ├── consolegrpc/  # ConsoleAuth、Admins
 │   │   ├── servergrpc/   # Projects/Users/Storage/Databases/Functions/APIKeys/Groups/Health/OAuthProviders/Payments/Assets/Subscriptions/Billing/Outbox
 │   │   ├── serverhttp/   # multipart 上传下载、OAuth 回调、Functions code 上传、well-known
 │   │   └── interceptor/  # auth（策略执行）、ratelimit、audit、usage、validate(protovalidate)、clientinfo、trusted_proxy
-│   ├── runtime/       # 服务装配与运行时：grpc/gateway/Console SPA/CORS/metrics 注册、authz 策略收集（BuildMethodPolicies → PolicySet）、authz-matrix 文档生成
 │   ├── app/           # client | console | server | storage | functions | documents | events | shared(四守卫)
 │   ├── domain/        # projects/users/auth(含 PolicySet 策略类型)/databases/storage/functions/billing/audit/shared...
-│   ├── infra/         # bun/bunrepo | documentdb | storage | functions | auth(validator) | projectschema | events | queue | messaging | health
-│   ├── bootkit/       # server/worker 共享启动校验（jwt secret、roles_sig 密钥初始化）与钩子
-│   ├── pkg/           # config/config.proto + bind.go | contexts(Principal) | database | buildinfo
-│   └── testutil/      # 集成测试 DB 辅助（TORCHWOOD_TEST_*，os.Getenv 直读）
-├── pkg/               # query(DSL 糖+typed AST) | crud | grpc/interceptor | jwtparser | password | secretbox | semaphore | idgen | uow
+│   └── infra/         # bun/bunrepo | documentdb | storage | functions | auth(validator) | projectschema | events | queue | messaging | health
+├── pkg/               # 共享内核：config(config.proto + bind.go) | contexts(Principal) | bootkit(server/worker/dispatcher 共享启动校验与钩子) | buildinfo | testutil(集成测试 DB 辅助) | query(DSL 糖+typed AST) | crud | jwtparser | password | secretbox | semaphore | idgen | ident | uow
 ├── sdk/               # typescript/ | go/client+server | demo/
 ├── configs/config.yaml.template  # 全部键与默认值，敏感键注释环境变量
 ├── db/migrations/     # golang-migrate SQL（public 控制面 + 全局 catalog 两表 + RLS 函数）
@@ -92,7 +89,7 @@ torchwood/
 └── Taskfile.yml       # 任务全表
 ```
 
-`internal/api/app/domain/infra` 三段式为代码组织主轴；`pkg/` 为可对外复用，`internal/pkg` 仅进程内。
+`internal/{api,app,domain,infra}` 四层为代码组织主轴；`pkg/` 为共享内核（含启动装配与测试辅助），应用私有组件一律收进 `cmd/<app>/internal/`。
 
 ---
 
@@ -100,11 +97,11 @@ torchwood/
 
 | 进程 | 入口 | 职责 | 配置校验 |
 |------|------|------|----------|
-| `server` | `cmd/server` | Lynx Runner：gRPC `127.0.0.1:9060` + gateway/Console SPA `:9080` + Metrics `127.0.0.1:9040` + 自定义 HTTP；装配在 `internal/runtime`（`grpc.go`/`grpc_gateway.go`/`console.go`/`metrics.go`），注册顺序 `grpc→gateway→realtime→metrics` | `security.jwt.secret` 必填（`internal/bootkit/config.go:33`，server/worker 共享）+ authz 策略语义断言（`AssertSemantic`） |
+| `server` | `cmd/server` | Lynx Runner：gRPC `127.0.0.1:9060` + gateway/Console SPA `:9080` + Metrics `127.0.0.1:9040` + 自定义 HTTP；装配在 `cmd/server/internal/runtime`（`grpc.go`/`grpc_gateway.go`/`console.go`/`metrics.go`），注册顺序 `grpc→gateway→realtime→metrics` | `security.jwt.secret` 必填（`pkg/bootkit/config.go:33`，server/worker 共享）+ authz 策略语义断言（`AssertSemantic`） |
 | `dev:worker` | `cmd/worker` | 后台任务消费者：Functions 队列、outbox 分发、chunk 清理、Stream 修剪、计费闭环等；与 server 共享 `app/domain/infra` 但独立 `ProviderSet`（无 `api` 层） | `data.database.source` 必填（`cmd/worker/provides.go:128`） |
 | `CLI` | `cmd/torchwood` | `bin/torchwood`，`lynx-go/commands` + `sdk/go/server.InvokeJSON` 按 `protoregistry.GlobalFiles` 动态分发；`rpc` 逃生舱覆盖全部 Server RPC，新增 RPC 无需登记。全局旗标在子命令路径之后、位置参数之前给出（环境变量 `TORCHWOOD_CLI_*` 优先）；退出码 0 成功 / 1 参数与校验错 / 2=40x / 3=5xx / 4=429 | `TORCHWOOD_CLI_*` 环境覆盖 |
 
-三者均 `godotenv.Load()` 加载 `.env`，配置绑定走 `config.NewBindConfigFunc()`（`internal/pkg/config/bind.go:21`），Wire 生成见 `04-codegen.md`。
+三者均 `godotenv.Load()` 加载 `.env`，配置绑定走 `config.NewBindConfigFunc()`（`pkg/config/bind.go:21`），Wire 生成见 `04-codegen.md`。
 
 ---
 
@@ -129,7 +126,7 @@ torchwood/
 ```
 HTTP 客户端 / Agent
   │ POST /v1/server/users（x-api-key）
-  ▼ grpc-gateway（internal/runtime/grpc_gateway.go）
+  ▼ grpc-gateway（cmd/server/internal/runtime/grpc_gateway.go）
   │ JSON↔proto、CORS、header 透传
   ▼ gRPC Server + 拦截器链（clientinfo → auth → ratelimit → audit → usage → validate）
   │   auth：PolicySet 策略门禁 + Principal 注入（internal/api/interceptor/jwt.go:126）
@@ -142,7 +139,7 @@ HTTP 客户端 / Agent
   ▼ PostgreSQL / Redis / S3
 ```
 
-认证：`interceptor/jwt.go` → `auth.Validator`（`internal/infra/auth/validator.go` + `authenticate.go`）校验 `api_key` 的 `Enabled`/`ExpireAt` 与 `project Status==active` → 写入 `Principal`；策略来自 `ProvideMethodPolicies` 收集的 proto 注解（`internal/runtime/authz_policy.go`）。
+认证：`interceptor/jwt.go` → `auth.Validator`（`internal/infra/auth/validator.go` + `authenticate.go`）校验 `api_key` 的 `Enabled`/`ExpireAt` 与 `project Status==active` → 写入 `Principal`；策略来自 `ProvideMethodPolicies` 收集的 proto 注解（`cmd/server/internal/runtime/authz_policy.go`）。
 
 代码路径示例：
 
@@ -152,7 +149,7 @@ HTTP 客户端 / Agent
 | 用例 | `internal/app/server/users.go` |
 | 端口 | `internal/domain/users` (`UserRepo`) |
 | 适配器 | `internal/infra/bun/bunrepo` + `internal/infra/documentdb` |
-| 注册 | `internal/runtime/grpc.go`（gRPC + 拦截器链）+ `grpc_gateway.go` |
+| 注册 | `cmd/server/internal/runtime/grpc.go`（gRPC + 拦截器链）+ `grpc_gateway.go` |
 
 ---
 
@@ -161,10 +158,10 @@ HTTP 客户端 / Agent
 - **W-J 事件脊柱**：`outbox` + `outbox_dead` 死信表，`OutboxService/ListDeadLetters:ReplayDeadLetter`（`outbox:read/write`，`proto/server/v1/outbox.proto:43`）+ gauge `torchwood_outbox_dead`，经济事件信封补 `version`（`updated_at` 纳秒）判序，防重发与乱序（`arch-review-2026-08-fix-plan.md:345`）。
 - **W-H 工程门禁**：`golangci-lint run --new-from-rev=origin/main` 棘轮 + 全量 0 warning、`buf breaking --against '.git#branch=origin/main'`、零漂移 `buf generate + config + wire:all + git diff --exit-code`、`go test -race` 全量（`Taskfile.yml:29,172`）。
 - **W-K 契约治理**：`ListRequest.filter/order_by` 未实现一律 `reserved` 消灭静默 no-op，client/server 重复 message 抽 `shared` 基底，新增 RPC 只须在 proto 标 `method_auth`（access + admin_roles/api_key_scope/permissions 一处声明）。
-- **authz 策略注册表（机制重设计）**：策略唯一声明在 proto 注解 → `BuildMethodPolicies`（`internal/runtime/authz_policy.go`）启动期收集为 `domainauth.PolicySet`，拦截器/HTTP/realtime/scope 词表/授权矩阵文档全消费同一注册表；Go 侧手写规则表（`apiKeyScopeRules`/`adminRoleMethodRules`）退役；档位（read_only/business_write/delegated_platform/platform_only）由声明派生，语义断言 fail-closed（`05-authentication.md` §3/§7）。
+- **authz 策略注册表（机制重设计）**：策略唯一声明在 proto 注解 → `BuildMethodPolicies`（`cmd/server/internal/runtime/authz_policy.go`）启动期收集为 `domainauth.PolicySet`，拦截器/HTTP/realtime/scope 词表/授权矩阵文档全消费同一注册表；Go 侧手写规则表（`apiKeyScopeRules`/`adminRoleMethodRules`）退役；档位（read_only/business_write/delegated_platform/platform_only）由声明派生，语义断言 fail-closed（`05-authentication.md` §3/§7）。
 - **请求形状校验 protovalidate**：required/长度/正则/枚举/范围以 `buf.validate` 注解声明在 proto，`ValidateInterceptor` 链尾统一求值（client/server 两面 20 处 handler 手写检查上收），跨字段与业务规则仍留 app 层（`09-api-guide.md` §2.3）。
 - **DocumentDB 重设计落地**：全局 catalog 两表（GetCollection 单查询）、`_acl` 内嵌 + RLS policy 判定（`tw_can`/`tw_visible` + roles_sig 验签，GUC 伪造通道封死）、物理表名 = collectionID、keyset-only 分页、写幂等 `request_id`、outbox seq 事件链、execute-tx 事务内核、数组列/vector/KNN（`06-databases.md`）。
-- **W-I 独立加密密钥**：`security.encryption_key`（`TORCHWOOD_SECURITY_ENCRYPTION_KEY`）隔离静态字段加密（OAuth/TOTP），未配回退 `jwt.secret` 并告警（`internal/pkg/config/crypto.go:10`）。
+- **W-I 独立加密密钥**：`security.encryption_key`（`TORCHWOOD_SECURITY_ENCRYPTION_KEY`）隔离静态字段加密（OAuth/TOTP），未配回退 `jwt.secret` 并告警（`pkg/config/crypto.go:10`）。
 - **全局信号量**：`pkg/semaphore` Redis `SET NX + TTL` 分布式计数（`build 4` / `run 16`，TTL 5m，多槽 `slot:<idx>`），内存 `InMemory` 回退（`internal/app/functions/functions.go:31`）。
 - **逐语句超时**：跨 `bun`/`documentdb` 仓储 `context.WithTimeout 5s/10s` 收敛慢查询与残留连接（`W-H` 收敛项）。
 
@@ -172,7 +169,7 @@ HTTP 客户端 / Agent
 
 ## 9. 约束与入口
 
-- gRPC 方法必须带 `method_auth`（或服务 `service_auth` 默认），否则启动失败（`missing auth policy` / `registered grpc methods missing authz annotation`，`internal/runtime/grpc.go`）。
+- gRPC 方法必须带 `method_auth`（或服务 `service_auth` 默认），否则启动失败（`missing auth policy` / `registered grpc methods missing authz annotation`，`cmd/server/internal/runtime/grpc.go`）。
 - Proto 删除字段一律 `reserved`（号+名）；更新请求可选字段 `proto3 optional`；时间 `google.protobuf.Timestamp`（JSON RFC3339）。
 - 列表复用 `pkg/crud`（AIP-132/158/160），动态文档用 `pkg/query`；配置单一入口 `config.proto`。
 - JWT claims 映射与 `pkg/jwtparser` 保持一致；Console 会话 `TORCHWOOD_session_console` HttpOnly cookie（`03-configuration.md §6.2`）。

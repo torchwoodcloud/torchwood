@@ -11,7 +11,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/stretchr/testify/require"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

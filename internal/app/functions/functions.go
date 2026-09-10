@@ -10,7 +10,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/semaphore"
 )
 

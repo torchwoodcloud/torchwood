@@ -15,7 +15,6 @@ import (
 	payments2 "github.com/torchwoodcloud/torchwood/internal/app/payments"
 	storage2 "github.com/torchwoodcloud/torchwood/internal/app/storage"
 	"github.com/torchwoodcloud/torchwood/internal/app/subscriptions"
-	"github.com/torchwoodcloud/torchwood/internal/bootkit"
 	"github.com/torchwoodcloud/torchwood/internal/infra/billing"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
@@ -25,6 +24,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/queue"
 	"github.com/torchwoodcloud/torchwood/internal/infra/realtime"
 	"github.com/torchwoodcloud/torchwood/internal/infra/storage"
+	"github.com/torchwoodcloud/torchwood/pkg/bootkit"
 )
 
 // Injectors from wire.go:

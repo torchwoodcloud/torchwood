@@ -14,7 +14,7 @@ server:
       # token 调 API，CORS 不是授权边界；中间件对请求 Origin 回显 ACAO + Vary。
       # OAuth 浏览器流走 /v1/account/oauth2/{provider}/authorize 302 端点，不经 CORS。
       # 如需跨站携带会话 cookie 的特殊形态：allow_origins 显式列出来源，
-      # 并把 allow_credentials 改回 true（带凭据时不接受 "*"，见 runtime/cors.go）
+      # 并把 allow_credentials 改回 true（带凭据时不接受 "*"，见 cmd/server/internal/runtime/cors.go）
       allow_origins: ["*"]
       allow_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
       allow_headers: ["Content-Type", "Authorization", "X-Api-Key", "X-Torchwood-Project", "X-Request-Id", "X-Correlation-Id", "Idempotency-Key"]

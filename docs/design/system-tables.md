@@ -549,7 +549,7 @@ func (r *userRepo) GetByEmail(ctx context.Context, projectID, email string) (*do
 - `Scoped` 仍 `projectschema.Apply` + `ProjectTable`（functions 已如此）。cut 后 Apply 是 no-op。
 - **禁止** `WHERE project_id=?`（S6 无该列）。租户边界 = schema。
 - 空 projectID → 现有 `errEmptyProjectID`（禁止扫全实例）。
-- 单测：`fake` 实现端口；集成测走 `internal/testutil` PG。
+- 单测：`fake` 实现端口；集成测走 `pkg/testutil` PG。
 
 ### 7.4 Wire 切换（一把，不要双 bind）
 

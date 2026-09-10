@@ -11,7 +11,7 @@ import (
 	appserver "github.com/torchwoodcloud/torchwood/internal/app/server"
 	"github.com/torchwoodcloud/torchwood/internal/app/shared"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
 	"github.com/torchwoodcloud/torchwood/pkg/crud"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	domainassets "github.com/torchwoodcloud/torchwood/internal/domain/assets"
 	domainshared "github.com/torchwoodcloud/torchwood/internal/domain/shared"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
 )
 
 // P0 执行身份：execution principal 的账本 operator 快照映射——actor_kind=

@@ -9,6 +9,7 @@ package main
 import (
 	"github.com/lynx-go/lynx"
 	"github.com/lynx-go/lynx/boot"
+	"github.com/torchwoodcloud/torchwood/cmd/server/internal/runtime"
 	"github.com/torchwoodcloud/torchwood/internal/api/clientgrpc"
 	"github.com/torchwoodcloud/torchwood/internal/api/consolegrpc"
 	realtime2 "github.com/torchwoodcloud/torchwood/internal/api/realtime"
@@ -24,7 +25,6 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/app/server"
 	storage2 "github.com/torchwoodcloud/torchwood/internal/app/storage"
 	"github.com/torchwoodcloud/torchwood/internal/app/subscriptions"
-	"github.com/torchwoodcloud/torchwood/internal/bootkit"
 	"github.com/torchwoodcloud/torchwood/internal/infra"
 	"github.com/torchwoodcloud/torchwood/internal/infra/auth"
 	"github.com/torchwoodcloud/torchwood/internal/infra/auth/principalcache"
@@ -41,7 +41,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/queue"
 	"github.com/torchwoodcloud/torchwood/internal/infra/realtime"
 	"github.com/torchwoodcloud/torchwood/internal/infra/storage"
-	"github.com/torchwoodcloud/torchwood/internal/runtime"
+	"github.com/torchwoodcloud/torchwood/pkg/bootkit"
 )
 
 // Injectors from wire.go:

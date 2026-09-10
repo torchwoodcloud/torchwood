@@ -10,7 +10,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/model"
 	"github.com/torchwoodcloud/torchwood/internal/infra/documentdb"
 	"github.com/torchwoodcloud/torchwood/internal/infra/projectschema"
-	"github.com/torchwoodcloud/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/testutil"
 )
 
 // TestFirstDatabase_NoSystemCollections：系统资源不寄居缺省第一业务库（app）。

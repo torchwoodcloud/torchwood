@@ -31,9 +31,9 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 	infrastorage "github.com/torchwoodcloud/torchwood/internal/infra/storage"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
-	"github.com/torchwoodcloud/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/config"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/testutil"
 )
 
 // serverWriteCtx 返回带 Server API 写主体（API key 类型）principal 的上下文：

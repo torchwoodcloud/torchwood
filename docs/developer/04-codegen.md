@@ -13,7 +13,7 @@
 |------|------|------|
 | `tools:install` | `go install protoc-gen-go / migrate / buf@v1.65.0 / wire / golangci-lint@v2.12.2` | 首次安装工具链 |
 | `generate:proto` | `buf lint` + `buf generate` | 生成 gRPC/gateway/Swagger（§2） |
-| `generate:config` | `protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto`（`internal/pkg/config` 内执行） | 生成 `config.pb.go` |
+| `generate:config` | `protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto`（`pkg/config` 内执行） | 生成 `config.pb.go` |
 | `wire:server` / `wire:worker` | `go mod tidy && go run -mod=mod github.com/google/wire/cmd/wire` | 各自重算 `wire_gen.go` |
 | `wire:all` | `wire:server` + `wire:worker` | 全量 Wire |
 | `generate:all` | `generate:proto` → `generate:config` → `wire:all` | 一键全量（§5） |
@@ -69,13 +69,13 @@ breaking: {use: [FILE]}
 
 ## 3. generate:config
 
-`Taskfile.yml:14` 在 `internal/pkg/config` 内执行：
+`Taskfile.yml:14` 在 `pkg/config` 内执行：
 
 ```bash
 protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto
 ```
 
-产出 `internal/pkg/config/config.pb.go`（仅 message/getter，供 `bind.go` 反射与 `NewAppConfig` 校验）。
+产出 `pkg/config/config.pb.go`（仅 message/getter，供 `bind.go` 反射与 `NewAppConfig` 校验）。
 
 ---
 
@@ -120,11 +120,11 @@ generate:all
 **新增 gRPC 方法清单**（fail-closed，`05-authentication.md §3/§7`）：
 
 1. 在 `proto/*/v1/*.proto` 为方法加 `(method_auth)`（或依赖 `service_auth` 默认），声明 `access` 与该面的细粒度门（SERVER 面 `admin_roles` + `api_key_scope`；PERMISSION 面 `permissions`）——策略唯一声明源在 proto，必填否则启动 `missing auth policy`；
-2. 同步 OpenAPI 扩展 `x-torchwood-access`（`public/end_user/server/permission`），一致性由 `internal/runtime/grpc_swagger_test.go` 断言；
+2. 同步 OpenAPI 扩展 `x-torchwood-access`（`public/end_user/server/permission`），一致性由 `cmd/server/internal/runtime/grpc_swagger_test.go` 断言；
 3. 在对应 `app/shared/authz.go` 选择 `RequireServerPrincipal`（业务写，API Key 可做）或 `RequirePlatformPrincipal`（平台级）做纵深防御；
 4. 运行 `task generate:all && task build && go vet ./...` 验证零漂移。
 
-`proto/shared/v1/authz.proto` 的 `AccessLevel`/`MethodAuth` 为鉴权唯一事实源（`internal/runtime.BuildMethodPolicies` 启动期收集并过 `AssertSemantic` 语义断言）。
+`proto/shared/v1/authz.proto` 的 `AccessLevel`/`MethodAuth` 为鉴权唯一事实源（`cmd/server/internal/runtime.BuildMethodPolicies` 启动期收集并过 `AssertSemantic` 语义断言）。
 
 > 生成产物一律可重放：同一 commit 下重复 `task generate:all` 应零 diff；CI 以此为门禁，本地提交前必跑。
 
@@ -146,6 +146,6 @@ generate:all
 - `proto/client|server|console|shared` 唯一事实来源
 - `genproto/` 生成产物（禁手改）
 - `cmd/server|worker/provides.go` / `wire.go` / `wire_gen.go`
-- `internal/pkg/config/config.proto`
+- `pkg/config/config.proto`
 - `AGENTS.md` 生成约定
-- `internal/runtime/grpc_swagger_test.go` swagger/`method_auth` 一致性断言
+- `cmd/server/internal/runtime/grpc_swagger_test.go` swagger/`method_auth` 一致性断言

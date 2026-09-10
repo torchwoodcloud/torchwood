@@ -9,7 +9,7 @@ import (
 
 	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
-	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/contexts"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

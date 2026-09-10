@@ -8,7 +8,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwoodcloud/torchwood/internal/infra/documentdb"
-	"github.com/torchwoodcloud/torchwood/internal/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/testutil"
 	"github.com/torchwoodcloud/torchwood/pkg/query"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"

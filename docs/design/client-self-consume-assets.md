@@ -222,7 +222,7 @@ func (a *Assets) SelfConsume(ctx context.Context, cmd SelfConsumeCommand) (*Self
 
 ### 6. Authz（method_auth / authz-matrix / 纵深防御）
 
-- proto：client 面服务级 `service_auth = { default_access: ACCESS_END_USER }` 已声明，`SelfConsume` 继承，permissions 归一 `["users"]`（`internal/runtime/authz_policy.go`）；**无新 scope、无新权限档位**。
+- proto：client 面服务级 `service_auth = { default_access: ACCESS_END_USER }` 已声明，`SelfConsume` 继承，permissions 归一 `["users"]`（`cmd/server/internal/runtime/authz_policy.go`）；**无新 scope、无新权限档位**。
 - 拦截器：API key 凭证在 END_USER permission 门方法上一律拒绝（`internal/api/interceptor/jwt.go`），console 会话同拒——self-consume 只能由登录态（含匿名会话）JWT 调用。
 - use-case：`RequireEndUser` 二次断言（纵深防御惯例，同 `requireAssetWrite`）。
 - 文档：`task gen:authz-matrix` 重生成 `docs/developer/authz-matrix.md`（字节锁测试强制）。
