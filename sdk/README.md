@@ -24,7 +24,8 @@
 
 ## Go SDK
 
-Go SDK 是 gRPC 直连的薄封装（默认本地走 insecure，生产用 `WithDialOptions` 配置 TLS），
+Go SDK 是 gRPC 直连的薄封装（默认本地走 insecure，标准 TLS 用 `WithTLS`（系统根证书），
+自定义 CA/mTLS 用 `WithDialOptions` 配置），
 拆分为 `sdk/go/client`（Client API，Bearer JWT，自动刷新 token）与
 `sdk/go/server`（Server API，API Key，含 InvokeJSON 动态分发）两个子包。
 

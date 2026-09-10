@@ -3,11 +3,13 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"time"
 
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	"github.com/torchwoodcloud/torchwood/sdk/go/internal/conn"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -47,6 +49,16 @@ func WithTimeout(d time.Duration) Option { return func(c *Config) { c.timeout = 
 // WithRetryDisabled 关闭默认的 UNAVAILABLE 自动重试 service config
 // （默认开启；非幂等写敏感的调用方可显式关闭）。
 func WithRetryDisabled() Option { return func(c *Config) { c.retryDisabled = true } }
+
+// WithTLS 启用 TLS：系统根证书校验服务端证书，SNI 取自 target 主机名
+// （典型形态是反向代理终结 TLS 后以 h2c 转发明文 gRPC 后端）。自定义
+// CA / mTLS 等高级场景经 WithDialOptions 传入 credentials 覆盖。
+func WithTLS() Option {
+	return func(c *Config) {
+		c.dialOptions = append(c.dialOptions,
+			grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})))
+	}
+}
 
 // WithDialOptions 附加底层 gRPC 拨号选项。
 func WithDialOptions(opts ...grpc.DialOption) Option {

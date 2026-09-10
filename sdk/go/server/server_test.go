@@ -2,13 +2,22 @@ package server
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"math/big"
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/test/bufconn"
 )
@@ -108,4 +117,51 @@ func TestNoHeadersWithoutConfig(t *testing.T) {
 	defer rec.mu.Unlock()
 	require.Empty(t, rec.md.Get("x-api-key"))
 	require.Empty(t, rec.md.Get("x-torchwood-project"))
+}
+
+// genSelfSigned 签发一张 127.0.0.1 的自编服务端证书（系统根证书不信任），
+// 供 TestWithTLS 验证客户端真的走了 TLS 握手。
+func genSelfSigned(t *testing.T) tls.Certificate {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	tmpl := x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "127.0.0.1"},
+		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &key.PublicKey, key)
+	require.NoError(t, err)
+	leaf, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}
+}
+
+// TestWithTLS 固化连接层安全不变量：WithTLS 注入的凭据必须覆盖 conn.Dial
+// 的 insecure 缺省（附加 dialOptions 在缺省之后生效）。若该顺序被破坏，
+// 客户端会以明文 h2c 完成对 TLS 端口的调用——对自编证书 TLS 服务端的
+// 一次健康检查即可区分两种情况：真 TLS 报证书信任错误，明文则成功。
+func TestWithTLS(t *testing.T) {
+	// 不用 newBufconn：它自带明文 fake server，会与本测试的 TLS server
+	// 争抢同一 listener 上的连接。
+	lis := bufconn.Listen(1 << 20)
+	cert := genSelfSigned(t)
+	srv := grpc.NewServer(grpc.Creds(credentials.NewServerTLSFromCert(&cert)))
+	serverv1.RegisterHealthServiceServer(srv, &fakeServer{rec: &recorder{}})
+	go func() { _ = srv.Serve(lis) }()
+	t.Cleanup(srv.Stop)
+
+	c, err := New("passthrough:///127.0.0.1", WithTLS(), WithRetryDisabled(),
+		WithDialOptions(dialer(lis)))
+	require.NoError(t, err)
+	defer func() { _ = c.Close() }()
+	_, err = c.Health.Check(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "x509")
 }

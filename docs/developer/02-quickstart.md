@@ -204,4 +204,4 @@ HTTP/Metrics 端口由 `server.http.addr` / `server.metrics.addr` 决定，非�
 ./bin/torchwood rpc /torchwood.server.v1.UsersService/ListUsers --data '{"pageSize":10}' --api-key <secret>
 ```
 
-全局 flag：`--endpoint`（`TORCHWOOD_CLI_ENDPOINT=127.0.0.1:9060`）、`--api-key`、`--timeout`、`--output`。
+全局 flag：`--endpoint`（`TORCHWOOD_CLI_ENDPOINT=127.0.0.1:9060`）、`--api-key`、`--timeout`、`--output`、`--tls`（系统根证书校验，用于反向代理终结 TLS 的场景，需代理以 h2c 转发后端）。
