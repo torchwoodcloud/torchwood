@@ -62,7 +62,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	redisExecutionTokenService := functions.NewRedisExecutionTokenService(client)
 	triggerRepo := bunrepo.NewFunctionTriggerRepository(database)
 	functionsFunctions := functions2.NewFunctionsWithUsage(appConfig, executor, functionRepo, sharedQueue, redisCounter, repository, semaphores, redisExecutionTokenService, triggerRepo)
-	workerWorker := worker.NewWorker(functionsFunctions, sharedQueue, logger)
+	workerWorker := worker.NewWorkerWithEventTriggers(functionsFunctions, sharedQueue, logger, client, database)
 	objectStore, err := storage.NewMinioObjectStore(appConfig)
 	if err != nil {
 		cleanup()

@@ -19,6 +19,13 @@ export interface FunctionItem {
   client_anonymous_allowed: boolean;
   client_per_user_limit: number;
   client_limit_window: "minute" | "hour" | "day";
+  // ——池策略（v3 多路复用，functions-v3.md §5/OQ2；只读视图，
+  // 管理经 updateFunction 的可选字段）——
+  min_instances: number;
+  max_instances: number;
+  idle_ttl_seconds: number;
+  max_requests_per_instance: number;
+  concurrency: number;
   created_at: string;
   updated_at: string;
 }
@@ -121,6 +128,12 @@ export async function updateFunction(
     client_anonymous_allowed?: boolean;
     client_per_user_limit?: number;
     client_limit_window?: "minute" | "hour" | "day";
+    // 池策略（v3 §5/OQ2；proto3 optional——未传 = 不修改）。
+    min_instances?: number;
+    max_instances?: number;
+    idle_ttl_seconds?: number;
+    max_requests_per_instance?: number;
+    concurrency?: number;
   }
 ): Promise<FunctionItem> {
   const res = await api.patch<FunctionItem>(`/server/functions/${id}`, input);
@@ -224,7 +237,7 @@ export async function getExecution(
 export interface FunctionTrigger {
   id: string;
   function_id: string;
-  type: "http" | "cron";
+  type: "http" | "cron" | "event";
   enabled: boolean;
   // http 专有
   response_mode?: string;
@@ -238,12 +251,14 @@ export interface FunctionTrigger {
   expr?: string;
   misfire?: string;
   next_run_at?: string;
+  // event 专有（v3 切片 D）
+  events?: string[];
   created_at: string;
   updated_at: string;
 }
 
 export interface CreateTriggerInput {
-  type: "http" | "cron";
+  type: "http" | "cron" | "event";
   http?: {
     response_mode: string;
     ack_body?: string;
@@ -253,6 +268,9 @@ export interface CreateTriggerInput {
   cron?: {
     expr: string;
     misfire?: string;
+  };
+  event?: {
+    events: string[];
   };
 }
 

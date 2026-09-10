@@ -208,6 +208,34 @@ func (r *triggerRepo) ClaimDueCron(ctx context.Context, projectID string, now ti
 	return claims, nil
 }
 
+// ListEnabledEventTriggers 返回项目内启用的 event 触发器（v3 切片 D：
+// worker 订阅匹配器周期快照扫描；走 function_triggers_event_scan partial
+// 索引，迁移 000018）。
+func (r *triggerRepo) ListEnabledEventTriggers(ctx context.Context, projectID string) ([]domainfunctions.Trigger, error) {
+	conn, sch, expr, err := r.scoped(ctx, projectID, "function_triggers", "ft")
+	if err != nil {
+		return nil, err
+	}
+	var ms []model.FunctionTrigger
+	err = conn.NewSelect().Model(&ms).ModelTableExpr(expr, sch).
+		Where("ft.project_id = ?", projectID).
+		Where("ft.type = ?", domainfunctions.TriggerTypeEvent).
+		Where("ft.enabled = ?", true).
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domainfunctions.Trigger, 0, len(ms))
+	for i := range ms {
+		d, err := mapTriggerToDomain(&ms[i])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *d)
+	}
+	return out, nil
+}
+
 func mapTriggerToModel(t *domainfunctions.Trigger) (*model.FunctionTrigger, error) {
 	cfg, err := json.Marshal(t.Config)
 	if err != nil {

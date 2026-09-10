@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/lynx-go/lynx"
+	"github.com/redis/go-redis/v9"
 	appfunctions "github.com/torchwoodcloud/torchwood/internal/app/functions"
 	domainshared "github.com/torchwoodcloud/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 )
 
 // workerConcurrency 是单进程并发消费 goroutine 数（BRPOP 多消费者互斥由
@@ -51,6 +53,9 @@ type Worker struct {
 	queue     domainshared.Queue
 	logger    *slog.Logger
 	workers   int
+	// events 是数据库事件触发器消费组（v3 切片 D；nil = 未装配——最小
+	// 测试构造 NewWorker 不带事件消费）。
+	events *eventTriggerConsumer
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
@@ -68,6 +73,16 @@ func NewWorker(functions *appfunctions.Functions, queue domainshared.Queue, logg
 		logger:    logger,
 		workers:   workerConcurrency,
 	}
+}
+
+// NewWorkerWithEventTriggers 是 Wire 装配入口（v3 切片 D，§4.2）：在
+// NewWorker 之上注入事件触发器消费组（Redis Stream torchwood:events 的
+// functions-triggers 消费组 + 停机补投）。测试侧仍用 NewWorker
+// （events nil = 不启动事件消费 goroutine）。
+func NewWorkerWithEventTriggers(functions *appfunctions.Functions, queue domainshared.Queue, logger *slog.Logger, rdb *redis.Client, db *clients.Database) *Worker {
+	w := NewWorker(functions, queue, logger)
+	w.events = newEventTriggerConsumer(functions, rdb, db, logger)
+	return w
 }
 
 func (w *Worker) Name() string { return "functions-worker" }
@@ -93,6 +108,13 @@ func (w *Worker) Start(ctx context.Context) error {
 
 	// cron 触发器调度循环（P1）：每分钟领取到期触发并入队异步执行。
 	w.wg.Go(func() { w.cronLoop(runCtx) })
+
+	// 数据库事件触发器消费循环（v3 切片 D，§4.2/D12）：functions-triggers
+	// 消费组 + 订阅匹配器快照 + 停机补投。关停随 runCtx 取消优雅退出
+	// （XREADGROUP Block 1s 内返回，对齐 consume 的退出延迟）。
+	if w.events != nil {
+		w.wg.Go(func() { w.eventLoop(runCtx) })
+	}
 
 	for i := 0; i < w.workers; i++ {
 		w.wg.Go(func() {
@@ -183,6 +205,14 @@ func (w *Worker) cronLoop(ctx context.Context) {
 		case <-ticker.C:
 			runOnce()
 		}
+	}
+}
+
+// eventLoop 数据库事件触发器消费（v3 切片 D）：阻塞至 ctx 取消，内部
+// 含快照刷新 / 停机补投 / XREADGROUP 消费（见 event_triggers.go）。
+func (w *Worker) eventLoop(ctx context.Context) {
+	if err := w.events.Run(ctx); err != nil && ctx.Err() == nil {
+		w.logger.Error("event trigger consumer stopped with error", "error", err)
 	}
 }
 

@@ -149,13 +149,19 @@ func (h *FunctionTriggersHandler) invoke(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
+	data, envelope := buildTriggerEnvelope(r, body)
 	cmd := appfunctions.InvokeTriggerCommand{
 		ProjectID:      projectID,
 		FunctionID:     functionID,
-		Data:           buildTriggerEnvelope(r, body),
+		Data:           data,
 		Source:         trg.TriggerSource(),
 		SourceIP:       ip,
 		BodyLimitBytes: bodyLimit,
+		// v3 §2.3/D10 恒填充：封套元数据 + 原始 body 随执行规格透传（body
+		// 已过上方 413 校验）。runner fetch 风格还原 Request；main 风格重组
+		// TW_DATA 与现状等价（app 不探测 runner 风格）。
+		TriggerEnvelope: envelope,
+		RawBody:         body,
 	}
 
 	if trg.Config.ResponseMode == domainfunctions.ResponseModeAsyncAck {
@@ -174,7 +180,8 @@ func (h *FunctionTriggersHandler) invoke(w http.ResponseWriter, r *http.Request,
 	}
 
 	// sync：同步执行（≤30s；ctx 超时 = 30s + 余量，网关 TimeoutHandler 60s
-	// 兜底），函数响应透传。
+	// 兜底）。fetch 风格（v3 §2.2/D10）透传完整 HTTP 响应（status/headers/
+	// body 原样）；main 风格照旧 200 + Response 文本。
 	ctx, cancel := context.WithTimeout(r.Context(), 35*time.Second)
 	defer cancel()
 	rec, err := h.invoker.InvokeTrigger(ctx, cmd)
@@ -183,6 +190,14 @@ func (h *FunctionTriggersHandler) invoke(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	if rec != nil && rec.Status == domainfunctions.ExecutionStatusCompleted {
+		// fetch 风格信号：rec.StatusCode ≥ 100 = 函数 HTTP status（executor
+		// 链路回传；main 风格恒 0——退出码语义位）。完整透传 status/headers/
+		// body（自定义状态码、二进制、content-type 从此可达）；失败语义不受
+		// 影响（函数 HTTP 4xx/5xx 是合法一等结果，D10）。
+		if rec.StatusCode >= 100 {
+			h.finishTransparent(w, r, projectID, functionID, triggerID, rec)
+			return
+		}
 		h.finish(w, r, projectID, functionID, triggerID, appfunctions.InvokeResultOK, http.StatusOK, rec.Response)
 		return
 	}
@@ -194,18 +209,14 @@ func (h *FunctionTriggersHandler) invoke(w http.ResponseWriter, r *http.Request,
 }
 
 // buildTriggerEnvelope 构造 TW_DATA 封套 {method, path, raw_query, headers,
-// body, body_base64}。headers 白名单（统一小写键）：全部 x-*（大小写不敏感）
-// + content-type + wechatpay-* 前缀——白名单缺了验签头，「验签归函数」的
-// 前提就塌了。body 双通道：body 为 best-effort UTF-8 字符串（JSON 序列化把
-// 非法字节替换为 U+FFFD），body_base64 恒在（无损，二进制 webhook 用）。
-func buildTriggerEnvelope(r *http.Request, body []byte) string {
-	headers := make(map[string][]string)
-	for name, vals := range r.Header {
-		ln := strings.ToLower(name)
-		if strings.HasPrefix(ln, "x-") || ln == "content-type" || strings.HasPrefix(ln, "wechatpay-") {
-			headers[ln] = vals
-		}
-	}
+// body, body_base64} 与封套元数据（v3 §2.3：TriggerEnvelope——不含 body，
+// 随执行规格透传给 runner，fetch 风格还原 Request / main 风格重组 TW_DATA）。
+// headers 白名单（统一小写键）：全部 x-*（大小写不敏感）+ content-type +
+// wechatpay-* 前缀——白名单缺了验签头，「验签归函数」的前提就塌了；两形态
+// 共用同一白名单。body 双通道：body 为 best-effort UTF-8 字符串（JSON 序列
+// 化把非法字节替换为 U+FFFD），body_base64 恒在（无损，二进制 webhook 用）。
+func buildTriggerEnvelope(r *http.Request, body []byte) (string, *domainfunctions.TriggerEnvelope) {
+	headers := whitelistHeaders(r)
 	envelope := map[string]any{
 		"method":      r.Method,
 		"path":        r.URL.Path,
@@ -217,13 +228,34 @@ func buildTriggerEnvelope(r *http.Request, body []byte) string {
 	payload, err := json.Marshal(envelope)
 	if err != nil {
 		// map[string]any 序列化不会失败；防御分支。
-		return `{}`
+		payload = []byte(`{}`)
 	}
-	return string(payload)
+	return string(payload), &domainfunctions.TriggerEnvelope{
+		Method:   r.Method,
+		Path:     r.URL.Path,
+		RawQuery: r.URL.RawQuery,
+		Headers:  headers,
+	}
+}
+
+// whitelistHeaders 抽取请求头的白名单子集（统一小写键、多值保留）：
+// 全部 x-* + content-type + wechatpay-* 前缀。
+func whitelistHeaders(r *http.Request) map[string][]string {
+	headers := make(map[string][]string)
+	for name, vals := range r.Header {
+		ln := strings.ToLower(name)
+		if strings.HasPrefix(ln, "x-") || ln == "content-type" || strings.HasPrefix(ln, "wechatpay-") {
+			headers[ln] = vals
+		}
+	}
+	return headers
 }
 
 // invokeTriggerErrorStatus 把 InvokeTrigger 错误映射为 HTTP 状态
-// （DeadlineExceeded=504 对齐既有约定）。
+// （DeadlineExceeded=504 对齐既有约定）。Unknown = 函数执行失败封套
+// （dispatcher runner ok=false）→ 502 BadGateway：对回调方而言上游函数
+// 失败即上游错误，与 rec.Status=failed 的 502 分支同语义（fetch/main 风格
+// 一致，v3 §2.2）。
 func invokeTriggerErrorStatus(err error) int {
 	code := status.Code(err)
 	switch code {
@@ -239,6 +271,8 @@ func invokeTriggerErrorStatus(err error) int {
 		return http.StatusTooManyRequests
 	case codes.Unavailable:
 		return http.StatusServiceUnavailable
+	case codes.Unknown:
+		return http.StatusBadGateway
 	default:
 		return http.StatusInternalServerError
 	}
@@ -259,6 +293,63 @@ func retryAfterString(d time.Duration) string {
 		s = 1
 	}
 	return strconv.FormatInt(s, 10)
+}
+
+// transparentHeaderBlocklist 是 sync 完整透传的第二层过滤（v3 §2.2/D10）：
+// runner 封套侧已滤一次（hop-by-hop + date/server），handler 再滤一层——
+// 防御纵深：hop-by-hop 头（connection/keep-alive/transfer-encoding 等）
+// 属传输层、不得由函数冒充；content-length 由本 handler 按实际 body 重算；
+// host/date/server 是平台头。其余头（含 content-type/cache-control 等）
+// 原样透传——完整 HTTP 响应语义的一部分。
+var transparentHeaderBlocklist = map[string]bool{
+	"connection":        true,
+	"keep-alive":        true,
+	"proxy-connection":  true,
+	"te":                true,
+	"trailer":           true,
+	"transfer-encoding": true,
+	"upgrade":           true,
+	"content-length":    true,
+	"host":              true,
+	"date":              true,
+	"server":            true,
+}
+
+// finishTransparent 是 sync 模式的 fetch 风格完整透传（v3 §2.2 表「HTTP
+// 触发器」行/D10）：status 原样、headers 透传（再滤一层 hop-by-hop +
+// 补 Content-Length）、body 原字节（rec.ResponseB64 无损通道）。与 legacy
+// finish 的差异：不强制 Cache-Control: no-store / Content-Type——响应头
+// 归函数所有（透传是其目的）；指标与访问日志语义与 finish 完全一致。
+// 持久化不感知：headers/body_b64 不落库（OQ7 收口语义，见
+// domainfunctions.ExecutionRecord 注释）。
+func (h *FunctionTriggersHandler) finishTransparent(w http.ResponseWriter, r *http.Request, projectID, functionID, triggerID string, rec *domainfunctions.ExecutionRecord) {
+	appfunctions.ObserveInvoke(projectID, functionID, domainfunctions.TriggerTypeHTTP, appfunctions.InvokeResultOK)
+	h.logger.Info("function trigger invoke",
+		slog.String("method", r.Method),
+		slog.String("project_id", projectID),
+		slog.String("function_id", functionID),
+		slog.String("trigger_id", triggerID),
+		slog.String("result", appfunctions.InvokeResultOK),
+		slog.Int("status", rec.StatusCode),
+		slog.String("ip", h.clientIP(r)),
+	)
+
+	body, err := base64.StdEncoding.DecodeString(rec.ResponseB64)
+	if err != nil {
+		// ResponseB64 由 runner→dispatcher→executor 链路生成，失败仅防御。
+		body = nil
+	}
+	for name, value := range rec.HTTPHeaders {
+		if transparentHeaderBlocklist[strings.ToLower(name)] {
+			continue
+		}
+		w.Header().Set(name, value)
+	}
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	w.WriteHeader(rec.StatusCode)
+	if len(body) > 0 {
+		_, _ = w.Write(body)
+	}
 }
 
 // finish 记指标 + 访问日志并写响应（无 body 时仅状态码）。日志不落 body

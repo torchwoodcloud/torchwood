@@ -61,6 +61,7 @@ import { useAdminRole, canWrite, isPlatformAdmin } from "@/hooks/useAdminRole";
 import type { ColumnDef } from "@/components/list/DataTable";
 import { FunctionTriggersCard } from "./triggers-card";
 import { FunctionClientPolicyCard } from "./client-policy-card";
+import { FunctionPoolPolicyCard } from "./pool-policy-card";
 
 const functionColumns: ColumnDef<FunctionItem>[] = [
   {
@@ -710,6 +711,8 @@ export function FunctionDetailPage() {
       <FunctionTriggersCard functionId={functionId!} writeable={writeable} />
 
       {fn && <FunctionClientPolicyCard fn={fn} writeable={writeable} />}
+
+      {fn && <FunctionPoolPolicyCard fn={fn} writeable={writeable} />}
 
       <Card>
         <CardHeader className="space-y-0 pb-3">

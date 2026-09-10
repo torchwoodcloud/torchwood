@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	domainprojects "github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
@@ -134,6 +135,18 @@ func (r *mockTriggerRepo) ClaimDueCron(ctx context.Context, projectID string, no
 	return claims, nil
 }
 
+func (r *mockTriggerRepo) ListEnabledEventTriggers(_ context.Context, projectID string) ([]domainfunctions.Trigger, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []domainfunctions.Trigger
+	for _, t := range r.triggers {
+		if t.ProjectID == projectID && t.Enabled && t.Type == domainfunctions.TriggerTypeEvent {
+			out = append(out, *t)
+		}
+	}
+	return out, nil
+}
+
 func newTriggerTestUC(executor *mockExecutor, repo *mockRepo, queue *mockQueue, triggers *mockTriggerRepo, projects domainprojects.Repository) *Functions {
 	uc := NewFunctionsWithUsage(&config.AppConfig{}, executor, repo, queue, nil, projects, Semaphores{}, nil, triggers)
 	return uc
@@ -218,6 +231,131 @@ func TestCreateFunctionTrigger_CronParsesExprAndSetsNextRun(t *testing.T) {
 		Cron: domainfunctions.TriggerConfig{Expr: "61 * * * *"},
 	})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+// TestCreateFunctionTrigger_EventValidatesSubscriptions v3 切片 D：event
+// 触发器的订阅串校验（非空、逐条格式、错误携带具体条目、去重）。
+func TestCreateFunctionTrigger_EventValidatesSubscriptions(t *testing.T) {
+	repo := newMockRepo()
+	seedReadyFunction(repo, "p1", "fn_1", true, 15)
+	triggers := newMockTriggerRepo()
+	uc := newTriggerTestUC(newMockExecutor(nil, nil), repo, newMockQueue(), triggers, nil)
+
+	// 合法创建：去重保序、no next_run_at。
+	trg, err := uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
+		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeEvent,
+		Events: []string{
+			"databases.app.collections.notes.documents.create",
+			"databases.app.collections.*.documents.*",
+			"databases.app.collections.notes.documents.create", // 重复 → 去重
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, domainfunctions.TriggerTypeEvent, trg.Type)
+	require.Equal(t, []string{
+		"databases.app.collections.notes.documents.create",
+		"databases.app.collections.*.documents.*",
+	}, trg.Config.Events, "重复订阅串按序去重")
+	require.Nil(t, trg.NextRunAt, "event 触发器无 next_run_at")
+	require.Equal(t, "event:"+trg.ID, trg.TriggerSource())
+
+	// 空订阅列表拒绝。
+	_, err = uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
+		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeEvent,
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	// 格式非法 → InvalidArgument 带具体条目。
+	_, err = uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
+		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeEvent,
+		Events: []string{"databases.app.collections.notes.documents.create", "databases.*.collections.x.documents.create"},
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Contains(t, err.Error(), "databases.*.collections.x.documents.create", "错误文案携带具体条目")
+
+	// database 段通配（一期）拒绝。
+	_, err = uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
+		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeEvent,
+		Events: []string{"databases.*.collections.x.documents.create"},
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	// type 词表扩展后既有 http/cron 校验不回归（default 分支文案更新）。
+	_, err = uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
+		ProjectID: "p1", FunctionID: "fn_1", Type: "webhook",
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	// List 响应带 events。
+	list, err := uc.ListFunctionTriggers(platformAdminCtx(), "p1", "fn_1")
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	require.Equal(t, trg.Config.Events, list[0].Config.Events)
+}
+
+// TestRefreshEventTriggerIndex 快照扫描：跨项目聚合、非 active/非 event/
+// 禁用触发器排除、任一项目扫描失败返回错误（worker 只在完整快照成功时换入）。
+func TestRefreshEventTriggerIndex(t *testing.T) {
+	repo := newMockRepo()
+	triggers := newMockTriggerRepo()
+	projects := &stubProjectRepo{list: []domainprojects.Project{
+		{ID: "p1", Status: "active"},
+		{ID: "p2", Status: "active"},
+		{ID: "p3", Status: "suspended"}, // 非 active 排除
+	}}
+	uc := newTriggerTestUC(newMockExecutor(nil, nil), repo, newMockQueue(), triggers, projects)
+
+	mk := func(id, project, fn string, enabled bool) *domainfunctions.Trigger {
+		return &domainfunctions.Trigger{
+			ID: id, ProjectID: project, FunctionID: fn, Type: domainfunctions.TriggerTypeEvent,
+			Enabled: enabled,
+			Config:  domainfunctions.TriggerConfig{Events: []string{"databases.app.collections.*.documents.create"}},
+		}
+	}
+	require.NoError(t, triggers.CreateTrigger(context.Background(), mk("trg_1", "p1", "fn_1", true)))
+	require.NoError(t, triggers.CreateTrigger(context.Background(), mk("trg_2", "p2", "fn_2", false))) // 禁用
+	require.NoError(t, triggers.CreateTrigger(context.Background(), mk("trg_3", "p3", "fn_3", true)))  // 非 active 项目
+	require.NoError(t, triggers.CreateTrigger(context.Background(), &domainfunctions.Trigger{          // cron 不入索引
+		ID: "trg_4", ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeCron,
+		Enabled: true, Config: domainfunctions.TriggerConfig{Expr: "* * * * *"},
+	}))
+
+	idx, err := uc.RefreshEventTriggerIndex(context.Background(), 100)
+	require.NoError(t, err)
+	require.Equal(t, 1, idx.Len())
+	require.Len(t, idx.Match("p1", "app", "notes", "create"), 1)
+	require.Empty(t, idx.Match("p3", "app", "notes", "create"), "非 active 项目不入快照")
+
+	// 预算截断。
+	idx, err = uc.RefreshEventTriggerIndex(context.Background(), 0)
+	require.NoError(t, err)
+	require.Equal(t, 1, idx.Len(), "budget=0 = 不限")
+}
+
+// TestInvokeTrigger_EventProjection v3 §4.2：事件路径 InvokeTrigger 记录
+// Source=event:{trigger_id}、data 投影在预算内、async 入队。
+func TestInvokeTrigger_EventProjection(t *testing.T) {
+	repo := newMockRepo()
+	seedReadyFunction(repo, "p1", "fn_1", true, 15)
+	triggers := newMockTriggerRepo()
+	queue := newMockQueue()
+	uc := newTriggerTestUC(newMockExecutor(nil, nil), repo, queue, triggers, nil)
+
+	data, err := domainfunctions.BuildEventInvocationData(&domainevents.Envelope{
+		EventID: "ev_1", Event: domainevents.EventDocumentsCreate, Seq: 7,
+		ProjectID: "p1", DatabaseID: "app", CollectionID: "notes", DocumentID: "doc_1",
+		Version: 3,
+	})
+	require.NoError(t, err)
+
+	rec, err := uc.InvokeTrigger(context.Background(), InvokeTriggerCommand{
+		ProjectID: "p1", FunctionID: "fn_1", Data: data, Async: true,
+		Source: "event:trg_ev1",
+	})
+	require.NoError(t, err)
+	require.Equal(t, domainfunctions.ExecutionStatusQueued, rec.Status)
+	require.Equal(t, "event:trg_ev1", rec.TriggerSource, "Source=event:{trigger_id} 记审计载体")
+	require.Len(t, queue.enqueued, 1)
 }
 
 func TestRotateFunctionTriggerToken(t *testing.T) {

@@ -33,23 +33,33 @@ type InvokeTriggerCommand struct {
 	// 上限随执行器模式放宽——v1 env 通道硬上限 32KB，v2 dispatcher body
 	// 通道 ≤1MB；cron 触发器封套恒小于 1KB，传 0 用默认）。
 	BodyLimitBytes int
+	// ——HTTP 触发器封套通道（v3 §2.3/D10；cron 不设置）——恒填充：app 不
+	// 探测 runner 风格，TriggerEnvelope 携带封套元数据（不含 body）、
+	// RawBody 携带触发器原始 body（已过 handler 入口 413 校验）。runner
+	// fetch 风格还原 Request；main 风格 runner 重组 TW_DATA（与现状等价，
+	// 双轨 D9）。RawBodyIsB64 场景（调用方手持 base64 文本）当前无来源——
+	// handler 手持原始字节，直接填充 RawBody。
+	TriggerEnvelope *domainfunctions.TriggerEnvelope
+	RawBody         []byte
 }
 
 // CreateTriggerCommand 创建触发器命令。
 type CreateTriggerCommand struct {
 	ProjectID  string
 	FunctionID string
-	Type       string // http | cron
+	Type       string // http | cron | event
 	HTTP       domainfunctions.TriggerConfig
 	Cron       domainfunctions.TriggerConfig
+	// Events 是 event 触发器的订阅串列表（v3 §4.1；仅 type=event 使用）。
+	Events []string
 	// Enabled 缺省 true。
 	Enabled *bool
 }
 
 // CreateFunctionTrigger 创建触发器：函数必须存在；按 type 校验配置
-// （response_mode/ack_body/handshake/body_limit；expr 可解析 + misfire）；
-// http 的 token 服务端生成（128bit）；cron 计算 next_run_at = now 之后的
-// 第一个计划时刻（UTC）。
+// （response_mode/ack_body/handshake/body_limit；expr 可解析 + misfire；
+// events 订阅串格式——v3 §4.1/D12）；http 的 token 服务端生成（128bit）；
+// cron 计算 next_run_at = now 之后的第一个计划时刻（UTC）。
 func (f *Functions) CreateFunctionTrigger(ctx context.Context, cmd CreateTriggerCommand) (*domainfunctions.Trigger, error) {
 	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return nil, err
@@ -95,8 +105,16 @@ func (f *Functions) CreateFunctionTrigger(ctx context.Context, cmd CreateTrigger
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		trg.NextRunAt = &next
+	case domainfunctions.TriggerTypeEvent:
+		cfg, err := normalizeEventTriggerConfig(cmd.Events)
+		if err != nil {
+			return nil, err
+		}
+		trg.Type = domainfunctions.TriggerTypeEvent
+		trg.Config = cfg
 	default:
-		return nil, status.Errorf(codes.InvalidArgument, "type must be %q or %q", domainfunctions.TriggerTypeHTTP, domainfunctions.TriggerTypeCron)
+		return nil, status.Errorf(codes.InvalidArgument, "type must be %q, %q or %q",
+			domainfunctions.TriggerTypeHTTP, domainfunctions.TriggerTypeCron, domainfunctions.TriggerTypeEvent)
 	}
 	if err := f.triggers.CreateTrigger(ctx, trg); err != nil {
 		return nil, err
@@ -168,16 +186,20 @@ func (f *Functions) GetHTTPTriggerByToken(ctx context.Context, projectID, token 
 // InvokeTrigger 触发器执行入口：与 CreateExecution 同一核心路径（两写预占
 // 语义/异步队列/执行身份铸造全部一致），差异仅两点——token 门禁在 handler
 // 已完成（不要求 principal）；data 上限随执行器模式放宽（触发器封套含透传
-// body）。Source/SourceIP 记入执行记录（审计载体）。
+// body）。Source/SourceIP 记入执行记录（审计载体）。HTTP 触发器场景恒填充
+// TriggerEnvelope/RawBody（v3 §2.3/D10 恒填充语义——app 不探测 runner 风格，
+// main 风格 runner 重组 TW_DATA 与 fetch 风格还原 Request 双轨并存）。
 func (f *Functions) InvokeTrigger(ctx context.Context, cmd InvokeTriggerCommand) (*domainfunctions.ExecutionRecord, error) {
 	return f.createExecution(ctx, CreateExecutionCommand{
-		ProjectID:      cmd.ProjectID,
-		FunctionID:     cmd.FunctionID,
-		Data:           cmd.Data,
-		Async:          cmd.Async,
-		Source:         cmd.Source,
-		SourceIP:       cmd.SourceIP,
-		DataLimitBytes: cmd.BodyLimitBytes,
+		ProjectID:       cmd.ProjectID,
+		FunctionID:      cmd.FunctionID,
+		Data:            cmd.Data,
+		Async:           cmd.Async,
+		Source:          cmd.Source,
+		SourceIP:        cmd.SourceIP,
+		DataLimitBytes:  cmd.BodyLimitBytes,
+		TriggerEnvelope: cmd.TriggerEnvelope,
+		RawBody:         cmd.RawBody,
 	})
 }
 
@@ -264,6 +286,82 @@ func (f *Functions) undoCronClaim(ctx context.Context, c domainfunctions.CronCla
 	if err := f.triggers.UpdateTrigger(undoCtx, trg); err != nil {
 		f.logger().Warn("undo cron claim failed", "trigger_id", c.TriggerID, "error", err)
 	}
+}
+
+// normalizeEventTriggerConfig 校验并归一 event 触发器配置（v3 §4.1/D12）：
+// 订阅串非空、逐条格式校验（错误文案携带具体条目）、按序去重。
+//
+// database/collection 存在性为 **best-effort**（设计 §4.1「集合存在性
+// best-effort」）：本 use-case 未注入 database/collection 仓储端口
+// （Functions 聚合只有函数域 repo），存在性校验需要跨域注入——一期跳过，
+// 订阅不存在的 database/collection 合法（事件永远不会命中，静默无投递），
+// 不阻断创建。Console 编辑处提示格式即可（D13 自环警告同层）。
+func normalizeEventTriggerConfig(events []string) (domainfunctions.TriggerConfig, error) {
+	if err := domainfunctions.ValidateEventPatterns(events); err != nil {
+		return domainfunctions.TriggerConfig{}, status.Error(codes.InvalidArgument, err.Error())
+	}
+	seen := make(map[string]struct{}, len(events))
+	out := make([]string, 0, len(events))
+	for _, e := range events {
+		if _, ok := seen[e]; ok {
+			continue
+		}
+		seen[e] = struct{}{}
+		out = append(out, e)
+	}
+	return domainfunctions.TriggerConfig{Events: out}, nil
+}
+
+// RefreshEventTriggerIndex 全量快照扫描 event 触发器并构建进程内匹配器
+// （v3 §4.2：worker 周期调用——**不每事件查库**，匹配是纯内存操作）。
+// 与 DispatchDueCronTriggers 的轮转游标不同，这里不用 scanCursor：订阅
+// 匹配器需要**全量快照**原子换入（轮转会交付残缺索引），且 15s 周期的
+// 全项目扫描与 1min cron 领取无资源冲突（每项目一条 partial 索引查询，
+// function_triggers_event_scan，迁移 000018）。budget 限制总加载条数
+// （防御异常膨胀）。**错误契约**：项目枚举失败或任一项目扫描失败都返回
+// error（此时索引仍含已扫到部分）——worker 侧只在 err == nil 时换入，
+// 残缺快照换入会在推进消费水位后把「匹配不到」变成永久丢事件，宁可
+// 保留上一轮完整快照（最多滞后一个刷新周期）。
+func (f *Functions) RefreshEventTriggerIndex(ctx context.Context, budget int) (*domainfunctions.EventTriggerIndex, error) {
+	if f.projects == nil || f.triggers == nil {
+		// 未装配项目目录/触发器仓储（最小测试装配）：空快照 + 无错误——
+		// 调用方换入空匹配器与「无订阅」等价。
+		return domainfunctions.NewEventTriggerIndex(nil), nil
+	}
+	all, err := f.projects.ListProjects(ctx)
+	if err != nil {
+		return domainfunctions.NewEventTriggerIndex(nil), err
+	}
+	var (
+		collected []domainfunctions.Trigger
+		firstErr  error
+	)
+	for i := range all {
+		if all[i].Status != "active" {
+			continue
+		}
+		if budget > 0 && len(collected) >= budget {
+			break
+		}
+		trgs, err := f.triggers.ListEnabledEventTriggers(ctx, all[i].ID)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			f.logger().Warn("list event triggers failed", "project_id", all[i].ID, "error", err)
+			continue
+		}
+		if budget > 0 && len(collected)+len(trgs) > budget {
+			trgs = trgs[:budget-len(collected)]
+		}
+		collected = append(collected, trgs...)
+	}
+	idx := domainfunctions.NewEventTriggerIndex(collected)
+	if firstErr != nil {
+		return idx, firstErr
+	}
+	f.logger().Debug("event trigger index refreshed", "subscriptions", idx.Len())
+	return idx, nil
 }
 
 // cronEnvelope 是 cron 触发入队 data（函数内可读 scheduled_for 做幂等键）。

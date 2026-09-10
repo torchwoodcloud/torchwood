@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { AlertTriangle, Plus } from "lucide-react";
 import {
   listFunctionTriggers,
   createFunctionTrigger,
@@ -45,7 +45,7 @@ export function FunctionTriggersCard({
 }) {
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
-  const [type, setType] = useState<"http" | "cron">("http");
+  const [type, setType] = useState<"http" | "cron" | "event">("http");
   // http 表单
   const [responseMode, setResponseMode] = useState<"sync" | "async_ack">("async_ack");
   const [ackBody, setAckBody] = useState('{"is_valid":true}');
@@ -54,6 +54,10 @@ export function FunctionTriggersCard({
   // cron 表单
   const [expr, setExpr] = useState("0 3 * * *");
   const [misfire, setMisfire] = useState<"skip" | "catch_up_once">("catch_up_once");
+  // event 表单（v3 切片 D）：订阅串多行输入，一行一条。
+  const [eventsText, setEventsText] = useState(
+    "databases.app.collections.*.documents.create"
+  );
 
   const queryKey = ["function-triggers", functionId];
 
@@ -82,10 +86,20 @@ export function FunctionTriggersCard({
                   : {}),
               },
             }
-          : {
-              type,
-              cron: { expr, misfire },
-            };
+          : type === "cron"
+            ? {
+                type,
+                cron: { expr, misfire },
+              }
+            : {
+                type,
+                event: {
+                  events: eventsText
+                    .split("\n")
+                    .map((line) => line.trim())
+                    .filter((line) => line !== ""),
+                },
+              };
       return createFunctionTrigger(functionId, input);
     },
     onSuccess: () => {
@@ -141,13 +155,17 @@ export function FunctionTriggersCard({
             <div className="rounded-md border p-3 space-y-3">
               <div className="flex items-center gap-3">
                 <Label className="w-16">类型</Label>
-                <Select value={type} onValueChange={(v) => setType(v as "http" | "cron")}>
+                <Select
+                  value={type}
+                  onValueChange={(v) => setType(v as "http" | "cron" | "event")}
+                >
                   <SelectTrigger className="w-40">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="http">HTTP 回调</SelectItem>
                     <SelectItem value="cron">定时（cron）</SelectItem>
+                    <SelectItem value="event">数据库事件</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -202,7 +220,7 @@ export function FunctionTriggersCard({
                     <span className="text-xs text-muted-foreground">KB（上限 1024 = 1MB）</span>
                   </div>
                 </>
-              ) : (
+              ) : type === "cron" ? (
                 <>
                   <div className="flex items-center gap-3">
                     <Label className="w-16">表达式</Label>
@@ -232,6 +250,42 @@ export function FunctionTriggersCard({
                         <SelectItem value="skip">skip（错过不补跑）</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-1">
+                    <Label className="w-16">订阅事件</Label>
+                    <textarea
+                      className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs"
+                      value={eventsText}
+                      onChange={(e) => setEventsText(e.target.value)}
+                      placeholder={
+                        "databases.app.collections.notes.documents.create\ndatabases.app.collections.*.documents.*"
+                      }
+                      spellCheck={false}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      一行一条，格式
+                      <code className="font-mono">
+                        {" "}
+                        databases.&#123;database&#125;.collections.&#123;collection&#125;.documents.&#123;create|update|delete|*&#125;
+                      </code>
+                      ；collection 与 op 段可为 <code className="font-mono">*</code>，
+                      database 段一期必须精确。函数收到的 data 只带事件摘要
+                      （event_id/seq/文档 ID 等），全量文档按 document_id 用
+                      databases:read 回读。
+                    </p>
+                  </div>
+                  {/* 自环警告（v3 D13：平台一期不做硬防护，Console 编辑处警告） */}
+                  <div className="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="size-4 mt-0.5 shrink-0" />
+                    <span>
+                      请勿订阅本函数自身写入的集合——写 → 事件 → 再触发循环会
+                      无限放大（平台不做硬防护，仅靠
+                      <code className="font-mono"> invoke_total&#123;source=event&#125;</code>
+                      速率告警兜底）。链式调用多个函数时同样注意环。
+                    </span>
                   </div>
                 </>
               )}
@@ -305,12 +359,24 @@ export function FunctionTriggersCard({
                         </div>
                       )}
                     </>
-                  ) : (
+                  ) : trg.type === "cron" ? (
                     <div className="text-xs text-muted-foreground">
                       <span className="font-mono">{trg.expr}</span> · {trg.misfire}
                       {trg.next_run_at
                         ? ` · 下次 ${new Date(trg.next_run_at).toLocaleString()}`
                         : ""}
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {(trg.events ?? []).map((ev) => (
+                        <div key={ev} className="font-mono text-xs break-all">
+                          {ev}
+                        </div>
+                      ))}
+                      <p className="text-xs text-muted-foreground">
+                        事件触发：投递为 at-least-once，函数内以 data 的
+                        event_id/seq 做幂等；注意自环（勿订阅本函数写入的集合）。
+                      </p>
                     </div>
                   )}
                 </div>

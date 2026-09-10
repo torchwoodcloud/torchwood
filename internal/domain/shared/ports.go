@@ -12,6 +12,23 @@ import (
 // QueueFunctionsExecutions 是函数异步执行的队列名（Redis Stream，至少一次）。
 const QueueFunctionsExecutions = "torchwood:queue:functions-executions"
 
+// 事件脊柱 Stream 与函数事件触发器消费（v2 阶段④ §4.5 + functions-v3 §4.2）。
+const (
+	// EventsStream 是文档写事件投递的 Redis Stream：worker outbox 领取后
+	// XADD 完整信封 JSON（含 acl + seq）；server 每实例一消费组 + 函数事件
+	// 触发器消费组（见下）各自 XREADGROUP 消费全量。
+	EventsStream = "torchwood:events"
+	// EventsGroupFunctionsTriggers 是函数事件触发器的消费组名（v3 切片 D）：
+	// 独立于 server 实例组——outbox 主投递路径（WS 扇出）零侵入，XACK 在
+	// 入队成功后。
+	EventsGroupFunctionsTriggers = "functions-triggers"
+	// FunctionsEventLastSeqKey 是函数事件触发的自管消费水位（Redis 键）：
+	// 每批 XACK 后推进（单调不回退）。Stream 条目 ID 是 XADD 自动生成
+	// （不含 seq 语义），停机补投的 gap 判定依赖该水位而非消费组
+	// last-delivered-id（v3 §4.2/D12 对抗审查修正）。
+	FunctionsEventLastSeqKey = "torchwood:fnevent:lastseq"
+)
+
 // Queue 是异步任务队列端口（A7 修复：至少一次）。
 // Dequeue 返回的 ack Token 需在处理成功后 Ack，否则消息在 PEL/inflight 超时后重投。
 type Queue interface {

@@ -39,10 +39,19 @@ var (
 		Name: "torchwood_functions_invoke_total",
 		Help: "Function invoke attempts at trigger/client entrypoints, by source and result.",
 	}, []string{"project", "function", "source", "result"})
+
+	// concurrencyDowngradedTotal 是并发降级保护计数（v3 实例内多路复用，
+	// docs/design/functions-v3.md §1.5/Observability）：函数 concurrency > 1
+	// 而执行所用 deployment 的 template_version < 3 时按并发 1 执行——
+	// fail-safe 不 fail-closed，降级发生即计数（重部署获 v3 模板后归零停止）。
+	concurrencyDowngradedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "torchwood_functions_concurrency_downgraded_total",
+		Help: "Executions downgraded to concurrency=1 because the deployment template predates runner v3.",
+	}, []string{"project", "function"})
 )
 
 func init() {
-	prometheus.MustRegister(executionDurationSeconds, executionQueueWaitSeconds, executionsTotal, invokeTotal)
+	prometheus.MustRegister(executionDurationSeconds, executionQueueWaitSeconds, executionsTotal, invokeTotal, concurrencyDowngradedTotal)
 }
 
 // source 词表：server 当前唯一取值（CreateExecution 内部路径）；http/cron
@@ -115,6 +124,15 @@ func observeQueueWait(projectID, functionID string, waited time.Duration) {
 		return
 	}
 	executionQueueWaitSeconds.WithLabelValues(projectID, functionID).Observe(waited.Seconds())
+}
+
+// observeConcurrencyDowngraded 记录一次并发降级（v3 §1.5 降级保护；
+// best-effort，不影响主链路）。
+func observeConcurrencyDowngraded(projectID, functionID string) {
+	if projectID == "" || functionID == "" {
+		return
+	}
+	concurrencyDowngradedTotal.WithLabelValues(projectID, functionID).Inc()
 }
 
 // executorV2 报告是否选择 dispatcher 执行器（v2 常驻执行模型）：run 信号量

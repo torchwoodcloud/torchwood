@@ -79,6 +79,13 @@ type CreateExecutionCommand struct {
 	// dispatcher 走 body 通道可放宽至触发器 body 上限 ≤1MB；v1 env 通道
 	// 保持 32KB 硬上限）。0 = 默认。客户端调用面（P2）不放宽：严格 32KB。
 	DataLimitBytes int
+	// ——HTTP 触发器封套通道（v3 §2.3/D10；Server 面 CreateExecution 不
+	// 设置）——恒填充（app 不探测 runner 风格）：TriggerEnvelope 携带封套
+	// 元数据（method/path/raw_query/headers 白名单，不含 body），RawBody 是
+	// 触发器原始 body（已过 handler 入口 413 校验）。runner fetch 风格还原
+	// Request、main 风格重组 TW_DATA（与现状等价，双轨 D9）。
+	TriggerEnvelope *domainfunctions.TriggerEnvelope
+	RawBody         []byte
 	// ——客户端调用面扩展（P2；设计 §4）——
 	// InvokingUserID 是调用用户（执行记录 invoking_user_id 列；执行身份
 	// token info 携带 invoking_user → 账本 operator 溯源 function+user）。
@@ -117,6 +124,11 @@ type queueMessage struct {
 	ProjectID   string `json:"project_id"`
 	Data        string `json:"data,omitempty"`
 	Attempt     int    `json:"attempt,omitempty"`
+	// ——HTTP 触发器封套通道（v3 §2.3/D10）：async_ack 路径的封套元数据与
+	// 原始 body 随队列透传（worker 执行时同 sync 路径进封套模式）；
+	// RawBody []byte 经 JSON 自动 base64 往返。
+	TriggerEnvelope *domainfunctions.TriggerEnvelope `json:"trigger_envelope,omitempty"`
+	RawBody         []byte                           `json:"raw_body,omitempty"`
 }
 
 func (f *Functions) CreateExecution(ctx context.Context, cmd CreateExecutionCommand) (*domainfunctions.ExecutionRecord, error) {
@@ -151,6 +163,12 @@ func (f *Functions) createExecution(ctx context.Context, cmd CreateExecutionComm
 	dataLimit := f.effectiveDataLimit(cmd.DataLimitBytes)
 	if len(cmd.Data) > dataLimit {
 		return nil, status.Errorf(codes.InvalidArgument, "data exceeds maximum size of %d bytes", dataLimit)
+	}
+	// RawBody 通道防御（v3 §2.3）：触发器原始 body 的 413 判定在 handler
+	// 入口（MaxTriggerBodyLimit，已过校验）；此处只防异常调用方直调 app 面
+	// ——上限与封套 data 同口径。
+	if cmd.TriggerEnvelope != nil && len(cmd.RawBody) > maxTriggerDataBytes {
+		return nil, status.Errorf(codes.InvalidArgument, "raw body exceeds maximum size of %d bytes", maxTriggerDataBytes)
 	}
 	// data 必须是 JSON object（R07-P3-7）：数组/标量/字面量 null 一律拒绝——
 	// 执行体以 JSON object 语义读取 TW_DATA，非 object 会导致运行时解析异常。
@@ -205,10 +223,12 @@ func (f *Functions) createExecution(ctx context.Context, cmd CreateExecutionComm
 			return nil, err
 		}
 		payload, err := json.Marshal(queueMessage{
-			ExecutionID: rec.ID,
-			FunctionID:  rec.FunctionID,
-			ProjectID:   rec.ProjectID,
-			Data:        cmd.Data,
+			ExecutionID:     rec.ID,
+			FunctionID:      rec.FunctionID,
+			ProjectID:       rec.ProjectID,
+			Data:            cmd.Data,
+			TriggerEnvelope: cmd.TriggerEnvelope,
+			RawBody:         cmd.RawBody,
 		})
 		if err != nil {
 			return nil, err
@@ -235,7 +255,7 @@ func (f *Functions) createExecution(ctx context.Context, cmd CreateExecutionComm
 	if err := f.repo.CreateExecution(ctx, rec); err != nil {
 		return nil, err
 	}
-	return f.runExecution(ctx, fn, rec, vars, cmd.Data, untrusted)
+	return f.runExecution(ctx, fn, rec, dep, vars, cmd.Data, cmd.TriggerEnvelope, cmd.RawBody, untrusted)
 }
 
 // selectDeployment 选定部署：显式指定（必须 ready）或最新 ready。
@@ -282,12 +302,14 @@ func (f *Functions) selectDeployment(ctx context.Context, fn *domainfunctions.Fu
 // runExecution 同步执行（两写预占的第二写）：执行身份铸造 → executor →
 // 终态 UPDATE（completed/failed + outputs + duration_ms）。执行结束（成功/
 // 失败/panic）主动吊销 token；超时等执行错误会写回 failed 记录并返回错误
-// （映射 DeadlineExceeded/HTTP 504）。
+// （映射 DeadlineExceeded/HTTP 504）。dep 是 selectDeployment 的结果——
+// TemplateVersion 供并发降级判定（v3 §1.5）。triggerEnvelope/rawBody 是
+// HTTP 触发器封套通道（v3 §2.3/D10；非触发器调用恒 nil/nil）。
 //
 // 信号量：v2（dispatcher）路径跳过全局 run 信号量——常驻实例池由
 // dispatcher 内部管控（池上限/有界排队），全局 16 槽是 per-execution 预算，
 // 双重限流会互相饿死（设计 §6）；v1 回退模式保留信号量。
-func (f *Functions) runExecution(ctx context.Context, fn *domainfunctions.Function, rec *domainfunctions.ExecutionRecord, vars map[string]string, data string, egressUntrusted bool) (*domainfunctions.ExecutionRecord, error) {
+func (f *Functions) runExecution(ctx context.Context, fn *domainfunctions.Function, rec *domainfunctions.ExecutionRecord, dep *domainfunctions.Deployment, vars map[string]string, data string, triggerEnvelope *domainfunctions.TriggerEnvelope, rawBody []byte, egressUntrusted bool) (*domainfunctions.ExecutionRecord, error) {
 	if !f.executorV2() {
 		ok, release, err := f.getRunSemaphore().TryAcquire(ctx)
 		if err != nil {
@@ -310,7 +332,7 @@ func (f *Functions) runExecution(ctx context.Context, fn *domainfunctions.Functi
 	token := f.mintExecutionToken(ctx, fn, rec)
 	defer f.revokeExecutionToken(token)
 
-	result, err := f.executor.Execute(ctx, buildExecution(fn, rec, vars, data, token, f.executionAPIBaseURL(), egressUntrusted))
+	result, err := f.executor.Execute(ctx, f.buildExecution(fn, rec, dep.TemplateVersion, vars, data, token, f.executionAPIBaseURL(), triggerEnvelope, rawBody, egressUntrusted))
 	now := time.Now()
 	rec.UpdatedAt = now
 	if err != nil {
@@ -334,7 +356,14 @@ func (f *Functions) runExecution(ctx context.Context, fn *domainfunctions.Functi
 	rec.Stdout, rec.StdoutTruncated = truncateWithFlag(result.Stdout, maxOutputBytes)
 	rec.Stderr, rec.StderrTruncated = truncateWithFlag(result.Stderr, maxOutputBytes)
 	rec.Response, rec.ResponseTruncated = truncateWithFlag(result.Response, maxOutputBytes)
-	if result.StatusCode != 0 {
+	// v4 fetch 风格透传字段（v3 §2.2/D10）：运行期字段、不落库（bun 映射
+	// 显式排除）；main 风格恒空。
+	rec.HTTPHeaders = result.Headers
+	rec.ResponseB64 = result.ResponseB64
+	if result.StatusCode != 0 && !f.executorV2() {
+		// v1 退出码语义：非零 = failed。v2 dispatcher 路径失败已由 err 承载
+		//（此处 err==nil 且 StatusCode 非 0 仅见于 v4 fetch 风格的函数 HTTP
+		// status——自定义状态码是一等结果，不再映射执行失败，D10）。
 		rec.Status = domainfunctions.ExecutionStatusFailed
 		if strings.TrimSpace(result.Stderr) != "" {
 			rec.Error = truncate(strings.TrimSpace(result.Stderr), maxOutputBytes)
@@ -477,7 +506,7 @@ func (f *Functions) ProcessExecution(ctx context.Context, msg queueMessage) erro
 	// egress 分类（P2）：异步路径（http async_ack / cron）的函数按同一分类
 	// 规则判定——存在 http/cron 触发器即不可信（与 createExecution 同口径）。
 	untrusted := fn.ClientCallable || f.hasTriggersCached(ctx, msg.ProjectID, msg.FunctionID)
-	result, err := f.executor.Execute(runCtx, buildExecution(fn, rec, vars, msg.Data, token, f.executionAPIBaseURL(), untrusted))
+	result, err := f.executor.Execute(runCtx, f.buildExecution(fn, rec, dep.TemplateVersion, vars, msg.Data, token, f.executionAPIBaseURL(), msg.TriggerEnvelope, msg.RawBody, untrusted))
 	execStart := time.Now()
 	now := time.Now()
 	rec.UpdatedAt = now
@@ -503,7 +532,11 @@ func (f *Functions) ProcessExecution(ctx context.Context, msg queueMessage) erro
 	rec.Stdout, rec.StdoutTruncated = truncateWithFlag(result.Stdout, maxOutputBytes)
 	rec.Stderr, rec.StderrTruncated = truncateWithFlag(result.Stderr, maxOutputBytes)
 	rec.Response, rec.ResponseTruncated = truncateWithFlag(result.Response, maxOutputBytes)
-	if result.StatusCode != 0 {
+	rec.HTTPHeaders = result.Headers
+	rec.ResponseB64 = result.ResponseB64
+	if result.StatusCode != 0 && !f.executorV2() {
+		// 同 runExecution：v1 退出码语义不变；v4 fetch 风格的函数 HTTP
+		// status 是一等结果（D10）。
 		rec.Status = domainfunctions.ExecutionStatusFailed
 		if strings.TrimSpace(result.Stderr) != "" {
 			rec.Error = truncate(strings.TrimSpace(result.Stderr), maxOutputBytes)
@@ -615,7 +648,17 @@ func (f *Functions) ListExecutions(ctx context.Context, projectID, functionID st
 // dispatcher 无 DB 依赖，策略随执行规格携带；v1 executor 忽略。
 // egressUntrusted 由调用方按函数分类（P2 安全切片：client_callable 或存在
 // http/cron 触发器 = 不可信，容器 attach internal 变体网络）。
-func buildExecution(fn *domainfunctions.Function, rec *domainfunctions.ExecutionRecord, vars map[string]string, data, execToken, apiBaseURL string, egressUntrusted bool) domainfunctions.Execution {
+// depTemplateVersion 是本次执行所用 deployment 的模板版本（0 = v1 模板/
+// 未知）：并发降级判定（v3 §1.5「fail-safe 不 fail-closed」）——函数
+// concurrency > 1 而模板 < v3（MinConcurrencyTemplateVersion，不支持
+// ctx/分桶/per-request 超时）时静默按并发 1 执行 + 指标观测，存量函数不因
+// 新列拒绝执行，重部署后自然生效。
+// 执行 ID 取自预占 INSERT 已生成的 rec.ID（v3 §1.2：经分发 header
+// x-tw-execution-id 透传给 runner 的 ctx.executionId）。
+// triggerEnvelope/rawBody 是 HTTP 触发器封套通道（v3 §2.3/D10）：**恒填充**
+// （app 不探测 runner 风格——fetch 与否由 runner 入口探测决定）；runner
+// fetch 风格还原 Request、main 风格重组 TW_DATA（与现状等价，双轨 D9）。
+func (f *Functions) buildExecution(fn *domainfunctions.Function, rec *domainfunctions.ExecutionRecord, depTemplateVersion int32, vars map[string]string, data, execToken, apiBaseURL string, triggerEnvelope *domainfunctions.TriggerEnvelope, rawBody []byte, egressUntrusted bool) domainfunctions.Execution {
 	env := sanitizeEnv(vars)
 	// 执行身份 env（P0）：为空则不注入对应变量（api_base_url 未配置时函数
 	// 需自行解析平台地址；token 为空 = 无平台身份）。v2 路径下 dispatcher
@@ -626,6 +669,18 @@ func buildExecution(fn *domainfunctions.Function, rec *domainfunctions.Execution
 	}
 	if apiBaseURL != "" {
 		env[twAPIBaseURLEnv] = apiBaseURL
+	}
+	// 并发生效值（v3 §1.5 降级保护）：模板 < v3（MinConcurrencyTemplateVersion）
+	// 时静默按 1。判定基准固定在 v3（v4 §2.1 仅扩展接口面、并发语义不变），
+	// 不随 RunnerTemplateVersion 漂移——否则 v4 版本 bump 会把存量 v3
+	// deployment 误降级。v1 docker executor 无池概念、Concurrency 本就被
+	// 忽略（§1.6），降级计数只在 v2 dispatcher 路径记账避免噪音。
+	concurrency := fn.Concurrency
+	if concurrency > 1 && depTemplateVersion < domainfunctions.MinConcurrencyTemplateVersion {
+		concurrency = 1
+		if f.executorV2() {
+			observeConcurrencyDowngraded(fn.ProjectID, fn.ID)
+		}
 	}
 	return domainfunctions.Execution{
 		FunctionID:   fn.ID,
@@ -641,6 +696,13 @@ func buildExecution(fn *domainfunctions.Function, rec *domainfunctions.Execution
 		MaxInstances:           fn.MaxInstances,
 		IdleTTLSeconds:         fn.IdleTTLSeconds,
 		MaxRequestsPerInstance: fn.MaxRequestsPerInstance,
+		// 单实例并发（v3 §1.1，降级判定后的生效值）+ 执行 ID 透传。
+		Concurrency: concurrency,
+		ExecutionID: rec.ID,
+		// HTTP 触发器封套通道（v3 §2.3/D10）：非触发器调用恒 nil/nil，
+		// dispatcher 不进封套模式。
+		TriggerEnvelope: triggerEnvelope,
+		RawBody:         rawBody,
 		// egress 分类（P2 安全切片）：infra 据此选择常规/internal 网络。
 		EgressUntrusted: egressUntrusted,
 	}

@@ -19,7 +19,8 @@ const (
 	// 实例一个消费组（见 subscriber.go）XREADGROUP 消费后 XACK。
 	// 回到 Stream 是有意决策：消费组模式同样解决多副本可见性，且换来
 	// 不丢帧与位点回放（A6 的 Pub/Sub 广播在阶段④被取代）。
-	eventsStream = "torchwood:events"
+	// 键名收敛到 domain/shared（v3 切片 D 起函数事件触发器消费组共用）。
+	eventsStream = shared.EventsStream
 )
 
 // eventsStreamMaxLen 是周期 XTRIM 水位（近似裁剪）：Stream 只是投递

@@ -198,6 +198,28 @@ func (s *FunctionsService) UpdateFunction(ctx context.Context, req *serverv1.Upd
 	if req.ClientLimitWindow != nil {
 		cmd.ClientLimitWindow = req.ClientLimitWindow
 	}
+	// 池策略（v3 §5/OQ2）：proto3 optional 的 presence 语义——未设置不修改；
+	// 值域由 protovalidate 兜底，min≤max 跨字段校验在 app 用例层。
+	if req.MinInstances != nil {
+		v := int(req.GetMinInstances())
+		cmd.MinInstances = &v
+	}
+	if req.MaxInstances != nil {
+		v := int(req.GetMaxInstances())
+		cmd.MaxInstances = &v
+	}
+	if req.IdleTtlSeconds != nil {
+		v := int(req.GetIdleTtlSeconds())
+		cmd.IdleTTLSeconds = &v
+	}
+	if req.MaxRequestsPerInstance != nil {
+		v := int(req.GetMaxRequestsPerInstance())
+		cmd.MaxRequestsPerInstance = &v
+	}
+	if req.Concurrency != nil {
+		v := int(req.GetConcurrency())
+		cmd.Concurrency = &v
+	}
 	fn, err := s.functions.UpdateFunction(ctx, cmd)
 	if err != nil {
 		return nil, err
@@ -394,7 +416,8 @@ func (s *FunctionsService) CreateFunctionTrigger(ctx context.Context, req *serve
 		Type:       req.GetType(),
 		HTTP:       mapHTTPTriggerConfig(req.GetHttp()),
 		Cron:       mapCronTriggerConfig(req.GetCron()),
-		Enabled:    nil, // 创建恒启用；启停经删除重建（P1 无 UpdateFunctionTrigger RPC）。
+		Events:     req.GetEvent().GetEvents(), // v3 §4.1：type=event 专用
+		Enabled:    nil,                        // 创建恒启用；启停经删除重建（P1 无 UpdateFunctionTrigger RPC）。
 	}
 	trg, err := s.functions.CreateFunctionTrigger(ctx, cmd)
 	if err != nil {
@@ -494,6 +517,8 @@ func mapFunctionTrigger(trg *domainfunctions.Trigger) *serverv1.FunctionTrigger 
 		if trg.NextRunAt != nil {
 			out.NextRunAt = timestamppb.New(*trg.NextRunAt)
 		}
+	case domainfunctions.TriggerTypeEvent:
+		out.Events = trg.Config.Events
 	}
 	return out
 }
@@ -517,6 +542,12 @@ func mapFunction(fn *domainfunctions.Function) *serverv1.Function {
 		ClientAnonymousAllowed: fn.ClientAnonymousAllowed,
 		ClientPerUserLimit:     int32(fn.ClientPerUserLimit),
 		ClientLimitWindow:      fn.ClientLimitWindow,
+		// 池策略只读视图（v3 §5/OQ2；管理经 UpdateFunction optional ×5）。
+		MinInstances:           int32(fn.MinInstances),
+		MaxInstances:           int32(fn.MaxInstances),
+		IdleTtlSeconds:         int32(fn.IdleTTLSeconds),
+		MaxRequestsPerInstance: int32(fn.MaxRequestsPerInstance),
+		Concurrency:            int32(fn.Concurrency),
 		CreatedAt:              timestamppb.New(fn.CreatedAt),
 		UpdatedAt:              timestamppb.New(fn.UpdatedAt),
 	}

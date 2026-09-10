@@ -5,10 +5,15 @@ import (
 	"time"
 )
 
-// 触发器词表（迁移 000015 CHECK 约束同源；设计 §3）。
+// 触发器词表（迁移 000015/000018 CHECK 约束同源；设计 §3 与 functions-v3
+// §4.1/D12）。
 const (
 	TriggerTypeHTTP = "http"
 	TriggerTypeCron = "cron"
+	// TriggerTypeEvent 是数据库事件触发器（v3 切片 D，迁移 000018 扩展
+	// CHECK 词表）：订阅文档写事件（create/update/delete），由 worker 的
+	// functions-triggers 消费组投递（设计 §4.2）。
+	TriggerTypeEvent = "event"
 
 	// ResponseMode 是 HTTP 触发器的双响应模式（二轮复审：微信 SSV 回调 1s
 	// 超时×重试 3 次，纯同步大概率全超时致事件丢失；async_ack 平台先 200）。
@@ -46,6 +51,11 @@ type TriggerConfig struct {
 	// —— cron ——
 	Expr    string `json:"expr,omitempty"`
 	Misfire string `json:"misfire,omitempty"`
+
+	// —— event（v3 §4.1，仅 event 类型使用）——
+	// Events 是订阅串列表，格式 databases.{db}.collections.{coll}.documents.{op}
+	//（Appwrite 风格；语法与通配语义见 eventmatch.go ParseEventPattern）。
+	Events []string `json:"events,omitempty"`
 }
 
 // EffectiveBodyLimit 返回生效的请求体上限（配置 0 = 平台缺省 64KB）。
@@ -56,12 +66,12 @@ func (c TriggerConfig) EffectiveBodyLimit() int {
 	return c.BodyLimitBytes
 }
 
-// Trigger 是函数触发器实体（HTTP webhook / cron 定时）。
+// Trigger 是函数触发器实体（HTTP webhook / cron 定时 / DB 事件订阅）。
 type Trigger struct {
 	ID         string
 	ProjectID  string
 	FunctionID string
-	Type       string // http | cron
+	Type       string // http | cron | event
 	Config     TriggerConfig
 	// Token 是 http 触发器的公开调用凭证（128bit，URL 即鉴权）；cron 为空。
 	Token string
@@ -74,7 +84,7 @@ type Trigger struct {
 }
 
 // TriggerSource 返回执行记录 trigger_source 列的取值（执行记录即审计载体）：
-// http:{trigger_id} / cron:{trigger_id}。
+// http:{trigger_id} / cron:{trigger_id} / event:{trigger_id}。
 func (t *Trigger) TriggerSource() string {
 	return t.Type + ":" + t.ID
 }
@@ -168,4 +178,9 @@ type TriggerRepo interface {
 	// 执行行 queued→building 的 CAS 防不了两条不同 execution。返回 CAS 赢家
 	// 中 Run=true 的条目（skip 的 misfire 行被推进但不返回）。
 	ClaimDueCron(ctx context.Context, projectID string, now time.Time, limit int, next CronNextFunc) ([]CronClaim, error)
+
+	// ListEnabledEventTriggers 返回项目内启用的 event 触发器（v3 切片 D：
+	// worker 订阅匹配器的周期快照扫描，走 function_triggers_event_scan
+	// partial 索引；禁用触发器不投递——与 cron 领取 enabled=true 同语义）。
+	ListEnabledEventTriggers(ctx context.Context, projectID string) ([]Trigger, error)
 }
