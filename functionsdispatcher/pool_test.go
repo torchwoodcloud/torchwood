@@ -3,6 +3,7 @@ package functionsdispatcher
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -407,6 +408,69 @@ func TestPoolDispatch_QueueHeadTimeout(t *testing.T) {
 	_, err := pool.Dispatch(ctx, dispatchReq())
 	require.Equal(t, codes.ResourceExhausted, status.Code(err))
 	require.Less(t, time.Since(start), 5*time.Second, "队首超时应远小于函数超时")
+	// 池满路径没有任何 spawn 尝试：消息保持干净（last spawn error 仅在确有
+	// 失败现场时拼接）。
+	require.NotContains(t, status.Convert(err).Message(), "last spawn error")
+}
+
+// recordingHandler 捕获 slog 默认 logger 的消息（告警限频断言用）。
+type recordingHandler struct {
+	mu      sync.Mutex
+	records []string
+}
+
+func (h *recordingHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *recordingHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r.Message)
+	return nil
+}
+
+func (h *recordingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+
+func (h *recordingHandler) WithGroup(string) slog.Handler { return h }
+
+func (h *recordingHandler) snapshot() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]string(nil), h.records...)
+}
+
+// TestPoolDispatch_QueueTimeoutCarriesLastSpawnError 被吞掉的 spawn 失败必须
+// 留现场（EACCES 秒退事故的观测性修复）：spawn 成功但健康握手永不 ready
+// （镜像坏档的等价形态）时，队首超时错误携带最后一次 spawn 失败原因，并以
+// per function 限频 slog.Warn 落告警（重试循环按 PollInterval 反复 trySpawn，
+// 不拦即刷屏）。
+func TestPoolDispatch_QueueTimeoutCarriesLastSpawnError(t *testing.T) {
+	d := newFakeDaemon()
+	reg := newFakeRegistry()
+	runner := &fakeRunner{} // healthy=false：健康握手永不 ready
+	pool := newTestPool(d, reg, runner, func(c *PoolConfig) {
+		c.BootTimeout = 30 * time.Millisecond
+		c.QueueHeadTimeout = 250 * time.Millisecond
+	})
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	records := &recordingHandler{}
+	slog.SetDefault(slog.New(records))
+
+	_, err := pool.Dispatch(context.Background(), dispatchReq())
+	require.Equal(t, codes.ResourceExhausted, status.Code(err))
+	msg := status.Convert(err).Message()
+	require.Contains(t, msg, "no free instance within queue head timeout")
+	require.Contains(t, msg, "last spawn error", "队首超时错误必须携带最后 spawn 失败原因")
+	require.Contains(t, msg, "failed health probe", "真实根因（健康握手失败）必须出现在错误里")
+
+	// 限频：测试窗口（~300ms）内反复重试只落一条告警（窗口 5s）。
+	warns := 0
+	for _, m := range records.snapshot() {
+		if strings.Contains(m, "spawn attempt failed") {
+			warns++
+		}
+	}
+	require.Equal(t, 1, warns, "spawn 失败告警在限频窗口内只落一条: %v", records.snapshot())
 }
 
 // TestPoolDispatch_TimeoutKillsInstance 请求超时 → 杀整个实例（实例级隔离

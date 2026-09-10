@@ -51,6 +51,10 @@ const (
 	// maxLogTailBytes 是 dispatch 响应 stdout/stderr 尾部截断（对齐平台
 	// 64KB 输出截断口径）。
 	maxLogTailBytes = 64 << 10
+
+	// spawnWarnInterval 是 spawn 失败告警的限频窗口（per function）：排队
+	// 请求按 PollInterval 反复重试 trySpawn，失败现场告警按窗口收敛。
+	spawnWarnInterval = 5 * time.Second
 )
 
 // BuildRequest 是 POST /v1/dispatch/builds 入参：zip 字节内联（base64）——

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"sync"
@@ -192,6 +193,12 @@ type PoolManager struct {
 	booting       map[string]int  // per function 启动中实例数
 	counted       map[string]bool // 已计入 resident 的容器 ID（防重复计数）
 	residentTotal int             // 进程内常驻总量（独立于全局 run 信号量，Q11 上限）
+	// lastSpawnErr/lastSpawnWarnAt 按函数保留最近一次被吞掉的 spawn 失败：
+	// Dispatch 不因 spawn 失败立即失败请求（继续排队等他人 spawn 成果），但
+	// 现场必须留存——否则镜像坏档之类的真实根因会被泛化的 queue timeout
+	// 完全吞掉（EACCES 秒退事故的排障放大器）。lastSpawnWarnAt 供告警限频。
+	lastSpawnErr    map[string]error
+	lastSpawnWarnAt map[string]time.Time
 }
 
 // NewPoolManager 构造池管理器（生产装配）。
@@ -219,15 +226,17 @@ func newPoolManager(daemon Daemon, registry Registry, runner runnerClient, cfg P
 		cfg.MaxInstancesDefault = 2
 	}
 	return &PoolManager{
-		daemon:   daemon,
-		registry: registry,
-		runner:   runner,
-		cfg:      cfg,
-		clock:    time.Now,
-		sleep:    defaultSleep,
-		waiters:  map[string]int{},
-		booting:  map[string]int{},
-		counted:  map[string]bool{},
+		daemon:          daemon,
+		registry:        registry,
+		runner:          runner,
+		cfg:             cfg,
+		clock:           time.Now,
+		sleep:           defaultSleep,
+		waiters:         map[string]int{},
+		booting:         map[string]int{},
+		counted:         map[string]bool{},
+		lastSpawnErr:    map[string]error{},
+		lastSpawnWarnAt: map[string]time.Time{},
 	}
 }
 
@@ -250,6 +259,30 @@ func defaultSleep(ctx context.Context, d time.Duration) bool {
 }
 
 func waiterKey(ref FunctionRef) string { return ref.ProjectID + ":" + ref.FunctionID }
+
+// recordSpawnFailure 记录一次被吞掉的 spawn 失败：保存最近失败原因（队首
+// 超时错误携带，第一现场止血）并限频 slog.Warn（排队请求每 PollInterval 重试
+// trySpawn，不拦就是刷屏）。
+func (p *PoolManager) recordSpawnFailure(key string, req ExecuteRequest, err error) {
+	p.mu.Lock()
+	p.lastSpawnErr[key] = err
+	now := p.clock()
+	if last, ok := p.lastSpawnWarnAt[key]; ok && now.Sub(last) < spawnWarnInterval {
+		p.mu.Unlock()
+		return
+	}
+	p.lastSpawnWarnAt[key] = now
+	p.mu.Unlock()
+	slog.Warn("functions-dispatcher: spawn attempt failed; request keeps waiting in queue",
+		"project", req.ProjectID, "function", req.FunctionID, "error", err)
+}
+
+// lastSpawnFailure 返回该函数最近一次被吞掉的 spawn 失败（无则 nil）。
+func (p *PoolManager) lastSpawnFailure(key string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.lastSpawnErr[key]
+}
 
 // applyDefaults 归一化单请求池策略（调用方零值字段取平台默认）。
 func (p *PoolManager) applyDefaults(policy PoolPolicy) PoolPolicy {
@@ -305,6 +338,10 @@ func (p *PoolManager) Dispatch(ctx context.Context, req ExecuteRequest) (*Execut
 		p.waiters[key]--
 		if p.waiters[key] <= 0 {
 			delete(p.waiters, key)
+			// 该函数已无等待请求：spawn 失败现场一并清账（防 map 无界增长；
+			// 错误已在超时返回时物化进错误消息，无需再保留）。
+			delete(p.lastSpawnErr, key)
+			delete(p.lastSpawnWarnAt, key)
 		}
 		p.mu.Unlock()
 	}()
@@ -330,10 +367,19 @@ func (p *PoolManager) Dispatch(ctx context.Context, req ExecuteRequest) (*Execut
 			if errors.Is(err, context.Canceled) || status.Code(err) == codes.ResourceExhausted {
 				return nil, err
 			}
+			// 被吞掉的失败必须留现场：全量告警（限频防刷屏）+ 保存最近失败
+			// 原因供队首超时错误携带（EACCES 秒退事故中真实根因在此消失，
+			// 只剩泛化 queue timeout，排障多花数轮）。
+			p.recordSpawnFailure(key, req, err)
 		}
 
 		if !p.clock().Before(deadline) {
 			DispatchQueueTimeouts.WithLabelValues(req.ProjectID, req.FunctionID).Inc()
+			if lastErr := p.lastSpawnFailure(key); lastErr != nil {
+				return nil, status.Errorf(codes.ResourceExhausted,
+					"no free instance within queue head timeout (max_instances=%d; last spawn error: %v)",
+					policy.MaxInstances, lastErr)
+			}
 			return nil, status.Errorf(codes.ResourceExhausted,
 				"no free instance within queue head timeout (max_instances=%d)", policy.MaxInstances)
 		}
