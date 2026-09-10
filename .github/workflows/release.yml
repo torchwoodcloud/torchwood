@@ -1,0 +1,125 @@
+# Release SDK（sdk/go + genproto 模块发布流水线）
+
+# 背景：`replace` 指令仅在主模块生效——下游 `go get github.com/torchwoodcloud/torchwood/sdk/go`
+# 时，sdk/go/go.mod 中的 `replace ... => ../../genproto` 会被忽略，require 的
+# 伪版本 `v0.0.0-00010101000000-000000000000` 又不存在于任何远端，导致分发链路
+# 断裂（audit R4 P1 #9）。本 workflow 以真实 genproto tag 重写 require 并移除
+# 相对路径 replace 后打 module tag，使下游可正常解析依赖。
+#
+# 前置：仓库需为公开（或 Actions 具备拉取权限）；GITHUB_TOKEN 默认具备 contents:write。
+
+name: Release SDK
+
+on:
+  workflow_dispatch:
+    inputs:
+      genproto_version:
+        description: 'genproto 版本（将创建 tag genproto/vX.Y.Z，如 v0.1.0）'
+        required: true
+        type: string
+      sdk_version:
+        description: 'sdk/go 版本（将创建 tag sdk/go/vX.Y.Z，如 v0.1.0）'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-sdk
+
+jobs:
+  release:
+    name: Tag genproto → rewrite sdk/go deps → tag sdk/go
+    runs-on: ubuntu-latest
+    env:
+      GENPROTO_TAG: genproto/${{ inputs.genproto_version }}
+      SDK_TAG: sdk/go/${{ inputs.sdk_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Validate inputs & tags do not exist
+        run: |
+          set -euo pipefail
+          for v in "$GENPROTO_TAG" "$SDK_TAG"; do
+            [[ "$v" =~ ^(genproto|sdk/go)/v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "::error::版本号必须形如 vX.Y.Z，got $v"; exit 1; }
+          done
+          for t in "$GENPROTO_TAG" "$SDK_TAG"; do
+            if git ls-remote --exit-code --tags origin "refs/tags/$t" >/dev/null 2>&1; then
+              echo "::error::tag $t 已存在"; exit 1
+            fi
+          done
+
+      - name: Cut genproto tag at HEAD
+        run: |
+          set -euo pipefail
+          git config user.name "torchwood-release-bot"
+          git config user.email "release@torchwoodcloud.noreply.github.com"
+          git tag "$GENPROTO_TAG"
+          git push origin "refs/tags/$GENPROTO_TAG"
+
+      # 核心：改写 sdk/go/go.mod —— require 指向真实 genproto tag，
+      # 删除仅对主模块生效的相对路径 replace；随后以 direct 模式拉取校验。
+      - name: Rewrite sdk/go/go.mod to real genproto version (drop local replace)
+        run: |
+          set -euo pipefail
+          # require 写纯版本号：nested module 的 tag 前缀（genproto/）由 Go 在
+          # 版本解析时剥离，go.mod 里写 "genproto/vX.Y.Z" 是 disallowed version。
+          GENPROTO_VERSION="${GENPROTO_TAG#genproto/}"
+          sed -i \
+            "s#github.com/torchwoodcloud/torchwood/genproto v0\.0\.0-00010101000000-000000000000#github.com/torchwoodcloud/torchwood/genproto ${GENPROTO_VERSION}#" \
+            sdk/go/go.mod
+          sed -i '\#^replace github.com/torchwoodcloud/torchwood/genproto => \.\./\.\./genproto$#d' sdk/go/go.mod
+          grep -q "torchwood/genproto ${GENPROTO_VERSION}\$" sdk/go/go.mod || {
+            echo "::error::require 改写失败"; exit 1; }
+          ! grep -q '^replace github.com/torchwoodcloud/torchwood/genproto' sdk/go/go.mod || {
+            echo "::error::replace 未删除干净"; exit 1; }
+          cd sdk/go
+          GOFLAGS=-mod=mod go mod tidy
+          go build ./... && go vet ./...
+
+      - name: Commit rewritten go.mod and cut sdk/go tag
+        run: |
+          set -euo pipefail
+          git add sdk/go/go.mod sdk/go/go.sum
+          git commit -m "chore(release): $SDK_TAG（genproto @ $GENPROTO_TAG，移除本地相对路径 replace）"
+          git tag "$SDK_TAG"
+          git push origin "refs/tags/$SDK_TAG"
+
+      # 验收：干净外部目录按下游视角安装并编译（等价 `go get ...@latest` 成功）。
+      - name: Verify downstream install from a clean directory
+        run: |
+          set -euo pipefail
+          probe="$(mktemp -d)"
+          cd "$probe"
+          go mod init probe.example/sdkprobe
+          cat > main.go <<'EOF'
+          package main
+
+          import (
+            "context"
+
+            "github.com/torchwoodcloud/torchwood/sdk/go/server"
+          )
+
+          func main() {
+            c, err := server.New("127.0.0.1:9060", server.WithAPIKey("k"))
+            if err != nil {
+              panic(err)
+            }
+            _, _ = c.Health.Check(context.Background())
+          }
+          EOF
+          # 验收同样只写纯版本号：module tag 前缀（sdk/go/）由 Go 解析。
+          # tidy 补全传递依赖的 go.sum 条目（go get pkg@ver 只写根模块条目，
+          # 直接 build 会因缺 sum 失败——v0.1.2 首次发布实测）。
+          GOFLAGS=-mod=mod \
+            go get github.com/torchwoodcloud/torchwood/sdk/go@"${SDK_TAG#sdk/go/}"
+          go mod tidy
+          go build ./...
+          echo "downstream install OK: $SDK_TAG"
