@@ -122,7 +122,7 @@ API Key 不在注册时生成，登录后在 Console **API Keys** 页面创建�
 .
 ├── cmd/server/          # 服务入口与 Wire 装配（provides.go -> wire_gen.go）
 ├── cmd/worker/          # 异步 worker（函数执行队列消费者，独立 Wire）
-├── cmd/client/          # Torchwood CLI（cobra，基于 sdk/go InvokeJSON）
+├── cmd/torchwood/          # Torchwood CLI（cobra，基于 sdk/go InvokeJSON）
 ├── console/             # Admin Console SPA（embed.go -> //go:embed dist）
 ├── configs/             # config.yaml.template（及本地 config.yaml）
 ├── db/migrations/       # golang-migrate SQL 迁移

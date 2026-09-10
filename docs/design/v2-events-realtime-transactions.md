@@ -1484,11 +1484,11 @@ Bulk 内部调 `UpdateDocument` 时必须设 `SkipVersion`，否则 PR1 会让�
 
 Increment 与 data 一起 PATCH，带同一个 `version`。
 
-**CLI**（`cmd/client/cmd/databases.go`，AGENTS.md 正式 Server API 入口）：
+**CLI**（`cmd/torchwood/cmd/databases.go`，AGENTS.md 正式 Server API 入口）：
 
 - `newDatabasesDocumentsUpdateCmd`：`--version`（int64，必填）；`buildUpdateDocumentReq` 写入 `version`。
 - `newDatabasesDocumentsDeleteCmd`：`--version` 必填，invoke body/query 带 `version`。
-- 更新 `cmd/client/cmd/databases_test.go` `TestBuildUpdateDocumentReq`。
+- 更新 `cmd/torchwood/cmd/databases_test.go` `TestBuildUpdateDocumentReq`。
 - Bulk 子命令不传 version。
 
 系统集合文档编辑器本身不可写（`collection.is_system` 已藏按钮），无需特殊 version。
@@ -1689,7 +1689,7 @@ Go Client 对等。不把 Realtime 放进 Server SDK（API Key 不能连）。
 - `internal/api/consolegrpc/cookies.go`
 - `pkg/grpc/interceptor/{jwt.go,apikey_scope.go,admin_roles.go}`
 - `internal/infra/auth/validator.go`（admin JWT 无 ProjectID）
-- `cmd/client/cmd/databases.go`
+- `cmd/torchwood/cmd/databases.go`
 - `pkg/jwtparser/jwt.go`
 - `pkg/idgen/ulid.go`
 - `cmd/worker/{worker.go,provides.go}`
@@ -1716,7 +1716,7 @@ Go Client 对等。不把 Realtime 放进 Server SDK（API Key 不能连）。
   - `internal/api/{client,server}grpc/databases.go`
   - `proto/client/v1/databases.proto`、`proto/server/v1/databases.proto`
   - `console/src/api/databases.ts`、`console/src/routes/databases/pages.tsx`（详情 **和** 列表删除）
-  - `cmd/client/cmd/databases.go`、`databases_test.go`（`--version`）
+  - `cmd/torchwood/cmd/databases.go`、`databases_test.go`（`--version`）
   - `sdk/typescript/src/types.ts`、`client/databases.ts`、`server/databases.ts`、`__tests__/contract.test.ts`
   - `sdk/go/{client,server}/databases.go`、`services_test.go`
   - **全部实现 `DocumentDB` 的测试桩**（漏改即 PR1 编译不过）：`internal/app/storage/storage_unit_test.go`、`internal/api/clientgrpc/account_test.go`、`internal/api/clientgrpc/groups_pagination_test.go`（`clientGroupsDocDB`；仓库**没有** `groups_test.go`）、`internal/api/servergrpc/pagination_test.go`、`internal/api/serverhttp/functions_handler_test.go`、`internal/app/server/cascade_guards_test.go`（`databases_reserved_test.go` 的 `collectionDocDB` 嵌入此 `fakeDocDB`）、`internal/infra/auth/validator_test.go`

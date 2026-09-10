@@ -130,7 +130,7 @@ api.interceptors.request.use((config) => {
 task console:install   # pnpm install（锁定 pnpm@11.20.0）
 task console:dev       # pnpm run dev → vite dev server
 task console:build     # pnpm run build → tsc -b && vite build → dist/
-task build             # 依赖 console:build → go build ./cmd/server ./cmd/worker ./cmd/client
+task build             # 依赖 console:build → go build ./cmd/server ./cmd/worker ./cmd/torchwood
 ```
 
 - `vite.config.ts:8`：`base: '/console/'`，`@` → `./src`（tsconfig + vite 双别名）；

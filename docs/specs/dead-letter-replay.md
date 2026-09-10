@@ -33,7 +33,7 @@ Provide an admin-only replay path that atomically moves a dead-letter row back i
 
 - **API**: `internal/api/servergrpc/outbox.go` thin handler (like `projects.go`), `projectID` from `Principal`, `WithAuditResource("outbox/dead/"+eventID)`. Wire via `internal/app/provides.go` (`events.NewOutboxAdmin`) and `internal/infra/server/grpc.go` (`collectMethodsByAccess` includes new file descriptor, `assertRegisteredMethodsHaveAuthz` already covers it).
 
-- **CLI**: `cmd/client/cmd/outbox.go` adds `torchwood admin outbox list-dead` and `replay` commands using `sdk/go/server` `InvokeJSON` (no direct `genproto` import, per `cmd/client` guard). `sdk/go/server` adds `OutboxService` client (like `projects.go`).
+- **CLI**: `cmd/torchwood/cmd/outbox.go` adds `torchwood admin outbox list-dead` and `replay` commands using `sdk/go/server` `InvokeJSON` (no direct `genproto` import, per `cmd/torchwood` guard). `sdk/go/server` adds `OutboxService` client (like `projects.go`).
 
 - **Audit**: `audit` interceptor already records `Action=FullMethod` and `ResourceID` from `WithAuditResource`; no new audit code needed beyond handler's `WithAuditResource`.
 
@@ -47,9 +47,9 @@ Provide an admin-only replay path that atomically moves a dead-letter row back i
   - `internal/infra/bun/bunrepo` – `TestOutboxRepo_ReplayDeadLetter` (insert dead row, replay, assert outbox has row with `attempts=0` and dead empty; replay idempotency; project mismatch -> `InvalidArgument`/`NotFound`).
   - `internal/app/events` – `TestOutboxAdmin_Replay` (platform admin vs member, project mismatch, not found).
   - `internal/api/servergrpc` – `TestOutboxService_Replay` (authz: `owner|admin` ok, `member|viewer` denied, API key with `outbox:write` ok).
-  - `cmd/client` – `TestBuildOutboxReplayRequest` (like `storage_test.go`).
+  - `cmd/torchwood` – `TestBuildOutboxReplayRequest` (like `storage_test.go`).
 
-- **Prior art**: `internal/infra/events/outbox_worker_test.go` (claim/dispatch/failRow), `internal/api/servergrpc/projects_test.go` (List pagination), `internal/infra/auth/validator_test.go` (admin role), `cmd/client/cmd/storage_test.go` (build request).
+- **Prior art**: `internal/infra/events/outbox_worker_test.go` (claim/dispatch/failRow), `internal/api/servergrpc/projects_test.go` (List pagination), `internal/infra/auth/validator_test.go` (admin role), `cmd/torchwood/cmd/storage_test.go` (build request).
 
 ## Out of Scope
 

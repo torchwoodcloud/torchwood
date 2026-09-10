@@ -66,7 +66,7 @@ internal/api  ──→  internal/app  ──→  internal/domain  ←──  in
 torchwood/
 ├── cmd/server/        # 主服务入口：main.go + provides.go + wire.go → wire_gen.go
 ├── cmd/worker/        # 异步 worker 入口：独立 Wire 装配（同构）
-├── cmd/client/        # CLI（lynx-go/commands，sdk/go InvokeJSON，不直连 genproto；import_guard_test 兜底）
+├── cmd/torchwood/        # CLI（lynx-go/commands，sdk/go InvokeJSON，不直连 genproto；import_guard_test 兜底）
 ├── console/           # React SPA，embed.go //go:embed dist；Vite 代理 /v1
 ├── proto/             # client/v1 · server/v1 · console/v1 · shared/v1（唯一事实源）
 ├── genproto/          # 生成产物 *.pb.go / *_grpc.pb.go / *.pb.gw.go / *.swagger.json（禁手改）
@@ -102,7 +102,7 @@ torchwood/
 |------|------|------|----------|
 | `server` | `cmd/server` | Lynx Runner：gRPC `127.0.0.1:9060` + gateway/Console SPA `:9080` + Metrics `127.0.0.1:9040` + 自定义 HTTP；装配在 `internal/runtime`（`grpc.go`/`grpc_gateway.go`/`console.go`/`metrics.go`），注册顺序 `grpc→gateway→realtime→metrics` | `security.jwt.secret` 必填（`internal/bootkit/config.go:33`，server/worker 共享）+ authz 策略语义断言（`AssertSemantic`） |
 | `dev:worker` | `cmd/worker` | 后台任务消费者：Functions 队列、outbox 分发、chunk 清理、Stream 修剪、计费闭环等；与 server 共享 `app/domain/infra` 但独立 `ProviderSet`（无 `api` 层） | `data.database.source` 必填（`cmd/worker/provides.go:128`） |
-| `CLI` | `cmd/client` | `bin/torchwood`，`lynx-go/commands` + `sdk/go/server.InvokeJSON` 按 `protoregistry.GlobalFiles` 动态分发；`rpc` 逃生舱覆盖全部 Server RPC，新增 RPC 无需登记。全局旗标在子命令路径之后、位置参数之前给出（环境变量 `TORCHWOOD_CLI_*` 优先）；退出码 0 成功 / 1 参数与校验错 / 2=40x / 3=5xx / 4=429 | `TORCHWOOD_CLI_*` 环境覆盖 |
+| `CLI` | `cmd/torchwood` | `bin/torchwood`，`lynx-go/commands` + `sdk/go/server.InvokeJSON` 按 `protoregistry.GlobalFiles` 动态分发；`rpc` 逃生舱覆盖全部 Server RPC，新增 RPC 无需登记。全局旗标在子命令路径之后、位置参数之前给出（环境变量 `TORCHWOOD_CLI_*` 优先）；退出码 0 成功 / 1 参数与校验错 / 2=40x / 3=5xx / 4=429 | `TORCHWOOD_CLI_*` 环境覆盖 |
 
 三者均 `godotenv.Load()` 加载 `.env`，配置绑定走 `config.NewBindConfigFunc()`（`internal/pkg/config/bind.go:21`），Wire 生成见 `04-codegen.md`。
 

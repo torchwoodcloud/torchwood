@@ -192,7 +192,7 @@ HTTP/Metrics 端口由 `server.http.addr` / `server.metrics.addr` 决定，非�
 
 ---
 
-## 7. CLI（`cmd/client`）
+## 7. CLI（`cmd/torchwood`）
 
 `bin/torchwood` 经 gRPC 直连 Server API（`sdk/go/server.InvokeJSON` 动态分发，新增 RPC 无需登记；`import_guard_test.go` 兜底禁直连 genproto）：
 

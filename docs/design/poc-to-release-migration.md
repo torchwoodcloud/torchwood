@@ -107,7 +107,7 @@ CREATE INDEX IF NOT EXISTS idx_<phys>_acl ON tw_p_db.c_xxx USING gin ("_acl");
 
 现状：`EnsureCatalog` 已收缩为"仅确保 schema 存在"（`postgres_catalog.go` 注释），但 **`projectschema.EnsureAll`（启动钩子）会重放 000011 DROP 四表**。二选一拍板：
 
-- **方案甲（推荐）**：独立一次性命令 `torchwood admin migrate legacy`（CLI `cmd/client` 新子命令，走 Server API 或直连 DSN），部署序列为 `db:migrate` → `torchwood admin migrate legacy` → 首次启动。命令完成后将该项目 schema 的 `schema_migrations` 推到 11（含自身 DROP 四表），启动钩子重放即 no-op。
+- **方案甲（推荐）**：独立一次性命令 `torchwood admin migrate legacy`（CLI `cmd/torchwood` 新子命令，走 Server API 或直连 DSN），部署序列为 `db:migrate` → `torchwood admin migrate legacy` → 首次启动。命令完成后将该项目 schema 的 `schema_migrations` 推到 11（含自身 DROP 四表），启动钩子重放即 no-op。
 - 方案乙：给 projectschema 000011 加"catalog 已搬迁才 DROP"的运行时门槛——改动已发布迁移语义，与 §6 的"禁改已应用迁移"规则同病，否决。
 
 ## 5. 直切点③：物理名解耦（存量表名 = 逻辑名 → `c_<base32(8)>`）
@@ -184,7 +184,7 @@ CREATE INDEX IF NOT EXISTS idx_<phys>_acl ON tw_p_db.c_xxx USING gin ("_acl");
 | 工作项 | 内容 | 归属 |
 |---|---|---|
 | `000031_roles_sig_r16_reconcile` | §6.3 ①（函数面幂等重放） | infra/clients + db/migrations |
-| `torchwood admin migrate legacy` | §3+§4+§5 搬迁器（探测/单库事务/隔离清单/进度表），复用 catalog_codec 编码与 copy.go 形态 | cmd/client + projectschema/documentdb |
+| `torchwood admin migrate legacy` | §3+§4+§5 搬迁器（探测/单库事务/隔离清单/进度表），复用 catalog_codec 编码与 copy.go 形态 | cmd/torchwood + projectschema/documentdb |
 | A1 扫描扩展 | 扫描步骤并入 §3 S1/S3/S4 与 INSERT(`_acl`) 授权修复 | documentdb（A1 同会话） |
 | 部署 runbook | §8 固化进 13-operations §6 | 文档会话 |
 | 验证用例 | §3.3 守恒/抽查、§4.2 回读一致性（encode↔decode）、§5.4 零泄漏断言 | 各归属会话 |

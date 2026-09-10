@@ -124,7 +124,7 @@ Create API Keys afterwards in Console → **API Keys** and call the Server API w
 .
 ├── cmd/server/          # server entry + Wire (provides.go -> wire_gen.go)
 ├── cmd/worker/          # async worker (functions queue consumer, own Wire)
-├── cmd/client/          # Torchwood CLI (cobra, sdk/go InvokeJSON)
+├── cmd/torchwood/          # Torchwood CLI (cobra, sdk/go InvokeJSON)
 ├── console/             # Admin Console SPA (embed.go -> //go:embed dist)
 ├── configs/             # config.yaml.template (+ local config.yaml)
 ├── db/migrations/       # golang-migrate SQL

@@ -78,7 +78,7 @@ linters:
         linters: [gosec]
         text: "G109"
       # CLI `functions code` 按用户指定路径读取函数代码包——功能本身即读取本地文件。
-      - path: cmd/client/cmd/functions\.go
+      - path: cmd/torchwood/cmd/functions\.go
         linters: [gosec]
         text: "G304"
       # 测试内 Walk 回调读取仓库自有测试数据，无符号链接攻击面（G122 对行内

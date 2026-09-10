@@ -12,7 +12,7 @@
 |------|------|------|
 | **server** | `cmd/server/main.go` | gRPC（`server.grpc.addr` 127.0.0.1:9060）+ grpc-gateway HTTP `/v1/*` + 独立 `serverhttp`（Storage 上传下载、OAuth/Functions/Payments）+ Metrics + Admin Console SPA（`console.Dist`）+ 健康/版本 |
 | **worker** | `cmd/worker/main.go` | 函数异步执行消费者：`BRPOP torchwood:queue:functions-executions`，4 goroutine 并发；启动对账——超 1h 的 `queued/building/running` 标 `failed`；瞬时失败重入队最多 3 次（`maxProcessAttempts`） |
-| **CLI** | `cmd/client/main.go` | `bin/torchwood[.exe]`，经 `sdk/go/server` 的 `InvokeJSON` 走 gRPC 调 Server API（不直连 `genproto`） |
+| **CLI** | `cmd/torchwood/main.go` | `bin/torchwood[.exe]`，经 `sdk/go/server` 的 `InvokeJSON` 走 gRPC 调 Server API（不直连 `genproto`） |
 
 本地开发：
 
@@ -64,7 +64,7 @@ build:
   cmds:
     - go build -ldflags "-X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.date={{.DATE}}" -o ./bin/ ./cmd/server
     - go build -ldflags "..." -o ./bin/ ./cmd/worker
-    - go build -ldflags "..." -o ./bin/torchwood{{if eq .OS "Windows_NT"}}.exe{{end}} ./cmd/client
+    - go build -ldflags "..." -o ./bin/torchwood{{if eq .OS "Windows_NT"}}.exe{{end}} ./cmd/torchwood
 ```
 
 - `console:build`（`Taskfile.yml:81`）为 `pnpm run build`（`tsc -b && vite build`），产物 `console/dist/` 再被 `console/embed.go:8` 的 `//go:embed dist` 打进二进制，由 `internal/runtime/console.go` 的 `NewConsoleHandler` 在 `/console/` 下 serve（含 SPA fallback 与 `X-Frame-Options: DENY`/CSP 等安全头）；
@@ -379,7 +379,7 @@ DSN 优先级：`TORCHWOOD_DATA_DATABASE_SOURCE` → `postgres://torchwood:torch
 
 #### 6.3.1 项目级备份与恢复：`torchwood admin export` / `import`（转出 POC 门禁 B5）
 
-`cmd/client` 的 admin 子命令**直连元数据库**（不经 API 面/gRPC；POC 运维工具属性）：
+`cmd/torchwood` 的 admin 子命令**直连元数据库**（不经 API 面/gRPC；POC 运维工具属性）：
 
 ```bash
 # 导出项目文档面：catalog 快照 + 每集合全行 NDJSON（to_jsonb 形态，含 _acl/_version）+ snapshot_seq
