@@ -20,9 +20,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	LeaderboardsService_SubmitLeaderboardScore_FullMethodName = "/torchwood.server.v1.LeaderboardsService/SubmitLeaderboardScore"
-	LeaderboardsService_GetLeaderboardEntry_FullMethodName    = "/torchwood.server.v1.LeaderboardsService/GetLeaderboardEntry"
-	LeaderboardsService_ListLeaderboardTop_FullMethodName     = "/torchwood.server.v1.LeaderboardsService/ListLeaderboardTop"
+	LeaderboardsService_SubmitLeaderboardScore_FullMethodName     = "/torchwood.server.v1.LeaderboardsService/SubmitLeaderboardScore"
+	LeaderboardsService_GetLeaderboardEntry_FullMethodName        = "/torchwood.server.v1.LeaderboardsService/GetLeaderboardEntry"
+	LeaderboardsService_ListLeaderboardTop_FullMethodName         = "/torchwood.server.v1.LeaderboardsService/ListLeaderboardTop"
+	LeaderboardsService_GetLeaderboardSettlement_FullMethodName   = "/torchwood.server.v1.LeaderboardsService/GetLeaderboardSettlement"
+	LeaderboardsService_ListLeaderboardSettlements_FullMethodName = "/torchwood.server.v1.LeaderboardsService/ListLeaderboardSettlements"
 )
 
 // LeaderboardsServiceClient is the client API for LeaderboardsService service.
@@ -36,6 +38,10 @@ type LeaderboardsServiceClient interface {
 	SubmitLeaderboardScore(ctx context.Context, in *SubmitLeaderboardScoreRequest, opts ...grpc.CallOption) (*v1.LeaderboardScoreSnapshot, error)
 	GetLeaderboardEntry(ctx context.Context, in *GetLeaderboardEntryRequest, opts ...grpc.CallOption) (*v1.LeaderboardScoreSnapshot, error)
 	ListLeaderboardTop(ctx context.Context, in *ListLeaderboardTopRequest, opts ...grpc.CallOption) (*v1.ListLeaderboardTopResponse, error)
+	// —— Phase 2：结算读（发奖明细 = 用户资产 ledger 的 leaderboard_settlement
+	// 引用视图；写操作只有 worker 与 console）——
+	GetLeaderboardSettlement(ctx context.Context, in *GetLeaderboardSettlementRequest, opts ...grpc.CallOption) (*GetLeaderboardSettlementResponse, error)
+	ListLeaderboardSettlements(ctx context.Context, in *ListLeaderboardSettlementsRequest, opts ...grpc.CallOption) (*ListLeaderboardSettlementsResponse, error)
 }
 
 type leaderboardsServiceClient struct {
@@ -76,6 +82,26 @@ func (c *leaderboardsServiceClient) ListLeaderboardTop(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *leaderboardsServiceClient) GetLeaderboardSettlement(ctx context.Context, in *GetLeaderboardSettlementRequest, opts ...grpc.CallOption) (*GetLeaderboardSettlementResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetLeaderboardSettlementResponse)
+	err := c.cc.Invoke(ctx, LeaderboardsService_GetLeaderboardSettlement_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *leaderboardsServiceClient) ListLeaderboardSettlements(ctx context.Context, in *ListLeaderboardSettlementsRequest, opts ...grpc.CallOption) (*ListLeaderboardSettlementsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListLeaderboardSettlementsResponse)
+	err := c.cc.Invoke(ctx, LeaderboardsService_ListLeaderboardSettlements_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LeaderboardsServiceServer is the server API for LeaderboardsService service.
 // All implementations must embed UnimplementedLeaderboardsServiceServer
 // for forward compatibility.
@@ -87,6 +113,10 @@ type LeaderboardsServiceServer interface {
 	SubmitLeaderboardScore(context.Context, *SubmitLeaderboardScoreRequest) (*v1.LeaderboardScoreSnapshot, error)
 	GetLeaderboardEntry(context.Context, *GetLeaderboardEntryRequest) (*v1.LeaderboardScoreSnapshot, error)
 	ListLeaderboardTop(context.Context, *ListLeaderboardTopRequest) (*v1.ListLeaderboardTopResponse, error)
+	// —— Phase 2：结算读（发奖明细 = 用户资产 ledger 的 leaderboard_settlement
+	// 引用视图；写操作只有 worker 与 console）——
+	GetLeaderboardSettlement(context.Context, *GetLeaderboardSettlementRequest) (*GetLeaderboardSettlementResponse, error)
+	ListLeaderboardSettlements(context.Context, *ListLeaderboardSettlementsRequest) (*ListLeaderboardSettlementsResponse, error)
 	mustEmbedUnimplementedLeaderboardsServiceServer()
 }
 
@@ -105,6 +135,12 @@ func (UnimplementedLeaderboardsServiceServer) GetLeaderboardEntry(context.Contex
 }
 func (UnimplementedLeaderboardsServiceServer) ListLeaderboardTop(context.Context, *ListLeaderboardTopRequest) (*v1.ListLeaderboardTopResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListLeaderboardTop not implemented")
+}
+func (UnimplementedLeaderboardsServiceServer) GetLeaderboardSettlement(context.Context, *GetLeaderboardSettlementRequest) (*GetLeaderboardSettlementResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetLeaderboardSettlement not implemented")
+}
+func (UnimplementedLeaderboardsServiceServer) ListLeaderboardSettlements(context.Context, *ListLeaderboardSettlementsRequest) (*ListLeaderboardSettlementsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListLeaderboardSettlements not implemented")
 }
 func (UnimplementedLeaderboardsServiceServer) mustEmbedUnimplementedLeaderboardsServiceServer() {}
 func (UnimplementedLeaderboardsServiceServer) testEmbeddedByValue()                             {}
@@ -181,6 +217,42 @@ func _LeaderboardsService_ListLeaderboardTop_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LeaderboardsService_GetLeaderboardSettlement_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLeaderboardSettlementRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LeaderboardsServiceServer).GetLeaderboardSettlement(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LeaderboardsService_GetLeaderboardSettlement_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LeaderboardsServiceServer).GetLeaderboardSettlement(ctx, req.(*GetLeaderboardSettlementRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LeaderboardsService_ListLeaderboardSettlements_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListLeaderboardSettlementsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LeaderboardsServiceServer).ListLeaderboardSettlements(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LeaderboardsService_ListLeaderboardSettlements_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LeaderboardsServiceServer).ListLeaderboardSettlements(ctx, req.(*ListLeaderboardSettlementsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // LeaderboardsService_ServiceDesc is the grpc.ServiceDesc for LeaderboardsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -199,6 +271,14 @@ var LeaderboardsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListLeaderboardTop",
 			Handler:    _LeaderboardsService_ListLeaderboardTop_Handler,
+		},
+		{
+			MethodName: "GetLeaderboardSettlement",
+			Handler:    _LeaderboardsService_GetLeaderboardSettlement_Handler,
+		},
+		{
+			MethodName: "ListLeaderboardSettlements",
+			Handler:    _LeaderboardsService_ListLeaderboardSettlements_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

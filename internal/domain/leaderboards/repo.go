@@ -42,6 +42,13 @@ type EntryRepo interface {
 	ListPeriods(ctx context.Context, projectID, boardID string, limit int) ([]string, error)
 	// PruneOlderThan 删除 period_key < cutoff 的整期条目（retention 任务）。
 	PruneOlderThan(ctx context.Context, projectID, boardID, cutoff string) (int64, error)
+	// ListRewardWinners 返回单条奖励规则命中的条目（rank/position 窗口在
+	// SQL 内计算；边界语义跟随 board.TieBreak：parallel → rank 含端点，
+	// earliest/latest → position 截断）。
+	ListRewardWinners(ctx context.Context, b *Board, periodKey string, rule RewardRule, limit int) ([]Entry, error)
+	// ListSettlablePeriods 返回已封榜（period_key < previousKey）且尚无
+	// 结算行的期（结算扫描入口；基于状态而非定时投放，停机自动补算）。
+	ListSettlablePeriods(ctx context.Context, projectID, boardID, previousKey string, limit int) ([]string, error)
 }
 
 // Clock 供测试注入时间。

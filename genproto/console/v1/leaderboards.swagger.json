@@ -281,6 +281,152 @@
         ]
       }
     },
+    "/v1/console/leaderboards/boards/{board_id}/settlements": {
+      "get": {
+        "operationId": "LeaderboardsService_ListLeaderboardSettlements",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/torchwoodconsolev1ListLeaderboardSettlementsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "board_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      }
+    },
+    "/v1/console/leaderboards/boards/{board_id}/settlements/{period}": {
+      "get": {
+        "summary": "—— Phase 2：结榜发奖（settled 拒绝 void/rerun；作弊处理窗口 = 宽限期）——",
+        "operationId": "LeaderboardsService_GetLeaderboardSettlement",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/torchwoodconsolev1GetLeaderboardSettlementResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "board_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "period",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      }
+    },
+    "/v1/console/leaderboards/boards/{board_id}/settlements/{period}:rerun": {
+      "post": {
+        "operationId": "LeaderboardsService_RerunLeaderboardSettlement",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1LeaderboardSettlementAck"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "board_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "period",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      }
+    },
+    "/v1/console/leaderboards/boards/{board_id}/settlements/{period}:void": {
+      "post": {
+        "operationId": "LeaderboardsService_VoidLeaderboardSettlement",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1LeaderboardSettlementAck"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "board_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "period",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      }
+    },
     "/v1/console/leaderboards/boards/{board_id}/top": {
       "get": {
         "operationId": "LeaderboardsService_ListLeaderboardTop",
@@ -380,9 +526,47 @@
         },
         "subject_kind": {
           "type": "string"
+        },
+        "rewards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LeaderboardRewardRule"
+          },
+          "title": "非空 = 整体替换；clear_rewards = true 显式清空"
+        },
+        "clear_rewards": {
+          "type": "boolean"
         }
       },
       "title": "UpdateLeaderboardBoardRequest 用 proto3 optional 表达\"未设置 = 不修改\"；\n显式清空走 clear_* 布尔。period/sort/tiebreak 声明/policy/tie_break 在\n榜内已有条目时不可改（FailedPrecondition）。"
+    },
+    "torchwoodconsolev1GetLeaderboardSettlementResponse": {
+      "type": "object",
+      "properties": {
+        "settlement": {
+          "$ref": "#/definitions/v1LeaderboardSettlement"
+        },
+        "grants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LeaderboardSettlementGrant"
+          }
+        }
+      }
+    },
+    "torchwoodconsolev1ListLeaderboardSettlementsResponse": {
+      "type": "object",
+      "properties": {
+        "settlements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LeaderboardSettlement"
+          }
+        }
+      }
     },
     "v1CreateLeaderboardBoardRequest": {
       "type": "object",
@@ -435,6 +619,13 @@
         },
         "subject_kind": {
           "type": "string"
+        },
+        "rewards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LeaderboardRewardRule"
+          }
         }
       }
     },
@@ -543,6 +734,14 @@
           "type": "string",
           "title": "纯展示提示（console 是否把 subject 链到用户详情），无语义"
         },
+        "rewards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LeaderboardRewardRule"
+          },
+          "title": "声明式奖励规则（Phase 2）：要求 period_kind != none"
+        },
         "created_at": {
           "type": "string",
           "format": "date-time"
@@ -589,6 +788,31 @@
       },
       "title": "LeaderboardEntry 是排行榜条目：唯一键 (board, period, subject) 内建去重。"
     },
+    "v1LeaderboardRewardRule": {
+      "type": "object",
+      "properties": {
+        "rank_min": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "rank_max": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "value_min": {
+          "type": "string",
+          "format": "int64"
+        },
+        "asset_code": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "string",
+          "format": "int64"
+        }
+      },
+      "title": "LeaderboardRewardRule 是声明式奖励规则（Phase 2 结算执行）：名次区间\n（含端点，边界语义跟随 tie_break：parallel=rank 含端点，earliest/latest=\nposition 截断）与 value 门槛可叠加；多规则独立评估、可叠加命中。"
+    },
     "v1LeaderboardScoreSnapshot": {
       "type": "object",
       "properties": {
@@ -619,6 +843,88 @@
         }
       },
       "title": "LeaderboardScoreSnapshot 是 submit / me / getEntry 的统一响应：\nrank = competition（并列同名次）；position = 全序位次（tie-break 决出）；\nbelow = value 严格低于我的人数（百分位分子，不受 tie-break 影响）。\n无条目时 entry/rank/position/below 缺省，total 仍返回。"
+    },
+    "v1LeaderboardSettlement": {
+      "type": "object",
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "period": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "sealed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "settled_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "entry_count": {
+          "type": "string",
+          "format": "int64"
+        },
+        "grant_count": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "error": {
+          "type": "string"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LeaderboardRewardRule"
+          }
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "title": "LeaderboardSettlement 是结榜发奖记录（期粒度，不随条目 retention 清理）。\nstatus: settling | settled | error | voided。"
+    },
+    "v1LeaderboardSettlementAck": {
+      "type": "object"
+    },
+    "v1LeaderboardSettlementGrant": {
+      "type": "object",
+      "properties": {
+        "rule_index": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "subject_id": {
+          "type": "string"
+        },
+        "asset_code": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "string",
+          "format": "int64"
+        },
+        "idempotency_key": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "title": "pending | granted | failed | voided"
+        },
+        "error": {
+          "type": "string"
+        }
+      },
+      "title": "LeaderboardSettlementGrant 是发放明细（重跑账本：failed 行重跑补发，\ngranted 行幂等跳过）。"
     },
     "v1LeaderboardTopEntry": {
       "type": "object",

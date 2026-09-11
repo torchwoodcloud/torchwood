@@ -44,6 +44,7 @@ var ProviderSet = wire.NewSet(
 	apppayments.NewPayments,
 	assets.NewAssets,
 	leaderboards.NewLeaderboards,
+	leaderboards.NewAssetsRewardGranter,
 	subscriptions.NewSubscriptions,
 	subscriptions.NewOrderFulfiller,
 	wire.Bind(new(domainpayments.SubscriptionCallbackHandler), new(*subscriptions.Subscriptions)),
@@ -90,6 +91,7 @@ var ProviderSet = wire.NewSet(
 	bunrepo.NewAssetLedgerRepository,
 	bunrepo.NewLeaderboardBoardRepository,
 	bunrepo.NewLeaderboardEntryRepository,
+	bunrepo.NewLeaderboardSettlementRepository,
 	bunrepo.NewIdempotencyStore,
 	wire.Bind(new(databases.IdempotencyStore), new(*bunrepo.IdempotencyStore)),
 	bunrepo.NewSubscriptionPlanRepository,
@@ -156,8 +158,8 @@ func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 	return &c, nil
 }
 
-func NewComponents(worker *workerpkg.Worker, cleaner *workerpkg.ChunkCleaner, trimmer *workerpkg.StreamTrimmer, outbox *workerpkg.OutboxWorkerService, paymentCloser *workerpkg.PaymentCloser, assetExpirer *workerpkg.AssetExpirer, subscriptionBiller *workerpkg.SubscriptionBiller, usageRollup *workerpkg.UsageRollupWorker, leaderboardsCleaner *workerpkg.LeaderboardsCleaner) []lynx.Service {
-	return []lynx.Service{worker, cleaner, trimmer, outbox, paymentCloser, assetExpirer, subscriptionBiller, usageRollup, leaderboardsCleaner}
+func NewComponents(worker *workerpkg.Worker, cleaner *workerpkg.ChunkCleaner, trimmer *workerpkg.StreamTrimmer, outbox *workerpkg.OutboxWorkerService, paymentCloser *workerpkg.PaymentCloser, assetExpirer *workerpkg.AssetExpirer, subscriptionBiller *workerpkg.SubscriptionBiller, usageRollup *workerpkg.UsageRollupWorker, leaderboardsCleaner *workerpkg.LeaderboardsCleaner, leaderboardsSettler *workerpkg.LeaderboardsSettler) []lynx.Service {
+	return []lynx.Service{worker, cleaner, trimmer, outbox, paymentCloser, assetExpirer, subscriptionBiller, usageRollup, leaderboardsCleaner, leaderboardsSettler}
 }
 
 // NewStorageOptions 返回生产默认的空选项集（WithClock 等仅供测试注入）。

@@ -82,8 +82,11 @@ type Board struct {
 	RetentionPeriods int32
 	// SubjectKind 纯展示提示（console 决定是否链到用户详情），无语义。
 	SubjectKind string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// Rewards 声明式奖励规则（Phase 2）：结算时平台按快照执行 Assets
+	// 幂等发放。要求 period.kind != none。
+	Rewards   []RewardRule
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // HasTiebreak 报告榜是否声明了 tiebreak 列。
@@ -152,6 +155,9 @@ func ValidateBoard(b *Board) error {
 	}
 	if len(b.SubjectKind) > maxSubjectKindLen {
 		return fmt.Errorf("%w: subject_kind exceeds %d characters", ErrInvalidConfig, maxSubjectKindLen)
+	}
+	if err := ValidateRewardRules(b.PeriodKind, b.Rewards); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidConfig, err)
 	}
 	return nil
 }

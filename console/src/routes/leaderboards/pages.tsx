@@ -9,6 +9,8 @@ import {
   deleteBoardEntry,
   getBoard,
   getBoardEntry,
+  getSettlement,
+  listSettlements,
   LEADERBOARD_PERIOD_KINDS,
   LEADERBOARD_POLICIES,
   LEADERBOARD_SORTS,
@@ -16,9 +18,12 @@ import {
   listBoardPeriods,
   listBoardTop,
   listBoards,
+  rerunSettlement,
   updateBoard,
+  voidSettlement,
   type LeaderboardBoard,
   type LeaderboardScoreSnapshot,
+  type LeaderboardSettlement,
 } from "@/api/leaderboards";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -114,7 +119,7 @@ export function LeaderboardsListPage() {
   return (
     <ResourceListPage
       title="排行榜"
-      description="榜配置（期 / 排序 / 合并策略 / 限频 / 保留）。作弊处理：进入榜详情删条目——封榜后的期不可变。"
+      description="榜配置（期 / 排序 / 合并策略 / 限频 / 保留 / 奖励规则）。作弊处理：进入榜详情删条目——封榜后的期不可变；结算见详情页。"
       searchPlaceholder="搜索榜 ID..."
       isLoading={isLoading}
       items={boards}
@@ -156,6 +161,7 @@ function CreateBoardDialog({ onCreated }: { onCreated: () => void }) {
     limit: "100",
     retention: "0",
     subjectKind: "user",
+    rewards: [] as Array<{ rank_min: string; rank_max: string; value_min: string; asset_code: string; amount: string }>,
   });
 
   const mutation = useMutation({
@@ -200,6 +206,15 @@ function CreateBoardDialog({ onCreated }: { onCreated: () => void }) {
               per_subject_submit_limit: Number(form.limit) || 100,
               retention_periods: Number(form.retention) || 0,
               subject_kind: form.subjectKind,
+              rewards: form.rewards
+                .filter((r) => r.asset_code.trim() !== "")
+                .map((r) => ({
+                  rank_min: r.rank_min === "" ? undefined : Number(r.rank_min),
+                  rank_max: r.rank_max === "" ? undefined : Number(r.rank_max),
+                  value_min: r.value_min === "" ? undefined : r.value_min,
+                  asset_code: r.asset_code.trim(),
+                  amount: r.amount,
+                })),
             });
           }}
         >
@@ -293,6 +308,11 @@ function CreateBoardDialog({ onCreated }: { onCreated: () => void }) {
             <Label>主体类型（展示提示，无语义）</Label>
             <Input value={form.subjectKind} onChange={(e) => setForm({ ...form, subjectKind: e.target.value })} />
           </div>
+          <RewardRulesEditor
+            rules={form.rewards}
+            onChange={(rewards) => setForm({ ...form, rewards })}
+            periodKind={form.periodKind}
+          />
           <div className="flex items-center gap-2">
             <Checkbox
               id="client-submit"
@@ -553,6 +573,225 @@ export function BoardDetailPage() {
           )
         ) : null}
       </div>
+
+      <SettlementsSection boardId={board.id} />
     </div>
+  );
+}
+
+function RewardRulesEditor({
+  rules,
+  onChange,
+  periodKind,
+}: {
+  rules: Array<{ rank_min: string; rank_max: string; value_min: string; asset_code: string; amount: string }>;
+  onChange: (rules: Array<{ rank_min: string; rank_max: string; value_min: string; asset_code: string; amount: string }>) => void;
+  periodKind: string;
+}) {
+  const update = (i: number, patch: Partial<typeof rules[number]>) =>
+    onChange(rules.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  return (
+    <div className="space-y-2">
+      <Label>奖励规则（Phase 2 结算；边界语义跟随 tie_break）</Label>
+      {rules.map((r, i) => (
+        <div key={i} className="grid grid-cols-6 gap-2 items-center">
+          <Input
+            type="number" placeholder="rank ≥" value={r.rank_min}
+            onChange={(e) => update(i, { rank_min: e.target.value })}
+          />
+          <Input
+            type="number" placeholder="rank ≤" value={r.rank_max}
+            onChange={(e) => update(i, { rank_max: e.target.value })}
+          />
+          <Input
+            placeholder="value ≥" value={r.value_min}
+            onChange={(e) => update(i, { value_min: e.target.value })}
+          />
+          <Input
+            placeholder="asset code" value={r.asset_code}
+            onChange={(e) => update(i, { asset_code: e.target.value })}
+          />
+          <Input
+            placeholder="amount" value={r.amount}
+            onChange={(e) => update(i, { amount: e.target.value })}
+          />
+          <Button
+            type="button" variant="outline" size="icon"
+            onClick={() => onChange(rules.filter((_, j) => j !== i))}
+          >
+            ×
+          </Button>
+        </div>
+      ))}
+      <Button
+        type="button" variant="outline" size="sm"
+        disabled={periodKind === "none"}
+        onClick={() => onChange([...rules, { rank_min: "", rank_max: "", value_min: "", asset_code: "", amount: "" }])}
+      >
+        <Plus className="h-3 w-3 mr-1" />
+        添加规则
+      </Button>
+      {periodKind === "none" ? (
+        <p className="text-xs text-muted-foreground">全期榜不支持奖励（无封榜时点）</p>
+      ) : null}
+    </div>
+  );
+}
+
+function SettlementsSection({ boardId }: { boardId: string }) {
+  const queryClient = useQueryClient();
+  const { data: settlements = [], isLoading } = useQuery({
+    queryKey: ["leaderboards-settlements", boardId],
+    queryFn: () => listSettlements(boardId, 50),
+  });
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["leaderboards-settlements", boardId] });
+
+  const voidMutation = useMutation({
+    mutationFn: (period: string) => voidSettlement(boardId, period),
+    onSuccess: () => {
+      toast.success("期已弃奖（settled 期不可 void）");
+      invalidate();
+    },
+    onError: () => invalidate(),
+  });
+  const rerunMutation = useMutation({
+    mutationFn: (period: string) => rerunSettlement(boardId, period),
+    onSuccess: () => {
+      toast.success("重跑完成（只补发未发放明细）");
+      invalidate();
+    },
+    onError: () => invalidate(),
+  });
+
+  if (isLoading) {
+    return <div className="text-sm text-muted-foreground">结算加载中…</div>;
+  }
+  if (settlements.length === 0) {
+    return (
+      <div className="rounded-md border p-4 text-sm text-muted-foreground">
+        暂无结算记录（配置了奖励规则的榜，期封榜后由 worker 自动结算）
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <h2 className="text-sm font-semibold">结榜发奖</h2>
+      <div className="rounded-md border">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b bg-muted/50 text-left">
+              <th className="p-2">期</th>
+              <th className="p-2">状态</th>
+              <th className="p-2">条目 / 发放</th>
+              <th className="p-2">完成时间</th>
+              <th className="p-2">错误</th>
+              <th className="p-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {settlements.map((s) => (
+              <SettlementRow
+                key={s.period}
+                boardId={boardId}
+                settlement={s}
+                onVoid={() => voidMutation.mutate(s.period)}
+                onRerun={() => rerunMutation.mutate(s.period)}
+                busy={voidMutation.isPending || rerunMutation.isPending}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SettlementRow({
+  boardId,
+  settlement,
+  onVoid,
+  onRerun,
+  busy,
+}: {
+  boardId: string;
+  settlement: LeaderboardSettlement;
+  onVoid: () => void;
+  onRerun: () => void;
+  busy: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const { data: detail } = useQuery({
+    queryKey: ["leaderboards-settlement-detail", boardId, settlement.period],
+    queryFn: () => getSettlement(boardId, settlement.period),
+    enabled: open,
+  });
+  const statusStyle =
+    settlement.status === "settled" ? "default" : settlement.status === "voided" ? "outline" : "secondary";
+  return (
+    <>
+      <tr className="border-b last:border-0 align-top">
+        <td className="p-2 font-mono text-xs">{settlement.period}</td>
+        <td className="p-2"><Badge variant={statusStyle}>{settlement.status}</Badge></td>
+        <td className="p-2 text-muted-foreground">
+          {settlement.entry_count ?? 0} / {settlement.grant_count ?? 0}
+        </td>
+        <td className="p-2 text-muted-foreground">
+          {settlement.settled_at ? new Date(settlement.settled_at).toLocaleString() : "—"}
+        </td>
+        <td className="p-2 max-w-64 truncate text-destructive" title={settlement.error}>{settlement.error || "—"}</td>
+        <td className="p-2">
+          <div className="flex gap-1">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(!open)}>
+              {open ? "收起" : "明细"}
+            </Button>
+            <Button
+              type="button" variant="ghost" size="sm" disabled={busy || settlement.status === "settled" || settlement.status === "voided"}
+              onClick={onVoid}
+            >
+              弃奖
+            </Button>
+            <Button
+              type="button" variant="ghost" size="sm" disabled={busy || settlement.status === "voided"}
+              onClick={onRerun}
+            >
+              重跑
+            </Button>
+          </div>
+        </td>
+      </tr>
+      {open ? (
+        <tr>
+          <td colSpan={6} className="bg-muted/30 p-2">
+            <div className="max-h-64 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-left text-muted-foreground">
+                    <th className="p-1">rule</th>
+                    <th className="p-1">subject</th>
+                    <th className="p-1">asset</th>
+                    <th className="p-1">amount</th>
+                    <th className="p-1">状态</th>
+                    <th className="p-1">错误</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(detail?.grants ?? []).map((g, i) => (
+                    <tr key={i}>
+                      <td className="p-1">{g.rule_index}</td>
+                      <td className="p-1 font-mono">{g.subject_id}</td>
+                      <td className="p-1">{g.asset_code}</td>
+                      <td className="p-1">{g.amount}</td>
+                      <td className="p-1">{g.status}</td>
+                      <td className="p-1 text-destructive">{g.error || ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </td>
+        </tr>
+      ) : null}
+    </>
   );
 }

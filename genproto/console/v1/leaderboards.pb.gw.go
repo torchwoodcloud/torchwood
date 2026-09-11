@@ -450,6 +450,224 @@ func local_request_LeaderboardsService_DeleteLeaderboardEntry_0(ctx context.Cont
 	return msg, metadata, err
 }
 
+func request_LeaderboardsService_GetLeaderboardSettlement_0(ctx context.Context, marshaler runtime.Marshaler, client LeaderboardsServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq GetLeaderboardSettlementRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	val, ok := pathParams["board_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "board_id")
+	}
+	protoReq.BoardId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "board_id", err)
+	}
+	val, ok = pathParams["period"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "period")
+	}
+	protoReq.Period, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "period", err)
+	}
+	msg, err := client.GetLeaderboardSettlement(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_LeaderboardsService_GetLeaderboardSettlement_0(ctx context.Context, marshaler runtime.Marshaler, server LeaderboardsServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq GetLeaderboardSettlementRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	val, ok := pathParams["board_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "board_id")
+	}
+	protoReq.BoardId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "board_id", err)
+	}
+	val, ok = pathParams["period"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "period")
+	}
+	protoReq.Period, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "period", err)
+	}
+	msg, err := server.GetLeaderboardSettlement(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+var filter_LeaderboardsService_ListLeaderboardSettlements_0 = &utilities.DoubleArray{Encoding: map[string]int{"board_id": 0}, Base: []int{1, 1, 0}, Check: []int{0, 1, 2}}
+
+func request_LeaderboardsService_ListLeaderboardSettlements_0(ctx context.Context, marshaler runtime.Marshaler, client LeaderboardsServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq ListLeaderboardSettlementsRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	val, ok := pathParams["board_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "board_id")
+	}
+	protoReq.BoardId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "board_id", err)
+	}
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_LeaderboardsService_ListLeaderboardSettlements_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	msg, err := client.ListLeaderboardSettlements(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_LeaderboardsService_ListLeaderboardSettlements_0(ctx context.Context, marshaler runtime.Marshaler, server LeaderboardsServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq ListLeaderboardSettlementsRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	val, ok := pathParams["board_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "board_id")
+	}
+	protoReq.BoardId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "board_id", err)
+	}
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_LeaderboardsService_ListLeaderboardSettlements_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	msg, err := server.ListLeaderboardSettlements(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+func request_LeaderboardsService_VoidLeaderboardSettlement_0(ctx context.Context, marshaler runtime.Marshaler, client LeaderboardsServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq VoidLeaderboardSettlementRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	val, ok := pathParams["board_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "board_id")
+	}
+	protoReq.BoardId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "board_id", err)
+	}
+	val, ok = pathParams["period"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "period")
+	}
+	protoReq.Period, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "period", err)
+	}
+	msg, err := client.VoidLeaderboardSettlement(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_LeaderboardsService_VoidLeaderboardSettlement_0(ctx context.Context, marshaler runtime.Marshaler, server LeaderboardsServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq VoidLeaderboardSettlementRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	val, ok := pathParams["board_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "board_id")
+	}
+	protoReq.BoardId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "board_id", err)
+	}
+	val, ok = pathParams["period"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "period")
+	}
+	protoReq.Period, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "period", err)
+	}
+	msg, err := server.VoidLeaderboardSettlement(ctx, &protoReq)
+	return msg, metadata, err
+}
+
+func request_LeaderboardsService_RerunLeaderboardSettlement_0(ctx context.Context, marshaler runtime.Marshaler, client LeaderboardsServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq RerunLeaderboardSettlementRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	val, ok := pathParams["board_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "board_id")
+	}
+	protoReq.BoardId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "board_id", err)
+	}
+	val, ok = pathParams["period"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "period")
+	}
+	protoReq.Period, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "period", err)
+	}
+	msg, err := client.RerunLeaderboardSettlement(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_LeaderboardsService_RerunLeaderboardSettlement_0(ctx context.Context, marshaler runtime.Marshaler, server LeaderboardsServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq RerunLeaderboardSettlementRequest
+		metadata runtime.ServerMetadata
+		err      error
+	)
+	val, ok := pathParams["board_id"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "board_id")
+	}
+	protoReq.BoardId, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "board_id", err)
+	}
+	val, ok = pathParams["period"]
+	if !ok {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "period")
+	}
+	protoReq.Period, err = runtime.String(val)
+	if err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "period", err)
+	}
+	msg, err := server.RerunLeaderboardSettlement(ctx, &protoReq)
+	return msg, metadata, err
+}
+
 // RegisterLeaderboardsServiceHandlerServer registers the http handlers for service LeaderboardsService to "mux".
 // UnaryRPC     :call LeaderboardsServiceServer directly.
 // StreamingRPC :currently unsupported pending https://github.com/grpc/grpc-go/issues/906.
@@ -635,6 +853,86 @@ func RegisterLeaderboardsServiceHandlerServer(ctx context.Context, mux *runtime.
 			return
 		}
 		forward_LeaderboardsService_DeleteLeaderboardEntry_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodGet, pattern_LeaderboardsService_GetLeaderboardSettlement_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/torchwood.console.v1.LeaderboardsService/GetLeaderboardSettlement", runtime.WithHTTPPathPattern("/v1/console/leaderboards/boards/{board_id}/settlements/{period}"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_LeaderboardsService_GetLeaderboardSettlement_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_LeaderboardsService_GetLeaderboardSettlement_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodGet, pattern_LeaderboardsService_ListLeaderboardSettlements_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/torchwood.console.v1.LeaderboardsService/ListLeaderboardSettlements", runtime.WithHTTPPathPattern("/v1/console/leaderboards/boards/{board_id}/settlements"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_LeaderboardsService_ListLeaderboardSettlements_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_LeaderboardsService_ListLeaderboardSettlements_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_LeaderboardsService_VoidLeaderboardSettlement_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/torchwood.console.v1.LeaderboardsService/VoidLeaderboardSettlement", runtime.WithHTTPPathPattern("/v1/console/leaderboards/boards/{board_id}/settlements/{period}:void"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_LeaderboardsService_VoidLeaderboardSettlement_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_LeaderboardsService_VoidLeaderboardSettlement_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_LeaderboardsService_RerunLeaderboardSettlement_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/torchwood.console.v1.LeaderboardsService/RerunLeaderboardSettlement", runtime.WithHTTPPathPattern("/v1/console/leaderboards/boards/{board_id}/settlements/{period}:rerun"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_LeaderboardsService_RerunLeaderboardSettlement_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_LeaderboardsService_RerunLeaderboardSettlement_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
 
 	return nil
@@ -829,6 +1127,74 @@ func RegisterLeaderboardsServiceHandlerClient(ctx context.Context, mux *runtime.
 		}
 		forward_LeaderboardsService_DeleteLeaderboardEntry_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodGet, pattern_LeaderboardsService_GetLeaderboardSettlement_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/torchwood.console.v1.LeaderboardsService/GetLeaderboardSettlement", runtime.WithHTTPPathPattern("/v1/console/leaderboards/boards/{board_id}/settlements/{period}"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_LeaderboardsService_GetLeaderboardSettlement_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_LeaderboardsService_GetLeaderboardSettlement_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodGet, pattern_LeaderboardsService_ListLeaderboardSettlements_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/torchwood.console.v1.LeaderboardsService/ListLeaderboardSettlements", runtime.WithHTTPPathPattern("/v1/console/leaderboards/boards/{board_id}/settlements"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_LeaderboardsService_ListLeaderboardSettlements_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_LeaderboardsService_ListLeaderboardSettlements_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_LeaderboardsService_VoidLeaderboardSettlement_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/torchwood.console.v1.LeaderboardsService/VoidLeaderboardSettlement", runtime.WithHTTPPathPattern("/v1/console/leaderboards/boards/{board_id}/settlements/{period}:void"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_LeaderboardsService_VoidLeaderboardSettlement_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_LeaderboardsService_VoidLeaderboardSettlement_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
+	mux.Handle(http.MethodPost, pattern_LeaderboardsService_RerunLeaderboardSettlement_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/torchwood.console.v1.LeaderboardsService/RerunLeaderboardSettlement", runtime.WithHTTPPathPattern("/v1/console/leaderboards/boards/{board_id}/settlements/{period}:rerun"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_LeaderboardsService_RerunLeaderboardSettlement_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_LeaderboardsService_RerunLeaderboardSettlement_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
 	return nil
 }
 
@@ -842,6 +1208,10 @@ var (
 	pattern_LeaderboardsService_ListLeaderboardTop_0          = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3, 1, 0, 4, 1, 5, 4, 2, 5}, []string{"v1", "console", "leaderboards", "boards", "board_id", "top"}, ""))
 	pattern_LeaderboardsService_GetLeaderboardEntry_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3, 1, 0, 4, 1, 5, 4, 2, 5, 1, 0, 4, 1, 5, 6}, []string{"v1", "console", "leaderboards", "boards", "board_id", "entries", "subject_id"}, ""))
 	pattern_LeaderboardsService_DeleteLeaderboardEntry_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3, 1, 0, 4, 1, 5, 4, 2, 5, 1, 0, 4, 1, 5, 6}, []string{"v1", "console", "leaderboards", "boards", "board_id", "entries", "subject_id"}, ""))
+	pattern_LeaderboardsService_GetLeaderboardSettlement_0    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3, 1, 0, 4, 1, 5, 4, 2, 5, 1, 0, 4, 1, 5, 6}, []string{"v1", "console", "leaderboards", "boards", "board_id", "settlements", "period"}, ""))
+	pattern_LeaderboardsService_ListLeaderboardSettlements_0  = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3, 1, 0, 4, 1, 5, 4, 2, 5}, []string{"v1", "console", "leaderboards", "boards", "board_id", "settlements"}, ""))
+	pattern_LeaderboardsService_VoidLeaderboardSettlement_0   = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3, 1, 0, 4, 1, 5, 4, 2, 5, 1, 0, 4, 1, 5, 6}, []string{"v1", "console", "leaderboards", "boards", "board_id", "settlements", "period"}, "void"))
+	pattern_LeaderboardsService_RerunLeaderboardSettlement_0  = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3, 1, 0, 4, 1, 5, 4, 2, 5, 1, 0, 4, 1, 5, 6}, []string{"v1", "console", "leaderboards", "boards", "board_id", "settlements", "period"}, "rerun"))
 )
 
 var (
@@ -854,4 +1224,8 @@ var (
 	forward_LeaderboardsService_ListLeaderboardTop_0          = runtime.ForwardResponseMessage
 	forward_LeaderboardsService_GetLeaderboardEntry_0         = runtime.ForwardResponseMessage
 	forward_LeaderboardsService_DeleteLeaderboardEntry_0      = runtime.ForwardResponseMessage
+	forward_LeaderboardsService_GetLeaderboardSettlement_0    = runtime.ForwardResponseMessage
+	forward_LeaderboardsService_ListLeaderboardSettlements_0  = runtime.ForwardResponseMessage
+	forward_LeaderboardsService_VoidLeaderboardSettlement_0   = runtime.ForwardResponseMessage
+	forward_LeaderboardsService_RerunLeaderboardSettlement_0  = runtime.ForwardResponseMessage
 )

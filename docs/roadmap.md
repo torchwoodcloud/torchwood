@@ -378,7 +378,7 @@ v2 **不是**「把 Appwrite 剩下的模块搬过来」。Agent 叙事（MCP、
 
 ---
 
-### 3.6 Leaderboards（排行榜，一等服务）— Phase 1 已落地（2026-09-12）
+### 3.6 Leaderboards（排行榜，一等服务）— Phase 1 + Phase 2 已落地（2026-09-12）
 
 来源：graviton-games dogfooding 提案（2026-09-11，评审三轮回执"修改后接受"）。
 动机与通用化论证：游戏/社区/商业场景共用的"主体 × 值 × 时间窗排名"原语——
@@ -389,9 +389,9 @@ count/自增/OCC 等 DIY 底料平台已有，但权限别扭（read:any 枚举�
   CRUD）、subject/value 中立模型、tie-break 三层（rank+position 双暴露）、两期
   宽限 + 封榜终局、request_id 幂等、per-subject 限频、retention worker、
   Go/TS SDK、console 页。详见 `docs/developer/18-leaderboards.md`。
-- **Phase 2（定型待做）**：声明式结榜发奖——rewards 规则（封榜快照）+ worker
-  状态机结算 + Assets 幂等发放（exactly-once）+ void/重跑；`on_settled` 函数
-  触发 v1.5。
+- **Phase 2（已落地）**：声明式结榜发奖——rewards 规则（认领时快照）+ worker
+  状态机结算 + Assets 幂等发放（单笔失败不阻断整期，重跑只补失败明细）+
+  void/重跑 + console/server 结算读面；`on_settled` 函数触发 v1.5。
 - **非目标**：滚动窗口、多字段 tiebreak、条目实时事件、反作弊检测、战队拆分
   发放；season/自定义 interval 为 v2 接缝。
 

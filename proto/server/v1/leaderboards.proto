@@ -88,6 +88,21 @@ service LeaderboardsService {
       api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_READ }
     };
   }
+
+  // —— Phase 2：结算读（发奖明细 = 用户资产 ledger 的 leaderboard_settlement
+  // 引用视图；写操作只有 worker 与 console）——
+  rpc GetLeaderboardSettlement(GetLeaderboardSettlementRequest) returns (GetLeaderboardSettlementResponse) {
+    option (google.api.http) = { get: "/v1/server/leaderboards/{board_id}/settlements/{period}" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_READ }
+    };
+  }
+  rpc ListLeaderboardSettlements(ListLeaderboardSettlementsRequest) returns (ListLeaderboardSettlementsResponse) {
+    option (google.api.http) = { get: "/v1/server/leaderboards/{board_id}/settlements" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_READ }
+    };
+  }
 }
 
 // SubmitLeaderboardScoreRequest：server 面可代任意 subject 提交（函数/
@@ -114,4 +129,23 @@ message ListLeaderboardTopRequest {
   string period = 2;
   int32 page_size = 3 [(buf.validate.field).int32 = { gte: 0, lte: 100 }];
   string page_token = 4;
+}
+
+message GetLeaderboardSettlementRequest {
+  string board_id = 1 [(buf.validate.field).required = true];
+  string period = 2 [(buf.validate.field).required = true];
+}
+
+message GetLeaderboardSettlementResponse {
+  shared.v1.LeaderboardSettlement settlement = 1;
+  repeated shared.v1.LeaderboardSettlementGrant grants = 2;
+}
+
+message ListLeaderboardSettlementsRequest {
+  string board_id = 1 [(buf.validate.field).required = true];
+  int32 limit = 2 [(buf.validate.field).int32 = { gte: 0, lte: 200 }];
+}
+
+message ListLeaderboardSettlementsResponse {
+  repeated shared.v1.LeaderboardSettlement settlements = 1;
 }

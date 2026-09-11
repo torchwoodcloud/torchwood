@@ -45,9 +45,11 @@ type LeaderboardBoard struct {
 	// 保留最近多少期（0 = 永久，默认不删用户数据）
 	RetentionPeriods int32 `protobuf:"varint,12,opt,name=retention_periods,json=retentionPeriods,proto3" json:"retention_periods,omitempty"`
 	// 纯展示提示（console 是否把 subject 链到用户详情），无语义
-	SubjectKind   string                 `protobuf:"bytes,13,opt,name=subject_kind,json=subjectKind,proto3" json:"subject_kind,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	SubjectKind string `protobuf:"bytes,13,opt,name=subject_kind,json=subjectKind,proto3" json:"subject_kind,omitempty"`
+	// 声明式奖励规则（Phase 2）：要求 period_kind != none
+	Rewards       []*LeaderboardRewardRule `protobuf:"bytes,16,rep,name=rewards,proto3" json:"rewards,omitempty"`
+	CreatedAt     *timestamppb.Timestamp   `protobuf:"bytes,14,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp   `protobuf:"bytes,15,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -171,6 +173,13 @@ func (x *LeaderboardBoard) GetSubjectKind() string {
 		return x.SubjectKind
 	}
 	return ""
+}
+
+func (x *LeaderboardBoard) GetRewards() []*LeaderboardRewardRule {
+	if x != nil {
+		return x.Rewards
+	}
+	return nil
 }
 
 func (x *LeaderboardBoard) GetCreatedAt() *timestamppb.Timestamp {
@@ -538,11 +547,311 @@ func (x *ListLeaderboardTopResponse) GetNextPageToken() string {
 	return ""
 }
 
+// LeaderboardRewardRule 是声明式奖励规则（Phase 2 结算执行）：名次区间
+// （含端点，边界语义跟随 tie_break：parallel=rank 含端点，earliest/latest=
+// position 截断）与 value 门槛可叠加；多规则独立评估、可叠加命中。
+type LeaderboardRewardRule struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RankMin       *int32                 `protobuf:"varint,1,opt,name=rank_min,json=rankMin,proto3,oneof" json:"rank_min,omitempty"`
+	RankMax       *int32                 `protobuf:"varint,2,opt,name=rank_max,json=rankMax,proto3,oneof" json:"rank_max,omitempty"`
+	ValueMin      *int64                 `protobuf:"varint,3,opt,name=value_min,json=valueMin,proto3,oneof" json:"value_min,omitempty"`
+	AssetCode     string                 `protobuf:"bytes,4,opt,name=asset_code,json=assetCode,proto3" json:"asset_code,omitempty"`
+	Amount        int64                  `protobuf:"varint,5,opt,name=amount,proto3" json:"amount,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LeaderboardRewardRule) Reset() {
+	*x = LeaderboardRewardRule{}
+	mi := &file_shared_v1_leaderboard_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LeaderboardRewardRule) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LeaderboardRewardRule) ProtoMessage() {}
+
+func (x *LeaderboardRewardRule) ProtoReflect() protoreflect.Message {
+	mi := &file_shared_v1_leaderboard_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LeaderboardRewardRule.ProtoReflect.Descriptor instead.
+func (*LeaderboardRewardRule) Descriptor() ([]byte, []int) {
+	return file_shared_v1_leaderboard_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *LeaderboardRewardRule) GetRankMin() int32 {
+	if x != nil && x.RankMin != nil {
+		return *x.RankMin
+	}
+	return 0
+}
+
+func (x *LeaderboardRewardRule) GetRankMax() int32 {
+	if x != nil && x.RankMax != nil {
+		return *x.RankMax
+	}
+	return 0
+}
+
+func (x *LeaderboardRewardRule) GetValueMin() int64 {
+	if x != nil && x.ValueMin != nil {
+		return *x.ValueMin
+	}
+	return 0
+}
+
+func (x *LeaderboardRewardRule) GetAssetCode() string {
+	if x != nil {
+		return x.AssetCode
+	}
+	return ""
+}
+
+func (x *LeaderboardRewardRule) GetAmount() int64 {
+	if x != nil {
+		return x.Amount
+	}
+	return 0
+}
+
+// LeaderboardSettlementGrant 是发放明细（重跑账本：failed 行重跑补发，
+// granted 行幂等跳过）。
+type LeaderboardSettlementGrant struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	RuleIndex      int32                  `protobuf:"varint,1,opt,name=rule_index,json=ruleIndex,proto3" json:"rule_index,omitempty"`
+	SubjectId      string                 `protobuf:"bytes,2,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
+	AssetCode      string                 `protobuf:"bytes,3,opt,name=asset_code,json=assetCode,proto3" json:"asset_code,omitempty"`
+	Amount         int64                  `protobuf:"varint,4,opt,name=amount,proto3" json:"amount,omitempty"`
+	IdempotencyKey string                 `protobuf:"bytes,5,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	// pending | granted | failed | voided
+	Status        string `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"`
+	Error         string `protobuf:"bytes,7,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LeaderboardSettlementGrant) Reset() {
+	*x = LeaderboardSettlementGrant{}
+	mi := &file_shared_v1_leaderboard_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LeaderboardSettlementGrant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LeaderboardSettlementGrant) ProtoMessage() {}
+
+func (x *LeaderboardSettlementGrant) ProtoReflect() protoreflect.Message {
+	mi := &file_shared_v1_leaderboard_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LeaderboardSettlementGrant.ProtoReflect.Descriptor instead.
+func (*LeaderboardSettlementGrant) Descriptor() ([]byte, []int) {
+	return file_shared_v1_leaderboard_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *LeaderboardSettlementGrant) GetRuleIndex() int32 {
+	if x != nil {
+		return x.RuleIndex
+	}
+	return 0
+}
+
+func (x *LeaderboardSettlementGrant) GetSubjectId() string {
+	if x != nil {
+		return x.SubjectId
+	}
+	return ""
+}
+
+func (x *LeaderboardSettlementGrant) GetAssetCode() string {
+	if x != nil {
+		return x.AssetCode
+	}
+	return ""
+}
+
+func (x *LeaderboardSettlementGrant) GetAmount() int64 {
+	if x != nil {
+		return x.Amount
+	}
+	return 0
+}
+
+func (x *LeaderboardSettlementGrant) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *LeaderboardSettlementGrant) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *LeaderboardSettlementGrant) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+// LeaderboardSettlement 是结榜发奖记录（期粒度，不随条目 retention 清理）。
+// status: settling | settled | error | voided。
+type LeaderboardSettlement struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	BoardId       string                   `protobuf:"bytes,1,opt,name=board_id,json=boardId,proto3" json:"board_id,omitempty"`
+	Period        string                   `protobuf:"bytes,2,opt,name=period,proto3" json:"period,omitempty"`
+	Status        string                   `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
+	SealedAt      *timestamppb.Timestamp   `protobuf:"bytes,4,opt,name=sealed_at,json=sealedAt,proto3" json:"sealed_at,omitempty"`
+	SettledAt     *timestamppb.Timestamp   `protobuf:"bytes,5,opt,name=settled_at,json=settledAt,proto3,oneof" json:"settled_at,omitempty"`
+	EntryCount    int64                    `protobuf:"varint,6,opt,name=entry_count,json=entryCount,proto3" json:"entry_count,omitempty"`
+	GrantCount    int32                    `protobuf:"varint,7,opt,name=grant_count,json=grantCount,proto3" json:"grant_count,omitempty"`
+	Error         string                   `protobuf:"bytes,8,opt,name=error,proto3" json:"error,omitempty"`
+	Rules         []*LeaderboardRewardRule `protobuf:"bytes,9,rep,name=rules,proto3" json:"rules,omitempty"`
+	CreatedAt     *timestamppb.Timestamp   `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp   `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LeaderboardSettlement) Reset() {
+	*x = LeaderboardSettlement{}
+	mi := &file_shared_v1_leaderboard_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LeaderboardSettlement) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LeaderboardSettlement) ProtoMessage() {}
+
+func (x *LeaderboardSettlement) ProtoReflect() protoreflect.Message {
+	mi := &file_shared_v1_leaderboard_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LeaderboardSettlement.ProtoReflect.Descriptor instead.
+func (*LeaderboardSettlement) Descriptor() ([]byte, []int) {
+	return file_shared_v1_leaderboard_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *LeaderboardSettlement) GetBoardId() string {
+	if x != nil {
+		return x.BoardId
+	}
+	return ""
+}
+
+func (x *LeaderboardSettlement) GetPeriod() string {
+	if x != nil {
+		return x.Period
+	}
+	return ""
+}
+
+func (x *LeaderboardSettlement) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *LeaderboardSettlement) GetSealedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.SealedAt
+	}
+	return nil
+}
+
+func (x *LeaderboardSettlement) GetSettledAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.SettledAt
+	}
+	return nil
+}
+
+func (x *LeaderboardSettlement) GetEntryCount() int64 {
+	if x != nil {
+		return x.EntryCount
+	}
+	return 0
+}
+
+func (x *LeaderboardSettlement) GetGrantCount() int32 {
+	if x != nil {
+		return x.GrantCount
+	}
+	return 0
+}
+
+func (x *LeaderboardSettlement) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *LeaderboardSettlement) GetRules() []*LeaderboardRewardRule {
+	if x != nil {
+		return x.Rules
+	}
+	return nil
+}
+
+func (x *LeaderboardSettlement) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *LeaderboardSettlement) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
 var File_shared_v1_leaderboard_proto protoreflect.FileDescriptor
 
 const file_shared_v1_leaderboard_proto_rawDesc = "" +
 	"\n" +
-	"\x1bshared/v1/leaderboard.proto\x12\x13torchwood.shared.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd4\x04\n" +
+	"\x1bshared/v1/leaderboard.proto\x12\x13torchwood.shared.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9a\x05\n" +
 	"\x10LeaderboardBoard\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04sort\x18\x02 \x01(\tR\x04sort\x12%\n" +
@@ -558,7 +867,8 @@ const file_shared_v1_leaderboard_proto_rawDesc = "" +
 	" \x01(\bR\fclientSubmit\x127\n" +
 	"\x18per_subject_submit_limit\x18\v \x01(\x05R\x15perSubjectSubmitLimit\x12+\n" +
 	"\x11retention_periods\x18\f \x01(\x05R\x10retentionPeriods\x12!\n" +
-	"\fsubject_kind\x18\r \x01(\tR\vsubjectKind\x129\n" +
+	"\fsubject_kind\x18\r \x01(\tR\vsubjectKind\x12D\n" +
+	"\arewards\x18\x10 \x03(\v2*.torchwood.shared.v1.LeaderboardRewardRuleR\arewards\x129\n" +
 	"\n" +
 	"created_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
@@ -602,7 +912,48 @@ const file_shared_v1_leaderboard_proto_rawDesc = "" +
 	"\x06period\x18\x01 \x01(\tR\x06period\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x03R\x05total\x12B\n" +
 	"\aentries\x18\x03 \x03(\v2(.torchwood.shared.v1.LeaderboardTopEntryR\aentries\x12&\n" +
-	"\x0fnext_page_token\x18\x04 \x01(\tR\rnextPageTokenBAZ?github.com/torchwoodcloud/torchwood/genproto/shared/v1;sharedv1b\x06proto3"
+	"\x0fnext_page_token\x18\x04 \x01(\tR\rnextPageToken\"\xd8\x01\n" +
+	"\x15LeaderboardRewardRule\x12\x1e\n" +
+	"\brank_min\x18\x01 \x01(\x05H\x00R\arankMin\x88\x01\x01\x12\x1e\n" +
+	"\brank_max\x18\x02 \x01(\x05H\x01R\arankMax\x88\x01\x01\x12 \n" +
+	"\tvalue_min\x18\x03 \x01(\x03H\x02R\bvalueMin\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"asset_code\x18\x04 \x01(\tR\tassetCode\x12\x16\n" +
+	"\x06amount\x18\x05 \x01(\x03R\x06amountB\v\n" +
+	"\t_rank_minB\v\n" +
+	"\t_rank_maxB\f\n" +
+	"\n" +
+	"_value_min\"\xe8\x01\n" +
+	"\x1aLeaderboardSettlementGrant\x12\x1d\n" +
+	"\n" +
+	"rule_index\x18\x01 \x01(\x05R\truleIndex\x12\x1d\n" +
+	"\n" +
+	"subject_id\x18\x02 \x01(\tR\tsubjectId\x12\x1d\n" +
+	"\n" +
+	"asset_code\x18\x03 \x01(\tR\tassetCode\x12\x16\n" +
+	"\x06amount\x18\x04 \x01(\x03R\x06amount\x12'\n" +
+	"\x0fidempotency_key\x18\x05 \x01(\tR\x0eidempotencyKey\x12\x16\n" +
+	"\x06status\x18\x06 \x01(\tR\x06status\x12\x14\n" +
+	"\x05error\x18\a \x01(\tR\x05error\"\xfa\x03\n" +
+	"\x15LeaderboardSettlement\x12\x19\n" +
+	"\bboard_id\x18\x01 \x01(\tR\aboardId\x12\x16\n" +
+	"\x06period\x18\x02 \x01(\tR\x06period\x12\x16\n" +
+	"\x06status\x18\x03 \x01(\tR\x06status\x127\n" +
+	"\tsealed_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bsealedAt\x12>\n" +
+	"\n" +
+	"settled_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\tsettledAt\x88\x01\x01\x12\x1f\n" +
+	"\ventry_count\x18\x06 \x01(\x03R\n" +
+	"entryCount\x12\x1f\n" +
+	"\vgrant_count\x18\a \x01(\x05R\n" +
+	"grantCount\x12\x14\n" +
+	"\x05error\x18\b \x01(\tR\x05error\x12@\n" +
+	"\x05rules\x18\t \x03(\v2*.torchwood.shared.v1.LeaderboardRewardRuleR\x05rules\x129\n" +
+	"\n" +
+	"created_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\r\n" +
+	"\v_settled_atBAZ?github.com/torchwoodcloud/torchwood/genproto/shared/v1;sharedv1b\x06proto3"
 
 var (
 	file_shared_v1_leaderboard_proto_rawDescOnce sync.Once
@@ -616,28 +967,37 @@ func file_shared_v1_leaderboard_proto_rawDescGZIP() []byte {
 	return file_shared_v1_leaderboard_proto_rawDescData
 }
 
-var file_shared_v1_leaderboard_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_shared_v1_leaderboard_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_shared_v1_leaderboard_proto_goTypes = []any{
 	(*LeaderboardBoard)(nil),           // 0: torchwood.shared.v1.LeaderboardBoard
 	(*LeaderboardEntry)(nil),           // 1: torchwood.shared.v1.LeaderboardEntry
 	(*LeaderboardScoreSnapshot)(nil),   // 2: torchwood.shared.v1.LeaderboardScoreSnapshot
 	(*LeaderboardTopEntry)(nil),        // 3: torchwood.shared.v1.LeaderboardTopEntry
 	(*ListLeaderboardTopResponse)(nil), // 4: torchwood.shared.v1.ListLeaderboardTopResponse
-	(*timestamppb.Timestamp)(nil),      // 5: google.protobuf.Timestamp
+	(*LeaderboardRewardRule)(nil),      // 5: torchwood.shared.v1.LeaderboardRewardRule
+	(*LeaderboardSettlementGrant)(nil), // 6: torchwood.shared.v1.LeaderboardSettlementGrant
+	(*LeaderboardSettlement)(nil),      // 7: torchwood.shared.v1.LeaderboardSettlement
+	(*timestamppb.Timestamp)(nil),      // 8: google.protobuf.Timestamp
 }
 var file_shared_v1_leaderboard_proto_depIdxs = []int32{
-	5, // 0: torchwood.shared.v1.LeaderboardBoard.created_at:type_name -> google.protobuf.Timestamp
-	5, // 1: torchwood.shared.v1.LeaderboardBoard.updated_at:type_name -> google.protobuf.Timestamp
-	5, // 2: torchwood.shared.v1.LeaderboardEntry.created_at:type_name -> google.protobuf.Timestamp
-	5, // 3: torchwood.shared.v1.LeaderboardEntry.updated_at:type_name -> google.protobuf.Timestamp
-	1, // 4: torchwood.shared.v1.LeaderboardScoreSnapshot.entry:type_name -> torchwood.shared.v1.LeaderboardEntry
-	5, // 5: torchwood.shared.v1.LeaderboardTopEntry.updated_at:type_name -> google.protobuf.Timestamp
-	3, // 6: torchwood.shared.v1.ListLeaderboardTopResponse.entries:type_name -> torchwood.shared.v1.LeaderboardTopEntry
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	5,  // 0: torchwood.shared.v1.LeaderboardBoard.rewards:type_name -> torchwood.shared.v1.LeaderboardRewardRule
+	8,  // 1: torchwood.shared.v1.LeaderboardBoard.created_at:type_name -> google.protobuf.Timestamp
+	8,  // 2: torchwood.shared.v1.LeaderboardBoard.updated_at:type_name -> google.protobuf.Timestamp
+	8,  // 3: torchwood.shared.v1.LeaderboardEntry.created_at:type_name -> google.protobuf.Timestamp
+	8,  // 4: torchwood.shared.v1.LeaderboardEntry.updated_at:type_name -> google.protobuf.Timestamp
+	1,  // 5: torchwood.shared.v1.LeaderboardScoreSnapshot.entry:type_name -> torchwood.shared.v1.LeaderboardEntry
+	8,  // 6: torchwood.shared.v1.LeaderboardTopEntry.updated_at:type_name -> google.protobuf.Timestamp
+	3,  // 7: torchwood.shared.v1.ListLeaderboardTopResponse.entries:type_name -> torchwood.shared.v1.LeaderboardTopEntry
+	8,  // 8: torchwood.shared.v1.LeaderboardSettlement.sealed_at:type_name -> google.protobuf.Timestamp
+	8,  // 9: torchwood.shared.v1.LeaderboardSettlement.settled_at:type_name -> google.protobuf.Timestamp
+	5,  // 10: torchwood.shared.v1.LeaderboardSettlement.rules:type_name -> torchwood.shared.v1.LeaderboardRewardRule
+	8,  // 11: torchwood.shared.v1.LeaderboardSettlement.created_at:type_name -> google.protobuf.Timestamp
+	8,  // 12: torchwood.shared.v1.LeaderboardSettlement.updated_at:type_name -> google.protobuf.Timestamp
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_shared_v1_leaderboard_proto_init() }
@@ -648,13 +1008,15 @@ func file_shared_v1_leaderboard_proto_init() {
 	file_shared_v1_leaderboard_proto_msgTypes[0].OneofWrappers = []any{}
 	file_shared_v1_leaderboard_proto_msgTypes[1].OneofWrappers = []any{}
 	file_shared_v1_leaderboard_proto_msgTypes[3].OneofWrappers = []any{}
+	file_shared_v1_leaderboard_proto_msgTypes[5].OneofWrappers = []any{}
+	file_shared_v1_leaderboard_proto_msgTypes[7].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_shared_v1_leaderboard_proto_rawDesc), len(file_shared_v1_leaderboard_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

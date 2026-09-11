@@ -46,6 +46,9 @@ func (s *LeaderboardsService) CreateLeaderboardBoard(ctx context.Context, req *c
 		v := domainleaderboards.SortDirection(req.GetTiebreakOrder())
 		in.TiebreakOrder = &v
 	}
+	if len(req.GetRewards()) > 0 {
+		in.Rewards = mapConsoleRewardRules(req.GetRewards())
+	}
 	b, err := s.app.CreateBoard(ctx, in)
 	if err != nil {
 		return nil, err
@@ -119,6 +122,11 @@ func (s *LeaderboardsService) UpdateLeaderboardBoard(ctx context.Context, req *c
 		kind := req.GetSubjectKind()
 		cmd.SubjectKind = &kind
 	}
+	cmd.ClearRewards = req.GetClearRewards()
+	if len(req.GetRewards()) > 0 {
+		rules := mapConsoleRewardRules(req.GetRewards())
+		cmd.Rewards = &rules
+	}
 	b, err := s.app.UpdateBoard(ctx, cmd)
 	if err != nil {
 		return nil, err
@@ -179,6 +187,55 @@ func (s *LeaderboardsService) DeleteLeaderboardEntry(ctx context.Context, req *c
 	return &sharedv1.Empty{}, nil
 }
 
+func (s *LeaderboardsService) GetLeaderboardSettlement(ctx context.Context, req *consolev1.GetLeaderboardSettlementRequest) (*consolev1.GetLeaderboardSettlementResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	settlement, grants, err := s.app.GetSettlement(ctx, req.GetBoardId(), req.GetPeriod())
+	if err != nil {
+		return nil, err
+	}
+	return &consolev1.GetLeaderboardSettlementResponse{
+		Settlement: mapConsoleSettlement(settlement),
+		Grants:     mapConsoleSettlementGrants(grants),
+	}, nil
+}
+
+func (s *LeaderboardsService) ListLeaderboardSettlements(ctx context.Context, req *consolev1.ListLeaderboardSettlementsRequest) (*consolev1.ListLeaderboardSettlementsResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	rows, err := s.app.ListSettlements(ctx, req.GetBoardId(), int(req.GetLimit()))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*sharedv1.LeaderboardSettlement, len(rows))
+	for i := range rows {
+		out[i] = mapConsoleSettlement(&rows[i])
+	}
+	return &consolev1.ListLeaderboardSettlementsResponse{Settlements: out}, nil
+}
+
+func (s *LeaderboardsService) VoidLeaderboardSettlement(ctx context.Context, req *consolev1.VoidLeaderboardSettlementRequest) (*consolev1.LeaderboardSettlementAck, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	if err := s.app.VoidSettlement(ctx, req.GetBoardId(), req.GetPeriod()); err != nil {
+		return nil, err
+	}
+	return &consolev1.LeaderboardSettlementAck{}, nil
+}
+
+func (s *LeaderboardsService) RerunLeaderboardSettlement(ctx context.Context, req *consolev1.RerunLeaderboardSettlementRequest) (*consolev1.LeaderboardSettlementAck, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	if err := s.app.RerunSettlement(ctx, req.GetBoardId(), req.GetPeriod()); err != nil {
+		return nil, err
+	}
+	return &consolev1.LeaderboardSettlementAck{}, nil
+}
+
 func mapConsoleBoard(b *domainleaderboards.Board) *sharedv1.LeaderboardBoard {
 	if b == nil {
 		return nil
@@ -205,6 +262,93 @@ func mapConsoleBoard(b *domainleaderboards.Board) *sharedv1.LeaderboardBoard {
 	}
 	if b.ValueMax != nil {
 		out.ValueMax = b.ValueMax
+	}
+	if len(b.Rewards) > 0 {
+		out.Rewards = mapConsoleRewardRuleProtos(b.Rewards)
+	}
+	return out
+}
+
+func mapConsoleRewardRules(in []*sharedv1.LeaderboardRewardRule) []domainleaderboards.RewardRule {
+	out := make([]domainleaderboards.RewardRule, 0, len(in))
+	for _, r := range in {
+		if r == nil {
+			continue
+		}
+		rule := domainleaderboards.RewardRule{
+			AssetCode: r.GetAssetCode(),
+			Amount:    r.GetAmount(),
+		}
+		if r.RankMin != nil {
+			rule.RankMin = r.RankMin
+		}
+		if r.RankMax != nil {
+			rule.RankMax = r.RankMax
+		}
+		if r.ValueMin != nil {
+			rule.ValueMin = r.ValueMin
+		}
+		out = append(out, rule)
+	}
+	return out
+}
+
+func mapConsoleRewardRuleProtos(in []domainleaderboards.RewardRule) []*sharedv1.LeaderboardRewardRule {
+	out := make([]*sharedv1.LeaderboardRewardRule, 0, len(in))
+	for _, r := range in {
+		rule := &sharedv1.LeaderboardRewardRule{
+			AssetCode: r.AssetCode,
+			Amount:    r.Amount,
+		}
+		if r.RankMin != nil {
+			rule.RankMin = r.RankMin
+		}
+		if r.RankMax != nil {
+			rule.RankMax = r.RankMax
+		}
+		if r.ValueMin != nil {
+			rule.ValueMin = r.ValueMin
+		}
+		out = append(out, rule)
+	}
+	return out
+}
+
+func mapConsoleSettlement(in *domainleaderboards.Settlement) *sharedv1.LeaderboardSettlement {
+	if in == nil {
+		return nil
+	}
+	rules, _ := domainleaderboards.UnmarshalRewardRules(in.RulesSnapshot)
+	out := &sharedv1.LeaderboardSettlement{
+		BoardId:    in.BoardID,
+		Period:     in.PeriodKey,
+		Status:     in.Status,
+		SealedAt:   timestamppb.New(in.SealedAt),
+		EntryCount: in.EntryCount,
+		GrantCount: in.GrantCount,
+		Error:      in.Error,
+		CreatedAt:  timestamppb.New(in.CreatedAt),
+		UpdatedAt:  timestamppb.New(in.UpdatedAt),
+		Rules:      mapConsoleRewardRuleProtos(rules),
+	}
+	if in.SettledAt != nil {
+		out.SettledAt = timestamppb.New(*in.SettledAt)
+	}
+	return out
+}
+
+func mapConsoleSettlementGrants(in []domainleaderboards.SettlementGrant) []*sharedv1.LeaderboardSettlementGrant {
+	out := make([]*sharedv1.LeaderboardSettlementGrant, len(in))
+	for i := range in {
+		out[i] = &sharedv1.LeaderboardSettlementGrant{
+			RuleIndex:      in[i].RuleIndex,
+			SubjectId:      in[i].SubjectID,
+			AssetCode:      in[i].AssetCode,
+			Amount:         in[i].Amount,
+			IdempotencyKey: in[i].IdempotencyKey,
+			Status:         in[i].Status,
+			Error:          in[i].Error,
+		}
 	}
 	return out
 }

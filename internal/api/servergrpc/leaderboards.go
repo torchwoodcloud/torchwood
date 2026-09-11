@@ -64,6 +64,35 @@ func (s *LeaderboardsService) ListLeaderboardTop(ctx context.Context, req *serve
 	return mapLeaderboardTop(res), nil
 }
 
+func (s *LeaderboardsService) GetLeaderboardSettlement(ctx context.Context, req *serverv1.GetLeaderboardSettlementRequest) (*serverv1.GetLeaderboardSettlementResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	settlement, grants, err := s.app.GetSettlement(ctx, req.GetBoardId(), req.GetPeriod())
+	if err != nil {
+		return nil, err
+	}
+	return &serverv1.GetLeaderboardSettlementResponse{
+		Settlement: mapLeaderboardSettlement(settlement),
+		Grants:     mapLeaderboardSettlementGrants(grants),
+	}, nil
+}
+
+func (s *LeaderboardsService) ListLeaderboardSettlements(ctx context.Context, req *serverv1.ListLeaderboardSettlementsRequest) (*serverv1.ListLeaderboardSettlementsResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	rows, err := s.app.ListSettlements(ctx, req.GetBoardId(), int(req.GetLimit()))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*sharedv1.LeaderboardSettlement, len(rows))
+	for i := range rows {
+		out[i] = mapLeaderboardSettlement(&rows[i])
+	}
+	return &serverv1.ListLeaderboardSettlementsResponse{Settlements: out}, nil
+}
+
 // mapLeaderboardDomainSnapshot / mapLeaderboardDomainEntry / mapLeaderboardDomainTop
 // 是 domain → proto 的共享映射（三面 handler 各自复制一份同构实现，跟随
 // assets/clientgrpc 的既有做法；不抽公共包避免 handler 层横向依赖）。
@@ -100,6 +129,61 @@ func mapLeaderboardEntry(e *domainleaderboards.Entry) *sharedv1.LeaderboardEntry
 	}
 	if e.TiebreakValue != nil {
 		out.TiebreakValue = e.TiebreakValue
+	}
+	return out
+}
+
+func mapLeaderboardSettlement(in *domainleaderboards.Settlement) *sharedv1.LeaderboardSettlement {
+	if in == nil {
+		return nil
+	}
+	rules, _ := domainleaderboards.UnmarshalRewardRules(in.RulesSnapshot)
+	out := &sharedv1.LeaderboardSettlement{
+		BoardId:    in.BoardID,
+		Period:     in.PeriodKey,
+		Status:     in.Status,
+		SealedAt:   timestamppb.New(in.SealedAt),
+		EntryCount: in.EntryCount,
+		GrantCount: in.GrantCount,
+		Error:      in.Error,
+		CreatedAt:  timestamppb.New(in.CreatedAt),
+		UpdatedAt:  timestamppb.New(in.UpdatedAt),
+		Rules:      make([]*sharedv1.LeaderboardRewardRule, len(rules)),
+	}
+	if in.SettledAt != nil {
+		out.SettledAt = timestamppb.New(*in.SettledAt)
+	}
+	for i, r := range rules {
+		rule := &sharedv1.LeaderboardRewardRule{
+			AssetCode: r.AssetCode,
+			Amount:    r.Amount,
+		}
+		if r.RankMin != nil {
+			rule.RankMin = r.RankMin
+		}
+		if r.RankMax != nil {
+			rule.RankMax = r.RankMax
+		}
+		if r.ValueMin != nil {
+			rule.ValueMin = r.ValueMin
+		}
+		out.Rules[i] = rule
+	}
+	return out
+}
+
+func mapLeaderboardSettlementGrants(in []domainleaderboards.SettlementGrant) []*sharedv1.LeaderboardSettlementGrant {
+	out := make([]*sharedv1.LeaderboardSettlementGrant, len(in))
+	for i := range in {
+		out[i] = &sharedv1.LeaderboardSettlementGrant{
+			RuleIndex:      in[i].RuleIndex,
+			SubjectId:      in[i].SubjectID,
+			AssetCode:      in[i].AssetCode,
+			Amount:         in[i].Amount,
+			IdempotencyKey: in[i].IdempotencyKey,
+			Status:         in[i].Status,
+			Error:          in[i].Error,
+		}
 	}
 	return out
 }

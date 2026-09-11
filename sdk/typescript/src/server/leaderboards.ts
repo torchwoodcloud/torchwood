@@ -1,6 +1,8 @@
 import { listQuery, type HttpTransport } from "../http.js";
 import type {
   LeaderboardScoreSnapshot,
+  LeaderboardSettlement,
+  LeaderboardSettlementGrant,
   ListLeaderboardTopResponse,
   SubmitLeaderboardScoreInput,
 } from "../types.js";
@@ -41,6 +43,32 @@ export class ServerLeaderboardsService {
       "GET",
       `/v1/server/leaderboards/${encodeURIComponent(boardId)}/top`,
       { auth: "apiKey", query: listQuery(params as never) },
+    );
+  }
+
+  /** 结算读（Phase 2）：发奖明细 = 用户资产 ledger 的 leaderboard_settlement 引用视图。 */
+  async getLeaderboardSettlement(
+    boardId: string,
+    period: string,
+  ): Promise<{
+    settlement: LeaderboardSettlement;
+    grants: LeaderboardSettlementGrant[];
+  }> {
+    return this.http.request(
+      "GET",
+      `/v1/server/leaderboards/${encodeURIComponent(boardId)}/settlements/${encodeURIComponent(period)}`,
+      { auth: "apiKey" },
+    );
+  }
+
+  async listLeaderboardSettlements(
+    boardId: string,
+    limit?: number,
+  ): Promise<{ settlements: LeaderboardSettlement[] }> {
+    return this.http.request(
+      "GET",
+      `/v1/server/leaderboards/${encodeURIComponent(boardId)}/settlements`,
+      { auth: "apiKey", query: { limit } },
     );
   }
 }

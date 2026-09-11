@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"time"
 
+	domainassets "github.com/torchwoodcloud/torchwood/internal/domain/assets"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	domainleaderboards "github.com/torchwoodcloud/torchwood/internal/domain/leaderboards"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
@@ -26,20 +27,27 @@ const (
 
 // Leaderboards 是排行榜子域 use-case 聚合。
 type Leaderboards struct {
-	db       uow.Runner
-	boards   domainleaderboards.BoardRepo
-	entries  domainleaderboards.EntryRepo
-	idem     databases.IdempotencyStore
-	projects projects.Repository
-	logger   *slog.Logger
-	now      func() time.Time
+	db          uow.Runner
+	boards      domainleaderboards.BoardRepo
+	entries     domainleaderboards.EntryRepo
+	settlements domainleaderboards.SettlementRepo
+	granter     domainleaderboards.RewardGranter
+	defs        domainassets.DefRepo
+	idem        databases.IdempotencyStore
+	projects    projects.Repository
+	logger      *slog.Logger
+	now         func() time.Time
 }
 
-// NewLeaderboards 构造 use-case 聚合（db 注入 uow.Runner 端口）。
+// NewLeaderboards 构造 use-case 聚合（db 注入 uow.Runner 端口；Phase 2 结算
+// 依赖 settlements/granter/defs，worker 与 server 共用同一装配）。
 func NewLeaderboards(
 	db uow.Runner,
 	boards domainleaderboards.BoardRepo,
 	entries domainleaderboards.EntryRepo,
+	settlements domainleaderboards.SettlementRepo,
+	granter domainleaderboards.RewardGranter,
+	defs domainassets.DefRepo,
 	idem databases.IdempotencyStore,
 	logger *slog.Logger,
 	projectRepo projects.Repository,
@@ -48,13 +56,16 @@ func NewLeaderboards(
 		logger = slog.Default()
 	}
 	return &Leaderboards{
-		db:       db,
-		boards:   boards,
-		entries:  entries,
-		idem:     idem,
-		projects: projectRepo,
-		logger:   logger,
-		now:      func() time.Time { return time.Now().UTC() },
+		db:          db,
+		boards:      boards,
+		entries:     entries,
+		settlements: settlements,
+		granter:     granter,
+		defs:        defs,
+		idem:        idem,
+		projects:    projectRepo,
+		logger:      logger,
+		now:         func() time.Time { return time.Now().UTC() },
 	}
 }
 
@@ -89,6 +100,12 @@ func mapLeaderboardError(err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, domainleaderboards.ErrBoardExists):
 		return status.Error(codes.AlreadyExists, err.Error())
+	case errors.Is(err, domainleaderboards.ErrSettlementNotFound):
+		return status.Error(codes.NotFound, err.Error())
+	case errors.Is(err, domainleaderboards.ErrSettlementAlreadySettled):
+		return status.Error(codes.FailedPrecondition, err.Error())
+	case errors.Is(err, domainleaderboards.ErrSettlementVoided):
+		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, domainleaderboards.ErrImmutableField):
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, domainleaderboards.ErrSubmitLimitExceeded):

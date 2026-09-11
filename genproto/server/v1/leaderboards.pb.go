@@ -241,6 +241,206 @@ func (x *ListLeaderboardTopRequest) GetPageToken() string {
 	return ""
 }
 
+type GetLeaderboardSettlementRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BoardId       string                 `protobuf:"bytes,1,opt,name=board_id,json=boardId,proto3" json:"board_id,omitempty"`
+	Period        string                 `protobuf:"bytes,2,opt,name=period,proto3" json:"period,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetLeaderboardSettlementRequest) Reset() {
+	*x = GetLeaderboardSettlementRequest{}
+	mi := &file_server_v1_leaderboards_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetLeaderboardSettlementRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetLeaderboardSettlementRequest) ProtoMessage() {}
+
+func (x *GetLeaderboardSettlementRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_leaderboards_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetLeaderboardSettlementRequest.ProtoReflect.Descriptor instead.
+func (*GetLeaderboardSettlementRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_leaderboards_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GetLeaderboardSettlementRequest) GetBoardId() string {
+	if x != nil {
+		return x.BoardId
+	}
+	return ""
+}
+
+func (x *GetLeaderboardSettlementRequest) GetPeriod() string {
+	if x != nil {
+		return x.Period
+	}
+	return ""
+}
+
+type GetLeaderboardSettlementResponse struct {
+	state         protoimpl.MessageState           `protogen:"open.v1"`
+	Settlement    *v1.LeaderboardSettlement        `protobuf:"bytes,1,opt,name=settlement,proto3" json:"settlement,omitempty"`
+	Grants        []*v1.LeaderboardSettlementGrant `protobuf:"bytes,2,rep,name=grants,proto3" json:"grants,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetLeaderboardSettlementResponse) Reset() {
+	*x = GetLeaderboardSettlementResponse{}
+	mi := &file_server_v1_leaderboards_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetLeaderboardSettlementResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetLeaderboardSettlementResponse) ProtoMessage() {}
+
+func (x *GetLeaderboardSettlementResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_leaderboards_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetLeaderboardSettlementResponse.ProtoReflect.Descriptor instead.
+func (*GetLeaderboardSettlementResponse) Descriptor() ([]byte, []int) {
+	return file_server_v1_leaderboards_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GetLeaderboardSettlementResponse) GetSettlement() *v1.LeaderboardSettlement {
+	if x != nil {
+		return x.Settlement
+	}
+	return nil
+}
+
+func (x *GetLeaderboardSettlementResponse) GetGrants() []*v1.LeaderboardSettlementGrant {
+	if x != nil {
+		return x.Grants
+	}
+	return nil
+}
+
+type ListLeaderboardSettlementsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BoardId       string                 `protobuf:"bytes,1,opt,name=board_id,json=boardId,proto3" json:"board_id,omitempty"`
+	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLeaderboardSettlementsRequest) Reset() {
+	*x = ListLeaderboardSettlementsRequest{}
+	mi := &file_server_v1_leaderboards_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLeaderboardSettlementsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLeaderboardSettlementsRequest) ProtoMessage() {}
+
+func (x *ListLeaderboardSettlementsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_leaderboards_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLeaderboardSettlementsRequest.ProtoReflect.Descriptor instead.
+func (*ListLeaderboardSettlementsRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_leaderboards_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ListLeaderboardSettlementsRequest) GetBoardId() string {
+	if x != nil {
+		return x.BoardId
+	}
+	return ""
+}
+
+func (x *ListLeaderboardSettlementsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListLeaderboardSettlementsResponse struct {
+	state         protoimpl.MessageState      `protogen:"open.v1"`
+	Settlements   []*v1.LeaderboardSettlement `protobuf:"bytes,1,rep,name=settlements,proto3" json:"settlements,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLeaderboardSettlementsResponse) Reset() {
+	*x = ListLeaderboardSettlementsResponse{}
+	mi := &file_server_v1_leaderboards_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLeaderboardSettlementsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLeaderboardSettlementsResponse) ProtoMessage() {}
+
+func (x *ListLeaderboardSettlementsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_leaderboards_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLeaderboardSettlementsResponse.ProtoReflect.Descriptor instead.
+func (*ListLeaderboardSettlementsResponse) Descriptor() ([]byte, []int) {
+	return file_server_v1_leaderboards_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListLeaderboardSettlementsResponse) GetSettlements() []*v1.LeaderboardSettlement {
+	if x != nil {
+		return x.Settlements
+	}
+	return nil
+}
+
 var File_server_v1_leaderboards_proto protoreflect.FileDescriptor
 
 const file_server_v1_leaderboards_proto_rawDesc = "" +
@@ -266,12 +466,28 @@ const file_server_v1_leaderboards_proto_rawDesc = "" +
 	"\x06period\x18\x02 \x01(\tR\x06period\x12&\n" +
 	"\tpage_size\x18\x03 \x01(\x05B\t\xbaH\x06\x1a\x04\x18d(\x00R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x04 \x01(\tR\tpageToken2\xd4\x04\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\"d\n" +
+	"\x1fGetLeaderboardSettlementRequest\x12!\n" +
+	"\bboard_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aboardId\x12\x1e\n" +
+	"\x06period\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06period\"\xb7\x01\n" +
+	" GetLeaderboardSettlementResponse\x12J\n" +
+	"\n" +
+	"settlement\x18\x01 \x01(\v2*.torchwood.shared.v1.LeaderboardSettlementR\n" +
+	"settlement\x12G\n" +
+	"\x06grants\x18\x02 \x03(\v2/.torchwood.shared.v1.LeaderboardSettlementGrantR\x06grants\"h\n" +
+	"!ListLeaderboardSettlementsRequest\x12!\n" +
+	"\bboard_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aboardId\x12 \n" +
+	"\x05limit\x18\x02 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\x05limit\"r\n" +
+	"\"ListLeaderboardSettlementsResponse\x12L\n" +
+	"\vsettlements\x18\x01 \x03(\v2*.torchwood.shared.v1.LeaderboardSettlementR\vsettlements2\xfb\a\n" +
 	"\x13LeaderboardsService\x12\xbf\x01\n" +
 	"\x16SubmitLeaderboardScore\x122.torchwood.server.v1.SubmitLeaderboardScoreRequest\x1a-.torchwood.shared.v1.LeaderboardScoreSnapshot\"B\x8a\xb2\x19\n" +
 	"\x1a\x02\x03\x04\"\x04\b\x0e\x10\x02\x82\xd3\xe4\x93\x02.:\x01*\")/v1/server/leaderboards/{board_id}:submit\x12\xc0\x01\n" +
 	"\x13GetLeaderboardEntry\x12/.torchwood.server.v1.GetLeaderboardEntryRequest\x1a-.torchwood.shared.v1.LeaderboardScoreSnapshot\"I\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x029\x127/v1/server/leaderboards/{board_id}/entries/{subject_id}\x12\xaf\x01\n" +
-	"\x12ListLeaderboardTop\x12..torchwood.server.v1.ListLeaderboardTopRequest\x1a/.torchwood.shared.v1.ListLeaderboardTopResponse\"8\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x02(\x12&/v1/server/leaderboards/{board_id}/top\x1a\x06\x92\xb2\x19\x02\b\x03B\xdb\x03\x92A\x96\x03RR\n" +
+	"\x12ListLeaderboardTop\x12..torchwood.server.v1.ListLeaderboardTopRequest\x1a/.torchwood.shared.v1.ListLeaderboardTopResponse\"8\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x02(\x12&/v1/server/leaderboards/{board_id}/top\x12\xd2\x01\n" +
+	"\x18GetLeaderboardSettlement\x124.torchwood.server.v1.GetLeaderboardSettlementRequest\x1a5.torchwood.server.v1.GetLeaderboardSettlementResponse\"I\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x029\x127/v1/server/leaderboards/{board_id}/settlements/{period}\x12\xcf\x01\n" +
+	"\x1aListLeaderboardSettlements\x126.torchwood.server.v1.ListLeaderboardSettlementsRequest\x1a7.torchwood.server.v1.ListLeaderboardSettlementsResponse\"@\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x020\x12./v1/server/leaderboards/{board_id}/settlements\x1a\x06\x92\xb2\x19\x02\b\x03B\xdb\x03\x92A\x96\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
@@ -298,26 +514,39 @@ func file_server_v1_leaderboards_proto_rawDescGZIP() []byte {
 	return file_server_v1_leaderboards_proto_rawDescData
 }
 
-var file_server_v1_leaderboards_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_server_v1_leaderboards_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_server_v1_leaderboards_proto_goTypes = []any{
-	(*SubmitLeaderboardScoreRequest)(nil), // 0: torchwood.server.v1.SubmitLeaderboardScoreRequest
-	(*GetLeaderboardEntryRequest)(nil),    // 1: torchwood.server.v1.GetLeaderboardEntryRequest
-	(*ListLeaderboardTopRequest)(nil),     // 2: torchwood.server.v1.ListLeaderboardTopRequest
-	(*v1.LeaderboardScoreSnapshot)(nil),   // 3: torchwood.shared.v1.LeaderboardScoreSnapshot
-	(*v1.ListLeaderboardTopResponse)(nil), // 4: torchwood.shared.v1.ListLeaderboardTopResponse
+	(*SubmitLeaderboardScoreRequest)(nil),      // 0: torchwood.server.v1.SubmitLeaderboardScoreRequest
+	(*GetLeaderboardEntryRequest)(nil),         // 1: torchwood.server.v1.GetLeaderboardEntryRequest
+	(*ListLeaderboardTopRequest)(nil),          // 2: torchwood.server.v1.ListLeaderboardTopRequest
+	(*GetLeaderboardSettlementRequest)(nil),    // 3: torchwood.server.v1.GetLeaderboardSettlementRequest
+	(*GetLeaderboardSettlementResponse)(nil),   // 4: torchwood.server.v1.GetLeaderboardSettlementResponse
+	(*ListLeaderboardSettlementsRequest)(nil),  // 5: torchwood.server.v1.ListLeaderboardSettlementsRequest
+	(*ListLeaderboardSettlementsResponse)(nil), // 6: torchwood.server.v1.ListLeaderboardSettlementsResponse
+	(*v1.LeaderboardSettlement)(nil),           // 7: torchwood.shared.v1.LeaderboardSettlement
+	(*v1.LeaderboardSettlementGrant)(nil),      // 8: torchwood.shared.v1.LeaderboardSettlementGrant
+	(*v1.LeaderboardScoreSnapshot)(nil),        // 9: torchwood.shared.v1.LeaderboardScoreSnapshot
+	(*v1.ListLeaderboardTopResponse)(nil),      // 10: torchwood.shared.v1.ListLeaderboardTopResponse
 }
 var file_server_v1_leaderboards_proto_depIdxs = []int32{
-	0, // 0: torchwood.server.v1.LeaderboardsService.SubmitLeaderboardScore:input_type -> torchwood.server.v1.SubmitLeaderboardScoreRequest
-	1, // 1: torchwood.server.v1.LeaderboardsService.GetLeaderboardEntry:input_type -> torchwood.server.v1.GetLeaderboardEntryRequest
-	2, // 2: torchwood.server.v1.LeaderboardsService.ListLeaderboardTop:input_type -> torchwood.server.v1.ListLeaderboardTopRequest
-	3, // 3: torchwood.server.v1.LeaderboardsService.SubmitLeaderboardScore:output_type -> torchwood.shared.v1.LeaderboardScoreSnapshot
-	3, // 4: torchwood.server.v1.LeaderboardsService.GetLeaderboardEntry:output_type -> torchwood.shared.v1.LeaderboardScoreSnapshot
-	4, // 5: torchwood.server.v1.LeaderboardsService.ListLeaderboardTop:output_type -> torchwood.shared.v1.ListLeaderboardTopResponse
-	3, // [3:6] is the sub-list for method output_type
-	0, // [0:3] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	7,  // 0: torchwood.server.v1.GetLeaderboardSettlementResponse.settlement:type_name -> torchwood.shared.v1.LeaderboardSettlement
+	8,  // 1: torchwood.server.v1.GetLeaderboardSettlementResponse.grants:type_name -> torchwood.shared.v1.LeaderboardSettlementGrant
+	7,  // 2: torchwood.server.v1.ListLeaderboardSettlementsResponse.settlements:type_name -> torchwood.shared.v1.LeaderboardSettlement
+	0,  // 3: torchwood.server.v1.LeaderboardsService.SubmitLeaderboardScore:input_type -> torchwood.server.v1.SubmitLeaderboardScoreRequest
+	1,  // 4: torchwood.server.v1.LeaderboardsService.GetLeaderboardEntry:input_type -> torchwood.server.v1.GetLeaderboardEntryRequest
+	2,  // 5: torchwood.server.v1.LeaderboardsService.ListLeaderboardTop:input_type -> torchwood.server.v1.ListLeaderboardTopRequest
+	3,  // 6: torchwood.server.v1.LeaderboardsService.GetLeaderboardSettlement:input_type -> torchwood.server.v1.GetLeaderboardSettlementRequest
+	5,  // 7: torchwood.server.v1.LeaderboardsService.ListLeaderboardSettlements:input_type -> torchwood.server.v1.ListLeaderboardSettlementsRequest
+	9,  // 8: torchwood.server.v1.LeaderboardsService.SubmitLeaderboardScore:output_type -> torchwood.shared.v1.LeaderboardScoreSnapshot
+	9,  // 9: torchwood.server.v1.LeaderboardsService.GetLeaderboardEntry:output_type -> torchwood.shared.v1.LeaderboardScoreSnapshot
+	10, // 10: torchwood.server.v1.LeaderboardsService.ListLeaderboardTop:output_type -> torchwood.shared.v1.ListLeaderboardTopResponse
+	4,  // 11: torchwood.server.v1.LeaderboardsService.GetLeaderboardSettlement:output_type -> torchwood.server.v1.GetLeaderboardSettlementResponse
+	6,  // 12: torchwood.server.v1.LeaderboardsService.ListLeaderboardSettlements:output_type -> torchwood.server.v1.ListLeaderboardSettlementsResponse
+	8,  // [8:13] is the sub-list for method output_type
+	3,  // [3:8] is the sub-list for method input_type
+	3,  // [3:3] is the sub-list for extension type_name
+	3,  // [3:3] is the sub-list for extension extendee
+	0,  // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_server_v1_leaderboards_proto_init() }
@@ -332,7 +561,7 @@ func file_server_v1_leaderboards_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_server_v1_leaderboards_proto_rawDesc), len(file_server_v1_leaderboards_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

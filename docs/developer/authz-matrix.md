@@ -12,7 +12,7 @@
 >   SERVER admin 会话（admin_roles）或 API key（scope）；PERMISSION admin 会话
 >   专属（permissions），key 一律拒绝；SYSTEM 预留禁用。
 
-方法总数 223：PUBLIC 28 · END_USER 46 · SERVER 124 · PERMISSION 25 · SYSTEM 0。
+方法总数 229：PUBLIC 28 · END_USER 46 · SERVER 126 · PERMISSION 29 · SYSTEM 0。
 
 ## /torchwood.client.v1.AccountService
 
@@ -150,10 +150,14 @@
 | `/torchwood.console.v1.LeaderboardsService/DeleteLeaderboardEntry` | PERMISSION | owner | — | — | |
 | `/torchwood.console.v1.LeaderboardsService/GetLeaderboardBoard` | PERMISSION | owner, admin | — | — | |
 | `/torchwood.console.v1.LeaderboardsService/GetLeaderboardEntry` | PERMISSION | owner, admin | — | — | |
+| `/torchwood.console.v1.LeaderboardsService/GetLeaderboardSettlement` | PERMISSION | owner, admin | — | — | |
 | `/torchwood.console.v1.LeaderboardsService/ListLeaderboardBoardPeriods` | PERMISSION | owner, admin | — | — | |
 | `/torchwood.console.v1.LeaderboardsService/ListLeaderboardBoards` | PERMISSION | owner, admin | — | — | |
+| `/torchwood.console.v1.LeaderboardsService/ListLeaderboardSettlements` | PERMISSION | owner, admin | — | — | |
 | `/torchwood.console.v1.LeaderboardsService/ListLeaderboardTop` | PERMISSION | owner, admin | — | — | |
+| `/torchwood.console.v1.LeaderboardsService/RerunLeaderboardSettlement` | PERMISSION | owner | — | — | |
 | `/torchwood.console.v1.LeaderboardsService/UpdateLeaderboardBoard` | PERMISSION | owner | — | — | |
+| `/torchwood.console.v1.LeaderboardsService/VoidLeaderboardSettlement` | PERMISSION | owner | — | — | |
 
 ## /torchwood.server.v1.APIKeysService
 
@@ -286,6 +290,8 @@
 | 方法 | Access | Admin 角色档 | Key Scope | 档位 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `/torchwood.server.v1.LeaderboardsService/GetLeaderboardEntry` | SERVER | 不限角色 | leaderboards.read | read_only | |
+| `/torchwood.server.v1.LeaderboardsService/GetLeaderboardSettlement` | SERVER | 不限角色 | leaderboards.read | read_only | |
+| `/torchwood.server.v1.LeaderboardsService/ListLeaderboardSettlements` | SERVER | 不限角色 | leaderboards.read | read_only | |
 | `/torchwood.server.v1.LeaderboardsService/ListLeaderboardTop` | SERVER | 不限角色 | leaderboards.read | read_only | |
 | `/torchwood.server.v1.LeaderboardsService/SubmitLeaderboardScore` | SERVER | admin, owner | leaderboards.write | delegated_platform | |
 

@@ -2,6 +2,7 @@ package leaderboards
 
 import (
 	"context"
+	"fmt"
 
 	domainleaderboards "github.com/torchwoodcloud/torchwood/internal/domain/leaderboards"
 )
@@ -34,6 +35,9 @@ func (a *Leaderboards) CreateBoard(ctx context.Context, in *domainleaderboards.B
 		in.SubjectKind = "user"
 	}
 	if err := domainleaderboards.ValidateBoard(in); err != nil {
+		return nil, mapLeaderboardError(err)
+	}
+	if err := a.validateRewardAssets(ctx, projectID, in.Rewards); err != nil {
 		return nil, mapLeaderboardError(err)
 	}
 	now := a.ts()
@@ -87,6 +91,9 @@ type UpdateBoardCommand struct {
 	PerSubjectLimit  *int32
 	RetentionPeriods *int32
 	SubjectKind      *string
+	// Rewards 整体替换（非 nil 时）；ClearRewards 显式清空。
+	Rewards      *[]domainleaderboards.RewardRule
+	ClearRewards bool
 }
 
 func (a *Leaderboards) UpdateBoard(ctx context.Context, cmd UpdateBoardCommand) (*domainleaderboards.Board, error) {
@@ -158,8 +165,16 @@ func (a *Leaderboards) UpdateBoard(ctx context.Context, cmd UpdateBoardCommand) 
 	if cmd.SubjectKind != nil {
 		b.SubjectKind = *cmd.SubjectKind
 	}
+	if cmd.ClearRewards {
+		b.Rewards = nil
+	} else if cmd.Rewards != nil {
+		b.Rewards = *cmd.Rewards
+	}
 
 	if err := domainleaderboards.ValidateBoard(b); err != nil {
+		return nil, mapLeaderboardError(err)
+	}
+	if err := a.validateRewardAssets(ctx, projectID, b.Rewards); err != nil {
 		return nil, mapLeaderboardError(err)
 	}
 	b.UpdatedAt = a.ts()
@@ -180,6 +195,24 @@ func (a *Leaderboards) DeleteBoard(ctx context.Context, boardID string) error {
 	}
 	if err := a.boards.Delete(ctx, projectID, boardID); err != nil {
 		return mapLeaderboardError(err)
+	}
+	return nil
+}
+
+// validateRewardAssets 校验规则引用的资产定义存在（保存时校验；封榜前被
+// 删则结算明细落 failed 可见，重跑前修复 def 即可）。
+func (a *Leaderboards) validateRewardAssets(ctx context.Context, projectID string, rules []domainleaderboards.RewardRule) error {
+	if a.defs == nil || len(rules) == 0 {
+		return nil
+	}
+	for i, r := range rules {
+		def, err := a.defs.GetByCode(ctx, projectID, r.AssetCode)
+		if err != nil {
+			return err
+		}
+		if def == nil {
+			return fmt.Errorf("%w: rewards[%d].asset_code %q not found", domainleaderboards.ErrInvalidConfig, i, r.AssetCode)
+		}
 	}
 	return nil
 }

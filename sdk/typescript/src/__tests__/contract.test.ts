@@ -312,6 +312,8 @@ const RPC_TO_METHOD: Record<string, Record<string, string>> = {
     SubmitLeaderboardScore: "submitLeaderboardScore",
     GetLeaderboardEntry: "getLeaderboardEntry",
     ListLeaderboardTop: "listLeaderboardTop",
+    GetLeaderboardSettlement: "getLeaderboardSettlement",
+    ListLeaderboardSettlements: "listLeaderboardSettlements",
   },
   "client.PaymentsService": {
     CreateOrder: "createOrder",

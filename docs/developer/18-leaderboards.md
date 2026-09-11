@@ -1,7 +1,8 @@
 # 18. Leaderboards（排行榜）
 
 > 面向后端开发者与游戏/通用消费方。来源：graviton-games dogfooding 提案
-> （2026-09-11）评审定型；Phase 1 已落地，Phase 2（声明式结榜发奖）另期。
+> （2026-09-11）评审定型；Phase 1（提交/分位/top/封榜/tie-break）与 Phase 2
+> （声明式结榜发奖）均已落地。
 > 竞品定位与通用化论证见提案归档与 `docs/design/economy-client-write-competitive-analysis.md`。
 
 ## 1 模型
@@ -27,6 +28,7 @@ client 面"替战队提交"的成员校权，v2 接缝）；值是 `value`（int
 | `per_subject_submit_limit` | 100（缺省），1..10000 | 每期每主体提交次数（受理即计数，含 best 策略下的同分重放） |
 | `retention_periods` | 0 = 永久（缺省，不默认删数据） | 保留最近 N 期，worker 每 30min 清理更早的期 |
 | `subject_kind` | `"user"`（缺省） | 纯展示提示（console 是否链到用户详情），无语义 |
+| `rewards[]` | 空（缺省） | 声明式奖励规则（§6，Phase 2）；≤20 条 |
 
 **Entry（条目）**：`(board_id, period_key, subject_id, value, tiebreak_value,
 submit_count, updated_at)`，表主键即模型内建去重——一主体一期一条。
@@ -116,16 +118,33 @@ total（分位是建议性读数）。并发正确性由唯一键 + 行锁保证
 season / 手动期 / 自定义 interval 是 v2 接缝：存储只见不透明 `period_key`，
 扩展只是新增推导函数。
 
-## 6 Phase 2：结榜发奖（已定型未实现）
+## 6 Phase 2：结榜发奖（已落地）
 
-声明式 `rewards[]`（名次区间含端点 / `value_min` 门槛 + asset + amount，
-≤20 条，封榜时快照冻结）+ worker 按状态扫描结算（`open → sealed → settling
-→ settled`，旁路 `voided`）+ 逐 `(rule, subject)` 以派生幂等键
-`lbsettle:{board}:{period}:{rule_index}:{subject}` 走 Assets Grant——
-at-least-once 执行、exactly-once 效果，对账复用 Assets Reconcile。奖励边界
-跟随 `tie_break`（parallel → rank 含端点；earliest/latest → position 截断）。
-`rewards` 要求 `period.kind ≠ none`。作弊窗口 = 宽限期；seal 后只能 void 或
-手工 consume 追回。`on_settled` 函数触发（通知/自定义逻辑逃生通道）v1.5。
+**声明式 rewards**（board 配置，console 编辑）：每条规则 = 名次区间（含端点）
++ `value_min` 门槛 + `asset_code` + `amount`，≤20 条，可叠加命中；要求
+`period.kind != none`，保存时校验 asset def 存在。边界语义跟随 `tie_break`：
+`parallel` → rank 含端点（并列第 rank_max 也发）；`earliest/latest` →
+position 截断（先达到者占位）。
+
+**结算执行**（worker `leaderboards-settler`，1min 状态扫描——已封榜
+（period_key < 上一期）且无结算行的期；停机自动补算）：
+
+- 状态机 `settling → settled`（旁路 `voided`；error 仅基础设施失败）。
+- 逐 `(rule, subject)` 以派生幂等键 `lbsettle:{board}:{period}:{rule_index}:{subject}`
+  走 Assets Grant（system 主体，ledger `ref_type=leaderboard_settlement`）——
+  at-least-once 执行、exactly-once 效果；对账复用 Assets Reconcile。
+- **单笔失败不阻断整期**：失败明细记 `failed`（含错误），期照常 settled；
+  console 重跑只补发非 granted 明细（幂等键保证不双发），全发放时为空操作。
+- 规则快照落 `leaderboard_settlements.rules_snapshot`（认领时冻结）；
+  结算行不随条目 retention 清理（钱的记录不走数据保留策略）。
+- **奖励延迟 = 一个宽限期**（daily 榜期结束后 24h）——"补传也算分"的公平性。
+- 作弊窗口 = 宽限期：seal 前 console 删条目即可；seal 后只能 void（未发放
+  部分）或手工 consume 追回（已发放）。
+
+**面**：console（结算列表/明细/void/重跑 + board 表单 rewards 编辑器）、
+server 面只读 `GetLeaderboardSettlement` / `ListLeaderboardSettlements`
+（`leaderboards.read`）。`on_settled` 函数触发（通知/自定义逻辑逃生通道）
+仍为 v1.5 接缝。
 
 ## 7 Console
 

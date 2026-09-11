@@ -66,7 +66,7 @@ func (r *boardRepo) Get(ctx context.Context, projectID, boardID string) (*leader
 var leaderboardBoardUpdateColumns = []string{
 	"sort", "tiebreak_order", "tie_break", "period_kind", "period_tz", "policy",
 	"value_min", "value_max", "client_submit", "per_subject_limit",
-	"retention_periods", "subject_kind", "updated_at",
+	"retention_periods", "subject_kind", "rewards", "updated_at",
 }
 
 func (r *boardRepo) Update(ctx context.Context, b *leaderboards.Board) error {
@@ -510,6 +510,7 @@ func mapBoardToModel(b *leaderboards.Board) *model.LeaderboardBoard {
 		PerSubjectLimit:  b.PerSubjectLimit,
 		RetentionPeriods: b.RetentionPeriods,
 		SubjectKind:      b.SubjectKind,
+		Rewards:          leaderboards.MarshalRewardRules(b.Rewards),
 		CreatedAt:        b.CreatedAt,
 		UpdatedAt:        b.UpdatedAt,
 	}
@@ -537,6 +538,13 @@ func mapBoardToDomain(m *model.LeaderboardBoard) *leaderboards.Board {
 		SubjectKind:      m.SubjectKind,
 		CreatedAt:        m.CreatedAt,
 		UpdatedAt:        m.UpdatedAt,
+	}
+	// rewards 反序列化失败不致命：按无奖励处理（结算以 Settlement 内的
+	// 规则快照为准）。
+	if len(m.Rewards) > 0 {
+		if rules, err := leaderboards.UnmarshalRewardRules(m.Rewards); err == nil {
+			b.Rewards = rules
+		}
 	}
 	if m.TiebreakOrder != nil {
 		v := leaderboards.SortDirection(*m.TiebreakOrder)
@@ -571,4 +579,122 @@ func mapEntryToDomain(m *model.LeaderboardEntry) *leaderboards.Entry {
 		CreatedAt:     m.CreatedAt,
 		UpdatedAt:     m.UpdatedAt,
 	}
+}
+
+// winnerRow 是 ListRewardWinners 的扫描目标。
+type winnerRow struct {
+	SubjectID     string    `bun:"subject_id"`
+	Value         int64     `bun:"value"`
+	TiebreakValue *int64    `bun:"tiebreak_value"`
+	SubmitCount   int32     `bun:"submit_count"`
+	CreatedAt     time.Time `bun:"created_at"`
+	UpdatedAt     time.Time `bun:"updated_at"`
+}
+
+func (r *entryRepo) ListRewardWinners(ctx context.Context, b *leaderboards.Board, periodKey string, rule leaderboards.RewardRule, limit int) ([]leaderboards.Entry, error) {
+	ctx2, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	conn, _, _, err := Scoped(ctx2, r.db, b.ProjectID, "leaderboard_entries", "le")
+	if err != nil {
+		return nil, err
+	}
+	table, err := ProjectQuoted(b.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	table += ".leaderboard_entries"
+	if limit <= 0 {
+		limit = 10000
+	}
+
+	full := fullOrderExpr(b)
+	// 边界语义跟随 tie_break：parallel → rank 含端点（并列第 rank_max 也发）；
+	// earliest/latest → position 截断（先达到者占位）。
+	ordinal := "rank_num"
+	if b.TieBreak == leaderboards.TieBreakEarliest || b.TieBreak == leaderboards.TieBreakLatest {
+		ordinal = "position_num"
+	}
+	conds := make([]string, 0, 3)
+	params := make([]any, 0, 8)
+	if rule.RankMin != nil || rule.RankMax != nil {
+		if rule.RankMin != nil {
+			conds = append(conds, fmt.Sprintf("%s >= ?", ordinal))
+			params = append(params, *rule.RankMin)
+		} else {
+			conds = append(conds, fmt.Sprintf("%s >= 1", ordinal))
+		}
+		if rule.RankMax != nil {
+			conds = append(conds, fmt.Sprintf("%s <= ?", ordinal))
+			params = append(params, *rule.RankMax)
+		}
+	}
+	if rule.ValueMin != nil {
+		conds = append(conds, "value >= ?")
+		params = append(params, *rule.ValueMin)
+	}
+	where := "TRUE"
+	if len(conds) > 0 {
+		where = strings.Join(conds, " AND ")
+	}
+
+	q := fmt.Sprintf(
+		"SELECT w.subject_id, w.value, w.tiebreak_value, w.submit_count, w.created_at, w.updated_at FROM ("+
+			"SELECT le.subject_id, le.value, le.tiebreak_value, le.submit_count, le.created_at, le.updated_at, "+
+			"RANK() OVER (ORDER BY le.value %s) AS rank_num, "+
+			"ROW_NUMBER() OVER (ORDER BY %s) AS position_num "+
+			"FROM %s le WHERE le.project_id = ? AND le.board_id = ? AND le.period_key = ?"+
+			") w WHERE %s ORDER BY w.rank_num, w.position_num LIMIT ?",
+		sortDirSQL(b.Sort), full, table, where,
+	)
+	params = append([]any{b.ProjectID, b.ID, periodKey}, params...)
+	params = append(params, limit)
+
+	var rows []winnerRow
+	if err := conn.NewRaw(q, params...).Scan(ctx2, &rows); err != nil {
+		return nil, err
+	}
+	out := make([]leaderboards.Entry, len(rows))
+	for i := range rows {
+		out[i] = leaderboards.Entry{
+			ProjectID:     b.ProjectID,
+			BoardID:       b.ID,
+			PeriodKey:     periodKey,
+			SubjectID:     rows[i].SubjectID,
+			Value:         rows[i].Value,
+			TiebreakValue: rows[i].TiebreakValue,
+			SubmitCount:   rows[i].SubmitCount,
+			CreatedAt:     rows[i].CreatedAt,
+			UpdatedAt:     rows[i].UpdatedAt,
+		}
+	}
+	return out, nil
+}
+
+func (r *entryRepo) ListSettlablePeriods(ctx context.Context, projectID, boardID, previousKey string, limit int) ([]string, error) {
+	ctx2, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	conn, _, _, err := Scoped(ctx2, r.db, projectID, "leaderboard_entries", "le")
+	if err != nil {
+		return nil, err
+	}
+	entriesTable, err := ProjectQuoted(projectID)
+	if err != nil {
+		return nil, err
+	}
+	settlementsTable := entriesTable + ".leaderboard_settlements"
+	entriesTable += ".leaderboard_entries"
+	if limit <= 0 {
+		limit = 50
+	}
+	q := fmt.Sprintf(
+		"SELECT DISTINCT le.period_key FROM %s le WHERE le.project_id = ? AND le.board_id = ? AND le.period_key < ? "+
+			"AND NOT EXISTS (SELECT 1 FROM %s ls WHERE ls.board_id = le.board_id AND ls.period_key = le.period_key) "+
+			"ORDER BY le.period_key DESC LIMIT ?",
+		entriesTable, settlementsTable,
+	)
+	var keys []string
+	if err := conn.NewRaw(q, projectID, boardID, previousKey, limit).Scan(ctx2, &keys); err != nil {
+		return nil, err
+	}
+	return keys, nil
 }

@@ -58,6 +58,80 @@
         ]
       }
     },
+    "/v1/server/leaderboards/{board_id}/settlements": {
+      "get": {
+        "operationId": "LeaderboardsService_ListLeaderboardSettlements",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/torchwoodserverv1ListLeaderboardSettlementsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "board_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      }
+    },
+    "/v1/server/leaderboards/{board_id}/settlements/{period}": {
+      "get": {
+        "summary": "—— Phase 2：结算读（发奖明细 = 用户资产 ledger 的 leaderboard_settlement\n引用视图；写操作只有 worker 与 console）——",
+        "operationId": "LeaderboardsService_GetLeaderboardSettlement",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/torchwoodserverv1GetLeaderboardSettlementResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "board_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "period",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      }
+    },
     "/v1/server/leaderboards/{board_id}/top": {
       "get": {
         "operationId": "LeaderboardsService_ListLeaderboardTop",
@@ -147,6 +221,21 @@
     }
   },
   "definitions": {
+    "torchwoodserverv1GetLeaderboardSettlementResponse": {
+      "type": "object",
+      "properties": {
+        "settlement": {
+          "$ref": "#/definitions/v1LeaderboardSettlement"
+        },
+        "grants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LeaderboardSettlementGrant"
+          }
+        }
+      }
+    },
     "torchwoodserverv1LeaderboardsServiceSubmitLeaderboardScoreBody": {
       "type": "object",
       "properties": {
@@ -170,6 +259,18 @@
         }
       },
       "title": "SubmitLeaderboardScoreRequest：server 面可代任意 subject 提交（函数/\n运营/自动化）。request_id 走 (project, actor, request_id) 24h 幂等——\n网络层重试不重复烧 per-subject 限频额度。"
+    },
+    "torchwoodserverv1ListLeaderboardSettlementsResponse": {
+      "type": "object",
+      "properties": {
+        "settlements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LeaderboardSettlement"
+          }
+        }
+      }
     },
     "v1Error": {
       "type": "object",
@@ -255,6 +356,31 @@
       },
       "title": "LeaderboardEntry 是排行榜条目：唯一键 (board, period, subject) 内建去重。"
     },
+    "v1LeaderboardRewardRule": {
+      "type": "object",
+      "properties": {
+        "rank_min": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "rank_max": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "value_min": {
+          "type": "string",
+          "format": "int64"
+        },
+        "asset_code": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "string",
+          "format": "int64"
+        }
+      },
+      "title": "LeaderboardRewardRule 是声明式奖励规则（Phase 2 结算执行）：名次区间\n（含端点，边界语义跟随 tie_break：parallel=rank 含端点，earliest/latest=\nposition 截断）与 value 门槛可叠加；多规则独立评估、可叠加命中。"
+    },
     "v1LeaderboardScoreSnapshot": {
       "type": "object",
       "properties": {
@@ -285,6 +411,85 @@
         }
       },
       "title": "LeaderboardScoreSnapshot 是 submit / me / getEntry 的统一响应：\nrank = competition（并列同名次）；position = 全序位次（tie-break 决出）；\nbelow = value 严格低于我的人数（百分位分子，不受 tie-break 影响）。\n无条目时 entry/rank/position/below 缺省，total 仍返回。"
+    },
+    "v1LeaderboardSettlement": {
+      "type": "object",
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "period": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "sealed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "settled_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "entry_count": {
+          "type": "string",
+          "format": "int64"
+        },
+        "grant_count": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "error": {
+          "type": "string"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LeaderboardRewardRule"
+          }
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "title": "LeaderboardSettlement 是结榜发奖记录（期粒度，不随条目 retention 清理）。\nstatus: settling | settled | error | voided。"
+    },
+    "v1LeaderboardSettlementGrant": {
+      "type": "object",
+      "properties": {
+        "rule_index": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "subject_id": {
+          "type": "string"
+        },
+        "asset_code": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "string",
+          "format": "int64"
+        },
+        "idempotency_key": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "title": "pending | granted | failed | voided"
+        },
+        "error": {
+          "type": "string"
+        }
+      },
+      "title": "LeaderboardSettlementGrant 是发放明细（重跑账本：failed 行重跑补发，\ngranted 行幂等跳过）。"
     },
     "v1LeaderboardTopEntry": {
       "type": "object",

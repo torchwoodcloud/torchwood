@@ -133,6 +133,36 @@ service LeaderboardsService {
       permissions: ["owner"]
     };
   }
+
+  // —— Phase 2：结榜发奖（settled 拒绝 void/rerun；作弊处理窗口 = 宽限期）——
+  rpc GetLeaderboardSettlement(GetLeaderboardSettlementRequest) returns (GetLeaderboardSettlementResponse) {
+    option (google.api.http) = { get: "/v1/console/leaderboards/boards/{board_id}/settlements/{period}" };
+    option (torchwood.shared.v1.method_auth) = {
+      access: ACCESS_PERMISSION
+      permissions: ["owner", "admin"]
+    };
+  }
+  rpc ListLeaderboardSettlements(ListLeaderboardSettlementsRequest) returns (ListLeaderboardSettlementsResponse) {
+    option (google.api.http) = { get: "/v1/console/leaderboards/boards/{board_id}/settlements" };
+    option (torchwood.shared.v1.method_auth) = {
+      access: ACCESS_PERMISSION
+      permissions: ["owner", "admin"]
+    };
+  }
+  rpc VoidLeaderboardSettlement(VoidLeaderboardSettlementRequest) returns (LeaderboardSettlementAck) {
+    option (google.api.http) = { post: "/v1/console/leaderboards/boards/{board_id}/settlements/{period}:void" };
+    option (torchwood.shared.v1.method_auth) = {
+      access: ACCESS_PERMISSION
+      permissions: ["owner"]
+    };
+  }
+  rpc RerunLeaderboardSettlement(RerunLeaderboardSettlementRequest) returns (LeaderboardSettlementAck) {
+    option (google.api.http) = { post: "/v1/console/leaderboards/boards/{board_id}/settlements/{period}:rerun" };
+    option (torchwood.shared.v1.method_auth) = {
+      access: ACCESS_PERMISSION
+      permissions: ["owner"]
+    };
+  }
 }
 
 message CreateLeaderboardBoardRequest {
@@ -158,6 +188,7 @@ message CreateLeaderboardBoardRequest {
   int32 per_subject_submit_limit = 11;
   int32 retention_periods = 12;
   string subject_kind = 13;
+  repeated shared.v1.LeaderboardRewardRule rewards = 14;
 }
 
 message ListLeaderboardBoardsRequest {}
@@ -189,6 +220,9 @@ message UpdateLeaderboardBoardRequest {
   optional int32 per_subject_submit_limit = 13;
   optional int32 retention_periods = 14;
   optional string subject_kind = 15;
+  // 非空 = 整体替换；clear_rewards = true 显式清空
+  repeated shared.v1.LeaderboardRewardRule rewards = 16;
+  bool clear_rewards = 17;
 }
 
 message DeleteLeaderboardBoardRequest {
@@ -222,3 +256,34 @@ message DeleteLeaderboardEntryRequest {
   string subject_id = 2 [(buf.validate.field).required = true];
   string period = 3 [(buf.validate.field).required = true];
 }
+
+message GetLeaderboardSettlementRequest {
+  string board_id = 1 [(buf.validate.field).required = true];
+  string period = 2 [(buf.validate.field).required = true];
+}
+
+message GetLeaderboardSettlementResponse {
+  shared.v1.LeaderboardSettlement settlement = 1;
+  repeated shared.v1.LeaderboardSettlementGrant grants = 2;
+}
+
+message ListLeaderboardSettlementsRequest {
+  string board_id = 1 [(buf.validate.field).required = true];
+  int32 limit = 2 [(buf.validate.field).int32 = { gte: 0, lte: 200 }];
+}
+
+message ListLeaderboardSettlementsResponse {
+  repeated shared.v1.LeaderboardSettlement settlements = 1;
+}
+
+message VoidLeaderboardSettlementRequest {
+  string board_id = 1 [(buf.validate.field).required = true];
+  string period = 2 [(buf.validate.field).required = true];
+}
+
+message RerunLeaderboardSettlementRequest {
+  string board_id = 1 [(buf.validate.field).required = true];
+  string period = 2 [(buf.validate.field).required = true];
+}
+
+message LeaderboardSettlementAck {}

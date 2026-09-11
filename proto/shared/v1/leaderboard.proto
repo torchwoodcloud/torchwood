@@ -33,6 +33,8 @@ message LeaderboardBoard {
   int32 retention_periods = 12;
   // 纯展示提示（console 是否把 subject 链到用户详情），无语义
   string subject_kind = 13;
+  // 声明式奖励规则（Phase 2）：要求 period_kind != none
+  repeated LeaderboardRewardRule rewards = 16;
   google.protobuf.Timestamp created_at = 14;
   google.protobuf.Timestamp updated_at = 15;
 }
@@ -79,4 +81,44 @@ message ListLeaderboardTopResponse {
   int64 total = 2;
   repeated LeaderboardTopEntry entries = 3;
   string next_page_token = 4;
+}
+
+// LeaderboardRewardRule 是声明式奖励规则（Phase 2 结算执行）：名次区间
+// （含端点，边界语义跟随 tie_break：parallel=rank 含端点，earliest/latest=
+// position 截断）与 value 门槛可叠加；多规则独立评估、可叠加命中。
+message LeaderboardRewardRule {
+  optional int32 rank_min = 1;
+  optional int32 rank_max = 2;
+  optional int64 value_min = 3;
+  string asset_code = 4;
+  int64 amount = 5;
+}
+
+// LeaderboardSettlementGrant 是发放明细（重跑账本：failed 行重跑补发，
+// granted 行幂等跳过）。
+message LeaderboardSettlementGrant {
+  int32 rule_index = 1;
+  string subject_id = 2;
+  string asset_code = 3;
+  int64 amount = 4;
+  string idempotency_key = 5;
+  // pending | granted | failed | voided
+  string status = 6;
+  string error = 7;
+}
+
+// LeaderboardSettlement 是结榜发奖记录（期粒度，不随条目 retention 清理）。
+// status: settling | settled | error | voided。
+message LeaderboardSettlement {
+  string board_id = 1;
+  string period = 2;
+  string status = 3;
+  google.protobuf.Timestamp sealed_at = 4;
+  optional google.protobuf.Timestamp settled_at = 5;
+  int64 entry_count = 6;
+  int32 grant_count = 7;
+  string error = 8;
+  repeated LeaderboardRewardRule rules = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
 }

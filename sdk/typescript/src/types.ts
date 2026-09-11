@@ -651,3 +651,38 @@ export interface SubmitLeaderboardScoreInput {
   /** (project, actor, request_id) 24h 幂等——网络重试不烧限频额度。 */
   request_id?: string;
 }
+
+/** 奖励规则（Phase 2）：名次区间（含端点，边界语义跟随 tie_break）+ value 门槛。 */
+export interface LeaderboardRewardRule {
+  rank_min?: number;
+  rank_max?: number;
+  value_min?: Int64String;
+  asset_code: string;
+  amount: Int64String;
+}
+
+/** 结算记录（期粒度）：status = settling | settled | error | voided。 */
+export interface LeaderboardSettlement {
+  board_id: string;
+  period: string;
+  status: string;
+  sealed_at?: string;
+  settled_at?: string;
+  entry_count?: number;
+  grant_count?: number;
+  error?: string;
+  rules?: LeaderboardRewardRule[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** 发放明细（重跑账本）：status = pending | granted | failed | voided。 */
+export interface LeaderboardSettlementGrant {
+  rule_index: number;
+  subject_id: string;
+  asset_code: string;
+  amount: Int64String;
+  idempotency_key: string;
+  status: string;
+  error?: string;
+}

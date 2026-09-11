@@ -48,6 +48,14 @@ export const LEADERBOARD_TIE_BREAKS = ["parallel", "earliest", "latest"] as cons
 export const LEADERBOARD_PERIOD_KINDS = ["daily", "weekly", "monthly", "none"] as const;
 export const LEADERBOARD_POLICIES = ["best", "latest", "sum"] as const;
 
+export interface LeaderboardRewardRule {
+  rank_min?: number;
+  rank_max?: number;
+  value_min?: string;
+  asset_code: string;
+  amount: string;
+}
+
 export interface CreateBoardInput {
   id: string;
   sort?: string;
@@ -62,6 +70,7 @@ export interface CreateBoardInput {
   per_subject_submit_limit?: number;
   retention_periods?: number;
   subject_kind?: string;
+  rewards?: LeaderboardRewardRule[];
 }
 
 export async function listBoards(): Promise<LeaderboardBoard[]> {
@@ -143,5 +152,62 @@ export async function deleteBoardEntry(
   await api.delete(
     `/console/leaderboards/boards/${encodeURIComponent(boardId)}/entries/${encodeURIComponent(subjectId)}`,
     { params: { period } }
+  );
+}
+
+export interface LeaderboardSettlement {
+  board_id: string;
+  period: string;
+  status: string;
+  sealed_at?: string;
+  settled_at?: string;
+  entry_count?: number;
+  grant_count?: number;
+  error?: string;
+  rules?: LeaderboardRewardRule[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface LeaderboardSettlementGrant {
+  rule_index: number;
+  subject_id: string;
+  asset_code: string;
+  amount: string;
+  idempotency_key: string;
+  status: string;
+  error?: string;
+}
+
+export async function listSettlements(
+  boardId: string,
+  limit?: number
+): Promise<LeaderboardSettlement[]> {
+  const res = await api.get<{ settlements: LeaderboardSettlement[] }>(
+    `/console/leaderboards/boards/${encodeURIComponent(boardId)}/settlements`,
+    { params: { limit } }
+  );
+  return res.data.settlements ?? [];
+}
+
+export async function getSettlement(
+  boardId: string,
+  period: string
+): Promise<{ settlement: LeaderboardSettlement; grants: LeaderboardSettlementGrant[] }> {
+  const res = await api.get(
+    `/console/leaderboards/boards/${encodeURIComponent(boardId)}/settlements/${encodeURIComponent(period)}`
+  );
+  return res.data;
+}
+
+export async function voidSettlement(boardId: string, period: string): Promise<void> {
+  await api.post(
+    `/console/leaderboards/boards/${encodeURIComponent(boardId)}/settlements/${encodeURIComponent(period)}:void`
+  );
+}
+
+export async function rerunSettlement(boardId: string, period: string): Promise<void> {
+  await api.post(
+    `/console/leaderboards/boards/${encodeURIComponent(boardId)}/settlements/${encodeURIComponent(period)}:rerun`
   );
 }

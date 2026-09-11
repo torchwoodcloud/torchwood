@@ -42,6 +42,7 @@ var ProviderSet = wire.NewSet(
 	payments.NewPayments,
 	assets.NewAssets,
 	leaderboards.NewLeaderboards,
+	leaderboards.NewAssetsRewardGranter,
 	subscriptions.NewSubscriptions,
 	subscriptions.NewOrderFulfiller,
 	wire.Bind(new(domainpayments.SubscriptionCallbackHandler), new(*subscriptions.Subscriptions)),

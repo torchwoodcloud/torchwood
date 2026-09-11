@@ -25,3 +25,11 @@ func (s *LeaderboardsService) GetLeaderboardEntry(ctx context.Context, boardID, 
 func (s *LeaderboardsService) ListLeaderboardTop(ctx context.Context, req *serverv1.ListLeaderboardTopRequest) (*sharedv1.ListLeaderboardTopResponse, error) {
 	return s.api.ListLeaderboardTop(ctx, req)
 }
+
+func (s *LeaderboardsService) GetLeaderboardSettlement(ctx context.Context, boardID, period string) (*serverv1.GetLeaderboardSettlementResponse, error) {
+	return s.api.GetLeaderboardSettlement(ctx, &serverv1.GetLeaderboardSettlementRequest{BoardId: boardID, Period: period})
+}
+
+func (s *LeaderboardsService) ListLeaderboardSettlements(ctx context.Context, req *serverv1.ListLeaderboardSettlementsRequest) (*serverv1.ListLeaderboardSettlementsResponse, error) {
+	return s.api.ListLeaderboardSettlements(ctx, req)
+}

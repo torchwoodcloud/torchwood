@@ -140,7 +140,7 @@ func TestRetentionCutoffKey(t *testing.T) {
 	}
 }
 
-func int64Ptr(v int64) *int64 { return &v }
+func int64Ptr(v int64) *int64               { return &v }
 func dirPtr(d SortDirection) *SortDirection { return &d }
 
 func TestMergeSubmitBest(t *testing.T) {

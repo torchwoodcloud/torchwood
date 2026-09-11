@@ -8,11 +8,11 @@ import (
 	"time"
 
 	domainleaderboards "github.com/torchwoodcloud/torchwood/internal/domain/leaderboards"
-	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
+	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -27,6 +27,9 @@ func newTestUC(t *testing.T) (*Leaderboards, string, context.Context, context.Co
 		db,
 		bunrepo.NewLeaderboardBoardRepository(db),
 		bunrepo.NewLeaderboardEntryRepository(db),
+		bunrepo.NewLeaderboardSettlementRepository(db),
+		nil,
+		nil,
 		bunrepo.NewIdempotencyStore(db),
 		nil,
 		bunrepo.NewProjectRepository(db),
@@ -54,18 +57,18 @@ func userCtx(ctx context.Context, projectID, userID string) context.Context {
 func guesspicBoard() *domainleaderboards.Board {
 	min, max := int64(0), int64(3080)
 	return &domainleaderboards.Board{
-		ID:              "daily_final",
-		Sort:            domainleaderboards.SortDesc,
-		TieBreak:        domainleaderboards.TieBreakParallel,
-		Policy:          domainleaderboards.PolicyBest,
-		PeriodKind:      domainleaderboards.PeriodDaily,
-		PeriodTZ:        "Asia/Shanghai",
-		ValueMin:        &min,
-		ValueMax:        &max,
-		ClientSubmit:    true,
-		PerSubjectLimit: 20,
+		ID:               "daily_final",
+		Sort:             domainleaderboards.SortDesc,
+		TieBreak:         domainleaderboards.TieBreakParallel,
+		Policy:           domainleaderboards.PolicyBest,
+		PeriodKind:       domainleaderboards.PeriodDaily,
+		PeriodTZ:         "Asia/Shanghai",
+		ValueMin:         &min,
+		ValueMax:         &max,
+		ClientSubmit:     true,
+		PerSubjectLimit:  20,
 		RetentionPeriods: 90,
-		SubjectKind:     "user",
+		SubjectKind:      "user",
 	}
 }
 
@@ -109,7 +112,10 @@ func TestIntegration_SubmitMidThenFinal(t *testing.T) {
 	}
 
 	// 再来两个较低分的玩家，然后 u1 终局提分。
-	for _, s := range []struct{ sub string; val int64 }{{"u2", 500}, {"u3", 1499}} {
+	for _, s := range []struct {
+		sub string
+		val int64
+	}{{"u2", 500}, {"u3", 1499}} {
 		if _, _, err := uc.Submit(admin, SubmitCommand{BoardID: "daily_final", SubjectID: s.sub, Value: s.val}); err != nil {
 			t.Fatal(err)
 		}
