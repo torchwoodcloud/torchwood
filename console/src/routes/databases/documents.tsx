@@ -41,7 +41,7 @@ import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { JsonEditor } from "@/components/ui/json-editor";
 import {
   Dialog,
   DialogContent,
@@ -311,13 +311,16 @@ function BulkUpdateDialog({
           }}
           className="space-y-4"
         >
-          <FormField
-            id="bulk-json"
-            label="字段 (JSON)"
-            value={json}
-            onChange={setJson}
-            placeholder='{"status":"published"}'
-          />
+          <div className="space-y-2">
+            <Label htmlFor="bulk-json">字段 (JSON)</Label>
+            <JsonEditor
+              id="bulk-json"
+              value={json}
+              onChange={setJson}
+              minHeightClass="min-h-[160px]"
+              maxHeightClass="max-h-[50vh]"
+            />
+          </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               取消
@@ -381,13 +384,14 @@ function DocumentFormFields({
 }) {
   if (attributes.length === 0) {
     return (
-      <FormField
-        id="payload"
-        label="Data (JSON)"
-        value={values.__json ?? "{}"}
-        onChange={(v) => onChange("__json", v)}
-        placeholder='{"title":"Hello"}'
-      />
+      <div className="space-y-2">
+        <Label htmlFor="payload">Data (JSON)</Label>
+        <JsonEditor
+          id="payload"
+          value={values.__json ?? "{}"}
+          onChange={(v) => onChange("__json", v)}
+        />
+      </div>
     );
   }
 
@@ -399,24 +403,24 @@ function DocumentFormFields({
             <Label htmlFor={attr.key}>
               {attr.key} ({attr.type})
             </Label>
-            <Textarea
+            <JsonEditor
               id={attr.key}
               value={values[attr.key] ?? ""}
-              onChange={(e) => onChange(attr.key, e.target.value)}
+              onChange={(v) => onChange(attr.key, v)}
               required={attr.required}
-              className="font-mono min-h-[140px]"
             />
           </div>
         ) : (
-          <FormField
-            key={attr.key}
-            id={attr.key}
-            label={`${attr.key} (${attr.type})`}
-            value={values[attr.key] ?? ""}
-            onChange={(v) => onChange(attr.key, v)}
-            required={attr.required}
-            type={attr.type === "integer" || attr.type === "float" ? "number" : "text"}
-          />
+          <div key={attr.key} className="max-w-lg">
+            <FormField
+              id={attr.key}
+              label={`${attr.key} (${attr.type})`}
+              value={values[attr.key] ?? ""}
+              onChange={(v) => onChange(attr.key, v)}
+              required={attr.required}
+              type={attr.type === "integer" || attr.type === "float" ? "number" : "text"}
+            />
+          </div>
         )
       )}
     </>
@@ -484,6 +488,7 @@ export function DocumentNewPage() {
       loading={create.isPending}
       submitLabel="创建"
       submitDisabled={!canWrite(role)}
+      formClassName="space-y-4 max-w-3xl"
       onSubmit={(e) => {
         e.preventDefault();
         create.mutate();
@@ -609,7 +614,7 @@ export function DocumentDetailPage() {
               e.preventDefault();
               save.mutate();
             }}
-            className="space-y-4 max-w-lg"
+            className="space-y-4"
           >
             <DocumentFormFields
               attributes={collection.attributes}
@@ -617,7 +622,7 @@ export function DocumentDetailPage() {
               onChange={(key, value) => setValues((prev) => ({ ...prev, [key]: value }))}
             />
             {collection.attributes.some((a) => a.type === "integer" || a.type === "float") && (
-              <div className="rounded-lg border p-4 space-y-3">
+              <div className="rounded-lg border p-4 space-y-3 max-w-lg">
                 <p className="text-sm font-medium">字段自增</p>
                 <p className="text-xs text-muted-foreground">
                   对数值字段做原子增减，不覆盖当前值；保存后立即生效（增量必须为整数）。

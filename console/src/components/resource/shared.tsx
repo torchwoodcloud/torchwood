@@ -18,6 +18,7 @@ export function FormPageWrapper({
   loading,
   submitLabel = "保存",
   submitDisabled,
+  formClassName = "space-y-4 max-w-lg",
   children,
 }: {
   title: string;
@@ -28,13 +29,14 @@ export function FormPageWrapper({
   loading?: boolean;
   submitLabel?: string;
   submitDisabled?: boolean;
+  formClassName?: string;
   children: React.ReactNode;
 }) {
   return (
     <FormPage title={title} description={description} backTo={backTo} backLabel={backLabel}>
       <Card>
         <CardContent className="pt-6">
-          <form onSubmit={onSubmit} className="space-y-4 max-w-lg">
+          <form onSubmit={onSubmit} className={formClassName}>
             {children}
             <Button type="submit" disabled={loading || submitDisabled}>
               {loading ? "保存中..." : submitLabel}
