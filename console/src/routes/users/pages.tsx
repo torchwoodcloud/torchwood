@@ -364,6 +364,13 @@ export function UserDetailPage() {
       backTo="/console/users"
       actions={
         <div className="flex gap-2">
+          {/* 行为轨迹：Analytics 读方法对 Console admin 全角色开放（viewer 含），
+              不做角色 gating（docs/design/analytics.md §4.1/§9）。 */}
+          <Button asChild size="sm" variant="outline">
+            <Link to={`/console/analytics/users/${encodeURIComponent(user.id)}`}>
+              行为轨迹
+            </Link>
+          </Button>
           {platformAdmin && (
             <Button asChild size="sm" variant="outline">
               <Link to={`/console/assets/users?owner=${encodeURIComponent(user.id)}`}>
