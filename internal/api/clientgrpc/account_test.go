@@ -317,6 +317,7 @@ func setupClientGRPC(t *testing.T) (context.Context, *AccountService, *fakeDocDB
 		auth.NewWeChatMiniProgramExchanger(),
 		auth.NewOTPGenerator(),
 		nil,
+		nil, // analyticsDeletions
 	)
 	return ctx, NewAccountService(account), docDB, mailer, projectID
 }

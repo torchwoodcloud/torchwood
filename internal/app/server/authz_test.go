@@ -34,7 +34,7 @@ var _ projects.Repository = (*emptyProjectRepo)(nil)
 // G2-2 纵深防御：CreateUser/DeleteUserSession 对匿名/端用户拒绝，
 // console admin 会话与 API key 主体（Server API 写凭证）放行。
 func TestUsers_WriteMethods_RequireServerPrincipal(t *testing.T) {
-	uc := NewUsers(&emptyProjectRepo{}, nil, nil, nil, nil, nil, nil)
+	uc := NewUsers(&emptyProjectRepo{}, nil, nil, nil, nil, nil, nil, nil)
 
 	denied := []*shared.Principal{
 		{ActorID: "user-1", ActorKind: shared.ActorKindEndUser, UserID: "user-1"},
@@ -75,7 +75,7 @@ func TestUsers_WriteMethods_RequireServerPrincipal(t *testing.T) {
 // 业务路径（项目不存在 → NotFound）。角色细粒度由拦截器 adminRoleMethodRules
 // 把关（owner/admin）。
 func TestUsers_UpdateUser_RequiresServerWriteActor(t *testing.T) {
-	uc := NewUsers(&emptyProjectRepo{}, nil, nil, nil, nil, nil, nil)
+	uc := NewUsers(&emptyProjectRepo{}, nil, nil, nil, nil, nil, nil, nil)
 	updates := map[string]any{"status": "active"}
 
 	endUserCtx := contexts.WithPrincipal(context.Background(), &shared.Principal{

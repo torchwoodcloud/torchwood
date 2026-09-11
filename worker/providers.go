@@ -19,4 +19,8 @@ var ProviderSet = wire.NewSet(
 	NewAssetExpirer,
 	NewSubscriptionBiller,
 	NewUsageRollupWorker,
+	// Analytics 作业（PR5）：rollup 每小时幂等重算 + maintenance 每日
+	// 分区治理/保留期裁剪与每 6h tombstone 清洗。
+	NewAnalyticsRollupWorker,
+	NewAnalyticsMaintenanceWorker,
 )

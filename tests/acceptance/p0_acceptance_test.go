@@ -243,7 +243,7 @@ func TestP0_Section9_DynamicDocuments(t *testing.T) {
 	usersRepo := bunrepo.NewUserRepository(db)
 	sessionRepo := bunrepo.NewSessionRepository(db)
 	roles := client.NewUserRoles(usersRepo, bunrepo.NewMembershipRepository(db))
-	usersUC := appserver.NewUsers(projectRepo, infrAuth.NewSessionService(cfg, sessionRepo, roles, nil), db, usersRepo, sessionRepo, bunrepo.NewGroupRepository(db), bunrepo.NewMembershipRepository(db))
+	usersUC := appserver.NewUsers(projectRepo, infrAuth.NewSessionService(cfg, sessionRepo, roles, nil), db, usersRepo, sessionRepo, bunrepo.NewGroupRepository(db), bunrepo.NewMembershipRepository(db), nil)
 
 	const email = "dsl-query@torchwood.local"
 	signedUp, _, _, _, err := account.SignUp(ctx, client.SignUpCommand{
@@ -335,7 +335,7 @@ func newAcceptanceTestAccount(cfg *config.AppConfig, projectRepo projects.Reposi
 	sessions := infrAuth.NewSessionService(cfg, sessionRepo, roles, nil)
 	mailer := inframessaging.NewMailer(cfg)
 	sms := inframessaging.NewSMSService(cfg)
-	return client.NewAccount(cfg, projectRepo, nil, nil, sessions, nil, nil, nil, nil, nil, nil, mailer, sms, nil, roles, nil, nil, nil, nil, usersRepo, identities, sessionRepo, nil, nil, nil, nil)
+	return client.NewAccount(cfg, projectRepo, nil, nil, sessions, nil, nil, nil, nil, nil, nil, mailer, sms, nil, roles, nil, nil, nil, nil, usersRepo, identities, sessionRepo, nil, nil, nil, nil, nil)
 }
 
 // ——P2 客户端调用面 × P0 执行身份 端到端验收（分层集成）——

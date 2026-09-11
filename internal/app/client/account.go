@@ -13,6 +13,7 @@ import (
 	"time"
 
 	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
+	domainanalytics "github.com/torchwoodcloud/torchwood/internal/domain/analytics"
 	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	domainidgen "github.com/torchwoodcloud/torchwood/internal/domain/idgen"
@@ -57,6 +58,9 @@ type Account struct {
 	otpGenerator    domainauth.OTPGenerator
 	// sessionCookies 校验并解出端用户会话 cookie（M5 C5 OAuth link 回调面）。
 	sessionCookies domainauth.SessionCookieVerifier
+	// analyticsDeletions 是注销合规钩子的 tombstone 写入端口（PR5，D10；
+	// nil = 未装配——既有测试兼容，跳过钩子）。
+	analyticsDeletions domainanalytics.DeletionQueueRepository
 }
 
 func NewAccount(
@@ -86,34 +90,36 @@ func NewAccount(
 	weChatExchanger domainauth.WeChatMiniProgramExchanger,
 	otpGenerator domainauth.OTPGenerator,
 	sessionCookies domainauth.SessionCookieVerifier,
+	analyticsDeletions domainanalytics.DeletionQueueRepository,
 ) *Account {
 	return &Account{
-		cfg:             cfg,
-		projectRepo:     projectRepo,
-		inviteRepo:      inviteRepo,
-		oauthProviders:  oauthProviders,
-		usersRepo:       usersRepo,
-		identities:      identities,
-		sessionRepo:     sessionRepo,
-		sessions:        sessions,
-		otp:             otp,
-		oauthState:      oauthState,
-		tokens:          tokens,
-		loginThrottle:   normalizeLoginThrottle(loginThrottle),
-		rotation:        rotation,
-		oauthFactory:    oauthFactory,
-		weChatExchanger: weChatExchanger,
-		otpGenerator:    otpGenerator,
-		idGen:           idGen,
-		mailer:          mailer,
-		sms:             sms,
-		rateLimiter:     rateLimiter,
-		roles:           roles,
-		mfa:             mfa,
-		mfaChallenges:   normalizeMFAChallengeStore(mfaChallenges),
-		oneTimeTokens:   oneTimeTokens,
-		auditRepo:       auditRepo,
-		sessionCookies:  sessionCookies,
+		cfg:                cfg,
+		projectRepo:        projectRepo,
+		inviteRepo:         inviteRepo,
+		oauthProviders:     oauthProviders,
+		usersRepo:          usersRepo,
+		identities:         identities,
+		sessionRepo:        sessionRepo,
+		sessions:           sessions,
+		otp:                otp,
+		oauthState:         oauthState,
+		tokens:             tokens,
+		loginThrottle:      normalizeLoginThrottle(loginThrottle),
+		rotation:           rotation,
+		oauthFactory:       oauthFactory,
+		weChatExchanger:    weChatExchanger,
+		otpGenerator:       otpGenerator,
+		idGen:              idGen,
+		mailer:             mailer,
+		sms:                sms,
+		rateLimiter:        rateLimiter,
+		roles:              roles,
+		mfa:                mfa,
+		mfaChallenges:      normalizeMFAChallengeStore(mfaChallenges),
+		oneTimeTokens:      oneTimeTokens,
+		auditRepo:          auditRepo,
+		sessionCookies:     sessionCookies,
+		analyticsDeletions: analyticsDeletions,
 	}
 }
 
@@ -429,6 +435,16 @@ func (a *Account) DeleteAccount(ctx context.Context) error {
 	}
 	if err := a.usersRepo.Update(ctx, p.ProjectID, p.UserID, updates); err != nil {
 		return fmt.Errorf("delete account: %w", err)
+	}
+	// 注销合规钩子（PR5，D10）：软删提交后写 analytics tombstone，worker
+	// 异步分批硬删该用户身份关联三表（raw/user_days/first_seen）。幂等
+	//（ON CONFLICT DO NOTHING）；失败向上传播——注销结果可重试收敛（软删
+	// 幂等、tombstone 不覆盖首次 enqueued_at），tombstone 缺失意味着行为
+	// 数据永不清洗，不静默降级。
+	if a.analyticsDeletions != nil {
+		if err := a.analyticsDeletions.EnqueueUserDeletion(ctx, p.ProjectID, p.UserID, time.Now().UTC()); err != nil {
+			return fmt.Errorf("enqueue analytics user deletion: %w", err)
+		}
 	}
 	return nil
 }

@@ -38,7 +38,7 @@ func newUsersUC(ctx context.Context, t *testing.T) (*Users, *clients.Database, s
 	projectID, _, cleanup := testutil.CreateTestProject(ctx, db)
 	cfg := &config.AppConfig{Security: &config.Security{Jwt: &config.Security_Jwt{Secret: usersUCJWTSecret}}}
 	sessions := auth.NewSessionService(cfg, bunrepo.NewSessionRepository(db), documentRoles{}, nil)
-	uc := NewUsers(bunrepo.NewProjectRepository(db), sessions, db, bunrepo.NewUserRepository(db), bunrepo.NewSessionRepository(db), bunrepo.NewGroupRepository(db), bunrepo.NewMembershipRepository(db))
+	uc := NewUsers(bunrepo.NewProjectRepository(db), sessions, db, bunrepo.NewUserRepository(db), bunrepo.NewSessionRepository(db), bunrepo.NewGroupRepository(db), bunrepo.NewMembershipRepository(db), nil)
 	return uc, db, projectID, cleanup
 }
 

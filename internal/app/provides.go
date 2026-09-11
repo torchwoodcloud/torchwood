@@ -48,6 +48,11 @@ var ProviderSet = wire.NewSet(
 	// Analytics 摄入用例（PR2 摄入链）：repo 经 infra bind、计量经
 	// domainbilling.UsageCounter 注入。
 	analytics.NewIngest,
-	// Analytics 查询用例（PR3 查询面）：六查询 RPC 的护栏/择路/source 标注。
-	analytics.NewQuery,
+	// Analytics 查询用例（PR3 查询面）：六查询 RPC 的护栏/择路/source 标注；
+	// raw 回退窗口护栏消费 analytics.retention_days 配置（PR5）。
+	analytics.NewQueryFromConfig,
+	// Analytics worker 用例（PR5）：rollup 幂等重算 + 分区治理/保留期裁剪/
+	// tombstone 清洗（RunWorkerOnce 模式，worker 包只做周期与日志）。
+	analytics.NewRollup,
+	analytics.NewMaintenanceFromConfig,
 )

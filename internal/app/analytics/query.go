@@ -13,6 +13,7 @@ import (
 	"time"
 
 	domainanalytics "github.com/torchwoodcloud/torchwood/internal/domain/analytics"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/crud"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -27,12 +28,26 @@ const userEventsDefaultPageSize = 50
 // Query 是查询面用例聚合。
 type Query struct {
 	repo domainanalytics.QueryRepository
-	now  func() time.Time
+	// retentionDays 是 raw 回退窗口护栏的保留期口径（PR5 起与 analytics
+	// .retention_days 配置同源，裁剪与回退一致；缺省 DefaultRetentionDays）。
+	retentionDays int
+	now           func() time.Time
 }
 
-// NewQuery 构造用例（Wire）。
+// NewQuery 构造用例（保留期取缺省值；组合根经 NewQueryFromConfig 注入配置
+// 口径）。
 func NewQuery(repo domainanalytics.QueryRepository) *Query {
-	return &Query{repo: repo, now: time.Now}
+	return &Query{repo: repo, retentionDays: domainanalytics.DefaultRetentionDays, now: time.Now}
+}
+
+// NewQueryFromConfig 组合根入口：raw 回退窗口护栏消费 analytics.retention_days
+// （未配置/越界值经 NormalizeRetentionDays 归一，与保留期裁剪同口径）。
+func NewQueryFromConfig(cfg *config.AppConfig, repo domainanalytics.QueryRepository) *Query {
+	q := NewQuery(repo)
+	if cfg != nil {
+		q.retentionDays = domainanalytics.NormalizeRetentionDays(cfg.GetAnalytics().GetRetentionDays())
+	}
+	return q
 }
 
 // —— 命令/结果（传输层从 proto 装配，保持 gRPC 映射薄） ——
@@ -180,7 +195,7 @@ func (u *Query) GetOverview(ctx context.Context, cmd OverviewCommand) (*Overview
 	} else {
 		// 覆盖缺失（worker 未部署/停摆/零事件日）：窗口 ≤ raw 保留期才回退
 		// raw 扫描；超窗明确报错（不静默返回残缺窗口）。
-		if err := ensureRawFallbackWindow(dayStart, dayEnd); err != nil {
+		if err := u.ensureRawFallbackWindow(dayStart, dayEnd); err != nil {
 			return nil, err
 		}
 		total, uv, err := u.repo.RawOverviewKPI(ctx, cmd.ProjectID, cmd.PeriodStart, cmd.PeriodEnd)
@@ -293,7 +308,7 @@ func (u *Query) QueryTimeseries(ctx context.Context, cmd TimeseriesCommand) (*Ti
 
 	// 多事件名：并集 UV 不能由 daily/user_days 导出（跨名去重），恒 raw。
 	if len(cmd.Names) > 1 {
-		if err := ensureRawFallbackWindow(dayStart, dayEnd); err != nil {
+		if err := u.ensureRawFallbackWindow(dayStart, dayEnd); err != nil {
 			return nil, err
 		}
 		points, err := u.repo.RawTimeseries(ctx, cmd.ProjectID, cmd.Names, cmd.PeriodStart, cmd.PeriodEnd, domainanalytics.GranularityDay)
@@ -312,7 +327,7 @@ func (u *Query) QueryTimeseries(ctx context.Context, cmd TimeseriesCommand) (*Ti
 	}
 	if coveredN < expectedDays(dayStart, dayEnd) {
 		// 覆盖缺失（worker 未部署/停摆/零事件日）→ 回退 raw（≤保留期）。
-		if err := ensureRawFallbackWindow(dayStart, dayEnd); err != nil {
+		if err := u.ensureRawFallbackWindow(dayStart, dayEnd); err != nil {
 			return nil, err
 		}
 		points, err := u.repo.RawTimeseries(ctx, cmd.ProjectID, cmd.Names, cmd.PeriodStart, cmd.PeriodEnd, domainanalytics.GranularityDay)
@@ -519,12 +534,17 @@ func expectedDays(dayStart, dayEnd time.Time) int {
 	return int(dayEnd.Sub(dayStart) / (24 * time.Hour))
 }
 
-// ensureRawFallbackWindow 回退 raw 的窗口护栏：day 桶跨度 ≤ 缺省保留期
-// （PR5 起 per-project analytics.retention_days；当前无配置，取缺省 90 天）。
-func ensureRawFallbackWindow(dayStart, dayEnd time.Time) error {
-	if max := time.Duration(domainanalytics.DefaultRetentionDays) * 24 * time.Hour; dayEnd.Sub(dayStart) > max {
+// ensureRawFallbackWindow 回退 raw 的窗口护栏：day 桶跨度 ≤ analytics
+// .retention_days（PR5 起配置化；未配置取缺省 90 天——与保留期裁剪 worker
+// 同源归一）。
+func (u *Query) ensureRawFallbackWindow(dayStart, dayEnd time.Time) error {
+	days := u.retentionDays
+	if days <= 0 {
+		days = domainanalytics.DefaultRetentionDays
+	}
+	if max := time.Duration(days) * 24 * time.Hour; dayEnd.Sub(dayStart) > max {
 		return status.Errorf(codes.InvalidArgument,
-			"no rollup coverage for window and window exceeds raw retention (%d days); deploy the analytics rollup worker or narrow the window", domainanalytics.DefaultRetentionDays)
+			"no rollup coverage for window and window exceeds raw retention (%d days); deploy the analytics rollup worker or narrow the window", days)
 	}
 	return nil
 }

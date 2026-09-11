@@ -200,6 +200,7 @@ func newOAuthBindingAccount() (*Account, *memOAuthStateStore, *memBindingSession
 		stubOAuthFactory{},
 		nil, nil,
 		verifier,
+		nil, // analyticsDeletions
 	)
 	return a, states, sessions, verifier, identities
 }

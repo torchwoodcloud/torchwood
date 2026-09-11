@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
+	domainanalytics "github.com/torchwoodcloud/torchwood/internal/domain/analytics"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"github.com/torchwoodcloud/torchwood/internal/domain/groups"
@@ -28,6 +30,9 @@ type Users struct {
 	usersRepo   users.Repository
 	groupsRepo  groups.GroupRepository
 	memberships groups.MembershipRepository
+	// analyticsDeletions 是注销合规钩子的 tombstone 写入端口（PR5，D10；
+	// nil = 未装配——既有测试兼容，跳过钩子）。
+	analyticsDeletions domainanalytics.DeletionQueueRepository
 }
 
 func NewUsers(
@@ -38,15 +43,17 @@ func NewUsers(
 	sessionRepo domainauth.SessionRepository,
 	groupsRepo groups.GroupRepository,
 	memberships groups.MembershipRepository,
+	analyticsDeletions domainanalytics.DeletionQueueRepository,
 ) *Users {
 	return &Users{
-		projectRepo: projectRepo,
-		sessions:    sessions,
-		sessionRepo: sessionRepo,
-		db:          db,
-		usersRepo:   usersRepo,
-		groupsRepo:  groupsRepo,
-		memberships: memberships,
+		projectRepo:        projectRepo,
+		sessions:           sessions,
+		sessionRepo:        sessionRepo,
+		db:                 db,
+		usersRepo:          usersRepo,
+		groupsRepo:         groupsRepo,
+		memberships:        memberships,
+		analyticsDeletions: analyticsDeletions,
 	}
 }
 
@@ -396,6 +403,15 @@ func (u *Users) DeleteUser(ctx context.Context, projectID, userID string, _ data
 		}
 		if err := u.usersRepo.Delete(txCtx, projectID, userID); err != nil {
 			return err
+		}
+		// 注销合规钩子（PR5，D10）：既有删除事务内写 analytics tombstone，
+		// worker 异步分批硬删该用户身份关联三表（raw/user_days/first_seen）。
+		// 幂等（ON CONFLICT DO NOTHING）；失败随事务回滚（用户未删，可整事务
+		// 重试）——tombstone 缺失意味着行为数据永不清洗，不静默降级。
+		if u.analyticsDeletions != nil {
+			if err := u.analyticsDeletions.EnqueueUserDeletion(txCtx, projectID, userID, time.Now().UTC()); err != nil {
+				return fmt.Errorf("enqueue analytics user deletion: %w", err)
+			}
 		}
 		if u.groupsRepo == nil {
 			return nil

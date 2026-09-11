@@ -14,6 +14,7 @@ message AppConfig {
   Messaging messaging = 7;
   IdGen idgen = 8;
   Payments payments = 9;
+  Analytics analytics = 10;
 }
 
 message Server {
@@ -280,6 +281,16 @@ message IdGen {
   Snowflake snowflake = 3;
   Sequence sequence = 4;
   Resources resources = 5;
+}
+
+// Analytics 是事件分析平台级配置（docs/design/analytics.md §5，PR5）。
+message Analytics {
+  // 原始事件（analytics_events 月分区）与 user_days 的保留天数。保留期裁剪
+  // 以整月 DROP 粒度执行（不足整月的部分留待下月）；查询面 raw 回退窗口
+  // 护栏与本值同源。默认 90；可配域 7–365，越界值启动后钳制到边界
+  // （domainanalytics.NormalizeRetentionDays）。
+  // env: TORCHWOOD_ANALYTICS_RETENTION_DAYS
+  int32 retention_days = 1;
 }
 
 // Payments 是 v3 支付子域配置（设计 §1.2）。渠道 secret 一律走

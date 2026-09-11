@@ -107,7 +107,8 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	weChatMiniProgramExchanger := auth.NewWeChatMiniProgramExchanger()
 	otpGenerator := auth.NewOTPGenerator()
 	sessionCookieVerifier := auth.NewSessionCookieVerifier(appConfig)
-	account := client.NewAccount(appConfig, repository, inviteCodeRepository, oAuthProviderRepository, sessionService, redisOTPChallengeStore, redisOAuthStateStore, redisAccountTokenStore, redisLoginThrottle, redisRefreshRotationStore, service, mailerService, smsService, redisRateLimiter, userRoles, mfaService, mfaChallengeStore, redisOneTimeTokenStore, auditRepository, userRepository, identityRepository, sessionRepository, oAuthAuthenticatorFactory, weChatMiniProgramExchanger, otpGenerator, sessionCookieVerifier)
+	analyticsWorkerRepository := bunrepo.NewAnalyticsWorkerRepository(database)
+	account := client.NewAccount(appConfig, repository, inviteCodeRepository, oAuthProviderRepository, sessionService, redisOTPChallengeStore, redisOAuthStateStore, redisAccountTokenStore, redisLoginThrottle, redisRefreshRotationStore, service, mailerService, smsService, redisRateLimiter, userRoles, mfaService, mfaChallengeStore, redisOneTimeTokenStore, auditRepository, userRepository, identityRepository, sessionRepository, oAuthAuthenticatorFactory, weChatMiniProgramExchanger, otpGenerator, sessionCookieVerifier, analyticsWorkerRepository)
 	accountService := clientgrpc.NewAccountService(account)
 	eventOutbox := events.NewEventOutbox(database)
 	documentDB := documentdb.NewPostgresDocumentDB(database, eventOutbox)
@@ -172,7 +173,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	v2 := NewStorageOptions()
 	storageStorage := storage2.NewStorage(appConfig, repository, objectStore, uploadSessionStore, bucketRepository, fileRepository, v2...)
 	storageService := servergrpc.NewStorageService(storageStorage)
-	users := server.NewUsers(repository, sessionService, database, userRepository, sessionRepository, groupRepository, membershipRepository)
+	users := server.NewUsers(repository, sessionService, database, userRepository, sessionRepository, groupRepository, membershipRepository, analyticsWorkerRepository)
 	usersService := servergrpc.NewUsersService(users)
 	policySet, err := runtime.ProvideMethodPolicies()
 	if err != nil {
@@ -206,7 +207,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	auditLogs := server.NewAuditLogs(auditRepository)
 	auditLogsService := servergrpc.NewAuditLogsService(auditLogs)
 	analyticsQueryRepository := bunrepo.NewAnalyticsQueryRepository(database)
-	query := analytics.NewQuery(analyticsQueryRepository)
+	query := analytics.NewQueryFromConfig(appConfig, analyticsQueryRepository)
 	servergrpcAnalyticsService := servergrpc.NewAnalyticsService(ingest, query)
 	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, analyticsService, healthService, projectsService, storageService, usersService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, authService, adminsService, outboxService, auditLogsService, servergrpcAnalyticsService, policySet)
 	if err != nil {

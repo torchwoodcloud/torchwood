@@ -136,6 +136,7 @@ func newAccountWithUserRepo(repo users.Repository, projectID string) *Account {
 		nil,
 		nil, nil, nil,
 		nil,
+		nil, // analyticsDeletions
 	)
 }
 
