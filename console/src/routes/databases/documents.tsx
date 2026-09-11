@@ -41,6 +41,7 @@ import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -392,17 +393,32 @@ function DocumentFormFields({
 
   return (
     <>
-      {attributes.map((attr) => (
-        <FormField
-          key={attr.key}
-          id={attr.key}
-          label={`${attr.key} (${attr.type})`}
-          value={values[attr.key] ?? ""}
-          onChange={(v) => onChange(attr.key, v)}
-          required={attr.required}
-          type={attr.type === "integer" || attr.type === "float" ? "number" : "text"}
-        />
-      ))}
+      {attributes.map((attr) =>
+        attr.type === "json" ? (
+          <div key={attr.key} className="space-y-2">
+            <Label htmlFor={attr.key}>
+              {attr.key} ({attr.type})
+            </Label>
+            <Textarea
+              id={attr.key}
+              value={values[attr.key] ?? ""}
+              onChange={(e) => onChange(attr.key, e.target.value)}
+              required={attr.required}
+              className="font-mono min-h-[140px]"
+            />
+          </div>
+        ) : (
+          <FormField
+            key={attr.key}
+            id={attr.key}
+            label={`${attr.key} (${attr.type})`}
+            value={values[attr.key] ?? ""}
+            onChange={(v) => onChange(attr.key, v)}
+            required={attr.required}
+            type={attr.type === "integer" || attr.type === "float" ? "number" : "text"}
+          />
+        )
+      )}
     </>
   );
 }

@@ -36,7 +36,15 @@ export function documentToValues(
   } else {
     for (const attr of attributes) {
       const raw = doc.data?.[attr.key];
-      next[attr.key] = raw == null ? "" : String(raw);
+      if (raw == null) {
+        next[attr.key] = "";
+      } else if (attr.type === "json" || typeof raw === "object") {
+        // json 属性的值可能是任意 JSON 标量/对象，统一以 JSON 字面量呈现，
+        // 与 parseFieldValue 的 JSON.parse 往返一致；对象走 String() 会变成 "[object Object]"。
+        next[attr.key] = JSON.stringify(raw, null, 2);
+      } else {
+        next[attr.key] = String(raw);
+      }
     }
   }
   return next;
