@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 // Analytics 区共享小组件（仅组件导出，满足 react-refresh 约束）。
 
 // SourceBadge 口径徽标（D8）：响应级 source（rollup | raw）诚实标注。
-// raw 时期（rollup worker 未上线或覆盖缺失）明示"实时扫描口径"。
+// raw（HOUR 粒度恒 raw，或窗口超出 rollup 覆盖时的回退）明示"实时扫描口径"。
 export function SourceBadge({ source }: { source?: string }) {
   if (source === "rollup") {
     return (
@@ -21,7 +21,7 @@ export function SourceBadge({ source }: { source?: string }) {
     return (
       <Badge
         variant="outline"
-        title="raw 口径：实时扫描原始事件（预聚合作业未上线或该窗口无覆盖）"
+        title="raw 口径：实时扫描原始事件（HOUR 粒度恒 raw；DAY 窗口超出 rollup 覆盖时回退）"
       >
         raw 实时扫描
       </Badge>
@@ -35,7 +35,7 @@ export function SourceNote({ source }: { source?: string }) {
   if (source !== "raw") return null;
   return (
     <p className="text-xs text-muted-foreground">
-      实时扫描口径（原始事件直查；数据聚合作业上线后此窗口将切换为 rollup 预聚合）。
+      实时扫描口径（原始事件直查；HOUR 粒度恒 raw，DAY 窗口超出 rollup 覆盖时也回退 raw）。
     </p>
   );
 }

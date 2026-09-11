@@ -12,6 +12,7 @@ Torchwood is an Appwrite-inspired, **AI/Agent-Native** Backend-as-a-Service buil
 - **Database**: schema-per-database, `_tenant` isolation, `_acl` document permissions enforced by Postgres RLS policies, typed query AST (`pkg/query`; Appwrite-style DSL as client-side sugar), keyset pagination, bulk ops, increments and array updates.
 - **Storage**: S3/MinIO-compatible, upload/download/view, thumbnails, public buckets, HMAC file tokens, chunked resumable upload.
 - **Functions**: Docker build/run executor, sync/async execution, async `cmd/worker` and retention policy.
+- **Analytics**: dual-face event ingestion (client-side session attribution + server-side API-key reporting), monthly-partitioned append-only storage, hourly pre-aggregation (trends/retention/breakdown/user drill-down), a Console analytics section and a TypeScript SDK batching buffer.
 - **Console**: React SPA embedded in the Go binary at `/console/`.
 
 ## Tech Stack

@@ -8,6 +8,27 @@ TypeScript SDK 以 npm 包 `@torchwood/sdk` 分发（`sdk/typescript/`，`task s
 
 ## @torchwood/sdk
 
+### v0.5.0 — 2026-09-11
+
+事件分析（Analytics，设计 `docs/design/analytics.md`；执行计划 PR6 收口）：
+
+- **新增 client 端侧摄入**：`Torchwood.analytics.ingest(events)`（POST
+  `/v1/analytics/events`）——归因（user_id）由服务端从 principal 落定（含
+  匿名会话），请求体不可指定；部分接收语义（响应 `accepted/skipped`），
+  at-least-once 不做去重（D14）。
+- **新增批量缓冲器 `AnalyticsEventBuffer`**（包根导出）：size/time 双阈值
+  flush（默认 20 条或 10s，上限对齐服务端单批 100）；浏览器环境自动注册
+  `visibilitychange`(hidden)/`beforeunload` 尽力 flush；失败静默——
+  `track`/`flush` 永不抛错，单批失败按指数退避有界重试（408/429/5xx 与
+  网络错误可重试，其余 4xx 直接放弃，默认 2 次、500ms*2^n），耗尽后该批
+  静默丢弃。构造入参为 send 注入点，小游戏/原生可替换为平台 HTTP 通道
+  （各端配方见 `docs/developer/18-analytics.md` §7）。
+- **新增 server 查询面 `Torchwood.server.analytics`**：`ingest`（可信代报
+  user_id，scope analytics:write）+ 固定形状查询 `getOverview` /
+  `listEventDefinitions` / `queryTimeseries` / `queryBreakdown` /
+  `queryRetention` / `listUserEvents`（scope analytics:read），响应带
+  `source: rollup|raw` 口径标注。
+
 ### v0.4.0 — 2026-09-11
 
 函数内执行身份（Functions v3 支柱，设计 `docs/design/functions-v3.md` §5.1）：

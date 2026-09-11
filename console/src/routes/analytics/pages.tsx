@@ -324,7 +324,7 @@ export function AnalyticsEventsPage() {
             <div>
               <CardTitle className="text-base">事件字典</CardTitle>
               <CardDescription>
-                近 30 天总量由数据聚合作业维护（作业上线前为 0，按最近上报排序）
+                近 30 天总量由 rollup worker 每小时刷新（新事件名的计数在下个整点后出现）
               </CardDescription>
             </div>
             <Input
@@ -408,8 +408,8 @@ const RETENTION_RANGES = [
 const RETENTION_SLOTS = 15; // D0–D14
 
 // AnalyticsRetentionPage 留存：cohort × D0–D14 矩阵。基座（user_days /
-// first_seen）由 rollup worker（PR5）产出——上线前该查询返回空矩阵，此处
-// 诚实展示空态说明，不做假数据。
+// first_seen）由 rollup worker 每小时幂等重算；项目尚无活跃数据（或 worker
+// 尚未跑过首个整点）时为空态，不展示假数据。
 export function AnalyticsRetentionPage() {
   const { projectId } = useAuth();
   const [days, setDays] = useState<number>(30);
@@ -458,7 +458,7 @@ export function AnalyticsRetentionPage() {
             ) : cohorts.length === 0 ? (
               <EmptyState
                 title="暂无留存数据"
-                description="留存矩阵依赖数据聚合作业（rollup worker）产出的 user_days / first_seen 基座表；作业上线前该查询返回空矩阵。作业上线后（PR5/PR6）此处将渲染 cohort × D0–D14 热力矩阵。"
+                description="留存矩阵基于 rollup worker 每小时重算的 user_days / first_seen 基座表。端 SDK 或摄入 API 上报事件并等待下个整点聚合后，这里会出现 cohort × D0–D14 矩阵。"
               />
             ) : (
               <div className="overflow-auto">
