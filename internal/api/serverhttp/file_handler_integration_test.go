@@ -722,7 +722,7 @@ func newFileHandlerTestAccount(cfg *config.AppConfig, projectRepo projects.Repos
 	identities := bunrepo.NewIdentityRepository(db)
 	roles := client.NewUserRoles(usersRepo, bunrepo.NewMembershipRepository(db))
 	sessions := auth.NewSessionService(cfg, sessionRepo, roles, nil)
-	return client.NewAccount(cfg, projectRepo, nil, nil, sessions, nil, nil, nil, nil, nil, nil, nil, nil, nil, roles, nil, nil, nil, nil, usersRepo, identities, sessionRepo, auth.NewOAuthAuthenticatorFactory(), auth.NewWeChatMiniProgramExchanger(), auth.NewOTPGenerator(), nil, nil)
+	return client.NewAccount(cfg, projectRepo, nil, nil, sessions, nil, nil, nil, nil, nil, nil, nil, nil, nil, roles, nil, nil, nil, nil, usersRepo, identities, sessionRepo, auth.NewOAuthAuthenticatorFactory(), auth.NewWeChatMiniProgramExchanger(), auth.NewOTPGenerator(), nil, nil, nil)
 }
 
 // testPolicies 定义于 auth_test.go（同包共享）。

@@ -52,7 +52,7 @@ func setupHooksEnv(t *testing.T) *hooksEnv {
 		bunrepo.NewGroupRepository(e.db), bunrepo.NewMembershipRepository(e.db), e.workerRepo)
 	account := appclient.NewAccount(cfg, e.projectsRepo, nil, nil, sessions,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, roles, nil, nil, nil, nil,
-		usersRepo, nil, sessionRepo, nil, nil, nil, nil, e.workerRepo)
+		usersRepo, nil, sessionRepo, nil, nil, nil, nil, e.workerRepo, nil)
 
 	maint := appanalytics.NewMaintenance(e.workerRepo, e.workerRepo, e.projectsRepo, 90, nil)
 	return &hooksEnv{rollupEnv: e, users: usersUC, account: account, maint: maint, sessions: sessions}

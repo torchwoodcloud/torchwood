@@ -8,7 +8,18 @@ TypeScript SDK 以 npm 包 `@torchwood/sdk` 分发（`sdk/typescript/`，`task s
 
 ## @torchwood/sdk
 
-### v0.5.0 — 2026-09-11
+### v0.6.0 — 2026-09-12
+
+> git tag `sdk/typescript/v0.5.0` 为仅含版本号 bump 的未发布占位（Leaderboards
+> 合入时点），npm 未发布 0.5.0——本版 0.6.0 首发以下全部内容。
+
+排行榜（Leaderboards）：
+
+- **新增 client 面** `Torchwood.client.leaderboards`：`submitLeaderboardScore` /
+  `getMyLeaderboardEntry` / `listLeaderboardTop`。
+- **新增 server 查询面** `Torchwood.server.leaderboards`：`submitLeaderboardScore` /
+  `getLeaderboardEntry` / `listLeaderboardTop` / `getLeaderboardSettlement` /
+  `listLeaderboardSettlements`。
 
 事件分析（Analytics，设计 `docs/design/analytics.md`；执行计划 PR6 收口）：
 

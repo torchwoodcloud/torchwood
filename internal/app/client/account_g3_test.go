@@ -121,7 +121,8 @@ func setupG3Account(t *testing.T) (context.Context, *Account, string, *failableS
 		auth.NewOTPGenerator(),
 		nil,
 		nil, // analyticsDeletions
-, nil)
+		nil, // uow.Runner
+	)
 	return ctx, account, projectID, sessions, mr, mailer
 }
 

@@ -137,7 +137,8 @@ func newAccountWithUserRepo(repo users.Repository, projectID string) *Account {
 		nil, nil, nil,
 		nil,
 		nil, // analyticsDeletions
-, nil)
+		nil, // uow.Runner
+	)
 }
 
 type recordingUserRepo struct {

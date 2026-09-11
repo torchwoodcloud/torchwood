@@ -318,6 +318,7 @@ func setupClientGRPC(t *testing.T) (context.Context, *AccountService, *fakeDocDB
 		auth.NewOTPGenerator(),
 		nil,
 		nil, // analyticsDeletions
+		nil, // uow.Runner
 	)
 	return ctx, NewAccountService(account), docDB, mailer, projectID
 }
