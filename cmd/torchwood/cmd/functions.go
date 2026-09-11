@@ -86,7 +86,10 @@ func newFunctionsCreateCmd(g *globalFlags) *verb {
 	var timeoutSeconds int
 	var spec string
 	var enabled bool
-	return newVerb(g, "create", "create a function", "functions create --id <id> --name <name> --runtime <runtime>",
+	var clientCallable bool
+	var clientPerUserLimit int
+	var clientLimitWindow string
+	return newVerb(g, "create", "create a function", "functions create --id <id> --name <name> --runtime <runtime> [--client-callable] [--client-per-user-limit <n>] [--client-limit-window <minute|hour|day>]",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&id, "id", "", "function ID (required)")
 			fs.StringVar(&name, "name", "", "function name (required)")
@@ -95,9 +98,14 @@ func newFunctionsCreateCmd(g *globalFlags) *verb {
 			fs.IntVar(&timeoutSeconds, "timeout-seconds", 0, "timeout in seconds (1-300, server default when omitted)")
 			fs.StringVar(&spec, "spec", "", "resource specification (defaults to shared-1x, see the specifications command)")
 			fs.BoolVar(&enabled, "enabled", false, "whether enabled (pass --enabled=true/false explicitly to take effect)")
+			// 客户端调用面策略（P2，设计 §4；optional——显式传入才生效）。
+			fs.BoolVar(&clientCallable, "client-callable", false, "allow client-face invocation (pass --client-callable=true/false explicitly to take effect)")
+			fs.IntVar(&clientPerUserLimit, "client-per-user-limit", 0, "per-user invocation quota within the limit window (>=1 when --client-callable=true)")
+			fs.StringVar(&clientLimitWindow, "client-limit-window", "", "quota window granularity: minute | hour | day (day is UTC-based, server default when omitted)")
 		},
 		func(v *verb, env *commands.Environment, _ []string) error {
-			req, err := buildCreateFunctionReq(v, id, name, runtime, entrypoint, timeoutSeconds, spec, enabled)
+			req, err := buildCreateFunctionReq(v, id, name, runtime, entrypoint, timeoutSeconds, spec, enabled,
+				clientCallable, clientPerUserLimit, clientLimitWindow)
 			if err != nil {
 				return err
 			}
@@ -120,7 +128,10 @@ func newFunctionsUpdateCmd(g *globalFlags) *verb {
 	var timeoutSeconds int
 	var enabled bool
 	var minInstances, maxInstances, idleTTLSeconds, maxRequests, concurrency int
-	return newVerb(g, "update", "update a function (only explicitly passed fields)", "functions update <function-id> [--name] [--entrypoint] [--timeout-seconds] [--spec] [--enabled] [--min-instances] [--max-instances] [--idle-ttl-seconds] [--max-requests-per-instance] [--concurrency]",
+	var clientCallable bool
+	var clientPerUserLimit int
+	var clientLimitWindow string
+	return newVerb(g, "update", "update a function (only explicitly passed fields)", "functions update <function-id> [--name] [--entrypoint] [--timeout-seconds] [--spec] [--enabled] [--min-instances] [--max-instances] [--idle-ttl-seconds] [--max-requests-per-instance] [--concurrency] [--client-callable] [--client-per-user-limit] [--client-limit-window]",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&name, "name", "", "function name")
 			fs.StringVar(&entrypoint, "entrypoint", "", "entrypoint file")
@@ -133,13 +144,18 @@ func newFunctionsUpdateCmd(g *globalFlags) *verb {
 			fs.IntVar(&idleTTLSeconds, "idle-ttl-seconds", 0, "idle reclaim threshold in seconds (>= 30)")
 			fs.IntVar(&maxRequests, "max-requests-per-instance", 0, "requests per instance before drain-replace (>= 1)")
 			fs.IntVar(&concurrency, "concurrency", 0, "per-instance in-flight request cap (1-16; >1 requires reentrant code, v3 templates only)")
+			// 客户端调用面策略（P2，设计 §4；proto3 optional——显式传入才生效）。
+			fs.BoolVar(&clientCallable, "client-callable", false, "allow client-face invocation (pass --client-callable=true/false explicitly to take effect)")
+			fs.IntVar(&clientPerUserLimit, "client-per-user-limit", 0, "per-user invocation quota within the limit window (>=1 when --client-callable=true)")
+			fs.StringVar(&clientLimitWindow, "client-limit-window", "", "quota window granularity: minute | hour | day (day is UTC-based)")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
 				return err
 			}
 			req, err := buildUpdateFunctionReq(v, args[0], name, entrypoint, timeoutSeconds, spec, enabled,
-				minInstances, maxInstances, idleTTLSeconds, maxRequests, concurrency)
+				minInstances, maxInstances, idleTTLSeconds, maxRequests, concurrency,
+				clientCallable, clientPerUserLimit, clientLimitWindow)
 			if err != nil {
 				return err
 			}
@@ -295,8 +311,10 @@ func newFunctionsExecutionsCreateCmd(g *globalFlags) *verb {
 		})
 }
 
-// buildCreateFunctionReq 构造 CreateFunctionRequest（id/name/runtime 必填）。
-func buildCreateFunctionReq(v *verb, id, name, runtime, entrypoint string, timeoutSeconds int, spec string, enabled bool) (map[string]any, error) {
+// buildCreateFunctionReq 构造 CreateFunctionRequest（id/name/runtime 必填；
+// 客户端调用面策略 optional——显式传入才生效）。
+func buildCreateFunctionReq(v *verb, id, name, runtime, entrypoint string, timeoutSeconds int, spec string, enabled bool,
+	clientCallable bool, clientPerUserLimit int, clientLimitWindow string) (map[string]any, error) {
 	if id == "" {
 		return nil, fmt.Errorf("--id is required")
 	}
@@ -313,13 +331,18 @@ func buildCreateFunctionReq(v *verb, id, name, runtime, entrypoint string, timeo
 	setChanged(v, "timeout-seconds", req, "timeoutSeconds", timeoutSeconds)
 	setChanged(v, "spec", req, "spec", spec)
 	setChanged(v, "enabled", req, "enabled", enabled)
+	setChanged(v, "client-callable", req, "clientCallable", clientCallable)
+	setChanged(v, "client-per-user-limit", req, "clientPerUserLimit", clientPerUserLimit)
+	setChanged(v, "client-limit-window", req, "clientLimitWindow", clientLimitWindow)
 	return req, nil
 }
 
 // buildUpdateFunctionReq 构造 UpdateFunctionRequest：仅设置显式传入的字段
-// （含池策略五列——v3 §5/OQ2；min/max/…/concurrency 显式传入才生效）。
+// （含池策略五列——v3 §5/OQ2，与客户端调用面策略三列——P2 设计 §4；
+// min/max/…/concurrency、client-* 显式传入才生效）。
 func buildUpdateFunctionReq(v *verb, functionID string, name, entrypoint string, timeoutSeconds int, spec string, enabled bool,
-	minInstances, maxInstances, idleTTLSeconds, maxRequests, concurrency int) (map[string]any, error) {
+	minInstances, maxInstances, idleTTLSeconds, maxRequests, concurrency int,
+	clientCallable bool, clientPerUserLimit int, clientLimitWindow string) (map[string]any, error) {
 	if functionID == "" {
 		return nil, fmt.Errorf("missing function-id")
 	}
@@ -334,6 +357,9 @@ func buildUpdateFunctionReq(v *verb, functionID string, name, entrypoint string,
 	setChanged(v, "idle-ttl-seconds", req, "idleTtlSeconds", idleTTLSeconds)
 	setChanged(v, "max-requests-per-instance", req, "maxRequestsPerInstance", maxRequests)
 	setChanged(v, "concurrency", req, "concurrency", concurrency)
+	setChanged(v, "client-callable", req, "clientCallable", clientCallable)
+	setChanged(v, "client-per-user-limit", req, "clientPerUserLimit", clientPerUserLimit)
+	setChanged(v, "client-limit-window", req, "clientLimitWindow", clientLimitWindow)
 	return req, nil
 }
 

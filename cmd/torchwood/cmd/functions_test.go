@@ -26,20 +26,27 @@ func funcFlagsDecl(fs *flag.FlagSet) {
 	fs.Int("idle-ttl-seconds", 0, "")
 	fs.Int("max-requests-per-instance", 0, "")
 	fs.Int("concurrency", 0, "")
+	// 客户端调用面策略三列（P2，设计 §4）。
+	fs.Bool("client-callable", false, "")
+	fs.Int("client-per-user-limit", 0, "")
+	fs.String("client-limit-window", "", "")
 }
 
 func TestBuildCreateFunctionReq(t *testing.T) {
 	tests := []struct {
-		name           string
-		id             string
-		functionName   string
-		runtime        string
-		entrypoint     string
-		timeoutSeconds int
-		spec           string
-		enabled        bool
-		set            map[string]string
-		wantErr        string
+		name               string
+		id                 string
+		functionName       string
+		runtime            string
+		entrypoint         string
+		timeoutSeconds     int
+		spec               string
+		enabled            bool
+		clientCallable     bool
+		clientPerUserLimit int
+		clientLimitWindow  string
+		set                map[string]string
+		wantErr            string
 	}{
 		{name: "缺 id", functionName: "f", runtime: "nodejs18", wantErr: "--id is required"},
 		{name: "缺 name", id: "f1", runtime: "nodejs18", wantErr: "--name is required"},
@@ -48,11 +55,14 @@ func TestBuildCreateFunctionReq(t *testing.T) {
 		{name: "全字段", id: "f1", functionName: "f", runtime: "nodejs18", entrypoint: "index.js",
 			timeoutSeconds: 30, spec: "shared-2x", enabled: true,
 			set: map[string]string{"timeout-seconds": "30", "spec": "shared-2x", "enabled": "true"}, wantErr: ""},
+		{name: "客户端调用面策略", id: "f1", functionName: "f", runtime: "nodejs18",
+			clientCallable: true, clientPerUserLimit: 15, clientLimitWindow: "hour",
+			set: map[string]string{"client-callable": "true", "client-per-user-limit": "15", "client-limit-window": "hour"}, wantErr: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req, err := buildCreateFunctionReq(newPresenceVerb(t, funcFlagsDecl, tt.set), tt.id, tt.functionName, tt.runtime, tt.entrypoint,
-				tt.timeoutSeconds, tt.spec, tt.enabled)
+				tt.timeoutSeconds, tt.spec, tt.enabled, tt.clientCallable, tt.clientPerUserLimit, tt.clientLimitWindow)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("want error containing %q, got %v", tt.wantErr, err)
@@ -87,32 +97,56 @@ func TestBuildCreateFunctionReq(t *testing.T) {
 			if wantEnabled {
 				require.Equal(t, tt.enabled, req["enabled"])
 			}
+			// 客户端调用面策略（P2）：presence + 值保真。
+			_, wantCallable := tt.set["client-callable"]
+			_, hasCallable := req["clientCallable"]
+			require.Equal(t, wantCallable, hasCallable, "clientCallable presence 不匹配: %v", req)
+			if wantCallable {
+				require.Equal(t, tt.clientCallable, req["clientCallable"])
+			}
+			_, wantLimit := tt.set["client-per-user-limit"]
+			_, hasLimit := req["clientPerUserLimit"]
+			require.Equal(t, wantLimit, hasLimit, "clientPerUserLimit presence 不匹配: %v", req)
+			if wantLimit {
+				require.Equal(t, tt.clientPerUserLimit, req["clientPerUserLimit"])
+			}
+			_, wantWindow := tt.set["client-limit-window"]
+			_, hasWindow := req["clientLimitWindow"]
+			require.Equal(t, wantWindow, hasWindow, "clientLimitWindow presence 不匹配: %v", req)
+			if wantWindow {
+				require.Equal(t, tt.clientLimitWindow, req["clientLimitWindow"])
+			}
 		})
 	}
 }
 
 func TestBuildUpdateFunctionReq(t *testing.T) {
 	tests := []struct {
-		name           string
-		functionID     string
-		newName        string
-		entrypoint     string
-		timeoutSeconds int
-		spec           string
-		enabled        bool
-		set            map[string]string
-		wantErr        string
+		name               string
+		functionID         string
+		newName            string
+		entrypoint         string
+		timeoutSeconds     int
+		spec               string
+		enabled            bool
+		clientCallable     bool
+		clientPerUserLimit int
+		clientLimitWindow  string
+		set                map[string]string
+		wantErr            string
 	}{
 		{name: "缺 function-id", wantErr: "missing function-id"},
 		{name: "仅 name", functionID: "f1", newName: "new", set: map[string]string{"name": "new"}, wantErr: ""},
 		{name: "全字段", functionID: "f1", newName: "new", entrypoint: "main.py",
 			timeoutSeconds: 60, spec: "shared-1x", enabled: false,
 			set: map[string]string{"name": "new", "entrypoint": "main.py", "timeout-seconds": "60", "spec": "shared-1x", "enabled": "false"}, wantErr: ""},
+		{name: "客户端调用面策略", functionID: "f1", clientCallable: true, clientPerUserLimit: 20,
+			set: map[string]string{"client-callable": "true", "client-per-user-limit": "20"}, wantErr: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req, err := buildUpdateFunctionReq(newPresenceVerb(t, funcFlagsDecl, tt.set), tt.functionID, tt.newName, tt.entrypoint,
-				tt.timeoutSeconds, tt.spec, tt.enabled, 0, 0, 0, 0, 0)
+				tt.timeoutSeconds, tt.spec, tt.enabled, 0, 0, 0, 0, 0, tt.clientCallable, tt.clientPerUserLimit, tt.clientLimitWindow)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("want error containing %q, got %v", tt.wantErr, err)
@@ -150,6 +184,25 @@ func TestBuildUpdateFunctionReq(t *testing.T) {
 			require.Equal(t, wantEnabled, hasEnabled, "enabled presence 不匹配: %v", req)
 			if wantEnabled {
 				require.Equal(t, tt.enabled, req["enabled"])
+			}
+			// 客户端调用面策略（P2）：presence + 值保真。
+			_, wantCallable := tt.set["client-callable"]
+			_, hasCallable := req["clientCallable"]
+			require.Equal(t, wantCallable, hasCallable, "clientCallable presence 不匹配: %v", req)
+			if wantCallable {
+				require.Equal(t, tt.clientCallable, req["clientCallable"])
+			}
+			_, wantLimit := tt.set["client-per-user-limit"]
+			_, hasLimit := req["clientPerUserLimit"]
+			require.Equal(t, wantLimit, hasLimit, "clientPerUserLimit presence 不匹配: %v", req)
+			if wantLimit {
+				require.Equal(t, tt.clientPerUserLimit, req["clientPerUserLimit"])
+			}
+			_, wantWindow := tt.set["client-limit-window"]
+			_, hasWindow := req["clientLimitWindow"]
+			require.Equal(t, wantWindow, hasWindow, "clientLimitWindow presence 不匹配: %v", req)
+			if wantWindow {
+				require.Equal(t, tt.clientLimitWindow, req["clientLimitWindow"])
 			}
 		})
 	}
