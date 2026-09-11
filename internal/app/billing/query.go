@@ -76,11 +76,7 @@ func (b *Billing) mergeLiveHour(ctx context.Context, projectID string, from, to 
 	if hour.Before(from) || !hour.Before(to) {
 		return
 	}
-	for _, metric := range []string{
-		domainbilling.MetricAPICalls,
-		domainbilling.MetricStorageBytes,
-		domainbilling.MetricFunctionDurationMS,
-	} {
+	for _, metric := range domainbilling.AllMetrics {
 		n, err := b.counter.Get(ctx, projectID, metric, hour)
 		if err != nil || n == 0 {
 			continue

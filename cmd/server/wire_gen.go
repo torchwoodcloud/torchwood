@@ -15,6 +15,7 @@ import (
 	realtime2 "github.com/torchwoodcloud/torchwood/internal/api/realtime"
 	"github.com/torchwoodcloud/torchwood/internal/api/servergrpc"
 	"github.com/torchwoodcloud/torchwood/internal/api/serverhttp"
+	"github.com/torchwoodcloud/torchwood/internal/app/analytics"
 	"github.com/torchwoodcloud/torchwood/internal/app/assets"
 	billing2 "github.com/torchwoodcloud/torchwood/internal/app/billing"
 	"github.com/torchwoodcloud/torchwood/internal/app/client"
@@ -153,6 +154,9 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	clientQuotaLimiter := functions.NewClientQuotaLimiter(redisClient)
 	functionsFunctions := functions2.NewFunctionsWithClientQuota(appConfig, executor, functionRepo, sharedQueue, redisCounter, repository, semaphores, redisExecutionTokenService, triggerRepo, clientQuotaLimiter)
 	functionsService := clientgrpc.NewFunctionsService(functionsFunctions)
+	analyticsIngestRepository := bunrepo.NewAnalyticsIngestRepository(database)
+	ingest := analytics.NewIngest(analyticsIngestRepository, redisCounter, logger)
+	analyticsService := clientgrpc.NewAnalyticsService(ingest)
 	buildInfo := NewBuildInfo()
 	healthService := servergrpc.NewHealthService(checkers, buildInfo)
 	schemaManager := NewSchemaManager(database, documentDB)
@@ -201,7 +205,8 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	outboxService := servergrpc.NewOutboxService(outboxAdmin)
 	auditLogs := server.NewAuditLogs(auditRepository)
 	auditLogsService := servergrpc.NewAuditLogsService(auditLogs)
-	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, healthService, projectsService, storageService, usersService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, authService, adminsService, outboxService, auditLogsService, policySet)
+	servergrpcAnalyticsService := servergrpc.NewAnalyticsService(ingest)
+	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, analyticsService, healthService, projectsService, storageService, usersService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, authService, adminsService, outboxService, auditLogsService, servergrpcAnalyticsService, policySet)
 	if err != nil {
 		cleanup()
 		return nil, nil, err

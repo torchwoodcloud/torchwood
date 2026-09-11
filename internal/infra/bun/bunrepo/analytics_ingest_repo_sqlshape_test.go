@@ -120,6 +120,20 @@ func TestAnalyticsCountDefinitions_SQLShape(t *testing.T) {
 	require.Contains(t, q, `"tw_shapecheck".analytics_event_definitions`)
 }
 
+// TestAnalyticsListDefinitionNames_SQLShape：软上限已达时的存量名清单读
+// （单列 name、无值拼接、schema 限定）。
+func TestAnalyticsListDefinitionNames_SQLShape(t *testing.T) {
+	bunDB, hook := newRenderOnlyDB(t)
+	expr, sch := analyticsTestTableExpr(analyticsEventDefinitionsTable, "aed")
+
+	_, _ = listAnalyticsEventDefinitionNames(context.Background(), bunDB, expr, sch)
+	q := hook.capturedSQL()
+	require.Contains(t, q, `"tw_shapecheck".analytics_event_definitions`)
+	require.Contains(t, q, `"aed"."name"`)
+	require.Contains(t, q, "ORDER BY")
+	require.NotContains(t, q, "*", "必须单列 name（千行级软上限，禁全列拖回）")
+}
+
 // TestAnalyticsMergeEventDefinitions：批内同名防御性合并（同语句两行命中
 // 同一冲突行会报 "cannot affect row a second time"）。
 func TestAnalyticsMergeEventDefinitions(t *testing.T) {

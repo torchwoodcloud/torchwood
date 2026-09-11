@@ -24,6 +24,11 @@ const (
 	// P2 客户端调用面与执行身份回访（验收测试用；策略与 proto 注解同构）。
 	MethodInvokeFunction = "/torchwood.client.v1.FunctionsService/InvokeFunction"
 	MethodAssetsGrant    = "/torchwood.server.v1.AssetsService/Grant"
+	// Analytics 摄入双面（PR2；策略与 proto 注解同构：client 面 service_auth
+	// 默认 END_USER → permissions 归一 ["users"]；server 面 method_auth =
+	// admin_roles {member,admin,owner} + analytics:write）。
+	MethodAnalyticsClientIngest = "/torchwood.client.v1.AnalyticsService/IngestEvents"
+	MethodAnalyticsServerIngest = "/torchwood.server.v1.AnalyticsService/IngestEvents"
 )
 
 // InterceptorEnv wires clientInfo + auth + rate limit + audit interceptors
@@ -75,6 +80,11 @@ func newInterceptorEnv(db *clients.Database, cfg *config.AppConfig, docDB databa
 		{Method: MethodInvokeFunction, Service: "/torchwood.client.v1.FunctionsService", Access: domainauth.AccessEndUser, Permissions: []string{"users"}},
 		{Method: MethodAssetsGrant, Service: "/torchwood.server.v1.AssetsService", Access: domainauth.AccessServer,
 			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAssets, Op: domainauth.ScopeWrite}},
+		// Analytics 摄入双面（PR2）。
+		{Method: MethodAnalyticsClientIngest, Service: "/torchwood.client.v1.AnalyticsService", Access: domainauth.AccessEndUser, Permissions: []string{"users"}},
+		{Method: MethodAnalyticsServerIngest, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
+			AdminRoles: []domainauth.AdminRole{domainauth.AdminRoleMember, domainauth.AdminRoleAdmin, domainauth.AdminRoleOwner},
+			Scope:      &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeWrite}},
 	})
 	if err != nil {
 		return nil, err

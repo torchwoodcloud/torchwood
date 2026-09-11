@@ -97,6 +97,17 @@ func (r *AnalyticsIngestRepository) CountEventDefinitions(ctx context.Context, p
 	return countAnalyticsEventDefinitions(ctx, conn, expr, sch)
 }
 
+// ListEventDefinitionNames 项目内全部事件名（按名排序；软上限已达时区分
+// 存量名/新名，D12）。SQL 构造在 listAnalyticsEventDefinitionNames（形状
+// 护栏测试的锚点）。
+func (r *AnalyticsIngestRepository) ListEventDefinitionNames(ctx context.Context, projectID string) ([]string, error) {
+	conn, sch, expr, err := Scoped(ctx, r.db, projectID, analyticsEventDefinitionsTable, "aed")
+	if err != nil {
+		return nil, err
+	}
+	return listAnalyticsEventDefinitionNames(ctx, conn, expr, sch)
+}
+
 func insertAnalyticsEvents(ctx context.Context, conn bun.IDB, expr string, sch bun.Ident, rows []model.AnalyticsEvent) error {
 	_, err := conn.NewInsert().Model(&rows).ModelTableExpr(expr, sch).
 		Column(analyticsEventInsertColumns...).
@@ -122,6 +133,20 @@ func countAnalyticsEventDefinitions(ctx context.Context, conn bun.IDB, expr stri
 		return 0, err
 	}
 	return int64(n), nil
+}
+
+func listAnalyticsEventDefinitionNames(ctx context.Context, conn bun.IDB, expr string, sch bun.Ident) ([]string, error) {
+	var names []string
+	err := conn.NewSelect().
+		Model((*model.AnalyticsEventDefinition)(nil)).
+		ModelTableExpr(expr, sch).
+		Column("name").
+		Order("name ASC").
+		Scan(ctx, &names)
+	if err != nil {
+		return nil, err
+	}
+	return names, nil
 }
 
 // mergeEventDefinitions 按名去重：first_seen 取最早、last_seen 取最晚

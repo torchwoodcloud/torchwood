@@ -16,4 +16,8 @@ type IngestRepository interface {
 	// CountEventDefinitions 项目内事件名总数（软上限 MaxEventNames 的
 	// 判定量；并发摄取轻微超扣可容忍，D12）。
 	CountEventDefinitions(ctx context.Context, projectID string) (int64, error)
+	// ListEventDefinitionNames 项目内全部事件名（按名排序；软上限已达时
+	// 区分批内「存量名/新名」的判定量——存量名不受软上限影响，仅拒新名，
+	// D12）。仅在 CountEventDefinitions >= MaxEventNames 的罕见路径调用。
+	ListEventDefinitionNames(ctx context.Context, projectID string) ([]string, error)
 }

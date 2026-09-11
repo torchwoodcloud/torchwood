@@ -33,11 +33,21 @@ var auditSilentClientMethods = map[string]bool{
 	"/torchwood.client.v1.AccountService/Me":           true,
 }
 
+// auditSilentServerMethods 是 server/console 面显式登记的高频写动作豁免
+// （与 auditSilentClientMethods 同一纪律：非读动词默认落审计，豁免必须显式
+// 登记——新增即护栏测试同步）。首例：Analytics 摄入是事件数据通道而非
+// 管理变更（D13，docs/design/analytics.md；限流默认档允许单用户
+// 1000 请求/min × 批 100 事件，落审计即纯噪声且体量碾压一切管理动作——
+// 事件的业务载体是 analytics_events 表本身）。
+var auditSilentServerMethods = map[string]bool{
+	"/torchwood.server.v1.AnalyticsService/IngestEvents": true,
+}
+
 // auditRowEligible 判定一次 unary 调用是否落 audit_logs 行（噪声治理：
 // 日常无害操作不进审计——量大且无安全价值）：
 //   - 框架内置服务（grpc.health.v1/grpc.reflection）：不记；
 //   - 管理面（server.v1/console.v1）：仅非读方法（读方法=Console/CLI 的
-//     日常浏览查询，噪声）；
+//     日常浏览查询，噪声），auditSilentServerMethods 显式登记者除外（D13）；
 //   - client 面：仅 AccountService 的非读安全动作（登录/登出/账号与凭证
 //     变更——端用户账号日志 GET /v1/account/logs 的数据来源）。其余
 //     client 服务（文档/函数执行/支付/资产等数据面）的审计载体是事件流
@@ -55,6 +65,9 @@ func auditRowEligible(fullMethod string) bool {
 	_, verb := splitFullMethod(fullMethod)
 	switch {
 	case strings.HasPrefix(fullMethod, "/torchwood.server.v1."), strings.HasPrefix(fullMethod, "/torchwood.console.v1."):
+		if auditSilentServerMethods[fullMethod] {
+			return false
+		}
 		return !isReadVerb(verb)
 	case strings.HasPrefix(fullMethod, "/torchwood.client.v1."):
 		if !strings.HasPrefix(fullMethod, "/torchwood.client.v1.AccountService/") || auditSilentClientMethods[fullMethod] {

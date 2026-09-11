@@ -82,6 +82,10 @@ func NewGRPCGatewayServer(
 		// 审计日志查询面（outbox 走 gRPC-only 未登记；Console 前端经
 		// /v1/server/audit-logs 消费，必须挂 gateway）。
 		serverv1.RegisterAuditLogsServiceHandlerFromEndpoint,
+		// Analytics 摄入双面（PR2）：POST /v1/analytics/events（端侧会话）
+		// 与 POST /v1/server/analytics/events（API Key/admin）。
+		clientv1.RegisterAnalyticsServiceHandlerFromEndpoint,
+		serverv1.RegisterAnalyticsServiceHandlerFromEndpoint,
 	}
 	for _, fn := range register {
 		if err := fn(ctx, mux, grpcEndpoint, opts); err != nil {

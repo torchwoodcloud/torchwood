@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/google/wire"
+	"github.com/torchwoodcloud/torchwood/internal/app/analytics"
 	"github.com/torchwoodcloud/torchwood/internal/app/assets"
 	"github.com/torchwoodcloud/torchwood/internal/app/billing"
 	"github.com/torchwoodcloud/torchwood/internal/app/client"
@@ -44,4 +45,7 @@ var ProviderSet = wire.NewSet(
 	subscriptions.NewOrderFulfiller,
 	wire.Bind(new(domainpayments.SubscriptionCallbackHandler), new(*subscriptions.Subscriptions)),
 	billing.NewBilling,
+	// Analytics 摄入用例（PR2 摄入链）：repo 经 infra bind、计量经
+	// domainbilling.UsageCounter 注入。
+	analytics.NewIngest,
 )

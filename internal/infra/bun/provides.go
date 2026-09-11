@@ -2,6 +2,7 @@ package bun
 
 import (
 	"github.com/google/wire"
+	"github.com/torchwoodcloud/torchwood/internal/domain/analytics"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 )
@@ -39,4 +40,7 @@ var ProviderSet = wire.NewSet(
 	bunrepo.NewMembershipRepository,
 	bunrepo.NewBucketRepository,
 	bunrepo.NewFileRepository,
+	// Analytics 摄入仓储（PR2 摄入链；项目 schema analytics_* 表）。
+	bunrepo.NewAnalyticsIngestRepository,
+	wire.Bind(new(analytics.IngestRepository), new(*bunrepo.AnalyticsIngestRepository)),
 )

@@ -12,7 +12,18 @@ const (
 	MetricAPICalls           = "api_calls"
 	MetricStorageBytes       = "storage_bytes"
 	MetricFunctionDurationMS = "function_duration_ms"
+	// MetricAnalyticsEvents 是 analytics 摄入计量点（docs/design/analytics.md
+	// §4.3 / D15）：摄入用例按 accepted 条数 Incr，自动进 rollups → 账单。
+	MetricAnalyticsEvents = "analytics_events"
 )
+
+// AllMetrics 是本期计量点全集（live 小时合并等枚举消费点的单一来源）。
+var AllMetrics = []string{
+	MetricAPICalls,
+	MetricStorageBytes,
+	MetricFunctionDurationMS,
+	MetricAnalyticsEvents,
+}
 
 // BucketTTL 是 Redis 小时 bucket 的键 TTL：worker 停机后仍能扫到上一完整小时
 // （验收：停机 1 小时重启 bucket 不丢）；设计要求 ≥ 48h。
@@ -29,7 +40,7 @@ const (
 // KnownMetric 报告 metric 是否为本期计量点（不含 Realtime，D18）。
 func KnownMetric(metric string) bool {
 	switch metric {
-	case MetricAPICalls, MetricStorageBytes, MetricFunctionDurationMS:
+	case MetricAPICalls, MetricStorageBytes, MetricFunctionDurationMS, MetricAnalyticsEvents:
 		return true
 	}
 	return false

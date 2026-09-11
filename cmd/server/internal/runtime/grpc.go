@@ -42,6 +42,7 @@ func NewGRPCServer(
 	clientAssets *clientgrpc.AssetsService,
 	clientSubscriptions *clientgrpc.SubscriptionsService,
 	clientFunctions *clientgrpc.FunctionsService,
+	clientAnalytics *clientgrpc.AnalyticsService,
 	health *servergrpc.HealthService,
 	projects *servergrpc.ProjectsService,
 	storage *servergrpc.StorageService,
@@ -60,6 +61,7 @@ func NewGRPCServer(
 	adminsService *consolegrpc.AdminsService,
 	outboxService *servergrpc.OutboxService,
 	auditLogsService *servergrpc.AuditLogsService,
+	serverAnalytics *servergrpc.AnalyticsService,
 	policySet *domainauth.PolicySet,
 ) (*lynxgrpc.Server, error) {
 	grpcCfg := cfg.GetServer().GetGrpc()
@@ -127,6 +129,9 @@ func NewGRPCServer(
 	clientv1.RegisterAssetsServiceServer(grpcSrv, clientAssets)
 	clientv1.RegisterSubscriptionsServiceServer(grpcSrv, clientSubscriptions)
 	clientv1.RegisterFunctionsServiceServer(grpcSrv, clientFunctions)
+	// Analytics 摄入双面（PR2）：client 面 Principal 归因、server 面可信
+	// 代报；proto 策略 PR1 已登记（authzFileDescriptors）。
+	clientv1.RegisterAnalyticsServiceServer(grpcSrv, clientAnalytics)
 	serverv1.RegisterHealthServiceServer(grpcSrv, health)
 	serverv1.RegisterProjectsServiceServer(grpcSrv, projects)
 	serverv1.RegisterStorageServiceServer(grpcSrv, storage)
@@ -146,6 +151,9 @@ func NewGRPCServer(
 		serverv1.RegisterOutboxServiceServer(grpcSrv, outboxService)
 	}
 	serverv1.RegisterAuditLogsServiceServer(grpcSrv, auditLogsService)
+	// 查询方法嵌 Unimplemented 占位（实现随 PR3），注册保证策略/反射/
+	// swagger 覆盖断言即刻可见。
+	serverv1.RegisterAnalyticsServiceServer(grpcSrv, serverAnalytics)
 
 	// fail-closed：所有已注册方法都必须带有 authz 注解，缺失的方法会在拦截器里被放行。
 	if err := assertRegisteredMethodsHaveAuthz(grpcSrv, policySet); err != nil {
