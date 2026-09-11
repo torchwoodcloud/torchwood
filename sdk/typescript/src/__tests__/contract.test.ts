@@ -318,6 +318,7 @@ const RPC_TO_METHOD: Record<string, Record<string, string>> = {
     ListLeaderboardTop: "listLeaderboardTop",
     GetLeaderboardSettlement: "getLeaderboardSettlement",
     ListLeaderboardSettlements: "listLeaderboardSettlements",
+  },
   AnalyticsService: {
     IngestEvents: "ingest",
     GetOverview: "getOverview",
