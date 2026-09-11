@@ -65,6 +65,7 @@ const (
 	ScopeOutbox         ScopeResource = "outbox"
 	ScopeAuditLogs      ScopeResource = "audit_logs"
 	ScopeLeaderboards   ScopeResource = "leaderboards"
+	ScopeAnalytics      ScopeResource = "analytics"
 )
 
 // AllScopeResources 是资源词表全集（死 scope 断言的对照面）。
@@ -73,6 +74,7 @@ var AllScopeResources = []ScopeResource{
 	ScopeOAuthProviders, ScopeFunctions, ScopePayments, ScopeAssets,
 	ScopeSubscriptions, ScopeBilling, ScopeOutbox, ScopeAuditLogs,
 	ScopeLeaderboards,
+	ScopeSubscriptions, ScopeBilling, ScopeOutbox, ScopeAuditLogs, ScopeAnalytics,
 }
 
 // ScopeOp 是 scope 的读写方向。

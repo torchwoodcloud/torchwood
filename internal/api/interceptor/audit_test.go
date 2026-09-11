@@ -52,6 +52,61 @@ func runAuditMiddleware(repo *auditTestRepo, callerCtx context.Context) (any, er
 	})
 }
 
+// TestAuditInterceptor_AnalyticsIngestSilent（D13 护栏，docs/design/analytics.md）：
+// Analytics 摄入是高频事件数据通道，两面的 IngestEvents 都不得落 audit_logs
+// 行——server 面（非读动词，默认会落审计）必须命中 auditSilentServerMethods
+// 显式豁免；client 面天然豁免（仅 AccountService 非读动作可审计）。判定量
+// = repo.Insert 从未被调用（gotCtx 恒 nil）。
+func TestAuditInterceptor_AnalyticsIngestSilent(t *testing.T) {
+	for _, method := range []string{
+		"/torchwood.server.v1.AnalyticsService/IngestEvents",
+		"/torchwood.client.v1.AnalyticsService/IngestEvents",
+	} {
+		repo := &auditTestRepo{}
+		a := NewAuditInterceptor(repo)
+		info := &grpc.UnaryServerInfo{FullMethod: method}
+		resp, err := a.UnaryAuditMiddleware(context.Background(), nil, info, func(context.Context, any) (any, error) {
+			return "resp", nil
+		})
+		requireNoError(t, err)
+		if resp != "resp" {
+			t.Fatalf("%s: expected handler response, got %v", method, resp)
+		}
+		if repo.gotCtx != nil {
+			t.Fatalf("%s: analytics ingestion must not write audit rows (D13)", method)
+		}
+	}
+}
+
+// TestAuditInterceptor_AnalyticsQueriesSilent（PR3 护栏，S2 遗留接线项）：
+// Analytics 六个查询 RPC 是分析浏览（读语义），不得落 audit_logs 行。
+// Get/List 前缀天然归读动词；Query* 前缀由 auditReadMethodPrefixes 显式
+// 收录——判定量 = repo.Insert 从未被调用。
+func TestAuditInterceptor_AnalyticsQueriesSilent(t *testing.T) {
+	for _, method := range []string{
+		"/torchwood.server.v1.AnalyticsService/GetOverview",
+		"/torchwood.server.v1.AnalyticsService/ListEventDefinitions",
+		"/torchwood.server.v1.AnalyticsService/QueryTimeseries",
+		"/torchwood.server.v1.AnalyticsService/QueryBreakdown",
+		"/torchwood.server.v1.AnalyticsService/QueryRetention",
+		"/torchwood.server.v1.AnalyticsService/ListUserEvents",
+	} {
+		repo := &auditTestRepo{}
+		a := NewAuditInterceptor(repo)
+		info := &grpc.UnaryServerInfo{FullMethod: method}
+		resp, err := a.UnaryAuditMiddleware(context.Background(), nil, info, func(context.Context, any) (any, error) {
+			return "resp", nil
+		})
+		requireNoError(t, err)
+		if resp != "resp" {
+			t.Fatalf("%s: expected handler response, got %v", method, resp)
+		}
+		if repo.gotCtx != nil {
+			t.Fatalf("%s: analytics queries are read-browse verbs and must not write audit rows", method)
+		}
+	}
+}
+
 // TestAuditInterceptor_InsertHasTimeout（R01-F7-6）：审计落库必须带
 // 3s 超时 ctx；repo 阻塞时 RPC 响应不受影响、按时返回。
 func TestAuditInterceptor_InsertHasTimeout(t *testing.T) {

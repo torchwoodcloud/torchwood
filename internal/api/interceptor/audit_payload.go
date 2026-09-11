@@ -32,9 +32,11 @@ var auditSummaryNamespaces = []string{
 
 // auditReadMethodPrefixes：读动词前缀（行级准入与请求摘要共用——读操作是
 // 日常浏览，既不落审计行也不含请求摘要）；未知动词一律记录——偏向多记
-// （漏记不可补，多记可过滤）。
+// （漏记不可补，多记可过滤）。"Query"（PR3 起）：Analytics 固定形状查询
+// （QueryTimeseries/QueryBreakdown/QueryRetention）是分析浏览而非管理变更，
+// 与 List/Get 同归读动词（误归写会高频落审计噪声）。
 var auditReadMethodPrefixes = []string{
-	"List", "Get", "Health", "Count", "Search", "Stats", "Describe", "Ping", "Watch", "Check",
+	"List", "Get", "Health", "Count", "Search", "Stats", "Describe", "Ping", "Watch", "Check", "Query",
 }
 
 // auditSensitiveFieldPatterns：字段名归一（小写、去 _/-）后 contains 命中即

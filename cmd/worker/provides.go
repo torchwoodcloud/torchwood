@@ -6,6 +6,7 @@ import (
 	"github.com/google/wire"
 	"github.com/lynx-go/lynx"
 	"github.com/lynx-go/lynx/boot"
+	appanalytics "github.com/torchwoodcloud/torchwood/internal/app/analytics"
 	"github.com/torchwoodcloud/torchwood/internal/app/assets"
 	appbilling "github.com/torchwoodcloud/torchwood/internal/app/billing"
 	appfunctions "github.com/torchwoodcloud/torchwood/internal/app/functions"
@@ -13,6 +14,7 @@ import (
 	apppayments "github.com/torchwoodcloud/torchwood/internal/app/payments"
 	appstorage "github.com/torchwoodcloud/torchwood/internal/app/storage"
 	"github.com/torchwoodcloud/torchwood/internal/app/subscriptions"
+	domainanalytics "github.com/torchwoodcloud/torchwood/internal/domain/analytics"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
@@ -99,6 +101,15 @@ var ProviderSet = wire.NewSet(
 	bunrepo.NewProviderIndexRepository,
 	bunrepo.NewUsageRepository,
 	bunrepo.NewBillingStatementRepository,
+	// Analytics worker 面（PR5）：rollup / maintenance 用例 + worker 仓储
+	//（四端口同实现：rollup 重算、分区治理、tombstone 清洗、注销钩子写入）。
+	appanalytics.NewRollup,
+	appanalytics.NewMaintenanceFromConfig,
+	bunrepo.NewAnalyticsWorkerRepository,
+	wire.Bind(new(domainanalytics.RollupRepository), new(*bunrepo.AnalyticsWorkerRepository)),
+	wire.Bind(new(domainanalytics.MaintenanceRepository), new(*bunrepo.AnalyticsWorkerRepository)),
+	wire.Bind(new(domainanalytics.TombstoneCleaner), new(*bunrepo.AnalyticsWorkerRepository)),
+	wire.Bind(new(domainanalytics.DeletionQueueRepository), new(*bunrepo.AnalyticsWorkerRepository)),
 	wire.Bind(new(domainstorage.BucketRepository), new(*bunrepo.BucketRepository)),
 	wire.Bind(new(domainstorage.FileRepository), new(*bunrepo.FileRepository)),
 	infraevents.ProviderSet,
@@ -158,8 +169,8 @@ func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 	return &c, nil
 }
 
-func NewComponents(worker *workerpkg.Worker, cleaner *workerpkg.ChunkCleaner, trimmer *workerpkg.StreamTrimmer, outbox *workerpkg.OutboxWorkerService, paymentCloser *workerpkg.PaymentCloser, assetExpirer *workerpkg.AssetExpirer, subscriptionBiller *workerpkg.SubscriptionBiller, usageRollup *workerpkg.UsageRollupWorker, leaderboardsCleaner *workerpkg.LeaderboardsCleaner, leaderboardsSettler *workerpkg.LeaderboardsSettler) []lynx.Service {
-	return []lynx.Service{worker, cleaner, trimmer, outbox, paymentCloser, assetExpirer, subscriptionBiller, usageRollup, leaderboardsCleaner, leaderboardsSettler}
+func NewComponents(worker *workerpkg.Worker, cleaner *workerpkg.ChunkCleaner, trimmer *workerpkg.StreamTrimmer, outbox *workerpkg.OutboxWorkerService, paymentCloser *workerpkg.PaymentCloser, assetExpirer *workerpkg.AssetExpirer, subscriptionBiller *workerpkg.SubscriptionBiller, usageRollup *workerpkg.UsageRollupWorker, leaderboardsCleaner *workerpkg.LeaderboardsCleaner, leaderboardsSettler *workerpkg.LeaderboardsSettler, analyticsRollup *workerpkg.AnalyticsRollupWorker, analyticsMaintenance *workerpkg.AnalyticsMaintenanceWorker) []lynx.Service {
+	return []lynx.Service{worker, cleaner, trimmer, outbox, paymentCloser, assetExpirer, subscriptionBiller, usageRollup, leaderboardsCleaner, leaderboardsSettler, analyticsRollup, analyticsMaintenance}
 }
 
 // NewStorageOptions 返回生产默认的空选项集（WithClock 等仅供测试注入）。

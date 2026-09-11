@@ -15,6 +15,7 @@ import (
 	realtime2 "github.com/torchwoodcloud/torchwood/internal/api/realtime"
 	"github.com/torchwoodcloud/torchwood/internal/api/servergrpc"
 	"github.com/torchwoodcloud/torchwood/internal/api/serverhttp"
+	"github.com/torchwoodcloud/torchwood/internal/app/analytics"
 	"github.com/torchwoodcloud/torchwood/internal/app/assets"
 	billing2 "github.com/torchwoodcloud/torchwood/internal/app/billing"
 	"github.com/torchwoodcloud/torchwood/internal/app/client"
@@ -107,7 +108,8 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	weChatMiniProgramExchanger := auth.NewWeChatMiniProgramExchanger()
 	otpGenerator := auth.NewOTPGenerator()
 	sessionCookieVerifier := auth.NewSessionCookieVerifier(appConfig)
-	account := client.NewAccount(appConfig, repository, inviteCodeRepository, oAuthProviderRepository, sessionService, redisOTPChallengeStore, redisOAuthStateStore, redisAccountTokenStore, redisLoginThrottle, redisRefreshRotationStore, service, mailerService, smsService, redisRateLimiter, userRoles, mfaService, mfaChallengeStore, redisOneTimeTokenStore, auditRepository, userRepository, identityRepository, sessionRepository, oAuthAuthenticatorFactory, weChatMiniProgramExchanger, otpGenerator, sessionCookieVerifier)
+	analyticsWorkerRepository := bunrepo.NewAnalyticsWorkerRepository(database)
+	account := client.NewAccount(appConfig, repository, inviteCodeRepository, oAuthProviderRepository, sessionService, redisOTPChallengeStore, redisOAuthStateStore, redisAccountTokenStore, redisLoginThrottle, redisRefreshRotationStore, service, mailerService, smsService, redisRateLimiter, userRoles, mfaService, mfaChallengeStore, redisOneTimeTokenStore, auditRepository, userRepository, identityRepository, sessionRepository, oAuthAuthenticatorFactory, weChatMiniProgramExchanger, otpGenerator, sessionCookieVerifier, analyticsWorkerRepository, database)
 	accountService := clientgrpc.NewAccountService(account)
 	eventOutbox := events.NewEventOutbox(database)
 	documentDB := documentdb.NewPostgresDocumentDB(database, eventOutbox)
@@ -160,6 +162,9 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	rewardGranter := leaderboards.NewAssetsRewardGranter(assetsAssets)
 	leaderboardsLeaderboards := leaderboards.NewLeaderboards(database, boardRepo, entryRepo, settlementRepo, rewardGranter, defRepo, idempotencyStore, logger, repository)
 	leaderboardsService := clientgrpc.NewLeaderboardsService(leaderboardsLeaderboards)
+	analyticsIngestRepository := bunrepo.NewAnalyticsIngestRepository(database)
+	ingest := analytics.NewIngest(analyticsIngestRepository, redisCounter, logger)
+	analyticsService := clientgrpc.NewAnalyticsService(ingest)
 	buildInfo := NewBuildInfo()
 	healthService := servergrpc.NewHealthService(checkers, buildInfo)
 	schemaManager := NewSchemaManager(database, documentDB)
@@ -175,7 +180,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	v2 := NewStorageOptions()
 	storageStorage := storage2.NewStorage(appConfig, repository, objectStore, uploadSessionStore, bucketRepository, fileRepository, v2...)
 	storageService := servergrpc.NewStorageService(storageStorage)
-	users := server.NewUsers(repository, sessionService, database, userRepository, sessionRepository, groupRepository, membershipRepository)
+	users := server.NewUsers(repository, sessionService, database, userRepository, sessionRepository, groupRepository, membershipRepository, analyticsWorkerRepository)
 	usersService := servergrpc.NewUsersService(users)
 	policySet, err := runtime.ProvideMethodPolicies()
 	if err != nil {
@@ -210,7 +215,10 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	auditLogsService := servergrpc.NewAuditLogsService(auditLogs)
 	servergrpcLeaderboardsService := servergrpc.NewLeaderboardsService(leaderboardsLeaderboards)
 	consolegrpcLeaderboardsService := consolegrpc.NewLeaderboardsService(leaderboardsLeaderboards)
-	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, leaderboardsService, healthService, projectsService, storageService, usersService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, authService, adminsService, outboxService, auditLogsService, servergrpcLeaderboardsService, consolegrpcLeaderboardsService, policySet)
+	analyticsQueryRepository := bunrepo.NewAnalyticsQueryRepository(database)
+	query := analytics.NewQueryFromConfig(appConfig, analyticsQueryRepository)
+	servergrpcAnalyticsService := servergrpc.NewAnalyticsService(ingest, query)
+	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, leaderboardsService, analyticsService, healthService, projectsService, storageService, usersService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, authService, adminsService, outboxService, auditLogsService, servergrpcLeaderboardsService, consolegrpcLeaderboardsService, servergrpcAnalyticsService, policySet)
 	if err != nil {
 		cleanup()
 		return nil, nil, err

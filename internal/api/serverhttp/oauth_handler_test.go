@@ -121,6 +121,7 @@ func newAuthorizeTestHandler(t *testing.T, projectSettings map[string]any, provi
 		nil, // weChatExchanger
 		nil, // otpGenerator
 		nil, // sessionCookies
+		nil, // analyticsDeletions
 	)
 	h, err := NewOAuthHandler(account, cfg, nil, limiter)
 	require.NoError(t, err)

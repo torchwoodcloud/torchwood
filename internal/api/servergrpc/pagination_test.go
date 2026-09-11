@@ -167,7 +167,7 @@ func paginationCtx() context.Context {
 
 func TestServerGRPC_ListHandlers_EchoNextPageToken(t *testing.T) {
 	ctx := paginationCtx()
-	users := NewUsersService(appserver.NewUsers(paginationProjectRepo{}, nil, nil, paginationUserRepo{}, paginationSessionRepo{}, paginationGroupRepo{}, paginationMembershipRepo{}))
+	users := NewUsersService(appserver.NewUsers(paginationProjectRepo{}, nil, nil, paginationUserRepo{}, paginationSessionRepo{}, paginationGroupRepo{}, paginationMembershipRepo{}, nil))
 	groups := NewGroupsService(appserver.NewGroups(paginationProjectRepo{}, paginationUserRepo{}, paginationGroupRepo{}, paginationMembershipRepo{}))
 	storage := NewStorageService(appstorage.NewStorage(&config.AppConfig{}, paginationProjectRepo{}, nil, nil, paginationBucketRepo{}, paginationFileRepo{}))
 

@@ -15,6 +15,25 @@ export { BillingService } from "./billing.js";
 export { OutboxService } from "./outbox.js";
 export { AuditLogsService } from "./auditLogs.js";
 export type { AuditLog, AuditLogsListParams, AuditLogsListResult } from "./auditLogs.js";
+export { AnalyticsService } from "./analytics.js";
+export type {
+  AnalyticsBreakdownBucket,
+  AnalyticsEventDefinition,
+  AnalyticsOverview,
+  AnalyticsOverviewKpi,
+  AnalyticsRetentionCohort,
+  AnalyticsTimeseriesPoint,
+  AnalyticsTodayStats,
+  AnalyticsTopEvent,
+  AnalyticsUserEvent,
+  IngestEventsResult,
+  ListEventDefinitionsResult,
+  ListUserEventsResult,
+  QueryBreakdownResult,
+  QueryRetentionResult,
+  QueryTimeseriesResult,
+  ServerAnalyticsEvent,
+} from "./analytics.js";
 export {
   agentTools,
   lookupAgentTool,

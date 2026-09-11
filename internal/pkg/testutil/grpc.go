@@ -24,6 +24,19 @@ const (
 	// P2 客户端调用面与执行身份回访（验收测试用；策略与 proto 注解同构）。
 	MethodInvokeFunction = "/torchwood.client.v1.FunctionsService/InvokeFunction"
 	MethodAssetsGrant    = "/torchwood.server.v1.AssetsService/Grant"
+	// Analytics 摄入双面（PR2；策略与 proto 注解同构：client 面 service_auth
+	// 默认 END_USER → permissions 归一 ["users"]；server 面 method_auth =
+	// admin_roles {member,admin,owner} + analytics:write）。
+	MethodAnalyticsClientIngest = "/torchwood.client.v1.AnalyticsService/IngestEvents"
+	MethodAnalyticsServerIngest = "/torchwood.server.v1.AnalyticsService/IngestEvents"
+	// Analytics 查询面六 RPC（PR3；策略与 proto 注解同构：读方法无
+	// admin_roles（= 全角色，viewer 含）+ API key analytics:read）。
+	MethodAnalyticsGetOverview     = "/torchwood.server.v1.AnalyticsService/GetOverview"
+	MethodAnalyticsListDefinitions = "/torchwood.server.v1.AnalyticsService/ListEventDefinitions"
+	MethodAnalyticsQueryTimeseries = "/torchwood.server.v1.AnalyticsService/QueryTimeseries"
+	MethodAnalyticsQueryBreakdown  = "/torchwood.server.v1.AnalyticsService/QueryBreakdown"
+	MethodAnalyticsQueryRetention  = "/torchwood.server.v1.AnalyticsService/QueryRetention"
+	MethodAnalyticsListUserEvents  = "/torchwood.server.v1.AnalyticsService/ListUserEvents"
 )
 
 // InterceptorEnv wires clientInfo + auth + rate limit + audit interceptors
@@ -75,6 +88,24 @@ func newInterceptorEnv(db *clients.Database, cfg *config.AppConfig, docDB databa
 		{Method: MethodInvokeFunction, Service: "/torchwood.client.v1.FunctionsService", Access: domainauth.AccessEndUser, Permissions: []string{"users"}},
 		{Method: MethodAssetsGrant, Service: "/torchwood.server.v1.AssetsService", Access: domainauth.AccessServer,
 			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAssets, Op: domainauth.ScopeWrite}},
+		// Analytics 摄入双面（PR2）。
+		{Method: MethodAnalyticsClientIngest, Service: "/torchwood.client.v1.AnalyticsService", Access: domainauth.AccessEndUser, Permissions: []string{"users"}},
+		{Method: MethodAnalyticsServerIngest, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
+			AdminRoles: []domainauth.AdminRole{domainauth.AdminRoleMember, domainauth.AdminRoleAdmin, domainauth.AdminRoleOwner},
+			Scope:      &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeWrite}},
+		// Analytics 查询面六 RPC（PR3）：admin 会话全角色 + analytics:read。
+		{Method: MethodAnalyticsGetOverview, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
+			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
+		{Method: MethodAnalyticsListDefinitions, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
+			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
+		{Method: MethodAnalyticsQueryTimeseries, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
+			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
+		{Method: MethodAnalyticsQueryBreakdown, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
+			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
+		{Method: MethodAnalyticsQueryRetention, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
+			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
+		{Method: MethodAnalyticsListUserEvents, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
+			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
 	})
 	if err != nil {
 		return nil, err

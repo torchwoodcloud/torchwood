@@ -13,6 +13,7 @@ import (
 	"time"
 
 	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
+	domainanalytics "github.com/torchwoodcloud/torchwood/internal/domain/analytics"
 	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	domainidgen "github.com/torchwoodcloud/torchwood/internal/domain/idgen"
@@ -23,6 +24,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
+	"github.com/torchwoodcloud/torchwood/pkg/uow"
 	"github.com/torchwoodcloud/torchwood/pkg/jwtparser"
 	"github.com/torchwoodcloud/torchwood/pkg/password"
 	"google.golang.org/grpc/codes"
@@ -57,6 +59,12 @@ type Account struct {
 	otpGenerator    domainauth.OTPGenerator
 	// sessionCookies 校验并解出端用户会话 cookie（M5 C5 OAuth link 回调面）。
 	sessionCookies domainauth.SessionCookieVerifier
+	// analyticsDeletions 是注销合规钩子的 tombstone 写入端口（PR5，D10；
+	// nil = 未装配——既有测试兼容，跳过钩子）。
+	analyticsDeletions domainanalytics.DeletionQueueRepository
+	// db 是注销原子性所需的 uow 端口：软删 UPDATE 与 tombstone INSERT
+	// 同事务（设计稿 §7；nil = 测试装配，退化为顺序执行）。
+	db uow.Runner
 }
 
 func NewAccount(
@@ -86,34 +94,38 @@ func NewAccount(
 	weChatExchanger domainauth.WeChatMiniProgramExchanger,
 	otpGenerator domainauth.OTPGenerator,
 	sessionCookies domainauth.SessionCookieVerifier,
+	analyticsDeletions domainanalytics.DeletionQueueRepository,
+	db uow.Runner,
 ) *Account {
 	return &Account{
-		cfg:             cfg,
-		projectRepo:     projectRepo,
-		inviteRepo:      inviteRepo,
-		oauthProviders:  oauthProviders,
-		usersRepo:       usersRepo,
-		identities:      identities,
-		sessionRepo:     sessionRepo,
-		sessions:        sessions,
-		otp:             otp,
-		oauthState:      oauthState,
-		tokens:          tokens,
-		loginThrottle:   normalizeLoginThrottle(loginThrottle),
-		rotation:        rotation,
-		oauthFactory:    oauthFactory,
-		weChatExchanger: weChatExchanger,
-		otpGenerator:    otpGenerator,
-		idGen:           idGen,
-		mailer:          mailer,
-		sms:             sms,
-		rateLimiter:     rateLimiter,
-		roles:           roles,
-		mfa:             mfa,
-		mfaChallenges:   normalizeMFAChallengeStore(mfaChallenges),
-		oneTimeTokens:   oneTimeTokens,
-		auditRepo:       auditRepo,
-		sessionCookies:  sessionCookies,
+		cfg:                cfg,
+		projectRepo:        projectRepo,
+		inviteRepo:         inviteRepo,
+		oauthProviders:     oauthProviders,
+		usersRepo:          usersRepo,
+		identities:         identities,
+		sessionRepo:        sessionRepo,
+		sessions:           sessions,
+		otp:                otp,
+		oauthState:         oauthState,
+		tokens:             tokens,
+		loginThrottle:      normalizeLoginThrottle(loginThrottle),
+		rotation:           rotation,
+		oauthFactory:       oauthFactory,
+		weChatExchanger:    weChatExchanger,
+		otpGenerator:       otpGenerator,
+		idGen:              idGen,
+		mailer:             mailer,
+		sms:                sms,
+		rateLimiter:        rateLimiter,
+		roles:              roles,
+		mfa:                mfa,
+		mfaChallenges:      normalizeMFAChallengeStore(mfaChallenges),
+		oneTimeTokens:      oneTimeTokens,
+		auditRepo:          auditRepo,
+		sessionCookies:     sessionCookies,
+		analyticsDeletions: analyticsDeletions,
+		db:                 db,
 	}
 }
 
@@ -427,10 +439,28 @@ func (a *Account) DeleteAccount(ctx context.Context) error {
 		// 清空仅为进一步消除离线破解价值）。
 		"password_hash": "",
 	}
-	if err := a.usersRepo.Update(ctx, p.ProjectID, p.UserID, updates); err != nil {
-		return fmt.Errorf("delete account: %w", err)
+	// 注销合规钩子（PR5，D10；设计稿 §7 要求与软删同事务，审查回填）：
+	// 软删 UPDATE 与 analytics tombstone INSERT 在同一 uow——软删提交而
+	// tombstone 缺失的窗口不存在（缺失 = 行为数据永不清洗，不可接受）。
+	// worker 异步分批硬删该用户关联三表（raw/user_days/first_seen）；
+	// tombstone 幂等（ON CONFLICT DO NOTHING，不覆盖首次 enqueued_at），
+	// 失败向上传播——注销整体可重试收敛。db 未注入（测试装配）时退化为
+	// 顺序执行。
+	runDelete := func(txCtx context.Context) error {
+		if err := a.usersRepo.Update(txCtx, p.ProjectID, p.UserID, updates); err != nil {
+			return fmt.Errorf("delete account: %w", err)
+		}
+		if a.analyticsDeletions != nil {
+			if err := a.analyticsDeletions.EnqueueUserDeletion(txCtx, p.ProjectID, p.UserID, time.Now().UTC()); err != nil {
+				return fmt.Errorf("enqueue analytics user deletion: %w", err)
+			}
+		}
+		return nil
 	}
-	return nil
+	if a.db != nil {
+		return a.db.Run(ctx, runDelete)
+	}
+	return runDelete(ctx)
 }
 
 func (a *Account) finishSignIn(ctx context.Context, projectID string, user *User) (*User, *TokenBundle, string, *MFASignInChallenge, error) {

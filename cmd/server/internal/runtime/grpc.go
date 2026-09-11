@@ -43,6 +43,7 @@ func NewGRPCServer(
 	clientSubscriptions *clientgrpc.SubscriptionsService,
 	clientFunctions *clientgrpc.FunctionsService,
 	clientLeaderboards *clientgrpc.LeaderboardsService,
+	clientAnalytics *clientgrpc.AnalyticsService,
 	health *servergrpc.HealthService,
 	projects *servergrpc.ProjectsService,
 	storage *servergrpc.StorageService,
@@ -63,6 +64,7 @@ func NewGRPCServer(
 	auditLogsService *servergrpc.AuditLogsService,
 	serverLeaderboards *servergrpc.LeaderboardsService,
 	consoleLeaderboards *consolegrpc.LeaderboardsService,
+	serverAnalytics *servergrpc.AnalyticsService,
 	policySet *domainauth.PolicySet,
 ) (*lynxgrpc.Server, error) {
 	grpcCfg := cfg.GetServer().GetGrpc()
@@ -131,6 +133,9 @@ func NewGRPCServer(
 	clientv1.RegisterSubscriptionsServiceServer(grpcSrv, clientSubscriptions)
 	clientv1.RegisterFunctionsServiceServer(grpcSrv, clientFunctions)
 	clientv1.RegisterLeaderboardsServiceServer(grpcSrv, clientLeaderboards)
+	// Analytics 摄入双面（PR2）：client 面 Principal 归因、server 面可信
+	// 代报；proto 策略 PR1 已登记（authzFileDescriptors）。
+	clientv1.RegisterAnalyticsServiceServer(grpcSrv, clientAnalytics)
 	serverv1.RegisterHealthServiceServer(grpcSrv, health)
 	serverv1.RegisterProjectsServiceServer(grpcSrv, projects)
 	serverv1.RegisterStorageServiceServer(grpcSrv, storage)
@@ -152,6 +157,9 @@ func NewGRPCServer(
 	}
 	serverv1.RegisterAuditLogsServiceServer(grpcSrv, auditLogsService)
 	serverv1.RegisterLeaderboardsServiceServer(grpcSrv, serverLeaderboards)
+	// 查询方法嵌 Unimplemented 占位（实现随 PR3），注册保证策略/反射/
+	// swagger 覆盖断言即刻可见。
+	serverv1.RegisterAnalyticsServiceServer(grpcSrv, serverAnalytics)
 
 	// fail-closed：所有已注册方法都必须带有 authz 注解，缺失的方法会在拦截器里被放行。
 	if err := assertRegisteredMethodsHaveAuthz(grpcSrv, policySet); err != nil {
@@ -211,6 +219,9 @@ func authzFileDescriptors() []protoreflect.FileDescriptor {
 		clientv1.File_client_v1_subscriptions_proto,
 		clientv1.File_client_v1_functions_proto,
 		clientv1.File_client_v1_leaderboards_proto,
+		// Analytics（docs/design/analytics.md）：client 面仅摄入；PR1 只登记
+		// proto 策略（handler/注册随 PR2 到位）。
+		clientv1.File_client_v1_analytics_proto,
 		serverv1.File_server_v1_projects_proto,
 		serverv1.File_server_v1_health_proto,
 		serverv1.File_server_v1_storage_proto,
@@ -227,6 +238,9 @@ func authzFileDescriptors() []protoreflect.FileDescriptor {
 		serverv1.File_server_v1_outbox_proto,
 		serverv1.File_server_v1_audit_logs_proto,
 		serverv1.File_server_v1_leaderboards_proto,
+		// Analytics server 面：摄入 + 七查询；PR1 只登记 proto 策略
+		// （摄入 handler 随 PR2、查询实现随 PR3 到位）。
+		serverv1.File_server_v1_analytics_proto,
 		consolev1.File_console_v1_auth_proto,
 		consolev1.File_console_v1_admins_proto,
 		consolev1.File_console_v1_leaderboards_proto,

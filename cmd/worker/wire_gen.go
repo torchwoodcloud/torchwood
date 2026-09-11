@@ -9,6 +9,7 @@ package main
 import (
 	"github.com/lynx-go/lynx"
 	"github.com/lynx-go/lynx/boot"
+	"github.com/torchwoodcloud/torchwood/internal/app/analytics"
 	"github.com/torchwoodcloud/torchwood/internal/app/assets"
 	billing2 "github.com/torchwoodcloud/torchwood/internal/app/billing"
 	functions2 "github.com/torchwoodcloud/torchwood/internal/app/functions"
@@ -113,7 +114,12 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	leaderboardsLeaderboards := leaderboards.NewLeaderboards(database, boardRepo, entryRepo, settlementRepo, rewardGranter, defRepo, idempotencyStore, logger, repository)
 	leaderboardsCleaner := worker.NewLeaderboardsCleaner(leaderboardsLeaderboards, logger)
 	leaderboardsSettler := worker.NewLeaderboardsSettler(leaderboardsLeaderboards, logger)
-	v2 := NewComponents(workerWorker, chunkCleaner, streamTrimmer, outboxWorkerService, paymentCloser, assetExpirer, subscriptionBiller, usageRollupWorker, leaderboardsCleaner, leaderboardsSettler)
+	analyticsWorkerRepository := bunrepo.NewAnalyticsWorkerRepository(database)
+	rollup := analytics.NewRollup(analyticsWorkerRepository, repository, logger)
+	analyticsRollupWorker := worker.NewAnalyticsRollupWorker(rollup, logger)
+	maintenance := analytics.NewMaintenanceFromConfig(appConfig, analyticsWorkerRepository, analyticsWorkerRepository, repository, logger)
+	analyticsMaintenanceWorker := worker.NewAnalyticsMaintenanceWorker(maintenance, logger)
+	v2 := NewComponents(workerWorker, chunkCleaner, streamTrimmer, outboxWorkerService, paymentCloser, assetExpirer, subscriptionBiller, usageRollupWorker, leaderboardsCleaner, leaderboardsSettler, analyticsRollupWorker, analyticsMaintenanceWorker)
 	v3 := bootkit.NewComponentBuilders()
 	bootstrap := boot.New(onStartHooks, onStopHooks, v2, v3)
 	return bootstrap, func() {

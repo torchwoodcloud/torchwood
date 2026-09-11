@@ -83,4 +83,8 @@ const (
 	ScopeLeaderboards      = "leaderboards"
 	ScopeLeaderboardsRead  = "leaderboards.read"
 	ScopeLeaderboardsWrite = "leaderboards.write"
+	// ScopeAnalytics 事件分析面（摄入 = analytics.write，查询 = analytics.read）。
+	ScopeAnalytics      = "analytics"
+	ScopeAnalyticsRead  = "analytics.read"
+	ScopeAnalyticsWrite = "analytics.write"
 )

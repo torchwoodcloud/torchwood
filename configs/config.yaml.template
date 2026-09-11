@@ -231,6 +231,13 @@ payments:
     verify_receipt_url: ""   # 空 = https://buy.itunes.apple.com/verifyReceipt
     sandbox_verify_url: ""   # 空 = https://sandbox.itunes.apple.com/verifyReceipt
 
+analytics:
+  # 原始事件（analytics_events 月分区）与 user_days 的保留天数（PR5）。
+  # 保留期裁剪按整月 DROP 粒度执行（不足整月的部分留待下月）；查询面 raw
+  # 回退窗口护栏与本值同源。默认 90；可配域 7–365，越界值钳制到边界。
+  # env: TORCHWOOD_ANALYTICS_RETENTION_DAYS
+  retention_days: 90
+
 telemetry:
   enabled: false
   otlp_endpoint: ""

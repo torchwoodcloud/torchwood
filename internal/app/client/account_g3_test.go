@@ -120,7 +120,8 @@ func setupG3Account(t *testing.T) (context.Context, *Account, string, *failableS
 		auth.NewWeChatMiniProgramExchanger(),
 		auth.NewOTPGenerator(),
 		nil,
-	)
+		nil, // analyticsDeletions
+, nil)
 	return ctx, account, projectID, sessions, mr, mailer
 }
 

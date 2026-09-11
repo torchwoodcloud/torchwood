@@ -64,6 +64,14 @@ func TestAuditRowEligible(t *testing.T) {
 		{"/torchwood.server.v1.HealthService/Check", false},
 		{"/torchwood.server.v1.HealthService/GetVersion", false},
 		{"/torchwood.console.v1.AdminsService/ListAdmins", false},
+		// 管理面写但显式登记豁免（D13）：Analytics 摄入是事件数据通道，
+		// 非读动词也不落审计（护栏：TestAuditInterceptor_AnalyticsIngestSilent）。
+		{"/torchwood.server.v1.AnalyticsService/IngestEvents", false},
+		// Analytics 查询面（PR3）：读动词，不记（Query* 前缀的审计动词
+		// 归类随 PR3 实现时一并处理）。
+		{"/torchwood.server.v1.AnalyticsService/GetOverview", false},
+		{"/torchwood.server.v1.AnalyticsService/ListEventDefinitions", false},
+		{"/torchwood.server.v1.AnalyticsService/ListUserEvents", false},
 		// client 面：仅 AccountService 非读安全动作。
 		{"/torchwood.client.v1.AccountService/SignIn", true},
 		{"/torchwood.client.v1.AccountService/SignUp", true},
@@ -85,6 +93,10 @@ func TestAuditRowEligible(t *testing.T) {
 		{"/torchwood.client.v1.FunctionsService/CreateExecution", false},
 		{"/torchwood.client.v1.PaymentsService/CreateOrder", false},
 		{"/torchwood.client.v1.GroupsService/ListGroupMemberships", false},
+		// client 面摄入（非 AccountService 服务）：天然豁免——client 面只审
+		// AccountService 非读安全动作，事件数据通道不在此记账（D13 断言性
+		// 用例，护栏：TestAuditInterceptor_AnalyticsIngestSilent）。
+		{"/torchwood.client.v1.AnalyticsService/IngestEvents", false},
 		// 未知命名空间：偏向多记。
 		{"/torchwood.future.v1.ThingsService/DoThing", true},
 		{"/test/Ok", true},

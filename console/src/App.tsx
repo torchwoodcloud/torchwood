@@ -106,6 +106,21 @@ const CollectionLayout = lazy(() =>
 const ListenPanel = lazy(() =>
   import("@/routes/databases/ListenPanel").then((m) => ({ default: m.ListenPanel }))
 );
+const AnalyticsOverviewPage = lazy(() =>
+  import("@/routes/analytics/pages").then((m) => ({ default: m.AnalyticsOverviewPage }))
+);
+const AnalyticsEventsPage = lazy(() =>
+  import("@/routes/analytics/pages").then((m) => ({ default: m.AnalyticsEventsPage }))
+);
+const AnalyticsRetentionPage = lazy(() =>
+  import("@/routes/analytics/pages").then((m) => ({ default: m.AnalyticsRetentionPage }))
+);
+const AnalyticsEventDetailPage = lazy(() =>
+  import("@/routes/analytics/EventDetailPage").then((m) => ({ default: m.AnalyticsEventDetailPage }))
+);
+const AnalyticsUserActivityPage = lazy(() =>
+  import("@/routes/analytics/UserActivityPage").then((m) => ({ default: m.AnalyticsUserActivityPage }))
+);
 const AdminsListPage = lazy(() =>
   import("@/routes/admins/pages").then((m) => ({ default: m.AdminsListPage }))
 );
@@ -542,6 +557,49 @@ function AppRoutes() {
           element={
             <RouteErrorBoundary>
               <DocumentDetailPage />
+            </RouteErrorBoundary>
+          }
+        />
+
+        {/* Analytics（docs/design/analytics.md §9）：读方法对 Console admin
+            全角色会话开放（viewer 含），不设 RequireRole。 */}
+        <Route
+          path="analytics"
+          element={
+            <RouteErrorBoundary>
+              <AnalyticsOverviewPage />
+            </RouteErrorBoundary>
+          }
+        />
+        <Route
+          path="analytics/events"
+          element={
+            <RouteErrorBoundary>
+              <AnalyticsEventsPage />
+            </RouteErrorBoundary>
+          }
+        />
+        <Route
+          path="analytics/events/:name"
+          element={
+            <RouteErrorBoundary>
+              <AnalyticsEventDetailPage />
+            </RouteErrorBoundary>
+          }
+        />
+        <Route
+          path="analytics/retention"
+          element={
+            <RouteErrorBoundary>
+              <AnalyticsRetentionPage />
+            </RouteErrorBoundary>
+          }
+        />
+        <Route
+          path="analytics/users/:userId"
+          element={
+            <RouteErrorBoundary>
+              <AnalyticsUserActivityPage />
             </RouteErrorBoundary>
           }
         />

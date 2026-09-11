@@ -1,5 +1,6 @@
 import {
   AccountService,
+  ClientAnalyticsService,
   ClientAssetsService,
   ClientDatabasesService,
   ClientFunctionsService,
@@ -13,6 +14,7 @@ import type { TorchwoodConfig } from "./http.js";
 import { HttpTransport } from "./http.js";
 import { TorchwoodError } from "./errors.js";
 import {
+  AnalyticsService,
   APIKeysService,
   AuditLogsService,
   FunctionsService,
@@ -47,6 +49,7 @@ export * from "./types.js";
 
 export class Torchwood {
   readonly account: AccountService;
+  readonly analytics: ClientAnalyticsService;
   readonly databases: ClientDatabasesService;
   readonly groups: ClientGroupsService;
   readonly realtime: RealtimeService;
@@ -73,6 +76,7 @@ export class Torchwood {
     billing: BillingService;
     outbox: OutboxService;
     auditLogs: AuditLogsService;
+    analytics: AnalyticsService;
   };
 
   private readonly transport: HttpTransport;
@@ -80,6 +84,7 @@ export class Torchwood {
   constructor(config: TorchwoodConfig) {
     this.transport = new HttpTransport(config);
     this.account = new AccountService(this.transport);
+    this.analytics = new ClientAnalyticsService(this.transport);
     this.databases = new ClientDatabasesService(this.transport);
     this.groups = new ClientGroupsService(this.transport);
     this.realtime = new RealtimeService(this.transport);
@@ -105,6 +110,7 @@ export class Torchwood {
       billing: new BillingService(this.transport),
       outbox: new OutboxService(this.transport),
       auditLogs: new AuditLogsService(this.transport),
+      analytics: new AnalyticsService(this.transport),
     };
   }
 

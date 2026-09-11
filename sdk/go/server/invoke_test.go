@@ -73,7 +73,13 @@ func TestInvokeJSONBadJSON(t *testing.T) {
 // ListLeaderboardTop）；
 // 132 → 134（2026-09-12，leaderboards.proto Phase 2 结算读——wrapper：
 // LeaderboardsService.GetLeaderboardSettlement / ListLeaderboardSettlements）。
-const expectedServerMethodCount = 134
+
+// 134 → 141（2026-09-12，analytics.proto 新增事件分析面七方法（合并自 feat/analytics，
+// docs/design/analytics.md §4.1），wrapper：AnalyticsService.IngestEvents /
+// GetOverview / ListEventDefinitions / QueryTimeseries / QueryBreakdown /
+// QueryRetention / ListUserEvents）。
+
+const expectedServerMethodCount = 141
 
 // TestInvokeJSONCompleteness 遍历 protoregistry.GlobalFiles 中 torchwood.server.v1
 // 包的全部方法（排除 APIKeysService），断言每个方法都能被解析并用空 JSON 构造

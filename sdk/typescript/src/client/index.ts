@@ -1,4 +1,11 @@
 export { AccountService } from "./account.js";
+export { ClientAnalyticsService, AnalyticsEventBuffer } from "./analytics.js";
+export type {
+  ClientAnalyticsEvent,
+  IngestEventsResult as ClientIngestEventsResult,
+  AnalyticsBufferOptions,
+  AnalyticsTimers,
+} from "./analytics.js";
 export { ClientAssetsService } from "./assets.js";
 export { ClientDatabasesService } from "./databases.js";
 export { ClientFunctionsService } from "./functions.js";

@@ -26,6 +26,8 @@
 | [15-exit-poc.md](15-exit-poc.md) | 转出 POC 检查单：发布前门禁——A 区清零前不得对外发布；转出后挂账的活跃清单 | 维护者 / 发布负责人 |
 | [16-document-modeling.md](16-document-modeling.md) | 文档建模指南：跨集合引用模式（1:N 引用属性、M:N 数组/junction、ExecuteTransactions 原子写、删除卫生协议、查询陷阱清单，附 Agent 提示词规约） | Agent 构建者 / 后端开发者 |
 | [18-leaderboards.md](18-leaderboards.md) | 排行榜：Board/Entry 模型、期派生与封榜语义、tie-break 全序（rank/position）、幂等与限频、console 与运维；Phase 2 结榜发奖定型稿 | 游戏开发者 / 后端开发者 |
+| [17-update-write-guard.md](17-update-write-guard.md) | bun 更新写规范与 internal_id 漂移修复：UPDATE 列白名单强约束、三道护栏、存量漂移 runbook | 后端开发者 |
+| [18-analytics.md](18-analytics.md) | 内置事件分析：双面摄入、月分区存储、rollup 聚合、固定形状查询、口径声明、TS SDK 缓冲器与各端接入配方 | 后端开发者 / 端侧接入者 |
 | [authz-matrix.md](authz-matrix.md) | 全方法授权矩阵（**生成物，勿手改**）：`task gen:authz-matrix` 从策略注册表渲染，含档位与威胁模型已知取舍 | 后端 / 安全评审 |
 
 ## 推荐阅读路径

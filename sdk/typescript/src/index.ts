@@ -1,6 +1,10 @@
 export { Torchwood, TorchwoodError, accountsChannel } from "./torchwood.js";
 export { parseOAuth2CallbackFragment } from "./client/account.js";
 export type { OAuth2CallbackFragment } from "./client/account.js";
+// 端侧摄入批量缓冲器（独立生命周期，不在 Torchwood 门面自动装配——
+// docs/developer/18-analytics.md 端配方章节）。
+export { AnalyticsEventBuffer } from "./client/analytics.js";
+export type { AnalyticsBufferOptions, AnalyticsTimers } from "./client/analytics.js";
 export type { TorchwoodConfig, AuthMode } from "./http.js";
 export type {
   RealtimeConnectOptions,

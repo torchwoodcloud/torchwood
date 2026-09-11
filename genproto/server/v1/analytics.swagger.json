@@ -1,0 +1,787 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "server/v1/analytics.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "AnalyticsService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/server/analytics/breakdown": {
+      "get": {
+        "summary": "QueryBreakdown 维度拆解（raw 直查 GROUP BY props-\u003e\u003e$key + Top-N + __other__\n归并，D9；窗口护栏 ≤30 天，prop_key 白名单校验后参数化）。",
+        "operationId": "AnalyticsService_QueryBreakdown",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1QueryBreakdownResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "prop_key",
+            "description": "拆解维度键（服务端白名单校验后参数化，防注入）。",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "period_start",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          },
+          {
+            "name": "period_end",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          },
+          {
+            "name": "top_n",
+            "description": "Top-N 桶数（≤50；其余归并 __other__；缺省 20）。",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "AnalyticsService"
+        ]
+      }
+    },
+    "/v1/server/analytics/event-definitions": {
+      "get": {
+        "summary": "ListEventDefinitions 事件字典（自由上报 + 事后发现，D12；Console 发现入口）。",
+        "operationId": "AnalyticsService_ListEventDefinitions",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListEventDefinitionsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "page_token",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AnalyticsService"
+        ]
+      }
+    },
+    "/v1/server/analytics/events": {
+      "post": {
+        "summary": "IngestEvents 服务端权威事件摄入（支付完成、订阅续费、函数侧业务事件），\n可信代报 user_id；source='server' 由服务端落定。审计豁免显式登记\n（D13：非读动词默认落审计，静默清单见 internal/api/interceptor/audit.go）。",
+        "operationId": "AnalyticsService_IngestEvents",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/torchwoodserverv1IngestEventsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1IngestServerEventsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "AnalyticsService"
+        ]
+      }
+    },
+    "/v1/server/analytics/overview": {
+      "get": {
+        "summary": "GetOverview 窗口 KPI（事件总量/UV/新增用户/人均事件）+ Top 事件 + 今日\n实时数（raw 直读）。",
+        "operationId": "AnalyticsService_GetOverview",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1AnalyticsOverview"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "period_start",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          },
+          {
+            "name": "period_end",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          }
+        ],
+        "tags": [
+          "AnalyticsService"
+        ]
+      }
+    },
+    "/v1/server/analytics/retention": {
+      "get": {
+        "summary": "QueryRetention 留存矩阵（D11 轻量：first_seen ⋈ user_days 自连接，cohort\n窗 ≤92 天 × D0–D14，日粒度 UTC 切日）。",
+        "operationId": "AnalyticsService_QueryRetention",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1QueryRetentionResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "cohort_start",
+            "description": "cohort 锚定窗：first_day ∈ [cohort_start, cohort_end]（窗 ≤92 天，app 层）。",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          },
+          {
+            "name": "cohort_end",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          }
+        ],
+        "tags": [
+          "AnalyticsService"
+        ]
+      }
+    },
+    "/v1/server/analytics/timeseries": {
+      "get": {
+        "summary": "QueryTimeseries 事件趋势（DAY → analytics_daily；HOUR → raw 分区裁剪）。",
+        "operationId": "AnalyticsService_QueryTimeseries",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1QueryTimeseriesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "names",
+            "description": "事件名集合（≤10；空 = 全部事件聚合）。",
+            "in": "query",
+            "required": false,
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "collectionFormat": "multi"
+          },
+          {
+            "name": "period_start",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          },
+          {
+            "name": "period_end",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          },
+          {
+            "name": "granularity",
+            "description": "UNSPECIFIED → InvalidArgument（app 层）。",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "ANALYTICS_GRANULARITY_UNSPECIFIED",
+              "ANALYTICS_GRANULARITY_HOUR",
+              "ANALYTICS_GRANULARITY_DAY"
+            ],
+            "default": "ANALYTICS_GRANULARITY_UNSPECIFIED"
+          }
+        ],
+        "tags": [
+          "AnalyticsService"
+        ]
+      }
+    },
+    "/v1/server/analytics/users/{user_id}/events": {
+      "get": {
+        "summary": "ListUserEvents 用户行为轨迹下钻（raw keyset 分页，窗 ≤92 天）。",
+        "operationId": "AnalyticsService_ListUserEvents",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListUserEventsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "page_token",
+            "description": "不透明游标（上一页末条的 (occurred_at, id) 编码）。",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "period_start",
+            "description": "可选时间窗（≤92 天，app 层）；缺省 = raw 保留期内全量倒序。",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          },
+          {
+            "name": "period_end",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          }
+        ],
+        "tags": [
+          "AnalyticsService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufNullValue": {
+      "type": "string",
+      "enum": [
+        "NULL_VALUE"
+      ],
+      "default": "NULL_VALUE",
+      "description": "`NullValue` is a singleton enumeration to represent the null value for the\n`Value` type union.\n\nThe JSON representation for `NullValue` is JSON `null`.\n\n - NULL_VALUE: Null value."
+    },
+    "torchwoodserverv1IngestEventsResponse": {
+      "type": "object",
+      "properties": {
+        "accepted": {
+          "type": "integer",
+          "format": "int32",
+          "title": "落库事件数。"
+        },
+        "skipped": {
+          "type": "integer",
+          "format": "int32",
+          "title": "被跳过事件数（坏形状 / 时间越界 / 超软上限的新事件名）。"
+        }
+      }
+    },
+    "v1AnalyticsBreakdownBucket": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string",
+          "title": "维度值字符串；缺失桶为 \"(unset)\"，归并桶为 \"__other__\"。"
+        },
+        "total": {
+          "type": "string",
+          "format": "int64"
+        },
+        "unique_users": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "v1AnalyticsEventDefinition": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "first_seen": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_seen": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "total_30d": {
+          "type": "string",
+          "format": "int64",
+          "title": "近 30 天总量（rollup 维护，排序用；rollup 未跑时为 0）。"
+        }
+      }
+    },
+    "v1AnalyticsGranularity": {
+      "type": "string",
+      "enum": [
+        "ANALYTICS_GRANULARITY_UNSPECIFIED",
+        "ANALYTICS_GRANULARITY_HOUR",
+        "ANALYTICS_GRANULARITY_DAY"
+      ],
+      "default": "ANALYTICS_GRANULARITY_UNSPECIFIED",
+      "title": "AnalyticsGranularity 是趋势查询的时间粒度（HOUR 走 raw、DAY 走 rollup，\nD6；时区口径：v1 UTC 切日，HOUR 路径可选 timezone 参数由 PR3 决定）。"
+    },
+    "v1AnalyticsOverview": {
+      "type": "object",
+      "properties": {
+        "kpi": {
+          "$ref": "#/definitions/v1AnalyticsOverviewKpi"
+        },
+        "top_events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1AnalyticsTopEvent"
+          }
+        },
+        "today": {
+          "$ref": "#/definitions/v1AnalyticsTodayStats"
+        },
+        "source": {
+          "type": "string",
+          "title": "窗口 KPI 口径：rollup | raw（worker 未覆盖时回退 raw，PR3 择路）。"
+        }
+      }
+    },
+    "v1AnalyticsOverviewKpi": {
+      "type": "object",
+      "properties": {
+        "total_events": {
+          "type": "string",
+          "format": "int64"
+        },
+        "unique_users": {
+          "type": "string",
+          "format": "int64"
+        },
+        "new_users": {
+          "type": "string",
+          "format": "int64"
+        },
+        "events_per_user": {
+          "type": "number",
+          "format": "double",
+          "title": "人均事件（total / unique_users，UV 为 0 时为 0）。"
+        }
+      }
+    },
+    "v1AnalyticsRetentionCohort": {
+      "type": "object",
+      "properties": {
+        "cohort": {
+          "type": "string",
+          "format": "date-time",
+          "title": "cohort 日（UTC 零点）。"
+        },
+        "size": {
+          "type": "string",
+          "format": "int64"
+        },
+        "retained": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "int64"
+          },
+          "title": "retained[k] = cohort+k 日仍活跃的用户数；固定 D0–D14（retained[0] = size）。"
+        }
+      }
+    },
+    "v1AnalyticsTimeseriesPoint": {
+      "type": "object",
+      "properties": {
+        "bucket": {
+          "type": "string",
+          "format": "date-time",
+          "title": "桶起点（UTC；DAY 粒度为当日零点，HOUR 为整点）。"
+        },
+        "total": {
+          "type": "string",
+          "format": "int64"
+        },
+        "unique_users": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "v1AnalyticsTodayStats": {
+      "type": "object",
+      "properties": {
+        "total_events": {
+          "type": "string",
+          "format": "int64"
+        },
+        "unique_users": {
+          "type": "string",
+          "format": "int64"
+        }
+      },
+      "title": "今日实时块（raw 直读，恒为 raw 口径；与窗口 KPI 的 rollup 口径并存的\n新鲜度差异由响应级 source 标注 + Console 提示承担，D8）。"
+    },
+    "v1AnalyticsTopEvent": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "total": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "v1AnalyticsUserEvent": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "int64",
+          "title": "调试序（BIGSERIAL，非全局唯一——分区表 PK 为 (id, occurred_at)；仅作\nkeyset 分页副键，非 API 级资源 ID）。"
+        },
+        "name": {
+          "type": "string"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "ingested_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string",
+          "title": "摄入通道：client | server（存储列口径，区别于响应级 rollup|raw 口径）。"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "app_version": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "props": {
+          "type": "object"
+        }
+      }
+    },
+    "v1Error": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "error_id": {
+          "type": "string"
+        },
+        "error_code": {
+          "$ref": "#/definitions/v1ErrorCode"
+        }
+      }
+    },
+    "v1ErrorCode": {
+      "type": "string",
+      "enum": [
+        "ERROR_CODE_UNSPECIFIED",
+        "ERROR_CODE_INVALID_REQUEST",
+        "ERROR_CODE_RESOURCE_NOT_FOUND",
+        "ERROR_CODE_INVALID_CREDENTIALS",
+        "ERROR_CODE_PERMISSION_DENIED",
+        "ERROR_CODE_RESOURCE_CONFLICT",
+        "ERROR_CODE_QUOTA_EXCEEDED",
+        "ERROR_CODE_PRECONDITION_FAILED",
+        "ERROR_CODE_CONCURRENT_MODIFICATION",
+        "ERROR_CODE_VALUE_OUT_OF_RANGE",
+        "ERROR_CODE_OPERATION_NOT_ALLOWED",
+        "ERROR_CODE_INTERNAL_ERROR",
+        "ERROR_CODE_SERVICE_UNAVAILABLE",
+        "ERROR_CODE_TIMEOUT"
+      ],
+      "default": "ERROR_CODE_UNSPECIFIED",
+      "title": "ErrorCode 与 gRPC code 的映射（HTTPErrorHandler 单一事实来源，\n见 internal/infra/server/errors.go）：\n  - InvalidArgument → ERROR_CODE_INVALID_REQUEST\n  - FailedPrecondition → ERROR_CODE_PRECONDITION_FAILED\n  - NotFound → ERROR_CODE_RESOURCE_NOT_FOUND\n  - AlreadyExists → ERROR_CODE_RESOURCE_CONFLICT\n  - Aborted → ERROR_CODE_CONCURRENT_MODIFICATION\n  - Unauthenticated → ERROR_CODE_INVALID_CREDENTIALS\n  - PermissionDenied → ERROR_CODE_PERMISSION_DENIED\n  - ResourceExhausted → ERROR_CODE_QUOTA_EXCEEDED\n  - DeadlineExceeded → ERROR_CODE_TIMEOUT\n  - 其余 → ERROR_CODE_INTERNAL_ERROR"
+    },
+    "v1ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "$ref": "#/definitions/v1Error"
+        }
+      }
+    },
+    "v1IngestServerEventsRequest": {
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1ServerAnalyticsEvent"
+          },
+          "title": "单批 1..100 事件；批内逐事件校验，坏事件 skipped 不拒整批（D12）。"
+        }
+      }
+    },
+    "v1ListEventDefinitionsResponse": {
+      "type": "object",
+      "properties": {
+        "definitions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1AnalyticsEventDefinition"
+          }
+        },
+        "meta": {
+          "$ref": "#/definitions/v1ListResponseMeta"
+        }
+      }
+    },
+    "v1ListResponseMeta": {
+      "type": "object",
+      "properties": {
+        "page_size": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "next_page_token": {
+          "type": "string"
+        },
+        "prev_page_token": {
+          "type": "string"
+        },
+        "total_count": {
+          "type": "integer",
+          "format": "int32",
+          "title": "total_count ≤0 = unknown（keyset 分页下 0 与空集合不可区分，调用方应以 next_page_token 是否为空判定是否还有更多；≤0 表示总数未知）。"
+        }
+      }
+    },
+    "v1ListUserEventsResponse": {
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1AnalyticsUserEvent"
+          }
+        },
+        "meta": {
+          "$ref": "#/definitions/v1ListResponseMeta"
+        },
+        "source": {
+          "type": "string",
+          "title": "下钻恒 raw。"
+        }
+      }
+    },
+    "v1QueryBreakdownResponse": {
+      "type": "object",
+      "properties": {
+        "buckets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1AnalyticsBreakdownBucket"
+          }
+        },
+        "source": {
+          "type": "string",
+          "title": "breakdown v1 恒 raw（D9）。"
+        }
+      }
+    },
+    "v1QueryRetentionResponse": {
+      "type": "object",
+      "properties": {
+        "cohorts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1AnalyticsRetentionCohort"
+          }
+        },
+        "source": {
+          "type": "string",
+          "title": "retention 恒 rollup（user_days / first_seen 基座，D11）。"
+        }
+      }
+    },
+    "v1QueryTimeseriesResponse": {
+      "type": "object",
+      "properties": {
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1AnalyticsTimeseriesPoint"
+          }
+        },
+        "source": {
+          "type": "string",
+          "title": "rollup | raw（D8 口径标注）。"
+        }
+      }
+    },
+    "v1ServerAnalyticsEvent": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "user_id": {
+          "type": "string",
+          "title": "可信代报的事件归属用户（server 面专属，D3）；缺省 = 无归属（不进\nuser_days / first_seen，仅进总量口径）。"
+        }
+      },
+      "title": "ServerAnalyticsEvent 是 server 面事件（设计 §3 形状 + 可信代报 user_id）。\n与 client 面同名概念的字段约束一致（上限常量见 internal/domain/analytics）。"
+    }
+  },
+  "securityDefinitions": {
+    "Bearer": {
+      "type": "apiKey",
+      "description": "格式: Bearer \u003cjwt\u003e",
+      "name": "Authorization",
+      "in": "header"
+    },
+    "apiKey": {
+      "type": "apiKey",
+      "description": "项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。",
+      "name": "X-API-Key",
+      "in": "header"
+    },
+    "cookie": {
+      "type": "apiKey",
+      "description": "TORCHWOOD_session_console=\u003csid\u003e（Console admin 会话）",
+      "name": "Cookie",
+      "in": "header"
+    }
+  },
+  "security": [
+    {
+      "apiKey": []
+    }
+  ],
+  "x-torchwood-access": "server"
+}

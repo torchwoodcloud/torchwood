@@ -12,6 +12,7 @@ Torchwood 是一个受 Appwrite 启发、**AI/Agent-Native** 的后端即服务�
 - **动态文档数据库**：schema-per-database，`_tenant` 隔离、`_acl` 文档级权限（Postgres RLS policy 判定），typed 查询 AST（`pkg/query`，Appwrite 风格 DSL 仅作客户端糖），支持 keyset 分页、批量操作、字段增量与数组原子更新。
 - **文件存储**：S3/MinIO 兼容，上传/下载/在线预览、缩略图、公开 bucket、HMAC File Token、分片上传与断点续传。
 - **函数执行**：Docker 构建/运行执行器，同步/异步执行，异步 `cmd/worker` 与保留策略。
+- **事件分析**：双面事件摄入（端侧会话归因 + 服务端 API Key 代报）、月分区只写存储、小时级预聚合（趋势/留存/维度拆解/用户下钻）、Console 分析区与 TS SDK 批量缓冲器。
 - **Admin Console**：React SPA，嵌入 Go 二进制，路径 `/console/`。
 
 ## 技术栈

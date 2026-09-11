@@ -85,6 +85,10 @@ func NewGRPCGatewayServer(
 		clientv1.RegisterLeaderboardsServiceHandlerFromEndpoint,
 		serverv1.RegisterLeaderboardsServiceHandlerFromEndpoint,
 		consolev1.RegisterLeaderboardsServiceHandlerFromEndpoint,
+		// Analytics 摄入双面（PR2）：POST /v1/analytics/events（端侧会话）
+		// 与 POST /v1/server/analytics/events（API Key/admin）。
+		clientv1.RegisterAnalyticsServiceHandlerFromEndpoint,
+		serverv1.RegisterAnalyticsServiceHandlerFromEndpoint,
 	}
 	for _, fn := range register {
 		if err := fn(ctx, mux, grpcEndpoint, opts); err != nil {

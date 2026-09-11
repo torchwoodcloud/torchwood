@@ -474,6 +474,20 @@ count/自增/OCC 等 DIY 底料平台已有，但权限别扭（read:any 枚举�
 | 多区域存储 | S3 跨区域复制、就近读取 | Storage adapter |
 | 只读副本 | 查询路由到 PostgreSQL 只读副本 | `internal/infra/clients/database.go` |
 | SDK 生成 | 根据 proto 生成 Go/JS/Flutter/Python SDK | `cmd/gensdk` |
+
+---
+
+### 4.7 Analytics（事件分析，一等公民服务）
+
+设计稿：`docs/design/analytics.md`（2026-09-11，经三路独立设计交叉验证修订）。与 Databases/Storage/Functions 同级的产品服务：端上行为与服务端权威事件的统一摄入 → 按项目 schema 只写时间序列存储 → 趋势/拆解/留存/用户下钻固定查询形状 + Console 分析区。事件通道独立于文档层与事件脊柱（不进 outbox/realtime）；摄入计量复用 v3 用量脊柱；`domain/analytics` 端口预留 OLAP 适配器接缝。狗粮场景：自营微信小游戏运营分析。
+
+| 任务 | 说明 | 关键端点 |
+|------|------|----------|
+| 事件摄入 | client 会话（含匿名）+ server API Key 双路径 batch，逐事件校验部分接收 | `/v1/{client,server}/analytics/events` |
+| 事件存储 | `analytics_events` 按月 RANGE 分区 + 日聚合/日活用户集，保留期默认 90 天 | projectschema 迁移 |
+| 查询面 | Overview / Timeseries / Breakdown / Retention / ListUserEvents / 字典发现，rollup/raw 双源标注 | `/v1/server/analytics/*` |
+| Console 分析区 | 概览 / 事件字典发现 / 留存网格 / 单用户行为流下钻 | Console 项目内 |
+| 合规 | 用户注销 tombstone → worker 异步硬删身份关联行，聚合计数保留 | 注销钩子 |
 | 计费/用量 | 按 API 调用、存储、函数执行时长计费 | Usage aggregator worker |
 | 高级可观测性 | OpenTelemetry、分布式追踪、告警 | `telemetry` config |
 

@@ -18,6 +18,8 @@ var ProviderSet = wire.NewSet(
 	clientgrpc.NewSubscriptionsService,
 	clientgrpc.NewFunctionsService,
 	clientgrpc.NewLeaderboardsService,
+	// Analytics client 面摄入（PR2；仅 IngestEvents）。
+	clientgrpc.NewAnalyticsService,
 	servergrpc.NewHealthService,
 	servergrpc.NewProjectsService,
 	servergrpc.NewStorageService,
@@ -34,6 +36,9 @@ var ProviderSet = wire.NewSet(
 	servergrpc.NewOutboxService,
 	servergrpc.NewAuditLogsService,
 	servergrpc.NewLeaderboardsService,
+	// Analytics server 面（PR2：摄入 IngestEvents；七查询 RPC 嵌
+	// Unimplemented 占位，实现随 PR3）。
+	servergrpc.NewAnalyticsService,
 	serverhttp.NewFileHandler,
 	serverhttp.NewOAuthHandler,
 	serverhttp.NewFunctionsHandler,

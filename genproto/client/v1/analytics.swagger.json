@@ -1,0 +1,190 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "client/v1/analytics.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "AnalyticsService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/analytics/events": {
+      "post": {
+        "summary": "IngestEvents 批量摄入端侧事件（部分接收语义：坏事件计入 skipped、好事件\n照收；at-least-once，D14——不做去重）。归因（user_id）与 source='client'\n由服务端从 principal 落定，请求体无法伪造。",
+        "operationId": "AnalyticsService_IngestEvents",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/torchwoodclientv1IngestEventsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1IngestEventsRequest"
+            }
+          }
+        ],
+        "tags": [
+          "AnalyticsService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufNullValue": {
+      "type": "string",
+      "enum": [
+        "NULL_VALUE"
+      ],
+      "default": "NULL_VALUE",
+      "description": "`NullValue` is a singleton enumeration to represent the null value for the\n`Value` type union.\n\nThe JSON representation for `NullValue` is JSON `null`.\n\n - NULL_VALUE: Null value."
+    },
+    "torchwoodclientv1IngestEventsResponse": {
+      "type": "object",
+      "properties": {
+        "accepted": {
+          "type": "integer",
+          "format": "int32",
+          "title": "落库事件数。"
+        },
+        "skipped": {
+          "type": "integer",
+          "format": "int32",
+          "title": "被跳过事件数（坏形状 / 时间越界 / 超软上限的新事件名）。"
+        }
+      }
+    },
+    "v1AnalyticsEvent": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "事件名：^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$，项目级软上限 1000（D12，存量名\n不受影响，仅拒新名——摄取期字典拦截）。"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time",
+          "title": "事件时间（客户端）：缺省 = 服务端 now；app 层钳制 [now-24h, now+5min]，\n越界计入 skipped（D4，离线补传事件算对日）。"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": {},
+          "title": "自由维度键值：≤25 键；键 ^[a-zA-Z_][a-zA-Z0-9_.]{0,63}$；值标量或浅数组；\n单事件序列化 ≤16KiB（复合上限在 app 层校验，键正则同样在 app 层——\nprotovalidate 的 map.key 约束覆盖不了全部复合规则）。"
+        },
+        "session_id": {
+          "type": "string",
+          "title": "端自报会话标识，可空（平台不解释语义）；user 归因不由端指定。"
+        }
+      },
+      "title": "AnalyticsEvent 是单个端侧事件（设计 §3）。上限常量在\ninternal/domain/analytics 集中定义，protovalidate 注解与之对齐：\n批 100 / 键 25 / 单事件 16KiB（键数与体积的复合校验在 app 层）/ 名 64 /\n值截断 256 字符（截断在 app 层执行，proto 只约束形状）。"
+    },
+    "v1Error": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "error_id": {
+          "type": "string"
+        },
+        "error_code": {
+          "$ref": "#/definitions/v1ErrorCode"
+        }
+      }
+    },
+    "v1ErrorCode": {
+      "type": "string",
+      "enum": [
+        "ERROR_CODE_UNSPECIFIED",
+        "ERROR_CODE_INVALID_REQUEST",
+        "ERROR_CODE_RESOURCE_NOT_FOUND",
+        "ERROR_CODE_INVALID_CREDENTIALS",
+        "ERROR_CODE_PERMISSION_DENIED",
+        "ERROR_CODE_RESOURCE_CONFLICT",
+        "ERROR_CODE_QUOTA_EXCEEDED",
+        "ERROR_CODE_PRECONDITION_FAILED",
+        "ERROR_CODE_CONCURRENT_MODIFICATION",
+        "ERROR_CODE_VALUE_OUT_OF_RANGE",
+        "ERROR_CODE_OPERATION_NOT_ALLOWED",
+        "ERROR_CODE_INTERNAL_ERROR",
+        "ERROR_CODE_SERVICE_UNAVAILABLE",
+        "ERROR_CODE_TIMEOUT"
+      ],
+      "default": "ERROR_CODE_UNSPECIFIED",
+      "title": "ErrorCode 与 gRPC code 的映射（HTTPErrorHandler 单一事实来源，\n见 internal/infra/server/errors.go）：\n  - InvalidArgument → ERROR_CODE_INVALID_REQUEST\n  - FailedPrecondition → ERROR_CODE_PRECONDITION_FAILED\n  - NotFound → ERROR_CODE_RESOURCE_NOT_FOUND\n  - AlreadyExists → ERROR_CODE_RESOURCE_CONFLICT\n  - Aborted → ERROR_CODE_CONCURRENT_MODIFICATION\n  - Unauthenticated → ERROR_CODE_INVALID_CREDENTIALS\n  - PermissionDenied → ERROR_CODE_PERMISSION_DENIED\n  - ResourceExhausted → ERROR_CODE_QUOTA_EXCEEDED\n  - DeadlineExceeded → ERROR_CODE_TIMEOUT\n  - 其余 → ERROR_CODE_INTERNAL_ERROR"
+    },
+    "v1ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "$ref": "#/definitions/v1Error"
+        }
+      }
+    },
+    "v1IngestEventsRequest": {
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1AnalyticsEvent"
+          },
+          "title": "单批 1..100 事件；批内逐事件校验，坏事件 skipped 不拒整批（D12）。"
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "Bearer": {
+      "type": "apiKey",
+      "description": "格式: Bearer \u003cjwt\u003e（Client API 登录态）",
+      "name": "Authorization",
+      "in": "header"
+    },
+    "apiKey": {
+      "type": "apiKey",
+      "description": "项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。",
+      "name": "X-API-Key",
+      "in": "header"
+    },
+    "cookie": {
+      "type": "apiKey",
+      "description": "TORCHWOOD_session_console=\u003csid\u003e（Console admin 会话）",
+      "name": "Cookie",
+      "in": "header"
+    }
+  },
+  "security": [
+    {
+      "Bearer": []
+    }
+  ],
+  "x-torchwood-access": "end_user"
+}
