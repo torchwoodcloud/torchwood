@@ -604,6 +604,9 @@ func (r *functionsAuditRepo) Insert(_ context.Context, e *audit.Entry) error {
 func (r *functionsAuditRepo) ListByActor(context.Context, string, string, int) ([]audit.Entry, error) {
 	return nil, nil
 }
+func (r *functionsAuditRepo) List(context.Context, audit.ListFilter) ([]audit.Entry, int, error) {
+	return nil, 0, nil
+}
 
 // TestFunctionsHandler_UploadWritesAudit（P2-6）：特权 HTTP 操作（代码包
 // 上传）必须有持久审计轨迹——授权失败也落一条 PermissionDenied。

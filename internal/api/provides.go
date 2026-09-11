@@ -31,6 +31,7 @@ var ProviderSet = wire.NewSet(
 	servergrpc.NewSubscriptionsService,
 	servergrpc.NewBillingService,
 	servergrpc.NewOutboxService,
+	servergrpc.NewAuditLogsService,
 	serverhttp.NewFileHandler,
 	serverhttp.NewOAuthHandler,
 	serverhttp.NewFunctionsHandler,

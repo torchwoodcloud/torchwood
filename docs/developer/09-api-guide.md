@@ -253,11 +253,20 @@ service OutboxService {
 
 CLI 调用：`torchwood outbox list-dead --project <id>` / `torchwood rpc /torchwood.server.v1.OutboxService/ListDeadLetters --data '{"project_id":"shop","pageSize":20}'`。
 
-## 12 自检清单
+## 12 审计日志（AuditLogsService + 拦截器结构化记录）
+
+写入侧在 gRPC 审计拦截器（`internal/api/interceptor/audit.go`，全量 unary 落 `audit_logs`）；`AuditLogsService`（`proto/server/v1/audit_logs.proto`）只提供读取：
+
+- **鉴权**：`admin_roles:[ADMIN_ROLE_ADMIN,ADMIN_ROLE_OWNER]` + `api_key_scope:{audit_logs, read}`（scope 词表 `SCOPE_RESOURCE_AUDIT_LOGS=13`）。项目上下文来自凭证（admin 需 `X-Torchwood-Project`，否则 FailedPrecondition，对齐 outbox）；`include_platform`（并入 `project_id IS NULL` 平台级行）与 `all_projects`（跨项目视图）仅平台 admin。
+- **结构化 metadata（非文本，机器可读）**：`client`（通道推导：凭证类型 + UA 自报——CLI/SDK 经 SDK `WithUserAgent("torchwood-cli/<ver>")` 等注入，console/function/user/api）；`request`（管理面非读方法的脱敏请求摘要：protojson presence 语义使更新类请求只含被改字段；敏感字段名打码 `[REDACTED]`、bytes/超长串截断、整体 ≤8KB）；`changes`（app 用例经 `contexts.SetAuditMetadata` 回填的 `{"字段":{from,to}}` before/after diff，试点 Functions Update）。
+- 查询：结构化过滤（actor/action/status/resource_id/时间闭区间，exact）+ `pkg/crud` offset 分页；索引见迁移 `000008`。
+- Console：`/console/audit-logs`（System 分组）；CLI：`torchwood audit-logs list`。
+
+## 13 自检清单
 
 1. `task generate:proto && go build ./...` 通过，`genproto/` 无手改；2. `task wire:all` 已重生成；3. `go vet` + `gofmt -l` 空；4. 错误码/分页符合 §7/§9；5. `TestSwaggerAccessExtensionMatches...` 通过；6. 集成测试参照 `internal/api/servergrpc/projects_test.go`（`stub repo + contexts.WithPrincipal`）与 `internal/pkg/testutil` 真库。
 
-## 13 参考
+## 14 参考
 
 - `AGENTS.md` §编辑遵循模式（端口/适配器、`reserved`/`optional`/`Timestamp`、`pkg/crud/pkg/query`）、`README.md` §Architecture。
 - `docs/developer/06-databases.md`（三层与 `pkg/query`）、`07-storage.md`（File Token 与 multipart）、`08-functions.md`（信号量与 Trim）。

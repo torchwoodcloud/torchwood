@@ -57,3 +57,42 @@ func AuditResource(ctx context.Context) string {
 	v, _ := ctx.Value(ContextKeyAuditResource).(string)
 	return v
 }
+
+// auditMetadataHolder 是审计扩展元数据的可变持有者（与 auditResourceHolder
+// 同构）：audit 拦截器预置，app 用例/handler 在执行中回填结构化键
+// （如 changes before/after diff），拦截器在 handler 返回后合并进审计行。
+type auditMetadataHolder struct{ metadata map[string]any }
+
+func (h *auditMetadataHolder) set(key string, value any) {
+	if h.metadata == nil {
+		h.metadata = map[string]any{}
+	}
+	h.metadata[key] = value
+}
+
+// SetAuditMetadata 记录一个结构化审计扩展键（保留键：changes、resource_name）。
+// 当 ctx 链中已有持有者（audit 拦截器预置）时原地写入，否则按不可变方式
+// 派生新 context（无拦截器链路的直调场景）。
+func SetAuditMetadata(ctx context.Context, key string, value any) context.Context {
+	if h, ok := ctx.Value(ContextKeyAuditMetadata).(*auditMetadataHolder); ok {
+		h.set(key, value)
+		return ctx
+	}
+	h := &auditMetadataHolder{}
+	h.set(key, value)
+	return context.WithValue(ctx, ContextKeyAuditMetadata, h)
+}
+
+// WithAuditMetadataHolder pre-populates the mutable audit metadata holder.
+// 仅由 audit 拦截器调用；普通代码应使用 SetAuditMetadata。
+func WithAuditMetadataHolder(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ContextKeyAuditMetadata, &auditMetadataHolder{metadata: map[string]any{}})
+}
+
+// AuditMetadata returns the audit extension metadata stored in ctx (may be nil)。
+func AuditMetadata(ctx context.Context) map[string]any {
+	if h, ok := ctx.Value(ContextKeyAuditMetadata).(*auditMetadataHolder); ok {
+		return h.metadata
+	}
+	return nil
+}

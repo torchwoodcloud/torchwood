@@ -65,8 +65,10 @@ func TestInvokeJSONBadJSON(t *testing.T) {
 // 身份 declared_scopes 全量替换，wrapper：FunctionsService.SetFunctionScopes）；
 // 124 → 128（2026-09-09，functions.proto 新增触发器管理四方法——P1 触发器
 // 模块，wrapper：FunctionsService.CreateFunctionTrigger / ListFunctionTriggers /
-// DeleteFunctionTrigger / RotateFunctionTriggerToken）。
-const expectedServerMethodCount = 128
+// DeleteFunctionTrigger / RotateFunctionTriggerToken）；
+// 128 → 129（2026-09-11，audit_logs.proto 新增审计日志查询——wrapper：
+// AuditLogsService.ListAuditLogs）。
+const expectedServerMethodCount = 129
 
 // TestInvokeJSONCompleteness 遍历 protoregistry.GlobalFiles 中 torchwood.server.v1
 // 包的全部方法（排除 APIKeysService），断言每个方法都能被解析并用空 JSON 构造

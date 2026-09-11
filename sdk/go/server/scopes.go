@@ -72,4 +72,10 @@ const (
 	ScopeOutbox      = "outbox"
 	ScopeOutboxRead  = "outbox.read"
 	ScopeOutboxWrite = "outbox.write"
+
+	// ScopeAuditLogs 审计日志查询面（当前仅只读方法；write 形态由资源
+	// 词表全集派生预留，尚无对应 RPC）。
+	ScopeAuditLogs      = "audit_logs"
+	ScopeAuditLogsRead  = "audit_logs.read"
+	ScopeAuditLogsWrite = "audit_logs.write"
 )

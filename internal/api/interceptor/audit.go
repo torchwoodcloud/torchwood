@@ -55,9 +55,11 @@ func (a *AuditInterceptor) UnaryAuditMiddleware(ctx context.Context, req any, in
 	if auditExemptMethods[info.FullMethod] {
 		return handler(ctx, req)
 	}
-	// 预置审计资源可变持有者：handler 内的 WithAuditResource 原地写入后，
-	// 本中间件在 handler 返回后仍能读取（context 值不可变，需共享可变槽）。
+	// 预置审计资源/元数据可变持有者：handler 内的 WithAuditResource/
+	// SetAuditMetadata 原地写入后，本中间件在 handler 返回后仍能读取
+	// （context 值不可变，需共享可变槽）。
 	ctx = contexts.WithAuditResourceHolder(ctx)
+	ctx = contexts.WithAuditMetadataHolder(ctx)
 	resp, err := handler(ctx, req)
 	if a.repo == nil {
 		return resp, err
@@ -67,6 +69,7 @@ func (a *AuditInterceptor) UnaryAuditMiddleware(ctx context.Context, req any, in
 		Action: info.FullMethod,
 		Status: auditStatus(err),
 	}
+	var principalUA string
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
 		// 优先使用 ClientInfoInterceptor 写入的、经过 trusted-proxy 校验的 IP；
 		// 仅在链路中没有 ClientInfo（如测试直挂 audit）时退化为直接读头部。
@@ -92,14 +95,27 @@ func (a *AuditInterceptor) UnaryAuditMiddleware(ctx context.Context, req any, in
 				entry.UserAgent = firstMetadataValue(md, "user-agent")
 			}
 		}
+		principalUA = entry.UserAgent
 	}
 	if p, ok := contexts.Principal(ctx); ok && p != nil {
 		entry.ActorID = string(p.ActorID)
 		entry.ActorKind = string(p.ActorKind)
 		entry.ProjectID = p.ProjectID
+		if client := auditClientChannel(p, principalUA); len(client) > 0 {
+			entry.SetMetadata("client", client)
+		}
 	}
 	if resID := contexts.AuditResource(ctx); resID != "" {
 		entry.ResourceID = resID
+	}
+	// 管理面写操作：脱敏请求摘要（成功/失败均记——被拒的变更尝试同样
+	// 是审计证据；protojson presence 语义使更新类请求只含被改字段）。
+	if summary := auditRequestSummary(info.FullMethod, req); summary != "" {
+		entry.SetMetadata("request", summary)
+	}
+	// app 用例回填的结构化扩展（试点：Functions Update 的 before/after diff）。
+	for k, v := range contexts.AuditMetadata(ctx) {
+		entry.SetMetadata(k, v)
 	}
 	// R01-F7-6：审计落库带 3s 超时且不继承 RPC 取消（WithoutCancel），
 	// 失败只 Warn，不得阻塞或影响 RPC 响应。

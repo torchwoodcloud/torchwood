@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { ProjectBootstrap } from "@/components/ProjectBootstrap";
 import { ProjectSelector } from "@/components/ProjectSelector";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Key, Users, Database, HardDrive, LogOut, Menu, X, UsersRound, ShieldCheck, FolderKanban, FunctionSquare, Receipt, Coins, CreditCard, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Key, Users, Database, HardDrive, LogOut, Menu, X, UsersRound, ShieldCheck, FolderKanban, FunctionSquare, Receipt, Coins, CreditCard, ScrollText, type LucideIcon } from "lucide-react";
 
 interface NavItem {
   to: string;
@@ -45,6 +45,7 @@ const navSections: { title?: string; items: NavItem[] }[] = [
     items: [
       { to: "/console/projects", label: "Projects", icon: FolderKanban },
       { to: "/console/admins", label: "Admins", icon: ShieldCheck },
+      { to: "/console/audit-logs", label: "Audit Logs", icon: ScrollText },
     ],
   },
 ];

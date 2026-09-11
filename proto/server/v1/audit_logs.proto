@@ -1,0 +1,128 @@
+syntax = "proto3";
+
+package torchwood.server.v1;
+
+option go_package = "github.com/torchwoodcloud/torchwood/genproto/server/v1;serverv1";
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "shared/v1/authz.proto";
+import "shared/v1/common.proto";
+
+// AuditLogsService 查询审计日志（roadmap §3.4「管理面写操作可查」）。
+// 写入侧由 gRPC 审计拦截器全量落库（internal/api/interceptor/audit.go），
+// 本服务只提供管理面读取：项目内 admin/owner 或持有 audit_logs.read 的
+// API key；平台 admin 可额外查看平台级行与跨项目视图。
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  security_definitions: {
+    security: {
+      key: "apiKey"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "X-API-Key"
+        description: "项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。"
+      }
+    }
+    security: {
+      key: "Bearer"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "格式: Bearer <jwt>"
+      }
+    }
+    security: {
+      key: "cookie"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Cookie"
+        description: "TORCHWOOD_session_console=<sid>（Console admin 会话）"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "apiKey"
+      value: {}
+    }
+  }
+  extensions: {
+    key: "x-torchwood-access"
+    value: { string_value: "server" }
+  }
+  // 统一 default 错误响应（运行时错误体即 shared.v1.ErrorResponse），
+  // 文件级声明自动填充到本文件全部 operation。
+  responses: {
+    key: "default"
+    value: {
+      description: "An unexpected error response."
+      schema: { json_schema: { ref: ".torchwood.shared.v1.ErrorResponse" } }
+    }
+  }
+};
+
+service AuditLogsService {
+  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
+
+  rpc ListAuditLogs(ListAuditLogsRequest) returns (ListAuditLogsResponse) {
+    option (google.api.http) = { get: "/v1/server/audit-logs" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_AUDIT_LOGS, op: SCOPE_OP_READ }
+    };
+  }
+}
+
+// ListAuditLogsRequest 不携带 project_id（决策对齐 OutboxService：项目上下文
+// 一律来自凭证——API key 取密钥行绑定，admin 会话必须携带 X-Torchwood-Project
+// 头，否则 FailedPrecondition；all_projects=true 的平台全量视图除外）。
+// 过滤为结构化字段（exact 匹配），时间范围闭区间。
+message ListAuditLogsRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = { gte: 0, lte: 1000 }];
+  string page_token = 2 [(buf.validate.field).string.max_len = 4096];
+  // 操作者过滤：actor_id 精确匹配（end_user id / admin id / api key id）。
+  string actor_id = 3 [(buf.validate.field).string.max_len = 128];
+  // 操作者类型：end_user | admin | service | execution | system。
+  string actor_kind = 4 [(buf.validate.field).string.max_len = 32];
+  // gRPC FullMethod 精确匹配，如 /torchwood.server.v1.FunctionsService/UpdateFunction。
+  string action = 5 [(buf.validate.field).string.max_len = 256];
+  // success | denied | throttled | gRPC code 名（如 PermissionDenied）。
+  string status = 6 [(buf.validate.field).string.max_len = 32];
+  // 资源实例 ID 精确匹配（handler 经 WithAuditResource 标注）。
+  string resource_id = 7 [(buf.validate.field).string.max_len = 128];
+  google.protobuf.Timestamp created_after = 8;
+  google.protobuf.Timestamp created_before = 9;
+  // 并入平台级行（project_id IS NULL，如项目建删）；仅平台 admin 可用。
+  bool include_platform = 10;
+  // 跨项目全量视图（含平台级行），忽略项目上下文；仅平台 admin 可用。
+  bool all_projects = 11;
+}
+
+// AuditLog 是一行审计记录。metadata 是结构化变更内容（非自由文本）：
+//   - client:  {channel, product, version} 调用通道（cli/sdk/console/function/api）；
+//   - request: 管理面写操作的脱敏请求摘要（更新类请求仅含被修改字段）；
+//   - changes: {字段: {from, to}} before/after diff（试点：Functions Update）。
+message AuditLog {
+  string id = 1;
+  string project_id = 2;
+  string actor_id = 3;
+  string actor_kind = 4;
+  string action = 5;
+  string status = 6;
+  string resource_id = 7;
+  string ip = 8;
+  string user_agent = 9;
+  google.protobuf.Struct metadata = 10;
+  google.protobuf.Timestamp created_at = 11;
+}
+
+message ListAuditLogsResponse {
+  repeated AuditLog audit_logs = 1;
+  shared.v1.ListResponseMeta meta = 2;
+}

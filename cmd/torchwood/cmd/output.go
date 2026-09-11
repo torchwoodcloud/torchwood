@@ -21,6 +21,11 @@ func invoke(g *globalFlags, method string, req any) ([]byte, error) {
 	if g.tls {
 		opts = append(opts, server.WithTLS())
 	}
+	// 自报身份：服务端审计日志按 UA 前缀把本调用归类为 cli 通道
+	// （metadata.client.channel，scope gate 之外的审计维度）。
+	if g.version != "" {
+		opts = append(opts, server.WithUserAgent("torchwood-cli/"+g.version))
+	}
 	c, err := server.New(g.endpoint, opts...)
 	if err != nil {
 		return nil, err

@@ -175,6 +175,7 @@ func (f *Functions) UpdateFunction(ctx context.Context, cmd UpdateFunctionComman
 	if fn == nil {
 		return nil, status.Error(codes.NotFound, "function not found")
 	}
+	before := *fn
 	if cmd.Name != nil {
 		if strings.TrimSpace(*cmd.Name) == "" {
 			return nil, status.Error(codes.InvalidArgument, "name is required")
@@ -209,6 +210,8 @@ func (f *Functions) UpdateFunction(ctx context.Context, cmd UpdateFunctionComman
 		return nil, err
 	}
 	fn.UpdatedAt = time.Now()
+	// before/after diff 落审计 metadata.changes（成功/失败均记变更尝试）。
+	recordAuditChanges(ctx, &before, fn)
 	if err := f.repo.UpdateFunction(ctx, fn); err != nil {
 		return nil, err
 	}

@@ -25,6 +25,7 @@ var ProviderSet = wire.NewSet(
 	server.NewProjects,
 	server.NewUsers,
 	server.NewAPIKeys,
+	server.NewAuditLogs,
 	server.NewInviteCodes,
 	server.NewOAuthProviders,
 	server.NewGroups,

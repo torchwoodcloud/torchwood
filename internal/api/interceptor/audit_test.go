@@ -40,6 +40,10 @@ func (r *auditTestRepo) ListByActor(context.Context, string, string, int) ([]aud
 	return nil, nil
 }
 
+func (r *auditTestRepo) List(context.Context, audit.ListFilter) ([]audit.Entry, int, error) {
+	return nil, 0, nil
+}
+
 func runAuditMiddleware(repo *auditTestRepo, callerCtx context.Context) (any, error) {
 	a := NewAuditInterceptor(repo)
 	info := &grpc.UnaryServerInfo{FullMethod: "/test/Ok"}

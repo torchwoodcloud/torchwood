@@ -59,6 +59,7 @@ func NewGRPCServer(
 	consoleAuth *consolegrpc.AuthService,
 	adminsService *consolegrpc.AdminsService,
 	outboxService *servergrpc.OutboxService,
+	auditLogsService *servergrpc.AuditLogsService,
 	policySet *domainauth.PolicySet,
 ) (*lynxgrpc.Server, error) {
 	grpcCfg := cfg.GetServer().GetGrpc()
@@ -144,6 +145,7 @@ func NewGRPCServer(
 	if outboxService != nil {
 		serverv1.RegisterOutboxServiceServer(grpcSrv, outboxService)
 	}
+	serverv1.RegisterAuditLogsServiceServer(grpcSrv, auditLogsService)
 
 	// fail-closed：所有已注册方法都必须带有 authz 注解，缺失的方法会在拦截器里被放行。
 	if err := assertRegisteredMethodsHaveAuthz(grpcSrv, policySet); err != nil {
@@ -216,6 +218,7 @@ func authzFileDescriptors() []protoreflect.FileDescriptor {
 		serverv1.File_server_v1_subscriptions_proto,
 		serverv1.File_server_v1_billing_proto,
 		serverv1.File_server_v1_outbox_proto,
+		serverv1.File_server_v1_audit_logs_proto,
 		consolev1.File_console_v1_auth_proto,
 		consolev1.File_console_v1_admins_proto,
 	}

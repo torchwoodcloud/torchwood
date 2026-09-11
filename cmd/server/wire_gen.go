@@ -199,7 +199,9 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	outboxRepository := bunrepo.NewOutboxRepository(database)
 	outboxAdmin := events2.NewOutboxAdmin(outboxRepository, repository)
 	outboxService := servergrpc.NewOutboxService(outboxAdmin)
-	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, healthService, projectsService, storageService, usersService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, authService, adminsService, outboxService, policySet)
+	auditLogs := server.NewAuditLogs(auditRepository)
+	auditLogsService := servergrpc.NewAuditLogsService(auditLogs)
+	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, healthService, projectsService, storageService, usersService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, authService, adminsService, outboxService, auditLogsService, policySet)
 	if err != nil {
 		cleanup()
 		return nil, nil, err

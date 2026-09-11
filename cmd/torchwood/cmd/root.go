@@ -38,6 +38,7 @@ type globalFlags struct {
 	output     string // 输出格式（MVP 仅 json）
 	tls        bool   // --tls：经 TLS 连接（系统根证书校验；反向代理终结 TLS 场景）
 	profile    string // 配置文件中的 profile 名
+	version    string // CLI 版本（ldflags 注入；自报 UA 用，非旗标）
 
 	// explicit 记录各旗标在本进程内是否被显式设置（trackedVal 在任一分发
 	// 层级解析时打标）：validate 据此落实「显式旗标 > env > profile > 内建
@@ -194,7 +195,7 @@ func (g *globalFlags) validate(needKey bool) error {
 
 // NewApp 构造根命令表；version 由 main 包 ldflags 注入。
 func NewApp(version string) *commands.App {
-	g := &globalFlags{endpoint: defaultEndpoint, timeout: defaultTimeout, output: defaultOutput}
+	g := &globalFlags{endpoint: defaultEndpoint, timeout: defaultTimeout, output: defaultOutput, version: version}
 	app := commands.New()
 	app.HelpHeader = `Torchwood CLI calls the Server API over gRPC (not the HTTP gateway);
 authentication always uses the x-api-key metadata (scopes follow the API
@@ -221,6 +222,7 @@ flag: explicit flag > TORCHWOOD_CLI_* env var > config file profile
 		newFunctionsCmd(g),
 		newOAuthProvidersCmd(g),
 		newAdminCmd(g),
+		newAuditLogsCmd(g),
 		newConfigCmd(),
 		newRPCCmd(g),
 	)

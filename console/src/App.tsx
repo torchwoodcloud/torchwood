@@ -109,6 +109,9 @@ const ListenPanel = lazy(() =>
 const AdminsListPage = lazy(() =>
   import("@/routes/admins/pages").then((m) => ({ default: m.AdminsListPage }))
 );
+const AuditLogsListPage = lazy(() =>
+  import("@/routes/audit-logs/pages").then((m) => ({ default: m.AuditLogsListPage }))
+);
 const OrdersListPage = lazy(() =>
   import("@/routes/payments/pages").then((m) => ({ default: m.OrdersListPage }))
 );
@@ -271,6 +274,19 @@ function AppRoutes() {
             <RouteErrorBoundary>
               <AdminsListPage />
             </RouteErrorBoundary>
+          }
+        />
+
+        {/* 审计日志只读面：服务端 admin_roles 门 = admin/owner（与
+            isPlatformAdmin 同集），路由侧用 platformAdmin 守卫对齐。 */}
+        <Route
+          path="audit-logs"
+          element={
+            <RequireRole mode="platformAdmin">
+              <RouteErrorBoundary>
+                <AuditLogsListPage />
+              </RouteErrorBoundary>
+            </RequireRole>
           }
         />
 

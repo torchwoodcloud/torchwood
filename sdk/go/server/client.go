@@ -24,6 +24,9 @@ type Config struct {
 
 	timeout       time.Duration // <=0 视为 conn.DefaultTimeout
 	retryDisabled bool
+	// userAgent 自报身份（grpc.WithUserAgent）：服务端审计日志据此把
+	// api_key 调用归类为 cli/sdk 通道（metadata.client.channel）。
+	userAgent string
 	// dialOptions 透传给底层拨号。
 	dialOptions []grpc.DialOption
 }
@@ -65,6 +68,10 @@ func WithDialOptions(opts ...grpc.DialOption) Option {
 	return func(c *Config) { c.dialOptions = append(c.dialOptions, opts...) }
 }
 
+// WithUserAgent 自报客户端身份（形如 "torchwood-cli/0.4.0"）：服务端审计
+// 日志把 API key 调用按 UA 前缀归类通道（cli/sdk/api），供审计查询消费。
+func WithUserAgent(ua string) Option { return func(c *Config) { c.userAgent = ua } }
+
 // Client 封装 Torchwood Server API（API Key 认证）。
 type Client struct {
 	cfg  Config
@@ -101,6 +108,8 @@ type Client struct {
 	Billing *BillingService
 	// Outbox 提供死信查询与重放。
 	Outbox *OutboxService
+	// AuditLogs 提供审计日志查询（scope audit_logs.read）。
+	AuditLogs *AuditLogsService
 }
 
 // New 建立 Server API 连接。target 为 gRPC 目标地址，不能为空。
@@ -114,6 +123,9 @@ func New(target string, opts ...Option) (*Client, error) {
 		// 超时兜底在最外层（含 auth 头注入的开销），auth 在内层。
 		grpc.WithChainUnaryInterceptor(conn.TimeoutUnaryInterceptor(cfg.timeout), c.authInterceptor()),
 	}, cfg.dialOptions...)
+	if cfg.userAgent != "" {
+		dialOpts = append(dialOpts, grpc.WithUserAgent(cfg.userAgent))
+	}
 	if !cfg.retryDisabled {
 		dialOpts = append(dialOpts, conn.RetryDialOption())
 	}
@@ -139,6 +151,7 @@ func New(target string, opts ...Option) (*Client, error) {
 	c.Subscriptions = &SubscriptionsService{c: c, api: serverv1.NewSubscriptionsServiceClient(gc)}
 	c.Billing = &BillingService{c: c, api: serverv1.NewBillingServiceClient(gc)}
 	c.Outbox = &OutboxService{c: c, api: serverv1.NewOutboxServiceClient(gc)}
+	c.AuditLogs = &AuditLogsService{c: c, api: serverv1.NewAuditLogsServiceClient(gc)}
 	return c, nil
 }
 
