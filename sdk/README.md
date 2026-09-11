@@ -134,7 +134,7 @@ await client.databases.createDocument("app", "notes", { data: { title: "Hi" } })
 
 **Client：** Account（注册/登录/会话/偏好）、Databases（文档 CRUD + count）、Groups 与 Memberships、Realtime（WebSocket 订阅）、Assets、Payments、Subscriptions。
 
-**Server：** Health、Projects、Users、Groups、Databases（库/集合/属性/索引/文档/Bulk）、API Keys、OAuthProviders、Storage（Bucket/File）、Functions、Payments、Assets、Subscriptions、Billing、Outbox，以及 18 个 Agent 默认工具目录（`agentTools` / `lookupAgentTool`）。
+**Server：** Health、Projects、Users、Groups、Databases（库/集合/属性/索引/文档/Bulk）、API Keys、OAuthProviders、Storage（Bucket/File）、Functions、Payments、Assets、Subscriptions、Billing、Outbox、AuditLogs，以及 18 个 Agent 默认工具目录（`agentTools` / `lookupAgentTool`）。
 
 **事务提示（Functions 开发者）**：函数代码运行在外部容器，不与服务端共享事务——函数内的多写原子批请调用 `documents:execute-tx`（`ExecuteTransactions`，Server 面；ATOMIC 模式任一失败整批回滚，批内事件序 = op 序，详见 `docs/developer/06-databases.md` §8.1 与 `08-functions.md` §4.1）。
 

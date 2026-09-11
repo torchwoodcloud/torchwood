@@ -78,7 +78,7 @@ fragment 刻意不含 refresh_token（安全加固）；OAuth 会话的 access_t
 
 **Client API**（Bearer JWT）：`account`（注册/登录/会话/偏好）、`databases`（文档 CRUD + count）、`groups` / memberships、`realtime`（WebSocket 订阅）、`assets`、`payments`、`subscriptions`。
 
-**Server API**（API Key）：`health`、`projects`、`users`、`groups`、`databases`（库/集合/属性/索引/文档/Bulk）、`apiKeys`、`storage`（Bucket/File）、`functions`、`oauthProviders`、`outbox`、`assets`、`payments`、`subscriptions`、`billing`。
+**Server API**（API Key）：`health`、`projects`、`users`、`groups`、`databases`（库/集合/属性/索引/文档/Bulk）、`apiKeys`、`storage`（Bucket/File）、`functions`、`oauthProviders`、`outbox`、`auditLogs`、`assets`、`payments`、`subscriptions`、`billing`。
 
 ## Agent 工具目录
 

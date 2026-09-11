@@ -15,6 +15,7 @@ import { ClientGroupsService } from "../client/groups.js";
 import { HttpTransport } from "../http.js";
 import {
   APIKeysService,
+  AuditLogsService,
   FunctionsService,
   HealthService,
   OAuthProvidersService,
@@ -57,6 +58,7 @@ const SDK_SERVICES: Record<string, ClassLike> = {
   SubscriptionsService: ServerSubscriptionsService,
   BillingService: BillingService,
   OutboxService: OutboxService,
+  AuditLogsService: AuditLogsService,
   // Client API（swagger 服务名与 Server API 重名，加 client. 前缀区分）
   "client.AccountService": AccountService,
   "client.DatabasesService": ClientDatabasesService,
@@ -299,6 +301,9 @@ const RPC_TO_METHOD: Record<string, Record<string, string>> = {
     ListDeadLetters: "listDeadLetters",
     ReplayDeadLetter: "replayDeadLetter",
   },
+  AuditLogsService: {
+    ListAuditLogs: "list",
+  },
   "client.PaymentsService": {
     CreateOrder: "createOrder",
     GetMyOrder: "getMyOrder",
@@ -462,6 +467,7 @@ const FACADE_SERVICES: Record<string, string> = {
   SubscriptionsService: "subscriptions",
   BillingService: "billing",
   OutboxService: "outbox",
+  AuditLogsService: "auditLogs",
 };
 
 // Round3 H4-1：Server swagger 的每个服务都必须经 `Torchwood.server.<svc>`

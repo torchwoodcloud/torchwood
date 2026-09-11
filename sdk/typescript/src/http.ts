@@ -31,7 +31,7 @@ export interface TorchwoodConfig {
 
 export interface RequestOptions {
   auth?: AuthMode;
-  query?: Record<string, string | number | string[] | undefined>;
+  query?: Record<string, string | number | boolean | string[] | undefined>;
   body?: unknown;
 }
 

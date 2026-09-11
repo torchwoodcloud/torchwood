@@ -13,6 +13,7 @@ import { HttpTransport } from "./http.js";
 import { TorchwoodError } from "./errors.js";
 import {
   APIKeysService,
+  AuditLogsService,
   FunctionsService,
   HealthService,
   OAuthProvidersService,
@@ -67,6 +68,7 @@ export class Torchwood {
     subscriptions: ServerSubscriptionsService;
     billing: BillingService;
     outbox: OutboxService;
+    auditLogs: AuditLogsService;
   };
 
   private readonly transport: HttpTransport;
@@ -96,6 +98,7 @@ export class Torchwood {
       subscriptions: new ServerSubscriptionsService(this.transport),
       billing: new BillingService(this.transport),
       outbox: new OutboxService(this.transport),
+      auditLogs: new AuditLogsService(this.transport),
     };
   }
 
