@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { Torchwood } from "../torchwood.js";
 import { AccountService } from "../client/account.js";
+import { ClientAnalyticsService } from "../client/analytics.js";
 import { ClientAssetsService } from "../client/assets.js";
 import { ClientDatabasesService } from "../client/databases.js";
 import { ClientFunctionsService } from "../client/functions.js";
@@ -14,6 +15,7 @@ import { ClientSubscriptionsService } from "../client/subscriptions.js";
 import { ClientGroupsService } from "../client/groups.js";
 import { HttpTransport } from "../http.js";
 import {
+  AnalyticsService,
   APIKeysService,
   AuditLogsService,
   FunctionsService,
@@ -59,8 +61,10 @@ const SDK_SERVICES: Record<string, ClassLike> = {
   BillingService: BillingService,
   OutboxService: OutboxService,
   AuditLogsService: AuditLogsService,
+  AnalyticsService: AnalyticsService,
   // Client API（swagger 服务名与 Server API 重名，加 client. 前缀区分）
   "client.AccountService": AccountService,
+  "client.AnalyticsService": ClientAnalyticsService,
   "client.DatabasesService": ClientDatabasesService,
   "client.GroupsService": ClientGroupsService,
   "client.PaymentsService": ClientPaymentsService,
@@ -304,6 +308,18 @@ const RPC_TO_METHOD: Record<string, Record<string, string>> = {
   AuditLogsService: {
     ListAuditLogs: "list",
   },
+  AnalyticsService: {
+    IngestEvents: "ingest",
+    GetOverview: "getOverview",
+    ListEventDefinitions: "listEventDefinitions",
+    QueryTimeseries: "queryTimeseries",
+    QueryBreakdown: "queryBreakdown",
+    QueryRetention: "queryRetention",
+    ListUserEvents: "listUserEvents",
+  },
+  "client.AnalyticsService": {
+    IngestEvents: "ingest",
+  },
   "client.PaymentsService": {
     CreateOrder: "createOrder",
     GetMyOrder: "getMyOrder",
@@ -468,6 +484,7 @@ const FACADE_SERVICES: Record<string, string> = {
   BillingService: "billing",
   OutboxService: "outbox",
   AuditLogsService: "auditLogs",
+  AnalyticsService: "analytics",
 };
 
 // Round3 H4-1：Server swagger 的每个服务都必须经 `Torchwood.server.<svc>`

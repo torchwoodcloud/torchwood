@@ -1,0 +1,343 @@
+syntax = "proto3";
+
+package torchwood.server.v1;
+
+option go_package = "github.com/torchwoodcloud/torchwood/genproto/server/v1;serverv1";
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "shared/v1/authz.proto";
+import "shared/v1/common.proto";
+
+// AnalyticsService 是事件分析的管理/查询面（docs/design/analytics.md §4.1）：
+// server 面摄入（服务端权威事件，可信代报 user_id）+ 七个固定形状查询 RPC
+// （D8：不用 DSL）。读方法对 Console admin 全角色会话开放（viewer 含）+
+// API key analytics:read；摄入为 business_write 档。项目上下文来自凭证
+// （API key 绑定项目；admin 会话带 X-Torchwood-Project 头），请求体不携带
+// project_id。
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  security_definitions: {
+    security: {
+      key: "apiKey"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "X-API-Key"
+        description: "项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。"
+      }
+    }
+    security: {
+      key: "Bearer"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "格式: Bearer <jwt>"
+      }
+    }
+    security: {
+      key: "cookie"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Cookie"
+        description: "TORCHWOOD_session_console=<sid>（Console admin 会话）"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "apiKey"
+      value: {}
+    }
+  }
+  extensions: {
+    key: "x-torchwood-access"
+    value: { string_value: "server" }
+  }
+  // 统一 default 错误响应（运行时错误体即 shared.v1.ErrorResponse），
+  // 文件级声明自动填充到本文件全部 operation。
+  responses: {
+    key: "default"
+    value: {
+      description: "An unexpected error response."
+      schema: { json_schema: { ref: ".torchwood.shared.v1.ErrorResponse" } }
+    }
+  }
+};
+
+service AnalyticsService {
+  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
+
+  // IngestEvents 服务端权威事件摄入（支付完成、订阅续费、函数侧业务事件），
+  // 可信代报 user_id；source='server' 由服务端落定。审计豁免显式登记
+  // （D13：非读动词默认落审计，静默清单见 internal/api/interceptor/audit.go）。
+  rpc IngestEvents(IngestServerEventsRequest) returns (IngestEventsResponse) {
+    option (google.api.http) = { post: "/v1/server/analytics/events", body: "*" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_MEMBER, ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_ANALYTICS, op: SCOPE_OP_WRITE }
+    };
+  }
+  // GetOverview 窗口 KPI（事件总量/UV/新增用户/人均事件）+ Top 事件 + 今日
+  // 实时数（raw 直读）。
+  rpc GetOverview(GetAnalyticsOverviewRequest) returns (AnalyticsOverview) {
+    option (google.api.http) = { get: "/v1/server/analytics/overview" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_ANALYTICS, op: SCOPE_OP_READ }
+    };
+  }
+  // ListEventDefinitions 事件字典（自由上报 + 事后发现，D12；Console 发现入口）。
+  rpc ListEventDefinitions(ListEventDefinitionsRequest) returns (ListEventDefinitionsResponse) {
+    option (google.api.http) = { get: "/v1/server/analytics/event-definitions" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_ANALYTICS, op: SCOPE_OP_READ }
+    };
+  }
+  // QueryTimeseries 事件趋势（DAY → analytics_daily；HOUR → raw 分区裁剪）。
+  rpc QueryTimeseries(QueryTimeseriesRequest) returns (QueryTimeseriesResponse) {
+    option (google.api.http) = { get: "/v1/server/analytics/timeseries" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_ANALYTICS, op: SCOPE_OP_READ }
+    };
+  }
+  // QueryBreakdown 维度拆解（raw 直查 GROUP BY props->>$key + Top-N + __other__
+  // 归并，D9；窗口护栏 ≤30 天，prop_key 白名单校验后参数化）。
+  rpc QueryBreakdown(QueryBreakdownRequest) returns (QueryBreakdownResponse) {
+    option (google.api.http) = { get: "/v1/server/analytics/breakdown" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_ANALYTICS, op: SCOPE_OP_READ }
+    };
+  }
+  // QueryRetention 留存矩阵（D11 轻量：first_seen ⋈ user_days 自连接，cohort
+  // 窗 ≤92 天 × D0–D14，日粒度 UTC 切日）。
+  rpc QueryRetention(QueryRetentionRequest) returns (QueryRetentionResponse) {
+    option (google.api.http) = { get: "/v1/server/analytics/retention" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_ANALYTICS, op: SCOPE_OP_READ }
+    };
+  }
+  // ListUserEvents 用户行为轨迹下钻（raw keyset 分页，窗 ≤92 天）。
+  rpc ListUserEvents(ListUserEventsRequest) returns (ListUserEventsResponse) {
+    option (google.api.http) = { get: "/v1/server/analytics/users/{user_id}/events" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_ANALYTICS, op: SCOPE_OP_READ }
+    };
+  }
+}
+
+// ServerAnalyticsEvent 是 server 面事件（设计 §3 形状 + 可信代报 user_id）。
+// 与 client 面同名概念的字段约束一致（上限常量见 internal/domain/analytics）。
+message ServerAnalyticsEvent {
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+    pattern: "^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$"
+  }];
+  optional google.protobuf.Timestamp occurred_at = 2;
+  map<string, google.protobuf.Value> props = 3;
+  string session_id = 4 [(buf.validate.field).string.max_len = 255];
+  // 可信代报的事件归属用户（server 面专属，D3）；缺省 = 无归属（不进
+  // user_days / first_seen，仅进总量口径）。
+  optional string user_id = 5 [(buf.validate.field).string.max_len = 255];
+}
+
+message IngestServerEventsRequest {
+  // 单批 1..100 事件；批内逐事件校验，坏事件 skipped 不拒整批（D12）。
+  repeated ServerAnalyticsEvent events = 1 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 100
+  }];
+}
+
+message IngestEventsResponse {
+  // 落库事件数。
+  int32 accepted = 1;
+  // 被跳过事件数（坏形状 / 时间越界 / 超软上限的新事件名）。
+  int32 skipped = 2;
+}
+
+// AnalyticsGranularity 是趋势查询的时间粒度（HOUR 走 raw、DAY 走 rollup，
+// D6；时区口径：v1 UTC 切日，HOUR 路径可选 timezone 参数由 PR3 决定）。
+enum AnalyticsGranularity {
+  ANALYTICS_GRANULARITY_UNSPECIFIED = 0;
+  ANALYTICS_GRANULARITY_HOUR = 1;
+  ANALYTICS_GRANULARITY_DAY = 2;
+}
+
+// 查询公共字段（设计 §4.1）：period_start/period_end 必填有界窗；窗口护栏
+// （HOUR ≤7 天 / DAY ≤366 天 / Breakdown ≤30 天 / Retention cohort ≤92 天 /
+// ListUserEvents ≤92 天）与跨字段校验在 app 用例层。
+message GetAnalyticsOverviewRequest {
+  google.protobuf.Timestamp period_start = 1 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp period_end = 2 [(buf.validate.field).required = true];
+}
+
+message AnalyticsOverviewKpi {
+  int64 total_events = 1;
+  int64 unique_users = 2;
+  int64 new_users = 3;
+  // 人均事件（total / unique_users，UV 为 0 时为 0）。
+  double events_per_user = 4;
+}
+
+message AnalyticsTopEvent {
+  string name = 1;
+  int64 total = 2;
+}
+
+// 今日实时块（raw 直读，恒为 raw 口径；与窗口 KPI 的 rollup 口径并存的
+// 新鲜度差异由响应级 source 标注 + Console 提示承担，D8）。
+message AnalyticsTodayStats {
+  int64 total_events = 1;
+  int64 unique_users = 2;
+}
+
+message AnalyticsOverview {
+  AnalyticsOverviewKpi kpi = 1;
+  repeated AnalyticsTopEvent top_events = 2;
+  AnalyticsTodayStats today = 3;
+  // 窗口 KPI 口径：rollup | raw（worker 未覆盖时回退 raw，PR3 择路）。
+  string source = 4;
+}
+
+message ListEventDefinitionsRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = { gte: 0, lte: 500 }];
+  string page_token = 2 [(buf.validate.field).string.max_len = 4096];
+}
+
+message AnalyticsEventDefinition {
+  string name = 1;
+  google.protobuf.Timestamp first_seen = 2;
+  google.protobuf.Timestamp last_seen = 3;
+  // 近 30 天总量（rollup 维护，排序用；rollup 未跑时为 0）。
+  int64 total_30d = 4;
+}
+
+message ListEventDefinitionsResponse {
+  repeated AnalyticsEventDefinition definitions = 1;
+  shared.v1.ListResponseMeta meta = 2;
+}
+
+message QueryTimeseriesRequest {
+  // 事件名集合（≤10；空 = 全部事件聚合）。
+  repeated string names = 1 [(buf.validate.field).repeated = {
+    max_items: 10
+    items: { string: { min_len: 1, max_len: 64, pattern: "^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$" } }
+  }];
+  google.protobuf.Timestamp period_start = 2 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp period_end = 3 [(buf.validate.field).required = true];
+  // UNSPECIFIED → InvalidArgument（app 层）。
+  AnalyticsGranularity granularity = 4;
+}
+
+message AnalyticsTimeseriesPoint {
+  // 桶起点（UTC；DAY 粒度为当日零点，HOUR 为整点）。
+  google.protobuf.Timestamp bucket = 1;
+  int64 total = 2;
+  int64 unique_users = 3;
+}
+
+message QueryTimeseriesResponse {
+  repeated AnalyticsTimeseriesPoint points = 1;
+  // rollup | raw（D8 口径标注）。
+  string source = 2;
+}
+
+message QueryBreakdownRequest {
+  string name = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 64
+      pattern: "^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$"
+    }
+  ];
+  // 拆解维度键（服务端白名单校验后参数化，防注入）。
+  string prop_key = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 64
+      pattern: "^[a-zA-Z_][a-zA-Z0-9_.]{0,63}$"
+    }
+  ];
+  google.protobuf.Timestamp period_start = 3 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp period_end = 4 [(buf.validate.field).required = true];
+  // Top-N 桶数（≤50；其余归并 __other__；缺省 20）。
+  int32 top_n = 5 [(buf.validate.field).int32 = { gte: 0, lte: 50 }];
+}
+
+message AnalyticsBreakdownBucket {
+  // 维度值字符串；缺失桶为 "(unset)"，归并桶为 "__other__"。
+  string value = 1;
+  int64 total = 2;
+  int64 unique_users = 3;
+}
+
+message QueryBreakdownResponse {
+  repeated AnalyticsBreakdownBucket buckets = 1;
+  // breakdown v1 恒 raw（D9）。
+  string source = 2;
+}
+
+message QueryRetentionRequest {
+  // cohort 锚定窗：first_day ∈ [cohort_start, cohort_end]（窗 ≤92 天，app 层）。
+  google.protobuf.Timestamp cohort_start = 1 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp cohort_end = 2 [(buf.validate.field).required = true];
+}
+
+message AnalyticsRetentionCohort {
+  // cohort 日（UTC 零点）。
+  google.protobuf.Timestamp cohort = 1;
+  int64 size = 2;
+  // retained[k] = cohort+k 日仍活跃的用户数；固定 D0–D14（retained[0] = size）。
+  repeated int64 retained = 3;
+}
+
+message QueryRetentionResponse {
+  repeated AnalyticsRetentionCohort cohorts = 1;
+  // retention 恒 rollup（user_days / first_seen 基座，D11）。
+  string source = 2;
+}
+
+message ListUserEventsRequest {
+  string user_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 255
+    }
+  ];
+  int32 page_size = 2 [(buf.validate.field).int32 = { gte: 0, lte: 100 }];
+  // 不透明游标（上一页末条的 (occurred_at, id) 编码）。
+  string page_token = 3 [(buf.validate.field).string.max_len = 4096];
+  // 可选时间窗（≤92 天，app 层）；缺省 = raw 保留期内全量倒序。
+  google.protobuf.Timestamp period_start = 4;
+  google.protobuf.Timestamp period_end = 5;
+}
+
+message AnalyticsUserEvent {
+  // 调试序（BIGSERIAL，非全局唯一——分区表 PK 为 (id, occurred_at)；仅作
+  // keyset 分页副键，非 API 级资源 ID）。
+  int64 id = 1;
+  string name = 2;
+  google.protobuf.Timestamp occurred_at = 3;
+  google.protobuf.Timestamp ingested_at = 4;
+  // 摄入通道：client | server（存储列口径，区别于响应级 rollup|raw 口径）。
+  string source = 5;
+  string platform = 6;
+  string app_version = 7;
+  string session_id = 8;
+  google.protobuf.Struct props = 9;
+}
+
+message ListUserEventsResponse {
+  repeated AnalyticsUserEvent events = 1;
+  shared.v1.ListResponseMeta meta = 2;
+  // 下钻恒 raw。
+  string source = 3;
+}

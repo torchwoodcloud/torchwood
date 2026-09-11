@@ -12,7 +12,7 @@
 >   SERVER admin 会话（admin_roles）或 API key（scope）；PERMISSION admin 会话
 >   专属（permissions），key 一律拒绝；SYSTEM 预留禁用。
 
-方法总数 208：PUBLIC 28 · END_USER 43 · SERVER 121 · PERMISSION 16 · SYSTEM 0。
+方法总数 216：PUBLIC 28 · END_USER 44 · SERVER 128 · PERMISSION 16 · SYSTEM 0。
 
 ## /torchwood.client.v1.AccountService
 
@@ -54,6 +54,12 @@
 | `/torchwood.client.v1.AccountService/UpdateRecovery` | PUBLIC | — | — | — | |
 | `/torchwood.client.v1.AccountService/UpdateVerification` | PUBLIC | — | — | — | |
 | `/torchwood.client.v1.AccountService/VerifyTOTPFactor` | END_USER | — | — | — | |
+
+## /torchwood.client.v1.AnalyticsService
+
+| 方法 | Access | Admin 角色档 | Key Scope | 档位 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `/torchwood.client.v1.AnalyticsService/IngestEvents` | END_USER | — | — | — | |
 
 ## /torchwood.client.v1.AssetsService
 
@@ -142,6 +148,18 @@
 | `/torchwood.server.v1.APIKeysService/GetAPIKey` | PERMISSION | owner, admin | — | platform_only | |
 | `/torchwood.server.v1.APIKeysService/ListAPIKeys` | PERMISSION | owner, admin | — | platform_only | |
 | `/torchwood.server.v1.APIKeysService/UpdateAPIKey` | PERMISSION | owner, admin | — | platform_only | |
+
+## /torchwood.server.v1.AnalyticsService
+
+| 方法 | Access | Admin 角色档 | Key Scope | 档位 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `/torchwood.server.v1.AnalyticsService/GetOverview` | SERVER | 不限角色 | analytics.read | read_only | |
+| `/torchwood.server.v1.AnalyticsService/IngestEvents` | SERVER | member, admin, owner | analytics.write | business_write | |
+| `/torchwood.server.v1.AnalyticsService/ListEventDefinitions` | SERVER | 不限角色 | analytics.read | read_only | |
+| `/torchwood.server.v1.AnalyticsService/ListUserEvents` | SERVER | 不限角色 | analytics.read | read_only | |
+| `/torchwood.server.v1.AnalyticsService/QueryBreakdown` | SERVER | 不限角色 | analytics.read | read_only | |
+| `/torchwood.server.v1.AnalyticsService/QueryRetention` | SERVER | 不限角色 | analytics.read | read_only | |
+| `/torchwood.server.v1.AnalyticsService/QueryTimeseries` | SERVER | 不限角色 | analytics.read | read_only | |
 
 ## /torchwood.server.v1.AssetsService
 

@@ -67,8 +67,12 @@ func TestInvokeJSONBadJSON(t *testing.T) {
 // 模块，wrapper：FunctionsService.CreateFunctionTrigger / ListFunctionTriggers /
 // DeleteFunctionTrigger / RotateFunctionTriggerToken）；
 // 128 → 129（2026-09-11，audit_logs.proto 新增审计日志查询——wrapper：
-// AuditLogsService.ListAuditLogs）。
-const expectedServerMethodCount = 129
+// AuditLogsService.ListAuditLogs）；
+// 129 → 136（2026-09-11，analytics.proto 新增事件分析面七方法（PR1 地基，
+// docs/design/analytics.md §4.1），wrapper：AnalyticsService.IngestEvents /
+// GetOverview / ListEventDefinitions / QueryTimeseries / QueryBreakdown /
+// QueryRetention / ListUserEvents）。
+const expectedServerMethodCount = 136
 
 // TestInvokeJSONCompleteness 遍历 protoregistry.GlobalFiles 中 torchwood.server.v1
 // 包的全部方法（排除 APIKeysService），断言每个方法都能被解析并用空 JSON 构造

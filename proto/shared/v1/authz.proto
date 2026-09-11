@@ -54,6 +54,7 @@ enum ScopeResource {
   SCOPE_RESOURCE_BILLING = 11;
   SCOPE_RESOURCE_OUTBOX = 12;
   SCOPE_RESOURCE_AUDIT_LOGS = 13;
+  SCOPE_RESOURCE_ANALYTICS = 14;
 }
 
 // ScopeOp 是 API key scope 的读写方向。

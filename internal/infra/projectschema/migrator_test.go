@@ -29,13 +29,16 @@ func TestApply_IdempotentCatalogAndOAuth(t *testing.T) {
 	var version int64
 	require.NoError(t, db.QueryRowContext(ctx,
 		"SELECT MAX(version) FROM "+quoted+".schema_migrations").Scan(&version))
+	// 000019（Analytics PR1 地基，docs/design/analytics.md §5）：事件分析
+	// 六表——analytics_events 月 RANGE 分区（2026-09/2026-10 静态预建 +
+	// DEFAULT 兜底）+ 字典/聚合/活跃集/首见/清洗队列五表。
 	// 000018（v3 切片 D，docs/design/functions-v3.md §4.1/D12）：
 	// function_triggers.type CHECK 扩展 'event'（+ partial 索引）。
 	// 000017（v3 实例内多路复用，docs/design/functions-v3.md §1.5）：
 	// functions.concurrency 池策略列（CHECK 1..16）。000016（P2 客户端调用面）：
 	// functions 策略四列 + function_executions invoking_user_id/
 	// client_idempotency_key（partial 唯一索引 + 限频计数 partial 索引）。
-	require.Equal(t, int64(18), version)
+	require.Equal(t, int64(19), version)
 
 	var dirty bool
 	require.NoError(t, db.QueryRowContext(ctx,
@@ -47,6 +50,8 @@ func TestApply_IdempotentCatalogAndOAuth(t *testing.T) {
 		"function_triggers",
 		"payment_orders", "asset_defs", "subscriptions", "usage_rollups", "billing_statements",
 		"users", "sessions", "identities", "groups", "memberships", "buckets", "files",
+		"analytics_events", "analytics_event_definitions", "analytics_daily",
+		"analytics_user_days", "analytics_user_first_seen", "analytics_user_deletions",
 	} {
 		var reg any
 		require.NoError(t, db.QueryRowContext(ctx,

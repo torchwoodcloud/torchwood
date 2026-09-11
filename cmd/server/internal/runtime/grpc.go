@@ -204,6 +204,9 @@ func authzFileDescriptors() []protoreflect.FileDescriptor {
 		clientv1.File_client_v1_assets_proto,
 		clientv1.File_client_v1_subscriptions_proto,
 		clientv1.File_client_v1_functions_proto,
+		// Analytics（docs/design/analytics.md）：client 面仅摄入；PR1 只登记
+		// proto 策略（handler/注册随 PR2 到位）。
+		clientv1.File_client_v1_analytics_proto,
 		serverv1.File_server_v1_projects_proto,
 		serverv1.File_server_v1_health_proto,
 		serverv1.File_server_v1_storage_proto,
@@ -219,6 +222,9 @@ func authzFileDescriptors() []protoreflect.FileDescriptor {
 		serverv1.File_server_v1_billing_proto,
 		serverv1.File_server_v1_outbox_proto,
 		serverv1.File_server_v1_audit_logs_proto,
+		// Analytics server 面：摄入 + 七查询；PR1 只登记 proto 策略
+		// （摄入 handler 随 PR2、查询实现随 PR3 到位）。
+		serverv1.File_server_v1_analytics_proto,
 		consolev1.File_console_v1_auth_proto,
 		consolev1.File_console_v1_admins_proto,
 	}

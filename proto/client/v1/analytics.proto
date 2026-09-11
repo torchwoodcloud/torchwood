@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+package torchwood.client.v1;
+
+option go_package = "github.com/torchwoodcloud/torchwood/genproto/client/v1;clientv1";
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "shared/v1/authz.proto";
+
+// AnalyticsService 是端侧事件摄入面（docs/design/analytics.md §4.2）：
+// 只有写入、没有查询（行为数据是项目方资产）；user_id/session_id 归因一律
+// 取自 principal（含匿名会话），请求体不可指定——client 面请求不携带
+// user_id 字段（红线，D3）。门禁 = 至少匿名会话（ACCESS_END_USER）。
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  security_definitions: {
+    security: {
+      key: "apiKey"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "X-API-Key"
+        description: "项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。"
+      }
+    }
+    security: {
+      key: "Bearer"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "格式: Bearer <jwt>（Client API 登录态）"
+      }
+    }
+    security: {
+      key: "cookie"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Cookie"
+        description: "TORCHWOOD_session_console=<sid>（Console admin 会话）"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "Bearer"
+      value: {}
+    }
+  }
+  extensions: {
+    key: "x-torchwood-access"
+    value: { string_value: "end_user" }
+  }
+  // 统一 default 错误响应（运行时错误体即 shared.v1.ErrorResponse），
+  // 文件级声明自动填充到本文件全部 operation。
+  responses: {
+    key: "default"
+    value: {
+      description: "An unexpected error response."
+      schema: { json_schema: { ref: ".torchwood.shared.v1.ErrorResponse" } }
+    }
+  }
+};
+
+service AnalyticsService {
+  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_END_USER };
+
+  // IngestEvents 批量摄入端侧事件（部分接收语义：坏事件计入 skipped、好事件
+  // 照收；at-least-once，D14——不做去重）。归因（user_id）与 source='client'
+  // 由服务端从 principal 落定，请求体无法伪造。
+  rpc IngestEvents(IngestEventsRequest) returns (IngestEventsResponse) {
+    option (google.api.http) = { post: "/v1/analytics/events", body: "*" };
+  }
+}
+
+// AnalyticsEvent 是单个端侧事件（设计 §3）。上限常量在
+// internal/domain/analytics 集中定义，protovalidate 注解与之对齐：
+// 批 100 / 键 25 / 单事件 16KiB（键数与体积的复合校验在 app 层）/ 名 64 /
+// 值截断 256 字符（截断在 app 层执行，proto 只约束形状）。
+message AnalyticsEvent {
+  // 事件名：^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$，项目级软上限 1000（D12，存量名
+  // 不受影响，仅拒新名——摄取期字典拦截）。
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+    pattern: "^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$"
+  }];
+  // 事件时间（客户端）：缺省 = 服务端 now；app 层钳制 [now-24h, now+5min]，
+  // 越界计入 skipped（D4，离线补传事件算对日）。
+  optional google.protobuf.Timestamp occurred_at = 2;
+  // 自由维度键值：≤25 键；键 ^[a-zA-Z_][a-zA-Z0-9_.]{0,63}$；值标量或浅数组；
+  // 单事件序列化 ≤16KiB（复合上限在 app 层校验，键正则同样在 app 层——
+  // protovalidate 的 map.key 约束覆盖不了全部复合规则）。
+  map<string, google.protobuf.Value> props = 3;
+  // 端自报会话标识，可空（平台不解释语义）；user 归因不由端指定。
+  string session_id = 4 [(buf.validate.field).string.max_len = 255];
+}
+
+message IngestEventsRequest {
+  // 单批 1..100 事件；批内逐事件校验，坏事件 skipped 不拒整批（D12）。
+  repeated AnalyticsEvent events = 1 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 100
+  }];
+}
+
+message IngestEventsResponse {
+  // 落库事件数。
+  int32 accepted = 1;
+  // 被跳过事件数（坏形状 / 时间越界 / 超软上限的新事件名）。
+  int32 skipped = 2;
+}
