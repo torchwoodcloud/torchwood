@@ -17,6 +17,19 @@ HTTP multipart FunctionsHandler (internal/api/serverhttp/functions_handler.go, P
 - 真实 Docker（`internal/infra/functions/docker.go:Build/Execute`），非 stub；MVP 单机与 `os.TempDir()/torchwood-functions/<project>/<function>/<deployment>.zip` 共享文件系统，多机需对象存储。
 - 四表 `db/migrations/000010_functions.*.sql`，`internal/infra/bun/model/function.go`；`internal/domain/functions/` 定义 `Execution`/`Deployment` 模型与 `Repository`/`Executor` 端口。
 
+### 1.1 运行限制一览（速查）
+
+dogfooding 反馈三项限制"文档里找不到"（2026-09-11 提案 §5.12）——数值其实
+都在下文各节，此处集中成表便于查阅：
+
+| 限制 | 数值 | 详见 |
+|---|---|---|
+| invoke 上行 `data` | ≤ 32KB（JSON object；`data+env ≤ 32KB`）；触发器封套通道放宽至 ≤ 1MB | §4 |
+| **响应大小** | response / stdout / stderr 各 **≤ 64KB 截断**（`maxOutputBytes`，一期口径；`truncated` 标记）——dispatcher 内部 1MiB 是读封套的缓冲上限，不是对调用方的承诺 | §4、§8 |
+| **执行超时** | 每函数可配 **[1, 300]s，缺省 15s**；**同步调用上限 30s**（`maxSyncTimeoutSeconds`，超出走异步） | §2、§4、§10 |
+| **`concurrency` 语义** | **单实例并发上限（1..16，默认 1）**，不是全局串行：单实例一次跑 `concurrency` 个请求（默认 1 = 实例内串行），池可在无空闲实例时冷启动扩到 `max_instances` 多实例并行；真正的全局闸门是独立的 run 信号量（16 并发，v2 路径）与每用户并发 2 | §4.3、§4.3.1、§5 |
+| 部署包 | zip ≤ 50MiB；解压 ≤ 1000 条 / 单条 ≤ 100MiB / 总量 ≤ 200MiB | §3 |
+
 ## 2 8 个写方法与鉴权
 
 `proto/server/v1/functions.proto:61` `FunctionsService` 共 14 RPC（`ACCESS_SERVER` 默认），其中 **8 个写方法**在用例层以 `appshared.RequireServerPrincipal` 纵深防御（`internal/app/functions/*.go`）：
