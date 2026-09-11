@@ -575,3 +575,79 @@ export interface ManualFulfillResponse {
   order: PaymentOrder;
   fulfillment: PaymentFulfillment;
 }
+
+// —— Leaderboards（dogfooding 提案 2026-09-11，Phase 1）——
+
+/** 榜配置（console CRUD；Phase 2 将扩展 rewards）。 */
+export interface LeaderboardBoard {
+  id: string;
+  sort?: string;
+  tiebreak_order?: string;
+  tie_break?: string;
+  period_kind?: string;
+  period_tz?: string;
+  policy?: string;
+  value_min?: Int64String;
+  value_max?: Int64String;
+  client_submit?: boolean;
+  per_subject_submit_limit?: number;
+  retention_periods?: number;
+  subject_kind?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** 排行榜条目：唯一键 (board, period, subject) 内建去重。 */
+export interface LeaderboardEntry {
+  board_id: string;
+  period: string;
+  subject_id: string;
+  value: Int64String;
+  tiebreak_value?: Int64String;
+  submit_count?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/**
+ * submit / me / getEntry 的统一响应：rank = competition（并列同名次），
+ * position = 全序位次（tie-break 决出），below = value 严格低于我的人数。
+ * 无条目时 entry 缺省、total 仍返回。
+ */
+export interface LeaderboardScoreSnapshot {
+  board_id: string;
+  period: string;
+  total: number;
+  entry?: LeaderboardEntry;
+  rank?: number;
+  position?: number;
+  below?: number;
+}
+
+/** top 列表行。 */
+export interface LeaderboardTopEntry {
+  subject_id: string;
+  value: Int64String;
+  tiebreak_value?: Int64String;
+  rank: number;
+  position: number;
+  updated_at?: string;
+}
+
+/** top 分页响应。 */
+export interface ListLeaderboardTopResponse {
+  period: string;
+  total: number;
+  entries: LeaderboardTopEntry[];
+  next_page_token?: string;
+}
+
+/** 提交入参（client 面 subject 恒为当前用户；server 面可代任意 subject）。 */
+export interface SubmitLeaderboardScoreInput {
+  value: Int64String;
+  tiebreak_value?: Int64String;
+  /** 缺省 = 当前期；显式必须命中 {当前期, 上一期}（离线补传宽限）。 */
+  period?: string;
+  /** (project, actor, request_id) 24h 幂等——网络重试不烧限频额度。 */
+  request_id?: string;
+}

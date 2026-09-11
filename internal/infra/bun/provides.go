@@ -28,6 +28,8 @@ var ProviderSet = wire.NewSet(
 	bunrepo.NewAssetDefRepository,
 	bunrepo.NewAssetHoldingRepository,
 	bunrepo.NewAssetLedgerRepository,
+	bunrepo.NewLeaderboardBoardRepository,
+	bunrepo.NewLeaderboardEntryRepository,
 	bunrepo.NewSubscriptionPlanRepository,
 	bunrepo.NewSubscriptionRepository,
 	bunrepo.NewUsageRepository,

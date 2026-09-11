@@ -21,6 +21,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/app/console"
 	events2 "github.com/torchwoodcloud/torchwood/internal/app/events"
 	functions2 "github.com/torchwoodcloud/torchwood/internal/app/functions"
+	"github.com/torchwoodcloud/torchwood/internal/app/leaderboards"
 	payments2 "github.com/torchwoodcloud/torchwood/internal/app/payments"
 	"github.com/torchwoodcloud/torchwood/internal/app/server"
 	storage2 "github.com/torchwoodcloud/torchwood/internal/app/storage"
@@ -153,6 +154,10 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	clientQuotaLimiter := functions.NewClientQuotaLimiter(redisClient)
 	functionsFunctions := functions2.NewFunctionsWithClientQuota(appConfig, executor, functionRepo, sharedQueue, redisCounter, repository, semaphores, redisExecutionTokenService, triggerRepo, clientQuotaLimiter)
 	functionsService := clientgrpc.NewFunctionsService(functionsFunctions)
+	boardRepo := bunrepo.NewLeaderboardBoardRepository(database)
+	entryRepo := bunrepo.NewLeaderboardEntryRepository(database)
+	leaderboardsLeaderboards := leaderboards.NewLeaderboards(database, boardRepo, entryRepo, idempotencyStore, logger, repository)
+	leaderboardsService := clientgrpc.NewLeaderboardsService(leaderboardsLeaderboards)
 	buildInfo := NewBuildInfo()
 	healthService := servergrpc.NewHealthService(checkers, buildInfo)
 	schemaManager := NewSchemaManager(database, documentDB)
@@ -201,7 +206,9 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	outboxService := servergrpc.NewOutboxService(outboxAdmin)
 	auditLogs := server.NewAuditLogs(auditRepository)
 	auditLogsService := servergrpc.NewAuditLogsService(auditLogs)
-	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, healthService, projectsService, storageService, usersService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, authService, adminsService, outboxService, auditLogsService, policySet)
+	servergrpcLeaderboardsService := servergrpc.NewLeaderboardsService(leaderboardsLeaderboards)
+	consolegrpcLeaderboardsService := consolegrpc.NewLeaderboardsService(leaderboardsLeaderboards)
+	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, leaderboardsService, healthService, projectsService, storageService, usersService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, authService, adminsService, outboxService, auditLogsService, servergrpcLeaderboardsService, consolegrpcLeaderboardsService, policySet)
 	if err != nil {
 		cleanup()
 		return nil, nil, err

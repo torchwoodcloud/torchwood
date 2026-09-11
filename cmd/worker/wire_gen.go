@@ -12,6 +12,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/app/assets"
 	billing2 "github.com/torchwoodcloud/torchwood/internal/app/billing"
 	functions2 "github.com/torchwoodcloud/torchwood/internal/app/functions"
+	"github.com/torchwoodcloud/torchwood/internal/app/leaderboards"
 	payments2 "github.com/torchwoodcloud/torchwood/internal/app/payments"
 	storage2 "github.com/torchwoodcloud/torchwood/internal/app/storage"
 	"github.com/torchwoodcloud/torchwood/internal/app/subscriptions"
@@ -104,7 +105,12 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	statementRepo := bunrepo.NewBillingStatementRepository(database)
 	billingBilling := billing2.NewBilling(redisCounter, usageRepo, statementRepo, repository, fileRepository, logger)
 	usageRollupWorker := worker.NewUsageRollupWorker(billingBilling, logger)
-	v2 := NewComponents(workerWorker, chunkCleaner, streamTrimmer, outboxWorkerService, paymentCloser, assetExpirer, subscriptionBiller, usageRollupWorker)
+	boardRepo := bunrepo.NewLeaderboardBoardRepository(database)
+	entryRepo := bunrepo.NewLeaderboardEntryRepository(database)
+	idempotencyStore := bunrepo.NewIdempotencyStore(database)
+	leaderboardsLeaderboards := leaderboards.NewLeaderboards(database, boardRepo, entryRepo, idempotencyStore, logger, repository)
+	leaderboardsCleaner := worker.NewLeaderboardsCleaner(leaderboardsLeaderboards, logger)
+	v2 := NewComponents(workerWorker, chunkCleaner, streamTrimmer, outboxWorkerService, paymentCloser, assetExpirer, subscriptionBiller, usageRollupWorker, leaderboardsCleaner)
 	v3 := bootkit.NewComponentBuilders()
 	bootstrap := boot.New(onStartHooks, onStopHooks, v2, v3)
 	return bootstrap, func() {

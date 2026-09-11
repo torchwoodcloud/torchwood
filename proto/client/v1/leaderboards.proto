@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+package torchwood.client.v1;
+
+option go_package = "github.com/torchwoodcloud/torchwood/genproto/client/v1;clientv1";
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "shared/v1/authz.proto";
+import "shared/v1/leaderboard.proto";
+
+// 服务默认 access=authenticated：swagger 顶层声明 Bearer security
+// （详见 docs/developer/09-api-guide.md §1.4 的 OpenAPI 建模约定；本服务全部方法继承）。
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  security_definitions: {
+    security: {
+      key: "apiKey"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "X-API-Key"
+        description: "项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。"
+      }
+    }
+    security: {
+      key: "Bearer"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "格式: Bearer <jwt>（Client API 登录态）"
+      }
+    }
+    security: {
+      key: "cookie"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Cookie"
+        description: "TORCHWOOD_session_console=<sid>（Console admin 会话）"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "Bearer"
+      value: {}
+    }
+  }
+  extensions: {
+    key: "x-torchwood-access"
+    value: { string_value: "end_user" }
+  }
+  // 统一 default 错误响应（运行时错误体即 shared.v1.ErrorResponse），
+  // 文件级声明自动填充到本文件全部 operation。
+  responses: {
+    key: "default"
+    value: {
+      description: "An unexpected error response."
+      schema: { json_schema: { ref: ".torchwood.shared.v1.ErrorResponse" } }
+    }
+  }
+};
+
+// LeaderboardsService 是终端用户排行榜面。submit 的 subject 恒从 session
+// 派生——client 面不存在"代他人提交"这回事（结构性保证，非运行时校验）；
+// board 未开 client_submit 时 PERMISSION_DENIED。
+service LeaderboardsService {
+  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_END_USER };
+
+  rpc SubmitLeaderboardScore(SubmitLeaderboardScoreRequest) returns (shared.v1.LeaderboardScoreSnapshot) {
+    option (google.api.http) = { post: "/v1/leaderboards/{board_id}:submit", body: "*" };
+  }
+  rpc GetMyLeaderboardEntry(GetMyLeaderboardEntryRequest) returns (shared.v1.LeaderboardScoreSnapshot) {
+    option (google.api.http) = { get: "/v1/leaderboards/{board_id}/me" };
+  }
+  rpc ListLeaderboardTop(ListLeaderboardTopRequest) returns (shared.v1.ListLeaderboardTopResponse) {
+    option (google.api.http) = { get: "/v1/leaderboards/{board_id}/top" };
+  }
+}
+
+// SubmitLeaderboardScoreRequest：value 越界（board 声明式区间或 JSON 安全
+// 界 ±2^53-1）拒收；request_id 网络层重试去重（不烧限频额度）。
+message SubmitLeaderboardScoreRequest {
+  string board_id = 1 [(buf.validate.field).required = true];
+  int64 value = 2;
+  optional int64 tiebreak_value = 3;
+  // 缺省 = 当前期；显式必须命中 {当前期, 上一期}（离线补传宽限）
+  string period = 4;
+  string request_id = 5;
+}
+
+message GetMyLeaderboardEntryRequest {
+  string board_id = 1 [(buf.validate.field).required = true];
+  string period = 2;
+}
+
+message ListLeaderboardTopRequest {
+  string board_id = 1 [(buf.validate.field).required = true];
+  string period = 2;
+  int32 page_size = 3 [(buf.validate.field).int32 = { gte: 0, lte: 100 }];
+  string page_token = 4;
+}

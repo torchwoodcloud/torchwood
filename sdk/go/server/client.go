@@ -102,6 +102,8 @@ type Client struct {
 	Payments *PaymentsService
 	// Assets 提供资产定义 CRUD 与五动词（终端用户无写入口）。
 	Assets *AssetsService
+	// Leaderboards 提供排行榜提交与读（代任意 subject）。
+	Leaderboards *LeaderboardsService
 	// Subscriptions 提供计划 CRUD 与订阅强制取消/过期。
 	Subscriptions *SubscriptionsService
 	// Billing 提供用量合计、小时 rollup 与月账单文档（只读）。
@@ -148,6 +150,7 @@ func New(target string, opts ...Option) (*Client, error) {
 	c.OAuthProviders = &OAuthProvidersService{c: c, api: serverv1.NewOAuthProvidersServiceClient(gc)}
 	c.Payments = &PaymentsService{c: c, api: serverv1.NewPaymentsServiceClient(gc)}
 	c.Assets = &AssetsService{c: c, api: serverv1.NewAssetsServiceClient(gc)}
+	c.Leaderboards = &LeaderboardsService{c: c, api: serverv1.NewLeaderboardsServiceClient(gc)}
 	c.Subscriptions = &SubscriptionsService{c: c, api: serverv1.NewSubscriptionsServiceClient(gc)}
 	c.Billing = &BillingService{c: c, api: serverv1.NewBillingServiceClient(gc)}
 	c.Outbox = &OutboxService{c: c, api: serverv1.NewOutboxServiceClient(gc)}

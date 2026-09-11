@@ -8,6 +8,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/app/console"
 	"github.com/torchwoodcloud/torchwood/internal/app/events"
 	"github.com/torchwoodcloud/torchwood/internal/app/functions"
+	"github.com/torchwoodcloud/torchwood/internal/app/leaderboards"
 	"github.com/torchwoodcloud/torchwood/internal/app/payments"
 	"github.com/torchwoodcloud/torchwood/internal/app/server"
 	"github.com/torchwoodcloud/torchwood/internal/app/storage"
@@ -40,6 +41,7 @@ var ProviderSet = wire.NewSet(
 	events.NewOutboxAdmin,
 	payments.NewPayments,
 	assets.NewAssets,
+	leaderboards.NewLeaderboards,
 	subscriptions.NewSubscriptions,
 	subscriptions.NewOrderFulfiller,
 	wire.Bind(new(domainpayments.SubscriptionCallbackHandler), new(*subscriptions.Subscriptions)),

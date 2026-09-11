@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { Torchwood } from "../torchwood.js";
 import { AccountService } from "../client/account.js";
 import { ClientAssetsService } from "../client/assets.js";
+import { ClientLeaderboardsService } from "../client/leaderboards.js";
 import { ClientDatabasesService } from "../client/databases.js";
 import { ClientFunctionsService } from "../client/functions.js";
 import { ClientPaymentsService } from "../client/payments.js";
@@ -29,6 +30,7 @@ import {
   ServerGroupsService,
   StorageService,
   UsersService,
+  ServerLeaderboardsService,
 } from "../server/index.js";
 
 // ---- 契约测试：proto（swagger.json 产物）↔ TS SDK 方法集合比对（F11-2）----
@@ -59,6 +61,7 @@ const SDK_SERVICES: Record<string, ClassLike> = {
   BillingService: BillingService,
   OutboxService: OutboxService,
   AuditLogsService: AuditLogsService,
+  LeaderboardsService: ServerLeaderboardsService,
   // Client API（swagger 服务名与 Server API 重名，加 client. 前缀区分）
   "client.AccountService": AccountService,
   "client.DatabasesService": ClientDatabasesService,
@@ -67,6 +70,7 @@ const SDK_SERVICES: Record<string, ClassLike> = {
   "client.AssetsService": ClientAssetsService,
   "client.SubscriptionsService": ClientSubscriptionsService,
   "client.FunctionsService": ClientFunctionsService,
+  "client.LeaderboardsService": ClientLeaderboardsService,
 };
 
 // RPC 名 → TS SDK 方法名（SDK 使用简短命名，与 proto 非一一对应，显式登记）。
@@ -304,6 +308,11 @@ const RPC_TO_METHOD: Record<string, Record<string, string>> = {
   AuditLogsService: {
     ListAuditLogs: "list",
   },
+  LeaderboardsService: {
+    SubmitLeaderboardScore: "submitLeaderboardScore",
+    GetLeaderboardEntry: "getLeaderboardEntry",
+    ListLeaderboardTop: "listLeaderboardTop",
+  },
   "client.PaymentsService": {
     CreateOrder: "createOrder",
     GetMyOrder: "getMyOrder",
@@ -323,6 +332,11 @@ const RPC_TO_METHOD: Record<string, Record<string, string>> = {
   },
   "client.FunctionsService": {
     InvokeFunction: "invokeFunction",
+  },
+  "client.LeaderboardsService": {
+    SubmitLeaderboardScore: "submitLeaderboardScore",
+    GetMyLeaderboardEntry: "getMyLeaderboardEntry",
+    ListLeaderboardTop: "listLeaderboardTop",
   },
 };
 
@@ -468,6 +482,7 @@ const FACADE_SERVICES: Record<string, string> = {
   BillingService: "billing",
   OutboxService: "outbox",
   AuditLogsService: "auditLogs",
+  LeaderboardsService: "leaderboards",
 };
 
 // Round3 H4-1：Server swagger 的每个服务都必须经 `Torchwood.server.<svc>`

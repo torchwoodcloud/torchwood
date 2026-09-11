@@ -9,10 +9,12 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/app/assets"
 	appbilling "github.com/torchwoodcloud/torchwood/internal/app/billing"
 	appfunctions "github.com/torchwoodcloud/torchwood/internal/app/functions"
+	"github.com/torchwoodcloud/torchwood/internal/app/leaderboards"
 	apppayments "github.com/torchwoodcloud/torchwood/internal/app/payments"
 	appstorage "github.com/torchwoodcloud/torchwood/internal/app/storage"
 	"github.com/torchwoodcloud/torchwood/internal/app/subscriptions"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
+	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
 	domainstorage "github.com/torchwoodcloud/torchwood/internal/domain/storage"
 	infrabilling "github.com/torchwoodcloud/torchwood/internal/infra/billing"
@@ -41,6 +43,7 @@ var ProviderSet = wire.NewSet(
 	appfunctions.NewFunctionsWithUsage,
 	apppayments.NewPayments,
 	assets.NewAssets,
+	leaderboards.NewLeaderboards,
 	subscriptions.NewSubscriptions,
 	subscriptions.NewOrderFulfiller,
 	wire.Bind(new(domainpayments.SubscriptionCallbackHandler), new(*subscriptions.Subscriptions)),
@@ -85,6 +88,10 @@ var ProviderSet = wire.NewSet(
 	bunrepo.NewAssetDefRepository,
 	bunrepo.NewAssetHoldingRepository,
 	bunrepo.NewAssetLedgerRepository,
+	bunrepo.NewLeaderboardBoardRepository,
+	bunrepo.NewLeaderboardEntryRepository,
+	bunrepo.NewIdempotencyStore,
+	wire.Bind(new(databases.IdempotencyStore), new(*bunrepo.IdempotencyStore)),
 	bunrepo.NewSubscriptionPlanRepository,
 	bunrepo.NewSubscriptionRepository,
 	bunrepo.NewProviderIndexRepository,
@@ -149,8 +156,8 @@ func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 	return &c, nil
 }
 
-func NewComponents(worker *workerpkg.Worker, cleaner *workerpkg.ChunkCleaner, trimmer *workerpkg.StreamTrimmer, outbox *workerpkg.OutboxWorkerService, paymentCloser *workerpkg.PaymentCloser, assetExpirer *workerpkg.AssetExpirer, subscriptionBiller *workerpkg.SubscriptionBiller, usageRollup *workerpkg.UsageRollupWorker) []lynx.Service {
-	return []lynx.Service{worker, cleaner, trimmer, outbox, paymentCloser, assetExpirer, subscriptionBiller, usageRollup}
+func NewComponents(worker *workerpkg.Worker, cleaner *workerpkg.ChunkCleaner, trimmer *workerpkg.StreamTrimmer, outbox *workerpkg.OutboxWorkerService, paymentCloser *workerpkg.PaymentCloser, assetExpirer *workerpkg.AssetExpirer, subscriptionBiller *workerpkg.SubscriptionBiller, usageRollup *workerpkg.UsageRollupWorker, leaderboardsCleaner *workerpkg.LeaderboardsCleaner) []lynx.Service {
+	return []lynx.Service{worker, cleaner, trimmer, outbox, paymentCloser, assetExpirer, subscriptionBiller, usageRollup, leaderboardsCleaner}
 }
 
 // NewStorageOptions 返回生产默认的空选项集（WithClock 等仅供测试注入）。

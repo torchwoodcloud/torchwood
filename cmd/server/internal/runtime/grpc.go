@@ -42,6 +42,7 @@ func NewGRPCServer(
 	clientAssets *clientgrpc.AssetsService,
 	clientSubscriptions *clientgrpc.SubscriptionsService,
 	clientFunctions *clientgrpc.FunctionsService,
+	clientLeaderboards *clientgrpc.LeaderboardsService,
 	health *servergrpc.HealthService,
 	projects *servergrpc.ProjectsService,
 	storage *servergrpc.StorageService,
@@ -60,6 +61,8 @@ func NewGRPCServer(
 	adminsService *consolegrpc.AdminsService,
 	outboxService *servergrpc.OutboxService,
 	auditLogsService *servergrpc.AuditLogsService,
+	serverLeaderboards *servergrpc.LeaderboardsService,
+	consoleLeaderboards *consolegrpc.LeaderboardsService,
 	policySet *domainauth.PolicySet,
 ) (*lynxgrpc.Server, error) {
 	grpcCfg := cfg.GetServer().GetGrpc()
@@ -127,6 +130,7 @@ func NewGRPCServer(
 	clientv1.RegisterAssetsServiceServer(grpcSrv, clientAssets)
 	clientv1.RegisterSubscriptionsServiceServer(grpcSrv, clientSubscriptions)
 	clientv1.RegisterFunctionsServiceServer(grpcSrv, clientFunctions)
+	clientv1.RegisterLeaderboardsServiceServer(grpcSrv, clientLeaderboards)
 	serverv1.RegisterHealthServiceServer(grpcSrv, health)
 	serverv1.RegisterProjectsServiceServer(grpcSrv, projects)
 	serverv1.RegisterStorageServiceServer(grpcSrv, storage)
@@ -142,10 +146,12 @@ func NewGRPCServer(
 	serverv1.RegisterBillingServiceServer(grpcSrv, billingService)
 	consolev1.RegisterConsoleAuthServiceServer(grpcSrv, consoleAuth)
 	consolev1.RegisterAdminsServiceServer(grpcSrv, adminsService)
+	consolev1.RegisterLeaderboardsServiceServer(grpcSrv, consoleLeaderboards)
 	if outboxService != nil {
 		serverv1.RegisterOutboxServiceServer(grpcSrv, outboxService)
 	}
 	serverv1.RegisterAuditLogsServiceServer(grpcSrv, auditLogsService)
+	serverv1.RegisterLeaderboardsServiceServer(grpcSrv, serverLeaderboards)
 
 	// fail-closed：所有已注册方法都必须带有 authz 注解，缺失的方法会在拦截器里被放行。
 	if err := assertRegisteredMethodsHaveAuthz(grpcSrv, policySet); err != nil {
@@ -204,6 +210,7 @@ func authzFileDescriptors() []protoreflect.FileDescriptor {
 		clientv1.File_client_v1_assets_proto,
 		clientv1.File_client_v1_subscriptions_proto,
 		clientv1.File_client_v1_functions_proto,
+		clientv1.File_client_v1_leaderboards_proto,
 		serverv1.File_server_v1_projects_proto,
 		serverv1.File_server_v1_health_proto,
 		serverv1.File_server_v1_storage_proto,
@@ -219,8 +226,10 @@ func authzFileDescriptors() []protoreflect.FileDescriptor {
 		serverv1.File_server_v1_billing_proto,
 		serverv1.File_server_v1_outbox_proto,
 		serverv1.File_server_v1_audit_logs_proto,
+		serverv1.File_server_v1_leaderboards_proto,
 		consolev1.File_console_v1_auth_proto,
 		consolev1.File_console_v1_admins_proto,
+		consolev1.File_console_v1_leaderboards_proto,
 	}
 }
 

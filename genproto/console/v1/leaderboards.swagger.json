@@ -1,0 +1,725 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "console/v1/leaderboards.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "LeaderboardsService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/console/leaderboards/boards": {
+      "get": {
+        "operationId": "LeaderboardsService_ListLeaderboardBoards",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListLeaderboardBoardsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "tags": [
+          "LeaderboardsService"
+        ]
+      },
+      "post": {
+        "operationId": "LeaderboardsService_CreateLeaderboardBoard",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1LeaderboardBoard"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateLeaderboardBoardRequest"
+            }
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      }
+    },
+    "/v1/console/leaderboards/boards/{board_id}": {
+      "get": {
+        "operationId": "LeaderboardsService_GetLeaderboardBoard",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1LeaderboardBoard"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "board_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      },
+      "delete": {
+        "operationId": "LeaderboardsService_DeleteLeaderboardBoard",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Empty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "board_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      },
+      "patch": {
+        "operationId": "LeaderboardsService_UpdateLeaderboardBoard",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1LeaderboardBoard"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "board_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/LeaderboardsServiceUpdateLeaderboardBoardBody"
+            }
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      }
+    },
+    "/v1/console/leaderboards/boards/{board_id}/entries/{subject_id}": {
+      "get": {
+        "operationId": "LeaderboardsService_GetLeaderboardEntry",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1LeaderboardScoreSnapshot"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "board_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      },
+      "delete": {
+        "operationId": "LeaderboardsService_DeleteLeaderboardEntry",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Empty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "board_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      }
+    },
+    "/v1/console/leaderboards/boards/{board_id}/periods": {
+      "get": {
+        "operationId": "LeaderboardsService_ListLeaderboardBoardPeriods",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListLeaderboardBoardPeriodsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "board_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      }
+    },
+    "/v1/console/leaderboards/boards/{board_id}/top": {
+      "get": {
+        "operationId": "LeaderboardsService_ListLeaderboardTop",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListLeaderboardTopResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "board_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "page_token",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "LeaderboardsServiceUpdateLeaderboardBoardBody": {
+      "type": "object",
+      "properties": {
+        "sort": {
+          "type": "string"
+        },
+        "tiebreak_order": {
+          "type": "string"
+        },
+        "clear_tiebreak": {
+          "type": "boolean"
+        },
+        "tie_break": {
+          "type": "string"
+        },
+        "period_kind": {
+          "type": "string"
+        },
+        "period_tz": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string"
+        },
+        "value_min": {
+          "type": "string",
+          "format": "int64"
+        },
+        "value_max": {
+          "type": "string",
+          "format": "int64"
+        },
+        "clear_value_bounds": {
+          "type": "boolean"
+        },
+        "client_submit": {
+          "type": "boolean"
+        },
+        "per_subject_submit_limit": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "retention_periods": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "subject_kind": {
+          "type": "string"
+        }
+      },
+      "title": "UpdateLeaderboardBoardRequest 用 proto3 optional 表达\"未设置 = 不修改\"；\n显式清空走 clear_* 布尔。period/sort/tiebreak 声明/policy/tie_break 在\n榜内已有条目时不可改（FailedPrecondition）。"
+    },
+    "v1CreateLeaderboardBoardRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "sort": {
+          "type": "string",
+          "title": "asc | desc（缺省 desc）"
+        },
+        "tiebreak_order": {
+          "type": "string",
+          "title": "声明单列 tiebreak 及方向（asc | desc）；缺省不声明"
+        },
+        "tie_break": {
+          "type": "string",
+          "title": "parallel | earliest | latest（缺省 parallel）"
+        },
+        "period_kind": {
+          "type": "string",
+          "title": "none | daily | weekly | monthly（缺省 none）"
+        },
+        "period_tz": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string",
+          "title": "best | latest | sum（缺省 best）"
+        },
+        "value_min": {
+          "type": "string",
+          "format": "int64"
+        },
+        "value_max": {
+          "type": "string",
+          "format": "int64"
+        },
+        "client_submit": {
+          "type": "boolean"
+        },
+        "per_subject_submit_limit": {
+          "type": "integer",
+          "format": "int32",
+          "title": "每期每主体提交次数上限（缺省 100，1..10000）"
+        },
+        "retention_periods": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "subject_kind": {
+          "type": "string"
+        }
+      }
+    },
+    "v1Empty": {
+      "type": "object"
+    },
+    "v1Error": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "error_id": {
+          "type": "string"
+        },
+        "error_code": {
+          "$ref": "#/definitions/v1ErrorCode"
+        }
+      }
+    },
+    "v1ErrorCode": {
+      "type": "string",
+      "enum": [
+        "ERROR_CODE_UNSPECIFIED",
+        "ERROR_CODE_INVALID_REQUEST",
+        "ERROR_CODE_RESOURCE_NOT_FOUND",
+        "ERROR_CODE_INVALID_CREDENTIALS",
+        "ERROR_CODE_PERMISSION_DENIED",
+        "ERROR_CODE_RESOURCE_CONFLICT",
+        "ERROR_CODE_QUOTA_EXCEEDED",
+        "ERROR_CODE_PRECONDITION_FAILED",
+        "ERROR_CODE_CONCURRENT_MODIFICATION",
+        "ERROR_CODE_VALUE_OUT_OF_RANGE",
+        "ERROR_CODE_OPERATION_NOT_ALLOWED",
+        "ERROR_CODE_INTERNAL_ERROR",
+        "ERROR_CODE_SERVICE_UNAVAILABLE",
+        "ERROR_CODE_TIMEOUT"
+      ],
+      "default": "ERROR_CODE_UNSPECIFIED",
+      "title": "ErrorCode 与 gRPC code 的映射（HTTPErrorHandler 单一事实来源，\n见 internal/infra/server/errors.go）：\n  - InvalidArgument → ERROR_CODE_INVALID_REQUEST\n  - FailedPrecondition → ERROR_CODE_PRECONDITION_FAILED\n  - NotFound → ERROR_CODE_RESOURCE_NOT_FOUND\n  - AlreadyExists → ERROR_CODE_RESOURCE_CONFLICT\n  - Aborted → ERROR_CODE_CONCURRENT_MODIFICATION\n  - Unauthenticated → ERROR_CODE_INVALID_CREDENTIALS\n  - PermissionDenied → ERROR_CODE_PERMISSION_DENIED\n  - ResourceExhausted → ERROR_CODE_QUOTA_EXCEEDED\n  - DeadlineExceeded → ERROR_CODE_TIMEOUT\n  - 其余 → ERROR_CODE_INTERNAL_ERROR"
+    },
+    "v1ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "$ref": "#/definitions/v1Error"
+        }
+      }
+    },
+    "v1LeaderboardBoard": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "sort": {
+          "type": "string",
+          "title": "asc | desc"
+        },
+        "tiebreak_order": {
+          "type": "string",
+          "title": "空 = 未声明单列 tiebreak；声明后 submit 必须携带 tiebreak_value"
+        },
+        "tie_break": {
+          "type": "string",
+          "title": "parallel | earliest | latest（默认 parallel：并列等同，奖励边界按\nrank 含端点；earliest/latest = 先/后达到者靠前）"
+        },
+        "period_kind": {
+          "type": "string",
+          "title": "none | daily | weekly | monthly（period_key 服务端按 tz 派生）"
+        },
+        "period_tz": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string",
+          "title": "best | latest | sum（best 方向跟随 sort：desc→取大，asc→取小）"
+        },
+        "value_min": {
+          "type": "string",
+          "format": "int64"
+        },
+        "value_max": {
+          "type": "string",
+          "format": "int64"
+        },
+        "client_submit": {
+          "type": "boolean"
+        },
+        "per_subject_submit_limit": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "retention_periods": {
+          "type": "integer",
+          "format": "int32",
+          "title": "保留最近多少期（0 = 永久，默认不删用户数据）"
+        },
+        "subject_kind": {
+          "type": "string",
+          "title": "纯展示提示（console 是否把 subject 链到用户详情），无语义"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "title": "LeaderboardBoard 是榜配置（console CRUD；Phase 2 将扩展 rewards）。"
+    },
+    "v1LeaderboardEntry": {
+      "type": "object",
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "period": {
+          "type": "string"
+        },
+        "subject_id": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string",
+          "format": "int64"
+        },
+        "tiebreak_value": {
+          "type": "string",
+          "format": "int64"
+        },
+        "submit_count": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "title": "LeaderboardEntry 是排行榜条目：唯一键 (board, period, subject) 内建去重。"
+    },
+    "v1LeaderboardScoreSnapshot": {
+      "type": "object",
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "period": {
+          "type": "string"
+        },
+        "total": {
+          "type": "string",
+          "format": "int64"
+        },
+        "entry": {
+          "$ref": "#/definitions/v1LeaderboardEntry"
+        },
+        "rank": {
+          "type": "string",
+          "format": "int64"
+        },
+        "position": {
+          "type": "string",
+          "format": "int64"
+        },
+        "below": {
+          "type": "string",
+          "format": "int64"
+        }
+      },
+      "title": "LeaderboardScoreSnapshot 是 submit / me / getEntry 的统一响应：\nrank = competition（并列同名次）；position = 全序位次（tie-break 决出）；\nbelow = value 严格低于我的人数（百分位分子，不受 tie-break 影响）。\n无条目时 entry/rank/position/below 缺省，total 仍返回。"
+    },
+    "v1LeaderboardTopEntry": {
+      "type": "object",
+      "properties": {
+        "subject_id": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string",
+          "format": "int64"
+        },
+        "tiebreak_value": {
+          "type": "string",
+          "format": "int64"
+        },
+        "rank": {
+          "type": "string",
+          "format": "int64"
+        },
+        "position": {
+          "type": "string",
+          "format": "int64"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "title": "LeaderboardTopEntry 是 top 列表行。"
+    },
+    "v1ListLeaderboardBoardPeriodsResponse": {
+      "type": "object",
+      "properties": {
+        "periods": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "v1ListLeaderboardBoardsResponse": {
+      "type": "object",
+      "properties": {
+        "boards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LeaderboardBoard"
+          }
+        }
+      }
+    },
+    "v1ListLeaderboardTopResponse": {
+      "type": "object",
+      "properties": {
+        "period": {
+          "type": "string"
+        },
+        "total": {
+          "type": "string",
+          "format": "int64"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LeaderboardTopEntry"
+          }
+        },
+        "next_page_token": {
+          "type": "string"
+        }
+      },
+      "title": "ListLeaderboardTopResponse 是 top 分页响应。"
+    }
+  },
+  "securityDefinitions": {
+    "Bearer": {
+      "type": "apiKey",
+      "description": "格式: Bearer \u003cjwt\u003e",
+      "name": "Authorization",
+      "in": "header"
+    },
+    "apiKey": {
+      "type": "apiKey",
+      "description": "项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。",
+      "name": "X-API-Key",
+      "in": "header"
+    },
+    "cookie": {
+      "type": "apiKey",
+      "description": "TORCHWOOD_session_console=\u003csid\u003e（Console admin 会话）",
+      "name": "Cookie",
+      "in": "header"
+    }
+  },
+  "security": [
+    {
+      "cookie": []
+    }
+  ],
+  "x-torchwood-access": "permission"
+}

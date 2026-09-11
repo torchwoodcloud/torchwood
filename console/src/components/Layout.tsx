@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { ProjectBootstrap } from "@/components/ProjectBootstrap";
 import { ProjectSelector } from "@/components/ProjectSelector";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Key, Users, Database, HardDrive, LogOut, Menu, X, UsersRound, ShieldCheck, FolderKanban, FunctionSquare, Receipt, Coins, CreditCard, ScrollText, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Key, Users, Database, HardDrive, LogOut, Menu, X, UsersRound, ShieldCheck, FolderKanban, FunctionSquare, Receipt, Coins, CreditCard, ScrollText, Trophy, type LucideIcon } from "lucide-react";
 
 interface NavItem {
   to: string;
@@ -38,6 +38,7 @@ const navSections: { title?: string; items: NavItem[] }[] = [
       { to: "/console/orders", label: "Orders", icon: Receipt },
       { to: "/console/assets", label: "Assets", icon: Coins },
       { to: "/console/subscriptions/plans", label: "Subscriptions", icon: CreditCard },
+      { to: "/console/leaderboards", label: "Leaderboards", icon: Trophy },
     ],
   },
   {

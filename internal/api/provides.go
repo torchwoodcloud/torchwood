@@ -17,6 +17,7 @@ var ProviderSet = wire.NewSet(
 	clientgrpc.NewAssetsService,
 	clientgrpc.NewSubscriptionsService,
 	clientgrpc.NewFunctionsService,
+	clientgrpc.NewLeaderboardsService,
 	servergrpc.NewHealthService,
 	servergrpc.NewProjectsService,
 	servergrpc.NewStorageService,
@@ -32,6 +33,7 @@ var ProviderSet = wire.NewSet(
 	servergrpc.NewBillingService,
 	servergrpc.NewOutboxService,
 	servergrpc.NewAuditLogsService,
+	servergrpc.NewLeaderboardsService,
 	serverhttp.NewFileHandler,
 	serverhttp.NewOAuthHandler,
 	serverhttp.NewFunctionsHandler,
@@ -40,5 +42,6 @@ var ProviderSet = wire.NewSet(
 	serverhttp.NewFunctionTriggersHandler,
 	consolegrpc.NewAuthService,
 	consolegrpc.NewAdminsService,
+	consolegrpc.NewLeaderboardsService,
 	apirealtime.NewHandler,
 )

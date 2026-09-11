@@ -78,4 +78,9 @@ const (
 	ScopeAuditLogs      = "audit_logs"
 	ScopeAuditLogsRead  = "audit_logs.read"
 	ScopeAuditLogsWrite = "audit_logs.write"
+
+	// ScopeLeaderboards 排行榜（dogfooding 提案 2026-09-11，Phase 1）。
+	ScopeLeaderboards      = "leaderboards"
+	ScopeLeaderboardsRead  = "leaderboards.read"
+	ScopeLeaderboardsWrite = "leaderboards.write"
 )

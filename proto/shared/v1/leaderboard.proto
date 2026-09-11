@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package torchwood.shared.v1;
+
+option go_package = "github.com/torchwoodcloud/torchwood/genproto/shared/v1;sharedv1";
+
+import "google/protobuf/timestamp.proto";
+
+// 排行榜共享载荷（dogfooding 提案 2026-09-11，Phase 1）。
+// 术语中立：subject_id（被排名主体，v1 client 面恒为用户；server 面可为
+// 战队/商家等任意不透明 ID）/ value（int64；小数域用放大整数约定）。
+
+// LeaderboardBoard 是榜配置（console CRUD；Phase 2 将扩展 rewards）。
+message LeaderboardBoard {
+  string id = 1;
+  // asc | desc
+  string sort = 2;
+  // 空 = 未声明单列 tiebreak；声明后 submit 必须携带 tiebreak_value
+  string tiebreak_order = 3;
+  // parallel | earliest | latest（默认 parallel：并列等同，奖励边界按
+  // rank 含端点；earliest/latest = 先/后达到者靠前）
+  string tie_break = 4;
+  // none | daily | weekly | monthly（period_key 服务端按 tz 派生）
+  string period_kind = 5;
+  string period_tz = 6;
+  // best | latest | sum（best 方向跟随 sort：desc→取大，asc→取小）
+  string policy = 7;
+  optional int64 value_min = 8;
+  optional int64 value_max = 9;
+  bool client_submit = 10;
+  int32 per_subject_submit_limit = 11;
+  // 保留最近多少期（0 = 永久，默认不删用户数据）
+  int32 retention_periods = 12;
+  // 纯展示提示（console 是否把 subject 链到用户详情），无语义
+  string subject_kind = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+}
+
+// LeaderboardEntry 是排行榜条目：唯一键 (board, period, subject) 内建去重。
+message LeaderboardEntry {
+  string board_id = 1;
+  string period = 2;
+  string subject_id = 3;
+  int64 value = 4;
+  optional int64 tiebreak_value = 5;
+  int32 submit_count = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+// LeaderboardScoreSnapshot 是 submit / me / getEntry 的统一响应：
+// rank = competition（并列同名次）；position = 全序位次（tie-break 决出）；
+// below = value 严格低于我的人数（百分位分子，不受 tie-break 影响）。
+// 无条目时 entry/rank/position/below 缺省，total 仍返回。
+message LeaderboardScoreSnapshot {
+  string board_id = 1;
+  string period = 2;
+  int64 total = 3;
+  LeaderboardEntry entry = 4;
+  int64 rank = 5;
+  int64 position = 6;
+  int64 below = 7;
+}
+
+// LeaderboardTopEntry 是 top 列表行。
+message LeaderboardTopEntry {
+  string subject_id = 1;
+  int64 value = 2;
+  optional int64 tiebreak_value = 3;
+  int64 rank = 4;
+  int64 position = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// ListLeaderboardTopResponse 是 top 分页响应。
+message ListLeaderboardTopResponse {
+  string period = 1;
+  int64 total = 2;
+  repeated LeaderboardTopEntry entries = 3;
+  string next_page_token = 4;
+}

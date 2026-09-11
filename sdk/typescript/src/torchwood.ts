@@ -6,6 +6,7 @@ import {
   ClientPaymentsService,
   ClientSubscriptionsService,
   ClientGroupsService,
+  ClientLeaderboardsService,
   RealtimeService,
 } from "./client/index.js";
 import type { TorchwoodConfig } from "./http.js";
@@ -27,6 +28,7 @@ import {
   StorageService,
   UsersService,
   OutboxService,
+  ServerLeaderboardsService,
 } from "./server/index.js";
 
 export type { TorchwoodConfig } from "./http.js";
@@ -50,6 +52,7 @@ export class Torchwood {
   readonly realtime: RealtimeService;
   readonly payments: ClientPaymentsService;
   readonly assets: ClientAssetsService;
+  readonly leaderboards: ClientLeaderboardsService;
   readonly subscriptions: ClientSubscriptionsService;
   readonly functions: ClientFunctionsService;
 
@@ -65,6 +68,7 @@ export class Torchwood {
     functions: FunctionsService;
     payments: ServerPaymentsService;
     assets: ServerAssetsService;
+    leaderboards: ServerLeaderboardsService;
     subscriptions: ServerSubscriptionsService;
     billing: BillingService;
     outbox: OutboxService;
@@ -81,6 +85,7 @@ export class Torchwood {
     this.realtime = new RealtimeService(this.transport);
     this.payments = new ClientPaymentsService(this.transport);
     this.assets = new ClientAssetsService(this.transport);
+    this.leaderboards = new ClientLeaderboardsService(this.transport);
     this.subscriptions = new ClientSubscriptionsService(this.transport);
     this.functions = new ClientFunctionsService(this.transport);
     this.server = {
@@ -95,6 +100,7 @@ export class Torchwood {
       functions: new FunctionsService(this.transport),
       payments: new ServerPaymentsService(this.transport),
       assets: new ServerAssetsService(this.transport),
+      leaderboards: new ServerLeaderboardsService(this.transport),
       subscriptions: new ServerSubscriptionsService(this.transport),
       billing: new BillingService(this.transport),
       outbox: new OutboxService(this.transport),

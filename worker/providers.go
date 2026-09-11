@@ -19,4 +19,5 @@ var ProviderSet = wire.NewSet(
 	NewAssetExpirer,
 	NewSubscriptionBiller,
 	NewUsageRollupWorker,
+	NewLeaderboardsCleaner,
 )

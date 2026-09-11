@@ -82,6 +82,9 @@ func NewGRPCGatewayServer(
 		// 审计日志查询面（outbox 走 gRPC-only 未登记；Console 前端经
 		// /v1/server/audit-logs 消费，必须挂 gateway）。
 		serverv1.RegisterAuditLogsServiceHandlerFromEndpoint,
+		clientv1.RegisterLeaderboardsServiceHandlerFromEndpoint,
+		serverv1.RegisterLeaderboardsServiceHandlerFromEndpoint,
+		consolev1.RegisterLeaderboardsServiceHandlerFromEndpoint,
 	}
 	for _, fn := range register {
 		if err := fn(ctx, mux, grpcEndpoint, opts); err != nil {

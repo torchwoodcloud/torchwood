@@ -109,6 +109,12 @@ const ListenPanel = lazy(() =>
 const AdminsListPage = lazy(() =>
   import("@/routes/admins/pages").then((m) => ({ default: m.AdminsListPage }))
 );
+const LeaderboardsListPage = lazy(() =>
+  import("@/routes/leaderboards/pages").then((m) => ({ default: m.LeaderboardsListPage }))
+);
+const LeaderboardBoardDetailPage = lazy(() =>
+  import("@/routes/leaderboards/pages").then((m) => ({ default: m.BoardDetailPage }))
+);
 const AuditLogsListPage = lazy(() =>
   import("@/routes/audit-logs/pages").then((m) => ({ default: m.AuditLogsListPage }))
 );
@@ -273,6 +279,23 @@ function AppRoutes() {
           element={
             <RouteErrorBoundary>
               <AdminsListPage />
+            </RouteErrorBoundary>
+          }
+        />
+
+        <Route
+          path="leaderboards"
+          element={
+            <RouteErrorBoundary>
+              <LeaderboardsListPage />
+            </RouteErrorBoundary>
+          }
+        />
+        <Route
+          path="leaderboards/:boardId"
+          element={
+            <RouteErrorBoundary>
+              <LeaderboardBoardDetailPage />
             </RouteErrorBoundary>
           }
         />

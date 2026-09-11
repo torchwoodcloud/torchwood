@@ -12,7 +12,7 @@
 >   SERVER admin 会话（admin_roles）或 API key（scope）；PERMISSION admin 会话
 >   专属（permissions），key 一律拒绝；SYSTEM 预留禁用。
 
-方法总数 208：PUBLIC 28 · END_USER 43 · SERVER 121 · PERMISSION 16 · SYSTEM 0。
+方法总数 223：PUBLIC 28 · END_USER 46 · SERVER 124 · PERMISSION 25 · SYSTEM 0。
 
 ## /torchwood.client.v1.AccountService
 
@@ -95,6 +95,14 @@
 | `/torchwood.client.v1.GroupsService/ListMemberships` | END_USER | — | — | — | |
 | `/torchwood.client.v1.GroupsService/UpdateMembershipStatus` | END_USER | — | — | — | |
 
+## /torchwood.client.v1.LeaderboardsService
+
+| 方法 | Access | Admin 角色档 | Key Scope | 档位 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `/torchwood.client.v1.LeaderboardsService/GetMyLeaderboardEntry` | END_USER | — | — | — | |
+| `/torchwood.client.v1.LeaderboardsService/ListLeaderboardTop` | END_USER | — | — | — | |
+| `/torchwood.client.v1.LeaderboardsService/SubmitLeaderboardScore` | END_USER | — | — | — | |
+
 ## /torchwood.client.v1.PaymentsService
 
 | 方法 | Access | Admin 角色档 | Key Scope | 档位 | 说明 |
@@ -132,6 +140,20 @@
 | `/torchwood.console.v1.ConsoleAuthService/SignIn` | PUBLIC | — | — | — | |
 | `/torchwood.console.v1.ConsoleAuthService/SignOut` | PUBLIC | — | — | — | |
 | `/torchwood.console.v1.ConsoleAuthService/SignUp` | PUBLIC | — | — | — | |
+
+## /torchwood.console.v1.LeaderboardsService
+
+| 方法 | Access | Admin 角色档 | Key Scope | 档位 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `/torchwood.console.v1.LeaderboardsService/CreateLeaderboardBoard` | PERMISSION | owner | — | — | |
+| `/torchwood.console.v1.LeaderboardsService/DeleteLeaderboardBoard` | PERMISSION | owner | — | — | |
+| `/torchwood.console.v1.LeaderboardsService/DeleteLeaderboardEntry` | PERMISSION | owner | — | — | |
+| `/torchwood.console.v1.LeaderboardsService/GetLeaderboardBoard` | PERMISSION | owner, admin | — | — | |
+| `/torchwood.console.v1.LeaderboardsService/GetLeaderboardEntry` | PERMISSION | owner, admin | — | — | |
+| `/torchwood.console.v1.LeaderboardsService/ListLeaderboardBoardPeriods` | PERMISSION | owner, admin | — | — | |
+| `/torchwood.console.v1.LeaderboardsService/ListLeaderboardBoards` | PERMISSION | owner, admin | — | — | |
+| `/torchwood.console.v1.LeaderboardsService/ListLeaderboardTop` | PERMISSION | owner, admin | — | — | |
+| `/torchwood.console.v1.LeaderboardsService/UpdateLeaderboardBoard` | PERMISSION | owner | — | — | |
 
 ## /torchwood.server.v1.APIKeysService
 
@@ -258,6 +280,14 @@
 | --- | --- | --- | --- | --- | --- |
 | `/torchwood.server.v1.HealthService/Check` | PUBLIC | — | — | — | |
 | `/torchwood.server.v1.HealthService/GetVersion` | PUBLIC | — | — | — | |
+
+## /torchwood.server.v1.LeaderboardsService
+
+| 方法 | Access | Admin 角色档 | Key Scope | 档位 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `/torchwood.server.v1.LeaderboardsService/GetLeaderboardEntry` | SERVER | 不限角色 | leaderboards.read | read_only | |
+| `/torchwood.server.v1.LeaderboardsService/ListLeaderboardTop` | SERVER | 不限角色 | leaderboards.read | read_only | |
+| `/torchwood.server.v1.LeaderboardsService/SubmitLeaderboardScore` | SERVER | admin, owner | leaderboards.write | delegated_platform | |
 
 ## /torchwood.server.v1.OAuthProvidersService
 

@@ -17,3 +17,4 @@ export type {
   RealtimeWebSocket,
 } from "./realtime.js";
 export { ClientGroupsService } from "./groups.js";
+export { ClientLeaderboardsService } from "./leaderboards.js";

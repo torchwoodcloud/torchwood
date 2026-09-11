@@ -169,6 +169,7 @@ const (
 	ScopeResource_SCOPE_RESOURCE_BILLING         ScopeResource = 11
 	ScopeResource_SCOPE_RESOURCE_OUTBOX          ScopeResource = 12
 	ScopeResource_SCOPE_RESOURCE_AUDIT_LOGS      ScopeResource = 13
+	ScopeResource_SCOPE_RESOURCE_LEADERBOARDS    ScopeResource = 14
 )
 
 // Enum value maps for ScopeResource.
@@ -188,6 +189,7 @@ var (
 		11: "SCOPE_RESOURCE_BILLING",
 		12: "SCOPE_RESOURCE_OUTBOX",
 		13: "SCOPE_RESOURCE_AUDIT_LOGS",
+		14: "SCOPE_RESOURCE_LEADERBOARDS",
 	}
 	ScopeResource_value = map[string]int32{
 		"SCOPE_RESOURCE_UNSPECIFIED":     0,
@@ -204,6 +206,7 @@ var (
 		"SCOPE_RESOURCE_BILLING":         11,
 		"SCOPE_RESOURCE_OUTBOX":          12,
 		"SCOPE_RESOURCE_AUDIT_LOGS":      13,
+		"SCOPE_RESOURCE_LEADERBOARDS":    14,
 	}
 )
 
@@ -516,7 +519,7 @@ const file_shared_v1_authz_proto_rawDesc = "" +
 	"\x11ADMIN_ROLE_VIEWER\x10\x01\x12\x15\n" +
 	"\x11ADMIN_ROLE_MEMBER\x10\x02\x12\x14\n" +
 	"\x10ADMIN_ROLE_ADMIN\x10\x03\x12\x14\n" +
-	"\x10ADMIN_ROLE_OWNER\x10\x04*\xad\x03\n" +
+	"\x10ADMIN_ROLE_OWNER\x10\x04*\xce\x03\n" +
 	"\rScopeResource\x12\x1e\n" +
 	"\x1aSCOPE_RESOURCE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18SCOPE_RESOURCE_DATABASES\x10\x01\x12\x18\n" +
@@ -532,7 +535,8 @@ const file_shared_v1_authz_proto_rawDesc = "" +
 	"\x12\x1a\n" +
 	"\x16SCOPE_RESOURCE_BILLING\x10\v\x12\x19\n" +
 	"\x15SCOPE_RESOURCE_OUTBOX\x10\f\x12\x1d\n" +
-	"\x19SCOPE_RESOURCE_AUDIT_LOGS\x10\r*J\n" +
+	"\x19SCOPE_RESOURCE_AUDIT_LOGS\x10\r\x12\x1f\n" +
+	"\x1bSCOPE_RESOURCE_LEADERBOARDS\x10\x0e*J\n" +
 	"\aScopeOp\x12\x18\n" +
 	"\x14SCOPE_OP_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rSCOPE_OP_READ\x10\x01\x12\x12\n" +
