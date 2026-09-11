@@ -9,7 +9,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-// Agent 默认工具名（E-7 overlay）。完整产品 API 仍是 185 个 RPC（Client 61 + Server 114 + Console 10）。
+// Agent 默认工具名（E-7 overlay）。完整产品 API 仍是 237 个 RPC（Client 68 + Server 146 + Console 23）。
 const (
 	ToolListUsers       = "list_users"
 	ToolGetUser         = "get_user"

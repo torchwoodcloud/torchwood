@@ -15,11 +15,11 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 )
 
-// workerConcurrency 是单进程并发消费 goroutine 数（BRPOP 多消费者互斥由
-// Redis 保证，任务间无顺序依赖）。
+// workerConcurrency 是单进程并发消费 goroutine 数（XREADGROUP 消费组多
+// 消费者互斥由 Redis 保证，任务间无顺序依赖）。
 const workerConcurrency = 4
 
-// dequeuePollInterval 是 BRPOP 轮询超时（配合优雅退出，取消后 1s 内返回）。
+// dequeuePollInterval 是 XREADGROUP Block 轮询超时（配合优雅退出，取消后 1s 内返回）。
 const dequeuePollInterval = time.Second
 
 // maxProcessAttempts 是消费瞬时失败的最大重试次数（超限后兜底标 failed）。

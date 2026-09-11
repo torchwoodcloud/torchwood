@@ -2,16 +2,17 @@
 
 > 基于当前实现编写（以 `cmd/server/main.go`、`Taskfile.yml`、`docker/local/docker-compose.yml`、`internal/pkg/config/config.proto`、`internal/infra/health/checks.go` 为准）。
 > 关联：`docs/developer/11-testing.md`（测试与门禁）、`AGENTS.md`。
-> 修订记录：2026-08-23 重写（核对 Lynx 三进程、compose 三件套、`task build` 含 `console:build`、`TORCHWOOD_SECURITY_*`、`TORCHWOOD_ENV` 排水、`/healthz`/`/metrics`/`migrate`/`backup`）；2026-09-05 增补 §6.6 vector（pgvector）启用 runbook（转出门禁 A3：镜像预装/superuser 引导两路径 + 验证 SQL + 实测记录），§2 镜像行同步 pgvector 基座。
+> 修订记录：2026-08-23 重写（核对 Lynx 三进程、compose 三件套、`task build` 含 `console:build`、`TORCHWOOD_SECURITY_*`、`TORCHWOOD_ENV` 排水、`/healthz`/`/metrics`/`migrate`/`backup`）；2026-09-05 增补 §6.6 vector（pgvector）启用 runbook（转出门禁 A3：镜像预装/superuser 引导两路径 + 验证 SQL + 实测记录），§2 镜像行同步 pgvector 基座；2026-09-12 按代码复核（四进程形态含 functions-dispatcher、worker 作业清单、HTTP 端口 9080、PG 基座换 percona + encoding=UTF8、projectschema 迁移 22 个）。
 
 ---
 
-## 1. 运行形态：Lynx 三进程
+## 1. 运行形态：Lynx 四进程
 
 | 进程 | 入口 | 职责 |
 |------|------|------|
 | **server** | `cmd/server/main.go` | gRPC（`server.grpc.addr` 127.0.0.1:9060）+ grpc-gateway HTTP `/v1/*` + 独立 `serverhttp`（Storage 上传下载、OAuth/Functions/Payments）+ Metrics + Admin Console SPA（`console.Dist`）+ 健康/版本 |
-| **worker** | `cmd/worker/main.go` | 函数异步执行消费者：`BRPOP torchwood:queue:functions-executions`，4 goroutine 并发；启动对账——超 1h 的 `queued/building/running` 标 `failed`；瞬时失败重入队最多 3 次（`maxProcessAttempts`） |
+| **worker** | `cmd/worker/main.go` | 周期/队列作业常驻进程（作业清单见 §1.2）：Functions 执行队列消费（Redis Stream `torchwood:queue:functions-executions`，XREADGROUP 至少一次，4 goroutine 并发；孤儿恢复为**每分钟周期任务**，stale 判定 = 行内 `timeout_seconds + 120s`，NULL 回退 1h，`worker/worker.go:28-35,100-104`）；瞬时失败重入队最多 3 次（`maxProcessAttempts`） |
+| **functions-dispatcher** | `cmd/functions-dispatcher/main.go` | Functions 执行器 v2 常驻进程（仓库根 `functionsdispatcher/`）：唯一 docker.sock 持有方，resident 实例池 + 租约认领，监听 `:9070`（`/healthz` 健康检查）；`functions.executor="dispatcher"`（默认）时必部署 |
 | **CLI** | `cmd/torchwood/main.go` | `bin/torchwood[.exe]`，经 `sdk/go/server` 的 `InvokeJSON` 走 gRPC 调 Server API（不直连 `genproto`） |
 
 本地开发：
@@ -21,17 +22,39 @@ task dev:server   # go run ./cmd/server
 task dev:worker       # go run ./cmd/worker
 ```
 
-> 仅使用数据库/存储时 `server` 单进程即可；启用 Functions 才需 `worker`。
+> `worker` 承载支付关单、订阅计费、资产过期、用量落表、outbox 分发、排行榜结榜/清理、analytics 聚合维护等周期作业——**任何生产部署都需要 worker**，不只 Functions。本地仅调试数据库/存储时可不跑 functions-dispatcher（Functions 执行走不通而已）。
 
 ### 1.1 端口（`configs/config.yaml.template` 默认）
 
 | 端口 | 用途 | 配置键 |
 |------|------|--------|
-| `:9099` | HTTP（gateway + `/console/`） | `server.http.addr` |
+| `:9080` | HTTP（gateway + `/console/`） | `server.http.addr` |
 | `127.0.0.1:9060` | gRPC（回环，gateway 同机转发） | `server.grpc.addr` |
 | `127.0.0.1:9040` | Prometheus `/metrics`（留空回退同值） | `server.metrics.addr` |
+| `:9070` | functions-dispatcher HTTP（runner 回调 + `/healthz`） | `functions.dispatcher.addr` |
 
 `cmd/server/main.go:16` 注入 `lynx.WithDrainTimeout`（见 §4.3）与 `lynx.WithShutdownTimeout(30s)`，`OnStop` 后才执行 `cleanup`（避免排水期关连接池）。
+
+### 1.2 worker 常驻作业清单（`worker/providers.go:11-28`）
+
+| 作业 | 周期 | 来源 |
+|------|------|------|
+| Functions 执行队列消费 | 常驻（4 goroutine，XREADGROUP Block 1s） | `worker/worker.go:20` |
+| 孤儿恢复（stale 判定 `timeout_seconds + 120s`，NULL 回退 1h） | 1min（启动即跑一轮） | `worker/worker.go:28-35` |
+| 执行记录保留策略清理 | 10min | `worker/worker.go:39` |
+| cron 触发器调度 | 1min | `worker/worker.go:44` |
+| 数据库事件触发器消费（`torchwood:events` functions-triggers 组） | 常驻 XREADGROUP | `worker/event_triggers.go` |
+| chunk 清理（Storage 分片残留） | 1h | `worker/cleaner.go:19` |
+| Stream 裁剪（`XTRIM` 执行队列 ~100k） | 10min | `worker/trimmer.go:13` |
+| outbox 事件分发 | 常驻 | `worker/outbox_worker.go` |
+| 支付关单 | 1min | `worker/payment_closer.go:13` |
+| 资产过期 | 1min | `worker/asset_expirer.go:12` |
+| 订阅计费 | 1min | `worker/subscription_biller.go:12` |
+| 用量 rollup | 5min | `worker/usage_rollup.go:13` |
+| leaderboards-settler（结榜发奖结算扫描） | 1min | `worker/leaderboards_settler.go:14` |
+| leaderboards-cleaner（retention 期清理） | 30min | `worker/leaderboards_cleaner.go:14` |
+| analytics-rollup（日聚合幂等重算） | 1h（启动即跑一轮） | `worker/analytics_rollup.go:14` |
+| analytics-maintenance（分区治理每日 + tombstone 清洗每 6h） | 双 ticker | `worker/analytics_maintenance.go:15-17` |
 
 ---
 
@@ -41,7 +64,7 @@ task dev:worker       # go run ./cmd/worker
 
 | 依赖 | 镜像 | 端口 | 用途 | 健康检查 |
 |------|------|------|------|----------|
-| PostgreSQL | `pgvector/pgvector:0.8.6-pg18`（pgvector 预装基座，锁 0.8.6 + PG18） | `5432` | 元数据静态表（`bun` + `golang-migrate`）与动态文档层（含 vector 列/HNSW） | `pg_isready` |
+| PostgreSQL | `percona/percona-distribution-postgresql:18`（发行版基座自带 pgvector 0.8.3 与常用扩展；数据目录为 `/data/db` 而非官方系 `/var/lib/postgresql`，换镜像须同步改挂载点） | `5432` | 元数据静态表（`bun` + `golang-migrate`）与动态文档层（含 vector 列/HNSW） | `pg_isready` |
 | Redis | `redis:7-alpine` | `6379` | 队列/上传会话/ID 生成 | `redis-cli ping` |
 | MinIO | `pgsty/silo:RELEASE.2026-09-03T13-18-01Z`（SILO，MinIO 社区延续分支，S3 API/变量/磁盘格式与 MinIO 兼容） | `9000`/`9001` | S3 兼容对象存储 | `exec 3<>/dev/tcp/127.0.0.1/9000` |
 
@@ -49,13 +72,13 @@ task dev:worker       # go run ./cmd/worker
 - 生产可将 `storage.provider: "s3"` 指向任意 S3 兼容服务；
 - 环境变量均支持 `${POSTGRES_USER:-torchwood}` 等覆盖（见 `compose` 中 `environment` 与 `ports` 模板）；
 - PostgreSQL 为 pgvector 预装基座（vector 非 trusted extension，启用路径与验证见 §6.6）；
-- **字符串排序语义（locale=C，现状注记）**：compose 与 CI 显式 `POSTGRES_INITDB_ARGS="--locale=C"`（61ac141；Debian/glibc 基座默认 `en_US.utf8` 与原 musl 基座行为不一致，锁 C 恢复跨镜像/跨平台确定性）——**string 列的 `ORDER BY`/范围比较 = UTF-8 码点字节序**，非语言学序（中文不按拼音、`'Z'<'a'` 大小写混排）；等值与 equal/filter 语义不受影响。决策背景与选项见 `docs/developer/15-exit-poc.md` A9（推荐维持 C，待拍板）。initdb 参数仅首次建库生效，已有卷不受影响；改 locale 须整库 dump→重建→restore 并 REINDEX 全部 text 索引。
+- **字符串排序语义（locale=C，现状注记）**：compose 与 CI 显式 `POSTGRES_INITDB_ARGS="--locale=C --encoding=UTF8"`（61ac141；Debian/glibc 基座默认 `en_US.utf8` 与原 musl 基座行为不一致，锁 C 恢复跨镜像/跨平台确定性）。**`--encoding=UTF8` 不可省**：locale=C 下 initdb 默认落 SQL_ASCII 编码，pgdriver（bun ≥1.2.16）握手期直接拒连——只设 locale 不设 encoding 会全量连接失败（CI 曾踩，见 `.github/workflows/ci.yml:31` 注释）——**string 列的 `ORDER BY`/范围比较 = UTF-8 码点字节序**，非语言学序（中文不按拼音、`'Z'<'a'` 大小写混排）；等值与 equal/filter 语义不受影响。决策背景与选项见 `docs/developer/15-exit-poc.md` A9（推荐维持 C，待拍板）。initdb 参数仅首次建库生效，已有卷不受影响；改 locale 须整库 dump→重建→restore 并 REINDEX 全部 text 索引。
 
 ---
 
 ## 3. 构建与发布
 
-### 3.1 `task build`（`Taskfile.yml:127`）
+### 3.1 `task build`（`Taskfile.yml:151`）
 
 ```yaml
 build:
@@ -64,24 +87,26 @@ build:
   cmds:
     - go build -ldflags "-X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.date={{.DATE}}" -o ./bin/ ./cmd/server
     - go build -ldflags "..." -o ./bin/ ./cmd/worker
+    # functions-dispatcher：执行器 v2 独立分发进程（P0.5，compose 单独服务）
+    - go build -ldflags "..." -o ./bin/ ./cmd/functions-dispatcher
     - go build -ldflags "..." -o ./bin/torchwood{{if eq .OS "Windows_NT"}}.exe{{end}} ./cmd/torchwood
 ```
 
-- `console:build`（`Taskfile.yml:81`）为 `pnpm run build`（`tsc -b && vite build`），产物 `console/dist/` 再被 `console/embed.go:8` 的 `//go:embed dist` 打进二进制，由 `cmd/server/internal/runtime/console.go` 的 `NewConsoleHandler` 在 `/console/` 下 serve（含 SPA fallback 与 `X-Frame-Options: DENY`/CSP 等安全头）；
+- `console:build`（`Taskfile.yml:100`）为 `pnpm run build`（`tsc -b && vite build`），产物 `console/dist/` 再被 `console/embed.go:8` 的 `//go:embed dist` 打进二进制，由 `cmd/server/internal/runtime/console.go` 的 `NewConsoleHandler` 在 `/console/` 下 serve（含 SPA fallback 与 `X-Frame-Options: DENY`/CSP 等安全头）；
 - 版本：`VERSION=$(git describe --tags --always)`、`COMMIT=$(git rev-parse --short HEAD)`、`DATE=$(date +%Y%m%d%H%M%S)`，注入 `main.version`/`main.commit`/`main.date`（全小写），由 `GET /v1/server/health/version` 暴露；
-- Windows 产物为 `bin/server.exe` / `bin/worker.exe` / `bin/torchwood.exe`；
+- Windows 产物为 `bin/server.exe` / `bin/worker.exe` / `bin/functions-dispatcher.exe` / `bin/torchwood.exe`；
 - **修改 Console 后必先 `task console:build` 再 `task build`**，否则 embed 旧 `dist/`。
 
 ### 3.2 Docker 镜像（`task docker:build`）
 
-`Taskfile.yml:195` 已定义：`DOCKER_IMAGE='torchwood:1.0.0-{{GIT_VERSION}}-{{TIMESTAMP}}'`，命令为 `docker build -t {{.DOCKER_IMAGE}} .`。仓库根已提供多阶段 `Dockerfile`（builder 构 console + 三二进制，runner 含最小运行时），可直接：
+`Taskfile.yml:223` 已定义：`DOCKER_IMAGE='torchwood:{{.VERSION}}-{{.GIT_VERSION}}-{{.TIMESTAMP}}'`，命令为 `docker build -t {{.DOCKER_IMAGE}} .`。仓库根已提供多阶段 `Dockerfile`（builder 构 console + 四二进制，runner 含最小运行时），可直接：
 
 ```bash
 task docker:build
-docker run --env-file .env -p 9099:9099 -p 9060:9060 torchwood:1.0.0-xxx-yyy
+docker run --env-file .env -p 9080:9080 -p 9060:9060 torchwood:1.0.0-xxx-yyy
 ```
 
-**Dokploy 一键部署**（单 Compose 栈：PG/Redis/MinIO + 迁移→三角色授权→roles_sig 一次性作业链 + server/worker）见 `docker/dokploy/README.md`；镜像由 GitHub Actions 预构建推 GHCR（`.github/workflows/image.yml`，部署机仅 pull），其中 `sync-roles-sig` 作业依赖镜像内置的 `torchwood` CLI。
+**Dokploy 一键部署**（单 Compose 栈：PG/Redis/MinIO + 迁移→三角色授权→roles_sig 一次性作业链 + server/worker + 常驻 functions-dispatcher——root 运行、挂 docker.sock、healthz `:9070`；server/worker 默认 `TORCHWOOD_FUNCTIONS_EXECUTOR=dispatcher`）见 `docker/dokploy/README.md`；镜像由 GitHub Actions 预构建推 GHCR（`.github/workflows/image.yml`，部署机仅 pull），其中 `sync-roles-sig` 作业依赖镜像内置的 `torchwood` CLI。
 
 ---
 
@@ -169,8 +194,9 @@ DO $do$ DECLARE t text; BEGIN
     END LOOP;
 END $do$;
 
--- ④' projectschema 静态迁移的 FK 面（000002/000004/000005/000006/000007 的
---    REFERENCES public.projects(id)：建外键要求被引用表上的 REFERENCES 权限）
+-- ④' projectschema 静态迁移的 FK 面（000002/000004/000005/000006/000007 与
+--    000019/000020 的 REFERENCES public.projects(id)：建外键要求被引用表上的
+--    REFERENCES 权限）
 GRANT REFERENCES ON public.projects TO tw_authenticator;
 
 -- ⑤ roles_sig 密钥面（B15）：**零授权**——迁移 000004 已 REVOKE
@@ -311,9 +337,9 @@ EOF
 
 | 指标 | Warn | Crit | 阈值来源 |
 |------|------|------|----------|
-| `torchwood_documentdb_tables_total{kind="project_schema",kind="business"}`（按集群合计，`catalog` 为基线不参与） | > 500 | > 1500 | redesign §3.1 社区阈值：几百 schema 舒适、1–2 千起劣化（pg_dump 24h+、relcache 膨胀、autovacuum XID 风险）。表计数是 schema 数的先行量（一个全新项目 schema 携带 ~17 张静态/账务表，每业务库每集合再 +1），500/1500 对齐社区谱系的两档 |
+| `torchwood_documentdb_tables_total{kind="project_schema",kind="business"}`（按集群合计，`catalog` 为基线不参与） | > 500 | > 1500 | redesign §3.1 社区阈值：几百 schema 舒适、1–2 千起劣化（pg_dump 24h+、relcache 膨胀、autovacuum XID 风险）。表计数是 schema 数的先行量（一个全新项目 schema 携带的静态/账务表随迁移集演进——projectschema 现有 22 个 up 迁移，含 leaderboard 五表与 analytics 六表；每业务库每集合再 +1），500/1500 对齐社区谱系的两档，基数以当前迁移集为准 |
 | `torchwood_documentdb_pgdump_duration_seconds` | > 3600（1h） | > 14400（4h） | §3.1 记录的社区劣化谱系终点是 pg_dump 24h+（Appwrite 规模），取其 1/24 与 1/6 作为早期信号档；本地基线（健康库）应为分钟级，超 1h 即显著劣化 |
-| `torchwood_documentdb_schema_migrate_duration_seconds` | > 60（/项目） | > 300 | 经验基线：健康库上全项目迁移集（17 个迁移文件）重放为亚秒级；60s≈两个数量级劣化，通常意味 advisory 锁排队或每项目 DDL 对象数膨胀——结合 tables_total 定位 |
+| `torchwood_documentdb_schema_migrate_duration_seconds` | > 60（/项目） | > 300 | 经验基线：健康库上全项目迁移集（当前 22 个 up 迁移文件）重放为亚秒级；60s≈两个数量级劣化，通常意味 advisory 锁排队或每项目 DDL 对象数膨胀——结合 tables_total 定位 |
 
 Prometheus 规则示例（`tables_total` 以 server 实例 scrape 为准；`pgdump` 以 Pushgateway/textfile 序列为准——按 `job` label 选择，应用内恒 0 序列不参与）：
 
@@ -417,7 +443,7 @@ bin/torchwood admin import --project <project_id> --in /backup/p1 --dsn "$TORCHW
 
 ### 6.4 升级
 
-1. 备份 PG + MinIO → 2. `task db:migrate` → 3. 滚动 `server`（校验 `/healthz/readiness` 200 与 `/v1/server/health/version`）→ 4. 重启 `worker` → 5. 灰度验证 Client/Server API → 6. 摘旧实例。
+1. 备份 PG + MinIO → 2. `task db:migrate` → 3. 滚动 `server`（校验 `/healthz/readiness` 200 与 `/v1/server/health/version`）→ 4. 重启 `worker` → 4'. 同批滚动 `functions-dispatcher`（executor=dispatcher 部署形态下的常驻进程）→ 5. 灰度验证 Client/Server API → 6. 摘旧实例。
 
 ### 6.5 排障
 
@@ -435,12 +461,13 @@ vector 属性类型（`VECTOR(dims)` 列、HNSW 索引、`vectorSearch` 算子�
 
 ```sql
 SELECT extname, extversion FROM pg_extension WHERE extname='vector';
--- 期望 1 行：vector | 0.8.6；返回 0 行 = 本库未启用
+-- 期望 1 行：vector 已启用；版本随基座镜像（percona 发行版基座 = 0.8.3，
+-- 旧 pgvector/pgvector 基座 = 0.8.6）——0 行 = 本库未启用
 ```
 
 **路径一（推荐）：pgvector 预装镜像 + superuser 迁移身份**
 
-适用于 docker/local、CI，以及迁移 DSN 即镜像 bootstrap 超管（`POSTGRES_USER` 创建的角色）的自管部署。`pgvector/pgvector:0.8.6-pg18`（docker/local 与 `.github/workflows/ci.yml` 已统一）把扩展文件预装进镜像，000005 由迁移身份直接执行成功，无额外步骤。
+适用于 docker/local、CI，以及迁移 DSN 即镜像 bootstrap 超管（`POSTGRES_USER` 创建的角色）的自管部署。docker/local 与 `.github/workflows/ci.yml` 现统一为 **`percona/percona-distribution-postgresql:18`**（发行版基座预装 pgvector **0.8.3**；曾用 `pgvector/pgvector:0.8.6-pg18`，换镜像因 CI 对 iterative scan 行为差异，见 ci.yml 注释），扩展文件预装进镜像，000005 由迁移身份直接执行成功，无额外步骤。自管若换回 pgvector 官方基座，initdb 参数必须带 `--encoding=UTF8`（仅 locale=C 会落 SQL_ASCII，pgdriver 握手拒连，见 §2）。
 
 实测记录（2026-09-05，本地 compose）：
 
@@ -497,7 +524,7 @@ $ psql -U tw_migrator_probe -d vector_probe \
 | 报错形态 | 原因 | 处置 |
 |----------|------|------|
 | `permission denied to create extension "vector"`（HINT: Must be superuser to create this extension.） | 迁移身份非 superuser 且目标库未启用扩展（场景 a 实测形态） | 走路径二第 1 步，superuser 预装后重跑迁移；golang-migrate 失败事务已回滚、版本记录未推进，重放安全 |
-| `extension "vector" is not available`（HINT: The extension must first be installed on the system where PostgreSQL is running.） | PG 实例基座不含 pgvector 扩展文件（本会话以不存在扩展名实测同形态报错） | 换 pgvector 预装基座（如 `pgvector/pgvector:0.8.6-pg18`）或按 pgvector 官方文档为实例安装扩展文件，之后仍走路径二第 1 步 |
+| `extension "vector" is not available`（HINT: The extension must first be installed on the system where PostgreSQL is running.） | PG 实例基座不含 pgvector 扩展文件（本会话以不存在扩展名实测同形态报错） | 换 pgvector 预装基座（如 `percona/percona-distribution-postgresql:18` 或旧 `pgvector/pgvector:0.8.6-pg18`）或按 pgvector 官方文档为实例安装扩展文件，之后仍走路径二第 1 步 |
 
 ### 6.7 RBAC 角色生命周期（转出 POC 门禁 A8）
 

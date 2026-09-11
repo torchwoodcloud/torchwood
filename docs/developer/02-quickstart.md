@@ -1,7 +1,7 @@
 # Torchwood 环境搭建与快速开始
 
 > 6 步本地启动，以代码为源：`Taskfile.yml`、`docker/local/docker-compose.yml`、`configs/config.yaml.template`、`.env.example`、`cmd/server/main.go`。
-> 最新更新：2026-08-23
+> 最新更新：2026-09-12 按代码复核
 
 ---
 
@@ -24,7 +24,7 @@
 
 | 服务 | 镜像 | 默认端口 | 容器 |
 |------|------|----------|------|
-| PostgreSQL | `postgres:18-alpine` | 5432 | `torchwood-postgres` |
+| PostgreSQL | `percona/percona-distribution-postgresql:18`（自带 pgvector 0.8.3 及常用扩展） | 5432 | `torchwood-postgres` |
 | Redis | `redis:7-alpine` | 6379 | `torchwood-redis` |
 | MinIO（SILO 分支） | `pgsty/silo:RELEASE.2026-09-03T13-18-01Z` | 9000/9001 | `torchwood-minio` |
 
@@ -36,7 +36,7 @@
 # 运行态：非 superuser authenticator（完成下方「步骤 2.5」一次性引导后可用；生产换强口令并走密管）
 TORCHWOOD_DATA_DATABASE_SOURCE=postgres://tw_authenticator:dev-only-auth-pass@127.0.0.1:5432/torchwood?sslmode=disable
 TORCHWOOD_DATA_REDIS_PASSWORD=
-TORCHWOOD_SECURITY_JWT_SECRET=dev-only-0123456789abcdef-0123456789abcdef  # ≥32 字符，含弱子串拒绝启动（cmd/server/provides.go:85）
+TORCHWOOD_SECURITY_JWT_SECRET=dev-only-0123456789abcdef-0123456789abcdef  # ≥32 字符，含弱子串拒绝启动（cmd/server/provides.go:85；黑名单见 internal/pkg/bootkit/config.go：change-me/changeme/minioadmin/secret/password/torchwood）
 TORCHWOOD_SECURITY_SETUP_TOKEN=dev-setup-0123456789abcdef0123456789abcdef # 首个管理员引导令牌，未配则注册被拒
 TORCHWOOD_STORAGE_S3_ENDPOINT=http://127.0.0.1:9000
 TORCHWOOD_STORAGE_S3_ACCESS_KEY_ID=minioadmin
@@ -47,7 +47,7 @@ TORCHWOOD_TEST_DATABASE_SOURCE=postgres://torchwood:torchwood@127.0.0.1:5432/TOR
 TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE=postgres://torchwood:torchwood@127.0.0.1:5432/postgres?sslmode=disable
 ```
 
-> `TORCHWOOD_STORAGE_S3_*` 键名由 `bind.go:envNameForKey` 按 proto json tag 推导；`configs/config.yaml.template:82` 与 `AGENTS.md` 一致。
+> `TORCHWOOD_STORAGE_S3_*` 键名由 `bind.go:envNameForKey` 按 proto json tag 推导；`configs/config.yaml.template:113-114` 与 `AGENTS.md` 一致。
 
 ---
 
@@ -73,7 +73,7 @@ docker ps        # 三容器 healthy
 task db:migrate     # migrate -path ./db/migrations -database <DSN> up
 ```
 
-DSN 优先 `TORCHWOOD_DATA_DATABASE_SOURCE`，否则由 `POSTGRES_*` 拼接（`Taskfile.yml:49`）。跨 `Taskfile` 的 `.env` 自动加载（`dotenv: ['.env']`）。
+DSN 优先 `TORCHWOOD_DATA_DATABASE_SOURCE`，否则由 `POSTGRES_*` 拼接（`Taskfile.yml:55`）。跨 `Taskfile` 的 `.env` 自动加载（`dotenv: ['.env']`）。
 
 > **双账号注意（§4.5/§6.1）**：迁移必须用 **owner 引导账号**（`torchwood/torchwood`）。若 `.env` 的 `TORCHWOOD_DATA_DATABASE_SOURCE` 已换成 authenticator（上方示例值），迁移时临时用引导账号覆盖：`TORCHWOOD_DATA_DATABASE_SOURCE="postgres://torchwood:torchwood@127.0.0.1:5432/torchwood?sslmode=disable" task db:migrate`（Task 环境变量优先于 dotenv）。
 
@@ -96,11 +96,10 @@ DO $do$ DECLARE t text; BEGIN
     END LOOP;
 END $do$;
 GRANT REFERENCES ON public.projects TO tw_authenticator;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.tw_secrets TO tw_authenticator;
 SQL
 ```
 
-验证 `rolsuper=false` 与完整 SQL 见 `13-operations.md` §4.5；后续迁移新增 public 表后需补授（§4.5 的 default privileges 建议）。
+验证 `rolsuper=false` 与完整 SQL 见 `13-operations.md` §4.5；后续迁移新增 public 表后需补授（§4.5 的 default privileges 建议）。**`tw_secrets` 必须保持零授权**（B15：迁移 000004 已 REVOKE authenticator 对该表全部权限，运行 DSN 对密钥表零权限，防 `app.roles` GUC 提权；上面的 DO 块排除清单已将其排除，切勿显式 GRANT）。
 
 ### 步骤 3 — 安装工具与依赖
 
@@ -119,14 +118,14 @@ task generate:all  # generate:proto → generate:config → wire:all
 |------|------|
 | `generate:proto` | `buf lint` + `buf generate` → `genproto/` |
 | `generate:config` | `protoc -I. --go_out=.` 在 `internal/pkg/config` 内产出 `config.pb.go` |
-| `wire:all` | `cmd/server/wire_gen.go` + `cmd/worker/wire_gen.go` |
+| `wire:all` | `cmd/server/wire_gen.go` + `cmd/worker/wire_gen.go` + `cmd/functions-dispatcher/wire_gen.go` |
 
 全量零漂移校验见 `04-codegen.md §5`。
 
 ### 步骤 5 — 构建并启动
 
 ```bash
-task build          # console:build → go build server/worker/CLI → ./bin/
+task build          # console:build → go build server/worker/functions-dispatcher/CLI 四二进制 → ./bin/
 ./bin/server        # Windows 为 ./bin/server.exe
 # 或开发态：
 task dev:server     # go run ./cmd/server
@@ -166,18 +165,19 @@ HTTP/Metrics 端口由 `server.http.addr` / `server.metrics.addr` 决定，非�
 |------|------|
 | `list` | 列出全部任务（`task --list-all`） |
 | `tools:install` | 安装 buf/wire/migrate 等 |
-| `up`/`down`/`clean` | 启动/停止/删卷（`docker compose down -v`） |
+| `docker:up`/`docker:down`/`docker:purge` | 启动/停止/删卷（`docker compose down -v`） |
 | `db:migrate` | 执行 `db/migrations` |
-| `generate:proto`/`generate:config`/`wire:all`/`generate:all` | Buf / config proto / Wire |
+| `generate:proto`/`generate:config`/`wire:all`/`generate:all` | Buf / config proto / Wire（wire:all = server + worker + dispatcher） |
+| `gen:authz-matrix` | 从策略注册表重新生成 `docs/developer/authz-matrix.md` |
 | `lint:proto` | `buf lint` + `buf breaking --against '.git#branch=origin/main'` |
 | `console:install`/`console:build`/`console:dev` | 前端 pnpm |
 | `dev:server`/`worker` | 直跑 server/worker |
-| `build` | `console:build` + 三二进制 |
-| `test` | `lint:go` + `test:sdk-go` + `test:sdk-ts` + `go test -v ./... -cover` |
+| `build` | `console:build` + 四二进制（server/worker/functions-dispatcher/CLI） |
+| `test` | `lint:go` + `lint:golangci` + `test:sdk-go` + `test:sdk-ts` + `go test -race -v ./... -cover` |
 | `lint` | `lint:go` + `lint:golangci` + `lint:sdk-go` + `lint:console` |
 | `docker:build` | `docker build -t torchwood:<ver>` |
 
-`task test` 自动从 `.env` 加载 `TORCHWOOD_TEST_*`；`lint:golangci` 为 `--new-from-rev=origin/main` 棘轮（`Taskfile.yml:172`）。
+`task test` 自动从 `.env` 加载 `TORCHWOOD_TEST_*`；`lint:golangci` 为全量门禁 `golangci-lint run ./...`（J6-3 后无棘轮，`Taskfile.yml:200-203`）。
 
 ---
 

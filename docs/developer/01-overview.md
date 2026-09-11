@@ -1,7 +1,7 @@
 # Torchwood 架构总览
 
 > 面向后端开发者的分层、进程与存储总览。以代码为事实源：`AGENTS.md`、`README.md`、`cmd/server/provides.go`、`internal/pkg/config/config.proto`、`proto/`。
-> 最新更新：2026-09-07
+> 最新更新：2026-09-12 按代码复核
 
 ---
 
@@ -17,7 +17,7 @@ Torchwood 是 **Appwrite-inspired、AI/Agent-Native 的 BaaS**，Go + PostgreSQL
 | 动态文档层 | 运行时建库/集合/文档，无需手工迁移（`internal/infra/documentdb/` + `pkg/query`） |
 | 官方 SDK | `sdk/typescript`（HTTP）与 `sdk/go`（gRPC 直连 + `InvokeJSON` 动态分发） |
 
-核心域：项目多租户隔离、用户认证（JWT/session/OTP/OAuth/MFA）、动态文档、S3/MinIO 存储、Docker 函数执行、React Console（`/console/`）。
+核心域：项目多租户隔离、用户认证（JWT/session/OTP/OAuth/MFA）、动态文档、S3/MinIO 存储、Docker 函数执行（v2 dispatcher + v3 并发池）、排行榜（leaderboards）、事件分析（analytics）、审计、经济闭环（payments/assets/subscriptions/billing）、React Console（`/console/`）。
 
 ---
 
@@ -75,12 +75,12 @@ torchwood/
 │   ├── api/           # clientgrpc | consolegrpc | servergrpc | serverhttp | realtime | interceptor
 │   │   ├── clientgrpc/   # Account、Databases、Groups、Payments、Assets、Subscriptions（Client 面）
 │   │   ├── consolegrpc/  # ConsoleAuth、Admins
-│   │   ├── servergrpc/   # Projects/Users/Storage/Databases/Functions/APIKeys/Groups/Health/OAuthProviders/Payments/Assets/Subscriptions/Billing/Outbox
+│   │   ├── servergrpc/   # Projects/Users/Storage/Databases/Functions/APIKeys/Groups/Health/OAuthProviders/Payments/Assets/Subscriptions/Billing/Outbox/Analytics/Leaderboards/AuditLogs
 │   │   ├── serverhttp/   # multipart 上传下载、OAuth 回调、Functions code 上传、well-known
 │   │   └── interceptor/  # auth（策略执行）、ratelimit、audit、usage、validate(protovalidate)、clientinfo、trusted_proxy
-│   ├── app/           # client | console | server | storage | functions | documents | events | shared(四守卫)
-│   ├── domain/        # projects/users/auth(含 PolicySet 策略类型)/databases/storage/functions/billing/audit/shared...
-│   ├── infra/         # bun/bunrepo | documentdb | storage | functions | auth(validator) | projectschema | events | queue | messaging | health
+│   ├── app/           # client | console | server | storage | functions | documents | events | assets | billing | payments | subscriptions | analytics | leaderboards | shared(四守卫)
+│   ├── domain/        # projects/users/auth(含 PolicySet 策略类型)/databases/storage/functions/billing/payments/subscriptions/assets/audit/analytics/leaderboards/shared...
+│   ├── infra/         # bun/bunrepo | documentdb | storage | functions | auth(validator) | projectschema | events | queue | messaging | health | billing | clients | idgen | payments | realtime
 │   └── pkg/           # 业务共享内核：config(config.proto + bind.go) | contexts(Principal) | bootkit(启动校验与钩子，server/worker/dispatcher 共享) | testutil(集成测试 DB 辅助)
 ├── functionsdispatcher/  # 函数分发器实现（仓库根顶层组件，仅 cmd/functions-dispatcher 引用；docker.sock 池/网络/分发）
 ├── pkg/               # 通用可复用库：buildinfo | query(DSL 糖+typed AST) | crud | jwtparser | password | secretbox | semaphore | idgen | ident | uow
@@ -95,12 +95,13 @@ torchwood/
 
 ---
 
-## 5. 三进程
+## 5. 进程（server / worker / functions-dispatcher / CLI）
 
 | 进程 | 入口 | 职责 | 配置校验 |
 |------|------|------|----------|
 | `server` | `cmd/server` | Lynx Runner：gRPC `127.0.0.1:9060` + gateway/Console SPA `:9080` + Metrics `127.0.0.1:9040` + 自定义 HTTP；装配在 `cmd/server/internal/runtime`（`grpc.go`/`grpc_gateway.go`/`console.go`/`metrics.go`），注册顺序 `grpc→gateway→realtime→metrics` | `security.jwt.secret` 必填（`internal/pkg/bootkit/config.go:33`，server/worker 共享）+ authz 策略语义断言（`AssertSemantic`） |
-| `dev:worker` | `cmd/worker` | 后台任务消费者：Functions 队列、outbox 分发、chunk 清理、Stream 修剪、计费闭环等；作业实现随仓库根 `worker/` 包（`cmd/worker` 只留 main + Wire 装配骨架）；与 server 共享 `app/domain/infra` 但独立 `ProviderSet`（无 `api` 层） | `data.database.source` 必填（`cmd/worker/provides.go:128`） |
+| `dev:worker` | `cmd/worker` | 后台任务常驻进程：Functions 队列、outbox 分发、chunk 清理、Stream 修剪、计费闭环、cron/事件触发器、leaderboards 结榜清理、analytics 聚合维护等（作业清单见 `13-operations.md` §1.2）；作业实现随仓库根 `worker/` 包（`cmd/worker` 只留 main + Wire 装配骨架）；与 server 共享 `app/domain/infra` 但独立 `ProviderSet`（无 `api` 层） | `data.database.source` 必填（`cmd/worker/provides.go:153-157`） |
+| `functions-dispatcher` | `cmd/functions-dispatcher` | Functions 执行器 v2 常驻进程（仓库根 `functionsdispatcher/`）：唯一 docker.sock 持有方，resident 实例池 + 租约认领，`:9070` healthz | `functions.dispatcher.*`（executor="dispatcher" 时 url 必填） |
 | `CLI` | `cmd/torchwood` | `bin/torchwood`，`lynx-go/commands` + `sdk/go/server.InvokeJSON` 按 `protoregistry.GlobalFiles` 动态分发；`rpc` 逃生舱覆盖全部 Server RPC，新增 RPC 无需登记。全局旗标在子命令路径之后、位置参数之前给出（环境变量 `TORCHWOOD_CLI_*` 优先）；退出码 0 成功 / 1 参数与校验错 / 2=40x / 3=5xx / 4=429 | `TORCHWOOD_CLI_*` 环境覆盖 |
 
 三者均 `godotenv.Load()` 加载 `.env`，配置绑定走 `config.NewBindConfigFunc()`（`internal/pkg/config/bind.go:21`），Wire 生成见 `04-codegen.md`。
@@ -111,7 +112,7 @@ torchwood/
 
 | 层 | schema | 内容 | 驱动 | 说明 |
 |----|--------|------|------|------|
-| 控制面 | `public` | `projects`/`admins`/`admin_projects`/`api_keys`/`audit_logs`/`outbox`+`outbox_dead`/`provider_resource_index`/`billing_*` + **全局 catalog 两表**（`catalog_databases`/`catalog_collections`，attrs/indexes/permissions JSONB 合一）+ `idempotency_keys` + `document_events_outbox` | bun + golang-migrate | 事件脊柱 + 审计 + 元数据目录，公库唯一 |
+| 控制面 | `public` | `projects`/`admins`/`admin_projects`/`api_keys`/`audit_logs`/`outbox`+`outbox_dead`/`provider_resource_index`/`billing_*` + **全局 catalog 两表**（`catalog_databases`/`catalog_collections`，attrs/indexes/permissions JSONB 合一）+ `tw_secrets`（roles_sig 密钥，迁移 000004）+ `invite_codes`（迁移 000007）+ `idempotency_keys` + `document_events_outbox` | bun + golang-migrate | 事件脊柱 + 审计 + 元数据目录，公库唯一 |
 | 项目数据面 | `tw_<project.id>` | 系统静态表 `users`/`sessions`/`identities`/`groups`/`memberships`/`buckets`/`files`（无 `_id`/`_acl`/`_version`） + 账本/Functions/OAuth 目录（`internal/infra/projectschema/`；文档目录已全局化迁出至 public） | bun | 每项目一 schema |
 | 业务文档面 | `tw_<project.id>_<database.id>` | 用户 collection 真表，**物理表名 = collectionID**；每表 `_tenant` 隔离 + `_acl` 内嵌 ACE + **RLS policy 判定**（`tw_visible`/`tw_can`，`SET LOCAL ROLE` + roles_sig 注入），`pkg/query` typed AST 查询 | documentdb | 每 `(project,database)` 一 schema |
 
@@ -158,7 +159,7 @@ HTTP 客户端 / Agent
 ## 8. 近期加固一句话点列
 
 - **W-J 事件脊柱**：`outbox` + `outbox_dead` 死信表，`OutboxService/ListDeadLetters:ReplayDeadLetter`（`outbox:read/write`，`proto/server/v1/outbox.proto:43`）+ gauge `torchwood_outbox_dead`，经济事件信封补 `version`（`updated_at` 纳秒）判序，防重发与乱序（`arch-review-2026-08-fix-plan.md:345`）。
-- **W-H 工程门禁**：`golangci-lint run --new-from-rev=origin/main` 棘轮 + 全量 0 warning、`buf breaking --against '.git#branch=origin/main'`、零漂移 `buf generate + config + wire:all + git diff --exit-code`、`go test -race` 全量（`Taskfile.yml:29,172`）。
+- **W-H 工程门禁**：`golangci-lint run ./...` 全量门禁（J6-3 后无棘轮，存量清零）+ `buf breaking --against '.git#branch=origin/main'`、零漂移 `buf generate + config + wire:all + git diff --exit-code`、`go test -race` 全量、RLS 基准/覆盖率/functions e2e 断言（`Taskfile.yml:180-203`、`11-testing.md` §5）。
 - **W-K 契约治理**：`ListRequest.filter/order_by` 未实现一律 `reserved` 消灭静默 no-op，client/server 重复 message 抽 `shared` 基底，新增 RPC 只须在 proto 标 `method_auth`（access + admin_roles/api_key_scope/permissions 一处声明）。
 - **authz 策略注册表（机制重设计）**：策略唯一声明在 proto 注解 → `BuildMethodPolicies`（`cmd/server/internal/runtime/authz_policy.go`）启动期收集为 `domainauth.PolicySet`，拦截器/HTTP/realtime/scope 词表/授权矩阵文档全消费同一注册表；Go 侧手写规则表（`apiKeyScopeRules`/`adminRoleMethodRules`）退役；档位（read_only/business_write/delegated_platform/platform_only）由声明派生，语义断言 fail-closed（`05-authentication.md` §3/§7）。
 - **请求形状校验 protovalidate**：required/长度/正则/枚举/范围以 `buf.validate` 注解声明在 proto，`ValidateInterceptor` 链尾统一求值（client/server 两面 20 处 handler 手写检查上收），跨字段与业务规则仍留 app 层（`09-api-guide.md` §2.3）。

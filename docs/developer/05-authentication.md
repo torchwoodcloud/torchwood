@@ -2,7 +2,7 @@
 
 > 四凭证、Principal 注入、**策略注册表**（proto 注解唯一声明 → `PolicySet` 收集 → 拦截器执行）与纵深防御。
 > 以代码为准：`proto/shared/v1/authz.proto`、`cmd/server/internal/runtime/authz_policy.go`（收集）、`internal/domain/auth/policy.go`（策略类型与断言）、`internal/api/interceptor/jwt.go`（执行）、`internal/infra/auth/`（凭证校验）。
-> 最新更新：2026-09-09
+> 最新更新：2026-09-12 按代码复核
 
 ---
 
@@ -12,8 +12,8 @@
 
 | 维度 | 取值 |
 |------|------|
-| `CredentialType` | `token`（JWT Bearer）· `session`（cookie 不透明/HMAC）· `api_key` |
-| `ActorKind` | `end_user`（终端用户）· `admin`（Console 管理员）· `service`（API Key 自动化） |
+| `CredentialType` | `token`（JWT Bearer）· `session`（cookie 不透明/HMAC）· `api_key` · `execution`（`twx_` 前缀函数执行 token，`internal/domain/shared/principal.go:28-33`） |
+| `ActorKind` | `end_user`（终端用户）· `admin`（Console 管理员）· `service`（API Key 自动化）· `execution`（函数执行）· `system`（内部系统） |
 
 `Validator.Authenticate`（`internal/infra/auth/authenticate.go:14`）是 **gRPC / HTTP / Realtime 共用的认证入口**：按以下优先级解析凭证（`shared.ParseAuthnRequest`）后走 `ValidateCredential` 校验；Grant 差异（Realtime 禁 API key、HTTP upload 禁 end-user）由调用方在成功后施加。
 
@@ -38,16 +38,16 @@
 
 | 凭证 | 校验 |
 |------|------|
-| `api_key` | `sha256(raw)` → `GetAPIKeyBySecretHash`（`validateAPIKey:124`）；查 `Enabled`/`ExpireAt`；**查 `project Status==active`**（`validator.go:143`）否则 `Unauthenticated: project is not active`；成功 `ActorKind=service`、`Roles=["keys", "key:<APIKeyID>"]`（B14：`keys` 承载 scope/API 面，`key:<id>` 承载数据隔离身份）、`Permissions=Scopes`、`ProjectID=key.ProjectID` |
-| `token` | 先 `admin-jwt` 域验签，失配再试 `end-user-jwt`（`parseJWT:110`，域分离见 §9）；分发到 `principalFromJWT:161` |
-| `session` | 先当 JWT 试解（console JWT），否则 `SessionCookieCodec.Verify` 得 `projectID:sessionID` → `principalFromSession:229` 查 `sessions` 集合 |
+| `api_key` | `sha256(raw)` → `GetAPIKeyBySecretHash`（`validateAPIKey:143`）；查 `Enabled`/`ExpireAt`；**查 `project Status==active`**（`validator.go:162`）否则 `Unauthenticated: project is not active`；成功 `ActorKind=service`、`Roles=["keys", "key:<APIKeyID>"]`（B14：`keys` 承载 scope/API 面，`key:<id>` 承载数据隔离身份）、`Permissions=Scopes`、`ProjectID=key.ProjectID` |
+| `token` | 先 `admin-jwt` 域验签，失配再试 `end-user-jwt`（`parseJWT:129`，域分离见 §9）；分发到 `principalFromJWT:216` |
+| `session` | 先当 JWT 试解（console JWT），否则 `SessionCookieCodec.Verify` 得 `projectID:sessionID` → `principalFromSession:301` 查 `sessions` 集合 |
 
 `principalFromJWT` 分支：
 
-- `akd=admin`：校验 `ttp==access`、查 `adminRepo`、校验 `RevokeBefore`（`checkAdminTokenRevoked:345`），`IsPlatformAdmin = role∈{owner,admin}`；
-- `akd=end_user`（含一次性 JWT：`oneTimeTokens.Consume` 原子消费防重放）、校验绑定 `sessionID` 的会话仍有效（`validateEndUserSession:265`）、校验 `ensureUserCanAuthenticate:298`（用户存在且 `CanAuthenticate`）、**实时 `resolveEndUserRoles:287`（`UserRoleResolver`）fail-closed 拒绝，防 JWT 旧角色残留**。
+- `akd=admin`：校验 `ttp==access`、查 `adminRepo`、校验 `RevokeBefore`（`checkAdminTokenRevoked:432`），`IsPlatformAdmin = role∈{owner,admin}`；
+- `akd=end_user`（含一次性 JWT：`oneTimeTokens.Consume` 原子消费防重放）、校验绑定 `sessionID` 的会话仍有效（`validateEndUserSession:349`）、校验 `ensureUserCanAuthenticate:385`（用户存在且 `CanAuthenticate`）、**实时 `resolveEndUserRoles:372`（`UserRoleResolver`）fail-closed 拒绝，防 JWT 旧角色残留**。
 
-`ValidateAdminProjectAccess:318`：非平台 admin 且 `principal.ProjectID` 非空时，校验 `adminProjectRepo.HasProjectAccess`。
+`ValidateAdminProjectAccess:405`：非平台 admin 且 `principal.ProjectID` 非空时，校验 `adminProjectRepo.HasProjectAccess`。
 
 ---
 
@@ -77,22 +77,22 @@ message ServiceAuth { AccessLevel default_access = 1; }  // 服务级默认（�
 
 - 方法级 `method_auth` 优先，缺省回落服务级 `service_auth.default_access`；细粒度字段（`admin_roles`/`api_key_scope`/`permissions`）仅来自方法级，服务级不携带。
 - `ACCESS_END_USER` 面 `permissions` 为空时归一为 `["users"]`（端用户基础角色，`domainauth.RoleEndUserTag`）。
-- scope 资源词表是 proto enum `ScopeResource`（databases/users/groups/storage/projects/oauthproviders/functions/payments/**assets**/subscriptions/billing/outbox）；`apikeys` 资源已删除（APIKeysService 为 PERMISSION 面，key 凭证禁入），`economy` 已更名 `assets`。
+- scope 资源词表是 proto enum `ScopeResource`，共 **15 资源**（databases/users/groups/storage/projects/oauthproviders/functions/payments/**assets**/subscriptions/billing/outbox/**audit_logs**/**leaderboards**/**analytics**，`proto/shared/v1/authz.proto:42-58`）；对应通道：`leaderboards.read`/`leaderboards.write`、`analytics:write`（仅 IngestEvents，member/admin/owner）+ `analytics:read`（6 个查询方法）、`audit_logs.read`（admin/owner）；词表由 `VocabularyFromPolicies` 派生并经 well-known 下发（`internal/api/serverhttp/wellknown.go:131`）；`apikeys` 资源已删除（APIKeysService 为 PERMISSION 面，key 凭证禁入），`economy` 已更名 `assets`。
 - console 面 me 型方法的会话标签 `"console"` 不是角色，经 `permissions` 字符串值域登记。
 
-**收集与注入**：`cmd/server/internal/runtime` 的 `BuildMethodPolicies(fileDescs...)`（`authz_policy.go:85`）从业务 proto 文件清单（`authzFileDescriptors()`，`grpc.go:186` 单一清单）构造 `domainauth.PolicySet`——经 Wire provider `ProvideMethodPolicies`（`cmd/server/internal/runtime/provides.go:22`）成为唯一注入点。`PolicySet` 的消费面：
+**收集与注入**：`cmd/server/internal/runtime` 的 `BuildMethodPolicies(fileDescs...)`（`authz_policy.go:91`）从业务 proto 文件清单（`authzFileDescriptors()`，`grpc.go:212` 单一清单）构造 `domainauth.PolicySet`——经 Wire provider `ProvideMethodPolicies`（`cmd/server/internal/runtime/provides.go:23`）成为唯一注入点。`PolicySet` 的消费面：
 
 | 消费方 | 用途 |
 |--------|------|
 | `interceptor.NewAuthInterceptor(validator, policySet)` | 请求期门禁执行（§4） |
-| `serverhttp`/`realtime` 镜像点 | 经 `AllowedAdminRoles`/`HasAPIKeyScope` 派生，禁止手写角色集（`policy.go:143/151`） |
+| `serverhttp`/`realtime` 镜像点 | 经 `AllowedAdminRoles`/`HasAPIKeyScope` 派生，禁止手写角色集（`policy.go:148/157`） |
 | `ProvideScopeVocabulary` → `ScopeVocabulary` | API key 创建校验（`app/server/apikeys.go:32`）与 well-known 下发（`serverhttp/wellknown.go:131`）的合法 scope 词表 |
 | `task gen:authz-matrix` | 生成 `docs/developer/authz-matrix.md`（字节级漂移锁定，勿手改） |
 | 启动期断言（§7） | 完备性/语义/项目寻址 fail-closed |
 
 ---
 
-## 4. 拦截器执行（`UnaryAuthMiddleware`，`jwt.go:126`）
+## 4. 拦截器执行（`UnaryAuthMiddleware`，`jwt.go:177`）
 
 按策略驱动，单实现覆盖全部方法：
 
@@ -100,9 +100,9 @@ message ServiceAuth { AccessLevel default_access = 1; }  // 服务级默认（�
 PolicySet.Get(fullMethod) 未命中 → 403 policy_missing（fail-closed；启动期另有断言兜底）
 ACCESS_PUBLIC → 尽力解析凭证（成功则注入 Principal）→ 直接放行
 Authenticate 失败 / 无 principal → 401（拒绝原因写审计，见下）
-ACCESS_SERVER（凭证族 = API key 或 admin 会话）：
+ACCESS_SERVER（凭证族 = API key、execution token 或 admin 会话）：
   ├─ 其他凭证族 → 401 "developer API requires x-api-key header or admin session"
-  └─ api_key：policies.AllowsAPIKey(scope) 不命中 → 403（未声明 scope 的方法 fail-closed，通配符不豁免）
+  └─ api_key / execution：policies.AllowsAPIKey(scope) 不命中 → 403（未声明 scope 的方法 fail-closed，通配符不豁免；两者同一 scope 求值路径）
 admin 会话主体：
   ├─ admin_roles 非空且 HasAnyRole 不命中 → 403（nil 语义 = 不限角色，viewer 可调）
   ├─ X-Torchwood-Project 多值 → 400；单值写入 principal.ProjectID
@@ -115,10 +115,11 @@ permissions 非空（PERMISSION/END_USER 面）：
 
 - **拒绝并联审计（M5 C6）**：`WithDenyAuditSink(auditRepo)` 把拦截器层拒绝（policy_missing/credential_invalid/scope 缺失/角色拒绝等）直接落审计——这些请求到不了后面的 audit 中间件，无双写。
 - `Principal`（`domain/shared/principal.go`）：`ActorID`/`ActorKind`/`CredentialType`/`IsPlatformAdmin`/`ProjectID`/`UserID`/`SessionID`/`APIKeyID`/`Roles`/`Permissions`（API Key 的 scopes 存 `Permissions`）。
+- SERVER 面放行集合含 `ActorKindExecution`（`twx_` 执行 token，与 API key 同一 scope 求值路径，`internal/api/interceptor/jwt.go:253-258`）；`ActorKindSystem` 亦存在（内部系统调用）。
 
 ---
 
-## 5. 拦截器链全景（`cmd/server/internal/runtime/grpc.go:100`）
+## 5. 拦截器链全景（`cmd/server/internal/runtime/grpc.go:115-121`）
 
 ```
 clientInfo → auth → rateLimit → audit → usage → validate(protovalidate) → handler
@@ -129,7 +130,7 @@ clientInfo → auth → rateLimit → audit → usage → validate(protovalidate
 | `ClientInfo`（`interceptor/client.go`） | 最先：经 `security.trusted_proxies` 校验解析真实 IP，供后续限流/审计 |
 | `Auth`（`interceptor/jwt.go`） | 需要凭证与策略；拒绝经 deny-audit 直落审计 |
 | `RateLimit`（`interceptor/ratelimit.go`） | 需要 trusted-proxy 后的 IP 与 principal（匿名按 IP、认证按主体）；Redis 固定窗口，基础设施故障按熔断策略（匿名公开读 fail-closed 语义见 C8 系列） |
-| `Audit`（`interceptor/audit.go`） | 请求审计落库（含校验失败的 4xx） |
+| `Audit`（`interceptor/audit.go`） | 请求审计落库，以 `auditRowEligible` 准入门为前置（仅 eligible 方法落库，「校验失败 4xx 照常审计」仅对 eligible 方法成立）；管理面写操作附加脱敏请求摘要与 client metadata（`audit.go:167-171`） |
 | `Usage`（`interceptor/usage.go`） | 用量计数 |
 | `Validate`（`interceptor/validate.go`） | **链尾**：protovalidate 形状校验（`buf.validate` 注解统一求值，见 `09-api-guide.md` §2.3）——失败请求照常产生审计行与用量计数，仅把 handler 开头的形状检查外提为 proto 声明 |
 
@@ -139,7 +140,7 @@ clientInfo → auth → rateLimit → audit → usage → validate(protovalidate
 
 **存储**：`secret = uuid()+uuid()`，库中仅 `sha256(secret)` hex（`internal/app/server/apikeys.go`），明文只在创建响应出现一次。
 
-**词表单一来源**：`ProvideScopeVocabulary(PolicySet)`（`cmd/server/internal/runtime/provides.go:35`）从策略注册表派生合法 scope 词表——每个被方法引用的资源贡献 `{资源名, 资源名.read, 资源名.write}`，叠加 `*`/`all`。key 创建校验与 well-known 下发都消费同一词表（死 scope 断言保证词表内资源均被引用，见 §7）。
+**词表单一来源**：`ProvideScopeVocabulary(PolicySet)`（`cmd/server/internal/runtime/provides.go:36`）从策略注册表派生合法 scope 词表——每个被方法引用的资源贡献 `{资源名, 资源名.read, 资源名.write}`，叠加 `*`/`all`。key 创建校验与 well-known 下发都消费同一词表（死 scope 断言保证词表内资源均被引用，见 §7）。
 
 **scope 语法表（T-02 扩展，`internal/domain/auth/scope_target.go` 单一实现）**：
 
@@ -164,7 +165,9 @@ clientInfo → auth → rateLimit → audit → usage → validate(protovalidate
 2. 双 key 并存，应用切换到新 key（旧 key 此期间继续可用）；
 3. 旧 key 经 `UpdateAPIKey` 设 `expire_at`（或直接禁用/删除）下线。
 
-**防护**：APIKeysService 是 PERMISSION 面（platform_only 档），API key 凭证天然禁入（防自铸提权）；API Key 以 `Roles=["keys", "key:<自身id>"]` 参与文档 `_acl`（不默认 bypass；仅 `SystemPrincipal`/平台 admin 绕过——见 `06-databases.md` §7）。**per-key 私有（B14，C6 决议）**：key 创建文档的空 ACE 种子绑 `read/update/delete:key:<自身id>`——其他 key 不可见（Get = NotFound 防枚举）；跨 key 协作需显式授予对方 `key:<id>` ACE；存量显式 `keys` ACE 保留有效（默认种子不再产生）。**key 认证失败限速（T-02）**：X-API-Key 认证失败（哈希不匹配/禁用/过期）按来源 IP 计数（`security.login_throttle.api_key_auth`，默认 10 次/60s），超限 429（gRPC 面拦截器统一执行；multipart HTTP 面暂仅拒绝审计）。**审计**：经 API key 的全部 RPC（含写操作）由 AuditInterceptor 统一落审计行——actor=key id、项目、full method、资源 ID（`WithAuditResource`）、结果，无需逐 handler 记录。
+**防护**：APIKeysService 是 PERMISSION 面（platform_only 档），API key 凭证天然禁入（防自铸提权）；API Key 以 `Roles=["keys", "key:<自身id>"]` 参与文档 `_acl`（不默认 bypass；仅 `SystemPrincipal`/平台 admin 绕过——见 `06-databases.md` §7）。**per-key 私有（B14，C6 决议）**：key 创建文档的空 ACE 种子绑 `read/update/delete:key:<自身id>`——其他 key 不可见（Get = NotFound 防枚举）；跨 key 协作需显式授予对方 `key:<id>` ACE；存量显式 `keys` ACE 保留有效（默认种子不再产生）。**key 认证失败限速（T-02）**：X-API-Key 认证失败（哈希不匹配/禁用/过期）按来源 IP 计数（`security.login_throttle.api_key_auth`，默认 10 次/60s），超限 429（gRPC 面拦截器统一执行；multipart HTTP 面暂仅拒绝审计）。**审计**：审计落行以 `auditRowEligible` 准入门为前置（`internal/api/interceptor/audit.go:59-80`，0eaf0a08 噪声治理）——server/console 面仅非读动词落审计（读方法不记，与凭证类型无关）；client 面仅 AccountService 非读安全动作记录；`AnalyticsService/IngestEvents` 显式静默（`audit.go:42-44`）；grpc.health/reflection 不记；**拒绝（deny）审计与登录限速（throttled）审计不经此门、全保留**。对 eligible 请求审计行统一含 actor（API key 即 key id）、项目、full method、资源 ID（`WithAuditResource`）、结果，无需逐 handler 记录。
+
+**audit 查询面**：`AuditLogsService.ListAuditLogs`（`proto/server/v1/audit_logs.proto:73-79`，SERVER 面，admin_roles admin/owner + `audit_logs.read` scope）供审计行查询；审计行带 request 摘要与 client metadata；CLI `torchwood audit-logs` 可消费。
 
 ---
 
@@ -172,15 +175,15 @@ clientInfo → auth → rateLimit → audit → usage → validate(protovalidate
 
 策略在启动期过三道闸，任一违例直接启动失败：
 
-1. **语义断言**（`domainauth.AssertSemantic`，`policy.go:405`，经 `ProvideMethodPolicies` 求值）：
+1. **语义断言**（`domainauth.AssertSemantic`，`policy.go:410`，经 `ProvideMethodPolicies` 求值）：
    - 完备性：access 未声明 → `missing auth policy`；`ACCESS_SYSTEM` 当前禁用；
    - SERVER 面必须声明 `api_key_scope`（不对 key 开放请改 PERMISSION）；scope 资源/方向必须在词表；
    - **死 scope 检测**：`ScopeResource` 词表内每个资源必须被至少一个方法引用（词表演进后残留即红）；
    - client/console 面值域：client 面只允许 PUBLIC/END_USER 且 END_USER 恒 `["users"]`，client PUBLIC 方法必须显式登记白名单（`clientPublicMethodWhitelist`，防误标公开）；console 面只允许 PUBLIC/PERMISSION，permissions 值域 `[console]`/`[owner]`/`[owner,admin]` 且写动词（Create*/Update*/Delete*）必须 `[owner]`；
-   - **项目寻址不变量**：server 面请求体不得携带 `project_id` 字段（项目上下文一律来自凭证），存量违例登记 `ProjectIDAllowlist` 渐进清空（`policy.go:332`，ProjectsService 自身豁免），新增即失败；
+   - **项目寻址不变量**：server 面请求体不得携带 `project_id` 字段（项目上下文一律来自凭证），存量违例登记 `ProjectIDAllowlist` 渐进清空（`policy.go:337`，ProjectsService 自身豁免），新增即失败；
    - streaming RPC 禁用（当前无 stream 接入，出现即断言失败）。
-2. **档位断言**（`ClassifyTier`，`policy.go:289`——档位是从声明派生的分类，不进 proto，避免第二策略源）：SERVER/PERMISSION 面方法必须落入四个已声明档位之一，否则启动失败。档位语义见 `authz-matrix.md` 档位列：`read_only`（read + 不限角色）/ `business_write`（write + member,admin,owner）/ `delegated_platform`（admin,owner）/ `platform_only`（PERMISSION 面 permissions ⊆ {admin,owner}）。
-3. **注册完备断言**（`assertRegisteredMethodsHaveAuthz`，`grpc.go:157`）：每个已注册 gRPC 方法必须命中 PolicySet，缺失即 `registered grpc methods missing authz annotation`；`grpc.health.v1`/`grpc.reflection.` 框架服务豁免（部署层网络策略保护）。
+2. **档位断言**（`ClassifyTier`，`policy.go:294`——档位是从声明派生的分类，不进 proto，避免第二策略源）：SERVER/PERMISSION 面方法必须落入四个已声明档位之一，否则启动失败。档位语义见 `authz-matrix.md` 档位列：`read_only`（read + 不限角色）/ `business_write`（write + member,admin,owner）/ `delegated_platform`（admin,owner）/ `platform_only`（PERMISSION 面 permissions ⊆ {admin,owner}）。
+3. **注册完备断言**（`assertRegisteredMethodsHaveAuthz`，`grpc.go:183`）：每个已注册 gRPC 方法必须命中 PolicySet，缺失即 `registered grpc methods missing authz annotation`；`grpc.health.v1`/`grpc.reflection.` 框架服务豁免（部署层网络策略保护）。
 
 当前矩阵规模见 `authz-matrix.md` 头部（方法总数与四 Access 分布）；策略变更后 `task gen:authz-matrix` 重新生成，漂移由 `cmd/server/internal/runtime/authz_matrix_doc_test.go` 字节级锁定。
 
@@ -193,7 +196,7 @@ clientInfo → auth → rateLimit → audit → usage → validate(protovalidate
 - `RequireEndUser:17`（纯端用户 actor 语义；项目绑定等上下文校验留在调用面）；
 - `RequirePlatformPrincipal:34`（Functions 写、API Key 管理、用户密码/令牌等平台级：仅 `admin.IsPlatformAdmin`，API Key / 受限 admin 一律拒绝）；
 - `RequireConsolePrincipal:48`（Console 专属；角色细粒度由拦截器 permissions 门禁把关）；
-- `RequireServerPrincipal:61`（业务写：console admin 会话或 API key 主体；匿名/端用户 `PermissionDenied`）。
+- `RequireServerPrincipal:64`（业务写：console admin 会话或 API key 主体；匿名/端用户 `PermissionDenied`）。
 
 Functions DDL 与 Storage 已对齐 `RequireServerPrincipal` 口径（Databases 组自 Round3 起与 Functions 同口径，API Key 持 `databases.write` 可做 DDL；schema DDL 不在 `RequirePlatformPrincipal` 内）。
 

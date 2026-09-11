@@ -1,7 +1,7 @@
 # Torchwood 配置体系
 
 > `config.proto` 为单一事实源，`bind.go` 完成 `TORCHWOOD_` 环境覆盖。以代码为准：`internal/pkg/config/config.proto`、`internal/pkg/config/bind.go`、`internal/pkg/config/runtime_env.go`、`configs/config.yaml.template`、`.env.example`。
-> 最新更新：2026-08-23
+> 最新更新：2026-09-12 按代码复核
 
 ---
 
@@ -12,11 +12,12 @@
 | 分组 | message | 说明 |
 |------|---------|------|
 | `server` | `Server` | `grpc` / `http` / `metrics` 三监听 |
-| `security` | `Security` | `jwt` / `api_key` / `trusted_proxies` / `setup_token` / `sessions` / `rate_limit` / `encryption_key` |
+| `security` | `Security` | `jwt` / `api_key` / `trusted_proxies` / `setup_token` / `sessions` / `rate_limit`（含 `functions_execution` 维度）/ `login_throttle` / `encryption_key` |
 | `data` | `Data` | `database`（DSN/池/慢查询）+ `redis` |
 | `storage` | `Storage` | `s3` / `local` |
-| `functions` | `Functions` | `docker.host`/`network`/`registry` |
+| `functions` | `Functions` | `executor`（"docker" v1 回退 / "dispatcher" v2 默认）+ `execution.api_base_url` + `dispatcher` 子节（url/shared_token/max_resident_instances=8/queue_depth=32/queue_head_timeout=10s/boot_timeout=60s/addr=":9070"/callback_container/timeout_budget=5）+ `trigger.http_ip_per_minute`=3000 + `client_invoke.per_user_concurrency`=2、`queue_head_timeout`=5s（`config.proto:151-225`）；**executor="dispatcher" 时 `dispatcher.url` 必填** |
 | `payments` | `Payments` | `stripe`/`wechat`/`alipay`/`ios_iap` 渠道密钥（仅环境变量） |
+| `analytics` | `Analytics` | `retention_days`（默认 90，可配域 7–365 越界钳制；`config.proto:287-294`） |
 | `telemetry` | `Telemetry` | OTLP |
 | `messaging` | `Messaging` | SMTP / SMS(Twilio) / `dev_log_*` |
 | `idgen` | `IdGen` | `uuid`/`ulid`/`snowflake`/`sequence`/`random` |
@@ -27,7 +28,8 @@
 - `security.jwt.secret` **必填**，启动校验 ≥32 字符且不含弱子串（`internal/pkg/bootkit/config.go`，server/worker 共享）；`security.encryption_key` 独立静态加密密钥，未配回退 `jwt.secret` 并告警（`internal/pkg/config/crypto.go:10`）；
 - `security.setup_token` 空则首个管理员注册 `FailedPrecondition`（`internal/app/console/setup.go`）；
 - `security.trusted_proxies` `repeated string` CIDR（逗号分隔环境覆盖，见 §4）；
-- `security.rate_limit` `optional bool enabled`（默认 true）+ 三维度 `ip`/`user`/`api_key` 固定窗口；
+- `security.rate_limit` `optional bool enabled`（默认 true）+ 四维度 `ip`/`user`/`api_key`/`functions_execution`（默认 6000/60s）固定窗口；
+- `security.login_throttle` 认证面局部频控（T-01）：`email`/`ip` 失败各默认 5 次/60s、`signup_ip` 10 次/1h、`api_key_auth` 10 次/60s，成功登录/注册重置相关键（`config.proto:92-106`）；
 - `data.database.slow_query_threshold` 空=500ms，`0`=禁用。
 
 关停排水窗口不在 proto：`TORCHWOOD_ENV` + `TORCHWOOD_SERVER_DRAIN_TIMEOUT` 在 Lynx `NewRunner` 前读取（`internal/pkg/config/runtime_env.go:12`）。
@@ -36,7 +38,7 @@
 
 ## 2. 运行时绑定（bind.go）
 
-`internal/pkg/config/bind.go:21` 的 `ConfigureViper` 流程：
+`internal/pkg/config/bind.go:25` 的 `ConfigureViper` 流程：
 
 1. `lynx.DefaultBindConfigFunc` 设搜索路径；
 2. 追加 `extraPaths`（默认 `./configs`）；
@@ -44,7 +46,7 @@
 4. 反射 `configKeys()` 遍历 `AppConfig` 全部叶子 `json tag` 路径，对每键 `BindEnv(key, envNameForKey(key))`（显式绑定，替代旧 `SetEnvKeyReplacer`）；
 5. `UnmarshalConfig` 按 `json` Tag 逐叶子 `c.Get(path)` 组装嵌套 map，再 `mapstructure` 解码（`TagName=json`、`WeaklyTypedInput`、`StringToSliceHookFunc(",")` 支持逗号分隔的 `repeated`）。
 
-`envNameForKey`（`bind.go:14`）：`.`/`-` → `_`，整体大写，加 `TORCHWOOD_` 前缀：
+`envNameForKey`（`bind.go:17`）：`.`/`-` → `_`，整体大写，加 `TORCHWOOD_` 前缀：
 
 ```
 "data.database.source"        → TORCHWOOD_DATA_DATABASE_SOURCE
@@ -79,14 +81,21 @@
 | `storage.s3.access_key_id`/`secret_access_key` | `TORCHWOOD_STORAGE_S3_ACCESS_KEY_ID`/`SECRET_ACCESS_KEY` | MinIO 凭据（与 `AGENTS.md` 一致） |
 | `payments.stripe.secret_key` 等 | `TORCHWOOD_PAYMENTS_*` | 渠道密钥一律环境变量 |
 | `idgen.snowflake.node_id` | `TORCHWOOD_IDGEN_SNOWFLAKE_NODE_ID` | 雪花节点 |
+| `functions.executor` | `TORCHWOOD_FUNCTIONS_EXECUTOR` | "docker"（v1 回退）/ "dispatcher"（v2 默认） |
+| `functions.dispatcher.*` | `TORCHWOOD_FUNCTIONS_DISPATCHER_*` | 执行器 v2 分发通路（`url` executor=dispatcher 时必填；shared_token/max_resident_instances/queue_depth/queue_head_timeout/boot_timeout/addr/callback_container/timeout_budget） |
+| `functions.trigger.http_ip_per_minute` | `TORCHWOOD_FUNCTIONS_TRIGGER_HTTP_IP_PER_MINUTE` | HTTP 触发器每 IP 限频（默认 3000） |
+| `functions.client_invoke.*` | `TORCHWOOD_FUNCTIONS_CLIENT_INVOKE_*` | client 调用并发（`per_user_concurrency` 默认 2、`queue_head_timeout` 5s） |
+| `analytics.retention_days` | `TORCHWOOD_ANALYTICS_RETENTION_DAYS` | 事件保留天数（默认 90，可配域 7–365） |
+| `security.login_throttle.*` | `TORCHWOOD_SECURITY_LOGIN_THROTTLE_*` | 认证失败频控四维度（email/ip/signup_ip/api_key_auth） |
+| `security.rate_limit.functions_execution` | `TORCHWOOD_SECURITY_RATE_LIMIT_FUNCTIONS_EXECUTION_*` | 函数执行限流维度（默认 6000/60s） |
 
-MinIO 凭据变量名由字段 `access_key_id`/`secret_access_key` 映射而来，三处一致：`bind.go` 推导、`configs/config.yaml.template:82` 注释、`.env.example:23`。
+MinIO 凭据变量名由字段 `access_key_id`/`secret_access_key` 映射而来，三处一致：`bind.go` 推导、`configs/config.yaml.template:113-114` 注释、`.env.example:23`。
 
 ---
 
 ## 4. TORCHWOOD_ENV 与排水
 
-`internal/pkg/config/runtime_env.go:28` 归一化：
+`internal/pkg/config/runtime_env.go:33` 归一化：
 
 | `TORCHWOOD_ENV` | 归一化 | 默认 `DrainTimeout` |
 |-----------------|--------|---------------------|
@@ -117,7 +126,7 @@ lynx.NewRunner(
 wireBootstrap → NewAppConfig → UnmarshalConfig → 校验 jwt.secret/encryption_key fallback
 ```
 
-`server` 校验 `jwt.secret`，`worker` 校验 `data.database.source`（`cmd/worker/provides.go:108`）。
+`server` 校验 `jwt.secret`，`worker` 校验 `data.database.source`（`cmd/worker/provides.go:153-157`）。
 
 ---
 
@@ -153,5 +162,5 @@ security:
 - `internal/pkg/config/bind.go` 绑定与解码
 - `internal/pkg/config/runtime_env.go` 环境与排水
 - `internal/pkg/config/crypto.go:10` 独立加密密钥
-- `cmd/server/provides.go:55` / `cmd/worker/provides.go:108` 启动校验
+- `cmd/server/provides.go:84` 附近 / `cmd/worker/provides.go:153-157` 启动校验
 - `configs/config.yaml.template`、`.env.example`

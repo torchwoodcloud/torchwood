@@ -2,7 +2,7 @@
 
 > 面向需在 Admin Console 新增页面的开发者。Console 为 React 19 + Vite 8 + TanStack Query + shadcn/ui 的管理后台，产物经 `go:embed` 打进二进制，由 `cmd/server/internal/runtime/console.go` 在 `/console/` 下 serve。
 > 目标读者：前端开发者。关联：`AGENTS.md`、`docs/developer/09-api-guide.md`。
-> 修订记录：2026-08-23 重写（以 `console/package.json`、`console/embed.go`、`console/src/api/client.ts`、`internal/api/consolegrpc/cookies.go` 为准）。
+> 修订记录：2026-08-23 重写；2026-09-12 按代码复核（目录树补 analytics/audit-logs/leaderboards 与 api client 全集、技术栈补 recharts/vitest、dev 代理端口对齐 9080）。
 
 ---
 
@@ -21,6 +21,8 @@
 | `@radix-ui/react-*` | `^1.x`/`^2.x` | 无头组件（dialog/select/label/avatar 等） |
 | `typescript` | `~6.0.2` | 类型检查（`tsc -b`） |
 | `vite` | `^8.0.12` | 构建/开发服务器 |
+| `recharts` | `^3.10.1` | 图表（Analytics 页面） |
+| `vitest` + `@testing-library/react` + `@testing-library/jest-dom` + `jsdom` | `^4.1.11` 等 | 前端测试（`scripts.test = vitest run`） |
 | `pnpm` | `11.20.0` | 包管理器（`packageManager` 字段锁定） |
 
 ---
@@ -31,14 +33,15 @@
 console/
 ├── embed.go                          # //go:embed dist → console.Dist
 ├── package.json / vite.config.ts / tailwind.config.js / eslint.config.js
-├── dist/                             # pnpm run build 产物（Go embed 打包）
+├── dist/                             # 构建产物已出库（.gitignore），仅 dist/.gitkeep 经 git add -f 入库作 embed 占位
 └── src/
     ├── main.tsx                      # createRoot + StrictMode
     ├── App.tsx                       # QueryClientProvider + AuthProvider + BrowserRouter + 路由表
     ├── api/
     │   ├── client.ts                 # axios 实例 + 拦截器（见 §3）
     │   ├── auth.ts                   # sign-in / sign-out / setup-status / sign-up
-    │   └── admins.ts / projects.ts / users.ts / groups.ts / databases.ts / storage.ts / functions.ts / oauthProviders.ts
+    │   ├── wellknown.ts              # /.well-known/torchwood 目录
+    │   └── admins.ts / projects.ts / users.ts / groups.ts / databases.ts / storage.ts / functions.ts / oauthProviders.ts / apiKeys.ts / payments.ts / assets.ts / subscriptions.ts / auditLogs.ts / leaderboards.ts / analytics.ts / realtime.ts
     ├── components/
     │   ├── Layout.tsx                # 侧边栏 + 顶部栏 + 项目选择器 + Outlet
     │   ├── ProjectBootstrap.tsx      # 自动选中默认项目（保证 X-Torchwood-Project）
@@ -53,12 +56,16 @@ console/
     │   ├── useAuth.tsx               # 会话状态（refresh 探测 + login/logout）
     │   ├── useAdminRole.ts           # 角色守卫（canWrite / isPlatformAdmin）
     │   ├── useListParams.ts          # 列表 URL 参数 q/page/pageSize
+    │   ├── useProjectScopeSync.ts    # 路由 ↔ 项目上下文同步
     │   └── useRowSelection.ts
     ├── lib/utils.ts                  # cn()
     └── routes/                       # 按资源分目录
         ├── Login.tsx / Dashboard.tsx
         ├── admins/ / api-keys/ / databases/ / functions/ / projects/
         ├── settings/ / storage/ / groups/ / users/ / payments/ / assets/ / subscriptions/
+        ├── leaderboards/             # 榜列表 + 建榜/编辑对话框 + 榜详情（top 表/按 subject 查条目）
+        ├── analytics/                # pages.tsx + EventDetailPage + UserActivityPage + shared（图表组件）
+        └── audit-logs/               # 平台审计日志查询页
 ```
 
 约定：
@@ -112,7 +119,7 @@ api.interceptors.request.use((config) => {
 
 - 签发：`POST /v1/console/auth/sign-in`（`auth.go:23`）与 `POST /v1/console/auth/refresh` 成功后 `setSessionCookies`；
 - `Set-Cookie` 经 `cmd/server/internal/runtime/grpc_gateway.go` 的 `authOutgoingHeaderMatcher` 透传；
-- CSRF 防护：`SameSite=Lax` 使跨站 POST 不携带 cookie；本服务变更类端点均为 POST，故无需额外 CSRF token（`console.go:32` 注释）；
+- CSRF 防护：`SameSite=Lax` 使跨站 POST 不携带 cookie；本服务变更类端点均为 POST，故无需额外 CSRF token（`consolegrpc/cookies.go:3-7` 注释）；
 - `Secure` 由 `console.Auth.SecureCookies()` 决定（非本地环境自动启用）。
 
 ### 4.2 前端（`console/src/hooks/useAuth.tsx` + `console/src/api/auth.ts`）
@@ -120,7 +127,7 @@ api.interceptors.request.use((config) => {
 - 挂载时 `refreshSession()`（即 single-flight refresh）探测会话：成功 → `isAuthenticated=true`（顺带续期），失败 → 匿名；`loading=true` 期间 `RequireAuth` 返回 `null` 避免闪屏；
 - `login(email,password)` 调 `POST /console/auth/sign-in`，成功后置 `authenticated`，`__skipToast` 让登录页自渲染错误；
 - `logout()` 调 `POST /console/auth/sign-out`（`__skipAuthRetry`），无论成败清空 `TORCHWOOD_console_project` 与 `queryClient`；
-- 路由守卫：`RequireAuth` 判登录；`RequireRole`（`App.tsx:167`）判写权限（`canWrite`）或平台管理员（`isPlatformAdmin`），失败重定向 `/console`。
+- 路由守卫：`RequireAuth` 判登录；`RequireRole`（`App.tsx:194`）判写权限（`canWrite`）或平台管理员（`isPlatformAdmin`），失败重定向 `/console`。
 
 ---
 
@@ -130,11 +137,11 @@ api.interceptors.request.use((config) => {
 task console:install   # pnpm install（锁定 pnpm@11.20.0）
 task console:dev       # pnpm run dev → vite dev server
 task console:build     # pnpm run build → tsc -b && vite build → dist/
-task build             # 依赖 console:build → go build ./cmd/server ./cmd/worker ./cmd/torchwood
+task build             # 依赖 console:build → go build 四二进制（server/worker/functions-dispatcher/CLI）
 ```
 
-- `vite.config.ts:8`：`base: '/console/'`，`@` → `./src`（tsconfig + vite 双别名）；
-- `vite.config.ts:20`：`server.proxy['/v1'] → http://localhost:9099`（与 `configs/config.yaml.template` 的 `server.http.addr` 对齐），保证 dev 下 `/v1` 同源，HttpOnly cookie 正常工作；
+- `vite.config.ts:23`：`base: '/console/'`，`@` → `./src`（tsconfig + vite 双别名）；
+- `vite.config.ts:37-38`：`server.proxy['/v1'] → http://localhost:9080`（与 `configs/config.yaml.template` 的 `server.http.addr` 对齐），保证 dev 下 `/v1` 同源，HttpOnly cookie 正常工作；
 - `console/embed.go:8`：`//go:embed dist` → `console.Dist`，由 `cmd/server/internal/runtime/console.go` 的 `NewConsoleHandler` 挂载，SPA fallback（未知路径回 `index.html`）+ 安全头（`X-Frame-Options: DENY` / CSP / `X-Content-Type-Options`）。
 
 > **必做**：修改 Console 后先 `task console:build` 再 `task build`，否则 `go:embed` 打包旧 `dist/`。
@@ -181,7 +188,7 @@ import { AdminsListPage } from "@/routes/admins/pages";
 
 所有业务页挂在 `<RequireAuth><Layout/></RequireAuth>` 下的 `/console` 布局路由；写路由外层再包 `<RequireRole>`。
 
-### 6.4 接入菜单（`src/components/Layout.tsx:14`）
+### 6.4 接入菜单（`src/components/Layout.tsx:15`）
 
 在 `navSections` 按分组追加：
 
@@ -203,7 +210,7 @@ task console:build && task build
 ## 7. 常见坑
 
 1. **忘了重构建**：`go:embed` 只打包构建时刻的 `dist/`；
-2. **dev cookie 失效**：`vite.config.ts` 代理须与后端 `server.http.addr` 同源（默认 `9099`）；
+2. **dev cookie 失效**：`vite.config.ts` 代理须与后端 `server.http.addr` 同源（默认 `9080`）；
 3. **空列表兜底**：`res.data.xxx ?? []`，否则空态崩溃；
 4. **错误消息**：从 `error.response.data.error.message` 读取；
 5. **绕过 `api` 实例**：仅 refresh 用裸 `axios`，其余一律走 `api` 以带 `X-Torchwood-Project` 与 401 刷新；
@@ -221,3 +228,17 @@ task console:build && task build
 | **邀请码** | 生成（次数 1..10000 或不限、可选过期时间）、列表回显（`twi_` 明文 + 已用次数 + 过期/吊销状态徽章）、复制、吊销 | `CreateInviteCode` / `ListInviteCodes` / `DeleteInviteCode`（owner/admin） |
 
 API Keys 页（`/console/api-keys`）在详情页新增**编辑**（name/scopes/enabled/expire_at，proto3 optional 只提交变更字段）与**轮换**引导（三步：新建同 scope 的 `-rotated` key → 应用切换 → 旧 key 设过期/吊销）对话框（T-02）。scope 输入支持资源级语法（如 `databases:blog.read`，见 `05-authentication.md` §6 语法表）。
+
+## 9. 页面全景（2026-09-12）
+
+侧边栏分组（`Layout.tsx:15`）：Dashboard 置顶；Develop（API Keys/Databases/Storage/Functions/Analytics）、Auth（Users/Groups）、Economy（Orders/Assets/Subscriptions/Leaderboards）、System（Projects/Admins/Audit Logs）。
+
+近期新增页面：
+
+| 路由 | 内容 | 守卫 |
+|------|------|------|
+| `/console/leaderboards` + `/console/leaderboards/:boardId` | 榜列表 + 建榜/编辑/删除；详情 = 期下拉 + top 表（rank/position/subject/value/updated_at，行删条目）+ 按 subject 查条目；board 表单含 Phase 2 rewards 编辑器（`App.tsx:301-316`） | 写操作 owner（`permissions:["owner"]`） |
+| `/console/analytics`、`/analytics/events`、`/analytics/events/:name`、`/analytics/retention`、`/analytics/users/:userId` | 事件分析：概览 / 事件字典 / 事件详情 / 留存网格 / 单用户行为流（recharts 图表，`App.tsx:564-605`） | 全角色开放（不设 RequireRole） |
+| `/console/audit-logs` | 平台审计日志查询（结构化过滤 + metadata 视图） | platformAdmin |
+
+用户详情页（`/console/users/:id`，`routes/users/pages.tsx:365-385`）头部提供直达入口：行为轨迹（analytics）、用户资产（`/console/assets/users?owner=`）、用户订阅（`/console/subscriptions?q=`）——资产/订阅入口仅 platformAdmin 可见。

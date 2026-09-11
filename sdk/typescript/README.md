@@ -76,9 +76,9 @@ fragment 刻意不含 refresh_token（安全加固）；OAuth 会话的 access_t
 
 ## API surface
 
-**Client API**（Bearer JWT）：`account`（注册/登录/会话/偏好）、`databases`（文档 CRUD + count）、`groups` / memberships、`realtime`（WebSocket 订阅）、`assets`、`payments`、`subscriptions`。
+**Client API**（Bearer JWT）：`account`（注册/登录/会话/偏好）、`databases`（文档 CRUD + count）、`groups` / memberships、`realtime`（WebSocket 订阅）、`assets`、`payments`、`subscriptions`、`functions`（`invokeFunction`）、`leaderboards`（提交/me/top）、`analytics`（`ingest`；包根另有 `AnalyticsEventBuffer` 批量缓冲器）。
 
-**Server API**（API Key）：`health`、`projects`、`users`、`groups`、`databases`（库/集合/属性/索引/文档/Bulk）、`apiKeys`、`storage`（Bucket/File）、`functions`、`oauthProviders`、`outbox`、`auditLogs`、`assets`、`payments`、`subscriptions`、`billing`。
+**Server API**（API Key）：`health`、`projects`、`users`、`groups`、`databases`（库/集合/属性/索引/文档/Bulk）、`apiKeys`、`storage`（Bucket/File）、`functions`、`oauthProviders`、`outbox`、`auditLogs`、`assets`、`payments`、`subscriptions`、`billing`、`leaderboards`（提交/条目/top/结算查询）、`analytics`（ingest + 固定形状查询）。
 
 ## Agent 工具目录
 

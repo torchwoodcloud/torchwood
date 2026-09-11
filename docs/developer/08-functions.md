@@ -10,7 +10,7 @@
 ```
 gRPC FunctionsService (proto/server/v1/functions.proto) ─→ app/functions ─┬→ FunctionRepo (bun: functions/function_deployments/function_variables/function_executions)
                                                                            ├→ Executor (Docker: Build/Execute/RemoveImage, internal/infra/functions/docker.go)
-                                                                           └→ Queue (Redis: torchwood:queue:functions-executions, internal/infra/queue/redis_queue.go) ─→ cmd/worker (4×BRPOP 1s)
+                                                                           └→ Queue (Redis Stream: torchwood:queue:functions-executions, internal/infra/queue/redis_queue.go) ─→ cmd/worker (4×XREADGROUP)
 HTTP multipart FunctionsHandler (internal/api/serverhttp/functions_handler.go, POST .../deployments/code, ≤50MiB) ─┘
 ```
 
@@ -223,14 +223,14 @@ defer release()
 
 `cmd/worker`（独立 lynx 二进制，无 `api` 层，`cmd/worker/provides.go`）：
 
-- 消费：4 goroutine `BRPOP`（`1s` 超时配合退出）→ `ProcessExecutionPayload`（见 `internal/app/functions/executions.go:242`）。
+- 消费：4 goroutine `XREADGROUP`（Redis Stream，至少一次；Block `1s` 配合退出；`internal/infra/queue/redis_queue.go` XADD/XREADGROUP/XACK）→ `ProcessExecutionPayload`（见 `internal/app/functions/executions.go:242`）。
 - 领取：`TransitionExecutionStatus(queued→building)` CAS 防重复投递，重复消息静默跳过（at-least-once 收敛）。
 - 补构建：非 `ready` 时 `context.WithTimeout(5m)` 同步 `buildDeployment`，失败归还 `building→queued` 并 `requeue`（见下）。
 - 重试：`queueMessage.Attempt` 持久化于 payload，瞬时失败 `requeue` 时 `+1 LPUSH`，`>maxProcessAttempts=3` 则 `FailExecutionIfActive` 标记 `failed`；`ErrInvalidQueuePayload` 丢弃不重试。
-- 启动对账：`RecoverOrphanExecutions(1h)` 按 `public.projects` 轮转扫描，将 `queued/building/running>1h` 标 `failed`（全局预算 `500`，`scanCursor` 轮转防饥饿）。
+- 启动对账：孤儿恢复为**每分钟周期任务** `RecoverOrphanExecutions`，stale 判定 = 行内 `timeout_seconds + 120s`（NULL 回退 1h），将超时 `queued/building/running` 标 `failed`（`worker/worker.go:28-35,100-104`）。
 - cron 调度循环（P1，`worker.go cronLoop`）：每分钟 `DispatchDueCronTriggers(now, 100)` 领取到期 cron 触发器并入队异步执行（见 §12.5）。
 - 事件触发器消费循环（v3 切片 D，`worker/event_triggers.go`）：`functions-triggers` 消费组 XREADGROUP `torchwood:events` + 订阅匹配器 15s 快照 + 停机补投（见 §12.5）。
-- 优雅退出：`Stop` 取消 `BRPOP` 上下文。
+- 优雅退出：`Stop` 取消消费上下文（XREADGROUP Block 1s 内返回）。
 
 `StreamTrimmer`（`worker/trimmer.go:14`）：每 10min `XTRIM APPROX torchwood:queue:functions-executions MAXLEN 100000`（`XADD` 不设 `MaxLen` 保未投递，裁剪低频 `Trim`，`context.WithTimeout(10s, WithoutCancel)`）。
 
@@ -280,7 +280,7 @@ TORCHWOOD_RUN_DOCKER_TESTS=1 go test ./internal/infra/functions -run TestDockerB
 
 ## 11 测试与边界
 
-- 单元：`internal/app/functions/functions_test.go`/`executions_test.go`/`mocks_test.go`（`maxConcurrentBuilds/Runs`、截断、队列 payload 校验、`RequireServerPrincipal` 分支）；`internal/infra/queue/redis_queue_test.go`（`LPUSH/BRPOP`、`Trim`）。
+- 单元：`internal/app/functions/functions_test.go`/`executions_test.go`/`mocks_test.go`（`maxConcurrentBuilds/Runs`、截断、队列 payload 校验、`RequireServerPrincipal` 分支）；`internal/infra/queue/redis_queue_test.go`（`Enqueue/Dequeue/Ack`、`Trim`）。
 - 安全：`security_test.go` 校验代码包 `zip slip`/符号链接/size 上限；`authz_test.go` 校验写方法鉴权；`semaphore_test.go` 校验 `SETNX+Lua` 互斥。
 - 集成：`internal/infra/functions/docker_integration_test.go`（`TORCHWOOD_RUN_DOCKER_TESTS=1`，CI 预拉 `node:18-alpine`/`python:3.11-alpine`）；`worker/consume_test.go` / `worker/requeue_test.go`（`attempt` 持久化、死信未落、`Transition` CAS）。
 - 未落地：独立构建队列（`CreateDeployment` 同步构建，Worker 消费前补构建兜底）；重试无死信队列（超限 `FailExecutionIfActive`）；变量明文；`entrypoint` 固定入口；多机需对象存储承载 zip；池策略管理 API 面（`UpdateFunction` proto3 optional ×5——min/max_instances、idle_ttl、max_requests、concurrency + Console「池策略」卡片，v3 B 切片）——**concurrency 现无管理入口，恒为列默认 1**，行为与 v2 串行等价。

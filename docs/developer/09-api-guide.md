@@ -21,7 +21,7 @@ gRPC handler (internal/api/*grpc) → app use-case (internal/app/*) → domain p
 syntax="proto3";
 package torchwood.server.v1;
 import "google/api/annotations.proto";
-import "google/google/protobuf/timestamp.proto";
+import "google/protobuf/timestamp.proto";
 import "shared/v1/authz.proto";
 import "shared/v1/common.proto";
 option go_package="github.com/torchwoodcloud/torchwood/genproto/server/v1;serverv1";
@@ -35,6 +35,11 @@ service ProjectsService {
   rpc CreateProject(CreateProjectRequest) returns (Project){
     option (google.api.http)={post:"/v1/server/projects" body:"*"};
     option (torchwood.shared.v1.method_auth)={access:ACCESS_PERMISSION permissions:["owner","admin"]};
+    // PERMISSION 档必须逐方法声明 operation 级扩展（否则继承顶层 "server"，
+    // 挂 TestSwaggerAccessExtensionMatchesCollectMethodsByAccess）；ACCESS_* 档可继承顶层。
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      extensions: { key: "x-torchwood-access" value: { string_value: "permission" } }
+    };
   }
   rpc ListProjects(shared.v1.ListRequest) returns (ListProjectsResponse){
     option (google.api.http)={get:"/v1/server/projects"};
@@ -73,7 +78,7 @@ service ProjectsService {
 - 更新类 `optional` 表达 presence：`optional string name=2;` 未传=不修改（`HasName()` 判别）；空串语义由 `UpdateCollectionRequest` 注释显式说明。
 - 删除字段一律 `reserved`（字段号+字段名，禁止复用），`buf breaking --against '.git#branch=origin/main'` 门禁。
 - 时间 `google.protobuf.Timestamp`（HTTP JSON RFC3339，`timestamppb.New`）。
-- 列表统一 `shared.v1.ListRequest`/`ListResponseMeta`（`proto/shared/v1/common.proto:7`），勿重造分页字段。
+- 列表统一 `shared.v1.ListRequest`/`ListResponseMeta`（`proto/shared/v1/common.proto:8`），勿重造分页字段。
 
 ### 2.3 形状校验注解（protovalidate）
 
@@ -159,9 +164,9 @@ func (s *ProjectsService) CreateProject(ctx context.Context, req *serverv1.Creat
 
 ### 7.1 列表分页（`shared.v1.ListRequest` + `pkg/crud`）
 
-`proto/shared/v1/common.proto:7`：`page_size/page_token/queries`（`filter`/`order_by` 字段号 3/4 已 reserved——W-K 终结：静态表面从未实现 AIP-160/132，POC 无兼容义务）；响应 `ListResponseMeta{page_size,next_page_token,prev_page_token,total_count}`（AIP-132/158/160），其中 `total_count ≤0` 表示总数未知（keyset 分页下 0 与空集合不可区分，需以 `next_page_token` 是否为空判定是否还有更多）。
+`proto/shared/v1/common.proto:8`：`page_size/page_token/queries`（`filter`/`order_by` 字段号 3/4 已 reserved——W-K 终结：静态表面从未实现 AIP-160/132，POC 无兼容义务）；响应 `ListResponseMeta{page_size,next_page_token,prev_page_token,total_count}`（AIP-132/158/160），其中 `total_count ≤0` 表示总数未知（keyset 分页下 0 与空集合不可区分，需以 `next_page_token` 是否为空判定是否还有更多）。
 
-`pkg/crud/list.go:57` `ParseListParams(pageSize,pageToken,filter,orderBy)`：校验 `page_size∈[1,1000]`（默认 50）、`page_token` 解码得 `Offset`；`pagination.go:360` `BuildPaginationInfo(params,totalCount,hasMore)` 产出 `HasNext/NextOffset/HasPrevious/PreviousOffset`，`EncodePageToken(offset)`（`v1` base64 JSON，`DefaultTokenTTL=24h`）。
+`pkg/crud/list.go:59` `ParseListParams(pageSize,pageToken,filter,orderBy)`：校验 `page_size∈[1,1000]`（默认 50）、`page_token` 解码得 `Offset`；`pagination.go:281` `BuildPaginationInfo(params,totalCount,hasMore)` 产出 `HasNext/NextOffset/HasPrevious/PreviousOffset`，`EncodePageToken(offset)`（`v1` base64 JSON，`DefaultTokenTTL=24h`）。
 
 **页 token 安全（R4-J2-4）**：生产进程启动时经 `crud.InitPageTokenSigning(jwtSecret)` 启用 HMAC-SHA256 签名（purpose 派生密钥，与 JWT/OAuth 域隔离），此后：
 
@@ -222,7 +227,7 @@ wire.Bind(new(projects.Repository), new(*bunrepo.ProjectRepo))
 {"error":{"type":"invalid_request_error","code":"InvalidArgument","message":"...","error_id":"<uuid>","error_code":"ERROR_CODE_INVALID_REQUEST"}}
 ```
 
-映射：`InvalidArgument→400/ERROR_CODE_INVALID_REQUEST`、`Unauthenticated→401/INVALID_CREDENTIALS`、`PermissionDenied→403/PERMISSION_DENIED`、`NotFound→404/RESOURCE_NOT_FOUND`、`AlreadyExists/Aborted→409/RESOURCE_CONFLICT/CONCURRENT_MODIFICATION`、`ResourceExhausted→429/QUOTA_EXCEEDED`、`DeadlineExceeded→504/TIMEOUT`。
+映射：`InvalidArgument→400/ERROR_CODE_INVALID_REQUEST`、`Unauthenticated→401/INVALID_CREDENTIALS`、`PermissionDenied→403/PERMISSION_DENIED`、`NotFound→404/RESOURCE_NOT_FOUND`、`AlreadyExists/Aborted→409/RESOURCE_CONFLICT/CONCURRENT_MODIFICATION`、`FailedPrecondition→400/ERROR_CODE_PRECONDITION_FAILED`、`OutOfRange→400`、`ResourceExhausted→429/QUOTA_EXCEEDED`、`DeadlineExceeded→504/TIMEOUT`（`cmd/server/internal/runtime/errors.go:32-49,119-141`）。
 
 ## 10 OpenAPI 与一致性断言
 
@@ -236,7 +241,7 @@ default 错误响应建模为声明式：`buf.gen.yaml` 对 openapiv2 插件设�
 
 ## 11 OutboxService 示例（新增服务的完整参照）
 
-`proto/server/v1/outbox.proto`（`ACCESS_SERVER` 默认，顶层 `x-torchwood-access=server`；方法级 `admin_roles:[ADMIN_ROLE_ADMIN,ADMIN_ROLE_OWNER]` + `api_key_scope` 写门）：
+`proto/server/v1/outbox.proto`（`ACCESS_SERVER` 默认，顶层 `x-torchwood-access=server`；方法级 `admin_roles:[ADMIN_ROLE_ADMIN,ADMIN_ROLE_OWNER]`——`ListDeadLetters` 为 `api_key_scope` 读门、仅 `ReplayDeadLetter` 为写门）：
 
 ```proto
 service OutboxService {
@@ -249,13 +254,13 @@ service OutboxService {
 }
 ```
 
-步骤复盘：`proto` 定义→`task generate:proto`→`internal/domain/shared/ports.go:OutboxRepository` 扩展→`internal/app/events/outbox_admin.go` 用例（`5s` per-statement 超时）→`internal/infra/events/outbox.go` 适配（`document_events_outbox_dead`）→`internal/api/servergrpc/outbox.go` handler（`ListRequest→crud.ParseListParams`）→`grpc.go`/`grpc_gateway.go` 注册→`task wire:all`。
+步骤复盘：`proto` 定义→`task generate:proto`→`internal/domain/events/outbox.go:21`（`OutboxRepository` 端口）扩展→`internal/app/events/outbox_admin.go` 用例（`5s` per-statement 超时）→`internal/infra/events/outbox.go` 适配（`document_events_outbox_dead`）→`internal/api/servergrpc/outbox.go` handler（`ListRequest→crud.ParseListParams`）→`grpc.go`/`grpc_gateway.go` 注册→`task wire:all`。
 
 CLI 调用：`torchwood outbox list-dead --project <id>` / `torchwood rpc /torchwood.server.v1.OutboxService/ListDeadLetters --data '{"project_id":"shop","pageSize":20}'`。
 
 ## 12 审计日志（AuditLogsService + 拦截器结构化记录）
 
-写入侧在 gRPC 审计拦截器（`internal/api/interceptor/audit.go`，`auditRowEligible` 噪声治理准入：管理面写操作 + client 面 AccountService 安全动作落库；读浏览/框架探针/数据面高频不记，拒绝与限速审计不经此门、全部保留）；`AuditLogsService`（`proto/server/v1/audit_logs.proto`）只提供读取：
+写入侧在 gRPC 审计拦截器（`internal/api/interceptor/audit.go`，`auditRowEligible` 噪声治理准入：管理面写操作 + client 面 AccountService 安全动作落库；读浏览/框架探针/数据面高频不记，拒绝与限速审计不经此门、全部保留）。server/console 面规则是「非读动词默认落审计、豁免必须显式登记」——`auditSilentServerMethods` 显式静默清单（`audit.go:42-44`，首例 `AnalyticsService/IngestEvents`），新增高频写方法需同步该清单（护栏测试同步）；`AuditLogsService`（`proto/server/v1/audit_logs.proto`）只提供读取：
 
 - **鉴权**：`admin_roles:[ADMIN_ROLE_ADMIN,ADMIN_ROLE_OWNER]` + `api_key_scope:{audit_logs, read}`（scope 词表 `SCOPE_RESOURCE_AUDIT_LOGS=13`）。项目上下文来自凭证（admin 需 `X-Torchwood-Project`，否则 FailedPrecondition，对齐 outbox）；`include_platform`（并入 `project_id IS NULL` 平台级行）与 `all_projects`（跨项目视图）仅平台 admin。
 - **结构化 metadata（非文本，机器可读）**：`client`（通道推导：凭证类型 + UA 自报——CLI/SDK 经 SDK `WithUserAgent("torchwood-cli/<ver>")` 等注入，console/function/user/api）；`request`（管理面非读方法的脱敏请求摘要：protojson presence 语义使更新类请求只含被改字段；敏感字段名打码 `[REDACTED]`、bytes/超长串截断、整体 ≤8KB）；`changes`（app 用例经 `contexts.SetAuditMetadata` 回填的 `{"字段":{from,to}}` before/after diff，试点 Functions Update）。

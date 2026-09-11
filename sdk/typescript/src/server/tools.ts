@@ -1,4 +1,4 @@
-/** Agent 默认工具（E-7 overlay）。完整产品 API 仍是 185 个 RPC（Client 61 + Server 114 + Console 10）；不含 API key 管理。 */
+/** Agent 默认工具（E-7 overlay）。完整产品 API 仍是 237 个 RPC（Client 68 + Server 146 + Console 23）；不含 API key 管理。 */
 
 export const TOOL_LIST_USERS = "list_users";
 export const TOOL_GET_USER = "get_user";

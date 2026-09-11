@@ -14,16 +14,16 @@
 | `tools:install` | `go install protoc-gen-go / migrate / buf@v1.65.0 / wire / golangci-lint@v2.12.2` | 首次安装工具链 |
 | `generate:proto` | `buf lint` + `buf generate` | 生成 gRPC/gateway/Swagger（§2） |
 | `generate:config` | `protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto`（`internal/pkg/config` 内执行） | 生成 `config.pb.go` |
-| `wire:server` / `wire:worker` | `go mod tidy && go run -mod=mod github.com/google/wire/cmd/wire` | 各自重算 `wire_gen.go` |
-| `wire:all` | `wire:server` + `wire:worker` | 全量 Wire |
+| `wire:server` / `wire:worker` / `wire:dispatcher` | `go mod tidy && go run -mod=mod github.com/google/wire/cmd/wire` | 各自重算 `wire_gen.go` |
+| `wire:all` | `wire:server` + `wire:worker` + `wire:dispatcher` | 全量 Wire |
 | `generate:all` | `generate:proto` → `generate:config` → `wire:all` | 一键全量（§5） |
 | `lint:proto` | `buf lint` + `buf breaking --against '.git#branch=origin/main'` | proto 兼容门禁 |
-| `lint:golangci` | `golangci-lint run --new-from-rev=origin/main ./...` | 增量棘轮（全量 `golangci-lint run ./...` 0 warning） |
+| `lint:golangci` | `golangci-lint run ./...` | 全量门禁（J6-3 后无棘轮，存量清零） |
 | `lint:go` | `go vet ./...` + `gofmt -l .` | Go 静态/格式检查 |
 | `up`/`down`/`clean` | `docker compose`（`docker/local`） | 基础设施 |
 | `db:migrate` | `migrate -path ./db/migrations -database <DSN> up`（`TORCHWOOD_DATA_DATABASE_SOURCE` 优先） | 迁移 |
-| `build` | `console:build` + `go build -ldflags version/commit/date` 三二进制 | 产出 `bin/server` `bin/worker` `bin/torchwood` |
-| `test` | `lint:go` + `test:sdk-go` + `test:sdk-ts` + `go test -v ./... -cover` | 全量测试 |
+| `build` | `console:build` + `go build -ldflags version/commit/date` 四二进制 | 产出 `bin/server` `bin/worker` `bin/functions-dispatcher` `bin/torchwood` |
+| `test` | `lint:go` + `lint:golangci` + `test:sdk-go` + `test:sdk-ts` + `go test -race -v ./... -cover` | 全量测试 |
 
 常用组合：改动前 `task docker:up && task db:migrate`；改动 proto/config/provider 后 `task generate:all && task build`；改 Console 后 `task console:build && task build`（`embed dist`）。
 
@@ -101,7 +101,8 @@ generate:all
  ├─ generate:config     # config.proto → config.pb.go
  └─ wire:all
       ├─ wire:server
-      └─ wire:worker
+      ├─ wire:worker
+      └─ wire:dispatcher
 ```
 
 | 场景 | 命令 |
@@ -115,7 +116,7 @@ generate:all
 
 - **proto 兼容**：`task lint:proto` → `buf breaking --against '.git#branch=origin/main'`（`Taskfile.yml:29`），禁字段号复用、删除未 `reserved`、破坏性变更；`buf lint` 的 5 项 `except` 已在 `buf.yaml:19` 注释理由，改前必读；
 - **codegen 零漂移**：`task generate:all && git diff --exit-code`（CI `lint` job），本地验证同样执行；任何 `genproto/`、`config.pb.go`、`wire_gen.go` 未提交即失败；
-- **lint 棘轮**：`golangci-lint run --new-from-rev=origin/main` 仅拦新增（`Taskfile.yml:172`），全量 `golangci-lint run ./...` 零告警后渐进烧存量债（`docs/review/arch-review-2026-08-fix-plan.md:317`）；`go vet` + `gofmt` 为前置门禁。
+- **lint 全量门禁**：`golangci-lint run ./...`（J6-3 后无棘轮，存量清零；`Taskfile.yml:200-203`）；`go vet` + `gofmt` 为前置门禁。
 
 **新增 gRPC 方法清单**（fail-closed，`05-authentication.md §3/§7`）：
 

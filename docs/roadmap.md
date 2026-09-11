@@ -1,7 +1,7 @@
 # Torchwood 开发路线图
 
 > 本文档基于已完成 P0 底座，规划 Torchwood 的短期、中期、长期开发方向。
-> 最新更新：2026-08-24（v2 PR1–PR5 与 **P2.5 / v3 经济系统均已实施**：payments/subscriptions/assets/billing 的迁移、proto 与 Console 页面已落地；轻量 Realtime + 事件脊柱已交付。设计文档存档：`docs/design/v3-payments-economy.md`、`docs/design/v3-execution-plan.md`）。
+> 最新更新：2026-09-12（**Functions 执行器 v2/v3、一等排行榜（Phase 1/2）、事件分析 Analytics（PR1–PR6）、审计查询面与噪声治理均已落地**；此前 2026-08-24：v2 PR1–PR5 与 P2.5 / v3 经济系统实施，轻量 Realtime + 事件脊柱交付。设计文档存档：`docs/design/v3-payments-economy.md`、`docs/design/v3-execution-plan.md`、`docs/design/functions-v3.md`、`docs/design/analytics.md`）。
 
 ---
 
@@ -209,6 +209,12 @@ Sprint 1 已完成 Server/Client Document CRUD；批量操作与 attribute/index
 「构建队列」任务以「CreateDeployment 同步构建」落地（对 roadmap 的 MVP 偏离，见
 `docs/implementation-functions-executor.md` §2）。
 
+**执行器 v2/v3 已落地（2026-09）**：v2 = 独立 `functions-dispatcher` 常驻进程
+（唯一 docker.sock 持有方，resident 实例池 + 租约认领）；v3 = runner 实例内
+并发复用（`main(data, ctx)`、runner fetch 协议、超时熔断、平台代装依赖构建、
+concurrency 策略链与函数内执行身份 `fromExecution`）。详见
+`docs/developer/08-functions.md` §4.3 与 `docs/design/functions-v3.md`。
+
 | 任务 | 说明 | 关键端点 / 组件 | 状态 |
 |------|------|-----------------|------|
 | Runtime 列表 | 返回支持的运行时（node-18、python-3.11 等） | `GET /v1/server/functions/runtimes` | ✅ 完成 |
@@ -219,7 +225,7 @@ Sprint 1 已完成 Server/Client Document CRUD；批量操作与 attribute/index
 | Execution CRUD | 同步/异步执行、获取结果 | `POST/GET /v1/server/functions/{id}/executions` | ✅ 完成 |
 | Docker build | 解压代码包，按运行时 Dockerfile 构建镜像（防 zip 炸弹/slip） | `internal/infra/functions/docker.go` | ✅ 完成 |
 | Docker run | 运行容器，收集 stdout/stderr，超时控制与安全基线 | `internal/infra/functions/docker.go` | ✅ 完成 |
-| 异步执行 Worker | `cmd/worker` 消费执行队列（BRPOP、N=4 并发、孤儿对账） | `cmd/worker/` | ✅ 完成 |
+| 异步执行 Worker | `cmd/worker` 消费执行队列（Redis Stream、N=4 并发、周期孤儿对账） | `cmd/worker/`、`worker/` | ✅ 完成 |
 | 构建队列 | Redis List 队列 + CreateDeployment 同步构建（MVP 偏离） | `internal/domain/shared/ports.go`、`internal/infra/queue/` | ✅ 完成 |
 
 **验收标准**：
@@ -252,9 +258,9 @@ Sprint 1 已完成 Server/Client Document CRUD；批量操作与 attribute/index
 | Databases 文档编辑器 | collection 下文档列表、新增/编辑/删除 | `console/src/routes/databases/` | ✅ 完成 |
 | Attributes / Indexes 管理 | 在 collection 详情中增删属性与索引（含 Attribute/Index 行内删除） | Databases 子页面 | ✅ 完成 |
 | Groups Memberships | 管理用户组邀请与成员 | `console/src/routes/groups/` | ✅ 完成 |
-| Functions 管理 | Functions / Deployments / Executions 页面 | 新增 `Functions.tsx` | 待办 |
+| Functions 管理 | Functions / Deployments / Executions 页面 | `console/src/routes/functions/` | ✅ 完成 |
 | 项目设置区 | 项目配置统一收敛至 `/console/projects/:id/settings`（显式项目作用域：基本信息编辑 `PATCH /v1/server/projects/{id}`、注册与登录（注册策略/邀请码/SMTP 说明）、OAuth（Providers/重定向白名单）、危险区（删除项目））；旧全局 `/console/settings` 重定向退役 | `console/src/routes/projects/settings.tsx` | ✅ 完成 |
-| 侧边栏菜单分组 | Dashboard 置顶；Develop（API Keys/Databases/Storage）、Auth（Users/Groups）、System（Projects/Admins）分组；项目设置入口在项目详情页与 Dashboard（侧边栏 Settings 捷径已移除） | `console/src/components/Layout.tsx` | ✅ 完成 |
+| 侧边栏菜单分组 | Dashboard 置顶；Develop（API Keys/Databases/Storage/Functions/Analytics）、Auth（Users/Groups）、Economy（Orders/Assets/Subscriptions/Leaderboards）、System（Projects/Admins/Audit Logs）分组；项目设置入口在项目详情页与 Dashboard | `console/src/components/Layout.tsx` | ✅ 完成 |
 
 **验收标准**：
 
@@ -478,6 +484,11 @@ count/自增/OCC 等 DIY 底料平台已有，但权限别扭（read:any 枚举�
 ---
 
 ### 4.7 Analytics（事件分析，一等公民服务）
+
+**已落地（2026-09-12，feat/analytics PR1–PR6 合入 main）**：摄入 / 存储 / 查询面 /
+Console 分析区 / 合规钩子与 TS SDK 缓冲器全部交付（开发者文档
+`docs/developer/18-analytics.md`；CHANGELOG @torchwood/sdk v0.6.0）。下表
+"计费/用量"与"高级可观测性"两行仍为规划项。
 
 设计稿：`docs/design/analytics.md`（2026-09-11，经三路独立设计交叉验证修订）。与 Databases/Storage/Functions 同级的产品服务：端上行为与服务端权威事件的统一摄入 → 按项目 schema 只写时间序列存储 → 趋势/拆解/留存/用户下钻固定查询形状 + Console 分析区。事件通道独立于文档层与事件脊柱（不进 outbox/realtime）；摄入计量复用 v3 用量脊柱；`domain/analytics` 端口预留 OLAP 适配器接缝。狗粮场景：自营微信小游戏运营分析。
 
