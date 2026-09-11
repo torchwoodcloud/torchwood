@@ -36,13 +36,15 @@ import (
 
 // ingestTestEnv 聚合摄入链集成测试的生产同构装配（真实 Postgres 项目 schema
 // analytics_* 表 + miniredis 上的真 RedisCounter 计量 + testutil.InterceptorEnv
-// 生产同构拦截器链 clientInfo → auth → rate limit → audit）。
+// 生产同构拦截器链 clientInfo → auth → rate limit → audit）。查询面（PR3）
+// 复用同一装配：ingest 落数据、query 读数。
 type ingestTestEnv struct {
 	ctx       context.Context
 	db        *clients.Database
 	projectID string
 	schema    string // 已 quote 的项目 schema 名
 	ingest    *analytics.Ingest
+	query     *analytics.Query
 	counter   *infrabilling.RedisCounter
 	env       *testutil.InterceptorEnv
 	sessions  *auth.SessionService
@@ -68,6 +70,7 @@ func setupIngestEnv(t *testing.T) *ingestTestEnv {
 	counter := infrabilling.NewRedisCounter(rdb)
 
 	ingest := analytics.NewIngest(bunrepo.NewAnalyticsIngestRepository(db), counter, nil)
+	query := analytics.NewQuery(bunrepo.NewAnalyticsQueryRepository(db))
 
 	cfg := &config.AppConfig{Security: &config.Security{Jwt: &config.Security_Jwt{Secret: "analytics-ingest-test-secret"}}} // #nosec G101 -- 测试固定密钥
 	env, err := testutil.NewInterceptorEnv(db, cfg, nil)
@@ -84,6 +87,7 @@ func setupIngestEnv(t *testing.T) *ingestTestEnv {
 		projectID: projectID,
 		schema:    testutil.CatalogQuoted(projectID),
 		ingest:    ingest,
+		query:     query,
 		counter:   counter,
 		env:       env,
 		sessions:  sessions,
@@ -156,7 +160,7 @@ func (e *ingestTestEnv) runClient(t *testing.T, md metadata.MD, req *clientv1.In
 // runServer 面调用：生产同构拦截器链 + 真 servergrpc handler。
 func (e *ingestTestEnv) runServer(t *testing.T, md metadata.MD, req *serverv1.IngestServerEventsRequest) (*serverv1.IngestEventsResponse, error) {
 	t.Helper()
-	handler := servergrpc.NewAnalyticsService(e.ingest)
+	handler := servergrpc.NewAnalyticsService(e.ingest, e.query)
 	var resp *serverv1.IngestEventsResponse
 	err := e.env.InvokeUnaryHandler(e.ctx, testutil.MethodAnalyticsServerIngest, md,
 		func(ctx context.Context, _ any) (any, error) {

@@ -29,6 +29,14 @@ const (
 	// admin_roles {member,admin,owner} + analytics:write）。
 	MethodAnalyticsClientIngest = "/torchwood.client.v1.AnalyticsService/IngestEvents"
 	MethodAnalyticsServerIngest = "/torchwood.server.v1.AnalyticsService/IngestEvents"
+	// Analytics 查询面六 RPC（PR3；策略与 proto 注解同构：读方法无
+	// admin_roles（= 全角色，viewer 含）+ API key analytics:read）。
+	MethodAnalyticsGetOverview     = "/torchwood.server.v1.AnalyticsService/GetOverview"
+	MethodAnalyticsListDefinitions = "/torchwood.server.v1.AnalyticsService/ListEventDefinitions"
+	MethodAnalyticsQueryTimeseries = "/torchwood.server.v1.AnalyticsService/QueryTimeseries"
+	MethodAnalyticsQueryBreakdown  = "/torchwood.server.v1.AnalyticsService/QueryBreakdown"
+	MethodAnalyticsQueryRetention  = "/torchwood.server.v1.AnalyticsService/QueryRetention"
+	MethodAnalyticsListUserEvents  = "/torchwood.server.v1.AnalyticsService/ListUserEvents"
 )
 
 // InterceptorEnv wires clientInfo + auth + rate limit + audit interceptors
@@ -85,6 +93,19 @@ func newInterceptorEnv(db *clients.Database, cfg *config.AppConfig, docDB databa
 		{Method: MethodAnalyticsServerIngest, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
 			AdminRoles: []domainauth.AdminRole{domainauth.AdminRoleMember, domainauth.AdminRoleAdmin, domainauth.AdminRoleOwner},
 			Scope:      &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeWrite}},
+		// Analytics 查询面六 RPC（PR3）：admin 会话全角色 + analytics:read。
+		{Method: MethodAnalyticsGetOverview, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
+			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
+		{Method: MethodAnalyticsListDefinitions, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
+			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
+		{Method: MethodAnalyticsQueryTimeseries, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
+			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
+		{Method: MethodAnalyticsQueryBreakdown, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
+			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
+		{Method: MethodAnalyticsQueryRetention, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
+			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
+		{Method: MethodAnalyticsListUserEvents, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
+			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
 	})
 	if err != nil {
 		return nil, err

@@ -11,11 +11,15 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// analyticsEventsTable / analyticsEventDefinitionsTable 是项目 schema 内的
 // analytics 表名（迁移 000019）；表名经 ModelTableExpr 以 schema 限定。
+// rollup 三表名（analytics_query_repo 消费）一并登记于此。
 const (
 	analyticsEventsTable           = "analytics_events"
 	analyticsEventDefinitionsTable = "analytics_event_definitions"
+	analyticsDailyTable            = "analytics_daily"
+	analyticsUserDaysTable         = "analytics_user_days"
+	analyticsUserFirstSeenTable    = "analytics_user_first_seen"
+	analyticsUserDeletionsTable    = "analytics_user_deletions"
 )
 
 var _ analytics.IngestRepository = (*AnalyticsIngestRepository)(nil)

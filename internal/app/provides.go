@@ -48,4 +48,6 @@ var ProviderSet = wire.NewSet(
 	// Analytics 摄入用例（PR2 摄入链）：repo 经 infra bind、计量经
 	// domainbilling.UsageCounter 注入。
 	analytics.NewIngest,
+	// Analytics 查询用例（PR3 查询面）：六查询 RPC 的护栏/择路/source 标注。
+	analytics.NewQuery,
 )

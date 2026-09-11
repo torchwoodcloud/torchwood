@@ -40,7 +40,10 @@ var ProviderSet = wire.NewSet(
 	bunrepo.NewMembershipRepository,
 	bunrepo.NewBucketRepository,
 	bunrepo.NewFileRepository,
-	// Analytics 摄入仓储（PR2 摄入链；项目 schema analytics_* 表）。
+	// Analytics 摄入仓储（PR2 摄入链；项目 schema analytics_* 表）+ 查询仓储
+	//（PR3 查询面）。
 	bunrepo.NewAnalyticsIngestRepository,
 	wire.Bind(new(analytics.IngestRepository), new(*bunrepo.AnalyticsIngestRepository)),
+	bunrepo.NewAnalyticsQueryRepository,
+	wire.Bind(new(analytics.QueryRepository), new(*bunrepo.AnalyticsQueryRepository)),
 )
