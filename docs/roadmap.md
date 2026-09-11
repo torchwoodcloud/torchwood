@@ -355,7 +355,7 @@ v2 **不是**「把 Appwrite 剩下的模块搬过来」。Agent 叙事（MCP、
 | 任务 | 说明 | 关键组件 |
 |------|------|----------|
 | 速率限制 | 按 IP / user / API Key | `pkg/ratelimit` + Redis |
-| 审计日志 | 已落地：拦截器全量写入 + 结构化变更记录（client/request/changes）+ `AuditLogsService` 查询（Console/CLI/SDK 消费），见 `docs/developer/09-api-guide.md` §12 | `internal/api/interceptor/audit.go` + `proto/server/v1/audit_logs.proto` |
+| 审计日志 | 已落地：拦截器按噪声治理范围写入（管理面写操作 + client 安全动作；读浏览/探针/数据面高频不记）+ 结构化变更记录（client/request/changes）+ `AuditLogsService` 查询（Console/CLI/SDK 消费），见 `docs/developer/09-api-guide.md` §12 | `internal/api/interceptor/audit.go` + `proto/server/v1/audit_logs.proto` |
 | API Key 轮换 | secret 重新生成 | `/v1/server/api-keys/{id}/rotate` |
 | 邮箱变更 staging | P1 遗留 B1：新邮箱验证前旧邮箱仍可用 | Account use-case |
 | Worker 重试持久化 | P1 遗留 B2：attempt 写入 payload | `cmd/worker` |

@@ -255,7 +255,7 @@ CLI 调用：`torchwood outbox list-dead --project <id>` / `torchwood rpc /torch
 
 ## 12 审计日志（AuditLogsService + 拦截器结构化记录）
 
-写入侧在 gRPC 审计拦截器（`internal/api/interceptor/audit.go`，全量 unary 落 `audit_logs`）；`AuditLogsService`（`proto/server/v1/audit_logs.proto`）只提供读取：
+写入侧在 gRPC 审计拦截器（`internal/api/interceptor/audit.go`，`auditRowEligible` 噪声治理准入：管理面写操作 + client 面 AccountService 安全动作落库；读浏览/框架探针/数据面高频不记，拒绝与限速审计不经此门、全部保留）；`AuditLogsService`（`proto/server/v1/audit_logs.proto`）只提供读取：
 
 - **鉴权**：`admin_roles:[ADMIN_ROLE_ADMIN,ADMIN_ROLE_OWNER]` + `api_key_scope:{audit_logs, read}`（scope 词表 `SCOPE_RESOURCE_AUDIT_LOGS=13`）。项目上下文来自凭证（admin 需 `X-Torchwood-Project`，否则 FailedPrecondition，对齐 outbox）；`include_platform`（并入 `project_id IS NULL` 平台级行）与 `all_projects`（跨项目视图）仅平台 admin。
 - **结构化 metadata（非文本，机器可读）**：`client`（通道推导：凭证类型 + UA 自报——CLI/SDK 经 SDK `WithUserAgent("torchwood-cli/<ver>")` 等注入，console/function/user/api）；`request`（管理面非读方法的脱敏请求摘要：protojson presence 语义使更新类请求只含被改字段；敏感字段名打码 `[REDACTED]`、bytes/超长串截断、整体 ≤8KB）；`changes`（app 用例经 `contexts.SetAuditMetadata` 回填的 `{"字段":{from,to}}` before/after diff，试点 Functions Update）。

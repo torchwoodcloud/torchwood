@@ -29,16 +29,68 @@ func TestAuditSummaryEligible(t *testing.T) {
 		{"/torchwood.server.v1.UsersService/DeleteUser", true},
 		{"/torchwood.server.v1.OutboxService/ReplayDeadLetter", true},
 		{"/torchwood.console.v1.ConsoleAuthService/SignIn", true},
-		// 读方法跳过。
+		// 读方法跳过（Check 为读动词：健康检查）。
 		{"/torchwood.server.v1.UsersService/ListUsers", false},
 		{"/torchwood.server.v1.UsersService/GetUser", false},
-		{"/torchwood.server.v1.HealthService/Check", true}, // 未知动词偏向多记
+		{"/torchwood.server.v1.HealthService/Check", false},
 		// client 数据面不记请求内容。
 		{"/torchwood.client.v1.DatabasesService/CreateDocument", false},
 		{"/torchwood.client.v1.FunctionsService/InvokeFunction", false},
 	}
 	for _, c := range cases {
 		require.Equal(t, c.want, auditSummaryEligible(c.method), c.method)
+	}
+}
+
+// TestAuditRowEligible 噪声治理准入表：日常无害操作（读浏览/框架探针/
+// 数据面高频/例行刷新）不落审计行；管理面写与 client 面安全动作保留。
+func TestAuditRowEligible(t *testing.T) {
+	cases := []struct {
+		method string
+		want   bool
+	}{
+		// 框架内置：监控/探针轮询，不记。
+		{"/grpc.health.v1.Health/Check", false},
+		{"/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo", false},
+		// 管理面写：记。
+		{"/torchwood.server.v1.UsersService/CreateUser", true},
+		{"/torchwood.server.v1.UsersService/DeleteUser", true},
+		{"/torchwood.server.v1.FunctionsService/UpdateFunction", true},
+		{"/torchwood.console.v1.AdminsService/CreateAdmin", true},
+		{"/torchwood.console.v1.ConsoleAuthService/SignIn", true},
+		// 管理面读（Console/CLI 日常浏览）：不记。
+		{"/torchwood.server.v1.UsersService/ListUsers", false},
+		{"/torchwood.server.v1.UsersService/GetUser", false},
+		{"/torchwood.server.v1.HealthService/Check", false},
+		{"/torchwood.server.v1.HealthService/GetVersion", false},
+		{"/torchwood.console.v1.AdminsService/ListAdmins", false},
+		// client 面：仅 AccountService 非读安全动作。
+		{"/torchwood.client.v1.AccountService/SignIn", true},
+		{"/torchwood.client.v1.AccountService/SignUp", true},
+		{"/torchwood.client.v1.AccountService/SignOut", true},
+		{"/torchwood.client.v1.AccountService/DeleteAccount", true},
+		{"/torchwood.client.v1.AccountService/CreateEmailOTPSession", true},
+		{"/torchwood.client.v1.AccountService/DeleteSession", true},
+		{"/torchwood.client.v1.AccountService/Me", false},
+		{"/torchwood.client.v1.AccountService/ListSessions", false},
+		{"/torchwood.client.v1.AccountService/ListLogs", false},
+		// 例行刷新与偏好：高频无害，不记（异常由拒绝审计覆盖）。
+		{"/torchwood.client.v1.AccountService/RefreshToken", false},
+		{"/torchwood.client.v1.AccountService/UpdatePrefs", false},
+		{"/torchwood.client.v1.AccountService/GetPrefs", false},
+		// client 数据面：审计载体是事件流/业务记录，不记。
+		{"/torchwood.client.v1.DatabasesService/CreateDocument", false},
+		{"/torchwood.client.v1.DatabasesService/UpdateDocument", false},
+		{"/torchwood.client.v1.FunctionsService/InvokeFunction", false},
+		{"/torchwood.client.v1.FunctionsService/CreateExecution", false},
+		{"/torchwood.client.v1.PaymentsService/CreateOrder", false},
+		{"/torchwood.client.v1.GroupsService/ListGroupMemberships", false},
+		// 未知命名空间：偏向多记。
+		{"/torchwood.future.v1.ThingsService/DoThing", true},
+		{"/test/Ok", true},
+	}
+	for _, c := range cases {
+		require.Equal(t, c.want, auditRowEligible(c.method), c.method)
 	}
 }
 
@@ -177,21 +229,48 @@ func TestUnaryAuditMiddleware_StructuredMetadata(t *testing.T) {
 	require.Equal(t, map[string]any{"from": 10, "to": 20}, changes["client_per_user_limit"])
 }
 
-// TestUnaryAuditMiddleware_NoRequestSummaryForReads：读方法与 client 面不落
-// request 摘要，channel 推导照常。
-func TestUnaryAuditMiddleware_NoRequestSummaryForReads(t *testing.T) {
-	repo := &auditCaptureRepo{}
-	a := NewAuditInterceptor(repo)
+// TestUnaryAuditMiddleware_NoiseOpsNotAudited：日常无害操作（管理面读浏览、
+// client 面 Me/数据面、例行刷新）不落审计行——噪声治理的中间件级验证。
+func TestUnaryAuditMiddleware_NoiseOpsNotAudited(t *testing.T) {
 	ctx := contexts.WithPrincipal(context.Background(), &shared.Principal{
 		CredentialType: shared.CredentialTypeSession,
 	})
-	info := &grpc.UnaryServerInfo{FullMethod: "/torchwood.server.v1.UsersService/ListUsers"}
+	for _, method := range []string{
+		"/torchwood.server.v1.UsersService/ListUsers", // 管理面读
+		"/torchwood.server.v1.HealthService/Check",    // 健康检查
+		"/grpc.health.v1.Health/Check",                // 框架探针
+		"/torchwood.client.v1.AccountService/Me",      // 高频自查
+		"/torchwood.client.v1.AccountService/RefreshToken",
+		"/torchwood.client.v1.DatabasesService/CreateDocument", // 数据面
+	} {
+		repo := &auditCaptureRepo{}
+		a := NewAuditInterceptor(repo)
+		info := &grpc.UnaryServerInfo{FullMethod: method}
+		_, err := a.UnaryAuditMiddleware(ctx, &sharedv1.ListRequest{}, info, func(context.Context, any) (any, error) {
+			return "resp", nil
+		})
+		require.NoError(t, err)
+		require.Empty(t, repo.entries, "%s 不应落审计行", method)
+	}
+}
+
+// TestUnaryAuditMiddleware_ClientSecurityOpsAudited：client 面安全动作
+// （登录族）保留审计行——action 级（无 request 摘要）+ channel 推导照常，
+// 端用户账号日志（GET /v1/account/logs）的数据来源。
+func TestUnaryAuditMiddleware_ClientSecurityOpsAudited(t *testing.T) {
+	repo := &auditCaptureRepo{}
+	a := NewAuditInterceptor(repo)
+	ctx := contexts.WithPrincipal(context.Background(), &shared.Principal{
+		CredentialType: shared.CredentialTypeToken,
+	})
+	info := &grpc.UnaryServerInfo{FullMethod: "/torchwood.client.v1.AccountService/SignIn"}
 	_, err := a.UnaryAuditMiddleware(ctx, &sharedv1.ListRequest{}, info, func(context.Context, any) (any, error) {
 		return "resp", nil
 	})
 	require.NoError(t, err)
 	require.Len(t, repo.entries, 1)
 	e := repo.entries[0]
-	require.NotContains(t, e.Metadata, "request")
-	require.Equal(t, map[string]any{"channel": "console"}, e.Metadata["client"])
+	require.Equal(t, "success", e.Status)
+	require.NotContains(t, e.Metadata, "request", "client 面无请求摘要")
+	require.Equal(t, map[string]any{"channel": "user"}, e.Metadata["client"])
 }

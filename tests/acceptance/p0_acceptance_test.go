@@ -109,14 +109,15 @@ func TestP0_Section7_AuditLogs(t *testing.T) {
 	env, err := testutil.NewInterceptorEnv(db, cfg, docDB)
 	require.NoError(t, err)
 
-	apiSecret, keyCleanup := testutil.CreateTestAPIKey(ctx, db, projectID, []string{"users"})
+	apiSecret, keyCleanup := testutil.CreateTestAPIKey(ctx, db, projectID, []string{"users", "assets"})
 	defer keyCleanup()
 
 	before, err := env.AuditLogCount(ctx)
 	require.NoError(t, err)
 
-	// §7.1 authenticated call writes audit_logs row.
-	err = env.InvokeUnary(ctx, testutil.MethodListUsers, metadata.Pairs("x-api-key", apiSecret))
+	// §7.1 authenticated write call writes audit_logs row（噪声治理：管理面
+	// 写操作是审计主体）。
+	err = env.InvokeUnary(ctx, testutil.MethodAssetsGrant, metadata.Pairs("x-api-key", apiSecret))
 	require.NoError(t, err)
 
 	after, err := env.AuditLogCount(ctx)
@@ -126,7 +127,7 @@ func TestP0_Section7_AuditLogs(t *testing.T) {
 	// §7.2 latest row has action/status/actor fields.
 	log, err := env.LatestAuditLog(ctx)
 	require.NoError(t, err)
-	require.Equal(t, testutil.MethodListUsers, log.Action)
+	require.Equal(t, testutil.MethodAssetsGrant, log.Action)
 	require.Equal(t, "success", log.Status)
 	require.NotEmpty(t, log.ActorID)
 	require.NotEmpty(t, log.ActorKind)
@@ -136,7 +137,7 @@ func TestP0_Section7_AuditLogs(t *testing.T) {
 	defer ownerCleanup()
 	ownerToken, err := testutil.SignAdminToken(cfg, owner)
 	require.NoError(t, err)
-	require.NoError(t, env.InvokeUnary(ctx, testutil.MethodListUsers, metadata.Pairs(
+	require.NoError(t, env.InvokeUnary(ctx, testutil.MethodAssetsGrant, metadata.Pairs(
 		"authorization", "Bearer "+ownerToken,
 		"X-Torchwood-Project", projectID,
 	)))
@@ -145,7 +146,15 @@ func TestP0_Section7_AuditLogs(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, projectID, log.ProjectID)
 
-	// §7.4 public health must succeed; audit is best-effort and must not fail the request.
+	// §7.4 read browsing writes no audit row（日常读操作=噪声，不落库）。
+	before, err = env.AuditLogCount(ctx)
+	require.NoError(t, err)
+	require.NoError(t, env.InvokeUnary(ctx, testutil.MethodListUsers, metadata.Pairs("x-api-key", apiSecret)))
+	after, err = env.AuditLogCount(ctx)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+
+	// §7.5 public health must succeed; audit is best-effort and must not fail the request.
 	err = env.InvokeUnary(ctx, testutil.MethodHealthCheck, metadata.Pairs())
 	require.NoError(t, err)
 }

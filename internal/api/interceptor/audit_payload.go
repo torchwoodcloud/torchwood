@@ -30,10 +30,11 @@ var auditSummaryNamespaces = []string{
 	"/torchwood.console.v1.",
 }
 
-// auditReadMethodPrefixes：读方法跳过（读请求内容只有噪声）；未知动词一律
-// 记录——偏向多记（漏记不可补，多记可过滤）。
+// auditReadMethodPrefixes：读动词前缀（行级准入与请求摘要共用——读操作是
+// 日常浏览，既不落审计行也不含请求摘要）；未知动词一律记录——偏向多记
+// （漏记不可补，多记可过滤）。
 var auditReadMethodPrefixes = []string{
-	"List", "Get", "Health", "Count", "Search", "Stats", "Describe", "Ping", "Watch",
+	"List", "Get", "Health", "Count", "Search", "Stats", "Describe", "Ping", "Watch", "Check",
 }
 
 // auditSensitiveFieldPatterns：字段名归一（小写、去 _/-）后 contains 命中即
@@ -81,6 +82,27 @@ func auditRequestSummary(fullMethod string, req any) string {
 	return string(out[:cut]) + auditTruncationSuffix
 }
 
+// splitFullMethod 解析 "/pkg.Service/Method" → ("pkg.Service", "Method")；
+// 非法形态返回空串。
+func splitFullMethod(fullMethod string) (service, method string) {
+	rest := strings.TrimPrefix(fullMethod, "/")
+	idx := strings.LastIndex(rest, "/")
+	if idx < 0 {
+		return "", ""
+	}
+	return rest[:idx], rest[idx+1:]
+}
+
+// isReadVerb 判定方法名是否读动词（auditReadMethodPrefixes 前缀匹配）。
+func isReadVerb(method string) bool {
+	for _, prefix := range auditReadMethodPrefixes {
+		if strings.HasPrefix(method, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // auditSummaryEligible 判定方法是否记录请求摘要：管理面命名空间 + 非读动词。
 func auditSummaryEligible(fullMethod string) bool {
 	ns := false
@@ -93,19 +115,8 @@ func auditSummaryEligible(fullMethod string) bool {
 	if !ns {
 		return false
 	}
-	// FullMethod 形如 /torchwood.server.v1.UsersService/ListUsers：
-	// 取最后一个 "/" 之后的方法名。
-	idx := strings.LastIndex(fullMethod, "/")
-	if idx < 0 || idx+1 >= len(fullMethod) {
-		return false
-	}
-	verb := fullMethod[idx+1:]
-	for _, prefix := range auditReadMethodPrefixes {
-		if strings.HasPrefix(verb, prefix) {
-			return false
-		}
-	}
-	return true
+	_, method := splitFullMethod(fullMethod)
+	return !isReadVerb(method)
 }
 
 // sanitizeAuditValue 递归脱敏任意 JSON 树（来自 protojson 反序列化）：

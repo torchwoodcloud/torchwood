@@ -13,9 +13,11 @@ import "shared/v1/authz.proto";
 import "shared/v1/common.proto";
 
 // AuditLogsService 查询审计日志（roadmap §3.4「管理面写操作可查」）。
-// 写入侧由 gRPC 审计拦截器全量落库（internal/api/interceptor/audit.go），
-// 本服务只提供管理面读取：项目内 admin/owner 或持有 audit_logs.read 的
-// API key；平台 admin 可额外查看平台级行与跨项目视图。
+// 写入侧由 gRPC 审计拦截器按噪声治理后的范围落库（管理面写操作 +
+// client 面 AccountService 安全动作；读浏览/框架探针/数据面高频不记，
+// 拒绝与限速审计保留），本服务只提供管理面读取：项目内 admin/owner 或
+// 持有 audit_logs.read 的 API key；平台 admin 可额外查看平台级行与跨项目
+// 视图。
 option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   security_definitions: {
     security: {

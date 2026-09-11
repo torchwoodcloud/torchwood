@@ -3,6 +3,7 @@ package interceptor
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
@@ -13,15 +14,56 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// auditExemptMethods 是审计豁免方法清单：这些 RPC 的审计载体不是本拦截器的
-// audit_logs 行，而是业务记录本身——重复写审计只会双轨冗余。
+// auditFrameworkPrefixes 是不落审计的 gRPC 框架内置服务（监控/探针高频
+// 轮询，纯噪声）。
+var auditFrameworkPrefixes = []string{
+	"/grpc.health.v1.",
+	"/grpc.reflection.",
+}
+
+// auditSilentClientMethods 是 client 面 AccountService 中的高频无害动作：
+// 例行 token 刷新与偏好读写是"日常无害操作"（每活跃用户 15 分钟一次的
+// RefreshToken 是最大的单点噪声源），不构成审计事件——异常场景（失效/
+// 被盗凭证）由 auth 层拒绝审计覆盖。Me 是高频自查读（动词不带读前缀，
+// 显式列出）。
+var auditSilentClientMethods = map[string]bool{
+	"/torchwood.client.v1.AccountService/RefreshToken": true,
+	"/torchwood.client.v1.AccountService/GetPrefs":     true,
+	"/torchwood.client.v1.AccountService/UpdatePrefs":  true,
+	"/torchwood.client.v1.AccountService/Me":           true,
+}
+
+// auditRowEligible 判定一次 unary 调用是否落 audit_logs 行（噪声治理：
+// 日常无害操作不进审计——量大且无安全价值）：
+//   - 框架内置服务（grpc.health.v1/grpc.reflection）：不记；
+//   - 管理面（server.v1/console.v1）：仅非读方法（读方法=Console/CLI 的
+//     日常浏览查询，噪声）；
+//   - client 面：仅 AccountService 的非读安全动作（登录/登出/账号与凭证
+//     变更——端用户账号日志 GET /v1/account/logs 的数据来源）。其余
+//     client 服务（文档/函数执行/支付/资产等数据面）的审计载体是事件流
+//     与业务记录（如 function_executions），不在此重复记账；
+//   - 未知命名空间：偏向多记（未来新增面默认可审计，豁免需显式登记）。
 //
-//   - /torchwood.client.v1.FunctionsService/InvokeFunction（P2 客户端调用面）：
-//     审计载体 = function_executions 行（含 trigger_source='client'、
-//     invoking_user_id、idempotency key；设计 §6 约束③ / §4）——同步审计写
-//     在热路径上的成本也已由 P0.5 清账约束排除。
-var auditExemptMethods = map[string]bool{
-	"/torchwood.client.v1.FunctionsService/InvokeFunction": true,
+// 拒绝（auth 层 writeDenyAudit）与登录限速审计不经此门，全部保留——
+// 它们是安全信号而非噪声。
+func auditRowEligible(fullMethod string) bool {
+	for _, prefix := range auditFrameworkPrefixes {
+		if strings.HasPrefix(fullMethod, prefix) {
+			return false
+		}
+	}
+	_, verb := splitFullMethod(fullMethod)
+	switch {
+	case strings.HasPrefix(fullMethod, "/torchwood.server.v1."), strings.HasPrefix(fullMethod, "/torchwood.console.v1."):
+		return !isReadVerb(verb)
+	case strings.HasPrefix(fullMethod, "/torchwood.client.v1."):
+		if !strings.HasPrefix(fullMethod, "/torchwood.client.v1.AccountService/") || auditSilentClientMethods[fullMethod] {
+			return false
+		}
+		return !isReadVerb(verb)
+	default:
+		return true
+	}
 }
 
 type AuditInterceptor struct {
@@ -50,9 +92,10 @@ func (a *AuditInterceptor) WithTrustedProxies(trusted *TrustedProxies) *AuditInt
 }
 
 func (a *AuditInterceptor) UnaryAuditMiddleware(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	// 审计豁免清单：载体在业务记录的方法直接透传（WithAuditResource 仍写入，
-	// 供 handler 内其他用途）。
-	if auditExemptMethods[info.FullMethod] {
+	// 噪声治理准入：日常无害操作（读浏览/框架探针/数据面高频）不落审计行
+	// （判定语义见 auditRowEligible）。原 InvokeFunction 豁免（审计载体=
+	// function_executions）已被 client 面规则覆盖。
+	if !auditRowEligible(info.FullMethod) {
 		return handler(ctx, req)
 	}
 	// 预置审计资源/元数据可变持有者：handler 内的 WithAuditResource/
