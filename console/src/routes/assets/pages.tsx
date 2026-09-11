@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
@@ -238,8 +238,14 @@ export function AssetDefDetailPage() {
 
 export function UserAssetsPage() {
   const { projectId } = useAuth();
-  const [ownerId, setOwnerId] = useState("");
-  const [queryOwner, setQueryOwner] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  // 查询目标以 URL owner 参数为事实源：支持 /console/assets/users?owner=<id> 直达（用户详情页入口跳入）。
+  const queryOwner = searchParams.get("owner")?.trim() ?? "";
+  const [ownerId, setOwnerId] = useState(queryOwner);
+
+  useEffect(() => {
+    setOwnerId(queryOwner);
+  }, [queryOwner]);
 
   const holdings = useQuery({
     queryKey: ["user-assets", projectId, queryOwner],
@@ -252,6 +258,11 @@ export function UserAssetsPage() {
     enabled: !!projectId && !!queryOwner,
   });
 
+  const submit = () => {
+    const v = ownerId.trim();
+    setSearchParams(v ? { owner: v } : {});
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -259,18 +270,26 @@ export function UserAssetsPage() {
           <CardTitle>查询用户资产</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-3">
-          <div className="space-y-2 min-w-[240px]">
-            <Label htmlFor="owner">用户 ID</Label>
-            <Input
-              id="owner"
-              value={ownerId}
-              onChange={(e) => setOwnerId(e.target.value)}
-              placeholder="user id"
-            />
-          </div>
-          <Button onClick={() => setQueryOwner(ownerId.trim())} disabled={!ownerId.trim()}>
-            查询
-          </Button>
+          <form
+            className="flex flex-wrap items-end gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit();
+            }}
+          >
+            <div className="space-y-2 min-w-[240px]">
+              <Label htmlFor="owner">用户 ID</Label>
+              <Input
+                id="owner"
+                value={ownerId}
+                onChange={(e) => setOwnerId(e.target.value)}
+                placeholder="user id"
+              />
+            </div>
+            <Button type="submit" disabled={!ownerId.trim()}>
+              查询
+            </Button>
+          </form>
           <Button variant="outline" asChild>
             <Link to="/console/assets">返回定义</Link>
           </Button>

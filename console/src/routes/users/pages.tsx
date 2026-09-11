@@ -365,6 +365,20 @@ export function UserDetailPage() {
       actions={
         <div className="flex gap-2">
           {platformAdmin && (
+            <Button asChild size="sm" variant="outline">
+              <Link to={`/console/assets/users?owner=${encodeURIComponent(user.id)}`}>
+                用户资产
+              </Link>
+            </Button>
+          )}
+          {platformAdmin && (
+            <Button asChild size="sm" variant="outline">
+              <Link to={`/console/subscriptions?q=${encodeURIComponent(user.id)}`}>
+                用户订阅
+              </Link>
+            </Button>
+          )}
+          {platformAdmin && (
             <Button size="sm" onClick={() => issueToken.mutate(user.id)} disabled={issueToken.isPending}>
               模拟登录
             </Button>

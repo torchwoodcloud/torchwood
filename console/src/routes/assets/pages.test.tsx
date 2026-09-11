@@ -21,7 +21,7 @@ vi.mock("@/api/assets", () => ({
   listUserLedger: vi.fn(),
 }));
 
-import { listAssetDefs } from "@/api/assets";
+import { listAssetDefs, listUserAssets, listUserLedger } from "@/api/assets";
 
 function wrap(ui: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -60,6 +60,10 @@ describe("AssetDefsListPage", () => {
 });
 
 describe("UserAssetsPage", () => {
+  beforeEach(() => {
+    vi.mocked(listUserAssets).mockReset();
+    vi.mocked(listUserLedger).mockReset();
+  });
   afterEach(() => cleanup());
 
   it("只读查询表单，无资产写按钮", () => {
@@ -68,5 +72,24 @@ describe("UserAssetsPage", () => {
     expect(screen.getByText("查询")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /grant/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /consume/i })).toBeNull();
+  });
+
+  it("URL owner 参数直达查询（用户详情页跳入）", async () => {
+    vi.mocked(listUserAssets).mockResolvedValue([
+      { id: "h1", def_id: "d1", def_code: "gold", class: "currency", quantity: "100" },
+    ]);
+    vi.mocked(listUserLedger).mockResolvedValue([]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/console/assets/users?owner=u1"]}>
+          <UserAssetsPage />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    expect(await screen.findByText(/gold/)).toBeTruthy();
+    expect(listUserAssets).toHaveBeenCalledWith("u1");
+    expect(listUserLedger).toHaveBeenCalledWith("u1");
+    expect((screen.getByLabelText("用户 ID") as HTMLInputElement).value).toBe("u1");
   });
 });
