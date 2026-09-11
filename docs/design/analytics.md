@@ -1,7 +1,7 @@
 # Analytics：内置事件分析
 
-> 状态：**已批准（2026-09-11；七项 owner 决策 + D1–D15 经三路独立设计交叉验证）**  
-> 执行计划：`docs/design/analytics-execution-plan.md`  
+> 状态：**已实现（2026-09-12；分支 feat/analytics，PR1–PR6 全部合入并通过终验）**  
+> 执行计划：`docs/design/analytics-execution-plan.md`（全切片完成）  
 > 日期：2026-09-11  
 > 驱动场景：Torchwood 自营微信小游戏运营分析（狗粮消费者，不进设计输入——本稿为通用 BaaS 能力）
 
