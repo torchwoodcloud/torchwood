@@ -1,23 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
-  <defs>
-    <linearGradient id="tw-bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#141A2C"/>
-      <stop offset="1" stop-color="#0C111F"/>
-    </linearGradient>
-    <radialGradient id="tw-glow" cx="0.5" cy="0.45" r="0.55">
-      <stop stop-color="#FFB020" stop-opacity=".3"/>
-      <stop offset="1" stop-color="#FFB020" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="tw-flame" x1="32" y1="9" x2="32" y2="41" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFE08A"/>
-      <stop offset=".55" stop-color="#FFB020"/>
-      <stop offset="1" stop-color="#FF8A00"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="14" fill="url(#tw-bg)"/>
-  <ellipse cx="32" cy="30" rx="22" ry="21" fill="url(#tw-glow)"/>
-  <path fill="url(#tw-flame)" d="M32 9c6.5 8 11.5 13.6 11.5 20.4a11.5 11.5 0 0 1-23 0C20.5 22.6 25.5 17 32 9z"/>
-  <path fill="#0C111F" d="M32 24c3 3.9 5.4 6.7 5.4 9.9a5.4 5.4 0 0 1-10.8 0c0-3.2 2.4-6 5.4-9.9z"/>
-  <rect x="28.5" y="42.5" width="7" height="11.5" rx="3.5" fill="#FFB020"/>
-  <rect x="24" y="44" width="16" height="3.5" rx="1.75" fill="#E05010"/>
+  <!-- Torchwood favicon — v10 日光橙（docs/brand/torchwood-mark-badge-dark.svg 的 64 网格版） -->
+  <rect width="64" height="64" rx="14" fill="#431407"/>
+  <path fill="#FB923C" fill-rule="evenodd"
+        d="M37.25 7.75 C38.75 15.25 42 21 43.5 29.4 a11.5 11.5 0 0 1 -23 0 C22 19.5 26.5 9.75 37.25 7.75 Z
+           M34.25 22.5c3 3.9 5.4 6.7 5.4 9.9a5.4 5.4 0 0 1-10.8 0c0-3.2 2.4-6 5.4-9.9z"/>
+  <path fill="#FFEDD5" d="M27.875 41.25 L28.625 54.5 Q28.625 57.5 31.625 57.5 L32.375 57.5 Q35.375 57.5 35.375 54.5 L36.125 41.25 Z"/>
+  <path stroke="#FFEDD5" stroke-width="3.25" stroke-linecap="round" stroke-linejoin="round" fill="none"
+        d="M20.5 43 L25.75 50.5 L29.25 43 L34.75 43 L38.25 50.5 L43.5 43"/>
 </svg>

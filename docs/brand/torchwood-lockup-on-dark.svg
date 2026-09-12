@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="128" viewBox="0 0 480 128" fill="none">
+  <!-- Torchwood horizontal lockup for DARK surfaces -->
+  <g transform="translate(20 28) scale(1.125)">
+    <rect width="64" height="64" rx="14" fill="#FFF7ED"/>
+    <path fill="#EA580C" fill-rule="evenodd"
+          d="M37.25 7.75 C38.75 15.25 42 21 43.5 29.4 a11.5 11.5 0 0 1 -23 0 C22 19.5 26.5 9.75 37.25 7.75 Z
+             M34.25 22.5c3 3.9 5.4 6.7 5.4 9.9a5.4 5.4 0 0 1-10.8 0c0-3.2 2.4-6 5.4-9.9z"/>
+    <path fill="#C2410C" d="M27.875 41.25 L28.625 54.5 Q28.625 57.5 31.625 57.5 L32.375 57.5 Q35.375 57.5 35.375 54.5 L36.125 41.25 Z"/>
+    <path stroke="#C2410C" stroke-width="3.25" stroke-linecap="round" stroke-linejoin="round" fill="none"
+          d="M20.5 43 L25.75 50.5 L29.25 43 L34.75 43 L38.25 50.5 L43.5 43"/>
+  </g>
+  <text x="118" y="78" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="52" font-weight="800" letter-spacing="-1" fill="#FFF7ED">Torchwood</text>
+  <text x="122" y="102" font-family="'JetBrains Mono', 'Cascadia Code', 'SFMono-Regular', Consolas, monospace" font-size="12" font-weight="600" letter-spacing="3.5" fill="#FDBA74">AI-NATIVE BACKEND AS A SERVICE</text>
+</svg>

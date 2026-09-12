@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="480" height="128" viewBox="0 0 480 128" fill="none">
-  <!-- Torchwood 官方横版标志 · v10 日光橙（源文件与规范见 docs/brand/） -->
+  <!-- Torchwood horizontal lockup for LIGHT surfaces (drop-in successor of root logo.svg) -->
   <g transform="translate(20 28) scale(1.125)">
     <rect width="64" height="64" rx="14" fill="#C2410C"/>
     <path fill="#FDBA74" fill-rule="evenodd"

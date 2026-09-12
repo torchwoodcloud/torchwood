@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <!-- Torchwood v10 — flat minimal / light badge
+       Two colours only: ink #17181A + signal orange #FF4D00
+       No gradient, no glow, no spark; fire core is negative space -->
+  <rect width="512" height="512" rx="112" fill="#FFF7ED"/>
+  <path fill="#F97316" fill-rule="evenodd"
+        d="M298 62 C310 122 336 168 348 235.2 A92 92 0 0 1 164 235.2 C176 156 212 78 298 62 Z
+           M274 180c24 31.2 43.2 53.6 43.2 79.2a43.2 43.2 0 0 1-86.4 0c0-25.6 19.2-48 43.2-79.2z"/>
+  <path fill="#C2410C" d="M223 330 L229 436 Q229 460 253 460 L259 460 Q283 460 283 436 L289 330 Z"/>
+  <path stroke="#C2410C" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" fill="none"
+        d="M164 344 L206 404 L234 344 L278 344 L306 404 L348 344"/>
+</svg>

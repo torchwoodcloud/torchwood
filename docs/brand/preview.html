@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #2a2d33; padding: 28px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 330px); gap: 26px; width: max-content; }
+  .tile { width: 330px; height: 330px; display: flex; align-items: center; justify-content: center; border-radius: 18px; position: relative; }
+  .tile span { position: absolute; left: 14px; top: 10px; font-size: 13px; color: #9aa0ab; z-index: 1; }
+  .navy   { background: linear-gradient(135deg, #7c2d12, #431407); }
+  .neutral  { background: #431407; }
+  .charcoal { background: #7c2d12; }
+  .white  { background: #ffffff; }
+  .offwhite { background: #fff7ed; }
+  .navyflat { background: #431407; }
+  .checker { background: conic-gradient(#cfd2d8 0 25%, #ffffff 0 50%, #cfd2d8 0 75%, #ffffff 0) 0 0/28px 28px; }
+  .row2 { display: flex; gap: 26px; margin-top: 26px; width: max-content; }
+  .lockup-tile { width: 530px; height: 190px; display: flex; align-items: center; justify-content: center; border-radius: 18px; position: relative; }
+  .lockup-tile img { width: 470px; }
+  .small { display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center; }
+  .small-row { display: flex; gap: 22px; align-items: flex-end; }
+  .small-row img { display: block; }
+  .small .lbl { font-size: 12px; color: #9aa0ab; text-align: center; margin-top: 6px; }
+  .cmp { display: flex; align-items: center; gap: 30px; }
+  .cmp .arrow { font-size: 30px; color: #9aa0ab; }
+  .swatches { display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
+  .sw { display: flex; align-items: center; gap: 12px; color: #c9cdd4; font-size: 14px; }
+  .chip { width: 34px; height: 34px; border-radius: 9px; border: 1px solid rgba(255,255,255,.14); }
+</style>
+</head>
+<body>
+  <div class="grid">
+    <div class="tile neutral cmp"><span>console favicon（现状）→ 新标志</span>
+      <img src="../../console/public/favicon.svg" width="190">
+      <div class="arrow">→</div>
+      <img src="torchwood-mark-badge-dark.svg" width="190">
+    </div>
+    <div class="tile offwhite"><span>badge / light</span><img src="torchwood-mark-badge-light.svg" width="290"></div>
+    <div class="tile checker"><span>mono / currentColor (transparent)</span><img src="torchwood-mark-mono.svg" width="200" style="color:#C2410C"></div>
+  </div>
+  <div class="row2">
+    <div class="tile charcoal"><span>transparent mark / on-dark</span><img src="torchwood-mark-on-dark.svg" width="230"></div>
+    <div class="tile white"><span>transparent mark / on-light</span><img src="torchwood-mark-on-light.svg" width="230"></div>
+    <div class="tile navy small"><span>small sizes (badge/dark)</span>
+      <div class="small-row">
+        <div><img src="torchwood-mark-badge-dark.svg" width="96"><div class="lbl">96</div></div>
+        <div><img src="torchwood-mark-badge-dark.svg" width="64"><div class="lbl">64</div></div>
+        <div><img src="torchwood-mark-badge-dark.svg" width="48"><div class="lbl">48</div></div>
+        <div><img src="torchwood-mark-badge-dark.svg" width="32"><div class="lbl">32</div></div>
+        <div><img src="torchwood-mark-badge-dark.svg" width="24"><div class="lbl">24</div></div>
+      </div>
+      <div class="small-row" style="margin-top:8px">
+        <div><img src="torchwood-mark-badge-light.svg" width="48"><div class="lbl">light 48</div></div>
+        <div><img src="torchwood-mark-badge-light.svg" width="32"><div class="lbl">light 32</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="row2">
+    <div class="tile charcoal"><span>配色系统（双色 + 中性）</span>
+      <div class="swatches">
+        <div class="sw"><div class="chip" style="background:#C2410C"></div>flame-deep 深橙 · #C2410C（柄 / 护手 / 浅底字标）</div>
+        <div class="sw"><div class="chip" style="background:#F97316"></div>ember 主橙 · #F97316 / #FB923C（火焰，浅底 / 深底）</div>
+        <div class="sw"><div class="chip" style="background:#FFF7ED"></div>cream 奶油纸 · #FFF7ED（浅底 / 深底上的体块）</div>
+        <div class="sw"><div class="chip" style="background:#431407"></div>cocoa 深可可 · #431407（深色徽标底）</div>
+        <div class="sw"><div class="chip" style="background:#D97706"></div>muted 暖调副标 · #D97706 / #FDBA74（副标文字）</div>
+        <div class="sw"><div class="chip" style="background:repeating-conic-gradient(#cfd2d8 0 25%, #ffffff 0 50%) 0 0/16px 16px"></div>负形 · 火心 / 气隙透底</div>
+      </div>
+    </div>
+    <div class="tile navyflat" style="width:686px"><span>lockup / on-dark + on-light</span>
+      <div style="display:flex; gap:18px; align-items:center;">
+        <img src="torchwood-lockup-on-dark.svg" width="420">
+        <img src="torchwood-lockup-on-light.svg" width="420" style="background:#ffffff; border-radius:10px; padding:6px 0;">
+      </div>
+    </div>
+  </div>
+</body>
+</html>
