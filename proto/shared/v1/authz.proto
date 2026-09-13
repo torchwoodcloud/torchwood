@@ -58,11 +58,16 @@ enum ScopeResource {
   SCOPE_RESOURCE_ANALYTICS = 15;
 }
 
-// ScopeOp 是 API key scope 的读写方向。
+// ScopeOp 是 API key scope 的权限方向。
+// admin 是配置面方向（2026-09-13 评审裁决）：当某资源存在"热路径凭证与
+// 控制面凭证需最小特权分离"的诉求时按资源 opt-in（首个使用方为
+// leaderboards 的 board 管控——提交分值密钥不得改榜配置）；并非全资源
+// 默认第三档，assets/functions 等仍为 read/write 两档。
 enum ScopeOp {
   SCOPE_OP_UNSPECIFIED = 0;
   SCOPE_OP_READ = 1;
   SCOPE_OP_WRITE = 2;
+  SCOPE_OP_ADMIN = 3;
 }
 
 // APIKeyScope 声明 SERVER 面方法对 API key 凭证开放的 scope 门。

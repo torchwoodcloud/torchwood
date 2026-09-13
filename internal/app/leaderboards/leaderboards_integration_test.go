@@ -3,6 +3,7 @@ package leaderboards
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -421,5 +422,78 @@ func TestIntegration_MeWithoutEntry(t *testing.T) {
 	}
 	if me.Entry != nil || me.Stats.Total != 1 {
 		t.Fatalf("me = %+v, want entry=nil total=1", me)
+	}
+}
+
+// server 面 provisioning 幂等创建：同配置重放 200 返还现状；异配置
+// ALREADY_EXISTS 附字段 diff（漂移信号）。
+func TestIntegration_ProvisionBoardIdempotent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	uc, _, _, admin := newTestUC(t)
+
+	created, err := uc.CreateBoardProvisioning(admin, &domainleaderboards.Board{
+		ID:         "daily_first",
+		PeriodKind: domainleaderboards.PeriodDaily,
+		PeriodTZ:   "Asia/Shanghai",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Sort != domainleaderboards.SortDesc || created.PerSubjectLimit != domainleaderboards.DefaultPerSubjectLimit {
+		t.Fatalf("defaults not applied: %+v", created)
+	}
+
+	// 同配置重放（缺省归一后逐字段相等）→ 返回现状。
+	replayed, err := uc.CreateBoardProvisioning(admin, &domainleaderboards.Board{
+		ID:         "daily_first",
+		PeriodKind: domainleaderboards.PeriodDaily,
+		PeriodTZ:   "Asia/Shanghai",
+	})
+	if err != nil {
+		t.Fatalf("replay should succeed: %v", err)
+	}
+	// created 是插入时的内存值（纳秒精度），replayed 从 PG 读出（微秒精度）。
+	if replayed.CreatedAt.Sub(created.CreatedAt).Abs() > time.Microsecond {
+		t.Fatalf("replay returned a different row: %v vs %v", replayed.CreatedAt, created.CreatedAt)
+	}
+
+	// 异配置重放 → ALREADY_EXISTS + diff。
+	_, err = uc.CreateBoardProvisioning(admin, &domainleaderboards.Board{
+		ID:              "daily_first",
+		PeriodKind:      domainleaderboards.PeriodDaily,
+		PeriodTZ:        "Asia/Shanghai",
+		PerSubjectLimit: 50,
+	})
+	if codeOf(t, err) != codes.AlreadyExists {
+		t.Fatalf("drift replay code = %v, want AlreadyExists: %v", codeOf(t, err), err)
+	}
+	if !strings.Contains(err.Error(), "per_subject_submit_limit") {
+		t.Fatalf("diff missing field: %v", err)
+	}
+}
+
+// 每项目榜配置上限（MaxBoardsPerProject）强制执行；满员时重放既有榜仍成功
+// （重放路径先于上限判定——预置脚本的重复执行零 diff 不因满员劣化）。
+func TestIntegration_BoardCap(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	uc, _, _, admin := newTestUC(t)
+
+	fill := &domainleaderboards.Board{ID: "fill", PeriodKind: domainleaderboards.PeriodNone}
+	for i := 0; i < domainleaderboards.MaxBoardsPerProject; i++ {
+		fill.ID = fmt.Sprintf("fill_%03d", i)
+		if _, err := uc.CreateBoard(admin, fill); err != nil {
+			t.Fatalf("create #%d: %v", i, err)
+		}
+	}
+	_, err := uc.CreateBoardProvisioning(admin, &domainleaderboards.Board{ID: "overflow", PeriodKind: domainleaderboards.PeriodNone})
+	if codeOf(t, err) != codes.ResourceExhausted {
+		t.Fatalf("overflow code = %v, want ResourceExhausted: %v", codeOf(t, err), err)
+	}
+	if _, err := uc.CreateBoardProvisioning(admin, &domainleaderboards.Board{ID: "fill_000", PeriodKind: domainleaderboards.PeriodNone}); err != nil {
+		t.Fatalf("replay at cap should succeed: %v", err)
 	}
 }

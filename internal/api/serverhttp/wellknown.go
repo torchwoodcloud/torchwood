@@ -135,6 +135,7 @@ func buildWellKnownPayload(policies *auth.PolicySet) []byte {
 			"resource": string(res),
 			"read":     vocab.HasOp(res, auth.ScopeRead),
 			"write":    vocab.HasOp(res, auth.ScopeWrite),
+			"admin":    vocab.HasOp(res, auth.ScopeAdmin),
 		})
 	}
 

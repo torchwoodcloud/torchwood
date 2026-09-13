@@ -16,6 +16,162 @@
     "application/json"
   ],
   "paths": {
+    "/v1/server/leaderboards/boards": {
+      "get": {
+        "operationId": "LeaderboardsService_ListLeaderboardBoards",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/torchwoodserverv1ListLeaderboardBoardsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "tags": [
+          "LeaderboardsService"
+        ]
+      },
+      "post": {
+        "summary": "—— board 配置管控（graviton-games 提案 2026-09-13，评审裁决）：预置与\n门禁自动化的控制面。写动词（Create/Update）走 leaderboards.admin——\n与 leaderboards.write 刻意分离：能提交分值的密钥不得改榜配置。Delete\n不进 server 面（条目级联删的破坏性操作留给 console owner 双确认）；\nrewards 不在 Create/Update 消息内（奖励规则编辑仅 console owner）。\nCreate 幂等：已存在且配置逐字段相等（缺省归一后）→ 200 + 现状；\n不等 → ALREADY_EXISTS（附字段 diff）。",
+        "operationId": "LeaderboardsService_CreateLeaderboardBoard",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1LeaderboardBoard"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/torchwoodserverv1CreateLeaderboardBoardRequest"
+            }
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      }
+    },
+    "/v1/server/leaderboards/boards/{board_id}": {
+      "get": {
+        "operationId": "LeaderboardsService_GetLeaderboardBoard",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1LeaderboardBoard"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "board_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      },
+      "patch": {
+        "operationId": "LeaderboardsService_UpdateLeaderboardBoard",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1LeaderboardBoard"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "board_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/torchwoodserverv1LeaderboardsServiceUpdateLeaderboardBoardBody"
+            }
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      }
+    },
+    "/v1/server/leaderboards/boards/{board_id}/periods": {
+      "get": {
+        "operationId": "LeaderboardsService_ListLeaderboardBoardPeriods",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/torchwoodserverv1ListLeaderboardBoardPeriodsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "board_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "LeaderboardsService"
+        ]
+      }
+    },
     "/v1/server/leaderboards/{board_id}/entries/{subject_id}": {
       "get": {
         "operationId": "LeaderboardsService_GetLeaderboardEntry",
@@ -221,6 +377,61 @@
     }
   },
   "definitions": {
+    "torchwoodserverv1CreateLeaderboardBoardRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "sort": {
+          "type": "string",
+          "title": "asc | desc（缺省 desc）"
+        },
+        "tiebreak_order": {
+          "type": "string",
+          "title": "声明单列 tiebreak 及方向（asc | desc）；缺省不声明"
+        },
+        "tie_break": {
+          "type": "string",
+          "title": "parallel | earliest | latest（缺省 parallel）"
+        },
+        "period_kind": {
+          "type": "string",
+          "title": "none | daily | weekly | monthly（缺省 none）"
+        },
+        "period_tz": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string",
+          "title": "best | latest | sum（缺省 best）"
+        },
+        "value_min": {
+          "type": "string",
+          "format": "int64"
+        },
+        "value_max": {
+          "type": "string",
+          "format": "int64"
+        },
+        "client_submit": {
+          "type": "boolean"
+        },
+        "per_subject_submit_limit": {
+          "type": "integer",
+          "format": "int32",
+          "title": "每期每主体提交次数上限（缺省 100，1..10000）"
+        },
+        "retention_periods": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "subject_kind": {
+          "type": "string"
+        }
+      },
+      "title": "CreateLeaderboardBoardRequest 与 console 同形去掉 rewards（评审裁决：奖励\n规则编辑仅 console owner，server 面消息不含 rewards，重放比较集亦不含）。"
+    },
     "torchwoodserverv1GetLeaderboardSettlementResponse": {
       "type": "object",
       "properties": {
@@ -259,6 +470,81 @@
         }
       },
       "title": "SubmitLeaderboardScoreRequest：server 面可代任意 subject 提交（函数/\n运营/自动化）。request_id 走 (project, actor, request_id) 24h 幂等——\n网络层重试不重复烧 per-subject 限频额度。"
+    },
+    "torchwoodserverv1LeaderboardsServiceUpdateLeaderboardBoardBody": {
+      "type": "object",
+      "properties": {
+        "sort": {
+          "type": "string"
+        },
+        "tiebreak_order": {
+          "type": "string"
+        },
+        "clear_tiebreak": {
+          "type": "boolean"
+        },
+        "tie_break": {
+          "type": "string"
+        },
+        "period_kind": {
+          "type": "string"
+        },
+        "period_tz": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string"
+        },
+        "value_min": {
+          "type": "string",
+          "format": "int64"
+        },
+        "value_max": {
+          "type": "string",
+          "format": "int64"
+        },
+        "clear_value_bounds": {
+          "type": "boolean"
+        },
+        "client_submit": {
+          "type": "boolean"
+        },
+        "per_subject_submit_limit": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "retention_periods": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "subject_kind": {
+          "type": "string"
+        }
+      },
+      "title": "UpdateLeaderboardBoardRequest 用 proto3 optional 表达\"未设置 = 不修改\"；\n显式清空走 clear_* 布尔。period/sort/tiebreak 声明/policy/tie_break 在\n榜内已有条目时不可改（FailedPrecondition，与 console 同一 domain 护栏）。\n不含 rewards / clear_rewards。"
+    },
+    "torchwoodserverv1ListLeaderboardBoardPeriodsResponse": {
+      "type": "object",
+      "properties": {
+        "periods": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "torchwoodserverv1ListLeaderboardBoardsResponse": {
+      "type": "object",
+      "properties": {
+        "boards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LeaderboardBoard"
+          }
+        }
+      }
     },
     "torchwoodserverv1ListLeaderboardSettlementsResponse": {
       "type": "object",
@@ -320,6 +606,78 @@
           "$ref": "#/definitions/v1Error"
         }
       }
+    },
+    "v1LeaderboardBoard": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "sort": {
+          "type": "string",
+          "title": "asc | desc"
+        },
+        "tiebreak_order": {
+          "type": "string",
+          "title": "空 = 未声明单列 tiebreak；声明后 submit 必须携带 tiebreak_value"
+        },
+        "tie_break": {
+          "type": "string",
+          "title": "parallel | earliest | latest（默认 parallel：并列等同，奖励边界按\nrank 含端点；earliest/latest = 先/后达到者靠前）"
+        },
+        "period_kind": {
+          "type": "string",
+          "title": "none | daily | weekly | monthly（period_key 服务端按 tz 派生）"
+        },
+        "period_tz": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string",
+          "title": "best | latest | sum（best 方向跟随 sort：desc→取大，asc→取小）"
+        },
+        "value_min": {
+          "type": "string",
+          "format": "int64"
+        },
+        "value_max": {
+          "type": "string",
+          "format": "int64"
+        },
+        "client_submit": {
+          "type": "boolean"
+        },
+        "per_subject_submit_limit": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "retention_periods": {
+          "type": "integer",
+          "format": "int32",
+          "title": "保留最近多少期（0 = 永久，默认不删用户数据）"
+        },
+        "subject_kind": {
+          "type": "string",
+          "title": "纯展示提示（console 是否把 subject 链到用户详情），无语义"
+        },
+        "rewards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LeaderboardRewardRule"
+          },
+          "title": "声明式奖励规则（Phase 2）：要求 period_kind != none"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "title": "LeaderboardBoard 是榜配置（console CRUD；Phase 2 将扩展 rewards）。"
     },
     "v1LeaderboardEntry": {
       "type": "object",

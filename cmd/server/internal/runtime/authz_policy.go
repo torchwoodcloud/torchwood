@@ -168,6 +168,8 @@ func buildMethodPolicy(serviceName string, method protoreflect.MethodDescriptor,
 			op = domainauth.ScopeRead
 		case sharedv1.ScopeOp_SCOPE_OP_WRITE:
 			op = domainauth.ScopeWrite
+		case sharedv1.ScopeOp_SCOPE_OP_ADMIN:
+			op = domainauth.ScopeAdmin
 		default:
 			return p, fmt.Errorf("method %s: api_key_scope 方向 %s 未登记", p.Method, scope.GetOp())
 		}

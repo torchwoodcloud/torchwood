@@ -79,7 +79,7 @@ func TestInvokeJSONBadJSON(t *testing.T) {
 // GetOverview / ListEventDefinitions / QueryTimeseries / QueryBreakdown /
 // QueryRetention / ListUserEvents）。
 
-const expectedServerMethodCount = 141
+const expectedServerMethodCount = 146
 
 // TestInvokeJSONCompleteness 遍历 protoregistry.GlobalFiles 中 torchwood.server.v1
 // 包的全部方法（排除 APIKeysService），断言每个方法都能被解析并用空 JSON 构造

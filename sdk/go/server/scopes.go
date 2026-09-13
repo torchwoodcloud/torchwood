@@ -80,9 +80,12 @@ const (
 	ScopeAuditLogsWrite = "audit_logs.write"
 
 	// ScopeLeaderboards 排行榜（dogfooding 提案 2026-09-11，Phase 1）。
+	// admin 是配置面方向（board 配置管控，2026-09-13）：与 write 刻意分离——
+	// 能提交分值的密钥不得改榜配置；各方向独立授予，裸资源/通配符仍放行全部。
 	ScopeLeaderboards      = "leaderboards"
 	ScopeLeaderboardsRead  = "leaderboards.read"
 	ScopeLeaderboardsWrite = "leaderboards.write"
+	ScopeLeaderboardsAdmin = "leaderboards.admin"
 	// ScopeAnalytics 事件分析面（摄入 = analytics.write，查询 = analytics.read）。
 	ScopeAnalytics      = "analytics"
 	ScopeAnalyticsRead  = "analytics.read"

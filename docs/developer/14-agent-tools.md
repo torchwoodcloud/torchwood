@@ -1,7 +1,7 @@
 # Agent 默认工具箱
 
-> Overlay，不是新 API。完整产品面仍是 **237 个 RPC**（Client 68 + Server 146 + Console 23），Agent 默认仅暴露 **18 个动词**。计数权威：`docs/developer/authz-matrix.md` 头部（生成物）；动词映射：`sdk/go/server/tools.go:46`（`Tools`）与 `sdk/typescript/src/server/tools.ts:34`（`agentTools`）；规格：`docs/review/wave3-e7-tool-catalog.md`。OpenAPI 以 `genproto/**/*.swagger.json`（`buf.gen.yaml:24` 的 `openapiv2`）为权威。
-> 修订记录：2026-09-12 按代码复核（RPC 计数 195→237、scope 词表述更新、golangci 全量门禁；18 条 `TOOL_*`/`Tool*` 不变，leaderboards/analytics 尚未收录 overlay）。
+> Overlay，不是新 API。完整产品面仍是 **242 个 RPC**（Client 68 + Server 151 + Console 23），Agent 默认仅暴露 **18 个动词**。计数权威：`docs/developer/authz-matrix.md` 头部（生成物）；动词映射：`sdk/go/server/tools.go:46`（`Tools`）与 `sdk/typescript/src/server/tools.ts:34`（`agentTools`）；规格：`docs/review/wave3-e7-tool-catalog.md`。OpenAPI 以 `genproto/**/*.swagger.json`（`buf.gen.yaml:24` 的 `openapiv2`）为权威。
+> 修订记录：2026-09-13 leaderboards board 管控 5 RPC（237→242，overlay 未收录）；2026-09-12 按代码复核（RPC 计数 195→237、scope 词表述更新、golangci 全量门禁；18 条 `TOOL_*`/`Tool*` 不变，leaderboards/analytics 尚未收录 overlay）。
 
 ---
 
@@ -11,7 +11,7 @@
 - Agent / 自动化默认只看见下表；Console、CLI、SDK 仍走完整 Server API；
 - 逃生舱仍是 `InvokeJSON(fullMethod, protojson)`（`sdk/go/server/invoke.go:20`）：覆盖全部 `torchwood.server.v1.*` unary，继续排除 `APIKeysService`；
 - 本 catalog **不含** create/list/get/delete API key——密钥只在 Console 或带合适 scope 的管理流程里创建，不交给普通 Agent 工具面；
-- 全量 237 的计数口径：`proto/client` + `proto/server` + `proto/console` 的全部 `rpc` 条目，见 `genproto/**/*.swagger.json` 的 `operationId`（`{Service}_{RPC}`）与 `authz-matrix.md` 头部（PUBLIC 28 · END_USER 47 · SERVER 133 · PERMISSION 29）；
+- 全量 242 的计数口径：`proto/client` + `proto/server` + `proto/console` 的全部 `rpc` 条目，见 `genproto/**/*.swagger.json` 的 `operationId`（`{Service}_{RPC}`）与 `authz-matrix.md` 头部（PUBLIC 28 · END_USER 47 · SERVER 138 · PERMISSION 29）；
 - 新增 RPC 后，overlay 是否收录由产品决策（截至 2026-09-12，leaderboards/analytics 均未收录），完整 API 由 `InvokeJSON` 自动覆盖，无需改动工具箱即可调用。
 
 ---

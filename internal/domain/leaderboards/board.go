@@ -57,7 +57,10 @@ const (
 	// MaxPerSubjectLimit / DefaultPerSubjectLimit 是每期每主体提交次数上限。
 	MaxPerSubjectLimit     = 10000
 	DefaultPerSubjectLimit = 100
-	maxSubjectKindLen      = 32
+	// MaxBoardsPerProject 是每项目榜配置数量上限（文档承诺值的强制执行点；
+	// server 面脚本化批量建榜使其从约定变为必须机械把守）。
+	MaxBoardsPerProject = 100
+	maxSubjectKindLen   = 32
 )
 
 var boardIDPattern = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)

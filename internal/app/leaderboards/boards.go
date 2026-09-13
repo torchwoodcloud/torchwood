@@ -7,37 +7,22 @@ import (
 	domainleaderboards "github.com/torchwoodcloud/torchwood/internal/domain/leaderboards"
 )
 
-// CreateBoard 创建榜配置（console 面）。缺省值在此收敛：
-// per_subject_limit 未填 = 100，sort 未填 = desc，policy 未填 = best，
-// tie_break 未填 = parallel，retention 未填 = 0（永久保留）。
+// CreateBoard 创建榜配置（console 面，纯 ALREADY_EXISTS 语义；server 面的
+// 幂等预置创建见 CreateBoardProvisioning）。缺省值收敛在 applyCreateDefaults。
 func (a *Leaderboards) CreateBoard(ctx context.Context, in *domainleaderboards.Board) (*domainleaderboards.Board, error) {
 	projectID, err := projectScope(ctx)
 	if err != nil {
 		return nil, err
 	}
 	in.ProjectID = projectID
-	if in.Sort == "" {
-		in.Sort = domainleaderboards.SortDesc
-	}
-	if in.TieBreak == "" {
-		in.TieBreak = domainleaderboards.TieBreakParallel
-	}
-	if in.Policy == "" {
-		in.Policy = domainleaderboards.PolicyBest
-	}
-	if in.PeriodKind == "" {
-		in.PeriodKind = domainleaderboards.PeriodNone
-	}
-	if in.PerSubjectLimit == 0 {
-		in.PerSubjectLimit = domainleaderboards.DefaultPerSubjectLimit
-	}
-	if in.SubjectKind == "" {
-		in.SubjectKind = "user"
-	}
+	applyCreateDefaults(in)
 	if err := domainleaderboards.ValidateBoard(in); err != nil {
 		return nil, mapLeaderboardError(err)
 	}
 	if err := a.validateRewardAssets(ctx, projectID, in.Rewards); err != nil {
+		return nil, mapLeaderboardError(err)
+	}
+	if err := a.enforceBoardCap(ctx, projectID); err != nil {
 		return nil, mapLeaderboardError(err)
 	}
 	now := a.ts()

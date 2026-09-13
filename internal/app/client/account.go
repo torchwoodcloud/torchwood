@@ -24,9 +24,9 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
-	"github.com/torchwoodcloud/torchwood/pkg/uow"
 	"github.com/torchwoodcloud/torchwood/pkg/jwtparser"
 	"github.com/torchwoodcloud/torchwood/pkg/password"
+	"github.com/torchwoodcloud/torchwood/pkg/uow"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

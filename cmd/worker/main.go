@@ -5,6 +5,10 @@ import (
 	"log"
 	"time"
 
+	// 嵌入 IANA 时区库：leaderboard 结算/retention 的期边界派生依赖
+	// time.LoadLocation；不依赖宿主 /usr/share/zoneinfo（与 cmd/server 同因）。
+	_ "time/tzdata"
+
 	"github.com/joho/godotenv"
 	"github.com/lynx-go/lynx"
 	lynxzap "github.com/lynx-go/lynx/contrib/zap"

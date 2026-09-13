@@ -90,6 +90,8 @@ func ParseScopeToken(s string) (scopeToken, bool) {
 			return seg[:dot], ScopeRead, true
 		case string(ScopeWrite):
 			return seg[:dot], ScopeWrite, true
+		case string(ScopeAdmin):
+			return seg[:dot], ScopeAdmin, true
 		default:
 			return "", "", false
 		}

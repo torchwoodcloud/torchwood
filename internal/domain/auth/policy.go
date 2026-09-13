@@ -77,12 +77,16 @@ var AllScopeResources = []ScopeResource{
 	ScopeSubscriptions, ScopeBilling, ScopeOutbox, ScopeAuditLogs, ScopeAnalytics,
 }
 
-// ScopeOp 是 scope 的读写方向。
+// ScopeOp 是 scope 的权限方向。admin 是配置面方向（与 proto shared.v1
+// ScopeOp 的裁决注释同源）：按资源 opt-in，供"热路径凭证与控制面凭证需
+// 最小特权分离"的资源（首个：leaderboards board 管控）声明；Functions
+// 执行 principal 的 declaredScopeOps 刻意不收录——函数身份永不可持 admin。
 type ScopeOp string
 
 const (
 	ScopeRead  ScopeOp = "read"
 	ScopeWrite ScopeOp = "write"
+	ScopeAdmin ScopeOp = "admin"
 )
 
 // ScopeRule 是 SERVER 面方法对 API key 凭证开放的 scope 门。
@@ -513,7 +517,7 @@ func validScope(rule ScopeRule) (ScopeRule, error) {
 	if !validRes {
 		return rule, fmt.Errorf("scope 资源 %q 不在词表", rule.Resource)
 	}
-	if rule.Op != ScopeRead && rule.Op != ScopeWrite {
+	if rule.Op != ScopeRead && rule.Op != ScopeWrite && rule.Op != ScopeAdmin {
 		return rule, fmt.Errorf("scope 方向 %q 非法", rule.Op)
 	}
 	return rule, nil

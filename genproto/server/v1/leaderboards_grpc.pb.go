@@ -20,11 +20,16 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	LeaderboardsService_SubmitLeaderboardScore_FullMethodName     = "/torchwood.server.v1.LeaderboardsService/SubmitLeaderboardScore"
-	LeaderboardsService_GetLeaderboardEntry_FullMethodName        = "/torchwood.server.v1.LeaderboardsService/GetLeaderboardEntry"
-	LeaderboardsService_ListLeaderboardTop_FullMethodName         = "/torchwood.server.v1.LeaderboardsService/ListLeaderboardTop"
-	LeaderboardsService_GetLeaderboardSettlement_FullMethodName   = "/torchwood.server.v1.LeaderboardsService/GetLeaderboardSettlement"
-	LeaderboardsService_ListLeaderboardSettlements_FullMethodName = "/torchwood.server.v1.LeaderboardsService/ListLeaderboardSettlements"
+	LeaderboardsService_SubmitLeaderboardScore_FullMethodName      = "/torchwood.server.v1.LeaderboardsService/SubmitLeaderboardScore"
+	LeaderboardsService_GetLeaderboardEntry_FullMethodName         = "/torchwood.server.v1.LeaderboardsService/GetLeaderboardEntry"
+	LeaderboardsService_ListLeaderboardTop_FullMethodName          = "/torchwood.server.v1.LeaderboardsService/ListLeaderboardTop"
+	LeaderboardsService_GetLeaderboardSettlement_FullMethodName    = "/torchwood.server.v1.LeaderboardsService/GetLeaderboardSettlement"
+	LeaderboardsService_ListLeaderboardSettlements_FullMethodName  = "/torchwood.server.v1.LeaderboardsService/ListLeaderboardSettlements"
+	LeaderboardsService_CreateLeaderboardBoard_FullMethodName      = "/torchwood.server.v1.LeaderboardsService/CreateLeaderboardBoard"
+	LeaderboardsService_GetLeaderboardBoard_FullMethodName         = "/torchwood.server.v1.LeaderboardsService/GetLeaderboardBoard"
+	LeaderboardsService_ListLeaderboardBoards_FullMethodName       = "/torchwood.server.v1.LeaderboardsService/ListLeaderboardBoards"
+	LeaderboardsService_ListLeaderboardBoardPeriods_FullMethodName = "/torchwood.server.v1.LeaderboardsService/ListLeaderboardBoardPeriods"
+	LeaderboardsService_UpdateLeaderboardBoard_FullMethodName      = "/torchwood.server.v1.LeaderboardsService/UpdateLeaderboardBoard"
 )
 
 // LeaderboardsServiceClient is the client API for LeaderboardsService service.
@@ -42,6 +47,18 @@ type LeaderboardsServiceClient interface {
 	// 引用视图；写操作只有 worker 与 console）——
 	GetLeaderboardSettlement(ctx context.Context, in *GetLeaderboardSettlementRequest, opts ...grpc.CallOption) (*GetLeaderboardSettlementResponse, error)
 	ListLeaderboardSettlements(ctx context.Context, in *ListLeaderboardSettlementsRequest, opts ...grpc.CallOption) (*ListLeaderboardSettlementsResponse, error)
+	// —— board 配置管控（graviton-games 提案 2026-09-13，评审裁决）：预置与
+	// 门禁自动化的控制面。写动词（Create/Update）走 leaderboards.admin——
+	// 与 leaderboards.write 刻意分离：能提交分值的密钥不得改榜配置。Delete
+	// 不进 server 面（条目级联删的破坏性操作留给 console owner 双确认）；
+	// rewards 不在 Create/Update 消息内（奖励规则编辑仅 console owner）。
+	// Create 幂等：已存在且配置逐字段相等（缺省归一后）→ 200 + 现状；
+	// 不等 → ALREADY_EXISTS（附字段 diff）。
+	CreateLeaderboardBoard(ctx context.Context, in *CreateLeaderboardBoardRequest, opts ...grpc.CallOption) (*v1.LeaderboardBoard, error)
+	GetLeaderboardBoard(ctx context.Context, in *GetLeaderboardBoardRequest, opts ...grpc.CallOption) (*v1.LeaderboardBoard, error)
+	ListLeaderboardBoards(ctx context.Context, in *ListLeaderboardBoardsRequest, opts ...grpc.CallOption) (*ListLeaderboardBoardsResponse, error)
+	ListLeaderboardBoardPeriods(ctx context.Context, in *ListLeaderboardBoardPeriodsRequest, opts ...grpc.CallOption) (*ListLeaderboardBoardPeriodsResponse, error)
+	UpdateLeaderboardBoard(ctx context.Context, in *UpdateLeaderboardBoardRequest, opts ...grpc.CallOption) (*v1.LeaderboardBoard, error)
 }
 
 type leaderboardsServiceClient struct {
@@ -102,6 +119,56 @@ func (c *leaderboardsServiceClient) ListLeaderboardSettlements(ctx context.Conte
 	return out, nil
 }
 
+func (c *leaderboardsServiceClient) CreateLeaderboardBoard(ctx context.Context, in *CreateLeaderboardBoardRequest, opts ...grpc.CallOption) (*v1.LeaderboardBoard, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(v1.LeaderboardBoard)
+	err := c.cc.Invoke(ctx, LeaderboardsService_CreateLeaderboardBoard_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *leaderboardsServiceClient) GetLeaderboardBoard(ctx context.Context, in *GetLeaderboardBoardRequest, opts ...grpc.CallOption) (*v1.LeaderboardBoard, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(v1.LeaderboardBoard)
+	err := c.cc.Invoke(ctx, LeaderboardsService_GetLeaderboardBoard_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *leaderboardsServiceClient) ListLeaderboardBoards(ctx context.Context, in *ListLeaderboardBoardsRequest, opts ...grpc.CallOption) (*ListLeaderboardBoardsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListLeaderboardBoardsResponse)
+	err := c.cc.Invoke(ctx, LeaderboardsService_ListLeaderboardBoards_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *leaderboardsServiceClient) ListLeaderboardBoardPeriods(ctx context.Context, in *ListLeaderboardBoardPeriodsRequest, opts ...grpc.CallOption) (*ListLeaderboardBoardPeriodsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListLeaderboardBoardPeriodsResponse)
+	err := c.cc.Invoke(ctx, LeaderboardsService_ListLeaderboardBoardPeriods_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *leaderboardsServiceClient) UpdateLeaderboardBoard(ctx context.Context, in *UpdateLeaderboardBoardRequest, opts ...grpc.CallOption) (*v1.LeaderboardBoard, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(v1.LeaderboardBoard)
+	err := c.cc.Invoke(ctx, LeaderboardsService_UpdateLeaderboardBoard_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LeaderboardsServiceServer is the server API for LeaderboardsService service.
 // All implementations must embed UnimplementedLeaderboardsServiceServer
 // for forward compatibility.
@@ -117,6 +184,18 @@ type LeaderboardsServiceServer interface {
 	// 引用视图；写操作只有 worker 与 console）——
 	GetLeaderboardSettlement(context.Context, *GetLeaderboardSettlementRequest) (*GetLeaderboardSettlementResponse, error)
 	ListLeaderboardSettlements(context.Context, *ListLeaderboardSettlementsRequest) (*ListLeaderboardSettlementsResponse, error)
+	// —— board 配置管控（graviton-games 提案 2026-09-13，评审裁决）：预置与
+	// 门禁自动化的控制面。写动词（Create/Update）走 leaderboards.admin——
+	// 与 leaderboards.write 刻意分离：能提交分值的密钥不得改榜配置。Delete
+	// 不进 server 面（条目级联删的破坏性操作留给 console owner 双确认）；
+	// rewards 不在 Create/Update 消息内（奖励规则编辑仅 console owner）。
+	// Create 幂等：已存在且配置逐字段相等（缺省归一后）→ 200 + 现状；
+	// 不等 → ALREADY_EXISTS（附字段 diff）。
+	CreateLeaderboardBoard(context.Context, *CreateLeaderboardBoardRequest) (*v1.LeaderboardBoard, error)
+	GetLeaderboardBoard(context.Context, *GetLeaderboardBoardRequest) (*v1.LeaderboardBoard, error)
+	ListLeaderboardBoards(context.Context, *ListLeaderboardBoardsRequest) (*ListLeaderboardBoardsResponse, error)
+	ListLeaderboardBoardPeriods(context.Context, *ListLeaderboardBoardPeriodsRequest) (*ListLeaderboardBoardPeriodsResponse, error)
+	UpdateLeaderboardBoard(context.Context, *UpdateLeaderboardBoardRequest) (*v1.LeaderboardBoard, error)
 	mustEmbedUnimplementedLeaderboardsServiceServer()
 }
 
@@ -141,6 +220,21 @@ func (UnimplementedLeaderboardsServiceServer) GetLeaderboardSettlement(context.C
 }
 func (UnimplementedLeaderboardsServiceServer) ListLeaderboardSettlements(context.Context, *ListLeaderboardSettlementsRequest) (*ListLeaderboardSettlementsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListLeaderboardSettlements not implemented")
+}
+func (UnimplementedLeaderboardsServiceServer) CreateLeaderboardBoard(context.Context, *CreateLeaderboardBoardRequest) (*v1.LeaderboardBoard, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateLeaderboardBoard not implemented")
+}
+func (UnimplementedLeaderboardsServiceServer) GetLeaderboardBoard(context.Context, *GetLeaderboardBoardRequest) (*v1.LeaderboardBoard, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetLeaderboardBoard not implemented")
+}
+func (UnimplementedLeaderboardsServiceServer) ListLeaderboardBoards(context.Context, *ListLeaderboardBoardsRequest) (*ListLeaderboardBoardsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListLeaderboardBoards not implemented")
+}
+func (UnimplementedLeaderboardsServiceServer) ListLeaderboardBoardPeriods(context.Context, *ListLeaderboardBoardPeriodsRequest) (*ListLeaderboardBoardPeriodsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListLeaderboardBoardPeriods not implemented")
+}
+func (UnimplementedLeaderboardsServiceServer) UpdateLeaderboardBoard(context.Context, *UpdateLeaderboardBoardRequest) (*v1.LeaderboardBoard, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateLeaderboardBoard not implemented")
 }
 func (UnimplementedLeaderboardsServiceServer) mustEmbedUnimplementedLeaderboardsServiceServer() {}
 func (UnimplementedLeaderboardsServiceServer) testEmbeddedByValue()                             {}
@@ -253,6 +347,96 @@ func _LeaderboardsService_ListLeaderboardSettlements_Handler(srv interface{}, ct
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LeaderboardsService_CreateLeaderboardBoard_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateLeaderboardBoardRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LeaderboardsServiceServer).CreateLeaderboardBoard(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LeaderboardsService_CreateLeaderboardBoard_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LeaderboardsServiceServer).CreateLeaderboardBoard(ctx, req.(*CreateLeaderboardBoardRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LeaderboardsService_GetLeaderboardBoard_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLeaderboardBoardRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LeaderboardsServiceServer).GetLeaderboardBoard(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LeaderboardsService_GetLeaderboardBoard_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LeaderboardsServiceServer).GetLeaderboardBoard(ctx, req.(*GetLeaderboardBoardRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LeaderboardsService_ListLeaderboardBoards_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListLeaderboardBoardsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LeaderboardsServiceServer).ListLeaderboardBoards(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LeaderboardsService_ListLeaderboardBoards_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LeaderboardsServiceServer).ListLeaderboardBoards(ctx, req.(*ListLeaderboardBoardsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LeaderboardsService_ListLeaderboardBoardPeriods_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListLeaderboardBoardPeriodsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LeaderboardsServiceServer).ListLeaderboardBoardPeriods(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LeaderboardsService_ListLeaderboardBoardPeriods_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LeaderboardsServiceServer).ListLeaderboardBoardPeriods(ctx, req.(*ListLeaderboardBoardPeriodsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LeaderboardsService_UpdateLeaderboardBoard_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateLeaderboardBoardRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LeaderboardsServiceServer).UpdateLeaderboardBoard(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LeaderboardsService_UpdateLeaderboardBoard_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LeaderboardsServiceServer).UpdateLeaderboardBoard(ctx, req.(*UpdateLeaderboardBoardRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // LeaderboardsService_ServiceDesc is the grpc.ServiceDesc for LeaderboardsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -279,6 +463,26 @@ var LeaderboardsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListLeaderboardSettlements",
 			Handler:    _LeaderboardsService_ListLeaderboardSettlements_Handler,
+		},
+		{
+			MethodName: "CreateLeaderboardBoard",
+			Handler:    _LeaderboardsService_CreateLeaderboardBoard_Handler,
+		},
+		{
+			MethodName: "GetLeaderboardBoard",
+			Handler:    _LeaderboardsService_GetLeaderboardBoard_Handler,
+		},
+		{
+			MethodName: "ListLeaderboardBoards",
+			Handler:    _LeaderboardsService_ListLeaderboardBoards_Handler,
+		},
+		{
+			MethodName: "ListLeaderboardBoardPeriods",
+			Handler:    _LeaderboardsService_ListLeaderboardBoardPeriods_Handler,
+		},
+		{
+			MethodName: "UpdateLeaderboardBoard",
+			Handler:    _LeaderboardsService_UpdateLeaderboardBoard_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

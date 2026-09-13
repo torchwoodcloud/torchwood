@@ -9,6 +9,8 @@ export interface WellKnownScopeResource {
   resource: string;
   read: boolean;
   write: boolean;
+  /** 配置面方向（如 leaderboards 的 board 管控）；仅被策略声明的资源为 true。 */
+  admin?: boolean;
 }
 
 interface WellKnownCatalog {

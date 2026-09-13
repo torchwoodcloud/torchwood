@@ -46,6 +46,9 @@ func TestSDKScopesContract_AlignedWithVocabulary(t *testing.T) {
 		want[string(r)+"."+string(domainauth.ScopeRead)] = true
 		want[string(r)+"."+string(domainauth.ScopeWrite)] = true
 	}
+	// admin 是配置面方向、按资源 opt-in（2026-09-13 裁决，非全资源默认档）：
+	// 当前仅 leaderboards（board 配置管控）。新资源启用 admin 时在此登记。
+	want[string(domainauth.ScopeLeaderboards)+"."+string(domainauth.ScopeAdmin)] = true
 
 	require.Len(t, got, len(want), "SDK scope 常量数量与词表不符（got=%d want=%d）", len(got), len(want))
 	var missing, extra []string

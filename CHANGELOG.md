@@ -8,6 +8,18 @@ TypeScript SDK 以 npm 包 `@torchwood/sdk` 分发（`sdk/typescript/`，`task s
 
 ## @torchwood/sdk
 
+### Unreleased
+
+排行榜 board 配置管控（server 面；消费方 graviton-games 提案 2026-09-13）：
+
+- **新增** `Torchwood.server.leaderboards` board 管控方法：`createLeaderboardBoard`
+  （幂等：已存在且配置逐字段相等 → 200 + 现状；不等 → 409 附字段 diff）/
+  `getLeaderboardBoard`（发布门禁主读点）/ `listLeaderboardBoards` /
+  `listLeaderboardBoardPeriods` / `updateLeaderboardBoard`（PATCH，optional
+  语义，不含 rewards——奖励规则编辑仅 console owner）。
+- 新增类型 `CreateLeaderboardBoardInput` / `UpdateLeaderboardBoardInput`；
+  `LeaderboardBoard` 补 `rewards` 只读字段。
+
 ### v0.6.0 — 2026-09-12
 
 > git tag `sdk/typescript/v0.5.0` 为仅含版本号 bump 的未发布占位（Leaderboards
@@ -188,6 +200,15 @@ genproto @ `genproto/v0.1.1`）：require 改写为真实 genproto 版本并移�
   APIKeysService），proto 新增方法零登记自动可用。
 
 ## genproto
+
+### Unreleased
+
+- **ScopeOp 新增 `SCOPE_OP_ADMIN`**（配置面方向，按资源 opt-in；匹配语义与
+  词表派生见 `docs/developer/05-authentication.md` §6）；
+- **server.v1.LeaderboardsService 新增 5 RPC**：CreateLeaderboardBoard /
+  GetLeaderboardBoard / ListLeaderboardBoards / ListLeaderboardBoardPeriods /
+  UpdateLeaderboardBoard（board 配置管控；写动词 = admin/owner 委托档 +
+  `leaderboards.admin`，读 = read_only + `leaderboards.read`）。
 
 ### v0.2.0 — 2026-09-07
 

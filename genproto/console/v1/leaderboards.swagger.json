@@ -23,7 +23,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1ListLeaderboardBoardsResponse"
+              "$ref": "#/definitions/torchwoodconsolev1ListLeaderboardBoardsResponse"
             }
           },
           "default": {
@@ -59,7 +59,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/v1CreateLeaderboardBoardRequest"
+              "$ref": "#/definitions/torchwoodconsolev1CreateLeaderboardBoardRequest"
             }
           }
         ],
@@ -153,7 +153,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/LeaderboardsServiceUpdateLeaderboardBoardBody"
+              "$ref": "#/definitions/torchwoodconsolev1LeaderboardsServiceUpdateLeaderboardBoardBody"
             }
           }
         ],
@@ -251,7 +251,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1ListLeaderboardBoardPeriodsResponse"
+              "$ref": "#/definitions/torchwoodconsolev1ListLeaderboardBoardPeriodsResponse"
             }
           },
           "default": {
@@ -478,7 +478,83 @@
     }
   },
   "definitions": {
-    "LeaderboardsServiceUpdateLeaderboardBoardBody": {
+    "torchwoodconsolev1CreateLeaderboardBoardRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "sort": {
+          "type": "string",
+          "title": "asc | desc（缺省 desc）"
+        },
+        "tiebreak_order": {
+          "type": "string",
+          "title": "声明单列 tiebreak 及方向（asc | desc）；缺省不声明"
+        },
+        "tie_break": {
+          "type": "string",
+          "title": "parallel | earliest | latest（缺省 parallel）"
+        },
+        "period_kind": {
+          "type": "string",
+          "title": "none | daily | weekly | monthly（缺省 none）"
+        },
+        "period_tz": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string",
+          "title": "best | latest | sum（缺省 best）"
+        },
+        "value_min": {
+          "type": "string",
+          "format": "int64"
+        },
+        "value_max": {
+          "type": "string",
+          "format": "int64"
+        },
+        "client_submit": {
+          "type": "boolean"
+        },
+        "per_subject_submit_limit": {
+          "type": "integer",
+          "format": "int32",
+          "title": "每期每主体提交次数上限（缺省 100，1..10000）"
+        },
+        "retention_periods": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "subject_kind": {
+          "type": "string"
+        },
+        "rewards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LeaderboardRewardRule"
+          }
+        }
+      }
+    },
+    "torchwoodconsolev1GetLeaderboardSettlementResponse": {
+      "type": "object",
+      "properties": {
+        "settlement": {
+          "$ref": "#/definitions/v1LeaderboardSettlement"
+        },
+        "grants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1LeaderboardSettlementGrant"
+          }
+        }
+      }
+    },
+    "torchwoodconsolev1LeaderboardsServiceUpdateLeaderboardBoardBody": {
       "type": "object",
       "properties": {
         "sort": {
@@ -541,17 +617,25 @@
       },
       "title": "UpdateLeaderboardBoardRequest 用 proto3 optional 表达\"未设置 = 不修改\"；\n显式清空走 clear_* 布尔。period/sort/tiebreak 声明/policy/tie_break 在\n榜内已有条目时不可改（FailedPrecondition）。"
     },
-    "torchwoodconsolev1GetLeaderboardSettlementResponse": {
+    "torchwoodconsolev1ListLeaderboardBoardPeriodsResponse": {
       "type": "object",
       "properties": {
-        "settlement": {
-          "$ref": "#/definitions/v1LeaderboardSettlement"
-        },
-        "grants": {
+        "periods": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "torchwoodconsolev1ListLeaderboardBoardsResponse": {
+      "type": "object",
+      "properties": {
+        "boards": {
           "type": "array",
           "items": {
             "type": "object",
-            "$ref": "#/definitions/v1LeaderboardSettlementGrant"
+            "$ref": "#/definitions/v1LeaderboardBoard"
           }
         }
       }
@@ -564,67 +648,6 @@
           "items": {
             "type": "object",
             "$ref": "#/definitions/v1LeaderboardSettlement"
-          }
-        }
-      }
-    },
-    "v1CreateLeaderboardBoardRequest": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "sort": {
-          "type": "string",
-          "title": "asc | desc（缺省 desc）"
-        },
-        "tiebreak_order": {
-          "type": "string",
-          "title": "声明单列 tiebreak 及方向（asc | desc）；缺省不声明"
-        },
-        "tie_break": {
-          "type": "string",
-          "title": "parallel | earliest | latest（缺省 parallel）"
-        },
-        "period_kind": {
-          "type": "string",
-          "title": "none | daily | weekly | monthly（缺省 none）"
-        },
-        "period_tz": {
-          "type": "string"
-        },
-        "policy": {
-          "type": "string",
-          "title": "best | latest | sum（缺省 best）"
-        },
-        "value_min": {
-          "type": "string",
-          "format": "int64"
-        },
-        "value_max": {
-          "type": "string",
-          "format": "int64"
-        },
-        "client_submit": {
-          "type": "boolean"
-        },
-        "per_subject_submit_limit": {
-          "type": "integer",
-          "format": "int32",
-          "title": "每期每主体提交次数上限（缺省 100，1..10000）"
-        },
-        "retention_periods": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "subject_kind": {
-          "type": "string"
-        },
-        "rewards": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/v1LeaderboardRewardRule"
           }
         }
       }
@@ -954,29 +977,6 @@
         }
       },
       "title": "LeaderboardTopEntry 是 top 列表行。"
-    },
-    "v1ListLeaderboardBoardPeriodsResponse": {
-      "type": "object",
-      "properties": {
-        "periods": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "v1ListLeaderboardBoardsResponse": {
-      "type": "object",
-      "properties": {
-        "boards": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/v1LeaderboardBoard"
-          }
-        }
-      }
     },
     "v1ListLeaderboardTopResponse": {
       "type": "object",

@@ -16,6 +16,8 @@ type BoardRepo interface {
 	Update(ctx context.Context, b *Board) error
 	Delete(ctx context.Context, projectID, boardID string) error
 	List(ctx context.Context, projectID string) ([]Board, error)
+	// Count 是项目内榜配置总数（MaxBoardsPerProject 上限判定）。
+	Count(ctx context.Context, projectID string) (int, error)
 }
 
 // EntryRepo 持久化 leaderboard_entries。写路径必须在调用方 uow.Run 内

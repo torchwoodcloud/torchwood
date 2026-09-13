@@ -140,7 +140,7 @@ export class Torchwood {
 | `outbox` | `tw.server.outbox` | `listDeadLetters(projectId, params?)` / `replayDeadLetter(eventId, projectId)`（见 §3.4） |
 | `leaderboards` | `tw.server.leaderboards` | `submitLeaderboardScore` / `getLeaderboardEntry` / `listLeaderboardTop` / `getLeaderboardSettlement` / `listLeaderboardSettlements`（可代任意 subject；`leaderboards.write`/`read`，见 `18-leaderboards.md`） |
 | `auditLogs` | `tw.server.auditLogs` | `list` / `listWithMeta`（admin/owner + `audit_logs.read`） |
-| `analytics` | `tw.server.analytics` | `ingest`（可信代报 user_id，`analytics:write`）+ `getOverview` / `listEventDefinitions` / `queryTimeseries` / `queryBreakdown` / `queryRetention` / `listUserEvents`（`analytics:read`），响应带 `source: rollup|raw` 口径标注（`src/server/analytics.ts:136-231`，见 `18-analytics.md`） |
+| `analytics` | `tw.server.analytics` | `ingest`（可信代报 user_id，`analytics.write`）+ `getOverview` / `listEventDefinitions` / `queryTimeseries` / `queryBreakdown` / `queryRetention` / `listUserEvents`（`analytics.read`），响应带 `source: rollup|raw` 口径标注（`src/server/analytics.ts:136-231`，见 `18-analytics.md`） |
 
 ### 3.4 Outbox（W-J）
 

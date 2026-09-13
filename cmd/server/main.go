@@ -5,6 +5,11 @@ import (
 	"log"
 	"time"
 
+	// 嵌入 IANA 时区库：leaderboard period_tz（如 Asia/Shanghai）的期边界
+	// 派生依赖 time.LoadLocation；不依赖宿主 /usr/share/zoneinfo，镜像精简
+	// 不致静默回落 UTC（domain Location() 的回落是 fail-open）。
+	_ "time/tzdata"
+
 	"github.com/joho/godotenv"
 	"github.com/lynx-go/lynx"
 	lynxzap "github.com/lynx-go/lynx/contrib/zap"

@@ -326,8 +326,8 @@ export function ApiKeyNewPage() {
   );
 }
 
-// ScopeResourceRow 渲染单资源的 read/write 勾选行（词表条目由服务端目录
-// 下发：read/write 为 false 的方向不渲染勾选框）。
+// ScopeResourceRow 渲染单资源的 read/write/admin 勾选行（词表条目由服务端
+// 目录下发：为 false 的方向不渲染勾选框）。
 function ScopeResourceRow({
   entry,
   disabled,
@@ -364,7 +364,17 @@ function ScopeResourceRow({
           write
         </label>
       )}
-      {!entry.read && !entry.write && <span className="text-muted-foreground">—</span>}
+      {entry.admin && (
+        <label className="flex items-center gap-1.5">
+          <Checkbox
+            checked={selected.has(`${entry.resource}.admin`)}
+            disabled={disabled}
+            onChange={(e) => onToggle(`${entry.resource}.admin`, e.target.checked)}
+          />
+          admin
+        </label>
+      )}
+      {!entry.read && !entry.write && !entry.admin && <span className="text-muted-foreground">—</span>}
     </div>
   );
 }

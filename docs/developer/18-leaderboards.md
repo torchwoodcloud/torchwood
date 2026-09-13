@@ -52,6 +52,29 @@ GET /v1/server/leaderboards/{boardId}/entries/{subjectId}?period=
 GET /v1/{,server/,console/}leaderboards/{boardId}/top?period=&page_size=&page_token=
 ```
 
+**board 配置管控**（server 面，graviton-games 提案 2026-09-13）：预置与门禁
+自动化的控制面——写动词走 **`leaderboards.admin`**（与 `leaderboards.write`
+刻意分离：能提交分值的密钥不得改榜配置），读动词走 `leaderboards.read`：
+
+```
+POST  /v1/server/leaderboards/boards                        # CreateLeaderboardBoard（幂等建档）
+GET   /v1/server/leaderboards/boards/{boardId}              # GetLeaderboardBoard（配置全文——发布门禁主读点）
+GET   /v1/server/leaderboards/boards                        # ListLeaderboardBoards（不分页，每项目 ≤100）
+GET   /v1/server/leaderboards/boards/{boardId}/periods      # ListLeaderboardBoardPeriods（对账期存在性）
+PATCH /v1/server/leaderboards/boards/{boardId}              # UpdateLeaderboardBoard（optional = 不修改）
+```
+
+- **Create 幂等**：已存在且配置逐字段相等（缺省归一后）→ `200` + 现状
+  （脚本可安全重放）；不等 → `ALREADY_EXISTS`，错误消息附字段 diff——console
+  或脚本任一侧改动 desired 字段都会被对端发现（漂移探测器）。
+- **Delete 不进 server 面**：条目级联删的破坏性操作留给 console owner 双确认。
+- **rewards 不在 server 面 Create/Update 消息内**：奖励规则编辑仅 console
+  owner（admin 钥不得间接获得发奖编排能力）；Get/List 只读透出 rewards。
+- **上限**：每项目 ≤100 榜（`MaxBoardsPerProject`，两写路径机械把守，超出
+  `RESOURCE_EXHAUSTED`）；满员时重放既有榜仍成功。
+- 每项目 ≤100 榜；不可变字段护栏（`period/sort/tiebreak 声明/tie_break/policy`
+  在榜内已有条目后不可改）与 console 共用同一 domain 校验。
+
 - **错误码**：`NOT_FOUND`（board/entry 不存在）、`INVALID_ARGUMENT`（分数越界 /
   period 格式错或不在提交窗口 / tiebreak 存在性不匹配）、`PERMISSION_DENIED`
   （client 提交未开 `client_submit` 的榜）、`RESOURCE_EXHAUSTED`（超限频）、
@@ -59,7 +82,9 @@ GET /v1/{,server/,console/}leaderboards/{boardId}/top?period=&page_size=&page_to
 - **request_id**：`(project, actor, request_id)` 24h 幂等（与 documents 同一
   中间件语义）——网络层重试返回首次快照，不重复烧限频额度；同 key 不同载荷
   = KEY_CONFLICT。
-- **Scopes**：`leaderboards.read` / `leaderboards.write`（API key 点风格）。
+- **Scopes**：`leaderboards.read` / `leaderboards.write`（提交与读）/
+  `leaderboards.admin`（board 配置管控——平台首个配置面方向 op，按资源
+  opt-in；详见 `05-authentication.md` §6）。
 - **SDK**：TS `tw.leaderboards.submit(board, value, {tiebreakValue?, period?,
   requestId?})` / `.me(board)` / `.top(board)`；`tw.server.leaderboards.*` 可代
   任意 subject。CLI 零登记自动可用（server 面反射覆盖测试保证）。
@@ -146,17 +171,21 @@ server 面只读 `GetLeaderboardSettlement` / `ListLeaderboardSettlements`
 （`leaderboards.read`）。`on_settled` 函数触发（通知/自定义逻辑逃生通道）
 仍为 v1.5 接缝。
 
-## 7 Console
+## 7 Console 与 server 管控面
 
 `/console/leaderboards`：榜列表 + 建榜/编辑（可变字段）对话框 + 删除（条目
 级联）；榜详情页：期下拉 + top 表（rank/position/subject/value/updated_at，
 行删条目）+ 按 subject 查条目（含 submit_count）。写操作仅 owner 角色
 （console 面 `permissions: ["owner"]`，读 `["owner","admin"]`）。
 
+server 面的 board 配置管控（建/改/读，§2）以 `leaderboards.admin` API key
+承载，面向预置脚本与发布门禁自动化；console 与 server 两条写路径共用同一
+domain 校验与审计，能力不互相回退。
+
 ## 8 审计与运维
 
 - 审计：client 面提交不落审计行（高频日常操作，对齐噪声治理）；server 面
-  提交与 console 写操作自动落审计（server 面非读方法规则）；board 配置
-  变更可溯。
+  提交、server 面 board 管控写动词（Create/Update）与 console 写操作自动落
+  审计（server 面非读方法规则）；board 配置变更可溯（含 API key 归因）。
 - worker：`leaderboards-cleaner`（30min）retention 清理——默认 0 = 永久，
   只有显式配置的榜被清；失败仅告警下一轮重试（清理幂等）。

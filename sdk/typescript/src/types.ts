@@ -578,7 +578,7 @@ export interface ManualFulfillResponse {
 
 // —— Leaderboards（dogfooding 提案 2026-09-11，Phase 1）——
 
-/** 榜配置（console CRUD；Phase 2 将扩展 rewards）。 */
+/** 榜配置（console CRUD + server 面管控读；Phase 2 扩展 rewards）。 */
 export interface LeaderboardBoard {
   id: string;
   sort?: string;
@@ -593,8 +593,45 @@ export interface LeaderboardBoard {
   per_subject_submit_limit?: number;
   retention_periods?: number;
   subject_kind?: string;
+  rewards?: LeaderboardRewardRule[];
   created_at?: string;
   updated_at?: string;
+}
+
+/** server 面建榜入参（幂等：已存在且配置逐字段相等 → 200 + 现状；不等 → 409 附字段 diff）。
+ * 不含 rewards——奖励规则编辑仅 console owner。 */
+export interface CreateLeaderboardBoardInput {
+  sort?: string;
+  tiebreak_order?: string;
+  tie_break?: string;
+  period_kind?: string;
+  period_tz?: string;
+  policy?: string;
+  value_min?: Int64String;
+  value_max?: Int64String;
+  client_submit?: boolean;
+  per_subject_submit_limit?: number;
+  retention_periods?: number;
+  subject_kind?: string;
+}
+
+/** server 面改榜入参（proto3 optional 语义：未设置 = 不修改；显式清空走 clear_*）。
+ * period/sort/tiebreak 声明/policy/tie_break 在榜内已有条目时不可改（FailedPrecondition）。 */
+export interface UpdateLeaderboardBoardInput {
+  sort?: string;
+  tiebreak_order?: string;
+  clear_tiebreak?: boolean;
+  tie_break?: string;
+  period_kind?: string;
+  period_tz?: string;
+  policy?: string;
+  value_min?: Int64String;
+  value_max?: Int64String;
+  clear_value_bounds?: boolean;
+  client_submit?: boolean;
+  per_subject_submit_limit?: number;
+  retention_periods?: number;
+  subject_kind?: string;
 }
 
 /** 排行榜条目：唯一键 (board, period, subject) 内建去重。 */

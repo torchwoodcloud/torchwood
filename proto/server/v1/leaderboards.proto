@@ -103,6 +103,46 @@ service LeaderboardsService {
       api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_READ }
     };
   }
+
+  // —— board 配置管控（graviton-games 提案 2026-09-13，评审裁决）：预置与
+  // 门禁自动化的控制面。写动词（Create/Update）走 leaderboards.admin——
+  // 与 leaderboards.write 刻意分离：能提交分值的密钥不得改榜配置。Delete
+  // 不进 server 面（条目级联删的破坏性操作留给 console owner 双确认）；
+  // rewards 不在 Create/Update 消息内（奖励规则编辑仅 console owner）。
+  // Create 幂等：已存在且配置逐字段相等（缺省归一后）→ 200 + 现状；
+  // 不等 → ALREADY_EXISTS（附字段 diff）。
+  rpc CreateLeaderboardBoard(CreateLeaderboardBoardRequest) returns (shared.v1.LeaderboardBoard) {
+    option (google.api.http) = { post: "/v1/server/leaderboards/boards", body: "*" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_ADMIN }
+    };
+  }
+  rpc GetLeaderboardBoard(GetLeaderboardBoardRequest) returns (shared.v1.LeaderboardBoard) {
+    option (google.api.http) = { get: "/v1/server/leaderboards/boards/{board_id}" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_READ }
+    };
+  }
+  rpc ListLeaderboardBoards(ListLeaderboardBoardsRequest) returns (ListLeaderboardBoardsResponse) {
+    option (google.api.http) = { get: "/v1/server/leaderboards/boards" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_READ }
+    };
+  }
+  rpc ListLeaderboardBoardPeriods(ListLeaderboardBoardPeriodsRequest) returns (ListLeaderboardBoardPeriodsResponse) {
+    option (google.api.http) = { get: "/v1/server/leaderboards/boards/{board_id}/periods" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_READ }
+    };
+  }
+  rpc UpdateLeaderboardBoard(UpdateLeaderboardBoardRequest) returns (shared.v1.LeaderboardBoard) {
+    option (google.api.http) = { patch: "/v1/server/leaderboards/boards/{board_id}", body: "*" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_ADMIN }
+    };
+  }
 }
 
 // SubmitLeaderboardScoreRequest：server 面可代任意 subject 提交（函数/
@@ -148,4 +188,72 @@ message ListLeaderboardSettlementsRequest {
 
 message ListLeaderboardSettlementsResponse {
   repeated shared.v1.LeaderboardSettlement settlements = 1;
+}
+
+// CreateLeaderboardBoardRequest 与 console 同形去掉 rewards（评审裁决：奖励
+// 规则编辑仅 console owner，server 面消息不含 rewards，重放比较集亦不含）。
+message CreateLeaderboardBoardRequest {
+  string id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = { pattern: "^[a-z_][a-z0-9_]*$", max_len: 40 }
+  ];
+  // asc | desc（缺省 desc）
+  string sort = 2;
+  // 声明单列 tiebreak 及方向（asc | desc）；缺省不声明
+  string tiebreak_order = 3;
+  // parallel | earliest | latest（缺省 parallel）
+  string tie_break = 4;
+  // none | daily | weekly | monthly（缺省 none）
+  string period_kind = 5;
+  string period_tz = 6;
+  // best | latest | sum（缺省 best）
+  string policy = 7;
+  optional int64 value_min = 8;
+  optional int64 value_max = 9;
+  bool client_submit = 10;
+  // 每期每主体提交次数上限（缺省 100，1..10000）
+  int32 per_subject_submit_limit = 11;
+  int32 retention_periods = 12;
+  string subject_kind = 13;
+}
+
+message ListLeaderboardBoardsRequest {}
+
+message ListLeaderboardBoardsResponse {
+  repeated shared.v1.LeaderboardBoard boards = 1;
+}
+
+message GetLeaderboardBoardRequest {
+  string board_id = 1 [(buf.validate.field).required = true];
+}
+
+// UpdateLeaderboardBoardRequest 用 proto3 optional 表达"未设置 = 不修改"；
+// 显式清空走 clear_* 布尔。period/sort/tiebreak 声明/policy/tie_break 在
+// 榜内已有条目时不可改（FailedPrecondition，与 console 同一 domain 护栏）。
+// 不含 rewards / clear_rewards。
+message UpdateLeaderboardBoardRequest {
+  string board_id = 1 [(buf.validate.field).required = true];
+  optional string sort = 2;
+  optional string tiebreak_order = 3;
+  bool clear_tiebreak = 4;
+  optional string tie_break = 5;
+  optional string period_kind = 6;
+  optional string period_tz = 7;
+  optional string policy = 8;
+  optional int64 value_min = 9;
+  optional int64 value_max = 10;
+  bool clear_value_bounds = 11;
+  optional bool client_submit = 12;
+  optional int32 per_subject_submit_limit = 13;
+  optional int32 retention_periods = 14;
+  optional string subject_kind = 15;
+}
+
+message ListLeaderboardBoardPeriodsRequest {
+  string board_id = 1 [(buf.validate.field).required = true];
+  int32 limit = 2 [(buf.validate.field).int32 = { gte: 0, lte: 200 }];
+}
+
+message ListLeaderboardBoardPeriodsResponse {
+  repeated string periods = 1;
 }

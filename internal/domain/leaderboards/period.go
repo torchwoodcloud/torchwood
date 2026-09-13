@@ -11,6 +11,7 @@ import (
 var (
 	ErrBoardNotFound        = errors.New("leaderboards: board not found")
 	ErrBoardExists          = errors.New("leaderboards: board already exists")
+	ErrBoardLimit           = errors.New("leaderboards: board count limit reached for this project")
 	ErrInvalidConfig        = errors.New("leaderboards: invalid board configuration")
 	ErrSubjectRequired      = errors.New("leaderboards: subject_id is required")
 	ErrSubjectTooLong       = errors.New("leaderboards: subject_id exceeds maximum length")

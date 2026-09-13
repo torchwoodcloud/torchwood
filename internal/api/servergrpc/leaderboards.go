@@ -93,6 +93,171 @@ func (s *LeaderboardsService) ListLeaderboardSettlements(ctx context.Context, re
 	return &serverv1.ListLeaderboardSettlementsResponse{Settlements: out}, nil
 }
 
+func (s *LeaderboardsService) CreateLeaderboardBoard(ctx context.Context, req *serverv1.CreateLeaderboardBoardRequest) (*sharedv1.LeaderboardBoard, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	in := &domainleaderboards.Board{
+		ID:               req.GetId(),
+		Sort:             domainleaderboards.SortDirection(req.GetSort()),
+		TieBreak:         domainleaderboards.TieBreak(req.GetTieBreak()),
+		PeriodKind:       domainleaderboards.PeriodKind(req.GetPeriodKind()),
+		PeriodTZ:         req.GetPeriodTz(),
+		Policy:           domainleaderboards.Policy(req.GetPolicy()),
+		ValueMin:         req.ValueMin,
+		ValueMax:         req.ValueMax,
+		ClientSubmit:     req.GetClientSubmit(),
+		PerSubjectLimit:  req.GetPerSubjectSubmitLimit(),
+		RetentionPeriods: req.GetRetentionPeriods(),
+		SubjectKind:      req.GetSubjectKind(),
+	}
+	if req.GetTiebreakOrder() != "" {
+		v := domainleaderboards.SortDirection(req.GetTiebreakOrder())
+		in.TiebreakOrder = &v
+	}
+	b, err := s.app.CreateBoardProvisioning(withAuditResource(ctx, req.GetId()), in)
+	if err != nil {
+		return nil, err
+	}
+	return mapLeaderboardBoard(b), nil
+}
+
+func (s *LeaderboardsService) GetLeaderboardBoard(ctx context.Context, req *serverv1.GetLeaderboardBoardRequest) (*sharedv1.LeaderboardBoard, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	b, err := s.app.GetBoard(ctx, req.GetBoardId())
+	if err != nil {
+		return nil, err
+	}
+	return mapLeaderboardBoard(b), nil
+}
+
+func (s *LeaderboardsService) ListLeaderboardBoards(ctx context.Context, req *serverv1.ListLeaderboardBoardsRequest) (*serverv1.ListLeaderboardBoardsResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	boards, err := s.app.ListBoards(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*sharedv1.LeaderboardBoard, len(boards))
+	for i := range boards {
+		out[i] = mapLeaderboardBoard(&boards[i])
+	}
+	return &serverv1.ListLeaderboardBoardsResponse{Boards: out}, nil
+}
+
+func (s *LeaderboardsService) ListLeaderboardBoardPeriods(ctx context.Context, req *serverv1.ListLeaderboardBoardPeriodsRequest) (*serverv1.ListLeaderboardBoardPeriodsResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	periods, err := s.app.ListPeriods(ctx, req.GetBoardId(), int(req.GetLimit()))
+	if err != nil {
+		return nil, err
+	}
+	return &serverv1.ListLeaderboardBoardPeriodsResponse{Periods: periods}, nil
+}
+
+func (s *LeaderboardsService) UpdateLeaderboardBoard(ctx context.Context, req *serverv1.UpdateLeaderboardBoardRequest) (*sharedv1.LeaderboardBoard, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	cmd := appleaderboards.UpdateBoardCommand{BoardID: req.GetBoardId()}
+	if req.Sort != nil {
+		v := domainleaderboards.SortDirection(req.GetSort())
+		cmd.Sort = &v
+	}
+	if req.TiebreakOrder != nil {
+		v := domainleaderboards.SortDirection(req.GetTiebreakOrder())
+		cmd.TiebreakOrder = &v
+	}
+	cmd.ClearTiebreak = req.GetClearTiebreak()
+	if req.TieBreak != nil {
+		v := domainleaderboards.TieBreak(req.GetTieBreak())
+		cmd.TieBreak = &v
+	}
+	if req.PeriodKind != nil {
+		v := domainleaderboards.PeriodKind(req.GetPeriodKind())
+		cmd.PeriodKind = &v
+	}
+	if req.PeriodTz != nil {
+		tz := req.GetPeriodTz()
+		cmd.PeriodTZ = &tz
+	}
+	if req.Policy != nil {
+		v := domainleaderboards.Policy(req.GetPolicy())
+		cmd.Policy = &v
+	}
+	cmd.ValueMin = req.ValueMin
+	cmd.ValueMax = req.ValueMax
+	cmd.ClearValueBounds = req.GetClearValueBounds()
+	cmd.ClientSubmit = req.ClientSubmit
+	cmd.PerSubjectLimit = req.PerSubjectSubmitLimit
+	cmd.RetentionPeriods = req.RetentionPeriods
+	if req.SubjectKind != nil {
+		kind := req.GetSubjectKind()
+		cmd.SubjectKind = &kind
+	}
+	b, err := s.app.UpdateBoard(withAuditResource(ctx, req.GetBoardId()), cmd)
+	if err != nil {
+		return nil, err
+	}
+	return mapLeaderboardBoard(b), nil
+}
+
+// mapLeaderboardLeaderboard 是 board 配置的 domain → proto 投影（与 console
+// 面 mapConsoleBoard 同构；rewards 只读透出——读无风险，编辑权已收敛在
+// console owner）。
+func mapLeaderboardBoard(b *domainleaderboards.Board) *sharedv1.LeaderboardBoard {
+	if b == nil {
+		return nil
+	}
+	out := &sharedv1.LeaderboardBoard{
+		Id:                    b.ID,
+		Sort:                  string(b.Sort),
+		TieBreak:              string(b.TieBreak),
+		PeriodKind:            string(b.PeriodKind),
+		PeriodTz:              b.PeriodTZ,
+		Policy:                string(b.Policy),
+		ClientSubmit:          b.ClientSubmit,
+		PerSubjectSubmitLimit: b.PerSubjectLimit,
+		RetentionPeriods:      b.RetentionPeriods,
+		SubjectKind:           b.SubjectKind,
+		CreatedAt:             timestamppb.New(b.CreatedAt),
+		UpdatedAt:             timestamppb.New(b.UpdatedAt),
+	}
+	if b.TiebreakOrder != nil {
+		out.TiebreakOrder = string(*b.TiebreakOrder)
+	}
+	if b.ValueMin != nil {
+		out.ValueMin = b.ValueMin
+	}
+	if b.ValueMax != nil {
+		out.ValueMax = b.ValueMax
+	}
+	if len(b.Rewards) > 0 {
+		out.Rewards = make([]*sharedv1.LeaderboardRewardRule, len(b.Rewards))
+		for i, r := range b.Rewards {
+			rule := &sharedv1.LeaderboardRewardRule{
+				AssetCode: r.AssetCode,
+				Amount:    r.Amount,
+			}
+			if r.RankMin != nil {
+				rule.RankMin = r.RankMin
+			}
+			if r.RankMax != nil {
+				rule.RankMax = r.RankMax
+			}
+			if r.ValueMin != nil {
+				rule.ValueMin = r.ValueMin
+			}
+			out.Rewards[i] = rule
+		}
+	}
+	return out
+}
+
 // mapLeaderboardDomainSnapshot / mapLeaderboardDomainEntry / mapLeaderboardDomainTop
 // 是 domain → proto 的共享映射（三面 handler 各自复制一份同构实现，跟随
 // assets/clientgrpc 的既有做法；不抽公共包避免 handler 层横向依赖）。

@@ -121,6 +121,19 @@ func (r *boardRepo) List(ctx context.Context, projectID string) ([]leaderboards.
 	return out, nil
 }
 
+func (r *boardRepo) Count(ctx context.Context, projectID string) (int, error) {
+	ctx2, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	conn, sch, expr, err := Scoped(ctx2, r.db, projectID, "leaderboard_boards", "lb")
+	if err != nil {
+		return 0, err
+	}
+	count, err := conn.NewSelect().ModelTableExpr(expr, sch).
+		Where("lb.project_id = ?", projectID).
+		Count(ctx2)
+	return int(count), err
+}
+
 // entryRepo 实现 leaderboards.EntryRepo。
 type entryRepo struct {
 	db *clients.Database

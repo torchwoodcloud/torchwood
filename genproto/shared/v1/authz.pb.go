@@ -240,13 +240,18 @@ func (ScopeResource) EnumDescriptor() ([]byte, []int) {
 	return file_shared_v1_authz_proto_rawDescGZIP(), []int{2}
 }
 
-// ScopeOp 是 API key scope 的读写方向。
+// ScopeOp 是 API key scope 的权限方向。
+// admin 是配置面方向（2026-09-13 评审裁决）：当某资源存在"热路径凭证与
+// 控制面凭证需最小特权分离"的诉求时按资源 opt-in（首个使用方为
+// leaderboards 的 board 管控——提交分值密钥不得改榜配置）；并非全资源
+// 默认第三档，assets/functions 等仍为 read/write 两档。
 type ScopeOp int32
 
 const (
 	ScopeOp_SCOPE_OP_UNSPECIFIED ScopeOp = 0
 	ScopeOp_SCOPE_OP_READ        ScopeOp = 1
 	ScopeOp_SCOPE_OP_WRITE       ScopeOp = 2
+	ScopeOp_SCOPE_OP_ADMIN       ScopeOp = 3
 )
 
 // Enum value maps for ScopeOp.
@@ -255,11 +260,13 @@ var (
 		0: "SCOPE_OP_UNSPECIFIED",
 		1: "SCOPE_OP_READ",
 		2: "SCOPE_OP_WRITE",
+		3: "SCOPE_OP_ADMIN",
 	}
 	ScopeOp_value = map[string]int32{
 		"SCOPE_OP_UNSPECIFIED": 0,
 		"SCOPE_OP_READ":        1,
 		"SCOPE_OP_WRITE":       2,
+		"SCOPE_OP_ADMIN":       3,
 	}
 )
 
@@ -540,11 +547,12 @@ const file_shared_v1_authz_proto_rawDesc = "" +
 	"\x15SCOPE_RESOURCE_OUTBOX\x10\f\x12\x1d\n" +
 	"\x19SCOPE_RESOURCE_AUDIT_LOGS\x10\r\x12\x1f\n" +
 	"\x1bSCOPE_RESOURCE_LEADERBOARDS\x10\x0e\x12\x1c\n" +
-	"\x18SCOPE_RESOURCE_ANALYTICS\x10\x0f*J\n" +
+	"\x18SCOPE_RESOURCE_ANALYTICS\x10\x0f*^\n" +
 	"\aScopeOp\x12\x18\n" +
 	"\x14SCOPE_OP_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rSCOPE_OP_READ\x10\x01\x12\x12\n" +
-	"\x0eSCOPE_OP_WRITE\x10\x02:b\n" +
+	"\x0eSCOPE_OP_WRITE\x10\x02\x12\x12\n" +
+	"\x0eSCOPE_OP_ADMIN\x10\x03:b\n" +
 	"\vmethod_auth\x12\x1e.google.protobuf.MethodOptions\x18\xa1\x96\x03 \x01(\v2\x1f.torchwood.shared.v1.MethodAuthR\n" +
 	"methodAuth:f\n" +
 	"\fservice_auth\x12\x1f.google.protobuf.ServiceOptions\x18\xa2\x96\x03 \x01(\v2 .torchwood.shared.v1.ServiceAuthR\vserviceAuthBAZ?github.com/torchwoodcloud/torchwood/genproto/shared/v1;sharedv1b\x06proto3"

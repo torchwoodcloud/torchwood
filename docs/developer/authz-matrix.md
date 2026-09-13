@@ -12,7 +12,7 @@
 >   SERVER admin 会话（admin_roles）或 API key（scope）；PERMISSION admin 会话
 >   专属（permissions），key 一律拒绝；SYSTEM 预留禁用。
 
-方法总数 237：PUBLIC 28 · END_USER 47 · SERVER 133 · PERMISSION 29 · SYSTEM 0。
+方法总数 242：PUBLIC 28 · END_USER 47 · SERVER 138 · PERMISSION 29 · SYSTEM 0。
 
 ## /torchwood.client.v1.AccountService
 
@@ -307,11 +307,16 @@
 
 | 方法 | Access | Admin 角色档 | Key Scope | 档位 | 说明 |
 | --- | --- | --- | --- | --- | --- |
+| `/torchwood.server.v1.LeaderboardsService/CreateLeaderboardBoard` | SERVER | admin, owner | leaderboards.admin | delegated_platform | |
+| `/torchwood.server.v1.LeaderboardsService/GetLeaderboardBoard` | SERVER | 不限角色 | leaderboards.read | read_only | |
 | `/torchwood.server.v1.LeaderboardsService/GetLeaderboardEntry` | SERVER | 不限角色 | leaderboards.read | read_only | |
 | `/torchwood.server.v1.LeaderboardsService/GetLeaderboardSettlement` | SERVER | 不限角色 | leaderboards.read | read_only | |
+| `/torchwood.server.v1.LeaderboardsService/ListLeaderboardBoardPeriods` | SERVER | 不限角色 | leaderboards.read | read_only | |
+| `/torchwood.server.v1.LeaderboardsService/ListLeaderboardBoards` | SERVER | 不限角色 | leaderboards.read | read_only | |
 | `/torchwood.server.v1.LeaderboardsService/ListLeaderboardSettlements` | SERVER | 不限角色 | leaderboards.read | read_only | |
 | `/torchwood.server.v1.LeaderboardsService/ListLeaderboardTop` | SERVER | 不限角色 | leaderboards.read | read_only | |
 | `/torchwood.server.v1.LeaderboardsService/SubmitLeaderboardScore` | SERVER | admin, owner | leaderboards.write | delegated_platform | |
+| `/torchwood.server.v1.LeaderboardsService/UpdateLeaderboardBoard` | SERVER | admin, owner | leaderboards.admin | delegated_platform | |
 
 ## /torchwood.server.v1.OAuthProvidersService
 

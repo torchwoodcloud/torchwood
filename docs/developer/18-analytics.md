@@ -16,7 +16,7 @@
 |---|---|---|
 | 领域 | `internal/domain/analytics/`（`limits.go`/`event.go`/`query.go`/`repository.go`/`worker.go`） | 平台级上限常量**单一来源**（批 100 / 名 64 / 键 25 / 16KiB / prop 值截断 256 / 字典软上限 1000 / 钳制窗 `[now-24h, now+5min]`）、事件与查询结果模型、摄入/查询/worker 三组端口、`NormalizeRetentionDays` |
 | 应用 | `internal/app/analytics/`（`ingest.go`/`query.go`/`rollup.go`/`maintenance.go`） | 逐事件校验（形状/钳制/标量化截断/16KiB）、归因落定（client=Principal、server=可信代报）、字典 upsert + 软上限、`accepted/skipped` 部分接收、计量 `Incr`、查询护栏与择路回退、幂等重算、分区治理与 tombstone 清洗编排 |
-| 传输 | `internal/api/clientgrpc/analytics.go` + `internal/api/servergrpc/analytics.go`（proto：`proto/client/v1/analytics.proto`、`proto/server/v1/analytics.proto`） | 双面 handler：client 绑定 Principal 归因与 `source=client`；server 走 scope（`analytics:write` 摄入 / `analytics:read` 查询）；请求形状校验由 protovalidate 注解声明、`ValidateInterceptor` 统一求值 |
+| 传输 | `internal/api/clientgrpc/analytics.go` + `internal/api/servergrpc/analytics.go`（proto：`proto/client/v1/analytics.proto`、`proto/server/v1/analytics.proto`） | 双面 handler：client 绑定 Principal 归因与 `source=client`；server 走 scope（`analytics.write` 摄入 / `analytics.read` 查询）；请求形状校验由 protovalidate 注解声明、`ValidateInterceptor` 统一求值 |
 | 适配器 | `internal/infra/bun/bunrepo/analytics_ingest_repo.go`（多行单语句 INSERT + 字典 upsert）、`analytics_query_repo.go`（护栏内查询 + 择路）、`analytics_worker_repo.go`（重算/分区/清洗 SQL）；模型 `internal/infra/bun/model/analytics.go`；迁移 `internal/infra/projectschema/migrations/000019_analytics.up.sql` | 项目 schema 内 `analytics_*` 六表全部 SQL；全参数化；SQL 形状断言进 `*_sqlshape_test.go` 护栏家族 |
 | worker | `worker/analytics_rollup.go`（每小时）+ `worker/analytics_maintenance.go`（分区每日 / 清洗每 6h） | 周期与日志壳，业务在 app 层（`RunWorkerOnce` 模式；单项目失败仅记日志，`projects.ListProjects` 遍历） |
 | 注销钩子 | `internal/app/client/account.go`（`DeleteAccount`）+ `internal/app/server/users.go`（`DeleteUser`） | 既有删除事务内 tombstone INSERT（`ON CONFLICT DO NOTHING` 幂等） |
@@ -98,7 +98,7 @@ curl -s -X POST http://127.0.0.1:9080/v1/analytics/events \
 # → {"accepted":2,"skipped":0}
 ```
 
-### 3.2 server 面摄入与查询（API Key，scope `analytics:write` / `analytics:read`）
+### 3.2 server 面摄入与查询（API Key，scope `analytics.write` / `analytics.read`）
 
 ```bash
 K="<project API key>"   # 项目绑定在密钥上，无需 X-Torchwood-Project
@@ -188,7 +188,7 @@ resp, err := client.Analytics.IngestEvents(ctx, &serverv1.IngestServerEventsRequ
 
 （`serverv1` = `github.com/torchwoodcloud/torchwood/genproto/server/v1`；查询方法与 §3 curl 一一对应。）
 
-CLI（`bin/torchwood`）零登记：`sdk/go/server` 的反射覆盖测试保证每个 server RPC 可经 `InvokeJSON` 调用，新增 RPC 无需在 CLI 登记。Agent 经 scoped API Key（`analytics:read`）可直接做运营问答。
+CLI（`bin/torchwood`）零登记：`sdk/go/server` 的反射覆盖测试保证每个 server RPC 可经 `InvokeJSON` 调用，新增 RPC 无需在 CLI 登记。Agent 经 scoped API Key（`analytics.read`）可直接做运营问答。
 
 ## 7 端配方（各端接入）
 

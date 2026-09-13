@@ -100,6 +100,8 @@ func mapLeaderboardError(err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, domainleaderboards.ErrBoardExists):
 		return status.Error(codes.AlreadyExists, err.Error())
+	case errors.Is(err, domainleaderboards.ErrBoardLimit):
+		return status.Error(codes.ResourceExhausted, err.Error())
 	case errors.Is(err, domainleaderboards.ErrSettlementNotFound):
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, domainleaderboards.ErrSettlementAlreadySettled):

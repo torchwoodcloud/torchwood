@@ -441,6 +441,534 @@ func (x *ListLeaderboardSettlementsResponse) GetSettlements() []*v1.LeaderboardS
 	return nil
 }
 
+// CreateLeaderboardBoardRequest 与 console 同形去掉 rewards（评审裁决：奖励
+// 规则编辑仅 console owner，server 面消息不含 rewards，重放比较集亦不含）。
+type CreateLeaderboardBoardRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// asc | desc（缺省 desc）
+	Sort string `protobuf:"bytes,2,opt,name=sort,proto3" json:"sort,omitempty"`
+	// 声明单列 tiebreak 及方向（asc | desc）；缺省不声明
+	TiebreakOrder string `protobuf:"bytes,3,opt,name=tiebreak_order,json=tiebreakOrder,proto3" json:"tiebreak_order,omitempty"`
+	// parallel | earliest | latest（缺省 parallel）
+	TieBreak string `protobuf:"bytes,4,opt,name=tie_break,json=tieBreak,proto3" json:"tie_break,omitempty"`
+	// none | daily | weekly | monthly（缺省 none）
+	PeriodKind string `protobuf:"bytes,5,opt,name=period_kind,json=periodKind,proto3" json:"period_kind,omitempty"`
+	PeriodTz   string `protobuf:"bytes,6,opt,name=period_tz,json=periodTz,proto3" json:"period_tz,omitempty"`
+	// best | latest | sum（缺省 best）
+	Policy       string `protobuf:"bytes,7,opt,name=policy,proto3" json:"policy,omitempty"`
+	ValueMin     *int64 `protobuf:"varint,8,opt,name=value_min,json=valueMin,proto3,oneof" json:"value_min,omitempty"`
+	ValueMax     *int64 `protobuf:"varint,9,opt,name=value_max,json=valueMax,proto3,oneof" json:"value_max,omitempty"`
+	ClientSubmit bool   `protobuf:"varint,10,opt,name=client_submit,json=clientSubmit,proto3" json:"client_submit,omitempty"`
+	// 每期每主体提交次数上限（缺省 100，1..10000）
+	PerSubjectSubmitLimit int32  `protobuf:"varint,11,opt,name=per_subject_submit_limit,json=perSubjectSubmitLimit,proto3" json:"per_subject_submit_limit,omitempty"`
+	RetentionPeriods      int32  `protobuf:"varint,12,opt,name=retention_periods,json=retentionPeriods,proto3" json:"retention_periods,omitempty"`
+	SubjectKind           string `protobuf:"bytes,13,opt,name=subject_kind,json=subjectKind,proto3" json:"subject_kind,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *CreateLeaderboardBoardRequest) Reset() {
+	*x = CreateLeaderboardBoardRequest{}
+	mi := &file_server_v1_leaderboards_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateLeaderboardBoardRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateLeaderboardBoardRequest) ProtoMessage() {}
+
+func (x *CreateLeaderboardBoardRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_leaderboards_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateLeaderboardBoardRequest.ProtoReflect.Descriptor instead.
+func (*CreateLeaderboardBoardRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_leaderboards_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *CreateLeaderboardBoardRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CreateLeaderboardBoardRequest) GetSort() string {
+	if x != nil {
+		return x.Sort
+	}
+	return ""
+}
+
+func (x *CreateLeaderboardBoardRequest) GetTiebreakOrder() string {
+	if x != nil {
+		return x.TiebreakOrder
+	}
+	return ""
+}
+
+func (x *CreateLeaderboardBoardRequest) GetTieBreak() string {
+	if x != nil {
+		return x.TieBreak
+	}
+	return ""
+}
+
+func (x *CreateLeaderboardBoardRequest) GetPeriodKind() string {
+	if x != nil {
+		return x.PeriodKind
+	}
+	return ""
+}
+
+func (x *CreateLeaderboardBoardRequest) GetPeriodTz() string {
+	if x != nil {
+		return x.PeriodTz
+	}
+	return ""
+}
+
+func (x *CreateLeaderboardBoardRequest) GetPolicy() string {
+	if x != nil {
+		return x.Policy
+	}
+	return ""
+}
+
+func (x *CreateLeaderboardBoardRequest) GetValueMin() int64 {
+	if x != nil && x.ValueMin != nil {
+		return *x.ValueMin
+	}
+	return 0
+}
+
+func (x *CreateLeaderboardBoardRequest) GetValueMax() int64 {
+	if x != nil && x.ValueMax != nil {
+		return *x.ValueMax
+	}
+	return 0
+}
+
+func (x *CreateLeaderboardBoardRequest) GetClientSubmit() bool {
+	if x != nil {
+		return x.ClientSubmit
+	}
+	return false
+}
+
+func (x *CreateLeaderboardBoardRequest) GetPerSubjectSubmitLimit() int32 {
+	if x != nil {
+		return x.PerSubjectSubmitLimit
+	}
+	return 0
+}
+
+func (x *CreateLeaderboardBoardRequest) GetRetentionPeriods() int32 {
+	if x != nil {
+		return x.RetentionPeriods
+	}
+	return 0
+}
+
+func (x *CreateLeaderboardBoardRequest) GetSubjectKind() string {
+	if x != nil {
+		return x.SubjectKind
+	}
+	return ""
+}
+
+type ListLeaderboardBoardsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLeaderboardBoardsRequest) Reset() {
+	*x = ListLeaderboardBoardsRequest{}
+	mi := &file_server_v1_leaderboards_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLeaderboardBoardsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLeaderboardBoardsRequest) ProtoMessage() {}
+
+func (x *ListLeaderboardBoardsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_leaderboards_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLeaderboardBoardsRequest.ProtoReflect.Descriptor instead.
+func (*ListLeaderboardBoardsRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_leaderboards_proto_rawDescGZIP(), []int{8}
+}
+
+type ListLeaderboardBoardsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Boards        []*v1.LeaderboardBoard `protobuf:"bytes,1,rep,name=boards,proto3" json:"boards,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLeaderboardBoardsResponse) Reset() {
+	*x = ListLeaderboardBoardsResponse{}
+	mi := &file_server_v1_leaderboards_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLeaderboardBoardsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLeaderboardBoardsResponse) ProtoMessage() {}
+
+func (x *ListLeaderboardBoardsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_leaderboards_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLeaderboardBoardsResponse.ProtoReflect.Descriptor instead.
+func (*ListLeaderboardBoardsResponse) Descriptor() ([]byte, []int) {
+	return file_server_v1_leaderboards_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ListLeaderboardBoardsResponse) GetBoards() []*v1.LeaderboardBoard {
+	if x != nil {
+		return x.Boards
+	}
+	return nil
+}
+
+type GetLeaderboardBoardRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BoardId       string                 `protobuf:"bytes,1,opt,name=board_id,json=boardId,proto3" json:"board_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetLeaderboardBoardRequest) Reset() {
+	*x = GetLeaderboardBoardRequest{}
+	mi := &file_server_v1_leaderboards_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetLeaderboardBoardRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetLeaderboardBoardRequest) ProtoMessage() {}
+
+func (x *GetLeaderboardBoardRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_leaderboards_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetLeaderboardBoardRequest.ProtoReflect.Descriptor instead.
+func (*GetLeaderboardBoardRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_leaderboards_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GetLeaderboardBoardRequest) GetBoardId() string {
+	if x != nil {
+		return x.BoardId
+	}
+	return ""
+}
+
+// UpdateLeaderboardBoardRequest 用 proto3 optional 表达"未设置 = 不修改"；
+// 显式清空走 clear_* 布尔。period/sort/tiebreak 声明/policy/tie_break 在
+// 榜内已有条目时不可改（FailedPrecondition，与 console 同一 domain 护栏）。
+// 不含 rewards / clear_rewards。
+type UpdateLeaderboardBoardRequest struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	BoardId               string                 `protobuf:"bytes,1,opt,name=board_id,json=boardId,proto3" json:"board_id,omitempty"`
+	Sort                  *string                `protobuf:"bytes,2,opt,name=sort,proto3,oneof" json:"sort,omitempty"`
+	TiebreakOrder         *string                `protobuf:"bytes,3,opt,name=tiebreak_order,json=tiebreakOrder,proto3,oneof" json:"tiebreak_order,omitempty"`
+	ClearTiebreak         bool                   `protobuf:"varint,4,opt,name=clear_tiebreak,json=clearTiebreak,proto3" json:"clear_tiebreak,omitempty"`
+	TieBreak              *string                `protobuf:"bytes,5,opt,name=tie_break,json=tieBreak,proto3,oneof" json:"tie_break,omitempty"`
+	PeriodKind            *string                `protobuf:"bytes,6,opt,name=period_kind,json=periodKind,proto3,oneof" json:"period_kind,omitempty"`
+	PeriodTz              *string                `protobuf:"bytes,7,opt,name=period_tz,json=periodTz,proto3,oneof" json:"period_tz,omitempty"`
+	Policy                *string                `protobuf:"bytes,8,opt,name=policy,proto3,oneof" json:"policy,omitempty"`
+	ValueMin              *int64                 `protobuf:"varint,9,opt,name=value_min,json=valueMin,proto3,oneof" json:"value_min,omitempty"`
+	ValueMax              *int64                 `protobuf:"varint,10,opt,name=value_max,json=valueMax,proto3,oneof" json:"value_max,omitempty"`
+	ClearValueBounds      bool                   `protobuf:"varint,11,opt,name=clear_value_bounds,json=clearValueBounds,proto3" json:"clear_value_bounds,omitempty"`
+	ClientSubmit          *bool                  `protobuf:"varint,12,opt,name=client_submit,json=clientSubmit,proto3,oneof" json:"client_submit,omitempty"`
+	PerSubjectSubmitLimit *int32                 `protobuf:"varint,13,opt,name=per_subject_submit_limit,json=perSubjectSubmitLimit,proto3,oneof" json:"per_subject_submit_limit,omitempty"`
+	RetentionPeriods      *int32                 `protobuf:"varint,14,opt,name=retention_periods,json=retentionPeriods,proto3,oneof" json:"retention_periods,omitempty"`
+	SubjectKind           *string                `protobuf:"bytes,15,opt,name=subject_kind,json=subjectKind,proto3,oneof" json:"subject_kind,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *UpdateLeaderboardBoardRequest) Reset() {
+	*x = UpdateLeaderboardBoardRequest{}
+	mi := &file_server_v1_leaderboards_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateLeaderboardBoardRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateLeaderboardBoardRequest) ProtoMessage() {}
+
+func (x *UpdateLeaderboardBoardRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_leaderboards_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateLeaderboardBoardRequest.ProtoReflect.Descriptor instead.
+func (*UpdateLeaderboardBoardRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_leaderboards_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *UpdateLeaderboardBoardRequest) GetBoardId() string {
+	if x != nil {
+		return x.BoardId
+	}
+	return ""
+}
+
+func (x *UpdateLeaderboardBoardRequest) GetSort() string {
+	if x != nil && x.Sort != nil {
+		return *x.Sort
+	}
+	return ""
+}
+
+func (x *UpdateLeaderboardBoardRequest) GetTiebreakOrder() string {
+	if x != nil && x.TiebreakOrder != nil {
+		return *x.TiebreakOrder
+	}
+	return ""
+}
+
+func (x *UpdateLeaderboardBoardRequest) GetClearTiebreak() bool {
+	if x != nil {
+		return x.ClearTiebreak
+	}
+	return false
+}
+
+func (x *UpdateLeaderboardBoardRequest) GetTieBreak() string {
+	if x != nil && x.TieBreak != nil {
+		return *x.TieBreak
+	}
+	return ""
+}
+
+func (x *UpdateLeaderboardBoardRequest) GetPeriodKind() string {
+	if x != nil && x.PeriodKind != nil {
+		return *x.PeriodKind
+	}
+	return ""
+}
+
+func (x *UpdateLeaderboardBoardRequest) GetPeriodTz() string {
+	if x != nil && x.PeriodTz != nil {
+		return *x.PeriodTz
+	}
+	return ""
+}
+
+func (x *UpdateLeaderboardBoardRequest) GetPolicy() string {
+	if x != nil && x.Policy != nil {
+		return *x.Policy
+	}
+	return ""
+}
+
+func (x *UpdateLeaderboardBoardRequest) GetValueMin() int64 {
+	if x != nil && x.ValueMin != nil {
+		return *x.ValueMin
+	}
+	return 0
+}
+
+func (x *UpdateLeaderboardBoardRequest) GetValueMax() int64 {
+	if x != nil && x.ValueMax != nil {
+		return *x.ValueMax
+	}
+	return 0
+}
+
+func (x *UpdateLeaderboardBoardRequest) GetClearValueBounds() bool {
+	if x != nil {
+		return x.ClearValueBounds
+	}
+	return false
+}
+
+func (x *UpdateLeaderboardBoardRequest) GetClientSubmit() bool {
+	if x != nil && x.ClientSubmit != nil {
+		return *x.ClientSubmit
+	}
+	return false
+}
+
+func (x *UpdateLeaderboardBoardRequest) GetPerSubjectSubmitLimit() int32 {
+	if x != nil && x.PerSubjectSubmitLimit != nil {
+		return *x.PerSubjectSubmitLimit
+	}
+	return 0
+}
+
+func (x *UpdateLeaderboardBoardRequest) GetRetentionPeriods() int32 {
+	if x != nil && x.RetentionPeriods != nil {
+		return *x.RetentionPeriods
+	}
+	return 0
+}
+
+func (x *UpdateLeaderboardBoardRequest) GetSubjectKind() string {
+	if x != nil && x.SubjectKind != nil {
+		return *x.SubjectKind
+	}
+	return ""
+}
+
+type ListLeaderboardBoardPeriodsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BoardId       string                 `protobuf:"bytes,1,opt,name=board_id,json=boardId,proto3" json:"board_id,omitempty"`
+	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLeaderboardBoardPeriodsRequest) Reset() {
+	*x = ListLeaderboardBoardPeriodsRequest{}
+	mi := &file_server_v1_leaderboards_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLeaderboardBoardPeriodsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLeaderboardBoardPeriodsRequest) ProtoMessage() {}
+
+func (x *ListLeaderboardBoardPeriodsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_leaderboards_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLeaderboardBoardPeriodsRequest.ProtoReflect.Descriptor instead.
+func (*ListLeaderboardBoardPeriodsRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_leaderboards_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ListLeaderboardBoardPeriodsRequest) GetBoardId() string {
+	if x != nil {
+		return x.BoardId
+	}
+	return ""
+}
+
+func (x *ListLeaderboardBoardPeriodsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListLeaderboardBoardPeriodsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Periods       []string               `protobuf:"bytes,1,rep,name=periods,proto3" json:"periods,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLeaderboardBoardPeriodsResponse) Reset() {
+	*x = ListLeaderboardBoardPeriodsResponse{}
+	mi := &file_server_v1_leaderboards_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLeaderboardBoardPeriodsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLeaderboardBoardPeriodsResponse) ProtoMessage() {}
+
+func (x *ListLeaderboardBoardPeriodsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_leaderboards_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLeaderboardBoardPeriodsResponse.ProtoReflect.Descriptor instead.
+func (*ListLeaderboardBoardPeriodsResponse) Descriptor() ([]byte, []int) {
+	return file_server_v1_leaderboards_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ListLeaderboardBoardPeriodsResponse) GetPeriods() []string {
+	if x != nil {
+		return x.Periods
+	}
+	return nil
+}
+
 var File_server_v1_leaderboards_proto protoreflect.FileDescriptor
 
 const file_server_v1_leaderboards_proto_rawDesc = "" +
@@ -480,14 +1008,87 @@ const file_server_v1_leaderboards_proto_rawDesc = "" +
 	"\x05limit\x18\x02 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\x05limit\"r\n" +
 	"\"ListLeaderboardSettlementsResponse\x12L\n" +
-	"\vsettlements\x18\x01 \x03(\v2*.torchwood.shared.v1.LeaderboardSettlementR\vsettlements2\xfb\a\n" +
+	"\vsettlements\x18\x01 \x03(\v2*.torchwood.shared.v1.LeaderboardSettlementR\vsettlements\"\x8b\x04\n" +
+	"\x1dCreateLeaderboardBoardRequest\x12.\n" +
+	"\x02id\x18\x01 \x01(\tB\x1e\xbaH\x1b\xc8\x01\x01r\x16\x18(2\x12^[a-z_][a-z0-9_]*$R\x02id\x12\x12\n" +
+	"\x04sort\x18\x02 \x01(\tR\x04sort\x12%\n" +
+	"\x0etiebreak_order\x18\x03 \x01(\tR\rtiebreakOrder\x12\x1b\n" +
+	"\ttie_break\x18\x04 \x01(\tR\btieBreak\x12\x1f\n" +
+	"\vperiod_kind\x18\x05 \x01(\tR\n" +
+	"periodKind\x12\x1b\n" +
+	"\tperiod_tz\x18\x06 \x01(\tR\bperiodTz\x12\x16\n" +
+	"\x06policy\x18\a \x01(\tR\x06policy\x12 \n" +
+	"\tvalue_min\x18\b \x01(\x03H\x00R\bvalueMin\x88\x01\x01\x12 \n" +
+	"\tvalue_max\x18\t \x01(\x03H\x01R\bvalueMax\x88\x01\x01\x12#\n" +
+	"\rclient_submit\x18\n" +
+	" \x01(\bR\fclientSubmit\x127\n" +
+	"\x18per_subject_submit_limit\x18\v \x01(\x05R\x15perSubjectSubmitLimit\x12+\n" +
+	"\x11retention_periods\x18\f \x01(\x05R\x10retentionPeriods\x12!\n" +
+	"\fsubject_kind\x18\r \x01(\tR\vsubjectKindB\f\n" +
+	"\n" +
+	"_value_minB\f\n" +
+	"\n" +
+	"_value_max\"\x1e\n" +
+	"\x1cListLeaderboardBoardsRequest\"^\n" +
+	"\x1dListLeaderboardBoardsResponse\x12=\n" +
+	"\x06boards\x18\x01 \x03(\v2%.torchwood.shared.v1.LeaderboardBoardR\x06boards\"?\n" +
+	"\x1aGetLeaderboardBoardRequest\x12!\n" +
+	"\bboard_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aboardId\"\xae\x06\n" +
+	"\x1dUpdateLeaderboardBoardRequest\x12!\n" +
+	"\bboard_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aboardId\x12\x17\n" +
+	"\x04sort\x18\x02 \x01(\tH\x00R\x04sort\x88\x01\x01\x12*\n" +
+	"\x0etiebreak_order\x18\x03 \x01(\tH\x01R\rtiebreakOrder\x88\x01\x01\x12%\n" +
+	"\x0eclear_tiebreak\x18\x04 \x01(\bR\rclearTiebreak\x12 \n" +
+	"\ttie_break\x18\x05 \x01(\tH\x02R\btieBreak\x88\x01\x01\x12$\n" +
+	"\vperiod_kind\x18\x06 \x01(\tH\x03R\n" +
+	"periodKind\x88\x01\x01\x12 \n" +
+	"\tperiod_tz\x18\a \x01(\tH\x04R\bperiodTz\x88\x01\x01\x12\x1b\n" +
+	"\x06policy\x18\b \x01(\tH\x05R\x06policy\x88\x01\x01\x12 \n" +
+	"\tvalue_min\x18\t \x01(\x03H\x06R\bvalueMin\x88\x01\x01\x12 \n" +
+	"\tvalue_max\x18\n" +
+	" \x01(\x03H\aR\bvalueMax\x88\x01\x01\x12,\n" +
+	"\x12clear_value_bounds\x18\v \x01(\bR\x10clearValueBounds\x12(\n" +
+	"\rclient_submit\x18\f \x01(\bH\bR\fclientSubmit\x88\x01\x01\x12<\n" +
+	"\x18per_subject_submit_limit\x18\r \x01(\x05H\tR\x15perSubjectSubmitLimit\x88\x01\x01\x120\n" +
+	"\x11retention_periods\x18\x0e \x01(\x05H\n" +
+	"R\x10retentionPeriods\x88\x01\x01\x12&\n" +
+	"\fsubject_kind\x18\x0f \x01(\tH\vR\vsubjectKind\x88\x01\x01B\a\n" +
+	"\x05_sortB\x11\n" +
+	"\x0f_tiebreak_orderB\f\n" +
+	"\n" +
+	"_tie_breakB\x0e\n" +
+	"\f_period_kindB\f\n" +
+	"\n" +
+	"_period_tzB\t\n" +
+	"\a_policyB\f\n" +
+	"\n" +
+	"_value_minB\f\n" +
+	"\n" +
+	"_value_maxB\x10\n" +
+	"\x0e_client_submitB\x1b\n" +
+	"\x19_per_subject_submit_limitB\x14\n" +
+	"\x12_retention_periodsB\x0f\n" +
+	"\r_subject_kind\"i\n" +
+	"\"ListLeaderboardBoardPeriodsRequest\x12!\n" +
+	"\bboard_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aboardId\x12 \n" +
+	"\x05limit\x18\x02 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\x05limit\"?\n" +
+	"#ListLeaderboardBoardPeriodsResponse\x12\x18\n" +
+	"\aperiods\x18\x01 \x03(\tR\aperiods2\x9c\x0f\n" +
 	"\x13LeaderboardsService\x12\xbf\x01\n" +
 	"\x16SubmitLeaderboardScore\x122.torchwood.server.v1.SubmitLeaderboardScoreRequest\x1a-.torchwood.shared.v1.LeaderboardScoreSnapshot\"B\x8a\xb2\x19\n" +
 	"\x1a\x02\x03\x04\"\x04\b\x0e\x10\x02\x82\xd3\xe4\x93\x02.:\x01*\")/v1/server/leaderboards/{board_id}:submit\x12\xc0\x01\n" +
 	"\x13GetLeaderboardEntry\x12/.torchwood.server.v1.GetLeaderboardEntryRequest\x1a-.torchwood.shared.v1.LeaderboardScoreSnapshot\"I\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x029\x127/v1/server/leaderboards/{board_id}/entries/{subject_id}\x12\xaf\x01\n" +
 	"\x12ListLeaderboardTop\x12..torchwood.server.v1.ListLeaderboardTopRequest\x1a/.torchwood.shared.v1.ListLeaderboardTopResponse\"8\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x02(\x12&/v1/server/leaderboards/{board_id}/top\x12\xd2\x01\n" +
 	"\x18GetLeaderboardSettlement\x124.torchwood.server.v1.GetLeaderboardSettlementRequest\x1a5.torchwood.server.v1.GetLeaderboardSettlementResponse\"I\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x029\x127/v1/server/leaderboards/{board_id}/settlements/{period}\x12\xcf\x01\n" +
-	"\x1aListLeaderboardSettlements\x126.torchwood.server.v1.ListLeaderboardSettlementsRequest\x1a7.torchwood.server.v1.ListLeaderboardSettlementsResponse\"@\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x020\x12./v1/server/leaderboards/{board_id}/settlements\x1a\x06\x92\xb2\x19\x02\b\x03B\xdb\x03\x92A\x96\x03RR\n" +
+	"\x1aListLeaderboardSettlements\x126.torchwood.server.v1.ListLeaderboardSettlementsRequest\x1a7.torchwood.server.v1.ListLeaderboardSettlementsResponse\"@\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x020\x12./v1/server/leaderboards/{board_id}/settlements\x12\xac\x01\n" +
+	"\x16CreateLeaderboardBoard\x122.torchwood.server.v1.CreateLeaderboardBoardRequest\x1a%.torchwood.shared.v1.LeaderboardBoard\"7\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\x0e\x10\x03\x82\xd3\xe4\x93\x02#:\x01*\"\x1e/v1/server/leaderboards/boards\x12\xaa\x01\n" +
+	"\x13GetLeaderboardBoard\x12/.torchwood.server.v1.GetLeaderboardBoardRequest\x1a%.torchwood.shared.v1.LeaderboardBoard\";\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x02+\x12)/v1/server/leaderboards/boards/{board_id}\x12\xb0\x01\n" +
+	"\x15ListLeaderboardBoards\x121.torchwood.server.v1.ListLeaderboardBoardsRequest\x1a2.torchwood.server.v1.ListLeaderboardBoardsResponse\"0\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/leaderboards/boards\x12\xd5\x01\n" +
+	"\x1bListLeaderboardBoardPeriods\x127.torchwood.server.v1.ListLeaderboardBoardPeriodsRequest\x1a8.torchwood.server.v1.ListLeaderboardBoardPeriodsResponse\"C\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x023\x121/v1/server/leaderboards/boards/{board_id}/periods\x12\xb7\x01\n" +
+	"\x16UpdateLeaderboardBoard\x122.torchwood.server.v1.UpdateLeaderboardBoardRequest\x1a%.torchwood.shared.v1.LeaderboardBoard\"B\x8a\xb2\x19\n" +
+	"\x1a\x02\x03\x04\"\x04\b\x0e\x10\x03\x82\xd3\xe4\x93\x02.:\x01*2)/v1/server/leaderboards/boards/{board_id}\x1a\x06\x92\xb2\x19\x02\b\x03B\xdb\x03\x92A\x96\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
@@ -514,39 +1115,58 @@ func file_server_v1_leaderboards_proto_rawDescGZIP() []byte {
 	return file_server_v1_leaderboards_proto_rawDescData
 }
 
-var file_server_v1_leaderboards_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_server_v1_leaderboards_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_server_v1_leaderboards_proto_goTypes = []any{
-	(*SubmitLeaderboardScoreRequest)(nil),      // 0: torchwood.server.v1.SubmitLeaderboardScoreRequest
-	(*GetLeaderboardEntryRequest)(nil),         // 1: torchwood.server.v1.GetLeaderboardEntryRequest
-	(*ListLeaderboardTopRequest)(nil),          // 2: torchwood.server.v1.ListLeaderboardTopRequest
-	(*GetLeaderboardSettlementRequest)(nil),    // 3: torchwood.server.v1.GetLeaderboardSettlementRequest
-	(*GetLeaderboardSettlementResponse)(nil),   // 4: torchwood.server.v1.GetLeaderboardSettlementResponse
-	(*ListLeaderboardSettlementsRequest)(nil),  // 5: torchwood.server.v1.ListLeaderboardSettlementsRequest
-	(*ListLeaderboardSettlementsResponse)(nil), // 6: torchwood.server.v1.ListLeaderboardSettlementsResponse
-	(*v1.LeaderboardSettlement)(nil),           // 7: torchwood.shared.v1.LeaderboardSettlement
-	(*v1.LeaderboardSettlementGrant)(nil),      // 8: torchwood.shared.v1.LeaderboardSettlementGrant
-	(*v1.LeaderboardScoreSnapshot)(nil),        // 9: torchwood.shared.v1.LeaderboardScoreSnapshot
-	(*v1.ListLeaderboardTopResponse)(nil),      // 10: torchwood.shared.v1.ListLeaderboardTopResponse
+	(*SubmitLeaderboardScoreRequest)(nil),       // 0: torchwood.server.v1.SubmitLeaderboardScoreRequest
+	(*GetLeaderboardEntryRequest)(nil),          // 1: torchwood.server.v1.GetLeaderboardEntryRequest
+	(*ListLeaderboardTopRequest)(nil),           // 2: torchwood.server.v1.ListLeaderboardTopRequest
+	(*GetLeaderboardSettlementRequest)(nil),     // 3: torchwood.server.v1.GetLeaderboardSettlementRequest
+	(*GetLeaderboardSettlementResponse)(nil),    // 4: torchwood.server.v1.GetLeaderboardSettlementResponse
+	(*ListLeaderboardSettlementsRequest)(nil),   // 5: torchwood.server.v1.ListLeaderboardSettlementsRequest
+	(*ListLeaderboardSettlementsResponse)(nil),  // 6: torchwood.server.v1.ListLeaderboardSettlementsResponse
+	(*CreateLeaderboardBoardRequest)(nil),       // 7: torchwood.server.v1.CreateLeaderboardBoardRequest
+	(*ListLeaderboardBoardsRequest)(nil),        // 8: torchwood.server.v1.ListLeaderboardBoardsRequest
+	(*ListLeaderboardBoardsResponse)(nil),       // 9: torchwood.server.v1.ListLeaderboardBoardsResponse
+	(*GetLeaderboardBoardRequest)(nil),          // 10: torchwood.server.v1.GetLeaderboardBoardRequest
+	(*UpdateLeaderboardBoardRequest)(nil),       // 11: torchwood.server.v1.UpdateLeaderboardBoardRequest
+	(*ListLeaderboardBoardPeriodsRequest)(nil),  // 12: torchwood.server.v1.ListLeaderboardBoardPeriodsRequest
+	(*ListLeaderboardBoardPeriodsResponse)(nil), // 13: torchwood.server.v1.ListLeaderboardBoardPeriodsResponse
+	(*v1.LeaderboardSettlement)(nil),            // 14: torchwood.shared.v1.LeaderboardSettlement
+	(*v1.LeaderboardSettlementGrant)(nil),       // 15: torchwood.shared.v1.LeaderboardSettlementGrant
+	(*v1.LeaderboardBoard)(nil),                 // 16: torchwood.shared.v1.LeaderboardBoard
+	(*v1.LeaderboardScoreSnapshot)(nil),         // 17: torchwood.shared.v1.LeaderboardScoreSnapshot
+	(*v1.ListLeaderboardTopResponse)(nil),       // 18: torchwood.shared.v1.ListLeaderboardTopResponse
 }
 var file_server_v1_leaderboards_proto_depIdxs = []int32{
-	7,  // 0: torchwood.server.v1.GetLeaderboardSettlementResponse.settlement:type_name -> torchwood.shared.v1.LeaderboardSettlement
-	8,  // 1: torchwood.server.v1.GetLeaderboardSettlementResponse.grants:type_name -> torchwood.shared.v1.LeaderboardSettlementGrant
-	7,  // 2: torchwood.server.v1.ListLeaderboardSettlementsResponse.settlements:type_name -> torchwood.shared.v1.LeaderboardSettlement
-	0,  // 3: torchwood.server.v1.LeaderboardsService.SubmitLeaderboardScore:input_type -> torchwood.server.v1.SubmitLeaderboardScoreRequest
-	1,  // 4: torchwood.server.v1.LeaderboardsService.GetLeaderboardEntry:input_type -> torchwood.server.v1.GetLeaderboardEntryRequest
-	2,  // 5: torchwood.server.v1.LeaderboardsService.ListLeaderboardTop:input_type -> torchwood.server.v1.ListLeaderboardTopRequest
-	3,  // 6: torchwood.server.v1.LeaderboardsService.GetLeaderboardSettlement:input_type -> torchwood.server.v1.GetLeaderboardSettlementRequest
-	5,  // 7: torchwood.server.v1.LeaderboardsService.ListLeaderboardSettlements:input_type -> torchwood.server.v1.ListLeaderboardSettlementsRequest
-	9,  // 8: torchwood.server.v1.LeaderboardsService.SubmitLeaderboardScore:output_type -> torchwood.shared.v1.LeaderboardScoreSnapshot
-	9,  // 9: torchwood.server.v1.LeaderboardsService.GetLeaderboardEntry:output_type -> torchwood.shared.v1.LeaderboardScoreSnapshot
-	10, // 10: torchwood.server.v1.LeaderboardsService.ListLeaderboardTop:output_type -> torchwood.shared.v1.ListLeaderboardTopResponse
-	4,  // 11: torchwood.server.v1.LeaderboardsService.GetLeaderboardSettlement:output_type -> torchwood.server.v1.GetLeaderboardSettlementResponse
-	6,  // 12: torchwood.server.v1.LeaderboardsService.ListLeaderboardSettlements:output_type -> torchwood.server.v1.ListLeaderboardSettlementsResponse
-	8,  // [8:13] is the sub-list for method output_type
-	3,  // [3:8] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	14, // 0: torchwood.server.v1.GetLeaderboardSettlementResponse.settlement:type_name -> torchwood.shared.v1.LeaderboardSettlement
+	15, // 1: torchwood.server.v1.GetLeaderboardSettlementResponse.grants:type_name -> torchwood.shared.v1.LeaderboardSettlementGrant
+	14, // 2: torchwood.server.v1.ListLeaderboardSettlementsResponse.settlements:type_name -> torchwood.shared.v1.LeaderboardSettlement
+	16, // 3: torchwood.server.v1.ListLeaderboardBoardsResponse.boards:type_name -> torchwood.shared.v1.LeaderboardBoard
+	0,  // 4: torchwood.server.v1.LeaderboardsService.SubmitLeaderboardScore:input_type -> torchwood.server.v1.SubmitLeaderboardScoreRequest
+	1,  // 5: torchwood.server.v1.LeaderboardsService.GetLeaderboardEntry:input_type -> torchwood.server.v1.GetLeaderboardEntryRequest
+	2,  // 6: torchwood.server.v1.LeaderboardsService.ListLeaderboardTop:input_type -> torchwood.server.v1.ListLeaderboardTopRequest
+	3,  // 7: torchwood.server.v1.LeaderboardsService.GetLeaderboardSettlement:input_type -> torchwood.server.v1.GetLeaderboardSettlementRequest
+	5,  // 8: torchwood.server.v1.LeaderboardsService.ListLeaderboardSettlements:input_type -> torchwood.server.v1.ListLeaderboardSettlementsRequest
+	7,  // 9: torchwood.server.v1.LeaderboardsService.CreateLeaderboardBoard:input_type -> torchwood.server.v1.CreateLeaderboardBoardRequest
+	10, // 10: torchwood.server.v1.LeaderboardsService.GetLeaderboardBoard:input_type -> torchwood.server.v1.GetLeaderboardBoardRequest
+	8,  // 11: torchwood.server.v1.LeaderboardsService.ListLeaderboardBoards:input_type -> torchwood.server.v1.ListLeaderboardBoardsRequest
+	12, // 12: torchwood.server.v1.LeaderboardsService.ListLeaderboardBoardPeriods:input_type -> torchwood.server.v1.ListLeaderboardBoardPeriodsRequest
+	11, // 13: torchwood.server.v1.LeaderboardsService.UpdateLeaderboardBoard:input_type -> torchwood.server.v1.UpdateLeaderboardBoardRequest
+	17, // 14: torchwood.server.v1.LeaderboardsService.SubmitLeaderboardScore:output_type -> torchwood.shared.v1.LeaderboardScoreSnapshot
+	17, // 15: torchwood.server.v1.LeaderboardsService.GetLeaderboardEntry:output_type -> torchwood.shared.v1.LeaderboardScoreSnapshot
+	18, // 16: torchwood.server.v1.LeaderboardsService.ListLeaderboardTop:output_type -> torchwood.shared.v1.ListLeaderboardTopResponse
+	4,  // 17: torchwood.server.v1.LeaderboardsService.GetLeaderboardSettlement:output_type -> torchwood.server.v1.GetLeaderboardSettlementResponse
+	6,  // 18: torchwood.server.v1.LeaderboardsService.ListLeaderboardSettlements:output_type -> torchwood.server.v1.ListLeaderboardSettlementsResponse
+	16, // 19: torchwood.server.v1.LeaderboardsService.CreateLeaderboardBoard:output_type -> torchwood.shared.v1.LeaderboardBoard
+	16, // 20: torchwood.server.v1.LeaderboardsService.GetLeaderboardBoard:output_type -> torchwood.shared.v1.LeaderboardBoard
+	9,  // 21: torchwood.server.v1.LeaderboardsService.ListLeaderboardBoards:output_type -> torchwood.server.v1.ListLeaderboardBoardsResponse
+	13, // 22: torchwood.server.v1.LeaderboardsService.ListLeaderboardBoardPeriods:output_type -> torchwood.server.v1.ListLeaderboardBoardPeriodsResponse
+	16, // 23: torchwood.server.v1.LeaderboardsService.UpdateLeaderboardBoard:output_type -> torchwood.shared.v1.LeaderboardBoard
+	14, // [14:24] is the sub-list for method output_type
+	4,  // [4:14] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_server_v1_leaderboards_proto_init() }
@@ -555,13 +1175,15 @@ func file_server_v1_leaderboards_proto_init() {
 		return
 	}
 	file_server_v1_leaderboards_proto_msgTypes[0].OneofWrappers = []any{}
+	file_server_v1_leaderboards_proto_msgTypes[7].OneofWrappers = []any{}
+	file_server_v1_leaderboards_proto_msgTypes[11].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_server_v1_leaderboards_proto_rawDesc), len(file_server_v1_leaderboards_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

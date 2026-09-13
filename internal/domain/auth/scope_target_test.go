@@ -32,6 +32,7 @@ func TestParseScopeToken(t *testing.T) {
 		{in: "databases", want: scopeToken{Resource: ScopeDatabases}, wantOK: true},
 		{in: "databases.read", want: scopeToken{Resource: ScopeDatabases, Op: ScopeRead}, wantOK: true},
 		{in: "databases.write", want: scopeToken{Resource: ScopeDatabases, Op: ScopeWrite}, wantOK: true},
+		{in: "leaderboards.admin", want: scopeToken{Resource: ScopeLeaderboards, Op: ScopeAdmin}, wantOK: true},
 		{in: "databases:blog", want: scopeToken{Resource: ScopeDatabases, TargetID: "blog"}, wantOK: true},
 		{in: "databases:blog.read", want: scopeToken{Resource: ScopeDatabases, Op: ScopeRead, TargetID: "blog"}, wantOK: true},
 		{in: "storage:media.write", want: scopeToken{Resource: ScopeStorage, Op: ScopeWrite, TargetID: "media"}, wantOK: true},
@@ -148,6 +149,53 @@ func TestValidateScopeTargetID(t *testing.T) {
 	require.NoError(t, ValidateScopeTargetID(ScopeStorage, "My_Bucket-01"))
 	require.Error(t, ValidateScopeTargetID(ScopeStorage, "bad bucket"))
 	require.Error(t, ValidateScopeTargetID(ScopeUsers, "x"))
+}
+
+// testLeaderboardsPolicySet 构造 leaderboards 三方向的最小策略集。
+func testLeaderboardsPolicySet(t *testing.T) *PolicySet {
+	t.Helper()
+	set, err := NewPolicySet([]MethodPolicy{
+		{Method: "/test/LBRead", Access: AccessServer, Scope: &ScopeRule{Resource: ScopeLeaderboards, Op: ScopeRead}},
+		{Method: "/test/LBWrite", Access: AccessServer, Scope: &ScopeRule{Resource: ScopeLeaderboards, Op: ScopeWrite}},
+		{Method: "/test/LBAdmin", Access: AccessServer, Scope: &ScopeRule{Resource: ScopeLeaderboards, Op: ScopeAdmin}},
+	})
+	require.NoError(t, err)
+	return set
+}
+
+// TestScopeAdminOp（2026-09-13 leaderboards.admin 裁决的匹配语义）：admin 是
+// 配置面方向——提交钥（write）不得命中 admin 门方法，admin 钥也不得命中
+// write/read 门方法（各方向独立授予）；裸资源与通配符仍放行全方向（既有
+// 行为不变量）。
+func TestScopeAdminOp(t *testing.T) {
+	t.Parallel()
+	set := testLeaderboardsPolicySet(t)
+
+	// admin 门：admin 钥/裸资源/通配符放行；write、read 钥拒绝。
+	require.True(t, set.AllowsAPIKey("/test/LBAdmin", []string{"leaderboards.admin"}))
+	require.True(t, set.AllowsAPIKey("/test/LBAdmin", []string{"leaderboards"}))
+	require.True(t, set.AllowsAPIKey("/test/LBAdmin", []string{"all"}))
+	require.False(t, set.AllowsAPIKey("/test/LBAdmin", []string{"leaderboards.write"}))
+	require.False(t, set.AllowsAPIKey("/test/LBAdmin", []string{"leaderboards.read"}))
+	// write 门：admin 钥拒绝（管理权不放大提交权）。
+	require.True(t, set.AllowsAPIKey("/test/LBWrite", []string{"leaderboards.write"}))
+	require.False(t, set.AllowsAPIKey("/test/LBWrite", []string{"leaderboards.admin"}))
+	// read 门：admin 钥拒绝（读单独授予——管理钥如需读配置须并列携带 read）。
+	require.True(t, set.AllowsAPIKey("/test/LBRead", []string{"leaderboards.read"}))
+	require.False(t, set.AllowsAPIKey("/test/LBRead", []string{"leaderboards.admin"}))
+}
+
+// TestScopeAdmin_Vocabulary：词表派生自动收录 admin 方向；不可寻址资源
+// 的实例限定形态仍拒绝。
+func TestScopeAdmin_Vocabulary(t *testing.T) {
+	t.Parallel()
+	set := testLeaderboardsPolicySet(t)
+	v := VocabularyFromPolicies(set)
+
+	require.True(t, v.Valid("leaderboards.admin"))
+	require.True(t, v.HasOp(ScopeLeaderboards, ScopeAdmin))
+	require.False(t, v.Valid("leaderboards.readwrite"))
+	require.False(t, v.Valid("leaderboards:b1.admin"))
 }
 
 func pad(s string, n int) string {
