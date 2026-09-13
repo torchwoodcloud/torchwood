@@ -201,6 +201,13 @@ HTTP/Metrics 端口由 `server.http.addr` / `server.metrics.addr` 决定，非�
 ./bin/torchwood uuid
 ./bin/torchwood users list --api-key <secret>
 ./bin/torchwood databases documents create app notes --data '{"title":"hi"}' --document-id doc1
+./bin/torchwood leaderboards boards create daily_wins --period-kind daily --policy best   # 幂等建榜（leaderboards.admin）
+./bin/torchwood leaderboards submit daily_wins user_42 --value 100                        # 代任意 subject 提交（leaderboards.write）
+./bin/torchwood leaderboards top daily_wins
+./bin/torchwood analytics overview --from 2026-09-01 --to 2026-09-14                      # 日期按 UTC 零点归一
+./bin/torchwood analytics ingest --file events.json                                       # 或 --file - 走 stdin（analytics.write）
+./bin/torchwood assets grant user_42 gems --quantity 100 --idempotency-key comp-2026-0914 # 运营补偿（assets.write，进审计）
+./bin/torchwood payments refund --help                                                    # 订单查询/退款/人工履约（payments.read/write）
 ./bin/torchwood rpc /torchwood.server.v1.UsersService/ListUsers --data '{"pageSize":10}' --api-key <secret>
 ```
 

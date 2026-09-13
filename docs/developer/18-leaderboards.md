@@ -87,7 +87,9 @@ PATCH /v1/server/leaderboards/boards/{boardId}              # UpdateLeaderboardB
   opt-in；详见 `05-authentication.md` §6）。
 - **SDK**：TS `tw.leaderboards.submit(board, value, {tiebreakValue?, period?,
   requestId?})` / `.me(board)` / `.top(board)`；`tw.server.leaderboards.*` 可代
-  任意 subject。CLI 零登记自动可用（server 面反射覆盖测试保证）。
+  任意 subject。CLI 一等命令组 `torchwood leaderboards`（`submit` / `get-entry` /
+  `top` / `settlements get|list` / `boards create|get|list|periods|update`，
+  board 写动词需 `leaderboards.admin`；`torchwood rpc` 逃生舱兜底任意方法）。
 
 ## 3 语义
 

@@ -22,7 +22,7 @@
 | 注销钩子 | `internal/app/client/account.go`（`DeleteAccount`）+ `internal/app/server/users.go`（`DeleteUser`） | 既有删除事务内 tombstone INSERT（`ON CONFLICT DO NOTHING` 幂等） |
 | 计量/限流 | `internal/domain/billing/billing.go`（`MetricAnalyticsEvents` 进 `KnownMetric`）+ 限流拦截器（复用 user 维度） | accepted 条数 `UsageCounter.Incr`（best-effort `WithoutCancel`）；自动进 usage_rollups → 账单 |
 | Console | `console/src/api/analytics.ts` + `console/src/routes/analytics/`（`pages.tsx`/`EventDetailPage.tsx`/`UserActivityPage.tsx`/`components.tsx`/`shared.ts`） | 概览（KPI+趋势+Top）、事件字典+详情（趋势+拆解）、留存矩阵、用户行为轨迹；`SourceBadge`/`SourceNote` 口径标注 |
-| SDK | `sdk/typescript/src/client/analytics.ts`（`ClientAnalyticsService` + `AnalyticsEventBuffer` 批量缓冲器）、`sdk/typescript/src/server/analytics.ts`；`sdk/go/server/analytics.go` | 端侧摄入薄封装 + size/time 双阈值缓冲器；server 查询面薄封装；CLI 零登记（`sdk/go/server` 反射覆盖测试自动纳入新 RPC） |
+| SDK | `sdk/typescript/src/client/analytics.ts`（`ClientAnalyticsService` + `AnalyticsEventBuffer` 批量缓冲器）、`sdk/typescript/src/server/analytics.ts`；`sdk/go/server/analytics.go` | 端侧摄入薄封装 + size/time 双阈值缓冲器；server 查询面薄封装；CLI 一等命令组 `torchwood analytics`（`torchwood rpc` 逃生舱兜底，新增 RPC 经 `sdk/go/server` 反射覆盖测试自动可用） |
 
 ### 范围外
 
@@ -188,7 +188,7 @@ resp, err := client.Analytics.IngestEvents(ctx, &serverv1.IngestServerEventsRequ
 
 （`serverv1` = `github.com/torchwoodcloud/torchwood/genproto/server/v1`；查询方法与 §3 curl 一一对应。）
 
-CLI（`bin/torchwood`）零登记：`sdk/go/server` 的反射覆盖测试保证每个 server RPC 可经 `InvokeJSON` 调用，新增 RPC 无需在 CLI 登记。Agent 经 scoped API Key（`analytics.read`）可直接做运营问答。
+CLI（`bin/torchwood`）一等命令组 `torchwood analytics`：`ingest`（`--file <path|->`，支持 stdin）/ `overview` / `events list` / `timeseries` / `breakdown` / `retention` / `user-events`；`torchwood rpc` 逃生舱兜底任意方法（`sdk/go/server` 反射覆盖测试保证，新增 RPC 无需登记）。Agent 经 scoped API Key（`analytics.read`）可直接做运营问答。
 
 ## 7 端配方（各端接入）
 
