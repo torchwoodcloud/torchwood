@@ -44,7 +44,7 @@ func main() {
 	},
 		lynx.WithName("Torchwood Functions Dispatcher"),
 		lynx.WithVersion(buildVersion),
-		lynx.WithSetFlagsFunc(func(f *pflag.FlagSet) {
+		lynx.WithBindFlagsFunc(func(f *pflag.FlagSet) {
 			f.String("config-dir", "./configs", "config file path")
 			f.String("log-level", "info", "log level")
 		}),

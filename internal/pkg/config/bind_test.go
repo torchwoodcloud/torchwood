@@ -152,7 +152,7 @@ func TestUnmarshalConfig(t *testing.T) {
 	require.Equal(t, "user:{id}", out.GetIdgen().GetResources().GetUsers())
 }
 
-func TestConfigureViperEnvBinding(t *testing.T) {
+func TestConfigureConfigSourceEnvBinding(t *testing.T) {
 	v := viper.New()
 	f := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	f.String("config-dir", "./testdata", "config file path")
@@ -164,7 +164,7 @@ func TestConfigureViperEnvBinding(t *testing.T) {
 	t.Setenv("TORCHWOOD_SECURITY_TRUSTED_PROXIES", "10.0.0.0/8,192.168.0.0/16")
 	t.Setenv("TORCHWOOD_SECURITY_SESSIONS_MAX_PER_USER", "3")
 
-	require.NoError(t, ConfigureViper(f, lynx.NewViperConfig(v)))
+	require.NoError(t, ConfigureConfigSource(f, lynx.NewViperConfig(v)))
 
 	require.Equal(t, ":10001", v.GetString("server.grpc.addr"))
 	require.Equal(t, "env-access-key", v.GetString("storage.s3.access_key_id"))
@@ -173,7 +173,7 @@ func TestConfigureViperEnvBinding(t *testing.T) {
 	require.Equal(t, 3, v.GetInt("security.sessions.max_per_user"))
 }
 
-func TestConfigureViperEnvBindingUnmarshal(t *testing.T) {
+func TestConfigureConfigSourceEnvBindingUnmarshal(t *testing.T) {
 	v := viper.New()
 	v.SetConfigType("yaml")
 	require.NoError(t, v.ReadConfig(strings.NewReader(testYAML)))
@@ -185,7 +185,7 @@ func TestConfigureViperEnvBindingUnmarshal(t *testing.T) {
 	t.Setenv("TORCHWOOD_STORAGE_S3_SECRET_ACCESS_KEY", "env-secret")
 	t.Setenv("TORCHWOOD_SECURITY_TRUSTED_PROXIES", "10.0.0.0/8,192.168.0.0/16")
 
-	require.NoError(t, ConfigureViper(f, lynx.NewViperConfig(v)))
+	require.NoError(t, ConfigureConfigSource(f, lynx.NewViperConfig(v)))
 
 	var out AppConfig
 	require.NoError(t, UnmarshalConfig(lynx.NewViperConfig(v), &out))
@@ -193,11 +193,6 @@ func TestConfigureViperEnvBindingUnmarshal(t *testing.T) {
 	require.Equal(t, "env-access-key", out.GetStorage().GetS3().GetAccessKeyId())
 	require.Equal(t, "env-secret", out.GetStorage().GetS3().GetSecretAccessKey())
 	require.Equal(t, []string{"10.0.0.0/8", "192.168.0.0/16"}, out.GetSecurity().GetTrustedProxies())
-}
-
-func TestEnvNameForKey(t *testing.T) {
-	require.Equal(t, "TORCHWOOD_DATA_DATABASE_SOURCE", envNameForKey("data.database.source"))
-	require.Equal(t, "TORCHWOOD_SECURITY_JWT_SECRET", envNameForKey("security.jwt.secret"))
 }
 
 // TestRateLimitBinding：security.rate_limit 的 YAML 解码（optional bool 的
@@ -234,7 +229,7 @@ security:
 	t.Setenv("TORCHWOOD_SECURITY_RATE_LIMIT_IP_LIMIT", "42")
 	t.Setenv("TORCHWOOD_SECURITY_RATE_LIMIT_API_KEY_WINDOW", "10s")
 
-	require.NoError(t, ConfigureViper(f, lynx.NewViperConfig(v)))
+	require.NoError(t, ConfigureConfigSource(f, lynx.NewViperConfig(v)))
 	var envOut AppConfig
 	require.NoError(t, UnmarshalConfig(lynx.NewViperConfig(v), &envOut))
 	envRL := envOut.GetSecurity().GetRateLimit()
