@@ -231,6 +231,7 @@ flag: explicit flag > TORCHWOOD_CLI_* env var > config file profile
 		newAuditLogsCmd(g),
 		newConfigCmd(),
 		newRPCCmd(g),
+		newRunbookCmd(g),
 	)
 	return app
 }

@@ -65,6 +65,7 @@ func NewGRPCServer(
 	serverLeaderboards *servergrpc.LeaderboardsService,
 	consoleLeaderboards *consolegrpc.LeaderboardsService,
 	serverAnalytics *servergrpc.AnalyticsService,
+	serverRunbook *servergrpc.RunbookService,
 	policySet *domainauth.PolicySet,
 ) (*lynxgrpc.Server, error) {
 	grpcCfg := cfg.GetServer().GetGrpc()
@@ -160,6 +161,8 @@ func NewGRPCServer(
 	// 查询方法嵌 Unimplemented 占位（实现随 PR3），注册保证策略/反射/
 	// swagger 覆盖断言即刻可见。
 	serverv1.RegisterAnalyticsServiceServer(grpcSrv, serverAnalytics)
+	// Runbook 迁移状态面（阶段 A：三方法全实现，策略/swagger 断言即刻可见）。
+	serverv1.RegisterRunbookServiceServer(grpcSrv, serverRunbook)
 
 	// fail-closed：所有已注册方法都必须带有 authz 注解，缺失的方法会在拦截器里被放行。
 	if err := assertRegisteredMethodsHaveAuthz(grpcSrv, policySet); err != nil {
@@ -241,6 +244,8 @@ func authzFileDescriptors() []protoreflect.FileDescriptor {
 		// Analytics server 面：摄入 + 七查询；PR1 只登记 proto 策略
 		// （摄入 handler 随 PR2、查询实现随 PR3 到位）。
 		serverv1.File_server_v1_analytics_proto,
+		// Runbook 迁移状态面（docs/design/runbook.md §2.2 阶段 A）。
+		serverv1.File_server_v1_runbook_proto,
 		consolev1.File_console_v1_auth_proto,
 		consolev1.File_console_v1_admins_proto,
 		consolev1.File_console_v1_leaderboards_proto,

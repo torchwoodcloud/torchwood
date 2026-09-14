@@ -28,6 +28,7 @@
 | [17-update-write-guard.md](17-update-write-guard.md) | bun 更新写规范与 internal_id 漂移修复：UPDATE 列白名单强约束、三道护栏、存量漂移 runbook | 后端开发者 |
 | [18-leaderboards.md](18-leaderboards.md) | 排行榜：Board/Entry 模型、期派生与封榜语义、tie-break 全序（rank/position）、幂等与限频、console 与运维；Phase 2 结榜发奖定型稿 | 游戏开发者 / 后端开发者 |
 | [18-analytics.md](18-analytics.md) | 内置事件分析：双面摄入、月分区存储、rollup 聚合、固定形状查询、口径声明、TS SDK 缓冲器与各端接入配方 | 后端开发者 / 端侧接入者 |
+| [19-runbook.md](19-runbook.md) | 版本化资源迁移：NNNNNN_name.yaml 双段文件、18 动词幂等 reconcile、checksum 防篡改、up/down/status/forgive 与两层漂移边界 | 后端开发者 / 运维 / CI 维护者 |
 | [authz-matrix.md](authz-matrix.md) | 全方法授权矩阵（**生成物，勿手改**）：`task gen:authz-matrix` 从策略注册表渲染，含档位与威胁模型已知取舍 | 后端 / 安全评审 |
 
 ## 推荐阅读路径
@@ -43,6 +44,5 @@
 - `README.md` / `README_ZH.md` — 项目总览与快速开始（中文/英文）
 - `AGENTS.md` — 开发约定（分层、生成、配置、数据库约定，必读）
 - `docs/roadmap.md` — 开发路线图（含 AI/Agent-Native 战略与验收标准）
-- `docs/tech-decision.md` — 技术决策记录
 - `docs/implementation-*.md` — 各功能实现说明（bootstrap-and-cli、health-observability、functions-executor、storage-chunked-upload、groups-prefs、account-completion、settings-page 等）
 - `docs/archived/` — 归档设计文档（P0 设计、安全评审、修复计划等）

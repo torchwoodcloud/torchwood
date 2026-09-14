@@ -89,6 +89,9 @@ func NewGRPCGatewayServer(
 		// 与 POST /v1/server/analytics/events（API Key/admin）。
 		clientv1.RegisterAnalyticsServiceHandlerFromEndpoint,
 		serverv1.RegisterAnalyticsServiceHandlerFromEndpoint,
+		// Runbook 迁移状态面（阶段 A）：/v1/server/runbooks/{runbook}/steps
+		//（CLI 经 gRPC InvokeJSON，gateway 供 Agent/OpenAPI 面）。
+		serverv1.RegisterRunbookServiceHandlerFromEndpoint,
 	}
 	for _, fn := range register {
 		if err := fn(ctx, mux, grpcEndpoint, opts); err != nil {

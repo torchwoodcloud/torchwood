@@ -30,6 +30,10 @@ import (
 	"github.com/torchwoodcloud/torchwood/worker"
 )
 
+import (
+	_ "time/tzdata"
+)
+
 // Injectors from wire.go:
 
 func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {

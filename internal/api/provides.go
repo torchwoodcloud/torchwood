@@ -39,6 +39,8 @@ var ProviderSet = wire.NewSet(
 	// Analytics server 面（PR2：摄入 IngestEvents；七查询 RPC 嵌
 	// Unimplemented 占位，实现随 PR3）。
 	servergrpc.NewAnalyticsService,
+	// Runbook 迁移状态面（docs/design/runbook.md §2.2 阶段 A）。
+	servergrpc.NewRunbookService,
 	serverhttp.NewFileHandler,
 	serverhttp.NewOAuthHandler,
 	serverhttp.NewFunctionsHandler,

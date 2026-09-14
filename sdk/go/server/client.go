@@ -114,6 +114,8 @@ type Client struct {
 	AuditLogs *AuditLogsService
 	// Analytics 提供事件摄入与固定形状查询（scope analytics.read/write）。
 	Analytics *AnalyticsService
+	// Runbook 提供版本化资源迁移的状态面（scope runbooks.read/write）。
+	Runbook *RunbookService
 }
 
 // New 建立 Server API 连接。target 为 gRPC 目标地址，不能为空。
@@ -158,6 +160,7 @@ func New(target string, opts ...Option) (*Client, error) {
 	c.Outbox = &OutboxService{c: c, api: serverv1.NewOutboxServiceClient(gc)}
 	c.AuditLogs = &AuditLogsService{c: c, api: serverv1.NewAuditLogsServiceClient(gc)}
 	c.Analytics = &AnalyticsService{c: c, api: serverv1.NewAnalyticsServiceClient(gc)}
+	c.Runbook = &RunbookService{c: c, api: serverv1.NewRunbookServiceClient(gc)}
 	return c, nil
 }
 

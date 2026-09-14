@@ -28,6 +28,7 @@ var scopeVocabularyContract = []string{
 	"outbox", "outbox.read", "outbox.write",
 	"audit_logs", "audit_logs.read", "audit_logs.write",
 	"analytics", "analytics.read", "analytics.write",
+	"runbooks", "runbooks.read", "runbooks.write",
 }
 
 func TestScopeConstantsMatchContract(t *testing.T) {
@@ -52,6 +53,7 @@ func TestScopeConstantsMatchContract(t *testing.T) {
 		ScopeOutbox: true, ScopeOutboxRead: true, ScopeOutboxWrite: true,
 		ScopeAuditLogs: true, ScopeAuditLogsRead: true, ScopeAuditLogsWrite: true,
 		ScopeAnalytics: true, ScopeAnalyticsRead: true, ScopeAnalyticsWrite: true,
+		ScopeRunbook: true, ScopeRunbookRead: true, ScopeRunbookWrite: true,
 	}
 
 	if len(got) != len(want) {

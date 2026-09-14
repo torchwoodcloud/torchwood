@@ -66,6 +66,7 @@ const (
 	ScopeAuditLogs      ScopeResource = "audit_logs"
 	ScopeLeaderboards   ScopeResource = "leaderboards"
 	ScopeAnalytics      ScopeResource = "analytics"
+	ScopeRunbooks       ScopeResource = "runbooks"
 )
 
 // AllScopeResources 是资源词表全集（死 scope 断言的对照面）。
@@ -73,8 +74,7 @@ var AllScopeResources = []ScopeResource{
 	ScopeDatabases, ScopeUsers, ScopeGroups, ScopeStorage, ScopeProjects,
 	ScopeOAuthProviders, ScopeFunctions, ScopePayments, ScopeAssets,
 	ScopeSubscriptions, ScopeBilling, ScopeOutbox, ScopeAuditLogs,
-	ScopeLeaderboards,
-	ScopeSubscriptions, ScopeBilling, ScopeOutbox, ScopeAuditLogs, ScopeAnalytics,
+	ScopeLeaderboards, ScopeAnalytics, ScopeRunbooks,
 }
 
 // ScopeOp 是 scope 的权限方向。admin 是配置面方向（与 proto shared.v1

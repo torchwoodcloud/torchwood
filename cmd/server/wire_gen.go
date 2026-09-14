@@ -46,6 +46,10 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/pkg/bootkit"
 )
 
+import (
+	_ "time/tzdata"
+)
+
 // Injectors from wire.go:
 
 func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
@@ -218,7 +222,10 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	analyticsQueryRepository := bunrepo.NewAnalyticsQueryRepository(database)
 	query := analytics.NewQueryFromConfig(appConfig, analyticsQueryRepository)
 	servergrpcAnalyticsService := servergrpc.NewAnalyticsService(ingest, query)
-	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, leaderboardsService, analyticsService, healthService, projectsService, storageService, usersService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, authService, adminsService, outboxService, auditLogsService, servergrpcLeaderboardsService, consolegrpcLeaderboardsService, servergrpcAnalyticsService, policySet)
+	stateRepo := bunrepo.NewRunbookStateRepository(database)
+	runbook := server.NewRunbook(stateRepo)
+	runbookService := servergrpc.NewRunbookService(runbook)
+	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, leaderboardsService, analyticsService, healthService, projectsService, storageService, usersService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, authService, adminsService, outboxService, auditLogsService, servergrpcLeaderboardsService, consolegrpcLeaderboardsService, servergrpcAnalyticsService, runbookService, policySet)
 	if err != nil {
 		cleanup()
 		return nil, nil, err

@@ -58,4 +58,6 @@ var ProviderSet = wire.NewSet(
 	// tombstone 清洗（RunWorkerOnce 模式，worker 包只做周期与日志）。
 	analytics.NewRollup,
 	analytics.NewMaintenanceFromConfig,
+	// Runbook 迁移状态用例（docs/design/runbook.md §2.2 阶段 A：CAS/顶版校验）。
+	server.NewRunbook,
 )

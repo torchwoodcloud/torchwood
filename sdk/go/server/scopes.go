@@ -90,4 +90,11 @@ const (
 	ScopeAnalytics      = "analytics"
 	ScopeAnalyticsRead  = "analytics.read"
 	ScopeAnalyticsWrite = "analytics.write"
+
+	// ScopeRunbook 资源迁移状态面（状态读 = runbooks.read；step 记录/摘除
+	// = runbooks.write；docs/design/runbook.md §2.2）。写档位含 admin 会话
+	// （member 不可触碰迁移历史）。
+	ScopeRunbook      = "runbooks"
+	ScopeRunbookRead  = "runbooks.read"
+	ScopeRunbookWrite = "runbooks.write"
 )

@@ -64,6 +64,8 @@ func protoScopeResource(r sharedv1.ScopeResource) (domainauth.ScopeResource, boo
 		return domainauth.ScopeLeaderboards, true
 	case sharedv1.ScopeResource_SCOPE_RESOURCE_ANALYTICS:
 		return domainauth.ScopeAnalytics, true
+	case sharedv1.ScopeResource_SCOPE_RESOURCE_RUNBOOKS:
+		return domainauth.ScopeRunbooks, true
 	default:
 		return "", false
 	}

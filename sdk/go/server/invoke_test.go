@@ -79,7 +79,11 @@ func TestInvokeJSONBadJSON(t *testing.T) {
 // GetOverview / ListEventDefinitions / QueryTimeseries / QueryBreakdown /
 // QueryRetention / ListUserEvents）。
 
-const expectedServerMethodCount = 146
+// 146 → 149（2026-09-14，runbook.proto 新增迁移状态面三方法（docs/design/
+// runbook.md §2.2 阶段 A），wrapper：RunbookService.GetRunbookState /
+// RecordRunbookStep / DeleteRunbookStep）。
+
+const expectedServerMethodCount = 149
 
 // TestInvokeJSONCompleteness 遍历 protoregistry.GlobalFiles 中 torchwood.server.v1
 // 包的全部方法（排除 APIKeysService），断言每个方法都能被解析并用空 JSON 构造

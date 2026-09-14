@@ -1,0 +1,272 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "server/v1/runbook.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "RunbookService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/server/runbooks/{runbook}/steps": {
+      "get": {
+        "summary": "GetRunbookState 返回指定 runbook 的已应用 step 升序全集（空 = 未应用）。",
+        "operationId": "RunbookService_GetRunbookState",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetRunbookStateResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "runbook",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "RunbookService"
+        ]
+      },
+      "post": {
+        "summary": "RecordRunbookStep 记录一个已应用的 step（CAS 语义，D8 并发防护）：\nexpect_prev_version 缺省/0 = 首步；不等于当前顶版 → FAILED_PRECONDITION\n（并发双跑输家重拉状态收敛）。checksum = sha256(归一化后文件字节)（D9）。",
+        "operationId": "RunbookService_RecordRunbookStep",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RecordRunbookStepResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "runbook",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/RunbookServiceRecordRunbookStepBody"
+            }
+          }
+        ],
+        "tags": [
+          "RunbookService"
+        ]
+      }
+    },
+    "/v1/server/runbooks/{runbook}/steps/{version}": {
+      "delete": {
+        "summary": "DeleteRunbookStep 摘除一个 step（down 回退 / forgive 逃生门 D21）：\n仅允许删除当前顶版（版本链单调），否则 FAILED_PRECONDITION。不执行\n任何资源动作——资源回退由调用方先完成再摘记录。",
+        "operationId": "RunbookService_DeleteRunbookStep",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Empty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "runbook",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "RunbookService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "RunbookServiceRecordRunbookStepBody": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "format": "int64"
+        },
+        "name": {
+          "type": "string"
+        },
+        "checksum": {
+          "type": "string"
+        },
+        "expect_prev_version": {
+          "type": "string",
+          "format": "int64",
+          "title": "CAS：缺省/0 = 断言无前序（首步）；显式值必须等于当前顶版。"
+        }
+      },
+      "title": "RecordRunbookStepRequest：字段号 3/4/5 为设计稿 §2.2 草案的撞号笔误修正\n（草案 name/version 同写 2；寻址键 runbook+version 对齐 Delete 消息的\n1/2 编号，name/checksum/expect_prev_version 顺延）。"
+    },
+    "v1Empty": {
+      "type": "object"
+    },
+    "v1Error": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "error_id": {
+          "type": "string"
+        },
+        "error_code": {
+          "$ref": "#/definitions/v1ErrorCode"
+        }
+      }
+    },
+    "v1ErrorCode": {
+      "type": "string",
+      "enum": [
+        "ERROR_CODE_UNSPECIFIED",
+        "ERROR_CODE_INVALID_REQUEST",
+        "ERROR_CODE_RESOURCE_NOT_FOUND",
+        "ERROR_CODE_INVALID_CREDENTIALS",
+        "ERROR_CODE_PERMISSION_DENIED",
+        "ERROR_CODE_RESOURCE_CONFLICT",
+        "ERROR_CODE_QUOTA_EXCEEDED",
+        "ERROR_CODE_PRECONDITION_FAILED",
+        "ERROR_CODE_CONCURRENT_MODIFICATION",
+        "ERROR_CODE_VALUE_OUT_OF_RANGE",
+        "ERROR_CODE_OPERATION_NOT_ALLOWED",
+        "ERROR_CODE_INTERNAL_ERROR",
+        "ERROR_CODE_SERVICE_UNAVAILABLE",
+        "ERROR_CODE_TIMEOUT"
+      ],
+      "default": "ERROR_CODE_UNSPECIFIED",
+      "title": "ErrorCode 与 gRPC code 的映射（HTTPErrorHandler 单一事实来源，\n见 internal/infra/server/errors.go）：\n  - InvalidArgument → ERROR_CODE_INVALID_REQUEST\n  - FailedPrecondition → ERROR_CODE_PRECONDITION_FAILED\n  - NotFound → ERROR_CODE_RESOURCE_NOT_FOUND\n  - AlreadyExists → ERROR_CODE_RESOURCE_CONFLICT\n  - Aborted → ERROR_CODE_CONCURRENT_MODIFICATION\n  - Unauthenticated → ERROR_CODE_INVALID_CREDENTIALS\n  - PermissionDenied → ERROR_CODE_PERMISSION_DENIED\n  - ResourceExhausted → ERROR_CODE_QUOTA_EXCEEDED\n  - DeadlineExceeded → ERROR_CODE_TIMEOUT\n  - 其余 → ERROR_CODE_INTERNAL_ERROR"
+    },
+    "v1ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "$ref": "#/definitions/v1Error"
+        }
+      }
+    },
+    "v1GetRunbookStateResponse": {
+      "type": "object",
+      "properties": {
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1RunbookStepState"
+          }
+        }
+      },
+      "title": "GetRunbookStateResponse 是升序全集（version ASC）。"
+    },
+    "v1RecordRunbookStepResponse": {
+      "type": "object",
+      "properties": {
+        "current_version": {
+          "type": "string",
+          "format": "int64",
+          "title": "记录成功后的当前顶版（= 本次 version）"
+        }
+      }
+    },
+    "v1RunbookStepState": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "format": "int64"
+        },
+        "name": {
+          "type": "string",
+          "title": "step 文件名去序号后的 name 段（NNNNNN_name.yaml）"
+        },
+        "checksum": {
+          "type": "string",
+          "title": "sha256(归一化后文件字节)，小写十六进制"
+        },
+        "applied_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "title": "RunbookStepState 是单条已应用记录的投影（物理寻址字段 project_id 不出）。"
+    }
+  },
+  "securityDefinitions": {
+    "Bearer": {
+      "type": "apiKey",
+      "description": "格式: Bearer \u003cjwt\u003e",
+      "name": "Authorization",
+      "in": "header"
+    },
+    "apiKey": {
+      "type": "apiKey",
+      "description": "项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。",
+      "name": "X-API-Key",
+      "in": "header"
+    },
+    "cookie": {
+      "type": "apiKey",
+      "description": "TORCHWOOD_session_console=\u003csid\u003e（Console admin 会话）",
+      "name": "Cookie",
+      "in": "header"
+    }
+  },
+  "security": [
+    {
+      "apiKey": []
+    }
+  ],
+  "x-torchwood-access": "server"
+}

@@ -208,6 +208,7 @@ HTTP/Metrics 端口由 `server.http.addr` / `server.metrics.addr` 决定，非�
 ./bin/torchwood analytics ingest --file events.json                                       # 或 --file - 走 stdin（analytics.write）
 ./bin/torchwood assets grant user_42 gems --quantity 100 --idempotency-key comp-2026-0914 # 运营补偿（assets.write，进审计）
 ./bin/torchwood payments refund --help                                                    # 订单查询/退款/人工履约（payments.read/write）
+./bin/torchwood runbook up --dir runbooks                                                 # 应用版本化资源迁移（runbooks.read/write，详见 19-runbook.md）
 ./bin/torchwood rpc /torchwood.server.v1.UsersService/ListUsers --data '{"pageSize":10}' --api-key <secret>
 ```
 

@@ -32,6 +32,9 @@ var ProviderSet = wire.NewSet(
 	bunrepo.NewLeaderboardBoardRepository,
 	bunrepo.NewLeaderboardEntryRepository,
 	bunrepo.NewLeaderboardSettlementRepository,
+	// Runbook 迁移状态仓储（控制面 runbook_steps，迁移 000009；全量
+	// SELECT/INSERT/DELETE，无 UPDATE——迁移历史不可变）。
+	bunrepo.NewRunbookStateRepository,
 	bunrepo.NewSubscriptionPlanRepository,
 	bunrepo.NewSubscriptionRepository,
 	bunrepo.NewUsageRepository,
