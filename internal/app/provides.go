@@ -60,4 +60,6 @@ var ProviderSet = wire.NewSet(
 	analytics.NewMaintenanceFromConfig,
 	// Runbook 迁移状态用例（docs/design/runbook.md §2.2 阶段 A：CAS/顶版校验）。
 	server.NewRunbook,
+	// 对外 token 校验用例（AuthService/VerifyToken，introspection）。
+	server.NewAuth,
 )

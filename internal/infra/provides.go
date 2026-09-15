@@ -96,6 +96,8 @@ var ProviderSet = wire.NewSet(
 	auth.NewOTPGenerator,
 	auth.NewSessionCookieVerifier,
 	wire.Bind(new(domainauth.SessionService), new(*auth.SessionService)),
+	// 对外 token 校验（introspection）复用进程内校验器：判定语义单一事实源。
+	wire.Bind(new(domainauth.CredentialVerifier), new(*auth.Validator)),
 	wire.Bind(new(domainauth.OTPChallengeStore), new(*auth.RedisOTPChallengeStore)),
 	wire.Bind(new(domainauth.OAuthStateStore), new(*auth.RedisOAuthStateStore)),
 	wire.Bind(new(domainauth.AccountTokenStore), new(*auth.RedisAccountTokenStore)),

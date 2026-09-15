@@ -24,6 +24,8 @@ var ProviderSet = wire.NewSet(
 	servergrpc.NewProjectsService,
 	servergrpc.NewStorageService,
 	servergrpc.NewUsersService,
+	// 对外 token 校验面（AuthService/VerifyToken，introspection）。
+	servergrpc.NewAuthService,
 	servergrpc.NewAPIKeysService,
 	servergrpc.NewOAuthProvidersService,
 	servergrpc.NewGroupsService,

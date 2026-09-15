@@ -121,7 +121,7 @@ linters:
         linters: [unused]
       # ---- 2026-09-10 workflows 停用期存量暂挂（测试数据/同性质误报）----
       # 测试夹具中的伪 token/DSN/URL（非凭证）。
-      - path: (cli/admin_roles_sig_test|functionsdispatcher/daemon_integration_test|internal/app/server/apikeys_test|internal/domain/projects/oauth_redirect_test|pkg/query/proto/proto_test)\.go
+      - path: (cli/admin_roles_sig_test|functionsdispatcher/daemon_integration_test|internal/app/server/apikeys_test|internal/app/server/auth_verify_test|internal/domain/projects/oauth_redirect_test|pkg/query/proto/proto_test)\.go
         linters: [gosec]
         text: "G101"
       # 测试读取仓库自有生成物/夹具文件。

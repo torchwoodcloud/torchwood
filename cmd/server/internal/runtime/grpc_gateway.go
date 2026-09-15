@@ -64,6 +64,9 @@ func NewGRPCGatewayServer(
 		serverv1.RegisterProjectsServiceHandlerFromEndpoint,
 		serverv1.RegisterStorageServiceHandlerFromEndpoint,
 		serverv1.RegisterUsersServiceHandlerFromEndpoint,
+		// 对外 token 校验面（POST /v1/server/auth/tokens:verify，供桥接
+		// 服务/Agent 经 HTTP 消费）。
+		serverv1.RegisterAuthServiceHandlerFromEndpoint,
 		serverv1.RegisterAPIKeysServiceHandlerFromEndpoint,
 		serverv1.RegisterOAuthProvidersServiceHandlerFromEndpoint,
 		serverv1.RegisterGroupsServiceHandlerFromEndpoint,

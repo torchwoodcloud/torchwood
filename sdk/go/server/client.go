@@ -86,6 +86,8 @@ type Client struct {
 	Health *HealthService
 	// Users 提供用户管理（含 CreateUserToken 模拟登录）。
 	Users *UsersService
+	// Auth 提供对外凭证校验（token introspection，scope users.read）。
+	Auth *AuthService
 	// Groups 提供服务端用户组管理。
 	Groups *GroupsService
 	// Databases 提供库/集合/属性/索引/文档管理，绑定默认 DatabaseID。
@@ -146,6 +148,7 @@ func New(target string, opts ...Option) (*Client, error) {
 	c.databases = serverv1.NewDatabasesServiceClient(gc)
 	c.Health = &HealthService{c: c, api: c.health}
 	c.Users = &UsersService{c: c}
+	c.Auth = &AuthService{c: c, api: serverv1.NewAuthServiceClient(gc)}
 	c.Groups = &GroupsService{c: c}
 	c.Databases = c.UseDatabase(cfg.DatabaseID)
 	c.Projects = &ProjectsService{c: c, api: serverv1.NewProjectsServiceClient(gc)}

@@ -48,6 +48,8 @@ func NewGRPCServer(
 	projects *servergrpc.ProjectsService,
 	storage *servergrpc.StorageService,
 	users *servergrpc.UsersService,
+	// 对外 token 校验面（AuthService/VerifyToken，introspection）。
+	serverAuth *servergrpc.AuthService,
 	apiKeys *servergrpc.APIKeysService,
 	oauthProviders *servergrpc.OAuthProvidersService,
 	groups *servergrpc.GroupsService,
@@ -141,6 +143,8 @@ func NewGRPCServer(
 	serverv1.RegisterProjectsServiceServer(grpcSrv, projects)
 	serverv1.RegisterStorageServiceServer(grpcSrv, storage)
 	serverv1.RegisterUsersServiceServer(grpcSrv, users)
+	// 对外 token 校验面（POST /v1/server/auth/tokens:verify）。
+	serverv1.RegisterAuthServiceServer(grpcSrv, serverAuth)
 	serverv1.RegisterAPIKeysServiceServer(grpcSrv, apiKeys)
 	serverv1.RegisterOAuthProvidersServiceServer(grpcSrv, oauthProviders)
 	serverv1.RegisterGroupsServiceServer(grpcSrv, groups)
@@ -229,6 +233,8 @@ func authzFileDescriptors() []protoreflect.FileDescriptor {
 		serverv1.File_server_v1_health_proto,
 		serverv1.File_server_v1_storage_proto,
 		serverv1.File_server_v1_users_proto,
+		// 对外 token 校验面（introspection）。
+		serverv1.File_server_v1_auth_proto,
 		serverv1.File_server_v1_apikeys_proto,
 		serverv1.File_server_v1_oauth_providers_proto,
 		serverv1.File_server_v1_groups_proto,

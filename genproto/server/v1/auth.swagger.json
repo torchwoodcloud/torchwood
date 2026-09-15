@@ -1,0 +1,227 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "server/v1/auth.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "AuthService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/server/auth/tokens:verify": {
+      "post": {
+        "summary": "VerifyToken 校验 Torchwood 凭证原文并返回主体信息。",
+        "description": "语义：\n- 任何校验失败（过期/撤销/封禁/不存在/签名无效）→ valid=false + 200，\n  不报错（introspection 契约）；仅基础设施故障返回 5xx。\n- 凭证范围：端用户 access JWT 与项目 API key（sk- secret）。admin JWT、\n  refresh token、一次性 JWT、函数执行 token 与端用户连接语义不符，\n  一律 valid=false；一次性 token 只读判定、不消费。\n- 项目边界：调用者（API key 恒绑定项目；admin 会话经 X-Torchwood-Project）\n  与凭证分属不同项目时 valid=false；平台 admin 未选项目可跨项目校验。\n- roles 为实时解析的角色词汇（不信任 JWT rls claim）：users /\n  user:\u003cid\u003e[/verified] / group:\u003cgid\u003e / member:\u003cmid\u003e / group:\u003cgid\u003e/\u003crole\u003e /\n  label:\u003cl\u003e 等。",
+        "operationId": "AuthService_VerifyToken",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1VerifyTokenResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1VerifyTokenRequest"
+            }
+          }
+        ],
+        "tags": [
+          "AuthService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "v1Error": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "error_id": {
+          "type": "string"
+        },
+        "error_code": {
+          "$ref": "#/definitions/v1ErrorCode"
+        }
+      }
+    },
+    "v1ErrorCode": {
+      "type": "string",
+      "enum": [
+        "ERROR_CODE_UNSPECIFIED",
+        "ERROR_CODE_INVALID_REQUEST",
+        "ERROR_CODE_RESOURCE_NOT_FOUND",
+        "ERROR_CODE_INVALID_CREDENTIALS",
+        "ERROR_CODE_PERMISSION_DENIED",
+        "ERROR_CODE_RESOURCE_CONFLICT",
+        "ERROR_CODE_QUOTA_EXCEEDED",
+        "ERROR_CODE_PRECONDITION_FAILED",
+        "ERROR_CODE_CONCURRENT_MODIFICATION",
+        "ERROR_CODE_VALUE_OUT_OF_RANGE",
+        "ERROR_CODE_OPERATION_NOT_ALLOWED",
+        "ERROR_CODE_INTERNAL_ERROR",
+        "ERROR_CODE_SERVICE_UNAVAILABLE",
+        "ERROR_CODE_TIMEOUT"
+      ],
+      "default": "ERROR_CODE_UNSPECIFIED",
+      "title": "ErrorCode 与 gRPC code 的映射（HTTPErrorHandler 单一事实来源，\n见 internal/infra/server/errors.go）：\n  - InvalidArgument → ERROR_CODE_INVALID_REQUEST\n  - FailedPrecondition → ERROR_CODE_PRECONDITION_FAILED\n  - NotFound → ERROR_CODE_RESOURCE_NOT_FOUND\n  - AlreadyExists → ERROR_CODE_RESOURCE_CONFLICT\n  - Aborted → ERROR_CODE_CONCURRENT_MODIFICATION\n  - Unauthenticated → ERROR_CODE_INVALID_CREDENTIALS\n  - PermissionDenied → ERROR_CODE_PERMISSION_DENIED\n  - ResourceExhausted → ERROR_CODE_QUOTA_EXCEEDED\n  - DeadlineExceeded → ERROR_CODE_TIMEOUT\n  - 其余 → ERROR_CODE_INTERNAL_ERROR"
+    },
+    "v1ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "$ref": "#/definitions/v1Error"
+        }
+      }
+    },
+    "v1GroupRef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        }
+      }
+    },
+    "v1VerifyCredentialType": {
+      "type": "string",
+      "enum": [
+        "VERIFY_CREDENTIAL_TYPE_UNSPECIFIED",
+        "VERIFY_CREDENTIAL_TYPE_AUTO",
+        "VERIFY_CREDENTIAL_TYPE_TOKEN",
+        "VERIFY_CREDENTIAL_TYPE_API_KEY"
+      ],
+      "default": "VERIFY_CREDENTIAL_TYPE_UNSPECIFIED",
+      "description": "- VERIFY_CREDENTIAL_TYPE_UNSPECIFIED: AUTO：按结构分派——sk- 前缀走 API key，其余按端用户 JWT 验签。\n - VERIFY_CREDENTIAL_TYPE_TOKEN: TOKEN：仅按端用户 access JWT 校验。\n - VERIFY_CREDENTIAL_TYPE_API_KEY: API_KEY：仅按 API key secret（sha256 查表）校验。",
+      "title": "VerifyCredentialType 是调用方声明的凭证分派方式。"
+    },
+    "v1VerifyTokenRequest": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "title": "Torchwood 凭证原文（端用户 access JWT 或 API key secret）。敏感字段：\n审计请求摘要按敏感字段名整值打码，不落原文。"
+        },
+        "type": {
+          "$ref": "#/definitions/v1VerifyCredentialType",
+          "title": "凭证分派方式，缺省 AUTO（protovalidate 的 enum defined_only 不默认\n开启，显式声明拒绝未定义枚举值）。"
+        }
+      }
+    },
+    "v1VerifyTokenResponse": {
+      "type": "object",
+      "properties": {
+        "valid": {
+          "type": "boolean",
+          "title": "false = 任何校验失败（过期/撤销/封禁/不存在/签名无效/跨项目）。\nvalid=false 时其余字段为零值，不泄露主体信息。"
+        },
+        "user_id": {
+          "type": "string",
+          "title": "端用户 id；API key 主体为空。"
+        },
+        "username": {
+          "type": "string",
+          "title": "端用户名（JWT usn claim，缺省回落 users 行 email）。"
+        },
+        "project_id": {
+          "type": "string",
+          "title": "凭证绑定的项目 id。"
+        },
+        "session_id": {
+          "type": "string",
+          "title": "端用户会话 id（活查会话表，登出即 invalid 的判定依据）。"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "title": "凭证到期时刻：JWT 为 exp；API key 为密钥行 expire_at（未设置则省略）。"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "实时解析的角色词汇（与请求侧授权同源，不信任 JWT rls claim）。"
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1GroupRef"
+          },
+          "title": "已接受（accepted）的组成员关系：每个 (group, role) 一条；无角色的\n成员关系 role 为空串。"
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "端用户 labels（与 label:\u003cl\u003e 角色同源）。"
+        },
+        "actor_kind": {
+          "type": "string",
+          "title": "end_user / service。"
+        },
+        "api_key_id": {
+          "type": "string",
+          "title": "API key 主体时为密钥行 id。"
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "Bearer": {
+      "type": "apiKey",
+      "description": "格式: Bearer \u003cjwt\u003e",
+      "name": "Authorization",
+      "in": "header"
+    },
+    "apiKey": {
+      "type": "apiKey",
+      "description": "项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。",
+      "name": "X-API-Key",
+      "in": "header"
+    },
+    "cookie": {
+      "type": "apiKey",
+      "description": "TORCHWOOD_session_console=\u003csid\u003e（Console admin 会话）",
+      "name": "Cookie",
+      "in": "header"
+    }
+  },
+  "security": [
+    {
+      "apiKey": []
+    }
+  ],
+  "x-torchwood-access": "server"
+}

@@ -12,7 +12,7 @@
 >   SERVER admin 会话（admin_roles）或 API key（scope）；PERMISSION admin 会话
 >   专属（permissions），key 一律拒绝；SYSTEM 预留禁用。
 
-方法总数 245：PUBLIC 28 · END_USER 47 · SERVER 141 · PERMISSION 29 · SYSTEM 0。
+方法总数 246：PUBLIC 28 · END_USER 47 · SERVER 142 · PERMISSION 29 · SYSTEM 0。
 
 ## /torchwood.client.v1.AccountService
 
@@ -210,6 +210,12 @@
 | 方法 | Access | Admin 角色档 | Key Scope | 档位 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `/torchwood.server.v1.AuditLogsService/ListAuditLogs` | SERVER | admin, owner | audit_logs.read | delegated_platform | |
+
+## /torchwood.server.v1.AuthService
+
+| 方法 | Access | Admin 角色档 | Key Scope | 档位 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `/torchwood.server.v1.AuthService/VerifyToken` | SERVER | 不限角色 | users.read | read_only | |
 
 ## /torchwood.server.v1.BillingService
 
