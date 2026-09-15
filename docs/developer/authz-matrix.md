@@ -12,7 +12,7 @@
 >   SERVER admin 会话（admin_roles）或 API key（scope）；PERMISSION admin 会话
 >   专属（permissions），key 一律拒绝；SYSTEM 预留禁用。
 
-方法总数 246：PUBLIC 28 · END_USER 47 · SERVER 142 · PERMISSION 29 · SYSTEM 0。
+方法总数 247：PUBLIC 28 · END_USER 47 · SERVER 142 · PERMISSION 30 · SYSTEM 0。
 
 ## /torchwood.client.v1.AccountService
 
@@ -136,6 +136,7 @@
 | `/torchwood.console.v1.AdminsService/GetCurrentAdmin` | PERMISSION | console | — | — | |
 | `/torchwood.console.v1.AdminsService/ListAdmins` | PERMISSION | owner, admin | — | — | |
 | `/torchwood.console.v1.AdminsService/UpdateAdmin` | PERMISSION | owner | — | — | |
+| `/torchwood.console.v1.AdminsService/UpdateCurrentAdmin` | PERMISSION | console | — | — | |
 
 ## /torchwood.console.v1.ConsoleAuthService
 

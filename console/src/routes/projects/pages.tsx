@@ -11,6 +11,8 @@ import {
 } from "@/api/projects";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useProjectScopeSync } from "@/hooks/useProjectScopeSync";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatDateTime } from "@/lib/datetime";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +26,8 @@ import {
   NotFound,
 } from "@/components/resource/shared";
 
-const columns: ColumnDef<Project>[] = [
+// 工厂：时区来自管理员偏好（hook 无法在模块级使用），由列表页传入。
+const columns = (tz: string): ColumnDef<Project>[] => [
   {
     key: "id",
     header: "ID",
@@ -46,12 +49,13 @@ const columns: ColumnDef<Project>[] = [
   {
     key: "created",
     header: "创建时间",
-    cell: (p) => new Date(p.created_at).toLocaleString(),
+    cell: (p) => formatDateTime(p.created_at, tz),
   },
 ];
 
 export function ProjectsListPage() {
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const platformAdmin = isPlatformAdmin(role);
 
   const { data: projects = [], isLoading } = useQuery({
@@ -71,7 +75,7 @@ export function ProjectsListPage() {
       searchPlaceholder="搜索项目名称或 ID..."
       isLoading={isLoading}
       items={projects}
-      columns={columns}
+      columns={columns(tz)}
       getSearchText={getSearchText}
       detailPath={(p) => `/console/projects/${p.id}`}
       toolbarActions={
@@ -152,6 +156,7 @@ export function ProjectNewPage() {
 // /console/projects/:id/settings（基本信息编辑、注册与登录、OAuth、危险区）。
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const tz = useUserTimezone();
   const { data: project, isLoading } = useQuery({
     queryKey: ["projects", id],
     queryFn: () => getProject(id!),
@@ -185,8 +190,8 @@ export function ProjectDetailPage() {
           { label: "名称", value: project.name },
           { label: "描述", value: project.description || "—" },
           { label: "状态", value: project.status },
-          { label: "创建时间", value: new Date(project.created_at).toLocaleString() },
-          { label: "更新时间", value: new Date(project.updated_at).toLocaleString() },
+          { label: "创建时间", value: formatDateTime(project.created_at, tz) },
+          { label: "更新时间", value: formatDateTime(project.updated_at, tz) },
         ]}
       />
     </DetailPageWrapper>

@@ -57,6 +57,10 @@ type Admin struct {
 	RevokedAt time.Time
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	// Metadata 是管理员通用偏好（JSONB 列，首键 timezone=IANA 时区名；键
+	// 不存在=跟随浏览器时区）。只读约定：业务层不直接改 map，写入一律走
+	// repo 的 UpdateAdminMetadata 单语句合并，避免读-改-写覆盖并发键。
+	Metadata map[string]string
 }
 
 // InviteCode 邀请码（T-03，invite_only 注册策略）。

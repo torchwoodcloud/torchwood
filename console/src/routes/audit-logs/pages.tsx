@@ -6,6 +6,8 @@ import {
 } from "@/api/auditLogs";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatDateTime, fromDateTimeLocalValue } from "@/lib/datetime";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingTable } from "@/components/LoadingTable";
@@ -136,6 +138,7 @@ export function AuditLogsListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const platformAdmin = isPlatformAdmin(role);
+  const tz = useUserTimezone();
 
   // 过滤条件（变更即回到第一页）。
   const [action, setAction] = useState("");
@@ -163,12 +166,13 @@ export function AuditLogsListPage() {
       status: status || undefined,
       actor_id: actorId || undefined,
       resource_id: resourceId || undefined,
-      created_after: createdAfter ? new Date(createdAfter).toISOString() : undefined,
-      created_before: createdBefore ? new Date(createdBefore).toISOString() : undefined,
+      // datetime-local 筛选值按管理员时区偏好解释为绝对时刻（非法输入视为未填）。
+      created_after: createdAfter ? fromDateTimeLocalValue(createdAfter, tz) || undefined : undefined,
+      created_before: createdBefore ? fromDateTimeLocalValue(createdBefore, tz) || undefined : undefined,
       include_platform: scope === "include_platform" || scope === "all_projects" || undefined,
       all_projects: scope === "all_projects" || undefined,
     }),
-    [pageSize, pageToken, action, status, actorId, resourceId, createdAfter, createdBefore, scope]
+    [pageSize, pageToken, action, status, actorId, resourceId, createdAfter, createdBefore, scope, tz]
   );
 
   const { data, isLoading } = useQuery({
@@ -336,7 +340,7 @@ export function AuditLogsListPage() {
                       >
                         <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                           {log.created_at
-                            ? new Date(log.created_at).toLocaleString()
+                            ? formatDateTime(log.created_at, tz)
                             : "—"}
                         </TableCell>
                         <TableCell className="max-w-[320px]">
@@ -434,6 +438,7 @@ export function AuditLogsListPage() {
 
 // AuditLogDetail 渲染详情：全字段 + 结构化变更内容分区（changes / request / client）。
 function AuditLogDetail({ log }: { log: AuditLog }) {
+  const tz = useUserTimezone();
   const changes = log.metadata?.["changes"] as
     | Record<string, { from?: unknown; to?: unknown }>
     | undefined;
@@ -452,7 +457,7 @@ function AuditLogDetail({ log }: { log: AuditLog }) {
     ["资源", log.resource_id || "—"],
     ["IP", log.ip || "—"],
     ["User-Agent", log.user_agent || "—"],
-    ["时间", log.created_at ? new Date(log.created_at).toLocaleString() : "—"],
+    ["时间", log.created_at ? formatDateTime(log.created_at, tz) : "—"],
   ];
 
   return (

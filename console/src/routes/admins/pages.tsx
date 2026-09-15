@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
 import { Plus, ShieldCheck } from "lucide-react";
 import {
@@ -42,7 +44,7 @@ const ROLE_STYLE: Record<string, "default" | "secondary" | "outline" | "destruct
   viewer: "outline",
 };
 
-const columns: ColumnDef<Admin>[] = [
+const columns = (tz: string): ColumnDef<Admin>[] => [
   { key: "email", header: "邮箱", cell: (a) => a.email },
   {
     key: "role",
@@ -52,12 +54,13 @@ const columns: ColumnDef<Admin>[] = [
   {
     key: "created_at",
     header: "创建时间",
-    cell: (a) => (a.created_at ? new Date(a.created_at).toLocaleString() : "—"),
+    cell: (a) => formatDateTime(a.created_at, tz),
   },
 ];
 
 export function AdminsListPage() {
   const queryClient = useQueryClient();
+  const tz = useUserTimezone();
 
   const { data: admins = [], isLoading } = useQuery({
     queryKey: ["console-admins"],
@@ -86,7 +89,7 @@ export function AdminsListPage() {
       searchPlaceholder="搜索邮箱..."
       isLoading={isLoading}
       items={admins}
-      columns={columns}
+      columns={columns(tz)}
       getSearchText={(a) => `${a.email} ${a.role}`}
       toolbarActions={
         isOwner ? (

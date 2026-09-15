@@ -69,4 +69,7 @@ type Admin struct {
 	RevokedAt time.Time `bun:"revoked_at,nullzero"`
 	CreatedAt time.Time `bun:"created_at,notnull"`
 	UpdatedAt time.Time `bun:"updated_at,notnull"`
+	// Metadata 通用偏好 JSONB（迁移 000010；首键 timezone=IANA 时区名）。
+	// INSERT 侧必须非 nil（NOT NULL 列），由 repo 层兜底空 map。
+	Metadata map[string]string `bun:"metadata,type:jsonb"`
 }

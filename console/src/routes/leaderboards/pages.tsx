@@ -49,8 +49,11 @@ import {
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { RowDeleteButton } from "@/components/resource/shared";
 import type { ColumnDef } from "@/components/list/DataTable";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatDateTime } from "@/lib/datetime";
 
-const boardColumns: ColumnDef<LeaderboardBoard>[] = [
+// 工厂：时区来自管理员偏好（hook 无法在模块级使用），由列表页传入。
+const boardColumns = (tz: string): ColumnDef<LeaderboardBoard>[] => [
   {
     key: "id",
     header: "榜 ID",
@@ -95,12 +98,13 @@ const boardColumns: ColumnDef<LeaderboardBoard>[] = [
   {
     key: "updated_at",
     header: "更新时间",
-    cell: (b) => (b.updated_at ? new Date(b.updated_at).toLocaleString() : "—"),
+    cell: (b) => (b.updated_at ? formatDateTime(b.updated_at, tz) : "—"),
   },
 ];
 
 export function LeaderboardsListPage() {
   const queryClient = useQueryClient();
+  const tz = useUserTimezone();
   const { data: boards = [], isLoading } = useQuery({
     queryKey: ["leaderboards-boards"],
     queryFn: listBoards,
@@ -123,7 +127,7 @@ export function LeaderboardsListPage() {
       searchPlaceholder="搜索榜 ID..."
       isLoading={isLoading}
       items={boards}
-      columns={boardColumns}
+      columns={boardColumns(tz)}
       getSearchText={(b) => `${b.id} ${b.subject_kind ?? ""}`}
       toolbarActions={
         <CreateBoardDialog onCreated={invalidate} />
@@ -425,6 +429,7 @@ function EditBoardDialog({ board, onSaved }: { board: LeaderboardBoard; onSaved:
 export function BoardDetailPage() {
   const { boardId } = useParams<{ boardId: string }>();
   const queryClient = useQueryClient();
+  const tz = useUserTimezone();
   const { data: board } = useQuery({
     queryKey: ["leaderboards-board", boardId],
     queryFn: () => getBoard(boardId!),
@@ -523,7 +528,7 @@ export function BoardDetailPage() {
                   <td className="p-2">{e.value}</td>
                   {board.tiebreak_order ? <td className="p-2">{e.tiebreak_value ?? "—"}</td> : null}
                   <td className="p-2 text-muted-foreground">
-                    {e.updated_at ? new Date(e.updated_at).toLocaleString() : "—"}
+                    {e.updated_at ? formatDateTime(e.updated_at, tz) : "—"}
                   </td>
                   <td className="p-2">
                     <RowDeleteButton
@@ -721,6 +726,7 @@ function SettlementRow({
   busy: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const tz = useUserTimezone();
   const { data: detail } = useQuery({
     queryKey: ["leaderboards-settlement-detail", boardId, settlement.period],
     queryFn: () => getSettlement(boardId, settlement.period),
@@ -737,7 +743,7 @@ function SettlementRow({
           {settlement.entry_count ?? 0} / {settlement.grant_count ?? 0}
         </td>
         <td className="p-2 text-muted-foreground">
-          {settlement.settled_at ? new Date(settlement.settled_at).toLocaleString() : "—"}
+          {settlement.settled_at ? formatDateTime(settlement.settled_at, tz) : "—"}
         </td>
         <td className="p-2 max-w-64 truncate text-destructive" title={settlement.error}>{settlement.error || "—"}</td>
         <td className="p-2">

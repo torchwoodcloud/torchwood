@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import {
@@ -42,12 +44,7 @@ import { formatInt64, isInt64Input } from "@/lib/utils";
 
 const CLASSES = ["currency", "stack", "instance", "entitlement"] as const;
 
-function formatTime(value?: string) {
-  if (!value) return "—";
-  return new Date(value).toLocaleString();
-}
-
-const defColumns: ColumnDef<AssetDef>[] = [
+const defColumns = (tz: string): ColumnDef<AssetDef>[] => [
   { key: "code", header: "Code", className: "font-mono text-xs", cell: (d) => d.code },
   { key: "name", header: "名称", cell: (d) => d.name },
   { key: "class", header: "类别", cell: (d) => d.class },
@@ -56,13 +53,14 @@ const defColumns: ColumnDef<AssetDef>[] = [
     header: "状态",
     cell: (d) => <Badge variant={d.status === "archived" ? "secondary" : "default"}>{d.status ?? "active"}</Badge>,
   },
-  { key: "created", header: "创建时间", cell: (d) => formatTime(d.created_at) },
+  { key: "created", header: "创建时间", cell: (d) => formatDateTime(d.created_at, tz) },
 ];
 
 export function AssetDefsListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const queryClient = useQueryClient();
+  const tz = useUserTimezone();
   const writeable = canWrite(role);
 
   const { data: defs = [], isLoading } = useQuery({
@@ -88,7 +86,7 @@ export function AssetDefsListPage() {
       searchPlaceholder="搜索 code / 名称 / 类别..."
       isLoading={isLoading}
       items={defs}
-      columns={defColumns}
+      columns={defColumns(tz)}
       getSearchText={getSearchText}
       detailPath={(d) => `/console/assets/defs/${d.id}`}
       toolbarActions={
@@ -194,6 +192,7 @@ export function AssetDefDetailPage() {
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const writeable = canWrite(role);
 
   const { data: def, isLoading } = useQuery({
@@ -229,7 +228,7 @@ export function AssetDefDetailPage() {
           { label: "状态", value: def.status ?? "active" },
           { label: "decimals", value: String(def.decimals) },
           { label: "max_quantity", value: def.max_quantity ? formatInt64(def.max_quantity) : "—" },
-          { label: "创建时间", value: formatTime(def.created_at) },
+          { label: "创建时间", value: formatDateTime(def.created_at, tz) },
         ]}
       />
     </DetailPageWrapper>

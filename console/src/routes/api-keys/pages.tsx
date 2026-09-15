@@ -14,6 +14,8 @@ import {
 import { fetchApiKeyScopeCatalog, type WellKnownScopeResource } from "@/api/wellknown";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,7 +42,8 @@ import {
   DeleteButton,
 } from "@/components/resource/shared";
 
-const columns: ColumnDef<APIKey>[] = [
+// columns 依赖管理员时区偏好，用工厂函数在组件内生成（与 admins 列表页同模式）。
+const columns = (tz: string): ColumnDef<APIKey>[] => [
   {
     key: "id",
     header: "ID",
@@ -61,13 +64,14 @@ const columns: ColumnDef<APIKey>[] = [
   {
     key: "created",
     header: "创建时间",
-    cell: (k) => new Date(k.created_at).toLocaleString(),
+    cell: (k) => formatDateTime(k.created_at, tz),
   },
 ];
 
 export function ApiKeysListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const queryClient = useQueryClient();
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const platformAdmin = isPlatformAdmin(role);
@@ -119,7 +123,7 @@ export function ApiKeysListPage() {
       searchPlaceholder="搜索名称或 ID..."
       isLoading={isLoading}
       items={keys}
-      columns={columns}
+      columns={columns(tz)}
       getSearchText={getSearchText}
       detailPath={(k) => `/console/api-keys/${k.id}`}
       toolbarActions={
@@ -387,6 +391,7 @@ export function ApiKeyDetailPage() {
   const { role } = useAdminRole();
   const [editOpen, setEditOpen] = useState(false);
   const [rotateOpen, setRotateOpen] = useState(false);
+  const tz = useUserTimezone();
 
   const { data: key, isLoading } = useQuery({
     queryKey: ["api-keys", id],
@@ -436,9 +441,9 @@ export function ApiKeyDetailPage() {
           { label: "名称", value: key.name },
           { label: "Scopes", value: key.scopes.join(", ") || "—" },
           { label: "状态", value: key.enabled ? "Active" : "Disabled" },
-          { label: "过期时间", value: key.expire_at ? new Date(key.expire_at).toLocaleString() : "永不过期" },
-          { label: "创建时间", value: new Date(key.created_at).toLocaleString() },
-          { label: "更新时间", value: new Date(key.updated_at).toLocaleString() },
+          { label: "过期时间", value: key.expire_at ? formatDateTime(key.expire_at, tz) : "永不过期" },
+          { label: "创建时间", value: formatDateTime(key.created_at, tz) },
+          { label: "更新时间", value: formatDateTime(key.updated_at, tz) },
         ]}
       />
       <ApiKeyEditDialog
@@ -467,11 +472,12 @@ function ApiKeyEditDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const queryClient = useQueryClient();
+  const tz = useUserTimezone();
   const [name, setName] = useState(key_.name);
   const [scopes, setScopes] = useState(key_.scopes.join(", "));
   const [enabled, setEnabled] = useState(key_.enabled);
   const [expireAt, setExpireAt] = useState(
-    key_.expire_at ? toDatetimeLocal(key_.expire_at) : ""
+    key_.expire_at ? toDateTimeLocalValue(key_.expire_at, tz) : ""
   );
 
   const mutation = useMutation({
@@ -485,8 +491,9 @@ function ApiKeyEditDialog({
       if (nextScopes.join(",") !== key_.scopes.join(",")) input.scopes = nextScopes;
       if (enabled !== key_.enabled) input.enabled = enabled;
       if (expireAt) {
-        const iso = new Date(expireAt).toISOString();
-        if (!key_.expire_at || iso !== new Date(key_.expire_at).toISOString()) {
+        // datetime-local 墙钟值按管理员时区偏好解释为绝对时刻（非法输入返 ""，跳过提交）。
+        const iso = fromDateTimeLocalValue(expireAt, tz);
+        if (iso && (!key_.expire_at || iso !== new Date(key_.expire_at).toISOString())) {
           input.expire_at = iso;
         }
       }
@@ -687,11 +694,4 @@ function ApiKeyRotateDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-// toDatetimeLocal 把 RFC3339 时间串转成 <input type="datetime-local"> 值。
-function toDatetimeLocal(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

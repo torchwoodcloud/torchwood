@@ -17,6 +17,8 @@ import {
 } from "@/api/users";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite, isPlatformAdmin } from "@/hooks/useAdminRole";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatDateTime } from "@/lib/datetime";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,7 +46,8 @@ import {
   DeleteButton,
 } from "@/components/resource/shared";
 
-const columns: ColumnDef<User>[] = [
+// 工厂：时区来自管理员偏好（hook 无法在模块级使用），由列表页传入。
+const columns = (tz: string): ColumnDef<User>[] => [
   {
     key: "id",
     header: "ID",
@@ -64,13 +67,14 @@ const columns: ColumnDef<User>[] = [
   {
     key: "created",
     header: "创建时间",
-    cell: (u) => new Date(u.created_at).toLocaleString(),
+    cell: (u) => formatDateTime(u.created_at, tz),
   },
 ];
 
 export function UsersListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const queryClient = useQueryClient();
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const writeable = canWrite(role);
@@ -123,7 +127,7 @@ export function UsersListPage() {
       searchPlaceholder="搜索邮箱、名称或 ID..."
       isLoading={isLoading}
       items={users}
-      columns={columns}
+      columns={columns(tz)}
       getSearchText={getSearchText}
       detailPath={(u) => `/console/users/${u.id}`}
       editPath={writeable ? (u) => `/console/users/${u.id}/edit` : undefined}
@@ -246,6 +250,7 @@ export function CreateUserPage() {
 function SessionsCard({ user }: { user: User }) {
   const queryClient = useQueryClient();
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const writeable = canWrite(role);
 
   const { data: sessions = [], isLoading } = useQuery({
@@ -288,7 +293,7 @@ function SessionsCard({ user }: { user: User }) {
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground truncate">
                     {s.ip || "-"} · {s.user_agent || "-"} ·{" "}
-                    {s.expire_at ? `过期于 ${new Date(s.expire_at).toLocaleString()}` : "无过期时间"}
+                    {s.expire_at ? `过期于 ${formatDateTime(s.expire_at, tz)}` : "无过期时间"}
                   </div>
                 </div>
                 <Button
@@ -318,6 +323,7 @@ export function UserDetailPage() {
   const [newPassword, setNewPassword] = useState("");
   const [tokenOpen, setTokenOpen] = useState(false);
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
+  const tz = useUserTimezone();
   const writeable = canWrite(role);
   const platformAdmin = isPlatformAdmin(role);
 
@@ -424,8 +430,8 @@ export function UserDetailPage() {
               value: user.prefs && Object.keys(user.prefs).length > 0 ? JSON.stringify(user.prefs) : "-",
               mono: true,
             },
-            { label: "创建时间", value: new Date(user.created_at).toLocaleString() },
-            { label: "更新时间", value: new Date(user.updated_at).toLocaleString() },
+            { label: "创建时间", value: formatDateTime(user.created_at, tz) },
+            { label: "更新时间", value: formatDateTime(user.updated_at, tz) },
           ]}
         />
         <SessionsCard user={user} />

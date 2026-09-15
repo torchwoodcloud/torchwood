@@ -6,6 +6,7 @@ option go_package = "github.com/torchwoodcloud/torchwood/genproto/console/v1;con
 
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
 import "shared/v1/authz.proto";
 import "shared/v1/common.proto";
@@ -78,6 +79,17 @@ service AdminsService {
     };
   }
 
+  // UpdateCurrentAdmin 当前登录管理员自助更新个人偏好（非 role/password 等
+  // 敏感字段；管理他人走 UpdateAdmin）。仅暴露 typed 偏好字段，存储侧落在
+  // admins.metadata JSONB（见 Admin.timezone 注释）。
+  rpc UpdateCurrentAdmin(UpdateCurrentAdminRequest) returns (Admin) {
+    option (google.api.http) = { patch: "/v1/console/admins/me", body: "*" };
+    option (torchwood.shared.v1.method_auth) = {
+      access: ACCESS_PERMISSION
+      permissions: ["console"]
+    };
+  }
+
   rpc ListAdmins(ListAdminsRequest) returns (ListAdminsResponse) {
     option (google.api.http) = { get: "/v1/console/admins" };
     option (torchwood.shared.v1.method_auth) = {
@@ -113,6 +125,16 @@ service AdminsService {
 
 message GetCurrentAdminRequest {}
 
+message UpdateCurrentAdminRequest {
+  // optional：未设置 = 不修改；设置空串 = 清除偏好（跟随浏览器时区）；
+  // 设置非空 = 更新为该 IANA 时区名（如 Asia/Shanghai）。形状在此校验，
+  // IANA 有效性由 use-case 层 time.LoadLocation 权威判定。
+  optional string timezone = 1 [(buf.validate.field).string = {
+    pattern: "^[A-Za-z]+(/[A-Za-z0-9_+-]+)*$"
+    max_len: 64
+  }];
+}
+
 message ListAdminsRequest {
   int32 page_size = 1;
   string page_token = 2;
@@ -146,4 +168,8 @@ message Admin {
   string role = 3;
   google.protobuf.Timestamp created_at = 4;
   google.protobuf.Timestamp updated_at = 5;
+  // 用户偏好时区（IANA 名，自 admins.metadata.timezone 投影；空 = 未设置，
+  // 前端回退浏览器时区）。metadata 本身不出 proto，新增偏好键在此追加
+  // typed 字段。
+  string timezone = 6;
 }

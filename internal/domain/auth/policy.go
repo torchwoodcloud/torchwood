@@ -483,6 +483,14 @@ func assertClientValueDomain(p MethodPolicy) error {
 	return nil
 }
 
+// consoleSelfServiceWriteWhitelist 是 console 面"写动词命名但仅作用于调用者
+// 自身记录"的自助方法显式登记（写动词必须 [owner] 规则的豁免口，与
+// clientPublicMethodWhitelist 同模式防误标扩散）。登记前提：方法 self-scoped
+// ——目标 id 只能取自 principal（callerID），不接受路径/请求体里的第三方 id。
+var consoleSelfServiceWriteWhitelist = map[string]struct{}{
+	"/torchwood.console.v1.AdminsService/UpdateCurrentAdmin": {},
+}
+
 func assertConsoleValueDomain(p MethodPolicy) error {
 	if p.Access == AccessPublic {
 		return nil // ConsoleAuthService 的自证凭证型公开方法
@@ -496,10 +504,10 @@ func assertConsoleValueDomain(p MethodPolicy) error {
 	default:
 		return fmt.Errorf("%s: console 面 permissions 值域为 [console]/[owner]/[owner,admin]（得到 %q）", p.Method, perms)
 	}
-	// 写动词方法最严：仅 owner。
+	// 写动词方法最严：仅 owner（自助偏好类方法经白名单显式豁免）。
 	name := p.Method[strings.LastIndex(p.Method, "/")+1:]
 	if strings.HasPrefix(name, "Create") || strings.HasPrefix(name, "Update") || strings.HasPrefix(name, "Delete") {
-		if perms != "owner" {
+		if _, selfService := consoleSelfServiceWriteWhitelist[p.Method]; !selfService && perms != "owner" {
 			return fmt.Errorf("%s: console 面写方法 permissions 必须为 [owner]（得到 %q）", p.Method, perms)
 		}
 	}

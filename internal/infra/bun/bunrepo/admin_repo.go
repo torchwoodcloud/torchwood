@@ -3,9 +3,11 @@ package bunrepo
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/model"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
@@ -73,8 +75,13 @@ func (r *adminRepo) ListAdmins(ctx context.Context) ([]projects.Admin, error) {
 	return out, nil
 }
 
-// adminToDomain 映射 bun 行到领域结构（revoked_at NULL → 零值=未撤销）。
+// adminToDomain 映射 bun 行到领域结构（revoked_at NULL → 零值=未撤销；
+// metadata 逐键拷贝，domain 侧只读不与 model 共享 map）。
 func adminToDomain(m *model.Admin) *projects.Admin {
+	metadata := make(map[string]string, len(m.Metadata))
+	for k, v := range m.Metadata {
+		metadata[k] = v
+	}
 	return &projects.Admin{
 		ID:           m.ID,
 		Email:        m.Email,
@@ -83,10 +90,15 @@ func adminToDomain(m *model.Admin) *projects.Admin {
 		RevokedAt:    m.RevokedAt,
 		CreatedAt:    m.CreatedAt,
 		UpdatedAt:    m.UpdatedAt,
+		Metadata:     metadata,
 	}
 }
 
 func (r *adminRepo) CreateAdmin(ctx context.Context, admin *projects.Admin) error {
+	metadata := admin.Metadata
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
 	m := &model.Admin{
 		ID:           admin.ID,
 		Email:        admin.Email,
@@ -94,8 +106,26 @@ func (r *adminRepo) CreateAdmin(ctx context.Context, admin *projects.Admin) erro
 		Role:         admin.Role,
 		CreatedAt:    admin.CreatedAt,
 		UpdatedAt:    admin.UpdatedAt,
+		Metadata:     metadata,
 	}
 	_, err := r.conn(ctx).NewInsert().Model(m).Exec(ctx)
+	return err
+}
+
+// UpdateAdminMetadata 单语句原子合并/删键偏好 JSONB：`|| $set` 合并写入、
+// `- $keys` 删除，不读-改-写，不覆盖并发写方的其他键。
+func (r *adminRepo) UpdateAdminMetadata(ctx context.Context, adminID string, set map[string]string, removeKeys []string, updatedAt time.Time) error {
+	setJSON, err := json.Marshal(set)
+	if err != nil {
+		return err
+	}
+	removeArr := make([]string, 0, len(removeKeys))
+	removeArr = append(removeArr, removeKeys...)
+	_, err = r.conn(ctx).NewUpdate().Model((*model.Admin)(nil)).
+		Set("updated_at = ?", updatedAt).
+		Set("metadata = (COALESCE(metadata, '{}'::jsonb) || ?::jsonb) - ?::text[]", string(setJSON), pq.StringArray(removeArr)).
+		Where("id = ?", adminID).
+		Exec(ctx)
 	return err
 }
 

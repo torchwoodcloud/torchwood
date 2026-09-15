@@ -1,6 +1,8 @@
 import { useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
 import {
   getOrder,
@@ -18,12 +20,7 @@ import type { ColumnDef } from "@/components/list/DataTable";
 import { DetailGrid, DetailPageWrapper, DetailSkeleton, NotFound } from "@/components/resource/shared";
 import { formatInt64 } from "@/lib/utils";
 
-function formatTime(value?: string) {
-  if (!value) return "—";
-  return new Date(value).toLocaleString();
-}
-
-const orderColumns: ColumnDef<PaymentOrder>[] = [
+const orderColumns = (tz: string): ColumnDef<PaymentOrder>[] => [
   { key: "id", header: "ID", className: "font-mono text-xs max-w-[140px] truncate", cell: (o) => o.id },
   { key: "user", header: "用户", className: "font-mono text-xs", cell: (o) => o.user_id ?? "—" },
   { key: "amount", header: "金额", cell: (o) => `${formatInt64(o.amount)} ${o.currency}` },
@@ -33,11 +30,12 @@ const orderColumns: ColumnDef<PaymentOrder>[] = [
     header: "状态",
     cell: (o) => <Badge variant={o.status === "paid" ? "default" : "secondary"}>{o.status}</Badge>,
   },
-  { key: "created", header: "创建时间", cell: (o) => formatTime(o.created_at) },
+  { key: "created", header: "创建时间", cell: (o) => formatDateTime(o.created_at, tz) },
 ];
 
 export function OrdersListPage() {
   const { projectId } = useAuth();
+  const tz = useUserTimezone();
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["payments-orders", projectId],
     queryFn: listOrders,
@@ -55,7 +53,7 @@ export function OrdersListPage() {
       searchPlaceholder="搜索订单 ID / 用户 / 状态..."
       isLoading={isLoading}
       items={orders}
-      columns={orderColumns}
+      columns={orderColumns(tz)}
       getSearchText={getSearchText}
       detailPath={(o) => `/console/orders/${o.id}`}
       emptyTitle="暂无订单"
@@ -69,6 +67,7 @@ export function OrderDetailPage() {
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const platformAdmin = isPlatformAdmin(role);
 
   const { data: order, isLoading } = useQuery({
@@ -135,9 +134,9 @@ export function OrderDetailPage() {
           { label: "状态", value: order.status },
           { label: "幂等键", value: order.idempotency_key ?? "—", mono: true },
           { label: "渠道会话", value: order.provider_session_id ?? "—", mono: true },
-          { label: "创建时间", value: formatTime(order.created_at) },
-          { label: "支付时间", value: formatTime(order.paid_at) },
-          { label: "过期时间", value: formatTime(order.expires_at) },
+          { label: "创建时间", value: formatDateTime(order.created_at, tz) },
+          { label: "支付时间", value: formatDateTime(order.paid_at, tz) },
+          { label: "过期时间", value: formatDateTime(order.expires_at, tz) },
         ]}
       />
     </DetailPageWrapper>

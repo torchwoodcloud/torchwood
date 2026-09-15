@@ -265,6 +265,10 @@
         "updated_at": {
           "type": "string",
           "format": "date-time"
+        },
+        "timezone": {
+          "type": "string",
+          "title": "用户偏好时区（IANA 名，自 admins.metadata.timezone 投影；空 = 未设置，\n前端回退浏览器时区）。metadata 本身不出 proto，新增偏好键在此追加\ntyped 字段。"
         }
       }
     },

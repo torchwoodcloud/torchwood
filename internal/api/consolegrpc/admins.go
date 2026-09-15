@@ -37,6 +37,24 @@ func (s *AdminsService) GetCurrentAdmin(ctx context.Context, _ *consolev1.GetCur
 	return mapAdmin(admin), nil
 }
 
+func (s *AdminsService) UpdateCurrentAdmin(ctx context.Context, req *consolev1.UpdateCurrentAdminRequest) (*consolev1.Admin, error) {
+	p, ok := principalFrom(ctx)
+	if !ok || p.ActorKind != shared.ActorKindAdmin || !p.IsAuthenticated() {
+		return nil, status.Error(codes.Unauthenticated, "admin context missing")
+	}
+	// optional：未设置 = 不修改；设置（含空串）= 更新/清除，语义同 UpdateAdmin.role。
+	cmd := console.UpdateProfileCommand{CallerID: callerID(ctx)}
+	if req.Timezone != nil {
+		tz := req.GetTimezone()
+		cmd.Timezone = &tz
+	}
+	admin, err := s.admins.UpdateProfile(ctx, cmd)
+	if err != nil {
+		return nil, err
+	}
+	return mapAdmin(admin), nil
+}
+
 func (s *AdminsService) ListAdmins(ctx context.Context, req *consolev1.ListAdminsRequest) (*consolev1.ListAdminsResponse, error) {
 	if err := appshared.RequireConsolePrincipal(ctx); err != nil {
 		return nil, err
@@ -155,5 +173,6 @@ func mapAdmin(a *projects.Admin) *consolev1.Admin {
 		Role:      a.Role,
 		CreatedAt: timestamppb.New(a.CreatedAt),
 		UpdatedAt: timestamppb.New(a.UpdatedAt),
+		Timezone:  a.Metadata["timezone"],
 	}
 }

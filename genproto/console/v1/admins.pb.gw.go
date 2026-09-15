@@ -56,6 +56,33 @@ func local_request_AdminsService_GetCurrentAdmin_0(ctx context.Context, marshale
 	return msg, metadata, err
 }
 
+func request_AdminsService_UpdateCurrentAdmin_0(ctx context.Context, marshaler runtime.Marshaler, client AdminsServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq UpdateCurrentAdminRequest
+		metadata runtime.ServerMetadata
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if req.Body != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+	}
+	msg, err := client.UpdateCurrentAdmin(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+}
+
+func local_request_AdminsService_UpdateCurrentAdmin_0(ctx context.Context, marshaler runtime.Marshaler, server AdminsServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var (
+		protoReq UpdateCurrentAdminRequest
+		metadata runtime.ServerMetadata
+	)
+	if err := marshaler.NewDecoder(req.Body).Decode(&protoReq); err != nil && !errors.Is(err, io.EOF) {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	msg, err := server.UpdateCurrentAdmin(ctx, &protoReq)
+	return msg, metadata, err
+}
+
 var filter_AdminsService_ListAdmins_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
 
 func request_AdminsService_ListAdmins_0(ctx context.Context, marshaler runtime.Marshaler, client AdminsServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -228,6 +255,26 @@ func RegisterAdminsServiceHandlerServer(ctx context.Context, mux *runtime.ServeM
 		}
 		forward_AdminsService_GetCurrentAdmin_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodPatch, pattern_AdminsService_UpdateCurrentAdmin_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/torchwood.console.v1.AdminsService/UpdateCurrentAdmin", runtime.WithHTTPPathPattern("/v1/console/admins/me"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_AdminsService_UpdateCurrentAdmin_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_AdminsService_UpdateCurrentAdmin_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
 	mux.Handle(http.MethodGet, pattern_AdminsService_ListAdmins_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -365,6 +412,23 @@ func RegisterAdminsServiceHandlerClient(ctx context.Context, mux *runtime.ServeM
 		}
 		forward_AdminsService_GetCurrentAdmin_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 	})
+	mux.Handle(http.MethodPatch, pattern_AdminsService_UpdateCurrentAdmin_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/torchwood.console.v1.AdminsService/UpdateCurrentAdmin", runtime.WithHTTPPathPattern("/v1/console/admins/me"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_AdminsService_UpdateCurrentAdmin_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		forward_AdminsService_UpdateCurrentAdmin_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+	})
 	mux.Handle(http.MethodGet, pattern_AdminsService_ListAdmins_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -437,17 +501,19 @@ func RegisterAdminsServiceHandlerClient(ctx context.Context, mux *runtime.ServeM
 }
 
 var (
-	pattern_AdminsService_GetCurrentAdmin_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"v1", "console", "admins", "me"}, ""))
-	pattern_AdminsService_ListAdmins_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "console", "admins"}, ""))
-	pattern_AdminsService_CreateAdmin_0     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "console", "admins"}, ""))
-	pattern_AdminsService_UpdateAdmin_0     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"v1", "console", "admins", "id"}, ""))
-	pattern_AdminsService_DeleteAdmin_0     = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"v1", "console", "admins", "id"}, ""))
+	pattern_AdminsService_GetCurrentAdmin_0    = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"v1", "console", "admins", "me"}, ""))
+	pattern_AdminsService_UpdateCurrentAdmin_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3}, []string{"v1", "console", "admins", "me"}, ""))
+	pattern_AdminsService_ListAdmins_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "console", "admins"}, ""))
+	pattern_AdminsService_CreateAdmin_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "console", "admins"}, ""))
+	pattern_AdminsService_UpdateAdmin_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"v1", "console", "admins", "id"}, ""))
+	pattern_AdminsService_DeleteAdmin_0        = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3}, []string{"v1", "console", "admins", "id"}, ""))
 )
 
 var (
-	forward_AdminsService_GetCurrentAdmin_0 = runtime.ForwardResponseMessage
-	forward_AdminsService_ListAdmins_0      = runtime.ForwardResponseMessage
-	forward_AdminsService_CreateAdmin_0     = runtime.ForwardResponseMessage
-	forward_AdminsService_UpdateAdmin_0     = runtime.ForwardResponseMessage
-	forward_AdminsService_DeleteAdmin_0     = runtime.ForwardResponseMessage
+	forward_AdminsService_GetCurrentAdmin_0    = runtime.ForwardResponseMessage
+	forward_AdminsService_UpdateCurrentAdmin_0 = runtime.ForwardResponseMessage
+	forward_AdminsService_ListAdmins_0         = runtime.ForwardResponseMessage
+	forward_AdminsService_CreateAdmin_0        = runtime.ForwardResponseMessage
+	forward_AdminsService_UpdateAdmin_0        = runtime.ForwardResponseMessage
+	forward_AdminsService_DeleteAdmin_0        = runtime.ForwardResponseMessage
 )

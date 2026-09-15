@@ -75,6 +75,9 @@ func (r *functionsAdminRepo) DeleteAdmin(context.Context, string) error         
 func (r *functionsAdminRepo) CountAdminsByRole(context.Context, string) (int64, error) {
 	return 1, nil
 }
+func (r *functionsAdminRepo) UpdateAdminMetadata(context.Context, string, map[string]string, []string, time.Time) error {
+	return nil
+}
 func (r *functionsAdminRepo) WithBootstrapLock(_ context.Context, _ int64, fn func(ctx context.Context) error) error {
 	return fn(context.Background())
 }

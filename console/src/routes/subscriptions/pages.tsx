@@ -1,6 +1,8 @@
 import { useCallback, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import {
@@ -40,11 +42,6 @@ import {
   RowDeleteButton,
 } from "@/components/resource/shared";
 import { formatInt64, isInt64Input } from "@/lib/utils";
-
-function formatTime(value?: string) {
-  if (!value) return "—";
-  return new Date(value).toLocaleString();
-}
 
 const planColumns: ColumnDef<SubscriptionPlan>[] = [
   { key: "code", header: "Code", className: "font-mono text-xs", cell: (p) => p.code },
@@ -273,6 +270,7 @@ export function SubscriptionDetailPage() {
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const platformAdmin = isPlatformAdmin(role);
 
   const { data: sub, isLoading } = useQuery({
@@ -325,9 +323,9 @@ export function SubscriptionDetailPage() {
           { label: "模式", value: sub.mode },
           { label: "状态", value: sub.status },
           { label: "期末取消", value: sub.cancel_at_period_end ? "是" : "否" },
-          { label: "当前周期开始", value: formatTime(sub.current_period_start) },
-          { label: "当前周期结束", value: formatTime(sub.current_period_end) },
-          { label: "宽限至", value: formatTime(sub.grace_until) },
+          { label: "当前周期开始", value: formatDateTime(sub.current_period_start, tz) },
+          { label: "当前周期结束", value: formatDateTime(sub.current_period_end, tz) },
+          { label: "宽限至", value: formatDateTime(sub.grace_until, tz) },
         ]}
       />
     </DetailPageWrapper>

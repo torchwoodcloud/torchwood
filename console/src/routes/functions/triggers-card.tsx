@@ -24,6 +24,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RowDeleteButton } from "@/components/resource/shared";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatDateTime } from "@/lib/datetime";
 
 // ——触发器管理（P1 触发器模块）——
 //
@@ -44,6 +46,7 @@ export function FunctionTriggersCard({
   writeable: boolean;
 }) {
   const queryClient = useQueryClient();
+  const tz = useUserTimezone();
   const [showCreate, setShowCreate] = useState(false);
   const [type, setType] = useState<"http" | "cron" | "event">("http");
   // http 表单
@@ -363,7 +366,7 @@ export function FunctionTriggersCard({
                     <div className="text-xs text-muted-foreground">
                       <span className="font-mono">{trg.expr}</span> · {trg.misfire}
                       {trg.next_run_at
-                        ? ` · 下次 ${new Date(trg.next_run_at).toLocaleString()}`
+                        ? ` · 下次 ${formatDateTime(trg.next_run_at, tz)}`
                         : ""}
                     </div>
                   ) : (

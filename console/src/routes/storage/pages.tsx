@@ -27,6 +27,8 @@ import {
 import { ChunkedUploader } from "@/routes/storage/chunked-uploader";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatDateTime } from "@/lib/datetime";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,7 +56,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const bucketColumns: ColumnDef<Bucket>[] = [
+// 工厂：时区来自管理员偏好（hook 无法在模块级使用），由列表页传入。
+const bucketColumns = (tz: string): ColumnDef<Bucket>[] => [
   {
     key: "id",
     header: "ID",
@@ -74,7 +77,7 @@ const bucketColumns: ColumnDef<Bucket>[] = [
   {
     key: "created",
     header: "创建时间",
-    cell: (b) => new Date(b.created_at).toLocaleString(),
+    cell: (b) => formatDateTime(b.created_at, tz),
   },
 ];
 
@@ -104,6 +107,7 @@ function UsageStatCard({
 export function StorageListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const queryClient = useQueryClient();
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const writeable = canWrite(role);
@@ -152,7 +156,7 @@ export function StorageListPage() {
       searchPlaceholder="搜索 Bucket 名称或 ID..."
       isLoading={isLoading}
       items={buckets}
-      columns={bucketColumns}
+      columns={bucketColumns(tz)}
       getSearchText={getSearchText}
       detailPath={(b) => `/console/storage/${b.id}`}
       toolbarActions={
@@ -238,6 +242,7 @@ export function BucketDetailPage() {
   const { bucketId } = useParams<{ bucketId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const tz = useUserTimezone();
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -306,7 +311,7 @@ export function BucketDetailPage() {
     {
       key: "created",
       header: "上传时间",
-      cell: (f) => new Date(f.created_at).toLocaleString(),
+      cell: (f) => formatDateTime(f.created_at, tz),
     },
   ];
 
@@ -358,7 +363,7 @@ export function BucketDetailPage() {
           items={[
             { label: "ID", value: bucket.id, mono: true },
             { label: "名称", value: bucket.name },
-            { label: "创建时间", value: new Date(bucket.created_at).toLocaleString() },
+            { label: "创建时间", value: formatDateTime(bucket.created_at, tz) },
           ]}
         />
       </DetailPageWrapper>
@@ -480,6 +485,7 @@ export function FileDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const [shareOpen, setShareOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [shareExpires, setShareExpires] = useState("");
@@ -550,7 +556,7 @@ export function FileDetailPage() {
         { __skipToast: true }
       );
       setShareUrl(`${fileViewUrl(bucketId, fileId)}?token=${encodeURIComponent(token)}`);
-      setShareExpires(new Date(expires_at).toLocaleString());
+      setShareExpires(formatDateTime(expires_at, tz));
       setShareOpen(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "生成分享链接失败");
@@ -608,8 +614,8 @@ export function FileDetailPage() {
           { label: "大小", value: formatBytes(file.size) },
           { label: "MIME 类型", value: file.mime_type },
           { label: "Bucket ID", value: file.bucket_id, mono: true },
-          { label: "创建时间", value: new Date(file.created_at).toLocaleString() },
-          { label: "更新时间", value: new Date(file.updated_at).toLocaleString() },
+          { label: "创建时间", value: formatDateTime(file.created_at, tz) },
+          { label: "更新时间", value: formatDateTime(file.updated_at, tz) },
         ]}
       />
 

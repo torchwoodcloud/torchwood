@@ -9,6 +9,8 @@ import { ListenPanel } from "./ListenPanel";
 vi.mock("@/api/auth", () => ({ refreshSession: vi.fn() }));
 // useAuth 直接返回当前 project（AuthProvider 依赖 QueryClient，单测绕开）。
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ projectId: "proj-1" }) }));
+// useUserTimezone 依赖 admins/me 查询（QueryClientProvider），单测固定时区即可。
+vi.mock("@/hooks/useTimezone", () => ({ useUserTimezone: () => "UTC" }));
 
 // MockWebSocket 模拟服务端一侧：记录客户端帧，测试手动触发 open/帧/close。
 class MockWebSocket {

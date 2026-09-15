@@ -29,6 +29,8 @@ import {
   useAdminRole,
   isPlatformAdmin,
 } from "@/hooks/useAdminRole";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatDateTime } from "@/lib/datetime";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -45,7 +47,8 @@ import {
   DeleteButton,
 } from "@/components/resource/shared";
 
-const dbColumns: ColumnDef<Database>[] = [
+// 模块级 columns 无法用 hook，工厂化注入管理员时区偏好。
+const dbColumns = (tz: string): ColumnDef<Database>[] => [
   {
     key: "id",
     header: "ID",
@@ -56,13 +59,14 @@ const dbColumns: ColumnDef<Database>[] = [
   {
     key: "created",
     header: "创建时间",
-    cell: (d) => new Date(d.created_at).toLocaleString(),
+    cell: (d) => formatDateTime(d.created_at, tz),
   },
 ];
 
 export function DatabasesListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const queryClient = useQueryClient();
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const platformAdmin = isPlatformAdmin(role);
@@ -111,7 +115,7 @@ export function DatabasesListPage() {
       searchPlaceholder="搜索数据库名称或 ID..."
       isLoading={isLoading}
       items={databases}
-      columns={dbColumns}
+      columns={dbColumns(tz)}
       getSearchText={getSearchText}
       detailPath={(d) => `/console/databases/${d.id}`}
       toolbarActions={
@@ -207,6 +211,7 @@ export function DatabaseDetailPage() {
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const platformAdmin = isPlatformAdmin(role);
 
@@ -318,7 +323,7 @@ export function DatabaseDetailPage() {
           items={[
             { label: "ID", value: database.id, mono: true },
             { label: "名称", value: database.name },
-            { label: "创建时间", value: new Date(database.created_at).toLocaleString() },
+            { label: "创建时间", value: formatDateTime(database.created_at, tz) },
           ]}
         />
       </DetailPageWrapper>

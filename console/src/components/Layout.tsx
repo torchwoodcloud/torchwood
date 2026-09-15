@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
+import { getCurrentAdmin } from "@/api/admins";
 import { ProjectBootstrap } from "@/components/ProjectBootstrap";
 import { ProjectSelector } from "@/components/ProjectSelector";
+import { PreferencesDialog } from "@/components/PreferencesDialog";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Key, Users, Database, HardDrive, LogOut, Menu, X, UsersRound, ShieldCheck, FolderKanban, FunctionSquare, BarChart3, Receipt, Coins, CreditCard, ScrollText, Trophy, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Key, Users, Database, HardDrive, LogOut, Menu, X, UsersRound, ShieldCheck, FolderKanban, FunctionSquare, BarChart3, Receipt, Coins, CreditCard, ScrollText, Trophy, Settings2, type LucideIcon } from "lucide-react";
 
 interface NavItem {
   to: string;
@@ -58,6 +61,14 @@ export function Layout() {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  // 当前管理员（共享 ["console-admin-me"] 缓存）：侧栏底部展示邮箱 + 偏好入口。
+  const { data: me } = useQuery({
+    queryKey: ["console-admin-me"],
+    queryFn: getCurrentAdmin,
+    retry: 1,
+    staleTime: 60_000,
+  });
 
   const handleLogout = async () => {
     await logout();
@@ -69,9 +80,15 @@ export function Layout() {
   return (
     <div className="flex h-screen bg-background">
       <ProjectBootstrap />
+      <PreferencesDialog open={prefsOpen} onOpenChange={setPrefsOpen} current={me?.timezone} />
       {/* Desktop sidebar */}
       <aside className="hidden md:flex w-64 border-r bg-card flex-col">
-        <SidebarContent onNavigate={closeMobile} onLogout={handleLogout} />
+        <SidebarContent
+          onNavigate={closeMobile}
+          onLogout={handleLogout}
+          email={me?.email}
+          onOpenPrefs={() => setPrefsOpen(true)}
+        />
       </aside>
 
       {/* Mobile overlay */}
@@ -88,7 +105,12 @@ export function Layout() {
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <SidebarContent onNavigate={closeMobile} onLogout={handleLogout} />
+        <SidebarContent
+          onNavigate={closeMobile}
+          onLogout={handleLogout}
+          email={me?.email}
+          onOpenPrefs={() => setPrefsOpen(true)}
+        />
       </aside>
 
       <main className="flex-1 overflow-auto">
@@ -111,9 +133,13 @@ export function Layout() {
 function SidebarContent({
   onNavigate,
   onLogout,
+  email,
+  onOpenPrefs,
 }: {
   onNavigate: () => void;
   onLogout: () => void;
+  email?: string;
+  onOpenPrefs: () => void;
 }) {
   return (
     <>
@@ -157,7 +183,19 @@ function SidebarContent({
           </div>
         ))}
       </nav>
-      <div className="p-4 border-t">
+      <div className="p-4 border-t space-y-1">
+        <div className="flex items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+            {(email ?? "?").slice(0, 1).toUpperCase()}
+          </span>
+          <span className="truncate" title={email}>
+            {email ?? "…"}
+          </span>
+        </div>
+        <Button variant="ghost" className="w-full justify-start gap-2" onClick={onOpenPrefs}>
+          <Settings2 className="h-4 w-4" />
+          偏好设置
+        </Button>
         <Button variant="ghost" className="w-full justify-start gap-2" onClick={onLogout}>
           <LogOut className="h-4 w-4" />
           Logout

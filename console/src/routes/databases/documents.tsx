@@ -37,6 +37,8 @@ import {
   useAdminRole,
   canWrite,
 } from "@/hooks/useAdminRole";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatDateTime } from "@/lib/datetime";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -70,7 +72,8 @@ import { PermissionEditor } from "@/components/resource/PermissionEditor";
 
 import { documentToValues, MAX_BULK_OPERATIONS } from "./collectionMeta";
 
-const documentColumns: ColumnDef<Document>[] = [
+// 模块级 columns 无法用 hook，工厂化注入管理员时区偏好。
+const documentColumns = (tz: string): ColumnDef<Document>[] => [
   {
     key: "id",
     header: "ID",
@@ -80,7 +83,7 @@ const documentColumns: ColumnDef<Document>[] = [
   {
     key: "updated",
     header: "更新时间",
-    cell: (d) => new Date(d.updated_at).toLocaleString(),
+    cell: (d) => formatDateTime(d.updated_at, tz),
   },
 ];
 
@@ -101,6 +104,7 @@ function DocumentListSection({
   const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
   const [bulkUpdateIds, setBulkUpdateIds] = useState<string[]>([]);
   const clearRef = useRef<(() => void) | null>(null);
+  const tz = useUserTimezone();
   const { data: documents = [], isLoading } = useQuery({
     queryKey: ["documents", dbId, collId],
     queryFn: () => listDocuments(dbId, collId),
@@ -121,7 +125,7 @@ function DocumentListSection({
   });
 
   const columns: ColumnDef<Document>[] = [
-    ...documentColumns,
+    ...documentColumns(tz),
     ...attributes.slice(0, 4).map((attr) => ({
       key: attr.key,
       header: attr.key,
@@ -511,6 +515,7 @@ export function DocumentDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const [values, setValues] = useState<Record<string, string>>({});
   const [increments, setIncrements] = useState<Record<string, string>>({});
   const [initialized, setInitialized] = useState(false);
@@ -603,8 +608,8 @@ export function DocumentDetailPage() {
       <DetailGrid
         items={[
           { label: "ID", value: document.id, mono: true },
-          { label: "创建时间", value: new Date(document.created_at).toLocaleString() },
-          { label: "更新时间", value: new Date(document.updated_at).toLocaleString() },
+          { label: "创建时间", value: formatDateTime(document.created_at, tz) },
+          { label: "更新时间", value: formatDateTime(document.updated_at, tz) },
         ]}
       />
       <Card className="mt-6">

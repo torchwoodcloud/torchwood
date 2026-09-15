@@ -38,6 +38,8 @@ import {
   useAdminRole,
   isPlatformAdmin,
 } from "@/hooks/useAdminRole";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatDate } from "@/lib/datetime";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -122,6 +124,7 @@ export function CollectionDetailPage() {
   const { dbId, collId } = useOutletContext<CollectionOutletContext>();
   const queryClient = useQueryClient();
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const [attrDialogOpen, setAttrDialogOpen] = useState(false);
   const [indexDialogOpen, setIndexDialogOpen] = useState(false);
   const [permDialogOpen, setPermDialogOpen] = useState(false);
@@ -220,7 +223,7 @@ export function CollectionDetailPage() {
           <CollectionStatCard
             icon={Calendar}
             label="创建时间"
-            value={new Date(collection.created_at).toLocaleDateString()}
+            value={formatDate(collection.created_at, tz)}
           />
         </div>
 

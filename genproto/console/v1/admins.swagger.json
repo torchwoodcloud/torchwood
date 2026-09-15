@@ -103,6 +103,37 @@
         "tags": [
           "AdminsService"
         ]
+      },
+      "patch": {
+        "summary": "UpdateCurrentAdmin 当前登录管理员自助更新个人偏好（非 role/password 等\n敏感字段；管理他人走 UpdateAdmin）。仅暴露 typed 偏好字段，存储侧落在\nadmins.metadata JSONB（见 Admin.timezone 注释）。",
+        "operationId": "AdminsService_UpdateCurrentAdmin",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Admin"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1UpdateCurrentAdminRequest"
+            }
+          }
+        ],
+        "tags": [
+          "AdminsService"
+        ]
       }
     },
     "/v1/console/admins/{id}": {
@@ -205,6 +236,10 @@
         "updated_at": {
           "type": "string",
           "format": "date-time"
+        },
+        "timezone": {
+          "type": "string",
+          "title": "用户偏好时区（IANA 名，自 admins.metadata.timezone 投影；空 = 未设置，\n前端回退浏览器时区）。metadata 本身不出 proto，新增偏好键在此追加\ntyped 字段。"
         }
       }
     },
@@ -306,6 +341,15 @@
           "type": "integer",
           "format": "int32",
           "title": "total_count ≤0 = unknown（keyset 分页下 0 与空集合不可区分，调用方应以 next_page_token 是否为空判定是否还有更多；≤0 表示总数未知）。"
+        }
+      }
+    },
+    "v1UpdateCurrentAdminRequest": {
+      "type": "object",
+      "properties": {
+        "timezone": {
+          "type": "string",
+          "title": "optional：未设置 = 不修改；设置空串 = 清除偏好（跟随浏览器时区）；\n设置非空 = 更新为该 IANA 时区名（如 Asia/Shanghai）。形状在此校验，\nIANA 有效性由 use-case 层 time.LoadLocation 权威判定。"
         }
       }
     }

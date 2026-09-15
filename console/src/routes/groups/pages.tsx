@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
 import { Plus, Settings2, UserPlus } from "lucide-react";
 import {
@@ -60,12 +62,7 @@ function statusBadge(status: string) {
   return <Badge variant={variant}>{STATUS_LABELS[status] ?? status}</Badge>;
 }
 
-function formatTime(value?: string) {
-  if (!value) return "—";
-  return new Date(value).toLocaleString();
-}
-
-const groupColumns: ColumnDef<Group>[] = [
+const groupColumns = (tz: string): ColumnDef<Group>[] => [
   {
     key: "id",
     header: "ID",
@@ -77,7 +74,7 @@ const groupColumns: ColumnDef<Group>[] = [
   {
     key: "created",
     header: "创建时间",
-    cell: (t) => formatTime(t.created_at),
+    cell: (t) => formatDateTime(t.created_at, tz),
   },
 ];
 
@@ -85,6 +82,7 @@ export function GroupsListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const queryClient = useQueryClient();
+  const tz = useUserTimezone();
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const writeable = canWrite(role);
 
@@ -132,7 +130,7 @@ export function GroupsListPage() {
       searchPlaceholder="搜索用户组名称或 ID..."
       isLoading={isLoading}
       items={groups}
-      columns={groupColumns}
+      columns={groupColumns(tz)}
       getSearchText={getSearchText}
       detailPath={(t) => `/console/groups/${t.id}`}
       toolbarActions={
@@ -315,6 +313,7 @@ export function GroupDetailPage() {
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
@@ -452,7 +451,7 @@ export function GroupDetailPage() {
     {
       key: "joined",
       header: "加入时间",
-      cell: (m) => formatTime(m.joined_at),
+      cell: (m) => formatDateTime(m.joined_at, tz),
     },
   ];
 
@@ -505,8 +504,8 @@ export function GroupDetailPage() {
             { label: "ID", value: group.id, mono: true },
             { label: "名称", value: group.name },
             { label: "成员数", value: String(group.total ?? 0) },
-            { label: "创建时间", value: formatTime(group.created_at) },
-            { label: "更新时间", value: formatTime(group.updated_at) },
+            { label: "创建时间", value: formatDateTime(group.created_at, tz) },
+            { label: "更新时间", value: formatDateTime(group.updated_at, tz) },
           ]}
         />
       </DetailPageWrapper>

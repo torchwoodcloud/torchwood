@@ -68,6 +68,29 @@ func (r *memAdminRepo) UpdateAdmin(_ context.Context, admin *projects.Admin) err
 	return nil
 }
 
+// UpdateAdminMetadata 模拟 JSONB 单语句合并/删键（与 bunrepo 实现同语义）。
+func (r *memAdminRepo) UpdateAdminMetadata(_ context.Context, adminID string, set map[string]string, removeKeys []string, updatedAt time.Time) error {
+	for i := range r.admins {
+		if r.admins[i].ID != adminID {
+			continue
+		}
+		metadata := r.admins[i].Metadata
+		if metadata == nil {
+			metadata = map[string]string{}
+		}
+		for k, v := range set {
+			metadata[k] = v
+		}
+		for _, k := range removeKeys {
+			delete(metadata, k)
+		}
+		r.admins[i].Metadata = metadata
+		r.admins[i].UpdatedAt = updatedAt
+		return nil
+	}
+	return nil
+}
+
 func (r *memAdminRepo) RevokeCredentials(_ context.Context, adminID string, revokedAt time.Time) error {
 	for i := range r.admins {
 		if r.admins[i].ID == adminID && (r.admins[i].RevokedAt.IsZero() || r.admins[i].RevokedAt.Before(revokedAt)) {
@@ -119,6 +142,8 @@ func mkAdmin(id, email, role string) projects.Admin {
 	}
 }
 
+func strPtr(s string) *string { return &s }
+
 func TestAdmins_Create_ValidatesInput(t *testing.T) {
 	t.Parallel()
 	uc := console.NewAdmins(newAdminRepo(), nil, nil)
@@ -151,6 +176,47 @@ func TestAdmins_Create_HashesPasswordAndNormalizesEmail(t *testing.T) {
 	// Duplicate email.
 	_, err = uc.Create(adminActorCtx(context.Background()), console.CreateAdminCommand{Email: "ops@example.com", Password: "Passw0rd", Role: "member"})
 	require.Equal(t, codes.AlreadyExists, status.Code(err))
+}
+
+// 时区偏好：合法值写入 metadata.timezone；非法值（形状已由 protovalidate 拦，
+// 这里覆盖 IANA 权威校验面）InvalidArgument；空串清除键（回退浏览器时区）；
+// Timezone 未设置 = 不修改（保持既有 metadata 与 updated_at 不动）。
+func TestAdmins_UpdateProfile_Timezone(t *testing.T) {
+	t.Parallel()
+	repo := newAdminRepo(mkAdmin("a1", "owner@x.com", "owner"))
+	uc := console.NewAdmins(repo, nil, nil)
+	ctx := adminActorCtx(context.Background())
+
+	// 非空：更新 + 返回值投影同步。
+	updated, err := uc.UpdateProfile(ctx, console.UpdateProfileCommand{CallerID: "a1", Timezone: strPtr("Asia/Shanghai")})
+	require.NoError(t, err)
+	require.Equal(t, "Asia/Shanghai", updated.Metadata["timezone"])
+	require.Equal(t, "Asia/Shanghai", repo.admins[0].Metadata["timezone"])
+
+	// 未认证 actor：拒绝。
+	_, err = uc.UpdateProfile(context.Background(), console.UpdateProfileCommand{CallerID: "a1", Timezone: strPtr("UTC")})
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+
+	// 非法 IANA 名：InvalidArgument，metadata 不变。
+	_, err = uc.UpdateProfile(ctx, console.UpdateProfileCommand{CallerID: "a1", Timezone: strPtr("Mars/Olympus")})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Equal(t, "Asia/Shanghai", repo.admins[0].Metadata["timezone"])
+
+	// "Local"：LoadLocation 合法但显示语义无效，显式拒绝。
+	_, err = uc.UpdateProfile(ctx, console.UpdateProfileCommand{CallerID: "a1", Timezone: strPtr("Local")})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	// 空串：清除键。
+	_, err = uc.UpdateProfile(ctx, console.UpdateProfileCommand{CallerID: "a1", Timezone: strPtr("")})
+	require.NoError(t, err)
+	require.NotContains(t, repo.admins[0].Metadata, "timezone")
+
+	// 未设置（nil）：完全不修改——updated_at 与 metadata 均不动。
+	before := repo.admins[0].UpdatedAt
+	after, err := uc.UpdateProfile(ctx, console.UpdateProfileCommand{CallerID: "a1"})
+	require.NoError(t, err)
+	require.Equal(t, before, after.UpdatedAt)
+	require.NotContains(t, after.Metadata, "timezone")
 }
 
 func TestAdmins_Update_RejectsSelfDemotion(t *testing.T) {

@@ -84,6 +84,10 @@ type AdminRepository interface {
 	ListAdmins(ctx context.Context) ([]Admin, error)
 	CreateAdmin(ctx context.Context, admin *Admin) error
 	UpdateAdmin(ctx context.Context, admin *Admin) error
+	// UpdateAdminMetadata 原子合并/删键偏好 JSONB（单语句 || / -，不覆盖
+	// 并发写方的其他键）。set 非空键合并写入，removeKeys 中的键删除；
+	// 两者可为空。感知调用方事务。
+	UpdateAdminMetadata(ctx context.Context, adminID string, set map[string]string, removeKeys []string, updatedAt time.Time) error
 	// RevokeCredentials 持久化 admin 凭证撤销时间戳：撤销时刻之前签发的
 	// 全部 token 在验证时失效。幂等且只前推（已有更晚撤销时间不回退）。
 	// 感知调用方事务：与 admins 行写同事务提交。

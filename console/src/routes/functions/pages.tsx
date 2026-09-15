@@ -57,13 +57,16 @@ import {
   BulkDeleteButton,
 } from "@/components/resource/shared";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserTimezone } from "@/hooks/useTimezone";
 import { useAdminRole, canWrite, isPlatformAdmin } from "@/hooks/useAdminRole";
+import { formatDateTime } from "@/lib/datetime";
 import type { ColumnDef } from "@/components/list/DataTable";
 import { FunctionTriggersCard } from "./triggers-card";
 import { FunctionClientPolicyCard } from "./client-policy-card";
 import { FunctionPoolPolicyCard } from "./pool-policy-card";
 
-const functionColumns: ColumnDef<FunctionItem>[] = [
+// 模块级 columns 无法用 hook，工厂化注入管理员时区偏好。
+const functionColumns = (tz: string): ColumnDef<FunctionItem>[] => [
   {
     key: "id",
     header: "ID",
@@ -89,7 +92,7 @@ const functionColumns: ColumnDef<FunctionItem>[] = [
   {
     key: "created",
     header: "创建时间",
-    cell: (f) => new Date(f.created_at).toLocaleString(),
+    cell: (f) => formatDateTime(f.created_at, tz),
   },
 ];
 
@@ -104,6 +107,7 @@ function formatBytes(bytes: number): string {
 export function FunctionsListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const queryClient = useQueryClient();
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -186,7 +190,7 @@ export function FunctionsListPage() {
         searchPlaceholder="搜索函数名称或 ID..."
         isLoading={isLoading}
         items={functions}
-        columns={functionColumns}
+        columns={functionColumns(tz)}
         getSearchText={getSearchText}
         detailPath={(f) => `/console/functions/${f.id}`}
         toolbarActions={
@@ -414,6 +418,7 @@ export function FunctionDetailPage() {
   const { functionId } = useParams<{ functionId: string }>();
   const { projectId } = useAuth();
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const queryClient = useQueryClient();
   const writeable = canWrite(role);
   const platformAdmin = isPlatformAdmin(role);
@@ -586,7 +591,7 @@ export function FunctionDetailPage() {
             { label: "ID", value: fn.id, mono: true },
             { label: "Runtime", value: fn.runtime },
             { label: "Entrypoint", value: fn.entrypoint },
-            { label: "创建时间", value: new Date(fn.created_at).toLocaleString() },
+            { label: "创建时间", value: formatDateTime(fn.created_at, tz) },
           ]}
         />
       </DetailPageWrapper>
@@ -817,7 +822,7 @@ export function FunctionDetailPage() {
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       {deploymentStatusBadge(d.status)}
                       <span>{formatBytes(d.size)}</span>
-                      <span>{new Date(d.created_at).toLocaleString()}</span>
+                      <span>{formatDateTime(d.created_at, tz)}</span>
                     </div>
                     {d.status === "failed" && d.error && (
                       <p className="text-xs text-destructive break-all">{d.error}</p>
@@ -878,7 +883,7 @@ export function FunctionDetailPage() {
                   <div className="min-w-0">
                     <div className="font-mono text-xs truncate">{e.id}</div>
                     <div className="text-xs text-muted-foreground">
-                      {new Date(e.created_at).toLocaleString()} · {e.duration_ms}ms
+                      {formatDateTime(e.created_at, tz)} · {e.duration_ms}ms
                       {e.error && <span className="text-destructive ml-2">{e.error}</span>}
                     </div>
                   </div>

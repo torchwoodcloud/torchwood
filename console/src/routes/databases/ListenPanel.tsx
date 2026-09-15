@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { Radio, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatTimeOnly } from "@/lib/datetime";
 import {
   startCollectionListener,
   type CollectionListener,
@@ -40,6 +42,7 @@ function summarize(payload: Record<string, unknown>): string {
 export function ListenPanel() {
   const { dbId, collId } = useOutletContext<CollectionOutletContext>();
   const { projectId } = useAuth();
+  const tz = useUserTimezone();
   const [status, setStatus] = useState<ListenStatus>("connecting");
   const [events, setEvents] = useState<ListenEvent[]>([]);
   const listenerRef = useRef<CollectionListener | null>(null);
@@ -104,7 +107,7 @@ export function ListenPanel() {
             {events.map((ev, i) => (
               <TableRow key={`${ev.at.getTime()}-${i}`}>
                 <TableCell className="font-mono text-xs">
-                  {ev.at.toLocaleTimeString()}
+                  {formatTimeOnly(ev.at, tz)}
                 </TableCell>
                 <TableCell className="font-mono text-xs">
                   {typeof ev.payload.event === "string" ? ev.payload.event : "event"}

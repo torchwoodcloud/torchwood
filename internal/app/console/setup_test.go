@@ -73,6 +73,10 @@ func (r *fakeAdminRepo) CountAdminsByRole(context.Context, string) (int64, error
 	return 0, nil
 }
 
+func (r *fakeAdminRepo) UpdateAdminMetadata(context.Context, string, map[string]string, []string, time.Time) error {
+	return nil
+}
+
 func (r *fakeAdminRepo) WithBootstrapLock(_ context.Context, _ int64, fn func(ctx context.Context) error) error {
 	return fn(context.Background())
 }

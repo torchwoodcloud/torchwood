@@ -7,6 +7,7 @@
 package consolev1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
@@ -61,6 +62,53 @@ func (*GetCurrentAdminRequest) Descriptor() ([]byte, []int) {
 	return file_console_v1_admins_proto_rawDescGZIP(), []int{0}
 }
 
+type UpdateCurrentAdminRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// optional：未设置 = 不修改；设置空串 = 清除偏好（跟随浏览器时区）；
+	// 设置非空 = 更新为该 IANA 时区名（如 Asia/Shanghai）。形状在此校验，
+	// IANA 有效性由 use-case 层 time.LoadLocation 权威判定。
+	Timezone      *string `protobuf:"bytes,1,opt,name=timezone,proto3,oneof" json:"timezone,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateCurrentAdminRequest) Reset() {
+	*x = UpdateCurrentAdminRequest{}
+	mi := &file_console_v1_admins_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateCurrentAdminRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateCurrentAdminRequest) ProtoMessage() {}
+
+func (x *UpdateCurrentAdminRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_console_v1_admins_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateCurrentAdminRequest.ProtoReflect.Descriptor instead.
+func (*UpdateCurrentAdminRequest) Descriptor() ([]byte, []int) {
+	return file_console_v1_admins_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *UpdateCurrentAdminRequest) GetTimezone() string {
+	if x != nil && x.Timezone != nil {
+		return *x.Timezone
+	}
+	return ""
+}
+
 type ListAdminsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
@@ -71,7 +119,7 @@ type ListAdminsRequest struct {
 
 func (x *ListAdminsRequest) Reset() {
 	*x = ListAdminsRequest{}
-	mi := &file_console_v1_admins_proto_msgTypes[1]
+	mi := &file_console_v1_admins_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -83,7 +131,7 @@ func (x *ListAdminsRequest) String() string {
 func (*ListAdminsRequest) ProtoMessage() {}
 
 func (x *ListAdminsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_admins_proto_msgTypes[1]
+	mi := &file_console_v1_admins_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -96,7 +144,7 @@ func (x *ListAdminsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAdminsRequest.ProtoReflect.Descriptor instead.
 func (*ListAdminsRequest) Descriptor() ([]byte, []int) {
-	return file_console_v1_admins_proto_rawDescGZIP(), []int{1}
+	return file_console_v1_admins_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ListAdminsRequest) GetPageSize() int32 {
@@ -123,7 +171,7 @@ type ListAdminsResponse struct {
 
 func (x *ListAdminsResponse) Reset() {
 	*x = ListAdminsResponse{}
-	mi := &file_console_v1_admins_proto_msgTypes[2]
+	mi := &file_console_v1_admins_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -135,7 +183,7 @@ func (x *ListAdminsResponse) String() string {
 func (*ListAdminsResponse) ProtoMessage() {}
 
 func (x *ListAdminsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_admins_proto_msgTypes[2]
+	mi := &file_console_v1_admins_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -148,7 +196,7 @@ func (x *ListAdminsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAdminsResponse.ProtoReflect.Descriptor instead.
 func (*ListAdminsResponse) Descriptor() ([]byte, []int) {
-	return file_console_v1_admins_proto_rawDescGZIP(), []int{2}
+	return file_console_v1_admins_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ListAdminsResponse) GetAdmins() []*Admin {
@@ -176,7 +224,7 @@ type CreateAdminRequest struct {
 
 func (x *CreateAdminRequest) Reset() {
 	*x = CreateAdminRequest{}
-	mi := &file_console_v1_admins_proto_msgTypes[3]
+	mi := &file_console_v1_admins_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -188,7 +236,7 @@ func (x *CreateAdminRequest) String() string {
 func (*CreateAdminRequest) ProtoMessage() {}
 
 func (x *CreateAdminRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_admins_proto_msgTypes[3]
+	mi := &file_console_v1_admins_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -201,7 +249,7 @@ func (x *CreateAdminRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateAdminRequest.ProtoReflect.Descriptor instead.
 func (*CreateAdminRequest) Descriptor() ([]byte, []int) {
-	return file_console_v1_admins_proto_rawDescGZIP(), []int{3}
+	return file_console_v1_admins_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CreateAdminRequest) GetEmail() string {
@@ -237,7 +285,7 @@ type UpdateAdminRequest struct {
 
 func (x *UpdateAdminRequest) Reset() {
 	*x = UpdateAdminRequest{}
-	mi := &file_console_v1_admins_proto_msgTypes[4]
+	mi := &file_console_v1_admins_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -249,7 +297,7 @@ func (x *UpdateAdminRequest) String() string {
 func (*UpdateAdminRequest) ProtoMessage() {}
 
 func (x *UpdateAdminRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_admins_proto_msgTypes[4]
+	mi := &file_console_v1_admins_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -262,7 +310,7 @@ func (x *UpdateAdminRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateAdminRequest.ProtoReflect.Descriptor instead.
 func (*UpdateAdminRequest) Descriptor() ([]byte, []int) {
-	return file_console_v1_admins_proto_rawDescGZIP(), []int{4}
+	return file_console_v1_admins_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *UpdateAdminRequest) GetId() string {
@@ -295,7 +343,7 @@ type DeleteAdminRequest struct {
 
 func (x *DeleteAdminRequest) Reset() {
 	*x = DeleteAdminRequest{}
-	mi := &file_console_v1_admins_proto_msgTypes[5]
+	mi := &file_console_v1_admins_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -307,7 +355,7 @@ func (x *DeleteAdminRequest) String() string {
 func (*DeleteAdminRequest) ProtoMessage() {}
 
 func (x *DeleteAdminRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_admins_proto_msgTypes[5]
+	mi := &file_console_v1_admins_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -320,7 +368,7 @@ func (x *DeleteAdminRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAdminRequest.ProtoReflect.Descriptor instead.
 func (*DeleteAdminRequest) Descriptor() ([]byte, []int) {
-	return file_console_v1_admins_proto_rawDescGZIP(), []int{5}
+	return file_console_v1_admins_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DeleteAdminRequest) GetId() string {
@@ -331,19 +379,23 @@ func (x *DeleteAdminRequest) GetId() string {
 }
 
 type Admin struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Email         string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
-	Role          string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Id        string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Email     string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	Role      string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// 用户偏好时区（IANA 名，自 admins.metadata.timezone 投影；空 = 未设置，
+	// 前端回退浏览器时区）。metadata 本身不出 proto，新增偏好键在此追加
+	// typed 字段。
+	Timezone      string `protobuf:"bytes,6,opt,name=timezone,proto3" json:"timezone,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Admin) Reset() {
 	*x = Admin{}
-	mi := &file_console_v1_admins_proto_msgTypes[6]
+	mi := &file_console_v1_admins_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -355,7 +407,7 @@ func (x *Admin) String() string {
 func (*Admin) ProtoMessage() {}
 
 func (x *Admin) ProtoReflect() protoreflect.Message {
-	mi := &file_console_v1_admins_proto_msgTypes[6]
+	mi := &file_console_v1_admins_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -368,7 +420,7 @@ func (x *Admin) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Admin.ProtoReflect.Descriptor instead.
 func (*Admin) Descriptor() ([]byte, []int) {
-	return file_console_v1_admins_proto_rawDescGZIP(), []int{6}
+	return file_console_v1_admins_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Admin) GetId() string {
@@ -406,12 +458,22 @@ func (x *Admin) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Admin) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
+}
+
 var File_console_v1_admins_proto protoreflect.FileDescriptor
 
 const file_console_v1_admins_proto_rawDesc = "" +
 	"\n" +
-	"\x17console/v1/admins.proto\x12\x14torchwood.console.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\x18\n" +
-	"\x16GetCurrentAdminRequest\"O\n" +
+	"\x17console/v1/admins.proto\x12\x14torchwood.console.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\x18\n" +
+	"\x16GetCurrentAdminRequest\"r\n" +
+	"\x19UpdateCurrentAdminRequest\x12H\n" +
+	"\btimezone\x18\x01 \x01(\tB'\xbaH$r\"\x18@2\x1e^[A-Za-z]+(/[A-Za-z0-9_+-]+)*$H\x00R\btimezone\x88\x01\x01B\v\n" +
+	"\t_timezone\"O\n" +
 	"\x11ListAdminsRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
@@ -429,7 +491,7 @@ const file_console_v1_admins_proto_rawDesc = "" +
 	"\bpassword\x18\x03 \x01(\tR\bpasswordB\a\n" +
 	"\x05_role\"$\n" +
 	"\x12DeleteAdminRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\xb7\x01\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\xd3\x01\n" +
 	"\x05Admin\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x12\n" +
@@ -437,9 +499,11 @@ const file_console_v1_admins_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt2\xc5\x05\n" +
+	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1a\n" +
+	"\btimezone\x18\x06 \x01(\tR\btimezone2\xdb\x06\n" +
 	"\rAdminsService\x12\x8a\x01\n" +
-	"\x0fGetCurrentAdmin\x12,.torchwood.console.v1.GetCurrentAdminRequest\x1a\x1b.torchwood.console.v1.Admin\",\x8a\xb2\x19\v\b\x04\x12\aconsole\x82\xd3\xe4\x93\x02\x17\x12\x15/v1/console/admins/me\x12\x8f\x01\n" +
+	"\x0fGetCurrentAdmin\x12,.torchwood.console.v1.GetCurrentAdminRequest\x1a\x1b.torchwood.console.v1.Admin\",\x8a\xb2\x19\v\b\x04\x12\aconsole\x82\xd3\xe4\x93\x02\x17\x12\x15/v1/console/admins/me\x12\x93\x01\n" +
+	"\x12UpdateCurrentAdmin\x12/.torchwood.console.v1.UpdateCurrentAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"/\x8a\xb2\x19\v\b\x04\x12\aconsole\x82\xd3\xe4\x93\x02\x1a:\x01*2\x15/v1/console/admins/me\x12\x8f\x01\n" +
 	"\n" +
 	"ListAdmins\x12'.torchwood.console.v1.ListAdminsRequest\x1a(.torchwood.console.v1.ListAdminsResponse\".\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x14\x12\x12/v1/console/admins\x12\x80\x01\n" +
 	"\vCreateAdmin\x12(.torchwood.console.v1.CreateAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"*\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x17:\x01*\"\x12/v1/console/admins\x12\x85\x01\n" +
@@ -472,39 +536,42 @@ func file_console_v1_admins_proto_rawDescGZIP() []byte {
 	return file_console_v1_admins_proto_rawDescData
 }
 
-var file_console_v1_admins_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_console_v1_admins_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_console_v1_admins_proto_goTypes = []any{
-	(*GetCurrentAdminRequest)(nil), // 0: torchwood.console.v1.GetCurrentAdminRequest
-	(*ListAdminsRequest)(nil),      // 1: torchwood.console.v1.ListAdminsRequest
-	(*ListAdminsResponse)(nil),     // 2: torchwood.console.v1.ListAdminsResponse
-	(*CreateAdminRequest)(nil),     // 3: torchwood.console.v1.CreateAdminRequest
-	(*UpdateAdminRequest)(nil),     // 4: torchwood.console.v1.UpdateAdminRequest
-	(*DeleteAdminRequest)(nil),     // 5: torchwood.console.v1.DeleteAdminRequest
-	(*Admin)(nil),                  // 6: torchwood.console.v1.Admin
-	(*v1.ListResponseMeta)(nil),    // 7: torchwood.shared.v1.ListResponseMeta
-	(*timestamppb.Timestamp)(nil),  // 8: google.protobuf.Timestamp
-	(*v1.Empty)(nil),               // 9: torchwood.shared.v1.Empty
+	(*GetCurrentAdminRequest)(nil),    // 0: torchwood.console.v1.GetCurrentAdminRequest
+	(*UpdateCurrentAdminRequest)(nil), // 1: torchwood.console.v1.UpdateCurrentAdminRequest
+	(*ListAdminsRequest)(nil),         // 2: torchwood.console.v1.ListAdminsRequest
+	(*ListAdminsResponse)(nil),        // 3: torchwood.console.v1.ListAdminsResponse
+	(*CreateAdminRequest)(nil),        // 4: torchwood.console.v1.CreateAdminRequest
+	(*UpdateAdminRequest)(nil),        // 5: torchwood.console.v1.UpdateAdminRequest
+	(*DeleteAdminRequest)(nil),        // 6: torchwood.console.v1.DeleteAdminRequest
+	(*Admin)(nil),                     // 7: torchwood.console.v1.Admin
+	(*v1.ListResponseMeta)(nil),       // 8: torchwood.shared.v1.ListResponseMeta
+	(*timestamppb.Timestamp)(nil),     // 9: google.protobuf.Timestamp
+	(*v1.Empty)(nil),                  // 10: torchwood.shared.v1.Empty
 }
 var file_console_v1_admins_proto_depIdxs = []int32{
-	6, // 0: torchwood.console.v1.ListAdminsResponse.admins:type_name -> torchwood.console.v1.Admin
-	7, // 1: torchwood.console.v1.ListAdminsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
-	8, // 2: torchwood.console.v1.Admin.created_at:type_name -> google.protobuf.Timestamp
-	8, // 3: torchwood.console.v1.Admin.updated_at:type_name -> google.protobuf.Timestamp
-	0, // 4: torchwood.console.v1.AdminsService.GetCurrentAdmin:input_type -> torchwood.console.v1.GetCurrentAdminRequest
-	1, // 5: torchwood.console.v1.AdminsService.ListAdmins:input_type -> torchwood.console.v1.ListAdminsRequest
-	3, // 6: torchwood.console.v1.AdminsService.CreateAdmin:input_type -> torchwood.console.v1.CreateAdminRequest
-	4, // 7: torchwood.console.v1.AdminsService.UpdateAdmin:input_type -> torchwood.console.v1.UpdateAdminRequest
-	5, // 8: torchwood.console.v1.AdminsService.DeleteAdmin:input_type -> torchwood.console.v1.DeleteAdminRequest
-	6, // 9: torchwood.console.v1.AdminsService.GetCurrentAdmin:output_type -> torchwood.console.v1.Admin
-	2, // 10: torchwood.console.v1.AdminsService.ListAdmins:output_type -> torchwood.console.v1.ListAdminsResponse
-	6, // 11: torchwood.console.v1.AdminsService.CreateAdmin:output_type -> torchwood.console.v1.Admin
-	6, // 12: torchwood.console.v1.AdminsService.UpdateAdmin:output_type -> torchwood.console.v1.Admin
-	9, // 13: torchwood.console.v1.AdminsService.DeleteAdmin:output_type -> torchwood.shared.v1.Empty
-	9, // [9:14] is the sub-list for method output_type
-	4, // [4:9] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	7,  // 0: torchwood.console.v1.ListAdminsResponse.admins:type_name -> torchwood.console.v1.Admin
+	8,  // 1: torchwood.console.v1.ListAdminsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	9,  // 2: torchwood.console.v1.Admin.created_at:type_name -> google.protobuf.Timestamp
+	9,  // 3: torchwood.console.v1.Admin.updated_at:type_name -> google.protobuf.Timestamp
+	0,  // 4: torchwood.console.v1.AdminsService.GetCurrentAdmin:input_type -> torchwood.console.v1.GetCurrentAdminRequest
+	1,  // 5: torchwood.console.v1.AdminsService.UpdateCurrentAdmin:input_type -> torchwood.console.v1.UpdateCurrentAdminRequest
+	2,  // 6: torchwood.console.v1.AdminsService.ListAdmins:input_type -> torchwood.console.v1.ListAdminsRequest
+	4,  // 7: torchwood.console.v1.AdminsService.CreateAdmin:input_type -> torchwood.console.v1.CreateAdminRequest
+	5,  // 8: torchwood.console.v1.AdminsService.UpdateAdmin:input_type -> torchwood.console.v1.UpdateAdminRequest
+	6,  // 9: torchwood.console.v1.AdminsService.DeleteAdmin:input_type -> torchwood.console.v1.DeleteAdminRequest
+	7,  // 10: torchwood.console.v1.AdminsService.GetCurrentAdmin:output_type -> torchwood.console.v1.Admin
+	7,  // 11: torchwood.console.v1.AdminsService.UpdateCurrentAdmin:output_type -> torchwood.console.v1.Admin
+	3,  // 12: torchwood.console.v1.AdminsService.ListAdmins:output_type -> torchwood.console.v1.ListAdminsResponse
+	7,  // 13: torchwood.console.v1.AdminsService.CreateAdmin:output_type -> torchwood.console.v1.Admin
+	7,  // 14: torchwood.console.v1.AdminsService.UpdateAdmin:output_type -> torchwood.console.v1.Admin
+	10, // 15: torchwood.console.v1.AdminsService.DeleteAdmin:output_type -> torchwood.shared.v1.Empty
+	10, // [10:16] is the sub-list for method output_type
+	4,  // [4:10] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_console_v1_admins_proto_init() }
@@ -512,14 +579,15 @@ func file_console_v1_admins_proto_init() {
 	if File_console_v1_admins_proto != nil {
 		return
 	}
-	file_console_v1_admins_proto_msgTypes[4].OneofWrappers = []any{}
+	file_console_v1_admins_proto_msgTypes[1].OneofWrappers = []any{}
+	file_console_v1_admins_proto_msgTypes[5].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_console_v1_admins_proto_rawDesc), len(file_console_v1_admins_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

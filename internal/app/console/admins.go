@@ -4,6 +4,9 @@ import (
 	"context"
 	"strings"
 	"time"
+	// 内嵌 IANA 时区数据库：distroless 容器/Windows 等无系统 zoneinfo 的
+	// 环境里 time.LoadLocation 仍可用（时区偏好校验依赖）。
+	_ "time/tzdata"
 
 	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
@@ -56,6 +59,13 @@ type UpdateAdminCommand struct {
 	CallerID string
 	Role     string
 	Password string // 非空则重置密码
+}
+
+// UpdateProfileCommand 当前管理员自助更新个人偏好。Timezone 为 nil = 不修改；
+// 指向空串 = 清除偏好（前端回退浏览器时区）；指向非空 = 更新为 IANA 时区名。
+type UpdateProfileCommand struct {
+	CallerID string
+	Timezone *string
 }
 
 func (a *Admins) List(ctx context.Context) ([]projects.Admin, error) {
@@ -187,6 +197,67 @@ func (a *Admins) Update(ctx context.Context, cmd UpdateAdminCommand) (*projects.
 		return nil, err
 	}
 	return admin, nil
+}
+
+// UpdateProfile 自助更新个人偏好（时区）：写入 admins.metadata JSONB，不改
+// role/password 等敏感字段，故不触发凭证撤销。单语句合并落库，无并发覆盖面。
+func (a *Admins) UpdateProfile(ctx context.Context, cmd UpdateProfileCommand) (*projects.Admin, error) {
+	if err := appshared.RequireConsolePrincipal(ctx); err != nil {
+		return nil, err
+	}
+	if cmd.CallerID == "" {
+		return nil, status.Error(codes.Unauthenticated, "admin context missing")
+	}
+	admin, err := a.repo.GetAdmin(ctx, cmd.CallerID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get admin: %v", err)
+	}
+	if admin == nil {
+		return nil, status.Error(codes.NotFound, "admin not found")
+	}
+	if cmd.Timezone != nil {
+		tz := *cmd.Timezone
+		if tz != "" {
+			if err := validateTimezone(tz); err != nil {
+				return nil, err
+			}
+		}
+		now := time.Now()
+		set := map[string]string{}
+		var removeKeys []string
+		if tz == "" {
+			removeKeys = []string{"timezone"}
+		} else {
+			set["timezone"] = tz
+		}
+		if err := a.repo.UpdateAdminMetadata(ctx, admin.ID, set, removeKeys, now); err != nil {
+			return nil, status.Errorf(codes.Internal, "update admin metadata: %v", err)
+		}
+		admin.UpdatedAt = now
+		// 返回值同步投影，免去回读。
+		if admin.Metadata == nil {
+			admin.Metadata = map[string]string{}
+		}
+		if tz == "" {
+			delete(admin.Metadata, "timezone")
+		} else {
+			admin.Metadata["timezone"] = tz
+		}
+	}
+	return admin, nil
+}
+
+// validateTimezone IANA 时区名权威校验（protovalidate 只做形状）。
+// "Local" 在 time.LoadLocation 里合法但语义是"服务器本地"，对显示无意义
+// （Intl 也不识别），显式拒绝；"UTC" 合法保留。
+func validateTimezone(tz string) error {
+	if tz == "Local" {
+		return status.Error(codes.InvalidArgument, `invalid timezone "Local": use an explicit IANA name (e.g. Asia/Shanghai)`)
+	}
+	if _, err := time.LoadLocation(tz); err != nil {
+		return status.Errorf(codes.InvalidArgument, "invalid timezone %q", tz)
+	}
+	return nil
 }
 
 func (a *Admins) Delete(ctx context.Context, id, callerID string) error {

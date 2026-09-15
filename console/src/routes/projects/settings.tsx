@@ -25,6 +25,8 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useProjectScopeSync } from "@/hooks/useProjectScopeSync";
+import { useUserTimezone } from "@/hooks/useTimezone";
+import { formatDateTime } from "@/lib/datetime";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -142,6 +144,7 @@ function GeneralPanel({
   editable: boolean;
 }) {
   const queryClient = useQueryClient();
+  const tz = useUserTimezone();
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description ?? "");
 
@@ -168,8 +171,8 @@ function GeneralPanel({
           { label: "名称", value: project.name },
           { label: "描述", value: project.description || "—" },
           { label: "状态", value: project.status },
-          { label: "创建时间", value: new Date(project.created_at).toLocaleString() },
-          { label: "更新时间", value: new Date(project.updated_at).toLocaleString() },
+          { label: "创建时间", value: formatDateTime(project.created_at, tz) },
+          { label: "更新时间", value: formatDateTime(project.updated_at, tz) },
         ]}
       />
       <form className="space-y-4 rounded-lg border p-6" onSubmit={onSubmit}>
@@ -519,6 +522,7 @@ function InviteCodeRow({
   // 过期展示按行加载时刻判定：render 内不得调用 Date.now（react-hooks/purity），
   // useState 初始化器是 React 认可的一次性求值点。
   const [loadedAt] = useState(() => Date.now());
+  const tz = useUserTimezone();
   const exhausted = code.used_count >= code.max_uses;
   const expired = code.expire_at ? new Date(code.expire_at).getTime() < loadedAt : false;
   const dead = code.revoked || exhausted || expired;
@@ -532,7 +536,7 @@ function InviteCodeRow({
         {code.used_count}/{code.max_uses} 次
       </span>
       <span className="text-xs text-muted-foreground">
-        {code.expire_at ? `过期 ${new Date(code.expire_at).toLocaleString()}` : "永不过期"}
+        {code.expire_at ? `过期 ${formatDateTime(code.expire_at, tz)}` : "永不过期"}
       </span>
       <div className="ml-auto flex gap-2">
         <Button
