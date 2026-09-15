@@ -37,10 +37,10 @@ enum ArrayUpdateOp {
   // 要求 values >= 1。
   ARRAY_UPDATE_OP_INTERSECT = 5;
   // DIFF 差集（转出 POC B1）：移除 col 中属于 values 的元素（保序、不去重，
-  // 与 REMOVE 同构——独立命名对齐 Appwrite arrayDiff）；移空后为空数组
+  // 与 REMOVE 同构）；移空后为空数组
   //（非 NULL）；NULL 列保持 NULL。要求 values >= 1。
   ARRAY_UPDATE_OP_DIFF = 6;
-  // INSERT 定点插入（转出 POC B1）：在 index（0 基，Appwrite 对齐）处插入
+  // INSERT 定点插入（转出 POC B1）：在 index（0 基）处插入
   // values[0]，其后元素顺移；index >= len（越界）= 尾插；NULL 列视为空数组。
   // 要求 values 恰 1 且 index 已设置且 >= 0，否则 InvalidArgument。
   ARRAY_UPDATE_OP_INSERT = 7;

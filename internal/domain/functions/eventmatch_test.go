@@ -10,7 +10,7 @@ import (
 	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
 )
 
-// ——订阅串解析/校验（v3 §4.1：Appwrite 风格；一期 database 精确、collection
+// ——订阅串解析/校验（v3 §4.1：一期 database 精确、collection
 // 与 op 支持通配）——
 
 func TestParseEventPattern(t *testing.T) {

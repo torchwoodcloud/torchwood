@@ -91,7 +91,7 @@ on_delete              enum     // RESTRICT | SET_NULL | CASCADE，默认 RESTRI
 
 ### 3.2 关系谓词过滤（R2）
 
-- **语法**：typed AST `Filter.attribute` 允许点路径（`category.slug`），按 catalog 关系注册表逐跳解析 + 别名；深度 ≤3（对齐 Appwrite）。SDK/CLI DSL 糖同步（不变量 10：DSL 仍只是客户端糖）。
+- **语法**：typed AST `Filter.attribute` 允许点路径（`category.slug`），按 catalog 关系注册表逐跳解析 + 别名；深度 ≤3（业界通行）。SDK/CLI DSL 糖同步（不变量 10：DSL 仍只是客户端糖）。
 - **编译**：半连接——`EXISTS (SELECT 1 FROM <related> sub WHERE sub._id = d.<fk> AND sub._tenant = ? AND <谓词>)`。不产生父行扇出，keyset 全序不变量无损；**子表 SELECT policy（`tw_visible`）在子查询内自动生效**——不可见子行不进 EXISTS，判定单源（不变量 6）零破坏。manyToMany 数组列用 `sub._id = ANY(d.<tags>)` 形态。
 - **硬约束**（validateQueryFields 显式拒绝，fail-closed）：
   - 关系路径**禁止作排序键**——cursor token 需服务端回查排序键值，路径键值不在驱动表（不变量 12）；

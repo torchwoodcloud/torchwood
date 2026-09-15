@@ -2,14 +2,14 @@
 
 **English** | [简体中文](README_ZH.md)
 
-Torchwood is an Appwrite-inspired, **AI/Agent-Native** Backend-as-a-Service built with Go, PostgreSQL and gRPC/grpc-gateway. It provides auth, a dynamic document database, file storage, function execution and an Admin Console — APIs and tooling designed for LLM agents, automation and MCP from day one.
+Torchwood is an **AI/Agent-Native** Backend-as-a-Service built with Go, PostgreSQL and gRPC/grpc-gateway.
 
 ## Features
 
 - **Agent-native API**: Protobuf is the single source of truth; `buf generate` produces gRPC stubs, grpc-gateway handlers and OpenAPI (`genproto/`). Scoped API Keys (`x-api-key`) expose the Server API for automation.
 - **Projects**: multi-project isolation; each `(project.id, database.id)` maps to a Postgres schema.
 - **Auth**: email/password, JWT access/refresh with rotation, session cookies, Email/Phone OTP, OAuth2 (Google/GitHub/WeChat), anonymous sessions, Magic URL, one-time JWT, TOTP MFA and email-change confirmation.
-- **Database**: schema-per-database, `_tenant` isolation, `_acl` document permissions enforced by Postgres RLS policies, typed query AST (`pkg/query`; Appwrite-style DSL as client-side sugar), keyset pagination, bulk ops, increments and array updates.
+- **Database**: schema-per-database, `_tenant` isolation, `_acl` document permissions enforced by Postgres RLS policies, typed query AST (`pkg/query`; a string DSL as client-side sugar), keyset pagination, bulk ops, increments and array updates.
 - **Storage**: S3/MinIO-compatible, upload/download/view, thumbnails, public buckets, HMAC file tokens, chunked resumable upload.
 - **Functions**: Docker build/run executor, sync/async execution, async `cmd/worker` and retention policy.
 - **Analytics**: dual-face event ingestion (client-side session attribution + server-side API-key reporting), monthly-partitioned append-only storage, hourly pre-aggregation (trends/retention/breakdown/user drill-down), a Console analytics section and a TypeScript SDK batching buffer.
@@ -197,7 +197,11 @@ Full docs live in [`docs/developer/`](docs/developer/README.md):
 | [13-operations](docs/developer/13-operations.md) | deploy, health, backup |
 | [14-agent-tools](docs/developer/14-agent-tools.md) | agent tool overlay (18 verbs) |
 
-Also: `AGENTS.md` (contributor conventions), `docs/roadmap.md` (AI/Agent-Native strategy), `docs/tech-decision.md`.
+Also: `AGENTS.md` (contributor conventions), `docs/roadmap.md` (AI/Agent-Native strategy).
+
+## Acknowledgements
+
+Torchwood's early design took inspiration from [Appwrite](https://appwrite.io) — an excellent open-source Backend-as-a-Service. The project has since charted its own course, but we are grateful for the foundation their work provided.
 
 ## License
 

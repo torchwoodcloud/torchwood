@@ -137,7 +137,7 @@ Sprint 1 已完成 Server/Client Document CRUD；批量操作与 attribute/index
 | 任务 | 说明 | 关键端点 | 状态 |
 |------|------|----------|------|
 | Document CRUD | 创建、获取、更新、删除文档 | `/v1/server/databases/{db}/collections/{coll}/documents` | ✅ 完成 |
-| Document 列表/计数 | 带 Appwrite DSL 查询、权限过滤 | `GET` / `count` | ✅ 完成 |
+| Document 列表/计数 | 带查询 DSL 过滤、权限过滤 | `GET` / `count` | ✅ 完成 |
 | Client Database API | 终端用户在授权下读写文档 | `/v1/databases/{db}/collections/{coll}/documents/*` | ✅ 完成 |
 | Console 文档编辑器 | collection 下文档列表、新增/编辑/删除 | `/console/databases/.../documents` | ✅ 完成 |
 | 批量操作 | 批量更新、删除、upsert | `.../documents:bulkUpdate` / `.../documents:bulkDelete`（REST 自定义动词，R10-P1-3/B3 后旧 `.../documents/bulk`、`.../documents/bulk/delete` 已废弃） | ✅ 完成（Console 文档列表批量更新/删除对话框） |
@@ -365,7 +365,7 @@ v2 **不是**「把 Appwrite 剩下的模块搬过来」。Agent 叙事（MCP、
 | API Key 轮换 | secret 重新生成 | `/v1/server/api-keys/{id}/rotate` |
 | 邮箱变更 staging | P1 遗留 B1：新邮箱验证前旧邮箱仍可用 | Account use-case |
 | Worker 重试持久化 | P1 遗留 B2：attempt 写入 payload | `cmd/worker` |
-| 全文检索收口 | `search` 仅允许 fulltext 索引列（已有算子，收紧以免 CPU DoS） | `buildAppwriteQuery` |
+| 全文检索收口 | `search` 仅允许 fulltext 索引列（已有算子，收紧以免 CPU DoS） | `buildQuery` |
 | DeleteProject | 已落地：平台 admin；级联清理动态 schema | `DELETE /v1/server/projects/{id}` |
 
 项目设置（平台 origin、密码策略、SMTP 模板、30+ OAuth）**不作为 v2 核心**。OAuth 维持已有 Google / GitHub / 微信；SMTP 维持现有发信。
@@ -567,6 +567,6 @@ Console 分析区 / 合规钩子与 TS SDK 缓冲器全部交付（开发者文�
 - `docs/design/v2-events-realtime-transactions.md`：v2 批准设计（事件 / Realtime / 事务）。
 - `docs/design/v2-execution-plan.md`：五张 PR 的执行计划。
 - `docs/prompts/implement-v2.md`：派给第三方实施 agent 的 prompt。
-- `docs/tech-decision.md`：技术选型决策。
+- `docs/archived/tech-decision.md`：技术选型决策（Appwrite 迁移期，已归档）。
 - `README.md`：快速开始。
 - `AGENTS.md`：开发约定。

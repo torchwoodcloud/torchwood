@@ -35,7 +35,7 @@
 | C4 | **OCC 显式三态** | `expected_version` **原语语义**三态：设置 → CAS（进同一条 DML 的 WHERE）；缺省 → 盲写 +1；0 → InvalidArgument。消灭 check-then-write 与错误码错位。各 API 面对"缺省态"的暴露由 §4.1/§4.4 分别定夺：单文档 Update/Delete 缺省即拒（强制乐观锁，与现状一致），Upsert/Bulk 与 §4.8 op 模型把缺省显式契约化为 LWW 盲写 +1（评审修订：2026-09-03，消除原"一律缺省盲写"表述与 §4.1 的矛盾） |
 | C5 | **在线 DDL（expand-contract）** | 一律 CONCURRENTLY + 独立事务 + `lock_timeout` 重试；catalog 侧索引/迁移两阶段状态机（building→active）；后台 reconcile 对账（缺列/INVALID 索引/幽灵表） |
 | C6 | **事件顺序化 + 补偿** | 事务性 outbox 保留；事件携带单调 `seq`（全局分配、按 collection 过滤重放）；断线带 `last_seq` 重放保留窗口 + `:changes` 补偿拉取；慢消费者超水位主动断开下发 RESYNC，不再静默丢帧 |
-| C7 | **查询单栈** | 规范模型只有一个 typed AST；Appwrite DSL 降级为 SDK/URL 层语法糖（构造器内部序列化为 AST）；双栈互斥校验消失 |
+| C7 | **查询单栈** | 规范模型只有一个 typed AST；字符串 DSL 降级为 SDK/URL 层语法糖（构造器内部序列化为 AST）；双栈互斥校验消失 |
 | C8 | **写响应一律读回** | 一切写操作返回服务端完整读回（含 created_at、default 生效后的值），禁止请求回显 |
 
 ## 3. 冲突裁决
@@ -241,7 +241,7 @@ CREATE POLICY p_delete ON ... FOR DELETE USING (tw_can delete);
 
 ## 5. 与当前架构对照
 
-- **保留（两轮评审验证为正确的设计）**：**每集合一张 typed 真实表**（维护者决策定案）；`tw_<p>_<db>` schema-per-database 布局与删除原子性（DROP SCHEMA CASCADE）；事务性 outbox 模式；OCC fail-closed 意识与 `_version` 概念；权限 SQL 下推思想（升级为单源 `tw_can`）；标识符白名单 + 全程参数绑定的注入防御；`DocumentDB` 三端口分层；角色认证期实时解析注入（不信任 JWT claims）；Upsert advisory lock；系统静态表与文档路径解耦的现状布局；Appwrite 式 `type:role` 权限模型（**D3 语义被有意取代：可 update/delete 即可读**，2026-09-03 决策，见 §3.2）。
+- **保留（两轮评审验证为正确的设计）**：**每集合一张 typed 真实表**（维护者决策定案）；`tw_<p>_<db>` schema-per-database 布局与删除原子性（DROP SCHEMA CASCADE）；事务性 outbox 模式；OCC fail-closed 意识与 `_version` 概念；权限 SQL 下推思想（升级为单源 `tw_can`）；标识符白名单 + 全程参数绑定的注入防御；`DocumentDB` 三端口分层；角色认证期实时解析注入（不信任 JWT claims）；Upsert advisory lock；系统静态表与文档路径解耦的现状布局；`type:role` 权限模型（**D3 语义被有意取代：可 update/delete 即可读**，2026-09-03 决策，见 §3.2）。
 - **替换**：每项目 catalog 四表 → 全局 catalog（attrs JSONB 全量契约含 default）；`_perms` 独立表 → `_acl` 内嵌；双判定实现 → 唯一 `tw_can` 函数（应用构造器与 RLS policy 共用）；offset+keyset 双 token → keyset-only；DSL/AST 双栈 → 单 AST（DSL 为 SDK 糖）；check-then-write OCC → WHERE 内 CAS；事务内 DDL → CONCURRENTLY + 状态机；Pub/Sub 扇出 → Stream 位点 + seq + 补偿；表/索引名=逻辑 ID → 物理名服务端分配；应用层唯一判定 → RLS policy 判定执行点（`tw_visible` 单源）+ 列级 GRANT + DB 角色分层。
 - **新增**：`request_id` 幂等、`if_match`、机器可读错误码体系、JSON Schema 导出、`:changes` 补偿、schema_version + 迁移 RPC、`:aggregate`（首期 count）、`array<T>`/`vector` 列、流式导出/导入、配额下推、schema repair CLI、DB 角色分层（tw_owner/tw_app/tw_system）、**事务内核与三形态消费**（§4.8：`execute-tx` / Functions 事务上下文 / 按需 staged session）。
 
@@ -311,7 +311,7 @@ POC 阶段各阶段**直接切换、不留兼容回退**：阶段③的 `_perms 
 - **Supabase 的 Realtime（WALRUS）走了反方向**：最初应用层逐订阅者判定，变更数×订阅者数不可控，最终把安全判定**移回数据库内**（回库按主键逐订阅者校验，1k 订阅者 64.7ms、10k 303.8ms 近似线性）——"授权下推到 DB"是规模化平台的共同归宿，不是 Supabase 专利。
 - **正面先例**：EdgeDB/Gel（PG 之上的图-关系语言 + access policy 在内核执行 + globals 承载会话上下文）；PocketBase（规则 DSL 编译为 SQLite 表达式随查询执行——与本设计 `type:role` → RLS policy 编译同构的微缩版）。
 - **反例**：FerretDB（Mongo 协议 shim + PG 后端）证明"通用协议翻译层"此路不通；Hasura/Nhost 没有文档层产品——"文档 API + PG 内核 + DB 层授权"这格**没有大厂占位**。
-- **torchwood 与 Supabase 的本质差异保持不变**：集合/DSL 是唯一对外契约（不暴露表、不暴露 SQL）；schema/索引演进由平台 API 承接（用户零迁移——Supabase 用户必须自己管 migrations）；RLS policy 由平台的 role 模型编译生成，用户永不手写。守住这三条红线，RLS 下推是"Appwrite 路线的规模化补完"而非路线切换（红线之二"不暴露 SQL"的复核论证见 §10.4）。
+- **torchwood 与 Supabase 的本质差异保持不变**：集合/DSL 是唯一对外契约（不暴露表、不暴露 SQL）；schema/索引演进由平台 API 承接（用户零迁移——Supabase 用户必须自己管 migrations）；RLS policy 由平台的 role 模型编译生成，用户永不手写。守住这三条红线，RLS 下推是"DSL 契约路线的规模化补完"而非路线切换（红线之二"不暴露 SQL"的复核论证见 §10.4）。
 
 ### 9.2 PG 候选方案采纳表
 

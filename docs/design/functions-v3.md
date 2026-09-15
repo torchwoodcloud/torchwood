@@ -279,7 +279,7 @@ USER node
 
 - **探测**：zip 根含 `package.json` 且 `dependencies` 非空 → 代装；否则维持现状（无依赖函数零变化）；
 - **lockfile 强制**：有 dependencies 但无 `package-lock.json` → 构建失败并提示先提交 lockfile（确定性构建原则，与「构建是平台确定性操作」不变量对齐——无锁安装不可复现）；
-- **node_modules 禁止入包**：构建期解压校验加一条——zip 含 `node_modules/` 直接拒绝（对齐 Appwrite，防跨平台二进制污染）；
+- **node_modules 禁止入包**：构建期解压校验加一条——zip 含 `node_modules/` 直接拒绝（防跨平台二进制污染）；
 
 #### 3.2 `--ignore-scripts` 默认（不变量张力的裁决）
 
@@ -302,7 +302,7 @@ python 随其 v2 支持：`requirements.txt` + `pip install --no-cache-dir`（pi
 }
 ```
 
-- 事件字符串格式对齐 Appwrite（业界同构、迁移友好）；一期支持精确三事件（create/update/delete）+ collection 级通配（`collections.*.documents.*`）；database 级通配后置；
+- 事件字符串格式业界同构（`databases.*.documents.*` 通行形态）；一期支持精确三事件（create/update/delete）+ collection 级通配（`collections.*.documents.*`）；database 级通配后置；
 - 管理 RPC 复用既有触发器四方法（type 值域扩展 + config 校验：事件串格式、集合存在性 best-effort）。
 
 #### 4.2 投递链路（独立消费组，零侵入 outbox 主链）
@@ -330,7 +330,7 @@ outbox 表（重放真源）──(既有)──▶ Redis Stream torchwood:event
 
 #### 4.3 递归与风暴语义
 
-- `declared_scopes` deny `functions:*`（既有）防「函数造函数」；**自环**（函数订阅自己写入的 collection → 写 → 新事件 → 再触发）一期**不做平台硬防护**（D13）：文档 + Console 订阅编辑处警告「请勿订阅本函数写入的集合」+ `invoke_total{source=event}` 速率告警兜底——Appwrite 官方同款处理（文档警告）；
+- `declared_scopes` deny `functions:*`（既有）防「函数造函数」；**自环**（函数订阅自己写入的 collection → 写 → 新事件 → 再触发）一期**不做平台硬防护**（D13）：文档 + Console 订阅编辑处警告「请勿订阅本函数写入的集合」+ `invoke_total{source=event}` 速率告警兜底（文档警告，业界通行处理）；
 - 风暴兜底：异步路径无队列深度上限、run 信号量 + dispatcher 有界排队兜底（与 cron misfire 同款既有语义）；per-trigger 并发上限后置（OQ9）。
 
 ### 5. 开发者体验
@@ -397,7 +397,7 @@ per-request 分桶 tail（v3 自带，执行结束 Console 即见**本请求**�
 | D10 | HTTP 触发器封套还原为真 Request；sync 透传完整 HTTP 响应（status/headers/body） | Web 标准生态可达；自定义状态码/二进制/重定向从此可达；main 风格封套照旧 |
 | D11 | 代装依赖默认 `npm ci --omit=dev --ignore-scripts`、lockfile 强制、node_modules 拒收 | 「构建期不执行用户代码」不变量优先；确定性构建；原生模块包不可用文档明示 |
 | D12 | 事件投递走独立消费组；**停机恢复 outbox 补投一期必做**（XTRIM 不理会消费组进度，静默丢失不可接受）；data 只带投影（ID+摘要），全量靠 `databases:read` 回读 | outbox 主链零侵入；Stream 只是传输、outbox 是重放真源；32KB 预算与 1MiB 信封的矛盾显式化解；权限链不豁免 |
-| D13 | 事件自环一期文档 + Console 警告 + 指标告警，不做平台硬防护 | Appwrite 同款；硬防护语义（深度切断）过强且伤合法链式场景 |
+| D13 | 事件自环一期文档 + Console 警告 + 指标告警，不做平台硬防护 | 业界通行；硬防护语义（深度切断）过强且伤合法链式场景 |
 | D14 | 实时日志流后置到对外开放注册（多租户）前；一期 per-request tail + docker logs 旁路 | 流式管道工程量与 dogfood 收益不成比例；对外用户无 docker logs 旁路时才是刚需（2026-09-10 拍板） |
 | D15 | DX 三件（SDK/dev/deploy）先行于接口与构建 | 便宜、独立、直接命中「局限大」体感；不依赖任何 runner 变更 |
 

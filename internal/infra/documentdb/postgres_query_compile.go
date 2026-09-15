@@ -1,4 +1,4 @@
-// Appwrite DSL → SQL 编译：谓词编译、字段白/黑名单校验、输入上限、LIKE 转义。
+// 查询 DSL → SQL 编译：谓词编译、字段白/黑名单校验、输入上限、LIKE 转义。
 package documentdb
 
 import (
@@ -286,9 +286,9 @@ func cloneQuery(src *query.Query) *query.Query {
 	return &cp
 }
 
-// buildAppwriteQuery 编译过滤树与排序。arrayTypes（key → PG 数组类型）供
+// buildQuery 编译过滤树与排序。arrayTypes（key → PG 数组类型）供
 // containsAny/containsAll 编译 && / @> 与元素类型 cast（阶段③-b 预决策 2）。
-func buildAppwriteQuery(parsed *query.Query, arrayTypes map[string]string) (string, []any, string, error) {
+func buildQuery(parsed *query.Query, arrayTypes map[string]string) (string, []any, string, error) {
 	var where string
 	var args []any
 	var err error
@@ -446,7 +446,7 @@ func compilePredicate(f *query.Filter, arrayTypes map[string]string) (string, []
 		case query.OpSearch:
 			return fmt.Sprintf("to_tsvector('simple', %s::text) @@ plainto_tsquery('simple', ?)", col), []any{f.Values[0]}, nil
 		// not* 变体（C7 预决策 1）：NOT 包裹正算子。三值逻辑下 NULL 键行
-		// 对 NOT(比较) 求值为 NULL 而被排除——与 Appwrite/SQL NOT 语义一致。
+		// 对 NOT(比较) 求值为 NULL 而被排除——与 SQL NOT 语义一致。
 		case query.OpNotContains:
 			return fmt.Sprintf(`%s NOT ILIKE ? ESCAPE '\'`, col), []any{"%" + escapeLikePattern(f.Values[0]) + "%"}, nil
 		case query.OpNotStartsWith:

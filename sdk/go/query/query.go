@@ -3,7 +3,7 @@
 //
 // 构造器产出 *sharedv1.Query，供 sdk/go 的 client/server 两面与直接调用
 // gRPC/HTTP 网关的用户使用。DSL 语法糖 FromDSL 的文法与仓库根模块的
-// pkg/query 同源（Appwrite 风格）；本包自带解析器以保持 SDK 模块的依赖
+// pkg/query 同源；本包自带解析器以保持 SDK 模块的依赖
 // 面最小（仅 genproto + stdlib），文法演进需两侧同步（sdk/go/query 与
 // pkg/query 的 golden 用例锁对齐）。
 package query
@@ -299,7 +299,7 @@ func (b *Builder) Build() *sharedv1.Query {
 }
 
 // ---------------------------------------------------------------------------
-// DSL 语法糖：Appwrite 风格串 → *sharedv1.Query（客户端解析，服务端零消费）
+// DSL 语法糖：DSL 串 → *sharedv1.Query（客户端解析，服务端零消费）
 // ---------------------------------------------------------------------------
 
 var dslRe = regexp.MustCompile(`^(\w+)\((.*)\)$`)
@@ -311,7 +311,7 @@ const (
 	dslMaxQueryLen = 4096
 )
 
-// FromDSL 把 Appwrite 风格 DSL 串解析为 typed Query（隐式 AND 合并）。
+// FromDSL 把查询 DSL 串解析为 typed Query（隐式 AND 合并）。
 // 支持算子：equal/notEqual/lessThan/lessThanEqual/greaterThan/
 // greaterThanEqual/in/contains/notContains/startsWith/notStartsWith/
 // endsWith/notEndsWith/search/notSearch/between/notBetween/isNull/

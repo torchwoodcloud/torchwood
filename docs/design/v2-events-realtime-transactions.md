@@ -318,7 +318,7 @@ case "$version", "_version":
 `systemQueryFields` 加入 `"_version"`。`validateQueryFields`：
 
 - 若 `coll.IsSystem` 且字段为 `_version` → `InvalidArgument`（系统表无此列）。
-- 若用户集合且 `_version` 列**尚未确保**（写路径还没 `ALTER`；读路径禁止 DDL）：**禁止**把 `$version`/`_version` 编进 SQL。`validateQueryFields`（在 `buildAppwriteQuery` 之前，`postgres.go` L877 / L1059）返回 `InvalidArgument`，稳定文案 `version_column_unavailable`。不要落到 PG `42703`。不要改写成对常量 `1` 的比较（`equal("$version", 2)` 会静默语义错误）。
+- 若用户集合且 `_version` 列**尚未确保**（写路径还没 `ALTER`；读路径禁止 DDL）：**禁止**把 `$version`/`_version` 编进 SQL。`validateQueryFields`（在 `buildQuery` 之前，`postgres.go` L877 / L1059）返回 `InvalidArgument`，稳定文案 `version_column_unavailable`。不要落到 PG `42703`。不要改写成对常量 `1` 的比较（`equal("$version", 2)` 会静默语义错误）。
 - 列是否存在：复用写路径的 `sync.Map`；读路径 cache miss 时只查 `information_schema.columns` / `pg_attribute`，**不** `ALTER`。列已是 bigint 则把 key 记入 cache，允许后续 `$version` 查询。
 
 #### 1.6 谁强制 version（use-case）

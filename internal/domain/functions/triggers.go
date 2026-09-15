@@ -54,7 +54,7 @@ type TriggerConfig struct {
 
 	// —— event（v3 §4.1，仅 event 类型使用）——
 	// Events 是订阅串列表，格式 databases.{db}.collections.{coll}.documents.{op}
-	//（Appwrite 风格；语法与通配语义见 eventmatch.go ParseEventPattern）。
+	//（语法与通配语义见 eventmatch.go ParseEventPattern）。
 	Events []string `json:"events,omitempty"`
 }
 

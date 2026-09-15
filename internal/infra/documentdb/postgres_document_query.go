@@ -83,7 +83,7 @@ func (p *postgresDocumentDB) listDocuments(ctx context.Context, projectID, datab
 		}
 	}
 
-	filterWhere, filterArgs, _, err := buildAppwriteQuery(parsed, arrayTypesOf(coll))
+	filterWhere, filterArgs, _, err := buildQuery(parsed, arrayTypesOf(coll))
 	if err != nil {
 		return nil, p.mapError(err)
 	}
@@ -757,7 +757,7 @@ func (p *postgresDocumentDB) countDocuments(ctx context.Context, projectID, data
 			return 0, p.mapError(err)
 		}
 	}
-	filterWhere, filterArgs, _, err := buildAppwriteQuery(parsed, arrayTypesOf(coll))
+	filterWhere, filterArgs, _, err := buildQuery(parsed, arrayTypesOf(coll))
 	if err != nil {
 		return 0, p.mapError(err)
 	}
@@ -874,7 +874,7 @@ func (p *postgresDocumentDB) aggregateDocuments(ctx context.Context, projectID, 
 		}
 	}
 	// 聚合只消费过滤算子；排序/分页已在 rejectNonFilterOperators 显式拒绝。
-	filterWhere, filterArgs, _, err := buildAppwriteQuery(parsed, arrayTypesOf(coll))
+	filterWhere, filterArgs, _, err := buildQuery(parsed, arrayTypesOf(coll))
 	if err != nil {
 		return nil, p.mapError(err)
 	}

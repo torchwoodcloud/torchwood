@@ -26,7 +26,7 @@
 
 ## 1. Overview
 
-今日七张系统资源（`users` `sessions` `identities` `groups` `memberships` `buckets` `files`）是 `EnsureSystemCollections` 经 `CreateCollection` 建的**文档表**：`_id` + `_tenant` + `_perms` + Appwrite DSL，无 FK。Account / Storage / Groups 热路径用 `SystemPrincipal` 绕过文档 ACE。为防 Databases API 摸到它们，堆了 sentinel `"_"`、字段黑名单、`version=0` 两套契约。
+今日七张系统资源（`users` `sessions` `identities` `groups` `memberships` `buckets` `files`）是 `EnsureSystemCollections` 经 `CreateCollection` 建的**文档表**：`_id` + `_tenant` + `_perms` + 查询 DSL，无 FK。Account / Storage / Groups 热路径用 `SystemPrincipal` 绕过文档 ACE。为防 Databases API 摸到它们，堆了 sentinel `"_"`、字段黑名单、`version=0` 两套契约。
 
 目标：
 
@@ -85,7 +85,7 @@ tw_<project>_<database>        只装用户 collection（含 _perms / _version�
 - 不把用户 collection 改成静态表，不删业务库 `_perms` / `_version` / `documentSecurity`。
 - 不改用户 collection 默认 `read:any`（D-9）。
 - 不砍 staged transactions API（D-6）。
-- 不把 Appwrite 字符串升成 Query AST（E-4）；系统表 List 只用**列白名单**编译现有 `queries[]`。
+- 不把查询字符串升成 Query AST（E-4）；系统表 List 只用**列白名单**编译现有 `queries[]`。
 - 不删 `public.document_*` 幽灵 catalog（D-7），除非该 PR 已在碰全局 migrate 且确认零读路径。
 - 不重做 `secret_hash` 协议、不发明 secret-bearer。
 - 不把 201 RPC 砍掉，不改 User / Session proto 字段布局（无 version 字段可删）。

@@ -120,8 +120,8 @@ type CollectionPatch struct {
 }
 
 // 数组列原子更新算子（阶段③-b §10.5 P0 写侧；Intersect/Diff/Insert/Filter
-// 补齐于转出 POC B1）。查询侧不对应对齐：Appwrite 的 arrayIntersect/arrayDiff
-// 是写侧算子，查询布尔谓词由 containsAny/containsAll 承担（无新增查询算子）。
+// 补齐于转出 POC B1）。查询侧不设对应算子：业界同类 arrayIntersect/arrayDiff
+// 均为写侧算子，查询布尔谓词由 containsAny/containsAll 承担（无新增查询算子）。
 const (
 	ArrayUpdateOpAppend    = "append"
 	ArrayUpdateOpPrepend   = "prepend"
@@ -140,7 +140,7 @@ const (
 type ArrayUpdate struct {
 	Op     string
 	Values []string
-	// Index 是 INSERT 的插入位置（0 基，Appwrite 对齐；越界 = 尾插）。
+	// Index 是 INSERT 的插入位置（0 基；越界 = 尾插）。
 	// nil = 未设置（INSERT → InvalidArgument；其余 op 忽略）。
 	Index *int32
 }

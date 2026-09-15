@@ -261,8 +261,8 @@ func parseSessionTime(v any) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("unsupported time type")
 }
 
-// structToStringSlice 将 Struct（数组值）转为 []any 字符串数组；Appwrite 的
-// labels 语义是字符串数组，宽容接受字符串与数字标量。
+// structToStringSlice 将 Struct（数组值）转为 []any 字符串数组；labels
+// 语义是字符串数组，宽容接受字符串与数字标量。
 func structToStringSlice(v *structpb.Struct) []any {
 	if v == nil {
 		return nil

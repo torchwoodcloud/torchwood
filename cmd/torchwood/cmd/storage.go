@@ -136,7 +136,7 @@ func newStorageFilesListCmd(g *globalFlags) *verb {
 	var pageToken string
 	return newVerb(g, "list", "list files in a bucket", "storage files list <bucket-id>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&queries, "queries", "", "Appwrite-style queries JSON array")
+			fs.StringVar(&queries, "queries", "", "Queries JSON array of DSL strings")
 			fs.IntVar(&pageSize, "page-size", 0, "page size (server default 50, max 1000)")
 			fs.StringVar(&pageToken, "page-token", "", "next_page_token returned by the previous page")
 		},

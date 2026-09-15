@@ -422,7 +422,7 @@ func (a *Account) CreateJWT(ctx, projectID, userID string) (string, error) {
 ```
 
 - 密钥与现有 end-user token 同一派生 key（`PurposeEndUserJWT`），保证 validator 可验证。
-- TTL 5 分钟（与 Appwrite 一致）；token 绑定项目与用户。
+- TTL 5 分钟；token 绑定项目与用户。
 - 注意：`jwtparser.Generate` 默认 15min——传显式 `ExpiresAt` 覆盖。
 
 ### 6.6 账号日志（`internal/app/client/logs.go` 新建）

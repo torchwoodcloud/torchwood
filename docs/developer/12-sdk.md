@@ -162,7 +162,7 @@ await tw.server.outbox.replayDeadLetter("01H...", "default");
 - Functions：`tw.functions.invokeFunction(functionId, input?)`（`src/client/functions.ts:29`）；
 - Leaderboards：`tw.leaderboards.submitLeaderboardScore(board, value, {tiebreakValue?, period?, requestId?})` / `getMyLeaderboardEntry` / `listLeaderboardTop`（`src/client/leaderboards.ts:15-34`）；
 - Analytics：`tw.analytics.ingest(events)` → POST `/v1/analytics/events`，归因（user_id）由服务端从 principal 落定（含匿名会话），部分接收语义 `{accepted, skipped}`（`src/client/analytics.ts:36-40`）；**`AnalyticsEventBuffer`**（包根导出，`src/client/analytics.ts:104`）size/time 双阈值 flush（默认 20 条或 10s，单批上限 100），浏览器环境自动注册 `visibilitychange`(hidden)/`beforeunload` 尽力 flush，失败静默 + 有界指数退避重试，`track`/`flush` 永不抛错；各端（小游戏/原生）接入配方见 `18-analytics.md` §7；
-- 传输：`fetch` + JSON，支持 `queries[]` 数组展开（Appwrite DSL），204 返回 `undefined`，非 2xx 抛 `TorchwoodError`（`status` + `code` + `body`）。
+- 传输：`fetch` + JSON，支持 `queries[]` 数组展开（查询 DSL），204 返回 `undefined`，非 2xx 抛 `TorchwoodError`（`status` + `code` + `body`）。
 
 ---
 
@@ -232,7 +232,7 @@ _ = me
 - 错误：`status.Code(err)` 判 `codes.NotFound`/`PermissionDenied` 等；限流响应可用 `server.ExtractRetryAfter(err)` 读出建议退避秒数；
 - 超时与重试：SDK 默认单次调用 30s 超时（`WithTimeout` 调整；调用方 ctx 已带 deadline 时尊重调用方），默认对 `Unavailable` 自动重试（最多 4 次指数退避），`WithRetryDisabled` 可关闭；
 - 文档：入参 `map[string]any` → `structpb`，读回数值多为 `float64`；
-- 查询：文档面收 typed AST（`*sharedv1.Query`，`sdk/go/query` 提供 `Eq/Gt/...` 构造器与链式 `Builder`）；Appwrite DSL 串经 `query.FromDSL` 在**客户端**解析为 AST 后发送（服务端零字符串解析）；`ListDatabases/ListCollections` 等静态面仍走 `queries` 串参数；
+- 查询：文档面收 typed AST（`*sharedv1.Query`，`sdk/go/query` 提供 `Eq/Gt/...` 构造器与链式 `Builder`）；查询 DSL 串经 `query.FromDSL` 在**客户端**解析为 AST 后发送（服务端零字符串解析）；`ListDatabases/ListCollections` 等静态面仍走 `queries` 串参数；
 - `cmd/torchwood`（`bin/torchwood`）**仅依赖 `sdk/go/server`** 的 `InvokeJSON`，源码不直连 `genproto/grpc`（`import_guard_test` 兜底），新增 RPC 无需 CLI 登记；
 - 测试：`bufconn` 内存 gRPC，无外部依赖，已纳入 `task test`（`test:sdk-go`）与 `task lint`（`lint:sdk-go`）；文档示例可编译性由 `sdk/go/docexamples`（build tag `docexample`，`go vet -tags docexample ./sdk/...`）保证。
 

@@ -509,13 +509,13 @@ func extractZipWithLimits(zipPath, destDir string, limits zipExtractLimits) (Zip
 		if f.Mode()&os.ModeSymlink != 0 {
 			return ZipContents{}, status.Error(codes.InvalidArgument, "zip entry is a symlink")
 		}
-		// node_modules 拒收（v3 §3.1/D11，对齐 Appwrite）：用户 zip 携带
+		// node_modules 拒收（v3 §3.1/D11）：用户 zip 携带
 		// node_modules 存在跨平台二进制不兼容与包体膨胀问题，依赖改由平台
 		// 构建期代装（CLI deploy 侧 B 切片已同步剔除）。判定条目路径第一段
 		// （含 node_modules 自身与 node_modules/...，目录与文件条目一并拒绝，
 		// 逐条判定即可，无需等解压完成）；子目录中的同名目录不受影响。
 		if firstPathSegment(f.Name) == "node_modules" {
-			return ZipContents{}, status.Error(codes.InvalidArgument, "请勿在代码包中携带 node_modules——平台将在构建期代装依赖（对齐 Appwrite；跨平台二进制不兼容）")
+			return ZipContents{}, status.Error(codes.InvalidArgument, "请勿在代码包中携带 node_modules——平台将在构建期代装依赖（跨平台二进制不兼容）")
 		}
 		if f.FileInfo().IsDir() {
 			continue

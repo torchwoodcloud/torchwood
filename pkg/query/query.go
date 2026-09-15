@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// Canonical AST operators. Appwrite codec names are the comparison ops;
+// Canonical AST operators. DSL codec names are the comparison ops;
 // proto eq/ne/lt/... map onto these（codec 在 pkg/query/proto）。取反一律走
 // not* 变体（索引友好）；无通用 NOT 算子（德摩根展开可表达，C7 预决策 1）。
 const (
@@ -83,7 +83,7 @@ const (
 )
 
 // Query is the parsed AST: Filter tree + Orders + page.
-// Parse / ParseMany are Appwrite-string codecs into this model.
+// Parse / ParseMany are DSL-string codecs into this model.
 // Filters is the implicit-AND leaf list produced by the codec (same as
 // today's ParseMany); compilers should prefer Filter when set.
 type Query struct {
@@ -214,7 +214,7 @@ func andFilters(leaves []Filter) *Filter {
 
 var queryRe = regexp.MustCompile(`^(\w+)\((.*)\)$`)
 
-// Parse parses a single Appwrite-style query string into an AST Query.
+// Parse parses a single query DSL string into an AST Query.
 // 定位（C7 单 AST）：本解析器是**客户端语法糖**——SDK/工具把 DSL 串解析成
 // AST 后以 typed Query 发送；服务端文档查询栈不消费字符串。示例：
 //
@@ -275,7 +275,7 @@ func Parse(raw string) (*Query, error) {
 		return &Query{Filters: []Filter{leaf}, Filter: &leaf}, nil
 
 	case OpIn:
-		// Appwrite 语义：值必须是数组（in("status", ["a","b"])）。编译端
+		// 值必须是数组（in("status", ["a","b"])）。编译端
 		// （compilePredicate 的 OpIn）与 proto AST codec（Filter_In）均已支持，
 		// 此处补齐 DSL 解析使双栈算子对齐。
 		if len(args) != 2 {
@@ -422,7 +422,7 @@ func Parse(raw string) (*Query, error) {
 	}
 }
 
-// ParseMany parses multiple Appwrite-style query strings and merges them into one Query.
+// ParseMany parses multiple query DSL strings and merges them into one Query.
 // Filter predicates are combined with implicit AND (same as today's codec).
 // 未显式指定 limit 时 Limit 保持 0，默认页大小由 adapter 决定（ListDocuments 用
 // PageSize 回退），避免 DSL 层注入默认值掩盖调用方的分页参数。
@@ -569,7 +569,7 @@ func quoteString(s string) string {
 	return `"` + escapeString(s) + `"`
 }
 
-// BuildFilter constructs a single Appwrite-style query string from structured args.
+// BuildFilter constructs a single query DSL string from structured args.
 // It is the safe counterpart to Sprintf-based query construction: values are
 // escaped so that quotes/backslashes inside user input cannot break out of the
 // quoted scope.

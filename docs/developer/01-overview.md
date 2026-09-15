@@ -7,7 +7,7 @@
 
 ## 1. 产品定位
 
-Torchwood 是 **Appwrite-inspired、AI/Agent-Native 的 BaaS**，Go + PostgreSQL，`gRPC + grpc-gateway` 双表面。
+Torchwood 是 **AI/Agent-Native 的 BaaS**，Go + PostgreSQL，`gRPC + grpc-gateway` 双表面。
 
 | 能力 | 说明 |
 |------|------|

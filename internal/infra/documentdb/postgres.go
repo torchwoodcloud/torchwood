@@ -51,7 +51,7 @@ const maxQueryLimit = 100
 // AST 叶数由 pkg/query.MaxQueries 封顶）。
 const maxFilterValues = 1000
 
-// maxTotalFilterParams 是跨 filter 绑定参数的累计上限（buildAppwriteQuery 出口
+// maxTotalFilterParams 是跨 filter 绑定参数的累计上限（buildQuery 出口
 // 检查），封死 100 条 query × 1000 值 = 10 万参数超出 PG 65535 语句参数上限的风险。
 const maxTotalFilterParams = 2000
 

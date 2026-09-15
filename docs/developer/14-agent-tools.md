@@ -54,7 +54,7 @@
 `ListDocumentsRequest` 同时承载两套查询：
 
 - `optional shared.v1.Query query`：`filter` 树 + `orders` + `page_size` / `page_token`（权威分页为 `page_token`，AIP-158）；
-- 旧栈 `queries[]string` + `page_size` / `page_token`（Appwrite DSL，如 `equal("status","active")`，由 `pkg/query` 解析）。
+- 旧栈 `queries[]string` + `page_size` / `page_token`（查询 DSL，如 `equal("status","active")`，由 `pkg/query` 解析）。
 
 两者同时提供且冲突 → `InvalidArgument`。gRPC/HTTP 的请求形状**不是**同一 JSON 换命名风格。
 

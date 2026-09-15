@@ -18,7 +18,7 @@ func timeNow() time.Time { return time.Unix(1700000000, 0).UTC() }
 // 每算子编译单测（C7 单 AST）：AST 构造 → SQL 断言。DSL 解析路径的等价性
 // 由 pkg/query 与 pkg/query/proto 的测试保证（客户端语法糖）。
 
-func TestBuildAppwriteQuery_EveryComparisonOperator(t *testing.T) {
+func TestBuildQuery_EveryComparisonOperator(t *testing.T) {
 	cases := []struct {
 		name   string
 		filter *query.Filter
@@ -49,7 +49,7 @@ func TestBuildAppwriteQuery_EveryComparisonOperator(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			where, args, _, err := buildAppwriteQuery(&query.Query{Filter: tc.filter}, nil)
+			where, args, _, err := buildQuery(&query.Query{Filter: tc.filter}, nil)
 			require.NoError(t, err)
 			require.Equal(t, tc.where, where)
 			if tc.args == nil {
@@ -62,15 +62,15 @@ func TestBuildAppwriteQuery_EveryComparisonOperator(t *testing.T) {
 }
 
 // contains 族通配符转义在 not* 变体同样生效（escapeLikePattern 复用）。
-func TestBuildAppwriteQuery_NotLikeEscapesWildcards(t *testing.T) {
-	where, args, _, err := buildAppwriteQuery(&query.Query{Filter: query.NotContains("a", "50%_off")}, nil)
+func TestBuildQuery_NotLikeEscapesWildcards(t *testing.T) {
+	where, args, _, err := buildQuery(&query.Query{Filter: query.NotContains("a", "50%_off")}, nil)
 	require.NoError(t, err)
 	require.Equal(t, `d."a" NOT ILIKE ? ESCAPE '\'`, where)
 	require.Equal(t, []any{`%50\%\_off%`}, args)
 }
 
-func TestBuildAppwriteQuery_OrCompilesToSQLOr(t *testing.T) {
-	where, args, _, err := buildAppwriteQuery(&query.Query{
+func TestBuildQuery_OrCompilesToSQLOr(t *testing.T) {
+	where, args, _, err := buildQuery(&query.Query{
 		Filter: query.Or(query.Eq("status", "a"), query.Eq("status", "b")),
 	}, nil)
 	require.NoError(t, err)
@@ -79,28 +79,28 @@ func TestBuildAppwriteQuery_OrCompilesToSQLOr(t *testing.T) {
 	require.NotContains(t, where, " AND ")
 }
 
-// TestBuildAppwriteQuery_CustomOrderHasIDTiebreaker：自定义排序必须以
+// TestBuildQuery_CustomOrderHasIDTiebreaker：自定义排序必须以
 // _id 收尾且与 cursor 续页路径同构（重复排序键的全序确定性 + keyset 各页
 // 同序；跨页不丢不重的机制保证）。
-func TestBuildAppwriteQuery_CustomOrderHasIDTiebreaker(t *testing.T) {
-	_, _, orderSQL, err := buildAppwriteQuery(&query.Query{Orders: []query.Order{{Attribute: "status"}}}, nil)
+func TestBuildQuery_CustomOrderHasIDTiebreaker(t *testing.T) {
+	_, _, orderSQL, err := buildQuery(&query.Query{Orders: []query.Order{{Attribute: "status"}}}, nil)
 	require.NoError(t, err)
 	require.Equal(t, `ORDER BY d."status" ASC, d._id ASC`, orderSQL)
 
-	_, _, orderSQL, err = buildAppwriteQuery(&query.Query{Orders: []query.Order{{Attribute: "priority", Desc: true}}}, nil)
+	_, _, orderSQL, err = buildQuery(&query.Query{Orders: []query.Order{{Attribute: "priority", Desc: true}}}, nil)
 	require.NoError(t, err)
 	require.Equal(t, `ORDER BY d."priority" DESC, d._id DESC`, orderSQL)
 
 	// 默认排序（无显式 orders）同样带 _id。
-	_, _, orderSQL, err = buildAppwriteQuery(&query.Query{Filter: query.Eq("status", "open")}, nil)
+	_, _, orderSQL, err = buildQuery(&query.Query{Filter: query.Eq("status", "open")}, nil)
 	require.NoError(t, err)
 	require.Equal(t, `ORDER BY d._created_at DESC, d._id DESC`, orderSQL)
 }
 
-// TestBuildAppwriteQuery_TotalFilterParamsLimit：跨 filter 绑定参数累计上限
+// TestBuildQuery_TotalFilterParamsLimit：跨 filter 绑定参数累计上限
 // （单 filter ≤1000 不封总量：100 叶 × 1000 值可积 10 万参数，超 PG 65535
 // 语句参数上限后以运行时错误暴露）。
-func TestBuildAppwriteQuery_TotalFilterParamsLimit(t *testing.T) {
+func TestBuildQuery_TotalFilterParamsLimit(t *testing.T) {
 	makeFilter := func(n int) *query.Filter {
 		values := make([]string, n)
 		for i := range values {
@@ -111,21 +111,21 @@ func TestBuildAppwriteQuery_TotalFilterParamsLimit(t *testing.T) {
 
 	// 3 × 700 = 2100 > 2000 → InvalidArgument。
 	over := &query.Query{Filter: query.And(makeFilter(700), makeFilter(700), makeFilter(700))}
-	_, _, _, err := buildAppwriteQuery(over, nil)
+	_, _, _, err := buildQuery(over, nil)
 	require.Error(t, err)
 	st, _ := status.FromError(err)
 	require.Equal(t, codes.InvalidArgument, st.Code())
 
 	// 3 × 600 = 1800 ≤ 2000 → 通过。
 	ok := &query.Query{Filter: query.And(makeFilter(600), makeFilter(600), makeFilter(600))}
-	where, args, _, err := buildAppwriteQuery(ok, nil)
+	where, args, _, err := buildQuery(ok, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, where)
 	require.Len(t, args, 1800)
 }
 
-func TestBuildAppwriteQuery_AndTree(t *testing.T) {
-	where, args, _, err := buildAppwriteQuery(&query.Query{
+func TestBuildQuery_AndTree(t *testing.T) {
+	where, args, _, err := buildQuery(&query.Query{
 		Filter: query.And(query.Eq("a", "1"), query.Eq("b", "2")),
 	}, nil)
 	require.NoError(t, err)
@@ -133,33 +133,33 @@ func TestBuildAppwriteQuery_AndTree(t *testing.T) {
 	require.Equal(t, []any{"1", "2"}, args)
 }
 
-func TestBuildAppwriteQuery_EmptyValuesInvalidArgument(t *testing.T) {
-	_, _, _, err := buildAppwriteQuery(&query.Query{
+func TestBuildQuery_EmptyValuesInvalidArgument(t *testing.T) {
+	_, _, _, err := buildQuery(&query.Query{
 		Filter: &query.Filter{Op: query.OpGreaterThan, Attribute: "n"},
 	}, nil)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, _, _, err = buildAppwriteQuery(&query.Query{
+	_, _, _, err = buildQuery(&query.Query{
 		Filter: &query.Filter{Op: query.OpEqual, Attribute: "a"},
 	}, nil)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
-// TestBuildAppwriteQuery_ArrayOperators（阶段③-b 预决策 2 门禁）：containsAny
+// TestBuildQuery_ArrayOperators（阶段③-b 预决策 2 门禁）：containsAny
 // 编译 &&（交集非空）、containsAll 编译 @>（子集），参数按列元素类型 cast
 // （pgTextArray 字面量 + ?::T[]）；arrayTypes 缺席（标量列/系统列/未声明列）
 // 编译期兜底拒绝（validateQueryFields 白名单先行）。
-func TestBuildAppwriteQuery_ArrayOperators(t *testing.T) {
+func TestBuildQuery_ArrayOperators(t *testing.T) {
 	arrTypes := map[string]string{"tags": "TEXT[]", "nums": "BIGINT[]"}
 
-	where, args, _, err := buildAppwriteQuery(&query.Query{
+	where, args, _, err := buildQuery(&query.Query{
 		Filter: query.ContainsAny("tags", "a", "b"),
 	}, arrTypes)
 	require.NoError(t, err)
 	require.Equal(t, `d."tags" && ?::TEXT[]`, where)
 	require.Equal(t, []any{`{"a","b"}`}, args)
 
-	where, args, _, err = buildAppwriteQuery(&query.Query{
+	where, args, _, err = buildQuery(&query.Query{
 		Filter: query.ContainsAll("nums", "1", "2", "3"),
 	}, arrTypes)
 	require.NoError(t, err)
@@ -167,13 +167,13 @@ func TestBuildAppwriteQuery_ArrayOperators(t *testing.T) {
 	require.Equal(t, []any{`{"1","2","3"}`}, args)
 
 	// 标量列 / 未声明列 / 白名单缺席 → InvalidArgument（fail-closed 兜底）。
-	_, _, _, err = buildAppwriteQuery(&query.Query{Filter: query.ContainsAny("title", "a")}, arrTypes)
+	_, _, _, err = buildQuery(&query.Query{Filter: query.ContainsAny("title", "a")}, arrTypes)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	_, _, _, err = buildAppwriteQuery(&query.Query{Filter: query.ContainsAll("tags", "a")}, nil)
+	_, _, _, err = buildQuery(&query.Query{Filter: query.ContainsAll("tags", "a")}, nil)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 
 	// 空值 → InvalidArgument。
-	_, _, _, err = buildAppwriteQuery(&query.Query{
+	_, _, _, err = buildQuery(&query.Query{
 		Filter: &query.Filter{Op: query.OpContainsAny, Attribute: "tags"},
 	}, arrTypes)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))

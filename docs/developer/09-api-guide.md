@@ -187,7 +187,7 @@ if info.HasPrevious { meta.PrevPageToken = crud.EncodePageToken(info.PreviousOff
 - 勿手拼 SQL `filter/order`；动态文档查询一律走 `pkg/query` typed AST（见 `06-databases.md` §6）。
 - `pkg/crud/filter.go`/`order.go` 供静态表列表复用；动态文档过滤载体唯一是 `shared.v1.Query`。
 
-`shared.v1.ListRequest.queries`（Appwrite 风格 DSL 串）是**静态表面遗留通道**，按面分化：仅 `ListUsers` 经 `ParseUserList` 白名单解析（`equal/greaterThan/lessThan` + 白名单属性）；storage buckets/files 与 groups 携带即 `InvalidArgument`（显式拒绝）；documents 已将 `queries` **reserved**（服务端零字符串解析，DSL 只存活为 SDK/CLI 客户端糖）。
+`shared.v1.ListRequest.queries`（DSL 串）是**静态表面遗留通道**，按面分化：仅 `ListUsers` 经 `ParseUserList` 白名单解析（`equal/greaterThan/lessThan` + 白名单属性）；storage buckets/files 与 groups 携带即 `InvalidArgument`（显式拒绝）；documents 已将 `queries` **reserved**（服务端零字符串解析，DSL 只存活为 SDK/CLI 客户端糖）。
 
 文档列表：GET 面保留 `page_size/page_token`，过滤/排序/投影一律 `POST .../documents:list`，body 即 Query JSON：
 

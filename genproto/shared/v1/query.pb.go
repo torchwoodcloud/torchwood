@@ -271,7 +271,7 @@ func (x *FilterList) GetFilters() []*Filter {
 }
 
 // Filter is a boolean expression tree (single-AST, C7). Comparison ops use
-// Appwrite-equivalent semantics; and/or are recursive (depth <= 8). Negation
+// DSL-equivalent semantics; and/or are recursive (depth <= 8). Negation
 // is expressed by not* variants only (index-friendly); there is no generic
 // NOT operator.
 type Filter struct {
@@ -748,7 +748,7 @@ func (x *Order) GetDesc() bool {
 }
 
 // Query is the single wire form of document list/count/aggregate filters
-// (C7: the server consumes no query strings; the Appwrite DSL survives only
+// (C7: the server consumes no query strings; the string DSL survives only
 // as client-side sugar in SDKs/tools). page_token is the authoritative pager
 // (K-20); page_size is the page bound.
 // vector_search（会话 #10；B2 多页）：KNN 一次一个；与 filter 可组合（AND），

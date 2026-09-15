@@ -153,7 +153,7 @@ func TestParse_EmptyEqualArray(t *testing.T) {
 	require.Error(t, err)
 }
 
-// TestParse_In：in 算子要求数组值（Appwrite 语义），非数组/空数组拒绝。
+// TestParse_In：in 算子要求数组值，非数组/空数组拒绝。
 func TestParse_In(t *testing.T) {
 	_, err := Parse(`in("status","draft")`)
 	require.Error(t, err)

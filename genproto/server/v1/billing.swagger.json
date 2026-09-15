@@ -106,7 +106,7 @@
           },
           {
             "name": "queries",
-            "description": "queries 是静态表面遗留的 Appwrite 风格 DSL 串通道，与文档查询栈的单\ntyped AST（shared.v1.Query）相互独立。消费面：users ListUsers 经\nParseUserList 白名单解析（equal/greaterThan/lessThan + 白名单属性）；\nstorage buckets/files 与 groups（ListGroups/ListMemberships）不支持——\n携带即 InvalidArgument（显式拒绝，不静默忽略）；其余使用本消息的面以\n各自 handler 的显式行为为准。",
+            "description": "queries 是静态表面遗留的 DSL 串通道，与文档查询栈的单\ntyped AST（shared.v1.Query）相互独立。消费面：users ListUsers 经\nParseUserList 白名单解析（equal/greaterThan/lessThan + 白名单属性）；\nstorage buckets/files 与 groups（ListGroups/ListMemberships）不支持——\n携带即 InvalidArgument（显式拒绝，不静默忽略）；其余使用本消息的面以\n各自 handler 的显式行为为准。",
             "in": "query",
             "required": false,
             "type": "array",

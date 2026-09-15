@@ -7,11 +7,11 @@ import "strings"
 // 禁止裸串拼接文档角色（由 docrole_test.go 的裸串扫描测试守门）。
 //
 // 词表形态：
-//   - 裸词表项：users / any / guests（Appwrite 语义角色）
+//   - 裸词表项：users / any / guests（语义角色）
 //   - 命名空间角色：user:<id>[/verified]、group:<gid>[/<role>]、key:<id>、
 //     member:<mid>、label:<label>（冒号前缀 + 身份段，可带复合后缀）
 //   - sentinel：__private__（纯私有占位 ACE）、__system__（内部旁路投影）
-//   - 模板占位符：user:{id} / group:{id}（Appwrite 授予模板，持久化前展开）
+//   - 模板占位符：user:{id} / group:{id}（授予模板，持久化前展开）
 const (
 	// 裸词表项（无命名空间前缀）。
 	RoleUsers  = "users"  // 已认证端用户（JWT 角色解析恒含，见 authz_policy END_USER 归一）

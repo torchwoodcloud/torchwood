@@ -15,7 +15,7 @@ import (
 // 与 storage/OAuth multipart 自定义 handler 同机制）。
 //
 // 内容三段：
-//   - query.operators：文档查询算子全集（canonical AST 名 = Appwrite DSL 名，
+//   - query.operators：文档查询算子全集（canonical AST 名 = DSL 串名，
 //     附 proto Filter oneof 字段与值数量约束；containsAny/containsAll 标注
 //     array_only）——与 pkg/query 常量、proto oneof 的同步由 wellknown_test
 //     防漂移断言锁定；
@@ -29,7 +29,7 @@ import (
 
 // wellKnownQueryOperator 是目录中单个查询算子的条目。
 type wellKnownQueryOperator struct {
-	Name       string `json:"name"`                 // canonical AST / Appwrite DSL 名
+	Name       string `json:"name"`                 // canonical AST / DSL 串名
 	ProtoField string `json:"proto_field"`          // shared.v1.Filter oneof expr 字段
 	MinValues  int    `json:"min_values,omitempty"` // Comparison.values 数量下限
 	MaxValues  int    `json:"max_values,omitempty"` // 数量上限；0 = 无上限

@@ -144,7 +144,7 @@ func newDatabasesCollectionsListCmd(g *globalFlags) *verb {
 	var pageToken string
 	return newVerb(g, "list", "list collections", "databases collections list <database-id>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&queries, "queries", "", "Appwrite-style queries JSON array (e.g. '[\"equal(\\\"status\\\",\\\"active\\\")\"]')")
+			fs.StringVar(&queries, "queries", "", "Queries JSON array of DSL strings (e.g. '[\"equal(\\\"status\\\",\\\"active\\\")\"]')")
 			fs.IntVar(&pageSize, "page-size", 0, "page size (server default 50, max 1000)")
 			fs.StringVar(&pageToken, "page-token", "", "next_page_token returned by the previous page")
 		},
@@ -332,7 +332,7 @@ func newDatabasesDocumentsListCmd(g *globalFlags) *verb {
 	var pageToken string
 	return newVerb(g, "list", "list documents", "databases documents list <database-id> <collection-id>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&queries, "queries", "", "Appwrite-style queries JSON array")
+			fs.StringVar(&queries, "queries", "", "Queries JSON array of DSL strings")
 			fs.IntVar(&pageSize, "page-size", 0, "page size (server default 50, max 1000)")
 			fs.StringVar(&pageToken, "page-token", "", "next_page_token returned by the previous page")
 		},
@@ -445,7 +445,7 @@ func newDatabasesDocumentsCountCmd(g *globalFlags) *verb {
 	var queries string
 	return newVerb(g, "count", "count documents matching the query", "databases documents count <database-id> <collection-id>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&queries, "queries", "", "Appwrite-style queries JSON array")
+			fs.StringVar(&queries, "queries", "", "Queries JSON array of DSL strings")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 2); err != nil {

@@ -1,5 +1,5 @@
 // 事件订阅串的解析、校验与匹配（functions v3 切片 D，docs/design/functions-v3.md
-// §4.1/D12）。订阅串格式对齐 Appwrite（业界同构、迁移友好）：
+// §4.1/D12）。订阅串格式（业界同构）：
 //
 //	databases.{database_id}.collections.{collection_id}.documents.{op}
 //
@@ -158,8 +158,8 @@ func NewEventTriggerIndex(triggers []Trigger) *EventTriggerIndex {
 }
 
 // Match 返回某项目内命中该文档写事件的全部订阅（逐 trigger 逐条投递；
-// 同一触发器多条订阅串命中同一事件 → 多次投递，与「订阅串数 = 触发面」
-// 的 Appwrite 语义一致，函数侧按 event_id 幂等吸收）。
+// 同一触发器多条订阅串命中同一事件 → 多次投递，订阅串数即触发面，
+// 函数侧按 event_id 幂等吸收）。
 func (x *EventTriggerIndex) Match(projectID, databaseID, collectionID, op string) []EventSubscription {
 	if x == nil {
 		return nil

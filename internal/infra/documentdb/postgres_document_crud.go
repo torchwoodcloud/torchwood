@@ -142,7 +142,7 @@ func (p *postgresDocumentDB) createDocument(ctx context.Context, projectID, data
 // UpsertDocument inserts doc, or when a row already matches conflictColumns
 // (which must correspond to a unique index on the collection table), updates
 // its data, _updated_at, _updated_by and replaces document permissions with
-// perms (Appwrite-style replace semantics). The insert and update are
+// perms (replace semantics). The insert and update are
 // performed atomically by a single INSERT ... ON CONFLICT (...) DO UPDATE SET
 // statement.
 func (p *postgresDocumentDB) UpsertDocument(ctx context.Context, projectID, databaseID, collectionID string, doc databases.Document, conflictColumns []string, perms []databases.Permission, principal databases.Principal) (databases.Document, error) {

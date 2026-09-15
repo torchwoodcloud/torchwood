@@ -79,7 +79,7 @@ func CollectionAllows(perms []Permission, permType string, roles []string) bool 
 	return false
 }
 
-// AllowsDocumentAccess implements Appwrite-style documentSecurity semantics (B1):
+// AllowsDocumentAccess implements document-level security semantics (B1):
 //   - documentSecurity=false: only collection permissions apply
 //   - documentSecurity=true:
 //   - document has no _perms rows (docHasPerms=false): collection permissions apply
@@ -103,7 +103,7 @@ func AllowsDocumentAccess(coll *Collection, docPerms []Permission, docHasPerms b
 		// 系统集合文档仍由集合级兜底（匿名读 groups/buckets 依赖此行为）。
 		return collOK || CollectionAllows(docPerms, permType, expanded)
 	}
-	// 用户集合：文档权限覆盖集合权限（Appwrite 语义，"私有文档"生效）。
+	// 用户集合：文档权限覆盖集合权限（"私有文档"语义生效）。
 	return CollectionAllows(docPerms, permType, expanded)
 }
 
@@ -166,11 +166,11 @@ func ParsePermissionStrings(items []string) ([]Permission, error) {
 	return out, nil
 }
 
-// ExpandPermissionTemplates replaces the Appwrite-style placeholders
-// RoleUserTemplate and RoleGroupTemplate in permission roles with the caller's
-// first matching concrete role (e.g. RoleUser("uuid")), preserving original
-// entries when no matching role is held. The expanded set is used for grant
-// validation and persistence, mirroring Appwrite's create/update semantics.
+// ExpandPermissionTemplates replaces the placeholders RoleUserTemplate and
+// RoleGroupTemplate in permission roles with the caller's first matching
+// concrete role (e.g. RoleUser("uuid")), preserving original entries when no
+// matching role is held. The expanded set is used for grant validation and
+// persistence (create/update 语义与权限授予校验一致).
 func ExpandPermissionTemplates(perms []Permission, roles []string) []Permission {
 	if len(perms) == 0 {
 		return perms

@@ -74,7 +74,7 @@ USER node
 ```
 
 - **lockfile 强制**：有 `dependencies` 但缺 `package-lock.json` → 构建失败（deployment failed），错误信息：「检测到 dependencies 但缺少 package-lock.json——请提交 lockfile 以保证确定性构建（npm install 会生成）」。无锁安装不可复现，与「构建是平台确定性操作」不变量对齐。
-- **`node_modules` 拒收**：代码包中任意条目路径第一段为 `node_modules`（含目录与文件条目）→ 构建失败：「请勿在代码包中携带 node_modules——平台将在构建期代装依赖（对齐 Appwrite；跨平台二进制不兼容）」。CLI deploy 已同步剔除（`cmd/torchwood` 打包排除 `node_modules/.git`）。
+- **`node_modules` 拒收**：代码包中任意条目路径第一段为 `node_modules`（含目录与文件条目）→ 构建失败：「请勿在代码包中携带 node_modules——平台将在构建期代装依赖（跨平台二进制不兼容）」。CLI deploy 已同步剔除（`cmd/torchwood` 打包排除 `node_modules/.git`）。
 - **`--ignore-scripts` 恒定**（一期不提供 opt-in，OQ4 收口）：不变量「构建期不执行用户代码/第三方脚本」——npm 生命周期脚本（postinstall）可执行任意代码。代价：依赖原生编译（node-gyp）或 postinstall 下载二进制的包**不可用**（如 esbuild/swc 的安装版——安装期二进制落盘步骤被跳过，函数执行时报「找不到可执行文件/模块」类错误即此原因；改用纯 JS 等价物或浏览器/WASM 构建）。残余风险（lockfile 为用户可控输入、npm 解析器漏洞）经 lockfile integrity hash 固定 + 构建容器既有 hardening 兜底，构建出网白名单后置（OQ5 收口：一期不限制，registry 拉包必需）。
 - **层缓存加速**：`package.json`/`package-lock.json` 不变的重新部署直接命中 Docker 层缓存，跳过 `npm ci` 拉包，只有代码层重建。
 - 探测与拒收实现在 zip 解压校验层（`internal/infra/functions/docker.go` `extractZipWithLimits`，与 zip slip/符号链接校验同处逐条判定）；模板决策在 `dockerfileFor`（v1）与 `runner.DockerfileFor`（v2/v3 常驻路径），两模板仅 CMD/ENV 差异。python 代装（`requirements.txt` + pip）随 python v2 支持落地。
@@ -344,7 +344,7 @@ TORCHWOOD_RUN_DOCKER_TESTS=1 go test ./internal/infra/functions -run TestDockerB
 
 数据库文档写事件（create/update/delete）触发函数异步执行。链路：文档写事务内 outbox 行（既有事件脊柱，零改动）→ `OutboxWorker` XADD Redis Stream `torchwood:events` → **`functions-triggers` 消费组**（worker 进程，`worker/event_triggers.go`）→ 进程内订阅匹配器 → 命中触发器逐条异步入队（与 cron 同一 `InvokeTrigger` 通道，执行记录 `trigger_source = event:{trigger_id}`）。outbox 主投递路径（WS 实时扇出）零侵入。
 
-- **订阅串格式（Appwrite 风格）**：`databases.{database_id}.collections.{collection_id}.documents.{op}`，op ∈ {create, update, delete}。一期通配语义：collection 段与 op 段可为 `*`（规范通配形态 `collections.*.documents.*` = 任一集合任一事件）；**database 段必须精确**（database 级通配后置）。解析/校验/匹配实现于 `internal/domain/functions/eventmatch.go`（创建期与匹配器构建共用同一解析——存储侧无第二套宽松口径）。一个触发器可带多条订阅串（≤64 条，protovalidate 形状校验 + 服务端逐条格式校验，错误文案携带具体条目）；同一事件命中同一触发器的多条订阅串会**多次投递**，函数幂等吸收。
+- **订阅串格式**：`databases.{database_id}.collections.{collection_id}.documents.{op}`，op ∈ {create, update, delete}。一期通配语义：collection 段与 op 段可为 `*`（规范通配形态 `collections.*.documents.*` = 任一集合任一事件）；**database 段必须精确**（database 级通配后置）。解析/校验/匹配实现于 `internal/domain/functions/eventmatch.go`（创建期与匹配器构建共用同一解析——存储侧无第二套宽松口径）。一个触发器可带多条订阅串（≤64 条，protovalidate 形状校验 + 服务端逐条格式校验，错误文案携带具体条目）；同一事件命中同一触发器的多条订阅串会**多次投递**，函数幂等吸收。
 - **存在性 best-effort**：创建时不强制校验 database/collection 存在（use-case 未注入跨域仓储端口）——订阅不存在的集合合法（事件永不命中，静默无投递）。
 - **data 投影与回读（32KB 预算的关键设计）**：事件信封可达 1MiB 而执行 data 上限 32KB——data 只带投影：
 
@@ -365,7 +365,7 @@ TORCHWOOD_RUN_DOCKER_TESTS=1 go test ./internal/infra/functions -run TestDockerB
 - **投递保证与幂等键**：at-least-once——补投与正常路径的重叠投递由函数幂等吸收；**幂等键推荐来源 = data 的 `event_id` / `seq`**（seq 是 outbox 全局分配序、集合内有空洞，仅当游标与去重辅助用，勿当全局提交序）。消费组 `XACK` 在入队成功后；XACK 前崩溃的在途条目由 XAUTOCLAIM（1min idle）重投。
 - **停机补投（D12 对抗审查升格，一期必做）**：`XTRIM`（~100k 条水位）不理会消费组进度——worker 停机超过 Stream 裁剪窗口后，消费组会静默跳到现存最老条目。worker 启动时（消费循环起来前）以 Redis 自管水位键 `torchwood:fnevent:lastseq`（每批 ACK 后 Lua 单调推进）与 Stream 现存首条的信封 seq 比较（Stream 条目 ID 自动生成、不含 seq 语义），`first_seq > lastseq+1` 即存在裁剪缺口 → 从 outbox 表按 `seq ∈ (lastseq, first_seq_in_stream]` 分批（500/批）补投，走同一匹配+投递路径；上界收在 Stream 现存首条（上界条目与恢复后的正常消费重叠投递一次，幂等吸收）。**诚实边界：outbox 行 24h 清理窗口之外的极端停机（>24h）才真正丢失**（与 WS 订阅 `EVENTS.RESUME_EXPIRED` 同一口径）。
 - **风暴兜底（OQ9 收口：一期不做精确限流）**：三层既有机制兜底——异步通道 run 信号量 + dispatcher 有界排队（429 ResourceExhausted → enqueue_error）+ 补投分批推进。
-- **自环警告（D13：无硬防护）**：函数订阅自己写入的集合 → 写 → 事件 → 再触发循环会无限放大。平台一期**不做递归硬防护**（Appwrite 官方同款处理：文档警告）——Console 订阅编辑处展示警告文案；链式调用多个函数成环同样危险。观测兜底见下。
+- **自环警告（D13：无硬防护）**：函数订阅自己写入的集合 → 写 → 事件 → 再触发循环会无限放大。平台一期**不做递归硬防护**（文档警告）——Console 订阅编辑处展示警告文案；链式调用多个函数成环同样危险。观测兜底见下。
 - **触发器生效延迟**：订阅匹配器是 15s 周期全量快照（`RefreshEventTriggerIndex`，任一项目扫描失败保留旧快照不换入）——创建/启停触发器到生效有一个刷新周期的传播窗口，窗口内的事件对**新**触发器不补投（快照语义）；重启即全量重建。
 - **指标**：`torchwood_functions_invoke_total{source="event"}`（入口计数，复用）、`torchwood_functions_event_deliveries_total{project, function, result=ok|enqueue_error}`（**只记命中的触发器**，no_match 不记——本指标速率即风暴/自环告警锚点）、`torchwood_functions_event_backfill_total{project, result=ok|error}`（**补投计数非零即告警锚点：停机窗口可视**）。
 

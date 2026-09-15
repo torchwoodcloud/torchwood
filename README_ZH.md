@@ -2,14 +2,14 @@
 
 [English](README.md) | **简体中文**
 
-Torchwood 是一个受 Appwrite 启发、**AI/Agent-Native** 的后端即服务（BaaS）平台，使用 Go + PostgreSQL + gRPC/grpc-gateway 构建，提供用户认证、动态文档数据库、文件存储、函数执行与 Admin Console —— API 与工具链自设计之初即面向 LLM Agent、自动化与 MCP。
+Torchwood 是一个 **AI/Agent-Native** 的后端即服务（BaaS）平台，使用 Go + PostgreSQL + gRPC/grpc-gateway 构建，提供用户认证、动态文档数据库、文件存储、函数执行与 Admin Console —— API 与工具链自设计之初即面向 LLM Agent、自动化与 MCP。
 
 ## 功能特性
 
 - **Agent 原生 API**：Protobuf 为单一事实来源，`buf generate` 产出 gRPC stub、grpc-gateway handler 与 OpenAPI（`genproto/`）；细粒度 scope 的 API Key（`x-api-key`）供 Agent/自动化调用 Server API。
 - **项目管理**：多项目隔离，每个 `(project.id, database.id)` 对应一个 PostgreSQL schema。
 - **用户认证**：邮箱注册/登录、JWT access/refresh（含轮换）、会话 Cookie、Email/Phone OTP、OAuth2（Google/GitHub/WeChat）、匿名会话、Magic URL、一次性 JWT、TOTP MFA 与邮箱变更二次确认。
-- **动态文档数据库**：schema-per-database，`_tenant` 隔离、`_acl` 文档级权限（Postgres RLS policy 判定），typed 查询 AST（`pkg/query`，Appwrite 风格 DSL 仅作客户端糖），支持 keyset 分页、批量操作、字段增量与数组原子更新。
+- **动态文档数据库**：schema-per-database，`_tenant` 隔离、`_acl` 文档级权限（Postgres RLS policy 判定），typed 查询 AST（`pkg/query`，字符串 DSL 仅作客户端糖），支持 keyset 分页、批量操作、字段增量与数组原子更新。
 - **文件存储**：S3/MinIO 兼容，上传/下载/在线预览、缩略图、公开 bucket、HMAC File Token、分片上传与断点续传。
 - **函数执行**：Docker 构建/运行执行器，同步/异步执行，异步 `cmd/worker` 与保留策略。
 - **事件分析**：双面事件摄入（端侧会话归因 + 服务端 API Key 代报）、月分区只写存储、小时级预聚合（趋势/留存/维度拆解/用户下钻）、Console 分析区与 TS SDK 批量缓冲器。
@@ -195,7 +195,11 @@ task sdk:demo   # http://localhost:5174
 | [13-operations](docs/developer/13-operations.md) | 部署、健康检查、备份 |
 | [14-agent-tools](docs/developer/14-agent-tools.md) | Agent 工具箱（18 动词 overlay） |
 
-另见 `AGENTS.md`（贡献约定）、`docs/roadmap.md`（AI/Agent-Native 战略）、`docs/tech-decision.md`。
+另见 `AGENTS.md`（贡献约定）、`docs/roadmap.md`（AI/Agent-Native 战略）。
+
+## 致谢
+
+Torchwood 的早期设计从 [Appwrite](https://appwrite.io) —— 一个优秀的开源后端即服务平台 —— 中获得过启发。项目如今已走出自己的道路，但我们依然感谢他们的工作打下的基础。
 
 ## 许可证
 

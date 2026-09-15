@@ -2,7 +2,7 @@
 
 > 状态：待实现（接力任务）
 > 目标读者：接力的实现 agent
-> 关联：`docs/roadmap.md` §2.6（Functions 真实执行器）、`docs/tech-decision.md`（技术选型）、`AGENTS.md`（开发约定，必读）
+> 关联：`docs/roadmap.md` §2.6（Functions 真实执行器）、`docs/archived/tech-decision.md`（技术选型，已归档）、`AGENTS.md`（开发约定，必读）
 > 修订记录：2026-08-09 v2（评审修订：FK 级联、registry/network、同步超时、zip slip、worker 对账、输出截断、并发限制等）
 
 ---

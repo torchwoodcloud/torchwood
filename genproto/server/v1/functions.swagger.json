@@ -49,7 +49,7 @@
           },
           {
             "name": "queries",
-            "description": "queries 是静态表面遗留的 Appwrite 风格 DSL 串通道，与文档查询栈的单\ntyped AST（shared.v1.Query）相互独立。消费面：users ListUsers 经\nParseUserList 白名单解析（equal/greaterThan/lessThan + 白名单属性）；\nstorage buckets/files 与 groups（ListGroups/ListMemberships）不支持——\n携带即 InvalidArgument（显式拒绝，不静默忽略）；其余使用本消息的面以\n各自 handler 的显式行为为准。",
+            "description": "queries 是静态表面遗留的 DSL 串通道，与文档查询栈的单\ntyped AST（shared.v1.Query）相互独立。消费面：users ListUsers 经\nParseUserList 白名单解析（equal/greaterThan/lessThan + 白名单属性）；\nstorage buckets/files 与 groups（ListGroups/ListMemberships）不支持——\n携带即 InvalidArgument（显式拒绝，不静默忽略）；其余使用本消息的面以\n各自 handler 的显式行为为准。",
             "in": "query",
             "required": false,
             "type": "array",
@@ -1020,7 +1020,7 @@
           "title": "订阅串列表（1..64 条，单条 ≤200 字节；服务端逐条格式校验）。"
         }
       },
-      "title": "EventTriggerConfig 是数据库事件触发器配置（v3 切片 D，functions-v3.md\n§4.1/D12）。订阅串格式（Appwrite 风格）：\n  databases.{database_id}.collections.{collection_id}.documents.{op}\nop ∈ {create, update, delete, *}；collection 段可为 `*`；database 段一期\n必须精确（database 级通配后置）。格式校验在服务端（领域层 eventmatch）。\n自环警告（D13）：订阅本函数自身写入的集合会形成「写→事件→再触发」循环，\n平台一期不做硬防护，Console 编辑处文案警告。"
+      "title": "EventTriggerConfig 是数据库事件触发器配置（v3 切片 D，functions-v3.md\n§4.1/D12）。订阅串格式（业界同构）：\n  databases.{database_id}.collections.{collection_id}.documents.{op}\nop ∈ {create, update, delete, *}；collection 段可为 `*`；database 段一期\n必须精确（database 级通配后置）。格式校验在服务端（领域层 eventmatch）。\n自环警告（D13）：订阅本函数自身写入的集合会形成「写→事件→再触发」循环，\n平台一期不做硬防护，Console 编辑处文案警告。"
     },
     "v1Execution": {
       "type": "object",

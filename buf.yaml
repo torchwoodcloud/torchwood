@@ -9,7 +9,7 @@ modules:
 lint:
   use:
     - STANDARD
-  # 以下规则与项目实际风格不符（Appwrite 风格契约，F11-4）：
+  # 以下规则与项目实际风格不符（既有契约，F11-4）：
   # - PACKAGE_DIRECTORY_MATCH：包名 torchwood.*.v1 有意与目录 proto/{client,server,...}/v1
   #   分离（模块化目录便于归类，重构目录将破坏全部 import）；
   # - RPC_REQUEST_RESPONSE_UNIQUE / RPC_REQUEST_STANDARD_NAME / RPC_RESPONSE_STANDARD_NAME：

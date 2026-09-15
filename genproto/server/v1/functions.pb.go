@@ -1603,7 +1603,7 @@ func (x *CronTriggerConfig) GetMisfire() string {
 }
 
 // EventTriggerConfig 是数据库事件触发器配置（v3 切片 D，functions-v3.md
-// §4.1/D12）。订阅串格式（Appwrite 风格）：
+// §4.1/D12）。订阅串格式（业界同构）：
 //
 //	databases.{database_id}.collections.{collection_id}.documents.{op}
 //
