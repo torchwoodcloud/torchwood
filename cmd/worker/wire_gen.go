@@ -51,8 +51,10 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	grantsReconcileHook := NewGrantsReconcileHook()
 	scaleMetricsHook := NewScaleMetricsHook()
 	schemaReconcileHook := NewSchemaReconcileHook()
-	onStartHooks := bootkit.NewOnStarts(repository, database, logger, grantsReconcileHook, scaleMetricsHook, schemaReconcileHook)
-	onStopHooks := bootkit.NewOnStops()
+	preStartHooks := bootkit.NewPreStarts(repository, database, logger, grantsReconcileHook, scaleMetricsHook, schemaReconcileHook)
+	drainHooks := bootkit.NewDrains()
+	preStopHooks := bootkit.NewPreStops()
+	postStopHooks := bootkit.NewPostStops()
 	dockerExecutor := functions.NewDockerExecutor(appConfig)
 	dispatcherExecutor := functions.NewDispatcherExecutor(appConfig)
 	executor, err := functions.ProvideExecutor(appConfig, dockerExecutor, dispatcherExecutor)
@@ -125,7 +127,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	analyticsMaintenanceWorker := worker.NewAnalyticsMaintenanceWorker(maintenance, logger)
 	v2 := NewComponents(workerWorker, chunkCleaner, streamTrimmer, outboxWorkerService, paymentCloser, assetExpirer, subscriptionBiller, usageRollupWorker, leaderboardsCleaner, leaderboardsSettler, analyticsRollupWorker, analyticsMaintenanceWorker)
 	v3 := bootkit.NewComponentBuilders()
-	bootstrap := boot.New(onStartHooks, onStopHooks, v2, v3)
+	bootstrap := boot.New(preStartHooks, drainHooks, preStopHooks, postStopHooks, v2, v3)
 	return bootstrap, func() {
 		cleanup()
 	}, nil

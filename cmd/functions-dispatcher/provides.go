@@ -18,9 +18,11 @@ var ProviderSet = wire.NewSet(
 	boot.New,
 	bootkit.NewLogger,
 	bootkit.NewComponentBuilders,
-	bootkit.NewOnStops,
+	bootkit.NewDrains,
+	bootkit.NewPreStops,
+	bootkit.NewPostStops,
 	NewAppConfig,
-	NewOnStarts,
+	NewPreStarts,
 	clients.NewRedisClient,
 	functionsdispatcher.NewService,
 	NewComponents,
@@ -38,8 +40,8 @@ func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 	return &c, nil
 }
 
-// NewOnStarts 返回空钩子集：dispatcher 不碰项目 schema（worker 同款边界）。
-func NewOnStarts() boot.OnStartHooks { return boot.OnStartHooks{} }
+// NewPreStarts 返回空启动前钩子集：dispatcher 不碰项目 schema（worker 同款边界）。
+func NewPreStarts() boot.PreStartHooks { return boot.PreStartHooks{} }
 
 // NewComponents 注册 dispatcher 服务（单服务进程）。
 func NewComponents(svc *functionsdispatcher.Service) []lynx.Service {

@@ -41,7 +41,7 @@ type (
 	SchemaReconcileHook func(context.Context) error
 )
 
-// NewOnStarts 注册启动钩子集：项目 schema 确保钩子（对全部项目幂等 EnsureAll）
+// NewPreStarts 注册启动前钩子集：项目 schema 确保钩子（对全部项目幂等 EnsureAll）
 // 与调用方注入的可选扩展钩子。roles 签名密钥同步钩子已退役（转出 POC 门禁
 // B15）：密钥落库改部署期 owner 一次性作业（`torchwood admin sync-roles-sig`，
 // clients.SyncRolesSigKey），运行 DSN 对 public.tw_secrets 零权限（迁移
@@ -51,8 +51,8 @@ type (
 // 分别传 documentdb 列授权全量 reconcile（门禁 A1）、规模预警线表计数采集
 // （门禁 B12）与 schema 漂移对账（门禁 B3）闭包；cmd/worker 传 nil——worker
 // 不碰文档层，import guard 守此边界）。
-func NewOnStarts(repo projects.Repository, db *clients.Database, logger *slog.Logger, grantsReconcile GrantsReconcileHook, scaleMetrics ScaleMetricsHook, schemaReconcile SchemaReconcileHook) boot.OnStartHooks {
-	hooks := boot.OnStartHooks{
+func NewPreStarts(repo projects.Repository, db *clients.Database, logger *slog.Logger, grantsReconcile GrantsReconcileHook, scaleMetrics ScaleMetricsHook, schemaReconcile SchemaReconcileHook) boot.PreStartHooks {
+	hooks := boot.PreStartHooks{
 		ProjectSchemaEnsureHook(repo, db, logger),
 	}
 	if grantsReconcile != nil {
@@ -67,10 +67,24 @@ func NewOnStarts(repo projects.Repository, db *clients.Database, logger *slog.Lo
 	return hooks
 }
 
-// NewOnStops 返回空钩子集：底层资源清理不进 Lynx（见 cmd/*/main.go 注释，
-// 在 runner.RunE() 返回后由 main 统一执行）。
-func NewOnStops() boot.OnStopHooks {
-	return boot.OnStopHooks{}
+// NewDrains 返回空排水钩子集：排水摘流由 readiness（drainChecker）承担，
+// 无服务目录注销需求；lynx v1.10.0 起 OnDrain 钩子仅在 DrainTimeout 窗口
+// 内执行（窗口即预算），留空即整段跳过。
+func NewDrains() boot.DrainHooks {
+	return boot.DrainHooks{}
+}
+
+// NewPreStops 返回空停止前钩子集：无"服务仍在服务期间的最后冲刷"需求。
+func NewPreStops() boot.PreStopHooks {
+	return boot.PreStopHooks{}
+}
+
+// NewPostStops 返回空收尾钩子集：底层资源清理（关闭 DB/Redis 连接池）
+// 不经 Bootstrap 聚合——wire injector 单独返回 cleanup，由各 main 经
+// app.OnPostStop(cleanup) 直接注册（v1.10.0 起框架在所有服务与总线停止
+// 后执行，自带 CleanupTimeout 预算，取代原 main.go 手写的超时兜底样板）。
+func NewPostStops() boot.PostStopHooks {
+	return boot.PostStopHooks{}
 }
 
 // ProjectSchemaEnsureHook 返回启动期项目数据面 schema 确保钩子：
@@ -102,5 +116,5 @@ func ProjectSchemaEnsureHook(repo projects.Repository, db *clients.Database, log
 // CollectionGrantsReconcileHook 与 ScaleMetricsHook 已移至 cmd/server 组合根：
 // 两者都是 documentdb 域职责（门禁 A1 / B12），bootkit 为 server/worker 共享
 // 装配包，直接实现会把 documentdb 拖进 worker 的依赖闭包（import guard
-// TestWorkerDepsGraph 守此边界）。server 侧经 NewOnStarts 的对应可选参数注入
+// TestWorkerDepsGraph 守此边界）。server 侧经 NewPreStarts 的对应可选参数注入
 // 闭包，worker 传 nil。）

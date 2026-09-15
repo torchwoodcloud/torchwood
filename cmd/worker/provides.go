@@ -57,8 +57,10 @@ var ProviderSet = wire.NewSet(
 	// 与 cmd/server 共享的装配样板收敛在 bootkit（Round4 J4-1）。
 	bootkit.NewLogger,
 	bootkit.NewComponentBuilders,
-	bootkit.NewOnStarts,
-	bootkit.NewOnStops,
+	bootkit.NewPreStarts,
+	bootkit.NewDrains,
+	bootkit.NewPreStops,
+	bootkit.NewPostStops,
 	NewGrantsReconcileHook,
 	NewScaleMetricsHook,
 	NewSchemaReconcileHook,
@@ -128,7 +130,7 @@ var ProviderSet = wire.NewSet(
 
 // NewGrantsReconcileHook 返回 nil：列授权全量 reconcile（门禁 A1）是
 // documentdb 域职责，仅 server 侧执行——worker 的依赖闭包不得包含
-// documentdb（import guard TestWorkerDepsGraph 守此边界），经 NewOnStarts
+// documentdb（import guard TestWorkerDepsGraph 守此边界），经 NewPreStarts
 // 的可选参数注入 nil 即跳过该钩子。
 func NewGrantsReconcileHook() bootkit.GrantsReconcileHook { return nil }
 

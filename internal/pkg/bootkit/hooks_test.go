@@ -1,5 +1,5 @@
 // 启动钩子接线测试（转出 POC 门禁 A1 / B12）：CollectionGrantsReconcileHook 与
-// ScaleMetricsHook 必须注册进 NewOnStarts（cmd/server 与 cmd/worker 共享装配），
+// ScaleMetricsHook 必须注册进 NewPreStarts（cmd/server 与 cmd/worker 共享装配），
 // 且执行钩子等价于执行对应采集——A1 构造授权偏离终态的表跑完钩子后恢复终态，
 // B12 执行后三平面 tables_total 指标刷新为当前库真实计数。
 package bootkit
@@ -21,7 +21,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/pkg/ident"
 )
 
-func TestCollectionGrantsReconcileHook_WiredInOnStarts(t *testing.T) {
+func TestCollectionGrantsReconcileHook_WiredInPreStarts(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -49,15 +49,15 @@ func TestCollectionGrantsReconcileHook_WiredInOnStarts(t *testing.T) {
 	require.NoError(t, err, "偏离播种：R13a 旧形态多授")
 
 	// 接线断言：grants reconcile 以闭包注入（R15 集中复审：bootkit 不 import
-	// documentdb——reconcile 实现移至 cmd/server 组合根，经 NewOnStarts 可选
+	// documentdb——reconcile 实现移至 cmd/server 组合根，经 NewPreStarts 可选
 	// 参数注入；此处以直调 documentdb 的闭包复现 server 侧注入形态）。
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	reconcile := func(ctx context.Context) error {
 		_, err := documentdb.ReconcileCollectionColumnGrants(ctx, db)
 		return err
 	}
-	hooks := NewOnStarts(nil, db, logger, reconcile, nil, nil)
-	require.Len(t, hooks, 2, "NewOnStarts 必须包含注入的 reconcile 钩子（A1 接线锁定；基础钩子 = 项目 schema 确保一项——roles 密钥同步钩子已随 B15 退役）")
+	hooks := NewPreStarts(nil, db, logger, reconcile, nil, nil)
+	require.Len(t, hooks, 2, "NewPreStarts 必须包含注入的 reconcile 钩子（A1 接线锁定；基础钩子 = 项目 schema 确保一项——roles 密钥同步钩子已随 B15 退役）")
 	for i, hook := range hooks {
 		require.NoError(t, hook(ctx), "hook %d", i)
 	}
@@ -82,11 +82,11 @@ func TestCollectionGrantsReconcileHook_WiredInOnStarts(t *testing.T) {
 	require.Contains(t, grants, "title:UPDATE", "钩子执行后数据列 UPDATE 授权必须在场")
 }
 
-// TestScaleMetricsHook_WiredInOnStarts 锁定门禁 B12 的钩子接线：规模预警线
+// TestScaleMetricsHook_WiredInPreStarts 锁定门禁 B12 的钩子接线：规模预警线
 // 表计数采集以闭包注入（与 A1 同形态——cmd/server 组合根直调 documentdb，
-// 经 NewOnStarts 的 scaleMetrics 参数注入），执行钩子等价于执行采集——
+// 经 NewPreStarts 的 scaleMetrics 参数注入），执行钩子等价于执行采集——
 // 三平面 tables_total 指标被刷新为当前库的真实计数。
-func TestScaleMetricsHook_WiredInOnStarts(t *testing.T) {
+func TestScaleMetricsHook_WiredInPreStarts(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -112,13 +112,13 @@ func TestScaleMetricsHook_WiredInOnStarts(t *testing.T) {
 	// 接线断言：未注入扩展钩子时仅 1 个基础钩子（nil 跳过语义；roles 密钥
 	// 同步钩子已随 B15 退役）；注入 scaleMetrics 闭包后为 2 个，执行后指标
 	// 被刷新。
-	require.Len(t, NewOnStarts(nil, nil, nil, nil, nil, nil), 1, "nil 扩展钩子必须被跳过（基础钩子 = 项目 schema 确保一项）")
+	require.Len(t, NewPreStarts(nil, nil, nil, nil, nil, nil), 1, "nil 扩展钩子必须被跳过（基础钩子 = 项目 schema 确保一项）")
 	scale := func(ctx context.Context) error {
 		_, err := documentdb.CollectScaleMetrics(ctx, db)
 		return err
 	}
-	hooks := NewOnStarts(nil, db, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, scale, nil)
-	require.Len(t, hooks, 2, "NewOnStarts 必须包含注入的 scaleMetrics 钩子（B12 接线锁定）")
+	hooks := NewPreStarts(nil, db, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, scale, nil)
+	require.Len(t, hooks, 2, "NewPreStarts 必须包含注入的 scaleMetrics 钩子（B12 接线锁定）")
 	for i, hook := range hooks {
 		require.NoError(t, hook(ctx), "hook %d", i)
 	}

@@ -67,8 +67,10 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	grantsReconcileHook := NewGrantsReconcileHook(database, logger)
 	scaleMetricsHook := NewScaleMetricsHook(database, logger)
 	schemaReconcileHook := NewSchemaReconcileHook(database, logger)
-	onStartHooks := bootkit.NewOnStarts(repository, database, logger, grantsReconcileHook, scaleMetricsHook, schemaReconcileHook)
-	onStopHooks := bootkit.NewOnStops()
+	preStartHooks := bootkit.NewPreStarts(repository, database, logger, grantsReconcileHook, scaleMetricsHook, schemaReconcileHook)
+	drainHooks := bootkit.NewDrains()
+	preStopHooks := bootkit.NewPreStops()
+	postStopHooks := bootkit.NewPostStops()
 	apiKeyRepository := bunrepo.NewAPIKeyRepository(database)
 	adminRepository := bunrepo.NewAdminRepository(database)
 	adminProjectRepository := bunrepo.NewAdminProjectRepository(database)
@@ -279,7 +281,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	}
 	v3 := NewComponents(grpcServer, grpcGatewayServer, realtimeSubscriberService, metricsServer)
 	v4 := bootkit.NewComponentBuilders()
-	bootstrap := boot.New(onStartHooks, onStopHooks, v3, v4)
+	bootstrap := boot.New(preStartHooks, drainHooks, preStopHooks, postStopHooks, v3, v4)
 	return bootstrap, func() {
 		cleanup()
 	}, nil

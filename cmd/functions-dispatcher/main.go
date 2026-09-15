@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"time"
 
@@ -30,15 +29,17 @@ func main() {
 		buildVersion += " built " + date
 	}
 
-	var cleanup func()
 	runner := lynx.NewRunner(func(app lynx.App) error {
 		app.SetLogger(lynxzap.MustNewLogger(app))
 
-		bootstrap, c, err := wireBootstrap(app)
+		bootstrap, cleanup, err := wireBootstrap(app)
 		if err != nil {
 			return err
 		}
-		cleanup = c
+		// cleanup（关闭 Redis 等底层资源）挂 OnPostStop（lynx v1.10.0，
+		// 与 server/worker 同约定）：所有服务停止后执行，自带预算——取代
+		// 此前 main 里的手写超时兜底样板。
+		app.OnPostStop(cleanup)
 		bootstrap.Bind(app)
 		return nil
 	},
@@ -54,25 +55,7 @@ func main() {
 		lynx.WithShutdownTimeout(30*time.Second),
 	)
 
-	// cleanup（关闭 Redis 等底层资源）不进 OnStop（与 server/worker 同约定）：
-	// 等 runner.RunE() 返回后再清理，单独给 10s 上限。
-	err := runner.RunE()
-	if cleanup != nil {
-		log.Println("running resource cleanup")
-		done := make(chan struct{})
-		go func() {
-			cleanup()
-			close(done)
-		}()
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		select {
-		case <-done:
-		case <-ctx.Done():
-			log.Println("resource cleanup timed out after 10s")
-		}
-	}
-	if err != nil {
+	if err := runner.RunE(); err != nil {
 		log.Fatalln(err)
 	}
 }

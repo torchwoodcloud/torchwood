@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"time"
 
@@ -27,18 +26,22 @@ func main() {
 	// 默认 30s（LB 摘流）。显式 TORCHWOOD_SERVER_DRAIN_TIMEOUT 可覆盖。
 	drainTimeout := config.CurrentDrainTimeout()
 
-	var cleanup func()
 	runner := lynx.NewRunner(func(app lynx.App) error {
 		app.SetLogger(lynxzap.MustNewLogger(app))
 		app.Logger().Info("runtime environment",
 			"env", string(config.CurrentRuntimeEnv()),
 			"drain_timeout", drainTimeout.String())
 
-		bootstrap, c, err := wireBootstrap(app)
+		bootstrap, cleanup, err := wireBootstrap(app)
 		if err != nil {
 			return err
 		}
-		cleanup = c
+		// cleanup（关闭 DB/Redis 等底层资源）挂 OnPostStop（lynx v1.10.0）：
+		// 所有服务 Stop、总线关停之后、Run 返回前逆序执行，自带
+		// CleanupTimeout 预算（默认 10s），覆盖 Run 全部退出路径。此前它
+		// 不能进 OnPreStop（先于服务 Stop，会掐断排水/关停期间在途请求的
+		// 连接池），只能等 RunE 返回后由 main 手写超时兜底样板。
+		app.OnPostStop(cleanup)
 		bootstrap.Bind(app)
 		return nil
 	},
@@ -53,29 +56,7 @@ func main() {
 		lynx.WithShutdownTimeout(30*time.Second),
 	)
 
-	// cleanup（关闭 DB/Redis 等底层资源）不能注册进 OnStop：lynx 在服务
-	// GracefulStop 之前执行 OnStop hooks，会先关掉连接池导致排水/关停期间
-	// 的在途请求失败。这里等 runner.RunE() 返回（所有服务已停止）后再清理，
-	// 并给 cleanup 单独的上限（10s）：任何 Close 挂起都不阻塞进程退出。
-	err := runner.RunE()
-	if cleanup != nil {
-		log.Println("running resource cleanup")
-		start := time.Now()
-		done := make(chan struct{})
-		go func() {
-			cleanup()
-			close(done)
-		}()
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		select {
-		case <-done:
-		case <-ctx.Done():
-			log.Println("resource cleanup timed out after 10s")
-		}
-		log.Printf("resource cleanup finished in %s", time.Since(start).Round(time.Millisecond))
-	}
-	if err != nil {
+	if err := runner.RunE(); err != nil {
 		log.Fatalln(err)
 	}
 }

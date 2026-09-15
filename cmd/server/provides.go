@@ -47,8 +47,10 @@ var ProviderSet = wire.NewSet(
 	// 与 cmd/worker 共享的装配样板收敛在 bootkit（Round4 J4-1）。
 	bootkit.NewLogger,
 	bootkit.NewComponentBuilders,
-	bootkit.NewOnStarts,
-	bootkit.NewOnStops,
+	bootkit.NewPreStarts,
+	bootkit.NewDrains,
+	bootkit.NewPreStops,
+	bootkit.NewPostStops,
 	NewGrantsReconcileHook,
 	NewScaleMetricsHook,
 	NewSchemaReconcileHook,
@@ -108,7 +110,7 @@ func NewBuildInfo() buildinfo.BuildInfo {
 //
 // 关停顺序说明（R09-P2-4，更新至 Lynx v1.3.0）：Lynx v1.3.0 仍经 oklog/run 停止服务——正常关停
 // 路径按注册顺序（而非逆序）逐个有界停止，即 grpc → gateway →
-// realtime-subscriber → metrics；逆序停止仅用于框架内部 Init/OnStart
+// realtime-subscriber → metrics；逆序停止仅用于框架内部 Init/OnPreStart
 // 失败路径的资源清理（stopServices）。依赖方向为 gateway → grpc，理想
 // 顺序应先停 gateway 再停 grpc；但关停前已有 30s 排水窗口（readiness
 // 摘流 + LB 摘除），且各服务 Stop 均有界，故 grpc 先停仅影响窗口内剩余
@@ -147,9 +149,9 @@ func NewSchemaManager(db *clients.Database, docDB databases.DocumentDB) *project
 // NewGrantsReconcileHook 产出启动期存量列授权全量 reconcile 闭包（门禁 A1，
 // docs/developer/15-exit-poc.md）：遍历 catalog 全部业务集合物理表，按
 // R13a/R16 终态口径逐表幂等重建列级 GRANT。挂在 server 侧——worker 不碰
-// 文档层（import guard TestWorkerDepsGraph 守此边界），故经 NewOnStarts 的
+// 文档层（import guard TestWorkerDepsGraph 守此边界），故经 NewPreStarts 的
 // 可选参数注入而非 bootkit 共享装配。失败语义同 bootkit 既有钩子：单表失败
-// 不阻断启动（documentdb 内部日志 + 失败计数指标），OnStart 先于监听。
+// 不阻断启动（documentdb 内部日志 + 失败计数指标），OnPreStart 先于监听。
 func NewGrantsReconcileHook(db *clients.Database, logger *slog.Logger) bootkit.GrantsReconcileHook {
 	return func(ctx context.Context) error {
 		if db == nil {
@@ -180,9 +182,9 @@ const scaleMetricsRefreshInterval = time.Hour
 // §4.4）：遍历全局 catalog 全部业务集合，扫三类漂移（缺列 / INVALID·failed
 // 索引含 building 超时残留的中断恢复 / 幽灵表）自动修复 + 告警，默认索引
 // 缺失经 CONCURRENTLY 通道补齐。挂在 server 侧——worker 不碰文档层（import
-// guard TestWorkerDepsGraph 守此边界），经 NewOnStarts 注入。失败语义同
+// guard TestWorkerDepsGraph 守此边界），经 NewPreStarts 注入。失败语义同
 // NewGrantsReconcileHook：单集合失败不阻断启动（documentdb 内部日志 + 失败
-// 计数指标），OnStart 先于监听。
+// 计数指标），OnPreStart 先于监听。
 func NewSchemaReconcileHook(db *clients.Database, logger *slog.Logger) bootkit.SchemaReconcileHook {
 	return func(ctx context.Context) error {
 		if db == nil {
@@ -208,7 +210,7 @@ func NewSchemaReconcileHook(db *clients.Database, logger *slog.Logger) bootkit.S
 // docs/developer/15-exit-poc.md；redesign §3.1 缓解 3 / §4.7）：对当前库执行
 // pg_class × pg_namespace 聚合，更新 torchwood_documentdb_tables_total{kind}
 // 三平面计数。挂在 server 侧——worker 不碰文档层（import guard
-// TestWorkerDepsGraph 守此边界），经 NewOnStarts 的 scaleMetrics 参数注入。
+// TestWorkerDepsGraph 守此边界），经 NewPreStarts 的 scaleMetrics 参数注入。
 // 失败语义同 NewGrantsReconcileHook：采集失败只记日志，不阻断启动（规模
 // 观测缺失是可观测性降级而非可用性故障，下次周期刷新重试）。首次同步采集
 // 成功后拉起进程内小时级周期刷新 goroutine（进程生命周期，无显式停止——
