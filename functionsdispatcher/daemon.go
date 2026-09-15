@@ -77,10 +77,23 @@ type SpawnOptions struct {
 // 取消的执行 ctx，也不允许 daemon 挂起时无限阻塞（与 v1 同约定）。
 const dockerCleanupTimeout = 30 * time.Second
 
+// networkClient 收窄 EnsureProjectNetwork 依赖的 docker 网络操作面（真实
+// 实现 = *client.Client；单测注入 fake 驱动 attach 幂等/自愈路径的确定性
+// 验证，不依赖真实 daemon）。
+type networkClient interface {
+	NetworkInspect(ctx context.Context, networkID string, options network.InspectOptions) (network.Inspect, error)
+	NetworkCreate(ctx context.Context, name string, options network.CreateOptions) (network.CreateResponse, error)
+	NetworkConnect(ctx context.Context, networkID, containerID string, config *network.EndpointSettings) error
+	NetworkDisconnect(ctx context.Context, networkID, containerID string, force bool) error
+}
+
 // dockerDaemon 是 Daemon 的真实实现（进程内唯一 docker.sock 持有方）。
 type dockerDaemon struct {
 	cfg *config.AppConfig
 	cli *client.Client
+	// netCli 是 cli 的网络操作收窄视图（生产与 cli 同一对象）；独立字段
+	// 仅为单测可注入。
+	netCli networkClient
 	// selfContainerID 非空 = dispatcher 自身运行在容器内（自 attach 需要）。
 	selfContainerID string
 }
@@ -96,6 +109,7 @@ func NewDockerDaemon(cfg *config.AppConfig) Daemon {
 		return d
 	}
 	d.cli = cli
+	d.netCli = cli
 	d.selfContainerID = detectSelfContainerID(cli)
 	return d
 }
@@ -122,17 +136,56 @@ func (d *dockerDaemon) client() (*client.Client, error) {
 	return d.cli, nil
 }
 
+// attach 冲突的两类报错文本判据：前者是容器已在网（幂等吞掉）；后者是网络
+// 里存在同名 endpoint 残留——endpoint 默认以容器名命名，守护进程重启/容器
+// 非优雅重建后，dispatcher 自建的 tw-func-* 网络（不受 compose 管理，跨重建
+// 存活）会残留上一代同名容器的 endpoint 记录，attach 从此确定性失败（2026-09-14
+// dev 事故：monsters 项目函数队列永久卡死）。后者文本自 moby 2016 起稳定，
+// 判据够窄，区别于已在网类冲突。
+const (
+	alreadyAttachedMsgFragment = "is already attached"
+	staleEndpointMsgFragment   = "already exists in network"
+)
+
+// isAlreadyConnectedErr 判定 NetworkConnect 错误是否为"容器已在网"类幂等冲突。
+func isAlreadyConnectedErr(err error) bool {
+	return err != nil && (strings.Contains(err.Error(), alreadyAttachedMsgFragment) || errdefs.IsConflict(err))
+}
+
+// ensureConnected 将容器 attach 到指定网络：已在网类冲突幂等吞掉；检出陈旧
+// endpoint 名冲突（staleEndpointMsgFragment）时 force disconnect 摘除残留
+// 记录再重试一次 connect 自愈。disconnect 报 NotFound = 残留已被并发 healer
+// 或外部摘除，视为已愈；重连撞上并发 healer 已挂成功（已在网类）同样吞掉。
+// disconnect 失败（除 NotFound）或重连仍失败才上抛。
+func ensureConnected(ctx context.Context, netCli networkClient, name, containerID string) error {
+	err := netCli.NetworkConnect(ctx, name, containerID, &network.EndpointSettings{})
+	if err == nil || isAlreadyConnectedErr(err) {
+		return nil
+	}
+	if !strings.Contains(err.Error(), staleEndpointMsgFragment) {
+		return err
+	}
+	if derr := netCli.NetworkDisconnect(ctx, name, containerID, true); derr != nil && !errdefs.IsNotFound(derr) {
+		return fmt.Errorf("heal stale endpoint (disconnect %q from network %q): %w", containerID, name, derr)
+	}
+	if rerr := netCli.NetworkConnect(ctx, name, containerID, &network.EndpointSettings{}); rerr != nil && !isAlreadyConnectedErr(rerr) {
+		return fmt.Errorf("heal stale endpoint (reconnect %q to network %q): %w", containerID, name, rerr)
+	}
+	return nil
+}
+
 // EnsureProjectNetwork 解析/创建项目网络并自 attach。常规网络命名与 v1
 // dockerExecutor 同一约定（tw-func-<project>；显式 functions.docker.network
 // 覆盖为全局共享网络）；untrusted=true 时为 internal 变体
 // tw-func-<project>-int（internal: true，出网全 deny——P2 egress 默认 deny，
 // 分类在 app 层完成，daemon 只按标志选网）。
 func (d *dockerDaemon) EnsureProjectNetwork(ctx context.Context, projectID string, untrusted bool) (string, error) {
-	cli, err := d.client()
-	if err != nil {
-		return "", err
+	if d.netCli == nil {
+		return "", status.Error(codes.Internal, "docker client unavailable (dispatcher requires docker.sock)")
 	}
+	cli := d.netCli
 	var name string
+	var err error
 	if untrusted {
 		name, err = infrafunctions.ResolveInternalNetworkName(d.cfg, projectID)
 	} else {
@@ -154,27 +207,21 @@ func (d *dockerDaemon) EnsureProjectNetwork(ctx context.Context, projectID strin
 		}
 	}
 	if d.selfContainerID != "" {
-		// 自 attach（幂等：已在网/路由已存在的冲突类错误吞掉）。失败不静默
-		// ——attach 不上去后续分发必然不可达，直接暴露错误。
-		if err := cli.NetworkConnect(ctx, name, d.selfContainerID, &network.EndpointSettings{}); err != nil {
-			msg := err.Error()
-			if !strings.Contains(msg, "is already attached") && !errdefs.IsConflict(err) {
-				return "", fmt.Errorf("attach dispatcher to network %q: %w", name, err)
-			}
+		// 自 attach（幂等 + 陈旧 endpoint 自愈，见 ensureConnected）。失败不
+		// 静默——attach 不上去后续分发必然不可达，直接暴露错误。
+		if err := ensureConnected(ctx, cli, name, d.selfContainerID); err != nil {
+			return "", fmt.Errorf("attach dispatcher to network %q: %w", name, err)
 		}
 	}
 	// 回访容器 attach（P2 部署前提）：函数经容器名 DNS 回访平台 API
 	// （functions.execution.api_base_url 指向该名字）。untrusted 函数在
 	// internal 网络（无 NAT 出口），这是其回访平台的唯一通路。attach 失败
 	// 不阻断执行——函数可能无需回访平台，但每次都记警告（部署应在首次
-	// 执行前修正 callback_container 配置）。已在网冲突幂等吞掉。
+	// 执行前修正 callback_container 配置）。幂等与自愈同 ensureConnected。
 	if cbName := d.cfg.GetFunctions().GetDispatcher().GetCallbackContainer(); cbName != "" {
-		if err := cli.NetworkConnect(ctx, name, cbName, &network.EndpointSettings{}); err != nil {
-			msg := err.Error()
-			if !strings.Contains(msg, "is already attached") && !errdefs.IsConflict(err) {
-				slog.Warn("functions-dispatcher: attach callback container to function network failed; platform callbacks from functions may be unreachable",
-					"network", name, "container", cbName, "error", err)
-			}
+		if err := ensureConnected(ctx, cli, name, cbName); err != nil {
+			slog.Warn("functions-dispatcher: attach callback container to function network failed; platform callbacks from functions may be unreachable",
+				"network", name, "container", cbName, "error", err)
 		}
 	}
 	return name, nil
