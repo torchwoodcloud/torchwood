@@ -1,7 +1,8 @@
 # 19. Runbook（版本化资源迁移）
 
 > 面向后端开发者与运维。来源：`docs/design/runbook.md`（2026-09-14 定稿，D1–D21 全部拍板）；
-> 实现落位：CLI 命令组 `cmd/torchwood/cmd/runbook*.go`（引擎在客户端），状态服务
+> 实现落位：引擎 `internal/pkg/runbook/`（文件层/编排层/动词对账决策层，`Caller` 注入
+> RPC 通道），CLI 命令组 `cli/runbook.go`（旗标 + InvokeJSON 适配），状态服务
 > `proto/server/v1/runbook.proto` + 迁移 `db/migrations/000009`（状态在服务端）。
 
 ## 1 定位与心智

@@ -426,6 +426,6 @@ per-request 分桶 tail（v3 自带，执行结束 Console 即见**本请求**�
 
 - 前置设计：`docs/design/functions-execution-identity-and-triggers.md`（v2 执行器与 P0–P2 全景；本稿 §1 为其 §6/Q12 的继任收口）
 - 现状文档：`docs/developer/08-functions.md` §4.3（v2 池与分发）、§12（触发器）、§13（客户端调用）
-- 代码锚点：`internal/infra/functions/runner/runner.js`（v2 模板与串行假设注释）、`functionsdispatcher/pool.go:528` `executeOn`、`functionsdispatcher/registry.go:94` `claimIdleLua`、`functionsdispatcher/types.go:80` `PoolPolicy`、`internal/app/functions/executions.go:618` `buildExecution`、`internal/domain/functions/repo.go:48` `RunnerTemplateVersion`、`internal/domain/events/envelope.go:36` `Envelope`（事件信封）、`sdk/typescript/src/http.ts`（transport auth 模式）、`cmd/torchwood/cmd/functions.go`（CLI 管理面现状）
+- 代码锚点：`internal/infra/functions/runner/runner.js`（v2 模板与串行假设注释）、`functionsdispatcher/pool.go:528` `executeOn`、`functionsdispatcher/registry.go:94` `claimIdleLua`、`functionsdispatcher/types.go:80` `PoolPolicy`、`internal/app/functions/executions.go:618` `buildExecution`、`internal/domain/functions/repo.go:48` `RunnerTemplateVersion`、`internal/domain/events/envelope.go:36` `Envelope`（事件信封）、`sdk/typescript/src/http.ts`（transport auth 模式）、`cli/functions.go`（CLI 管理面现状）
 - 迁移先例：`internal/infra/projectschema/migrations/000014_function_executor_v2.up.sql`
 - 竞品证据（2026-09-10 调研）：Cloud Run 实例并发（docs.cloud.google.com/run/docs/about-concurrency）、Vercel Fluid（vercel.com/docs/fluid-compute）、Appwrite Functions 构建（appwrite.io/docs/products/functions/develop）、Appwrite 事件订阅、Supabase 自托管现状（github.com/supabase/supabase/issues/38505）、faasd（github.com/openfaas/faasd）

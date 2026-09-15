@@ -1,7 +1,7 @@
 # Runbook：版本化资源迁移（类 sql migrate 的 up/down）
 
 > 状态：**已实施（2026-09-14，五阶段全部完成并通过终验：全量测试绿 + 真机 RPC 链路验证）**
-> 相关代码：`proto/server/v1/runbook.proto`、`internal/domain/runbook/`、`internal/app/server/runbook.go`、`internal/infra/bun/{model,bunrepo}/runbook.go`、`internal/api/servergrpc/runbook.go`、`cmd/torchwood/cmd/runbook*.go`、`sdk/go/server/runbook.go`、`db/migrations/000009_runbook_steps.*`、`docs/developer/19-runbook.md`（使用者文档）
+> 相关代码：`proto/server/v1/runbook.proto`、`internal/domain/runbook/`、`internal/app/server/runbook.go`、`internal/infra/bun/{model,bunrepo}/runbook.go`、`internal/api/servergrpc/runbook.go`、`internal/pkg/runbook/`（引擎）+ `cli/runbook.go`（命令组）、`sdk/go/server/runbook.go`、`db/migrations/000009_runbook_steps.*`、`docs/developer/19-runbook.md`（使用者文档）
 > 相关现状：`sdk/go/server/invoke.go`（InvokeJSON 动态通道，CLI 唯一 RPC 通路）、`internal/app/leaderboards/provision.go`（幂等 provisioning 先例）、`db/migrations/`（golang-migrate 控制面迁移）、`docs/developer/12-sdk.md` §CLI
 
 ---
@@ -271,9 +271,9 @@ update 动词的请求体用 YAML 字段显式存在性表达 proto3 optional �
 
 ## 8. 改动面清单
 
-新增：`proto/server/v1/runbook.proto`、`db/migrations/000009_runbook_steps.{up,down}.sql`、`internal/domain/runbook/`、`internal/app/server/runbook.go`、`internal/infra/bun/bunrepo/runbook.go`、`internal/api/servergrpc/runbook.go`、`sdk/go/server/runbook.go`、`cmd/torchwood/cmd/runbook.go`、`runbook_file.go`、`runbook_engine.go`（+ 各 `_test.go`）、`docs/developer/19-runbook.md`。
+新增：`proto/server/v1/runbook.proto`、`db/migrations/000009_runbook_steps.{up,down}.sql`、`internal/domain/runbook/`、`internal/app/server/runbook.go`、`internal/infra/bun/bunrepo/runbook.go`、`internal/api/servergrpc/runbook.go`、`sdk/go/server/runbook.go`、`internal/pkg/runbook/`（引擎 `runbook_file`/`runbook_engine`/`runbook_reconcile*`；初版位于 cli/，后移入业务共享内核）、`cli/runbook.go`（命令组）（+ 各 `_test.go`）、`docs/developer/19-runbook.md`。
 
-修改：`proto/shared/v1/authz.proto`（RUNBOOKS）、`genproto/`（生成）、`sdk/go/server/invoke_test.go`（146→149）、`cmd/torchwood/cmd/root.go`（Register 一行）、`docs/developer/authz-matrix.md`（重生成）、docs 索引；`cmd/server/wire_gen.go`（`task wire:all`）。
+修改：`proto/shared/v1/authz.proto`（RUNBOOKS）、`genproto/`（生成）、`sdk/go/server/invoke_test.go`（146→149）、`cmd/torchwood/app.go`（Register 一行；当时位于 `cmd/torchwood/cmd/root.go`）、`docs/developer/authz-matrix.md`（重生成）、docs 索引；`cmd/server/wire_gen.go`（`task wire:all`）。
 
 ---
 

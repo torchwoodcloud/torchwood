@@ -1,0 +1,21 @@
+package cli
+
+import (
+	"github.com/lynx-go/commands"
+)
+
+// newAdminCmd 提供平台运维管理命令（W-J）。outbox 走 Server RPC（需 API
+// key）；export/import、schema、sync-roles-sig 直连数据库（不经 InvokeJSON/
+// API 面）：导出需要 tw_system 旁路身份与 catalog/outbox 直读，POC 运维工
+// 具属性允许直连，DSN 走 --dsn/环境变量，因此不挂全局旗标、不做 api-key 校验。
+func newAdminCmd(g *GlobalFlags) *group {
+	return newGroup(g, "admin", "platform operations management (outbox dead letters, project export/import, etc.)", func(sub *commands.App) {
+		sub.Register(
+			newOutboxCmd(g),
+			newAdminExportCmd(),
+			newAdminImportCmd(),
+			newAdminSchemaCmd(),
+			newAdminSyncRolesSigCmd(),
+		)
+	})
+}

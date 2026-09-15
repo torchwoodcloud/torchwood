@@ -87,7 +87,7 @@ linters:
         text: "G109"
       # CLI `functions code` / dispatcher 客户端 Build 按用户指定路径读取函数
       # 代码包——功能本身即读取本地文件。
-      - path: (cmd/torchwood/cmd/functions|internal/infra/functions/dispatcher_client)\.go
+      - path: (cli/functions|internal/infra/functions/dispatcher_client)\.go
         linters: [gosec]
         text: "G304"
       # Redis 限频 Lua 脚本常量含 token/INCR 字样误报（非凭证）。
@@ -121,7 +121,7 @@ linters:
         linters: [unused]
       # ---- 2026-09-10 workflows 停用期存量暂挂（测试数据/同性质误报）----
       # 测试夹具中的伪 token/DSN/URL（非凭证）。
-      - path: (cmd/torchwood/cmd/admin_roles_sig_test|functionsdispatcher/daemon_integration_test|internal/app/server/apikeys_test|internal/domain/projects/oauth_redirect_test|pkg/query/proto/proto_test)\.go
+      - path: (cli/admin_roles_sig_test|functionsdispatcher/daemon_integration_test|internal/app/server/apikeys_test|internal/domain/projects/oauth_redirect_test|pkg/query/proto/proto_test)\.go
         linters: [gosec]
         text: "G101"
       # 测试读取仓库自有生成物/夹具文件。

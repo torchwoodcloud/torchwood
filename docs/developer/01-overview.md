@@ -67,7 +67,7 @@ torchwood/
 ├── cmd/server/        # 主服务入口：main.go + provides.go + wire.go → wire_gen.go；internal/runtime/ 为其私有运行时装配（grpc/gateway/Console SPA/CORS/metrics、authz 策略收集与 authz-matrix 文档生成）
 ├── cmd/worker/        # 异步 worker 入口：独立 Wire 装配；作业实现放仓库根 worker/
 ├── cmd/functions-dispatcher/  # 函数执行分发器入口（独立进程，专职持有 docker.sock）；实现放仓库根 functionsdispatcher/
-├── cmd/torchwood/        # CLI（lynx-go/commands，sdk/go InvokeJSON，不直连 genproto；import_guard_test 兜底）
+├── cmd/torchwood/        # CLI 入口（只留 main + 根命令表装配；实现放仓库根 client/）
 ├── console/           # React SPA，embed.go //go:embed dist；Vite 代理 /v1
 ├── proto/             # client/v1 · server/v1 · console/v1 · shared/v1（唯一事实源）
 ├── genproto/          # 生成产物 *.pb.go / *_grpc.pb.go / *.pb.gw.go / *.swagger.json（禁手改）
@@ -81,8 +81,9 @@ torchwood/
 │   ├── app/           # client | console | server | storage | functions | documents | events | assets | billing | payments | subscriptions | analytics | leaderboards | shared(四守卫)
 │   ├── domain/        # projects/users/auth(含 PolicySet 策略类型)/databases/storage/functions/billing/payments/subscriptions/assets/audit/analytics/leaderboards/shared...
 │   ├── infra/         # bun/bunrepo | documentdb | storage | functions | auth(validator) | projectschema | events | queue | messaging | health | billing | clients | idgen | payments | realtime
-│   └── pkg/           # 业务共享内核：config(config.proto + bind.go) | contexts(Principal) | bootkit(启动校验与钩子，server/worker/dispatcher 共享) | testutil(集成测试 DB 辅助)
+│   └── pkg/           # 业务共享内核：config(config.proto + bind.go) | contexts(Principal) | bootkit(启动校验与钩子，server/worker/dispatcher 共享) | testutil(集成测试 DB 辅助) | runbook(runbook 引擎：文件层/编排层/动词对账，cli 命令组与 server 侧工具共享)
 ├── functionsdispatcher/  # 函数分发器实现（仓库根顶层组件，仅 cmd/functions-dispatcher 引用；docker.sock 池/网络/分发）
+├── cli/            # Torchwood CLI 实现（仓库根顶层组件，仅 cmd/torchwood 引用；lynx-go/commands，sdk/go InvokeJSON，不直连 genproto；import_guard_test 兜底）
 ├── pkg/               # 通用可复用库：buildinfo | query(DSL 糖+typed AST) | crud | jwtparser | password | secretbox | semaphore | idgen | ident | uow
 ├── sdk/               # typescript/ | go/client+server | demo/
 ├── configs/config.yaml.template  # 全部键与默认值，敏感键注释环境变量
@@ -102,7 +103,7 @@ torchwood/
 | `server` | `cmd/server` | Lynx Runner：gRPC `127.0.0.1:9060` + gateway/Console SPA `:9080` + Metrics `127.0.0.1:9040` + 自定义 HTTP；装配在 `cmd/server/internal/runtime`（`grpc.go`/`grpc_gateway.go`/`console.go`/`metrics.go`），注册顺序 `grpc→gateway→realtime→metrics` | `security.jwt.secret` 必填（`internal/pkg/bootkit/config.go:33`，server/worker 共享）+ authz 策略语义断言（`AssertSemantic`） |
 | `dev:worker` | `cmd/worker` | 后台任务常驻进程：Functions 队列、outbox 分发、chunk 清理、Stream 修剪、计费闭环、cron/事件触发器、leaderboards 结榜清理、analytics 聚合维护等（作业清单见 `13-operations.md` §1.2）；作业实现随仓库根 `worker/` 包（`cmd/worker` 只留 main + Wire 装配骨架）；与 server 共享 `app/domain/infra` 但独立 `ProviderSet`（无 `api` 层） | `data.database.source` 必填（`cmd/worker/provides.go:153-157`） |
 | `functions-dispatcher` | `cmd/functions-dispatcher` | Functions 执行器 v2 常驻进程（仓库根 `functionsdispatcher/`）：唯一 docker.sock 持有方，resident 实例池 + 租约认领，`:9070` healthz | `functions.dispatcher.*`（executor="dispatcher" 时 url 必填） |
-| `CLI` | `cmd/torchwood` | `bin/torchwood`，`lynx-go/commands` + `sdk/go/server.InvokeJSON` 按 `protoregistry.GlobalFiles` 动态分发；`rpc` 逃生舱覆盖全部 Server RPC，新增 RPC 无需登记。全局旗标在子命令路径之后、位置参数之前给出（环境变量 `TORCHWOOD_CLI_*` 优先）；退出码 0 成功 / 1 参数与校验错 / 2=40x / 3=5xx / 4=429 | `TORCHWOOD_CLI_*` 环境覆盖 |
+| `CLI` | `cmd/torchwood` | `bin/torchwood`（实现随仓库根 `cli/` 包，`cmd/torchwood` 只留 main + 装配），`lynx-go/commands` + `sdk/go/server.InvokeJSON` 按 `protoregistry.GlobalFiles` 动态分发；`rpc` 逃生舱覆盖全部 Server RPC，新增 RPC 无需登记。全局旗标在子命令路径之后、位置参数之前给出（环境变量 `TORCHWOOD_CLI_*` 优先）；退出码 0 成功 / 1 参数与校验错 / 2=40x / 3=5xx / 4=429 | `TORCHWOOD_CLI_*` 环境覆盖 |
 
 三者均 `godotenv.Load()` 加载 `.env`，配置绑定走 `config.NewBindConfigFunc()`（`internal/pkg/config/bind.go:21`），Wire 生成见 `04-codegen.md`。
 

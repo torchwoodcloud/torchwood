@@ -33,7 +33,7 @@ Provide an admin-only replay path that atomically moves a dead-letter row back i
 
 - **API**: `internal/api/servergrpc/outbox.go` thin handler (like `projects.go`), `projectID` from `Principal`, `WithAuditResource("outbox/dead/"+eventID)`. Wire via `internal/app/provides.go` (`events.NewOutboxAdmin`) and `internal/infra/server/grpc.go` (`collectMethodsByAccess` includes new file descriptor, `assertRegisteredMethodsHaveAuthz` already covers it).
 
-- **CLI**: `cmd/torchwood/cmd/outbox.go` adds `torchwood admin outbox list-dead` and `replay` commands using `sdk/go/server` `InvokeJSON` (no direct `genproto` import, per `cmd/torchwood` guard). `sdk/go/server` adds `OutboxService` client (like `projects.go`).
+- **CLI**: `cli/outbox.go` adds `torchwood admin outbox list-dead` and `replay` commands using `sdk/go/server` `InvokeJSON` (no direct `genproto` import, per the CLI import guard, now at `cli/import_guard_test.go`). `sdk/go/server` adds `OutboxService` client (like `projects.go`).
 
 - **Audit**: `audit` interceptor already records `Action=FullMethod` and `ResourceID` from `WithAuditResource`; no new audit code needed beyond handler's `WithAuditResource`.
 
@@ -49,7 +49,7 @@ Provide an admin-only replay path that atomically moves a dead-letter row back i
   - `internal/api/servergrpc` – `TestOutboxService_Replay` (authz: `owner|admin` ok, `member|viewer` denied, API key with `outbox:write` ok).
   - `cmd/torchwood` – `TestBuildOutboxReplayRequest` (like `storage_test.go`).
 
-- **Prior art**: `internal/infra/events/outbox_worker_test.go` (claim/dispatch/failRow), `internal/api/servergrpc/projects_test.go` (List pagination), `internal/infra/auth/validator_test.go` (admin role), `cmd/torchwood/cmd/storage_test.go` (build request).
+- **Prior art**: `internal/infra/events/outbox_worker_test.go` (claim/dispatch/failRow), `internal/api/servergrpc/projects_test.go` (List pagination), `internal/infra/auth/validator_test.go` (admin role), `cli/storage_test.go` (build request).
 
 ## Out of Scope
 

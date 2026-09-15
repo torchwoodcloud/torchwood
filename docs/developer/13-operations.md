@@ -13,7 +13,7 @@
 | **server** | `cmd/server/main.go` | gRPC（`server.grpc.addr` 127.0.0.1:9060）+ grpc-gateway HTTP `/v1/*` + 独立 `serverhttp`（Storage 上传下载、OAuth/Functions/Payments）+ Metrics + Admin Console SPA（`console.Dist`）+ 健康/版本 |
 | **worker** | `cmd/worker/main.go` | 周期/队列作业常驻进程（作业清单见 §1.2）：Functions 执行队列消费（Redis Stream `torchwood:queue:functions-executions`，XREADGROUP 至少一次，4 goroutine 并发；孤儿恢复为**每分钟周期任务**，stale 判定 = 行内 `timeout_seconds + 120s`，NULL 回退 1h，`worker/worker.go:28-35,100-104`）；瞬时失败重入队最多 3 次（`maxProcessAttempts`） |
 | **functions-dispatcher** | `cmd/functions-dispatcher/main.go` | Functions 执行器 v2 常驻进程（仓库根 `functionsdispatcher/`）：唯一 docker.sock 持有方，resident 实例池 + 租约认领，监听 `:9070`（`/healthz` 健康检查）；`functions.executor="dispatcher"`（默认）时必部署 |
-| **CLI** | `cmd/torchwood/main.go` | `bin/torchwood[.exe]`，经 `sdk/go/server` 的 `InvokeJSON` 走 gRPC 调 Server API（不直连 `genproto`） |
+| **CLI** | `cmd/torchwood/main.go` | `bin/torchwood[.exe]`，经 `sdk/go/server` 的 `InvokeJSON` 走 gRPC 调 Server API（不直连 `genproto`）；命令实现随仓库根 `cli/` 包（`cmd/torchwood` 只留 main + 根命令表装配） |
 
 本地开发：
 

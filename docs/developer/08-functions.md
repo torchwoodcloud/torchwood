@@ -74,7 +74,7 @@ USER node
 ```
 
 - **lockfile 强制**：有 `dependencies` 但缺 `package-lock.json` → 构建失败（deployment failed），错误信息：「检测到 dependencies 但缺少 package-lock.json——请提交 lockfile 以保证确定性构建（npm install 会生成）」。无锁安装不可复现，与「构建是平台确定性操作」不变量对齐。
-- **`node_modules` 拒收**：代码包中任意条目路径第一段为 `node_modules`（含目录与文件条目）→ 构建失败：「请勿在代码包中携带 node_modules——平台将在构建期代装依赖（跨平台二进制不兼容）」。CLI deploy 已同步剔除（`cmd/torchwood` 打包排除 `node_modules/.git`）。
+- **`node_modules` 拒收**：代码包中任意条目路径第一段为 `node_modules`（含目录与文件条目）→ 构建失败：「请勿在代码包中携带 node_modules——平台将在构建期代装依赖（跨平台二进制不兼容）」。CLI deploy 已同步剔除（`cli/functions_deploy.go` 打包排除 `node_modules/.git`）。
 - **`--ignore-scripts` 恒定**（一期不提供 opt-in，OQ4 收口）：不变量「构建期不执行用户代码/第三方脚本」——npm 生命周期脚本（postinstall）可执行任意代码。代价：依赖原生编译（node-gyp）或 postinstall 下载二进制的包**不可用**（如 esbuild/swc 的安装版——安装期二进制落盘步骤被跳过，函数执行时报「找不到可执行文件/模块」类错误即此原因；改用纯 JS 等价物或浏览器/WASM 构建）。残余风险（lockfile 为用户可控输入、npm 解析器漏洞）经 lockfile integrity hash 固定 + 构建容器既有 hardening 兜底，构建出网白名单后置（OQ5 收口：一期不限制，registry 拉包必需）。
 - **层缓存加速**：`package.json`/`package-lock.json` 不变的重新部署直接命中 Docker 层缓存，跳过 `npm ci` 拉包，只有代码层重建。
 - 探测与拒收实现在 zip 解压校验层（`internal/infra/functions/docker.go` `extractZipWithLimits`，与 zip slip/符号链接校验同处逐条判定）；模板决策在 `dockerfileFor`（v1）与 `runner.DockerfileFor`（v2/v3 常驻路径），两模板仅 CMD/ENV 差异。python 代装（`requirements.txt` + pip）随 python v2 支持落地。
