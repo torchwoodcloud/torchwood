@@ -192,7 +192,12 @@ func (d *DispatcherExecutor) Execute(ctx context.Context, exec functions.Executi
 		"execution_token": token,
 		// 执行 ID（v3 §1.2/§1.5）：经分发 header x-tw-execution-id 透传给
 		// runner（ctx.executionId / 日志关联）；空则 dispatcher 不发 header。
-		"execution_id":     exec.ExecutionID,
+		"execution_id": exec.ExecutionID,
+		// 调用身份（runner v5）：source/invoking_user_id 经分发 header
+		// x-tw-source / x-tw-invoking-user-id 进 runner ctx（project_id 已随
+		// 网络寻址字段透传，dispatcher 补发 x-tw-project-id header）。
+		"source":           exec.Source,
+		"invoking_user_id": exec.InvokingUserID,
 		"data":             exec.Data,
 		"egress_untrusted": exec.EgressUntrusted,
 		"pool": map[string]any{

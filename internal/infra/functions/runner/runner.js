@@ -16,16 +16,19 @@
  *     ESM 写法需经打包/互操作落成 CJS 导出；
  *   - POST /：两种风格（D9 双轨，同一函数包二选一生效）：
  *       · main 风格：body = TW_DATA JSON，main(data, ctx)。ctx =
- *         { executionToken, apiBaseUrl, executionId }——并发下唯一安全的
- *         请求上下文通道（AsyncLocalStorage 圈住每次调用，v3 §1.2 凭证
- *         串号修复）。process.env.TW_EXECUTION_TOKEN 仍逐请求同步写入
- *         （同步 main 与模块顶层读取兼容）；但含 await 的函数恢复执行后
- *         env 可能已被后续请求覆盖——**必须读 ctx**；
+ *         { executionToken, apiBaseUrl, executionId, source, invokingUserId,
+ *         projectId }（前三 v3 §1.2，后三 v5 调用身份：source 恒非空——
+ *         client / http|cron|event:{trigger_id} / server（缺省回落）；
+ *         invokingUserId 空 = 非用户触发（系统语义）；projectId 是所属
+ *         项目）——并发下唯一安全的请求上下文通道（AsyncLocalStorage
+ *         圈住每次调用，v3 §1.2 凭证串号修复）。process.env.TW_EXECUTION_TOKEN
+ *         仍逐请求同步写入（同步 main 与模块顶层读取兼容）；但含 await 的
+ *         函数恢复执行后 env 可能已被后续请求覆盖——**必须读 ctx**；
  *       · fetch 风格（v4 §2.1）：fetch(request, env)，env =
- *         { EXECUTION_TOKEN, API_BASE_URL, EXECUTION_ID }——请求级三件
- *         经参数传递（v3 §2.1：token 串号问题在该风格下结构性不存在；
- *         functionVariables 仍固化在容器 process.env，函数级非请求级）。
- *         request 是 Node 18+ 原生全局 Request（undici）；
+ *         { EXECUTION_TOKEN, API_BASE_URL, EXECUTION_ID, SOURCE,
+ *         INVOKING_USER_ID, PROJECT_ID }——请求级身份六件经参数传递
+ *         （v3 §2.1：token 串号问题在该风格下结构性不存在；v5 三件与
+ *         ctx 同源）。request 是 Node 18+ 原生全局 Request（undici）；
  *   - 触发器封套（v4 §2.3，对抗审查修正：封套经独立 header 传递）：分发
  *     header `x-tw-trigger-envelope`（base64 JSON：{method,path,raw_query,
  *     headers 白名单}，不含 body，≤12KB）存在时——fetch 风格还原 Request：
@@ -95,7 +98,8 @@ const RESPONSE_HEADER_BLOCKLIST = new Set([
 ]);
 
 // als 圈住每次调用的请求上下文（v3 §1.2）：store = { token, apiBaseUrl,
-// executionId, logs }；console 捕获经 als.getStore() 定位本请求分桶。
+// executionId, source, invokingUserId, projectId, logs }（v5 增调用身份
+// 三件）；console 捕获经 als.getStore() 定位本请求分桶。
 const als = new AsyncLocalStorage();
 
 let userMain = null;
@@ -401,17 +405,48 @@ const server = http.createServer((req, res) => {
     const timeoutS = Number.isFinite(timeoutHeader) && timeoutHeader > 0 ? timeoutHeader : DEFAULT_REQUEST_TIMEOUT_S;
     let executionId = req.headers['x-tw-execution-id'];
     if (typeof executionId !== 'string') executionId = '';
+    // v5 调用身份三件（分发 header，与 token/executionId 同节律）：source
+    // 恒非空——header 缺省/为空回落 'server'（旧 dispatcher 兼容）；非
+    // string 形态（重复 header 的数组）视为空。invokingUserId 空串 = 非用户
+    // 触发（server 面/触发器路径，系统语义）；projectId 是执行所属项目。
+    let source = req.headers['x-tw-source'];
+    if (typeof source !== 'string' || source.length === 0) source = 'server';
+    let invokingUserId = req.headers['x-tw-invoking-user-id'];
+    if (typeof invokingUserId !== 'string') invokingUserId = '';
+    let projectId = req.headers['x-tw-project-id'];
+    if (typeof projectId !== 'string') projectId = '';
     const store = {
       token,
       apiBaseUrl: process.env.TW_API_BASE_URL || '',
       executionId,
+      source,
+      invokingUserId,
+      projectId,
       logs: { out: Buffer.alloc(0), err: Buffer.alloc(0) },
     };
     // v3 §1.2 调用约定：main(data, ctx)。ctx 是并发安全的请求上下文通道。
-    const ctx = { executionToken: store.token, apiBaseUrl: store.apiBaseUrl, executionId: store.executionId };
+    // v5：+ source/invokingUserId/projectId（平台注入的调用身份，函数侧
+    // op 级鉴权与审计依据——值经 AsyncLocalStorage 隔离，并发下与
+    // executionToken 同节律安全）。
+    const ctx = {
+      executionToken: store.token,
+      apiBaseUrl: store.apiBaseUrl,
+      executionId: store.executionId,
+      source: store.source,
+      invokingUserId: store.invokingUserId,
+      projectId: store.projectId,
+    };
     // v4 §2.1 调用约定：fetch(request, env)。env 是每次调用的参数而非
-    // process.env——请求级三件与 ctx 同源（token/apiBaseUrl/executionId）。
-    const env = { EXECUTION_TOKEN: store.token, API_BASE_URL: store.apiBaseUrl, EXECUTION_ID: store.executionId };
+    // process.env——请求级身份件与 ctx 同源（token/apiBaseUrl/executionId
+    // + v5 三件 source/invokingUserId/projectId）。
+    const env = {
+      EXECUTION_TOKEN: store.token,
+      API_BASE_URL: store.apiBaseUrl,
+      EXECUTION_ID: store.executionId,
+      SOURCE: store.source,
+      INVOKING_USER_ID: store.invokingUserId,
+      PROJECT_ID: store.projectId,
+    };
     const entryName = userFetch ? 'fetch()' : 'main()';
 
     let settled = false;

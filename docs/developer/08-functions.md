@@ -131,7 +131,7 @@ USER node
 | 端点 | 入参 → 出参 | 说明 |
 |---|---|---|
 | `POST /v1/dispatch/builds` | `{project_id, function_id, deployment_id, zip_base64, function_timeout_seconds}` → `{error?}` | v2 模板构建；成功后旧 deployment 池 drain（宽限 ≤ 函数超时） |
-| `POST /v1/dispatch/executions` | 执行规格 `{image, project_id, function_id, deployment_id, runtime, spec, timeout_seconds, env, execution_token, data, pool}` → `{status, response, stdout_tail, stderr_tail, duration_ms, status_code, error}` | 池管理热路径；接受调用方 ctx 超时 |
+| `POST /v1/dispatch/executions` | 执行规格 `{image, project_id, function_id, deployment_id, runtime, spec, timeout_seconds, env, execution_token, execution_id, source, invoking_user_id, data, pool}` → `{status, response, stdout_tail, stderr_tail, duration_ms, status_code, error}` | 池管理热路径；接受调用方 ctx 超时；`source`/`invoking_user_id` 经分发 header 进 runner ctx（§4.3.3） |
 | `POST /v1/dispatch/images/remove` | `{function_id, deployment_id}` | 幂等 |
 
 错误映射：排队超限 429 → `ResourceExhausted`、执行超时 504 → `DeadlineExceeded`、缺参 400。`TW_DATA` 由请求体承载、`TW_EXECUTION_TOKEN` 经分发 header 传递——**P0 的 mint→注入→defer revoke 链路不变，常驻的是容器不是凭证**，只换注入通道。
@@ -151,7 +151,7 @@ USER node
 
 **并发模型与可重入契约（红线）**：单 Node 事件循环内多请求交错（非多进程/worker_threads，D1）——**函数作者必须保证 `main` 可重入：模块级可变全局状态在并发下有竞态**，与 Lambda / Cloud Run 同款契约。平台责任 = 默认 `concurrency=1`（不 opt-in 即无暴露，fail-closed）+ 本文档明示 + max_requests/崩溃重建兜底。迁移 000017 落 `functions.concurrency`（`INTEGER NOT NULL DEFAULT 1`，CHECK `1..16`——上限 16 为 2026-09-10 拍板：8 实例 × 16 = 128 并发对单机拓扑够用；管理 API 面随池策略管理切片开放，见 §11 未落地）。池语义变化仅认领条件一处：`ClaimIdle` 从「实例空闲」变为 `inflight < concurrency`（实例记录 inflight 化，释放路径 Lua 原子化防并发 claim/release 交错丢更新），背压顺序不变（认领 → trySpawn → 有界排队 → 超限 429，§4.3）。
 
-**`main(data, ctx)` 第二参数**：runner v3 以 `node:async_hooks` 的 `AsyncLocalStorage` 圈住每次调用，`ctx = { executionToken, apiBaseUrl, executionId }`。**含 await 的 main 必须读 `ctx.executionToken`**：`process.env.TW_EXECUTION_TOKEN` 仍设置（同步 main 与模块顶层读取兼容），但 async 函数在 await 恢复后 env 可能已被并发请求覆盖（凭证串号——A 以 B 的身份干活）；ctx 是并发下唯一安全通道。执行 ID 经分发 header `x-tw-execution-id` 透传进 `ctx.executionId`（日志关联）。
+**`main(data, ctx)` 第二参数**：runner v3 以 `node:async_hooks` 的 `AsyncLocalStorage` 圈住每次调用，`ctx = { executionToken, apiBaseUrl, executionId }`（v5 起追加调用身份三件 `source / invokingUserId / projectId`，见 §4.3.3）。**含 await 的 main 必须读 `ctx.executionToken`**：`process.env.TW_EXECUTION_TOKEN` 仍设置（同步 main 与模块顶层读取兼容），但 async 函数在 await 恢复后 env 可能已被并发请求覆盖（凭证串号——A 以 B 的身份干活）；ctx 是并发下唯一安全通道。执行 ID 经分发 header `x-tw-execution-id` 透传进 `ctx.executionId`（日志关联）。
 
 **per-request 日志分桶**：console 捕获按请求环缓冲（`als.getStore().logs`，模块加载期落实例级兜底）——执行记录 `stdout`/`stderr` 语义从「实例级混流尾部」变为「**本请求** console 输出尾部」（审计口径更准，排障改善）。
 
@@ -178,7 +178,7 @@ exports.fetch = async (request, env) => {
 exports.main = async (data, ctx) => ({ ok: true });
 ```
 
-**env 三件**：fetch 风格的 `env` 是每次调用的**参数**（非 process.env），恒为 `{ EXECUTION_TOKEN, API_BASE_URL, EXECUTION_ID }`——token 经参数传递，并发下串号问题在该风格下结构性不存在（对照 §4.3.1 的 ctx）。functionVariables 仍固化在容器 `process.env`（函数级非请求级，第三方库读 env 照常工作）；`env` 参数与 data 同计 32KB 预算（token/baseUrl 约 200B 量级）。
+**env 三件**：fetch 风格的 `env` 是每次调用的**参数**（非 process.env），恒为 `{ EXECUTION_TOKEN, API_BASE_URL, EXECUTION_ID }`（v5 起追加调用身份三件 `SOURCE / INVOKING_USER_ID / PROJECT_ID`，与 ctx 同源，见 §4.3.3）——token 经参数传递，并发下串号问题在该风格下结构性不存在（对照 §4.3.1 的 ctx）。functionVariables 仍固化在容器 `process.env`（函数级非请求级，第三方库读 env 照常工作）；`env` 参数与 data 同计 32KB 预算（token/baseUrl 约 200B 量级）。
 
 **触发器 sync 完整透传示例**（D10：HTTP 触发器 + fetch 风格 = 标准 Web 处理器）：
 
@@ -194,6 +194,32 @@ exports.fetch = async (request, env) => {
 ```
 
 sync 模式下函数返回的 `Response` 完整透传给调用方：HTTP status（`ExecutionResult.StatusCode` ≥ 100 即函数 HTTP status）、headers（runner 侧已过滤 hop-by-hop 与 date/server/host 等平台头；handler 侧第二层白名单过滤，见 `function_triggers_handler.go` transparentHeaderBlocklist）、body（>64KB 截断，超限头/体不回传）。自定义状态码、二进制（`body_base64` 无损）、302 重定向从此可达。main 风格封套照旧进 TW_DATA（双轨并存到 main 退役）。一期限制：invoke 路径（server/client）不回传 headers、body 全缓冲不流式（OQ7 收口）；`waitUntil` 后台任务不做。
+
+### 4.3.3 ctx 调用身份三件（runner v5）
+
+平台经**可信通道**把调用身份注入函数运行时，handler 据此做 op 级鉴权与审计——「身份由平台注入」原则在 handler 侧的补全（此前 `invoking_user_id` 只存在于执行行与 execution token 的服务端投影，函数内做 op 级鉴权没有可信输入）。
+
+**注入链路**（与 `x-tw-execution-token` / `x-tw-execution-id` 同一通道、同节律）：执行记录 `trigger_source` / `invoking_user_id` / 所属项目经 `buildExecution`（`internal/app/functions/executions.go`）进执行规格 → dispatcher 客户端进分发请求体（`source` / `invoking_user_id` / `project_id`）→ dispatcher 经分发 header `x-tw-source` / `x-tw-invoking-user-id` / `x-tw-project-id` 注入 runner → main 风格读 `ctx`、fetch 风格读 `env` 参数（`SOURCE` / `INVOKING_USER_ID` / `PROJECT_ID`），两风格同源。**并发安全性与 `ctx.executionToken` 同节律**：值进 AsyncLocalStorage 圈住的请求级 store（不落 `process.env`、无跨请求覆盖面），实例内多路复用（§4.3.1）下并发请求各自拿到自身身份。
+
+| 字段 | 类型 | 取值 | 何时为空 |
+|---|---|---|---|
+| `ctx.source` | string | `client`（客户端调用面 §13）/ `http:{trigger_id}` / `cron:{trigger_id}` / `event:{trigger_id}`（触发器来源，含 trigger 前缀）/ `server`（Server 面 `CreateExecution`） | **恒非空**——空 `trigger_source` 由平台映射为 `server`；header 缺省（v5 前分发链路）时 runner 回落 `server` |
+| `ctx.invokingUserId` | string | 客户端调用面的调用用户 id（principal 注入，非请求体自报，不可伪造） | 空串 = 非用户触发（server 面 / 触发器路径，**系统语义**）——函数不得把空值当匿名调用者放行 |
+| `ctx.projectId` | string | 执行所属项目 id | 恒非空（分发请求必带 project）；防御性容忍空串 |
+
+```js
+// op 级鉴权示例（rpc 封套配合，见 §13.7）：
+exports.main = async (data, ctx) => {
+  if (data.type === "rpc" && data.op === "admin") {
+    if (ctx.source !== "client" || !ctx.invokingUserId) {
+      return { error: "forbidden" };        // 非用户触发不进管理操作
+    }
+    // …按 ctx.invokingUserId 鉴权/审计…
+  }
+};
+```
+
+**生效条件**：字段随 runner 模板 v5（`RunnerTemplateVersion = 5`）起注入——存量 deployment 需重新 `CreateDeployment` 获 v5 模板（模板版本化重建语义，§4.3）；v1 docker executor（无 runner ctx）不注入，函数侧不应假设字段必然存在（防御性读法同 `ctx.executionToken`）。
 
 ## 4.4 同步快路径两写预占记账（§6 约束①，K9）
 
@@ -424,6 +450,39 @@ if (res.status === "completed") {
 ```
 
 Go SDK：`client.New(...).Functions.InvokeString(ctx, "daily_signin", data, idempotencyKey, "")`。
+
+### 13.7 rpc 调用封套（多操作函数的入口分发约定）
+
+调用方（mlbridge 经 client 面中继，或直调本面的客户端）调用函数时，`data` 采用 **type 判别封套**——与事件投影（§12.5，`type:"event"`）、HTTP 触发器封套同一「先判型再分发」哲学：
+
+```json
+{
+  "type": "rpc",
+  "op": "sum",
+  "rid": "<请求id>",
+  "args": { "a": 1, "b": 2 }
+}
+```
+
+- **顶层保留键 `type` / `op` / `rid` / `args` 是版本化契约：只增不改**。调用方全权组装封套；函数按保留键分发，未知键透传不解释；
+- `type:"rpc"` 表示同步 RPC 调用：`op` 是操作名（调用方以 method/channel 寻址函数、以 op 选操作）、`rid` 是调用方请求 id（应答关联）、`args` 是操作参数 JSON object（无参数为 `{}`）；`type:"event"` 是既有事件投影的判别值；
+- 多操作函数（或多触发器同居）应在入口统一 `switch (data.type)` 分发——一个函数镜像（一个暖实例池）暴露多个操作，避免一 op 一函数的构建与保温成本；
+
+```js
+// index.js —— event + rpc 同居分发的参考形态
+exports.main = async (data, ctx) => {
+  switch (data.type) {
+    case "event": return handleEvent(data, ctx);        // 事件投影（§12.5）
+    case "rpc":   return (handlers[data.op] || unknownOp)(data.args, ctx);
+    default:      return { error: "unknown invocation type" };
+  }
+};
+const handlers = {
+  sum: (args) => args.a + args.b,
+};
+```
+
+- **身份不入封套**：客户端可绕过调用方直调本面伪造任意 `data`，封套是路由约定不是信任边界——op 级鉴权与审计读 `ctx.invokingUserId` / `ctx.source`（§4.3.3，平台可信注入）。
 
 ## 14 参考
 

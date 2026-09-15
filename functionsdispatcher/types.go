@@ -126,9 +126,16 @@ type ExecuteRequest struct {
 	// ExecutionID 是平台执行 ID（v3 §1.2/§1.5：经分发 header
 	// x-tw-execution-id 透传给 runner，供 ctx.executionId / 日志关联）。
 	// A2 才从 app 侧传入，本切片零值即不发 header。
-	ExecutionID string     `json:"execution_id,omitempty"`
-	Data        string     `json:"data"`
-	Pool        PoolPolicy `json:"pool"`
+	ExecutionID string `json:"execution_id,omitempty"`
+	// ——调用身份（runner v5，mlbridge fn-rpc 设计 §2.5）——执行行
+	// trigger_source / invoking_user_id 的投影，经分发 header x-tw-source /
+	// x-tw-invoking-user-id 进 runner ctx（source / invokingUserId；
+	// project_id 复用 ProjectID 字段补发 x-tw-project-id）。空则不发 header
+	//（runner 对 source 缺省回落 "server"）。
+	Source         string     `json:"source,omitempty"`
+	InvokingUserID string     `json:"invoking_user_id,omitempty"`
+	Data           string     `json:"data"`
+	Pool           PoolPolicy `json:"pool"`
 	// ——HTTP 触发器封套通道（v3 §2.3/D10）——TriggerEnvelope 非空 = 分发
 	// 请求改走封套模式：①封套元数据经分发 header `x-tw-trigger-envelope`
 	//（base64 JSON，不含 body；编码后 ≤12KB，Dispatch 入口校验超限

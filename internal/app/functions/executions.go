@@ -699,6 +699,13 @@ func (f *Functions) buildExecution(fn *domainfunctions.Function, rec *domainfunc
 		// 单实例并发（v3 §1.1，降级判定后的生效值）+ 执行 ID 透传。
 		Concurrency: concurrency,
 		ExecutionID: rec.ID,
+		// 调用身份投影（runner v5）：执行行的 trigger_source/invoking_user_id
+		// 随执行规格贯通到 runner ctx（source/invokingUserId/projectId）——
+		// server 面空 trigger_source 映射为 "server" 字面值（runner ctx.source
+		// 恒非空，handler 无需判空区分）；project 复用 ProjectID 字段。v1
+		// docker executor 忽略（无 runner ctx 概念）。
+		Source:         runnerSource(rec.TriggerSource),
+		InvokingUserID: rec.InvokingUserID,
 		// HTTP 触发器封套通道（v3 §2.3/D10）：非触发器调用恒 nil/nil，
 		// dispatcher 不进封套模式。
 		TriggerEnvelope: triggerEnvelope,
@@ -706,6 +713,18 @@ func (f *Functions) buildExecution(fn *domainfunctions.Function, rec *domainfunc
 		// egress 分类（P2 安全切片）：infra 据此选择常规/internal 网络。
 		EgressUntrusted: egressUntrusted,
 	}
+}
+
+// runnerSource 把执行行 trigger_source（http:{id} / cron:{id} / event:{id} /
+// client / 空 = server 面）投影为 runner ctx.source 的取值：空值映射为
+// "server" 字面值（runner v5 调用身份三件之一）——ctx.source 恒非空，
+// handler 按「前缀 = 触发器来源、client = 客户端调用、server = 平台面」
+// 分发无需判空。非空值（含 trigger 前缀）原样透传。
+func runnerSource(triggerSource string) string {
+	if triggerSource == "" {
+		return executionSourceServer
+	}
+	return triggerSource
 }
 
 // mintExecutionToken 铸造本次执行的短期 token（P0 执行身份）。TTL = 函数

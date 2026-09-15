@@ -180,11 +180,14 @@ func TestRunnerFetch_NoEnvelope(t *testing.T) {
 	skipWithoutFetchAPI(t)
 	base := startRunner(t, `module.exports.fetch = async (request, env) => {
   const data = await request.json();
-  return Response.json({ url: request.url, method: request.method, data, execId: env.EXECUTION_ID, token: env.EXECUTION_TOKEN, apiBase: env.API_BASE_URL });
+  return Response.json({ url: request.url, method: request.method, data, execId: env.EXECUTION_ID, token: env.EXECUTION_TOKEN, apiBase: env.API_BASE_URL, source: env.SOURCE, invokingUserId: env.INVOKING_USER_ID, projectId: env.PROJECT_ID });
 };`, "TW_API_BASE_URL=http://tw-api.internal:8080")
 	status, body := invokeJSON(t, base, `{"n":7}`, map[string]string{
-		"X-Tw-Execution-Token": "twx_tok",
-		"X-Tw-Execution-Id":    "exec-9",
+		"X-Tw-Execution-Token":  "twx_tok",
+		"X-Tw-Execution-Id":     "exec-9",
+		"X-Tw-Source":           "client",
+		"X-Tw-Invoking-User-Id": "user-1",
+		"X-Tw-Project-Id":       "p1",
 	})
 	if status != 200 || !body.Ok {
 		t.Fatalf("invoke failed: %d %+v", status, body)
@@ -192,6 +195,8 @@ func TestRunnerFetch_NoEnvelope(t *testing.T) {
 	for _, want := range []string{
 		`"url":"http://function/"`, `"method":"POST"`, `"n":7`,
 		`"execId":"exec-9"`, `"token":"twx_tok"`, `"apiBase":"http://tw-api.internal:8080"`,
+		// v5 调用身份三件：与 ctx 同源（client 链路样例）。
+		`"source":"client"`, `"invokingUserId":"user-1"`, `"projectId":"p1"`,
 	} {
 		if !strings.Contains(fetchBodyText(body), want) {
 			t.Fatalf("result 缺少 %s: %s", want, fetchBodyText(body))

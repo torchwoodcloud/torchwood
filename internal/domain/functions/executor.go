@@ -44,6 +44,20 @@ type Execution struct {
 	// header x-tw-execution-id 透传给 runner（ctx.executionId / 日志关联）；
 	// 空则不发 header。
 	ExecutionID string
+	// ——调用身份投影（runner v5，mlbridge fn-rpc 设计 §2.5 第 1 项）——
+	// 把执行记录的调用身份随执行规格贯通到 runner ctx（source /
+	// invokingUserId；projectId 由 ProjectID 字段承载），handler 据此做 op
+	// 级鉴权与审计——「身份由平台注入」原则在 handler 侧的补全。
+	// Source 是触发来源（trigger_source 列原值：client / http:{trigger_id} /
+	// cron:{trigger_id} / event:{trigger_id}；server 面为 "server"——app 层
+	// buildExecution 把空 trigger_source 映射为该字面值）。dispatcher 经分发
+	// header x-tw-source 透传给 runner（ctx.source）；空则不发 header。
+	Source string
+	// InvokingUserID 是调用用户 id（客户端调用面 invoking_user_id 列）；
+	// 空串 = 非用户触发（server 面/触发器路径，系统语义——函数不得把空值
+	// 当作匿名调用者放行）。dispatcher 经分发 header x-tw-invoking-user-id
+	// 透传给 runner（ctx.invokingUserId）；空则不发 header。
+	InvokingUserID string
 	// EgressUntrusted 是 egress 分类结果（P2 安全切片，设计 Security #6）：
 	// true = 不可信函数（client_callable 或存在 http/cron 触发器），容器
 	// attach internal 变体网络（tw-func-<project>-int，出网全 deny）；

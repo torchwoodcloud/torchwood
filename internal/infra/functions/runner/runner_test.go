@@ -100,15 +100,16 @@ func TestDockerfileFor_UnknownRuntime(t *testing.T) {
 	}
 }
 
-// TestTemplateVersion_v4 模板版本单一事实源（v3 §2.1：RunnerTemplateVersion
-// 3 → 4，runner.go 编译期引用防漂移；并发降级判定基准固定在
-// MinConcurrencyTemplateVersion=3，不随本版本漂移）。
-func TestTemplateVersion_v4(t *testing.T) {
-	if TemplateVersion != 4 {
-		t.Fatalf("TemplateVersion = %d, want 4 (v3 切片 C fetch 接口必须递增)", TemplateVersion)
+// TestTemplateVersion_v5 模板版本单一事实源（v5 = 调用身份 ctx 三件，
+// mlbridge fn-rpc 设计 §2.5：RunnerTemplateVersion 4 → 5，runner.go 编译期
+// 引用防漂移；并发降级判定基准固定在 MinConcurrencyTemplateVersion=3，
+// 不随本版本漂移）。
+func TestTemplateVersion_v5(t *testing.T) {
+	if TemplateVersion != 5 {
+		t.Fatalf("TemplateVersion = %d, want 5 (v5 调用身份 ctx 三件必须递增)", TemplateVersion)
 	}
 	if domainfunctions.MinConcurrencyTemplateVersion != 3 {
-		t.Fatalf("MinConcurrencyTemplateVersion = %d, want 3（v4 版本 bump 不得把存量 v3 deployment 误降级）", domainfunctions.MinConcurrencyTemplateVersion)
+		t.Fatalf("MinConcurrencyTemplateVersion = %d, want 3（v5 版本 bump 不得把存量 v3 deployment 误降级）", domainfunctions.MinConcurrencyTemplateVersion)
 	}
 }
 
@@ -402,4 +403,44 @@ func TestRunnerSmoke_HealthInflight(t *testing.T) {
 	if got := healthInflight(t, base); got != 0 {
 		t.Fatalf("完成后 health inflight = %d, want 0", got)
 	}
+}
+
+// TestRunnerSmoke_IdentityCtxFields v5 调用身份三件：分发 header
+// x-tw-source / x-tw-invoking-user-id / x-tw-project-id → ctx.source /
+// invokingUserId / projectId。client 链路（source=client + 真实用户）与
+// event 链路（source 含 trigger 前缀 + 无用户）双覆盖；header 全缺省时
+// source 回落 "server"（v5 前分发链路兼容），invokingUserId/projectId 落空串。
+func TestRunnerSmoke_IdentityCtxFields(t *testing.T) {
+	base := startRunner(t, `module.exports.main = function (data, ctx) {
+  return { source: ctx.source, invokingUserId: ctx.invokingUserId, projectId: ctx.projectId };
+};`)
+
+	assertResult := func(headers map[string]string, wants []string) {
+		t.Helper()
+		status, body := invokeJSON(t, base, `{}`, headers)
+		if status != 200 || !body.Ok {
+			t.Fatalf("invoke failed: %d %+v", status, body)
+		}
+		for _, want := range wants {
+			if !strings.Contains(string(body.Result), want) {
+				t.Fatalf("result 缺少 %s: %s", want, body.Result)
+			}
+		}
+	}
+
+	// client 链路：三 header 齐备 → ctx 三件原样可达。
+	assertResult(map[string]string{
+		"X-Tw-Source":           "client",
+		"X-Tw-Invoking-User-Id": "user-1",
+		"X-Tw-Project-Id":       "p1",
+	}, []string{`"source":"client"`, `"invokingUserId":"user-1"`, `"projectId":"p1"`})
+
+	// event 链路：source 含 trigger 前缀、无用户 header → invokingUserId 空串。
+	assertResult(map[string]string{
+		"X-Tw-Source":     "event:trg-evt-1",
+		"X-Tw-Project-Id": "p1",
+	}, []string{`"source":"event:trg-evt-1"`, `"invokingUserId":""`, `"projectId":"p1"`})
+
+	// header 全缺省（v5 前分发链路）：source 回落 "server"，其余空串。
+	assertResult(nil, []string{`"source":"server"`, `"invokingUserId":""`, `"projectId":""`})
 }

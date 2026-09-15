@@ -35,7 +35,8 @@ const RunnerPort = 18080
 // TemplateVersion 是 runner 镜像模板版本（runner.js 或 Dockerfile 模板任何
 // 语义变更都必须递增；单一事实源为 domainfunctions.RunnerTemplateVersion，
 // 此处编译期引用防漂移。v4 = fetch 入口探测/触发器封套还原/Response 封套
-// 扩展，v3 §2.1–§2.4）。
+// 扩展，v3 §2.1–§2.4；v5 = ctx/env 调用身份三件
+// source/invokingUserId/projectId，mlbridge fn-rpc 设计 §2.5）。
 const TemplateVersion = int(domainfunctions.RunnerTemplateVersion)
 
 // NodeRunnerJS 返回嵌入的 node runner 源码（构建镜像时写入 build context）。

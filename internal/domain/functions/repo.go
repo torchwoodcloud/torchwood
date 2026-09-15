@@ -42,12 +42,14 @@ func IsTriggerSource(triggerSource string) bool {
 }
 
 // RunnerTemplateVersion 是平台 runner 镜像模板版本（P0.5 执行器 v2 → v3
-// 实例内多路复用 §1.2 → v4 Web 标准 fetch 接口 §2.1，docs/design/
-// functions-v3.md，端口级契约单一事实源）：模板任何语义变更递增；
+// 实例内多路复用 §1.2 → v4 Web 标准 fetch 接口 §2.1 → v5 调用身份 ctx
+// 三件，docs/design/functions-v3.md 与 mlbridge fn-rpc 设计 §2.5；端口级
+// 契约单一事实源）：模板任何语义变更递增；
 // infra/functions/runner 的模板资产与本常量同步（编译期断言），构建时写入
 // function_deployments.template_version，存量 deployment 据此按新模板重建。
-// 0 = v1 模板或未知。
-const RunnerTemplateVersion int32 = 4
+// 0 = v1 模板或未知。v5 = ctx/env 增 source/invokingUserId/projectId
+// （分发 header x-tw-source/x-tw-invoking-user-id/x-tw-project-id）。
+const RunnerTemplateVersion int32 = 5
 
 // MinConcurrencyTemplateVersion 是支持实例内并发的最低模板版本（v3 §1.5
 // 降级保护的判定基准）：v3 引入 per-request 基建（ctx/分桶/per-request

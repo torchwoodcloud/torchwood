@@ -161,3 +161,72 @@ func TestExecutionIdentity_ClientInvokeMintsInvokingUser(t *testing.T) {
 	require.Equal(t, tokens.tokens[0], executor.calls[0].Env[twExecutionTokenEnv])
 	require.Equal(t, []string{tokens.tokens[0]}, tokens.revoked)
 }
+
+// 调用身份贯通（runner v5，mlbridge fn-rpc 设计 §2.5 第 1 项）：执行行的
+// trigger_source / invoking_user_id 随执行规格（domainfunctions.Execution）
+// 贯通到分发链路（dispatcher 侧经 header 进 runner ctx）。三条链路：
+//   - client 来源（ClientInvoke 同步）：source="client"、invokingUserId=真实
+//     调用用户、projectId 随行；
+//   - event 来源（InvokeTrigger 异步，Source=event:{trigger_id}）：source 含
+//     trigger 前缀、invokingUserId 为空（系统语义——事件源是终端用户写入，
+//     但执行身份不是该用户，身份归 execution token 与审计行）；
+//   - server 面（CreateExecution 不设 Source）：空 trigger_source 映射为
+//     "server" 字面值（runner ctx.source 恒非空）。
+func TestExecutionIdentity_RunnerCtxSourceFields(t *testing.T) {
+	t.Run("client 来源：source=client + invokingUserId=真实用户", func(t *testing.T) {
+		repo := newMockRepo()
+		seedClientCallableFunction(t, repo, "p1", "fn_client")
+		executor := newMockExecutor(&domainfunctions.ExecutionResult{StatusCode: 0}, nil)
+		uc := newTestUC(executor, repo, newMockQueue())
+		uc.clientQuota = &fakeQuotaLimiter{}
+
+		_, err := uc.ClientInvoke(endUserCtx(), ClientInvokeCommand{ProjectID: "p1", FunctionID: "fn_client"})
+		require.NoError(t, err)
+
+		require.Len(t, executor.calls, 1)
+		require.Equal(t, domainfunctions.TriggerSourceClient, executor.calls[0].Source)
+		require.Equal(t, "user-1", executor.calls[0].InvokingUserID, "invoking_user_id 必须来自 principal 注入")
+		require.Equal(t, "p1", executor.calls[0].ProjectID)
+	})
+
+	t.Run("event 来源：source 含 trigger 前缀 + invokingUserId 为空", func(t *testing.T) {
+		repo := newMockRepo()
+		seedReadyFunction(repo, "p1", "fn_event", true, 15)
+		executor := newMockExecutor(&domainfunctions.ExecutionResult{StatusCode: 0}, nil)
+		q := newMockQueue()
+		uc := newTestUC(executor, repo, q)
+
+		source := domainfunctions.TriggerTypeEvent + ":trg-evt-1"
+		_, err := uc.InvokeTrigger(context.Background(), InvokeTriggerCommand{
+			ProjectID:  "p1",
+			FunctionID: "fn_event",
+			Data:       `{"type":"event","event_id":"ev_1"}`,
+			Async:      true,
+			Source:     source,
+		})
+		require.NoError(t, err)
+		// 异步路径：经队列消费后执行（身份经执行行持久化，不依赖队列消息）。
+		require.Len(t, q.enqueued, 1)
+		require.NoError(t, uc.ProcessExecutionPayload(context.Background(), q.enqueued[0]))
+
+		require.Len(t, executor.calls, 1)
+		require.Equal(t, source, executor.calls[0].Source, "event 触发的 trigger 前缀原样贯通")
+		require.Empty(t, executor.calls[0].InvokingUserID, "触发器路径无调用用户（系统语义）")
+		require.Equal(t, "p1", executor.calls[0].ProjectID)
+	})
+
+	t.Run("server 面：空 trigger_source 映射为 server", func(t *testing.T) {
+		repo := newMockRepo()
+		seedReadyFunction(repo, "p1", "fn_server", true, 15)
+		executor := newMockExecutor(&domainfunctions.ExecutionResult{StatusCode: 0}, nil)
+		uc := newTestUC(executor, repo, newMockQueue())
+
+		_, err := uc.CreateExecution(platformAdminCtx(), CreateExecutionCommand{ProjectID: "p1", FunctionID: "fn_server"})
+		require.NoError(t, err)
+
+		require.Len(t, executor.calls, 1)
+		require.Equal(t, executionSourceServer, executor.calls[0].Source, "server 面空 trigger_source 投影为字面值 server")
+		require.Empty(t, executor.calls[0].InvokingUserID)
+		require.Equal(t, "p1", executor.calls[0].ProjectID)
+	})
+}

@@ -111,7 +111,9 @@ type runnerClient interface {
 	Health(ctx context.Context, ip string) error
 	// Invoke 分发一次执行：body = TW_DATA JSON（封套模式 = 触发器原始
 	// body，v3 §2.3）；header 带执行 token + execution id（v3 §1.2
-	// ctx.executionId 来源，空则不发）+ 函数超时（v3 per-request 超时
+	// ctx.executionId 来源，空则不发）+ 调用身份三件（runner v5：source/
+	// invoking_user_id/project_id → ctx.source/invokingUserId/projectId，
+	// 空则不发）+ 函数超时（v3 per-request 超时
 	// header，runner 缺省 30s）+ 触发器封套元数据（x-tw-trigger-envelope，
 	// TriggerEnvelope 非空时）；超时/连接失败返回 error（调用方据此分类
 	// 处置——超时不杀实例，传输错误杀实例，v3 §1.4）。
@@ -209,6 +211,20 @@ func (h *httpRunner) Invoke(ctx context.Context, ip string, req ExecuteRequest, 
 	if executionID := req.ExecutionID; executionID != "" {
 		// v3 §1.2：平台执行 ID 透传，runner 侧进 ctx.executionId（日志关联）。
 		req2.Header.Set("X-Tw-Execution-Id", executionID)
+	}
+	// 调用身份（runner v5）：source/invoking_user_id/project_id 经分发
+	// header 进 runner ctx（source/invokingUserId/projectId）——与 token/
+	// executionId 同一 header 通道、同节律（逐请求、并发安全）；空则不发
+	//（runner 对 source 缺省回落 "server"）。project_id 在请求体已有（网络
+	// 寻址），此处补发 header 是 ctx 三件的单一来源。
+	if source := req.Source; source != "" {
+		req2.Header.Set("X-Tw-Source", source)
+	}
+	if userID := req.InvokingUserID; userID != "" {
+		req2.Header.Set("X-Tw-Invoking-User-Id", userID)
+	}
+	if projectID := req.ProjectID; projectID != "" {
+		req2.Header.Set("X-Tw-Project-Id", projectID)
 	}
 	if envelopeHeader != "" {
 		// v3 §2.3：触发器封套元数据（base64 JSON，不含 body）。
