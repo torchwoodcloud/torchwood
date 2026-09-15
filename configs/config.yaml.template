@@ -116,16 +116,11 @@ storage:
     path: "./data/files"
 
 functions:
-  # executor 二选一（不同时启用）：
-  #   "docker"      v1 回退模式：每请求一容器、进程内执行（server/worker 需挂
-  #                 docker.sock）。默认值——未配置时生效。
-  #   "dispatcher"  v2 默认执行模型（P0.5 执行器 v2）：常驻 runner 容器池 +
-  #                 独立 functions-dispatcher 进程分发；server/worker 零
-  #                 daemon 依赖，docker.sock 只挂给 dispatcher。python 函数
-  #                 v2 暂不支持（构建期明确报错），请对 python 函数保持 v1。
-  # env: TORCHWOOD_FUNCTIONS_EXECUTOR
-  executor: "docker"
+  # 函数执行统一经 functions-dispatcher 分发（常驻 runner 容器池；v1 docker
+  # 执行器已移除）：server/worker 零 daemon 依赖，docker.sock 只挂给
+  # dispatcher（functions.docker.host 供其消费）。
   docker:
+    # docker.sock 地址（仅 functions-dispatcher 进程消费）。
     host: "unix:///var/run/docker.sock"
     # 函数执行容器网络。默认（留空/删除本键）为 per-project 隔离网络
     # tw-func-<project_id>：项目间函数容器互不可达（Round4 J5-4）。
@@ -145,9 +140,10 @@ functions:
     # 留空 = 不注入 TW_API_BASE_URL（函数无法回访平台 API）。
     api_base_url: ""                  # env: TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL
   dispatcher:
-    # P0.5 执行器 v2 分发通路（executor="dispatcher" 时生效）。
-    # url 指向 functions-dispatcher 的内网 HTTP 端点（compose 拓扑：
-    # http://functions-dispatcher:9070）。
+    # 分发通路（server/worker 执行函数的唯一通路）：url 指向
+    # functions-dispatcher 的内网 HTTP 端点（compose 拓扑：
+    # http://functions-dispatcher:9070）。**必填**——缺失时 server/worker
+    # 拒绝启动。
     # env: TORCHWOOD_FUNCTIONS_DISPATCHER_URL
     url: ""
     # 内网共享密钥（可选；与 dispatcher 进程配置同值，空 = 不校验，仅限

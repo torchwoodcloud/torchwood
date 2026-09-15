@@ -1,3 +1,5 @@
+> ⚠️ 现状更新（2026-09-16）：v1 docker 执行器（每请求一容器）已移除，常驻 runner（dispatcher 池）为唯一执行路径；python-3.11 运行时随 v1 一并移除（python runner 未实现，未来以本稿语义回归）。文中「v2 尚未支持 python 时暂走 v1」等表述已成历史。现状以 `docs/developer/08-functions.md` 为准。
+
 # Functions v3：并发复用、接口现代化与开发者体验
 
 > 状态：**已批准（2026-09-10 owner 拍板：D1–D15 全部通过、OQ1–OQ9 全部收口；按 Rollout 顺序进入实施——A 切片一先行、B/DX 并行、C 接口待 A 落地、D/E 独立并行；C/D 合入前各过一轮安全自查）**

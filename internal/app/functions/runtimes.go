@@ -2,12 +2,12 @@ package functions
 
 import domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 
-// runtimes 静态运行时表：node-18.0 → node:18-alpine（入口 index.js 的 main）；
-// python-3.11 → python:3.11-alpine（入口 main.py 的 main）。entrypoint 字段 MVP
-// 仅占位，执行入口固定（见实现方案 §8）。
+// runtimes 静态运行时表：node-18.0 → node:18-alpine（入口 index.js 的
+// main）。entrypoint 字段 MVP 仅占位，执行入口固定（见实现方案 §8）。
+// python-3.11 已随 v1 docker 执行器移除（常驻执行器 node-only，python
+// runner 未实现）；历史 python 函数再次部署将在构建期明确报错。
 var runtimes = []domainfunctions.RuntimeInfo{
 	{ID: "node-18.0", Name: "Node.js 18", Entrypoint: "index.main"},
-	{ID: "python-3.11", Name: "Python 3.11", Entrypoint: "main.main"},
 }
 
 var specifications = []domainfunctions.SpecificationInfo{

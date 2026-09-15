@@ -33,6 +33,17 @@ func ValidateAppConfig(logger *slog.Logger, c *config.AppConfig) error {
 	return ValidateJWTSecret(c.GetSecurity().GetJwt().GetSecret())
 }
 
+// ValidateFunctionsDispatchConfig 校验函数分发通路配置：v1 docker 执行器已
+// 移除，函数执行统一经 functions-dispatcher 分发，functions.dispatcher.url
+// 必填（启动期 fail-fast，不留到首次执行）。仅 server/worker 组合根调用
+// ——functions-dispatcher 进程自身是通路终点，不消费该键。
+func ValidateFunctionsDispatchConfig(c *config.AppConfig) error {
+	if c.GetFunctions().GetDispatcher().GetUrl() == "" {
+		return fmt.Errorf("functions.dispatcher.url is required (function execution requires the functions-dispatcher service; env TORCHWOOD_FUNCTIONS_DISPATCHER_URL)")
+	}
+	return nil
+}
+
 // WeakSecretTokens 是已知弱默认值/常见占位密钥的子串黑名单。
 var WeakSecretTokens = []string{
 	"change-me",

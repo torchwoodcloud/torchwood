@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
@@ -37,9 +36,10 @@ const (
 	workerRebuildTimeout = 5 * time.Minute
 )
 
-// 执行身份 env（P0）：注入容器的是 token 原值与 Server API 可达地址。两者
-// 计入 env+data ≤32KB 预算（token ≈ 60B、URL 典型 ≤100B，量级无碍；合并
-// 预算兜底在 infra/functions docker.go maxExecEnvBudgetBytes）。
+// 执行身份 env（P0）：注入容器的是 token 原值与 Server API 可达地址。token
+// 由 dispatcher 客户端从 env 摘出经分发 header 传递（常驻的是容器不是凭证）；
+// api_base_url 留在 env。data 上限在 app 层校验（maxExecutionDataBytes，
+// 触发器 body 通道放宽至 maxTriggerDataBytes）。
 const (
 	twExecutionTokenEnv = "TW_EXECUTION_TOKEN"
 	twAPIBaseURLEnv     = "TW_API_BASE_URL"
@@ -54,12 +54,12 @@ const (
 // ErrInvalidQueuePayload 标识无法解析或缺失 ID 的队列消息（worker 不应重试）。
 var ErrInvalidQueuePayload = errors.New("invalid queue payload")
 
-// 执行信号量：同步执行与 worker 共用（§5.3）。
-// 默认进程内 4/16，生产通过 pkg/semaphore.RedisSemaphore 提供跨进程全局配额
-// （W-F，SETNX+TTL 租约，TTL 覆盖最长执行；崩溃后 TTL 过期自动释放）。
+// 构建信号量：部署构建共用（§5.3）。默认进程内 4，生产通过
+// pkg/semaphore.RedisSemaphore 提供跨进程全局配额（W-F，SETNX+TTL 租约，
+// TTL 覆盖最长构建；崩溃后 TTL 过期自动释放）。执行并发不设全局信号量
+// ——常驻实例池由 functions-dispatcher 内部管控。
 const (
 	maxConcurrentBuilds = 4
-	maxConcurrentRuns   = 16
 )
 
 type CreateExecutionCommand struct {
@@ -96,14 +96,10 @@ type CreateExecutionCommand struct {
 	IdempotencyKey string
 }
 
-// effectiveDataLimit 计算本次执行的 data 上限：默认 32KB（execve 单变量
-// 硬限制余量）；触发器路径在 v2（dispatcher body 通道）下放宽到调用方
-// 上限（≤1MB，封套校验），v1（env 通道）保持 32KB。
+// effectiveDataLimit 计算本次执行的 data 上限：默认 32KB；触发器路径经
+// dispatcher body 通道放宽到调用方上限（≤1MB，封套校验）。
 func (f *Functions) effectiveDataLimit(override int) int {
 	if override <= 0 {
-		return maxExecutionDataBytes
-	}
-	if !f.executorV2() {
 		return maxExecutionDataBytes
 	}
 	if override > maxTriggerDataBytes {
@@ -306,25 +302,9 @@ func (f *Functions) selectDeployment(ctx context.Context, fn *domainfunctions.Fu
 // TemplateVersion 供并发降级判定（v3 §1.5）。triggerEnvelope/rawBody 是
 // HTTP 触发器封套通道（v3 §2.3/D10；非触发器调用恒 nil/nil）。
 //
-// 信号量：v2（dispatcher）路径跳过全局 run 信号量——常驻实例池由
-// dispatcher 内部管控（池上限/有界排队），全局 16 槽是 per-execution 预算，
-// 双重限流会互相饿死（设计 §6）；v1 回退模式保留信号量。
+// 执行并发不设全局 run 信号量：常驻实例池由 dispatcher 内部管控（池上限/
+// 有界排队），全局配额双重限流会互相饿死（设计 §6）。
 func (f *Functions) runExecution(ctx context.Context, fn *domainfunctions.Function, rec *domainfunctions.ExecutionRecord, dep *domainfunctions.Deployment, vars map[string]string, data string, triggerEnvelope *domainfunctions.TriggerEnvelope, rawBody []byte, egressUntrusted bool) (*domainfunctions.ExecutionRecord, error) {
-	if !f.executorV2() {
-		ok, release, err := f.getRunSemaphore().TryAcquire(ctx)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "acquire run semaphore: %v", err)
-		}
-		if !ok {
-			rec.Status = domainfunctions.ExecutionStatusFailed
-			rec.Error = "too many concurrent executions"
-			rec.UpdatedAt = time.Now()
-			_ = f.repo.UpdateExecution(ctx, rec)
-			return nil, status.Error(codes.ResourceExhausted, "too many concurrent executions")
-		}
-		defer release()
-	}
-
 	started := time.Now()
 	// 执行身份（P0）：铸造短期 token 并注入 env（v2 下由 dispatcher 客户端
 	// 摘出经分发 header 传递，语义不变）；defer 覆盖成功/失败/panic 三条
@@ -360,17 +340,9 @@ func (f *Functions) runExecution(ctx context.Context, fn *domainfunctions.Functi
 	// 显式排除）；main 风格恒空。
 	rec.HTTPHeaders = result.Headers
 	rec.ResponseB64 = result.ResponseB64
-	if result.StatusCode != 0 && !f.executorV2() {
-		// v1 退出码语义：非零 = failed。v2 dispatcher 路径失败已由 err 承载
-		//（此处 err==nil 且 StatusCode 非 0 仅见于 v4 fetch 风格的函数 HTTP
-		// status——自定义状态码是一等结果，不再映射执行失败，D10）。
-		rec.Status = domainfunctions.ExecutionStatusFailed
-		if strings.TrimSpace(result.Stderr) != "" {
-			rec.Error = truncate(strings.TrimSpace(result.Stderr), maxOutputBytes)
-		}
-	} else {
-		rec.Status = domainfunctions.ExecutionStatusCompleted
-	}
+	// err==nil 且 StatusCode 非 0 仅见于 v4 fetch 风格的函数 HTTP status
+	// ——自定义状态码是一等结果，不映射执行失败（D10）；失败已由 err 承载。
+	rec.Status = domainfunctions.ExecutionStatusCompleted
 	if err := f.repo.UpdateExecution(ctx, rec); err != nil {
 		return nil, err
 	}
@@ -478,26 +450,8 @@ func (f *Functions) ProcessExecution(ctx context.Context, msg queueMessage) erro
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(fn.TimeoutSeconds)*time.Second)
 	defer cancel()
 
-	// 信号量：v2（dispatcher）路径跳过全局 run 信号量（同 runExecution 注释
-	// ——池由 dispatcher 内部管控，避免双重限流）；v1 回退模式保留。
-	var runRelease func()
-	if !f.executorV2() {
-		ok, rel, err := f.getRunSemaphore().TryAcquire(ctx)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			rec.Status = domainfunctions.ExecutionStatusFailed
-			rec.Error = "too many concurrent executions"
-			rec.UpdatedAt = time.Now()
-			_ = f.repo.UpdateExecution(ctx, rec)
-			return nil
-		}
-		runRelease = rel
-	}
-	if runRelease != nil {
-		defer runRelease()
-	}
+	// 执行并发不设全局 run 信号量（同 runExecution 注释——池由 dispatcher
+	// 内部管控）。
 
 	// 执行身份（P0）：与同步路径同一铸造/注入/主动吊销语义（进程无关）。
 	token := f.mintExecutionToken(ctx, fn, rec)
@@ -534,16 +488,9 @@ func (f *Functions) ProcessExecution(ctx context.Context, msg queueMessage) erro
 	rec.Response, rec.ResponseTruncated = truncateWithFlag(result.Response, maxOutputBytes)
 	rec.HTTPHeaders = result.Headers
 	rec.ResponseB64 = result.ResponseB64
-	if result.StatusCode != 0 && !f.executorV2() {
-		// 同 runExecution：v1 退出码语义不变；v4 fetch 风格的函数 HTTP
-		// status 是一等结果（D10）。
-		rec.Status = domainfunctions.ExecutionStatusFailed
-		if strings.TrimSpace(result.Stderr) != "" {
-			rec.Error = truncate(strings.TrimSpace(result.Stderr), maxOutputBytes)
-		}
-	} else {
-		rec.Status = domainfunctions.ExecutionStatusCompleted
-	}
+	// 同 runExecution：v4 fetch 风格的函数 HTTP status 是一等结果（D10），
+	// 失败已由 err 承载。
+	rec.Status = domainfunctions.ExecutionStatusCompleted
 	if err := f.repo.UpdateExecution(ctx, rec); err != nil {
 		return err
 	}
@@ -673,14 +620,11 @@ func (f *Functions) buildExecution(fn *domainfunctions.Function, rec *domainfunc
 	// 并发生效值（v3 §1.5 降级保护）：模板 < v3（MinConcurrencyTemplateVersion）
 	// 时静默按 1。判定基准固定在 v3（v4 §2.1 仅扩展接口面、并发语义不变），
 	// 不随 RunnerTemplateVersion 漂移——否则 v4 版本 bump 会把存量 v3
-	// deployment 误降级。v1 docker executor 无池概念、Concurrency 本就被
-	// 忽略（§1.6），降级计数只在 v2 dispatcher 路径记账避免噪音。
+	// deployment 误降级。
 	concurrency := fn.Concurrency
 	if concurrency > 1 && depTemplateVersion < domainfunctions.MinConcurrencyTemplateVersion {
 		concurrency = 1
-		if f.executorV2() {
-			observeConcurrencyDowngraded(fn.ProjectID, fn.ID)
-		}
+		observeConcurrencyDowngraded(fn.ProjectID, fn.ID)
 	}
 	return domainfunctions.Execution{
 		FunctionID:   fn.ID,

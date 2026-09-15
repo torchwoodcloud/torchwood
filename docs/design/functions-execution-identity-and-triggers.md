@@ -1,3 +1,5 @@
+> ⚠️ 现状更新（2026-09-16）：v1 docker 执行器已移除，§6 中「executor=docker/dispatcher 二选一」的选择面不复存在——常驻 runner（dispatcher 分发）为唯一执行路径。现状以 `docs/developer/08-functions.md` 为准。
+
 # 函数平台补全：执行身份、触发器与客户端调用面
 
 > 状态：**已批准（2026-09-09 owner 拍板：K1–K10 全部裁决、Open Questions Q1–Q13 全部收口；按 P0 → P0.5 → P1 → P2 → P3 分阶段实施）**

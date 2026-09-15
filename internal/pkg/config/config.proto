@@ -161,13 +161,12 @@ message Functions {
   message Execution {
     string api_base_url = 1;
   }
-  // Dispatcher 是执行器 v2 的分发通路配置（P0.5，owner 拍板方案③：独立
-  // functions-dispatcher 进程专职持有 docker.sock、join 项目网络、承接
-  // Build/Execute/RemoveImage 全部 daemon 操作；server/worker 零 daemon
-  // 依赖）。executor="docker"（v1 回退）时本节不生效。
+  // Dispatcher 是分发通路配置（owner 拍板方案③：独立 functions-dispatcher
+  // 进程专职持有 docker.sock、join 项目网络、承接 Build/Execute/RemoveImage
+  // 全部 daemon 操作；server/worker 零 daemon 依赖）。
   message Dispatcher {
     // dispatcher 的内网 HTTP 基址（server/worker 侧消费），如
-    // http://functions-dispatcher:9070。executor="dispatcher" 时必填。
+    // http://functions-dispatcher:9070。必填（组合根启动期校验）。
     string url = 1;
     // 静态共享密钥（内网专用可选认证；空 = 不校验，仅限可信内网）。
     string shared_token = 2;
@@ -196,10 +195,10 @@ message Functions {
     // 超时达到该阈值即杀实例重建，防僵尸负载慢性塞满事件循环；默认 5）。
     uint32 timeout_budget = 9;
   }
-  // executor 是执行器选择：默认 "docker"（v1 每请求一容器，进程内执行，
-  // 回退模式）；"dispatcher"（v2 常驻 runner 为默认执行模型，经
-  // functions-dispatcher 分发）。二选一，不同时启用。
-  string executor = 1;
+  // executor（字段号 1）已删除：v1 docker 执行器（每请求一容器、进程内
+  // docker.sock）已移除，函数执行统一经 functions-dispatcher 分发。
+  reserved 1;
+  reserved "executor";
   Docker docker = 2;
   Execution execution = 3;
   Dispatcher dispatcher = 4;

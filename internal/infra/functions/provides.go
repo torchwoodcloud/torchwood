@@ -1,14 +1,15 @@
 package functions
 
-import "github.com/google/wire"
+import (
+	"github.com/google/wire"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
+)
 
 var ProviderSet = wire.NewSet(
-	// v1 回退执行器（每请求一容器）与 v2 dispatcher 客户端都构造（惰性），
-	// 由 ProvideExecutor 按 functions.executor 配置择一绑定 Executor 端口
-	// （P0.5 执行器 v2；二选一，不同时启用）。
-	NewDockerExecutor,
+	// dispatcher 是唯一执行器（v1 docker 执行器已移除）：经 functions-dispatcher
+	// 分发（docker.sock 收敛到 dispatcher 进程，server/worker 零 daemon 依赖）。
 	NewDispatcherExecutor,
-	ProvideExecutor,
+	wire.Bind(new(domainfunctions.Executor), new(*DispatcherExecutor)),
 	// P0 执行身份：Redis 执行 token 服务（server 同步路径经 validator 校验、
 	// worker 异步路径经 Functions 聚合铸造/吊销；实现在本包以保 worker 依赖
 	// 图不触 infra/auth，见 cmd/worker/import_guard_test.go）。

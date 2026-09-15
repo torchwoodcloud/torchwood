@@ -95,7 +95,7 @@ jobs:
         run: buf breaking --against '.git#branch=origin/main'
 
       - name: Pre-pull function runtime base images
-        run: docker pull node:18-alpine && docker pull python:3.11-alpine
+        run: docker pull node:18-alpine
 
       - name: Format check (gofmt)
         run: test -z "$(gofmt -l .)"

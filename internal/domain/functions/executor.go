@@ -22,15 +22,15 @@ type Execution struct {
 	FunctionID   string
 	DeploymentID string // 构建产物镜像标识（{registry}/func-{functionID}-{deploymentID}）
 	ProjectID    string // 所属项目：决定执行容器网络（tw-func-<project.id>，Round4 J5-4）
-	Runtime      string // e.g. node-18.0, python-3.11
+	Runtime      string // e.g. node-18.0（常驻执行器仅 node；python runner 未实现）
 	SourcePath   string // path or archive location of function source
 	Entrypoint   string // e.g. "index.main"
 	Spec         string // 资源规格（shared-1x / shared-2x）
 	Timeout      int64  // seconds
 	Env          map[string]string
 	Data         string // JSON payload
-	// ——池策略（P0.5 执行器 v2）：dispatcher executor 用其管理常驻实例池；
-	// v1 docker executor 忽略。零值时 dispatcher 侧取平台默认。
+	// ——池策略（P0.5 执行器 v2）：dispatcher 用其管理常驻实例池。零值时
+	// dispatcher 侧取平台默认。
 	MinInstances           int
 	MaxInstances           int
 	IdleTTLSeconds         int
@@ -38,7 +38,6 @@ type Execution struct {
 	// Concurrency 是单实例并发上限（v3 实例内多路复用，docs/design/
 	// functions-v3.md §1.1/§1.5）：默认 1、上限 16；经 dispatcher 客户端进
 	// ExecuteRequest.Pool.Concurrency，spawn 时固化进 InstanceRecord。
-	// v1 docker executor 忽略。
 	Concurrency int
 	// ExecutionID 是平台执行 ID（v3 §1.2/§1.5）：dispatcher 客户端经分发
 	// header x-tw-execution-id 透传给 runner（ctx.executionId / 日志关联）；
@@ -64,9 +63,8 @@ type Execution struct {
 	// false = 可信（server key 触发），保持常规网络。分类在 app 层完成
 	// （函数属性而非单次调用属性），executor 只消费。
 	EgressUntrusted bool
-	// ——HTTP 触发器封套通道（v3 §2.3/D10；executor=dispatcher 的 v4 路径
-	// 消费，v1 docker executor 忽略）——恒填充（app 不探测 runner 风格）：
-	// TriggerEnvelope 非空时 dispatcher 改发 RawBody 作分发 HTTP body
+	// ——HTTP 触发器封套通道（v3 §2.3/D10）——恒填充（app 不探测 runner
+	// 风格）：TriggerEnvelope 非空时 dispatcher 改发 RawBody 作分发 HTTP body
 	// （忽略 Data），封套元数据经分发 header 传递；runner fetch 风格还原
 	// Request、main 风格重组 TW_DATA（与现状等价）。RawBodyIsB64 = RawBody
 	// 携带的是 base64 文本（调用方手持 body_base64 免先解码的场景）。
@@ -77,10 +75,9 @@ type Execution struct {
 
 // ExecutionResult is the output of a function invocation.
 type ExecutionResult struct {
-	// StatusCode 语义随执行器/模板演进：v1 = 容器退出码（非零 = failed）；
-	// v2/v3 dispatcher = 函数失败置 1（err 已承载失败，成功恒 0）；
+	// StatusCode 语义随模板演进：dispatcher（失败由 err 承载，成功恒 0）；
 	// v4 fetch 风格（§2.2）= 函数返回的 HTTP status（非零是合法结果——
-	// 自定义状态码是一等结果，不再映射执行失败）。
+	// 自定义状态码是一等结果，不映射执行失败）。
 	StatusCode int
 	Stdout     string
 	Stderr     string

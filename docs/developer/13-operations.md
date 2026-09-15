@@ -106,7 +106,7 @@ task docker:build
 docker run --env-file .env -p 9080:9080 -p 9060:9060 torchwood:1.0.0-xxx-yyy
 ```
 
-**Dokploy 一键部署**（单 Compose 栈：PG/Redis/MinIO + 迁移→三角色授权→roles_sig 一次性作业链 + server/worker + 常驻 functions-dispatcher——root 运行、挂 docker.sock、healthz `:9070`；server/worker 默认 `TORCHWOOD_FUNCTIONS_EXECUTOR=dispatcher`）见 `docker/dokploy/README.md`；镜像由 GitHub Actions 预构建推 GHCR（`.github/workflows/image.yml`，部署机仅 pull），其中 `sync-roles-sig` 作业依赖镜像内置的 `torchwood` CLI。
+**Dokploy 一键部署**（单 Compose 栈：PG/Redis/MinIO + 迁移→三角色授权→roles_sig 一次性作业链 + server/worker + 常驻 functions-dispatcher——root 运行、挂 docker.sock、healthz `:9070`；函数执行统一经 dispatcher 分发，server/worker 须配置 `TORCHWOOD_FUNCTIONS_DISPATCHER_URL`）见 `docker/dokploy/README.md`；镜像由 GitHub Actions 预构建推 GHCR（`.github/workflows/image.yml`，部署机仅 pull），其中 `sync-roles-sig` 作业依赖镜像内置的 `torchwood` CLI。
 
 ---
 

@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"bufio"
 	"bytes"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,15 +56,6 @@ func TestReadBuildOutput_PlainTextNoError(t *testing.T) {
 	log, err := readBuildOutput(strings.NewReader("plain text line, not json\n"))
 	require.NoError(t, err)
 	require.Contains(t, log, "plain text line")
-}
-
-func TestBuildError_FitsBudget(t *testing.T) {
-	log := strings.Repeat("L", maxBuildLogBytes)
-	err := buildError(errors.New("boom: build failed"), log)
-	msg := err.Error()
-	require.Contains(t, msg, "boom: build failed")
-	require.Contains(t, msg, "build log tail:")
-	require.True(t, len(msg) <= maxBuildLogBytes, "错误总长不得超过构建日志预算")
 }
 
 func TestTailBuffer_KeepsTail(t *testing.T) {
@@ -500,67 +490,25 @@ func extractZipFromFiles(t *testing.T, files map[string]string) (ZipContents, er
 	return extractZip(zipPath, filepath.Join(t.TempDir(), "out"))
 }
 
-// ---- dockerfileFor 三形态（v3 §3.1/D11）：分层模板 / 旧模板 / lockfile 强制 ----
-
-// TestDockerfileFor_NodeLayeredWithDeps 带依赖 + lockfile → 分层模板：
-// 清单先行 COPY、npm ci 代装、再 COPY 全部代码（lockfile 不变命中层缓存）；
-// CMD/USER 与旧模板一致（本切片不改 runner 协议、不 bump 模板版本）。
-func TestDockerfileFor_NodeLayeredWithDeps(t *testing.T) {
-	df, err := dockerfileFor("node-18.0", true, true)
+// TestExtractZip_DetectsPythonEntrypoint main.py zip 仍探测为 python-3.11
+// （探测保留、报错前移到构建期 runner.DockerfileFor——错误可指认 runtime）。
+func TestExtractZip_DetectsPythonEntrypoint(t *testing.T) {
+	contents, err := extractZipFromFiles(t, map[string]string{
+		"main.py": "def main(data):\n    return {}\n",
+	})
 	require.NoError(t, err)
-	require.Contains(t, df, "FROM node:18-alpine\nWORKDIR /app\n")
-	require.Contains(t, df, "COPY package.json package-lock.json* ./\n")
-	require.Contains(t, df, "RUN npm ci --omit=dev --ignore-scripts\n")
-	// 分层顺序：清单 COPY → npm ci → 全量 COPY（层缓存正确性）。
-	require.Less(t, strings.Index(df, "npm ci"), strings.Index(df, "COPY . ."))
-	require.Contains(t, df, "USER node\n")
-	// CMD 与无依赖模板逐字节一致（产物等价，模板版本不 bump 的前提）。
-	legacy, err := dockerfileFor("node-18.0", false, false)
-	require.NoError(t, err)
-	require.Equal(t, tailAfterCopy(legacy), tailAfterCopy(df), "CMD/USER 行两形态必须一致")
-	// --ignore-scripts 恒定（D11）。
-	require.Contains(t, df, "--ignore-scripts")
-	require.NotContains(t, strings.ToUpper(df), "ENTRYPOINT")
+	require.Equal(t, "python-3.11", contents.Runtime)
 }
 
-// tailAfterCopy 取 Dockerfile 中 "COPY . ." 之后的内容（USER + CMD），用于
-// 断言分层模板与旧模板在这些行上逐字节一致。
-func tailAfterCopy(df string) string {
-	i := strings.Index(df, "COPY . .\n")
-	if i < 0 {
-		panic("COPY . . not found in dockerfile: " + df)
-	}
-	return df[i+len("COPY . .\n"):]
-}
-
-// TestDockerfileFor_NodeNoDepsLegacy 无依赖 → 维持旧模板（无 npm ci，
-// 无依赖函数零变化、不白跑 npm ci）。
-func TestDockerfileFor_NodeNoDepsLegacy(t *testing.T) {
-	df, err := dockerfileFor("node-18.0", false, false)
-	require.NoError(t, err)
-	require.NotContains(t, df, "npm ci")
-	require.Contains(t, df, "COPY . .\n")
-	require.Contains(t, df, "USER node\n")
-}
-
-// TestDockerfileFor_NodeDepsWithoutLockfile 带依赖无 lockfile → 构建期报错，
-// 错误信息指向提交 lockfile（v3 §3.1 lockfile 强制）。
-func TestDockerfileFor_NodeDepsWithoutLockfile(t *testing.T) {
-	_, err := dockerfileFor("node-18.0", true, false)
+// TestExtractZip_MissingEntrypoint 既无 index.js 也无 main.py → 明确报错
+// （node 是唯一受支持 runtime，错误信息不再提及 python）。
+func TestExtractZip_MissingEntrypoint(t *testing.T) {
+	_, err := extractZipFromFiles(t, map[string]string{
+		"README.md": "not code",
+	})
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.ErrorContains(t, err, "检测到 dependencies 但缺少 package-lock.json")
-	require.ErrorContains(t, err, "npm install 会生成")
-}
-
-// TestDockerfileFor_PythonIgnoresNodeDeps python 分支不受 node 依赖探测影响
-// （代装随 python v2 支持，v3 §3.2 末）：zip 里附带 package.json 不改变 python
-// 模板。
-func TestDockerfileFor_PythonIgnoresNodeDeps(t *testing.T) {
-	base, err := dockerfileFor("python-3.11", false, false)
-	require.NoError(t, err)
-	withDeps, err := dockerfileFor("python-3.11", true, true)
-	require.NoError(t, err)
-	require.Equal(t, base, withDeps)
-	require.NotContains(t, base, "npm ci")
+	require.ErrorContains(t, err, "missing entrypoint file")
+	require.ErrorContains(t, err, "index.js")
+	require.NotContains(t, err.Error(), "main.py")
 }

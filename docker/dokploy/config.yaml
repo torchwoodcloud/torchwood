@@ -79,7 +79,6 @@ storage:
     secret_access_key: ""           # env TORCHWOOD_STORAGE_S3_SECRET_ACCESS_KEY
 
 functions:
-  executor: "docker"
   docker:
     host: "unix:///var/run/docker.sock"
     # 默认 per-project 隔离网络 tw-func-<project_id>；勿配全局网络（跨租户横向风险）

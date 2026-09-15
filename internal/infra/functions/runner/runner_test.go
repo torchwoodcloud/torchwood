@@ -81,15 +81,18 @@ func TestDockerfileFor_NodeDepsWithoutLockfile(t *testing.T) {
 	}
 }
 
-// TestDockerfileFor_PythonExplicitError 常驻路径下 python 明确报错（不静默
-// 回落 v1 CMD——resident 语义下 v1 CMD 跑完即退，实例永远不会 ready）。
+// TestDockerfileFor_PythonExplicitError 常驻路径下 python 明确报错（探测
+// 保留、构建期拒绝；v1 docker 执行器已移除，报错不得引导切换执行器）。
 func TestDockerfileFor_PythonExplicitError(t *testing.T) {
 	_, err := DockerfileFor("python-3.11", false, false)
 	if err == nil {
 		t.Fatal("python on the resident executor must fail explicitly")
 	}
-	if !strings.Contains(err.Error(), "docker") {
-		t.Errorf("错误应引导回退 v1： %v", err)
+	if !strings.Contains(err.Error(), "node-only") {
+		t.Errorf("错误应说明常驻执行器仅支持 node： %v", err)
+	}
+	if strings.Contains(err.Error(), "executor=") {
+		t.Errorf("错误不应引导配置执行器选择（已无选择面）： %v", err)
 	}
 }
 

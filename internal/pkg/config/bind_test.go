@@ -131,7 +131,8 @@ func TestUnmarshalConfig(t *testing.T) {
 	require.False(t, out.GetStorage().GetS3().GetUseSsl())
 	require.Equal(t, "./data", out.GetStorage().GetLocal().GetPath())
 
-	require.Equal(t, "docker", out.GetFunctions().GetExecutor())
+	// executor 键已随 v1 docker 执行器删除（config.proto reserved）；testYAML
+	// 特意保留该残留键，钉住「proto 反序列化容忍未知字段、不报错」的兼容行为。
 	require.Equal(t, "unix:///var/run/docker.sock", out.GetFunctions().GetDocker().GetHost())
 
 	require.True(t, out.GetTelemetry().GetEnabled())

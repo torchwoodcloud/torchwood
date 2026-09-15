@@ -7,11 +7,11 @@
 // 不变量保持。模板版本化（TemplateVersion）：模板变更必须递增，存量
 // deployment 按新模板重建（function_deployments.template_version）。
 //
-// 本期只交付 node runner；python 留 TODO 占位——常驻路径下 python 部署
-// 明确报错（不静默回落 v1 CMD：resident 语义下 v1 CMD 跑完即退，实例
-// 永远不会 ready，错误会被推迟到首次调用且形态难排查），python 函数继续
-// 走 functions.executor="docker"（v1）路径。python runner 落地时直接实现
-// v3 全部语义（并发 + per-request 基建，模板版本同源，v3 范围裁决）。
+// 本期只交付 node runner；python 探测保留但构建期明确报错（不静默构建一个
+// 跑不起来的镜像——resident 语义下一次性 CMD 跑完即退，实例永远不会 ready，
+// 错误会被推迟到首次调用且形态难排查；v1 docker 执行器已移除，无回退路径）。
+// python runner 落地时直接实现 v3 全部语义（并发 + per-request 基建，模板
+// 版本同源，v3 范围裁决）。
 package runner
 
 import (
@@ -42,9 +42,9 @@ const TemplateVersion = int(domainfunctions.RunnerTemplateVersion)
 // NodeRunnerJS 返回嵌入的 node runner 源码（构建镜像时写入 build context）。
 func NodeRunnerJS() []byte { return nodeRunnerJS }
 
-// DockerfileFor 生成 v2（runner CMD）运行时 Dockerfile。与 v1 模板
-// （internal/infra/functions docker.go dockerfileFor）的差异仅在 CMD：
-// 用户入口移交平台 runner，构建期不执行用户代码的不变量不变。
+// DockerfileFor 生成常驻执行模型的运行时 Dockerfile（唯一执行路径，经
+// functions-dispatcher 构建）：用户入口移交平台 runner（CMD），
+// 构建期不执行用户代码的不变量由此保持。
 //
 // node 分支支持平台代装依赖（v3 §3.1/D11，functions-v3.md）：nodeDeps=true
 // （zip 根 package.json dependencies 非空，探测在 zip 校验层
@@ -85,9 +85,10 @@ func DockerfileFor(runtime string, nodeDeps, hasLockfile bool) (string, error) {
 			fmt.Sprintf("ENV TW_RUNNER_PORT=%d\n", RunnerPort) +
 			fmt.Sprintf("CMD [\"node\",%q]\n", RunnerFileName), nil
 	case "python-3.11":
-		// TODO(P1+)：python runner（常驻 WSGI/ASGI 形态）。v2 路径下 python
-		// 部署明确报错（见包注释），函数暂走 v1 docker executor。
-		return "", fmt.Errorf("runtime %q is not supported by the resident executor (v2, node only); use functions.executor=\"docker\" for python functions", runtime)
+		// TODO(P1+)：python runner（常驻 WSGI/ASGI 形态）。python 探测保留、
+		// 构建期明确报错（见包注释）——无 v1 回退路径，报错不得引导用户切换
+		// 执行器。
+		return "", fmt.Errorf("runtime %q is not available: the resident executor is node-only (python runner not implemented yet)", runtime)
 	default:
 		return "", fmt.Errorf("unsupported runtime %q", runtime)
 	}

@@ -115,12 +115,10 @@ var ProviderSet = wire.NewSet(
 	wire.Bind(new(domainstorage.BucketRepository), new(*bunrepo.BucketRepository)),
 	wire.Bind(new(domainstorage.FileRepository), new(*bunrepo.FileRepository)),
 	infraevents.ProviderSet,
-	// 执行器按 functions.executor 配置择一绑定（P0.5）："docker"（默认，
-	// v1 回退）| "dispatcher"（v2 常驻 runner，经 functions-dispatcher 分发，
-	// worker 零 docker.sock 依赖）。
-	infrafunctions.NewDockerExecutor,
+	// 唯一执行器（v1 docker 执行器已移除）：经 functions-dispatcher 分发，
+	// worker 零 docker.sock 依赖。
 	infrafunctions.NewDispatcherExecutor,
-	infrafunctions.ProvideExecutor,
+	wire.Bind(new(domainfunctions.Executor), new(*infrafunctions.DispatcherExecutor)),
 	infrapayments.ProviderSet,
 	infrabilling.ProviderSet,
 	infraqueue.ProviderSet,
@@ -153,6 +151,11 @@ func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 	// server 签发的 page_token，弱主密钥属同一攻击面，故一并 fail-closed
 	// （此前仅 server 校验、worker 静默跳过，属装配分叉）。
 	if err := bootkit.ValidateAppConfig(app.Logger(), &c); err != nil {
+		return nil, err
+	}
+	// v1 docker 执行器已移除：函数执行统一经 functions-dispatcher 分发，
+	// 分发通路缺失直接拒绝启动（不留到首次执行）。
+	if err := bootkit.ValidateFunctionsDispatchConfig(&c); err != nil {
 		return nil, err
 	}
 	if c.GetData().GetDatabase().GetSource() == "" {

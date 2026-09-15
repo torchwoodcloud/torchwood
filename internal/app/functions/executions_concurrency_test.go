@@ -15,9 +15,9 @@ import (
 // 的 app 层单测：concurrency 从函数记录到执行请求的透传与 template_version
 // 降级判定——
 
-// v2UC 构造 executor=dispatcher 的用例（v2 常驻执行模型）。
+// v2UC 构造用例（常驻执行模型是唯一执行路径，配置不再区分执行器）。
 func v2UC(executor *mockExecutor, repo *mockRepo, queue *mockQueue) *Functions {
-	return NewFunctions(&config.AppConfig{Functions: &config.Functions{Executor: "dispatcher"}}, executor, repo, queue)
+	return NewFunctions(&config.AppConfig{}, executor, repo, queue)
 }
 
 // downgradedCounter 取指定标签的降级计数当前值（零值返回 0）。
@@ -110,22 +110,4 @@ func TestProcessExecution_ConcurrencyDowngradedOnOldTemplate(t *testing.T) {
 	require.Len(t, executor.calls, 1)
 	require.Equal(t, 1, executor.calls[0].Concurrency, "异步路径同样降级按 1")
 	require.InDelta(t, before+1, downgradedCounter("p1", "fn_async"), 0.001, "异步路径降级计数 +1")
-}
-
-// TestCreateExecution_V1ExecutorNoDowngradeMetric v1 docker executor 无池概念
-// （v3 §1.6），Concurrency 本就被忽略：降级分支不记账（避免噪音指标）。
-func TestCreateExecution_V1ExecutorNoDowngradeMetric(t *testing.T) {
-	repo := newMockRepo()
-	fn := seedReadyFunction(repo, "p1", "fn_v1", true, 15)
-	fn.Concurrency = 8
-	_ = repo.CreateFunction(context.Background(), fn)
-	repo.deployments["dep_ready"].TemplateVersion = 2
-
-	executor := newMockExecutor(&domainfunctions.ExecutionResult{StatusCode: 0, Response: `{}`}, nil)
-	uc := newTestUC(executor, repo, newMockQueue()) // executor 未配置 = v1 docker
-
-	before := downgradedCounter("p1", "fn_v1")
-	_, err := uc.CreateExecution(platformAdminCtx(), CreateExecutionCommand{ProjectID: "p1", FunctionID: "fn_v1", Data: `{}`})
-	require.NoError(t, err)
-	require.InDelta(t, before, downgradedCounter("p1", "fn_v1"), 0.001, "v1 路径不记降级计数")
 }

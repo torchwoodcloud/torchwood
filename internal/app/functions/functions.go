@@ -24,7 +24,6 @@ type Functions struct {
 	projects   projects.Repository        // 可选：启动对账枚举项目（nil 则 Recover 空操作）
 	scanCursor appshared.ProjectRotation  // RecoverOrphanExecutions 轮转游标（串行）
 	buildSem   semaphore.Semaphore
-	runSem     semaphore.Semaphore
 	// execTokens 是执行身份铸造/吊销端口（P0 执行身份；可选：nil 时执行
 	// 不注入 TW_EXECUTION_TOKEN，函数无平台身份——declared_scopes 语义为
 	// 增强而非执行前提）。
@@ -46,7 +45,6 @@ type Functions struct {
 func NewFunctions(cfg *config.AppConfig, executor functions.Executor, repo functions.FunctionRepo, queue shared.Queue) *Functions {
 	f := &Functions{cfg: cfg, executor: executor, repo: repo, queue: queue, cache: newFnCache()}
 	f.buildSem = semaphore.NewInMemory(4)
-	f.runSem = semaphore.NewInMemory(16)
 	f.initUserGate(cfg)
 	return f
 }
@@ -59,9 +57,6 @@ func NewFunctionsWithUsage(cfg *config.AppConfig, executor functions.Executor, r
 	f.projects = projectRepo
 	if sems.Build != nil {
 		f.buildSem = sems.Build
-	}
-	if sems.Run != nil {
-		f.runSem = sems.Run
 	}
 	f.execTokens = execTokens
 	f.triggers = triggers
@@ -97,14 +92,12 @@ func (f *Functions) logger() *slog.Logger {
 	return slog.Default()
 }
 
-// WithSemaphores 注入分布式信号量（Wire 覆盖默认内存信号量）。
-// buildSem 限制并发构建（默认 4），runSem 限制并发执行（默认 16）。
-func (f *Functions) WithSemaphores(buildSem, runSem semaphore.Semaphore) *Functions {
+// WithSemaphores 注入分布式构建信号量（Wire 覆盖默认内存信号量）。
+// buildSem 限制并发构建（默认 4）；执行并发不设全局信号量——常驻实例池由
+// functions-dispatcher 内部管控（池上限/有界排队，设计 §6）。
+func (f *Functions) WithSemaphores(buildSem semaphore.Semaphore) *Functions {
 	if buildSem != nil {
 		f.buildSem = buildSem
-	}
-	if runSem != nil {
-		f.runSem = runSem
 	}
 	return f
 }
@@ -114,13 +107,6 @@ func (f *Functions) getBuildSemaphore() semaphore.Semaphore {
 		return f.buildSem
 	}
 	return semaphore.NewInMemory(4)
-}
-
-func (f *Functions) getRunSemaphore() semaphore.Semaphore {
-	if f.runSem != nil {
-		return f.runSem
-	}
-	return semaphore.NewInMemory(16)
 }
 
 func sanitizeEnv(env map[string]string) map[string]string {

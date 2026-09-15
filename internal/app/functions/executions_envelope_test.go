@@ -17,7 +17,7 @@ import (
 // ---- v3 切片 C：触发器封套透传与 fetch 风格执行结果（functions-v3.md §2.2/§2.3/D10）----
 
 func envelopeUC(executor *mockExecutor, repo *mockRepo, queue *mockQueue) *Functions {
-	return NewFunctions(&config.AppConfig{Functions: &config.Functions{Executor: "dispatcher"}}, executor, repo, queue)
+	return NewFunctions(&config.AppConfig{}, executor, repo, queue)
 }
 
 func httpEnvelope() *domainfunctions.TriggerEnvelope {
@@ -125,22 +125,6 @@ func TestRunExecution_FetchStyleHTTPStatus(t *testing.T) {
 	require.Equal(t, "nope", rec.Response)
 	require.Equal(t, base64.StdEncoding.EncodeToString([]byte("nope")), rec.ResponseB64)
 	require.Equal(t, map[string]string{"content-type": "text/plain"}, rec.HTTPHeaders)
-}
-
-// TestRunExecution_V1ExitCodeStillFails v1 退出码语义回归：非 v2 executor 下
-// 非零 StatusCode 仍映射 failed（err==nil 形态）。
-func TestRunExecution_V1ExitCodeStillFails(t *testing.T) {
-	repo := newMockRepo()
-	fn := seedReadyFunction(repo, "p1", "fn_v1ec", true, 15)
-	_ = repo.CreateFunction(context.Background(), fn)
-
-	executor := newMockExecutor(&domainfunctions.ExecutionResult{StatusCode: 1, Stderr: "boom"}, nil)
-	uc := newTestUC(executor, repo, newMockQueue()) // executor 未配置 = v1 docker
-
-	rec, err := uc.CreateExecution(platformAdminCtx(), CreateExecutionCommand{ProjectID: "p1", FunctionID: "fn_v1ec", Data: `{}`})
-	require.NoError(t, err)
-	require.Equal(t, domainfunctions.ExecutionStatusFailed, rec.Status)
-	require.Equal(t, 1, rec.StatusCode)
 }
 
 // TestInvokeTrigger_FailureUnknown 函数执行失败封套（dispatcher Unknown）在

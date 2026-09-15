@@ -147,20 +147,14 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	paymentsService := clientgrpc.NewPaymentsService(paymentsPayments)
 	assetsService := clientgrpc.NewAssetsService(assetsAssets)
 	subscriptionsService := clientgrpc.NewSubscriptionsService(subscriptionsSubscriptions)
-	dockerExecutor := functions.NewDockerExecutor(appConfig)
 	dispatcherExecutor := functions.NewDispatcherExecutor(appConfig)
-	executor, err := functions.ProvideExecutor(appConfig, dockerExecutor, dispatcherExecutor)
-	if err != nil {
-		cleanup()
-		return nil, nil, err
-	}
 	functionRepo := bunrepo.NewFunctionRepository(database)
 	sharedQueue := queue.NewRedisQueue(redisClient)
 	redisCounter := billing.NewRedisCounter(redisClient)
 	semaphores := functions2.ProvideSemaphores(redisClient, appConfig)
 	triggerRepo := bunrepo.NewFunctionTriggerRepository(database)
 	clientQuotaLimiter := functions.NewClientQuotaLimiter(redisClient)
-	functionsFunctions := functions2.NewFunctionsWithClientQuota(appConfig, executor, functionRepo, sharedQueue, redisCounter, repository, semaphores, redisExecutionTokenService, triggerRepo, clientQuotaLimiter)
+	functionsFunctions := functions2.NewFunctionsWithClientQuota(appConfig, dispatcherExecutor, functionRepo, sharedQueue, redisCounter, repository, semaphores, redisExecutionTokenService, triggerRepo, clientQuotaLimiter)
 	functionsService := clientgrpc.NewFunctionsService(functionsFunctions)
 	boardRepo := bunrepo.NewLeaderboardBoardRepository(database)
 	entryRepo := bunrepo.NewLeaderboardEntryRepository(database)

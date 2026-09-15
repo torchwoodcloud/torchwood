@@ -372,9 +372,9 @@ type cronEnvelope struct {
 }
 
 // MaxTriggerBodyLimit 返回 HTTP 触发器请求体的生效上限（字节）：配置值
-// （0 = 平台缺省 64KB）与执行器通道能力取小——v2 dispatcher 走 body 通道，
-// 配置值（≤1MB）全额生效；v1 env 通道 data 预算 32KB 减封套余量。handler
-// 据此做 413 判定，保证超限请求在入口被拒而不是执行创建期报 400。
+// （0 = 平台缺省 64KB）与执行器通道能力取小——dispatcher 走 body 通道，
+// 配置值（≤1MB）全额生效。handler 据此做 413 判定，保证超限请求在入口被拒
+// 而不是执行创建期报 400。
 func (f *Functions) MaxTriggerBodyLimit(configured int) int {
 	limit := configured
 	if limit <= 0 {
@@ -382,12 +382,6 @@ func (f *Functions) MaxTriggerBodyLimit(configured int) int {
 	}
 	if limit > domainfunctions.MaxHTTPBodyLimitBytes {
 		limit = domainfunctions.MaxHTTPBodyLimitBytes
-	}
-	if !f.executorV2() {
-		v1Cap := maxExecutionDataBytes - 8<<10 // 封套（method/path/headers）余量
-		if limit > v1Cap {
-			limit = v1Cap
-		}
 	}
 	return limit
 }

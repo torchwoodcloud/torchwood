@@ -12,7 +12,6 @@ import (
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	domainprojects "github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
-	"github.com/torchwoodcloud/torchwood/pkg/semaphore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -80,16 +79,19 @@ func TestCreateExecution_SyncTimeoutMarksFailed(t *testing.T) {
 	}
 }
 
-func TestCreateExecution_SyncExitCodeNonZeroFails(t *testing.T) {
+// TestCreateExecution_NonZeroStatusCodeCompleted err==nil 且 StatusCode 非 0
+// 仅见于 fetch 风格的函数 HTTP status——一等结果，不映射执行失败（v1 退出码
+// 语义已随 docker executor 移除；失败路径由 err 承载，见 Timeout 用例）。
+func TestCreateExecution_NonZeroStatusCodeCompleted(t *testing.T) {
 	repo := newMockRepo()
 	seedReadyFunction(repo, "p1", "fn_1", true, 15)
-	executor := newMockExecutor(&domainfunctions.ExecutionResult{StatusCode: 1, Stderr: "boom"}, nil)
+	executor := newMockExecutor(&domainfunctions.ExecutionResult{StatusCode: 404, Stderr: ""}, nil)
 	uc := newTestUC(executor, repo, newMockQueue())
 
 	rec, err := uc.CreateExecution(platformAdminCtx(), CreateExecutionCommand{ProjectID: "p1", FunctionID: "fn_1"})
 	require.NoError(t, err)
-	require.Equal(t, domainfunctions.ExecutionStatusFailed, rec.Status)
-	require.Equal(t, "boom", rec.Error)
+	require.Equal(t, domainfunctions.ExecutionStatusCompleted, rec.Status)
+	require.Equal(t, 404, rec.StatusCode)
 }
 
 func TestCreateExecution_AsyncEnqueues(t *testing.T) {
@@ -253,27 +255,6 @@ func TestCreateExecution_NotFound(t *testing.T) {
 	require.Equal(t, codes.NotFound, status.Code(err))
 }
 
-func TestCreateExecution_ResourceExhausted(t *testing.T) {
-	repo := newMockRepo()
-	seedReadyFunction(repo, "p1", "fn_1", true, 15)
-	uc := newTestUC(newMockExecutor(nil, nil), repo, newMockQueue())
-	sem, releases := newFullSemaphoreExec(maxConcurrentRuns)
-	defer func() {
-		for _, r := range releases {
-			r()
-		}
-	}()
-	uc.WithSemaphores(nil, sem)
-
-	_, err := uc.CreateExecution(platformAdminCtx(), CreateExecutionCommand{ProjectID: "p1", FunctionID: "fn_1"})
-	require.Equal(t, codes.ResourceExhausted, status.Code(err))
-	require.Len(t, repo.executions, 1)
-	for _, e := range repo.executions {
-		require.Equal(t, domainfunctions.ExecutionStatusFailed, e.Status)
-		require.Equal(t, "too many concurrent executions", e.Error)
-	}
-}
-
 func TestCreateFunction_Validation(t *testing.T) {
 	repo := newMockRepo()
 	uc := newTestUC(newMockExecutor(nil, nil), repo, newMockQueue())
@@ -300,12 +281,13 @@ func TestCreateFunction_Validation(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.ErrorContains(t, err, "id is required")
 
-	fn, err := uc.CreateFunction(ctx, CreateFunctionCommand{
-		ID: "fn_new", ProjectID: "p1", Name: "f", Runtime: "python-3.11", TimeoutSeconds: timeoutPtr(15),
+	// python-3.11 已随 v1 docker 执行器移除（常驻执行器 node-only）：创建期
+	// 即拒绝，不再进入缺省 entrypoint 分支。
+	_, err = uc.CreateFunction(ctx, CreateFunctionCommand{
+		ID: "fn_py", ProjectID: "p1", Name: "f", Runtime: "python-3.11", TimeoutSeconds: timeoutPtr(15),
 	})
-	require.NoError(t, err)
-	require.Equal(t, "shared-1x", fn.Spec, "spec 缺省 shared-1x")
-	require.Equal(t, "main.main", fn.Entrypoint, "python 缺省 entrypoint")
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.ErrorContains(t, err, "unsupported runtime")
 }
 
 func TestCreateFunction_TimeoutDefault(t *testing.T) {
@@ -415,8 +397,8 @@ func TestProcessExecution_SemaphoreFullReleasesAndKeepsDeployment(t *testing.T) 
 
 	executor := newMockExecutor(&domainfunctions.ExecutionResult{StatusCode: 0, Stdout: "ok"}, nil)
 	uc := newTestUC(executor, repo, newMockQueue())
-	sem, releases := newFullSemaphoreExec(maxConcurrentBuilds)
-	uc.WithSemaphores(sem, nil)
+	sem, releases := newFullSemaphore(maxConcurrentBuilds)
+	uc.WithSemaphores(sem)
 	rec := &domainfunctions.ExecutionRecord{
 		ID: "e1", FunctionID: "fn_1", ProjectID: "p1", DeploymentID: "dep_pending",
 		Status: domainfunctions.ExecutionStatusQueued, CreatedAt: time.Now(), UpdatedAt: time.Now(),
@@ -567,16 +549,4 @@ func TestRecoverOrphanExecutions_EnumeratesActiveProjectsWithBudget(t *testing.T
 	require.Equal(t, int64(500), n, "全局预算 500：p1 扣 300，p2 扣 remaining 200")
 	require.Equal(t, []string{"p1", "p2"}, repo.recoverCalls)
 	require.Equal(t, []int{500, 200}, repo.recoverLimits)
-}
-
-func newFullSemaphoreExec(max int) (*semaphore.InMemorySemaphore, []func()) {
-	sem := semaphore.NewInMemory(max)
-	var releases []func()
-	for i := 0; i < max; i++ {
-		ok, rel, _ := sem.TryAcquire(context.Background())
-		if ok {
-			releases = append(releases, rel)
-		}
-	}
-	return sem, releases
 }

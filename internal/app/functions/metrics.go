@@ -135,12 +135,6 @@ func observeConcurrencyDowngraded(projectID, functionID string) {
 	concurrencyDowngradedTotal.WithLabelValues(projectID, functionID).Inc()
 }
 
-// executorV2 报告是否选择 dispatcher 执行器（v2 常驻执行模型）：run 信号量
-// 对 v2 执行跳过（池由 dispatcher 内部管控），v1 回退模式保留信号量。
-func (f *Functions) executorV2() bool {
-	return f.cfg.GetFunctions().GetExecutor() == "dispatcher"
-}
-
 // PruneOldExecutions 是执行记录保留分级的全项目周期入口（P0.5 起 worker
 // 低频 ticker 驱动；P2 Q7 保留分级拆两条删除路径）：
 //   - server 面来源（trigger_source = ”）：条数式，每函数保留最近

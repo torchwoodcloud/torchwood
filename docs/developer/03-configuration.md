@@ -15,7 +15,7 @@
 | `security` | `Security` | `jwt` / `api_key` / `trusted_proxies` / `setup_token` / `sessions` / `rate_limit`（含 `functions_execution` 维度）/ `login_throttle` / `encryption_key` |
 | `data` | `Data` | `database`（DSN/池/慢查询）+ `redis` |
 | `storage` | `Storage` | `s3` / `local` |
-| `functions` | `Functions` | `executor`（"docker" v1 回退 / "dispatcher" v2 默认）+ `execution.api_base_url` + `dispatcher` 子节（url/shared_token/max_resident_instances=8/queue_depth=32/queue_head_timeout=10s/boot_timeout=60s/addr=":9070"/callback_container/timeout_budget=5）+ `trigger.http_ip_per_minute`=3000 + `client_invoke.per_user_concurrency`=2、`queue_head_timeout`=5s（`config.proto:151-225`）；**executor="dispatcher" 时 `dispatcher.url` 必填** |
+| `functions` | `Functions` | `docker` 子节（host/network/registry）+ `execution.api_base_url` + `dispatcher` 子节（**url 必填**/shared_token/max_resident_instances=8/queue_depth=32/queue_head_timeout=10s/boot_timeout=60s/addr=":9070"/callback_container/timeout_budget=5）+ `trigger.http_ip_per_minute`=3000 + `client_invoke.per_user_concurrency`=2、`queue_head_timeout`=5s；函数执行统一经 functions-dispatcher 分发（v1 docker 执行器已移除，`executor` 键已删除为 reserved，残留键被忽略） |
 | `payments` | `Payments` | `stripe`/`wechat`/`alipay`/`ios_iap` 渠道密钥（仅环境变量） |
 | `analytics` | `Analytics` | `retention_days`（默认 90，可配域 7–365 越界钳制；`config.proto:287-294`） |
 | `telemetry` | `Telemetry` | OTLP |

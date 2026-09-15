@@ -86,6 +86,11 @@ func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 	if err := bootkit.ValidateAppConfig(app.Logger(), &c); err != nil {
 		return nil, err
 	}
+	// v1 docker 执行器已移除：函数执行统一经 functions-dispatcher 分发，
+	// 分发通路缺失直接拒绝启动（不留到首次执行）。
+	if err := bootkit.ValidateFunctionsDispatchConfig(&c); err != nil {
+		return nil, err
+	}
 	// R4-J2-4：启用页 token 签名（HMAC，purpose 派生自 jwt.secret）。
 	if err := bootkit.InitPageTokenSigning(&c); err != nil {
 		return nil, err

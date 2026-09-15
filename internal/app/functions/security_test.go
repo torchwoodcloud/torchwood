@@ -216,7 +216,7 @@ func TestCreateDeployment_BuildSemaphoreFullCleansUp(t *testing.T) {
 			r()
 		}
 	}()
-	uc.WithSemaphores(sem, nil)
+	uc.WithSemaphores(sem)
 
 	_, err := uc.CreateDeployment(platformAdminCtx(), CreateDeploymentCommand{
 		ProjectID:  "p1",

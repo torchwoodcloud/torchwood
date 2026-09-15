@@ -459,42 +459,29 @@ func TestInvokeTrigger_AsyncAckOrderRedLine(t *testing.T) {
 	}
 }
 
-// TestInvokeTrigger_TriggerBodyLimitRelaxed v2 dispatcher 模式下触发器封套
-// 上限放宽至 body_limit（≤1MB）；v1（默认 docker）保持 32KB env 通道上限。
+// TestInvokeTrigger_TriggerBodyLimitRelaxed 触发器封套上限放宽至 body_limit
+// （≤1MB；dispatcher body 通道，v1 env 通道已随执行器移除）。
 func TestInvokeTrigger_TriggerBodyLimitRelaxed(t *testing.T) {
 	repo := newMockRepo()
 	seedReadyFunction(repo, "p1", "fn_1", true, 15)
 	triggers := newMockTriggerRepo()
 	uc := newTriggerTestUC(newMockExecutor(nil, nil), repo, newMockQueue(), triggers, nil)
 
-	// v1：>32KB data 拒绝（env 通道）。
+	// >32KB data 放行（body 通道，触发器上限生效；v1 env 通道 32KB 上限已成历史）。
 	big := fmt.Sprintf(`{"body":%q}`, strings.Repeat("x", 40<<10))
 	_, err := uc.InvokeTrigger(context.Background(), InvokeTriggerCommand{
 		ProjectID: "p1", FunctionID: "fn_1", Data: big, Async: true,
 		Source: "http:trg_x", BodyLimitBytes: 64 << 10,
 	})
-	require.Equal(t, codes.InvalidArgument, status.Code(err), "v1 env 通道保持 32KB 上限")
-
-	// v2：同 data 放行（body 通道，触发器上限生效）。
-	ucV2 := NewFunctionsWithUsage(&config.AppConfig{Functions: &config.Functions{Executor: "dispatcher"}}, newMockExecutor(nil, nil), repo, newMockQueue(), nil, nil, Semaphores{}, nil, triggers)
-	_, err = ucV2.InvokeTrigger(context.Background(), InvokeTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1", Data: big, Async: true,
-		Source: "http:trg_x", BodyLimitBytes: 64 << 10,
-	})
-	require.NoError(t, err, "v2 body 通道放宽到触发器上限")
+	require.NoError(t, err, "body 通道放宽到触发器上限")
 }
 
-// TestMaxTriggerBodyLimit 锁 v1/v2 执行器模式下的生效 body 上限语义。
+// TestMaxTriggerBodyLimit 锁生效 body 上限语义（dispatcher body 通道）。
 func TestMaxTriggerBodyLimit(t *testing.T) {
-	v1 := NewFunctions(&config.AppConfig{}, nil, nil, nil)
-	// v1 env 通道：封套余量 8KB，32KB data 预算 → 24KB（缺省 64KB 同样收窄
-	// ——物理上 data 经 TW_DATA 环境变量注入，超 32KB 无法 execve）。
-	require.Equal(t, 24<<10, v1.MaxTriggerBodyLimit(0))
-	require.Equal(t, 24<<10, v1.MaxTriggerBodyLimit(64<<10))
-	v2 := NewFunctions(&config.AppConfig{Functions: &config.Functions{Executor: "dispatcher"}}, nil, nil, nil)
-	require.Equal(t, 64<<10, v2.MaxTriggerBodyLimit(0), "v2 缺省 64KB")
-	require.Equal(t, 1<<20, v2.MaxTriggerBodyLimit(1<<20), "v2 body 通道配置全额生效")
-	require.Equal(t, 1<<20, v2.MaxTriggerBodyLimit(2<<20), "超过 1MB 收到 1MB")
+	uc := NewFunctions(&config.AppConfig{}, nil, nil, nil)
+	require.Equal(t, 64<<10, uc.MaxTriggerBodyLimit(0), "缺省 64KB")
+	require.Equal(t, 1<<20, uc.MaxTriggerBodyLimit(1<<20), "body 通道配置全额生效")
+	require.Equal(t, 1<<20, uc.MaxTriggerBodyLimit(2<<20), "超过 1MB 收到 1MB")
 }
 
 // TestDispatchDueCronTriggers_EnqueueFailureUndoClaim 入队失败回滚领取：

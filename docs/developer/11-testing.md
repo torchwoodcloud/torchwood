@@ -141,7 +141,7 @@ Services：`percona/percona-distribution-postgresql:18`（`torchwood:torchwood`�
 
 1. `checkout@v4` + `setup-go`（`go-version-file: go.mod`）+ `setup-task` + `buf-setup-action@v1`（`v1.65.0`）；
 2. `buf lint` → **`buf breaking --against '.git#branch=origin/main'`**（见 §6）；
-3. 预拉 `node:18-alpine` / `python:3.11-alpine`（Functions 运行时基镜像）；
+3. 预拉 `node:18-alpine`（Functions 运行时基镜像；python 已随 v1 执行器移除）；
 4. `test -z "$(gofmt -l .)"` → `go vet ./...` → `golangci-lint run ./...`（全量门禁，`ci.yml:106-111`）；
 5. `go test -race -covermode=atomic -coverprofile=coverage.out ./...`（单元+集成）→ `sdk/go: go test -race ./...`（`ci.yml:115-119`）；
 6. **RLS 相对基准门禁**（`ci.yml:122-123`）：RLS 查询耗时相对基准 30x 阈值；

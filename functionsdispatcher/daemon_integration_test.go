@@ -52,7 +52,6 @@ func testDispatcherConfig(t *testing.T) *config.AppConfig {
 	}
 	return &config.AppConfig{
 		Functions: &config.Functions{
-			Executor: "dispatcher",
 			Docker: &config.Functions_Docker{
 				Host:     host,
 				Registry: "torchwood-funcs-dispatch-test",

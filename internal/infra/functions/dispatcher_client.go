@@ -39,8 +39,9 @@ type DispatcherExecutor struct {
 	hc          *http.Client
 }
 
-// NewDispatcherExecutor 构造 dispatcher HTTP 客户端（executor="dispatcher" 时
-// 由 ProvideExecutor 装配；URL 未配置时延迟到首次调用报错，与 v1 同策略）。
+// NewDispatcherExecutor 构造 dispatcher HTTP 客户端（唯一 Executor 装配；
+// URL 缺失的配置错误在组合根 NewAppConfig 启动期 fail-fast，此处延迟校验
+// 仅作纵深防御）。
 func NewDispatcherExecutor(cfg *config.AppConfig) *DispatcherExecutor {
 	d := cfg.GetFunctions().GetDispatcher()
 	return &DispatcherExecutor{
