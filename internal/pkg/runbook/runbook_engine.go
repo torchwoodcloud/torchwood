@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -104,6 +105,15 @@ func fetchRunbookState(c Caller, runbook string) ([]runbookStateStep, error) {
 			version = t
 		case int:
 			version = int64(t)
+		case string:
+			// protojson 把 int64 序列化为字符串（"version": "3"）——生产
+			// gRPC 链路（InvokeJSON 响应）走的正是这个形状；其余形状留给
+			// 测试 fake 与宽容解码器。
+			v, perr := strconv.ParseInt(t, 10, 64)
+			if perr != nil {
+				return nil, fmt.Errorf("fetch runbook state: step version is not a number (%q)", t)
+			}
+			version = v
 		default:
 			return nil, fmt.Errorf("fetch runbook state: step version is not a number (%T)", m["version"])
 		}

@@ -852,6 +852,33 @@ func runDownOnWorld(t *testing.T, w *fakeRunbookWorld, dir string, mutate func(*
 	return summary, err
 }
 
+// TestFetchRunbookStateProtojsonInt64AsString 锁定生产 RPC 链路的响应形状：
+// protojson 把 int64 字段序列化为 JSON 字符串（"version": "3"），InvokeJSON
+// 的响应 map 里 version 因此是 Go string 而非 number（真机 mlbridge runbook
+// 首跑踩中）。引擎必须解析它，并拒绝非数字字符串。
+func TestFetchRunbookStateProtojsonInt64AsString(t *testing.T) {
+	caller := func(method string, req map[string]any) (map[string]any, error) {
+		require.Equal(t, runbookMethodGetState, method)
+		return map[string]any{"steps": []any{
+			map[string]any{"version": "1", "name": "a", "checksum": strings.Repeat("a", 64)},
+			map[string]any{"version": "12", "name": "b", "checksum": strings.Repeat("b", 64)},
+		}}, nil
+	}
+	steps, err := fetchRunbookState(caller, runbookDefaultName)
+	require.NoError(t, err)
+	require.Len(t, steps, 2)
+	require.Equal(t, int64(1), steps[0].Version)
+	require.Equal(t, int64(12), steps[1].Version)
+
+	bad := func(method string, req map[string]any) (map[string]any, error) {
+		return map[string]any{"steps": []any{
+			map[string]any{"version": "not-a-number", "name": "a", "checksum": strings.Repeat("a", 64)},
+		}}, nil
+	}
+	_, err = fetchRunbookState(bad, runbookDefaultName)
+	require.ErrorContains(t, err, "step version is not a number")
+}
+
 // ---------------------------------------------------------------------------
 // gRPC code 名契约（错误分类的根基）
 // ---------------------------------------------------------------------------
