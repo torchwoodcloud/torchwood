@@ -18,7 +18,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
 	github.com/lynx-go/commands v0.3.0
-	github.com/lynx-go/lynx v1.10.0
+	github.com/lynx-go/lynx v1.11.0
 	github.com/lynx-go/lynx/contrib/zap v1.7.0
 	github.com/minio/minio-go/v7 v7.2.0
 	github.com/oklog/ulid/v2 v2.1.1

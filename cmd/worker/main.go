@@ -38,7 +38,7 @@ func main() {
 		// 手写超时兜底样板（不能进 OnPreStop：排水/关停期间在途任务还要用
 		// 连接池）。
 		app.OnPostStop(cleanup)
-		bootstrap.Bind(app)
+		bootstrap.Apply(app)
 		return nil
 	},
 		lynx.WithName("Torchwood Worker"),

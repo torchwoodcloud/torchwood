@@ -42,7 +42,7 @@ func main() {
 		// 不能进 OnPreStop（先于服务 Stop，会掐断排水/关停期间在途请求的
 		// 连接池），只能等 RunE 返回后由 main 手写超时兜底样板。
 		app.OnPostStop(cleanup)
-		bootstrap.Bind(app)
+		bootstrap.Apply(app)
 		return nil
 	},
 		lynx.WithName("Torchwood"),

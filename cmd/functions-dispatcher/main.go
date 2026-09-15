@@ -40,7 +40,7 @@ func main() {
 		// 与 server/worker 同约定）：所有服务停止后执行，自带预算——取代
 		// 此前 main 里的手写超时兜底样板。
 		app.OnPostStop(cleanup)
-		bootstrap.Bind(app)
+		bootstrap.Apply(app)
 		return nil
 	},
 		lynx.WithName("Torchwood Functions Dispatcher"),
