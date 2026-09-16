@@ -165,6 +165,9 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	analyticsIngestRepository := bunrepo.NewAnalyticsIngestRepository(database)
 	ingest := analytics.NewIngest(analyticsIngestRepository, redisCounter, logger)
 	analyticsService := clientgrpc.NewAnalyticsService(ingest)
+	runtimeVarPublicRead := bunrepo.NewRuntimeVarPublicRead(database)
+	runtimeVars := client.NewRuntimeVars(repository, runtimeVarPublicRead)
+	runtimeVarsService := clientgrpc.NewRuntimeVarsService(runtimeVars)
 	buildInfo := NewBuildInfo()
 	healthService := servergrpc.NewHealthService(checkers, buildInfo)
 	schemaManager := NewSchemaManager(database, documentDB)
@@ -224,9 +227,9 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	runbook := server.NewRunbook(stateRepo)
 	runbookService := servergrpc.NewRunbookService(runbook)
 	runtimeVarRepository := bunrepo.NewRuntimeVarRepository(database)
-	runtimeVars := server.NewRuntimeVars(runtimeVarRepository, database)
-	runtimeVarsService := servergrpc.NewRuntimeVarsService(runtimeVars)
-	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, leaderboardsService, analyticsService, healthService, projectsService, storageService, usersService, authService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, consolegrpcAuthService, adminsService, outboxService, auditLogsService, servergrpcLeaderboardsService, consolegrpcLeaderboardsService, servergrpcAnalyticsService, runbookService, runtimeVarsService, policySet)
+	serverRuntimeVars := server.NewRuntimeVars(runtimeVarRepository, database)
+	servergrpcRuntimeVarsService := servergrpc.NewRuntimeVarsService(serverRuntimeVars)
+	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, leaderboardsService, analyticsService, runtimeVarsService, healthService, projectsService, storageService, usersService, authService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, consolegrpcAuthService, adminsService, outboxService, auditLogsService, servergrpcLeaderboardsService, consolegrpcLeaderboardsService, servergrpcAnalyticsService, runbookService, servergrpcRuntimeVarsService, policySet)
 	if err != nil {
 		cleanup()
 		return nil, nil, err

@@ -1,0 +1,128 @@
+syntax = "proto3";
+
+package torchwood.client.v1;
+
+option go_package = "github.com/torchwoodcloud/torchwood/genproto/client/v1;clientv1";
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "shared/v1/authz.proto";
+
+// 服务默认 access=authenticated：swagger 顶层声明 Bearer security；
+// ACCESS_PUBLIC 方法逐方法声明 security: [] + x-torchwood-access: "public"
+// （详见 docs/developer/09-api-guide.md §1.4 的 OpenAPI 建模约定）。
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  security_definitions: {
+    security: {
+      key: "apiKey"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "X-API-Key"
+        description: "项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。"
+      }
+    }
+    security: {
+      key: "Bearer"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "格式: Bearer <jwt>（Client API 登录态）"
+      }
+    }
+    security: {
+      key: "cookie"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Cookie"
+        description: "TORCHWOOD_session_console=<sid>（Console admin 会话）"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "Bearer"
+      value: {}
+    }
+  }
+  extensions: {
+    key: "x-torchwood-access"
+    value: { string_value: "end_user" }
+  }
+  // 统一 default 错误响应（运行时错误体即 shared.v1.ErrorResponse），
+  // 文件级声明自动填充到本文件全部 operation。
+  responses: {
+    key: "default"
+    value: {
+      description: "An unexpected error response."
+      schema: { json_schema: { ref: ".torchwood.shared.v1.ErrorResponse" } }
+    }
+  }
+};
+
+// RuntimeVarsService 是 client 面运行时变量拉取端点（docs/design/runtime-vars.md
+// §2.3）：方法级 ACCESS_PUBLIC（public 集匿名可读），集合级可见性（private 拒绝
+// 匿名）在数据访问层过滤（§2.4）。唯一方法 GetRuntimeVars——按集合全量快照，
+// 无单 key 读/分页/跨集合聚合/集合目录（D4/D14）。
+service RuntimeVarsService {
+  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_END_USER };
+
+  // GetRuntimeVars 拉取集合的全量快照。project_id 是匿名唯一可靠寻址
+  // （resolveProjectID 链第一级）；etag 透传上次响应值，命中则 unchanged=true
+  // 且 vars 为空（不透明 token "{epoch}:{revision}"，D2）。SDK 轮询建议
+  // TTL ≥ 60s；收到 404 保留 last-known-good 缓存（D15）。
+  rpc GetRuntimeVars(GetRuntimeVarsRequest) returns (GetRuntimeVarsResponse) {
+    option (google.api.http) = { get: "/v1/runtime-vars/{var_set_id}" };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {}
+      extensions: {
+        key: "x-torchwood-access"
+        value: { string_value: "public" }
+      }
+    };
+  }
+}
+
+message GetRuntimeVarsRequest {
+  // 路径参数：集合名（创建后不可改，D9）。
+  string var_set_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 40
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+  // 匿名唯一可靠寻址；缺省回落 X-Torchwood-Project 头 → Principal（handler
+  // 三级回落链，与 ListDocuments 同）。
+  string project_id = 2;
+  // 可选：上次响应的 etag；命中则短路返回 unchanged=true（vars 为空）。
+  string etag = 3;
+}
+
+message GetRuntimeVarsResponse {
+  // 全量快照；unchanged 时为空。删除语义靠整 map 替换自然生效（D4）。
+  map<string, RuntimeVarValue> vars = 1;
+  string etag = 2;
+  bool unchanged = 3;
+}
+
+// RuntimeVarValue 是五类型 oneof（D3，client 侧独立定义——client/server 资源
+// 类型互不 import 是仓库现状，一致性由 swagger 测试与 SDK 类型测试覆盖）。
+// integer 限 ±2^53−1：gateway 输出 JSON number，TS number 超精度静默损坏。
+// json_value 为合法 JSON 文本（写路径已校验嵌套深度 ≤100）。
+message RuntimeVarValue {
+  oneof kind {
+    option (buf.validate.oneof).required = true;
+
+    string string_value = 1;
+    int64 integer_value = 2 [(buf.validate.field).int64 = { gte: -9007199254740991, lte: 9007199254740991 }];
+    double float_value = 3;
+    bool bool_value = 4;
+    string json_value = 5;
+  }
+}

@@ -23,6 +23,10 @@ var ProviderSet = wire.NewSet(
 	wire.Bind(new(domainauth.UserRoleResolver), new(*client.UserRoles)),
 	client.NewAccount,
 	client.NewDatabases,
+	// RuntimeVars client 面拉取用例（docs/design/runtime-vars.md §2.6）：
+	// 只注入 RuntimeVarPublicRead 窄 port（可见性过滤在实现内），全量
+	// repo 不进 client 装配。
+	client.NewRuntimeVars,
 	client.NewGroups,
 	server.NewProjects,
 	server.NewUsers,

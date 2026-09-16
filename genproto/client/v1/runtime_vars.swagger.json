@@ -1,0 +1,186 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "client/v1/runtime_vars.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "RuntimeVarsService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/runtime-vars/{var_set_id}": {
+      "get": {
+        "summary": "GetRuntimeVars 拉取集合的全量快照。project_id 是匿名唯一可靠寻址\n（resolveProjectID 链第一级）；etag 透传上次响应值，命中则 unchanged=true\n且 vars 为空（不透明 token \"{epoch}:{revision}\"，D2）。SDK 轮询建议\nTTL ≥ 60s；收到 404 保留 last-known-good 缓存（D15）。",
+        "operationId": "RuntimeVarsService_GetRuntimeVars",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetRuntimeVarsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "var_set_id",
+            "description": "路径参数：集合名（创建后不可改，D9）。",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "project_id",
+            "description": "匿名唯一可靠寻址；缺省回落 X-Torchwood-Project 头 → Principal（handler\n三级回落链，与 ListDocuments 同）。",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "etag",
+            "description": "可选：上次响应的 etag；命中则短路返回 unchanged=true（vars 为空）。",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "RuntimeVarsService"
+        ],
+        "security": [],
+        "x-torchwood-access": "public"
+      }
+    }
+  },
+  "definitions": {
+    "torchwoodclientv1RuntimeVarValue": {
+      "type": "object",
+      "properties": {
+        "string_value": {
+          "type": "string"
+        },
+        "integer_value": {
+          "type": "string",
+          "format": "int64"
+        },
+        "float_value": {
+          "type": "number",
+          "format": "double"
+        },
+        "bool_value": {
+          "type": "boolean"
+        },
+        "json_value": {
+          "type": "string"
+        }
+      },
+      "title": "RuntimeVarValue 是五类型 oneof（D3，client 侧独立定义——client/server 资源\n类型互不 import 是仓库现状，一致性由 swagger 测试与 SDK 类型测试覆盖）。\ninteger 限 ±2^53−1：gateway 输出 JSON number，TS number 超精度静默损坏。\njson_value 为合法 JSON 文本（写路径已校验嵌套深度 ≤100）。"
+    },
+    "v1Error": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "error_id": {
+          "type": "string"
+        },
+        "error_code": {
+          "$ref": "#/definitions/v1ErrorCode"
+        }
+      }
+    },
+    "v1ErrorCode": {
+      "type": "string",
+      "enum": [
+        "ERROR_CODE_UNSPECIFIED",
+        "ERROR_CODE_INVALID_REQUEST",
+        "ERROR_CODE_RESOURCE_NOT_FOUND",
+        "ERROR_CODE_INVALID_CREDENTIALS",
+        "ERROR_CODE_PERMISSION_DENIED",
+        "ERROR_CODE_RESOURCE_CONFLICT",
+        "ERROR_CODE_QUOTA_EXCEEDED",
+        "ERROR_CODE_PRECONDITION_FAILED",
+        "ERROR_CODE_CONCURRENT_MODIFICATION",
+        "ERROR_CODE_VALUE_OUT_OF_RANGE",
+        "ERROR_CODE_OPERATION_NOT_ALLOWED",
+        "ERROR_CODE_INTERNAL_ERROR",
+        "ERROR_CODE_SERVICE_UNAVAILABLE",
+        "ERROR_CODE_TIMEOUT"
+      ],
+      "default": "ERROR_CODE_UNSPECIFIED",
+      "title": "ErrorCode 与 gRPC code 的映射（HTTPErrorHandler 单一事实来源，\n见 internal/infra/server/errors.go）：\n  - InvalidArgument → ERROR_CODE_INVALID_REQUEST\n  - FailedPrecondition → ERROR_CODE_PRECONDITION_FAILED\n  - NotFound → ERROR_CODE_RESOURCE_NOT_FOUND\n  - AlreadyExists → ERROR_CODE_RESOURCE_CONFLICT\n  - Aborted → ERROR_CODE_CONCURRENT_MODIFICATION\n  - Unauthenticated → ERROR_CODE_INVALID_CREDENTIALS\n  - PermissionDenied → ERROR_CODE_PERMISSION_DENIED\n  - ResourceExhausted → ERROR_CODE_QUOTA_EXCEEDED\n  - DeadlineExceeded → ERROR_CODE_TIMEOUT\n  - 其余 → ERROR_CODE_INTERNAL_ERROR"
+    },
+    "v1ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "$ref": "#/definitions/v1Error"
+        }
+      }
+    },
+    "v1GetRuntimeVarsResponse": {
+      "type": "object",
+      "properties": {
+        "vars": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/torchwoodclientv1RuntimeVarValue"
+          },
+          "title": "全量快照；unchanged 时为空。删除语义靠整 map 替换自然生效（D4）。"
+        },
+        "etag": {
+          "type": "string"
+        },
+        "unchanged": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "Bearer": {
+      "type": "apiKey",
+      "description": "格式: Bearer \u003cjwt\u003e（Client API 登录态）",
+      "name": "Authorization",
+      "in": "header"
+    },
+    "apiKey": {
+      "type": "apiKey",
+      "description": "项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。",
+      "name": "X-API-Key",
+      "in": "header"
+    },
+    "cookie": {
+      "type": "apiKey",
+      "description": "TORCHWOOD_session_console=\u003csid\u003e（Console admin 会话）",
+      "name": "Cookie",
+      "in": "header"
+    }
+  },
+  "security": [
+    {
+      "Bearer": []
+    }
+  ],
+  "x-torchwood-access": "end_user"
+}

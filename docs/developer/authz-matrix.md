@@ -12,7 +12,7 @@
 >   SERVER admin 会话（admin_roles）或 API key（scope）；PERMISSION admin 会话
 >   专属（permissions），key 一律拒绝；SYSTEM 预留禁用。
 
-方法总数 261：PUBLIC 29 · END_USER 47 · SERVER 155 · PERMISSION 30 · SYSTEM 0。
+方法总数 262：PUBLIC 30 · END_USER 47 · SERVER 155 · PERMISSION 30 · SYSTEM 0。
 
 ## /torchwood.client.v1.AccountService
 
@@ -117,6 +117,12 @@
 | `/torchwood.client.v1.PaymentsService/GetMyOrder` | END_USER | — | — | — | |
 | `/torchwood.client.v1.PaymentsService/ListMyOrders` | END_USER | — | — | — | |
 | `/torchwood.client.v1.PaymentsService/VerifyReceipt` | END_USER | — | — | — | |
+
+## /torchwood.client.v1.RuntimeVarsService
+
+| 方法 | Access | Admin 角色档 | Key Scope | 档位 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `/torchwood.client.v1.RuntimeVarsService/GetRuntimeVars` | PUBLIC | — | — | — | |
 
 ## /torchwood.client.v1.SubscriptionsService
 

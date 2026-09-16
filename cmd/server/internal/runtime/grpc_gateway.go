@@ -98,6 +98,9 @@ func NewGRPCGatewayServer(
 		// RuntimeVars server 面（阶段 2 服务面）：/v1/server/runtime-var-sets
 		// CRUD + vars + versions（Console/CLI/Agent 经 gateway 消费）。
 		serverv1.RegisterRuntimeVarsServiceHandlerFromEndpoint,
+		// RuntimeVars client 面（阶段 3 匿名拉取端点）：GET /v1/runtime-vars/
+		// {var_set_id}——客户端 SDK 轮询入口，必须挂 gateway。
+		clientv1.RegisterRuntimeVarsServiceHandlerFromEndpoint,
 	}
 	for _, fn := range register {
 		if err := fn(ctx, mux, grpcEndpoint, opts); err != nil {

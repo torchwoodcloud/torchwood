@@ -512,7 +512,7 @@
           "type": "string"
         },
         "value": {
-          "$ref": "#/definitions/v1RuntimeVarValue"
+          "$ref": "#/definitions/torchwoodserverv1RuntimeVarValue"
         },
         "description": {
           "type": "string"
@@ -533,7 +533,7 @@
       "type": "object",
       "properties": {
         "value": {
-          "$ref": "#/definitions/v1RuntimeVarValue",
+          "$ref": "#/definitions/torchwoodserverv1RuntimeVarValue",
           "title": "必填：完整新值，类型可随本次变更（D5 无 Upsert，Update 分立）。"
         },
         "description": {
@@ -553,6 +553,29 @@
           "type": "string"
         }
       }
+    },
+    "torchwoodserverv1RuntimeVarValue": {
+      "type": "object",
+      "properties": {
+        "string_value": {
+          "type": "string"
+        },
+        "integer_value": {
+          "type": "string",
+          "format": "int64"
+        },
+        "float_value": {
+          "type": "number",
+          "format": "double"
+        },
+        "bool_value": {
+          "type": "boolean"
+        },
+        "json_value": {
+          "type": "string"
+        }
+      },
+      "title": "RuntimeVarValue 是五类型 oneof（D3）。integer 限 ±2^53−1：gateway 输出\nJSON number，TS number 超精度静默损坏。json_value 为合法 JSON 文本，\n嵌套深度 ≤100（app 层校验，错误友好——encoding/json 万层栈保护错误不可读）。"
     },
     "v1CreateVarSetRequest": {
       "type": "object",
@@ -713,7 +736,7 @@
           "type": "string"
         },
         "value": {
-          "$ref": "#/definitions/v1RuntimeVarValue"
+          "$ref": "#/definitions/torchwoodserverv1RuntimeVarValue"
         },
         "description": {
           "type": "string"
@@ -728,29 +751,6 @@
         }
       },
       "title": "RuntimeVar 是单个类型化变量。value 的 oneof 即类型锚点（存储 JSONB 单列 +\nvalue_type 列，D3）；类型创建时锁定、变更走显式 Update。"
-    },
-    "v1RuntimeVarValue": {
-      "type": "object",
-      "properties": {
-        "string_value": {
-          "type": "string"
-        },
-        "integer_value": {
-          "type": "string",
-          "format": "int64"
-        },
-        "float_value": {
-          "type": "number",
-          "format": "double"
-        },
-        "bool_value": {
-          "type": "boolean"
-        },
-        "json_value": {
-          "type": "string"
-        }
-      },
-      "title": "RuntimeVarValue 是五类型 oneof（D3）。integer 限 ±2^53−1：gateway 输出\nJSON number，TS number 超精度静默损坏。json_value 为合法 JSON 文本，\n嵌套深度 ≤100（app 层校验，错误友好——encoding/json 万层栈保护错误不可读）。"
     },
     "v1RuntimeVarVersion": {
       "type": "object",
@@ -795,7 +795,7 @@
           "type": "string"
         },
         "value": {
-          "$ref": "#/definitions/v1RuntimeVarValue"
+          "$ref": "#/definitions/torchwoodserverv1RuntimeVarValue"
         },
         "description": {
           "type": "string"

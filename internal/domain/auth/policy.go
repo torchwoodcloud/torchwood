@@ -468,6 +468,9 @@ var clientPublicMethodWhitelist = map[string]struct{}{
 	"/torchwood.client.v1.DatabasesService/ListDocuments":                {},
 	"/torchwood.client.v1.DatabasesService/GetDocument":                  {},
 	"/torchwood.client.v1.DatabasesService/CountDocuments":               {},
+	// RuntimeVars client 面（docs/design/runtime-vars.md §2.3）：public 集合
+	// 匿名可读；private 集合的可见性过滤在数据访问层（RuntimeVarPublicRead）。
+	"/torchwood.client.v1.RuntimeVarsService/GetRuntimeVars": {},
 }
 
 func assertClientValueDomain(p MethodPolicy) error {

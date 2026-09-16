@@ -44,6 +44,7 @@ func NewGRPCServer(
 	clientFunctions *clientgrpc.FunctionsService,
 	clientLeaderboards *clientgrpc.LeaderboardsService,
 	clientAnalytics *clientgrpc.AnalyticsService,
+	clientRuntimeVars *clientgrpc.RuntimeVarsService,
 	health *servergrpc.HealthService,
 	projects *servergrpc.ProjectsService,
 	storage *servergrpc.StorageService,
@@ -140,6 +141,8 @@ func NewGRPCServer(
 	// Analytics 摄入双面（PR2）：client 面 Principal 归因、server 面可信
 	// 代报；proto 策略 PR1 已登记（authzFileDescriptors）。
 	clientv1.RegisterAnalyticsServiceServer(grpcSrv, clientAnalytics)
+	// RuntimeVars client 面（阶段 3 匿名拉取端点）：GET /v1/runtime-vars/{set}。
+	clientv1.RegisterRuntimeVarsServiceServer(grpcSrv, clientRuntimeVars)
 	serverv1.RegisterHealthServiceServer(grpcSrv, health)
 	serverv1.RegisterProjectsServiceServer(grpcSrv, projects)
 	serverv1.RegisterStorageServiceServer(grpcSrv, storage)
@@ -232,6 +235,9 @@ func authzFileDescriptors() []protoreflect.FileDescriptor {
 		// Analytics（docs/design/analytics.md）：client 面仅摄入；PR1 只登记
 		// proto 策略（handler/注册随 PR2 到位）。
 		clientv1.File_client_v1_analytics_proto,
+		// RuntimeVars client 面（docs/design/runtime-vars.md §2.3：唯一方法
+		// GetRuntimeVars，ACCESS_PUBLIC 白名单登记见 domain/auth/policy.go）。
+		clientv1.File_client_v1_runtime_vars_proto,
 		serverv1.File_server_v1_projects_proto,
 		serverv1.File_server_v1_health_proto,
 		serverv1.File_server_v1_storage_proto,

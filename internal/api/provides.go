@@ -20,6 +20,9 @@ var ProviderSet = wire.NewSet(
 	clientgrpc.NewLeaderboardsService,
 	// Analytics client 面摄入（PR2；仅 IngestEvents）。
 	clientgrpc.NewAnalyticsService,
+	// RuntimeVars client 面匿名拉取端点（docs/design/runtime-vars.md §2.3：
+	// GET /v1/runtime-vars/{var_set_id}）。
+	clientgrpc.NewRuntimeVarsService,
 	servergrpc.NewHealthService,
 	servergrpc.NewProjectsService,
 	servergrpc.NewStorageService,
