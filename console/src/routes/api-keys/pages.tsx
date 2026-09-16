@@ -216,8 +216,9 @@ export function ApiKeyNewPage() {
 
   const buildScopes = (): string[] => {
     if (manualMode) {
+      // 手动输入区是多行文本框：逗号或换行均可分隔。
       return manualScopes
-        .split(",")
+        .split(/[\n,]/)
         .map((s) => s.trim())
         .filter(Boolean);
     }
@@ -263,6 +264,7 @@ export function ApiKeyNewPage() {
       description="Secret 创建后仅显示一次"
       backTo="/console/api-keys"
       submitLabel="创建"
+      formClassName="space-y-5 max-w-4xl"
       onSubmit={(e) => {
         e.preventDefault();
         mutation.mutate({
@@ -275,17 +277,24 @@ export function ApiKeyNewPage() {
     >
       <FormField id="name" label="名称" value={name} onChange={setName} required placeholder="Production API Key" />
       {manualMode ? (
-        <FormField
-          id="manual-scopes"
-          label="Scopes（逗号分隔）"
-          value={manualScopes}
-          onChange={setManualScopes}
-          placeholder="users.read, users.write"
-        />
+        <div className="space-y-2">
+          <Label htmlFor="manual-scopes">Scopes（逗号或换行分隔）</Label>
+          <textarea
+            id="manual-scopes"
+            value={manualScopes}
+            onChange={(e) => setManualScopes(e.target.value)}
+            placeholder={"users.read, users.write\ndatabases.read\nrunbooks.admin"}
+            rows={6}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs"
+          />
+          <p className="text-xs text-muted-foreground">
+            支持资源级限定（如 <code>databases:blog.read</code> 单库只读）与自定义服务 scope。
+          </p>
+        </div>
       ) : (
         <div className="space-y-3">
           <Label>Scopes</Label>
-          <div className="space-y-3 rounded-md border p-4">
+          <div className="space-y-4 rounded-md border p-5">
             <div className="flex items-center gap-2">
               <Checkbox
                 id="scope-wildcard"
@@ -303,7 +312,7 @@ export function ApiKeyNewPage() {
                   : "Scope 词表加载中…"}
               </p>
             ) : (
-              <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
+              <div className="grid gap-x-10 gap-y-3 sm:grid-cols-2">
                 {catalog.map((entry) => (
                   <ScopeResourceRow
                     key={entry.resource}
