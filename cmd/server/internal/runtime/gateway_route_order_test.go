@@ -8,10 +8,10 @@ import (
 	"sync"
 	"testing"
 
+	gwruntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/stretchr/testify/require"
 	consolev1 "github.com/torchwoodcloud/torchwood/genproto/console/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
-	"github.com/stretchr/testify/require"
-	gwruntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 )
 
 // grpc-gateway 的 ServeMux.Handle 是头插（LIFO）：同 HTTP 方法下后注册的
