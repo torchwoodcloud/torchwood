@@ -25,3 +25,5 @@ export type {
 } from "./realtime.js";
 export { ClientGroupsService } from "./groups.js";
 export { ClientLeaderboardsService } from "./leaderboards.js";
+export { ClientRuntimeVarsService } from "./runtimeVars.js";
+export type { GetRuntimeVarsResult, RuntimeVarValue } from "./runtimeVars.js";

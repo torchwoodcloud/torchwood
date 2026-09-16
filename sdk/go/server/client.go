@@ -118,6 +118,8 @@ type Client struct {
 	Analytics *AnalyticsService
 	// Runbook 提供版本化资源迁移的状态面（scope runbooks.read/write）。
 	Runbook *RunbookService
+	// RuntimeVars 提供运行时变量集合/变量/版本链管理（scope runtime_vars.read/write）。
+	RuntimeVars *RuntimeVarsService
 }
 
 // New 建立 Server API 连接。target 为 gRPC 目标地址，不能为空。
@@ -164,6 +166,7 @@ func New(target string, opts ...Option) (*Client, error) {
 	c.AuditLogs = &AuditLogsService{c: c, api: serverv1.NewAuditLogsServiceClient(gc)}
 	c.Analytics = &AnalyticsService{c: c, api: serverv1.NewAnalyticsServiceClient(gc)}
 	c.Runbook = &RunbookService{c: c, api: serverv1.NewRunbookServiceClient(gc)}
+	c.RuntimeVars = &RuntimeVarsService{c: c, api: serverv1.NewRuntimeVarsServiceClient(gc)}
 	return c, nil
 }
 

@@ -80,6 +80,7 @@ type Client struct {
 	assets        clientv1.AssetsServiceClient
 	subscriptions clientv1.SubscriptionsServiceClient
 	functions     clientv1.FunctionsServiceClient
+	runtimeVars   clientv1.RuntimeVarsServiceClient
 
 	// Account 提供注册/登录/账户管理。
 	Account *AccountService
@@ -95,6 +96,8 @@ type Client struct {
 	Subscriptions *SubscriptionsService
 	// Functions 提供客户端调用面（P2：按 per-function 策略同步调用函数）。
 	Functions *FunctionsService
+	// RuntimeVars 提供运行时变量按集合全量快照拉取（public 集匿名可读）。
+	RuntimeVars *RuntimeVarsService
 }
 
 // New 建立 Client API 连接。target 为 gRPC 目标地址，不能为空。
@@ -132,6 +135,7 @@ func New(target string, opts ...Option) (*Client, error) {
 	c.assets = clientv1.NewAssetsServiceClient(gc)
 	c.subscriptions = clientv1.NewSubscriptionsServiceClient(gc)
 	c.functions = clientv1.NewFunctionsServiceClient(gc)
+	c.runtimeVars = clientv1.NewRuntimeVarsServiceClient(gc)
 	c.Account = &AccountService{c: c}
 	c.Groups = &GroupsService{c: c}
 	c.Databases = c.UseDatabase(cfg.DatabaseID)
@@ -139,6 +143,7 @@ func New(target string, opts ...Option) (*Client, error) {
 	c.Assets = &AssetsService{c: c}
 	c.Subscriptions = &SubscriptionsService{c: c}
 	c.Functions = &FunctionsService{c: c}
+	c.RuntimeVars = &RuntimeVarsService{c: c}
 	return c, nil
 }
 

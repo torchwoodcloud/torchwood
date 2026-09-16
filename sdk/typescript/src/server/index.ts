@@ -11,6 +11,21 @@ export { AuthService } from "./auth.js";
 export type { VerifyCredentialType, VerifyTokenGroupRef, VerifyTokenResponse } from "./auth.js";
 export { RunbookService } from "./runbook.js";
 export type { RecordRunbookStepInput, RunbookStepState } from "./runbook.js";
+export { RuntimeVarsService } from "./runtimeVars.js";
+export type {
+  GetRuntimeVarVersionResponse,
+  RollbackResponse,
+  RuntimeVar,
+  RuntimeVarValue,
+  RuntimeVarValueInput,
+  RuntimeVarVersion,
+  RuntimeVarVersionAction,
+  RuntimeVarVersionEntry,
+  RuntimeVarsPageParams,
+  VarSet,
+  VarSetVisibility,
+  VarSetVisibilityInput,
+} from "./runtimeVars.js";
 export { ServerPaymentsService } from "./payments.js";
 export { ServerAssetsService } from "./assets.js";
 export { ServerLeaderboardsService } from "./leaderboards.js";

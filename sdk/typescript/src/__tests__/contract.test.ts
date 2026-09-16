@@ -14,6 +14,7 @@ import { ClientFunctionsService } from "../client/functions.js";
 import { ClientPaymentsService } from "../client/payments.js";
 import { ClientSubscriptionsService } from "../client/subscriptions.js";
 import { ClientGroupsService } from "../client/groups.js";
+import { ClientRuntimeVarsService } from "../client/runtimeVars.js";
 import { HttpTransport } from "../http.js";
 import {
   AnalyticsService,
@@ -35,6 +36,7 @@ import {
   StorageService,
   UsersService,
   ServerLeaderboardsService,
+  RuntimeVarsService,
 } from "../server/index.js";
 
 // ---- 契约测试：proto（swagger.json 产物）↔ TS SDK 方法集合比对（F11-2）----
@@ -69,6 +71,7 @@ const SDK_SERVICES: Record<string, ClassLike> = {
   AnalyticsService: AnalyticsService,
   AuthService: AuthService,
   RunbookService: RunbookService,
+  RuntimeVarsService: RuntimeVarsService,
   // Client API（swagger 服务名与 Server API 重名，加 client. 前缀区分）
   "client.AccountService": AccountService,
   "client.AnalyticsService": ClientAnalyticsService,
@@ -79,6 +82,7 @@ const SDK_SERVICES: Record<string, ClassLike> = {
   "client.SubscriptionsService": ClientSubscriptionsService,
   "client.FunctionsService": ClientFunctionsService,
   "client.LeaderboardsService": ClientLeaderboardsService,
+  "client.RuntimeVarsService": ClientRuntimeVarsService,
 };
 
 // RPC 名 → TS SDK 方法名（SDK 使用简短命名，与 proto 非一一对应，显式登记）。
@@ -374,6 +378,24 @@ const RPC_TO_METHOD: Record<string, Record<string, string>> = {
     GetMyLeaderboardEntry: "getMyLeaderboardEntry",
     ListLeaderboardTop: "listLeaderboardTop",
   },
+  RuntimeVarsService: {
+    CreateVarSet: "createVarSet",
+    ListVarSets: "listVarSets",
+    GetVarSet: "getVarSet",
+    UpdateVarSet: "updateVarSet",
+    DeleteVarSet: "deleteVarSet",
+    CreateRuntimeVar: "createVar",
+    ListRuntimeVars: "listVars",
+    GetRuntimeVar: "getVar",
+    UpdateRuntimeVar: "updateVar",
+    DeleteRuntimeVar: "deleteVar",
+    ListRuntimeVarVersions: "listVersions",
+    GetRuntimeVarVersion: "getVersion",
+    RollbackRuntimeVar: "rollback",
+  },
+  "client.RuntimeVarsService": {
+    GetRuntimeVars: "getRuntimeVars",
+  },
 };
 
 // securityDefinitions 中必须存在的三个统一 scheme 名（F11-1）。
@@ -522,6 +544,7 @@ const FACADE_SERVICES: Record<string, string> = {
   AnalyticsService: "analytics",
   AuthService: "auth",
   RunbookService: "runbooks",
+  RuntimeVarsService: "runtimeVars",
 };
 
 // Round3 H4-1：Server swagger 的每个服务都必须经 `Torchwood.server.<svc>`
@@ -625,6 +648,7 @@ it("Torchwood.server 门面可达全部 Server swagger 服务（含 functions）
       payments: new ServerPaymentsService(h),
       assets: new ServerAssetsService(h),
       subscriptions: new ServerSubscriptionsService(h),
+      runtimeVars: new RuntimeVarsService(h),
     });
     const client = (h: HttpTransport) => ({
       account: new AccountService(h),
@@ -632,6 +656,7 @@ it("Torchwood.server 门面可达全部 Server swagger 服务（含 functions）
       assets: new ClientAssetsService(h),
       subscriptions: new ClientSubscriptionsService(h),
       functions: new ClientFunctionsService(h),
+      runtimeVars: new ClientRuntimeVarsService(h),
     });
 
     // 覆盖各服务的 Create/Update/Delete 写方法（及代表性 Get/其他写方法）。
@@ -722,7 +747,15 @@ it("Torchwood.server 门面可达全部 Server swagger 服务（含 functions）
       { side: "client", operationId: "PaymentsService_CreateOrder", invoke: (h) => client(h).payments.createOrder({ idempotency_key: "idem-1", provider: "stripe", amount: "1999", currency: "USD", purpose_kind: "topup", purpose: { currency_code: "gold", amount: "100" } }) },
       { side: "client", operationId: "SubscriptionsService_Subscribe", invoke: (h) => client(h).subscriptions.subscribe({ plan_code: "pro", mode: "platform", idempotency_key: "s1" }) },
       { side: "client", operationId: "SubscriptionsService_Cancel", invoke: (h) => client(h).subscriptions.cancel("sub-1") },
-      { side: "client", operationId: "FunctionsService_InvokeFunction", invoke: (h) => client(h).functions.invokeFunction("sign_in", { data: "{\"day\":\"2026-09-09\"}", idempotency_key: "idem-1" }) }
+      { side: "client", operationId: "FunctionsService_InvokeFunction", invoke: (h) => client(h).functions.invokeFunction("sign_in", { data: "{\"day\":\"2026-09-09\"}", idempotency_key: "idem-1" }) },
+      { side: "server", operationId: "RuntimeVarsService_CreateVarSet", invoke: (h) => server(h).runtimeVars.createVarSet({ var_set_id: "flags", description: "feature flags" }) },
+      { side: "server", operationId: "RuntimeVarsService_UpdateVarSet", invoke: (h) => server(h).runtimeVars.updateVarSet("flags", { visibility: "VAR_SET_VISIBILITY_PRIVATE", description: "d2" }) },
+      { side: "server", operationId: "RuntimeVarsService_DeleteVarSet", invoke: (h) => server(h).runtimeVars.deleteVarSet("flags") },
+      { side: "server", operationId: "RuntimeVarsService_CreateRuntimeVar", invoke: (h) => server(h).runtimeVars.createVar("flags", { key: "enabled", value: { bool_value: true } }) },
+      { side: "server", operationId: "RuntimeVarsService_UpdateRuntimeVar", invoke: (h) => server(h).runtimeVars.updateVar("flags", "enabled", { value: { integer_value: 3 }, description: "d" }) },
+      { side: "server", operationId: "RuntimeVarsService_DeleteRuntimeVar", invoke: (h) => server(h).runtimeVars.deleteVar("flags", "enabled") },
+      { side: "server", operationId: "RuntimeVarsService_RollbackRuntimeVar", invoke: (h) => server(h).runtimeVars.rollback("flags", 3) },
+      { side: "client", operationId: "RuntimeVarsService_GetRuntimeVars", invoke: (h) => client(h).runtimeVars.getRuntimeVars("flags", { projectId: "p1", etag: "e1" }) }
     );
     assert.ok(cases.length >= 40, `HTTP 绑定用例不足（当前 ${cases.length}）`);
 

@@ -5,6 +5,7 @@ import {
   ClientDatabasesService,
   ClientFunctionsService,
   ClientPaymentsService,
+  ClientRuntimeVarsService,
   ClientSubscriptionsService,
   ClientGroupsService,
   ClientLeaderboardsService,
@@ -24,6 +25,7 @@ import {
   ProjectsService,
   BillingService,
   RunbookService,
+  RuntimeVarsService,
   ServerAssetsService,
   ServerDatabasesService,
   ServerPaymentsService,
@@ -60,6 +62,7 @@ export class Torchwood {
   readonly leaderboards: ClientLeaderboardsService;
   readonly subscriptions: ClientSubscriptionsService;
   readonly functions: ClientFunctionsService;
+  readonly runtimeVars: ClientRuntimeVarsService;
 
   readonly server: {
     health: HealthService;
@@ -81,6 +84,7 @@ export class Torchwood {
     analytics: AnalyticsService;
     auth: AuthService;
     runbooks: RunbookService;
+    runtimeVars: RuntimeVarsService;
   };
 
   private readonly transport: HttpTransport;
@@ -97,6 +101,7 @@ export class Torchwood {
     this.leaderboards = new ClientLeaderboardsService(this.transport);
     this.subscriptions = new ClientSubscriptionsService(this.transport);
     this.functions = new ClientFunctionsService(this.transport);
+    this.runtimeVars = new ClientRuntimeVarsService(this.transport);
     this.server = {
       health: new HealthService(this.transport),
       projects: new ProjectsService(this.transport),
@@ -117,6 +122,7 @@ export class Torchwood {
       analytics: new AnalyticsService(this.transport),
       auth: new AuthService(this.transport),
       runbooks: new RunbookService(this.transport),
+      runtimeVars: new RuntimeVarsService(this.transport),
     };
   }
 

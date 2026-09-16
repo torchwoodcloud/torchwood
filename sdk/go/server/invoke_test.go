@@ -86,7 +86,11 @@ func TestInvokeJSONBadJSON(t *testing.T) {
 // 149 → 150（2026-09-15，auth.proto 新增对外凭证校验（token
 // introspection，RFC 9660 模式），wrapper：AuthService.VerifyToken）。
 
-const expectedServerMethodCount = 150
+// 150 → 163（2026-09-16，runtime_vars.proto 新增运行时变量管理面 13 方法
+// ——阶段②（docs/design/runtime-vars.md §2.3），wrapper：RuntimeVarsService
+// 集合 CRUD 5 + 变量 CRUD 5 + 版本 3，同名透传）。
+
+const expectedServerMethodCount = 163
 
 // TestInvokeJSONCompleteness 遍历 protoregistry.GlobalFiles 中 torchwood.server.v1
 // 包的全部方法（排除 APIKeysService），断言每个方法都能被解析并用空 JSON 构造
