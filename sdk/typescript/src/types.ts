@@ -155,6 +155,17 @@ export interface APIKey {
   updated_at: string;
 }
 
+// WhoAmI 自述响应（proto server.v1.WhoAmIResponse）：描述调用凭证自身，
+// 永不回显 secret；max_age_seconds 为服务端计算的相对剩余秒数（未设
+// expire_at 为 "0"）。
+export interface WhoAmIResponse {
+  key_id: string;
+  name: string;
+  project_id: string;
+  scopes: string[];
+  max_age_seconds: Int64String;
+}
+
 export interface User {
   id: string;
   email: string;

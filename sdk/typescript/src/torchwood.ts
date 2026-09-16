@@ -17,11 +17,13 @@ import {
   AnalyticsService,
   APIKeysService,
   AuditLogsService,
+  AuthService,
   FunctionsService,
   HealthService,
   OAuthProvidersService,
   ProjectsService,
   BillingService,
+  RunbookService,
   ServerAssetsService,
   ServerDatabasesService,
   ServerPaymentsService,
@@ -77,6 +79,8 @@ export class Torchwood {
     outbox: OutboxService;
     auditLogs: AuditLogsService;
     analytics: AnalyticsService;
+    auth: AuthService;
+    runbooks: RunbookService;
   };
 
   private readonly transport: HttpTransport;
@@ -111,6 +115,8 @@ export class Torchwood {
       outbox: new OutboxService(this.transport),
       auditLogs: new AuditLogsService(this.transport),
       analytics: new AnalyticsService(this.transport),
+      auth: new AuthService(this.transport),
+      runbooks: new RunbookService(this.transport),
     };
   }
 

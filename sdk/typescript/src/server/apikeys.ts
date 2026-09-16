@@ -1,5 +1,5 @@
 import type { HttpTransport } from "../http.js";
-import type { APIKey } from "../types.js";
+import type { APIKey, WhoAmIResponse } from "../types.js";
 
 export class APIKeysService {
   constructor(private readonly http: HttpTransport) {}
@@ -41,6 +41,14 @@ export class APIKeysService {
     return this.http.request<APIKey>("PATCH", `/v1/server/api-keys/${id}`, {
       auth: "apiKey",
       body: input,
+    });
+  }
+
+  // whoAmI 自述调用凭证本身（ACCESS_PUBLIC 自证凭证型：出示 key 明文即
+  // 查询授权，无效/禁用/过期/删除 → 401）。
+  async whoAmI(): Promise<WhoAmIResponse> {
+    return this.http.request<WhoAmIResponse>("GET", "/v1/server/api-keys/whoami", {
+      auth: "apiKey",
     });
   }
 }
