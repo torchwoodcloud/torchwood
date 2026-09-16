@@ -67,6 +67,12 @@ const FunctionsListPage = lazy(() =>
 const FunctionDetailPage = lazy(() =>
   import("@/routes/functions/pages").then((m) => ({ default: m.FunctionDetailPage }))
 );
+const VarSetsListPage = lazy(() =>
+  import("@/routes/runtime-vars/pages").then((m) => ({ default: m.VarSetsListPage }))
+);
+const VarSetDetailPage = lazy(() =>
+  import("@/routes/runtime-vars/pages").then((m) => ({ default: m.VarSetDetailPage }))
+);
 const GroupsListPage = lazy(() =>
   import("@/routes/groups/pages").then((m) => ({ default: m.GroupsListPage }))
 );
@@ -467,6 +473,26 @@ function AppRoutes() {
           element={
             <RouteErrorBoundary>
               <FunctionDetailPage />
+            </RouteErrorBoundary>
+          }
+        />
+
+        {/* RuntimeVars（docs/design/runtime-vars.md §2.7）：读动词对 Console admin
+            全角色会话开放（viewer 含）；写动词 admin/owner，在页面按钮层
+            isPlatformAdmin 收口（新建集合走列表页 Dialog，无独立 new 路由）。 */}
+        <Route
+          path="runtime-vars"
+          element={
+            <RouteErrorBoundary>
+              <VarSetsListPage />
+            </RouteErrorBoundary>
+          }
+        />
+        <Route
+          path="runtime-vars/:varSetId"
+          element={
+            <RouteErrorBoundary>
+              <VarSetDetailPage />
             </RouteErrorBoundary>
           }
         />

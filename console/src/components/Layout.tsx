@@ -7,7 +7,7 @@ import { ProjectBootstrap } from "@/components/ProjectBootstrap";
 import { ProjectSelector } from "@/components/ProjectSelector";
 import { PreferencesDialog } from "@/components/PreferencesDialog";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Key, Users, Database, HardDrive, LogOut, Menu, X, UsersRound, ShieldCheck, FolderKanban, FunctionSquare, BarChart3, Receipt, Coins, CreditCard, ScrollText, Trophy, Settings2, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Key, Users, Database, HardDrive, LogOut, Menu, X, UsersRound, ShieldCheck, FolderKanban, FunctionSquare, BarChart3, Receipt, Coins, CreditCard, ScrollText, Trophy, Settings2, SlidersHorizontal, type LucideIcon } from "lucide-react";
 
 interface NavItem {
   to: string;
@@ -26,6 +26,9 @@ const navSections: { title?: string; items: NavItem[] }[] = [
       { to: "/console/databases", label: "Databases", icon: Database },
       { to: "/console/storage", label: "Storage", icon: HardDrive },
       { to: "/console/functions", label: "Functions", icon: FunctionSquare },
+      // RuntimeVars：项目级运行时配置下发（集合/可见性/版本回滚），
+      // 与 API Keys 同为凭证相邻的开发者资源。
+      { to: "/console/runtime-vars", label: "Runtime Vars", icon: SlidersHorizontal },
       // Analytics：与 Databases/Storage/Functions 并列的一等公民服务
       // （docs/design/analytics.md §9，roadmap 独立一节）。
       { to: "/console/analytics", label: "Analytics", icon: BarChart3 },
