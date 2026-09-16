@@ -1,0 +1,885 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "server/v1/runtime_vars.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "RuntimeVarsService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/server/runtime-var-sets": {
+      "get": {
+        "operationId": "RuntimeVarsService_ListVarSets",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListVarSetsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "page_token",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "queries",
+            "description": "queries 是静态表面遗留的 DSL 串通道，与文档查询栈的单\ntyped AST（shared.v1.Query）相互独立。消费面：users ListUsers 经\nParseUserList 白名单解析（equal/greaterThan/lessThan + 白名单属性）；\nstorage buckets/files 与 groups（ListGroups/ListMemberships）不支持——\n携带即 InvalidArgument（显式拒绝，不静默忽略）；其余使用本消息的面以\n各自 handler 的显式行为为准。",
+            "in": "query",
+            "required": false,
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "collectionFormat": "multi"
+          }
+        ],
+        "tags": [
+          "RuntimeVarsService"
+        ]
+      },
+      "post": {
+        "operationId": "RuntimeVarsService_CreateVarSet",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1VarSet"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateVarSetRequest"
+            }
+          }
+        ],
+        "tags": [
+          "RuntimeVarsService"
+        ]
+      }
+    },
+    "/v1/server/runtime-var-sets/{var_set_id}": {
+      "get": {
+        "operationId": "RuntimeVarsService_GetVarSet",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1VarSet"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "var_set_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "RuntimeVarsService"
+        ]
+      },
+      "delete": {
+        "summary": "DeleteVarSet 删除集合；vars/heads/versions 经 FK CASCADE 连带销毁\n（全部历史不可恢复，Console 二次确认警示）。",
+        "operationId": "RuntimeVarsService_DeleteVarSet",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Empty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "var_set_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "RuntimeVarsService"
+        ]
+      },
+      "patch": {
+        "summary": "UpdateVarSet 只改集合元数据（optional visibility/description，未设置 =\n不修改）；元数据变更不 bump revision、不入版本链（D10），仅进审计。",
+        "operationId": "RuntimeVarsService_UpdateVarSet",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1VarSet"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "var_set_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/RuntimeVarsServiceUpdateVarSetBody"
+            }
+          }
+        ],
+        "tags": [
+          "RuntimeVarsService"
+        ]
+      }
+    },
+    "/v1/server/runtime-var-sets/{var_set_id}/vars": {
+      "get": {
+        "operationId": "RuntimeVarsService_ListRuntimeVars",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListRuntimeVarsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "var_set_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "page_token",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "RuntimeVarsService"
+        ]
+      },
+      "post": {
+        "operationId": "RuntimeVarsService_CreateRuntimeVar",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RuntimeVar"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "var_set_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/RuntimeVarsServiceCreateRuntimeVarBody"
+            }
+          }
+        ],
+        "tags": [
+          "RuntimeVarsService"
+        ]
+      }
+    },
+    "/v1/server/runtime-var-sets/{var_set_id}/vars/{key}": {
+      "get": {
+        "operationId": "RuntimeVarsService_GetRuntimeVar",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RuntimeVar"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "var_set_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "RuntimeVarsService"
+        ]
+      },
+      "delete": {
+        "operationId": "RuntimeVarsService_DeleteRuntimeVar",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Empty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "var_set_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "RuntimeVarsService"
+        ]
+      },
+      "patch": {
+        "summary": "UpdateRuntimeVar 携带完整新值（必填）；类型可随本次变更（value 与\nvalue_type 同步落库，D3）。optional description：未设置 = 不修改。",
+        "operationId": "RuntimeVarsService_UpdateRuntimeVar",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RuntimeVar"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "var_set_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/RuntimeVarsServiceUpdateRuntimeVarBody"
+            }
+          }
+        ],
+        "tags": [
+          "RuntimeVarsService"
+        ]
+      }
+    },
+    "/v1/server/runtime-var-sets/{var_set_id}/versions": {
+      "get": {
+        "summary": "ListRuntimeVarVersions 仅元数据（revision/action/summary/actor/时间）；\n全文走 GetRuntimeVarVersion。版本保留最近 50 版/集合（D11）。",
+        "operationId": "RuntimeVarsService_ListRuntimeVarVersions",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListRuntimeVarVersionsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "var_set_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "page_token",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "RuntimeVarsService"
+        ]
+      }
+    },
+    "/v1/server/runtime-var-sets/{var_set_id}/versions/{revision}": {
+      "get": {
+        "operationId": "RuntimeVarsService_GetRuntimeVarVersion",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1GetRuntimeVarVersionResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "var_set_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "revision",
+            "description": "版本链寻址号（revision 1 起；0 = 尚无任何版本）。",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "format": "int64"
+          }
+        ],
+        "tags": [
+          "RuntimeVarsService"
+        ]
+      }
+    },
+    "/v1/server/runtime-var-sets/{var_set_id}/versions:rollback": {
+      "post": {
+        "summary": "RollbackRuntimeVar 回滚到目标版本（D12：target_revision 等于当前版本 →\nInvalidArgument；目标已被窗口淘汰 → NotFound \"target revision pruned\"）。\ncustom verb 与 tokens:verify 同惯例——网关按路径路由。",
+        "operationId": "RuntimeVarsService_RollbackRuntimeVar",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1RuntimeVarVersion"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "var_set_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/RuntimeVarsServiceRollbackRuntimeVarBody"
+            }
+          }
+        ],
+        "tags": [
+          "RuntimeVarsService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "RuntimeVarsServiceCreateRuntimeVarBody": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/definitions/v1RuntimeVarValue"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "RuntimeVarsServiceRollbackRuntimeVarBody": {
+      "type": "object",
+      "properties": {
+        "target_revision": {
+          "type": "string",
+          "format": "int64",
+          "title": "等于当前版本 → InvalidArgument（D12：语义错误而非幂等操作）；窗口外\n（已被淘汰）→ NotFound \"target revision pruned\"。"
+        }
+      }
+    },
+    "RuntimeVarsServiceUpdateRuntimeVarBody": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "$ref": "#/definitions/v1RuntimeVarValue",
+          "title": "必填：完整新值，类型可随本次变更（D5 无 Upsert，Update 分立）。"
+        },
+        "description": {
+          "type": "string",
+          "title": "proto3 optional：未设置 = 不修改。"
+        }
+      }
+    },
+    "RuntimeVarsServiceUpdateVarSetBody": {
+      "type": "object",
+      "properties": {
+        "visibility": {
+          "$ref": "#/definitions/v1VarSetVisibility",
+          "title": "proto3 optional：未设置 = 不修改（PATCH 语义）。"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "v1CreateVarSetRequest": {
+      "type": "object",
+      "properties": {
+        "var_set_id": {
+          "type": "string",
+          "title": "创建后不可改（D9 显式实体；重命名 = 重建 + 回滚替代）。"
+        },
+        "visibility": {
+          "$ref": "#/definitions/v1VarSetVisibility",
+          "title": "缺省 public（UNSPECIFIED 由 app 层归一）。"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "v1Empty": {
+      "type": "object"
+    },
+    "v1Error": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "error_id": {
+          "type": "string"
+        },
+        "error_code": {
+          "$ref": "#/definitions/v1ErrorCode"
+        }
+      }
+    },
+    "v1ErrorCode": {
+      "type": "string",
+      "enum": [
+        "ERROR_CODE_UNSPECIFIED",
+        "ERROR_CODE_INVALID_REQUEST",
+        "ERROR_CODE_RESOURCE_NOT_FOUND",
+        "ERROR_CODE_INVALID_CREDENTIALS",
+        "ERROR_CODE_PERMISSION_DENIED",
+        "ERROR_CODE_RESOURCE_CONFLICT",
+        "ERROR_CODE_QUOTA_EXCEEDED",
+        "ERROR_CODE_PRECONDITION_FAILED",
+        "ERROR_CODE_CONCURRENT_MODIFICATION",
+        "ERROR_CODE_VALUE_OUT_OF_RANGE",
+        "ERROR_CODE_OPERATION_NOT_ALLOWED",
+        "ERROR_CODE_INTERNAL_ERROR",
+        "ERROR_CODE_SERVICE_UNAVAILABLE",
+        "ERROR_CODE_TIMEOUT"
+      ],
+      "default": "ERROR_CODE_UNSPECIFIED",
+      "title": "ErrorCode 与 gRPC code 的映射（HTTPErrorHandler 单一事实来源，\n见 internal/infra/server/errors.go）：\n  - InvalidArgument → ERROR_CODE_INVALID_REQUEST\n  - FailedPrecondition → ERROR_CODE_PRECONDITION_FAILED\n  - NotFound → ERROR_CODE_RESOURCE_NOT_FOUND\n  - AlreadyExists → ERROR_CODE_RESOURCE_CONFLICT\n  - Aborted → ERROR_CODE_CONCURRENT_MODIFICATION\n  - Unauthenticated → ERROR_CODE_INVALID_CREDENTIALS\n  - PermissionDenied → ERROR_CODE_PERMISSION_DENIED\n  - ResourceExhausted → ERROR_CODE_QUOTA_EXCEEDED\n  - DeadlineExceeded → ERROR_CODE_TIMEOUT\n  - 其余 → ERROR_CODE_INTERNAL_ERROR"
+    },
+    "v1ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "$ref": "#/definitions/v1Error"
+        }
+      }
+    },
+    "v1GetRuntimeVarVersionResponse": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "$ref": "#/definitions/v1RuntimeVarVersion"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1RuntimeVarVersionEntry"
+          },
+          "title": "该版本的全量快照（key ASC）。"
+        }
+      }
+    },
+    "v1ListResponseMeta": {
+      "type": "object",
+      "properties": {
+        "page_size": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "next_page_token": {
+          "type": "string"
+        },
+        "prev_page_token": {
+          "type": "string"
+        },
+        "total_count": {
+          "type": "integer",
+          "format": "int32",
+          "title": "total_count ≤0 = unknown（keyset 分页下 0 与空集合不可区分，调用方应以 next_page_token 是否为空判定是否还有更多；≤0 表示总数未知）。"
+        }
+      }
+    },
+    "v1ListRuntimeVarVersionsResponse": {
+      "type": "object",
+      "properties": {
+        "versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1RuntimeVarVersion"
+          }
+        },
+        "meta": {
+          "$ref": "#/definitions/v1ListResponseMeta"
+        }
+      }
+    },
+    "v1ListRuntimeVarsResponse": {
+      "type": "object",
+      "properties": {
+        "vars": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1RuntimeVar"
+          }
+        },
+        "meta": {
+          "$ref": "#/definitions/v1ListResponseMeta"
+        }
+      }
+    },
+    "v1ListVarSetsResponse": {
+      "type": "object",
+      "properties": {
+        "var_sets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1VarSet"
+          }
+        },
+        "meta": {
+          "$ref": "#/definitions/v1ListResponseMeta"
+        }
+      }
+    },
+    "v1RuntimeVar": {
+      "type": "object",
+      "properties": {
+        "var_set_id": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/definitions/v1RuntimeVarValue"
+        },
+        "description": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "title": "RuntimeVar 是单个类型化变量。value 的 oneof 即类型锚点（存储 JSONB 单列 +\nvalue_type 列，D3）；类型创建时锁定、变更走显式 Update。"
+    },
+    "v1RuntimeVarValue": {
+      "type": "object",
+      "properties": {
+        "string_value": {
+          "type": "string"
+        },
+        "integer_value": {
+          "type": "string",
+          "format": "int64"
+        },
+        "float_value": {
+          "type": "number",
+          "format": "double"
+        },
+        "bool_value": {
+          "type": "boolean"
+        },
+        "json_value": {
+          "type": "string"
+        }
+      },
+      "title": "RuntimeVarValue 是五类型 oneof（D3）。integer 限 ±2^53−1：gateway 输出\nJSON number，TS number 超精度静默损坏。json_value 为合法 JSON 文本，\n嵌套深度 ≤100（app 层校验，错误友好——encoding/json 万层栈保护错误不可读）。"
+    },
+    "v1RuntimeVarVersion": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "string",
+          "format": "int64"
+        },
+        "action": {
+          "$ref": "#/definitions/v1RuntimeVarVersionAction"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "actor": {
+          "type": "string",
+          "title": "admin:\u003cid\u003e / apikey:\u003cid\u003e / function:\u003cid\u003e（handler 从 Principal 填入）。"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "title": "RuntimeVarVersion 是版本链元数据（D10：revision 复用 heads.revision，\n版本链语义收窄为\"值快照序列\"；集合元数据变更不入链）。全文快照走\nGetRuntimeVarVersion。"
+    },
+    "v1RuntimeVarVersionAction": {
+      "type": "string",
+      "enum": [
+        "RUNTIME_VAR_VERSION_ACTION_UNSPECIFIED",
+        "RUNTIME_VAR_VERSION_ACTION_CREATE",
+        "RUNTIME_VAR_VERSION_ACTION_UPDATE",
+        "RUNTIME_VAR_VERSION_ACTION_DELETE",
+        "RUNTIME_VAR_VERSION_ACTION_ROLLBACK"
+      ],
+      "default": "RUNTIME_VAR_VERSION_ACTION_UNSPECIFIED",
+      "title": "RuntimeVarVersionAction 是版本链动作（runtime_var_versions.action）。"
+    },
+    "v1RuntimeVarVersionEntry": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/definitions/v1RuntimeVarValue"
+        },
+        "description": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "title": "RuntimeVarVersionEntry 是版本快照全文的单键条目（{key:{t,v,d,c}} 的展开，\nD11 全列四元组：description/created_at 保留，Console 两版 diff 用）。"
+    },
+    "v1VarSet": {
+      "type": "object",
+      "properties": {
+        "var_set_id": {
+          "type": "string"
+        },
+        "visibility": {
+          "$ref": "#/definitions/v1VarSetVisibility"
+        },
+        "description": {
+          "type": "string"
+        },
+        "etag": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string",
+          "format": "int64"
+        },
+        "var_count": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "total_bytes": {
+          "type": "string",
+          "format": "int64"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "title": "VarSet 是集合的资源投影。etag 为不透明 token \"{epoch}:{revision}\"（D2：\n客户端直接透传做轮询；epoch 掺入防同名删除重建碰撞）；revision 单独作\n版本链寻址。var_count/total_bytes 是 footprint（D13 限额的 Console 展示）。"
+    },
+    "v1VarSetVisibility": {
+      "type": "string",
+      "enum": [
+        "VAR_SET_VISIBILITY_UNSPECIFIED",
+        "VAR_SET_VISIBILITY_PUBLIC",
+        "VAR_SET_VISIBILITY_PRIVATE"
+      ],
+      "default": "VAR_SET_VISIBILITY_UNSPECIFIED",
+      "title": "VarSetVisibility 是集合可见性（§2.4）：public = 任何持 project_id 的客户端\n可匿名读；private = 项目用户（有效 Principal）可见、路人不可见。"
+    }
+  },
+  "securityDefinitions": {
+    "Bearer": {
+      "type": "apiKey",
+      "description": "格式: Bearer \u003cjwt\u003e",
+      "name": "Authorization",
+      "in": "header"
+    },
+    "apiKey": {
+      "type": "apiKey",
+      "description": "项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。",
+      "name": "X-API-Key",
+      "in": "header"
+    },
+    "cookie": {
+      "type": "apiKey",
+      "description": "TORCHWOOD_session_console=\u003csid\u003e（Console admin 会话）",
+      "name": "Cookie",
+      "in": "header"
+    }
+  },
+  "security": [
+    {
+      "apiKey": []
+    }
+  ],
+  "x-torchwood-access": "server"
+}

@@ -1,0 +1,491 @@
+syntax = "proto3";
+
+package torchwood.server.v1;
+
+option go_package = "github.com/torchwoodcloud/torchwood/genproto/server/v1;serverv1";
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "shared/v1/authz.proto";
+import "shared/v1/common.proto";
+
+// 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
+// docs/developer/09-api-guide.md §1.4 的 OpenAPI 建模约定；本服务全部方法继承，无需逐方法覆盖）。
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  security_definitions: {
+    security: {
+      key: "apiKey"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "X-API-Key"
+        description: "项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。"
+      }
+    }
+    security: {
+      key: "Bearer"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "格式: Bearer <jwt>"
+      }
+    }
+    security: {
+      key: "cookie"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Cookie"
+        description: "TORCHWOOD_session_console=<sid>（Console admin 会话）"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "apiKey"
+      value: {}
+    }
+  }
+  extensions: {
+    key: "x-torchwood-access"
+    value: { string_value: "server" }
+  }
+  // 统一 default 错误响应（运行时错误体即 shared.v1.ErrorResponse），
+  // 文件级声明自动填充到本文件全部 operation。
+  responses: {
+    key: "default"
+    value: {
+      description: "An unexpected error response."
+      schema: { json_schema: { ref: ".torchwood.shared.v1.ErrorResponse" } }
+    }
+  }
+};
+
+// RuntimeVarsService 是项目级运行时配置的管理面（docs/design/runtime-vars.md
+// §2.3）：集合 CRUD + 变量 CRUD + 版本链查看/回滚，三组 13 方法。读动词
+// （Get/List×3）对 Console admin 全角色会话开放（viewer 含）+ API key
+// runtime_vars:read；写动词（Create/Update/Delete/Rollback）admin/owner +
+// runtime_vars:write（D6 两档，不设 admin 第三档——无热路径凭证分离诉求）。
+// 项目上下文来自凭证（请求体不携带 project_id）。
+service RuntimeVarsService {
+  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
+
+  // ---- 集合 ----
+
+  rpc CreateVarSet(CreateVarSetRequest) returns (VarSet) {
+    option (google.api.http) = {
+      post: "/v1/server/runtime-var-sets"
+      body: "*"
+    };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_WRITE }
+    };
+  }
+
+  rpc ListVarSets(shared.v1.ListRequest) returns (ListVarSetsResponse) {
+    option (google.api.http) = { get: "/v1/server/runtime-var-sets" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_READ }
+    };
+  }
+
+  rpc GetVarSet(GetVarSetRequest) returns (VarSet) {
+    option (google.api.http) = { get: "/v1/server/runtime-var-sets/{var_set_id}" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_READ }
+    };
+  }
+
+  // UpdateVarSet 只改集合元数据（optional visibility/description，未设置 =
+  // 不修改）；元数据变更不 bump revision、不入版本链（D10），仅进审计。
+  rpc UpdateVarSet(UpdateVarSetRequest) returns (VarSet) {
+    option (google.api.http) = {
+      patch: "/v1/server/runtime-var-sets/{var_set_id}"
+      body: "*"
+    };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_WRITE }
+    };
+  }
+
+  // DeleteVarSet 删除集合；vars/heads/versions 经 FK CASCADE 连带销毁
+  // （全部历史不可恢复，Console 二次确认警示）。
+  rpc DeleteVarSet(DeleteVarSetRequest) returns (shared.v1.Empty) {
+    option (google.api.http) = { delete: "/v1/server/runtime-var-sets/{var_set_id}" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_WRITE }
+    };
+  }
+
+  // ---- 变量 ----
+
+  rpc CreateRuntimeVar(CreateRuntimeVarRequest) returns (RuntimeVar) {
+    option (google.api.http) = {
+      post: "/v1/server/runtime-var-sets/{var_set_id}/vars"
+      body: "*"
+    };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_WRITE }
+    };
+  }
+
+  rpc ListRuntimeVars(ListRuntimeVarsRequest) returns (ListRuntimeVarsResponse) {
+    option (google.api.http) = { get: "/v1/server/runtime-var-sets/{var_set_id}/vars" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_READ }
+    };
+  }
+
+  rpc GetRuntimeVar(GetRuntimeVarRequest) returns (RuntimeVar) {
+    option (google.api.http) = { get: "/v1/server/runtime-var-sets/{var_set_id}/vars/{key}" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_READ }
+    };
+  }
+
+  // UpdateRuntimeVar 携带完整新值（必填）；类型可随本次变更（value 与
+  // value_type 同步落库，D3）。optional description：未设置 = 不修改。
+  rpc UpdateRuntimeVar(UpdateRuntimeVarRequest) returns (RuntimeVar) {
+    option (google.api.http) = {
+      patch: "/v1/server/runtime-var-sets/{var_set_id}/vars/{key}"
+      body: "*"
+    };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_WRITE }
+    };
+  }
+
+  rpc DeleteRuntimeVar(DeleteRuntimeVarRequest) returns (shared.v1.Empty) {
+    option (google.api.http) = { delete: "/v1/server/runtime-var-sets/{var_set_id}/vars/{key}" };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_WRITE }
+    };
+  }
+
+  // ---- 版本链 ----
+
+  // ListRuntimeVarVersions 仅元数据（revision/action/summary/actor/时间）；
+  // 全文走 GetRuntimeVarVersion。版本保留最近 50 版/集合（D11）。
+  rpc ListRuntimeVarVersions(ListRuntimeVarVersionsRequest) returns (ListRuntimeVarVersionsResponse) {
+    option (google.api.http) = { get: "/v1/server/runtime-var-sets/{var_set_id}/versions" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_READ }
+    };
+  }
+
+  rpc GetRuntimeVarVersion(GetRuntimeVarVersionRequest) returns (GetRuntimeVarVersionResponse) {
+    option (google.api.http) = { get: "/v1/server/runtime-var-sets/{var_set_id}/versions/{revision}" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_READ }
+    };
+  }
+
+  // RollbackRuntimeVar 回滚到目标版本（D12：target_revision 等于当前版本 →
+  // InvalidArgument；目标已被窗口淘汰 → NotFound "target revision pruned"）。
+  // custom verb 与 tokens:verify 同惯例——网关按路径路由。
+  rpc RollbackRuntimeVar(RollbackRuntimeVarRequest) returns (RuntimeVarVersion) {
+    option (google.api.http) = {
+      post: "/v1/server/runtime-var-sets/{var_set_id}/versions:rollback"
+      body: "*"
+    };
+    option (torchwood.shared.v1.method_auth) = {
+      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
+      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_WRITE }
+    };
+  }
+}
+
+// VarSetVisibility 是集合可见性（§2.4）：public = 任何持 project_id 的客户端
+// 可匿名读；private = 项目用户（有效 Principal）可见、路人不可见。
+enum VarSetVisibility {
+  VAR_SET_VISIBILITY_UNSPECIFIED = 0;
+  VAR_SET_VISIBILITY_PUBLIC = 1;
+  VAR_SET_VISIBILITY_PRIVATE = 2;
+}
+
+// RuntimeVarVersionAction 是版本链动作（runtime_var_versions.action）。
+enum RuntimeVarVersionAction {
+  RUNTIME_VAR_VERSION_ACTION_UNSPECIFIED = 0;
+  RUNTIME_VAR_VERSION_ACTION_CREATE = 1;
+  RUNTIME_VAR_VERSION_ACTION_UPDATE = 2;
+  RUNTIME_VAR_VERSION_ACTION_DELETE = 3;
+  RUNTIME_VAR_VERSION_ACTION_ROLLBACK = 4;
+}
+
+message CreateVarSetRequest {
+  // 创建后不可改（D9 显式实体；重命名 = 重建 + 回滚替代）。
+  string var_set_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 40
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+  // 缺省 public（UNSPECIFIED 由 app 层归一）。
+  VarSetVisibility visibility = 2;
+  string description = 3 [(buf.validate.field).string.max_len = 256];
+}
+
+message GetVarSetRequest {
+  string var_set_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 40
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+}
+
+message UpdateVarSetRequest {
+  string var_set_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 40
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+  // proto3 optional：未设置 = 不修改（PATCH 语义）。
+  optional VarSetVisibility visibility = 2 [(buf.validate.field).enum = { defined_only: true, not_in: [0] }];
+  optional string description = 3 [(buf.validate.field).string.max_len = 256];
+}
+
+message DeleteVarSetRequest {
+  string var_set_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 40
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+}
+
+// VarSet 是集合的资源投影。etag 为不透明 token "{epoch}:{revision}"（D2：
+// 客户端直接透传做轮询；epoch 掺入防同名删除重建碰撞）；revision 单独作
+// 版本链寻址。var_count/total_bytes 是 footprint（D13 限额的 Console 展示）。
+message VarSet {
+  string var_set_id = 1;
+  VarSetVisibility visibility = 2;
+  string description = 3;
+  string etag = 4;
+  int64 revision = 5;
+  int32 var_count = 6;
+  int64 total_bytes = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+message ListVarSetsResponse {
+  repeated VarSet var_sets = 1;
+  shared.v1.ListResponseMeta meta = 2;
+}
+
+message CreateRuntimeVarRequest {
+  string var_set_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 40
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+  string key = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 64
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+  RuntimeVarValue value = 3 [(buf.validate.field).required = true];
+  string description = 4 [(buf.validate.field).string.max_len = 256];
+}
+
+message ListRuntimeVarsRequest {
+  string var_set_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 40
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+  int32 page_size = 2 [(buf.validate.field).int32 = { gte: 0, lte: 1000 }];
+  string page_token = 3 [(buf.validate.field).string.max_len = 4096];
+}
+
+message GetRuntimeVarRequest {
+  string var_set_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 40
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+  string key = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 64
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+}
+
+message UpdateRuntimeVarRequest {
+  string var_set_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 40
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+  string key = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 64
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+  // 必填：完整新值，类型可随本次变更（D5 无 Upsert，Update 分立）。
+  RuntimeVarValue value = 3 [(buf.validate.field).required = true];
+  // proto3 optional：未设置 = 不修改。
+  optional string description = 4 [(buf.validate.field).string.max_len = 256];
+}
+
+message DeleteRuntimeVarRequest {
+  string var_set_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 40
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+  string key = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 64
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+}
+
+// RuntimeVar 是单个类型化变量。value 的 oneof 即类型锚点（存储 JSONB 单列 +
+// value_type 列，D3）；类型创建时锁定、变更走显式 Update。
+message RuntimeVar {
+  string var_set_id = 1;
+  string key = 2;
+  RuntimeVarValue value = 3;
+  string description = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// RuntimeVarValue 是五类型 oneof（D3）。integer 限 ±2^53−1：gateway 输出
+// JSON number，TS number 超精度静默损坏。json_value 为合法 JSON 文本，
+// 嵌套深度 ≤100（app 层校验，错误友好——encoding/json 万层栈保护错误不可读）。
+message RuntimeVarValue {
+  oneof kind {
+    option (buf.validate.oneof).required = true;
+
+    string string_value = 1;
+    int64 integer_value = 2 [(buf.validate.field).int64 = { gte: -9007199254740991, lte: 9007199254740991 }];
+    double float_value = 3;
+    bool bool_value = 4;
+    string json_value = 5;
+  }
+}
+
+message ListRuntimeVarsResponse {
+  repeated RuntimeVar vars = 1;
+  shared.v1.ListResponseMeta meta = 2;
+}
+
+message ListRuntimeVarVersionsRequest {
+  string var_set_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 40
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+  int32 page_size = 2 [(buf.validate.field).int32 = { gte: 0, lte: 200 }];
+  string page_token = 3 [(buf.validate.field).string.max_len = 4096];
+}
+
+message GetRuntimeVarVersionRequest {
+  string var_set_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 40
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+  // 版本链寻址号（revision 1 起；0 = 尚无任何版本）。
+  int64 revision = 2 [(buf.validate.field).int64.gte = 1];
+}
+
+message RollbackRuntimeVarRequest {
+  string var_set_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 40
+      pattern: "^[a-z_][a-z0-9_]*$"
+    }
+  ];
+  // 等于当前版本 → InvalidArgument（D12：语义错误而非幂等操作）；窗口外
+  // （已被淘汰）→ NotFound "target revision pruned"。
+  int64 target_revision = 2 [(buf.validate.field).int64.gte = 1];
+}
+
+// RuntimeVarVersion 是版本链元数据（D10：revision 复用 heads.revision，
+// 版本链语义收窄为"值快照序列"；集合元数据变更不入链）。全文快照走
+// GetRuntimeVarVersion。
+message RuntimeVarVersion {
+  int64 revision = 1;
+  RuntimeVarVersionAction action = 2;
+  string summary = 3;
+  // admin:<id> / apikey:<id> / function:<id>（handler 从 Principal 填入）。
+  string actor = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message ListRuntimeVarVersionsResponse {
+  repeated RuntimeVarVersion versions = 1;
+  shared.v1.ListResponseMeta meta = 2;
+}
+
+// RuntimeVarVersionEntry 是版本快照全文的单键条目（{key:{t,v,d,c}} 的展开，
+// D11 全列四元组：description/created_at 保留，Console 两版 diff 用）。
+message RuntimeVarVersionEntry {
+  string key = 1;
+  RuntimeVarValue value = 2;
+  string description = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message GetRuntimeVarVersionResponse {
+  RuntimeVarVersion version = 1;
+  // 该版本的全量快照（key ASC）。
+  repeated RuntimeVarVersionEntry entries = 2;
+}

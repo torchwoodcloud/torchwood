@@ -97,4 +97,10 @@ const (
 	ScopeRunbook      = "runbooks"
 	ScopeRunbookRead  = "runbooks.read"
 	ScopeRunbookWrite = "runbooks.write"
+
+	// ScopeRuntimeVars 运行时变量面（docs/design/runtime-vars.md §2.3：读 =
+	// runtime_vars.read（viewer 含），写 = runtime_vars.write（admin/owner））。
+	ScopeRuntimeVars      = "runtime_vars"
+	ScopeRuntimeVarsRead  = "runtime_vars.read"
+	ScopeRuntimeVarsWrite = "runtime_vars.write"
 )

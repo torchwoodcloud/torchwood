@@ -66,6 +66,8 @@ func protoScopeResource(r sharedv1.ScopeResource) (domainauth.ScopeResource, boo
 		return domainauth.ScopeAnalytics, true
 	case sharedv1.ScopeResource_SCOPE_RESOURCE_RUNBOOKS:
 		return domainauth.ScopeRunbooks, true
+	case sharedv1.ScopeResource_SCOPE_RESOURCE_RUNTIME_VARS:
+		return domainauth.ScopeRuntimeVars, true
 	default:
 		return "", false
 	}

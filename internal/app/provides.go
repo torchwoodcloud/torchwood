@@ -60,6 +60,9 @@ var ProviderSet = wire.NewSet(
 	analytics.NewMaintenanceFromConfig,
 	// Runbook 迁移状态用例（docs/design/runbook.md §2.2 阶段 A：CAS/顶版校验）。
 	server.NewRunbook,
+	// RuntimeVars server 面用例（docs/design/runtime-vars.md §2.5/§2.6：限额
+	// 校验 + 写路径单事务编排 + 回滚；repo 经 infra bind）。
+	server.NewRuntimeVars,
 	// 对外 token 校验用例（AuthService/VerifyToken，introspection）。
 	server.NewAuth,
 )

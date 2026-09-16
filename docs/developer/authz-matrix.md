@@ -12,7 +12,7 @@
 >   SERVER admin 会话（admin_roles）或 API key（scope）；PERMISSION admin 会话
 >   专属（permissions），key 一律拒绝；SYSTEM 预留禁用。
 
-方法总数 248：PUBLIC 29 · END_USER 47 · SERVER 142 · PERMISSION 30 · SYSTEM 0。
+方法总数 261：PUBLIC 29 · END_USER 47 · SERVER 155 · PERMISSION 30 · SYSTEM 0。
 
 ## /torchwood.client.v1.AccountService
 
@@ -371,6 +371,24 @@
 | `/torchwood.server.v1.RunbookService/DeleteRunbookStep` | SERVER | admin, owner | runbooks.write | delegated_platform | |
 | `/torchwood.server.v1.RunbookService/GetRunbookState` | SERVER | 不限角色 | runbooks.read | read_only | |
 | `/torchwood.server.v1.RunbookService/RecordRunbookStep` | SERVER | admin, owner | runbooks.write | delegated_platform | |
+
+## /torchwood.server.v1.RuntimeVarsService
+
+| 方法 | Access | Admin 角色档 | Key Scope | 档位 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `/torchwood.server.v1.RuntimeVarsService/CreateRuntimeVar` | SERVER | admin, owner | runtime_vars.write | delegated_platform | |
+| `/torchwood.server.v1.RuntimeVarsService/CreateVarSet` | SERVER | admin, owner | runtime_vars.write | delegated_platform | |
+| `/torchwood.server.v1.RuntimeVarsService/DeleteRuntimeVar` | SERVER | admin, owner | runtime_vars.write | delegated_platform | |
+| `/torchwood.server.v1.RuntimeVarsService/DeleteVarSet` | SERVER | admin, owner | runtime_vars.write | delegated_platform | |
+| `/torchwood.server.v1.RuntimeVarsService/GetRuntimeVar` | SERVER | 不限角色 | runtime_vars.read | read_only | |
+| `/torchwood.server.v1.RuntimeVarsService/GetRuntimeVarVersion` | SERVER | 不限角色 | runtime_vars.read | read_only | |
+| `/torchwood.server.v1.RuntimeVarsService/GetVarSet` | SERVER | 不限角色 | runtime_vars.read | read_only | |
+| `/torchwood.server.v1.RuntimeVarsService/ListRuntimeVarVersions` | SERVER | 不限角色 | runtime_vars.read | read_only | |
+| `/torchwood.server.v1.RuntimeVarsService/ListRuntimeVars` | SERVER | 不限角色 | runtime_vars.read | read_only | |
+| `/torchwood.server.v1.RuntimeVarsService/ListVarSets` | SERVER | 不限角色 | runtime_vars.read | read_only | |
+| `/torchwood.server.v1.RuntimeVarsService/RollbackRuntimeVar` | SERVER | admin, owner | runtime_vars.write | delegated_platform | |
+| `/torchwood.server.v1.RuntimeVarsService/UpdateRuntimeVar` | SERVER | admin, owner | runtime_vars.write | delegated_platform | |
+| `/torchwood.server.v1.RuntimeVarsService/UpdateVarSet` | SERVER | admin, owner | runtime_vars.write | delegated_platform | |
 
 ## /torchwood.server.v1.StorageService
 

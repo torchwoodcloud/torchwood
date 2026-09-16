@@ -223,7 +223,10 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	stateRepo := bunrepo.NewRunbookStateRepository(database)
 	runbook := server.NewRunbook(stateRepo)
 	runbookService := servergrpc.NewRunbookService(runbook)
-	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, leaderboardsService, analyticsService, healthService, projectsService, storageService, usersService, authService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, consolegrpcAuthService, adminsService, outboxService, auditLogsService, servergrpcLeaderboardsService, consolegrpcLeaderboardsService, servergrpcAnalyticsService, runbookService, policySet)
+	runtimeVarRepository := bunrepo.NewRuntimeVarRepository(database)
+	runtimeVars := server.NewRuntimeVars(runtimeVarRepository, database)
+	runtimeVarsService := servergrpc.NewRuntimeVarsService(runtimeVars)
+	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, leaderboardsService, analyticsService, healthService, projectsService, storageService, usersService, authService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, consolegrpcAuthService, adminsService, outboxService, auditLogsService, servergrpcLeaderboardsService, consolegrpcLeaderboardsService, servergrpcAnalyticsService, runbookService, runtimeVarsService, policySet)
 	if err != nil {
 		cleanup()
 		return nil, nil, err

@@ -43,6 +43,9 @@ var ProviderSet = wire.NewSet(
 	servergrpc.NewAnalyticsService,
 	// Runbook 迁移状态面（docs/design/runbook.md §2.2 阶段 A）。
 	servergrpc.NewRunbookService,
+	// RuntimeVars server 面（docs/design/runtime-vars.md §2.3：集合 CRUD +
+	// var CRUD + 版本链/回滚，13 方法）。
+	servergrpc.NewRuntimeVarsService,
 	serverhttp.NewFileHandler,
 	serverhttp.NewOAuthHandler,
 	serverhttp.NewFunctionsHandler,
