@@ -8,7 +8,7 @@ TypeScript SDK 以 npm 包 `@torchwood/sdk` 分发（`sdk/typescript/`，`task s
 
 ## @torchwood/sdk
 
-### Unreleased
+### v0.7.0 — 2026-09-16
 
 排行榜 board 配置管控（server 面；消费方 graviton-games 提案 2026-09-13）：
 
@@ -19,6 +19,22 @@ TypeScript SDK 以 npm 包 `@torchwood/sdk` 分发（`sdk/typescript/`，`task s
   语义，不含 rewards——奖励规则编辑仅 console owner）。
 - 新增类型 `CreateLeaderboardBoardInput` / `UpdateLeaderboardBoardInput`；
   `LeaderboardBoard` 补 `rewards` 只读字段。
+
+Server 面补齐（WhoAmI / Auth / Runbooks）：
+
+- **新增** `Torchwood.server.apiKeys.whoAmI()`：自述调用凭证本身
+  （ACCESS_PUBLIC 自证凭证型——出示 key 明文即查询授权，无效/禁用/过期/
+  已删除 → 401）；新增 `WhoAmIResponse` 类型。
+- **新增** `Torchwood.server.auth.verifyToken(token, type?)`：token
+  introspection（proto `server.v1.AuthService`，RFC 9660 模式）——任何校验
+  失败（过期/撤销/封禁/签名无效/跨项目）→ `valid=false` + 200，仅基础设施
+  故障返回 5xx；返回主体信息（user_id / roles / groups / labels /
+  actor_kind 等），`VerifyCredentialType` 支持 AUTO/TOKEN/API_KEY 分派。
+- **新增** `Torchwood.server.runbooks`：runbook 版本化资源迁移的服务端状态面
+  （proto `server.v1.RunbookService`，只记录"哪些 step 已应用"）——
+  `getState(runbook)`（已应用 step 升序全集）/ `recordStep(runbook, input)`
+  （CAS 冲突 → FAILED_PRECONDITION）/ `deleteStep(runbook, version)`
+  （仅允许删除当前顶版）。
 
 ### v0.6.0 — 2026-09-12
 
