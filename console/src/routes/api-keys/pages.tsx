@@ -178,7 +178,6 @@ export function ApiKeyNewPage() {
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [wildcard, setWildcard] = useState(false);
-  const [manualMode, setManualMode] = useState(false);
   const [manualScopes, setManualScopes] = useState("");
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
 
@@ -215,17 +214,15 @@ export function ApiKeyNewPage() {
   };
 
   const buildScopes = (): string[] => {
-    if (manualMode) {
-      // 手动输入区是多行文本框：逗号或换行均可分隔。
-      return manualScopes
-        .split(/[\n,]/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-    }
     if (wildcard) {
       return ["*"];
     }
-    return Array.from(selected).sort();
+    // 词表勾选与自定义输入合并去重；自定义输入区为多行文本框，逗号或换行均可分隔。
+    const manual = manualScopes
+      .split(/[\n,]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return Array.from(new Set([...selected, ...manual])).sort();
   };
 
   const copySecret = () => {
@@ -276,65 +273,55 @@ export function ApiKeyNewPage() {
       submitDisabled={!isPlatformAdmin(role)}
     >
       <FormField id="name" label="名称" value={name} onChange={setName} required placeholder="Production API Key" />
-      {manualMode ? (
-        <div className="space-y-2">
-          <Label htmlFor="manual-scopes">Scopes（逗号或换行分隔）</Label>
-          <textarea
-            id="manual-scopes"
-            value={manualScopes}
-            onChange={(e) => setManualScopes(e.target.value)}
-            placeholder={"users.read, users.write\ndatabases.read\nrunbooks.admin"}
-            rows={6}
-            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs"
-          />
-          <p className="text-xs text-muted-foreground">
-            支持资源级限定（如 <code>databases:blog.read</code> 单库只读）与自定义服务 scope。
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <Label>Scopes</Label>
-          <div className="space-y-4 rounded-md border p-5">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="scope-wildcard"
-                checked={wildcard}
-                onChange={(e) => setWildcard(e.target.checked)}
-              />
-              <Label htmlFor="scope-wildcard" className="font-normal">
-                全部权限（<code className="font-mono text-xs">*</code> 通配，含未来新增资源）
-              </Label>
+      <div className="space-y-3">
+        <Label>Scopes</Label>
+        <div className="space-y-4 rounded-md border p-5">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="scope-wildcard"
+              checked={wildcard}
+              onChange={(e) => setWildcard(e.target.checked)}
+            />
+            <Label htmlFor="scope-wildcard" className="font-normal">
+              全部权限（<code className="font-mono text-xs">*</code> 通配，含未来新增资源）
+            </Label>
+          </div>
+          {catalog.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {catalogFailed
+                ? "Scope 词表加载失败，可直接在下方手动输入。"
+                : "Scope 词表加载中…"}
+            </p>
+          ) : (
+            <div className="grid gap-x-10 gap-y-3 sm:grid-cols-2">
+              {catalog.map((entry) => (
+                <ScopeResourceRow
+                  key={entry.resource}
+                  entry={entry}
+                  disabled={wildcard}
+                  selected={selected}
+                  onToggle={toggleScope}
+                />
+              ))}
             </div>
-            {catalog.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {catalogFailed
-                  ? "Scope 词表加载失败，请改用手动高级输入。"
-                  : "Scope 词表加载中…"}
-              </p>
-            ) : (
-              <div className="grid gap-x-10 gap-y-3 sm:grid-cols-2">
-                {catalog.map((entry) => (
-                  <ScopeResourceRow
-                    key={entry.resource}
-                    entry={entry}
-                    disabled={wildcard}
-                    selected={selected}
-                    onToggle={toggleScope}
-                  />
-                ))}
-              </div>
-            )}
+          )}
+          <div className="space-y-2 border-t pt-4">
+            <Label htmlFor="manual-scopes">自定义 Scopes（可选，逗号或换行分隔）</Label>
+            <textarea
+              id="manual-scopes"
+              value={manualScopes}
+              onChange={(e) => setManualScopes(e.target.value)}
+              placeholder={"databases:blog.read\nmyapp:reports.read"}
+              rows={4}
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs"
+            />
+            <p className="text-xs text-muted-foreground">
+              追加词表之外的 scope，与上方勾选合并生效：支持资源级限定（如{" "}
+              <code>databases:blog.read</code> 单库只读）与自定义服务 scope；词表不可用时也可完全在此手动输入。
+            </p>
           </div>
         </div>
-      )}
-      <Button
-        type="button"
-        variant="link"
-        className="h-auto px-0 text-xs text-muted-foreground"
-        onClick={() => setManualMode((m) => !m)}
-      >
-        {manualMode ? "返回词表多选" : "手动输入 Scopes（高级，词表接口不可用时）"}
-      </Button>
+      </div>
     </FormPageWrapper>
   );
 }
