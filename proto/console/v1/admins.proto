@@ -79,17 +79,6 @@ service AdminsService {
     };
   }
 
-  // UpdateCurrentAdmin 当前登录管理员自助更新个人偏好（非 role/password 等
-  // 敏感字段；管理他人走 UpdateAdmin）。仅暴露 typed 偏好字段，存储侧落在
-  // admins.metadata JSONB（见 Admin.timezone 注释）。
-  rpc UpdateCurrentAdmin(UpdateCurrentAdminRequest) returns (Admin) {
-    option (google.api.http) = { patch: "/v1/console/admins/me", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
-      permissions: ["console"]
-    };
-  }
-
   rpc ListAdmins(ListAdminsRequest) returns (ListAdminsResponse) {
     option (google.api.http) = { get: "/v1/console/admins" };
     option (torchwood.shared.v1.method_auth) = {
@@ -106,11 +95,29 @@ service AdminsService {
     };
   }
 
+  // 路由顺序约束（重要）：grpc-gateway 的 ServeMux.Handle 是头插（LIFO）——
+  // 同 HTTP 方法下"后注册的 pattern 先匹配"，注册顺序 = proto 声明顺序。
+  // 字面量路径 /me 与变量路径 /{id} 同形竞争时，字面量 rpc 必须声明在后，
+  // 否则 /me 被 {id} 吞掉（UpdateAdmin(id="me") 查库 nil → 404 admin not
+  // found，回归测试见 cmd/server/internal/runtime/gateway_route_order_test.go）。
   rpc UpdateAdmin(UpdateAdminRequest) returns (Admin) {
     option (google.api.http) = { patch: "/v1/console/admins/{id}", body: "*" };
     option (torchwood.shared.v1.method_auth) = {
       access: ACCESS_PERMISSION
       permissions: ["owner"]
+    };
+  }
+
+  // UpdateCurrentAdmin 当前登录管理员自助更新个人偏好（非 role/password 等
+  // 敏感字段；管理他人走 UpdateAdmin）。仅暴露 typed 偏好字段，存储侧落在
+  // admins.metadata JSONB（见 Admin.timezone 注释）。
+  // 声明位置必须在 UpdateAdmin 之后：PATCH /me 与 PATCH /{id} 同形竞争，
+  // gateway LIFO 匹配下后声明者胜（见上方路由顺序约束注释）。
+  rpc UpdateCurrentAdmin(UpdateCurrentAdminRequest) returns (Admin) {
+    option (google.api.http) = { patch: "/v1/console/admins/me", body: "*" };
+    option (torchwood.shared.v1.method_auth) = {
+      access: ACCESS_PERMISSION
+      permissions: ["console"]
     };
   }
 
@@ -127,10 +134,11 @@ message GetCurrentAdminRequest {}
 
 message UpdateCurrentAdminRequest {
   // optional：未设置 = 不修改；设置空串 = 清除偏好（跟随浏览器时区）；
-  // 设置非空 = 更新为该 IANA 时区名（如 Asia/Shanghai）。形状在此校验，
+  // 设置非空 = 更新为该 IANA 时区名（如 Asia/Shanghai）。形状在此校验
+  // （pattern 放行空串——空串是"清除"语义，非空形状由分支约束），
   // IANA 有效性由 use-case 层 time.LoadLocation 权威判定。
   optional string timezone = 1 [(buf.validate.field).string = {
-    pattern: "^[A-Za-z]+(/[A-Za-z0-9_+-]+)*$"
+    pattern: "^([A-Za-z]+(/[A-Za-z0-9_+-]+)*)?$"
     max_len: 64
   }];
 }

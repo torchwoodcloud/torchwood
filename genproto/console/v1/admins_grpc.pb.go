@@ -21,10 +21,10 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	AdminsService_GetCurrentAdmin_FullMethodName    = "/torchwood.console.v1.AdminsService/GetCurrentAdmin"
-	AdminsService_UpdateCurrentAdmin_FullMethodName = "/torchwood.console.v1.AdminsService/UpdateCurrentAdmin"
 	AdminsService_ListAdmins_FullMethodName         = "/torchwood.console.v1.AdminsService/ListAdmins"
 	AdminsService_CreateAdmin_FullMethodName        = "/torchwood.console.v1.AdminsService/CreateAdmin"
 	AdminsService_UpdateAdmin_FullMethodName        = "/torchwood.console.v1.AdminsService/UpdateAdmin"
+	AdminsService_UpdateCurrentAdmin_FullMethodName = "/torchwood.console.v1.AdminsService/UpdateCurrentAdmin"
 	AdminsService_DeleteAdmin_FullMethodName        = "/torchwood.console.v1.AdminsService/DeleteAdmin"
 )
 
@@ -37,13 +37,20 @@ const (
 // 方法与 client/server API 不同，这里直接使用 console admin role 作为权限串。
 type AdminsServiceClient interface {
 	GetCurrentAdmin(ctx context.Context, in *GetCurrentAdminRequest, opts ...grpc.CallOption) (*Admin, error)
+	ListAdmins(ctx context.Context, in *ListAdminsRequest, opts ...grpc.CallOption) (*ListAdminsResponse, error)
+	CreateAdmin(ctx context.Context, in *CreateAdminRequest, opts ...grpc.CallOption) (*Admin, error)
+	// 路由顺序约束（重要）：grpc-gateway 的 ServeMux.Handle 是头插（LIFO）——
+	// 同 HTTP 方法下"后注册的 pattern 先匹配"，注册顺序 = proto 声明顺序。
+	// 字面量路径 /me 与变量路径 /{id} 同形竞争时，字面量 rpc 必须声明在后，
+	// 否则 /me 被 {id} 吞掉（UpdateAdmin(id="me") 查库 nil → 404 admin not
+	// found，回归测试见 cmd/server/internal/runtime/gateway_route_order_test.go）。
+	UpdateAdmin(ctx context.Context, in *UpdateAdminRequest, opts ...grpc.CallOption) (*Admin, error)
 	// UpdateCurrentAdmin 当前登录管理员自助更新个人偏好（非 role/password 等
 	// 敏感字段；管理他人走 UpdateAdmin）。仅暴露 typed 偏好字段，存储侧落在
 	// admins.metadata JSONB（见 Admin.timezone 注释）。
+	// 声明位置必须在 UpdateAdmin 之后：PATCH /me 与 PATCH /{id} 同形竞争，
+	// gateway LIFO 匹配下后声明者胜（见上方路由顺序约束注释）。
 	UpdateCurrentAdmin(ctx context.Context, in *UpdateCurrentAdminRequest, opts ...grpc.CallOption) (*Admin, error)
-	ListAdmins(ctx context.Context, in *ListAdminsRequest, opts ...grpc.CallOption) (*ListAdminsResponse, error)
-	CreateAdmin(ctx context.Context, in *CreateAdminRequest, opts ...grpc.CallOption) (*Admin, error)
-	UpdateAdmin(ctx context.Context, in *UpdateAdminRequest, opts ...grpc.CallOption) (*Admin, error)
 	DeleteAdmin(ctx context.Context, in *DeleteAdminRequest, opts ...grpc.CallOption) (*v1.Empty, error)
 }
 
@@ -59,16 +66,6 @@ func (c *adminsServiceClient) GetCurrentAdmin(ctx context.Context, in *GetCurren
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Admin)
 	err := c.cc.Invoke(ctx, AdminsService_GetCurrentAdmin_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *adminsServiceClient) UpdateCurrentAdmin(ctx context.Context, in *UpdateCurrentAdminRequest, opts ...grpc.CallOption) (*Admin, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Admin)
-	err := c.cc.Invoke(ctx, AdminsService_UpdateCurrentAdmin_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -105,6 +102,16 @@ func (c *adminsServiceClient) UpdateAdmin(ctx context.Context, in *UpdateAdminRe
 	return out, nil
 }
 
+func (c *adminsServiceClient) UpdateCurrentAdmin(ctx context.Context, in *UpdateCurrentAdminRequest, opts ...grpc.CallOption) (*Admin, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Admin)
+	err := c.cc.Invoke(ctx, AdminsService_UpdateCurrentAdmin_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adminsServiceClient) DeleteAdmin(ctx context.Context, in *DeleteAdminRequest, opts ...grpc.CallOption) (*v1.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(v1.Empty)
@@ -124,13 +131,20 @@ func (c *adminsServiceClient) DeleteAdmin(ctx context.Context, in *DeleteAdminRe
 // 方法与 client/server API 不同，这里直接使用 console admin role 作为权限串。
 type AdminsServiceServer interface {
 	GetCurrentAdmin(context.Context, *GetCurrentAdminRequest) (*Admin, error)
+	ListAdmins(context.Context, *ListAdminsRequest) (*ListAdminsResponse, error)
+	CreateAdmin(context.Context, *CreateAdminRequest) (*Admin, error)
+	// 路由顺序约束（重要）：grpc-gateway 的 ServeMux.Handle 是头插（LIFO）——
+	// 同 HTTP 方法下"后注册的 pattern 先匹配"，注册顺序 = proto 声明顺序。
+	// 字面量路径 /me 与变量路径 /{id} 同形竞争时，字面量 rpc 必须声明在后，
+	// 否则 /me 被 {id} 吞掉（UpdateAdmin(id="me") 查库 nil → 404 admin not
+	// found，回归测试见 cmd/server/internal/runtime/gateway_route_order_test.go）。
+	UpdateAdmin(context.Context, *UpdateAdminRequest) (*Admin, error)
 	// UpdateCurrentAdmin 当前登录管理员自助更新个人偏好（非 role/password 等
 	// 敏感字段；管理他人走 UpdateAdmin）。仅暴露 typed 偏好字段，存储侧落在
 	// admins.metadata JSONB（见 Admin.timezone 注释）。
+	// 声明位置必须在 UpdateAdmin 之后：PATCH /me 与 PATCH /{id} 同形竞争，
+	// gateway LIFO 匹配下后声明者胜（见上方路由顺序约束注释）。
 	UpdateCurrentAdmin(context.Context, *UpdateCurrentAdminRequest) (*Admin, error)
-	ListAdmins(context.Context, *ListAdminsRequest) (*ListAdminsResponse, error)
-	CreateAdmin(context.Context, *CreateAdminRequest) (*Admin, error)
-	UpdateAdmin(context.Context, *UpdateAdminRequest) (*Admin, error)
 	DeleteAdmin(context.Context, *DeleteAdminRequest) (*v1.Empty, error)
 	mustEmbedUnimplementedAdminsServiceServer()
 }
@@ -145,9 +159,6 @@ type UnimplementedAdminsServiceServer struct{}
 func (UnimplementedAdminsServiceServer) GetCurrentAdmin(context.Context, *GetCurrentAdminRequest) (*Admin, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCurrentAdmin not implemented")
 }
-func (UnimplementedAdminsServiceServer) UpdateCurrentAdmin(context.Context, *UpdateCurrentAdminRequest) (*Admin, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateCurrentAdmin not implemented")
-}
 func (UnimplementedAdminsServiceServer) ListAdmins(context.Context, *ListAdminsRequest) (*ListAdminsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListAdmins not implemented")
 }
@@ -156,6 +167,9 @@ func (UnimplementedAdminsServiceServer) CreateAdmin(context.Context, *CreateAdmi
 }
 func (UnimplementedAdminsServiceServer) UpdateAdmin(context.Context, *UpdateAdminRequest) (*Admin, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateAdmin not implemented")
+}
+func (UnimplementedAdminsServiceServer) UpdateCurrentAdmin(context.Context, *UpdateCurrentAdminRequest) (*Admin, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateCurrentAdmin not implemented")
 }
 func (UnimplementedAdminsServiceServer) DeleteAdmin(context.Context, *DeleteAdminRequest) (*v1.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteAdmin not implemented")
@@ -195,24 +209,6 @@ func _AdminsService_GetCurrentAdmin_Handler(srv interface{}, ctx context.Context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminsServiceServer).GetCurrentAdmin(ctx, req.(*GetCurrentAdminRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AdminsService_UpdateCurrentAdmin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateCurrentAdminRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AdminsServiceServer).UpdateCurrentAdmin(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AdminsService_UpdateCurrentAdmin_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AdminsServiceServer).UpdateCurrentAdmin(ctx, req.(*UpdateCurrentAdminRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -271,6 +267,24 @@ func _AdminsService_UpdateAdmin_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminsService_UpdateCurrentAdmin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateCurrentAdminRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminsServiceServer).UpdateCurrentAdmin(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminsService_UpdateCurrentAdmin_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminsServiceServer).UpdateCurrentAdmin(ctx, req.(*UpdateCurrentAdminRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AdminsService_DeleteAdmin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DeleteAdminRequest)
 	if err := dec(in); err != nil {
@@ -301,10 +315,6 @@ var AdminsService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AdminsService_GetCurrentAdmin_Handler,
 		},
 		{
-			MethodName: "UpdateCurrentAdmin",
-			Handler:    _AdminsService_UpdateCurrentAdmin_Handler,
-		},
-		{
 			MethodName: "ListAdmins",
 			Handler:    _AdminsService_ListAdmins_Handler,
 		},
@@ -315,6 +325,10 @@ var AdminsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateAdmin",
 			Handler:    _AdminsService_UpdateAdmin_Handler,
+		},
+		{
+			MethodName: "UpdateCurrentAdmin",
+			Handler:    _AdminsService_UpdateCurrentAdmin_Handler,
 		},
 		{
 			MethodName: "DeleteAdmin",

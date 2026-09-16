@@ -65,7 +65,8 @@ func (*GetCurrentAdminRequest) Descriptor() ([]byte, []int) {
 type UpdateCurrentAdminRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// optional：未设置 = 不修改；设置空串 = 清除偏好（跟随浏览器时区）；
-	// 设置非空 = 更新为该 IANA 时区名（如 Asia/Shanghai）。形状在此校验，
+	// 设置非空 = 更新为该 IANA 时区名（如 Asia/Shanghai）。形状在此校验
+	// （pattern 放行空串——空串是"清除"语义，非空形状由分支约束），
 	// IANA 有效性由 use-case 层 time.LoadLocation 权威判定。
 	Timezone      *string `protobuf:"bytes,1,opt,name=timezone,proto3,oneof" json:"timezone,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -470,9 +471,9 @@ var File_console_v1_admins_proto protoreflect.FileDescriptor
 const file_console_v1_admins_proto_rawDesc = "" +
 	"\n" +
 	"\x17console/v1/admins.proto\x12\x14torchwood.console.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\x18\n" +
-	"\x16GetCurrentAdminRequest\"r\n" +
-	"\x19UpdateCurrentAdminRequest\x12H\n" +
-	"\btimezone\x18\x01 \x01(\tB'\xbaH$r\"\x18@2\x1e^[A-Za-z]+(/[A-Za-z0-9_+-]+)*$H\x00R\btimezone\x88\x01\x01B\v\n" +
+	"\x16GetCurrentAdminRequest\"u\n" +
+	"\x19UpdateCurrentAdminRequest\x12K\n" +
+	"\btimezone\x18\x01 \x01(\tB*\xbaH'r%\x18@2!^([A-Za-z]+(/[A-Za-z0-9_+-]+)*)?$H\x00R\btimezone\x88\x01\x01B\v\n" +
 	"\t_timezone\"O\n" +
 	"\x11ListAdminsRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
@@ -502,12 +503,12 @@ const file_console_v1_admins_proto_rawDesc = "" +
 	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1a\n" +
 	"\btimezone\x18\x06 \x01(\tR\btimezone2\xdb\x06\n" +
 	"\rAdminsService\x12\x8a\x01\n" +
-	"\x0fGetCurrentAdmin\x12,.torchwood.console.v1.GetCurrentAdminRequest\x1a\x1b.torchwood.console.v1.Admin\",\x8a\xb2\x19\v\b\x04\x12\aconsole\x82\xd3\xe4\x93\x02\x17\x12\x15/v1/console/admins/me\x12\x93\x01\n" +
-	"\x12UpdateCurrentAdmin\x12/.torchwood.console.v1.UpdateCurrentAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"/\x8a\xb2\x19\v\b\x04\x12\aconsole\x82\xd3\xe4\x93\x02\x1a:\x01*2\x15/v1/console/admins/me\x12\x8f\x01\n" +
+	"\x0fGetCurrentAdmin\x12,.torchwood.console.v1.GetCurrentAdminRequest\x1a\x1b.torchwood.console.v1.Admin\",\x8a\xb2\x19\v\b\x04\x12\aconsole\x82\xd3\xe4\x93\x02\x17\x12\x15/v1/console/admins/me\x12\x8f\x01\n" +
 	"\n" +
 	"ListAdmins\x12'.torchwood.console.v1.ListAdminsRequest\x1a(.torchwood.console.v1.ListAdminsResponse\".\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x14\x12\x12/v1/console/admins\x12\x80\x01\n" +
 	"\vCreateAdmin\x12(.torchwood.console.v1.CreateAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"*\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x17:\x01*\"\x12/v1/console/admins\x12\x85\x01\n" +
-	"\vUpdateAdmin\x12(.torchwood.console.v1.UpdateAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"/\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x1c:\x01*2\x17/v1/console/admins/{id}\x12\x81\x01\n" +
+	"\vUpdateAdmin\x12(.torchwood.console.v1.UpdateAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"/\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x1c:\x01*2\x17/v1/console/admins/{id}\x12\x93\x01\n" +
+	"\x12UpdateCurrentAdmin\x12/.torchwood.console.v1.UpdateCurrentAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"/\x8a\xb2\x19\v\b\x04\x12\aconsole\x82\xd3\xe4\x93\x02\x1a:\x01*2\x15/v1/console/admins/me\x12\x81\x01\n" +
 	"\vDeleteAdmin\x12(.torchwood.console.v1.DeleteAdminRequest\x1a\x1a.torchwood.shared.v1.Empty\",\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x19*\x17/v1/console/admins/{id}\x1a\x06\x92\xb2\x19\x02\b\x04B\xe1\x03\x92A\x9a\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
@@ -556,16 +557,16 @@ var file_console_v1_admins_proto_depIdxs = []int32{
 	9,  // 2: torchwood.console.v1.Admin.created_at:type_name -> google.protobuf.Timestamp
 	9,  // 3: torchwood.console.v1.Admin.updated_at:type_name -> google.protobuf.Timestamp
 	0,  // 4: torchwood.console.v1.AdminsService.GetCurrentAdmin:input_type -> torchwood.console.v1.GetCurrentAdminRequest
-	1,  // 5: torchwood.console.v1.AdminsService.UpdateCurrentAdmin:input_type -> torchwood.console.v1.UpdateCurrentAdminRequest
-	2,  // 6: torchwood.console.v1.AdminsService.ListAdmins:input_type -> torchwood.console.v1.ListAdminsRequest
-	4,  // 7: torchwood.console.v1.AdminsService.CreateAdmin:input_type -> torchwood.console.v1.CreateAdminRequest
-	5,  // 8: torchwood.console.v1.AdminsService.UpdateAdmin:input_type -> torchwood.console.v1.UpdateAdminRequest
+	2,  // 5: torchwood.console.v1.AdminsService.ListAdmins:input_type -> torchwood.console.v1.ListAdminsRequest
+	4,  // 6: torchwood.console.v1.AdminsService.CreateAdmin:input_type -> torchwood.console.v1.CreateAdminRequest
+	5,  // 7: torchwood.console.v1.AdminsService.UpdateAdmin:input_type -> torchwood.console.v1.UpdateAdminRequest
+	1,  // 8: torchwood.console.v1.AdminsService.UpdateCurrentAdmin:input_type -> torchwood.console.v1.UpdateCurrentAdminRequest
 	6,  // 9: torchwood.console.v1.AdminsService.DeleteAdmin:input_type -> torchwood.console.v1.DeleteAdminRequest
 	7,  // 10: torchwood.console.v1.AdminsService.GetCurrentAdmin:output_type -> torchwood.console.v1.Admin
-	7,  // 11: torchwood.console.v1.AdminsService.UpdateCurrentAdmin:output_type -> torchwood.console.v1.Admin
-	3,  // 12: torchwood.console.v1.AdminsService.ListAdmins:output_type -> torchwood.console.v1.ListAdminsResponse
-	7,  // 13: torchwood.console.v1.AdminsService.CreateAdmin:output_type -> torchwood.console.v1.Admin
-	7,  // 14: torchwood.console.v1.AdminsService.UpdateAdmin:output_type -> torchwood.console.v1.Admin
+	3,  // 11: torchwood.console.v1.AdminsService.ListAdmins:output_type -> torchwood.console.v1.ListAdminsResponse
+	7,  // 12: torchwood.console.v1.AdminsService.CreateAdmin:output_type -> torchwood.console.v1.Admin
+	7,  // 13: torchwood.console.v1.AdminsService.UpdateAdmin:output_type -> torchwood.console.v1.Admin
+	7,  // 14: torchwood.console.v1.AdminsService.UpdateCurrentAdmin:output_type -> torchwood.console.v1.Admin
 	10, // 15: torchwood.console.v1.AdminsService.DeleteAdmin:output_type -> torchwood.shared.v1.Empty
 	10, // [10:16] is the sub-list for method output_type
 	4,  // [4:10] is the sub-list for method input_type
