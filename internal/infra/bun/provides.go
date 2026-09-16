@@ -13,6 +13,11 @@ var ProviderSet = wire.NewSet(
 	bunrepo.NewOAuthProviderRepository,
 	bunrepo.NewAPIKeyRepository,
 	bunrepo.NewInviteCodeRepository,
+	// RuntimeVars 仓储（runtime_var_sets/vars/heads/versions，迁移 000011）：
+	// server 面全量 port + client 面可见性过滤窄 port（双 port 同实现，client
+	// 装配只取窄 port，误接线为编译错误）。
+	bunrepo.NewRuntimeVarRepository,
+	bunrepo.NewRuntimeVarPublicRead,
 	bunrepo.NewIdempotencyStore,
 	wire.Bind(new(databases.IdempotencyStore), new(*bunrepo.IdempotencyStore)),
 	bunrepo.NewAdminRepository,
