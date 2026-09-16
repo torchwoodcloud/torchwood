@@ -1,6 +1,8 @@
 # RuntimeVars：项目级运行时配置下发（多集合 · 可见性 · 版本回滚）
 
-> 状态：**设计定稿，待实施（2026-09-16）**。范围三问已拍板：纯类型化 KV 下发（无灰度引擎）/ client 匿名可读 / ETag 轮询传播（不做 realtime 推送）；同日扩展多集合、公开·私有可见性、版本回滚，并经深度复查修正两处（ETag 掺 epoch 防同名重建碰撞 §3-D2、回滚快照全列防元数据丢失 §3-D11）。同日对抗式审查：最强反驳 = 可见性判定的用例层旁路（初稿自称与 ListDocuments 的 RLS 同构名不副实）——已修复为 port 拆分、判定下推数据访问层（§2.4/§2.6），连带读一致性、锁契约、轮询 TTL 口径三处加固。
+> 状态：**已实施（2026-09-17，五阶段子代理依次实现 + 终验全过：全量 task test exit 0、task build 四二进制、E2E 关键路径实走——server 面 CRUD/版本链/回滚快照语义/匿名拉取/etag 短路/private 与不存在错误体一致/无效凭证 401/CLI 反射实调）**。范围三问已拍板：纯类型化 KV 下发（无灰度引擎）/ client 匿名可读 / ETag 轮询传播（不做 realtime 推送）；多集合、公开·私有可见性、版本回滚经深度复查与对抗式审查定稿（ETag 掺 epoch 防同名重建碰撞 §3-D2、回滚快照全列防元数据丢失 §3-D11、可见性判定下推数据访问层 §2.4/§2.6）。
+> 相关代码：`db/migrations/000011_runtime_vars.*`、`internal/domain/projects/runtime_var.go`（双 port）、`internal/infra/bun/{model,bunrepo}/runtime_var*.go`、`internal/app/{server,client}/runtimevars.go`、`internal/api/{servergrpc,clientgrpc}/runtime_vars.go`、`proto/{server,client}/v1/runtime_vars.proto`、`sdk/go/{server,client}/runtimevars*.go`、`sdk/typescript/src/{server,client}/runtimeVars.ts`、`console/src/routes/runtime-vars/pages.tsx`。
+> 实施偏差记录（均可回溯）：① 写事务规范调用序实测修正为 LockHead → 变更 → 快照回读 → InsertVersion → BumpRevisionAndPrune（淘汰窗口必须计入新版本行，port 契约注释为准）；② server 面读动词 admin_roles 按仓库 ClassifyTier 三档惯例省略声明（= 全角色，语义等价）；③ gateway 对 int64 输出 JSON 字符串为全仓既有行为，TS SDK/Console 在各自数据层归一为 number；④ 未知 project_id 报 InvalidArgument 而非 NotFound（与"不向匿名确认存在性"自洽）。
 > 相关：`proto/shared/v1/authz.proto`（scope 词表三处同步）、`internal/domain/auth/policy.go`（client 面 PUBLIC 白名单）、`db/migrations/000003_catalog_global.up.sql`（public 控制面表同构先例）、`proto/client/v1/databases.proto`（client 面匿名读先例：ListDocuments/GetDocument/CountDocuments）、`internal/infra/bun/bunrepo/apikey_repo.go`（update_guard 合规 Update 模板）。
 
 ---
