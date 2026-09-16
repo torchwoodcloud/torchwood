@@ -45,10 +45,17 @@ func mapClientInvokeResponse(res *appfunctions.ClientInvokeResult) *clientv1.Inv
 	rec := res.Record
 	// 终态 failed 语义保持原样返回（HTTP 200 + status=failed）：函数执行
 	// 失败是结果而非传输错误，容器 exit code 对客户端无语义（设计 §4）。
-	// status 透传执行记录状态（completed | failed | running）。
+	// status 透传执行记录状态（completed | failed | running）。failed 时
+	// response 字段承载执行行的 error 摘要（InvokeFunctionResponse 无独立
+	// error 字段；调用方以 status 分流——completed 的 response 是函数返回
+	// JSON，failed 的 response 是失败摘要文本）。
+	response := rec.Response
+	if rec.Status == "failed" && response == "" {
+		response = rec.Error
+	}
 	return &clientv1.InvokeFunctionResponse{
 		ExecutionId: rec.ID,
 		Status:      rec.Status,
-		Response:    rec.Response,
+		Response:    response,
 	}
 }

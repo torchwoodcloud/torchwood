@@ -130,13 +130,27 @@ func (f *Functions) ClientInvoke(ctx context.Context, cmd ClientInvokeCommand) (
 				f.observeClientInvoke(cmd, InvokeResultOK)
 				return &ClientInvokeResult{Record: existing, Reused: true}, nil
 			}
-			// 冲突行回读失败（极端：刚插入即被删）按原始错误继续上抛语义
-			// 归一为 Internal——不吞错。
-			return nil, status.Error(codes.Internal, "idempotency conflict but existing execution unavailable")
-		}
-		f.observeClientInvokeCmd(cmd, err)
-		return nil, err
+		// 冲突行回读失败（极端：刚插入即被删）按原始错误继续上抛语义
+		// 归一为 Internal——不吞错。
+		return nil, status.Error(codes.Internal, "idempotency conflict but existing execution unavailable")
 	}
+	// 终态 failed 按结果返回（设计 §4「函数执行失败是结果而非传输错误」）：
+	// runExecution 的错误分支已把 failed 记录入库（摘要/Error + 输出截断），
+	// 同步快路径却把 err 一路上抛成 grpc UNKNOWN/500——调用方拿不到
+	// execution_id，也无法区分函数失败与平台故障。此处回收：rec 非空且
+	// status=failed 即函数结局，按 200+failed 返回记录。**超时除外**：
+	// DeadlineExceeded 维持错误传播（调用方按超时语义重试/放弃，mlbridge
+	// 映射 FUNCTION_TIMEOUT 信封而非 payload 层错误）。执行级失败指标
+	// （executions_total{status=failed}）已由 runExecution 侧记录，入口
+	// 计数按调用面成功（face 200）记 ok。
+	if rec != nil && rec.Status == domainfunctions.ExecutionStatusFailed &&
+		!errors.Is(err, context.DeadlineExceeded) && status.Code(err) != codes.DeadlineExceeded {
+		f.observeClientInvoke(cmd, InvokeResultOK)
+		return &ClientInvokeResult{Record: rec, Reused: false}, nil
+	}
+	f.observeClientInvokeCmd(cmd, err)
+	return nil, err
+}
 	f.observeClientInvoke(cmd, InvokeResultOK)
 	return &ClientInvokeResult{Record: rec, Reused: false}, nil
 }

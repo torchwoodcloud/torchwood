@@ -453,38 +453,54 @@ if (res.status === "completed") {
 
 Go SDK：`client.New(...).Functions.InvokeString(ctx, "daily_signin", data, idempotencyKey, "")`。
 
-### 13.7 rpc 调用封套（多操作函数的入口分发约定）
+### 13.7 rpc 调用封套 = JSON-RPC 2.0 请求对象（多操作函数的入口分发约定）
 
-调用方（mlbridge 经 client 面中继，或直调本面的客户端）调用函数时，`data` 采用 **type 判别封套**——与事件投影（§12.5，`type:"event"`）、HTTP 触发器封套同一「先判型再分发」哲学：
+调用方（mlbridge 经 client 面中继，或直调本面的客户端）调用函数时，`data`
+**直接采用 JSON-RPC 2.0 规范的请求对象**
+（https://www.jsonrpc.org/specification）：
 
 ```json
 {
-  "type": "rpc",
-  "op": "sum",
-  "rid": "<请求id>",
-  "args": { "a": 1, "b": 2 }
+  "jsonrpc": "2.0",
+  "method": "sum",
+  "params": { "a": 1, "b": 2 },
+  "id": "<请求id>"
 }
 ```
 
-- **顶层保留键 `type` / `op` / `rid` / `args` 是版本化契约：只增不改**。调用方全权组装封套；函数按保留键分发，未知键透传不解释；
-- `type:"rpc"` 表示同步 RPC 调用：`op` 是操作名（调用方以 method/channel 寻址函数、以 op 选操作）、`rid` 是调用方请求 id（应答关联）、`args` 是操作参数 JSON object（无参数为 `{}`）；`type:"event"` 是既有事件投影的判别值；
-- 多操作函数（或多触发器同居）应在入口统一 `switch (data.type)` 分发——一个函数镜像（一个暖实例池）暴露多个操作，避免一 op 一函数的构建与保温成本；
+- **`jsonrpc` 成员兼任触发判别**：事件投影（§12.5）带 `type:"event"` 而非
+  `jsonrpc`，函数入口据此一分到底，无需额外路由字段；
+- 不使用规范中的 notification（无 `id` 即无应答）——调用方
+  （mlbridge/MessageLoop RPC）传输层严格请求/应答，`id` 恒存在（字符串
+  形式）；`params` 恒为命名（对象）形式；
+- 多操作函数（或多触发器同居）在入口统一判别分发——一个函数镜像（一个
+  暖实例池）暴露多个 method，避免一 method 一函数的构建与保温成本；
 
 ```js
 // index.js —— event + rpc 同居分发的参考形态
 exports.main = async (data, ctx) => {
-  switch (data.type) {
-    case "event": return handleEvent(data, ctx);        // 事件投影（§12.5）
-    case "rpc":   return (handlers[data.op] || unknownOp)(data.args, ctx);
-    default:      return { error: "unknown invocation type" };
+  if (data && data.jsonrpc === "2.0") {
+    const h = handlers[data.method];
+    return h ? h(data.params, ctx) : { error: { code: -32601, message: "method not found" } };
+  }
+  switch (data && data.type) {
+    case "event": return handleEvent(data, ctx);       // 事件投影（§12.5）
+    default:      throw new Error("unknown invocation");
   }
 };
 const handlers = {
-  sum: (args) => args.a + args.b,
+  sum: (params) => ({ sum: params.a + params.b }),
 };
 ```
 
-- **身份不入封套**：客户端可绕过调用方直调本面伪造任意 `data`，封套是路由约定不是信任边界——op 级鉴权与审计读 `ctx.invokingUserId` / `ctx.source`（§4.3.3，平台可信注入）。
+- **应答约定（result / error 二分）**：函数返回值即调用电路上响应的
+  `result` 成员；返回 `{"error":{"code":<int>,"message":<string>,"data"?:<any>}}`
+  形状即 `error` 成员（恰含其一永不共存）。authored 错误码建议用保留区
+  `-32000..-32099`；分发级失败复用规范自带码（`-32601` method not found、
+  `-32602` invalid params）。合法结果恰为该形状时须嵌套一层；
+- **身份不入请求对象**：客户端可绕过调用方直调本面伪造任意 `data`，封套是
+  路由约定不是信任边界——method 级鉴权与审计读 `ctx.invokingUserId` /
+  `ctx.source`（§4.3.3，平台可信注入）。
 
 ## 14 参考
 
