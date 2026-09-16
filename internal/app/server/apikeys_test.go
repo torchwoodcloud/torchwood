@@ -82,8 +82,9 @@ func TestAPIKeys_Create_SecretFormat(t *testing.T) {
 	require.Equal(t, hex.EncodeToString(hash[:]), key.SecretHash)
 }
 
-// TestAPIKeys_Create_ScopeValidation (B2): Create 时校验 scope 格式
-// ∈ {*, all, 裸资源名, <resource>.read, <resource>.write}，上限 32 项/64 字符。
+// TestAPIKeys_Create_ScopeValidation (B2/T2): Create 时校验 scope 格式
+// ∈ {*, all, 裸资源名, <resource>.read, <resource>.write, <res>:<id>[.op],
+// <service>.<name> 自定义}，上限 32 项。
 func TestAPIKeys_Create_ScopeValidation(t *testing.T) {
 	uc := NewAPIKeys(&fakeAPIKeyRepository{}, testScopeVocabulary())
 	ctx := platformAdminCtx(context.Background())
@@ -94,6 +95,9 @@ func TestAPIKeys_Create_ScopeValidation(t *testing.T) {
 		{"databases"},
 		{"databases.read", "databases.write"},
 		{"users.read", "storage.write", "oauthproviders", "groups"},
+		// 自定义服务形态（T2）：纯语法门，TW 不解释语义。
+		{"messageloop.session.act"},
+		{"mlbridge.history.read", "databases.read"},
 	} {
 		_, _, err := uc.Create(ctx, CreateAPIKeyCommand{Name: "k", Scopes: scopes})
 		require.NoError(t, err, "scopes %v should be accepted", scopes)
@@ -102,11 +106,18 @@ func TestAPIKeys_Create_ScopeValidation(t *testing.T) {
 	for _, scopes := range [][]string{
 		{"foo"},
 		{"health"},
-		{"health.read"},
 		{"databases.delete"},
 		{"databases.read.extra"},
 		{"any"},
 		{""},
+		// 自定义语法非法（T2）。
+		{"Messageloop.x"},         // 大写
+		{"svc..x"},                // 双点（空段）
+		{"a.x"},                   // service 单字符（语法要求 ≥2）
+		{"users.anything"},        // 内建域不可被自定义占用
+		{"databases.custom"},      // 内建域不可被自定义占用
+		{"svc.name$"},             // 非法字符
+		{strings.Repeat("a", 65)}, // 自定义总长 65 > 64
 	} {
 		_, _, err := uc.Create(ctx, CreateAPIKeyCommand{Name: "k", Scopes: scopes})
 		require.Equal(t, codes.InvalidArgument, status.Code(err), "scopes %v should be rejected", scopes)
@@ -182,20 +193,24 @@ func TestAPIKeys_Update_DisableExpireAndScopes(t *testing.T) {
 	key, secret, err := uc.Create(ctx, CreateAPIKeyCommand{ProjectID: projectID, Name: "k", Scopes: []string{"databases"}})
 	require.NoError(t, err)
 
-	// 改名 + 收窄 scope 到实例限定。
+	// 改名 + 收窄 scope 到实例限定 + 附自定义 scope（T2：Update 路径同样
+	// 过语法门）。
 	updated, err := uc.Update(ctx, UpdateAPIKeyCommand{
 		ProjectID: projectID,
 		ID:        key.ID,
 		Name:      strPtrAPIKey("blog-key"),
-		Scopes:    []string{"databases:blog"},
+		Scopes:    []string{"databases:blog", "messageloop.session.act"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, "blog-key", updated.Name)
-	require.Equal(t, []string{"databases:blog"}, updated.Scopes)
+	require.Equal(t, []string{"databases:blog", "messageloop.session.act"}, updated.Scopes)
 	require.True(t, updated.Enabled)
 
 	// 非法 scope → 400。
 	_, err = uc.Update(ctx, UpdateAPIKeyCommand{ProjectID: projectID, ID: key.ID, Scopes: []string{"databases:Blog"}})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	// 非法自定义 scope → 400（内建域占用）。
+	_, err = uc.Update(ctx, UpdateAPIKeyCommand{ProjectID: projectID, ID: key.ID, Scopes: []string{"users.anything"}})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 
 	// 禁用 → enabled=false 落库（validator 每请求读库 → 立即 401）。
@@ -334,4 +349,86 @@ func TestAPIKeys_EnsureScopesWithinCaller(t *testing.T) {
 	// 匿名 → Unauthenticated。
 	err := ensureScopesWithinCaller(context.Background(), []string{"users.read"})
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
+// selfDescribeRepo 是 SelfDescribe 的可控桩：返回预置 key 行（nil = 模拟
+// 行不存在）。
+type selfDescribeRepo struct {
+	fakeAPIKeyRepository
+	key *projects.APIKey
+}
+
+func (r *selfDescribeRepo) GetAPIKey(context.Context, string, string) (*projects.APIKey, error) {
+	return r.key, nil
+}
+
+func whoamiKeyRow() *projects.APIKey {
+	exp := time.Now().Add(90 * time.Second).UTC()
+	return &projects.APIKey{
+		ID: "key-123", ProjectID: "acme", Name: "tenant-key",
+		Scopes:   []string{"databases:blog", "messageloop.session.act"},
+		ExpireAt: &exp, Enabled: true, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+}
+
+// TestAPIKeys_SelfDescribe（WhoAmI 用例层）：仅 API key 凭证（service 主体）
+// 可取自身 key 行；admin/匿名/执行身份无可述的 key → 401；行不存在（认证后
+// 删除竞态）→ 401。
+func TestAPIKeys_SelfDescribe(t *testing.T) {
+	newUC := func(key *projects.APIKey) *APIKeys {
+		return NewAPIKeys(&selfDescribeRepo{key: key}, testScopeVocabulary())
+	}
+
+	// API key 主体 → 返回行。
+	uc := newUC(whoamiKeyRow())
+	ctx := contexts.WithPrincipal(context.Background(), &shared.Principal{
+		ActorID: "key-123", ActorKind: shared.ActorKindService,
+		CredentialType: shared.CredentialTypeAPIKey, ProjectID: "acme", APIKeyID: "key-123",
+	})
+	key, err := uc.SelfDescribe(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "key-123", key.ID)
+	require.Equal(t, "tenant-key", key.Name)
+	require.Equal(t, []string{"databases:blog", "messageloop.session.act"}, key.Scopes)
+
+	// admin 会话 / 匿名 / 端用户 → 401。
+	adminCtx := contexts.WithPrincipal(context.Background(), &shared.Principal{
+		ActorID: "admin-1", ActorKind: shared.ActorKindAdmin,
+		CredentialType: shared.CredentialTypeToken,
+	})
+	_, err = uc.SelfDescribe(adminCtx)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	_, err = uc.SelfDescribe(context.Background())
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	endUserCtx := contexts.WithPrincipal(context.Background(), &shared.Principal{
+		ActorID: "u1", ActorKind: shared.ActorKindEndUser,
+		CredentialType: shared.CredentialTypeToken, ProjectID: "acme", UserID: "u1",
+	})
+	_, err = uc.SelfDescribe(endUserCtx)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+
+	// 行已删除（认证后竞态）→ 401，与"无效 key"不可区分。
+	_, err = newUC(nil).SelfDescribe(ctx)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
+// TestMaxAgeSeconds（WhoAmI 契约）：expire_at 未设置 → 0；已过期 → 0；
+// 未到期 → max(0, expire_at - now) 整秒截断。
+func TestMaxAgeSeconds(t *testing.T) {
+	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+
+	require.EqualValues(t, 0, MaxAgeSeconds(nil, now), "未设置 expire_at → 0")
+
+	past := now.Add(-time.Second)
+	require.EqualValues(t, 0, MaxAgeSeconds(&past, now), "已过期 → 0")
+
+	exact := now.Add(time.Second)
+	require.EqualValues(t, 1, MaxAgeSeconds(&exact, now))
+
+	in90s := now.Add(90 * time.Second)
+	require.EqualValues(t, 90, MaxAgeSeconds(&in90s, now))
+
+	// 亚秒部分整秒截断（90.9s → 90，不向上取整）。
+	sub := now.Add(90900 * time.Millisecond)
+	require.EqualValues(t, 90, MaxAgeSeconds(&sub, now))
 }

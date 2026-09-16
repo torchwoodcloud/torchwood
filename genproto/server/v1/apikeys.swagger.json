@@ -94,6 +94,32 @@
         ]
       }
     },
+    "/v1/server/api-keys/whoami": {
+      "get": {
+        "summary": "WhoAmI 返回调用凭证（X-API-Key）自身对应的 key 行（whoami）。",
+        "description": "认证形态为\"自证凭证型\"（ACCESS_PUBLIC + 不要求任何 scope）：出示 key\n明文本身就是查询授权——任何有效 key 可查自己，零信息泄露、零自铸面；\n不要求 scope 意味着零 scope key 也可用。无效/禁用/过期/删除 → 401\n（每请求读库校验，与请求侧认证同路径）；匿名/非 API key 凭证（admin\n会话等）无可述的 key，handler 返回 401。\n响应不含 secret（永不回显）；max_age_seconds 由服务端以服务器时钟计算\n（相对时间，规避客户端时钟偏斜）。",
+        "operationId": "APIKeysService_WhoAmI",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1WhoAmIResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "tags": [
+          "APIKeysService"
+        ],
+        "security": [],
+        "x-torchwood-access": "public"
+      }
+    },
     "/v1/server/api-keys/{id}": {
       "get": {
         "operationId": "APIKeysService_GetAPIKey",
@@ -361,6 +387,35 @@
           "type": "integer",
           "format": "int32",
           "title": "total_count ≤0 = unknown（keyset 分页下 0 与空集合不可区分，调用方应以 next_page_token 是否为空判定是否还有更多；≤0 表示总数未知）。"
+        }
+      }
+    },
+    "v1WhoAmIResponse": {
+      "type": "object",
+      "properties": {
+        "key_id": {
+          "type": "string",
+          "title": "key 唯一 ID（非显示名：审计/归因/allow 列表按本 ID 匹配）。"
+        },
+        "name": {
+          "type": "string",
+          "title": "key 显示名。"
+        },
+        "project_id": {
+          "type": "string",
+          "title": "key 所属 project id。当前数据模型 key 恒绑定项目（api_keys.project_id\nNOT NULL）；平台级 key（空 project）需 schema 迁移，暂未支持。"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "该 key 的 scope 列表原样：TW 内建词表形态 + `\u003cservice\u003e.\u003cname\u003e` 自定义\n语法（TW 只存不解释，语义归各服务）。"
+        },
+        "max_age_seconds": {
+          "type": "string",
+          "format": "int64",
+          "title": "服务端计算：key 设了 expire_at → max(0, expire_at - now) 秒；未设置 = 0。\n相对时间规避客户端/服务端时钟偏斜。已过期 key 不会到达本方法（认证层\n即 401），此处钳 0 为防御。"
         }
       }
     }

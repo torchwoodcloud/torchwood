@@ -160,6 +160,7 @@ clientInfo → auth → rateLimit → audit → usage → validate(protovalidate
 | `databases:<database_id>` | 限定单个 database 的读写；访问其他 database 一律 403 |
 | `databases:<database_id>.read` / `.write` | 单个 database 的单向 |
 | `storage:<bucket_id>`（及 `.read` / `.write`） | 限定单个 bucket |
+| `<service>.<name>` | 自定义服务标签（跨系统）：TW 只做语法校验与存储，不解释语义；对 TW 方法永不匹配 |
 
 规则：
 
@@ -167,7 +168,8 @@ clientInfo → auth → rateLimit → audit → usage → validate(protovalidate
 - 可寻址资源目前仅 `databases` / `storage`；其余资源携带 `:` 的 scope 创建期即 400，执行期不匹配（fail-closed）。
 - 执行点在 `PolicySet.AllowsAPIKeyTargets`（gRPC 拦截器 + serverhttp `auth.go`）：按方法声明的资源族从请求体提取目标实例（`database_id` / `bucket_id`；`CreateDatabase` / `GetBucket` 等取 `id`）。**无实例寻址的方法**（`ListDatabases` / `ListBuckets` / `GetStorageUsage` / `CreateBucket` 等）对实例限定 scope 一律 403——`databases:blog` 的 key 不能列出或创建其他库，也不能跨库寻址。
 - **DDL 归属**：server 面 DatabasesService 的 DDL（CreateDatabase / CreateCollection / CreateAttribute / CreateIndex…）与文档 CRUD 共用 `databases` 资源 scope——`databases:blog` 天然覆盖 blog 库的全部 DDL 与数据读写，无需组合其他 scope。单一库应用的最小组合示例：`scopes: ["databases:blog", "storage:blog-media"]`。
-- CreateAPIKey / UpdateAPIKey 对非法 scope（未知服务、不可寻址资源、非法实例 ID、非法方向）直接 400。
+- **自定义服务标签（`<service>.<name>`）**：`service` 为 `[a-z][a-z0-9-]{1,31}`，`name` 为 `[a-z0-9_.-]{1,40}`（允许多段点分，如 `messageloop.session.act`），总长 ≤ 64，全小写，不允许空段（双点/前导点/尾点）。TW 只做语法校验与原样存储，**不解释服务 scope 语义**——自定义 scope 对 TW 方法永不匹配（fail-closed），仅供外部系统按自身前缀过滤消费（如 messageloop 侧只认 `messageloop.` 前缀）。**内建保护**：`service` 段不得命中 TW 内建资源词表与保留别名 `all`（`users.anything` 拒绝）——无前缀形态是 TW 自己的词表且受 TW 治理。
+- CreateAPIKey / UpdateAPIKey 对非法 scope（未知服务、不可寻址资源、非法实例 ID、非法方向、自定义语法非法）直接 400。
 
 ### 6.3 Key 治理与轮换
 
@@ -181,7 +183,7 @@ secret 无原地轮换。平滑轮换流程（Console 详情页「轮换」引�
 
 ### 6.4 防护语义
 
-- **防自铸提权**：APIKeysService 是 PERMISSION 面，API key 凭证天然禁入——key 永远无法管理 key。
+- **防自铸提权**：APIKeysService 是 PERMISSION 面，API key 凭证天然禁入——key 永远无法管理 key。唯一例外是 WhoAmI（§6.6，自证凭证型 PUBLIC）：只读描述调用凭证自身，不触及管理面。
 - **不默认 bypass 文档权限**：API Key 以 `Roles=["keys", "key:<自身id>"]` 参与文档 `_acl` 判定；仅 `SystemPrincipal` 与平台 admin 绕过（见 `06-databases.md`）。
 - **per-key 私有**：key 创建文档时，空 ACE 种子绑 `read/update/delete:key:<自身id>`——其他 key 不可见（Get 返回 NotFound 防枚举）；跨 key 协作需显式授予对方 `key:<id>` ACE；存量显式 `keys` ACE 保留有效（默认种子不再产生）。
 - **认证失败限速**：X-API-Key 认证失败（哈希不匹配 / 禁用 / 过期）按来源 IP 计数（`security.login_throttle.api_key_auth`，默认 10 次/60s），超限 429；gRPC 面由拦截器统一执行，multipart HTTP 面暂仅做拒绝审计。
@@ -191,6 +193,16 @@ secret 无原地轮换。平滑轮换流程（Console 详情页「轮换」引�
 - 审计落行以 `auditRowEligible` 准入门为前置（`internal/api/interceptor/audit.go`，噪声治理）：server / console 面仅非读动词落审计（读方法不记，与凭证类型无关）；client 面仅 AccountService 非读安全动作记录；`AnalyticsService/IngestEvents` 显式静默；grpc.health / reflection 不记。**拒绝（deny）审计与限速（throttled）审计不经此门、全保留**。
 - eligible 请求的审计行统一含 actor（API key 即 key id）、项目、full method、资源 ID（`WithAuditResource`）、结果，无需逐 handler 记录。
 - 查询面：`AuditLogsService.ListAuditLogs`（SERVER 面，admin_roles admin/owner + `audit_logs.read` scope），审计行带 request 摘要与 client metadata；CLI `torchwood audit-logs` 可消费。
+
+### 6.6 WhoAmI：key 自述端点
+
+`GET /v1/server/api-keys/whoami`（`APIKeysService/WhoAmI`）返回**调用凭证自身**对应的 key 行。认证形态为自证凭证型（`ACCESS_PUBLIC` + 不要求任何 scope）："知道 key 明文"本身就是查询授权——任何有效 key 可查自己，零信息泄露、零自铸面，零 scope key 也可用。
+
+- 无效/禁用/过期/删除 → 401（与请求侧认证同路径：每请求读库校验 + 失败按 IP 限速）；匿名或非 API key 凭证（admin 会话等）没有可述的 key → 401。
+- 响应字段：`key_id`（唯一 ID，非显示名）、`name`、`project_id`（当前数据模型 key 恒绑定项目）、`scopes`（原样，含自定义标签）、`max_age_seconds`（服务端时钟计算：设了 `expire_at` → max(0, expire_at − now) 秒；未设置 → 0——相对时间规避客户端/服务端时钟偏斜）。
+- 不回显 secret（任何接口都不回显，见 §6.1）。
+
+典型用途：外部系统（如 messageloop 的 proxy 桥）拿到调用方出示的 key 后核对身份与 scope 面；或部署流水线自检手上的 key 能做什么。
 
 ---
 

@@ -167,6 +167,23 @@ func (s *APIKeysService) UpdateAPIKey(ctx context.Context, req *serverv1.UpdateA
 	return mapAPIKey(key), nil
 }
 
+// WhoAmI 返回调用凭证自身对应的 key 行（自证凭证型：拦截器已完成认证，
+// 无效/禁用/过期 key 到不了这里）。max_age_seconds 由服务端时钟计算
+// （MaxAgeSeconds），规避客户端时钟偏斜。
+func (s *APIKeysService) WhoAmI(ctx context.Context, req *serverv1.WhoAmIRequest) (*serverv1.WhoAmIResponse, error) {
+	key, err := s.apiKeys.SelfDescribe(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &serverv1.WhoAmIResponse{
+		KeyId:         key.ID,
+		Name:          key.Name,
+		ProjectId:     key.ProjectID,
+		Scopes:        key.Scopes,
+		MaxAgeSeconds: appserver.MaxAgeSeconds(key.ExpireAt, time.Now()),
+	}, nil
+}
+
 func mapAPIKey(k *projects.APIKey) *serverv1.APIKey {
 	if k == nil {
 		return nil

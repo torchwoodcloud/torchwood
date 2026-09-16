@@ -69,6 +69,8 @@ service APIKeysService {
   // 凭据，管理权（含元数据读）仅 owner/admin console 会话；API key 凭证一律
   // 拒绝（防泄露 key 自铸新 key 永久提权），apikeys scope 资源随之退役
   // （key 不再可被授予 apikeys.read/write）。
+  // 唯一例外是 WhoAmI（自证凭证型 PUBLIC，逐方法覆盖）：它不管理 key、只
+  // 描述调用凭证自身，"知道 key 明文"即是查询授权，无自铸面。
   option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_PERMISSION };
   rpc CreateAPIKey(CreateAPIKeyRequest) returns (APIKeyWithSecret) {
     option (google.api.http) = { post: "/v1/server/api-keys", body: "*" };
@@ -111,6 +113,27 @@ service APIKeysService {
     option (torchwood.shared.v1.method_auth) = {
       access: ACCESS_PERMISSION
       permissions: ["owner", "admin"]
+    };
+  }
+
+  // WhoAmI 返回调用凭证（X-API-Key）自身对应的 key 行（whoami）。
+  //
+  // 认证形态为"自证凭证型"（ACCESS_PUBLIC + 不要求任何 scope）：出示 key
+  // 明文本身就是查询授权——任何有效 key 可查自己，零信息泄露、零自铸面；
+  // 不要求 scope 意味着零 scope key 也可用。无效/禁用/过期/删除 → 401
+  // （每请求读库校验，与请求侧认证同路径）；匿名/非 API key 凭证（admin
+  // 会话等）无可述的 key，handler 返回 401。
+  // 响应不含 secret（永不回显）；max_age_seconds 由服务端以服务器时钟计算
+  // （相对时间，规避客户端时钟偏斜）。
+  rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse) {
+    option (google.api.http) = { get: "/v1/server/api-keys/whoami" };
+    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      security: {}
+      extensions: {
+        key: "x-torchwood-access"
+        value: { string_value: "public" }
+      }
     };
   }
 }
@@ -156,4 +179,23 @@ message APIKey {
   google.protobuf.Timestamp expire_at = 5;
   google.protobuf.Timestamp created_at = 6;
   google.protobuf.Timestamp updated_at = 7;
+}
+
+message WhoAmIRequest {}
+
+message WhoAmIResponse {
+  // key 唯一 ID（非显示名：审计/归因/allow 列表按本 ID 匹配）。
+  string key_id = 1;
+  // key 显示名。
+  string name = 2;
+  // key 所属 project id。当前数据模型 key 恒绑定项目（api_keys.project_id
+  // NOT NULL）；平台级 key（空 project）需 schema 迁移，暂未支持。
+  string project_id = 3;
+  // 该 key 的 scope 列表原样：TW 内建词表形态 + `<service>.<name>` 自定义
+  // 语法（TW 只存不解释，语义归各服务）。
+  repeated string scopes = 4;
+  // 服务端计算：key 设了 expire_at → max(0, expire_at - now) 秒；未设置 = 0。
+  // 相对时间规避客户端/服务端时钟偏斜。已过期 key 不会到达本方法（认证层
+  // 即 401），此处钳 0 为防御。
+  int64 max_age_seconds = 5;
 }

@@ -140,3 +140,23 @@ func TestSchemaName_SentinelNeverProducesOneSegment(t *testing.T) {
 		require.NotEqual(t, got, ps)
 	}
 }
+
+// TestSchemaResourceID_ValidAsMessageloopNamespace 锁定跨仓契约不变量（T5）：
+// project id 被下游 messageloop 当 namespace 使用，其语法为
+// [a-z0-9-]{1,32} 且不以 '-' 开头/结尾。当前 ValidateSchemaResourceID
+// （^[a-z][a-z0-9]{0,27}$：小写字母开头、仅小写字母/数字、≤28）是该语法
+// 的严格子集——本测试防止未来放宽 ID 规则时无声破坏 messageloop 侧的
+// namespace 语法门（签出非法 namespace 会被清洗为零范围 Key）。
+func TestSchemaResourceID_ValidAsMessageloopNamespace(t *testing.T) {
+	for _, id := range []string{"a", "default", "acme", "acmeprodshop2026", strings.Repeat("a", 28)} {
+		require.NoError(t, ValidateSchemaResourceID(id), id)
+		// 逐条独立断言 messageloop namespace 语法（不 import 对端包，双实现
+		// 对照锁定）。
+		require.LessOrEqual(t, len(id), 32, id)
+		require.NotEqual(t, '-', id[0], id)
+		require.NotEqual(t, '-', id[len(id)-1], id)
+		for _, ch := range id {
+			require.Contains(t, "abcdefghijklmnopqrstuvwxyz0123456789-", string(ch), id)
+		}
+	}
+}

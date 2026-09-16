@@ -25,6 +25,7 @@ const (
 	APIKeysService_GetAPIKey_FullMethodName    = "/torchwood.server.v1.APIKeysService/GetAPIKey"
 	APIKeysService_UpdateAPIKey_FullMethodName = "/torchwood.server.v1.APIKeysService/UpdateAPIKey"
 	APIKeysService_DeleteAPIKey_FullMethodName = "/torchwood.server.v1.APIKeysService/DeleteAPIKey"
+	APIKeysService_WhoAmI_FullMethodName       = "/torchwood.server.v1.APIKeysService/WhoAmI"
 )
 
 // APIKeysServiceClient is the client API for APIKeysService service.
@@ -40,6 +41,16 @@ type APIKeysServiceClient interface {
 	// 立即生效（每请求鉴权读库校验）。
 	UpdateAPIKey(ctx context.Context, in *UpdateAPIKeyRequest, opts ...grpc.CallOption) (*APIKey, error)
 	DeleteAPIKey(ctx context.Context, in *GetAPIKeyRequest, opts ...grpc.CallOption) (*v1.Empty, error)
+	// WhoAmI 返回调用凭证（X-API-Key）自身对应的 key 行（whoami）。
+	//
+	// 认证形态为"自证凭证型"（ACCESS_PUBLIC + 不要求任何 scope）：出示 key
+	// 明文本身就是查询授权——任何有效 key 可查自己，零信息泄露、零自铸面；
+	// 不要求 scope 意味着零 scope key 也可用。无效/禁用/过期/删除 → 401
+	// （每请求读库校验，与请求侧认证同路径）；匿名/非 API key 凭证（admin
+	// 会话等）无可述的 key，handler 返回 401。
+	// 响应不含 secret（永不回显）；max_age_seconds 由服务端以服务器时钟计算
+	// （相对时间，规避客户端时钟偏斜）。
+	WhoAmI(ctx context.Context, in *WhoAmIRequest, opts ...grpc.CallOption) (*WhoAmIResponse, error)
 }
 
 type aPIKeysServiceClient struct {
@@ -100,6 +111,16 @@ func (c *aPIKeysServiceClient) DeleteAPIKey(ctx context.Context, in *GetAPIKeyRe
 	return out, nil
 }
 
+func (c *aPIKeysServiceClient) WhoAmI(ctx context.Context, in *WhoAmIRequest, opts ...grpc.CallOption) (*WhoAmIResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WhoAmIResponse)
+	err := c.cc.Invoke(ctx, APIKeysService_WhoAmI_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // APIKeysServiceServer is the server API for APIKeysService service.
 // All implementations must embed UnimplementedAPIKeysServiceServer
 // for forward compatibility.
@@ -113,6 +134,16 @@ type APIKeysServiceServer interface {
 	// 立即生效（每请求鉴权读库校验）。
 	UpdateAPIKey(context.Context, *UpdateAPIKeyRequest) (*APIKey, error)
 	DeleteAPIKey(context.Context, *GetAPIKeyRequest) (*v1.Empty, error)
+	// WhoAmI 返回调用凭证（X-API-Key）自身对应的 key 行（whoami）。
+	//
+	// 认证形态为"自证凭证型"（ACCESS_PUBLIC + 不要求任何 scope）：出示 key
+	// 明文本身就是查询授权——任何有效 key 可查自己，零信息泄露、零自铸面；
+	// 不要求 scope 意味着零 scope key 也可用。无效/禁用/过期/删除 → 401
+	// （每请求读库校验，与请求侧认证同路径）；匿名/非 API key 凭证（admin
+	// 会话等）无可述的 key，handler 返回 401。
+	// 响应不含 secret（永不回显）；max_age_seconds 由服务端以服务器时钟计算
+	// （相对时间，规避客户端时钟偏斜）。
+	WhoAmI(context.Context, *WhoAmIRequest) (*WhoAmIResponse, error)
 	mustEmbedUnimplementedAPIKeysServiceServer()
 }
 
@@ -137,6 +168,9 @@ func (UnimplementedAPIKeysServiceServer) UpdateAPIKey(context.Context, *UpdateAP
 }
 func (UnimplementedAPIKeysServiceServer) DeleteAPIKey(context.Context, *GetAPIKeyRequest) (*v1.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteAPIKey not implemented")
+}
+func (UnimplementedAPIKeysServiceServer) WhoAmI(context.Context, *WhoAmIRequest) (*WhoAmIResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WhoAmI not implemented")
 }
 func (UnimplementedAPIKeysServiceServer) mustEmbedUnimplementedAPIKeysServiceServer() {}
 func (UnimplementedAPIKeysServiceServer) testEmbeddedByValue()                        {}
@@ -249,6 +283,24 @@ func _APIKeysService_DeleteAPIKey_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _APIKeysService_WhoAmI_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WhoAmIRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(APIKeysServiceServer).WhoAmI(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: APIKeysService_WhoAmI_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(APIKeysServiceServer).WhoAmI(ctx, req.(*WhoAmIRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // APIKeysService_ServiceDesc is the grpc.ServiceDesc for APIKeysService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -275,6 +327,10 @@ var APIKeysService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteAPIKey",
 			Handler:    _APIKeysService_DeleteAPIKey_Handler,
+		},
+		{
+			MethodName: "WhoAmI",
+			Handler:    _APIKeysService_WhoAmI_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -45,11 +45,28 @@ func TestAssertSemantic_RealProtoRegistry(t *testing.T) {
 		require.True(t, c.verify(p), "%s：%s（实际 Access=%v AdminRoles=%v Scope=%v）", c.method, c.desc, p.Access, p.AdminRoles, p.Scope)
 	}
 
-	// apikeys/economy 资源已退役；assets 在词表。
+	// apikeys/economy 资源已退役；assets 在词表。T2 起 <service>.<name>
+	// 自定义语法会有意放行 "apikeys.write" 这类串（作为不透明标签存储、
+	// 供外部系统消费），因此"资源退役"的安全不变量断言在词表面：内建资源
+	// 词表不再含 apikeys/economy → 任何 TW 方法都不可能被这些串匹配
+	// （匹配面 fail-closed 由 TestCustomScope_NeverGrantsTWAccess 锁定）。
 	vocab := domainauth.VocabularyFromPolicies(set)
-	require.False(t, vocab.Valid("apikeys.write"), "apikeys scope 资源应退役")
-	require.False(t, vocab.Valid("economy.read"), "economy 应更名 assets")
+	require.NotContains(t, vocab.Resources(), domainauth.ScopeResource("apikeys"), "apikeys scope 资源应退役")
+	require.NotContains(t, vocab.Resources(), domainauth.ScopeResource("economy"), "economy 应更名 assets")
 	require.True(t, vocab.Valid("assets.read"), "assets 词表项存在")
+	require.False(t, setAllowsAnyMethod(set, "apikeys.write"), "退役资源串不得匹配任何 TW 方法")
+	require.False(t, setAllowsAnyMethod(set, "economy.read"), "退役资源串不得匹配任何 TW 方法")
+}
+
+// setAllowsAnyMethod 报告 scope 串能否匹配注册表内任一 SERVER 面方法
+// （退役资源串的匹配面断言）。
+func setAllowsAnyMethod(set *domainauth.PolicySet, scope string) bool {
+	for _, p := range set.Methods() {
+		if set.AllowsAPIKey(p.Method, []string{scope}) {
+			return true
+		}
+	}
+	return false
 }
 
 // TestAssertSemantic_DetectsViolations：构造违例策略，断言语义断言真的会

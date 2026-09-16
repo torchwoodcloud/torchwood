@@ -10,6 +10,7 @@ import (
 	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 	"google.golang.org/grpc/codes"
@@ -17,11 +18,17 @@ import (
 )
 
 // API key scope 上限（B2）：每项 ≤96 字符、最多 32 项。96 = 资源限定形态
-// 上限（storage: + 64 字符 bucket id + .write）留余量（T-02）。
+// 上限（storage: + 64 字符 bucket id + .write）留余量（T-02）。自定义服务
+// scope（T2）有独立的 ≤64 总长门（ParseCustomScope 语法内强制）。
 const (
 	maxAPIKeyScopes      = 32
 	maxAPIKeyScopeLength = 96
 )
+
+// scopeAllowedForms 是非法 scope 400 提示的合法形态词表（Create/Update 同源）。
+const scopeAllowedForms = `* | all | <resource> | <resource>.read | <resource>.write | ` +
+	`databases:<database_id>[.read|.write] | storage:<bucket_id>[.read|.write] | ` +
+	`<service>.<name> (custom: <=64 chars, lowercase, service [a-z][a-z0-9-]{1,31}, name [a-z0-9_.-]{1,40})`
 
 type APIKeys struct {
 	repo projects.APIKeyRepository
@@ -86,10 +93,11 @@ func (a *APIKeys) CreateInternal(ctx context.Context, cmd CreateAPIKeyCommand) (
 		return nil, "", status.Errorf(codes.InvalidArgument, "scopes exceeds maximum of %d", maxAPIKeyScopes)
 	}
 	for _, s := range cmd.Scopes {
-		// 词表校验（T-02 扩展）：既有精确形态 + 可寻址资源（databases/storage）
-		// 的实例限定形态 <res>:<id>[.op]；未知服务/非法资源名/非法实例 ID 一律 400。
+		// 词表校验（T-02 扩展 / T2 自定义）：内建精确形态 + 可寻址资源
+		//（databases/storage）实例限定形态 <res>:<id>[.op] + 自定义服务形态
+		// <service>.<name>（纯语法门，内建域不可占用）；非法一律 400。
 		if len(s) > maxAPIKeyScopeLength || !a.vocab.Valid(s) {
-			return nil, "", status.Errorf(codes.InvalidArgument, "invalid scope %q (allowed: * | all | <resource> | <resource>.read | <resource>.write | databases:<database_id>[.read|.write] | storage:<bucket_id>[.read|.write])", s)
+			return nil, "", status.Errorf(codes.InvalidArgument, "invalid scope %q (allowed: %s)", s, scopeAllowedForms)
 		}
 	}
 	id := idgen.UUID().String()
@@ -125,6 +133,41 @@ func (a *APIKeys) Get(ctx context.Context, projectID, id string) (*projects.APIK
 		return nil, status.Error(codes.NotFound, "api key not found")
 	}
 	return key, nil
+}
+
+// SelfDescribe 返回调用者 API key 凭证自身对应的 key 行（WhoAmI/whoami）。
+// 仅 API key 凭证有意义——admin 会话/匿名/端用户/函数执行身份没有可述的
+// key，一律 Unauthenticated；key 在认证后被删除（竞态）同语义（401，与
+// "无效 key"不可区分，不泄露存在性）。字段权威来源是密钥行（非 principal
+// 投影）：name/scopes/expire_at 以库内当前值为准。
+func (a *APIKeys) SelfDescribe(ctx context.Context) (*projects.APIKey, error) {
+	p, ok := contexts.Principal(ctx)
+	if !ok || p.CredentialType != shared.CredentialTypeAPIKey ||
+		p.ActorKind != shared.ActorKindService || p.APIKeyID == "" || p.ProjectID == "" {
+		return nil, status.Error(codes.Unauthenticated, "api key credential required")
+	}
+	key, err := a.repo.GetAPIKey(ctx, p.ProjectID, p.APIKeyID)
+	if err != nil {
+		return nil, err
+	}
+	if key == nil {
+		return nil, status.Error(codes.Unauthenticated, "invalid api key")
+	}
+	return key, nil
+}
+
+// MaxAgeSeconds 是 whoami 契约的服务端相对时间计算：expire_at 未设置 → 0；
+// 已过期 → 0（正常路径到不了这里——认证层即 401，钳 0 为防御）；否则
+// max(0, expire_at - now) 整秒截断。用服务器时钟，规避客户端时钟偏斜。
+func MaxAgeSeconds(expireAt *time.Time, now time.Time) int64 {
+	if expireAt == nil {
+		return 0
+	}
+	d := expireAt.Sub(now)
+	if d <= 0 {
+		return 0
+	}
+	return int64(d / time.Second)
 }
 
 func (a *APIKeys) Delete(ctx context.Context, projectID, id string) error {
@@ -180,7 +223,7 @@ func (a *APIKeys) Update(ctx context.Context, cmd UpdateAPIKeyCommand) (*project
 		}
 		for _, s := range cmd.Scopes {
 			if len(s) > maxAPIKeyScopeLength || !a.vocab.Valid(s) {
-				return nil, status.Errorf(codes.InvalidArgument, "invalid scope %q (allowed: * | all | <resource> | <resource>.read | <resource>.write | databases:<database_id>[.read|.write] | storage:<bucket_id>[.read|.write])", s)
+				return nil, status.Errorf(codes.InvalidArgument, "invalid scope %q (allowed: %s)", s, scopeAllowedForms)
 			}
 		}
 		// G2-5 纵深防御：变更后的 scope 集合不得超出调用者自身权限。

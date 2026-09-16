@@ -207,10 +207,12 @@ func VocabularyFromPolicies(set *PolicySet) *ScopeVocabulary {
 	return v
 }
 
-// Valid 报告 scope 字符串是否在词表内（key 创建校验用）。除既有精确形态
-// （{*, all} ∪ {资源, 资源.op}）外，接受可寻址资源（databases/storage）的
-// 实例限定形态 <res>:<id>[.op]——资源需在词表、方向需被声明、目标 ID 格式
-// 合法（T-02）。
+// Valid 报告 scope 字符串是否在词表内（key 创建校验用）。合法形态三类：
+//   - 内建精确形态：{*, all} ∪ {资源, 资源.op}；
+//   - 内建实例限定形态：可寻址资源（databases/storage）的
+//     <res>:<id>[.op]——资源需在词表、方向需被声明、目标 ID 格式合法（T-02）；
+//   - 自定义服务形态：<service>.<name>（T2，纯语法门 + 内建保护；TW 不解释
+//     其语义，执行期对 TW 方法永不匹配）。
 func (v *ScopeVocabulary) Valid(s string) bool {
 	if v == nil {
 		return false
@@ -218,20 +220,20 @@ func (v *ScopeVocabulary) Valid(s string) bool {
 	if _, ok := v.valid[s]; ok {
 		return true
 	}
-	tok, ok := ParseScopeToken(s)
-	if !ok || tok.TargetID == "" {
-		return false
+	if tok, ok := ParseScopeToken(s); ok && tok.TargetID != "" {
+		if !ScopeAddressable(tok.Resource) {
+			return false
+		}
+		if _, ok := v.valid[string(tok.Resource)]; !ok {
+			return false
+		}
+		if tok.Op != "" && !v.HasOp(tok.Resource, tok.Op) {
+			return false
+		}
+		return ValidateScopeTargetID(tok.Resource, tok.TargetID) == nil
 	}
-	if !ScopeAddressable(tok.Resource) {
-		return false
-	}
-	if _, ok := v.valid[string(tok.Resource)]; !ok {
-		return false
-	}
-	if tok.Op != "" && !v.HasOp(tok.Resource, tok.Op) {
-		return false
-	}
-	return ValidateScopeTargetID(tok.Resource, tok.TargetID) == nil
+	_, _, ok := ParseCustomScope(s)
+	return ok
 }
 
 // Resources 返回被引用的资源清单（排序稳定，供下发与生成）。
