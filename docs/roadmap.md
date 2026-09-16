@@ -394,7 +394,7 @@ count/自增/OCC 等 DIY 底料平台已有，但权限别扭（read:any 枚举�
 - **Phase 1（已完成）**：三面 API（client submit/me/top、server 代提交、console
   CRUD）、subject/value 中立模型、tie-break 三层（rank+position 双暴露）、两期
   宽限 + 封榜终局、request_id 幂等、per-subject 限频、retention worker、
-  Go/TS SDK、console 页。详见 `docs/developer/18-leaderboards.md`。
+  Go/TS SDK、console 页。详见 `docs/developer/20-leaderboards.md`。
 - **Phase 2（已落地）**：声明式结榜发奖——rewards 规则（认领时快照）+ worker
   状态机结算 + Assets 幂等发放（单笔失败不阻断整期，重跑只补失败明细）+
   void/重跑 + console/server 结算读面；`on_settled` 函数触发 v1.5。
