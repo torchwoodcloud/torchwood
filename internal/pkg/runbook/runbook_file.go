@@ -327,10 +327,10 @@ func Scaffold(dir, name string) (string, int64, error) {
 	}
 	version++
 	path := filepath.Join(dir, fmt.Sprintf("%06d_%s.yaml", version, name))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // 用户源文件目录（类 sql migrations），0755 有意
 		return "", 0, fmt.Errorf("create runbook directory %s: %w", dir, err)
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644) //nolint:gosec // 用户源文件，0644 有意
 	if err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			return "", 0, fmt.Errorf("runbook file already exists: %s", path)

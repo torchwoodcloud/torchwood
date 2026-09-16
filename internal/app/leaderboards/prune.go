@@ -6,9 +6,6 @@ import (
 	domainleaderboards "github.com/torchwoodcloud/torchwood/internal/domain/leaderboards"
 )
 
-// pruneBatchLimit 是单项目单轮清理的批删上限（DELETE 单语句，量级护栏）。
-const pruneBatchLimit = 5000
-
 // PruneExpiredPeriods 是 retention 清理入口（worker 低频 ticker 驱动）：
 // 遍历 active 项目 → retention > 0 的榜 → 比保留截止期更早的期整期删除。
 // 单榜失败不影响其他榜（错误吞掉记日志，下一轮重试——清理是幂等的）。

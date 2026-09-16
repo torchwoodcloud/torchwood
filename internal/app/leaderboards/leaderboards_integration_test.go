@@ -73,15 +73,6 @@ func guesspicBoard() *domainleaderboards.Board {
 	}
 }
 
-func currentPeriod(t *testing.T, b *domainleaderboards.Board) string {
-	t.Helper()
-	loc, err := time.LoadLocation(b.PeriodTZ)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return domainleaderboards.PeriodKey(b.PeriodKind, loc, time.Now())
-}
-
 func codeOf(t *testing.T, err error) codes.Code {
 	t.Helper()
 	if err == nil {

@@ -93,7 +93,7 @@ func (r *AnalyticsWorkerRepository) queryList(ctx context.Context, projectID, qu
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close() // #nosec G104 -- 只读游标，关闭失败不改变查询结果
+	defer func() { _ = rows.Close() }() // 只读游标，关闭失败不改变查询结果
 	var out []string
 	for rows.Next() {
 		var v string

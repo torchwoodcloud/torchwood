@@ -82,7 +82,7 @@ func TestHTTPRunner_EnvelopeParsing(t *testing.T) {
 // TestHTTPRunner_InvokeHeaders Invoke 的分发 header 通道（v3 §1.2）：
 // execution id 非空 → X-Tw-Execution-Id 下发；空 → 不发；函数超时恒经
 // X-Tw-Timeout-Seconds 下发（runner per-request 超时来源）。调用身份三件
-//（runner v5）：source/invoking_user_id/project_id 经 X-Tw-Source /
+// （runner v5）：source/invoking_user_id/project_id 经 X-Tw-Source /
 // X-Tw-Invoking-User-Id / X-Tw-Project-Id 下发——client 链路（source=client
 // + 真实用户）与 event 链路（source 含 trigger 前缀 + 空用户）双覆盖；空
 // invoking_user_id 不发 header（runner 侧 ctx.invokingUserId 落空串）。

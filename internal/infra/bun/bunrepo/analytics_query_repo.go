@@ -79,7 +79,7 @@ func (r *AnalyticsQueryRepository) DailySeries(ctx context.Context, projectID, n
 			if err != nil {
 				return err
 			}
-			defer rows.Close() // #nosec G104 -- 只读游标，关闭失败不改变查询结果
+			defer func() { _ = rows.Close() }() // 只读游标，关闭失败不改变查询结果
 			for rows.Next() {
 				var p analytics.DailyPoint
 				if err := rows.Scan(&p.Day, &p.Total); err != nil {
@@ -93,7 +93,7 @@ func (r *AnalyticsQueryRepository) DailySeries(ctx context.Context, projectID, n
 		if err != nil {
 			return err
 		}
-		defer rows.Close() // #nosec G104 -- 只读游标，关闭失败不改变查询结果
+		defer func() { _ = rows.Close() }() // 只读游标，关闭失败不改变查询结果
 		for rows.Next() {
 			var p analytics.DailyPoint
 			if err := rows.Scan(&p.Day, &p.Total, &p.UniqueUsers); err != nil {
@@ -115,7 +115,7 @@ func (r *AnalyticsQueryRepository) UserDaySeries(ctx context.Context, projectID 
 		if err != nil {
 			return err
 		}
-		defer rows.Close() // #nosec G104 -- 只读游标，关闭失败不改变查询结果
+		defer func() { _ = rows.Close() }() // 只读游标，关闭失败不改变查询结果
 		for rows.Next() {
 			var p analytics.DailyPoint
 			if err := rows.Scan(&p.Day, &p.UniqueUsers); err != nil {
@@ -156,7 +156,7 @@ func (r *AnalyticsQueryRepository) TopEventsFromDaily(ctx context.Context, proje
 		if err != nil {
 			return err
 		}
-		defer rows.Close() // #nosec G104 -- 只读游标，关闭失败不改变查询结果
+		defer func() { _ = rows.Close() }() // 只读游标，关闭失败不改变查询结果
 		for rows.Next() {
 			var e analytics.TopEvent
 			if err := rows.Scan(&e.Name, &e.Total); err != nil {
@@ -187,7 +187,7 @@ func (r *AnalyticsQueryRepository) ListEventDefinitions(ctx context.Context, pro
 		if err != nil {
 			return err
 		}
-		defer rows.Close() // #nosec G104 -- 只读游标，关闭失败不改变查询结果
+		defer func() { _ = rows.Close() }() // 只读游标，关闭失败不改变查询结果
 		for rows.Next() {
 			var d analytics.EventDefinitionInfo
 			if err := rows.Scan(&d.Name, &d.FirstSeen, &d.LastSeen, &d.Total30d); err != nil {
@@ -225,7 +225,7 @@ func (r *AnalyticsQueryRepository) RawTimeseries(ctx context.Context, projectID 
 		if err != nil {
 			return err
 		}
-		defer rows.Close() // #nosec G104 -- 只读游标，关闭失败不改变查询结果
+		defer func() { _ = rows.Close() }() // 只读游标，关闭失败不改变查询结果
 		for rows.Next() {
 			var p analytics.TimeseriesPoint
 			if err := rows.Scan(&p.Bucket, &p.Total, &p.UniqueUsers); err != nil {
@@ -255,7 +255,7 @@ func (r *AnalyticsQueryRepository) RawTopEvents(ctx context.Context, projectID s
 		if err != nil {
 			return err
 		}
-		defer rows.Close() // #nosec G104 -- 只读游标，关闭失败不改变查询结果
+		defer func() { _ = rows.Close() }() // 只读游标，关闭失败不改变查询结果
 		for rows.Next() {
 			var e analytics.TopEvent
 			if err := rows.Scan(&e.Name, &e.Total); err != nil {
@@ -286,7 +286,7 @@ func (r *AnalyticsQueryRepository) RawBreakdown(ctx context.Context, projectID, 
 		if qErr != nil {
 			return qErr
 		}
-		defer rows.Close() // #nosec G104 -- 只读游标，关闭失败不改变查询结果
+		defer func() { _ = rows.Close() }() // 只读游标，关闭失败不改变查询结果
 		for rows.Next() {
 			var b analytics.BreakdownBucket
 			if sErr := rows.Scan(&b.Value, &b.Total, &b.UniqueUsers); sErr != nil {
@@ -322,7 +322,7 @@ func (r *AnalyticsQueryRepository) RetentionMatrix(ctx context.Context, projectI
 		if err != nil {
 			return err
 		}
-		defer rows.Close() // #nosec G104 -- 只读游标，关闭失败不改变查询结果
+		defer func() { _ = rows.Close() }() // 只读游标，关闭失败不改变查询结果
 		cols := make([]int64, analytics.RetentionSlots)
 		for rows.Next() {
 			var c analytics.RetentionCohort
@@ -355,7 +355,7 @@ func (r *AnalyticsQueryRepository) ListUserEvents(ctx context.Context, projectID
 		if err != nil {
 			return err
 		}
-		defer rows.Close() // #nosec G104 -- 只读游标，关闭失败不改变查询结果
+		defer func() { _ = rows.Close() }() // 只读游标，关闭失败不改变查询结果
 		for rows.Next() {
 			var e analytics.UserEvent
 			if err := rows.Scan(&e.ID, &e.Name, &e.OccurredAt, &e.IngestedAt, &e.Source,

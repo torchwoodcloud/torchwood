@@ -249,7 +249,7 @@ func TestRollupIntegration_FirstSeenExtremesAndDefTotals(t *testing.T) {
 	// 首轮：u1 在 D 活跃。
 	e.seedEvent(t, "level_complete", "u1", dayD.Add(10*time.Hour))
 	e.runRollup(t, clock)
-	first, last, ok := e.firstSeenRow(t, "u1")
+	first, _, ok := e.firstSeenRow(t, "u1")
 	require.True(t, ok)
 	require.Equal(t, dayD.Format("2006-01-02"), first.Format("2006-01-02"))
 
@@ -257,7 +257,7 @@ func TestRollupIntegration_FirstSeenExtremesAndDefTotals(t *testing.T) {
 	// last_day 保持 D（GREATEST）——极值语义幂等且方向正确。
 	e.seedEvent(t, "level_complete", "u1", dayDm1.Add(9*time.Hour))
 	e.runRollup(t, clock)
-	first, last, ok = e.firstSeenRow(t, "u1")
+	first, last, ok := e.firstSeenRow(t, "u1")
 	require.True(t, ok)
 	require.Equal(t, dayDm1.Format("2006-01-02"), first.Format("2006-01-02"), "first_day = LEAST")
 	require.Equal(t, dayD.Format("2006-01-02"), last.Format("2006-01-02"), "last_day = GREATEST")

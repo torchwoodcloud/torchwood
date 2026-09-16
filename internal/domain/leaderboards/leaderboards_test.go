@@ -154,7 +154,7 @@ func TestMergeSubmitBest(t *testing.T) {
 		t.Errorf("best higher = (%d,%v,%v)", v, tb, improved)
 	}
 	// 更低分：保留旧值，improved=false（updated_at 不推进）。
-	v, tb, improved = MergeSubmit(b, cur, 100, nil, base.Add(time.Minute))
+	v, _, improved = MergeSubmit(b, cur, 100, nil, base.Add(time.Minute))
 	if v != 900 || improved {
 		t.Errorf("best lower = (%d,%v)", v, improved)
 	}

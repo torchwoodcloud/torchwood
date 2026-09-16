@@ -369,8 +369,8 @@ func TestIntegration_ImageReadableAsTemplateUser(t *testing.T) {
 
 	cfg := testDispatcherConfig(t)
 	d := NewDockerDaemon(cfg)
-	old := setTestUmask(0o077)
-	setTestUmask(old)
+	restoreUmask := setTestUmask(0o077)
+	defer restoreUmask()
 
 	fnID := "fnperm"
 	depID := fmt.Sprintf("dep%d", time.Now().UnixNano())

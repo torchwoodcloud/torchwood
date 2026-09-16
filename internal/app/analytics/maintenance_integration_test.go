@@ -24,13 +24,13 @@ type maintenanceEnv struct {
 	query       *appanalytics.Query
 }
 
-func setupMaintenanceEnv(t *testing.T, retentionDays int) *maintenanceEnv {
+func setupMaintenanceEnv(t *testing.T, retentionDays int32) *maintenanceEnv {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
 	e := setupRollupEnv(t)
-	cfg := &config.AppConfig{Analytics: &config.Analytics{RetentionDays: int32(retentionDays)}}
+	cfg := &config.AppConfig{Analytics: &config.Analytics{RetentionDays: retentionDays}}
 	m := appanalytics.NewMaintenanceFromConfig(cfg, e.workerRepo, e.workerRepo, e.projectsRepo, nil)
 	query := appanalytics.NewQueryFromConfig(cfg, bunrepo.NewAnalyticsQueryRepository(e.db))
 	return &maintenanceEnv{rollupEnv: e, maintenance: m, query: query}

@@ -246,7 +246,7 @@ func runbookProgressLine(stderr io.Writer, quiet bool, format string, args ...an
 	if quiet || stderr == nil {
 		return
 	}
-	fmt.Fprintf(stderr, "[runbook] "+format+"\n", args...)
+	_, _ = fmt.Fprintf(stderr, "[runbook] "+format+"\n", args...)
 }
 
 // RunUp 应用到最新/指定版（§2.3 up 算法）：

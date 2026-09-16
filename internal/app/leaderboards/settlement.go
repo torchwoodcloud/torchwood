@@ -132,7 +132,7 @@ func (a *Leaderboards) settleOne(ctx context.Context, b *domainleaderboards.Boar
 	}
 	a.logger.Info("leaderboard period settled",
 		"project_id", b.ProjectID, "board_id", b.ID, "period", periodKey,
-		"entries", total, "granted", granted, "failed", int32(len(grants))-granted)
+		"entries", total, "granted", granted, "failed", len(grants)-int(granted))
 	return true, nil
 }
 

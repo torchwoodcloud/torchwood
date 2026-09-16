@@ -23,8 +23,8 @@ import (
 // 文件恒 0644、目录恒 0755、属主归零，镜像权限与 dispatcher 以何用户/何
 // umask 运行解耦。Linux 下置 umask 0077 复现生产掩蔽形态（修复前本测试必红）。
 func TestTarDir_NormalizesModesIndependentOfUmask(t *testing.T) {
-	old := setTestUmask(0o077)
-	defer setTestUmask(old)
+	restoreUmask := setTestUmask(0o077)
+	defer restoreUmask()
 
 	dir := t.TempDir()
 	// 写盘用收紧 mode（0600/0750）：直接模拟生产 umask 掩蔽后的磁盘状态

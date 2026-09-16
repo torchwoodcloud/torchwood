@@ -360,7 +360,7 @@ func TestScaffold(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, int64(1), version)
 		require.Equal(t, filepath.Join(dir, "000001_hello.yaml"), path)
-		content, err := os.ReadFile(path)
+		content, err := os.ReadFile(path) //nolint:gosec // path 为 Scaffold 在 t.TempDir 下生成，非外部输入
 		require.NoError(t, err)
 		require.Contains(t, string(content), "up: []")
 		require.Contains(t, string(content), "down: []")

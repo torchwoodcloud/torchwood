@@ -250,7 +250,7 @@ func (u *Query) ListEventDefinitions(ctx context.Context, cmd ListDefinitionsCom
 	res := &ListDefinitionsResult{
 		Definitions: defs,
 		PageSize:    int32(limit),
-		TotalCount:  int32(total),
+		TotalCount:  int32(total), // #nosec G115 -- 字典软上限 MaxEventNames=1000，批内超扣亦远小于 int32
 	}
 	if offset+limit < int(total) {
 		if res.NextPageToken, err = encodeDefinitionsOffset(offset + limit); err != nil {

@@ -3,6 +3,7 @@ package runbook
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -519,6 +520,9 @@ func runbookWantInt(body map[string]any, key string) int64 {
 	case int64:
 		return t
 	case uint64:
+		if t > math.MaxInt64 {
+			return 0
+		}
 		return int64(t)
 	case float64:
 		return int64(t)

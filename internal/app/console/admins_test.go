@@ -193,9 +193,9 @@ func TestAdmins_UpdateProfile_Timezone(t *testing.T) {
 	require.Equal(t, "Asia/Shanghai", updated.Metadata["timezone"])
 	require.Equal(t, "Asia/Shanghai", repo.admins[0].Metadata["timezone"])
 
-	// 未认证 actor：拒绝。
+	// 未认证 actor：拒绝（包内约定对齐 handler 层 requireAdminActor → PermissionDenied）。
 	_, err = uc.UpdateProfile(context.Background(), console.UpdateProfileCommand{CallerID: "a1", Timezone: strPtr("UTC")})
-	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 
 	// 非法 IANA 名：InvalidArgument，metadata 不变。
 	_, err = uc.UpdateProfile(ctx, console.UpdateProfileCommand{CallerID: "a1", Timezone: strPtr("Mars/Olympus")})
