@@ -43,7 +43,7 @@ console/
     ├── components/
     │   ├── Layout.tsx                # 侧边栏 + 顶部栏 + 项目选择器 + Outlet
     │   ├── ProjectBootstrap.tsx      # 自动选中默认项目（保证 X-Torchwood-Project）
-    │   ├── PreferencesDialog.tsx     # 管理员偏好（时区）对话框
+    │   ├── AdminRoleBadge.tsx        # 管理员角色徽章（账户资料 / 管理员列表共用）
     │   ├── ProjectSelector.tsx / PageHeader.tsx / EmptyState.tsx / LoadingTable.tsx
     │   ├── ConfirmDialog.tsx / FormPage.tsx / ErrorBoundary.tsx
     │   ├── list/                     # DataTable / ListToolbar / ResourceListPage
@@ -62,6 +62,7 @@ console/
     └── routes/                       # 按资源分目录，一资源一目录
         ├── Login.tsx / Dashboard.tsx
         ├── admins/ / api-keys/ / databases/ / functions/ / projects/
+        ├── account/                  # 账户设置区（Profile / Preferences 子页）
         ├── settings/ / storage/ / groups/ / users/ / payments/ / assets/ / subscriptions/
         ├── leaderboards/             # 榜列表 + 建榜/编辑对话框 + 榜详情
         ├── analytics/                # 概览 / 事件字典 / 留存网格 / 单用户行为流
@@ -126,9 +127,9 @@ api.interceptors.request.use((config) => {
 
 ### 4.3 管理员时区偏好
 
-`admins.metadata` JSONB 存管理员自助偏好（首键 `timezone`，IANA 时区名），经 `UpdateCurrentAdmin` 自助 RPC 修改（Console 顶部栏 PreferencesDialog）。
+`admins.metadata` JSONB 存管理员自助偏好（首键 `timezone`，IANA 时区名），经 `UpdateCurrentAdmin` 自助 RPC 修改（Console 账户设置页 `/console/account/preferences`，侧栏底部账户入口进入）。
 
-- `useUserTimezone()`（`console/src/hooks/useTimezone.ts`）返回当前管理员生效时区：`admins/me` 的偏好 → 浏览器时区回退；与 `useAdminRole` 共享 `["console-admin-me"]` 查询缓存——偏好保存后 invalidate 该 key，全部消费组件随重渲染拿到新时区。
+- `useUserTimezone()`（`console/src/hooks/useTimezone.ts`）返回当前管理员生效时区：`admins/me` 的偏好 → 浏览器时区回退；与 `useAdminRole` 共享 `["console-admin-me"]` 查询缓存——偏好保存后 `setQueryData` 该 key，全部消费组件随重渲染拿到新时区。
 - **全站时间显示统一走 `lib/datetime.ts` 的 `formatDateTime` / `formatDate`**（按用户时区格式化；空值 / 无法解析返回 `—`）。新页面不要用 `dayjs(...).format()` 之类的本地时区格式化。
 
 ## 5. 开发与构建
@@ -225,6 +226,7 @@ API Keys 页详情提供**编辑**（name / scopes / enabled / expire_at，proto
 
 | 路由 | 内容 | 守卫 |
 |------|------|------|
+| `/console/account`（index → profile） | 账户设置区（侧栏底部邮箱进入）：`profile` = 账户资料（邮箱 / 角色 / 创建时间，只读）；`preferences` = 时区偏好（选中即暂存 + 显式保存，清除 = 跟随浏览器） | 全角色开放（自助面） |
 | `/console/leaderboards` + `/:boardId` | 榜列表 + 建榜 / 编辑 / 删除；详情 = 期下拉 + top 表（rank/position/subject/value/updated_at，行删条目）+ 按 subject 查条目；board 表单含 Phase 2 rewards 编辑器 | 写操作 owner |
 | `/console/analytics`（+ events / events/:name / retention / users/:userId） | 事件分析：概览 / 事件字典 / 事件详情 / 留存网格 / 单用户行为流（recharts） | 全角色开放 |
 | `/console/audit-logs` | 平台审计日志查询（结构化过滤 + metadata 视图） | platformAdmin |

@@ -28,6 +28,15 @@ const ProjectSettingsPage = lazy(() =>
 const SettingsRedirect = lazy(() =>
   import("@/routes/settings/pages").then((m) => ({ default: m.SettingsRedirect }))
 );
+const AccountLayout = lazy(() =>
+  import("@/routes/account/AccountLayout").then((m) => ({ default: m.AccountLayout }))
+);
+const AccountProfilePage = lazy(() =>
+  import("@/routes/account/pages").then((m) => ({ default: m.AccountProfilePage }))
+);
+const AccountPreferencesPage = lazy(() =>
+  import("@/routes/account/pages").then((m) => ({ default: m.AccountPreferencesPage }))
+);
 const ApiKeysListPage = lazy(() =>
   import("@/routes/api-keys/pages").then((m) => ({ default: m.ApiKeysListPage }))
 );
@@ -294,6 +303,36 @@ function AppRoutes() {
             </RouteErrorBoundary>
           }
         />
+
+        {/* 账户设置区（/console/account/*）：管理员自助面，owner/admin/member/viewer
+            全角色可用，不设 RequireRole。Profile 与 Preferences 子页分离，
+            后续自助分区（安全/会话等）在此追加子路由与页签。 */}
+        <Route
+          path="account"
+          element={
+            <RouteErrorBoundary>
+              <AccountLayout />
+            </RouteErrorBoundary>
+          }
+        >
+          <Route index element={<Navigate to="profile" replace />} />
+          <Route
+            path="profile"
+            element={
+              <RouteErrorBoundary>
+                <AccountProfilePage />
+              </RouteErrorBoundary>
+            }
+          />
+          <Route
+            path="preferences"
+            element={
+              <RouteErrorBoundary>
+                <AccountPreferencesPage />
+              </RouteErrorBoundary>
+            }
+          />
+        </Route>
 
         <Route
           path="admins"

@@ -5,20 +5,18 @@ import { useAuth } from "@/hooks/useAuth";
 import { getCurrentAdmin } from "@/api/admins";
 import { ProjectBootstrap } from "@/components/ProjectBootstrap";
 import { ProjectSelector } from "@/components/ProjectSelector";
-import { PreferencesDialog } from "@/components/PreferencesDialog";
 import { TimeBadge } from "@/components/TimeBadge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { breadcrumbsFor } from "@/lib/routeTitles";
 import { navSections } from "@/lib/nav";
-import { ChevronRight, ChevronsUpDown, LogOut, Menu, X } from "lucide-react";
+import { ChevronRight, LogOut, Menu, X } from "lucide-react";
 
 export function Layout() {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [prefsOpen, setPrefsOpen] = useState(false);
-  // 当前管理员（共享 ["console-admin-me"] 缓存）：侧栏底部展示邮箱 + 偏好入口。
+  // 当前管理员（共享 ["console-admin-me"] 缓存）：侧栏底部展示邮箱 + 账户设置入口。
   const { data: me } = useQuery({
     queryKey: ["console-admin-me"],
     queryFn: getCurrentAdmin,
@@ -36,14 +34,12 @@ export function Layout() {
   return (
     <div className="flex h-screen bg-sidebar">
       <ProjectBootstrap />
-      <PreferencesDialog open={prefsOpen} onOpenChange={setPrefsOpen} current={me?.timezone} />
       {/* Desktop sidebar */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
         <SidebarContent
           onNavigate={closeMobile}
           onLogout={handleLogout}
           email={me?.email}
-          onOpenPrefs={() => setPrefsOpen(true)}
         />
       </aside>
 
@@ -66,7 +62,6 @@ export function Layout() {
           onNavigate={closeMobile}
           onLogout={handleLogout}
           email={me?.email}
-          onOpenPrefs={() => setPrefsOpen(true)}
         />
       </aside>
 
@@ -129,12 +124,10 @@ function SidebarContent({
   onNavigate,
   onLogout,
   email,
-  onOpenPrefs,
 }: {
   onNavigate: () => void;
   onLogout: () => void;
   email?: string;
-  onOpenPrefs: () => void;
 }) {
   const initial = (email ?? "?").slice(0, 1).toUpperCase();
 
@@ -190,10 +183,15 @@ function SidebarContent({
         ))}
       </nav>
       <div className="space-y-0.5 border-t border-sidebar-border p-3">
-        <button
-          type="button"
-          onClick={onOpenPrefs}
-          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent"
+        <NavLink
+          to="/console/account/profile"
+          onClick={onNavigate}
+          className={({ isActive }) =>
+            cn(
+              "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent",
+              isActive && "bg-sidebar-accent"
+            )
+          }
         >
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-medium">
             {initial}
@@ -203,11 +201,11 @@ function SidebarContent({
               {email ?? "…"}
             </span>
             <span className="truncate text-[11px] leading-tight text-muted-foreground">
-              偏好设置
+              账户设置
             </span>
           </span>
-          <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-        </button>
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </NavLink>
         <Button
           variant="ghost"
           size="sm"

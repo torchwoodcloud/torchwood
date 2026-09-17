@@ -15,6 +15,7 @@ import {
 } from "@/api/admins";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { AdminRoleBadge } from "@/components/AdminRoleBadge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -37,19 +38,12 @@ import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { RowDeleteButton } from "@/components/resource/shared";
 import type { ColumnDef } from "@/components/list/DataTable";
 
-const ROLE_STYLE: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
-  owner: "default",
-  admin: "secondary",
-  member: "outline",
-  viewer: "outline",
-};
-
 const columns = (tz: string): ColumnDef<Admin>[] => [
   { key: "email", header: "邮箱", cell: (a) => a.email },
   {
     key: "role",
     header: "角色",
-    cell: (a) => <Badge variant={ROLE_STYLE[a.role] ?? "secondary"}>{a.role}</Badge>,
+    cell: (a) => <AdminRoleBadge role={a.role} />,
   },
   {
     key: "created_at",
