@@ -2,7 +2,7 @@
 
 面向后端开发者：Functions 子系统的执行模型（常驻 runner + dispatcher 分发）、构建流程、鉴权、触发器（HTTP / cron / 事件）、客户端调用面与异步 worker。所有函数执行统一经 functions-dispatcher 分发。
 
-> 源码锚点：`internal/domain/functions/`、`internal/infra/functions/`（分发客户端）、`functionsdispatcher/`、`internal/app/functions/`、`pkg/semaphore/`、`worker/`。
+> 源码锚点：`internal/domain/functions/`、`internal/infra/functions/`（分发客户端）、`functionsdispatcher/`、`functionspacker/`（git 打包服务）、`internal/app/functions/`、`pkg/semaphore/`、`worker/`。
 > 阅读顺序建议：`06-databases.md`（三层与 outbox）→ 本章 → `09-api-guide.md`（新增 RPC）。
 
 ## 1. 架构
@@ -25,7 +25,7 @@ HTTP multipart FunctionsHandler（POST .../deployments/code，≤50MiB）──�
 | 响应大小 | response / stdout / stderr 各 **≤64KB 截断**（`maxOutputBytes`，`truncated` 标记）。dispatcher 内部 1MiB 是读封套的缓冲上限，不是对调用方的承诺 | §4、§11 |
 | 执行超时 | 每函数可配 **[1,300]s，缺省 15s**；**同步调用上限 30s**（超出走异步） | §2、§4、§14 |
 | `concurrency` 语义 | **单实例并发上限（1..16，默认 1）**，不是全局串行：单实例一次跑 `concurrency` 个请求；池可在无空闲实例时冷启动扩到 `max_instances` 多实例并行。真正的全局闸门是 dispatcher 池上限（`max_instances` + 有界排队 429）与每用户并发 2 | §4.3、§4.3.1、§14 |
-| 部署包 | zip ≤50MiB；解压 ≤1000 条 / 单条 ≤100MiB / 总量 ≤200MiB | §3 |
+| 部署包 | zip ≤50MiB；解压 ≤1000 条 / 单条 ≤100MiB / 总量 ≤200MiB（git 源物化包条目放宽至 ≤5000，§3.4） | §3、§3.4 |
 
 ## 2. 写方法与鉴权
 
@@ -37,7 +37,7 @@ HTTP multipart FunctionsHandler（POST .../deployments/code，≤50MiB）──�
 | `UpdateFunction` | `PATCH .../{function_id}` | `optional name/entrypoint/timeout/spec/enabled`（scopes 走独立 RPC） |
 | `SetFunctionScopes` | `PUT .../{function_id}/scopes` | 全量替换 `declared_scopes`；空集 = 撤销全部平台访问 |
 | `DeleteFunction` | `DELETE .../{function_id}` | 级联删部署 + RemoveImage + 删 zip（幂等） |
-| `CreateDeployment` | `POST .../{function_id}/deployments` | gRPC `bytes code` ≤1MiB；大包走 `POST .../deployments/code` multipart ≤50MiB |
+| `CreateDeployment` | `POST .../{function_id}/deployments` | `source` oneof：gRPC `bytes code` ≤1MiB（大包走 `POST .../deployments/code` multipart ≤50MiB）或 `git`（`GitSource`，§3.4） |
 | `DeleteDeployment` | `DELETE .../{function_id}/deployments/{deployment_id}` | |
 | `SetVariables` | `PUT .../{function_id}/variables` | 全量替换，明文存储（`function_variables`） |
 | `CreateExecution` | `POST .../{function_id}/executions` | 同 / 异步二选一（§4） |
@@ -184,6 +184,53 @@ build 成功后 dispatcher 自动追加**验证 spawn**（`functionsdispatcher/d
 - **egress 与执行一致**：untrusted 函数（client_callable 或存在触发器）的验证实例挂 **internal 变体网络**——部署期不给不可信镜像开出网窗口（执行期 egress 约束不被部署期旁路）。
 - **失败处置**：回收容器日志尾部（≤64KB）拼进错误 → `deployment.error`——运行期错误（panic / 协议未实现）的第一现场；编译错误在构建日志、不经此路径。
 - **验证范围 = health 探针，不做 invoke 验证**：invoke 需要平台构造 TW_DATA 并**执行用户代码**（副作用不可控），违反「部署期不执行用户代码」不变量；「health 通过 ≠ invoke 语义正确」的残余风险由运行期 transport-error → 杀实例重建语义兜底（有意为之，非疏漏）。
+
+### 3.4 部署源：git 仓库（functions-packer）
+
+git 部署源（二期，设计 `docs/design/functions-runtimes-and-sources.md` §2）：`CreateDeployment` 请求的 `source` oneof 二选一——`code`（zip bytes，既有通道）或 `git`（`GitSource`）。git 源由独立 **functions-packer 服务**（§3.5）把 `url@ref[:directory]` 物化为与 zip 源**同构**的代码包，随后走同一条构建路径（写盘 → INSERT → `buildDeployment`）；zip 流向反转：packer → server 落既有 `zipPath`。`function_deployments` 的 source 投影列（projectschema 迁移 000023）：`source_type ∈ {zip, git}` + 审计四件 `source_url` / `source_ref`（钉死 commit SHA）/ `source_dir` / `context_sha256`（物化 zip 的 hex sha256）——**凭证字段在投影上不存在**。
+
+**GitSource 字段语义**（protovalidate 声明 + app 层 `validateGitSource` 纵深复核，`internal/app/functions/deployments_git.go`）：
+
+| 字段 | 语义 |
+|---|---|
+| `url` | 仅 `https://`（`functions.packer.allow_insecure=true` 时放行 `http://`，与 packer 侧 SSRF 开关同源）；**拒绝 URL 内嵌 userinfo**——带凭证的 URL 会进错误消息/日志，凭证必须走独立字段；packer 侧另有 `file://`/裸本地路径，仅 `TORCHWOOD_ENV=development`（本地调试） |
+| `ref` | 空 = HEAD；branch / tag / 40 位 hex commit 均可（字符白名单 `[A-Za-z0-9._/-]`）。解析顺序 HEAD → hex → branch → tag，全部未命中明确 404，**不静默回落 HEAD**——回落会把部署钉到非请求内容 |
+| `directory` | 仓库内子目录 = 构建上下文根（`/` 分隔、相对路径；拒绝绝对路径与任何 `..` 段）；空 = 仓库根。物化 zip 的根 = 该子目录（子目录外的文件不入包） |
+| `username` / `token` | 私有仓库的 Basic 凭证（PAT）；`username` 空回落字面量 `git`（GitHub/GitLab PAT 通用形态）。**一次性凭证**：仅本次请求内存送达 packer，不落库、不写日志、不回显（D8）——分支后续移动不影响已部署内容，重新部署才需要再给凭证 |
+
+**钉死 commit**：packer 解析 ref 后返回 `CommitSHA`，落 `source_ref` 列——部署内容 = 该提交的不可变快照；`context_sha256` 使盘上 zip 可审计比对。
+
+**失败清理分流**：pack 失败 / 写盘失败 / INSERT 失败 / 构建信号量满 → **无行无 zip**（请求级失败不留残骸）；**构建失败（已收敛为 `failed` 状态）时 git zip 保留**——与 zip 源构建失败即删不同：物化快照在盘上，worker 补构建以盘上 zip 为输入、不依赖一次性凭证（重建语义，`buildDeployment` 按 `source_type` 分流）。
+
+**条目边界（诚实声明）**：packer 物化上限 **5000 条目**（`MaxPackEntries`——git worktree 是真实文件，宽于 zip 上传通道的 1000 防炸弹声明侧预检）；dispatcher 构建侧对 BuildImage 统一放宽到同口径（`ExtractZipRelaxed`，条目 1000 → 5000，单条 100MiB / 总量 200MiB 维持）。**>5000 条目的典型 vendor 项目仍受限**——属声明边界，超限报 ResourceExhausted；node 项目请依赖平台代装依赖（§3），Go 项目 vendor/ 想进包请自行瘦身。
+
+**CLI**（一次性 token 走环境变量，绝不进 argv / shell history）：
+
+```bash
+export TORCHWOOD_GIT_TOKEN=ghp_xxx        # 或 --git-token-env 指向其他变量名
+./bin/torchwood functions deployments create-from-git greet \
+  --url https://github.com/acme/functions.git \
+  --ref main --dir functions/greet        # 公开仓库也请设一个非空占位值（显式优于静默匿名拉取）
+```
+
+token 未设置即报错（不静默匿名拉取私有仓库）；服务端 `functions.packer.url` 未配置时 git 源报明确错误（`FailedPrecondition`），zip 源完全不受影响——**增量启用**。
+
+### 3.5 functions-packer 服务（运维）
+
+独立进程（`cmd/functions-packer`，`task build` 一并产出；实现包 `functionspacker/`）专职承载**不可信 git 输入**的重资源操作：浅克隆 + worktree 核算 + 子目录物化为 zip（go-git 纯 Go 实现，无系统 git 依赖）。
+
+- **无状态、可牺牲**：零 Redis / DB / docker 依赖；单请求内存上界 ≈ 物化 zip 预算（默认 50MiB）+ base64 膨胀（×4/3）。它挂了只有 git 部署不可用（重启即恢复），API / 函数执行 / node 构建无感；可独立重启 / 扩缩（多副本无亲和需求——zip 由 server 落构建亲和节点本地盘）。
+- **并发自限**：进程内信号量（容量 = `concurrency`，默认 4），饱和**立即 429**——与 dispatcher 的构建信号量成两道独立闸、无嵌套（pack 在构建信号量之外）。
+- **两级预算 + 整体封顶**：`max_repo_bytes`（worktree 磁盘侧，默认 200MiB）/ `max_zip_bytes`（物化 zip 传输侧，默认 50MiB，与构建内联通道同源）+ 5000 条目；`fetch_timeout`（默认 120s）对单次打包整体封顶（clone + 核算 + 物化共享同一预算），到点 504。物化跳过 `.git` / symlink、拒收 `node_modules`（与 zip 通道同口径）；同 commit 产出字节级一致的 zip（walk 字典序 + 固定时间戳 → checksum 稳定可审计）。
+- **部署拓扑**：与 functions-dispatcher 同级的**内网服务**（dokploy compose 同网部署，server 经 `functions.packer.url`（如 `http://functions-packer:9071`）寻址）；HTTP 监听 `addr` 默认 `:9071`（与 dispatcher 缺省 `:9070` 错开）。server 进程只消费 `url` / `shared_token`，其余字段仅 packer 进程消费（与 dispatcher 同款分段约定）。
+- **SSRF 防护**：默认 **https-only** 且拒绝私网 / 回环 / link-local 目标（云元数据端点 169.254.169.254 等）；校验实施在**拨号点**（`dialer.Control` 钩子，TCP connect 时对解析后 IP 判定）——DNS rebinding（解析后换记录）因此失效。`allow_insecure=true` 整体放行（http + 私网目标），为**自托管内网 git 服务**场景提供显式开关而非逼出危险旁路；口径启动即固定（go-git 协议表是进程级全局）。
+- **API 面**（内网专用 + 可选 `x-tw-packer-token` 静态共享密钥，constant-time 比对；`GET /healthz` 豁免认证）：
+
+  | 端点 | 入参 → 出参 | 说明 |
+  |---|---|---|
+  | `POST /v1/pack/git` | `{url, ref?, directory?, username?, token?}` → `{commit_sha, checksum, zip_base64}` | 请求体 ≤1MiB；响应读取上限 = max_zip_bytes 的 base64 膨胀 + 余量 |
+
+  错误映射（与 dispatcher 同款）：并发饱和 429 → ResourceExhausted、超预算 429 → ResourceExhausted、fetch_timeout 504 → DeadlineExceeded、形状错误 400 → InvalidArgument、仓库/ref 未命中 404 → NotFound、git 凭证认证失败 400 → InvalidArgument；packer API 自身的共享密钥校验失败为 401，server 侧 `PackerClient`（`internal/infra/functions/packer_client.go`）按码还原 grpc status（401 → FailedPrecondition）。
 
 ## 4. 执行（同步 / 异步）
 
@@ -406,8 +453,16 @@ go test ./functionsdispatcher -run TestIntegration_Dispatcher -count=1
 | `functions.trigger.http_ip_per_minute` | HTTP 触发器每 IP 限频，默认 3000 |
 | `functions.client_invoke.per_user_concurrency` | 每用户并发闸门，默认 2 |
 | `functions.client_invoke.queue_head_timeout` | 并发闸门排队队首超时，默认 5s |
+| `functions.packer.url` | functions-packer 内网 HTTP 基址（server 侧消费），如 `http://functions-packer:9071`；**空 = git 部署源未启用**（zip 源不受影响，§3.4/§3.5） |
+| `functions.packer.shared_token` | 内网可选认证（`x-tw-packer-token`），空 = 不校验（仅限可信内网） |
+| `functions.packer.fetch_timeout` | 单次 fetch+物化整体超时，默认 `120s`（仅 packer 进程消费） |
+| `functions.packer.max_repo_bytes` | 克隆 worktree 磁盘侧预算，默认 200MiB（仅 packer 进程消费） |
+| `functions.packer.max_zip_bytes` | 物化 zip 传输侧预算，默认 50MiB（仅 packer 进程消费） |
+| `functions.packer.concurrency` | 并发打包上限，默认 4；饱和立即 429（仅 packer 进程消费） |
+| `functions.packer.allow_insecure` | 放行 http:// 与私网/回环目标（SSRF guard 整体放行，自托管内网 git 场景），默认 false |
+| `functions.packer.addr` | packer HTTP 监听地址，默认 `:9071`（仅 packer 进程消费） |
 
-`functions.executor` 键已删除（reserved；残留配置键被静默忽略）。`task build` 同时产出 server / worker / torchwood / functions-dispatcher 四个二进制。
+`functions.executor` 键已删除（reserved；残留配置键被静默忽略）。`task build` 同时产出 server / worker / torchwood / functions-dispatcher / functions-packer 五个二进制。
 
 ## 10. 变量与保留策略
 
@@ -428,7 +483,7 @@ go test ./functionsdispatcher -run TestIntegration_Dispatcher -count=1
 
 - 单元：`internal/app/functions/`（并发上限、截断、队列 payload 校验、鉴权分支）；`internal/infra/queue/redis_queue_test.go`。
 - 安全：`security_test.go`（zip slip / 符号链接 / size 上限）；`authz_test.go`（写方法鉴权）；`semaphore_test.go`（SETNX + Lua 互斥）。
-- 集成：`functionsdispatcher/daemon_integration_test.go`（门控 `TORCHWOOD_FUNCTIONS_DOCKER_HOST`，CI 预拉 node:18-alpine / golang:1.26-alpine；含 python zip 构建期拒绝用例）；Go 端到端（`TestIntegration_GoMainFunctionE2E` / `GoFetchFunctionE2E` 双风格执行断言、`NodeVerifyStillGreenE2E` 护栏、`GoVerifyFailureCapturesLogTail` 验证失败日志尾回收、`GoMissingEntryRejected` 缺入口拒收）；worker 的消费 / requeue 测试（attempt 持久化、Transition CAS）。
+- 集成：`functionsdispatcher/daemon_integration_test.go`（门控 `TORCHWOOD_FUNCTIONS_DOCKER_HOST`，CI 预拉 node:18-alpine / golang:1.26-alpine；含 python zip 构建期拒绝用例）；Go 端到端（`TestIntegration_GoMainFunctionE2E` / `GoFetchFunctionE2E` 双风格执行断言、`NodeVerifyStillGreenE2E` 护栏、`GoVerifyFailureCapturesLogTail` 验证失败日志尾回收、`GoMissingEntryRejected` 缺入口拒收）；git 源 docker 集成（`functionsdispatcher/git_source_integration_test.go`：`GitSourceGoFunctionFullChainE2E` git fixture → PackGit → BuildImage(verify) → 池执行全链 + `GitWideEntryZipBuild` >1000 条目放宽预算构建回归）；worker 的消费 / requeue 测试（attempt 持久化、Transition CAS）；app 层 git 源进程内冒烟（`deployments_git_e2e_test.go`，真实 DB + fake packer/executor）。
 - **未落地清单**：独立构建队列（CreateDeployment 同步构建，worker 消费前补构建兜底）；重试无死信队列（超限直接标 failed）；变量明文；`entrypoint` 固定入口；多机需对象存储承载 zip；池策略管理 API 面（min/max_instances、idle_ttl、max_requests、concurrency 的 UpdateFunction 字段 + Console 卡片未落地）——**concurrency 现无管理入口，恒为列默认 1**，行为与 v2 串行等价。
 
 ## 13. 触发器（HTTP + cron + 事件）
@@ -608,4 +663,4 @@ const handlers = {
 - `06-databases.md` §8.1 — execute-tx 事务内核（函数多写原子性的承载）
 - `05-authentication.md` — `RequireServerPrincipal` 与 execution principal 凭证族
 - `07-storage.md` — Redis 原子语义对照（分片锁）
-- `docs/design/functions-execution-identity-and-triggers.md` / `docs/design/functions-v3.md` — 设计文档
+- `docs/design/functions-execution-identity-and-triggers.md` / `docs/design/functions-v3.md` / `docs/design/functions-runtimes-and-sources.md`（§2 git 部署源）— 设计文档

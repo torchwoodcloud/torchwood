@@ -62,8 +62,8 @@ func NewService(cfg *config.AppConfig, logger *slog.Logger) *Service {
 	installGuardedHTTPTransport(opts.AllowInsecure)
 	srv := newPackServer(pc.GetSharedToken(), opts, concurrency)
 	return &Service{
-		cfg:          cfg,
-		logger:       logger,
+		cfg:    cfg,
+		logger: logger,
 		http: &http.Server{
 			Addr: addr,
 			// 内网 API：显式拒绝慢速攻击面（读头超时）。

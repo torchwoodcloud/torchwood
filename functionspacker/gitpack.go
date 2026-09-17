@@ -23,10 +23,11 @@ import (
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	gittransport "github.com/go-git/go-git/v5/plumbing/transport"
 	gitclient "github.com/go-git/go-git/v5/plumbing/transport/client"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
-	gittransport "github.com/go-git/go-git/v5/plumbing/transport"
 	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -300,9 +301,11 @@ func doClone(ctx context.Context, root string, o *gogit.CloneOptions, refName st
 // 的等价物：不经传输层 clone——go-git 的 file 客户端会 shell-out 到
 // git-upload-pack（Windows 上是 sh 脚本、无法直接 exec），而 dev 场景仓库
 // 就在本机，只读打开 + 把目标提交的树物化到临时目录语义等价且零外部依赖。
-// ref 解析与 cloneAndCheckout 同序（HEAD → 40hex → branch → tag）；tree
-// 迭代天然只落常规 blob（symlink/submodule 不物化——与 zip 写侧跳过
-// symlink 的口径一致）。
+// ref 解析与 cloneAndCheckout 同序（HEAD → 40hex → branch → tag）；symlink
+// 条目不物化（其 blob 内容是 target 路径字符串——物化成常规文件会让 zip
+// 携带错误内容，与 zip 写侧跳过 symlink 的口径一致。容器内 Linux 实跑
+// 暴露：tree.Files() 并不天然只含常规 blob，Windows 宿主因 symlink 特权
+// 缺失而测试假绿）；submodule 条目防御性跳过。
 func materializeLocalSource(srcURL, root string, req PackRequest) (string, string, error) {
 	repo, err := gogit.PlainOpen(srcURL)
 	if err != nil {
@@ -339,6 +342,9 @@ func materializeLocalSource(srcURL, root string, req PackRequest) (string, strin
 		return "", "", status.Errorf(codes.Internal, "commit tree: %v", err)
 	}
 	if err := tree.Files().ForEach(func(f *object.File) error {
+		if f.Mode == filemode.Symlink || f.Mode == filemode.Submodule {
+			return nil // 不物化：symlink blob 内容是 target 字符串，非文件内容
+		}
 		abs := filepath.Join(root, filepath.FromSlash(f.Name))
 		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 			return err

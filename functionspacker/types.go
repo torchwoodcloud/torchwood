@@ -43,7 +43,7 @@ const (
 )
 
 // PackRequest 是 POST /v1/pack/git 入参，与 domain GitSource 值对象
-//（internal/domain/functions/sourcepack.go）同构：把 url@ref 的 directory
+// （internal/domain/functions/sourcepack.go）同构：把 url@ref 的 directory
 // 子目录物化为 zip。Username/Token 是一次性 Basic 凭证——仅本次请求内存、
 // 不落库不写日志不回显（D8）。
 type PackRequest struct {

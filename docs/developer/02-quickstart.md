@@ -223,6 +223,7 @@ CLI 二进制为 `bin/torchwood`（入口 `cmd/torchwood`，实现随仓库根 `
 ./bin/torchwood analytics ingest --file events.json                                        # 或 --file - 走 stdin（analytics.write）
 ./bin/torchwood assets grant user_42 gems --quantity 100 --idempotency-key comp-2026-0914  # 运营补偿（assets.write，进审计）
 ./bin/torchwood payments refund --help                                                     # 订单查询 / 退款 / 人工履约
+TORCHWOOD_GIT_TOKEN=ghp_xxx ./bin/torchwood functions deployments create-from-git greet --url https://github.com/acme/functions.git --ref main --dir functions/greet   # git 源部署（token 走环境变量，见 08-functions.md §3.4）
 ./bin/torchwood runbook up --dir runbooks                                                  # 版本化资源迁移，见 19-runbook.md
 ./bin/torchwood rpc /torchwood.server.v1.UsersService/ListUsers --data '{"pageSize":10}' --api-key <secret>
 ```
