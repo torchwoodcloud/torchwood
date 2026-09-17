@@ -5,11 +5,11 @@
 > （业界对照，零推翻 + 2 处补强）→ 多机演进立项（owner 裁决路径 1
 > 细胞模型，排为阶段四，§4）→ 三子代理独立复核修订（13 处并入）→
 > **一期已实现**（2026-09-17，四阶段还原点 b760cb1 / 53a3ff1 / 462470b /
-> af9dbfb，全量回归绿、集成 9 用例实跑绿）**。
-> Key Decisions 与 Open Questions 的原始裁决记录保留；交叉验证推翻的
-> 三处（D3 Go 形态、D4 git 位置、OQ5 重建限制）已按修订稿改写并在
-> 「交叉验证记录」一节明确标注，其中 D3 经一期落地验证（D2/D5 属二三期）；
-> 后续各轮记录见文末各节。
+> af9dbfb，全量回归绿、集成 9 用例实跑绿）→ **D2 再裁决**（owner 否决
+> server 进程内 fetch，定向独立 functions-packer 服务，§2 改写）**。
+> Key Decisions 与 Open Questions 记录保留（D2/D6 按 packer 案修订）；
+> 交叉验证推翻项已全部收口：D3 一期落地验证、D2 owner 再裁决、OQ5 随
+> packer 案成立；后续各轮记录见文末各节。
 > 现状基线：`docs/developer/08-functions.md`（§3.1-§3.3 已含 Go 运行时 /
 > Runner 协议 / 验证 spawn 质量门）。
 > **v3 裁决边界修正（独立复核 A7）**：functions-v3.md Non-Goals 点名的
@@ -32,7 +32,7 @@
 | 需求 | 切入层 | 一句话 |
 |---|---|---|
 | Go 运行时 | 语言/模板层（探测 + `DockerfileFor` + 平台生成 bootstrap） | 编译型语言下平台改用「生成引用用户包的 main」保持 runner 注入模型 |
-| Git 仓库源 | 源获取层（zip 之前的 fetch） | server 侧物化为 zip 落既有路径，下游构建管线零改动 |
+| Git 仓库源 | 源获取层（zip 之前的打包） | 独立 functions-packer 服务物化为 zip 落既有路径，业务服务零 git 流量 |
 | Docker 镜像源 | 构建层整层跳过 | 平台不构建，pull + digest 钉死 + retag + 契约验证 |
 
 **共享的横切决策**（统一设计的理由）：
@@ -82,8 +82,9 @@ Git 集成仅存在于 roadmap §4.3 VCS（P3，GitHub OAuth + webhook 自动部
 
 - Go 运行时（zip 源）：`go-1.25` 表项 + go.mod 探测 + 多阶段构建模板 +
   平台生成 bootstrap（AST 探测 Fetch/Main 双轨入口）+ 部署后验证 spawn；
-- Git 源：`https://` 仓库 @ ref + 子目录，server 侧 go-git 物化为 zip，
-  commit SHA 钉死，重建不依赖凭证（物化 zip 在盘）；
+- Git 源：`https://` 仓库 @ ref + 子目录，**独立 functions-packer 服务**
+  打包为 zip（业务服务零 git 流量，资源尖峰隔离在可牺牲的基础设施
+  进程），commit SHA 钉死，重建不依赖凭证（物化 zip 在盘）；
 - 镜像源：契约镜像引用 → pull + digest 钉死 + retag 进平台命名 + 强制
   契约验证，runtime 专用 ID `image`。
 
@@ -111,21 +112,22 @@ Git 集成仅存在于 roadmap §4.3 VCS（P3，GitHub OAuth + webhook 自动部
 
 ### 0. 统一模型：部署源与运行协议（横切，随二期落 schema）
 
-**源归一化**——部署源三变体，git 在 server 侧归一为 zip，image 跳过构建：
+**源归一化**——部署源三变体，git 由独立 functions-packer 服务归一为
+zip，image 跳过构建：
 
 ```
 DeploymentSource:
   zip    (inline bytes)                    → 构建路径（既有，零改动）
-  git    (url, ref, dir, token)            → server 物化 zip → 既有构建路径
+  git    (url, ref, dir, token)            → packer 打包 zip → 既有构建路径
   image  (reference, digest)               → 免构建路径：pull→digest 钉死→retag→verify
 ```
 
-- git 物化 zip 落**既有 `zipPath`**（共享盘），worker 补构建、模板版本
-  语义自动成立（这是选 server 侧物化的核心论据，交叉验证 2/3 收敛）；
-  **「零改动」的强表述经独立复核证伪并降级为「构建路径复用」**——三处
+- packer 打包的 zip 落**既有 `zipPath`**（共享盘），worker 补构建、模板
+  版本语义自动成立（这是 packer 输出对齐 zip 通道的核心论据）；
+  **「零改动」的强表述经独立复核证伪并降级为「构建路径复用」**——两处
   显式改造：dispatcher 解压预算按源注入（条目 5000，§2）、构建失败
-  zip 保留分流（git 保留/zip 删除，§2）、信号量两相化（§2）；image
-  源不产生 zip，worker 补构建走幂等 ImportImage（§3）。
+  zip 保留分流（git 保留/zip 删除，§2）；image 源不产生 zip，worker
+  补构建走幂等 ImportImage（§3）。
 - 镜像源 pull 后 **retag 成 `ImageName(fid, did)` 并删除原始引用**（防本
   地 daemon 残留）——「镜像名 = 平台命名」不变式保持，池 spawn /
   `RemoveImage` 零改动。
@@ -368,71 +370,73 @@ config 文档须标注该画像（首个 Go 部署在全新环境超时 = 高频
 必要时按 runtime 分档调大；验证 spawn 的 `boot_timeout`（60s）语义上
 嵌套在 `build_timeout` 预算内（构建 + 验证共享一个上限）。
 
-### 2. 阶段二：Git 源（server 侧物化 zip——交叉验证 2/3 收敛，推翻原
-dispatcher 容器化方案）
+### 2. 阶段二：Git 源（独立 functions-packer 服务——2026-09-17 owner 裁决，
+推翻「server 进程内物化」与「dispatcher 进程内 fetch」两案）
 
-**端口与适配器**：domain 新文件 `sourcefetch.go`：
+**裁决记录**：server 进程内 go-git 物化（原 D2）被 owner 否决——控制面
+进程不承载不可信输入的重资源操作（clone 内存尖峰伤及全部 API 流量）；
+dispatcher 进程内 fetch 同被否决——dispatcher 仍在函数执行关键路径。
+最终形态 = **functionsdispatcher 模式复刻**：职责单一、可独立重启/扩缩的
+基础设施服务，OOM 只影响 git 部署自身。zip 流向反转：不再是
+「server 取好 zip 发给 dispatcher」，而是「packer 打好 zip 交回 server 落盘」。
 
-```go
-// SourceFetcher 把 git 仓库物化为本地 zip（凭证只在调用栈内存，不持久化）。
-type SourceFetcher interface {
-    FetchGit(ctx context.Context, src GitSource, dstPath string) (commitSHA, contentSHA256 string, err error)
-}
-```
-
-infra 适配器 `internal/infra/functions/gitfetch.go`：**go-git v5 进程内实现**
-（无 shell 面、无外部二进制依赖；若个别 forge 兼容性失败，退路是端口下
-换 shell-out git，实现细节不外溢）：
-
-- 浅克隆 `Depth: 1`；ref 解析：40 位 hex → 直取 commit（不可达则回退非浅
-  fetch + checkout）；branch → tag → HEAD 依次解析；解析后回读 SHA；
-- 凭证：`http.BasicAuth`（username 空时字面量 `git`——GitHub/GitLab PAT
-  通用形态）；
-- **SSRF 防护（交叉验证独有并入）**：自定义 `http.Transport.DialContext`
-  在 DNS 解析后校验 IP，默认拒绝 loopback/private/link-local（169.254.
-  169.254 云元数据端点等）；**校验必须实施在拨号点（Dialer 的
-  Control/DialContext 钩子对将拨号的真实 IP 校验），而非请求前预解析
-  ——防 DNS rebinding（预解析通过、连接时换内网 IP）**；
-  `functions.git.allow_insecure=true` 时放行
-  http + 私网（自托管内网 gitea 是真实场景，给显式开关而非逼出危险旁路）；
-  URL 拒绝内嵌 userinfo（凭证走独立字段，防 URL 落日志泄密）；
-  development 环境额外允许 `file://`（集成测试与本地开发，复用
-  `TORCHWOOD_ENV` 语义）；
-- 物化：`directory` 穿越校验（Clean 后拒 `..`/绝对路径），walk 子目录跳过
-  `.git`、跳过 symlink 条目、拒 `node_modules`（与 zip 通道同口径）；
-  **两级预算（第二轮复查修正）**：克隆 worktree ≤200MiB（磁盘侧，config
-  `functions.git.max_repo_bytes`）＋ **物化 zip（子目录内容）≤50MiB（与
-  `maxBuildBodyBytes` 内联传输通道同源——物化超 50MiB 的 zip 无法经
-  Build base64 内联送达 dispatcher，必须在物化期收紧并给出清晰错误，
-  而非在 dispatcher 入口报用户看不懂的 exceeds）**；条目 ≤5000（git
-  worktree 是真实文件，宽于 zip 上传的 1000 反炸弹声明侧预检）；
-  fetch 超时 120s（config `functions.git.fetch_timeout`）。
-  **条目维链条补齐（独立复核 A1——二轮复查只咬合了字节维，漏了同构的
-  条目维）**：dispatcher 侧 `ExtractZip` 走 `defaultZipExtractLimits`
-  （`maxZipEntries=1000`），5000 条的物化 zip 会在解压步被击毙——
-  报错形态恰是复查声称已消灭的「dispatcher 侧 exceeds」。修正：
-  `BuildImage` 用**注入的放宽 limits**（`extractZipWithLimits` 本就支持
-  注入，构建路径条目上限与 server 物化预算对齐为 5000、总量对齐
-  200MiB 解压预算）；**诚实声明**：>5000 条的典型 vendor 项目
-  （k8s.io/client-go 级）仍受限，属声明边界而非支持承诺——若实测为
-  高频痛点，预算常量单独调档（影响面只有两个常量）。
-
-**用例时序（关键：FetchGit 在 deployment 行落库之前，凭证不跨行生命周期；
-信号量两相化——独立复核 A8）**：
+**服务契约**（`functionspacker/` 顶层组件包 + `cmd/functions-packer`，
+与 `functionsdispatcher/` 同级模式；无 Redis/DB/池依赖，状态可牺牲）：
 
 ```
-CreateDeployment(git): 校验 → GetFunction → 占信号量（相一）→ FetchGit
-物化 zip + sha256 → INSERT 行（pending, source 列, 钉死 SHA）→ building
-→ executor.Build（buildDeployment 内不重复占槽——相一传递复用）→
-ready / failed → 释放
+POST /v1/pack/git
+  {url, ref?, directory?, username?, token?}        ← token 一次性，仅内存
+→ {commit_sha, checksum, zip_base64 ≤50MiB}          ← 错误走 HTTP 状态码映射
 ```
 
-字面照抄原时序会**双重占槽**（外层占一次、`buildDeployment` 内
-`TryAcquire` 再占一次，git 源并发构建能力对半且报错形态错位）；且信号量
-TTL 现状固定 360s，而 clone 120s + build_timeout 5min（+ 验证 60s）≈ 7min
-——**TTL 到点槽位会被并发部署偷走、release 语义错乱**。二期实施清单：
-`buildDeployment` 拆两相（信号量获取时机前移、句柄传递复用），信号量
-TTL 与 build_timeout + fetch_timeout 联动（≥ 两者之和 + 验证预算）。
+- **配置**：`functions.packer.{url, shared_token, fetch_timeout,
+  max_repo_bytes, max_zip_bytes, concurrency}`（Functions 字段 9）；
+  **url 未配置 = git 源未启用**（app 层 git 部署报明确错误；zip/node
+  完全不受影响，增量启用）；shared_token 中间件与 dispatcher 同款；
+- **并发自限**：packer 自带并发上限（concurrency，默认 4），饱和回 429
+  → server 映射 ResourceExhausted——与构建信号量成**两道独立闸**，
+  无嵌套（原 A8 信号量两相化问题整体消失：pack 在构建信号量之外）；
+- **clone 实现**（packer 进程内 go-git v5；若个别 forge 兼容性失败，
+  退路是换 shell-out git 或容器化 clone，端点契约不外溢）：
+  - 浅克隆 `Depth: 1` + **单 ref refspec**（`+refs/heads/<ref>` /
+    `+refs/tags/<ref>`，不取全量 refs）；ref 解析：40 位 hex → 直取
+    commit（不可达则回退非浅 fetch + checkout）；branch → tag → HEAD
+    依次解析；解析后回读 SHA；
+  - 凭证：`http.BasicAuth`（username 空时字面量 `git`——GitHub/GitLab
+    PAT 通用形态）；
+  - **SSRF 防护**：自定义 `http.Transport.DialContext` 在 DNS 解析后
+    校验 IP，默认拒绝 loopback/private/link-local（169.254.169.254 云
+    元数据端点等）；**校验必须实施在拨号点（Dialer 的 Control/
+    DialContext 钩子对将拨号的真实 IP 校验），而非请求前预解析——防
+    DNS rebinding**；`functions.packer.allow_insecure=true` 时放行
+    http + 私网（自托管内网 gitea 是真实场景，给显式开关而非逼出危险
+    旁路）；URL 拒绝内嵌 userinfo（凭证走独立字段，防 URL 落日志泄密）；
+    development 环境额外允许 `file://`（集成测试与本地开发，复用
+    `TORCHWOOD_ENV` 语义）；
+  - 物化：`directory` 穿越校验（Clean 后拒 `..`/绝对路径），walk 子目录
+    跳过 `.git`、跳过 symlink 条目、拒 `node_modules`（与 zip 通道同
+    口径）；**两级预算**：克隆 worktree ≤200MiB（磁盘侧，config
+    `max_repo_bytes`）＋ 物化 zip ≤50MiB（传输侧，config `max_zip_bytes`，
+    与 `maxBuildBodyBytes` 内联通道同源）；条目 ≤5000（git worktree 是
+    真实文件，宽于 zip 上传的 1000 反炸弹声明侧预检）；fetch 超时 120s
+    （config `fetch_timeout`）；
+  - **条目维链条**（独立复核 A1）：dispatcher 侧 `ExtractZip` 默认
+    `maxZipEntries=1000` 会击毙 5000 条物化 zip——`BuildImage` 用注入的
+    放宽 limits（条目对齐 5000、总量对齐 200MiB 解压预算）；诚实声明：
+    >5000 条的典型 vendor 项目仍受限，属声明边界。
+- **资源画像与隔离声明**：clone 的内存尖峰/磁盘消耗全部收敛在 packer
+  进程——它死了只有 git 部署不可用（重启即恢复，dokploy/compose
+  restart 策略），API/函数执行/node 构建无感。最坏损失上界 = 一次
+  ≤120s 的失败 clone（流量 + 临时盘 + 一个 packer 并发槽）。
+
+**app 时序**（pack 在 deployment 行落库之前——失败路径无行无 zip，与
+zip 魔数校验失败同类）：
+
+```
+CreateDeployment(git): 形状校验（https/ref/dir）→ SourcePacker.PackGit
+（HTTP 调 packer）→ zip 写既有 zipPath + INSERT 行（source 列 + 钉死
+SHA + checksum）→ buildDeployment —— 与 zip 源完全同构
+```
 
 **重建语义（推翻原 OQ5 限制）**：物化 zip 落既有 `zipPath` 且 **git 源
 构建失败后 zip 保留**（zip 源维持现状删除）——worker 补构建以盘上 zip
@@ -441,10 +445,11 @@ TTL 与 build_timeout + fetch_timeout 联动（≥ 两者之和 + 验证预算�
 
 **审计**：`source_url + source_ref(钉死 SHA) + source_dir + context_sha256`
 四件 = 不可变快照锚；分支后续移动不影响已部署内容。token 的审计脱敏
-实际由 `internal/api/interceptor/audit_payload.go` 的敏感键关键词 mask
-承担（清单已含 "token"——`GitSource.token` / `registry_token` 自动命中；
-独立复核修正引用：variables 的 secretMask 是 GetVariables 响应掩码，
-另一机制）。
+由 `internal/api/interceptor/audit_payload.go` 的敏感键关键词 mask
+承担（清单已含 "token"——`GitSource.token` 自动命中）。
+
+**多机四期衔接**：packer 无状态可多副本（无亲和需求——zip 由调用方
+server 落在构建亲和节点的本地盘，M5 语义不变）。
 
 ### 3. 阶段三：镜像源（BYO Image）
 
@@ -651,7 +656,7 @@ InstanceRecord 的 Redis 结构本三期不加 node 列；④ zip/物化路径�
 | 阶段 | 内容 | proto/DB | 依赖 |
 |---|---|---|---|
 | 一：Go 运行时 | gorunner 模板资产 + AST 探测 + go 模板/表项 + BuildSpec 定稿 + 验证 spawn（带 variables）+ build_timeout + ctx 解耦 + Runner 协议文档节 | config.proto 两字段（dispatcher.build_timeout=10/verify_build=11），**无 API proto/DB 变更** | 无（**不再依赖 SDK 发布**——生成路线无发布物） |
-| 二：Git 源 | source oneof + DB 迁移 + SourceFetcher（go-git + SSRF guard）+ 钉死 SHA + 保留策略分流 + CLI/Console | oneof、Deployment 投影、000023 迁移 | 无（可与三调序） |
+| 二：Git 源 | functions-packer 服务（go-git + IP guard + 两级预算 + 并发自限）+ source oneof + DB 迁移 + SourcePacker HTTP 适配器 + dispatcher 放宽解压预算 + CLI/Console | oneof、Deployment 投影、000023 迁移、config packer=9 | 无（可与三调序） |
 | 三：镜像源 | ImageSource 实现 + runtime=`image` + pull/digest/retag + 强制验证 + template_version=0 + 基础镜像 | 复用阶段二 schema 的 image 分支 | 阶段一（协议文档 + 参考实现） |
 | 四：多机执行面 | 细胞模型：M1 registry push → M2/M3 节点注册 + 实例亲和路由 → M4 容量共享 → M6 回调多节点化（§4，独立立项量级） | config `functions.docker.registry` 语义升格 | 阶段三交付后按容量画像启动（不阻塞） |
 
@@ -660,7 +665,7 @@ proto 增量）。**装配与生成物清单（独立复核 M2/M3 补齐，漏�
 性风险）**：二期起 `servergrpc/functions.go` 的 CreateDeployment 按
 oneof 分发（现状直取 `req.GetCode()`）+ `mapDeployment` 补 source 四列
 投影（**漏映射不报编译错，须显式断言**）+ `serverhttp` multipart 维持
-zip-only 分支确认；SourceFetcher 进 `provides.go` + `task wire:all`；
+zip-only 分支确认；SourcePacker HTTP 适配器进 `provides.go` + `task wire:all`；
 config 变更 `task generate:config`；proto 变更 `task generate:proto`；
 Console 改动后 `task console:build` 再 `task build`（embed 旧版本风险，
 AGENTS.md 明文）。CLI：`functions deployments create-from-git <fn> --url …
@@ -676,13 +681,13 @@ zip）。SDK 方法覆盖自动可用，CLI 仅需旗标。
 | # | 裁决 | 来源 |
 |---|---|---|
 | D1 | 三需求一份设计、三期实施（源模型统一 + 协议公开化） | 收敛 |
-| D2 | git 在 server 侧物化为 zip 落既有 zipPath；image pull+retag 免构建 | 收敛（git 位置 2/3 + worker 补构建论据裁决） |
+| D2 | git 打包收敛**独立 functions-packer 服务**（2026-09-17 owner 否决 server 进程内方案并定向此形态；zip 回流共享盘保 worker 补构建免凭证）；image pull+retag 免构建 | owner 裁决 |
 | D3 | **Go = 平台生成 twmain/ bootstrap（AST 探测 Fetch(w,r)/Main(map,map) 双轨，stdlib 契约，用户零平台依赖）**；SDK 路线否决（见 Alternatives） | 收敛 3/3（推翻原拍板，待 owner 重新确认） |
 | D4 | go.sum 强制（require 非空）+ GOFLAGS 按 vendor 分支（vendor → `-mod=vendor`，否则 `-mod=readonly`）+ `CGO_ENABLED=0` + **vendor/ 受纳**；多阶段模板 alpine 运行段 + ca-certificates + 非 root | 收敛 + vendor 独有 + 二轮复查修正（GOFLAGS 显式值覆盖 vendor 自动检测） |
 | D5 | `:18080` 协议升格公开契约（文档 + bootstrap 源码 + 基础镜像三件参考实现），版本随 RunnerTemplateVersion（共享 5 不 bump） | 收敛 |
-| D6 | git fetch = server 侧 go-git 进程内 + IP guard（拒 loopback/private/link-local）+ allow_insecure 开关 + dev file:// | 裁决（位置 2/3；SSRF 防护独有并入） |
+| D6 | git clone = packer 服务内 go-git + IP guard（拨号点拒 loopback/private/link-local）+ allow_insecure 开关 + dev file:// | 裁决（SSRF 防护独有并入；位置随 D2 修订） |
 | D7 | 探测结果必须 == fn.runtime，不一致构建期报错；image 源专用 runtime ID `image`，源/运行时互斥 | 收敛 |
-| D8 | 凭证一次性内联不落库（否决持久化凭证表——server 物化 zip 后重建不依赖凭证，持久化只剩边缘场景收益）；绝不进 function_variables | 裁决 3/4 |
+| D8 | 凭证一次性内联不落库（否决持久化凭证表——packer 物化 zip 后重建不依赖凭证，持久化只剩边缘场景收益）；绝不进 function_variables | 裁决 3/4 |
 | D9 | `source_url + source_ref + source_dir + context_sha256` 统一可复现性锚；git 钉死 commit、image 钉死 digest | 收敛 |
 | D10 | 验证 spawn：强制（Go/BYO）、带函数 variables、池外实例、失败回收容器日志尾部；`verify_build` 默认 true | 收敛（验证必须有）+ 带 env/日志回收为原会话复查独有 |
 | D11 | 构建 ctx 与客户端断开解耦（WithoutCancel + build_timeout 5min 封顶） | 独有（原会话复查） |
@@ -715,6 +720,17 @@ zip）。SDK 方法覆盖自动可用，CLI 仅需旗标。
   `file://` 仅测试；image 源 worker 补拉为声明边界。
 
 ## Alternatives Considered
+
+- **server 侧进程内 go-git 物化（原 D2，2026-09-17 owner 否决）**：隔离
+  论据曾胜出（worker 补构建论据），但控制面进程承载不可信输入的 clone
+  内存尖峰会伤及全部 API 流量——「其他都是业务服务」原则下重资源操作
+  必须收敛进可牺牲的基础设施进程；由此演进出独立 functions-packer 服务
+  （§2，zip 流向反转为 packer→server），D2 的全部收益（worker 补构建
+  免凭证、快照可复现、预算护栏）在 packer 案中原样保留；
+- **dispatcher 进程内 fetch + 快照回传（过渡方案，同日被否）**：zip 回传
+  保住了补构建免凭证，但 dispatcher 仍在函数执行关键路径——clone 尖峰
+  炸的是全平台函数面；owner 定向「单独一个服务只负责拉取和打包」后
+  演进为 packer 服务案；
 
 - **Go SDK 路线（`twfn.Serve(handler)`，原拍板 D3）——被交叉验证推翻**：
   三个独立方案一致否决：用户必须 `go get` 平台模块 → 平台必须先发布
