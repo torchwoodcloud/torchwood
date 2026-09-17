@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
   useEffect,
+  useMemo,
 } from "react";
 import {
   Link,
@@ -17,6 +18,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  Pencil,
   Plus,
   Settings2,
 } from "lucide-react";
@@ -39,6 +41,7 @@ import {
 } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
+import { cn } from "@/lib/utils";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -431,6 +434,70 @@ function DocumentFormFields({
   );
 }
 
+// 只读视图：与编辑态共用 documentToValues 的字符串值，JSON 以等宽代码块呈现，
+// 空值显示占位符；默认展示此组件，点「编辑」才切换到表单。
+function DocumentReadonlyFields({
+  attributes,
+  values,
+}: {
+  attributes: Attribute[];
+  values: Record<string, string>;
+}) {
+  const boxClass = "rounded-md border bg-muted/40 px-3 py-2 text-sm";
+  if (attributes.length === 0) {
+    return (
+      <div className="space-y-2">
+        <Label>Data (JSON)</Label>
+        <pre
+          className={cn(
+            boxClass,
+            "max-h-[65vh] overflow-auto whitespace-pre-wrap break-words font-mono"
+          )}
+        >
+          {values.__json || "{}"}
+        </pre>
+      </div>
+    );
+  }
+  return (
+    <>
+      {attributes.map((attr) => {
+        const value = values[attr.key] ?? "";
+        return (
+          <div
+            key={attr.key}
+            className={cn("space-y-2", attr.type !== "json" && "max-w-lg")}
+          >
+            <Label>
+              {attr.key} ({attr.type})
+            </Label>
+            {attr.type === "json" ? (
+              <pre
+                className={cn(
+                  boxClass,
+                  "max-h-[65vh] overflow-auto whitespace-pre-wrap break-words font-mono"
+                )}
+              >
+                {value === "" ? "—" : value}
+              </pre>
+            ) : (
+              <p
+                className={cn(
+                  boxClass,
+                  "break-words whitespace-pre-wrap",
+                  value === "" && "text-muted-foreground"
+                )}
+              >
+                {value === "" ? "—" : value}
+              </p>
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 function buildDocumentData(
   attributes: Attribute[],
   values: Record<string, string>
@@ -518,7 +585,8 @@ export function DocumentDetailPage() {
   const tz = useUserTimezone();
   const [values, setValues] = useState<Record<string, string>>({});
   const [increments, setIncrements] = useState<Record<string, string>>({});
-  const [initialized, setInitialized] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const initializedDocRef = useRef<string | null>(null);
   const writeable = canWrite(role);
 
   const { data: collection } = useQuery({
@@ -533,11 +601,35 @@ export function DocumentDetailPage() {
     enabled: !!dbId && !!collId && !!docId,
   });
 
+  // 仅在切换到新文档（id 变化）时重建表单，避免后台 refetch 覆盖编辑中的草稿；
+  // collection 未就绪时不初始化，防止以空 attributes 建表单。
   useEffect(() => {
-    if (!document || initialized) return;
-    setValues(documentToValues(collection?.attributes ?? [], document));
-    setInitialized(true);
-  }, [collection, document, initialized]);
+    if (!document || !collection || initializedDocRef.current === document.id) return;
+    initializedDocRef.current = document.id;
+    setValues(documentToValues(collection.attributes, document));
+    setIncrements({});
+    setEditing(false);
+  }, [collection, document]);
+
+  // 只读视图直接由服务端文档与元数据派生，不依赖表单同步时序。
+  const displayValues = useMemo(
+    () => (document ? documentToValues(collection?.attributes ?? [], document) : {}),
+    [collection, document]
+  );
+
+  const startEdit = () => {
+    if (!document || !collection) return;
+    setValues(documentToValues(collection.attributes, document));
+    setIncrements({});
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    if (!document || !collection) return;
+    setValues(documentToValues(collection.attributes, document));
+    setIncrements({});
+    setEditing(false);
+  };
 
   const save = useMutation({
     mutationFn: () => {
@@ -566,6 +658,7 @@ export function DocumentDetailPage() {
       setIncrements({});
       // 用响应文档重建表单，避免与（可能被自增/服务端归一化修改的）服务端状态失同步。
       setValues(documentToValues(collection?.attributes ?? [], doc));
+      setEditing(false);
       queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId] });
       queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId, docId] });
     },
@@ -600,8 +693,14 @@ export function DocumentDetailPage() {
       backTo={documentsPath}
       backLabel="返回文档列表"
       actions={
-        collection.is_system || !writeable ? null : (
-          <DeleteButton onConfirm={() => remove.mutate()} loading={remove.isPending} />
+        collection.is_system || !writeable || editing ? null : (
+          <>
+            <Button size="sm" variant="outline" onClick={startEdit}>
+              <Pencil className="mr-2 h-4 w-4" />
+              编辑
+            </Button>
+            <DeleteButton onConfirm={() => remove.mutate()} loading={remove.isPending} />
+          </>
         )
       }
     >
@@ -614,49 +713,68 @@ export function DocumentDetailPage() {
       />
       <Card className="mt-6">
         <CardContent className="pt-6">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              save.mutate();
-            }}
-            className="space-y-4"
-          >
-            <DocumentFormFields
-              attributes={collection.attributes}
-              values={values}
-              onChange={(key, value) => setValues((prev) => ({ ...prev, [key]: value }))}
-            />
-            {collection.attributes.some((a) => a.type === "integer" || a.type === "float") && (
-              <div className="rounded-lg border p-4 space-y-3 max-w-lg">
-                <p className="text-sm font-medium">字段自增</p>
-                <p className="text-xs text-muted-foreground">
-                  对数值字段做原子增减，不覆盖当前值；保存后立即生效（增量必须为整数）。
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {collection.attributes
-                    .filter((a) => a.type === "integer" || a.type === "float")
-                    .map((attr) => (
-                      <div key={attr.key} className="space-y-2">
-                        <Label htmlFor={`inc-${attr.key}`}>{attr.key} Δ</Label>
-                        <Input
-                          id={`inc-${attr.key}`}
-                          value={increments[attr.key] ?? ""}
-                          onChange={(e) =>
-                            setIncrements((prev) => ({ ...prev, [attr.key]: e.target.value }))
-                          }
-                          placeholder="如 1、-1"
-                          type="number"
-                          step="any"
-                        />
-                      </div>
-                    ))}
+          {editing ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                save.mutate();
+              }}
+              className="space-y-4"
+            >
+              <DocumentFormFields
+                attributes={collection.attributes}
+                values={values}
+                onChange={(key, value) => setValues((prev) => ({ ...prev, [key]: value }))}
+              />
+              {collection.attributes.some((a) => a.type === "integer" || a.type === "float") && (
+                <div className="rounded-lg border p-4 space-y-3 max-w-lg">
+                  <p className="text-sm font-medium">字段自增</p>
+                  <p className="text-xs text-muted-foreground">
+                    对数值字段做原子增减，不覆盖当前值；保存后立即生效（增量必须为整数）。
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {collection.attributes
+                      .filter((a) => a.type === "integer" || a.type === "float")
+                      .map((attr) => (
+                        <div key={attr.key} className="space-y-2">
+                          <Label htmlFor={`inc-${attr.key}`}>{attr.key} Δ</Label>
+                          <Input
+                            id={`inc-${attr.key}`}
+                            value={increments[attr.key] ?? ""}
+                            onChange={(e) =>
+                              setIncrements((prev) => ({ ...prev, [attr.key]: e.target.value }))
+                            }
+                            placeholder="如 1、-1"
+                            type="number"
+                            step="any"
+                          />
+                        </div>
+                      ))}
+                  </div>
                 </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button type="submit" disabled={save.isPending}>
+                  {save.isPending ? "保存中..." : "保存"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={cancelEdit}
+                  disabled={save.isPending}
+                >
+                  取消
+                </Button>
               </div>
-            )}
-            <Button type="submit" disabled={!writeable || save.isPending}>
-              {save.isPending ? "保存中..." : "保存"}
-            </Button>
-          </form>
+            </form>
+          ) : (
+            <div className="space-y-4">
+              <DocumentReadonlyFields
+                attributes={collection.attributes}
+                values={displayValues}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
     </DetailPageWrapper>
