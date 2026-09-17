@@ -313,7 +313,7 @@ export function ApiKeyNewPage() {
               onChange={(e) => setManualScopes(e.target.value)}
               placeholder={"databases:blog.read\nmyapp:reports.read"}
               rows={4}
-              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs"
+              className="flex w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs text-sm transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
             />
             <p className="text-xs text-muted-foreground">
               追加词表之外的 scope，与上方勾选合并生效：支持资源级限定（如{" "}

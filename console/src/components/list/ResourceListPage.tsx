@@ -73,7 +73,7 @@ export function ResourceListPage<T extends { id: string }>({
       {title && <PageHeader title={title} description={description} />}
 
       <Card>
-        <CardHeader className="space-y-4">
+        <CardHeader className="space-y-4 border-b">
           <CardTitle>{cardTitle}</CardTitle>
           <ListToolbar
             searchValue={params.q}
@@ -88,7 +88,7 @@ export function ResourceListPage<T extends { id: string }>({
             actions={selectionActions?.(selection.selectedItems, selection.clear)}
           />
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {isLoading ? (
             <LoadingTable columns={columns.length + 2} />
           ) : pageItems.length === 0 ? (

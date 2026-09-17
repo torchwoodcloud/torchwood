@@ -1,68 +1,50 @@
 import { Link, useLocation } from "react-router-dom";
-import { ChevronRight, Home } from "lucide-react";
+import { ArrowLeft, type LucideIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { pageIconElement } from "@/lib/nav";
 
-const routeNames: Record<string, string> = {
-  "": "Dashboard",
-  projects: "Projects",
-  "api-keys": "API Keys",
-  users: "Users",
-  storage: "Storage",
-  databases: "Databases",
-  functions: "Functions",
-  analytics: "Analytics",
-  events: "Events",
-  retention: "Retention",
-  settings: "Settings",
-  new: "新建",
-  edit: "编辑",
-  collections: "Collections",
-  documents: "文档",
-  files: "Files",
-};
-
-function segmentLabel(segment: string, prevSegment?: string): string {
-  if (routeNames[segment]) return routeNames[segment];
-  if (prevSegment && segment.length > 8) return segment.slice(0, 8) + "…";
-  return segment;
+interface PageHeaderProps {
+  title: React.ReactNode;
+  description?: string;
+  icon?: LucideIcon;
+  actions?: React.ReactNode;
+  backTo?: string;
+  backLabel?: string;
 }
 
-export function PageHeader({ title, description, actions }: { title: React.ReactNode; description?: string; actions?: React.ReactNode }) {
-  const location = useLocation();
-  const segments = location.pathname.replace("/console", "").split("/").filter(Boolean);
+export function PageHeader({
+  title,
+  description,
+  icon: Icon,
+  actions,
+  backTo,
+  backLabel = "返回列表",
+}: PageHeaderProps) {
+  const { pathname } = useLocation();
+  const iconClass = "h-5 w-5 shrink-0 text-muted-foreground";
 
   return (
-    <div className="mb-8 space-y-2">
-      <nav className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-        <Link to="/console" className="flex items-center gap-1 hover:text-foreground">
-          <Home className="h-3.5 w-3.5" />
-          <span className="sr-only">Dashboard</span>
-        </Link>
-        {segments.map((segment, idx) => {
-          const path = "/console/" + segments.slice(0, idx + 1).join("/");
-          const isLast = idx === segments.length - 1;
-          const prev = idx > 0 ? segments[idx - 1] : undefined;
-          const label = segmentLabel(segment, prev);
-          return (
-            <div key={path} className="flex items-center gap-2">
-              <ChevronRight className="h-3.5 w-3.5" />
-              {isLast ? (
-                <span className="text-foreground font-medium">{label}</span>
-              ) : (
-                <Link to={path} className="hover:text-foreground">
-                  {label}
-                </Link>
-              )}
-            </div>
-          );
-        })}
-      </nav>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
-          {description && <p className="text-muted-foreground">{description}</p>}
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        {backTo && (
+          <Button variant="ghost" size="icon" asChild className="-ml-2 shrink-0">
+            <Link to={backTo} title={backLabel}>
+              <ArrowLeft className="h-4 w-4" />
+              <span className="sr-only">{backLabel}</span>
+            </Link>
+          </Button>
+        )}
+        {Icon ? <Icon className={iconClass} /> : pageIconElement(pathname, iconClass)}
+        <div className="min-w-0">
+          <h1 className="flex items-center gap-2 truncate text-xl font-semibold tracking-tight">
+            {title}
+          </h1>
+          {description && (
+            <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+          )}
         </div>
-        {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
       </div>
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }

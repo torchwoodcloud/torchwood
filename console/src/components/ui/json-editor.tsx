@@ -57,7 +57,7 @@ export function JsonEditor({
     <div className={className}>
       <div
         className={cn(
-          "relative overflow-hidden rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+          "relative overflow-hidden rounded-lg border border-input bg-background focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30",
           invalid && "border-destructive focus-within:ring-destructive"
         )}
       >

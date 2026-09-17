@@ -1,13 +1,12 @@
 import { Link } from "react-router-dom";
 import { useState } from "react";
-import { FormPage, DetailPage } from "@/components/FormPage";
-import { Card, CardContent } from "@/components/ui/card";
+import { PageCard } from "@/components/PageCard";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { Trash2 } from "lucide-react";
+import { SearchX, Trash2 } from "lucide-react";
 
 export function FormPageWrapper({
   title,
@@ -33,18 +32,14 @@ export function FormPageWrapper({
   children: React.ReactNode;
 }) {
   return (
-    <FormPage title={title} description={description} backTo={backTo} backLabel={backLabel}>
-      <Card>
-        <CardContent className="pt-6">
-          <form onSubmit={onSubmit} className={formClassName}>
-            {children}
-            <Button type="submit" disabled={loading || submitDisabled}>
-              {loading ? "保存中..." : submitLabel}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </FormPage>
+    <PageCard title={title} description={description} backTo={backTo} backLabel={backLabel}>
+      <form onSubmit={onSubmit} className={formClassName}>
+        {children}
+        <Button type="submit" disabled={loading || submitDisabled}>
+          {loading ? "保存中..." : submitLabel}
+        </Button>
+      </form>
+    </PageCard>
   );
 }
 
@@ -99,9 +94,16 @@ export function DetailPageWrapper({
   children: React.ReactNode;
 }) {
   return (
-    <DetailPage title={title} description={description} backTo={backTo} backLabel={backLabel} actions={actions}>
+    <PageCard
+      title={title}
+      description={description}
+      backTo={backTo}
+      backLabel={backLabel}
+      actions={actions}
+      contentClassName="border-t py-8 space-y-6"
+    >
       {children}
-    </DetailPage>
+    </PageCard>
   );
 }
 
@@ -111,27 +113,23 @@ export function DetailGrid({
   items: { label: string; value: React.ReactNode; mono?: boolean }[];
 }) {
   return (
-    <Card>
-      <CardContent className="pt-6">
-        <dl className="grid gap-4 sm:grid-cols-2">
-          {items.map((item) => (
-            <div key={item.label}>
-              <dt className="text-sm text-muted-foreground">{item.label}</dt>
-              <dd className={`mt-1 font-medium ${item.mono ? "font-mono text-sm break-all" : ""}`}>
-                {item.value}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </CardContent>
-    </Card>
+    <dl className="grid gap-4 sm:grid-cols-2">
+      {items.map((item) => (
+        <div key={item.label}>
+          <dt className="text-sm text-muted-foreground">{item.label}</dt>
+          <dd className={`mt-1 font-medium ${item.mono ? "font-mono text-sm break-all" : ""}`}>
+            {item.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
 export function DetailSkeleton() {
   return (
-    <div className="space-y-4">
-      <Skeleton className="h-8 w-48" />
+    <div className="space-y-4 rounded-xl bg-card p-6 ring-1 ring-foreground/10">
+      <Skeleton className="h-6 w-48" />
       <Skeleton className="h-40 w-full" />
     </div>
   );
@@ -139,8 +137,11 @@ export function DetailSkeleton() {
 
 export function NotFound({ backTo }: { backTo: string }) {
   return (
-    <div className="text-center py-12">
-      <p className="text-muted-foreground mb-4">资源不存在或已被删除</p>
+    <div className="flex min-h-[40vh] w-full flex-col items-center justify-center gap-4 rounded-lg border border-dashed p-8">
+      <div className="rounded-full bg-muted p-4">
+        <SearchX className="h-8 w-8 text-muted-foreground" />
+      </div>
+      <p className="text-sm font-medium">资源不存在或已被删除</p>
       <Button asChild variant="outline">
         <Link to={backTo}>返回列表</Link>
       </Button>

@@ -13,6 +13,7 @@ export function ProjectSelector() {
   });
 
   const selectedProjectId = projectId || "";
+  const activeProject = projects.find((p) => p.id === selectedProjectId);
 
   if (isLoading) {
     return <Skeleton className="h-9 w-full" />;
@@ -20,14 +21,23 @@ export function ProjectSelector() {
 
   if (projects.length === 0) {
     return (
-      <p className="text-xs text-muted-foreground px-1">暂无项目，请先在 Projects 中创建</p>
+      <p className="px-2 py-1.5 text-xs text-muted-foreground">
+        暂无项目，请先在 Projects 中创建
+      </p>
     );
   }
 
   return (
     <Select value={selectedProjectId} onValueChange={selectProject}>
-      <SelectTrigger className="w-full">
-        <SelectValue placeholder="选择项目" />
+      <SelectTrigger className="h-9 gap-2 border-sidebar-border bg-background px-2 text-sm font-medium focus:ring-1 focus:ring-ring/30">
+        <span className="flex min-w-0 items-center gap-2">
+          {activeProject && (
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-sidebar-accent text-[10px] font-semibold">
+              {activeProject.name.slice(0, 1).toUpperCase()}
+            </span>
+          )}
+          <SelectValue placeholder="选择项目" />
+        </span>
       </SelectTrigger>
       <SelectContent>
         {projects.map((p) => (

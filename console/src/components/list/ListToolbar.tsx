@@ -55,7 +55,7 @@ export function SelectionBar({ count, onClear, actions }: SelectionBarProps) {
   if (count === 0) return null;
 
   return (
-    <div className="flex items-center justify-between rounded-md border bg-muted/50 px-4 py-2">
+    <div className="flex items-center justify-between rounded-lg border bg-muted/50 px-4 py-2">
       <span className="text-sm font-medium">已选择 {count} 项</span>
       <div className="flex items-center gap-2">
         {actions}

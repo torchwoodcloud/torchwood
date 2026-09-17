@@ -114,7 +114,7 @@ export function Login() {
     <div className="flex min-h-screen items-center justify-center overflow-y-auto bg-muted/40 p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Torchwood Console</CardTitle>
+          <CardTitle className="text-xl">Torchwood Console</CardTitle>
           <CardDescription>
             {isSetup ? "首次部署：创建第一个管理员账户" : "使用管理员账户登录"}
           </CardDescription>

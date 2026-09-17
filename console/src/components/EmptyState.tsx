@@ -2,12 +2,16 @@ import { Inbox } from "lucide-react";
 
 export function EmptyState({ title, description }: { title: string; description?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="rounded-full bg-muted p-3 mb-3">
-        <Inbox className="h-6 w-6 text-muted-foreground" />
+    <div className="flex min-h-[40vh] w-full flex-col items-center justify-center gap-4 rounded-lg border border-dashed p-8">
+      <div className="rounded-full bg-muted p-4">
+        <Inbox className="h-8 w-8 text-muted-foreground" />
       </div>
-      <h3 className="text-lg font-medium">{title}</h3>
-      {description && <p className="text-sm text-muted-foreground mt-1">{description}</p>}
+      <div className="space-y-1 text-center">
+        <p className="text-sm font-medium">{title}</p>
+        {description && (
+          <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
+        )}
+      </div>
     </div>
   );
 }

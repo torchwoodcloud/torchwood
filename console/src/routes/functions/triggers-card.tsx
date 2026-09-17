@@ -260,7 +260,7 @@ export function FunctionTriggersCard({
                   <div className="space-y-1">
                     <Label className="w-16">订阅事件</Label>
                     <textarea
-                      className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs"
+                      className="flex min-h-20 w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs text-sm transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
                       value={eventsText}
                       onChange={(e) => setEventsText(e.target.value)}
                       placeholder={

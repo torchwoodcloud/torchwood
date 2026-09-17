@@ -1,64 +1,17 @@
-import { useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Fragment, useState } from "react";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { getCurrentAdmin } from "@/api/admins";
 import { ProjectBootstrap } from "@/components/ProjectBootstrap";
 import { ProjectSelector } from "@/components/ProjectSelector";
 import { PreferencesDialog } from "@/components/PreferencesDialog";
+import { TimeBadge } from "@/components/TimeBadge";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Key, Users, Database, HardDrive, LogOut, Menu, X, UsersRound, ShieldCheck, FolderKanban, FunctionSquare, BarChart3, Receipt, Coins, CreditCard, ScrollText, Trophy, Settings2, SlidersHorizontal, type LucideIcon } from "lucide-react";
-
-interface NavItem {
-  to: string;
-  label: string;
-  icon: LucideIcon;
-}
-
-const navSections: { title?: string; items: NavItem[] }[] = [
-  {
-    items: [{ to: "/console", label: "Dashboard", icon: LayoutDashboard }],
-  },
-  {
-    title: "Develop",
-    items: [
-      { to: "/console/api-keys", label: "API Keys", icon: Key },
-      { to: "/console/databases", label: "Databases", icon: Database },
-      { to: "/console/storage", label: "Storage", icon: HardDrive },
-      { to: "/console/functions", label: "Functions", icon: FunctionSquare },
-      // RuntimeVars：项目级运行时配置下发（集合/可见性/版本回滚），
-      // 与 API Keys 同为凭证相邻的开发者资源。
-      { to: "/console/runtime-vars", label: "Runtime Vars", icon: SlidersHorizontal },
-      // Analytics：与 Databases/Storage/Functions 并列的一等公民服务
-      // （docs/design/analytics.md §9，roadmap 独立一节）。
-      { to: "/console/analytics", label: "Analytics", icon: BarChart3 },
-    ],
-  },
-  {
-    title: "Auth",
-    items: [
-      { to: "/console/users", label: "Users", icon: Users },
-      { to: "/console/groups", label: "Groups", icon: UsersRound },
-    ],
-  },
-  {
-    title: "Economy",
-    items: [
-      { to: "/console/orders", label: "Orders", icon: Receipt },
-      { to: "/console/assets", label: "Assets", icon: Coins },
-      { to: "/console/subscriptions/plans", label: "Subscriptions", icon: CreditCard },
-      { to: "/console/leaderboards", label: "Leaderboards", icon: Trophy },
-    ],
-  },
-  {
-    title: "System",
-    items: [
-      { to: "/console/projects", label: "Projects", icon: FolderKanban },
-      { to: "/console/admins", label: "Admins", icon: ShieldCheck },
-      { to: "/console/audit-logs", label: "Audit Logs", icon: ScrollText },
-    ],
-  },
-];
+import { cn } from "@/lib/utils";
+import { breadcrumbsFor } from "@/lib/routeTitles";
+import { navSections } from "@/lib/nav";
+import { ChevronRight, ChevronsUpDown, LogOut, Menu, X } from "lucide-react";
 
 export function Layout() {
   const { logout } = useAuth();
@@ -81,11 +34,11 @@ export function Layout() {
   const closeMobile = () => setMobileOpen(false);
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen bg-sidebar">
       <ProjectBootstrap />
       <PreferencesDialog open={prefsOpen} onOpenChange={setPrefsOpen} current={me?.timezone} />
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-64 border-r bg-card flex-col">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
         <SidebarContent
           onNavigate={closeMobile}
           onLogout={handleLogout}
@@ -97,16 +50,17 @@ export function Layout() {
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       {/* Mobile sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 border-r bg-card flex-col transform transition-transform duration-200 md:hidden ${
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-200 md:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        )}
       >
         <SidebarContent
           onNavigate={closeMobile}
@@ -116,20 +70,58 @@ export function Layout() {
         />
       </aside>
 
-      <main className="flex-1 overflow-auto">
-        <div className="flex items-center justify-between border-b bg-card px-4 py-3 md:hidden">
-          <Link to="/console" className="text-lg font-bold tracking-tight">
-            Torchwood Console
-          </Link>
-          <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)}>
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="flex h-16 shrink-0 items-center gap-2 px-4 md:px-6">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="-ml-1 md:hidden"
+            onClick={() => setMobileOpen(true)}
+          >
             <Menu className="h-5 w-5" />
           </Button>
-        </div>
-        <div className="p-4 md:p-8">
-          <Outlet />
+          <TopbarBreadcrumb />
+          <div className="ml-auto flex items-center gap-2">
+            <TimeBadge />
+          </div>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 md:px-6">
+          <div className="min-h-[calc(100vh-5rem)] rounded-xl border bg-background p-4 shadow-sm md:p-6">
+            <Outlet />
+          </div>
         </div>
       </main>
     </div>
+  );
+}
+
+function TopbarBreadcrumb() {
+  const { pathname } = useLocation();
+  const crumbs = breadcrumbsFor(pathname);
+
+  return (
+    <nav className="flex min-w-0 items-center gap-1.5 text-sm">
+      {crumbs.map((crumb, idx) => {
+        const isLast = idx === crumbs.length - 1;
+        return (
+          <Fragment key={crumb.to}>
+            {idx > 0 && (
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+            )}
+            {isLast ? (
+              <span className="truncate font-medium">{crumb.label}</span>
+            ) : (
+              <Link
+                to={crumb.to}
+                className="hidden truncate text-muted-foreground transition-colors hover:text-foreground sm:inline"
+              >
+                {crumb.label}
+              </Link>
+            )}
+          </Fragment>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -144,62 +136,84 @@ function SidebarContent({
   email?: string;
   onOpenPrefs: () => void;
 }) {
+  const initial = (email ?? "?").slice(0, 1).toUpperCase();
+
   return (
     <>
-      <div className="flex items-center justify-between p-6 border-b">
-        <Link to="/console" className="text-xl font-bold tracking-tight">
-          Torchwood Console
-        </Link>
-        <Button variant="ghost" size="icon" className="md:hidden" onClick={onNavigate}>
+      <div className="flex items-center gap-2.5 px-4 py-4">
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-xs font-semibold text-sidebar-primary-foreground">
+          T
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-sm font-medium leading-tight">Torchwood</span>
+          <span className="truncate text-[11px] leading-tight text-muted-foreground">
+            Console
+          </span>
+        </span>
+        <Button variant="ghost" size="icon" className="-mr-1 md:hidden" onClick={onNavigate}>
           <X className="h-5 w-5" />
         </Button>
       </div>
-      <div className="px-6 pt-4 pb-4 border-b">
+      <div className="px-3 pb-2">
         <ProjectSelector />
       </div>
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-2">
         {navSections.map((section) => (
-          <div key={section.title ?? "main"} className="space-y-1">
+          <div key={section.title ?? "main"}>
             {section.title && (
-              <div className="px-3 pt-4 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
+              <div className="px-2 pb-1 text-xs font-medium text-muted-foreground">
                 {section.title}
               </div>
             )}
-            {section.items.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === "/console"}
-                onClick={onNavigate}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`
-                }
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </NavLink>
-            ))}
+            <div className="space-y-0.5">
+              {section.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === "/console"}
+                  onClick={onNavigate}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex h-8 items-center gap-2 rounded-lg px-2 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground"
+                    )
+                  }
+                >
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </NavLink>
+              ))}
+            </div>
           </div>
         ))}
       </nav>
-      <div className="p-4 border-t space-y-1">
-        <div className="flex items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground">
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-            {(email ?? "?").slice(0, 1).toUpperCase()}
+      <div className="space-y-0.5 border-t border-sidebar-border p-3">
+        <button
+          type="button"
+          onClick={onOpenPrefs}
+          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent"
+        >
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-medium">
+            {initial}
           </span>
-          <span className="truncate" title={email}>
-            {email ?? "…"}
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-sm font-medium leading-tight" title={email}>
+              {email ?? "…"}
+            </span>
+            <span className="truncate text-[11px] leading-tight text-muted-foreground">
+              偏好设置
+            </span>
           </span>
-        </div>
-        <Button variant="ghost" className="w-full justify-start gap-2" onClick={onOpenPrefs}>
-          <Settings2 className="h-4 w-4" />
-          偏好设置
-        </Button>
-        <Button variant="ghost" className="w-full justify-start gap-2" onClick={onLogout}>
+          <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start gap-2 text-muted-foreground"
+          onClick={onLogout}
+        >
           <LogOut className="h-4 w-4" />
           Logout
         </Button>

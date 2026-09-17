@@ -74,7 +74,7 @@ export function PermissionEditor({
           <select
             value={permType}
             onChange={(e) => setPermType(e.target.value)}
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            className="h-9 rounded-lg border border-input bg-background px-3 text-sm"
           >
             {PERM_TYPES.map((t) => (
               <option key={t} value={t}>{t}</option>
