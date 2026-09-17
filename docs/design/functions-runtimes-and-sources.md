@@ -9,12 +9,17 @@
 > server 进程内 fetch，定向独立 functions-packer 服务，§2 改写）→
 > **二期已实现**（2026-09-17，四阶段还原点 faf0de5 / f2c23d5 / 7fa08ff /
 > 450089b；真实 DB 迁移/往返全绿、docker 集成 11 用例容器内实跑全绿、
-> 带 DSN 全量回归 78 包零失败）**。
+> 带 DSN 全量回归 78 包零失败）→ **三期已实现**（2026-09-17，四阶段
+> 还原点 e21f20a / 2e7ead5 / 05229dc / c1ad0c9；docker 集成 14 用例
+> 容器内实跑全绿、带 DSN 全量回归 79 包零失败；Console 三入口 + 源
+> 徽章同批交付；实施修正一处：registry host 防护为名称级校验——
+> daemon pull 拨号点 guard 不可实施，残余面随 egress 原语后置，§3
+> 诚实口径）**。
 > Key Decisions 与 Open Questions 记录保留（D2/D6 按 packer 案修订）；
 > 交叉验证推翻项已全部收口：D3 一期落地验证、D2 owner 再裁决、OQ5 随
 > packer 案成立；后续各轮记录见文末各节。
-> 现状基线：`docs/developer/08-functions.md`（§3.1-§3.5 已含 Go 运行时 /
-> Runner 协议 / 验证 spawn 质量门 / git 部署源 / packer 运维）。
+> 现状基线：`docs/developer/08-functions.md`（§3.1-§3.6 已含 Go 运行时 /
+> Runner 协议 / 验证 spawn 质量门 / git 部署源 / packer 运维 / 镜像源）。
 > **v3 裁决边界修正（独立复核 A7）**：functions-v3.md Non-Goals 点名的
 > 「多机分发」经 owner 2026-09-17 裁决**显式推翻**（阶段四细胞模型）；
 > v3 其余 Non-Goals（WASM/isolate/Firecracker/K8s/每实例多进程等）
