@@ -2,16 +2,65 @@ package functions
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
+
+// TestDispatcherExecutor_BuildCarriesFullPayload 构建链载荷一期定稿（设计
+// §0/D14）：DispatcherExecutor 按 BuildSpec 全量组装 BuildRequest——
+// project_id/runtime/function_timeout_seconds/env/egress_untrusted/verify
+// 齐、zip_base64 内联通道不变（字节级往返一致）。
+func TestDispatcherExecutor_BuildCarriesFullPayload(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(raw, &body))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	cfg := &config.AppConfig{Functions: &config.Functions{
+		Dispatcher: &config.Functions_Dispatcher{Url: srv.URL},
+	}}
+	exec := NewDispatcherExecutor(cfg)
+	zipPath := filepath.Join(t.TempDir(), "code.zip")
+	zipBytes := []byte("PK\x03\x04-fake-code")
+	require.NoError(t, os.WriteFile(zipPath, zipBytes, 0o600))
+	err := exec.Build(context.Background(), domainfunctions.BuildSpec{
+		ProjectID:              "p1",
+		FunctionID:             "fn_1",
+		DeploymentID:           "dep_1",
+		ZipPath:                zipPath,
+		Runtime:                "go-1.26",
+		FunctionTimeoutSeconds: 30,
+		Env:                    map[string]string{"FOO": "bar"},
+		EgressUntrusted:        true,
+		Verify:                 true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "p1", body["project_id"], "project_id 必携（drain 项目语义，D14）")
+	require.Equal(t, "fn_1", body["function_id"])
+	require.Equal(t, "dep_1", body["deployment_id"])
+	require.Equal(t, "go-1.26", body["runtime"], "runtime 必携（D7 对账基准）")
+	require.Equal(t, float64(30), body["function_timeout_seconds"], "函数超时必携（旧池 drain 宽限）")
+	require.Equal(t, map[string]any{"FOO": "bar"}, body["env"], "函数 variables 必携（验证 spawn，阶段 3 消费）")
+	require.Equal(t, true, body["egress_untrusted"])
+	require.Equal(t, true, body["verify"])
+	require.Equal(t, base64.StdEncoding.EncodeToString(zipBytes), body["zip_base64"],
+		"zip base64 内联通道不变（字节级一致）")
+}
 
 // TestDispatcherExecutor_ExecuteCarriesConcurrencyAndExecutionID v3 透传链
 // 末端断言（docs/design/functions-v3.md §1.5）：domain Execution 的

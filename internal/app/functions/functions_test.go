@@ -16,6 +16,11 @@ type mockExecutor struct {
 	builds   int
 	buildErr error
 	removes  int
+	// builds 是 Build 载荷断言面：specs 收集每次 BuildSpec（构建链一期
+	// 定稿载荷，deployments 构建测试用）。
+	specs []domainfunctions.BuildSpec
+	// buildFn 非空时接管 Build 行为（ctx 形态/超时预算断言、可编程返回）。
+	buildFn func(ctx context.Context, spec domainfunctions.BuildSpec) error
 }
 
 func (m *mockExecutor) Execute(_ context.Context, exec domainfunctions.Execution) (*domainfunctions.ExecutionResult, error) {
@@ -23,8 +28,12 @@ func (m *mockExecutor) Execute(_ context.Context, exec domainfunctions.Execution
 	return m.result, m.err
 }
 
-func (m *mockExecutor) Build(_ context.Context, _, _, _ string) error {
+func (m *mockExecutor) Build(ctx context.Context, spec domainfunctions.BuildSpec) error {
+	m.specs = append(m.specs, spec)
 	m.builds++
+	if m.buildFn != nil {
+		return m.buildFn(ctx, spec)
+	}
 	return m.buildErr
 }
 

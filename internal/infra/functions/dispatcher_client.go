@@ -142,18 +142,30 @@ type dispatchExecuteResponse struct {
 	ResponseB64 string            `json:"response_b64,omitempty"`
 }
 
-// Build 将 zip 代码包经 dispatcher 构建为镜像（v2 runner 模板在 dispatcher
-// 侧应用；构建期不执行用户代码的不变量由模板层保持）。
-func (d *DispatcherExecutor) Build(ctx context.Context, functionID, deploymentID, zipPath string) error {
-	zip, err := os.ReadFile(zipPath)
+// Build 将 zip 代码包经 dispatcher 构建为镜像（runner 模板在 dispatcher
+// 侧应用；构建期不执行用户代码的不变量由模板层保持）。载荷按 BuildSpec
+// 全量组装（一期定稿，设计 §0/D14）：project_id/runtime/function_timeout_
+// seconds/env/egress_untrusted/verify 齐备——drain 精确化、D7 runtime 对账
+// 与阶段 3 验证 spawn 的通道自本端点贯通；zip base64 内联通道不变。
+func (d *DispatcherExecutor) Build(ctx context.Context, spec functions.BuildSpec) error {
+	zip, err := os.ReadFile(spec.ZipPath)
 	if err != nil {
 		return status.Errorf(codes.Internal, "read function code package: %v", err)
 	}
 	var out dispatchBuildResponse
 	err = d.do(ctx, "/v1/dispatch/builds", map[string]any{
-		"function_id":   functionID,
-		"deployment_id": deploymentID,
+		"project_id":    spec.ProjectID,
+		"function_id":   spec.FunctionID,
+		"deployment_id": spec.DeploymentID,
 		"zip_base64":    base64.StdEncoding.EncodeToString(zip),
+		"runtime":       spec.Runtime,
+		// 旧池 drain 宽限上限（drain ≤ 函数超时）：恒 0 = 不触发（历史行为）。
+		"function_timeout_seconds": spec.FunctionTimeoutSeconds,
+		// ——验证 spawn 载荷（阶段 3 消费；env 与执行链同源组装、无执行身份
+		// token，见 app 层 buildDeployment）——
+		"env":              spec.Env,
+		"egress_untrusted": spec.EgressUntrusted,
+		"verify":           spec.Verify,
 	}, &out, maxBuildLogBytes)
 	if err != nil {
 		return err

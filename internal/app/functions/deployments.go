@@ -16,6 +16,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// defaultBuildTimeout 是构建整体超时缺省值（functions.dispatcher.build_timeout
+// 空/非法时回落；对齐 worker 补构建原 workerRebuildTimeout=5m 口径）。
+const defaultBuildTimeout = 5 * time.Minute
+
 // maxDeploymentCodeBytes 是 zip 代码包上限（multipart 路径限流）。
 const maxDeploymentCodeBytes = 50 << 20 // 50 MiB
 
@@ -72,8 +76,9 @@ func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCo
 		return nil, fmt.Errorf("write code package: %w", err)
 	}
 
-	// 同步构建（MVP 定案：不在独立构建队列，请求内完成）。
-	if err := f.buildDeployment(ctx, dep, path); err != nil {
+	// 同步构建（MVP 定案：不在独立构建队列，请求内完成；构建 ctx 与请求
+	// ctx 解耦，见 buildDeployment）。
+	if err := f.buildDeployment(ctx, fn, dep, path); err != nil {
 		// 信号量满或状态写回失败：删除 deployment 行与本地 zip，避免残留 pending 行。
 		_ = f.repo.DeleteDeployment(ctx, cmd.ProjectID, cmd.FunctionID, dep.ID)
 		_ = removeZip(cmd.ProjectID, cmd.FunctionID, dep.ID)
@@ -86,7 +91,14 @@ func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCo
 // 信号量满仅返回 ResourceExhausted——是否清理 deployment 行与 zip 是调用方
 // 的决策（CreateDeployment 清理本次刚建的 pending 行；worker 补构建路径
 // 保留既有 deployment，靠队列重试在信号量释放后重建）。
-func (f *Functions) buildDeployment(ctx context.Context, dep *domainfunctions.Deployment, path string) error {
+//
+// fn 是部署所属函数记录（BuildSpec 的 runtime/timeout/variables/egress
+// 分类来源）。ctx 解耦（D11）：信号量获取之后的全部动作（building 落库 →
+// executor.Build → 终态落库 → ActivateDeployment）运行在
+// context.WithoutCancel + build_timeout 封顶的独立预算上——客户端断开后
+// 构建继续、状态照常落库，客户端以 deployment.status 轮询兜底；孤儿构建
+// 的信号量占用有界（build_timeout 到点释放，对抗审查 A6 接受）。
+func (f *Functions) buildDeployment(ctx context.Context, fn *domainfunctions.Function, dep *domainfunctions.Deployment, path string) error {
 	ok, release, err := f.getBuildSemaphore().TryAcquire(ctx)
 	if err != nil {
 		return status.Errorf(codes.Internal, "acquire build semaphore: %v", err)
@@ -96,21 +108,28 @@ func (f *Functions) buildDeployment(ctx context.Context, dep *domainfunctions.De
 	}
 	defer release()
 
+	buildCtx, cancelBuild := context.WithTimeout(context.WithoutCancel(ctx), f.buildTimeout())
+	defer cancelBuild()
+
 	dep.Status = domainfunctions.DeploymentStatusBuilding
 	dep.UpdatedAt = time.Now()
-	if err := f.repo.UpdateDeployment(ctx, dep); err != nil {
+	if err := f.repo.UpdateDeployment(buildCtx, dep); err != nil {
 		return err
 	}
 
-	err = f.executor.Build(ctx, dep.FunctionID, dep.ID, path)
+	spec, err := f.buildSpec(buildCtx, fn, dep, path)
+	if err != nil {
+		return err
+	}
+	err = f.executor.Build(buildCtx, spec)
 	dep.UpdatedAt = time.Now()
 	if err != nil {
 		dep.Status = domainfunctions.DeploymentStatusFailed
 		dep.Error = truncate(err.Error(), maxOutputBytes)
-		_ = f.repo.UpdateDeployment(ctx, dep)
+		_ = f.repo.UpdateDeployment(buildCtx, dep)
 		// 清理本地 zip 与可能残留的镜像（幂等）。
 		_ = removeZip(dep.ProjectID, dep.FunctionID, dep.ID)
-		_ = f.executor.RemoveImage(ctx, dep.FunctionID, dep.ID)
+		_ = f.executor.RemoveImage(buildCtx, dep.FunctionID, dep.ID)
 		return nil
 	}
 	dep.Status = domainfunctions.DeploymentStatusReady
@@ -118,12 +137,67 @@ func (f *Functions) buildDeployment(ctx context.Context, dep *domainfunctions.De
 	// ready 转移走 ActivateDeployment：同一事务内维护
 	// functions.latest_ready_deployment_id（热路径清账，P0.5——
 	// selectDeployment 优先读指针，消灭 ListDeployments 全量拉取）。
-	if err := f.repo.ActivateDeployment(ctx, dep); err != nil {
+	if err := f.repo.ActivateDeployment(buildCtx, dep); err != nil {
 		return err
 	}
 	// 缓存失效：latest 指针投影随函数记录缓存（P0.5）。
 	f.cache.invalidate(dep.ProjectID, dep.FunctionID)
 	return nil
+}
+
+// buildSpec 组装 BuildSpec（构建链载荷一期定稿，设计 §0）：
+//   - Runtime = fn.runtime 原值（daemon 侧 D7 对账基准）；
+//   - FunctionTimeoutSeconds = fn.timeout_seconds（旧池 drain 宽限上限，
+//     D14：载荷补齐后 drain 真正生效）；
+//   - Env 与执行链 env 组装同源（sanitizeEnv 剔除非法键 + TW_API_BASE_URL
+//     注入），不含 TW_EXECUTION_TOKEN——构建/验证期无执行身份（无常驻
+//     凭证注入，验证 spawn 仅做 health 探针）；v2 语义下 TW_DATA 走请求体
+//     通道，本就不在 env；
+//   - EgressUntrusted 与执行路径同一分类规则（client_callable 或存在
+//     http/cron 触发器 = 不可信，对抗审查 A1：验证实例与执行同网）；
+//   - Verify 取 config functions.dispatcher.verify_build 的 presence 解析
+//     （未配置 = 默认开启，显式 false 关闭，D10）。
+func (f *Functions) buildSpec(ctx context.Context, fn *domainfunctions.Function, dep *domainfunctions.Deployment, zipPath string) (domainfunctions.BuildSpec, error) {
+	vars, err := f.getCachedVariables(ctx, dep.ProjectID, dep.FunctionID)
+	if err != nil {
+		return domainfunctions.BuildSpec{}, err
+	}
+	env := sanitizeEnv(vars)
+	if apiBaseURL := f.executionAPIBaseURL(); apiBaseURL != "" {
+		env[twAPIBaseURLEnv] = apiBaseURL
+	}
+	return domainfunctions.BuildSpec{
+		ProjectID:              dep.ProjectID,
+		FunctionID:             dep.FunctionID,
+		DeploymentID:           dep.ID,
+		ZipPath:                zipPath,
+		Runtime:                fn.Runtime,
+		FunctionTimeoutSeconds: int64(fn.TimeoutSeconds),
+		Env:                    env,
+		EgressUntrusted:        fn.ClientCallable || f.hasTriggersCached(ctx, dep.ProjectID, dep.FunctionID),
+		Verify:                 f.verifyBuildEnabled(),
+	}, nil
+}
+
+// buildTimeout 解析 functions.dispatcher.build_timeout；空/非法回落默认 5m
+// （parseDurationValue 同款风格，对齐 clientinvoke 的时长配置解析）。
+func (f *Functions) buildTimeout() time.Duration {
+	if f.cfg == nil {
+		return defaultBuildTimeout
+	}
+	return parseDurationValue(f.cfg.GetFunctions().GetDispatcher().GetBuildTimeout(), defaultBuildTimeout)
+}
+
+// verifyBuildEnabled 解析 functions.dispatcher.verify_build（optional bool
+// presence 语义，D10「默认 true 可关」）：dispatcher 段未配置、字段未设置
+// → 默认开启；显式 false → 关闭。先例：security.rate_limit.enabled
+// （internal/api/interceptor/ratelimit.go 同款 presence 归一）。
+func (f *Functions) verifyBuildEnabled() bool {
+	if f.cfg == nil {
+		return true
+	}
+	d := f.cfg.GetFunctions().GetDispatcher()
+	return d == nil || d.VerifyBuild == nil || d.GetVerifyBuild()
 }
 
 func (f *Functions) ListDeployments(ctx context.Context, projectID, functionID string) ([]domainfunctions.Deployment, error) {

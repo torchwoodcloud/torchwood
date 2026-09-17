@@ -112,8 +112,10 @@ func (s *dispatchServer) handleBuild(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	if req.FunctionID == "" || req.DeploymentID == "" || req.ZipBase64 == "" {
-		writeError(w, status.Error(codes.InvalidArgument, "function_id/deployment_id/zip_base64 are required"))
+	// project_id 必填（D14 顺手修复的另一半）：drain 走项目语义（旧池扫描
+	// 按 (project, function) 收窄），镜像名全局唯一不等于池键可省 project。
+	if req.ProjectID == "" || req.FunctionID == "" || req.DeploymentID == "" || req.ZipBase64 == "" {
+		writeError(w, status.Error(codes.InvalidArgument, "project_id/function_id/deployment_id/zip_base64 are required"))
 		return
 	}
 	zip, err := base64.StdEncoding.DecodeString(req.ZipBase64)
@@ -125,11 +127,23 @@ func (s *dispatchServer) handleBuild(w http.ResponseWriter, r *http.Request) {
 		writeError(w, status.Errorf(codes.InvalidArgument, "zip exceeds %d bytes", maxBuildBodyBytes))
 		return
 	}
-	if err := s.daemon.BuildImage(r.Context(), req.FunctionID, req.DeploymentID, zip); err != nil {
+	if err := s.daemon.BuildImage(r.Context(), BuildImageOptions{
+		ProjectID:              req.ProjectID,
+		FunctionID:             req.FunctionID,
+		DeploymentID:           req.DeploymentID,
+		Zip:                    zip,
+		Runtime:                req.Runtime,
+		FunctionTimeoutSeconds: req.FunctionTimeoutSeconds,
+		Env:                    req.Env,
+		EgressUntrusted:        req.EgressUntrusted,
+		Verify:                 req.Verify,
+	}); err != nil {
 		writeJSON(w, http.StatusOK, BuildResponse{Error: errorMessage(err)})
 		return
 	}
 	// 部署更新：旧 deployment 池 drain（宽限上限 ≤ 函数超时，设计 §6）。
+	// D14 顺手修复：FunctionTimeoutSeconds 曾因 server 侧恒不携带而恒 0、
+	// drain 从不触发；Build 载荷补齐后按函数超时真正生效。
 	if req.FunctionTimeoutSeconds > 0 {
 		s.pool.DrainForDeployment(r.Context(), req.ProjectID, req.FunctionID, req.DeploymentID,
 			time.Duration(req.FunctionTimeoutSeconds)*time.Second)
@@ -143,8 +157,8 @@ func (s *dispatchServer) handleExecute(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	// DrainForDeployment 的 project 语义由执行请求路径携带；build 请求无
-	// project 字段（镜像名全局唯一），drain 按函数号全池扫描兜底。
+	// DrainForDeployment 的 project 语义由执行/构建请求一并携带（BuildRequest
+	// 一期定稿含 project_id，D14）——drain 按 (project, function) 精确收窄。
 	resp, err := s.pool.Dispatch(r.Context(), req)
 	if err != nil {
 		writeError(w, err)

@@ -350,7 +350,7 @@ type acceptanceExecutor struct {
 	called    int
 }
 
-func (m *acceptanceExecutor) Build(context.Context, string, string, string) error { return nil }
+func (m *acceptanceExecutor) Build(context.Context, domainfunctions.BuildSpec) error { return nil }
 func (m *acceptanceExecutor) Execute(_ context.Context, e domainfunctions.Execution) (*domainfunctions.ExecutionResult, error) {
 	m.called++
 	if m.onExecute != nil {

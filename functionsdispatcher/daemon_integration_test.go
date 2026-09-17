@@ -165,7 +165,10 @@ func TestIntegration_DispatcherBuildSpawnDispatch(t *testing.T) {
 	defer cancel()
 
 	zip := makeEntryZip(t, "index.js", "module.exports.main = (data) => ({ got: data.n, runner: true });")
-	require.NoError(t, d.BuildImage(ctx, "fnit", "depit", zip))
+	require.NoError(t, d.BuildImage(ctx, BuildImageOptions{
+		ProjectID: "dispatchit", FunctionID: "fnit", DeploymentID: "depit",
+		Zip: zip, Runtime: "node-18.0",
+	}))
 
 	req := ExecuteRequest{
 		// ProjectID 须满足 ^[a-z][a-z0-9]{0,27}$（diag 诊断段曾实证：连字符
@@ -251,7 +254,7 @@ func TestIntegration_DispatcherBuild_PythonRejected(t *testing.T) {
 	defer cancel()
 
 	zip := makeEntryZip(t, "main.py", "def main(data):\n    return {}\n")
-	err := d.BuildImage(ctx, "fnpy", "deppy", zip)
+	err := d.BuildImage(ctx, BuildImageOptions{FunctionID: "fnpy", DeploymentID: "deppy", Zip: zip})
 	require.Error(t, err, "python on v2 must fail explicitly at build time")
 	t.Logf("python build error (expected): %v", err)
 }
@@ -323,7 +326,9 @@ func TestIntegration_DispatcherBuild_WithDependencies(t *testing.T) {
 		"package.json":      dispatcherDepsPackageJSON,
 		"package-lock.json": dispatcherDepsLockfile,
 	})
-	require.NoError(t, d.BuildImage(ctx, fnID, depID, zip),
+	require.NoError(t, d.BuildImage(ctx, BuildImageOptions{
+		FunctionID: fnID, DeploymentID: depID, Zip: zip, Runtime: "node-18.0",
+	}),
 		"带依赖 + lockfile 的 dispatcher 构建必须成功（平台代装）")
 
 	history, err := cli.ImageHistory(ctx, imageRef)
@@ -388,7 +393,9 @@ func TestIntegration_ImageReadableAsTemplateUser(t *testing.T) {
 		"index.js":    "const { util } = require('./lib/util');\nmodule.exports.main = () => ({ u: util });\n",
 		"lib/util.js": "module.exports = { util: 42 };\n",
 	})
-	require.NoError(t, d.BuildImage(ctx, fnID, depID, zip))
+	require.NoError(t, d.BuildImage(ctx, BuildImageOptions{
+		FunctionID: fnID, DeploymentID: depID, Zip: zip, Runtime: "node-18.0",
+	}))
 
 	tag := fmt.Sprintf("%d", time.Now().UnixNano())
 

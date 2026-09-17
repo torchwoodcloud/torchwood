@@ -496,7 +496,7 @@ type functionsRecordingExecutor struct {
 	builds   int
 }
 
-func (e *functionsRecordingExecutor) Build(ctx context.Context, _, _, _ string) error {
+func (e *functionsRecordingExecutor) Build(ctx context.Context, _ domainfunctions.BuildSpec) error {
 	e.buildCtx = ctx
 	e.builds++
 	return nil

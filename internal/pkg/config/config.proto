@@ -197,11 +197,12 @@ message Functions {
     // 部署构建整体超时（如 "5m"；默认 5m，对齐 worker 补构建）。构建 ctx
     // 与客户端断开解耦（WithoutCancel），由该值封顶；Go 冷构建（基础镜像
     // 拉取数百 MB + go mod download + 编译）在全新环境可逼近该默认值，
-    // 必要时按 runtime 分档调大。一期仅落 schema（阶段 2 消费）。
+    // 必要时按 runtime 分档调大。空/非法值回落默认。
     string build_timeout = 10;
     // 部署后验证 spawn（build 成功后起池外实例轮询 /_tw/health 的质量门；
-    // Go 强制、node 同开，默认 true 可关）。一期仅落 schema（阶段 2 消费）。
-    bool verify_build = 11;
+    // Go 强制、node 同开）。optional presence 语义：未配置 = 默认开启，
+    // 显式 false = 关闭（先例：security.rate_limit.enabled）。
+    optional bool verify_build = 11;
   }
   // executor（字段号 1）已删除：v1 docker 执行器（每请求一容器、进程内
   // docker.sock）已移除，函数执行统一经 functions-dispatcher 分发。

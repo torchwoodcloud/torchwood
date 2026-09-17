@@ -94,6 +94,38 @@ type ExecutionResult struct {
 	DurationMS int64
 }
 
+// BuildSpec 是构建链载荷（Go 一期定稿，设计
+// docs/design/functions-runtimes-and-sources.md §0「构建链载荷与接口定稿」
+// ——四期纪律①以此为基线，多机路由/广播演化收敛在适配器内部，不再改
+// Build 签名）。server/worker 经此把部署上下文全量携带到执行器，dispatcher
+// 据此做 runtime 一致性对账（D7）、旧池 drain 精确化（D14）与部署后验证
+// spawn（D10）。
+type BuildSpec struct {
+	ProjectID    string
+	FunctionID   string
+	DeploymentID string
+	// ZipPath 是 zip 源的本地路径（server/worker 共享盘，单机假设）。
+	ZipPath string
+	// Runtime 是 fn.runtime 原值——D7 一致性校验的比对基准（执行器/daemon
+	// 侧把 zip 探测结果与其对账，不一致 InvalidArgument；空值跳过对账）。
+	Runtime string
+	// FunctionTimeoutSeconds 是函数超时（fn.timeout_seconds 原值）：部署
+	// 更新时旧池 drain 的宽限上限（drain ≤ 函数超时，设计 §6；零值 = 不触发
+	// drain——历史行为）。
+	FunctionTimeoutSeconds int64
+	// Env 是验证 spawn 携带的函数 variables（与执行链 env 组装同源：经
+	// sanitizeEnv 剔除非法键 + 注入 TW_API_BASE_URL；不含 TW_EXECUTION_TOKEN
+	// ——构建/验证期无执行身份）。仅 verify 消费。
+	Env map[string]string
+	// EgressUntrusted 是 egress 分类结果（与 Execution.EgressUntrusted 同
+	// 语义）：untrusted 函数的验证实例挂 internal 变体网络（对抗审查 A1：
+	// 否则部署期给不可信镜像一跳出网窗口，执行期 egress 约束被部署期旁路）。
+	EgressUntrusted bool
+	// Verify 是 config functions.dispatcher.verify_build 的解析值（默认
+	// true）：构建成功后 spawn 池外验证实例做 /_tw/health 探针（D10）。
+	Verify bool
+}
+
 // Executor is the function runtime port.
 //
 // 事务边界（redesign §4.8 Phase 2 形态乙，阶段③-b 定稿）：函数代码运行在
@@ -102,8 +134,10 @@ type ExecutionResult struct {
 // （execute-tx）RPC 提供（函数经 API/SDK 调用即可，批内事件序 = op 序）。
 // 不做跨进程事务魔法（两阶段/补偿协调器不在 POC 范围）。
 type Executor interface {
-	// Build 将 zip 代码包构建为镜像（解压校验 → 生成 Dockerfile → docker build）。
-	Build(ctx context.Context, functionID, deploymentID, zipPath string) error
+	// Build 将 zip 代码包构建为镜像（解压校验 → runtime 对账 → 生成
+	// Dockerfile → docker build）；构建上下文全量随 BuildSpec 携带（一期
+	// 定稿形态，见 BuildSpec 注释）。
+	Build(ctx context.Context, spec BuildSpec) error
 	Execute(ctx context.Context, exec Execution) (*ExecutionResult, error)
 	// RemoveImage 删除构建产物镜像（幂等，失败由调用方记日志）。
 	RemoveImage(ctx context.Context, functionID, deploymentID string) error

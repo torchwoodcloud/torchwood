@@ -80,15 +80,29 @@ const (
 
 // BuildRequest 是 POST /v1/dispatch/builds 入参：zip 字节内联（base64）——
 // server/worker 与 dispatcher 无共享文件系统假设（compose 拓扑下各自容器
-// /tmp 独立），构建是低频管理操作，内网传输 ≤50MiB 可接受。
+// /tmp 独立），构建是低频管理操作，内网传输 ≤50MiB 可接受。字段一期定稿
+// （设计 §0「构建链载荷与接口定稿」/D14）：project_id 使 drain 走项目语义、
+// runtime 供 daemon 在 DockerfileFor 前做探测结果对账（D7）、
+// function_timeout_seconds 是旧池 drain 宽限上限（恒 0 = 不触发，历史行为）、
+// env/egress_untrusted/verify 供部署后验证 spawn（阶段 3 消费）。
 type BuildRequest struct {
 	ProjectID    string `json:"project_id"`
 	FunctionID   string `json:"function_id"`
 	DeploymentID string `json:"deployment_id"`
 	ZipBase64    string `json:"zip_base64"`
+	// Runtime 是 fn.runtime 原值（D7 对账基准；空 = 跳过对账——兼容历史调用方）。
+	Runtime string `json:"runtime,omitempty"`
 	// FunctionTimeoutSeconds 用于部署更新时旧池 drain 的宽限上限
 	// （drain ≤ 函数超时，设计 §6）。
 	FunctionTimeoutSeconds int64 `json:"function_timeout_seconds,omitempty"`
+	// Env 是验证 spawn 携带的函数 variables（仅 verify 消费；阶段 3 起用）。
+	Env map[string]string `json:"env,omitempty"`
+	// EgressUntrusted：untrusted 函数的验证实例挂 internal 变体网络（对抗
+	// 审查 A1）。
+	EgressUntrusted bool `json:"egress_untrusted,omitempty"`
+	// Verify：构建成功后 spawn 池外验证实例做 /_tw/health 探针（D10；
+	// daemon 侧阶段 3 实现，本字段先透传）。
+	Verify bool `json:"verify,omitempty"`
 }
 
 // BuildResponse 是 builds 出参；Error 非空 = 构建失败（含日志尾部）。

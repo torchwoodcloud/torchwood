@@ -34,6 +34,8 @@ type fakeDaemon struct {
 	networkFlags map[string]bool
 	// lastNetwork 记录最近一次 SpawnInstance 收到的网络名。
 	lastNetwork string
+	// lastBuild 记录最近一次 BuildImage 收到的完整入参（构建链载荷断言用）。
+	lastBuild BuildImageOptions
 }
 
 func newFakeDaemon() *fakeDaemon {
@@ -93,10 +95,12 @@ func (d *fakeDaemon) RemoveInstance(_ context.Context, containerID string) error
 	return nil
 }
 
-func (d *fakeDaemon) BuildImage(_ context.Context, functionID, deploymentID string, _ []byte) error {
+func (d *fakeDaemon) BuildImage(_ context.Context, opts BuildImageOptions) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.builtImages = append(d.builtImages, functionID+"-"+deploymentID)
+	d.builtImages = append(d.builtImages, opts.FunctionID+"-"+opts.DeploymentID)
+	// 全载荷记录（构建链一期定稿：handleBuild → daemon 传参断言用）。
+	d.lastBuild = opts
 	return nil
 }
 

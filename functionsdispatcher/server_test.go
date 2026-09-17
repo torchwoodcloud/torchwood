@@ -2,11 +2,13 @@ package functionsdispatcher
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -82,6 +84,73 @@ func TestServer_Build(t *testing.T) {
 		ProjectID: "p1", FunctionID: "fn1", DeploymentID: "dep1", ZipBase64: "!!!",
 	})
 	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// TestServer_BuildCarriesOptionsToDaemon 构建链载荷一期定稿（D14/D7/D10）：
+// handleBuild 把 BuildRequest 全量字段传入 daemon（fake 全字段断言）。
+func TestServer_BuildCarriesOptionsToDaemon(t *testing.T) {
+	srv, d, _ := newTestServer(t, "")
+	zipBytes := []byte("PK\x03\x04-fake")
+	rec := postJSON(t, srv, "/v1/dispatch/builds", "", BuildRequest{
+		ProjectID:              "p1",
+		FunctionID:             "fn1",
+		DeploymentID:           "dep1",
+		ZipBase64:              base64.StdEncoding.EncodeToString(zipBytes),
+		Runtime:                "go-1.26",
+		FunctionTimeoutSeconds: 30,
+		Env:                    map[string]string{"FOO": "bar"},
+		EgressUntrusted:        true,
+		Verify:                 true,
+	})
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, d.builtImages, 1)
+	opts := d.lastBuild
+	require.Equal(t, "p1", opts.ProjectID)
+	require.Equal(t, "fn1", opts.FunctionID)
+	require.Equal(t, "dep1", opts.DeploymentID)
+	require.Equal(t, zipBytes, opts.Zip, "zip 须为 base64 解码后的原字节")
+	require.Equal(t, "go-1.26", opts.Runtime)
+	require.Equal(t, int64(30), opts.FunctionTimeoutSeconds)
+	require.Equal(t, map[string]string{"FOO": "bar"}, opts.Env)
+	require.True(t, opts.EgressUntrusted)
+	require.True(t, opts.Verify)
+
+	// project_id 缺失 → 400（D14：drain 走项目语义，project 必填）。
+	rec = postJSON(t, srv, "/v1/dispatch/builds", "", BuildRequest{
+		FunctionID: "fn1", DeploymentID: "dep1",
+		ZipBase64: base64.StdEncoding.EncodeToString(zipBytes),
+	})
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// TestServer_BuildTriggersDrain D14 顺手修复：FunctionTimeoutSeconds 曾因
+// server 侧恒不携带而恒 0、drain 从不触发；载荷补齐后旧池 drain 真正生效
+// （构建成功 + function_timeout_seconds>0 → 旧 deployment 的 idle 实例立即
+// 回收，新 deployment 实例保留）。
+func TestServer_BuildTriggersDrain(t *testing.T) {
+	srv, d, pool := newTestServer(t, "")
+	ctx := context.Background()
+	ref := FunctionRef{ProjectID: "p1", FunctionID: "fn1"}
+	now := time.Now()
+	lease := now.Add(time.Minute).UnixMilli()
+	require.NoError(t, pool.registry.Save(ctx, ref, InstanceRecord{InstanceID: "old-idle", ContainerID: "old-idle",
+		IP: "10.9.0.1", DeploymentID: "dep-old", SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.UnixMilli(), LeaseUntilMS: lease}))
+	d.spawned["old-idle"], d.running["old-idle"] = "10.9.0.1", true
+
+	rec := postJSON(t, srv, "/v1/dispatch/builds", "", BuildRequest{
+		ProjectID:              "p1",
+		FunctionID:             "fn1",
+		DeploymentID:           "dep-new",
+		ZipBase64:              base64.StdEncoding.EncodeToString([]byte("PK\x03\x04-fake")),
+		FunctionTimeoutSeconds: 1,
+	})
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	// idle 旧实例在 drain 同步路径回收；同 deployment/其他函数实例不受影响。
+	records, err := pool.registry.List(ctx, ref)
+	require.NoError(t, err)
+	require.Empty(t, records, "旧 deployment 的 idle 实例必须被 drain 回收")
+	require.Contains(t, d.stopped, "old-idle")
 }
 
 func TestServer_RemoveImage(t *testing.T) {

@@ -32,8 +32,6 @@ const (
 	// （P2 Q7 保留分级）：48h ≥ 2× 最长限频窗口（day=24h），保证限频 DB 降级
 	// 路径在最长窗口内的计数行不被 prune 裁掉（少计超发，设计 §5 交互修正）。
 	pruneTriggerRetention = 48 * time.Hour
-	// workerRebuildTimeout 是 worker 补构建的最长耗时（防挂死的 daemon 卡住消费）。
-	workerRebuildTimeout = 5 * time.Minute
 )
 
 // 执行身份 env（P0）：注入容器的是 token 原值与 Server API 可达地址。token
@@ -417,18 +415,18 @@ func (f *Functions) ProcessExecution(ctx context.Context, msg queueMessage) erro
 		return err
 	}
 
-	// deployment 非 ready 先补构建（5 分钟超时，防挂死的 daemon 卡住消费）。
-	// 构建失败（含信号量满）按可重试处理：归还 queued 并返回错误，由 worker
-	// requeue 在退避后重试；重试超限走 failPayload 兜底。
+	// deployment 非 ready 先补构建：构建 ctx 解耦与超时预算统一收敛在
+	// buildDeployment（WithoutCancel + functions.dispatcher.build_timeout，
+	// 默认 5m = 原 workerRebuildTimeout 口径；worker 本就是后台 ctx，行为
+	// 不变，config 调大后补构建同享更长预算）。构建失败（含信号量满）按
+	// 可重试处理：归还 queued 并返回错误，由 worker requeue 在退避后重试；
+	// 重试超限走 failPayload 兜底。
 	if dep.Status != domainfunctions.DeploymentStatusReady {
 		if err := f.repo.UpdateExecution(ctx, rec); err != nil {
 			release()
 			return err
 		}
-		buildCtx, cancel := context.WithTimeout(ctx, workerRebuildTimeout)
-		buildErr := f.buildDeployment(buildCtx, dep, zipPath(msg.ProjectID, msg.FunctionID, dep.ID))
-		cancel()
-		if buildErr != nil {
+		if buildErr := f.buildDeployment(ctx, fn, dep, zipPath(msg.ProjectID, msg.FunctionID, dep.ID)); buildErr != nil {
 			release()
 			return buildErr
 		}

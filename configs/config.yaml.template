@@ -175,6 +175,16 @@ functions:
     # 超时达到该阈值即杀实例重建，防僵尸负载；默认 5）。
     # env: TORCHWOOD_FUNCTIONS_DISPATCHER_TIMEOUT_BUDGET
     timeout_budget: 5
+    # 部署构建整体超时（构建 ctx 与客户端断开解耦，由该值封顶；空/非法
+    # 回落 5m）。Go 冷构建（首次拉取 golang 基础镜像数百 MB + go mod
+    # download + 编译）在全新环境可逼近默认值，必要时调大——验证 spawn 的
+    # boot_timeout（60s）预算嵌套其内（构建 + 验证共享一个上限）。
+    # env: TORCHWOOD_FUNCTIONS_DISPATCHER_BUILD_TIMEOUT
+    build_timeout: "5m"
+    # 部署后验证 spawn（build 成功后起池外实例轮询 /_tw/health 的质量门；
+    # Go 强制、node 同开）。未配置 = 默认开启；显式 false = 关闭。
+    # env: TORCHWOOD_FUNCTIONS_DISPATCHER_VERIFY_BUILD
+    verify_build: true
   trigger:
     # P1 触发器模块：HTTP 触发器公开端点（/f/{project}/{token}）的 per-IP
     # 固定窗口限频（次/分钟，默认 3000）。独立更高默认：微信等回调出口 IP

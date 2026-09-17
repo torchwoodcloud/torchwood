@@ -21,6 +21,7 @@ import (
 	"github.com/docker/docker/client"
 	infrafunctions "github.com/torchwoodcloud/torchwood/internal/infra/functions"
 	"github.com/torchwoodcloud/torchwood/internal/infra/functions/runner"
+	"github.com/torchwoodcloud/torchwood/internal/infra/functions/runner/gorunner"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -54,11 +55,35 @@ type Daemon interface {
 	StopInstance(ctx context.Context, containerID string, timeout time.Duration) error
 	// RemoveInstance 强制删除容器（幂等）。
 	RemoveInstance(ctx context.Context, containerID string) error
-	// BuildImage 以 v2 runner 模板构建镜像（zip 字节内联；构建期不执行用户
-	// 代码的不变量由模板层保持——runner 仅被 COPY）。
-	BuildImage(ctx context.Context, functionID, deploymentID string, zip []byte) error
+	// BuildImage 以 runner 模板构建镜像（zip 字节内联；构建期不执行用户
+	// 代码的不变量由模板层保持——runner 仅被 COPY/编译）。构建链载荷一期
+	// 定稿形态（设计 §0），runtime 对账与 go bootstrap 生成在实现内完成。
+	BuildImage(ctx context.Context, opts BuildImageOptions) error
 	// RemoveImage 删除镜像（幂等）。
 	RemoveImage(ctx context.Context, functionID, deploymentID string) error
+}
+
+// BuildImageOptions 是 BuildImage 的入参（设计 §0 定稿形态）：构建链载荷
+// 全量（zip + 上下文字段），由 handleBuild 从 BuildRequest 组装。
+type BuildImageOptions struct {
+	ProjectID    string
+	FunctionID   string
+	DeploymentID string
+	// Zip 是 zip 字节（base64 解码后；dispatcher 内网 API 的传输形态）。
+	Zip []byte
+	// Runtime 是 fn.runtime 原值：与 zip 探测结果对账（D7），不一致
+	// InvalidArgument；空 = 跳过对账（兼容历史调用方）。
+	Runtime string
+	// FunctionTimeoutSeconds 是旧池 drain 宽限上限（由 handleBuild 在构建
+	// 成功后消费，BuildImage 实现自身不消费——保留在 opts 供 fake 断言与
+	// 未来 verify/drain 联动收敛在单一载荷）。
+	FunctionTimeoutSeconds int64
+	// Env 是验证 spawn 携带的函数 variables（Verify=true 时阶段 3 消费）。
+	Env map[string]string
+	// EgressUntrusted：untrusted 函数的验证实例挂 internal 变体网络（A1）。
+	EgressUntrusted bool
+	// Verify：构建成功后 spawn 池外验证实例（D10；阶段 3 实现）。
+	Verify bool
 }
 
 // SpawnOptions 是 SpawnInstance 的入参。
@@ -338,10 +363,11 @@ func (d *dockerDaemon) RemoveInstance(ctx context.Context, containerID string) e
 	return nil
 }
 
-// BuildImage 以 v2 runner 模板构建镜像：zip 解压校验（复用 v1 的防炸弹
-// 预算）→ 写入 runner + Dockerfile（CMD = runner，非 ENTRYPOINT）→ tar
-// build context → docker build。构建期不执行用户代码。
-func (d *dockerDaemon) BuildImage(ctx context.Context, functionID, deploymentID string, zip []byte) error {
+// BuildImage 以 runner 模板构建镜像：构建上下文准备（zip 解压校验 → runtime
+// 对账 → Go bootstrap 生成 / node runner 写入 → Dockerfile 渲染，见
+// prepareBuildContext）→ tar build context → docker build。构建期不执行
+// 用户代码。
+func (d *dockerDaemon) BuildImage(ctx context.Context, opts BuildImageOptions) error {
 	cli, err := d.client()
 	if err != nil {
 		return err
@@ -352,25 +378,88 @@ func (d *dockerDaemon) BuildImage(ctx context.Context, functionID, deploymentID 
 	}
 	defer func() { _ = os.RemoveAll(buildDir) }()
 
+	if err := prepareBuildContext(buildDir, opts); err != nil {
+		return err
+	}
+
+	tarCtx, err := tarDir(buildDir)
+	if err != nil {
+		return fmt.Errorf("tar build context: %w", err)
+	}
+	buildOpts := build.ImageBuildOptions{
+		Tags:       []string{infrafunctions.ImageName(d.cfg, opts.FunctionID, opts.DeploymentID)},
+		Dockerfile: "Dockerfile",
+		Remove:     true,
+	}
+	resp, err := cli.ImageBuild(ctx, tarCtx, buildOpts)
+	if err != nil {
+		return fmt.Errorf("docker build failed: %s", infrafunctions.TruncateBuildLog(err.Error()))
+	}
+	defer func() { _ = resp.Body.Close() }()
+	// BuildKit 失败在流内 error JSON，复用 v1 读取/裁剪逻辑。
+	_, buildErr := infrafunctions.ReadBuildOutput(resp.Body)
+	if buildErr != nil {
+		return buildErr
+	}
+	// TODO(阶段3)：部署后验证 spawn（opts.Verify 时池外实例 /_tw/health
+	// 探针 + opts.Env 注入 + untrusted 选 internal 网络 + 失败回收容器日志
+	// 尾部；boot_timeout 预算嵌套在 build_timeout 内，设计 §1）。
+	_ = opts.Verify
+	return nil
+}
+
+// prepareBuildContext 在 buildDir 准备镜像构建上下文（无 docker 依赖，纯
+// 文件编排，单测以临时 zip 直接驱动）。顺序敏感（Go 一期接线，设计 §1）：
+//
+//  1. 解压 zip 并探测部署源（ExtractZip；twmain/ 保留目录冲突在此探测为
+//     TwmainConflict 标记——基于 zip 条目清单而非落盘目录）；
+//  2. runtime 一致性对账（D7）：opts.Runtime 非空且 ≠ 探测结果 →
+//     InvalidArgument（错误信息含两侧值）；
+//  3. go 分支：gorunner.DetectEntry 扫根包选入口（此时尚无 twmain/，探测
+//     时点正确）→ RenderBootstrap 渲染 → 写 <buildDir>/twmain/{runtime,main}.go
+//     ——写入必须在 DockerfileFor 渲染之前（模板 COPY twmain/）；
+//  4. node 分支照旧写 .tw-runner.js；最后渲染 Dockerfile（缺 go.sum /
+//     twmain 冲突等拒收错误在此冒出）。
+func prepareBuildContext(buildDir string, opts BuildImageOptions) error {
 	tmpZip, err := os.CreateTemp("", "torchwood-dispatch-src-*.zip")
 	if err != nil {
 		return fmt.Errorf("stage zip: %w", err)
 	}
 	defer func() { _ = os.Remove(tmpZip.Name()) }()
-	if _, err := tmpZip.Write(zip); err != nil {
+	if _, err := tmpZip.Write(opts.Zip); err != nil {
 		_ = tmpZip.Close()
 		return fmt.Errorf("stage zip: %w", err)
 	}
 	_ = tmpZip.Close()
 
-	// extractZip 与镜像名解析复用 v1 语义（防 zip 炸弹/路径穿越预算一致；
-	// 镜像命名约定不变）。SourceContents 附带部署源探测结果（node 代装依赖
-	// v3 §3.1 + Go 一期 go.mod 形态探测），逐字段映射为 runner 包的模板
-	// 载体（runner 保持叶子资产包，不 import infra/functions 根包）。
+	// 解压 + 探测：复用 v1 防炸弹/路径穿越预算；SourceContents 附带部署源
+	// 探测结果，逐字段映射为 runner 包的模板载体（runner 保持叶子资产包，
+	// 不 import infra/functions 根包）。
 	contents, err := infrafunctions.ExtractZip(tmpZip.Name(), buildDir)
 	if err != nil {
 		return err
 	}
+
+	// runtime 一致性对账（D7）：探测结果必须与 fn.runtime 一致，不一致在
+	// 构建期报 InvalidArgument（收严无存量负担）；opts.Runtime 为空跳过
+	// （兼容未携带 runtime 的历史调用方）。
+	if opts.Runtime != "" && opts.Runtime != contents.Runtime {
+		return status.Errorf(codes.InvalidArgument,
+			"runtime mismatch: function declares %q but source probes as %q (redeploy with the matching runtime)",
+			opts.Runtime, contents.Runtime)
+	}
+
+	// go 分支：平台生成 twmain/ bootstrap（Detect → Render → 落盘），写入
+	// 时点在 DockerfileFor 之前（模板 COPY twmain/）、在 DetectEntry 之后
+	// （根包扫描不受影响——twmain 是子目录，且 TwmainConflict 基于 zip 条目
+	// 清单）。权限 0644 对齐既有 runner 写入约定（镜像内 USER 须可读，
+	// tarDir 收口点再归一化）。
+	if contents.Runtime == "go-1.26" {
+		if err := writeGoBootstrap(buildDir, contents.GoModulePath); err != nil {
+			return err
+		}
+	}
+
 	dockerfile, err := runner.DockerfileFor(runner.SourceContents{
 		Runtime:        contents.Runtime,
 		NodeDeps:       contents.NodeDeps,
@@ -384,34 +473,41 @@ func (d *dockerDaemon) BuildImage(ctx context.Context, functionID, deploymentID 
 	if err != nil {
 		return err
 	}
-	// 构建产物（runner 脚本 + Dockerfile）经 COPY 进入镜像后须被镜像内
-	// USER node（非 root）读取——权限必须保持 world-readable（G306 误报：
-	// 非机密，且收紧曾致容器秒退、健康握手永不 ready，CI e2e 实证）。
-	if err := os.WriteFile(filepath.Join(buildDir, runner.RunnerFileName), runner.NodeRunnerJS(), 0o644); err != nil { // #nosec G306 -- 镜像内 USER node 须可读
+	// node 分支：runner 脚本随 COPY . . 进镜像（go 分支写入该文件无害——
+	// go 模板不引用它）。构建产物经 COPY 进入镜像后须被镜像内 USER 读取
+	// ——权限必须保持 world-readable（G306 误报：非机密，且收紧曾致容器
+	// 秒退、健康握手永不 ready，CI e2e 实证）。
+	if err := os.WriteFile(filepath.Join(buildDir, runner.RunnerFileName), runner.NodeRunnerJS(), 0o644); err != nil { // #nosec G306 -- 镜像内 USER 须可读
 		return fmt.Errorf("write runner: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(buildDir, "Dockerfile"), []byte(dockerfile), 0o644); err != nil { // #nosec G306 -- 镜像内 USER node 须可读
+	if err := os.WriteFile(filepath.Join(buildDir, "Dockerfile"), []byte(dockerfile), 0o644); err != nil { // #nosec G306 -- 镜像内 USER 须可读
 		return fmt.Errorf("write dockerfile: %w", err)
 	}
+	return nil
+}
 
-	tarCtx, err := tarDir(buildDir)
+// writeGoBootstrap 在构建上下文生成保留目录 twmain/ 的两份 bootstrap 源码
+// （AST 入口探测 → 渲染 → 落盘；Go 一期，设计 §1/D3 生成路线）。
+func writeGoBootstrap(buildDir, modulePath string) error {
+	entry, err := gorunner.DetectEntry(buildDir)
 	if err != nil {
-		return fmt.Errorf("tar build context: %w", err)
+		return err
 	}
-	opts := build.ImageBuildOptions{
-		Tags:       []string{infrafunctions.ImageName(d.cfg, functionID, deploymentID)},
-		Dockerfile: "Dockerfile",
-		Remove:     true,
-	}
-	resp, err := cli.ImageBuild(ctx, tarCtx, opts)
+	runtimeGo, mainGo, err := gorunner.RenderBootstrap(modulePath, entry)
 	if err != nil {
-		return fmt.Errorf("docker build failed: %s", infrafunctions.TruncateBuildLog(err.Error()))
+		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
-	// BuildKit 失败在流内 error JSON，复用 v1 读取/裁剪逻辑。
-	_, buildErr := infrafunctions.ReadBuildOutput(resp.Body)
-	if buildErr != nil {
-		return buildErr
+	twDir := filepath.Join(buildDir, "twmain")
+	if err := os.MkdirAll(twDir, 0o755); err != nil {
+		return fmt.Errorf("create twmain dir: %w", err)
+	}
+	// 0644 对齐既有 runner 写入注释（镜像内非 root USER 须可读；tarDir 收口
+	// 点对落盘 mode 再归一化，防 umask 漂移）。
+	if err := os.WriteFile(filepath.Join(twDir, "runtime.go"), runtimeGo, 0o644); err != nil { // #nosec G306 -- 镜像内 USER 须可读
+		return fmt.Errorf("write twmain/runtime.go: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(twDir, "main.go"), mainGo, 0o644); err != nil { // #nosec G306 -- 镜像内 USER 须可读
+		return fmt.Errorf("write twmain/main.go: %w", err)
 	}
 	return nil
 }

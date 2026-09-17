@@ -72,7 +72,7 @@ type fullpathExecutor struct {
 	onExecute func(execToken string)
 }
 
-func (m *fullpathExecutor) Build(context.Context, string, string, string) error { return nil }
+func (m *fullpathExecutor) Build(context.Context, domainfunctions.BuildSpec) error { return nil }
 func (m *fullpathExecutor) Execute(_ context.Context, e domainfunctions.Execution) (*domainfunctions.ExecutionResult, error) {
 	m.captured = e
 	if m.onExecute != nil {
