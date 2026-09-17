@@ -34,6 +34,12 @@ type fakeDaemon struct {
 	networkFlags map[string]bool
 	// lastNetwork 记录最近一次 SpawnInstance 收到的网络名。
 	lastNetwork string
+	// lastSpawn 记录最近一次 SpawnInstance 收到的完整入参（验证 spawn 的
+	// env/Spec/MaxRequests 注入断言用）。
+	lastSpawn SpawnOptions
+	// logs 是 containerID -> 容器日志（fake InstanceLogsTail 返回值；验证
+	// spawn 失败路径的日志尾拼接断言用）。
+	logs map[string]string
 	// lastBuild 记录最近一次 BuildImage 收到的完整入参（构建链载荷断言用）。
 	lastBuild BuildImageOptions
 }
@@ -44,6 +50,7 @@ func newFakeDaemon() *fakeDaemon {
 		running:      map[string]bool{},
 		nextIP:       1,
 		networkFlags: map[string]bool{},
+		logs:         map[string]string{},
 	}
 }
 
@@ -62,6 +69,7 @@ func (d *fakeDaemon) SpawnInstance(_ context.Context, opts SpawnOptions) (Instan
 	defer d.mu.Unlock()
 	d.spawnCount++
 	d.lastNetwork = opts.Network
+	d.lastSpawn = opts
 	id := fmt.Sprintf("cid-%d", d.spawnCount)
 	ip := fmt.Sprintf("10.0.0.%d", d.nextIP)
 	d.nextIP++
@@ -93,6 +101,12 @@ func (d *fakeDaemon) RemoveInstance(_ context.Context, containerID string) error
 	d.removed = append(d.removed, containerID)
 	delete(d.spawned, containerID)
 	return nil
+}
+
+func (d *fakeDaemon) InstanceLogsTail(_ context.Context, containerID string, _ int64) (string, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.logs[containerID], nil
 }
 
 func (d *fakeDaemon) BuildImage(_ context.Context, opts BuildImageOptions) error {

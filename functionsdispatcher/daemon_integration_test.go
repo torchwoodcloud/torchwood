@@ -4,7 +4,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
+	"net/http"
 	"os"
 	"runtime"
 	"sort"
@@ -18,6 +20,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/stretchr/testify/require"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	infrafunctions "github.com/torchwoodcloud/torchwood/internal/infra/functions"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
@@ -449,4 +452,336 @@ func TestIntegration_ImageReadableAsTemplateUser(t *testing.T) {
 		},
 		&container.HostConfig{NetworkMode: container.NetworkMode(netName)})
 	require.Equal(t, 0, probeCode, "runner 健康探针必须可达（镜像起不来 = 部署即坏，构建态不可见）:\n%s", probeOut)
+}
+
+// —— 部署后验证 spawn e2e（Go 一期阶段 3，设计
+// docs/design/functions-runtimes-and-sources.md §1/D10）——
+//
+// 门控与 TestIntegration_DispatcherBuildSpawnDispatch 同一口径：验证探针与
+// 池执行都依赖宿主进程 → 容器 bridge IP 的 Linux 直连路由（生产拓扑 =
+// dispatcher 容器自 attach，非 Linux 宿主的 Docker Desktop 上容器 IP 不可
+// 宿主路由，跳过）。IP 路由型用例另见各测试注释。
+
+// go e2e fixture：module 根 = zip 根，非 main 的任意包名（D3 生成路线）。
+const goE2EMod = "module example.com/hello\n\ngo 1.26\n"
+
+// goMainE2ESrc main 风格契约入口：返回固定封套供 e2e 断言（ctx.source 经
+// 分发 header 缺省回落 "server"，runner v5 契约）。
+const goMainE2ESrc = `package hello
+
+func Main(data map[string]any, ctx map[string]string) (any, error) {
+	return map[string]any{"got": data["n"], "runtime": "go", "src": ctx["source"]}, nil
+}
+`
+
+// goFetchE2ESrc fetch 风格契约入口：自定义 status/header/body 供 fetch 封套
+// 断言（status/headers/body_base64，v4 §2.2）。
+const goFetchE2ESrc = `package hello
+
+import "net/http"
+
+func Fetch(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("X-Tw-E2E", "go-fetch")
+	w.WriteHeader(http.StatusTeapot)
+	_, _ = w.Write([]byte("brew:" + r.URL.Query().Get("q")))
+}
+`
+
+// goBlockedE2ESrc 编译通过但 health 永不就绪：init 永久阻塞 → runner 永不
+// 监听 → 验证 spawn 必须在 boot 预算内判失败，且错误携带容器日志尾部
+// （init 的 println 是第一现场）；Main 合法保证失败只能来自运行期而非探测/
+// 编译。注意阻塞形态必须带 pending timer（永久 Sleep）——裸 select{} 会被
+// runtime 全局死锁检测直接杀进程（唯一 goroutine 全眠 → fatal error
+// deadlock，容器秒退），走不到 health 探针路径（本套件首次实跑实证）。
+const goBlockedE2ESrc = `package blocked
+
+import (
+	"fmt"
+	"time"
+)
+
+func init() {
+	fmt.Println("tw-verify-boot-blocked: init is blocking forever")
+	for {
+		time.Sleep(time.Hour)
+	}
+}
+
+func Main(data map[string]any, ctx map[string]string) (any, error) {
+	return map[string]any{"ok": true}, nil
+}
+`
+
+// requireIPRoutingHost 汇总 IP 路由型 e2e 门控：short 模式与非 Linux 宿主
+// 跳过（理由见文件头 TestIntegration_DispatcherBuildSpawnDispatch 注释），
+// daemon 不可达跳过。
+func requireIPRoutingHost(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	if runtimeGOOS() != "linux" {
+		t.Skipf("host OS %q: container bridge IPs are not host-routable outside Linux (Docker Desktop VM); dispatcher dispatch path requires the Linux/dokploy topology", runtimeGOOS())
+	}
+}
+
+// cleanupImage 挂测试结束的镜像清理（独立 ctx，对齐 dockerCleanupTimeout）。
+func cleanupImage(t *testing.T, d Daemon, fnID, depID string) {
+	t.Helper()
+	t.Cleanup(func() {
+		rmCtx, rmCancel := context.WithTimeout(context.Background(), dockerCleanupTimeout)
+		defer rmCancel()
+		_ = d.RemoveImage(rmCtx, fnID, depID)
+	})
+}
+
+// requireNoLeftoverVerifyContainers 断言 daemon 上不存在仍挂本镜像的容器：
+// 验证实例无论成败必须用完即删（池外语义）。在池 spawn 之前调用可把验证
+// 残留与池实例区分开（池实例同镜像，但由 drain/reaper 显式清理并有
+// ResidentTotal 归零断言兜底）。
+func requireNoLeftoverVerifyContainers(t *testing.T, cli *client.Client, imageRef string) {
+	t.Helper()
+	list, err := cli.ContainerList(context.Background(), container.ListOptions{All: true})
+	require.NoError(t, err)
+	for _, c := range list {
+		require.NotEqual(t, imageRef, c.Image, "验证实例容器必须已回收（池外用完即删），发现残留: %s %v", c.ID[:12], c.Names)
+	}
+}
+
+// waitPoolDrained 收尾清空池（idle 回收在 TTL 之前主动触发；断言与既有
+// 用例同款：ProjectID 必须与执行请求一致）。
+func waitPoolDrained(t *testing.T, pool *PoolManager, ctx context.Context) {
+	t.Helper()
+	deadline := time.Now().Add(60 * time.Second)
+	for time.Now().Before(deadline) {
+		if pool.ResidentTotal() == 0 {
+			return
+		}
+		pool.Reaper(ctx)
+		time.Sleep(200 * time.Millisecond)
+	}
+	require.Equal(t, 0, pool.ResidentTotal(), "测试实例必须清理干净")
+}
+
+// cleanupPool 挂测试结束的池清理兜底（t.Cleanup 在断言失败路径同样执行
+// ——首轮实跑教训：FailNow 会跳过测试体内的 drain，遗留运行中的池容器）。
+func cleanupPool(t *testing.T, pool *PoolManager, projectID, fnID string) {
+	t.Helper()
+	t.Cleanup(func() {
+		pool.DrainForDeployment(context.Background(), projectID, fnID, "none", 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		waitPoolDrained(t, pool, ctx)
+	})
+}
+
+// TestIntegration_GoMainFunctionE2E go main 风格端到端：BuildImage（verify
+// 默认开 = 验证 spawn 内联通过）→ 断言验证实例已回收 → 真实 spawn 执行一次
+// → 断言 main 封套（result JSON）。
+func TestIntegration_GoMainFunctionE2E(t *testing.T) {
+	requireIPRoutingHost(t)
+	cli := requireDockerClient(t)
+	cfg := testDispatcherConfig(t)
+	d := NewDockerDaemon(cfg)
+	reg := newFakeRegistry()
+	pool := NewPoolManager(d, reg, PoolConfig{
+		BootTimeout:      90 * time.Second,
+		QueueHeadTimeout: 90 * time.Second,
+	})
+
+	fnID, depID := "fngomain", fmt.Sprintf("dep%d", time.Now().UnixNano())
+	imageRef := infrafunctions.ImageName(cfg, fnID, depID)
+	cleanupImage(t, d, fnID, depID)
+	cleanupPool(t, pool, "goeit", fnID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	zip := makeEntryZipFiles(t, map[string]string{"go.mod": goE2EMod, "main.go": goMainE2ESrc})
+	require.NoError(t, d.BuildImage(ctx, BuildImageOptions{
+		ProjectID: "goeit", FunctionID: fnID, DeploymentID: depID,
+		Zip: zip, Runtime: "go-1.26",
+		Env:    map[string]string{"GREETING": "e2e"},
+		Verify: true,
+	}), "go main 风格构建 + 验证 spawn 必须成功")
+
+	// 验证实例已回收（此刻池尚未 spawn，凡挂本镜像的容器只能是验证残留）。
+	requireNoLeftoverVerifyContainers(t, cli, imageRef)
+
+	// 真实 spawn 执行（复用既有执行断言路径：池冷启动 → 健康握手 → 分发）。
+	resp, err := pool.Dispatch(ctx, ExecuteRequest{
+		Image: imageRef, ProjectID: "goeit", FunctionID: fnID, DeploymentID: depID,
+		Runtime: "go-1.26", Spec: "shared-1x", TimeoutSeconds: 30,
+		Data:           `{"n":41}`,
+		ExecutionToken: "twx_it-token",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "ok", resp.Status)
+	require.Contains(t, resp.Response, `"got":41`)
+	require.Contains(t, resp.Response, `"runtime":"go"`)
+	require.Contains(t, resp.Response, `"src":"server"`, "ctx.source 经分发 header 透传（缺省回落 server）")
+	// 不断言 DurationMS > 0：Go 函数亚毫秒完成，毫秒精度下可为 0（node 专属
+	// 假设，见既有用例）。
+
+	pool.DrainForDeployment(ctx, "goeit", fnID, "none", 5*time.Second)
+	waitPoolDrained(t, pool, ctx)
+}
+
+// TestIntegration_GoFetchFunctionE2E go fetch 风格端到端：触发器封套分发 →
+// gorunner 还原为真 *http.Request → fetch 封套（status/headers/body_base64）
+// 断言（v4 §2.2 语义在 Go 实现上的回归锚）。
+func TestIntegration_GoFetchFunctionE2E(t *testing.T) {
+	requireIPRoutingHost(t)
+	cfg := testDispatcherConfig(t)
+	d := NewDockerDaemon(cfg)
+	reg := newFakeRegistry()
+	pool := NewPoolManager(d, reg, PoolConfig{
+		BootTimeout:      90 * time.Second,
+		QueueHeadTimeout: 90 * time.Second,
+	})
+
+	fnID, depID := "fngofetch", fmt.Sprintf("dep%d", time.Now().UnixNano())
+	imageRef := infrafunctions.ImageName(cfg, fnID, depID)
+	cleanupImage(t, d, fnID, depID)
+	cleanupPool(t, pool, "goeft", fnID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	zip := makeEntryZipFiles(t, map[string]string{"go.mod": goE2EMod, "main.go": goFetchE2ESrc})
+	require.NoError(t, d.BuildImage(ctx, BuildImageOptions{
+		ProjectID: "goeft", FunctionID: fnID, DeploymentID: depID,
+		Zip: zip, Runtime: "go-1.26",
+		Verify: true,
+	}), "go fetch 风格构建 + 验证 spawn 必须成功")
+
+	// AST 探测 Fetch 优先：验证实例的启动行应为 style=fetch（借执行前的
+	// 一次性容器日志无法观测——已删除；此处以 fetch 封套行为断言兜底）。
+	resp, err := pool.Dispatch(ctx, ExecuteRequest{
+		Image: imageRef, ProjectID: "goeft", FunctionID: fnID, DeploymentID: depID,
+		Runtime: "go-1.26", Spec: "shared-1x", TimeoutSeconds: 30,
+		Data: `{}`,
+		TriggerEnvelope: &domainfunctions.TriggerEnvelope{
+			Method:   http.MethodGet,
+			Path:     "/f/goeft/tok1",
+			RawQuery: "q=42",
+			Headers:  map[string][]string{"x-e2e": {"1"}},
+		},
+		ExecutionToken: "twx_it-token",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "ok", resp.Status)
+	require.Equal(t, 418, resp.StatusCode, "fetch 封套 status 承载函数 HTTP status")
+	require.Equal(t, "brew:42", resp.Response, "Response 为 body 解码文本")
+	require.Equal(t, base64.StdEncoding.EncodeToString([]byte("brew:42")), resp.ResponseB64)
+	require.Equal(t, "go-fetch", resp.HTTPHeaders["x-tw-e2e"], "自定义响应头随封套回传（键小写化）")
+
+	pool.DrainForDeployment(ctx, "goeft", fnID, "none", 5*time.Second)
+	waitPoolDrained(t, pool, ctx)
+}
+
+// TestIntegration_NodeVerifyStillGreenE2E node 路径回归（OQ1「node 同开」
+// 锚点）：verify=true 下 node zip 构建 + 验证 spawn + 执行仍全绿——Go 新增
+// 验证门不得破坏存量 node 构建链。
+func TestIntegration_NodeVerifyStillGreenE2E(t *testing.T) {
+	requireIPRoutingHost(t)
+	cfg := testDispatcherConfig(t)
+	d := NewDockerDaemon(cfg)
+	reg := newFakeRegistry()
+	pool := NewPoolManager(d, reg, PoolConfig{
+		BootTimeout:      90 * time.Second,
+		QueueHeadTimeout: 90 * time.Second,
+	})
+
+	fnID, depID := "fnnodevt", fmt.Sprintf("dep%d", time.Now().UnixNano())
+	imageRef := infrafunctions.ImageName(cfg, fnID, depID)
+	cleanupImage(t, d, fnID, depID)
+	cleanupPool(t, pool, "nodeit", fnID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	zip := makeEntryZip(t, "index.js", "module.exports.main = (data) => ({ node: true, got: data.n });")
+	require.NoError(t, d.BuildImage(ctx, BuildImageOptions{
+		ProjectID: "nodeit", FunctionID: fnID, DeploymentID: depID,
+		Zip: zip, Runtime: "node-18.0",
+		Verify: true,
+	}), "verify=true 下 node 构建 + 验证 spawn 必须成功")
+
+	resp, err := pool.Dispatch(ctx, ExecuteRequest{
+		Image: imageRef, ProjectID: "nodeit", FunctionID: fnID, DeploymentID: depID,
+		Runtime: "node-18.0", Spec: "shared-1x", TimeoutSeconds: 30,
+		Data:           `{"n":42}`,
+		ExecutionToken: "twx_it-token",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "ok", resp.Status)
+	require.Contains(t, resp.Response, `"node":true`)
+	require.Contains(t, resp.Response, `"got":42`)
+
+	pool.DrainForDeployment(ctx, "nodeit", fnID, "none", 5*time.Second)
+	waitPoolDrained(t, pool, ctx)
+}
+
+// TestIntegration_GoVerifyFailureCapturesLogTail 验证失败路径端到端：编译
+// 通过但 health 永不就绪（init 阻塞）→ BuildImage 报错且错误信息含容器日志
+// 尾部片段（第一现场）；untrusted 函数走 internal 变体网络（egress 分类与
+// 执行一致，A1）且验证容器已回收。
+func TestIntegration_GoVerifyFailureCapturesLogTail(t *testing.T) {
+	requireIPRoutingHost(t)
+	cli := requireDockerClient(t)
+	// boot 预算 3s：失败判定快速收敛（生产默认 60s，语义相同）。
+	cfg := testDispatcherConfig(t)
+	cfg.Functions.Dispatcher.BootTimeout = "3s"
+	d := NewDockerDaemon(cfg)
+
+	fnID, depID := "fngofail", fmt.Sprintf("dep%d", time.Now().UnixNano())
+	imageRef := infrafunctions.ImageName(cfg, fnID, depID)
+	cleanupImage(t, d, fnID, depID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	zip := makeEntryZipFiles(t, map[string]string{"go.mod": goE2EMod, "main.go": goBlockedE2ESrc})
+	err := d.BuildImage(ctx, BuildImageOptions{
+		ProjectID: "goefail", FunctionID: fnID, DeploymentID: depID,
+		Zip: zip, Runtime: "go-1.26",
+		Env:             map[string]string{"GREETING": "e2e"},
+		EgressUntrusted: true, // 验证实例必须挂 internal 变体网络（A1）
+		Verify:          true,
+	})
+	require.Error(t, err, "编译通过但永不就绪的函数必须在验证门被拦截（deployment 将标 failed）")
+	msg := err.Error()
+	require.Contains(t, msg, "verification failed")
+	require.Contains(t, msg, "tw-verify-boot-blocked", "错误必须携带容器日志尾部（init 阻塞的第一现场输出）:\n%s", msg)
+
+	// 验证失败容器已回收（此刻无池实例，凡挂本镜像的容器只能是验证残留）。
+	requireNoLeftoverVerifyContainers(t, cli, imageRef)
+}
+
+// TestIntegration_GoMissingEntryRejected 非契约镜像路径：双缺（无 Fetch 无
+// Main）的 go zip 在 prepareBuildContext 构建期报错（先于 docker build，
+// 单测 TestPrepareBuildContext_GoMissingEntry 的真实 daemon 形态对照）。
+func TestIntegration_GoMissingEntryRejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	if !dockerAvailable(t) {
+		t.Skip("docker daemon unavailable")
+	}
+	d := NewDockerDaemon(testDispatcherConfig(t))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	zip := makeEntryZipFiles(t, map[string]string{
+		"go.mod":  goE2EMod,
+		"util.go": "package hello\n\nfunc A() {}\n",
+	})
+	err := d.BuildImage(ctx, BuildImageOptions{
+		ProjectID: "goemiss", FunctionID: "fngomiss", DeploymentID: "depmiss",
+		Zip: zip, Runtime: "go-1.26",
+		Verify: true,
+	})
+	require.Error(t, err, "非契约入口必须在构建期被拒收（不会产出跑不起来的镜像）")
+	require.Contains(t, err.Error(), "must export Fetch or Main")
 }

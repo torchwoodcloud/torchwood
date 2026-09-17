@@ -19,6 +19,7 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	infrafunctions "github.com/torchwoodcloud/torchwood/internal/infra/functions"
 	"github.com/torchwoodcloud/torchwood/internal/infra/functions/runner"
 	"github.com/torchwoodcloud/torchwood/internal/infra/functions/runner/gorunner"
@@ -55,6 +56,10 @@ type Daemon interface {
 	StopInstance(ctx context.Context, containerID string, timeout time.Duration) error
 	// RemoveInstance 强制删除容器（幂等）。
 	RemoveInstance(ctx context.Context, containerID string) error
+	// InstanceLogsTail 返回容器日志尾部（stdout/stderr 解复用合并，取末尾
+	// limit 字节）：验证 spawn 失败的第一现场（panic/协议未实现都在容器
+	// stdout，设计 §1「失败时回收容器日志尾部」）；容器已退出仍可读。
+	InstanceLogsTail(ctx context.Context, containerID string, limit int64) (string, error)
 	// BuildImage 以 runner 模板构建镜像（zip 字节内联；构建期不执行用户
 	// 代码的不变量由模板层保持——runner 仅被 COPY/编译）。构建链载荷一期
 	// 定稿形态（设计 §0），runtime 对账与 go bootstrap 生成在实现内完成。
@@ -102,6 +107,13 @@ type SpawnOptions struct {
 // 取消的执行 ctx，也不允许 daemon 挂起时无限阻塞（与 v1 同约定）。
 const dockerCleanupTimeout = 30 * time.Second
 
+// 验证 spawn 的 health 探针节拍（对齐池启动握手 spawnInstance：单次探针
+// 2s 超时、轮询间隔 100ms；预算本身 = 本进程 boot_timeout，构造时解析）。
+const (
+	verifyProbeTimeout = 2 * time.Second
+	verifyPollInterval = 100 * time.Millisecond
+)
+
 // networkClient 收窄 EnsureProjectNetwork 依赖的 docker 网络操作面（真实
 // 实现 = *client.Client；单测注入 fake 驱动 attach 幂等/自愈路径的确定性
 // 验证，不依赖真实 daemon）。
@@ -121,12 +133,25 @@ type dockerDaemon struct {
 	netCli networkClient
 	// selfContainerID 非空 = dispatcher 自身运行在容器内（自 attach 需要）。
 	selfContainerID string
+	// ——部署后验证 spawn 参数（D10；从 config 一次性解析，与池共享语义）——
+	// bootTimeout 是验证实例 health 探针预算（= 池 boot_timeout，同一 config
+	// 键同一解析规则；语义上嵌套在 build_timeout 预算内，设计 §1）。
+	bootTimeout time.Duration
+	// maxRequestsDefault 是验证实例 TW_MAX_REQUESTS 注入值（对齐池缺省 1000）。
+	maxRequestsDefault int
 }
 
 // NewDockerDaemon 构造真实 daemon 实现。docker client 构造失败延迟到首次
 // 调用暴露（与 dockerExecutor 同策略）。
 func NewDockerDaemon(cfg *config.AppConfig) Daemon {
-	d := &dockerDaemon{cfg: cfg}
+	// 验证 spawn 参数与池同源解析（本进程 boot_timeout / MaxRequests 缺省）；
+	// daemon 与池各自消费同一份 config 值，不引入构造参数（最小侵入）。
+	pc := PoolConfigFromConfig(cfg)
+	d := &dockerDaemon{
+		cfg:                cfg,
+		bootTimeout:        pc.BootTimeout,
+		maxRequestsDefault: pc.MaxRequestsDefault,
+	}
 	host := cfg.GetFunctions().GetDocker().GetHost()
 	cli, err := client.NewClientWithOpts(client.WithHost(host), client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -401,11 +426,148 @@ func (d *dockerDaemon) BuildImage(ctx context.Context, opts BuildImageOptions) e
 	if buildErr != nil {
 		return buildErr
 	}
-	// TODO(阶段3)：部署后验证 spawn（opts.Verify 时池外实例 /_tw/health
-	// 探针 + opts.Env 注入 + untrusted 选 internal 网络 + 失败回收容器日志
-	// 尾部；boot_timeout 预算嵌套在 build_timeout 内，设计 §1）。
-	_ = opts.Verify
-	return nil
+	// 部署后验证 spawn（D10，设计 §1）：opts.Verify=false（config
+	// verify_build 显式关闭）跳过整段。
+	if !opts.Verify {
+		return nil
+	}
+	return d.verifyBuild(ctx, opts)
+}
+
+// verifyBuild 是 dockerDaemon 的验证 spawn 入口：探针复用池的 HTTP runner
+// 客户端（同一 /_tw/health 契约面），预算与 TW_MAX_REQUESTS 注入值取构造时
+// 解析的池参数（本进程 boot_timeout，设计 §1）。
+func (d *dockerDaemon) verifyBuild(ctx context.Context, opts BuildImageOptions) error {
+	return spawnVerifyInstance(ctx, d, newHTTPRunner(), opts, verifySpawnConfig{
+		Image:       infrafunctions.ImageName(d.cfg, opts.FunctionID, opts.DeploymentID),
+		BootTimeout: d.bootTimeout,
+		MaxRequests: d.maxRequestsDefault,
+	})
+}
+
+// verifySpawnConfig 是验证 spawn 的参数包：镜像名 + 探针预算 + 注入值。
+// PollInterval 零值取 verifyPollInterval（单测注入加速/确定性）。
+type verifySpawnConfig struct {
+	Image        string
+	BootTimeout  time.Duration
+	MaxRequests  int
+	PollInterval time.Duration
+}
+
+// healthProber 是验证探针的最小抽象（runnerClient 的 Health 面收窄；生产 =
+// httpRunner，单测 = fake 表驱动）。
+type healthProber interface {
+	Health(ctx context.Context, ip string) error
+}
+
+// spawnVerifyInstance 执行一次部署后验证 spawn（设计 §1/D10）：build 成功后
+// spawn 一枚验证实例 → /_tw/health 轮询（预算 = BootTimeout）→ 就绪即回收。
+//
+// 池外语义（设计 §1）：走 daemon 原语直连——不进 Redis 注册表、不受
+// MaxResidentInstances 约束、不参与 reaper 对账（BuildImage 无池依赖，天然
+// 满足），用完即删；验证范围 = health 探针，不做 invoke——invoke 需要平台
+// 构造 TW_DATA 并执行用户代码（副作用不可控），违反「部署期不执行用户代码」
+// 不变量（对抗审查 A5 裁决，残余风险由运行期 transport-error 杀实例兜底）。
+//
+// 失败处置：回收容器日志尾部（64KB 上限）拼进错误——运行期错误（panic/协议
+// 未实现）在容器 stdout，第一现场必须带回 deployment.error；编译错误在构建
+// 日志、不经此路径。无论成败容器以独立 cleanup ctx Stop(SIGKILL)+Remove
+// （不继承已取消/临期的构建 ctx，dockerCleanupTimeout 同约定）。
+func spawnVerifyInstance(ctx context.Context, d Daemon, probe healthProber, opts BuildImageOptions, vc verifySpawnConfig) error {
+	// egress 分类与执行一致（对抗审查 A1 最强修复）：untrusted 函数的验证
+	// 实例挂 internal 变体网络（与池 spawnInstance 同路）——验证期不得给
+	// 不可信镜像开跳出网窗口。
+	network, err := d.EnsureProjectNetwork(ctx, opts.ProjectID, opts.EgressUntrusted)
+	if err != nil {
+		return fmt.Errorf("verify spawn: ensure network: %w", err)
+	}
+	// env 组装与池 spawnInstance 同源（「携带函数当前 variables，与执行时
+	// 同源组装」）：TW_DATA/TW_EXECUTION_TOKEN 不进容器 env（常驻的是容器
+	// 不是凭证）；TW_MAX_REQUESTS/TW_DRAIN_TIMEOUT_MS 由 SpawnInstance 统一
+	// 追加，此处不重复注入。
+	env := make([]string, 0, len(opts.Env))
+	for k, v := range opts.Env {
+		if k == "TW_DATA" || k == "TW_EXECUTION_TOKEN" {
+			continue
+		}
+		env = append(env, k+"="+v)
+	}
+	inst, err := d.SpawnInstance(ctx, SpawnOptions{
+		ProjectID:   opts.ProjectID,
+		Image:       vc.Image,
+		Network:     network,
+		Env:         env,
+		Spec:        "shared-1x",
+		MaxRequests: vc.MaxRequests,
+	})
+	if err != nil {
+		return fmt.Errorf("verify spawn: %w", err)
+	}
+	// 无论成败回收容器（SIGKILL：验证实例无在途请求，无需 drain 宽限）。
+	defer func() {
+		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), dockerCleanupTimeout)
+		defer cancel()
+		_ = d.StopInstance(cctx, inst.ContainerID, 0)
+		_ = d.RemoveInstance(cctx, inst.ContainerID)
+	}()
+
+	interval := vc.PollInterval
+	if interval <= 0 {
+		interval = verifyPollInterval
+	}
+	deadline := time.Now().Add(vc.BootTimeout)
+	for {
+		pctx, pcancel := context.WithTimeout(ctx, verifyProbeTimeout)
+		err := probe.Health(pctx, inst.IP)
+		pcancel()
+		if err == nil {
+			return nil // 验证通过：静默（成功不产生 deployment.error）
+		}
+		if ctx.Err() != nil || !time.Now().Before(deadline) {
+			// 失败处置：日志读取与后续清理同用脱离构建 ctx 的独立 ctx
+			//（预算到点时构建 ctx 可能已取消/临期）。
+			tailCtx, tailCancel := context.WithTimeout(context.WithoutCancel(ctx), dockerCleanupTimeout)
+			tail, tailErr := d.InstanceLogsTail(tailCtx, inst.ContainerID, maxLogTailBytes)
+			tailCancel()
+			if tailErr != nil {
+				tail = fmt.Sprintf("<container logs unavailable: %v>", tailErr)
+			}
+			return fmt.Errorf("verification failed: function image did not become healthy within %s (last probe error: %v); container log tail:\n%s",
+				vc.BootTimeout, err, tail)
+		}
+		if !defaultSleep(ctx, interval) {
+			// sleep 期间 ctx 取消：下一轮探针立即失败并走上面的日志回收路径。
+			continue
+		}
+	}
+}
+
+// InstanceLogsTail 返回容器日志尾部（stdout/stderr 解复用合并，取末尾 limit
+// 字节）：验证 spawn 失败的第一现场诊断面。spawn 的容器无 TTY——daemon 返回
+// 多路复用流，stdcopy 解复用（与集成测试 runOneShot 同款）。
+func (d *dockerDaemon) InstanceLogsTail(ctx context.Context, containerID string, limit int64) (string, error) {
+	cli, err := d.client()
+	if err != nil {
+		return "", err
+	}
+	logs, err := cli.ContainerLogs(ctx, containerID, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Tail:       "200",
+	})
+	if err != nil {
+		return "", fmt.Errorf("container logs: %w", err)
+	}
+	defer func() { _ = logs.Close() }()
+	var buf bytes.Buffer
+	if _, err := stdcopy.StdCopy(&buf, &buf, logs); err != nil {
+		return "", fmt.Errorf("demux container logs: %w", err)
+	}
+	out := buf.Bytes()
+	if int64(len(out)) > limit {
+		out = out[int64(len(out))-limit:]
+	}
+	return string(out), nil
 }
 
 // prepareBuildContext 在 buildDir 准备镜像构建上下文（无 docker 依赖，纯
