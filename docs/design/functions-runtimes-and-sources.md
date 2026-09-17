@@ -3,16 +3,26 @@
 > 状态：**已拍板（2026-09-17 owner）→ 同日复查修正 → 独立设计交叉验证
 > 修订 → 二轮深度复查修正 → 对抗审查（4 处修复并入）→ 竞品调研
 > （业界对照，零推翻 + 2 处补强）→ 多机演进立项（owner 裁决路径 1
-> 细胞模型，排为阶段四，§4）→ 三子代理独立复核修订（13 处并入）**。
+> 细胞模型，排为阶段四，§4）→ 三子代理独立复核修订（13 处并入）→
+> **一期已实现**（2026-09-17，四阶段还原点 b760cb1 / 53a3ff1 / 462470b /
+> af9dbfb，全量回归绿、集成 9 用例实跑绿）**。
 > Key Decisions 与 Open Questions 的原始裁决记录保留；交叉验证推翻的
 > 三处（D3 Go 形态、D4 git 位置、OQ5 重建限制）已按修订稿改写并在
-> 「交叉验证记录」一节明确标注，**待 owner 对推翻项重新确认**；后续
-> 各轮记录见文末各节。
-> 现状基线：`docs/developer/08-functions.md`（执行器 v2/v3/v4/v5 常驻池模型）。
+> 「交叉验证记录」一节明确标注，其中 D3 经一期落地验证（D2/D5 属二三期）；
+> 后续各轮记录见文末各节。
+> 现状基线：`docs/developer/08-functions.md`（§3.1-§3.3 已含 Go 运行时 /
+> Runner 协议 / 验证 spawn 质量门）。
 > **v3 裁决边界修正（独立复核 A7）**：functions-v3.md Non-Goals 点名的
 > 「多机分发」经 owner 2026-09-17 裁决**显式推翻**（阶段四细胞模型）；
 > v3 其余 Non-Goals（WASM/isolate/Firecracker/K8s/每实例多进程等）
 > 本稿维持不重开。
+>
+> 一期实施裁决补记：① OQ3 定稿 **go-1.26**（golang:1.26-alpine /
+> alpine:3.22，与本仓库 toolchain 主版本对齐）；② verify_build 为全局
+> 开关（未按 runtime 分档强制——部署方级质量门，简化可接受）；
+> ③ worker 补构建 5m 预算收敛进 buildDeployment 的 build_timeout（同源
+> 默认，config 调大同享）；④ Go fetch 身份通道按 §0 设计落地（x-tw-*
+> 注入还原 Request，信息等价 node fetch env）。
 
 ## Overview
 
