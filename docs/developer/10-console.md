@@ -227,6 +227,8 @@ API Keys 页详情提供**编辑**（name / scopes / enabled / expire_at，proto
 
 侧边栏分组：Dashboard 置顶；Develop（API Keys / Databases / Storage / Functions / Analytics）、Auth（Users / Groups）、Economy（Orders / Assets / Subscriptions / Leaderboards）、System（Projects / Admins / Audit Logs）。
 
+桌面侧栏可收起为图标栏（页头 `PanelLeftClose`/`PanelLeftOpen` 按钮，状态持久化在 `localStorage.TORCHWOOD_console_sidebar_collapsed`）：收起时仅保留图标与项目首字母，悬浮由 `title` 提示；移动端抽屉不受影响。
+
 | 路由 | 内容 | 守卫 |
 |------|------|------|
 | `/console/account`（index → profile） | 账户设置区（侧栏底部邮箱进入）：`profile` = 账户资料（邮箱 / 角色 / 创建时间，只读）+ 修改密码（当前密码校验，成功后全凭证撤销并回登录页）；`preferences` = 偏好列表（当前仅时区，点击行内当前值弹层修改，选中即暂存 + 显式保存，清除 = 跟随浏览器） | 全角色开放（自助面） |

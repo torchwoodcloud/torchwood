@@ -10,12 +10,26 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { breadcrumbsFor } from "@/lib/routeTitles";
 import { navSections } from "@/lib/nav";
-import { ChevronRight, LogOut, Menu, X } from "lucide-react";
+import {
+  ChevronRight,
+  LogOut,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  X,
+} from "lucide-react";
+
+// 桌面侧栏收起态持久化键：刷新后保持用户选择。
+const SIDEBAR_COLLAPSED_KEY = "TORCHWOOD_console_sidebar_collapsed";
 
 export function Layout() {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  // 收起 = 图标栏（w-16）：仅保留图标/头像，hover 用 title 提示；移动端抽屉不受影响。
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1"
+  );
   // 当前管理员（共享 ["console-admin-me"] 缓存）：侧栏底部展示邮箱 + 账户设置入口。
   const { data: me } = useQuery({
     queryKey: ["console-admin-me"],
@@ -31,15 +45,28 @@ export function Layout() {
 
   const closeMobile = () => setMobileOpen(false);
 
+  const toggleCollapsed = () =>
+    setCollapsed((prev) => {
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, prev ? "0" : "1");
+      return !prev;
+    });
+
   return (
     <div className="flex h-screen bg-sidebar">
       <ProjectBootstrap />
       {/* Desktop sidebar */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
+      <aside
+        className={cn(
+          "hidden shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 md:flex",
+          collapsed ? "w-16" : "w-64"
+        )}
+      >
         <SidebarContent
           onNavigate={closeMobile}
           onLogout={handleLogout}
           email={me?.email}
+          collapsed={collapsed}
+          onToggleCollapsed={toggleCollapsed}
         />
       </aside>
 
@@ -124,36 +151,75 @@ function SidebarContent({
   onNavigate,
   onLogout,
   email,
+  collapsed = false,
+  onToggleCollapsed,
 }: {
   onNavigate: () => void;
   onLogout: () => void;
   email?: string;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }) {
   const initial = (email ?? "?").slice(0, 1).toUpperCase();
 
   return (
     <>
-      <div className="flex items-center gap-2.5 px-4 py-4">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-xs font-semibold text-sidebar-primary-foreground">
-          T
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-sm font-medium leading-tight">Torchwood</span>
-          <span className="truncate text-[11px] leading-tight text-muted-foreground">
-            Console
-          </span>
-        </span>
-        <Button variant="ghost" size="icon" className="-mr-1 md:hidden" onClick={onNavigate}>
-          <X className="h-5 w-5" />
-        </Button>
+      <div
+        className={cn(
+          "flex items-center gap-2.5 py-4",
+          collapsed ? "justify-center px-3" : "px-4"
+        )}
+      >
+        {collapsed ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground"
+            onClick={onToggleCollapsed}
+            title="展开菜单"
+          >
+            <PanelLeftOpen className="h-5 w-5" />
+          </Button>
+        ) : (
+          <>
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-xs font-semibold text-sidebar-primary-foreground">
+              T
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-sm font-medium leading-tight">Torchwood</span>
+              <span className="truncate text-[11px] leading-tight text-muted-foreground">
+                Console
+              </span>
+            </span>
+            {onToggleCollapsed && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="-mr-1 shrink-0 text-muted-foreground"
+                onClick={onToggleCollapsed}
+                title="收起菜单"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" className="-mr-1 md:hidden" onClick={onNavigate}>
+              <X className="h-5 w-5" />
+            </Button>
+          </>
+        )}
       </div>
       <div className="px-3 pb-2">
-        <ProjectSelector />
+        <ProjectSelector collapsed={collapsed} />
       </div>
-      <nav className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-2">
+      <nav
+        className={cn(
+          "min-h-0 flex-1 space-y-4 overflow-y-auto py-2",
+          collapsed ? "px-2" : "px-3"
+        )}
+      >
         {navSections.map((section) => (
           <div key={section.title ?? "main"}>
-            {section.title && (
+            {section.title && !collapsed && (
               <div className="px-2 pb-1 text-xs font-medium text-muted-foreground">
                 {section.title}
               </div>
@@ -165,9 +231,11 @@ function SidebarContent({
                   to={item.to}
                   end={item.to === "/console"}
                   onClick={onNavigate}
+                  title={collapsed ? item.label : undefined}
                   className={({ isActive }) =>
                     cn(
-                      "flex h-8 items-center gap-2 rounded-lg px-2 text-sm font-medium transition-colors",
+                      "flex h-8 items-center gap-2 rounded-lg text-sm font-medium transition-colors",
+                      collapsed ? "justify-center px-0" : "px-2",
                       isActive
                         ? "bg-sidebar-accent text-sidebar-accent-foreground"
                         : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground"
@@ -175,20 +243,27 @@ function SidebarContent({
                   }
                 >
                   <item.icon className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{item.label}</span>
+                  {!collapsed && <span className="truncate">{item.label}</span>}
                 </NavLink>
               ))}
             </div>
           </div>
         ))}
       </nav>
-      <div className="space-y-0.5 border-t border-sidebar-border p-3">
+      <div
+        className={cn(
+          "space-y-0.5 border-t border-sidebar-border",
+          collapsed ? "p-2" : "p-3"
+        )}
+      >
         <NavLink
           to="/console/account/profile"
           onClick={onNavigate}
+          title={collapsed ? (email ?? "账户设置") : undefined}
           className={({ isActive }) =>
             cn(
-              "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent",
+              "flex w-full items-center gap-2 rounded-lg text-left transition-colors hover:bg-sidebar-accent",
+              collapsed ? "justify-center px-0 py-1.5" : "px-2 py-1.5",
               isActive && "bg-sidebar-accent"
             )
           }
@@ -196,24 +271,32 @@ function SidebarContent({
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-medium">
             {initial}
           </span>
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-sm font-medium leading-tight" title={email}>
-              {email ?? "…"}
-            </span>
-            <span className="truncate text-[11px] leading-tight text-muted-foreground">
-              账户设置
-            </span>
-          </span>
-          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          {!collapsed && (
+            <>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-sm font-medium leading-tight" title={email}>
+                  {email ?? "…"}
+                </span>
+                <span className="truncate text-[11px] leading-tight text-muted-foreground">
+                  账户设置
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </>
+          )}
         </NavLink>
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-start gap-2 text-muted-foreground"
+          title="Logout"
+          className={cn(
+            "w-full text-muted-foreground",
+            collapsed ? "justify-center px-0" : "justify-start gap-2"
+          )}
           onClick={onLogout}
         >
           <LogOut className="h-4 w-4" />
-          Logout
+          {!collapsed && "Logout"}
         </Button>
       </div>
     </>
