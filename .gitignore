@@ -38,3 +38,4 @@ sdk/demo/dist/
 .tmp-acc/
 .tmp-jwtcheck/
 r3.txt
+"residue.txt"  
