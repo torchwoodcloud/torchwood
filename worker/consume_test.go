@@ -127,7 +127,7 @@ func (retryExecutor) Execute(context.Context, domainfunctions.Execution) (*domai
 	return nil, nil
 }
 func (retryExecutor) Build(context.Context, domainfunctions.BuildSpec) error { return nil }
-func (retryExecutor) RemoveImage(context.Context, string, string) error   { return nil }
+func (retryExecutor) RemoveImage(context.Context, string, string) error      { return nil }
 
 // channelQueue 是 shared.Queue 的测试桩：Enqueue 记录 payload 并送入有缓冲
 // channel，Dequeue 取出；空时按 timeout 返回 nil（与真实 BRPOP 语义对齐）。

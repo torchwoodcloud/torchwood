@@ -46,9 +46,9 @@ HTTP multipart FunctionsHandler（POST .../deployments/code，≤50MiB）──�
 
 ## 3. 运行时与构建
 
-**运行时**：仅 `node-18.0`（`index.js` 导出 `main`，node:18-alpine）。python 运行时已随 v1 docker 执行器移除（python runner 未实现），历史 python zip 在构建期明确报错。规格：`shared-1x`（0.5CPU/256MB）、`shared-2x`（1CPU/512MB）。
+**运行时**：`node-18.0`（`index.js` 导出 `main`/`fetch`，node:18-alpine）与 `go-1.26`（Go 一期，golang:1.26-alpine 多阶段构建 + 平台生成 bootstrap，见 §3.1）。python-3.11 探测保留但构建期明确报错（python runner 未实现），历史 python zip 在构建期明确报错。规格：`shared-1x`（0.5CPU/256MB）、`shared-2x`（1CPU/512MB）。
 
-**runner 模板**（常驻执行模型唯一模板，CMD = 平台 runner）：
+**node runner 模板**（常驻执行模型模板，CMD = 平台 runner）：
 
 ```dockerfile
 FROM node:18-alpine
@@ -77,9 +77,113 @@ CMD ["node",".tw-runner.js"]
 - **`node_modules` 拒收**：代码包中任意条目路径第一段为 `node_modules` → 构建失败（跨平台二进制不兼容）。CLI deploy 打包时已同步排除 `node_modules` / `.git`。
 - **`--ignore-scripts` 恒定**（一期不提供 opt-in）：不变量"构建期不执行用户代码 / 第三方脚本"——npm 生命周期脚本（postinstall）可执行任意代码。代价：依赖原生编译（node-gyp）或 postinstall 下载二进制的包不可用（如 esbuild / swc 安装版——函数执行时报"找不到可执行文件"即此原因，改用纯 JS 等价物或 WASM 构建）。残余风险（lockfile 为用户可控输入、npm 解析器漏洞）经 lockfile integrity hash 固定 + 构建容器 hardening 兜底；构建出网白名单后置（一期不限制，registry 拉包必需）。
 - **层缓存加速**：`package.json` / lockfile 不变的重新部署直接命中 Docker 层缓存，跳过 `npm ci`，只有代码层重建。
-- 探测与拒收实现在 zip 解压校验层（`extractZipWithLimits`，与 zip slip / 符号链接校验同处逐条判定）；模板决策在 `runner.DockerfileFor`。
+- 探测与拒收实现在 zip 解压校验层（`extractZipWithLimits`，与 zip slip / 符号链接校验同处逐条判定）；部署源探测产出 `SourceContents`（runtime 判定 + node/go 依赖标记）；模板决策在 `runner.DockerfileFor`。
 
-**构建流程**（`internal/app/functions/deployments.go`）：校验 zip 魔数 `PK\x03\x04` + 50MiB 限制 → 落库 `pending` → 占构建信号量 → `building` → zip base64 内联经 dispatcher `/v1/dispatch/builds` 构建（解压 ≤1000 条 / 单条 ≤100MiB / 总量 ≤200MiB，拒绝符号链接与 zip slip，拒收 node_modules，探测 package.json 决定模板）→ `ready` / `failed`。镜像名 `<registry>/func-<fid>-<did>`（registry 默认 `torchwood-funcs`）。
+**构建流程**（`internal/app/functions/deployments.go`）：校验 zip 魔数 `PK\x03\x04` + 50MiB 限制 → 落库 `pending` → 占构建信号量 → `building` → zip base64 内联经 dispatcher `/v1/dispatch/builds` 构建（解压 ≤1000 条 / 单条 ≤100MiB / 总量 ≤200MiB，拒绝符号链接与 zip slip，拒收 node_modules；探测优先级 `index.js` > `go.mod` > `main.py`，混装按 node 不报错；**runtime 对账**：探测结果 ≠ `fn.runtime` 声明 → 构建期 InvalidArgument；go 分支平台生成 `twmain/` bootstrap，见 §3.1）→ `ready` / `failed`。镜像名 `<registry>/func-<fid>-<did>`（registry 默认 `torchwood-funcs`）。构建 ctx 与客户端断开解耦（`context.WithoutCancel` + `functions.dispatcher.build_timeout` 默认 5m 封顶），客户端断开后构建继续、状态照常落库，以 `deployment.status` 轮询兜底。
+
+### 3.1 Go 运行时（go-1.26）
+
+Go 一期（设计 `docs/design/functions-runtimes-and-sources.md` §1）：运行时表项 `go-1.26`（`internal/app/functions/runtimes.go`；entrypoint 字段 MVP 仅占位，升级 = 新 runtime ID、旧 ID 不日落）。构建段 `golang:1.26-alpine`（`CGO_ENABLED=0`），运行段 `alpine:3.22` + `ca-certificates`（函数 HTTPS 出访需要，基础 alpine 不自带）+ 非 root 数字 UID（65534）：
+
+```dockerfile
+FROM golang:1.26-alpine AS build
+WORKDIR /src
+ENV CGO_ENABLED=0
+ENV GOFLAGS=-mod=readonly        # vendor 分支替换为 -mod=vendor 且免下一层
+COPY go.mod go.sum* ./
+RUN go mod download              # vendor 分支免此层
+COPY . .
+COPY twmain/ ./twmain/
+RUN go build -trimpath -ldflags="-s -w" -o /out/tw-app ./twmain
+
+FROM alpine:3.22
+RUN apk add --no-cache ca-certificates
+COPY --from=build /out/tw-app /tw-app
+USER 65534:65534
+ENV TW_RUNNER_PORT=18080
+CMD ["/tw-app"]
+```
+
+**用户契约**（纯标准库、零平台依赖）：
+
+- **zip 根 = module 根**：go.mod 必须在 zip 根；根包为**非 main 的任意包名**（module path 取自 go.mod module 行，会被注入生成代码的 import 语句，含引号/空白等非法形态在探测期拒绝）。
+- **入口双轨**（AST 探测 `gorunner.DetectEntry`，优先级同 node：Fetch 优先、Main 兜底；生成期二选一写死进 bootstrap——签名不符由编译器报错兜底，构建日志透传）：
+
+  ```go
+  // fetch 风格（优先）：HTTP 触发器封套还原为真 *http.Request，
+  // 响应经 ResponseRecorder 捕获进 fetch 封套（status/headers/body 可控）。
+  func Fetch(w http.ResponseWriter, r *http.Request)
+
+  // main 风格（兜底）：data 为 TW_DATA JSON 反序列化；ctx 六键全 string。
+  func Main(data map[string]any, ctx map[string]string) (any, error)
+  // ctx 键：executionToken / apiBaseUrl / executionId / source /
+  // invokingUserId / projectId（source 恒非空——缺省回落 "server"；
+  // invokingUserId 空串 = 非用户触发，系统语义）。
+  ```
+
+  **fetch 风格身份通道**：Go fetch 风格还原的 `*http.Request` 除触发器封套 headers 外，还注入 x-tw-* 调用身份 header（`x-tw-execution-token` / `x-tw-execution-id` / `x-tw-source` / `x-tw-invoking-user-id` / `x-tw-project-id`，经 `r.Header.Get` 读取）——与 node fetch 风格的 env 参数**信息等价、通道不同**。`source` 缺省回落 `"server"`（与 main 风格 ctx / node env 同语义）；其余身份头分发侧未携带时不注入（`Get` 返回空串，等价 node env 空值）。`apiBaseUrl` 不走 header，函数直接读容器 env `TW_API_BASE_URL`（与 ctx 同源）。封套触发头与身份头撞名时身份头胜出（平台身份不得被触发方伪造）。
+
+  两者皆无 → 构建期报错 `go function must export Fetch or Main`。探测口径与编译器同宽：文件枚举按 `go/build` MatchFile 评估（显式 `GOOS=linux`/`GOARCH=amd64` 上下文 + Cgo 关闭，`//go:build ignore` 与平台特定文件里的 Fetch 不会被误探测），显式跳过 `*_test.go`（export_test.go 暴露内部函数是 Go 社区常见写法）。
+
+- **依赖确定性**（对齐 node「lockfile 强制」口径）：go.mod `require` 非空时须有 `go.sum` **或** `vendor/`，否则构建期报错（「检测到外部依赖但缺少 go.sum——go mod tidy 生成后提交」）。`vendor/` **受纳**（Go 官方钉版机制、源码形态无跨平台二进制问题，与拒收 node_modules 的理由本质不同）：模板切 `-mod=vendor` 且免 `go mod download` 层；无 vendor 走 `-mod=readonly` + 分层下载（go.mod/go.sum 不变命中 Docker 层缓存）。纯 stdlib 函数（require 空）合法无 go.sum——模板 `COPY go.mod go.sum* ./` 通配。
+- **`CGO_ENABLED=0`**：cgo 依赖（如 mattn/go-sqlite3）不可用；`go build` 只编译不执行（Go modules 无 npm 生命周期脚本等价物），「构建期不执行用户代码」不变量强于 node。
+- **`twmain/` 是平台保留目录**：构建期由平台生成（`runtime.go` = runner 协议实现 + `main.go` = `import user "<module path>"` 的编译入口），用户代码包内禁用——zip 携带路径第一段为 `twmain` 的条目构建期拒收并提示改名。
+- **诚实契约差（与 node 的行为差异）**：
+  - 封套 `stdout`/`stderr` **恒空串**（字段位保留）：Go 无 per-request console 捕获，函数日志直接写容器 stdout，经 `docker logs` 查看（node 的 per-request 日志分桶语义不适用）；
+  - cgo 不可用（上条）；native 依赖须有纯 Go 等价物；
+  - **构建画像**：Go 冷构建 = dispatcher 拉 `golang:1.26-alpine` 基础镜像（数百 MB，计入构建时间）+ 依赖下载 + 编译——全新环境的首个 Go 部署可逼近 `functions.dispatcher.build_timeout` 默认 5m，必要时调大该配置；go.mod/go.sum 不变的重新部署命中层缓存。
+
+### 3.2 Runner 协议（契约镜像规范）
+
+自 Go 一期起，`:18080` runner 契约升格为**公开契约**（为三期 BYO 契约镜像铺路）：Go 函数与未来的镜像源函数是同一契约的两类消费方。平台有两份同契约同版本的实现——node `runner/runner.js` 与 Go `runner/gorunner/assets/runtime.go.tmpl`（渲染进 twmain/），本节是协议规格，事实源 = 两份实现源码。
+
+**监听与端点**（容器内 `:18080`，env `TW_RUNNER_PORT` 可配；仅 per-project 网络内可达）：
+
+- `GET /_tw/health` → 200 `{"ok":true,"ready":true,"served":<n>,"inflight":<n>}`。ready 语义差异：node 入口运行期探测（模块加载失败**常驻 not-ready**，boot 探针超时回收）；Go 入口编译期绑定，**恒 ready**。
+- `POST /` 调用双轨（同一函数包二选一生效，优先级 fetch > main）：
+  - **main 风格**：请求 body = TW_DATA JSON → 200 `{"ok":true,"result":<入口返回值>,"stdout":"...","stderr":"..."}`（Go 实现的 stdout/stderr 恒空串，§3.1）；入口返回 error / 返回值不可 JSON 序列化 → 500 `{"ok":false,"error":...,"stdout","stderr"}`；body 非 JSON object → 400；body 上限 4MB（超限 413）；用户 panic 捕获为 500 错误封套（不杀常驻实例）。
+  - **fetch 风格**：成功封套 `{"ok":true,"status":<函数 HTTP status>,"headers":{...},"body_base64":"...","truncated":bool,"stdout","stderr"}`——headers 过滤 hop-by-hop 与 content-length/host/date/server，其余（含 content-type）原样透传、同名多值逗号合并；body 超 64KB 截断标 `truncated`。无触发器封套时 Request = `POST http://function/`、body = TW_DATA（invoke / cron 语义）。
+  - 未知路径 / 非 POST → 404 错误封套。
+- **per-request 超时**：分发 header `x-tw-timeout-seconds`（缺省 30s）——到点回 500 封套（error 注明 timed out）并放弃等待；诚实声明（Lambda 同款）：用户代码可能残跑至实例回收，inflight 按请求生命周期释放。
+
+**`x-tw-*` 分发 header 族**（dispatcher → runner，调用身份与控制面）：
+
+| header | 语义 |
+|---|---|
+| `x-tw-execution-token` | 本次执行的短期平台凭证（main 风格 `ctx.executionToken`；node fetch 风格经 `env.EXECUTION_TOKEN` 参数；Go fetch 风格经还原 Request 的本 header 可达，见 §3.1 fetch 风格身份通道） |
+| `x-tw-execution-id` | 平台执行 ID（日志关联） |
+| `x-tw-source` | 调用来源 `client` / `http\|cron\|event:{trigger_id}` / `server`；缺省/为空回落 `server`，**恒非空** |
+| `x-tw-invoking-user-id` | 触发用户 id（principal 注入不可伪造）；空串 = 非用户触发（系统语义） |
+| `x-tw-project-id` | 执行所属项目 id |
+| `x-tw-timeout-seconds` | per-request 超时秒数（缺省 30） |
+| `x-tw-trigger-envelope` | 触发器封套元数据（base64 JSON `{method,path,raw_query,headers}`，不含 body，≤12KB）：存在时 fetch 风格还原真 `*http.Request`（`url = http://trigger{path}?{raw_query}`、headers 原样、body = 分发 body 本身）、main 风格重组 TW_DATA（与 §13.1 封套逐字段同构） |
+
+**生命周期**：
+
+- `TW_MAX_REQUESTS`（默认 1000；≤0 = 不限）：每响应后计数，达标主动退出（dispatcher 检测退出后补位）；
+- SIGTERM → **drain**：停止接新请求（drain 中的 POST / 回 503）、等在途完成后退出；`TW_DRAIN_TIMEOUT_MS`（默认 10000）兜底强退。
+
+**协议演进宪法（四条，必须遵守）**——契约公开后消费方分两类：平台可控（node runner / Go bootstrap，受同版本纪律约束）与平台不可控（用户 BYO 契约镜像，`RunnerTemplateVersion` 的「重建即升级」对其无强制力）。因此：
+
+1. **只加不改不删**：既有端点 / 封套字段 / header 语义冻结；
+2. **未知 `x-tw-*` header 镜像侧必须忽略**（分发侧可先于镜像侧演进）；
+3. **封套新字段必须可选**（消费方防御式解析，未知/缺失字段不致命）；
+4. **分发侧（dispatcher）对响应封套的解析必须防御式**（未知/缺失字段不致命）。
+
+**双实现同版本纪律**：node runner.js 与 Go twmain runtime.go 共享单一常量 `RunnerTemplateVersion`（当前 = 5；Go 模板分支新增不改存量 node 语义，不 bump）——任一实现的语义变更必须同步另一实现并递增同一常量，禁止「node 到 v6 而 Go 停在 v5」的漂移。
+
+**本地测试指引**：契约镜像可直接 `docker run` 本地对照 `:18080`——`docker run --rm -p 18080:18080 <image>` 后 `curl http://127.0.0.1:18080/_tw/health` 与 `curl -X POST -d '{"hello":"world"}' http://127.0.0.1:18080/` 即可自测契约符合性（Lambda RIE 等效物）；twmain 的 runtime.go 与 runner.js 源码即参考实现。三期契约基础镜像（FROM node:18-alpine + 预置 runner）交付后，BYO 用户 `FROM` 后 COPY 代码即得合规镜像。
+
+### 3.3 部署后验证 spawn（构建质量门）
+
+build 成功后 dispatcher 自动追加**验证 spawn**（`functionsdispatcher/daemon.go` `spawnVerifyInstance`）：spawn 一枚验证实例 → `/_tw/health` 轮询（预算 = `functions.dispatcher.boot_timeout`，默认 60s）→ 就绪即回收。实施语义：
+
+- **开关**：`functions.dispatcher.verify_build`（config optional bool——未设置 = 默认开启，显式 false 全局关闭）；node / go 同一机制，无按 runtime 的分档。
+- **池外实例**：走 daemon 原语直连——不进 Redis 注册表、不受 `max_resident_instances` 约束、不参与 reaper 对账，用完即删。
+- **env 与执行同源**：验证实例携带函数当前 variables（模块顶层 / init 依赖环境变量是常见模式，无 env 的验证会误杀合法部署）；`TW_DATA` / `TW_EXECUTION_TOKEN` 不进容器 env（构建/验证期无执行身份，常驻的是容器不是凭证）。
+- **egress 与执行一致**：untrusted 函数（client_callable 或存在触发器）的验证实例挂 **internal 变体网络**——部署期不给不可信镜像开出网窗口（执行期 egress 约束不被部署期旁路）。
+- **失败处置**：回收容器日志尾部（≤64KB）拼进错误 → `deployment.error`——运行期错误（panic / 协议未实现）的第一现场；编译错误在构建日志、不经此路径。
+- **验证范围 = health 探针，不做 invoke 验证**：invoke 需要平台构造 TW_DATA 并**执行用户代码**（副作用不可控），违反「部署期不执行用户代码」不变量；「health 通过 ≠ invoke 语义正确」的残余风险由运行期 transport-error → 杀实例重建语义兜底（有意为之，非疏漏）。
 
 ## 4. 执行（同步 / 异步）
 
@@ -124,7 +228,7 @@ CMD ["node",".tw-runner.js"]
 
 CGI 形态（每请求一容器）为设计缺陷，常驻 runner 是唯一执行路径（v1 docker 执行器已移除）。
 
-**模型**：函数镜像 CMD 为平台 runner（`internal/infra/functions/runner/`）。模板版本常量 `RunnerTemplateVersion` 落 `function_deployments.template_version`（当前 = 5），语义变更必须递增。runner 启动即加载用户模块（约定 `index.js` 导出 `main(TW_DATA)`），加载完成前 `/_tw/health` 返回 not-ready；加载后监听容器内 `:18080`（仅 per-project 桥网络可达）：`POST /` body = TW_DATA JSON + header `x-tw-execution-token`，响应 200 `{"ok":true,"result":...}` / 500 `{"ok":false,"error":...}`（附加 stdout / stderr 尾部环缓冲）；达 `TW_MAX_REQUESTS` 自退出、SIGTERM 排空在途后退出。
+**模型**：函数镜像 CMD 为平台 runner（node：构建期 COPY `.tw-runner.js` 作 CMD；go：平台编译产物 `/tw-app` 内嵌同契约 runtime，§3.1——`internal/infra/functions/runner/` 与 `runner/gorunner/`）。模板版本常量 `RunnerTemplateVersion` 落 `function_deployments.template_version`（当前 = 5），语义变更必须递增（node/Go 双实现同版本纪律见 §3.2）。runner 启动即加载用户入口（node：约定 `index.js` 导出 `main`/`fetch`，加载完成前 `/_tw/health` 返回 not-ready；go：入口编译期绑定恒 ready），加载后监听容器内 `:18080`（仅 per-project 桥网络可达）：`POST /` body = TW_DATA JSON + header `x-tw-execution-token`，响应 200 `{"ok":true,"result":...}` / 500 `{"ok":false,"error":...}`（附加 stdout / stderr 尾部环缓冲）；达 `TW_MAX_REQUESTS` 自退出、SIGTERM 排空在途后退出（协议全貌见 §3.2）。
 
 **分发拓扑**：独立 `functions-dispatcher` 进程专职持有 docker.sock（compose 唯一挂载点；dokploy 编排下 dispatcher 以 `user: root` 运行——镜像缺省用户读不了宿主 `root:docker` 的 sock）。dispatcher 按需 join `tw-func-<project>` 网络（容器 NetworkConnect 自 attach；宿主进程模式跳过——注意 Docker Desktop for Windows/macOS 的 VM 拓扑下容器 bridge IP 对宿主不可路由，分发通路要求 Linux / dokploy compose 拓扑）。server/worker 经 HTTP API 分发（适配 Executor 端口），零 daemon 依赖；zip 构建以 base64 内联传输（无共享文件系统假设）。API 面（内网专用 + 可选 `x-tw-dispatcher-token` 静态共享密钥）：
 
@@ -188,7 +292,7 @@ exports.fetch = async (request, env) => {
 };
 ```
 
-sync 模式下函数返回的 `Response` 完整透传给调用方：HTTP status（≥100 即函数 HTTP status）、headers（runner 侧过滤 hop-by-hop 与 date/server/host 等平台头；handler 侧第二层白名单过滤）、body（>64KB 截断）。自定义状态码、二进制（`body_base64` 无损）、302 重定向从此可达。main 风格封套照旧进 TW_DATA（双轨并存到 main 退役）。一期限制：invoke 路径（server / client）不回传 headers、body 全缓冲不流式；`waitUntil` 后台任务不做。
+sync 模式下函数返回的 `Response` 完整透传给调用方：HTTP status（≥100 即函数 HTTP status）、headers（runner 侧过滤 hop-by-hop 与 date/server/host 等平台头；handler 侧第二层白名单过滤）、body（>64KB 截断）。自定义状态码、二进制（`body_base64` 无损）、302 重定向从此可达。main 风格封套照旧进 TW_DATA（双轨并存到 main 退役）。一期限制：invoke 路径（server / client）不回传 headers、body 全缓冲不流式；`waitUntil` 后台任务不做。Go 运行时的 fetch 双轨对应 `Fetch(w http.ResponseWriter, r *http.Request)`（§3.1）——请求级身份经还原 Request 的 x-tw-* header 可达（信息等价、通道不同，见 §3.1 fetch 风格身份通道）。
 
 ### 4.3.3 ctx 调用身份三件（runner v5）
 
@@ -274,8 +378,10 @@ Functions 的异步执行投递失败亦通过统一 `outbox` 事件对外可见
 
 ```bash
 go test ./pkg/semaphore -run TestRedisSemaphore -count=1
-TORCHWOOD_RUN_DOCKER_TESTS=1 go test ./functionsdispatcher -run TestIntegration_Dispatcher -count=1
+go test ./functionsdispatcher -run TestIntegration_Dispatcher -count=1
 ```
+
+（dispatcher 集成测试探测本机 docker daemon：可达即跑、不可达自动 skip；非默认 daemon 用 `TORCHWOOD_FUNCTIONS_DOCKER_HOST` 指向。）
 
 ## 9. 配置
 
@@ -287,7 +393,9 @@ TORCHWOOD_RUN_DOCKER_TESTS=1 go test ./functionsdispatcher -run TestIntegration_
 | `functions.dispatcher.shared_token` | 内网可选认证（`x-tw-dispatcher-token`） |
 | `functions.dispatcher.max_resident_instances` | 每 daemon 常驻总量上限，默认 8 |
 | `functions.dispatcher.queue_depth` / `queue_head_timeout` | 有界排队深度 32 / 队首超时 10s |
-| `functions.dispatcher.boot_timeout` | 实例启动超时 60s |
+| `functions.dispatcher.boot_timeout` | 实例启动超时 60s（验证 spawn 的探针预算同源） |
+| `functions.dispatcher.build_timeout` | 构建整体超时（构建 ctx 与请求 ctx 解耦后的独立预算），默认 `5m`——Go 冷构建含基础镜像拉取，全新环境首个 Go 部署必要时调大（§3.1） |
+| `functions.dispatcher.verify_build` | 构建后验证 spawn 开关（optional bool：未设置 = 默认开启，显式 false 关闭；§3.3） |
 | `functions.dispatcher.timeout_budget` | 超时熔断阈值，默认 5 |
 | `functions.dispatcher.addr` | dispatcher HTTP 监听地址，默认 `:9070` |
 | `functions.dispatcher.callback_container` | dokploy 场景随函数网络 attach 的 server 容器名 |
@@ -320,7 +428,7 @@ TORCHWOOD_RUN_DOCKER_TESTS=1 go test ./functionsdispatcher -run TestIntegration_
 
 - 单元：`internal/app/functions/`（并发上限、截断、队列 payload 校验、鉴权分支）；`internal/infra/queue/redis_queue_test.go`。
 - 安全：`security_test.go`（zip slip / 符号链接 / size 上限）；`authz_test.go`（写方法鉴权）；`semaphore_test.go`（SETNX + Lua 互斥）。
-- 集成：`functionsdispatcher/daemon_integration_test.go`（`TORCHWOOD_RUN_DOCKER_TESTS=1`，CI 预拉 node:18-alpine；含 python zip 构建期拒绝用例）；worker 的消费 / requeue 测试（attempt 持久化、Transition CAS）。
+- 集成：`functionsdispatcher/daemon_integration_test.go`（门控 `TORCHWOOD_FUNCTIONS_DOCKER_HOST`，CI 预拉 node:18-alpine / golang:1.26-alpine；含 python zip 构建期拒绝用例）；Go 端到端（`TestIntegration_GoMainFunctionE2E` / `GoFetchFunctionE2E` 双风格执行断言、`NodeVerifyStillGreenE2E` 护栏、`GoVerifyFailureCapturesLogTail` 验证失败日志尾回收、`GoMissingEntryRejected` 缺入口拒收）；worker 的消费 / requeue 测试（attempt 持久化、Transition CAS）。
 - **未落地清单**：独立构建队列（CreateDeployment 同步构建，worker 消费前补构建兜底）；重试无死信队列（超限直接标 failed）；变量明文；`entrypoint` 固定入口；多机需对象存储承载 zip；池策略管理 API 面（min/max_instances、idle_ttl、max_requests、concurrency 的 UpdateFunction 字段 + Console 卡片未落地）——**concurrency 现无管理入口，恒为列默认 1**，行为与 v2 串行等价。
 
 ## 13. 触发器（HTTP + cron + 事件）

@@ -40,7 +40,7 @@ func newFunctionsDeployCmd(g *GlobalFlags) *verb {
 	return newVerb(g, "deploy", "deploy a function directory: zip in memory, create deployment, optionally watch the build", "functions deploy --function-id <id> [--dir .] [--watch]",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&functionID, "function-id", "", "function ID (required)")
-			fs.StringVar(&dir, "dir", ".", "function directory to deploy (index.js expected; node_modules/.git excluded)")
+			fs.StringVar(&dir, "dir", ".", "function directory to deploy (index.js for Node or go.mod for Go at the root; node_modules/.git excluded)")
 			fs.BoolVar(&watch, "watch", false, "poll the build status until ready/failed; on failure keep watching the directory and redeploy on change (Ctrl-C to stop)")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
@@ -69,6 +69,28 @@ type deployOptions struct {
 	pollEvery   time.Duration
 	pollTimeout time.Duration
 	watchEvery  time.Duration
+}
+
+// validateDeployDir 校验 deploy 目录形态（zip 根二选一，Go 一期放宽，设计
+// functions-runtimes-and-sources.md Rollout）：index.js（node-18.0 运行时）
+// 或 go.mod（go-1.26 运行时，zip 根 = module 根）。判定优先级与服务端 zip
+// 探测一致（index.js > go.mod，混装按 node）。注意 dev 命令不走本校验——
+// 本地 runner 是 node 本体，go 函数本地无法运行（validateFunctionDir 保持
+// index.js 单一口径）。
+func validateDeployDir(dir string) error {
+	if info, err := os.Stat(filepath.Join(dir, "index.js")); err == nil {
+		if info.IsDir() {
+			return fmt.Errorf("--dir/index.js is a directory")
+		}
+		return nil
+	}
+	if info, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+		if info.IsDir() {
+			return fmt.Errorf("--dir/go.mod is a directory")
+		}
+		return nil
+	}
+	return fmt.Errorf("--dir must contain index.js (Node function: exports.main/exports.fetch) or go.mod (Go function: module root package exporting Fetch or Main) at its root; neither was found")
 }
 
 // zipFunctionDir 把函数目录打进内存 zip：排除 node_modules / .git（任意
@@ -231,7 +253,7 @@ func runDeploy(g *GlobalFlags, stdout io.Writer, opts deployOptions) error {
 	if opts.watchEvery <= 0 {
 		opts.watchEvery = deployWatchEvery
 	}
-	if err := validateFunctionDir(opts.dir); err != nil {
+	if err := validateDeployDir(opts.dir); err != nil {
 		return err
 	}
 	if err := deployOnce(g, stdout, opts); err != nil {

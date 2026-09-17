@@ -32,6 +32,43 @@ func TestValidateFunctionDir(t *testing.T) {
 	require.NoError(t, validateFunctionDir(good))
 }
 
+func TestValidateDeployDir(t *testing.T) {
+	// 仅 index.js：node 形态，行为与放宽前一致。
+	nodeOnly := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(nodeOnly, "index.js"), []byte("exports.main=()=>1"), 0o600))
+	require.NoError(t, validateDeployDir(nodeOnly))
+
+	// 仅 go.mod：go-1.26 形态（Go 一期放宽，设计 Rollout「functions deploy
+	// 目录校验放宽为 index.js/go.mod 二选一」）——放宽前此处报 index.js 错。
+	goOnly := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(goOnly, "go.mod"), []byte("module example.com/fn\n\ngo 1.26\n"), 0o600))
+	require.NoError(t, validateDeployDir(goOnly), "仅 go.mod 应放行")
+
+	// 两者共存：合法（服务端 zip 探测优先级 index.js > go.mod，按 node）。
+	mixed := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(mixed, "index.js"), []byte("exports.main=()=>1"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(mixed, "go.mod"), []byte("module example.com/fn\n"), 0o600))
+	require.NoError(t, validateDeployDir(mixed))
+
+	// 两者皆无：拒绝且文案提示两种受支持形态。
+	empty := t.TempDir()
+	err := validateDeployDir(empty)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "index.js")
+	require.Contains(t, err.Error(), "go.mod")
+
+	// 入口文件为目录：拒绝（与 validateFunctionDir 同款防呆）。
+	jsDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(jsDir, "index.js"), 0o700))
+	require.Error(t, validateDeployDir(jsDir), "index.js 为目录拒绝")
+	modDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(modDir, "go.mod"), 0o700))
+	require.Error(t, validateDeployDir(modDir), "go.mod 为目录拒绝")
+
+	// 目录不存在：拒绝。
+	require.Error(t, validateDeployDir(filepath.Join(t.TempDir(), "nope")))
+}
+
 func TestResolveNodePath(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not in PATH")

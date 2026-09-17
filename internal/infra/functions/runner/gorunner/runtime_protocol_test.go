@@ -420,12 +420,16 @@ func Fetch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Server", "fake")      // 平台头：必须被滤
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"method": r.Method,
-		"url":    r.URL.String(),
-		"path":   r.URL.Path,
-		"query":  r.URL.RawQuery,
-		"sig":    r.Header.Get("X-Hub-Signature"),
-		"body":   string(body),
+		"method":        r.Method,
+		"url":           r.URL.String(),
+		"path":          r.URL.Path,
+		"query":         r.URL.RawQuery,
+		"sig":           r.Header.Get("X-Hub-Signature"),
+		"body":          string(body),
+		"idSource":      r.Header.Get("X-Tw-Source"),
+		"idToken":       r.Header.Get("X-Tw-Execution-Token"),
+		"idUser":        r.Header.Get("X-Tw-Invoking-User-Id"),
+		"idTriggerHdr":  r.Header.Get("X-Tw-Trigger-Envelope") != "",
 	})
 }
 `
@@ -437,9 +441,12 @@ func TestGoRuntime_FetchEnvelope(t *testing.T) {
 	// 1) 触发器封套还原：path/raw_query/headers/body 各归其位；响应封套
 	//    status/headers/body_base64 恒在，hop-by-hop 与平台头被滤。
 	hdr := triggerEnvelopeHeader(http.MethodPost, "/f/p1/tok1", "signature=abc&ts=9",
-		map[string][]string{"x-hub-signature": {"sha"}})
+		map[string][]string{"x-hub-signature": {"sha"}, "x-tw-source": {"spoofed"}})
 	status, env := invoke(t, base, []byte(`<xml>raw-body</xml>`), map[string]string{
 		"X-Tw-Trigger-Envelope": hdr,
+		"X-Tw-Source":           "client",
+		"X-Tw-Execution-Token":  "tok-1",
+		"X-Tw-Invoking-User-Id": "u-1",
 	})
 	if status != 200 || !env.Ok || env.Status != http.StatusCreated {
 		t.Fatalf("fetch invoke mismatch: %d %+v", status, env)
@@ -472,6 +479,14 @@ func TestGoRuntime_FetchEnvelope(t *testing.T) {
 	if got["body"] != "<xml>raw-body</xml>" {
 		t.Fatalf("封套模式下 body = 分发 HTTP body 本身: %+v", got)
 	}
+	// 身份头通道（与 main 风格 ctx 信息等价）：分发 x-tw-* 头还原进 Request；
+	// 封套触发头撞名时身份头胜出（平台身份不得被触发方伪造）。
+	if got["idSource"] != "client" || got["idToken"] != "tok-1" || got["idUser"] != "u-1" {
+		t.Fatalf("fetch 身份头必须可达: %+v", got)
+	}
+	if got["idTriggerHdr"] != false {
+		t.Fatalf("协议内 header（trigger-envelope）不得进用户 Request: %+v", got)
+	}
 	if env.Truncated {
 		t.Fatalf("未截断响应不得标 truncated: %+v", env)
 	}
@@ -493,6 +508,10 @@ func TestGoRuntime_FetchEnvelope(t *testing.T) {
 	}
 	if !strings.Contains(got["body"].(string), `"twdata":true`) {
 		t.Fatalf("无封套 body = TW_DATA: %+v", got)
+	}
+	// 无封套同样携带身份头通道；source 缺省回落 "server"（与 node env 同语义）。
+	if got["idSource"] != "server" {
+		t.Fatalf("无封套 source 必须回落 server: %+v", got)
 	}
 }
 

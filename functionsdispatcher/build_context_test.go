@@ -174,10 +174,10 @@ func TestPrepareBuildContext_GoVendorBranch(t *testing.T) {
 	err := prepareBuildContext(buildDir, BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip: makeEntryZipFiles(t, map[string]string{
-			"go.mod":              goModFixture + "\nrequire github.com/some/dep v1.0.0\n",
-			"main.go":             goMainFixture,
-			"vendor/modules.txt":  "# github.com/some/dep v1.0.0\n",
-			"vendor/x/x.go":       "package x\n",
+			"go.mod":             goModFixture + "\nrequire github.com/some/dep v1.0.0\n",
+			"main.go":            goMainFixture,
+			"vendor/modules.txt": "# github.com/some/dep v1.0.0\n",
+			"vendor/x/x.go":      "package x\n",
 		}),
 		Runtime: "go-1.26",
 	})

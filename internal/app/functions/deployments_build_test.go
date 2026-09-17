@@ -57,8 +57,8 @@ func TestBuildDeployment_BuildSpecPayload(t *testing.T) {
 	require.Equal(t, "go-1.26", spec.Runtime, "runtime = fn.runtime 原值（D7 对账基准）")
 	require.Equal(t, int64(30), spec.FunctionTimeoutSeconds, "函数超时原值（旧池 drain 宽限，D14）")
 	require.Equal(t, map[string]string{
-		"FOO":              "bar",
-		twAPIBaseURLEnv:    "http://torchwood-server:9080",
+		"FOO":           "bar",
+		twAPIBaseURLEnv: "http://torchwood-server:9080",
 	}, spec.Env, "Env 与执行链同源组装（sanitizeEnv + api_base_url 注入）")
 	require.NotContains(t, spec.Env, twExecutionTokenEnv, "构建/验证期无执行身份 token")
 	require.True(t, spec.EgressUntrusted, "client_callable → untrusted（验证实例与执行同网，A1）")

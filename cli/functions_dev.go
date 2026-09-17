@@ -76,6 +76,8 @@ func newFunctionsDevCmd(g *GlobalFlags) *verb {
 
 // validateFunctionDir 校验函数目录形态：index.js 必须存在（runner 启动即
 // 同步 require ./index.js；缺失时 runner 常驻 not-ready，提前拦截体验更好）。
+// 仅 dev 命令消费——本地 runner 是 node 本体；deploy 的目录口径更宽
+// （index.js 或 go.mod，见 functions_deploy.go 的 validateDeployDir）。
 func validateFunctionDir(dir string) error {
 	info, err := os.Stat(filepath.Join(dir, "index.js"))
 	if err != nil {

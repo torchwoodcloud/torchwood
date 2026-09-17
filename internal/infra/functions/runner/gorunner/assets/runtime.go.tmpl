@@ -223,7 +223,7 @@ func route(e entry, w http.ResponseWriter, r *http.Request) {
 	// 缓冲 1：超时放弃等待后，残跑 goroutine 的发送不泄漏、不阻塞。
 	finished := make(chan *runnerReply, 1)
 	go func() {
-		finished <- invoke(e, meta, raw, callCtx)
+		finished <- invoke(e, meta, raw, callCtx, identityHeaders(r.Header))
 	}()
 
 	timer := time.NewTimer(time.Duration(timeoutSeconds) * time.Second)
@@ -244,14 +244,14 @@ func route(e entry, w http.ResponseWriter, r *http.Request) {
 // invoke 执行用户入口并产出响应封套（在独立 goroutine 中运行：per-request
 // 超时到点放弃等待，goroutine 残跑同 node）。panic 捕获为 500 错误封套——
 // 用户 panic 不得杀掉常驻实例（node 同步 throw 同款语义）。
-func invoke(e entry, meta *triggerEnvelopeMeta, raw []byte, callCtx map[string]string) (reply *runnerReply) {
+func invoke(e entry, meta *triggerEnvelopeMeta, raw []byte, callCtx map[string]string, identity http.Header) (reply *runnerReply) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			reply = errorReply(fmt.Sprintf("panic: %v", rec))
 		}
 	}()
 	if e.fetch != nil {
-		return runFetch(e.fetch, meta, raw)
+		return runFetch(e.fetch, meta, raw, identity)
 	}
 	data, err := buildTWData(meta, raw)
 	if err != nil {
@@ -295,8 +295,10 @@ func runMain(fn func(map[string]any, map[string]string) (any, error), data map[s
 // 与 cron 语义），用户响应经 httptest.ResponseRecorder 同构捕获 → fetch
 // 封套 {ok, status, headers, body_base64, truncated}——status/headers/
 // body_base64 恒在，无损承载二进制响应；body 超 64KB 截断标 truncated。
-func runFetch(fn func(http.ResponseWriter, *http.Request), meta *triggerEnvelopeMeta, raw []byte) *runnerReply {
-	req, err := buildFetchRequest(meta, raw)
+// identity 是请求级身份头通道（与 main 风格 ctx 信息等价、通道不同）：
+// 还原后的 Request 可经 r.Header 读 x-tw-* 身份头。
+func runFetch(fn func(http.ResponseWriter, *http.Request), meta *triggerEnvelopeMeta, raw []byte, identity http.Header) *runnerReply {
+	req, err := buildFetchRequest(meta, raw, identity)
 	if err != nil {
 		return errorReply("invalid request: " + err.Error())
 	}
@@ -340,14 +342,19 @@ func runFetch(fn func(http.ResponseWriter, *http.Request), meta *triggerEnvelope
 // 语义）：有封套 → url = http://trigger{path}?{raw_query}、headers 原样
 // （单值/多值形态均承载）、body = 分发 HTTP body 本身（封套模式下
 // dispatcher 发的是触发器原始 body 而非 TW_DATA；GET/HEAD 不允许 body，
-// 置空）；无封套 → POST http://function/ body=TW_DATA。
-func buildFetchRequest(meta *triggerEnvelopeMeta, raw []byte) (*http.Request, error) {
+// 置空）；无封套 → POST http://function/ body=TW_DATA。identity（调用身份
+// 头，identityHeaders 产出）后合并——封套触发头与之撞名时身份头胜出
+// （平台身份不得被触发方伪造）。
+func buildFetchRequest(meta *triggerEnvelopeMeta, raw []byte, identity http.Header) (*http.Request, error) {
 	if meta == nil {
 		req, err := http.NewRequest(http.MethodPost, "http://function/", bytes.NewReader(raw))
 		if err != nil {
 			return nil, err
 		}
 		req.Header.Set("Content-Type", "application/json")
+		for k, vs := range identity {
+			req.Header[k] = vs
+		}
 		return req, nil
 	}
 	method := strings.ToUpper(meta.Method)
@@ -375,7 +382,30 @@ func buildFetchRequest(meta *triggerEnvelopeMeta, raw []byte) (*http.Request, er
 	for k, vs := range meta.headerValues() {
 		req.Header[textproto.CanonicalMIMEHeaderKey(k)] = vs
 	}
+	for k, vs := range identity {
+		req.Header[k] = vs
+	}
 	return req, nil
+}
+
+// identityHeaders 提取分发请求的调用身份头（fetch 风格身份通道：与 main
+// 风格 ctx 六件信息等价、通道不同——设计 §0「双实现」口径）。source 空
+// 回落 "server"（与 ctx / node fetch env 同语义）；其余身份头仅非空时
+// 注入（Get 对空值与缺失同返 ""，信息等价）。apiBaseUrl 不走 header
+// （容器 env TW_API_BASE_URL，与 ctx 同源）。
+func identityHeaders(h http.Header) http.Header {
+	out := http.Header{}
+	for _, k := range []string{"X-Tw-Execution-Token", "X-Tw-Execution-Id", "X-Tw-Invoking-User-Id", "X-Tw-Project-Id"} {
+		if v := h.Get(k); v != "" {
+			out.Set(k, v)
+		}
+	}
+	src := h.Get("X-Tw-Source")
+	if src == "" {
+		src = "server"
+	}
+	out.Set("X-Tw-Source", src)
+	return out
 }
 
 // buildTWData 组装 main 风格 TW_DATA（v4 §2.3「与现状等价」/D9 双轨）：
