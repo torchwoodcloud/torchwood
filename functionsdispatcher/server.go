@@ -16,6 +16,7 @@ import (
 //
 //	POST /v1/dispatch/builds        zip（base64）构建镜像（v2 runner 模板）
 //	POST /v1/dispatch/executions    执行分发（池管理热路径）
+//	POST /v1/dispatch/images/import 镜像源导入（pull/digest 钉死/retag/契约验证）
 //	POST /v1/dispatch/images/remove 删除镜像（幂等）
 //	GET  /healthz                   进程存活
 //	GET  /metrics                   Prometheus 指标（只读观测面）
@@ -37,6 +38,7 @@ func (s *dispatchServer) routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/dispatch/builds", s.handleBuild)
 	mux.HandleFunc("POST /v1/dispatch/executions", s.handleExecute)
+	mux.HandleFunc("POST /v1/dispatch/images/import", s.handleImportImage)
 	mux.HandleFunc("POST /v1/dispatch/images/remove", s.handleRemoveImage)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -184,4 +186,43 @@ func (s *dispatchServer) handleRemoveImage(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleImportImage 承接镜像源导入（三期阶段三，设计 §3）：必填形状校验 →
+// daemon.ImportImage（host 校验/pull/digest 钉死/retag/删原始引用/强制契约
+// 验证）→ 成功回 Digest；导入失败与 builds 同风格走 200 + Error（部署业务
+// 结果，由调用方落 deployment.error），仅请求形状错误走状态码映射
+// （writeError）。导入成功且 function_timeout_seconds > 0 时旧池 drain
+// （与 handleBuild 同语义：镜像部署换版同样回收旧 deployment 实例）。
+func (s *dispatchServer) handleImportImage(w http.ResponseWriter, r *http.Request) {
+	var req ImportImageRequest
+	if err := decodeJSON(r, &req, 1<<20); err != nil {
+		writeError(w, err)
+		return
+	}
+	if req.ProjectID == "" || req.FunctionID == "" || req.DeploymentID == "" || req.Reference == "" {
+		writeError(w, status.Error(codes.InvalidArgument, "project_id/function_id/deployment_id/reference are required"))
+		return
+	}
+	digest, err := s.daemon.ImportImage(r.Context(), ImportImageOptions{
+		ProjectID:              req.ProjectID,
+		FunctionID:             req.FunctionID,
+		DeploymentID:           req.DeploymentID,
+		Reference:              req.Reference,
+		RegistryUsername:       req.RegistryUsername,
+		RegistryToken:          req.RegistryToken,
+		ExpectedDigest:         req.ExpectedDigest,
+		FunctionTimeoutSeconds: req.FunctionTimeoutSeconds,
+		Env:                    req.Env,
+		EgressUntrusted:        req.EgressUntrusted,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusOK, ImportImageResponse{Error: errorMessage(err)})
+		return
+	}
+	if req.FunctionTimeoutSeconds > 0 {
+		s.pool.DrainForDeployment(r.Context(), req.ProjectID, req.FunctionID, req.DeploymentID,
+			time.Duration(req.FunctionTimeoutSeconds)*time.Second)
+	}
+	writeJSON(w, http.StatusOK, ImportImageResponse{Digest: digest})
 }

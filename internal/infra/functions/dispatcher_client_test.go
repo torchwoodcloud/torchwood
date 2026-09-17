@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -168,16 +169,19 @@ func TestDispatcherExecutor_ExecuteCarriesIdentityFields(t *testing.T) {
 	}
 }
 
-// TestDispatcherExecutor_ImportImagePlaceholderUnimplemented 三期阶段 1 占位
-// 断言（设计 §3）：ImportImage 在阶段 2 dispatcher 端点接线前恒返回
-// Unimplemented（image 源未开放），且不发出任何 HTTP 请求——zip/git 源
-// 不受影响。
-func TestDispatcherExecutor_ImportImagePlaceholderUnimplemented(t *testing.T) {
-	called := false
+// TestDispatcherExecutor_ImportImageCarriesPayload 三期阶段 3 真实实现断言
+// （设计 §3）：ImportImage 按 ImportImageSpec 全量组装请求——一次性 registry
+// 凭证内联单次转发、ExpectedDigest 透传（幂等补拉）、验证 spawn 载荷齐备；
+// 响应 digest 即钉死值回传。
+func TestDispatcherExecutor_ImportImageCarriesPayload(t *testing.T) {
+	pinned := "sha256:" + strings.Repeat("ab", 32)
+	var body map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
+		raw, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(raw, &body))
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{}`))
+		_, _ = w.Write([]byte(`{"digest":"` + pinned + `"}`))
 	}))
 	defer srv.Close()
 
@@ -186,13 +190,86 @@ func TestDispatcherExecutor_ImportImagePlaceholderUnimplemented(t *testing.T) {
 	}}
 	exec := NewDispatcherExecutor(cfg)
 	digest, err := exec.ImportImage(context.Background(), domainfunctions.ImportImageSpec{
-		ProjectID:    "p1",
-		FunctionID:   "fn_1",
-		DeploymentID: "dep_1",
-		Reference:    "registry.example.com/acme/greet:v1",
+		ProjectID:              "p1",
+		FunctionID:             "fn_1",
+		DeploymentID:           "dep_1",
+		Reference:              "ghcr.io/acme/greet:v1",
+		RegistryUsername:       "user",
+		RegistryToken:          "tok",
+		ExpectedDigest:         "sha256:expected",
+		FunctionTimeoutSeconds: 30,
+		Env:                    map[string]string{"FOO": "bar"},
+		EgressUntrusted:        true,
 	})
-	require.Empty(t, digest)
-	require.Equal(t, codes.Unimplemented, status.Code(err), "占位实现恒 Unimplemented（phase 3 stage 2 wiring）")
-	require.ErrorContains(t, err, "phase 3 stage 2")
-	require.False(t, called, "占位实现不得发出任何 dispatcher 请求")
+	require.NoError(t, err)
+	require.Equal(t, pinned, digest, "响应 digest 即钉死值（调用方落 source_ref）")
+	require.Equal(t, "p1", body["project_id"])
+	require.Equal(t, "fn_1", body["function_id"])
+	require.Equal(t, "dep_1", body["deployment_id"])
+	require.Equal(t, "ghcr.io/acme/greet:v1", body["reference"])
+	require.Equal(t, "user", body["registry_username"], "一次性凭证内联转发（不落库，D8）")
+	require.Equal(t, "tok", body["registry_token"])
+	require.Equal(t, "sha256:expected", body["expected_digest"], "ExpectedDigest 透传（幂等补拉/复检）")
+	require.Equal(t, float64(30), body["function_timeout_seconds"], "函数超时必携（旧池 drain 宽限）")
+	require.Equal(t, map[string]any{"FOO": "bar"}, body["env"], "函数 variables 必携（强制契约验证 spawn）")
+	require.Equal(t, true, body["egress_untrusted"])
+}
+
+// TestDispatcherExecutor_ImportImageErrorMapping 导入失败（host 校验/pull/
+// 契约验证）走 200 + Error 业务结果：错误消息透传（第一现场落
+// deployment.error）；HTTP 状态码错误（dispatcher 不可达等）走 do 的映射。
+func TestDispatcherExecutor_ImportImageErrorMapping(t *testing.T) {
+	cases := []struct {
+		name       string
+		status     int
+		respBody   string
+		wantErrHas string
+		wantCode   codes.Code
+	}{
+		{
+			name:       "business-error-200",
+			status:     http.StatusOK,
+			respBody:   `{"error":"docker pull \"ghcr.io/a/b:v1\" failed: pull access denied"}`,
+			wantErrHas: "pull access denied",
+			wantCode:   codes.Unknown,
+		},
+		{
+			name:       "invalid-argument-400",
+			status:     http.StatusBadRequest,
+			respBody:   `{"error":"image reference host \"192.168.1.5:5000\" is an IP literal: refused"}`,
+			wantErrHas: "IP literal",
+			wantCode:   codes.InvalidArgument,
+		},
+		{
+			name:       "empty-digest-500",
+			status:     http.StatusOK,
+			respBody:   `{}`,
+			wantErrHas: "empty image digest",
+			wantCode:   codes.Internal,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.respBody))
+			}))
+			defer srv.Close()
+
+			cfg := &config.AppConfig{Functions: &config.Functions{
+				Dispatcher: &config.Functions_Dispatcher{Url: srv.URL},
+			}}
+			exec := NewDispatcherExecutor(cfg)
+			digest, err := exec.ImportImage(context.Background(), domainfunctions.ImportImageSpec{
+				ProjectID:    "p1",
+				FunctionID:   "fn_1",
+				DeploymentID: "dep_1",
+				Reference:    "ghcr.io/acme/greet:v1",
+			})
+			require.Empty(t, digest)
+			require.ErrorContains(t, err, tc.wantErrHas)
+			require.Equal(t, tc.wantCode, status.Code(err))
+		})
+	}
 }

@@ -176,13 +176,47 @@ func (d *DispatcherExecutor) Build(ctx context.Context, spec functions.BuildSpec
 	return nil
 }
 
-// ImportImage 拉取外部镜像并钉死 digest 后 retag 进平台命名（Executor 端口
-// 三期阶段 1 新增方法，设计 §3）。阶段 1 占位：dispatcher 侧
-// /v1/dispatch/images/import 端点与真实 pull/retag/契约验证在阶段 2 接线，
-// 本占位恒返回 Unimplemented——首次导入失败无行、复检路径收敛 failed，
-// 语义 = image 源在阶段 2 之前未开放（zip/git 源不受影响）。
+// dispatchImportImageResponse 是 images/import 端点出参（Error 非空 = 导入
+// 失败：host 校验/pull/digest 一致性/契约验证，与 builds 出参同风格）。
+type dispatchImportImageResponse struct {
+	Digest string `json:"digest,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
+// ImportImage 经 dispatcher 拉取外部镜像并导入为平台镜像（三期阶段三真实
+// 实现，设计 §3：端点 /v1/dispatch/images/import）：pull（digest 钉死）→
+// retag 进平台命名 → 强制契约验证，返回钉死 digest（调用方落 source_ref）。
+// 载荷按 ImportImageSpec 全量组装：一次性 registry 凭证内联单次转发（不落
+// 库不落日志）、ExpectedDigest 透传（幂等补拉/复检）。响应体仅 digest/
+// error，复用 1MiB 响应上限足够（maxExecuteResponseBytes 同口径）。
 func (d *DispatcherExecutor) ImportImage(ctx context.Context, spec functions.ImportImageSpec) (string, error) {
-	return "", status.Error(codes.Unimplemented, "image import not wired yet (phase 3 stage 2: dispatcher /v1/dispatch/images/import)")
+	var out dispatchImportImageResponse
+	err := d.do(ctx, "/v1/dispatch/images/import", map[string]any{
+		"project_id":    spec.ProjectID,
+		"function_id":   spec.FunctionID,
+		"deployment_id": spec.DeploymentID,
+		"reference":     spec.Reference,
+		// ——一次性 registry 凭证（仅首次导入随请求携带，D8）——
+		"registry_username": spec.RegistryUsername,
+		"registry_token":    spec.RegistryToken,
+		// 预期 digest 非空 = 幂等补拉/复检（本地命中零 pull）。
+		"expected_digest":          spec.ExpectedDigest,
+		"function_timeout_seconds": spec.FunctionTimeoutSeconds,
+		// ——强制契约验证 spawn 载荷（env 与构建链同源组装、无执行身份
+		// token）——
+		"env":              spec.Env,
+		"egress_untrusted": spec.EgressUntrusted,
+	}, &out, maxExecuteResponseBytes)
+	if err != nil {
+		return "", err
+	}
+	if out.Error != "" {
+		return "", fmt.Errorf("image import failed: %s", out.Error)
+	}
+	if out.Digest == "" {
+		return "", status.Error(codes.Internal, "dispatcher returned an empty image digest")
+	}
+	return out.Digest, nil
 }
 
 // Execute 经 dispatcher 分发执行（池管理在 dispatcher 侧；本进程只做协议

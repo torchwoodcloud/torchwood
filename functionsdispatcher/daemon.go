@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -64,8 +66,49 @@ type Daemon interface {
 	// 代码的不变量由模板层保持——runner 仅被 COPY/编译）。构建链载荷一期
 	// 定稿形态（设计 §0），runtime 对账与 go bootstrap 生成在实现内完成。
 	BuildImage(ctx context.Context, opts BuildImageOptions) error
+	// ImportImage 拉取外部镜像导入为平台镜像（三期阶段三，设计 §3）：host
+	// 名称级校验 → pull（ExpectedDigest 本地命中零 pull）→ digest 钉死 →
+	// retag 进平台命名并删原始引用标签 → 强制契约验证 spawn → 返回钉死
+	// digest（调用方落 deployment.source_ref）。编排见 importImage。
+	ImportImage(ctx context.Context, opts ImportImageOptions) (string, error)
 	// RemoveImage 删除镜像（幂等）。
 	RemoveImage(ctx context.Context, functionID, deploymentID string) error
+}
+
+// ImportImageOptions 是 ImportImage 的入参（镜像源导入链全量载荷，与
+// BuildImageOptions 同风格；由 handleImportImage 从 ImportImageRequest 组装）。
+type ImportImageOptions struct {
+	ProjectID    string
+	FunctionID   string
+	DeploymentID string
+	// Reference 是用户提交的原始镜像引用（host/repo[:tag|@sha256:...]），
+	// 与部署行 source_url 同值。
+	Reference string
+	// RegistryUsername/RegistryToken 是一次性 registry 凭证（base64
+	// RegistryAuth 后单次转发 daemon pull；不落库不落日志，D8）。
+	RegistryUsername string
+	RegistryToken    string
+	// ExpectedDigest 非空 = 幂等补拉/复检：本地平台镜像已持有该 digest 时
+	// 零 pull 直接确认；解析结果与该值不一致 InvalidArgument（防 tag 漂移）。
+	ExpectedDigest string
+	// FunctionTimeoutSeconds 是旧池 drain 宽限上限（由 handleImportImage 在
+	// 导入成功后消费，与 handleBuild 的 drain 同语义；ImportImage 实现自身
+	// 不消费——保留在 opts 供 fake 断言与 drain 联动收敛在单一载荷）。
+	FunctionTimeoutSeconds int64
+	// Env 是契约验证 spawn 携带的函数 variables（仅验证 spawn 消费）。
+	Env map[string]string
+	// EgressUntrusted：untrusted 函数的验证实例挂 internal 变体网络（A1）。
+	EgressUntrusted bool
+}
+
+// imageClient 收窄 ImportImage 依赖的 docker 镜像操作面（真实实现 =
+// *client.Client；单测注入 fake 驱动 pull→inspect→tag→remove 序列的确定性
+// 验证，不依赖真实 daemon——与 netCli 同款收窄注入模式）。
+type imageClient interface {
+	ImagePull(ctx context.Context, ref string, options image.PullOptions) (io.ReadCloser, error)
+	ImageInspect(ctx context.Context, imageID string, inspectOpts ...client.ImageInspectOption) (image.InspectResponse, error)
+	ImageTag(ctx context.Context, source, target string) error
+	ImageRemove(ctx context.Context, imageID string, options image.RemoveOptions) ([]image.DeleteResponse, error)
 }
 
 // BuildImageOptions 是 BuildImage 的入参（设计 §0 定稿形态）：构建链载荷
@@ -131,6 +174,9 @@ type dockerDaemon struct {
 	// netCli 是 cli 的网络操作收窄视图（生产与 cli 同一对象）；独立字段
 	// 仅为单测可注入。
 	netCli networkClient
+	// imgCli 是 cli 的镜像操作收窄视图（生产与 cli 同一对象；独立字段仅为
+	// 单测可注入——与 netCli 同款）。
+	imgCli imageClient
 	// selfContainerID 非空 = dispatcher 自身运行在容器内（自 attach 需要）。
 	selfContainerID string
 	// ——部署后验证 spawn 参数（D10；从 config 一次性解析，与池共享语义）——
@@ -160,6 +206,7 @@ func NewDockerDaemon(cfg *config.AppConfig) Daemon {
 	}
 	d.cli = cli
 	d.netCli = cli
+	d.imgCli = cli
 	d.selfContainerID = detectSelfContainerID(cli)
 	return d
 }
@@ -443,6 +490,243 @@ func (d *dockerDaemon) verifyBuild(ctx context.Context, opts BuildImageOptions) 
 		BootTimeout: d.bootTimeout,
 		MaxRequests: d.maxRequestsDefault,
 	})
+}
+
+// images 返回镜像操作收窄视图（与 client() 同约定：client 构造失败时
+// Internal 暴露）。
+func (d *dockerDaemon) images() (imageClient, error) {
+	if d.imgCli == nil {
+		return nil, status.Error(codes.Internal, "docker client unavailable (dispatcher requires docker.sock)")
+	}
+	return d.imgCli, nil
+}
+
+// ImportImage 拉取外部镜像导入为平台镜像（三期阶段三，设计 §3）：编排见
+// importImage。pull 超时 = 调用方 ctx：首次导入随请求 ctx（与 git pack 同
+// 形），worker 补构建 / ready 门禁复检经 buildDeployment 的 build_timeout
+// 预算（WithoutCancel 解耦，天然覆盖 image 分流）。
+func (d *dockerDaemon) ImportImage(ctx context.Context, opts ImportImageOptions) (string, error) {
+	imgs, err := d.images()
+	if err != nil {
+		return "", err
+	}
+	return importImage(ctx, d, imgs, newHTTPRunner(), d.cfg, opts, d.bootTimeout, d.maxRequestsDefault)
+}
+
+// importImage 是 ImportImage 的编排实现（镜像源免构建路径，设计 §3）：
+//
+//	host 名称级校验 → 取得钉死内容（ExpectedDigest 本地命中零 pull；引用本地
+//	已存在 = 本地构建/本地 tag 直导场景直接用本地内容；否则 pull，RegistryAuth
+//	内联单次转发）→ digest 钉死（引用带 @sha256 时校验一致，防 tag 漂移）→
+//	retag 进平台命名（「镜像名 = 平台命名」不变式，池 spawn/RemoveImage 零
+//	改动）→ 删原始引用标签（防本地 daemon 残留；reference 即 target 时跳过）
+//	→ 强制契约验证 spawn（D10 镜像源同款：health 探针/池外实例/带
+//	variables/egress 选网/失败日志尾回收；config verify_build 关不掉——设计
+//	§3「强制」）→ 返回钉死 digest。
+//
+// 镜像原语收窄在 imageClient、探针收窄在 healthProber 上（真实 = docker
+// client / httpRunner；单测 = fake 表驱动调用序列与失败路径），验证 spawn
+// 复用一期 spawnVerifyInstance。
+func importImage(ctx context.Context, d Daemon, imgs imageClient, probe healthProber, cfg *config.AppConfig, opts ImportImageOptions, bootTimeout time.Duration, maxRequests int) (string, error) {
+	// 1) registry host 名称级校验（设计 §3 安全基线的可实现口径：名称级
+	//    校验 + 白名单 + allow_insecure 显式开关；失败 InvalidArgument 明示
+	//    命中规则）。先于一切 docker 操作——本地直导路径同样受准入口径约束。
+	if err := validateImageRegistryHost(parseImageReferenceHost(opts.Reference),
+		cfg.GetFunctions().GetImage().GetAllowedRegistries(),
+		cfg.GetFunctions().GetImage().GetAllowInsecure()); err != nil {
+		return "", err
+	}
+
+	target := infrafunctions.ImageName(cfg, opts.FunctionID, opts.DeploymentID)
+
+	// 2) 幂等（设计 §3「本地命中则零 pull」）：ExpectedDigest 非空且本地
+	//    平台镜像可判定持有时零 pull/retag 直接契约验证并确认（worker 补拉
+	//    / ready 门禁复检）。非 NotFound 的 inspect 错误原样上抛（daemon
+	//    不可达时后续操作也必败，fail-fast）。
+	if opts.ExpectedDigest != "" {
+		ins, err := imgs.ImageInspect(ctx, target)
+		switch {
+		case err == nil && localImageMatches(ins, opts.ExpectedDigest):
+			if err := verifyImported(ctx, d, probe, opts, target, bootTimeout, maxRequests); err != nil {
+				return "", err
+			}
+			return opts.ExpectedDigest, nil
+		case err != nil && !errdefs.IsNotFound(err):
+			return "", fmt.Errorf("inspect platform image %q: %w", target, err)
+		}
+	}
+
+	// 3) 取得钉死内容：引用本地已存在（本地构建/本地 tag 直导场景，任务
+	//    口径「本地构建/本地 tag 场景 reference 就是本地 tag」）直接用本地
+	//    内容——跳过 pull，不触网（内容陈旧风险由部署者承担，digest 钉死值
+	//    在 source_url/source_ref 上诚实可见）；未命中（NotFound）才 pull
+	//    （凭证空 = 匿名；RegistryAuth 是 base64 JSON 单次转发 daemon，不落
+	//    库不落日志）。pull 失败流内 JSON error（与 BuildKit error 流同形，
+	//    复用同一解析——registry 认证失败/引用不存在在此冒出）。
+	refIns, err := imgs.ImageInspect(ctx, opts.Reference)
+	switch {
+	case errdefs.IsNotFound(err):
+		pullResp, pullErr := imgs.ImagePull(ctx, opts.Reference, image.PullOptions{RegistryAuth: registryAuth(opts.RegistryUsername, opts.RegistryToken)})
+		if pullErr != nil {
+			return "", fmt.Errorf("docker pull %q: %w", opts.Reference, pullErr)
+		}
+		if _, streamErr := infrafunctions.ReadBuildOutput(pullResp); streamErr != nil {
+			_ = pullResp.Close()
+			return "", status.Errorf(codes.InvalidArgument, "docker pull %q failed: %s",
+				opts.Reference, infrafunctions.TruncateBuildLog(streamErr.Error()))
+		}
+		_ = pullResp.Close()
+		refIns, err = imgs.ImageInspect(ctx, opts.Reference)
+		if err != nil {
+			return "", fmt.Errorf("inspect %q after pull: %w", opts.Reference, err)
+		}
+	case err != nil:
+		return "", fmt.Errorf("inspect %q: %w", opts.Reference, err)
+	}
+
+	// 4) digest 钉死：提取 RepoDigest 的 @sha256 部分；引用自带 @sha256
+	//    校验一致（tag 漂移 → InvalidArgument）；调用方预期 digest 不一致
+	//    同样拒绝。
+	digest, err := pinnedDigest(opts.Reference, refIns)
+	if err != nil {
+		return "", err
+	}
+	if opts.ExpectedDigest != "" && digest != opts.ExpectedDigest {
+		return "", status.Errorf(codes.InvalidArgument,
+			"pulled image digest %q does not match expected digest %q (tag drift; redeploy pinning the exact digest)",
+			digest, opts.ExpectedDigest)
+	}
+
+	// 5) retag 进平台命名并删除原始引用标签（设计 §0：retag 后全链路零
+	//    改动且删除语义干净）。原始引用删除防本地 daemon 残留；本地构建/
+	//    本地 tag 场景 reference 可能就是平台镜像名自身（相同则跳过）；
+	//    同镜像多标签下 Force=false 只摘标签不删数据，NotFound 容忍（引用
+	//    已不存在 = 已无残留）。
+	if err := imgs.ImageTag(ctx, opts.Reference, target); err != nil {
+		return "", fmt.Errorf("tag %q -> %q: %w", opts.Reference, target, err)
+	}
+	if opts.Reference != target {
+		if _, err := imgs.ImageRemove(ctx, opts.Reference, image.RemoveOptions{Force: false}); err != nil && !errdefs.IsNotFound(err) {
+			return "", fmt.Errorf("remove original reference %q: %w", opts.Reference, err)
+		}
+	}
+
+	// 6) 强制契约验证 spawn + 返回钉死 digest。
+	if err := verifyImported(ctx, d, probe, opts, target, bootTimeout, maxRequests); err != nil {
+		return "", err
+	}
+	return digest, nil
+}
+
+// verifyImported 对导入后的平台镜像执行强制契约验证 spawn（与 build 验证
+// 同一机制：池外实例、带函数 variables、egress 选网、失败日志尾回收）。
+func verifyImported(ctx context.Context, d Daemon, probe healthProber, opts ImportImageOptions, image string, bootTimeout time.Duration, maxRequests int) error {
+	return spawnVerifyInstance(ctx, d, probe, BuildImageOptions{
+		ProjectID:       opts.ProjectID,
+		FunctionID:      opts.FunctionID,
+		DeploymentID:    opts.DeploymentID,
+		Env:             opts.Env,
+		EgressUntrusted: opts.EgressUntrusted,
+	}, verifySpawnConfig{
+		Image:       image,
+		BootTimeout: bootTimeout,
+		MaxRequests: maxRequests,
+	})
+}
+
+// registryAuth 构造 docker RegistryAuth（base64 JSON 形态
+// {"username","password","serveraddress":""}；凭证空 = 匿名 pull，返回空串
+// ——空 RegistryAuth 时 daemon 走匿名）。一次性凭证只在内存存在（D8）。
+func registryAuth(username, token string) string {
+	if username == "" && token == "" {
+		return ""
+	}
+	raw, err := json.Marshal(map[string]string{
+		"username":      username,
+		"password":      token,
+		"serveraddress": "",
+	})
+	if err != nil {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(raw)
+}
+
+// localImageMatches 判定本地平台镜像是否命中预期 digest（幂等零 pull 的
+// 判定核心）：
+//   - RepoDigests 任一条目命中，或 Image ID 直接过命中 → 命中（严格可证；
+//     ID 命中覆盖本地构建/本地 tag 场景——未经 registry 的镜像无
+//     RepoDigest，Image ID（config digest）是唯一内容寻址钉死值）；
+//   - RepoDigests 非空且全不命中 → 不命中（可证的本地内容漂移 → 走重拉
+//     对账，比对后拒绝）；
+//   - RepoDigests 为空且 ID 不命中 → 命中：这是首次导入自身的稳态——原始
+//     引用已删除，registry manifest digest 关联随原始引用摘除，而 Image ID
+//     ≠ manifest digest，本地内容无法严格证伪。平台命名 tag 属平台专属
+//     命名空间（外部改动不在威胁模型），其内容在首次导入时已钉死 digest
+//     并通过契约验证——target 存在即视为幂等命中（「本地命中零 pull」承诺
+//     的可实现形态；M7 补拉语义只在镜像真正缺失时触发）。
+func localImageMatches(ins image.InspectResponse, digest string) bool {
+	for _, rd := range ins.RepoDigests {
+		if digestFromRepoDigest(rd) == digest {
+			return true
+		}
+	}
+	if ins.ID == digest {
+		return true
+	}
+	if len(ins.RepoDigests) > 0 {
+		return false // 可证漂移：本地内容确定性不匹配 → 走重拉对账
+	}
+	// 不可证伪态（首次导入稳态）：target 存在即视为幂等命中；退化 inspect
+	//（无 ID 无 RepoDigests）不视为命中，落回 pull 路径。
+	return ins.ID != ""
+}
+
+// pinnedDigest 从 pull 后的 inspect 结果提取钉死 digest：优先在 RepoDigests
+// 中命中引用自带 @sha256 的条目（多仓库镜像的 RepoDigests 顺序不稳定，防
+// 误判）；无自带 digest 时取 RepoDigests[0]；RepoDigests 为空（本地构建/
+// docker load 的镜像不经 registry）回落镜像 ID——内容寻址钉死值仍成立，
+// registry 摘要缺失对调用方诚实可见。
+func pinnedDigest(reference string, ins image.InspectResponse) (string, error) {
+	refDigest := referenceDigest(reference)
+	if refDigest != "" {
+		for _, rd := range ins.RepoDigests {
+			if digestFromRepoDigest(rd) == refDigest {
+				return refDigest, nil
+			}
+		}
+		if ins.ID == refDigest {
+			return refDigest, nil
+		}
+		return "", status.Errorf(codes.InvalidArgument,
+			"image reference digest %q does not match any pulled repo digests %v (tag drift)",
+			refDigest, ins.RepoDigests)
+	}
+	if len(ins.RepoDigests) > 0 {
+		return digestFromRepoDigest(ins.RepoDigests[0]), nil
+	}
+	if ins.ID != "" {
+		return ins.ID, nil
+	}
+	return "", status.Errorf(codes.Internal, "image %q inspect returned no digest to pin", reference)
+}
+
+// referenceDigest 提取引用中的 digest 部分（"repo@sha256:..." →
+// "sha256:..."；无 digest 引用返回空串）。
+func referenceDigest(reference string) string {
+	if i := strings.Index(reference, "@"); i >= 0 {
+		return reference[i+1:]
+	}
+	return ""
+}
+
+// digestFromRepoDigest 提取 RepoDigest 条目的 digest 部分
+// （"alpine@sha256:..." → "sha256:..."）。
+func digestFromRepoDigest(repoDigest string) string {
+	if i := strings.Index(repoDigest, "@"); i >= 0 {
+		return repoDigest[i+1:]
+	}
+	return repoDigest
 }
 
 // verifySpawnConfig 是验证 spawn 的参数包：镜像名 + 探针预算 + 注入值。

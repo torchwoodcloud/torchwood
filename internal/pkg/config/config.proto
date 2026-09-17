@@ -263,6 +263,25 @@ message Functions {
     string addr = 8;
   }
   Packer packer = 9;
+  // Image 是 BYO 镜像源（三期阶段三，docs/design/functions-runtimes-and-sources.md
+  // §3）的 registry 准入配置：host 名称级校验在 functions-dispatcher 侧
+  // ImportImage 实施（pull 由宿主 docker daemon 执行，IP 拨号点 guard 不可
+  // 实施于 daemon——故采用名称级校验 + 白名单 + 信任级论证：部署者 =
+  // functions.write 特权主体；公网域名解析到内网的残余面诚实声明、随
+  // egress 原语后置）。仅 functions-dispatcher 进程消费。
+  message Image {
+    // registry host 正向白名单（空 = 不设白名单）：条目为精确域名或后缀域
+    //（"example.com" 同时命中 "example.com" 与子域 "registry.example.com"，
+    // 不命中 "badexample.com"；含端口的 host 需整体精确登记）。白名单命中
+    // 优先放行——显式登记 = 运维明确意图（含内网 registry 直连 IP 的
+    // 显式白名单场景）；白名单非空时未命中一律拒绝。
+    repeated string allowed_registries = 1;
+    // 放行 IP 字面量（IPv4/IPv6）与 localhost/*.localhost 形态的 registry
+    // host（自托管内网 registry 场景显式开启，给显式开关而非逼出危险
+    // 旁路）。默认 false。
+    bool allow_insecure = 2;
+  }
+  Image image = 8;
 }
 
 message Telemetry {

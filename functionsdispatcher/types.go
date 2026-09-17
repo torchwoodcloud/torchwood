@@ -200,3 +200,33 @@ type RemoveImageRequest struct {
 	FunctionID   string `json:"function_id"`
 	DeploymentID string `json:"deployment_id"`
 }
+
+// ImportImageRequest 是 POST /v1/dispatch/images/import 入参（三期阶段三，
+// 设计 §3：镜像源免构建路径）。RegistryUsername/RegistryToken 是一次性
+// registry 凭证（base64 RegistryAuth 后单次转发 daemon pull，不落库不落
+// 日志）；ExpectedDigest 非空 = 幂等补拉/复检（本地平台镜像已持有时零
+// pull）；FunctionTimeoutSeconds 是旧池 drain 宽限上限（与 builds 端点同
+// 语义）；Env/EgressUntrusted 供强制契约验证 spawn（env 仅验证 spawn 消费，
+// 不进任何持久化面）。
+type ImportImageRequest struct {
+	ProjectID    string `json:"project_id"`
+	FunctionID   string `json:"function_id"`
+	DeploymentID string `json:"deployment_id"`
+	// Reference 是用户提交的原始镜像引用（host/repo[:tag|@sha256:...]）。
+	Reference              string            `json:"reference"`
+	RegistryUsername       string            `json:"registry_username,omitempty"`
+	RegistryToken          string            `json:"registry_token,omitempty"`
+	ExpectedDigest         string            `json:"expected_digest,omitempty"`
+	FunctionTimeoutSeconds int64             `json:"function_timeout_seconds,omitempty"`
+	Env                    map[string]string `json:"env,omitempty"`
+	EgressUntrusted        bool              `json:"egress_untrusted,omitempty"`
+}
+
+// ImportImageResponse 是 images/import 出参：Digest = 钉死 digest（调用方
+// 落 deployment.source_ref）；Error 非空 = 导入失败（host 校验/pull/digest
+// 一致性/契约验证，与 builds 出参同风格——失败是部署业务结果，走 200 +
+// Error 由调用方落 deployment.error）。
+type ImportImageResponse struct {
+	Digest string `json:"digest,omitempty"`
+	Error  string `json:"error,omitempty"`
+}

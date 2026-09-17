@@ -232,6 +232,22 @@ functions:
     # clone 打内网/云元数据端点）。默认 false。
     # env: TORCHWOOD_FUNCTIONS_PACKER_ALLOW_INSECURE
     allow_insecure: false
+  image:
+    # BYO 镜像源（三期阶段三）registry 准入配置（仅 functions-dispatcher
+    # 进程消费；host 名称级校验在 dispatcher 侧 ImportImage 实施——pull 由
+    # 宿主 docker daemon 执行，IP 拨号点 guard 不可实施于 daemon，故采用
+    # 名称级校验 + 白名单 + 信任级论证）。
+    # registry host 正向白名单（空 = 不设白名单）：精确域名或后缀域
+    #（"example.com" 命中子域 "registry.example.com"；含端口 host 需整体
+    # 精确登记）。白名单非空时未命中一律拒绝；命中优先放行（含内网
+    # registry 直连 IP 的显式登记场景）。
+    # env: TORCHWOOD_FUNCTIONS_IMAGE_ALLOWED_REGISTRIES
+    allowed_registries: []
+    # 放行 IP 字面量与 localhost/*.localhost 形态的 registry host。**仅
+    # 自托管内网 registry 场景显式开启**；默认 false（默认拒绝 IP 字面量
+    # 与 localhost host，错误明示放行开关）。
+    # env: TORCHWOOD_FUNCTIONS_IMAGE_ALLOW_INSECURE
+    allow_insecure: false
 
 payments:
   stripe:

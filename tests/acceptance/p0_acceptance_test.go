@@ -358,6 +358,9 @@ func (m *acceptanceExecutor) Execute(_ context.Context, e domainfunctions.Execut
 	}
 	return &domainfunctions.ExecutionResult{StatusCode: 0, Response: `{"ok":true}`}, nil
 }
+func (m *acceptanceExecutor) ImportImage(context.Context, domainfunctions.ImportImageSpec) (string, error) {
+	return "", nil // image 源不在本文件测试路径
+}
 func (m *acceptanceExecutor) RemoveImage(context.Context, string, string) error { return nil }
 
 type acceptanceQueue struct{}

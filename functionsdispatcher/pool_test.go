@@ -42,6 +42,14 @@ type fakeDaemon struct {
 	logs map[string]string
 	// lastBuild 记录最近一次 BuildImage 收到的完整入参（构建链载荷断言用）。
 	lastBuild BuildImageOptions
+	// ——ImportImage（三期阶段三）——
+	// lastImport 记录最近一次 ImportImage 收到的完整入参（导入链载荷断言用）。
+	lastImport ImportImageOptions
+	// imports 记录 ImportImage 调用次序；importDigest/importErr 为可编程
+	// 返回值（digest 为空时返回缺省 digest）。
+	imports      []string
+	importDigest string
+	importErr    error
 }
 
 func newFakeDaemon() *fakeDaemon {
@@ -123,6 +131,23 @@ func (d *fakeDaemon) RemoveImage(_ context.Context, functionID, deploymentID str
 	defer d.mu.Unlock()
 	d.removedImages = append(d.removedImages, functionID+"-"+deploymentID)
 	return nil
+}
+
+// ImportImage fake 同步（三期阶段三）：记录入参与调用次序，返回可编程
+// digest/错误——server HTTP 面参数传递与错误映射断言用（docker 编排序列的
+// 确定性验证在 daemon_import_test.go 的 fake imageClient 层）。
+func (d *fakeDaemon) ImportImage(_ context.Context, opts ImportImageOptions) (string, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.lastImport = opts
+	d.imports = append(d.imports, opts.FunctionID+"-"+opts.DeploymentID)
+	if d.importErr != nil {
+		return "", d.importErr
+	}
+	if d.importDigest != "" {
+		return d.importDigest, nil
+	}
+	return "sha256:" + strings.Repeat("ab", 32), nil
 }
 
 type fakeRegistry struct {
