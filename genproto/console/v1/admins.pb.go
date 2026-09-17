@@ -68,9 +68,15 @@ type UpdateCurrentAdminRequest struct {
 	// 设置非空 = 更新为该 IANA 时区名（如 Asia/Shanghai）。形状在此校验
 	// （pattern 放行空串——空串是"清除"语义，非空形状由分支约束），
 	// IANA 有效性由 use-case 层 time.LoadLocation 权威判定。
-	Timezone      *string `protobuf:"bytes,1,opt,name=timezone,proto3,oneof" json:"timezone,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Timezone *string `protobuf:"bytes,1,opt,name=timezone,proto3,oneof" json:"timezone,omitempty"`
+	// 自助改密（语义对齐 client 的 UpdateAccount.old_password/password）：
+	// new_password 非空 = 修改密码，必须同时提供 current_password 供校验；
+	// 强度（至少 8 位、最多 72 位且含字母和数字）由 use-case 层校验；
+	// 成功后既有凭证全部撤销，所有设备需重新登录。
+	CurrentPassword string `protobuf:"bytes,2,opt,name=current_password,json=currentPassword,proto3" json:"current_password,omitempty"`
+	NewPassword     string `protobuf:"bytes,3,opt,name=new_password,json=newPassword,proto3" json:"new_password,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *UpdateCurrentAdminRequest) Reset() {
@@ -106,6 +112,20 @@ func (*UpdateCurrentAdminRequest) Descriptor() ([]byte, []int) {
 func (x *UpdateCurrentAdminRequest) GetTimezone() string {
 	if x != nil && x.Timezone != nil {
 		return *x.Timezone
+	}
+	return ""
+}
+
+func (x *UpdateCurrentAdminRequest) GetCurrentPassword() string {
+	if x != nil {
+		return x.CurrentPassword
+	}
+	return ""
+}
+
+func (x *UpdateCurrentAdminRequest) GetNewPassword() string {
+	if x != nil {
+		return x.NewPassword
 	}
 	return ""
 }
@@ -471,9 +491,11 @@ var File_console_v1_admins_proto protoreflect.FileDescriptor
 const file_console_v1_admins_proto_rawDesc = "" +
 	"\n" +
 	"\x17console/v1/admins.proto\x12\x14torchwood.console.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\x18\n" +
-	"\x16GetCurrentAdminRequest\"u\n" +
+	"\x16GetCurrentAdminRequest\"\xc3\x01\n" +
 	"\x19UpdateCurrentAdminRequest\x12K\n" +
-	"\btimezone\x18\x01 \x01(\tB*\xbaH'r%\x18@2!^([A-Za-z]+(/[A-Za-z0-9_+-]+)*)?$H\x00R\btimezone\x88\x01\x01B\v\n" +
+	"\btimezone\x18\x01 \x01(\tB*\xbaH'r%\x18@2!^([A-Za-z]+(/[A-Za-z0-9_+-]+)*)?$H\x00R\btimezone\x88\x01\x01\x12)\n" +
+	"\x10current_password\x18\x02 \x01(\tR\x0fcurrentPassword\x12!\n" +
+	"\fnew_password\x18\x03 \x01(\tR\vnewPasswordB\v\n" +
 	"\t_timezone\"O\n" +
 	"\x11ListAdminsRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +

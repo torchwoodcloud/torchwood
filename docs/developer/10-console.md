@@ -125,9 +125,12 @@ api.interceptors.request.use((config) => {
 - `logout()` 调 sign-out（`__skipAuthRetry`），无论成败清空项目选择与 `queryClient`。
 - 路由守卫：`RequireAuth` 判登录；`RequireRole` 判写权限（`canWrite`）或平台管理员（`isPlatformAdmin`），失败重定向 `/console`。
 
-### 4.3 管理员时区偏好
+### 4.3 管理员账户设置（资料 / 偏好）
 
-`admins.metadata` JSONB 存管理员自助偏好（首键 `timezone`，IANA 时区名），经 `UpdateCurrentAdmin` 自助 RPC 修改（Console 账户设置页 `/console/account/preferences`，侧栏底部账户入口进入）。
+账户设置区 `/console/account/*`（侧栏底部邮箱进入）：
+
+- **Profile**（`/console/account/profile`）：账户资料（邮箱/角色/创建时间，只读）+ **修改密码**（须提供当前密码校验；成功后服务端撤销全部凭证，前端清项目选择并跳 `/console/login?reason=password_changed` 重新登录）；邮箱/角色仍由 owner 通过 `UpdateAdmin` 管理。
+- **Preferences**（`/console/account/preferences`）：偏好列表（每项一行，点击右侧当前值弹层修改）。当前含时区：`admins.metadata` JSONB 存 `timezone`（IANA 时区名），经 `UpdateCurrentAdmin` 自助 RPC 修改，弹层内选中即暂存、显式「保存」才提交；「跟随浏览器」= 清除该键。
 
 - `useUserTimezone()`（`console/src/hooks/useTimezone.ts`）返回当前管理员生效时区：`admins/me` 的偏好 → 浏览器时区回退；与 `useAdminRole` 共享 `["console-admin-me"]` 查询缓存——偏好保存后 `setQueryData` 该 key，全部消费组件随重渲染拿到新时区。
 - **全站时间显示统一走 `lib/datetime.ts` 的 `formatDateTime` / `formatDate`**（按用户时区格式化；空值 / 无法解析返回 `—`）。新页面不要用 `dayjs(...).format()` 之类的本地时区格式化。
@@ -226,7 +229,7 @@ API Keys 页详情提供**编辑**（name / scopes / enabled / expire_at，proto
 
 | 路由 | 内容 | 守卫 |
 |------|------|------|
-| `/console/account`（index → profile） | 账户设置区（侧栏底部邮箱进入）：`profile` = 账户资料（邮箱 / 角色 / 创建时间，只读）；`preferences` = 时区偏好（选中即暂存 + 显式保存，清除 = 跟随浏览器） | 全角色开放（自助面） |
+| `/console/account`（index → profile） | 账户设置区（侧栏底部邮箱进入）：`profile` = 账户资料（邮箱 / 角色 / 创建时间，只读）+ 修改密码（当前密码校验，成功后全凭证撤销并回登录页）；`preferences` = 偏好列表（当前仅时区，点击行内当前值弹层修改，选中即暂存 + 显式保存，清除 = 跟随浏览器） | 全角色开放（自助面） |
 | `/console/leaderboards` + `/:boardId` | 榜列表 + 建榜 / 编辑 / 删除；详情 = 期下拉 + top 表（rank/position/subject/value/updated_at，行删条目）+ 按 subject 查条目；board 表单含 Phase 2 rewards 编辑器 | 写操作 owner |
 | `/console/analytics`（+ events / events/:name / retention / users/:userId） | 事件分析：概览 / 事件字典 / 事件详情 / 留存网格 / 单用户行为流（recharts） | 全角色开放 |
 | `/console/audit-logs` | 平台审计日志查询（结构化过滤 + metadata 视图） | platformAdmin |

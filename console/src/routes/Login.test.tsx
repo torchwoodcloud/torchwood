@@ -65,6 +65,20 @@ describe("Login 弹跳断路器", () => {
     });
   });
 
+  it("reason=password_changed 时停留登录页并提示改密成功", async () => {
+    mockUseAuth.mockReturnValue({ isAuthenticated: true, login: vi.fn() });
+    renderLogin("/console/login?reason=password_changed");
+
+    await waitFor(() => {
+      expect(getSetupStatus).toHaveBeenCalled();
+    });
+    expect(screen.getByRole("textbox", { name: "Email" })).toBeTruthy();
+    expect(
+      screen.getByTestId("loc").textContent
+    ).toBe("/console/login?reason=password_changed");
+    expect(screen.getByText("密码已修改，请重新登录")).toBeTruthy();
+  });
+
   it("未认证时不跳转,正常渲染登录表单", async () => {
     mockUseAuth.mockReturnValue({ isAuthenticated: false, login: vi.fn() });
     renderLogin("/console/login");

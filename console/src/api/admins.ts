@@ -1,4 +1,4 @@
-import { api } from "./client";
+import { api, type ApiRequestConfig } from "./client";
 
 export interface Admin {
   id: string;
@@ -21,12 +21,19 @@ export async function getCurrentAdmin(): Promise<Admin> {
   return res.data;
 }
 
-// updateCurrentAdmin 自助更新个人偏好（PATCH /console/admins/me）。
+// updateCurrentAdmin 自助更新个人资料（PATCH /console/admins/me）。
 // timezone：undefined = 不修改；"" = 清除偏好（回退浏览器时区）；非空 = IANA 名。
-export async function updateCurrentAdmin(input: {
-  timezone?: string;
-}): Promise<Admin> {
-  const res = await api.patch<Admin>("/console/admins/me", input);
+// current_password + new_password：非空 new_password = 改密（须带当前密码校验），
+// 成功后服务端撤销全部凭证，需要重新登录。
+export async function updateCurrentAdmin(
+  input: {
+    timezone?: string;
+    current_password?: string;
+    new_password?: string;
+  },
+  config?: ApiRequestConfig
+): Promise<Admin> {
+  const res = await api.patch<Admin>("/console/admins/me", input, config);
   return res.data;
 }
 

@@ -108,9 +108,9 @@ service AdminsService {
     };
   }
 
-  // UpdateCurrentAdmin 当前登录管理员自助更新个人偏好（非 role/password 等
-  // 敏感字段；管理他人走 UpdateAdmin）。仅暴露 typed 偏好字段，存储侧落在
-  // admins.metadata JSONB（见 Admin.timezone 注释）。
+  // UpdateCurrentAdmin 当前登录管理员自助更新个人资料：偏好（时区）与密码。
+  // 偏好写 admins.metadata JSONB；改密必须同时提供当前密码（校验通过才落库），
+  // 成功后既有凭证全部撤销（所有设备需重新登录，语义同 UpdateAdmin 重置密码）。
   // 声明位置必须在 UpdateAdmin 之后：PATCH /me 与 PATCH /{id} 同形竞争，
   // gateway LIFO 匹配下后声明者胜（见上方路由顺序约束注释）。
   rpc UpdateCurrentAdmin(UpdateCurrentAdminRequest) returns (Admin) {
@@ -141,6 +141,13 @@ message UpdateCurrentAdminRequest {
     pattern: "^([A-Za-z]+(/[A-Za-z0-9_+-]+)*)?$"
     max_len: 64
   }];
+
+  // 自助改密（语义对齐 client 的 UpdateAccount.old_password/password）：
+  // new_password 非空 = 修改密码，必须同时提供 current_password 供校验；
+  // 强度（至少 8 位、最多 72 位且含字母和数字）由 use-case 层校验；
+  // 成功后既有凭证全部撤销，所有设备需重新登录。
+  string current_password = 2;
+  string new_password = 3;
 }
 
 message ListAdminsRequest {

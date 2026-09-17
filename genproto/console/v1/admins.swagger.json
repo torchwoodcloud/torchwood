@@ -105,7 +105,7 @@
         ]
       },
       "patch": {
-        "summary": "UpdateCurrentAdmin 当前登录管理员自助更新个人偏好（非 role/password 等\n敏感字段；管理他人走 UpdateAdmin）。仅暴露 typed 偏好字段，存储侧落在\nadmins.metadata JSONB（见 Admin.timezone 注释）。\n声明位置必须在 UpdateAdmin 之后：PATCH /me 与 PATCH /{id} 同形竞争，\ngateway LIFO 匹配下后声明者胜（见上方路由顺序约束注释）。",
+        "summary": "UpdateCurrentAdmin 当前登录管理员自助更新个人资料：偏好（时区）与密码。\n偏好写 admins.metadata JSONB；改密必须同时提供当前密码（校验通过才落库），\n成功后既有凭证全部撤销（所有设备需重新登录，语义同 UpdateAdmin 重置密码）。\n声明位置必须在 UpdateAdmin 之后：PATCH /me 与 PATCH /{id} 同形竞争，\ngateway LIFO 匹配下后声明者胜（见上方路由顺序约束注释）。",
         "operationId": "AdminsService_UpdateCurrentAdmin",
         "responses": {
           "200": {
@@ -351,6 +351,13 @@
         "timezone": {
           "type": "string",
           "title": "optional：未设置 = 不修改；设置空串 = 清除偏好（跟随浏览器时区）；\n设置非空 = 更新为该 IANA 时区名（如 Asia/Shanghai）。形状在此校验\n（pattern 放行空串——空串是\"清除\"语义，非空形状由分支约束），\nIANA 有效性由 use-case 层 time.LoadLocation 权威判定。"
+        },
+        "current_password": {
+          "type": "string",
+          "title": "自助改密（语义对齐 client 的 UpdateAccount.old_password/password）：\nnew_password 非空 = 修改密码，必须同时提供 current_password 供校验；\n强度（至少 8 位、最多 72 位且含字母和数字）由 use-case 层校验；\n成功后既有凭证全部撤销，所有设备需重新登录。"
+        },
+        "new_password": {
+          "type": "string"
         }
       }
     }

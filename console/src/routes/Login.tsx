@@ -33,6 +33,9 @@ export function Login() {
   // console↔login 无限弹跳的根源;必须显式重新登录。
   const [searchParams] = useSearchParams();
   const sessionExpired = searchParams.get("expired") === "1";
+  // reason=password_changed 由账户设置页改密成功后携带：凭证已全部撤销，
+  // 与 expired 同样必须显式重新登录（抑制自动跳回 console）。
+  const passwordChanged = searchParams.get("reason") === "password_changed";
 
   const probeSetup = useCallback(() => {
     setSetupProbeError(null);
@@ -57,12 +60,12 @@ export function Login() {
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated && !sessionExpired) {
+    if (isAuthenticated && !sessionExpired && !passwordChanged) {
       navigate("/console", { replace: true });
       return;
     }
     return probeSetup();
-  }, [isAuthenticated, sessionExpired, navigate, probeSetup]);
+  }, [isAuthenticated, sessionExpired, passwordChanged, navigate, probeSetup]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -214,6 +217,9 @@ export function Login() {
             )}
             {sessionExpired && !error && (
               <p className="text-sm text-muted-foreground">会话已过期，请重新登录</p>
+            )}
+            {passwordChanged && !error && (
+              <p className="text-sm text-muted-foreground">密码已修改，请重新登录</p>
             )}
             {error && <p className="text-sm text-destructive">{error}</p>}
             {isSetup && (

@@ -61,11 +61,15 @@ type UpdateAdminCommand struct {
 	Password string // 非空则重置密码
 }
 
-// UpdateProfileCommand 当前管理员自助更新个人偏好。Timezone 为 nil = 不修改；
+// UpdateProfileCommand 当前管理员自助更新个人资料。Timezone 为 nil = 不修改；
 // 指向空串 = 清除偏好（前端回退浏览器时区）；指向非空 = 更新为 IANA 时区名。
+// NewPassword 非空 = 自助改密：必须同时提供 CurrentPassword（旧密码校验），
+// 成功后既有凭证全部撤销（所有设备需重新登录）。
 type UpdateProfileCommand struct {
-	CallerID string
-	Timezone *string
+	CallerID        string
+	Timezone        *string
+	CurrentPassword string
+	NewPassword     string
 }
 
 func (a *Admins) List(ctx context.Context) ([]projects.Admin, error) {
@@ -199,8 +203,9 @@ func (a *Admins) Update(ctx context.Context, cmd UpdateAdminCommand) (*projects.
 	return admin, nil
 }
 
-// UpdateProfile 自助更新个人偏好（时区）：写入 admins.metadata JSONB，不改
-// role/password 等敏感字段，故不触发凭证撤销。单语句合并落库，无并发覆盖面。
+// UpdateProfile 自助更新个人资料：偏好（时区）与密码。时区写 admins.metadata
+// JSONB（单语句合并，无并发覆盖面）；改密校验旧密码 + 强度，与凭证撤销同事务
+// 落库（同 Update 改密路径），消除"密码已改但旧 token 仍有效"窗口。
 func (a *Admins) UpdateProfile(ctx context.Context, cmd UpdateProfileCommand) (*projects.Admin, error) {
 	if err := appshared.RequireConsolePrincipal(ctx); err != nil {
 		return nil, err
@@ -215,6 +220,34 @@ func (a *Admins) UpdateProfile(ctx context.Context, cmd UpdateProfileCommand) (*
 	if admin == nil {
 		return nil, status.Error(codes.NotFound, "admin not found")
 	}
+
+	// 先完成全部校验与派生，再进入落库阶段（避免半应用状态）。
+	var newHash string
+	changingPassword := cmd.NewPassword != ""
+	if changingPassword {
+		if admin.PasswordHash == "" {
+			return nil, status.Error(codes.FailedPrecondition, "account has no password set")
+		}
+		if cmd.CurrentPassword == "" {
+			return nil, status.Error(codes.InvalidArgument, "current password is required")
+		}
+		// 旧密码错误返回 PermissionDenied（而非 Unauthenticated）：Console 的
+		// 401 会触发全局刷新/强制重登，改密输错密码不应把用户踢出会话。
+		if ok, _ := password.Verify(cmd.CurrentPassword, admin.PasswordHash); !ok {
+			return nil, status.Error(codes.PermissionDenied, "current password is incorrect")
+		}
+		if err := users.ValidatePasswordStrength(cmd.NewPassword); err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		if newHash, err = password.Hash(cmd.NewPassword); err != nil {
+			return nil, status.Errorf(codes.Internal, "hash password: %v", err)
+		}
+	}
+
+	var (
+		set        map[string]string
+		removeKeys []string
+	)
 	if cmd.Timezone != nil {
 		tz := *cmd.Timezone
 		if tz != "" {
@@ -222,27 +255,50 @@ func (a *Admins) UpdateProfile(ctx context.Context, cmd UpdateProfileCommand) (*
 				return nil, err
 			}
 		}
-		now := time.Now()
-		set := map[string]string{}
-		var removeKeys []string
 		if tz == "" {
 			removeKeys = []string{"timezone"}
 		} else {
-			set["timezone"] = tz
+			set = map[string]string{"timezone": tz}
 		}
-		if err := a.repo.UpdateAdminMetadata(ctx, admin.ID, set, removeKeys, now); err != nil {
-			return nil, status.Errorf(codes.Internal, "update admin metadata: %v", err)
-		}
-		admin.UpdatedAt = now
+	}
+
+	now := time.Now()
+	if changingPassword {
+		admin.PasswordHash = newHash
+	}
+	if cmd.Timezone != nil {
 		// 返回值同步投影，免去回读。
 		if admin.Metadata == nil {
 			admin.Metadata = map[string]string{}
 		}
-		if tz == "" {
+		if len(removeKeys) > 0 {
 			delete(admin.Metadata, "timezone")
 		} else {
-			admin.Metadata["timezone"] = tz
+			admin.Metadata["timezone"] = set["timezone"]
 		}
+	}
+	// 无任何变更（timezone 未设置且不改密）时不碰 updated_at，保持幂等。
+	if changingPassword || cmd.Timezone != nil {
+		admin.UpdatedAt = now
+	}
+
+	if err := a.runInTx(ctx, func(txCtx context.Context) error {
+		if changingPassword {
+			if err := a.repo.UpdateAdmin(txCtx, admin); err != nil {
+				return status.Errorf(codes.Internal, "update admin: %v", err)
+			}
+			if err := a.repo.RevokeCredentials(txCtx, admin.ID, admin.UpdatedAt); err != nil {
+				return status.Errorf(codes.Internal, "revoke admin credentials: %v", err)
+			}
+		}
+		if cmd.Timezone != nil {
+			if err := a.repo.UpdateAdminMetadata(txCtx, admin.ID, set, removeKeys, now); err != nil {
+				return status.Errorf(codes.Internal, "update admin metadata: %v", err)
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return admin, nil
 }

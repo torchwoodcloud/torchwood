@@ -219,6 +219,44 @@ func TestAdmins_UpdateProfile_Timezone(t *testing.T) {
 	require.NotContains(t, after.Metadata, "timezone")
 }
 
+// 自助改密：旧密码校验通过才写新哈希并撤销既有凭证；缺失/错误旧密码、
+// 弱新密码一律拒绝且不落库；不提供新密码 = 纯偏好路径不触碰凭证。
+func TestAdmins_UpdateProfile_Password(t *testing.T) {
+	t.Parallel()
+	oldHash, err := password.Hash("OldPassw0rd")
+	require.NoError(t, err)
+	admin := mkAdmin("a1", "owner@x.com", "owner")
+	admin.PasswordHash = oldHash
+	repo := newAdminRepo(admin)
+	uc := console.NewAdmins(repo, nil, nil)
+	ctx := adminActorCtx(context.Background())
+
+	// 缺失旧密码 / 旧密码错误：拒绝，哈希与撤销时间戳不变。
+	_, err = uc.UpdateProfile(ctx, console.UpdateProfileCommand{CallerID: "a1", NewPassword: "NewPassw0rd"})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	_, err = uc.UpdateProfile(ctx, console.UpdateProfileCommand{CallerID: "a1", CurrentPassword: "WrongPassw0rd", NewPassword: "NewPassw0rd"})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	// 弱新密码：拒绝。
+	_, err = uc.UpdateProfile(ctx, console.UpdateProfileCommand{CallerID: "a1", CurrentPassword: "OldPassw0rd", NewPassword: "short"})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	require.Equal(t, oldHash, repo.admins[0].PasswordHash)
+	require.True(t, repo.admins[0].RevokedAt.IsZero())
+
+	// 成功：新哈希可验证旧密码失效，凭证撤销时间戳前推。
+	updated, err := uc.UpdateProfile(ctx, console.UpdateProfileCommand{CallerID: "a1", CurrentPassword: "OldPassw0rd", NewPassword: "NewPassw0rd"})
+	require.NoError(t, err)
+	ok, err := password.Verify("NewPassw0rd", updated.PasswordHash)
+	require.NoError(t, err)
+	require.True(t, ok)
+	ok, err = password.Verify("OldPassw0rd", updated.PasswordHash)
+	require.NoError(t, err)
+	require.False(t, ok)
+	require.False(t, repo.admins[0].RevokedAt.IsZero())
+	require.Equal(t, updated.PasswordHash, repo.admins[0].PasswordHash)
+}
+
 func TestAdmins_Update_RejectsSelfDemotion(t *testing.T) {
 	t.Parallel()
 	repo := newAdminRepo(mkAdmin("a1", "owner@x.com", "owner"), mkAdmin("a2", "admin@x.com", "admin"))

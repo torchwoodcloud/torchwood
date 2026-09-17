@@ -43,7 +43,12 @@ func (s *AdminsService) UpdateCurrentAdmin(ctx context.Context, req *consolev1.U
 		return nil, status.Error(codes.Unauthenticated, "admin context missing")
 	}
 	// optional：未设置 = 不修改；设置（含空串）= 更新/清除，语义同 UpdateAdmin.role。
-	cmd := console.UpdateProfileCommand{CallerID: callerID(ctx)}
+	// current_password/new_password 非空 = 自助改密（见 use-case UpdateProfile）。
+	cmd := console.UpdateProfileCommand{
+		CallerID:        callerID(ctx),
+		CurrentPassword: req.GetCurrentPassword(),
+		NewPassword:     req.GetNewPassword(),
+	}
 	if req.Timezone != nil {
 		tz := req.GetTimezone()
 		cmd.Timezone = &tz

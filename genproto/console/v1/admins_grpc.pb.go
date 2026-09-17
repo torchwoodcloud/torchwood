@@ -45,9 +45,9 @@ type AdminsServiceClient interface {
 	// 否则 /me 被 {id} 吞掉（UpdateAdmin(id="me") 查库 nil → 404 admin not
 	// found，回归测试见 cmd/server/internal/runtime/gateway_route_order_test.go）。
 	UpdateAdmin(ctx context.Context, in *UpdateAdminRequest, opts ...grpc.CallOption) (*Admin, error)
-	// UpdateCurrentAdmin 当前登录管理员自助更新个人偏好（非 role/password 等
-	// 敏感字段；管理他人走 UpdateAdmin）。仅暴露 typed 偏好字段，存储侧落在
-	// admins.metadata JSONB（见 Admin.timezone 注释）。
+	// UpdateCurrentAdmin 当前登录管理员自助更新个人资料：偏好（时区）与密码。
+	// 偏好写 admins.metadata JSONB；改密必须同时提供当前密码（校验通过才落库），
+	// 成功后既有凭证全部撤销（所有设备需重新登录，语义同 UpdateAdmin 重置密码）。
 	// 声明位置必须在 UpdateAdmin 之后：PATCH /me 与 PATCH /{id} 同形竞争，
 	// gateway LIFO 匹配下后声明者胜（见上方路由顺序约束注释）。
 	UpdateCurrentAdmin(ctx context.Context, in *UpdateCurrentAdminRequest, opts ...grpc.CallOption) (*Admin, error)
@@ -139,9 +139,9 @@ type AdminsServiceServer interface {
 	// 否则 /me 被 {id} 吞掉（UpdateAdmin(id="me") 查库 nil → 404 admin not
 	// found，回归测试见 cmd/server/internal/runtime/gateway_route_order_test.go）。
 	UpdateAdmin(context.Context, *UpdateAdminRequest) (*Admin, error)
-	// UpdateCurrentAdmin 当前登录管理员自助更新个人偏好（非 role/password 等
-	// 敏感字段；管理他人走 UpdateAdmin）。仅暴露 typed 偏好字段，存储侧落在
-	// admins.metadata JSONB（见 Admin.timezone 注释）。
+	// UpdateCurrentAdmin 当前登录管理员自助更新个人资料：偏好（时区）与密码。
+	// 偏好写 admins.metadata JSONB；改密必须同时提供当前密码（校验通过才落库），
+	// 成功后既有凭证全部撤销（所有设备需重新登录，语义同 UpdateAdmin 重置密码）。
 	// 声明位置必须在 UpdateAdmin 之后：PATCH /me 与 PATCH /{id} 同形竞争，
 	// gateway LIFO 匹配下后声明者胜（见上方路由顺序约束注释）。
 	UpdateCurrentAdmin(context.Context, *UpdateCurrentAdminRequest) (*Admin, error)
