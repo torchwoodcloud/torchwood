@@ -18,7 +18,7 @@ func init() {
 	prometheus.MustRegister(egressClassTotal)
 }
 
-// ObserveEgressClass 记录一次容器创建的 egress 分类（functions-dispatcher
+// ObserveEgressClass 记录一次容器创建的 egress 分类（dispatcher
 // 的 v2 spawn 路径打点；best-effort，不影响主链路）。
 func ObserveEgressClass(projectID string, untrusted bool) {
 	if projectID == "" {

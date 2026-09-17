@@ -6,7 +6,7 @@
 #       + roles-sig（torchwood admin sync-roles-sig，一次性，B15 部署时序）
 #       + server（gRPC/gateway/Console/healthz，:9080，container_name
 #         torchwood-server——函数网络 DNS 回访锚点）+ worker（Functions 消费者）
-#       + functions-dispatcher（执行器 v2：唯一 docker.sock 持有方，join
+#       + dispatcher（执行器 v2：唯一 docker.sock 持有方，join
 #         tw-func-<project>[-int] 网络并同步 attach server，承接全部分发）
 #
 # 部署时序契约（docs/developer/13-operations.md §4.5/§6.1）由 depends_on 链保证：
@@ -220,8 +220,8 @@ services:
       - "127.0.0.1:${TORCHWOOD_GRPC_PORT:-9060}:9060"
     environment:
       <<: *app-env
-      # 函数执行统一经 functions-dispatcher 分发（唯一执行路径）。
-      TORCHWOOD_FUNCTIONS_DISPATCHER_URL: http://functions-dispatcher:9070
+      # 函数执行统一经 dispatcher 分发（唯一执行路径）。
+      TORCHWOOD_FUNCTIONS_DISPATCHER_URL: http://dispatcher:9070
       TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN: ${TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN:?请在 Dokploy Environment 设置 openssl rand -hex 32}
       # 函数回访平台 API 的地址（注入执行容器 TW_API_BASE_URL）。必须是
       # 函数网络内可达地址：dispatcher 按 callback_container 把本容器
@@ -253,8 +253,8 @@ services:
     entrypoint: ["/usr/local/bin/worker"]
     environment:
       <<: *app-env
-      # 函数异步执行统一经 functions-dispatcher 分发（唯一执行路径）。
-      TORCHWOOD_FUNCTIONS_DISPATCHER_URL: http://functions-dispatcher:9070
+      # 函数异步执行统一经 dispatcher 分发（唯一执行路径）。
+      TORCHWOOD_FUNCTIONS_DISPATCHER_URL: http://dispatcher:9070
       TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN: ${TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN:?请在 Dokploy Environment 设置 openssl rand -hex 32}
       # 异步执行同样经 buildExecution 注入回访地址（与 server 保持一致）
       TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL: http://torchwood-server:9080
@@ -271,7 +271,7 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
-  functions-dispatcher:
+  dispatcher:
     <<: *app-image
     # 镜像缺省 USER torchwood（非 root），读不了宿主 root:docker(660) 的
     # docker.sock（connect: permission denied，函数构建必失败）。显式以 root
@@ -283,7 +283,7 @@ services:
     # 直分 runner。server/worker 零 daemon 依赖，host-root 等价凭证收敛到
     # 非 API 面进程。
     # ⚠ docker.sock 等同宿主 root 权限，仅在可信环境启用。
-    entrypoint: ["/usr/local/bin/functions-dispatcher"]
+    entrypoint: ["/usr/local/bin/dispatcher"]
     environment:
       <<: *app-env
       TORCHWOOD_FUNCTIONS_DISPATCHER_ADDR: ":9070"
@@ -307,6 +307,34 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    restart: unless-stopped
+
+  packer:
+    <<: *app-image
+    # git 部署源打包服务（二期阶段二，docs/design/functions-runtimes-and-sources.md
+    # §2）：go-git 浅克隆 + 物化 zip 回传 server 落构建路径。无状态、无
+    # docker.sock、无业务依赖——资源尖峰（clone/物化）隔离在可牺牲的基础
+    # 设施进程，OOM 仅影响 git 部署自身，重启即恢复。可独立多副本。
+    # ⚠ 出网面：需可达目标 git 服务（https 默认；allow_insecure 放行内网
+    # http——自托管 forge 场景）。
+    entrypoint: ["/usr/local/bin/packer"]
+    environment:
+      <<: *app-env
+      TORCHWOOD_FUNCTIONS_PACKER_ADDR: ":9071"
+      TORCHWOOD_FUNCTIONS_PACKER_SHARED_TOKEN: ${TORCHWOOD_FUNCTIONS_PACKER_SHARED_TOKEN:?请在 Dokploy Environment 设置 openssl rand -hex 32}
+      # 与 server 侧同值（server 经 functions.packer.url 调用本服务）。
+      TORCHWOOD_FUNCTIONS_PACKER_FETCH_TIMEOUT: ${TORCHWOOD_FUNCTIONS_PACKER_FETCH_TIMEOUT:-120s}
+      TORCHWOOD_FUNCTIONS_PACKER_MAX_REPO_BYTES: ${TORCHWOOD_FUNCTIONS_PACKER_MAX_REPO_BYTES:-209715200}
+      TORCHWOOD_FUNCTIONS_PACKER_MAX_ZIP_BYTES: ${TORCHWOOD_FUNCTIONS_PACKER_MAX_ZIP_BYTES:-52428800}
+      TORCHWOOD_FUNCTIONS_PACKER_CONCURRENCY: ${TORCHWOOD_FUNCTIONS_PACKER_CONCURRENCY:-4}
+      # 自托管内网 http forge 场景才开启（默认 https-only + 拨号点拒内网 IP）。
+      TORCHWOOD_FUNCTIONS_PACKER_ALLOW_INSECURE: ${TORCHWOOD_FUNCTIONS_PACKER_ALLOW_INSECURE:-false}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9071/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
     restart: unless-stopped
 
 volumes:

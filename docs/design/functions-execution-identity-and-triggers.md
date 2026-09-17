@@ -8,7 +8,7 @@
 > 执行器裁决（2026-09-09 owner）：「每请求一个容器进程」确认为设计缺陷（CGI 形态）——常驻 runner 升级为**默认执行模型 v2**（原 §6「可选 warm pool」吸收重写为 resident-first，冷启动 = 池 0→1 扩容的单一路径）；新增 **P0.5 阶段**：先修地基，再开新面
 > SLA（2026-09-09 owner）：**热路径同步分发，简单函数端到端 P99 ≤ 100ms（平台开销 ≤ 25ms）**；冷启动（池 0→1）与异步队列路径显式不在 SLA 内——不同档位不伪装成同档（§6 预算表）
 > 独立复核（2026-09-09 三轮·双代理）：事实核查（代码断言全数命中，措辞微调）+ 对抗评审修复 4×P0——SLA 预算前置清账（鉴权 4 次 DB 往返/同步审计/部署全量拉取）、单写记账改**两写预占**、分发通路升格为**阻断性决策**（原 Q9）、DocRole 数据面接合；另修 P1 六项与 Rollout 重复行（各节「三轮复核」标注）
-> **Owner 拍板（2026-09-09，四主 + 六默认，全部锁定）**：分发通路 = **独立 functions-dispatcher 进程**（Q13 联动收口）；token = **Redis 不透明 token**（主动 DEL 吊销）；客户端调用 = **同步默认**；egress = **不可信函数默认 deny + per-function 白名单**。默认锁定：cron UTC（可配后置）、匿名一期不开、runner 协议容器内 HTTP、URL `/f/{project}/{token}`、常驻上限每 daemon 8、多路复用维持串行
+> **Owner 拍板（2026-09-09，四主 + 六默认，全部锁定）**：分发通路 = **独立 dispatcher 进程**（Q13 联动收口）；token = **Redis 不透明 token**（主动 DEL 吊销）；客户端调用 = **同步默认**；egress = **不可信函数默认 deny + per-function 白名单**。默认锁定：cron UTC（可配后置）、匿名一期不开、runner 协议容器内 HTTP、URL `/f/{project}/{token}`、常驻上限每 daemon 8、多路复用维持串行
 > 动机：BaaS 定位的完整性原语——「客户端可触发的服务端逻辑」是全行业的品类基础设施（竞品分析 §三），也是自有 dogfooding 小游戏 serverless 化的唯一完成路径（竞品分析 §八）
 > 前置评审缝：`docs/review/saas-baas-design-2026/04-platform-capabilities.md` PC-5（触发器模块）、PC-6（SecretResolver）
 > 关系：`client-self-consume-assets.md`（方案 A）转为本稿 Rollout P3 的复盘项；决策依据与竞品证据见 `economy-client-write-competitive-analysis.md`
@@ -187,7 +187,7 @@ message InvokeFunctionResponse {
 
 **模型（resident-first，单一代码路径）**：固定 Dockerfile 的 CMD 换为平台 runner（现行模板无 ENTRYPOINT、用户入口在 CMD，`docker.go:503,509`；node/python 各一份，模板资产——「构建期不执行用户代码」不变量保持）。runner 启动即加载用户模块，容器内监听 HTTP（仅 per-project 桥网络可达，无外部暴露），启动握手 + 心跳做健康检查。分发：dispatcher（server 同步路径 / worker 共用）经桥网络 POST 容器 `IP:port`——body = TW_DATA，header 带按请求铸造的 `TW_EXECUTION_TOKEN`（**常驻的是容器不是凭证**，TTL/最小特权语义与身份模型不变）；响应经 HTTP 回传，stdout 退化为纯日志。**冷启动不是独立路径，是池从 0→1 的扩容**：无 ready 实例时 spawn（该请求支付冷启动成本），此后按 idle TTL 保留。对函数代码透明：仍是 `main(TW_DATA)` 进、JSON 出。
 
-**分发通路（三轮复核 P0：阻断性设计决策，由原 Q9 升格）**：标准部署下 server 自身就是容器（`docker/dokploy/docker-compose.yml`），不在 `tw-func-<project>` bridge 上，跨 bridge 无路由——「经桥网络 POST 容器 IP」默认**物理不可达**。这不是优化项，是 P0.5 的硬前置，实施前三选一拍板并写明部署变更：①executor 创建项目网络时把自身容器 attach 进去（实现最顺；注意 docker 网络数量上限与 join 失败重试）；②runner 监听端口发布到宿主 `127.0.0.1` 动态端口，注册表存 host:port（跨平台最稳；注意端口段管理与宿主暴露面）；③独立 functions-dispatcher 进程（Q13）专职挂网络（顺带解决 docker.sock 不进 API 面容器的问题）。任一方案的验收清单都须含「dokploy compose 标准拓扑端到端打通」。**已拍板（2026-09-09 owner）：方案③独立 functions-dispatcher**——compose 新增 functions-dispatcher 服务，专职持有 docker.sock、join 各项目网络、承接全部执行分发（server 同步路径与 worker 异步路径都经它的 HTTP 接口）；server/worker 零 daemon 依赖，host-root 等价凭证收敛到非 API 面进程，Q13 联动收口；多一跳 ≈1ms 在 25ms 预算内；无状态、初期单副本，需要 HA 时双副本 + Redis 注册表仲裁。
+**分发通路（三轮复核 P0：阻断性设计决策，由原 Q9 升格）**：标准部署下 server 自身就是容器（`docker/dokploy/docker-compose.yml`），不在 `tw-func-<project>` bridge 上，跨 bridge 无路由——「经桥网络 POST 容器 IP」默认**物理不可达**。这不是优化项，是 P0.5 的硬前置，实施前三选一拍板并写明部署变更：①executor 创建项目网络时把自身容器 attach 进去（实现最顺；注意 docker 网络数量上限与 join 失败重试）；②runner 监听端口发布到宿主 `127.0.0.1` 动态端口，注册表存 host:port（跨平台最稳；注意端口段管理与宿主暴露面）；③独立 dispatcher 进程（Q13）专职挂网络（顺带解决 docker.sock 不进 API 面容器的问题）。任一方案的验收清单都须含「dokploy compose 标准拓扑端到端打通」。**已拍板（2026-09-09 owner）：方案③独立 dispatcher**——compose 新增 dispatcher 服务，专职持有 docker.sock、join 各项目网络、承接全部执行分发（server 同步路径与 worker 异步路径都经它的 HTTP 接口）；server/worker 零 daemon 依赖，host-root 等价凭证收敛到非 API 面进程，Q13 联动收口；多一跳 ≈1ms 在 25ms 预算内；无状态、初期单副本，需要 HA 时双副本 + Redis 注册表仲裁。
 
 **池策略（平台默认 + per-function 覆盖）**：`min_instances`（默认 0 = 纯 scale-from-zero；可设 1–2 保温）、`idle_ttl_seconds`（默认 300）、`max_requests_per_instance`（默认 1000，防函数内存泄漏的定期回收，同 Lambda 实例回收语义）+ 平台级常驻总量上限（每 daemon N 个，防单项目耗尽宿主内存）。**边界补全（三轮复核 P1）**：`max_instances`（默认 2）——突发并发达上限后**有界排队**（深度上限 + 队首超时 → `ResourceExhausted`，同步调用方不得无界等在 30s ctx 上）；drain 语义——部署更新旧池排空上限 ≤ 函数超时，到点强杀在途请求以 504 类错误收场（幂等键的适用场景，文档明示）；判活规则——dispatch 时租约续期 + 注册表 busy 标记，长请求期间区分 busy 与 dead，reaper 不得误杀执行中实例；daemon 重启 = 热实例全灭——spawn 收敛为每函数同时一个（其余请求等注册表），防全量冷启动风暴。常驻实例**不占全局 run 信号量**（16 槽是 per-execution 预算，被常驻占用会饿死并发执行），独立核算。
 
@@ -233,7 +233,7 @@ message InvokeFunctionResponse {
 | 阶段 | 内容 | 狗粮验收锚点（自有小游戏） |
 |------|------|--------------------------|
 | P0 执行身份 | 迁移 000013（functions.declared_scopes + function_variables.kind）+ `functions.execution.api_base_url` 配置 + token 铸造/校验 + 限流 execution 维度 + requireAssetWrite 断言集扩展 + operator/审计贯通 + Console 函数表单 scope 编辑 + 08-functions.md 更新 | 游戏任一函数迁移到注入身份（TW_API_BASE_URL + TW_EXECUTION_TOKEN），删除 variables 中的长期 API key；账本 operator 可见 function+user；连续调用不触发 per-IP 限流 |
-| P0.5 执行器 v2 | 迁移 000014（池策略列：min_instances/max_instances/idle_ttl/max_requests）+ **functions-dispatcher 服务（compose 新组件：docker.sock 收敛、join 项目网络、承接全部分发）** + runner 模板（node 先行灰度，容器内 HTTP）+ reaper/Redis 实例注册表 + 同步快路径**两写预占**记账 + 热路径 DB 清账（principal 缓存、latest_ready_deployment_id、审计载体化、Prune 移出）+ 模板版本化重建 + 幽灵实例周期对账 + 存活计量 + Console 池策略 | 狗粮既有函数在 v2 上回归（结果一致、stdout 日志化）；**简单函数热路径同步端到端 P99 ≤ 100ms（平台开销 ≤ 25ms，SLA 见 §6）**；dokploy compose 标准拓扑端到端打通；daemon create/stop 调用量下降可观测 |
+| P0.5 执行器 v2 | 迁移 000014（池策略列：min_instances/max_instances/idle_ttl/max_requests）+ **dispatcher 服务（compose 新组件：docker.sock 收敛、join 项目网络、承接全部分发）** + runner 模板（node 先行灰度，容器内 HTTP）+ reaper/Redis 实例注册表 + 同步快路径**两写预占**记账 + 热路径 DB 清账（principal 缓存、latest_ready_deployment_id、审计载体化、Prune 移出）+ 模板版本化重建 + 幽灵实例周期对账 + 存活计量 + Console 池策略 | 狗粮既有函数在 v2 上回归（结果一致、stdout 日志化）；**简单函数热路径同步端到端 P99 ≤ 100ms（平台开销 ≤ 25ms，SLA 见 §6）**；dokploy compose 标准拓扑端到端打通；daemon create/stop 调用量下降可观测 |
 | P1 触发器 | 迁移 000015（function_triggers）+ HTTP 触发器（路由/封套透传/双响应模式/限频/来源 IP 摘要列）+ cron 调度循环（misfire 补跑）+ 触发器管理 RPC + Console 触发器管理页 + 指标 | **微信 SSV 回调接入**（async_ack 模式）：验签 → 按 transaction_id 去重 → grant 复活券；每日/赛季重置（cron，验证 catch_up_once）；热/冷路径时延分布实测（验证 v2 收益） |
 | P2 客户端面 | 迁移 000016（client 策略列 + invoking_user_id + client_idempotency_key）+ client proto/handler/gateway（同步默认）+ 每用户限频（可配窗口，含 DB 降级）+ 并发闸门 + **egress 默认 deny（client_callable/HTTP 触发函数）+ per-function 白名单** + SDK + authz-matrix + `task generate:proto`（新 proto 进 swagger 反向覆盖断言）+ Console 策略开关 + 保留策略/指标 | 签到、成绩提交、广告奖励 isEnded 即时暂发（SSV 对账兜底）全部走客户端调用；重试不重复发资产（幂等键）；每用户限频由平台强制；**isEnded 暂发热路径 P99 ≤ 100ms 达标（SLA 见 §6）** |
 | P3 复盘组合方案 | 收集组合实现（HTTP 触发器 + client invoke + 限频 + cron + 资产）在狗粮游戏的运行数据（延迟/成本/滥用面）；仅当数据证明组合不足时，立项「声明式限频动作」水平原语（`client-self-consume-assets.md` 的资产域设计降为该原语的应用层参考） | 高频轻量操作（每次广告/签到）的 P99 延迟与执行成本画像（含执行器 v1/v2 前后对照） |
@@ -271,7 +271,7 @@ message InvokeFunctionResponse {
 10. ~~runner 分发协议~~ **已拍板**：容器内 HTTP（dispatcher → 容器 IP:port）。
 11. ~~常驻总量与计费~~ **已拍板**：每 daemon 上限 8 个起步（超限排队/拒绝语义已在 §6）；计费档位实施时随计费体系定。
 12. ~~多路复用~~ **已拍板**：维持一期串行（池大小 = 并发）；放开需可重入契约，后置。
-13. ~~池管理拓扑~~ **已拍板（与分发通路联动）**：独立 functions-dispatcher 进程统一路由执行（§6「分发通路」）。
+13. ~~池管理拓扑~~ **已拍板（与分发通路联动）**：独立 dispatcher 进程统一路由执行（§6「分发通路」）。
 
 ## Alternatives Considered
 

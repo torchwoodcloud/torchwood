@@ -10,15 +10,15 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/torchwoodcloud/torchwood/functionspacker"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/packer"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 // PackerClient 是 SourcePacker 端口（二期阶段 3，设计 §2）的 HTTP 适配实现：
-// 经 functions-packer 服务的内网 API（POST /v1/pack/git）把 GitSource 物化
+// 经 packer 服务的内网 API（POST /v1/pack/git）把 GitSource 物化
 // 为 zip 代码包。zip 流向反转：packer 打好 zip 交回 server 落既有 zipPath——
 // 本客户端只做协议适配，不落盘不落库。凭证（Username/Token）只在调用栈
 // 内存随请求体送达 packer，本实现不持久化、不写日志、不回显（D8）。
@@ -40,7 +40,7 @@ func NewPackerClient(cfg *config.AppConfig) *PackerClient {
 	// 打包整体封顶（clone+核算+物化共享同一预算，服务端到点回 504），客户端
 	// 只需防连接级挂起（对齐 DispatcherExecutor 的「不设响应头超时」 vs
 	// 「重资源操作要有界」折中——pack 在部署请求关键路径上，必须有界）。
-	timeout := functionspacker.DefaultFetchTimeout
+	timeout := packer.DefaultFetchTimeout
 	if d, err := time.ParseDuration(p.GetFetchTimeout()); err == nil && d > 0 {
 		timeout = d
 	}
@@ -68,12 +68,12 @@ func NewPackerClient(cfg *config.AppConfig) *PackerClient {
 // 调大 max_zip_bytes 时本上限随之放大，合法响应不会被截断）。
 func packResponseLimit(maxZipBytes int64) int64 {
 	if maxZipBytes <= 0 {
-		maxZipBytes = functionspacker.DefaultMaxZipBytes
+		maxZipBytes = packer.DefaultMaxZipBytes
 	}
 	return maxZipBytes/3*4 + 1<<20
 }
 
-// PackGit 调 functions-packer 把 GitSource 物化为 zip 代码包。错误映射与
+// PackGit 调 packer 把 GitSource 物化为 zip 代码包。错误映射与
 // packer 服务端状态码口径互逆（429 → ResourceExhausted、504 →
 // DeadlineExceeded、400 → InvalidArgument、401 → FailedPrecondition、
 // 其余 → Internal）。
@@ -81,7 +81,7 @@ func (c *PackerClient) PackGit(ctx context.Context, src domainfunctions.GitSourc
 	if c.baseURL == "" {
 		return "", "", nil, status.Error(codes.FailedPrecondition, "functions.packer.url is not configured (git deployment source disabled)")
 	}
-	payload, err := json.Marshal(functionspacker.PackRequest{
+	payload, err := json.Marshal(packer.PackRequest{
 		URL:       src.URL,
 		Ref:       src.Ref,
 		Directory: src.Directory,
@@ -130,7 +130,7 @@ func (c *PackerClient) PackGit(ctx context.Context, src domainfunctions.GitSourc
 			return "", "", nil, status.Errorf(codes.Internal, "packer error (http %d): %s", resp.StatusCode, msg)
 		}
 	}
-	var out functionspacker.PackResponse
+	var out packer.PackResponse
 	if err := json.Unmarshal(body, &out); err != nil {
 		return "", "", nil, status.Errorf(codes.Internal, "decode packer response: %v", err)
 	}

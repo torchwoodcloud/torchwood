@@ -22,7 +22,7 @@
 | `lint:go` | `go vet ./...` + `gofmt -l .` | Go 静态与格式检查 |
 | `lint:golangci` | `golangci-lint run ./...` | 全量 lint 门禁 |
 | `db:migrate` | `migrate -path ./db/migrations -database <DSN> up` | 数据库迁移（DSN 优先 `TORCHWOOD_DATA_DATABASE_SOURCE`） |
-| `build` | console:build + `go build` 四个二进制（带 version/commit/date ldflags） | 产出 `bin/server`、`bin/worker`、`bin/functions-dispatcher`、`bin/torchwood` |
+| `build` | console:build + `go build` 四个二进制（带 version/commit/date ldflags） | 产出 `bin/server`、`bin/worker`、`bin/dispatcher`、`bin/torchwood` |
 | `test` | lint:go + lint:golangci + test:sdk-go + test:sdk-ts + `go test -race -v ./... -cover` | 全量测试 |
 
 常用组合：开工前 `task docker:up && task db:migrate`；改 proto / config / provider 后 `task generate:all && task build`；改 Console 后 `task console:build && task build`。
@@ -94,7 +94,7 @@ protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto
 | `cmd/server/wire.go` | `//go:generate wire` + `wire.Build(ProviderSet)` |
 | `cmd/server/wire_gen.go` | Wire 生成装配代码（禁手改） |
 
-`cmd/worker/` 与 `cmd/functions-dispatcher/` 同构。worker 的 `provides.go` 另行校验 `data.database.source` 必填。
+`cmd/worker/` 与 `cmd/dispatcher/` 同构。worker 的 `provides.go` 另行校验 `data.database.source` 必填。
 
 **改动 provider（新增 / 删除 / 改签名）后必须 `task wire:all`**，否则 `wire_gen.go` 与 provider 声明失步，编译或启动失败。
 

@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwoodcloud/torchwood/functionspacker"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/packer"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -28,7 +28,7 @@ func packerTestCfg(url string) *config.AppConfig {
 }
 
 // TestPackerClient_PackGitProtocol 协议面：shared_token header 名
-// （x-tw-packer-token，与 functionspacker/server.go 中间件同源）、请求体
+// （x-tw-packer-token，与 packer/server.go 中间件同源）、请求体
 // 逐字段（含一次性凭证）、响应解码（commit_sha/checksum/zip base64 字节级
 // 往返）。
 func TestPackerClient_PackGitProtocol(t *testing.T) {
@@ -123,7 +123,7 @@ func TestPackerClient_ResponseLimit(t *testing.T) {
 		}))
 		defer srv.Close()
 		cfg := packerTestCfg(srv.URL)
-		cfg.Functions.Packer.MaxZipBytes = functionspacker.DefaultMaxZipBytes
+		cfg.Functions.Packer.MaxZipBytes = packer.DefaultMaxZipBytes
 		_, _, zip, err := NewPackerClient(cfg).PackGit(context.Background(), domainfunctions.GitSource{URL: "https://git.example.com/a/b.git"})
 		require.NoError(t, err)
 		require.Len(t, zip, 3<<20)

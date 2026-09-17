@@ -13,5 +13,5 @@
 // 构建失败；render_test 对渲染产物做 stdlib-only 断言防回归。
 //
 // 本包保持叶子资产包形态：不 import infra/functions 根包与 runner 包
-// （调用方为 functions-dispatcher，探测产物由其映射进模板载体）。
+// （调用方为 dispatcher，探测产物由其映射进模板载体）。
 package gorunner

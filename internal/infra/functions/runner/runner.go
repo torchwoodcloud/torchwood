@@ -7,7 +7,7 @@
 // 不变量保持。模板版本化（TemplateVersion）：模板变更必须递增，存量
 // deployment 按新模板重建（function_deployments.template_version）。
 //
-// 本包保持叶子资产包形态（CLI functions dev 与 functions-dispatcher 双
+// 本包保持叶子资产包形态（CLI functions dev 与 dispatcher 双
 // 消费方），不 import infra/functions 根包：DockerfileFor 的入参载体
 // SourceContents 在本包定义，探测层产物（infrafunctions.SourceContents）
 // 由调用方逐字段映射，杜绝潜在 import 环。Go 模板资产（twmain bootstrap
@@ -75,7 +75,7 @@ type SourceContents struct {
 }
 
 // DockerfileFor 生成常驻执行模型的运行时 Dockerfile（唯一执行路径，经
-// functions-dispatcher 构建）：用户入口移交平台 runner（CMD），
+// dispatcher 构建）：用户入口移交平台 runner（CMD），
 // 构建期不执行用户代码的不变量由此保持。
 //
 // node 分支支持平台代装依赖（v3 §3.1/D11，functions-v3.md）：nodeDeps=true

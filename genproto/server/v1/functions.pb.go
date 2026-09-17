@@ -1096,7 +1096,7 @@ func (x *GetFunctionRequest) GetFunctionId() string {
 // code 为 zip 代码包，≤1MiB 走此通道；更大的 zip 包走 multipart 上传
 // （POST /v1/server/functions/{function_id}/deployments/code，仅承载 zip）。
 // git/image 源载荷极小，仅走本 gRPC JSON 通道、不设 multipart 形态：git 由
-// 独立 functions-packer 服务物化为 zip 落既有构建路径；image 为免构建路径
+// 独立 packer 服务物化为 zip 落既有构建路径；image 为免构建路径
 // （pull + digest 钉死 + retag + 契约验证，runtime 专用 ID `image`，源/运行时
 // 互斥见 §0）。字段号 2 原号移入 oneof，wire 兼容。
 type CreateDeploymentRequest struct {
@@ -1205,7 +1205,7 @@ func (*CreateDeploymentRequest_Git) isCreateDeploymentRequest_Source() {}
 
 func (*CreateDeploymentRequest_Image) isCreateDeploymentRequest_Source() {}
 
-// GitSource 是 git 仓库部署源（functions-packer 归一为 zip，设计 §2）。
+// GitSource 是 git 仓库部署源（packer 归一为 zip，设计 §2）。
 type GitSource struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 仓库地址。https 为生产形态；file:// 仅 development 环境放行（server

@@ -10,7 +10,7 @@
 |------|------|------|
 | **server** | `cmd/server` | gRPC（`127.0.0.1:9060`）+ grpc-gateway HTTP `/v1/*` + 独立 serverhttp（Storage 上传下载、OAuth / Functions / Payments 回调）+ Metrics + Admin Console SPA（embed）+ 健康与版本端点 |
 | **worker** | `cmd/worker` | 周期 / 队列作业常驻进程（作业清单见 §1.2）：Functions 执行队列消费、孤儿恢复、outbox 事件分发、支付关单、订阅计费、leaderboards 结榜 / 清理、analytics 聚合等 |
-| **functions-dispatcher** | `cmd/functions-dispatcher` | Functions 执行常驻进程（仓库根 `functionsdispatcher/`）：**唯一 docker.sock 持有方**，resident 实例池 + 租约认领，`:9070` 提供 healthz。所有部署形态必配 |
+| **dispatcher** | `cmd/dispatcher` | Functions 执行常驻进程（仓库根 `dispatcher/`）：**唯一 docker.sock 持有方**，resident 实例池 + 租约认领，`:9070` 提供 healthz。所有部署形态必配 |
 | **torchwood CLI** | `cmd/torchwood` | `bin/torchwood`，经 `sdk/go/server` 的 InvokeJSON 走 gRPC 调 Server API（不直连 genproto）；命令实现随仓库根 `cli/` 包 |
 
 本地开发：
@@ -20,7 +20,7 @@ task dev:server   # go run ./cmd/server
 task dev:worker   # go run ./cmd/worker
 ```
 
-> worker 承载支付关单、订阅计费、资产过期、用量落表、outbox 分发、排行榜结榜 / 清理、analytics 聚合维护等周期作业——**任何生产部署都需要 worker**，不只 Functions。本地仅调试数据库 / 存储时可不跑 functions-dispatcher（Functions 执行走不通而已）。
+> worker 承载支付关单、订阅计费、资产过期、用量落表、outbox 分发、排行榜结榜 / 清理、analytics 聚合维护等周期作业——**任何生产部署都需要 worker**，不只 Functions。本地仅调试数据库 / 存储时可不跑 dispatcher（Functions 执行走不通而已）。
 
 ### 1.1 端口（config.yaml.template 默认）
 
@@ -29,7 +29,7 @@ task dev:worker   # go run ./cmd/worker
 | `:9080` | HTTP（gateway + `/console/`） | `server.http.addr` |
 | `127.0.0.1:9060` | gRPC（回环，gateway 同机转发） | `server.grpc.addr` |
 | `127.0.0.1:9040` | Prometheus `/metrics` | `server.metrics.addr` |
-| `:9070` | functions-dispatcher HTTP（runner 回调 + healthz） | `functions.dispatcher.addr` |
+| `:9070` | dispatcher HTTP（runner 回调 + healthz） | `functions.dispatcher.addr` |
 
 server 注入 `lynx.WithDrainTimeout`（§4.3）与 `lynx.WithShutdownTimeout(30s)`；`OnStop` 后才执行 cleanup（避免排水期关连接池）。
 
@@ -74,7 +74,7 @@ server 注入 `lynx.WithDrainTimeout`（§4.3）与 `lynx.WithShutdownTimeout(30
 
 ```bash
 task build
-# = console:build + go build 四个二进制（server / worker / functions-dispatcher / torchwood）
+# = console:build + go build 四个二进制（server / worker / dispatcher / torchwood）
 # ldflags 注入 VERSION/COMMIT/DATE（git describe / rev-parse / date），由 GET /v1/server/health/version 暴露
 ```
 
@@ -89,7 +89,7 @@ task docker:build   # 多阶段 Dockerfile：builder 构 console + 四二进制�
 docker run --env-file .env -p 9080:9080 -p 9060:9060 torchwood:<tag>
 ```
 
-**Dokploy 一键部署**（单 Compose 栈：PG / Redis / MinIO + 迁移 → 三角色授权 → roles_sig 一次性作业链 + server / worker + 常驻 functions-dispatcher——root 运行、挂 docker.sock、healthz `:9070`；函数执行统一经 dispatcher 分发，server / worker 须配置 `TORCHWOOD_FUNCTIONS_DISPATCHER_URL`）见 `docker/dokploy/README.md`。镜像由 GitHub Actions 预构建推 GHCR（部署机仅 pull），`sync-roles-sig` 作业依赖镜像内置的 torchwood CLI。
+**Dokploy 一键部署**（单 Compose 栈：PG / Redis / MinIO + 迁移 → 三角色授权 → roles_sig 一次性作业链 + server / worker + 常驻 dispatcher——root 运行、挂 docker.sock、healthz `:9070`；函数执行统一经 dispatcher 分发，server / worker 须配置 `TORCHWOOD_FUNCTIONS_DISPATCHER_URL`）见 `docker/dokploy/README.md`。镜像由 GitHub Actions 预构建推 GHCR（部署机仅 pull），`sync-roles-sig` 作业依赖镜像内置的 torchwood CLI。
 
 ## 4. 生产配置要点
 
@@ -393,7 +393,7 @@ bin/torchwood admin import --project <project_id> --in /backup/p1 --dsn "$TORCHW
 1. 备份 PG + MinIO；
 2. `task db:migrate`（+ roles_sig 时序，见 §6.1）；
 3. 滚动 `server`（校验 `/healthz/readiness` 200 与 `/v1/server/health/version`）；
-4. 重启 `worker`；同批滚动 `functions-dispatcher`；
+4. 重启 `worker`；同批滚动 `dispatcher`；
 5. 灰度验证 Client / Server API；
 6. 摘旧实例。
 

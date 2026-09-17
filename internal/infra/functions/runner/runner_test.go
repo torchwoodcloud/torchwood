@@ -17,7 +17,7 @@ import (
 )
 
 // nodeContents / goContents 构造 DockerfileFor 的入参载体（探测产物
-// infrafunctions.SourceContents 的模板投影，字段映射见 functionsdispatcher
+// infrafunctions.SourceContents 的模板投影，字段映射见 dispatcher
 // daemon 调用点）。
 func nodeContents(nodeDeps, hasLockfile bool) SourceContents {
 	return SourceContents{Runtime: "node-18.0", NodeDeps: nodeDeps, HasLockfile: hasLockfile}

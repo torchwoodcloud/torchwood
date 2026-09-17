@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/torchwoodcloud/torchwood/functionspacker"
+	"github.com/torchwoodcloud/torchwood/packer"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -724,11 +724,11 @@ func TestExtractZipRelaxed_EntryBudgetWidened(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "node-18.0", contents.Runtime)
 
-	// 放宽上限 = functionspacker.MaxPackEntries（5000）：5001 条目仍拒绝。
-	zip5001 := writeCraftedZip(t, craftEntryZipN(t, functionspacker.MaxPackEntries+1))
+	// 放宽上限 = packer.MaxPackEntries（5000）：5001 条目仍拒绝。
+	zip5001 := writeCraftedZip(t, craftEntryZipN(t, packer.MaxPackEntries+1))
 	_, err = ExtractZipRelaxed(zip5001, filepath.Join(t.TempDir(), "out-5001"))
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.ErrorContains(t, err, fmt.Sprintf("zip contains too many entries (max %d)", functionspacker.MaxPackEntries))
+	require.ErrorContains(t, err, fmt.Sprintf("zip contains too many entries (max %d)", packer.MaxPackEntries))
 
 	// 单条与总量预算维持默认口径（100MiB / 200MiB）。
 	require.Equal(t, int64(maxZipEntryBytes), gitPackZipExtractLimits.maxEntryBytes)

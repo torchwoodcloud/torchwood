@@ -127,14 +127,14 @@ task generate:all      # generate:proto → generate:config → wire:all
 |------|------|
 | `generate:proto` | `buf lint` + `buf generate` → `genproto/` |
 | `generate:config` | 由 `internal/pkg/config/config.proto` 产出 `config.pb.go` |
-| `wire:all` | server / worker / functions-dispatcher 三份 `wire_gen.go` |
+| `wire:all` | server / worker / dispatcher 三份 `wire_gen.go` |
 
 生成物零漂移校验（生成后 `git diff --exit-code`）见 `04-codegen.md`。
 
 ### 步骤 5 — 构建并启动
 
 ```bash
-task build             # console:build → go build 四个二进制（server / worker / functions-dispatcher / torchwood）到 ./bin/
+task build             # console:build → go build 四个二进制（server / worker / dispatcher / torchwood）到 ./bin/
 ./bin/server           # Windows 下为 ./bin/server.exe
 # 开发态直跑：
 task dev:server        # go run ./cmd/server

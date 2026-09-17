@@ -346,7 +346,7 @@ func sameFileStates(a, b map[string]time.Time) bool {
 }
 
 // ——git 部署源（二期阶段 3，docs/design/functions-runtimes-and-sources.md
-// §2）：functions deployments create-from-git——服务端 functions-packer 把
+// §2）：functions deployments create-from-git——服务端 packer 把
 // url@ref[:directory] 物化为同一 zip 构建路径，CLI 只组装 GitSource 请求——
 // token 从环境变量读（缺省变量名 TORCHWOOD_GIT_TOKEN，--git-token-env 可
 // 覆盖），绝不进 argv/shell history。凭证为一次性：server 落库投影只有
@@ -361,7 +361,7 @@ type lookupEnvFunc func(string) (string, bool)
 // newFunctionsDeploymentsCreateFromGitCmd 从 git 仓库创建部署。
 func newFunctionsDeploymentsCreateFromGitCmd(g *GlobalFlags) *verb {
 	var url, ref, dir, username, tokenEnv string
-	return newVerb(g, "create-from-git", "create a deployment from a git repository (the server-side functions-packer service materializes it to the same zip build path)", "functions deployments create-from-git <function-id> --url <repo-url> [--ref <branch|tag|commit>] [--dir <subdir>] [--git-username <user>] [--git-token-env <VAR>]",
+	return newVerb(g, "create-from-git", "create a deployment from a git repository (the server-side packer service materializes it to the same zip build path)", "functions deployments create-from-git <function-id> --url <repo-url> [--ref <branch|tag|commit>] [--dir <subdir>] [--git-username <user>] [--git-token-env <VAR>]",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&url, "url", "", "git repository HTTPS URL (required)")
 			fs.StringVar(&ref, "ref", "", "branch, tag or commit SHA (defaults to the repository HEAD; the server pins the resolved commit into the deployment)")

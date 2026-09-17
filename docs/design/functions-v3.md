@@ -45,7 +45,7 @@
 
 执行器 v2 的地基是对的（常驻容器 + 池 + dispatcher = Lambda/Cloud Run/Nuclio/faasd 共同的存活形态，v1 每请求容器的 CGI 形态已被本项目亲手裁掉）。但四项与业界默认形态的差距在 v2 落地时被「水平原语优先」的排期掩盖：
 
-1. **串行**：`InstanceRecord.Busy` 布尔互斥（`functionsdispatcher/registry.go` claimIdleLua），并发 = 池大小 ≤ 8。I/O bound 函数（验签/回访平台/发奖——狗粮全部画像）的事件循环在 await 期空闲，这正是 Fluid Compute 论证的并发收益区。
+1. **串行**：`InstanceRecord.Busy` 布尔互斥（`dispatcher/registry.go` claimIdleLua），并发 = 池大小 ≤ 8。I/O bound 函数（验签/回访平台/发奖——狗粮全部画像）的事件循环在 await 期空闲，这正是 Fluid Compute 论证的并发收益区。
 2. **协议**：`main(TW_DATA)` 是自定义 JSON 协议——调研判据下处于死亡区边缘（无标准工具可调试、无生态可复用；复查后从「死亡区」修正为「生态/表达力缺口」：server/client invoke 本就是平台 RPC，真实伤害是响应表达力与 npm web 生态）。
 3. **构建**：平台不装依赖 = 用户 zip 塞 node_modules（Appwrite 明确禁止的形态）或零依赖裸写。
 4. **触发面**：outbox 事件脊柱已就绪（seq/notify/Stream 投递），但函数订阅事件的后半程缺失。
@@ -176,7 +176,7 @@ return cjson.encode(rec)
 
 **时间字段毫秒化（排雷）**：`spawned_at`/`idle_since` 从 RFC3339 改数值毫秒，兑现既有注释「cjson 往返不得改写时间字段形态」不变量的彻底版。**兼容陷阱（必须处理）**：注册表只能从记录侧对账（容器在、记录亡的容器无人回收），**清 Redis 键升级会泄漏容器**——decode 必须双读旧字段名（自定义 `UnmarshalJSON` 兼容 RFC3339 → 毫秒），旧记录自然老化，无升级 runbook。
 
-#### 1.4 dispatcher：超时语义、判活与 drain（`functionsdispatcher/pool.go`）
+#### 1.4 dispatcher：超时语义、判活与 drain（`dispatcher/pool.go`）
 
 **超时/取消不再杀实例**：现状 `executeOn` 对 invokeErr 一律 `killInstance`（`pool.go:541-549`）——串行下合理，并发下一个慢请求误杀同实例健康在途请求。改为：
 
@@ -199,7 +199,7 @@ return cjson.encode(rec)
           CONSTRAINT functions_concurrency_check CHECK (concurrency BETWEEN 1 AND 16);
   ```
 
-- **透传链**：bun model `Function.Concurrency` → domain `Function` → `buildExecution`（`internal/app/functions/executions.go:618` 池策略组旁）→ domain `Execution.Concurrency` + `ExecutionID` → `dispatcher_client.go` → `ExecuteRequest.Pool.Concurrency` + `ExecutionID`（`functionsdispatcher/types.go` PoolPolicy/ExecuteRequest 加字段，后者经分发 header `x-tw-execution-id` 透传）。
+- **透传链**：bun model `Function.Concurrency` → domain `Function` → `buildExecution`（`internal/app/functions/executions.go:618` 池策略组旁）→ domain `Execution.Concurrency` + `ExecutionID` → `dispatcher_client.go` → `ExecuteRequest.Pool.Concurrency` + `ExecutionID`（`dispatcher/types.go` PoolPolicy/ExecuteRequest 加字段，后者经分发 header `x-tw-execution-id` 透传）。
 - **降级保护（fail-safe，不 fail-closed）**：`fn.Concurrency > 1` 而当前 deployment `template_version < 3` 时**静默按 1 执行** + 指标/日志观测——存量函数不因新列拒绝执行，重部署后自然生效。
 
 #### 1.6 兼容与迁移
@@ -428,6 +428,6 @@ per-request 分桶 tail（v3 自带，执行结束 Console 即见**本请求**�
 
 - 前置设计：`docs/design/functions-execution-identity-and-triggers.md`（v2 执行器与 P0–P2 全景；本稿 §1 为其 §6/Q12 的继任收口）
 - 现状文档：`docs/developer/08-functions.md` §4.3（v2 池与分发）、§12（触发器）、§13（客户端调用）
-- 代码锚点：`internal/infra/functions/runner/runner.js`（v2 模板与串行假设注释）、`functionsdispatcher/pool.go:528` `executeOn`、`functionsdispatcher/registry.go:94` `claimIdleLua`、`functionsdispatcher/types.go:80` `PoolPolicy`、`internal/app/functions/executions.go:618` `buildExecution`、`internal/domain/functions/repo.go:48` `RunnerTemplateVersion`、`internal/domain/events/envelope.go:36` `Envelope`（事件信封）、`sdk/typescript/src/http.ts`（transport auth 模式）、`cli/functions.go`（CLI 管理面现状）
+- 代码锚点：`internal/infra/functions/runner/runner.js`（v2 模板与串行假设注释）、`dispatcher/pool.go:528` `executeOn`、`dispatcher/registry.go:94` `claimIdleLua`、`dispatcher/types.go:80` `PoolPolicy`、`internal/app/functions/executions.go:618` `buildExecution`、`internal/domain/functions/repo.go:48` `RunnerTemplateVersion`、`internal/domain/events/envelope.go:36` `Envelope`（事件信封）、`sdk/typescript/src/http.ts`（transport auth 模式）、`cli/functions.go`（CLI 管理面现状）
 - 迁移先例：`internal/infra/projectschema/migrations/000014_function_executor_v2.up.sql`
 - 竞品证据（2026-09-10 调研）：Cloud Run 实例并发（docs.cloud.google.com/run/docs/about-concurrency）、Vercel Fluid（vercel.com/docs/fluid-compute）、Appwrite Functions 构建（appwrite.io/docs/products/functions/develop）、Appwrite 事件订阅、Supabase 自托管现状（github.com/supabase/supabase/issues/38505）、faasd（github.com/openfaas/faasd）

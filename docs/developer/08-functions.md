@@ -1,20 +1,20 @@
 # 08 函数：执行器、并发与异步
 
-面向后端开发者：Functions 子系统的执行模型（常驻 runner + dispatcher 分发）、构建流程、鉴权、触发器（HTTP / cron / 事件）、客户端调用面与异步 worker。所有函数执行统一经 functions-dispatcher 分发。
+面向后端开发者：Functions 子系统的执行模型（常驻 runner + dispatcher 分发）、构建流程、鉴权、触发器（HTTP / cron / 事件）、客户端调用面与异步 worker。所有函数执行统一经 dispatcher 分发。
 
-> 源码锚点：`internal/domain/functions/`、`internal/infra/functions/`（分发客户端）、`functionsdispatcher/`、`functionspacker/`（git 打包服务）、`internal/app/functions/`、`pkg/semaphore/`、`worker/`。
+> 源码锚点：`internal/domain/functions/`、`internal/infra/functions/`（分发客户端）、`dispatcher/`、`packer/`（git 打包服务）、`internal/app/functions/`、`pkg/semaphore/`、`worker/`。
 > 阅读顺序建议：`06-databases.md`（三层与 outbox）→ 本章 → `09-api-guide.md`（新增 RPC）。
 
 ## 1. 架构
 
 ```
 gRPC FunctionsService (proto/server/v1/functions.proto) ─→ app/functions ─┬→ FunctionRepo（bun：functions/function_deployments/function_variables/function_executions）
-                                                                           ├→ Executor（DispatcherExecutor → functions-dispatcher 内网 HTTP，internal/infra/functions/dispatcher_client.go）
+                                                                           ├→ Executor（DispatcherExecutor → dispatcher 内网 HTTP，internal/infra/functions/dispatcher_client.go）
                                                                            └→ Queue（Redis Stream torchwood:queue:functions-executions）─→ worker（4×XREADGROUP）
 HTTP multipart FunctionsHandler（POST .../deployments/code，≤50MiB）────────┘
 ```
 
-- **执行统一经 functions-dispatcher 分发**（`functionsdispatcher/`，独立进程、平台唯一 docker.sock 持有方）。v1 docker 执行器（每请求一容器、server/worker 进程内挂 docker.sock）已于 2026-09 移除。MVP 为单机形态，部署包落在共享文件系统 `os.TempDir()/torchwood-functions/<project>/<function>/<deployment>.zip`；多机部署需对象存储承载 zip。
+- **执行统一经 dispatcher 分发**（`dispatcher/`，独立进程、平台唯一 docker.sock 持有方）。v1 docker 执行器（每请求一容器、server/worker 进程内挂 docker.sock）已于 2026-09 移除。MVP 为单机形态，部署包落在共享文件系统 `os.TempDir()/torchwood-functions/<project>/<function>/<deployment>.zip`；多机部署需对象存储承载 zip。
 - 四张表由 projectschema 迁移维护（`internal/infra/projectschema/migrations/000003_functions`）；执行身份 / 池策略 / 触发器 / 客户端调用 / 并发分别为 000013 / 000014 / 000015 / 000016 / 000017 / 000018。模型与端口在 `internal/domain/functions/`（`Execution` / `Deployment` / `Repository` / `Executor`）。
 
 ### 1.1 运行限制速查
@@ -176,7 +176,7 @@ CMD ["/tw-app"]
 
 ### 3.3 部署后验证 spawn（构建质量门）
 
-build 成功后 dispatcher 自动追加**验证 spawn**（`functionsdispatcher/daemon.go` `spawnVerifyInstance`）：spawn 一枚验证实例 → `/_tw/health` 轮询（预算 = `functions.dispatcher.boot_timeout`，默认 60s）→ 就绪即回收。实施语义：
+build 成功后 dispatcher 自动追加**验证 spawn**（`dispatcher/daemon.go` `spawnVerifyInstance`）：spawn 一枚验证实例 → `/_tw/health` 轮询（预算 = `functions.dispatcher.boot_timeout`，默认 60s）→ 就绪即回收。实施语义：
 
 - **开关**：`functions.dispatcher.verify_build`（config optional bool——未设置 = 默认开启，显式 false 全局关闭）；node / go 同一机制，无按 runtime 的分档。
 - **池外实例**：走 daemon 原语直连——不进 Redis 注册表、不受 `max_resident_instances` 约束、不参与 reaper 对账，用完即删。
@@ -185,9 +185,9 @@ build 成功后 dispatcher 自动追加**验证 spawn**（`functionsdispatcher/d
 - **失败处置**：回收容器日志尾部（≤64KB）拼进错误 → `deployment.error`——运行期错误（panic / 协议未实现）的第一现场；编译错误在构建日志、不经此路径。
 - **验证范围 = health 探针，不做 invoke 验证**：invoke 需要平台构造 TW_DATA 并**执行用户代码**（副作用不可控），违反「部署期不执行用户代码」不变量；「health 通过 ≠ invoke 语义正确」的残余风险由运行期 transport-error → 杀实例重建语义兜底（有意为之，非疏漏）。
 
-### 3.4 部署源：git 仓库（functions-packer）
+### 3.4 部署源：git 仓库（packer）
 
-git 部署源（二期，设计 `docs/design/functions-runtimes-and-sources.md` §2）：`CreateDeployment` 请求的 `source` oneof 二选一——`code`（zip bytes，既有通道）或 `git`（`GitSource`）。git 源由独立 **functions-packer 服务**（§3.5）把 `url@ref[:directory]` 物化为与 zip 源**同构**的代码包，随后走同一条构建路径（写盘 → INSERT → `buildDeployment`）；zip 流向反转：packer → server 落既有 `zipPath`。`function_deployments` 的 source 投影列（projectschema 迁移 000023）：`source_type ∈ {zip, git}` + 审计四件 `source_url` / `source_ref`（钉死 commit SHA）/ `source_dir` / `context_sha256`（物化 zip 的 hex sha256）——**凭证字段在投影上不存在**。
+git 部署源（二期，设计 `docs/design/functions-runtimes-and-sources.md` §2）：`CreateDeployment` 请求的 `source` oneof 二选一——`code`（zip bytes，既有通道）或 `git`（`GitSource`）。git 源由独立 **packer 服务**（§3.5）把 `url@ref[:directory]` 物化为与 zip 源**同构**的代码包，随后走同一条构建路径（写盘 → INSERT → `buildDeployment`）；zip 流向反转：packer → server 落既有 `zipPath`。`function_deployments` 的 source 投影列（projectschema 迁移 000023）：`source_type ∈ {zip, git}` + 审计四件 `source_url` / `source_ref`（钉死 commit SHA）/ `source_dir` / `context_sha256`（物化 zip 的 hex sha256）——**凭证字段在投影上不存在**。
 
 **GitSource 字段语义**（protovalidate 声明 + app 层 `validateGitSource` 纵深复核，`internal/app/functions/deployments_git.go`）：
 
@@ -215,14 +215,14 @@ export TORCHWOOD_GIT_TOKEN=ghp_xxx        # 或 --git-token-env 指向其他变�
 
 token 未设置即报错（不静默匿名拉取私有仓库）；服务端 `functions.packer.url` 未配置时 git 源报明确错误（`FailedPrecondition`），zip 源完全不受影响——**增量启用**。
 
-### 3.5 functions-packer 服务（运维）
+### 3.5 packer 服务（运维）
 
-独立进程（`cmd/functions-packer`，`task build` 一并产出；实现包 `functionspacker/`）专职承载**不可信 git 输入**的重资源操作：浅克隆 + worktree 核算 + 子目录物化为 zip（go-git 纯 Go 实现，无系统 git 依赖）。
+独立进程（`cmd/packer`，`task build` 一并产出；实现包 `packer/`）专职承载**不可信 git 输入**的重资源操作：浅克隆 + worktree 核算 + 子目录物化为 zip（go-git 纯 Go 实现，无系统 git 依赖）。
 
 - **无状态、可牺牲**：零 Redis / DB / docker 依赖；单请求内存上界 ≈ 物化 zip 预算（默认 50MiB）+ base64 膨胀（×4/3）。它挂了只有 git 部署不可用（重启即恢复），API / 函数执行 / node 构建无感；可独立重启 / 扩缩（多副本无亲和需求——zip 由 server 落构建亲和节点本地盘）。
 - **并发自限**：进程内信号量（容量 = `concurrency`，默认 4），饱和**立即 429**——与 dispatcher 的构建信号量成两道独立闸、无嵌套（pack 在构建信号量之外）。
 - **两级预算 + 整体封顶**：`max_repo_bytes`（worktree 磁盘侧，默认 200MiB）/ `max_zip_bytes`（物化 zip 传输侧，默认 50MiB，与构建内联通道同源）+ 5000 条目；`fetch_timeout`（默认 120s）对单次打包整体封顶（clone + 核算 + 物化共享同一预算），到点 504。物化跳过 `.git` / symlink、拒收 `node_modules`（与 zip 通道同口径）；同 commit 产出字节级一致的 zip（walk 字典序 + 固定时间戳 → checksum 稳定可审计）。
-- **部署拓扑**：与 functions-dispatcher 同级的**内网服务**（dokploy compose 同网部署，server 经 `functions.packer.url`（如 `http://functions-packer:9071`）寻址）；HTTP 监听 `addr` 默认 `:9071`（与 dispatcher 缺省 `:9070` 错开）。server 进程只消费 `url` / `shared_token`，其余字段仅 packer 进程消费（与 dispatcher 同款分段约定）。
+- **部署拓扑**：与 dispatcher 同级的**内网服务**（dokploy compose 同网部署，server 经 `functions.packer.url`（如 `http://packer:9071`）寻址）；HTTP 监听 `addr` 默认 `:9071`（与 dispatcher 缺省 `:9070` 错开）。server 进程只消费 `url` / `shared_token`，其余字段仅 packer 进程消费（与 dispatcher 同款分段约定）。
 - **SSRF 防护**：默认 **https-only** 且拒绝私网 / 回环 / link-local 目标（云元数据端点 169.254.169.254 等）；校验实施在**拨号点**（`dialer.Control` 钩子，TCP connect 时对解析后 IP 判定）——DNS rebinding（解析后换记录）因此失效。`allow_insecure=true` 整体放行（http + 私网目标），为**自托管内网 git 服务**场景提供显式开关而非逼出危险旁路；口径启动即固定（go-git 协议表是进程级全局）。
 - **API 面**（内网专用 + 可选 `x-tw-packer-token` 静态共享密钥，constant-time 比对；`GET /healthz` 豁免认证）：
 
@@ -239,12 +239,12 @@ token 未设置即报错（不静默匿名拉取私有仓库）；服务端 `fun
 **流程**（`internal/app/functions/deployments_image.go` → dispatcher `POST /v1/dispatch/images/import`）：
 
 1. server 侧形状校验（引用非空、≤500 字节）→ GetFunction 互斥校验 → **首次 ImportImage 在 INSERT 之前**（digest 是 `source_ref` 不可变写入的前提；失败无行，与 git pack→INSERT 同构；INSERT 失败由 `RemoveImage` 幂等清理兜底）；
-2. dispatcher 编排（`functionsdispatcher/daemon.go` `importImage`）：registry host 名称级准入（先于一切 docker 操作，本地直导同样受约束）→ 取得钉死内容（`ExpectedDigest` 命中本地平台镜像**零 pull**；引用本地已存在——本地构建/本地 tag 直导——直接用本地内容跳过 pull；否则 pull，`RegistryAuth` 内联单次转发）→ digest 钉死 → retag 成 `<registry>/func-<fid>-<did>` 并删原始引用标签 → **强制契约验证 spawn** → 返回钉死 digest；
+2. dispatcher 编排（`dispatcher/daemon.go` `importImage`）：registry host 名称级准入（先于一切 docker 操作，本地直导同样受约束）→ 取得钉死内容（`ExpectedDigest` 命中本地平台镜像**零 pull**；引用本地已存在——本地构建/本地 tag 直导——直接用本地内容跳过 pull；否则 pull，`RegistryAuth` 内联单次转发）→ digest 钉死 → retag 成 `<registry>/func-<fid>-<did>` 并删原始引用标签 → **强制契约验证 spawn** → 返回钉死 digest；
 3. INSERT 行（`source_ref` = digest、`template_version = 0`）→ `buildDeployment` 按 `source_type` 分流：image → 幂等 ImportImage 复检（spec 带预期 digest = 行内 `source_ref`；本地命中零操作，镜像被外部删除则重 pull）→ ready。
 
 **引用语义与 digest 钉死**：引用形态 `host/repo[:tag|@sha256:...]`（无显式 host 归属 docker.io）。tag 在导入期钉死为 digest 落 `source_ref`——tag 上游漂移不影响已部署内容；引用自带 `@sha256:` 时校验与拉取结果一致（不匹配 InvalidArgument，防 tag 漂移）；本地构建/tag 直导不经 registry（无 manifest digest）回落镜像 ID（内容寻址钉死值）。`source_url` 保留原始引用（审计四件之一），删除部署走 `RemoveImage` 只删本地平台镜像、不动上游 registry。
 
-**registry host 准入（`functionsdispatcher/imageref.go`，名称级校验）**：pull 的网络发起方是宿主 docker daemon（IP 拨号点 guard 不可实施于 daemon），故采用**名称级校验 + 白名单 + 信任级论证**（部署者 = functions.write 特权主体，与 zip 上传同级）：
+**registry host 准入（`dispatcher/imageref.go`，名称级校验）**：pull 的网络发起方是宿主 docker daemon（IP 拨号点 guard 不可实施于 daemon），故采用**名称级校验 + 白名单 + 信任级论证**（部署者 = functions.write 特权主体，与 zip 上传同级）：
 
 - 默认拒 **IP 字面量**（IPv4/IPv6，含端口形态）与 **`localhost` / `*.localhost`**——消灭「引用直接写 IP 打内网」的最廉价攻击形态，错误信息明示命中规则与放行通道；
 - `functions.image.allowed_registries`（可选正向白名单，空 = 不设）：条目为精确域名或后缀域（`example.com` 同时命中自身与子域 `registry.example.com:5000`，不命中 `badexample.com`；含端口 host 需整体精确登记）；**白名单命中优先放行**——显式登记 = 运维明确意图（含内网 registry 直连 IP 的显式白名单场景）；白名单非空时未命中一律拒绝（正向白名单语义）；
@@ -275,7 +275,7 @@ token 未设置即报错（不静默匿名拉取私有仓库）；服务端 `fun
 - **异步**：`status=queued` → Redis Stream 入队，payload `{execution_id, function_id, project_id, data, attempt?}`；首次无 `attempt`，重试 +1 持久化于消息体。
 - 状态机 `queued → building（补构建）→ running → completed|failed`；`failed` 聚合 `error`（stderr / timed out / build failed）；`duration_ms` / `status_code` 落库；每函数保留最近 100 条（`PruneOldExecutions`）。
 
-**安全基线**（`functionsdispatcher/daemon.go SpawnInstance`）：`CapDrop ALL`、`no-new-privileges`、只读根文件系统 + `/tmp` tmpfs、memory / cpu / pids(512) 按 spec。网络默认 per-project 隔离 bridge `tw-func-<project.id>`（项目间函数容器互不可达）；显式配置 `functions.docker.network` 时 opt-in 全局网络——跨项目容器同网互通有横向访问风险（`configs/config.yaml.template` 有警告）。`TW_DATA` 由分发请求体承载，超时强制回收实例。
+**安全基线**（`dispatcher/daemon.go SpawnInstance`）：`CapDrop ALL`、`no-new-privileges`、只读根文件系统 + `/tmp` tmpfs、memory / cpu / pids(512) 按 spec。网络默认 per-project 隔离 bridge `tw-func-<project.id>`（项目间函数容器互不可达）；显式配置 `functions.docker.network` 时 opt-in 全局网络——跨项目容器同网互通有横向访问风险（`configs/config.yaml.template` 有警告）。`TW_DATA` 由分发请求体承载，超时强制回收实例。
 
 ### 4.1 事务边界
 
@@ -312,7 +312,7 @@ CGI 形态（每请求一容器）为设计缺陷，常驻 runner 是唯一执�
 
 **模型**：函数镜像 CMD 为平台 runner（node：构建期 COPY `.tw-runner.js` 作 CMD；go：平台编译产物 `/tw-app` 内嵌同契约 runtime，§3.1——`internal/infra/functions/runner/` 与 `runner/gorunner/`）。模板版本常量 `RunnerTemplateVersion` 落 `function_deployments.template_version`（当前 = 5），语义变更必须递增（node/Go 双实现同版本纪律见 §3.2）。runner 启动即加载用户入口（node：约定 `index.js` 导出 `main`/`fetch`，加载完成前 `/_tw/health` 返回 not-ready；go：入口编译期绑定恒 ready），加载后监听容器内 `:18080`（仅 per-project 桥网络可达）：`POST /` body = TW_DATA JSON + header `x-tw-execution-token`，响应 200 `{"ok":true,"result":...}` / 500 `{"ok":false,"error":...}`（附加 stdout / stderr 尾部环缓冲）；达 `TW_MAX_REQUESTS` 自退出、SIGTERM 排空在途后退出（协议全貌见 §3.2）。
 
-**分发拓扑**：独立 `functions-dispatcher` 进程专职持有 docker.sock（compose 唯一挂载点；dokploy 编排下 dispatcher 以 `user: root` 运行——镜像缺省用户读不了宿主 `root:docker` 的 sock）。dispatcher 按需 join `tw-func-<project>` 网络（容器 NetworkConnect 自 attach；宿主进程模式跳过——注意 Docker Desktop for Windows/macOS 的 VM 拓扑下容器 bridge IP 对宿主不可路由，分发通路要求 Linux / dokploy compose 拓扑）。server/worker 经 HTTP API 分发（适配 Executor 端口），零 daemon 依赖；zip 构建以 base64 内联传输（无共享文件系统假设）。API 面（内网专用 + 可选 `x-tw-dispatcher-token` 静态共享密钥）：
+**分发拓扑**：独立 `dispatcher` 进程专职持有 docker.sock（compose 唯一挂载点；dokploy 编排下 dispatcher 以 `user: root` 运行——镜像缺省用户读不了宿主 `root:docker` 的 sock）。dispatcher 按需 join `tw-func-<project>` 网络（容器 NetworkConnect 自 attach；宿主进程模式跳过——注意 Docker Desktop for Windows/macOS 的 VM 拓扑下容器 bridge IP 对宿主不可路由，分发通路要求 Linux / dokploy compose 拓扑）。server/worker 经 HTTP API 分发（适配 Executor 端口），零 daemon 依赖；zip 构建以 base64 内联传输（无共享文件系统假设）。API 面（内网专用 + 可选 `x-tw-dispatcher-token` 静态共享密钥）：
 
 | 端点 | 入参 → 出参 | 说明 |
 |---|---|---|
@@ -322,7 +322,7 @@ CGI 形态（每请求一容器）为设计缺陷，常驻 runner 是唯一执�
 
 错误映射：排队超限 429 → ResourceExhausted、执行超时 504 → DeadlineExceeded、缺参 400。`TW_EXECUTION_TOKEN` 经分发 header 传递——**mint → 注入 → defer revoke 链路不变，常驻的是容器不是凭证**。
 
-**池策略**（平台默认 + per-function 列覆盖，projectschema 迁移 000014）：`min_instances`（默认 0 = 纯 scale-from-zero；≥1 保温）、`max_instances`（默认 2）、`idle_ttl_seconds`（默认 300）、`max_requests_per_instance`（默认 1000，Lambda 同款防泄漏回收）+ 平台级常驻总量上限（每 daemon 默认 8，`functions.dispatcher.max_resident_instances`）。实现语义（`functionsdispatcher/pool.go`，Redis 注册表 `torchwood:fninst:{project}:{function}`）：
+**池策略**（平台默认 + per-function 列覆盖，projectschema 迁移 000014）：`min_instances`（默认 0 = 纯 scale-from-zero；≥1 保温）、`max_instances`（默认 2）、`idle_ttl_seconds`（默认 300）、`max_requests_per_instance`（默认 1000，Lambda 同款防泄漏回收）+ 平台级常驻总量上限（每 daemon 默认 8，`functions.dispatcher.max_resident_instances`）。实现语义（`dispatcher/pool.go`，Redis 注册表 `torchwood:fninst:{project}:{function}`）：
 
 - **spawn 收敛**：同函数并发 spawn 经 `torchwood:fnspawn:*` SETNX 锁收敛为一次，其余请求等注册表（防 daemon 重启后全量冷启动风暴）；冷启动成本由触发 spawn 的请求支付但不独占实例。
 - **有界排队**：池满时排队（深度上限 `queue_depth` 默认 32 + 队首超时 `queue_head_timeout` 默认 10s）→ 超限 429 ResourceExhausted，同步调用方不无界等在 30s ctx 上。
@@ -460,7 +460,7 @@ Functions 的异步执行投递失败亦通过统一 `outbox` 事件对外可见
 
 ```bash
 go test ./pkg/semaphore -run TestRedisSemaphore -count=1
-go test ./functionsdispatcher -run TestIntegration_Dispatcher -count=1
+go test ./dispatcher -run TestIntegration_Dispatcher -count=1
 ```
 
 （dispatcher 集成测试探测本机 docker daemon：可达即跑、不可达自动 skip；非默认 daemon 用 `TORCHWOOD_FUNCTIONS_DOCKER_HOST` 指向。）
@@ -481,14 +481,14 @@ go test ./functionsdispatcher -run TestIntegration_Dispatcher -count=1
 | `functions.dispatcher.timeout_budget` | 超时熔断阈值，默认 5 |
 | `functions.dispatcher.addr` | dispatcher HTTP 监听地址，默认 `:9070` |
 | `functions.dispatcher.callback_container` | dokploy 场景随函数网络 attach 的 server 容器名 |
-| `functions.docker.host` | 默认 `unix:///var/run/docker.sock`，仅 functions-dispatcher 进程消费 |
+| `functions.docker.host` | 默认 `unix:///var/run/docker.sock`，仅 dispatcher 进程消费 |
 | `functions.docker.network` | 默认留空 = per-project 网络（不存在时自动创建 bridge）；显式配置为 opt-in 全局网络 |
 | `functions.docker.registry` | 小写，默认 `torchwood-funcs` |
 | `functions.execution.api_base_url` | 函数容器可达的 Server API 地址，注入 `TW_API_BASE_URL`；空 = 不注入 |
 | `functions.trigger.http_ip_per_minute` | HTTP 触发器每 IP 限频，默认 3000 |
 | `functions.client_invoke.per_user_concurrency` | 每用户并发闸门，默认 2 |
 | `functions.client_invoke.queue_head_timeout` | 并发闸门排队队首超时，默认 5s |
-| `functions.packer.url` | functions-packer 内网 HTTP 基址（server 侧消费），如 `http://functions-packer:9071`；**空 = git 部署源未启用**（zip 源不受影响，§3.4/§3.5） |
+| `functions.packer.url` | packer 内网 HTTP 基址（server 侧消费），如 `http://packer:9071`；**空 = git 部署源未启用**（zip 源不受影响，§3.4/§3.5） |
 | `functions.packer.shared_token` | 内网可选认证（`x-tw-packer-token`），空 = 不校验（仅限可信内网） |
 | `functions.packer.fetch_timeout` | 单次 fetch+物化整体超时，默认 `120s`（仅 packer 进程消费） |
 | `functions.packer.max_repo_bytes` | 克隆 worktree 磁盘侧预算，默认 200MiB（仅 packer 进程消费） |
@@ -496,10 +496,10 @@ go test ./functionsdispatcher -run TestIntegration_Dispatcher -count=1
 | `functions.packer.concurrency` | 并发打包上限，默认 4；饱和立即 429（仅 packer 进程消费） |
 | `functions.packer.allow_insecure` | 放行 http:// 与私网/回环目标（SSRF guard 整体放行，自托管内网 git 场景），默认 false |
 | `functions.packer.addr` | packer HTTP 监听地址，默认 `:9071`（仅 packer 进程消费） |
-| `functions.image.allowed_registries` | registry host 正向白名单（空 = 不设白名单）：条目为精确域名或后缀域（`example.com` 命中自身与子域，含端口需整体精确登记）；命中优先放行，非空时未命中一律拒绝（仅 functions-dispatcher 进程消费，§3.6） |
-| `functions.image.allow_insecure` | 放行 IP 字面量与 `localhost`/`*.localhost` 形态的 registry host（自托管内网 registry 显式开关），默认 false（仅 functions-dispatcher 进程消费，§3.6） |
+| `functions.image.allowed_registries` | registry host 正向白名单（空 = 不设白名单）：条目为精确域名或后缀域（`example.com` 命中自身与子域，含端口需整体精确登记）；命中优先放行，非空时未命中一律拒绝（仅 dispatcher 进程消费，§3.6） |
+| `functions.image.allow_insecure` | 放行 IP 字面量与 `localhost`/`*.localhost` 形态的 registry host（自托管内网 registry 显式开关），默认 false（仅 dispatcher 进程消费，§3.6） |
 
-`functions.executor` 键已删除（reserved；残留配置键被静默忽略）。`task build` 同时产出 server / worker / torchwood / functions-dispatcher / functions-packer 五个二进制。
+`functions.executor` 键已删除（reserved；残留配置键被静默忽略）。`task build` 同时产出 server / worker / torchwood / dispatcher / packer 五个二进制。
 
 ## 10. 变量与保留策略
 
@@ -520,7 +520,7 @@ go test ./functionsdispatcher -run TestIntegration_Dispatcher -count=1
 
 - 单元：`internal/app/functions/`（并发上限、截断、队列 payload 校验、鉴权分支）；`internal/infra/queue/redis_queue_test.go`。
 - 安全：`security_test.go`（zip slip / 符号链接 / size 上限）；`authz_test.go`（写方法鉴权）；`semaphore_test.go`（SETNX + Lua 互斥）。
-- 集成：`functionsdispatcher/daemon_integration_test.go`（门控 `TORCHWOOD_FUNCTIONS_DOCKER_HOST`，CI 预拉 node:18-alpine / golang:1.26-alpine；含 python zip 构建期拒绝用例）；Go 端到端（`TestIntegration_GoMainFunctionE2E` / `GoFetchFunctionE2E` 双风格执行断言、`NodeVerifyStillGreenE2E` 护栏、`GoVerifyFailureCapturesLogTail` 验证失败日志尾回收、`GoMissingEntryRejected` 缺入口拒收）；git 源 docker 集成（`functionsdispatcher/git_source_integration_test.go`：`GitSourceGoFunctionFullChainE2E` git fixture → PackGit → BuildImage(verify) → 池执行全链 + `GitWideEntryZipBuild` >1000 条目放宽预算构建回归）；**镜像源 docker 集成**（`functionsdispatcher/image_source_integration_test.go`：`ImageSourceFullChainE2E` 旗舰全链——BuildImage 产物即契约镜像 tag 带域名引用 → ImportImage 本地直导（host 准入拒 IP 字面量 / digest 钉死 = Image ID / retag 进平台命名 / 原始引用删除 / 强制验证）→ 池执行封套断言；`ImageSourceNonContractRejected` 非契约镜像验证拒收 + 残留断言；`ImageSourceDigestPinIdempotentResummon` ExpectedDigest 命中零 pull（不可解析 `.invalid` 域名实证——实现若违规 pull 必炸）+ 本地 miss 重拉真实触网报错）；worker 的消费 / requeue 测试（attempt 持久化、Transition CAS）；app 层 git 源进程内冒烟（`deployments_git_e2e_test.go`，真实 DB + fake packer/executor）；app 层镜像源分支（`deployments_image_test.go` 互斥校验/形状校验/降级 + `deployments_image_dispatch_e2e_test.go` 真实 DB + fake executor）。
+- 集成：`dispatcher/daemon_integration_test.go`（门控 `TORCHWOOD_FUNCTIONS_DOCKER_HOST`，CI 预拉 node:18-alpine / golang:1.26-alpine；含 python zip 构建期拒绝用例）；Go 端到端（`TestIntegration_GoMainFunctionE2E` / `GoFetchFunctionE2E` 双风格执行断言、`NodeVerifyStillGreenE2E` 护栏、`GoVerifyFailureCapturesLogTail` 验证失败日志尾回收、`GoMissingEntryRejected` 缺入口拒收）；git 源 docker 集成（`dispatcher/git_source_integration_test.go`：`GitSourceGoFunctionFullChainE2E` git fixture → PackGit → BuildImage(verify) → 池执行全链 + `GitWideEntryZipBuild` >1000 条目放宽预算构建回归）；**镜像源 docker 集成**（`dispatcher/image_source_integration_test.go`：`ImageSourceFullChainE2E` 旗舰全链——BuildImage 产物即契约镜像 tag 带域名引用 → ImportImage 本地直导（host 准入拒 IP 字面量 / digest 钉死 = Image ID / retag 进平台命名 / 原始引用删除 / 强制验证）→ 池执行封套断言；`ImageSourceNonContractRejected` 非契约镜像验证拒收 + 残留断言；`ImageSourceDigestPinIdempotentResummon` ExpectedDigest 命中零 pull（不可解析 `.invalid` 域名实证——实现若违规 pull 必炸）+ 本地 miss 重拉真实触网报错）；worker 的消费 / requeue 测试（attempt 持久化、Transition CAS）；app 层 git 源进程内冒烟（`deployments_git_e2e_test.go`，真实 DB + fake packer/executor）；app 层镜像源分支（`deployments_image_test.go` 互斥校验/形状校验/降级 + `deployments_image_dispatch_e2e_test.go` 真实 DB + fake executor）。
 - **未落地清单**：独立构建队列（CreateDeployment 同步构建，worker 消费前补构建兜底）；重试无死信队列（超限直接标 failed）；变量明文；`entrypoint` 固定入口；多机需对象存储承载 zip；池策略管理 API 面（min/max_instances、idle_ttl、max_requests、concurrency 的 UpdateFunction 字段 + Console 卡片未落地）——**concurrency 现无管理入口，恒为列默认 1**，行为与 v2 串行等价。
 
 ## 13. 触发器（HTTP + cron + 事件）

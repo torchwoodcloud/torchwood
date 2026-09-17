@@ -6,7 +6,7 @@
 > 细胞模型，排为阶段四，§4）→ 三子代理独立复核修订（13 处并入）→
 > **一期已实现**（2026-09-17，四阶段还原点 b760cb1 / 53a3ff1 / 462470b /
 > af9dbfb，全量回归绿、集成 9 用例实跑绿）→ **D2 再裁决**（owner 否决
-> server 进程内 fetch，定向独立 functions-packer 服务，§2 改写）→
+> server 进程内 fetch，定向独立 packer 服务，§2 改写）→
 > **二期已实现**（2026-09-17，四阶段还原点 faf0de5 / f2c23d5 / 7fa08ff /
 > 450089b；真实 DB 迁移/往返全绿、docker 集成 11 用例容器内实跑全绿、
 > 带 DSN 全量回归 78 包零失败）→ **三期已实现**（2026-09-17，四阶段
@@ -40,7 +40,7 @@
 | 需求 | 切入层 | 一句话 |
 |---|---|---|
 | Go 运行时 | 语言/模板层（探测 + `DockerfileFor` + 平台生成 bootstrap） | 编译型语言下平台改用「生成引用用户包的 main」保持 runner 注入模型 |
-| Git 仓库源 | 源获取层（zip 之前的打包） | 独立 functions-packer 服务物化为 zip 落既有路径，业务服务零 git 流量 |
+| Git 仓库源 | 源获取层（zip 之前的打包） | 独立 packer 服务物化为 zip 落既有路径，业务服务零 git 流量 |
 | Docker 镜像源 | 构建层整层跳过 | 平台不构建，pull + digest 钉死 + retag + 契约验证 |
 
 **共享的横切决策**（统一设计的理由）：
@@ -69,7 +69,7 @@
 
 部署链：`CreateDeployment`（zip bytes ≤1MiB gRPC / ≤50MiB multipart，proto
 `functions.proto:380`）→ 落库 pending → 同步构建 → `DispatcherExecutor.Build`
-（zip base64 内联，`functionsdispatcher/types.go:84`）→ dispatcher
+（zip base64 内联，`dispatcher/types.go:84`）→ dispatcher
 `BuildImage`（`daemon.go:344`：解压 → 写 `.tw-runner.js` + Dockerfile → tar →
 `docker build`，tag = `func-<fid>-<did>`）→ ready。执行 = 常驻实例池 spawn，
 runner 监听 `:18080`，`GET /_tw/health` 握手就绪（`runner.js:317`）；池与
@@ -90,7 +90,7 @@ Git 集成仅存在于 roadmap §4.3 VCS（P3，GitHub OAuth + webhook 自动部
 
 - Go 运行时（zip 源）：`go-1.25` 表项 + go.mod 探测 + 多阶段构建模板 +
   平台生成 bootstrap（AST 探测 Fetch/Main 双轨入口）+ 部署后验证 spawn；
-- Git 源：`https://` 仓库 @ ref + 子目录，**独立 functions-packer 服务**
+- Git 源：`https://` 仓库 @ ref + 子目录，**独立 packer 服务**
   打包为 zip（业务服务零 git 流量，资源尖峰隔离在可牺牲的基础设施
   进程），commit SHA 钉死，重建不依赖凭证（物化 zip 在盘）；
 - 镜像源：契约镜像引用 → pull + digest 钉死 + retag 进平台命名 + 强制
@@ -120,7 +120,7 @@ Git 集成仅存在于 roadmap §4.3 VCS（P3，GitHub OAuth + webhook 自动部
 
 ### 0. 统一模型：部署源与运行协议（横切，随二期落 schema）
 
-**源归一化**——部署源三变体，git 由独立 functions-packer 服务归一为
+**源归一化**——部署源三变体，git 由独立 packer 服务归一为
 zip，image 跳过构建：
 
 ```
@@ -378,18 +378,18 @@ config 文档须标注该画像（首个 Go 部署在全新环境超时 = 高频
 必要时按 runtime 分档调大；验证 spawn 的 `boot_timeout`（60s）语义上
 嵌套在 `build_timeout` 预算内（构建 + 验证共享一个上限）。
 
-### 2. 阶段二：Git 源（独立 functions-packer 服务——2026-09-17 owner 裁决，
+### 2. 阶段二：Git 源（独立 packer 服务——2026-09-17 owner 裁决，
 推翻「server 进程内物化」与「dispatcher 进程内 fetch」两案）
 
 **裁决记录**：server 进程内 go-git 物化（原 D2）被 owner 否决——控制面
 进程不承载不可信输入的重资源操作（clone 内存尖峰伤及全部 API 流量）；
 dispatcher 进程内 fetch 同被否决——dispatcher 仍在函数执行关键路径。
-最终形态 = **functionsdispatcher 模式复刻**：职责单一、可独立重启/扩缩的
+最终形态 = **dispatcher 模式复刻**：职责单一、可独立重启/扩缩的
 基础设施服务，OOM 只影响 git 部署自身。zip 流向反转：不再是
 「server 取好 zip 发给 dispatcher」，而是「packer 打好 zip 交回 server 落盘」。
 
-**服务契约**（`functionspacker/` 顶层组件包 + `cmd/functions-packer`，
-与 `functionsdispatcher/` 同级模式；无 Redis/DB/池依赖，状态可牺牲）：
+**服务契约**（`packer/` 顶层组件包 + `cmd/packer`，
+与 `dispatcher/` 同级模式；无 Redis/DB/池依赖，状态可牺牲）：
 
 ```
 POST /v1/pack/git
@@ -656,7 +656,7 @@ InstanceRecord 的 Redis 结构本三期不加 node 列；④ zip/物化路径�
   `cli/import_guard_test`；`sdk/go/server` 覆盖测试自动覆盖新字段；
   审计脱敏断言（GitSource.token 不出现在审计载荷——`audit_payload.go`
   mask 命中验证）。
-- **fake 基建复用**：`functionsdispatcher/daemon_test.go` 的 fake 网络
+- **fake 基建复用**：`dispatcher/daemon_test.go` 的 fake 网络
   客户端驱动验证 spawn 路径；mock executor 驱动 app 分流。
 
 ## Rollout Plan / 阶段与切片
@@ -664,7 +664,7 @@ InstanceRecord 的 Redis 结构本三期不加 node 列；④ zip/物化路径�
 | 阶段 | 内容 | proto/DB | 依赖 |
 |---|---|---|---|
 | 一：Go 运行时 | gorunner 模板资产 + AST 探测 + go 模板/表项 + BuildSpec 定稿 + 验证 spawn（带 variables）+ build_timeout + ctx 解耦 + Runner 协议文档节 | config.proto 两字段（dispatcher.build_timeout=10/verify_build=11），**无 API proto/DB 变更** | 无（**不再依赖 SDK 发布**——生成路线无发布物） |
-| 二：Git 源 | functions-packer 服务（go-git + IP guard + 两级预算 + 并发自限）+ source oneof + DB 迁移 + SourcePacker HTTP 适配器 + dispatcher 放宽解压预算 + CLI/Console | oneof、Deployment 投影、000023 迁移、config packer=9 | 无（可与三调序） |
+| 二：Git 源 | packer 服务（go-git + IP guard + 两级预算 + 并发自限）+ source oneof + DB 迁移 + SourcePacker HTTP 适配器 + dispatcher 放宽解压预算 + CLI/Console | oneof、Deployment 投影、000023 迁移、config packer=9 | 无（可与三调序） |
 | 三：镜像源 | ImageSource 实现 + runtime=`image` + pull/digest/retag + 强制验证 + template_version=0 + 基础镜像 | 复用阶段二 schema 的 image 分支 | 阶段一（协议文档 + 参考实现） |
 | 四：多机执行面 | 细胞模型：M1 registry push → M2/M3 节点注册 + 实例亲和路由 → M4 容量共享 → M6 回调多节点化（§4，独立立项量级） | config `functions.docker.registry` 语义升格 | 阶段三交付后按容量画像启动（不阻塞） |
 
@@ -689,7 +689,7 @@ zip）。SDK 方法覆盖自动可用，CLI 仅需旗标。
 | # | 裁决 | 来源 |
 |---|---|---|
 | D1 | 三需求一份设计、三期实施（源模型统一 + 协议公开化） | 收敛 |
-| D2 | git 打包收敛**独立 functions-packer 服务**（2026-09-17 owner 否决 server 进程内方案并定向此形态；zip 回流共享盘保 worker 补构建免凭证）；image pull+retag 免构建 | owner 裁决 |
+| D2 | git 打包收敛**独立 packer 服务**（2026-09-17 owner 否决 server 进程内方案并定向此形态；zip 回流共享盘保 worker 补构建免凭证）；image pull+retag 免构建 | owner 裁决 |
 | D3 | **Go = 平台生成 twmain/ bootstrap（AST 探测 Fetch(w,r)/Main(map,map) 双轨，stdlib 契约，用户零平台依赖）**；SDK 路线否决（见 Alternatives） | 收敛 3/3（推翻原拍板，待 owner 重新确认） |
 | D4 | go.sum 强制（require 非空）+ GOFLAGS 按 vendor 分支（vendor → `-mod=vendor`，否则 `-mod=readonly`）+ `CGO_ENABLED=0` + **vendor/ 受纳**；多阶段模板 alpine 运行段 + ca-certificates + 非 root | 收敛 + vendor 独有 + 二轮复查修正（GOFLAGS 显式值覆盖 vendor 自动检测） |
 | D5 | `:18080` 协议升格公开契约（文档 + bootstrap 源码 + 基础镜像三件参考实现），版本随 RunnerTemplateVersion（共享 5 不 bump） | 收敛 |
@@ -732,7 +732,7 @@ zip）。SDK 方法覆盖自动可用，CLI 仅需旗标。
 - **server 侧进程内 go-git 物化（原 D2，2026-09-17 owner 否决）**：隔离
   论据曾胜出（worker 补构建论据），但控制面进程承载不可信输入的 clone
   内存尖峰会伤及全部 API 流量——「其他都是业务服务」原则下重资源操作
-  必须收敛进可牺牲的基础设施进程；由此演进出独立 functions-packer 服务
+  必须收敛进可牺牲的基础设施进程；由此演进出独立 packer 服务
   （§2，zip 流向反转为 packer→server），D2 的全部收益（worker 补构建
   免凭证、快照可复现、预算护栏）在 packer 案中原样保留；
 - **dispatcher 进程内 fetch + 快照回传（过渡方案，同日被否）**：zip 回传
@@ -973,6 +973,6 @@ A1/A8 证伪其强形式并逐处修正，正文不再以「零改动」作论�
 - 执行器 v2 分发通路：`docs/design/functions-execution-identity-and-triggers.md` §6
 - 运行协议事实源：`internal/infra/functions/runner/runner.js`（头注释即契约全文）
 - 模板层：`internal/infra/functions/runner/runner.go`（`DockerfileFor`）
-- 构建链：`internal/app/functions/deployments.go`、`functionsdispatcher/daemon.go`、`functionsdispatcher/types.go`
+- 构建链：`internal/app/functions/deployments.go`、`dispatcher/daemon.go`、`dispatcher/types.go`
 - worker 补构建锚点：`internal/app/functions/executions.go`（zipPath 补构建）
 - VCS 远期集成：`docs/roadmap.md` §4.3

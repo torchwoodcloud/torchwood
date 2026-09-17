@@ -115,7 +115,7 @@ var ProviderSet = wire.NewSet(
 	wire.Bind(new(domainstorage.BucketRepository), new(*bunrepo.BucketRepository)),
 	wire.Bind(new(domainstorage.FileRepository), new(*bunrepo.FileRepository)),
 	infraevents.ProviderSet,
-	// 唯一执行器（v1 docker 执行器已移除）：经 functions-dispatcher 分发，
+	// 唯一执行器（v1 docker 执行器已移除）：经 dispatcher 分发，
 	// worker 零 docker.sock 依赖。
 	infrafunctions.NewDispatcherExecutor,
 	wire.Bind(new(domainfunctions.Executor), new(*infrafunctions.DispatcherExecutor)),
@@ -153,7 +153,7 @@ func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 	if err := bootkit.ValidateAppConfig(app.Logger(), &c); err != nil {
 		return nil, err
 	}
-	// v1 docker 执行器已移除：函数执行统一经 functions-dispatcher 分发，
+	// v1 docker 执行器已移除：函数执行统一经 dispatcher 分发，
 	// 分发通路缺失直接拒绝启动（不留到首次执行）。
 	if err := bootkit.ValidateFunctionsDispatchConfig(&c); err != nil {
 		return nil, err

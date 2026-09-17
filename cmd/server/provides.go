@@ -86,7 +86,7 @@ func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 	if err := bootkit.ValidateAppConfig(app.Logger(), &c); err != nil {
 		return nil, err
 	}
-	// v1 docker 执行器已移除：函数执行统一经 functions-dispatcher 分发，
+	// v1 docker 执行器已移除：函数执行统一经 dispatcher 分发，
 	// 分发通路缺失直接拒绝启动（不留到首次执行）。
 	if err := bootkit.ValidateFunctionsDispatchConfig(&c); err != nil {
 		return nil, err

@@ -21,7 +21,7 @@ import (
 )
 
 // 端到端最小冒烟（二期阶段 3，真实 DB；DSN 未配置时跳过——集成链路在
-// `task test`/带 DSN 的验收跑法覆盖）：httptest 起 fake functions-packer
+// `task test`/带 DSN 的验收跑法覆盖）：httptest 起 fake packer
 // → PackerClient（真实 infra 适配）→ app CreateDeployment(git)（fake
 // executor）→ 断言 zipPath 文件存在 + DB 行 source 列正确。
 
@@ -41,7 +41,7 @@ func TestCreateDeployment_GitEndToEndSmoke(t *testing.T) {
 		checksum  = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 		zipBytes  = "PK\x03\x04e2e-materialized-zip"
 	)
-	// fake functions-packer：同款路由形状（POST /v1/pack/git +
+	// fake packer：同款路由形状（POST /v1/pack/git +
 	// x-tw-packer-token 认证），返回固定 PackResponse。
 	packCalls := 0
 	packerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -1944,17 +1944,17 @@ func (x *Functions_Execution) GetApiBaseUrl() string {
 	return ""
 }
 
-// Dispatcher 是分发通路配置（owner 拍板方案③：独立 functions-dispatcher
+// Dispatcher 是分发通路配置（owner 拍板方案③：独立 dispatcher
 // 进程专职持有 docker.sock、join 项目网络、承接 Build/Execute/RemoveImage
 // 全部 daemon 操作；server/worker 零 daemon 依赖）。
 type Functions_Dispatcher struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// dispatcher 的内网 HTTP 基址（server/worker 侧消费），如
-	// http://functions-dispatcher:9070。必填（组合根启动期校验）。
+	// http://dispatcher:9070。必填（组合根启动期校验）。
 	Url string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
 	// 静态共享密钥（内网专用可选认证；空 = 不校验，仅限可信内网）。
 	SharedToken string `protobuf:"bytes,2,opt,name=shared_token,json=sharedToken,proto3" json:"shared_token,omitempty"`
-	// ——以下仅 functions-dispatcher 进程消费（池策略全局参数）——
+	// ——以下仅 dispatcher 进程消费（池策略全局参数）——
 	// 每 daemon 常驻实例总量上限（设计 Q11 拍板：默认 8；防单项目耗尽宿主内存）。
 	MaxResidentInstances int32 `protobuf:"varint,3,opt,name=max_resident_instances,json=maxResidentInstances,proto3" json:"max_resident_instances,omitempty"`
 	// 单函数有界排队深度上限（超限立即 ResourceExhausted；默认 32）。
@@ -2204,22 +2204,22 @@ func (x *Functions_ClientInvoke) GetQueueHeadTimeout() string {
 	return ""
 }
 
-// Packer 是 git 源打包服务（functions-packer，二期阶段二）配置：独立
+// Packer 是 git 源打包服务（packer，二期阶段二）配置：独立
 // 进程把 git 仓库 @ref 物化为 zip 交回 server 落既有构建路径（zip 流向
 // 反转：packer → server；docs/design/functions-runtimes-and-sources.md
-// §2）。与 functions-dispatcher 的构建信号量成两道独立闸、无嵌套；
+// §2）。与 dispatcher 的构建信号量成两道独立闸、无嵌套；
 // clone 的内存尖峰/磁盘消耗全部收敛在 packer 进程（可独立重启/扩缩，
 // OOM 只影响 git 部署自身）。server 进程只消费 url/shared_token；
-// 其余字段仅 functions-packer 进程消费（与 dispatcher 同款分段注释约定）。
+// 其余字段仅 packer 进程消费（与 dispatcher 同款分段注释约定）。
 type Functions_Packer struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// functions-packer 的内网 HTTP 基址（server 侧消费），如
-	// http://functions-packer:9071。空 = git 部署源未启用（app 层 git
+	// packer 的内网 HTTP 基址（server 侧消费），如
+	// http://packer:9071。空 = git 部署源未启用（app 层 git
 	// 部署报明确错误；zip 源完全不受影响，增量启用）。
 	Url string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
 	// 静态共享密钥（内网专用可选认证；空 = 不校验，仅限可信内网）。
 	SharedToken string `protobuf:"bytes,2,opt,name=shared_token,json=sharedToken,proto3" json:"shared_token,omitempty"`
-	// ——以下仅 functions-packer 进程消费——
+	// ——以下仅 packer 进程消费——
 	// 单次 fetch+物化的整体超时（如 "120s"；默认 120s）。空/非法值回落
 	// 默认。最坏损失上界 = 一次 ≤该值的失败 clone（设计 §2）。
 	FetchTimeout string `protobuf:"bytes,3,opt,name=fetch_timeout,json=fetchTimeout,proto3" json:"fetch_timeout,omitempty"`
@@ -2327,11 +2327,11 @@ func (x *Functions_Packer) GetAddr() string {
 }
 
 // Image 是 BYO 镜像源（三期阶段三，docs/design/functions-runtimes-and-sources.md
-// §3）的 registry 准入配置：host 名称级校验在 functions-dispatcher 侧
+// §3）的 registry 准入配置：host 名称级校验在 dispatcher 侧
 // ImportImage 实施（pull 由宿主 docker daemon 执行，IP 拨号点 guard 不可
 // 实施于 daemon——故采用名称级校验 + 白名单 + 信任级论证：部署者 =
 // functions.write 特权主体；公网域名解析到内网的残余面诚实声明、随
-// egress 原语后置）。仅 functions-dispatcher 进程消费。
+// egress 原语后置）。仅 dispatcher 进程消费。
 type Functions_Image struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// registry host 正向白名单（空 = 不设白名单）：条目为精确域名或后缀域

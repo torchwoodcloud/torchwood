@@ -209,7 +209,7 @@ Sprint 1 已完成 Server/Client Document CRUD；批量操作与 attribute/index
 「构建队列」任务以「CreateDeployment 同步构建」落地（对 roadmap 的 MVP 偏离，见
 `docs/implementation-functions-executor.md` §2）。
 
-**执行器 v2/v3 已落地（2026-09）**：v2 = 独立 `functions-dispatcher` 常驻进程
+**执行器 v2/v3 已落地（2026-09）**：v2 = 独立 `dispatcher` 常驻进程
 （唯一 docker.sock 持有方，resident 实例池 + 租约认领）；v3 = runner 实例内
 并发复用（`main(data, ctx)`、runner fetch 协议、超时熔断、平台代装依赖构建、
 concurrency 策略链与函数内执行身份 `fromExecution`）。详见

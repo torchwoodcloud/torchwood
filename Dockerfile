@@ -35,7 +35,7 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/worker ./cmd/worker && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/functions-dispatcher ./cmd/functions-dispatcher && \
+    go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/dispatcher ./cmd/dispatcher && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/torchwood ./cmd/torchwood
 
@@ -44,9 +44,9 @@ FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 torchwood
 COPY --from=go-builder /out/server /usr/local/bin/server
 COPY --from=go-builder /out/worker /usr/local/bin/worker
-# functions-dispatcher：执行器 v2 独立分发进程（compose functions-dispatcher
+# dispatcher：执行器 v2 独立分发进程（compose dispatcher
 # 服务专用；docker.sock 只挂给它，server/worker 零 daemon 依赖）
-COPY --from=go-builder /out/functions-dispatcher /usr/local/bin/functions-dispatcher
+COPY --from=go-builder /out/dispatcher /usr/local/bin/dispatcher
 # torchwood CLI：部署期 owner 作业（admin sync-roles-sig）与项目级备份（admin export/import）
 COPY --from=go-builder /out/torchwood /usr/local/bin/torchwood
 COPY configs/ /app/configs/

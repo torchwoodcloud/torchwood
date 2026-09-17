@@ -29,7 +29,7 @@ const twExecutionTokenEnv = "TW_EXECUTION_TOKEN"
 // runner 响应同口径）。
 const maxExecuteResponseBytes = 1 << 20
 
-// DispatcherExecutor 是 Executor 端口的 v2 适配实现：经 functions-dispatcher
+// DispatcherExecutor 是 Executor 端口的 v2 适配实现：经 dispatcher
 // 的内网 HTTP API 承接 Build/Execute/RemoveImage（docker.sock 收敛到
 // dispatcher 进程，server/worker 零 daemon 依赖，设计 §6 分发通路方案③）。
 type DispatcherExecutor struct {

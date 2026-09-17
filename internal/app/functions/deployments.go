@@ -31,7 +31,7 @@ type CreateDeploymentCommand struct {
 	FunctionID string
 	Code       []byte // zip 字节流
 	// Git 是 git 仓库源（二期，设计 §2）：非 nil 时经 SourcePacker
-	// （functions-packer 服务）物化为同一 zip 构建路径——pack 在 deployment
+	// （packer 服务）物化为同一 zip 构建路径——pack 在 deployment
 	// 行落库之前，失败路径无行无 zip；zip 路径行为完全不变。
 	Git *domainfunctions.GitSource
 	// Image 是 BYO 镜像源（三期阶段 1，设计 §3）：非 nil 时走免构建路径

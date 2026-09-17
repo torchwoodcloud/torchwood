@@ -116,11 +116,11 @@ storage:
     path: "./data/files"
 
 functions:
-  # 函数执行统一经 functions-dispatcher 分发（常驻 runner 容器池；v1 docker
+  # 函数执行统一经 dispatcher 分发（常驻 runner 容器池；v1 docker
   # 执行器已移除）：server/worker 零 daemon 依赖，docker.sock 只挂给
   # dispatcher（functions.docker.host 供其消费）。
   docker:
-    # docker.sock 地址（仅 functions-dispatcher 进程消费）。
+    # docker.sock 地址（仅 dispatcher 进程消费）。
     host: "unix:///var/run/docker.sock"
     # 函数执行容器网络。默认（留空/删除本键）为 per-project 隔离网络
     # tw-func-<project_id>：项目间函数容器互不可达（Round4 J5-4）。
@@ -141,15 +141,15 @@ functions:
     api_base_url: ""                  # env: TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL
   dispatcher:
     # 分发通路（server/worker 执行函数的唯一通路）：url 指向
-    # functions-dispatcher 的内网 HTTP 端点（compose 拓扑：
-    # http://functions-dispatcher:9070）。**必填**——缺失时 server/worker
+    # dispatcher 的内网 HTTP 端点（compose 拓扑：
+    # http://dispatcher:9070）。**必填**——缺失时 server/worker
     # 拒绝启动。
     # env: TORCHWOOD_FUNCTIONS_DISPATCHER_URL
     url: ""
     # 内网共享密钥（可选；与 dispatcher 进程配置同值，空 = 不校验，仅限
     # 可信内网）。env: TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN
     shared_token: ""
-    # ——以下仅 functions-dispatcher 进程消费——
+    # ——以下仅 dispatcher 进程消费——
     # 每 daemon 常驻实例总量上限（防单项目耗尽宿主内存；Q11 默认 8）。
     # env: TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES
     max_resident_instances: 8
@@ -202,7 +202,7 @@ functions:
     # env: TORCHWOOD_FUNCTIONS_CLIENT_INVOKE_QUEUE_HEAD_TIMEOUT
     queue_head_timeout: "5s"
   packer:
-    # git 部署源打包服务（functions-packer，二期阶段二）：独立进程把
+    # git 部署源打包服务（packer，二期阶段二）：独立进程把
     # git 仓库 @ref 物化为 zip 交回 server 落既有构建路径（与 dispatcher
     # 的构建信号量成两道独立闸）。**url 未配置 = git 源未启用**——app 层
     # git 部署报明确错误，zip 源完全不受影响（增量启用）。
@@ -211,7 +211,7 @@ functions:
     # 内网共享密钥（可选；与 packer 进程配置同值，空 = 不校验，仅限
     # 可信内网）。env: TORCHWOOD_FUNCTIONS_PACKER_SHARED_TOKEN
     shared_token: ""
-    # ——以下仅 functions-packer 进程消费——
+    # ——以下仅 packer 进程消费——
     # packer HTTP 监听地址（仅内网；与 dispatcher 缺省 ":9070" 错开）。
     # env: TORCHWOOD_FUNCTIONS_PACKER_ADDR
     addr: ":9071"
@@ -233,7 +233,7 @@ functions:
     # env: TORCHWOOD_FUNCTIONS_PACKER_ALLOW_INSECURE
     allow_insecure: false
   image:
-    # BYO 镜像源（三期阶段三）registry 准入配置（仅 functions-dispatcher
+    # BYO 镜像源（三期阶段三）registry 准入配置（仅 dispatcher
     # 进程消费；host 名称级校验在 dispatcher 侧 ImportImage 实施——pull 由
     # 宿主 docker daemon 执行，IP 拨号点 guard 不可实施于 daemon，故采用
     # 名称级校验 + 白名单 + 信任级论证）。

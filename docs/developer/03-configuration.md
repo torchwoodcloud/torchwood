@@ -39,12 +39,12 @@
 
 ### 1.2 Functions 配置
 
-函数执行统一经 functions-dispatcher 分发。v1 的进程内 docker 执行器已移除，`functions.executor` 字段已 `reserved` 删除（残留的环境变量被忽略）。
+函数执行统一经 dispatcher 分发。v1 的进程内 docker 执行器已移除，`functions.executor` 字段已 `reserved` 删除（残留的环境变量被忽略）。
 
 | 键 | 默认 | 说明 |
 |----|------|------|
 | `functions.execution.api_base_url` | — | 函数执行回调基址 |
-| `functions.dispatcher.url` | — | **必填**（server/worker 启动校验），dispatcher 服务地址，如 `http://functions-dispatcher:9070` |
+| `functions.dispatcher.url` | — | **必填**（server/worker 启动校验），dispatcher 服务地址，如 `http://dispatcher:9070` |
 | `functions.dispatcher.shared_token` | — | 与 dispatcher 的共享令牌 |
 | `functions.dispatcher.max_resident_instances` | 8 | resident 实例池上限 |
 | `functions.dispatcher.queue_depth` | 32 | 分发队列深度 |

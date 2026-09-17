@@ -96,7 +96,7 @@ linters:
         text: "G101"
       # WalkDir 打包自有构建目录（daemon.go 构建产物 → tar 上下文），
       # G122 对行内 #nosec 注释不生效，故此处圈定。
-      - path: functionsdispatcher/daemon\.go
+      - path: dispatcher/daemon\.go
         linters: [gosec]
         text: "G122"
       # 测试内 Walk 回调读取仓库自有测试数据，无符号链接攻击面（G122 对行内
@@ -121,7 +121,7 @@ linters:
         linters: [unused]
       # ---- 2026-09-10 workflows 停用期存量暂挂（测试数据/同性质误报）----
       # 测试夹具中的伪 token/DSN/URL（非凭证）。
-      - path: (cli/admin_roles_sig_test|functionsdispatcher/daemon_integration_test|internal/app/server/apikeys_test|internal/app/server/auth_verify_test|internal/domain/projects/oauth_redirect_test|pkg/query/proto/proto_test)\.go
+      - path: (cli/admin_roles_sig_test|dispatcher/daemon_integration_test|internal/app/server/apikeys_test|internal/app/server/auth_verify_test|internal/domain/projects/oauth_redirect_test|pkg/query/proto/proto_test)\.go
         linters: [gosec]
         text: "G101"
       # 测试读取仓库自有生成物/夹具文件。

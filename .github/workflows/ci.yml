@@ -53,7 +53,7 @@ jobs:
           --health-retries 5
       redis:
         # 函数实例注册表（torchwood:fninst:*）真 Redis 集成测试用
-        # （functionsdispatcher/registry_redis_integration_test.go），
+        # （dispatcher/registry_redis_integration_test.go），
         # 版本对齐 docker/local/docker-compose.yml（不追 latest）。
         image: redis:7-alpine
         ports:

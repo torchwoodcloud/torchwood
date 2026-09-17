@@ -9,7 +9,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
-// NewRedisClient 构造仅依赖 Redis 的客户端（functions-dispatcher 独立进程
+// NewRedisClient 构造仅依赖 Redis 的客户端（dispatcher 独立进程
 // 用：零 daemon/DB 依赖是方案③的装配意义所在，不能为拿 Redis 被迫配置
 // Postgres DSN）。语义与 NewDataClients 的 Redis 支路一致：addr 必填 +
 // 5s Ping 兜底。

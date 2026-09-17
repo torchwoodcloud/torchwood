@@ -55,7 +55,7 @@ var ErrInvalidQueuePayload = errors.New("invalid queue payload")
 // 构建信号量：部署构建共用（§5.3）。默认进程内 4，生产通过
 // pkg/semaphore.RedisSemaphore 提供跨进程全局配额（W-F，SETNX+TTL 租约，
 // TTL 覆盖最长构建；崩溃后 TTL 过期自动释放）。执行并发不设全局信号量
-// ——常驻实例池由 functions-dispatcher 内部管控。
+// ——常驻实例池由 dispatcher 内部管控。
 const (
 	maxConcurrentBuilds = 4
 )

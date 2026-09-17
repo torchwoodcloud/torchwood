@@ -12,7 +12,7 @@ import (
 //
 // 执行时长/排队时长直方图（设计 Observability：补齐现状无 functions 专属
 // Prometheus 指标的缺口；source 维度 server 暂时单值，client/http/cron 留
-// 枚举位随 P1/P2 打开）。冷启动与池水位指标在 functions-dispatcher 包内。
+// 枚举位随 P1/P2 打开）。冷启动与池水位指标在 dispatcher 包内。
 var (
 	executionDurationSeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "torchwood_functions_execution_duration_seconds",

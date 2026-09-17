@@ -9,7 +9,7 @@ import (
 )
 
 // Semaphores 持有 Functions 的全局构建配额信号量（执行并发不设全局信号量
-// ——常驻实例池由 functions-dispatcher 内部管控；原 run 信号量随 v1 docker
+// ——常驻实例池由 dispatcher 内部管控；原 run 信号量随 v1 docker
 // 执行器一并移除）。
 type Semaphores struct {
 	Build semaphore.Semaphore

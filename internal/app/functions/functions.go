@@ -78,7 +78,7 @@ func NewFunctionsWithClientQuota(cfg *config.AppConfig, executor functions.Execu
 }
 
 // NewFunctionsWithSourcePacker 是 Wire 装配入口（二期阶段 3，git 部署源）：
-// 在 NewFunctionsWithClientQuota 之上注入 SourcePacker（functions-packer
+// 在 NewFunctionsWithClientQuota 之上注入 SourcePacker（packer
 // HTTP 客户端）。测试侧仍用 NewFunctions/NewFunctionsWithUsage/
 // NewFunctionsWithClientQuota（packer nil = git 源 fail-fast，zip 路径不
 // 受影响）；worker 装配保持 NewFunctionsWithUsage（补构建以盘上 zip 为
@@ -110,7 +110,7 @@ func (f *Functions) logger() *slog.Logger {
 
 // WithSemaphores 注入分布式构建信号量（Wire 覆盖默认内存信号量）。
 // buildSem 限制并发构建（默认 4）；执行并发不设全局信号量——常驻实例池由
-// functions-dispatcher 内部管控（池上限/有界排队，设计 §6）。
+// dispatcher 内部管控（池上限/有界排队，设计 §6）。
 func (f *Functions) WithSemaphores(buildSem semaphore.Semaphore) *Functions {
 	if buildSem != nil {
 		f.buildSem = buildSem

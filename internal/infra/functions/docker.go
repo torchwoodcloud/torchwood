@@ -12,8 +12,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/torchwoodcloud/torchwood/functionspacker"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/packer"
 	"github.com/torchwoodcloud/torchwood/pkg/ident"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -21,7 +21,7 @@ import (
 
 // 本文件承载函数构建/执行路径的共享 docker 约定（zip 解压校验与依赖探测、
 // 镜像名/执行网络名解析、构建日志解析）。v1 docker 执行器（每请求一容器、
-// 进程内 docker.sock）已移除——执行统一经 functions-dispatcher 分发
+// 进程内 docker.sock）已移除——执行统一经 dispatcher 分发
 // （DispatcherExecutor），docker.sock 收敛到 dispatcher 进程。
 
 // zip 解压与构建日志限制（§5.4 防 zip 炸弹；构建日志保留尾部 64KB）。
@@ -56,11 +56,11 @@ var defaultZipExtractLimits = zipExtractLimits{
 
 // gitPackZipExtractLimits 是 git 源物化 zip 的放宽解压预算（二期阶段 3，
 // 设计 §2「条目维链条」）：条目对齐 packer 物化上限
-// （functionspacker.MaxPackEntries=5000——git worktree 是真实文件，宽于
+// （packer.MaxPackEntries=5000——git worktree 是真实文件，宽于
 // zip 上传通道的 1000 反炸弹声明侧预检）；单条 100MiB 与总量 200MiB 解压
 // 预算维持。诚实声明：>5000 条的典型 vendor 项目仍受限，属设计声明边界。
 var gitPackZipExtractLimits = zipExtractLimits{
-	maxEntries:    functionspacker.MaxPackEntries,
+	maxEntries:    packer.MaxPackEntries,
 	maxEntryBytes: maxZipEntryBytes,
 	maxTotalBytes: maxZipTotalBytes,
 }
@@ -95,7 +95,7 @@ var specResources = map[string]struct {
 	"shared-2x": {cpu: 1.0, memory: 512 << 20},
 }
 
-// ResourceSpec 是资源规格的配额投影（functions-dispatcher 复用同一映射）。
+// ResourceSpec 是资源规格的配额投影（dispatcher 复用同一映射）。
 type ResourceSpec struct {
 	Memory   int64
 	NanoCPUs int64
@@ -134,7 +134,7 @@ func ImageName(cfg *config.AppConfig, functionID, deploymentID string) string {
 }
 
 // ResolveNetworkName 解析函数执行容器网络名（Round4 J5-4；导出供
-// functions-dispatcher 保持约定）：
+// dispatcher 保持约定）：
 //   - 显式配置 functions.docker.network 时使用该全局网络（opt-in；跨项目
 //     函数容器同网互通，存在横向访问风险，见 config.yaml.template 警告）；
 //   - 未配置（默认）时使用 per-project 网络 tw-func-<project.id>，项目间
@@ -156,7 +156,7 @@ func ResolveNetworkName(cfg *config.AppConfig, projectID string) (string, error)
 }
 
 // ResolveInternalNetworkName 解析 internal 变体网络名（P2 egress 默认 deny；
-// 导出供 functions-dispatcher 保持约定）：常规网络名 + "-int" 后缀
+// 导出供 dispatcher 保持约定）：常规网络名 + "-int" 后缀
 // （tw-func-<project>-int；显式全局网络配置同样加后缀）。
 // projectID 校验与 ResolveNetworkName 同源。
 func ResolveInternalNetworkName(cfg *config.AppConfig, projectID string) (string, error) {
@@ -206,13 +206,13 @@ func extractZip(zipPath, destDir string) (SourceContents, error) {
 	return extractZipWithLimits(zipPath, destDir, defaultZipExtractLimits)
 }
 
-// ExtractZip 是 extractZip 的导出版（functions-dispatcher 的构建复用
+// ExtractZip 是 extractZip 的导出版（dispatcher 的构建复用
 // 同一防 zip 炸弹/路径穿越预算与依赖探测）。
 func ExtractZip(zipPath, destDir string) (SourceContents, error) {
 	return extractZip(zipPath, destDir)
 }
 
-// ExtractZipRelaxed 是 git 源物化 zip 的放宽预算导出版（functionsdispatcher
+// ExtractZipRelaxed 是 git 源物化 zip 的放宽预算导出版（dispatcher
 // 的 BuildImage 消费）：条目上限放宽到 packer 物化口径（5000），防 git 源
 // 合法 zip 被 zip 上传通道的 1000 条目预算击毙（设计 §2 条目维链条）。
 // 导出函数形态保持 zipExtractLimits 封装（调用方不接触预算结构体）。
@@ -524,7 +524,7 @@ func readBuildOutput(r io.Reader) (string, error) {
 	return log.String(), buildErr
 }
 
-// ReadBuildOutput 是 readBuildOutput 的导出版（functions-dispatcher 的构建
+// ReadBuildOutput 是 readBuildOutput 的导出版（dispatcher 的构建
 // 复用同一 BuildKit error 流解析）。
 func ReadBuildOutput(r io.Reader) (string, error) {
 	return readBuildOutput(r)

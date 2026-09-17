@@ -58,7 +58,7 @@ internal/api  ──→  internal/app  ──→  internal/domain  ←──  in
 - **业务共享内核** `internal/pkg/`：`config`（config.proto + bind）、`contexts`（Principal）、`bootkit`（启动校验，server / worker / dispatcher 共享）、`testutil`（集成测试数据库辅助）、`runbook`（runbook 引擎，CLI 命令组与 server 侧工具共享）。
 - **通用可复用库** `pkg/`：`buildinfo`、`query`（文档查询 DSL）、`crud`（列表分页抽象）、`jwtparser`、`password`、`secretbox`、`semaphore`、`idgen`、`ident`、`uow`。
 
-此外，三个顶层组件包与 `internal/` 四层同级：`functionsdispatcher/`（函数分发器实现）、`worker/`（后台作业实现）、`cli/`（CLI 实现）。各自只被对应的 `cmd/<app>` 入口引用。
+此外，三个顶层组件包与 `internal/` 四层同级：`dispatcher/`（函数分发器实现）、`worker/`（后台作业实现）、`cli/`（CLI 实现）。各自只被对应的 `cmd/<app>` 入口引用。
 
 三条分层规则：
 
@@ -76,7 +76,7 @@ torchwood/
 │   ├── server/                 # 主服务入口：main.go + provides.go + wire.go → wire_gen.go
 │   │   └── internal/runtime/   # server 私有运行时装配（grpc / gateway / Console SPA / CORS / metrics / authz 策略收集）
 │   ├── worker/                 # 异步 worker 入口（main + Wire 装配骨架；作业实现随仓库根 worker/）
-│   ├── functions-dispatcher/   # 函数分发器入口（独立进程，专职持有 docker.sock；实现随 functionsdispatcher/）
+│   ├── dispatcher/   # 函数分发器入口（独立进程，专职持有 docker.sock；实现随 dispatcher/）
 │   └── torchwood/              # CLI 入口（main + 根命令表装配；实现随仓库根 cli/）
 ├── console/                    # React SPA，embed.go //go:embed dist；Vite 开发代理 /v1
 ├── proto/                      # client/v1 · server/v1 · console/v1 · shared/v1（唯一事实源）
@@ -90,7 +90,7 @@ torchwood/
 │   ├── infra/                  # bun/bunrepo | documentdb | storage | functions | auth | projectschema | events
 │   │                           # | queue | messaging | health | billing | clients | idgen | payments | realtime
 │   └── pkg/                    # 业务共享内核：config | contexts | bootkit | testutil | runbook
-├── functionsdispatcher/        # 函数分发器实现（docker.sock 池 / 网络 / 分发）
+├── dispatcher/        # 函数分发器实现（docker.sock 池 / 网络 / 分发）
 ├── worker/                     # 后台作业实现（Functions 队列消费、outbox 分发、cron / 事件触发器等）
 ├── cli/                        # Torchwood CLI 实现（lynx-go/commands；经 sdk/go InvokeJSON 调 Server API，不直连 genproto）
 ├── pkg/                        # 通用可复用库（见 §3）
@@ -111,7 +111,7 @@ torchwood/
 |------|------|------|-----------|
 | server | `cmd/server` | Lynx Runner，监听四组端点：gRPC `127.0.0.1:9060`、HTTP gateway + Console SPA `:9080`、metrics `127.0.0.1:9040`、自定义 HTTP handler。装配代码在 `cmd/server/internal/runtime/`，注册顺序 grpc → gateway → realtime → metrics | `security.jwt.secret` 必填；authz 策略语义断言（`AssertSemantic`）失败即启动失败 |
 | worker | `cmd/worker` | 后台任务常驻进程：Functions 队列消费、outbox 事件分发、分片清理、Stream 修剪、计费闭环、cron / 事件触发器、leaderboards 结榜清理、analytics 聚合维护等（完整清单见 `13-operations.md`）。与 server 共享 `app/domain/infra`，但 Wire 装配独立、无 `api` 层 | `data.database.source` 必填 |
-| functions-dispatcher | `cmd/functions-dispatcher` | Functions 执行常驻进程，唯一 docker.sock 持有方，resident 实例池 + 租约认领，`:9070` 提供 healthz | `functions.dispatcher.url` 必填（executor 为 dispatcher 时） |
+| dispatcher | `cmd/dispatcher` | Functions 执行常驻进程，唯一 docker.sock 持有方，resident 实例池 + 租约认领，`:9070` 提供 healthz | `functions.dispatcher.url` 必填（executor 为 dispatcher 时） |
 | torchwood CLI | `cmd/torchwood` | 开发者命令行工具，基于 `lynx-go/commands`，经 `sdk/go/server.InvokeJSON` 按 protoregistry 动态分发调用 Server API。`rpc` 逃生舱覆盖全部 Server RPC，新增 RPC 无需登记。退出码契约：0 成功 / 1 参数与校验错 / 2=40x / 3=5xx / 4=429 | `TORCHWOOD_CLI_*` 环境覆盖 |
 
 CLI 的实现细节见 `02-quickstart.md` §7；版本化资源迁移（runbook）命令组见 `19-runbook.md`。
