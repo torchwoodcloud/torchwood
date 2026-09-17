@@ -95,9 +95,9 @@ func adminToDomain(m *model.Admin) *projects.Admin {
 }
 
 func (r *adminRepo) CreateAdmin(ctx context.Context, admin *projects.Admin) error {
-	metadata := admin.Metadata
+	metadata := model.AdminMetadata(admin.Metadata)
 	if metadata == nil {
-		metadata = map[string]string{}
+		metadata = model.AdminMetadata{}
 	}
 	m := &model.Admin{
 		ID:           admin.ID,

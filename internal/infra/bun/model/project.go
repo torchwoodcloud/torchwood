@@ -70,6 +70,7 @@ type Admin struct {
 	CreatedAt time.Time `bun:"created_at,notnull"`
 	UpdatedAt time.Time `bun:"updated_at,notnull"`
 	// Metadata 通用偏好 JSONB（迁移 000010；首键 timezone=IANA 时区名）。
-	// INSERT 侧必须非 nil（NOT NULL 列），由 repo 层兜底空 map。
-	Metadata map[string]string `bun:"metadata,type:jsonb"`
+	// 类型 AdminMetadata 是读取容忍投影（认证热路径不可因偏好形态报错，
+	// 见其注释）；Value() 对空值落 "{}"，INSERT 侧无需额外兜底。
+	Metadata AdminMetadata `bun:"metadata,type:jsonb"`
 }
