@@ -230,6 +230,39 @@ message Functions {
     string queue_head_timeout = 2;
   }
   ClientInvoke client_invoke = 6;
+  // Packer 是 git 源打包服务（functions-packer，二期阶段二）配置：独立
+  // 进程把 git 仓库 @ref 物化为 zip 交回 server 落既有构建路径（zip 流向
+  // 反转：packer → server；docs/design/functions-runtimes-and-sources.md
+  // §2）。与 functions-dispatcher 的构建信号量成两道独立闸、无嵌套；
+  // clone 的内存尖峰/磁盘消耗全部收敛在 packer 进程（可独立重启/扩缩，
+  // OOM 只影响 git 部署自身）。server 进程只消费 url/shared_token；
+  // 其余字段仅 functions-packer 进程消费（与 dispatcher 同款分段注释约定）。
+  message Packer {
+    // functions-packer 的内网 HTTP 基址（server 侧消费），如
+    // http://functions-packer:9071。空 = git 部署源未启用（app 层 git
+    // 部署报明确错误；zip 源完全不受影响，增量启用）。
+    string url = 1;
+    // 静态共享密钥（内网专用可选认证；空 = 不校验，仅限可信内网）。
+    string shared_token = 2;
+    // ——以下仅 functions-packer 进程消费——
+    // 单次 fetch+物化的整体超时（如 "120s"；默认 120s）。空/非法值回落
+    // 默认。最坏损失上界 = 一次 ≤该值的失败 clone（设计 §2）。
+    string fetch_timeout = 3;
+    // 克隆 worktree 磁盘侧预算（字节；默认 209715200 = 200MiB）。
+    int64 max_repo_bytes = 4;
+    // 物化 zip 传输侧预算（字节；默认 52428800 = 50MiB，与构建内联通道
+    // maxBuildBodyBytes 同源）。
+    int64 max_zip_bytes = 5;
+    // 并发打包上限（默认 4；饱和请求立即 429 ResourceExhausted）。
+    uint32 concurrency = 6;
+    // 放行 http:// 与私网/回环目标（SSRF guard 整体放行）。仅自托管内网
+    // git 服务场景显式开启（给显式开关而非逼出危险旁路）；默认 false。
+    bool allow_insecure = 7;
+    // packer HTTP 监听地址（仅内网；默认 ":9071"，与 dispatcher 缺省
+    // ":9070" 错开）。
+    string addr = 8;
+  }
+  Packer packer = 9;
 }
 
 message Telemetry {

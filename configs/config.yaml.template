@@ -201,6 +201,37 @@ functions:
     # 并发闸门排队队首超时（超时 ResourceExhausted，同步调用方不无界等待）。
     # env: TORCHWOOD_FUNCTIONS_CLIENT_INVOKE_QUEUE_HEAD_TIMEOUT
     queue_head_timeout: "5s"
+  packer:
+    # git 部署源打包服务（functions-packer，二期阶段二）：独立进程把
+    # git 仓库 @ref 物化为 zip 交回 server 落既有构建路径（与 dispatcher
+    # 的构建信号量成两道独立闸）。**url 未配置 = git 源未启用**——app 层
+    # git 部署报明确错误，zip 源完全不受影响（增量启用）。
+    # env: TORCHWOOD_FUNCTIONS_PACKER_URL
+    url: ""
+    # 内网共享密钥（可选；与 packer 进程配置同值，空 = 不校验，仅限
+    # 可信内网）。env: TORCHWOOD_FUNCTIONS_PACKER_SHARED_TOKEN
+    shared_token: ""
+    # ——以下仅 functions-packer 进程消费——
+    # packer HTTP 监听地址（仅内网；与 dispatcher 缺省 ":9070" 错开）。
+    # env: TORCHWOOD_FUNCTIONS_PACKER_ADDR
+    addr: ":9071"
+    # 单次 fetch+物化的整体超时（超时回 504；空/非法回落 120s）。
+    # env: TORCHWOOD_FUNCTIONS_PACKER_FETCH_TIMEOUT
+    fetch_timeout: "120s"
+    # 克隆 worktree 磁盘侧预算（字节；默认 209715200 = 200MiB）。
+    # env: TORCHWOOD_FUNCTIONS_PACKER_MAX_REPO_BYTES
+    max_repo_bytes: 209715200
+    # 物化 zip 传输侧预算（字节；默认 52428800 = 50MiB，与构建内联通道同源）。
+    # env: TORCHWOOD_FUNCTIONS_PACKER_MAX_ZIP_BYTES
+    max_zip_bytes: 52428800
+    # 并发打包上限（饱和请求立即 429；默认 4）。
+    # env: TORCHWOOD_FUNCTIONS_PACKER_CONCURRENCY
+    concurrency: 4
+    # 放行 http:// 与私网/回环目标（SSRF guard 整体放行）。**仅自托管内网
+    # git 服务场景显式开启**（如内网 gitea；面向公网时保持 false，防
+    # clone 打内网/云元数据端点）。默认 false。
+    # env: TORCHWOOD_FUNCTIONS_PACKER_ALLOW_INSECURE
+    allow_insecure: false
 
 payments:
   stripe:

@@ -74,11 +74,18 @@ tasks:
       - go mod tidy
       - go run -mod=mod github.com/google/wire/cmd/wire
 
+  wire:packer:
+    dir: '{{.USER_WORKING_DIR}}/cmd/functions-packer'
+    cmds:
+      - go mod tidy
+      - go run -mod=mod github.com/google/wire/cmd/wire
+
   wire:all:
     cmds:
       - task: wire:server
       - task: wire:worker
       - task: wire:dispatcher
+      - task: wire:packer
 
   generate:all:
     cmds:
