@@ -1,0 +1,16 @@
+// 代码生成产物：torchwood functions 平台构建期写入（渲染自
+// internal/infra/functions/runner/gorunner/assets/main.go.tmpl，勿手改）。
+// user 即用户 zip 根包（module path 来自 go.mod 的 module 行）——用户契约
+// 纯标准库、零平台依赖（设计 D3 生成路线：import user "<module>" + 调
+// user.Fetch / user.Main + serve(runtime)）。
+package main
+
+import user "{{.ModulePath}}"
+
+func main() {
+{{- if .UseFetch}}
+	serve(entry{fetch: user.Fetch})
+{{- else}}
+	serve(entry{main: user.Main})
+{{- end}}
+}

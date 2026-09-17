@@ -474,7 +474,7 @@ func TestExtractZip_InvalidPackageJSON(t *testing.T) {
 }
 
 // extractZipFromFiles 测试辅助：files 打进内存 zip 并走 extractZip 全链路。
-func extractZipFromFiles(t *testing.T, files map[string]string) (ZipContents, error) {
+func extractZipFromFiles(t *testing.T, files map[string]string) (SourceContents, error) {
 	t.Helper()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -500,8 +500,8 @@ func TestExtractZip_DetectsPythonEntrypoint(t *testing.T) {
 	require.Equal(t, "python-3.11", contents.Runtime)
 }
 
-// TestExtractZip_MissingEntrypoint 既无 index.js 也无 main.py → 明确报错
-// （node 是唯一受支持 runtime，错误信息不再提及 python）。
+// TestExtractZip_MissingEntrypoint 既无 index.js 也无 go.mod / main.py →
+// 明确报错。
 func TestExtractZip_MissingEntrypoint(t *testing.T) {
 	_, err := extractZipFromFiles(t, map[string]string{
 		"README.md": "not code",
@@ -511,4 +511,168 @@ func TestExtractZip_MissingEntrypoint(t *testing.T) {
 	require.ErrorContains(t, err, "missing entrypoint file")
 	require.ErrorContains(t, err, "index.js")
 	require.NotContains(t, err.Error(), "main.py")
+}
+
+// ---- Go 一期探测（设计 functions-runtimes-and-sources.md §1）----
+
+// TestExtractZip_DetectsGoMod go.mod zip 探测为 go-1.26：module 行解析
+// （引号与行尾注释形态剥壳）、require 非空（单行与块形态）、go.sum/vendor/
+// twmain 标记。
+func TestExtractZip_DetectsGoMod(t *testing.T) {
+	contents, err := extractZipFromFiles(t, map[string]string{
+		"go.mod":  "module example.com/fn\n\ngo 1.26\n\nrequire github.com/x/y v1.2.3\n",
+		"go.sum":  "github.com/x/y v1.2.3 h1:abc=\n",
+		"main.go": "package fn\n\nfunc Main(data map[string]any, ctx map[string]string) (any, error) { return nil, nil }\n",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "go-1.26", contents.Runtime)
+	require.Equal(t, "example.com/fn", contents.GoModulePath)
+	require.True(t, contents.GoHasRequires)
+	require.True(t, contents.GoHasSum)
+	require.False(t, contents.HasVendor)
+	require.False(t, contents.TwmainConflict)
+}
+
+// TestExtractZip_GoModParseForms module 行与 require 判定的形态矩阵：
+// 引号 module、行尾注释、require 块、// indirect 注释剥离、纯 stdlib
+// （require 缺省 → GoHasRequires=false）。
+func TestExtractZip_GoModParseForms(t *testing.T) {
+	cases := []struct {
+		name         string
+		goMod        string
+		wantModule   string
+		wantRequires bool
+	}{
+		{
+			"quoted module",
+			"module \"example.com/quoted\"\n",
+			"example.com/quoted", false,
+		},
+		{
+			"trailing comment",
+			"module example.com/x // production module\n",
+			"example.com/x", false,
+		},
+		{
+			"quoted module with comment",
+			"module \"example.com/q2\" // prod\n",
+			"example.com/q2", false,
+		},
+		{
+			"require block with indirect comments",
+			"module example.com/x\n\nrequire (\n\tgithub.com/x/y v1.2.3 // indirect\n)\n",
+			"example.com/x", true,
+		},
+		{
+			"single line require",
+			"module example.com/x\n\nrequire github.com/x/y v1.2.3\n",
+			"example.com/x", true,
+		},
+		{
+			"stdlib only",
+			"module example.com/x\n\ngo 1.26\n",
+			"example.com/x", false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			contents, err := extractZipFromFiles(t, map[string]string{
+				"go.mod":  tc.goMod,
+				"main.go": "package fn\n",
+			})
+			require.NoError(t, err)
+			require.Equal(t, "go-1.26", contents.Runtime)
+			require.Equal(t, tc.wantModule, contents.GoModulePath)
+			require.Equal(t, tc.wantRequires, contents.GoHasRequires)
+		})
+	}
+}
+
+// TestExtractZip_GoModInvalid 坏 go.mod（module 行缺失/空路径）是明确错误，
+// 不静默按零值处理（module path 会注入生成 bootstrap 的 import 语句）。
+// 合法引号形态由 TestExtractZip_GoModParseForms 覆盖，不在此列。
+func TestExtractZip_GoModInvalid(t *testing.T) {
+	for _, goMod := range []string{
+		"go 1.26\n",     // 无 module 行
+		"module\n",      // 空路径
+		"module \"\"\n", // 引号空路径
+	} {
+		_, err := extractZipFromFiles(t, map[string]string{
+			"go.mod":  goMod,
+			"main.go": "package fn\n",
+		})
+		require.Error(t, err, "go.mod %q must be rejected", goMod)
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+		require.ErrorContains(t, err, "invalid go.mod")
+	}
+}
+
+// TestExtractZip_GoModTooLarge go.mod 超 4MiB 读取上限 → 明确报错（对齐
+// package.json 探测的防巨型条目口径）。
+func TestExtractZip_GoModTooLarge(t *testing.T) {
+	_, err := extractZipFromFiles(t, map[string]string{
+		"go.mod":  "module example.com/x\n\n// " + strings.Repeat("pad", maxGoModBytes) + "\n",
+		"main.go": "package fn\n",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.ErrorContains(t, err, "go.mod exceeds")
+}
+
+// TestExtractZip_GoDetectionMarkers vendor/ 与 twmain/ 标记：任一根下
+// vendor 前缀条目命中 HasVendor；twmain 前缀条目（目录与文件形态）命中
+// TwmainConflict。
+func TestExtractZip_GoDetectionMarkers(t *testing.T) {
+	// vendor/ 目录（zip 显式目录条目 + 目录下文件条目均命中）。
+	contents, err := extractZipFromFiles(t, map[string]string{
+		"go.mod":                     "module example.com/x\n\nrequire github.com/x/y v1.2.3\n",
+		"vendor/":                    "",
+		"vendor/github.com/x/y/y.go": "package y\n",
+		"main.go":                    "package fn\n",
+	})
+	require.NoError(t, err)
+	require.True(t, contents.HasVendor)
+	require.False(t, contents.TwmainConflict)
+
+	// twmain/ 目录条目形态。
+	contents, err = extractZipFromFiles(t, map[string]string{
+		"go.mod":      "module example.com/x\n",
+		"twmain/":     "",
+		"twmain/x.go": "package main\n",
+		"main.go":     "package fn\n",
+	})
+	require.NoError(t, err)
+	require.True(t, contents.TwmainConflict)
+	require.False(t, contents.HasVendor)
+
+	// twmain 文件条目形态（无显式目录条目）。
+	contents, err = extractZipFromFiles(t, map[string]string{
+		"go.mod":            "module example.com/x\n",
+		"twmain/runtime.go": "package main\n",
+		"main.go":           "package fn\n",
+	})
+	require.NoError(t, err)
+	require.True(t, contents.TwmainConflict)
+
+	// 子目录中的 twmain 同名目录不受影响（判定口径 = 路径第一段）。
+	contents, err = extractZipFromFiles(t, map[string]string{
+		"go.mod":                "module example.com/x\n",
+		"test/twmain-helper.go": "package test\n",
+		"main.go":               "package fn\n",
+	})
+	require.NoError(t, err)
+	require.False(t, contents.TwmainConflict)
+}
+
+// TestExtractZip_PriorityIndexJSOverGoMod 混装探测优先级：index.js > go.mod
+// （混装按 node，不报冲突——与「探测即入口」现状一致；Go 字段不投影）。
+func TestExtractZip_PriorityIndexJSOverGoMod(t *testing.T) {
+	contents, err := extractZipFromFiles(t, map[string]string{
+		"index.js": "exports.main = () => ({});",
+		"go.mod":   "module example.com/mixed\n",
+		"main.go":  "package fn\n",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "node-18.0", contents.Runtime)
+	require.Empty(t, contents.GoModulePath, "混装按 node：Go 探测字段不投影")
 }

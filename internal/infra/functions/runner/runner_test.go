@@ -16,11 +16,65 @@ import (
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 )
 
+// nodeContents / goContents 构造 DockerfileFor 的入参载体（探测产物
+// infrafunctions.SourceContents 的模板投影，字段映射见 functionsdispatcher
+// daemon 调用点）。
+func nodeContents(nodeDeps, hasLockfile bool) SourceContents {
+	return SourceContents{Runtime: "node-18.0", NodeDeps: nodeDeps, HasLockfile: hasLockfile}
+}
+
+func goContents(modify func(*SourceContents)) SourceContents {
+	c := SourceContents{
+		Runtime:      "go-1.26",
+		GoModulePath: "example.com/fn",
+		GoHasSum:     true,
+	}
+	if modify != nil {
+		modify(&c)
+	}
+	return c
+}
+
+// TestDockerfileFor_NodeGolden 逐字节锁定 node 分支两个模板（无依赖一次性
+// COPY / 带依赖分层 npm ci）：Go 分支引入（go-1.26 模板资产，设计
+// functions-runtimes-and-sources.md §1）不得触碰存量 node 语义——node 用户
+// 重建镜像产物必须与改造前逐字节一致（模板版本不 bump 的前提）。
+func TestDockerfileFor_NodeGolden(t *testing.T) {
+	goldenLegacy := "FROM node:18-alpine\n" +
+		"WORKDIR /app\n" +
+		"COPY . .\n" +
+		"USER node\n" +
+		"ENV TW_RUNNER_PORT=18080\n" +
+		"CMD [\"node\",\".tw-runner.js\"]\n"
+	goldenLayered := "FROM node:18-alpine\n" +
+		"WORKDIR /app\n" +
+		"COPY package.json package-lock.json* ./\n" +
+		"RUN npm ci --omit=dev --ignore-scripts\n" +
+		"COPY . .\n" +
+		"USER node\n" +
+		"ENV TW_RUNNER_PORT=18080\n" +
+		"CMD [\"node\",\".tw-runner.js\"]\n"
+	df, err := DockerfileFor(nodeContents(false, false))
+	if err != nil {
+		t.Fatalf("legacy template: %v", err)
+	}
+	if df != goldenLegacy {
+		t.Errorf("legacy template drifted:\nwant:\n%s\ngot:\n%s", goldenLegacy, df)
+	}
+	df, err = DockerfileFor(nodeContents(true, true))
+	if err != nil {
+		t.Fatalf("layered template: %v", err)
+	}
+	if df != goldenLayered {
+		t.Errorf("layered template drifted:\nwant:\n%s\ngot:\n%s", goldenLayered, df)
+	}
+}
+
 // TestDockerfileFor_NodeTemplate 锁定模板形态：CMD = runner（现行模板无
 // ENTRYPOINT，用户入口从 CMD 移交 runner）；构建期不执行用户代码的不变量由
 // 「仅 COPY + npm ci --ignore-scripts」保持。
 func TestDockerfileFor_NodeTemplate(t *testing.T) {
-	df, err := DockerfileFor("node-18.0", false, false)
+	df, err := DockerfileFor(nodeContents(false, false))
 	if err != nil {
 		t.Fatalf("node template: %v", err)
 	}
@@ -44,11 +98,11 @@ func TestDockerfileFor_NodeTemplate(t *testing.T) {
 // 再 COPY 全部代码（lockfile 不变命中 Docker 层缓存）；CMD/ENV 与旧模板
 // 逐字节一致——本切片不改 runner 协议、不 bump 模板版本（产物等价）。
 func TestDockerfileFor_NodeLayeredWithDeps(t *testing.T) {
-	legacy, err := DockerfileFor("node-18.0", false, false)
+	legacy, err := DockerfileFor(nodeContents(false, false))
 	if err != nil {
 		t.Fatalf("legacy template: %v", err)
 	}
-	df, err := DockerfileFor("node-18.0", true, true)
+	df, err := DockerfileFor(nodeContents(true, true))
 	if err != nil {
 		t.Fatalf("layered template: %v", err)
 	}
@@ -72,7 +126,7 @@ func TestDockerfileFor_NodeLayeredWithDeps(t *testing.T) {
 // TestDockerfileFor_NodeDepsWithoutLockfile 带依赖无 lockfile → 构建期报错，
 // 错误信息指向提交 lockfile（v3 §3.1 lockfile 强制，确定性构建不变量）。
 func TestDockerfileFor_NodeDepsWithoutLockfile(t *testing.T) {
-	_, err := DockerfileFor("node-18.0", true, false)
+	_, err := DockerfileFor(nodeContents(true, false))
 	if err == nil {
 		t.Fatal("dependencies without package-lock.json must fail the build")
 	}
@@ -84,7 +138,7 @@ func TestDockerfileFor_NodeDepsWithoutLockfile(t *testing.T) {
 // TestDockerfileFor_PythonExplicitError 常驻路径下 python 明确报错（探测
 // 保留、构建期拒绝；v1 docker 执行器已移除，报错不得引导切换执行器）。
 func TestDockerfileFor_PythonExplicitError(t *testing.T) {
-	_, err := DockerfileFor("python-3.11", false, false)
+	_, err := DockerfileFor(SourceContents{Runtime: "python-3.11"})
 	if err == nil {
 		t.Fatal("python on the resident executor must fail explicitly")
 	}
@@ -98,18 +152,133 @@ func TestDockerfileFor_PythonExplicitError(t *testing.T) {
 
 // TestDockerfileFor_UnknownRuntime 未知运行时拒绝。
 func TestDockerfileFor_UnknownRuntime(t *testing.T) {
-	if _, err := DockerfileFor("deno-2.0", false, false); err == nil {
+	if _, err := DockerfileFor(SourceContents{Runtime: "deno-2.0"}); err == nil {
 		t.Fatal("unknown runtime must be rejected")
+	}
+}
+
+// TestDockerfileFor_GoGolden go 分支两形态快照（设计
+// functions-runtimes-and-sources.md §1 构建模板 + 二轮复查 GOFLAGS 修正）：
+// 无 vendor（-mod=readonly + go mod download 层 + go.sum 通配）与 vendor
+// （-mod=vendor + 免 download 层）。多阶段：golang 构建段 CGO_ENABLED=0、
+// alpine 运行段 + ca-certificates + 非 root 数字 UID + CMD = 平台产物
+// tw-app（「构建期不执行用户代码」不变量：go build 只编译不执行）。
+func TestDockerfileFor_GoGolden(t *testing.T) {
+	goldenNoVendor := "FROM golang:1.26-alpine AS build\n" +
+		"WORKDIR /src\n" +
+		"ENV CGO_ENABLED=0\n" +
+		"ENV GOFLAGS=-mod=readonly\n" +
+		"COPY go.mod go.sum* ./\n" +
+		"RUN go mod download\n" +
+		"COPY . .\n" +
+		"COPY twmain/ ./twmain/\n" +
+		"RUN go build -trimpath -ldflags=\"-s -w\" -o /out/tw-app ./twmain\n" +
+		"\n" +
+		"FROM alpine:3.22\n" +
+		"RUN apk add --no-cache ca-certificates\n" +
+		"COPY --from=build /out/tw-app /tw-app\n" +
+		"USER 65534:65534\n" +
+		"ENV TW_RUNNER_PORT=18080\n" +
+		"CMD [\"/tw-app\"]\n"
+	goldenVendor := "FROM golang:1.26-alpine AS build\n" +
+		"WORKDIR /src\n" +
+		"ENV CGO_ENABLED=0\n" +
+		"ENV GOFLAGS=-mod=vendor\n" +
+		"COPY go.mod go.sum* ./\n" +
+		"COPY . .\n" +
+		"COPY twmain/ ./twmain/\n" +
+		"RUN go build -trimpath -ldflags=\"-s -w\" -o /out/tw-app ./twmain\n" +
+		"\n" +
+		"FROM alpine:3.22\n" +
+		"RUN apk add --no-cache ca-certificates\n" +
+		"COPY --from=build /out/tw-app /tw-app\n" +
+		"USER 65534:65534\n" +
+		"ENV TW_RUNNER_PORT=18080\n" +
+		"CMD [\"/tw-app\"]\n"
+
+	df, err := DockerfileFor(goContents(nil))
+	if err != nil {
+		t.Fatalf("no-vendor template: %v", err)
+	}
+	if df != goldenNoVendor {
+		t.Errorf("no-vendor template drifted:\nwant:\n%s\ngot:\n%s", goldenNoVendor, df)
+	}
+
+	// vendor 形态：纯 stdlib vendor 项目合法无 go.sum（vendor + require 非空
+	// + 无 go.sum 亦放行——-mod=vendor 不消费 go.sum）。
+	df, err = DockerfileFor(goContents(func(c *SourceContents) {
+		c.HasVendor = true
+		c.GoHasSum = false
+		c.GoHasRequires = true
+	}))
+	if err != nil {
+		t.Fatalf("vendor template: %v", err)
+	}
+	if df != goldenVendor {
+		t.Errorf("vendor template drifted:\nwant:\n%s\ngot:\n%s", goldenVendor, df)
+	}
+
+	// 不变量抽查（两形态公共面）：go.sum 必须带 * 通配（纯 stdlib 函数合法
+	// 无 go.sum，COPY 任一源缺失即失败）；CMD 恒为平台产物（用户入口不进
+	// CMD）；无 ENTRYPOINT。
+	for _, df := range []string{goldenNoVendor, goldenVendor} {
+		if !strings.Contains(df, "COPY go.mod go.sum* ./\n") {
+			t.Errorf("go.sum 必须带通配（node package-lock.json* 先例同构）:\n%s", df)
+		}
+		if !strings.HasSuffix(df, "CMD [\"/tw-app\"]\n") {
+			t.Errorf("CMD 必须是平台产物 tw-app:\n%s", df)
+		}
+		if strings.Contains(strings.ToUpper(df), "ENTRYPOINT") {
+			t.Errorf("template must not introduce ENTRYPOINT:\n%s", df)
+		}
+	}
+}
+
+// TestDockerfileFor_GoMissingGoSum require 非空且无 go.sum 且无 vendor →
+// 构建期报错（对齐 node 缺 lockfile 同构口径）；错误文案指向 go mod tidy。
+func TestDockerfileFor_GoMissingGoSum(t *testing.T) {
+	_, err := DockerfileFor(goContents(func(c *SourceContents) {
+		c.GoHasRequires = true
+		c.GoHasSum = false
+	}))
+	if err == nil {
+		t.Fatal("external deps without go.sum must fail the build")
+	}
+	if !strings.Contains(err.Error(), "go.sum") || !strings.Contains(err.Error(), "go mod tidy") {
+		t.Errorf("error must point at go mod tidy: %v", err)
+	}
+
+	// require 为空的纯 stdlib 函数合法无 go.sum。
+	if _, err := DockerfileFor(goContents(func(c *SourceContents) {
+		c.GoHasSum = false
+	})); err != nil {
+		t.Fatalf("stdlib-only function without go.sum must build: %v", err)
+	}
+}
+
+// TestDockerfileFor_GoTwmainConflict twmain/ 保留目录冲突拒收，错误文案
+// 指明改名（设计 §1「错误文案指明改名」）。
+func TestDockerfileFor_GoTwmainConflict(t *testing.T) {
+	_, err := DockerfileFor(goContents(func(c *SourceContents) {
+		c.TwmainConflict = true
+	}))
+	if err == nil {
+		t.Fatal("twmain/ reserved dir conflict must be rejected")
+	}
+	if !strings.Contains(err.Error(), "twmain") || !strings.Contains(err.Error(), "改名") {
+		t.Errorf("error must point at renaming: %v", err)
 	}
 }
 
 // TestTemplateVersion_v5 模板版本单一事实源（v5 = 调用身份 ctx 三件，
 // mlbridge fn-rpc 设计 §2.5：RunnerTemplateVersion 4 → 5，runner.go 编译期
 // 引用防漂移；并发降级判定基准固定在 MinConcurrencyTemplateVersion=3，
-// 不随本版本漂移）。
+// 不随本版本漂移）。Go 分支新增不改存量语义：D5/OQ2 裁决不 bump（v5 从此
+// 管 node runner.js 与 Go bootstrap 双实现——任一语义变更同步另一实现并
+// 递增同一常量）。
 func TestTemplateVersion_v5(t *testing.T) {
 	if TemplateVersion != 5 {
-		t.Fatalf("TemplateVersion = %d, want 5 (v5 调用身份 ctx 三件必须递增)", TemplateVersion)
+		t.Fatalf("TemplateVersion = %d, want 5 (Go 分支新增不改存量语义，不 bump)", TemplateVersion)
 	}
 	if domainfunctions.MinConcurrencyTemplateVersion != 3 {
 		t.Fatalf("MinConcurrencyTemplateVersion = %d, want 3（v5 版本 bump 不得把存量 v3 deployment 误降级）", domainfunctions.MinConcurrencyTemplateVersion)

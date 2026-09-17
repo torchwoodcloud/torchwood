@@ -1962,6 +1962,14 @@ type Functions_Dispatcher struct {
 	// 实例累计超时熔断阈值（functions v3 §1.4：超时不杀实例后，实例累计
 	// 超时达到该阈值即杀实例重建，防僵尸负载慢性塞满事件循环；默认 5）。
 	TimeoutBudget uint32 `protobuf:"varint,9,opt,name=timeout_budget,json=timeoutBudget,proto3" json:"timeout_budget,omitempty"`
+	// 部署构建整体超时（如 "5m"；默认 5m，对齐 worker 补构建）。构建 ctx
+	// 与客户端断开解耦（WithoutCancel），由该值封顶；Go 冷构建（基础镜像
+	// 拉取数百 MB + go mod download + 编译）在全新环境可逼近该默认值，
+	// 必要时按 runtime 分档调大。一期仅落 schema（阶段 2 消费）。
+	BuildTimeout string `protobuf:"bytes,10,opt,name=build_timeout,json=buildTimeout,proto3" json:"build_timeout,omitempty"`
+	// 部署后验证 spawn（build 成功后起池外实例轮询 /_tw/health 的质量门；
+	// Go 强制、node 同开，默认 true 可关）。一期仅落 schema（阶段 2 消费）。
+	VerifyBuild   bool `protobuf:"varint,11,opt,name=verify_build,json=verifyBuild,proto3" json:"verify_build,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2057,6 +2065,20 @@ func (x *Functions_Dispatcher) GetTimeoutBudget() uint32 {
 		return x.TimeoutBudget
 	}
 	return 0
+}
+
+func (x *Functions_Dispatcher) GetBuildTimeout() string {
+	if x != nil {
+		return x.BuildTimeout
+	}
+	return ""
+}
+
+func (x *Functions_Dispatcher) GetVerifyBuild() bool {
+	if x != nil {
+		return x.VerifyBuild
+	}
+	return false
 }
 
 // Trigger 是触发器模块平台级配置（P1 触发器模块）。
@@ -2927,7 +2949,7 @@ const file_config_proto_rawDesc = "" +
 	"\x11secret_access_key\x18\x05 \x01(\tR\x0fsecretAccessKey\x12\x17\n" +
 	"\ause_ssl\x18\x06 \x01(\bR\x06useSsl\x1a\x1b\n" +
 	"\x05Local\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\"\x87\b\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\"\xcf\b\n" +
 	"\tFunctions\x12>\n" +
 	"\x06docker\x18\x02 \x01(\v2&.torchwood.api.config.Functions.DockerR\x06docker\x12G\n" +
 	"\texecution\x18\x03 \x01(\v2).torchwood.api.config.Functions.ExecutionR\texecution\x12J\n" +
@@ -2942,7 +2964,7 @@ const file_config_proto_rawDesc = "" +
 	"\bregistry\x18\x03 \x01(\tR\bregistry\x1a-\n" +
 	"\tExecution\x12 \n" +
 	"\fapi_base_url\x18\x01 \x01(\tR\n" +
-	"apiBaseUrl\x1a\xd3\x02\n" +
+	"apiBaseUrl\x1a\x9b\x03\n" +
 	"\n" +
 	"Dispatcher\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12!\n" +
@@ -2954,7 +2976,10 @@ const file_config_proto_rawDesc = "" +
 	"\fboot_timeout\x18\x06 \x01(\tR\vbootTimeout\x12\x12\n" +
 	"\x04addr\x18\a \x01(\tR\x04addr\x12-\n" +
 	"\x12callback_container\x18\b \x01(\tR\x11callbackContainer\x12%\n" +
-	"\x0etimeout_budget\x18\t \x01(\rR\rtimeoutBudget\x1a6\n" +
+	"\x0etimeout_budget\x18\t \x01(\rR\rtimeoutBudget\x12#\n" +
+	"\rbuild_timeout\x18\n" +
+	" \x01(\tR\fbuildTimeout\x12!\n" +
+	"\fverify_build\x18\v \x01(\bR\vverifyBuild\x1a6\n" +
 	"\aTrigger\x12+\n" +
 	"\x12http_ip_per_minute\x18\x01 \x01(\x05R\x0fhttpIpPerMinute\x1an\n" +
 	"\fClientInvoke\x120\n" +

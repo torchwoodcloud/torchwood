@@ -364,13 +364,23 @@ func (d *dockerDaemon) BuildImage(ctx context.Context, functionID, deploymentID 
 	_ = tmpZip.Close()
 
 	// extractZip 与镜像名解析复用 v1 语义（防 zip 炸弹/路径穿越预算一致；
-	// 镜像命名约定不变）。ZipContents 附带平台代装依赖探测结果（v3 §3.1：
-	// node_modules 拒收、dependencies 非空、lockfile 存在性）。
+	// 镜像命名约定不变）。SourceContents 附带部署源探测结果（node 代装依赖
+	// v3 §3.1 + Go 一期 go.mod 形态探测），逐字段映射为 runner 包的模板
+	// 载体（runner 保持叶子资产包，不 import infra/functions 根包）。
 	contents, err := infrafunctions.ExtractZip(tmpZip.Name(), buildDir)
 	if err != nil {
 		return err
 	}
-	dockerfile, err := runner.DockerfileFor(contents.Runtime, contents.NodeDeps, contents.HasLockfile)
+	dockerfile, err := runner.DockerfileFor(runner.SourceContents{
+		Runtime:        contents.Runtime,
+		NodeDeps:       contents.NodeDeps,
+		HasLockfile:    contents.HasLockfile,
+		GoModulePath:   contents.GoModulePath,
+		GoHasRequires:  contents.GoHasRequires,
+		GoHasSum:       contents.GoHasSum,
+		HasVendor:      contents.HasVendor,
+		TwmainConflict: contents.TwmainConflict,
+	})
 	if err != nil {
 		return err
 	}

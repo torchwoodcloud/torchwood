@@ -7,11 +7,17 @@
 // 不变量保持。模板版本化（TemplateVersion）：模板变更必须递增，存量
 // deployment 按新模板重建（function_deployments.template_version）。
 //
-// 本期只交付 node runner；python 探测保留但构建期明确报错（不静默构建一个
-// 跑不起来的镜像——resident 语义下一次性 CMD 跑完即退，实例永远不会 ready，
-// 错误会被推迟到首次调用且形态难排查；v1 docker 执行器已移除，无回退路径）。
-// python runner 落地时直接实现 v3 全部语义（并发 + per-request 基建，模板
-// 版本同源，v3 范围裁决）。
+// 本包保持叶子资产包形态（CLI functions dev 与 functions-dispatcher 双
+// 消费方），不 import infra/functions 根包：DockerfileFor 的入参载体
+// SourceContents 在本包定义，探测层产物（infrafunctions.SourceContents）
+// 由调用方逐字段映射，杜绝潜在 import 环。Go 模板资产（twmain bootstrap
+// 源码模板与渲染器）在子包 gorunner——它同样不回溯 import 本包与根包。
+//
+// python 探测保留但构建期明确报错（不静默构建一个跑不起来的镜像——
+// resident 语义下一次性 CMD 跑完即退，实例永远不会 ready，错误会被推迟到
+// 首次调用且形态难排查；v1 docker 执行器已移除，无回退路径）。python
+// runner 落地时直接实现 v3 全部语义（并发 + per-request 基建，模板版本
+// 同源，v3 范围裁决）。
 package runner
 
 import (
@@ -37,10 +43,36 @@ const RunnerPort = 18080
 // 此处编译期引用防漂移。v4 = fetch 入口探测/触发器封套还原/Response 封套
 // 扩展，v3 §2.1–§2.4；v5 = ctx/env 调用身份三件
 // source/invokingUserId/projectId，mlbridge fn-rpc 设计 §2.5）。
+// Go 分支新增（go-1.26 模板）不改存量 node 语义，按 D5/OQ2 裁决不 bump；
+// Go runner 协议实现（gorunner 资产）与本常量同源——双实现同版本纪律：
+// 任一实现的语义变更必须同步另一实现并递增同一常量。
 const TemplateVersion = int(domainfunctions.RunnerTemplateVersion)
 
 // NodeRunnerJS 返回嵌入的 node runner 源码（构建镜像时写入 build context）。
 func NodeRunnerJS() []byte { return nodeRunnerJS }
+
+// SourceContents 是 DockerfileFor 的入参载体：部署源探测结果的模板投影，
+// 字段与探测层产物（infrafunctions.SourceContents）一一对应。探测层只产出
+// 标记；报错收敛在本包（缺 go.sum / twmain 冲突拒收），与 node 缺 lockfile
+// 同构——构建期错误统一从 DockerfileFor 冒出。
+type SourceContents struct {
+	// Runtime 是运行时 ID（node-18.0 / go-1.26；python-3.11 仅探测保留）。
+	Runtime string
+	// NodeDeps 表示 zip 根 package.json 的 dependencies 键非空。
+	NodeDeps bool
+	// HasLockfile 表示 zip 根含 package-lock.json。
+	HasLockfile bool
+	// GoModulePath 是 zip 根 go.mod 的 module 行路径（探测层已剥引号/注释）。
+	GoModulePath string
+	// GoHasRequires 表示 go.mod 存在非空 require（单行或块形态）。
+	GoHasRequires bool
+	// GoHasSum 表示 zip 根含 go.sum。
+	GoHasSum bool
+	// HasVendor 表示 zip 根存在 vendor/ 目录（受纳；存在时 go.sum 不作要求）。
+	HasVendor bool
+	// TwmainConflict 表示 zip 根存在 twmain/ 前缀条目（平台保留目录名）。
+	TwmainConflict bool
+}
 
 // DockerfileFor 生成常驻执行模型的运行时 Dockerfile（唯一执行路径，经
 // functions-dispatcher 构建）：用户入口移交平台 runner（CMD），
@@ -52,13 +84,23 @@ func NodeRunnerJS() []byte { return nodeRunnerJS }
 // lockfile 不变即命中 Docker 层缓存（二次部署免费获得增量构建）；lockfile
 // 强制在此决策。无依赖函数维持一次性 COPY 模板（零变化、不白跑 npm ci）。
 // 模板语义变化不 bump 模板版本：构建管道变化、产物等价（CMD/ENV 不动）。
-func DockerfileFor(runtime string, nodeDeps, hasLockfile bool) (string, error) {
-	switch runtime {
+//
+// go 分支（Go 一期，设计 functions-runtimes-and-sources.md §1）多阶段构建：
+// 构建段 golang:1.26-alpine（CGO_ENABLED=0 结构化消灭 #cgo/pkg-config 构建
+// 期命令执行面；GOFLAGS 按 vendor 探测分支——显式 -mod=readonly 会覆盖
+// 「vendor 目录存在时自动 -mod=vendor」的默认行为，HasVendor=true 时必须
+// 显式 -mod=vendor），运行段 alpine + ca-certificates（函数 HTTPS 出访需要
+// CA 证书而基础 alpine 不自带）+ 非 root 数字 UID。go.sum 通配
+// （`go.sum*`）：纯 stdlib 函数合法无 go.sum，COPY 任一源缺失即失败——
+// node 模板 package-lock.json* 先例同构。go build 只编译不执行（Go modules
+// 无 npm 生命周期脚本等价物），「构建期不执行用户代码」强于 node。
+func DockerfileFor(contents SourceContents) (string, error) {
+	switch contents.Runtime {
 	case "node-18.0":
-		if nodeDeps {
+		if contents.NodeDeps {
 			// lockfile 强制（v3 §3.1）：无锁安装不可复现，与「构建是平台
 			// 确定性操作」不变量对齐。
-			if !hasLockfile {
+			if !contents.HasLockfile {
 				return "", fmt.Errorf("检测到 dependencies 但缺少 package-lock.json——请提交 lockfile 以保证确定性构建（npm install 会生成）")
 			}
 			// --ignore-scripts 恒定（v3 §3.2/D11：一期不提供 opt-in）。不变量：
@@ -84,12 +126,49 @@ func DockerfileFor(runtime string, nodeDeps, hasLockfile bool) (string, error) {
 			"USER node\n" +
 			fmt.Sprintf("ENV TW_RUNNER_PORT=%d\n", RunnerPort) +
 			fmt.Sprintf("CMD [\"node\",%q]\n", RunnerFileName), nil
+	case "go-1.26":
+		// twmain/ 保留目录冲突拒收（设计 §1「错误文案指明改名」）：用户 zip
+		// 携带同名目录会与平台构建期生成的 bootstrap 撞包。
+		if contents.TwmainConflict {
+			return "", fmt.Errorf("请勿在代码包中携带 twmain/ 目录——该目录为平台保留（构建期生成 Go runner bootstrap），请改名后重试")
+		}
+		// 依赖确定性（对齐 node lockfile 强制口径）：require 非空且无 go.sum
+		// 且无 vendor → 拒收（无锁依赖不可复现）；vendor 存在时 go build
+		// -mod=vendor 不消费 go.sum，不作要求（D4）。
+		if contents.GoHasRequires && !contents.GoHasSum && !contents.HasVendor {
+			return "", fmt.Errorf("检测到外部依赖但缺少 go.sum——go mod tidy 生成后提交")
+		}
+		goFlags := "-mod=readonly"
+		downloadLayer := "RUN go mod download\n"
+		if contents.HasVendor {
+			// GOFLAGS 显式 -mod=vendor：否则显式 -mod=readonly 会覆盖 Go
+			// 「vendor 目录存在时自动切换」的默认行为，vendor 形同虚设
+			// （二轮复查修正）；vendor 分支免 go mod download 层。
+			goFlags = "-mod=vendor"
+			downloadLayer = ""
+		}
+		return "FROM golang:1.26-alpine AS build\n" +
+			"WORKDIR /src\n" +
+			"ENV CGO_ENABLED=0\n" +
+			fmt.Sprintf("ENV GOFLAGS=%s\n", goFlags) +
+			"COPY go.mod go.sum* ./\n" +
+			downloadLayer +
+			"COPY . .\n" +
+			"COPY twmain/ ./twmain/\n" +
+			"RUN go build -trimpath -ldflags=\"-s -w\" -o /out/tw-app ./twmain\n" +
+			"\n" +
+			"FROM alpine:3.22\n" +
+			"RUN apk add --no-cache ca-certificates\n" +
+			"COPY --from=build /out/tw-app /tw-app\n" +
+			"USER 65534:65534\n" +
+			fmt.Sprintf("ENV TW_RUNNER_PORT=%d\n", RunnerPort) +
+			"CMD [\"/tw-app\"]\n", nil
 	case "python-3.11":
 		// TODO(P1+)：python runner（常驻 WSGI/ASGI 形态）。python 探测保留、
 		// 构建期明确报错（见包注释）——无 v1 回退路径，报错不得引导用户切换
 		// 执行器。
-		return "", fmt.Errorf("runtime %q is not available: the resident executor is node-only (python runner not implemented yet)", runtime)
+		return "", fmt.Errorf("runtime %q is not available: the resident executor is node-only (python runner not implemented yet)", contents.Runtime)
 	default:
-		return "", fmt.Errorf("unsupported runtime %q", runtime)
+		return "", fmt.Errorf("unsupported runtime %q", contents.Runtime)
 	}
 }
