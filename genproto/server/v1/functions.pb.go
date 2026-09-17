@@ -1208,8 +1208,9 @@ func (*CreateDeploymentRequest_Image) isCreateDeploymentRequest_Source() {}
 // GitSource 是 git 仓库部署源（functions-packer 归一为 zip，设计 §2）。
 type GitSource struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// 仓库 HTTPS 地址；SSRF 防护（拨号点 IP guard）与 userinfo 拒绝由
-	// packer 服务执行。
+	// 仓库地址。https 为生产形态；file:// 仅 development 环境放行（server
+	// app 层按 TORCHWOOD_ENV 收紧，非 dev 一律 InvalidArgument）。SSRF 防护
+	// （拨号点 IP guard）与 userinfo 拒绝由 packer 服务执行。
 	Url string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
 	// branch/tag/commit；缺省 HEAD（服务端解析并钉死为 commit SHA）。
 	Ref string `protobuf:"bytes,2,opt,name=ref,proto3" json:"ref,omitempty"`
@@ -2614,9 +2615,9 @@ const file_server_v1_functions_proto_rawDesc = "" +
 	"\x04code\x18\x02 \x01(\fH\x00R\x04code\x122\n" +
 	"\x03git\x18\x03 \x01(\v2\x1e.torchwood.server.v1.GitSourceH\x00R\x03git\x128\n" +
 	"\x05image\x18\x04 \x01(\v2 .torchwood.server.v1.ImageSourceH\x00R\x05imageB\b\n" +
-	"\x06source\"\xbf\x01\n" +
-	"\tGitSource\x12(\n" +
-	"\x03url\x18\x01 \x01(\tB\x16\xbaH\x13\xc8\x01\x01r\x0e\x18\x80\x102\t^https://R\x03url\x12\x1a\n" +
+	"\x06source\"\xc6\x01\n" +
+	"\tGitSource\x12/\n" +
+	"\x03url\x18\x01 \x01(\tB\x1d\xbaH\x1a\xc8\x01\x01r\x15\x18\x80\x102\x10^(https|file)://R\x03url\x12\x1a\n" +
 	"\x03ref\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\x03ref\x12&\n" +
 	"\tdirectory\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\tdirectory\x12$\n" +
 	"\busername\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\busername\x12\x1e\n" +

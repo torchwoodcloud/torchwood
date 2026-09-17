@@ -2,6 +2,7 @@ package functions
 
 import (
 	"context"
+	"os"
 	"path"
 	"regexp"
 	"strings"
@@ -113,6 +114,8 @@ func (f *Functions) createDeploymentFromGit(ctx context.Context, cmd CreateDeplo
 // validateGitSource 对 git 源做 server 侧形状校验（防御性复核层）：
 //   - url：必须 https://（functions.packer.allow_insecure=true 时放行
 //     http://——自托管内网 forge 场景与 packer 侧 SSRF 放行开关同源）；
+//     file:// 仅 development 环境放行（集成测试与本地开发；proto 层
+//     pattern 放行两种 scheme 后由本层按环境收紧——非 dev 一律拒绝）；
 //   - ref：字符白名单 + 长度上限；空 = HEAD 合法；
 //   - directory：仓库内相对路径，Clean 后拒绝 `..` 段与绝对路径；空 = 根。
 func (f *Functions) validateGitSource(src *domainfunctions.GitSource) error {
@@ -121,7 +124,14 @@ func (f *Functions) validateGitSource(src *domainfunctions.GitSource) error {
 	}
 	allowInsecure := f.cfg.GetFunctions().GetPacker().GetAllowInsecure()
 	if !strings.HasPrefix(src.URL, "https://") {
-		if !(allowInsecure && strings.HasPrefix(src.URL, "http://")) {
+		if strings.HasPrefix(src.URL, "file://") {
+			// file:// 仅 development（直读进程 env——与 cmd/server 的
+			// TORCHWOOD_ENV 同源；packer 侧同名门控独立生效，两端须同为
+			// development 才能走通，任一非 dev 即 fail-closed）。
+			if os.Getenv("TORCHWOOD_ENV") != "development" {
+				return status.Error(codes.InvalidArgument, "git source url file:// is only allowed in development environment")
+			}
+		} else if !(allowInsecure && strings.HasPrefix(src.URL, "http://")) {
 			return status.Error(codes.InvalidArgument, "git source url must use https:// (http is only allowed with functions.packer.allow_insecure)")
 		}
 	}

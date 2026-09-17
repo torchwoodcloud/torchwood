@@ -1252,7 +1252,7 @@
       "properties": {
         "url": {
           "type": "string",
-          "title": "仓库 HTTPS 地址；SSRF 防护（拨号点 IP guard）与 userinfo 拒绝由\npacker 服务执行。"
+          "title": "仓库地址。https 为生产形态；file:// 仅 development 环境放行（server\napp 层按 TORCHWOOD_ENV 收紧，非 dev 一律 InvalidArgument）。SSRF 防护\n（拨号点 IP guard）与 userinfo 拒绝由 packer 服务执行。"
         },
         "ref": {
           "type": "string",

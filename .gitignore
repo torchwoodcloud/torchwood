@@ -33,3 +33,8 @@ sdk/demo/dist/
 
 .zcode/
 .scratch/
+
+# 验收临时目录（fixture 仓等，一次性）
+.tmp-acc/
+.tmp-jwtcheck/
+r3.txt
