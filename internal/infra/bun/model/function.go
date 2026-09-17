@@ -50,9 +50,18 @@ type FunctionDeployment struct {
 	Status     string `bun:"status,notnull,default:'pending'"`
 	Error      string `bun:"error,notnull,default:''"`
 	// TemplateVersion 是构建所用镜像模板版本（P0.5；0 = v1 模板/未知）。
-	TemplateVersion int32     `bun:"template_version"`
-	CreatedAt       time.Time `bun:"created_at,notnull"`
-	UpdatedAt       time.Time `bun:"updated_at,notnull"`
+	TemplateVersion int32 `bun:"template_version"`
+	// ——部署源快照（二期，迁移 000023；INSERT 期写全、之后不可变——
+	// UpdateDeployment 列白名单有意不含 source 列，对齐 update_guard 的
+	// 不可变列语义）。source_type CHECK 词表 zip|git|image 与迁移同源；
+	// 凭证（GitSource.username/token）任何列不落库（D8）。
+	SourceType    string    `bun:"source_type,notnull,default:'zip'"`
+	SourceURL     string    `bun:"source_url,notnull,default:''"`
+	SourceRef     string    `bun:"source_ref,notnull,default:''"`
+	SourceDir     string    `bun:"source_dir,notnull,default:''"`
+	ContextSHA256 string    `bun:"context_sha256,notnull,default:''"`
+	CreatedAt     time.Time `bun:"created_at,notnull"`
+	UpdatedAt     time.Time `bun:"updated_at,notnull"`
 }
 
 type FunctionVariable struct {

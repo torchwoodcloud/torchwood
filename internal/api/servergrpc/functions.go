@@ -245,11 +245,23 @@ func (s *FunctionsService) CreateDeployment(ctx context.Context, req *serverv1.C
 		return nil, err
 	}
 	ctx = contexts.WithAuditResource(ctx, req.GetFunctionId())
-	dep, err := s.functions.CreateDeployment(ctx, appfunctions.CreateDeploymentCommand{
+	// 部署源 oneof 分发（二期，设计 §0）：code = zip 通道（≤1MiB；大包另经
+	// serverhttp multipart，仍 zip-only）；git 映射为命令 Git 字段（本阶段
+	// app 层占位拒绝 Unimplemented，阶段 3 换 packer 真实调用）；两者皆空
+	// = InvalidArgument。
+	cmd := appfunctions.CreateDeploymentCommand{
 		ProjectID:  projectID,
 		FunctionID: req.GetFunctionId(),
-		Code:       req.GetCode(),
-	})
+	}
+	switch req.GetSource().(type) {
+	case *serverv1.CreateDeploymentRequest_Code:
+		cmd.Code = req.GetCode()
+	case *serverv1.CreateDeploymentRequest_Git:
+		cmd.Git = mapGitSource(req.GetGit())
+	default:
+		return nil, status.Error(codes.InvalidArgument, "source is required: set either code (zip) or git")
+	}
+	dep, err := s.functions.CreateDeployment(ctx, cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -563,8 +575,30 @@ func mapDeployment(d *domainfunctions.Deployment) *serverv1.Deployment {
 		Size:       d.Size,
 		Status:     d.Status,
 		Error:      d.Error,
+		// 部署源只读投影（二期，迁移 000023）：git url/钉死 SHA/子目录原样；
+		// zip 源四字段恒为 source_type=zip + 空串。漏映射不报编译错，投影
+		// 形状由 functions_test.go 显式断言（设计 §0）。
+		SourceType: d.SourceType,
+		SourceUrl:  d.SourceURL,
+		SourceRef:  d.SourceRef,
+		SourceDir:  d.SourceDir,
 		CreatedAt:  timestamppb.New(d.CreatedAt),
 		UpdatedAt:  timestamppb.New(d.UpdatedAt),
+	}
+}
+
+// mapGitSource 把 proto GitSource 映射为领域值对象（一次性凭证随结构体
+// 仅在请求生命周期内存活——不落库不回显，D8）。
+func mapGitSource(g *serverv1.GitSource) *domainfunctions.GitSource {
+	if g == nil {
+		return nil
+	}
+	return &domainfunctions.GitSource{
+		URL:       g.GetUrl(),
+		Ref:       g.GetRef(),
+		Directory: g.GetDirectory(),
+		Username:  g.GetUsername(),
+		Token:     g.GetToken(),
 	}
 }
 

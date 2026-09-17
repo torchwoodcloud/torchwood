@@ -170,6 +170,9 @@ func (r *functionRepo) UpdateDeployment(ctx context.Context, d *domainfunctions.
 	// 列白名单（bun 更新写规范）：id/function_id/project_id/size/created_at
 	// 不可变。不设状态 CAS——语义由既有集成测试锚定（跨项目误写静默 no-op、
 	// ready→failed 合法），生产唯一写方 buildDeployment 串行推进状态。
+	// 部署源快照五列（迁移 000023，source_type/source_url/source_ref/
+	// source_dir/context_sha256）INSERT 期写全、之后不可变：**有意不登记**
+	// 本白名单（对齐 update_guard 护栏约定——不可变列漏登记正是期望行为）。
 	_, err = conn.NewUpdate().Model(m).ModelTableExpr(expr, sch).
 		Column("status", "error", "updated_at").
 		WherePK().
@@ -677,6 +680,13 @@ func mapFunctionToDomain(m *model.Function) *domainfunctions.Function {
 }
 
 func mapDeploymentToModel(d *domainfunctions.Deployment) *model.FunctionDeployment {
+	// source_type 零值归一为 'zip'（迁移 000023 列 DEFAULT 同值）：INSERT 是
+	// 全模型写（bun 更新写规范只约束 UPDATE），空串会违反 CHECK 词表——
+	// 存量/未感知 source 的调用方（zip 通道全部路径）语义即 zip 源。
+	sourceType := d.SourceType
+	if sourceType == "" {
+		sourceType = domainfunctions.DeploymentSourceZip
+	}
 	return &model.FunctionDeployment{
 		ID:              d.ID,
 		FunctionID:      d.FunctionID,
@@ -685,8 +695,15 @@ func mapDeploymentToModel(d *domainfunctions.Deployment) *model.FunctionDeployme
 		Status:          d.Status,
 		Error:           d.Error,
 		TemplateVersion: d.TemplateVersion,
-		CreatedAt:       d.CreatedAt,
-		UpdatedAt:       d.UpdatedAt,
+		// 部署源快照（迁移 000023）：INSERT 期写全、之后不可变——
+		// UpdateDeployment 列白名单有意不含 source 列。
+		SourceType:    sourceType,
+		SourceURL:     d.SourceURL,
+		SourceRef:     d.SourceRef,
+		SourceDir:     d.SourceDir,
+		ContextSHA256: d.ContextSHA256,
+		CreatedAt:     d.CreatedAt,
+		UpdatedAt:     d.UpdatedAt,
 	}
 }
 
@@ -699,6 +716,11 @@ func mapDeploymentToDomain(m *model.FunctionDeployment) *domainfunctions.Deploym
 		Status:          m.Status,
 		Error:           m.Error,
 		TemplateVersion: m.TemplateVersion,
+		SourceType:      m.SourceType,
+		SourceURL:       m.SourceURL,
+		SourceRef:       m.SourceRef,
+		SourceDir:       m.SourceDir,
+		ContextSHA256:   m.ContextSHA256,
 		CreatedAt:       m.CreatedAt,
 		UpdatedAt:       m.UpdatedAt,
 	}

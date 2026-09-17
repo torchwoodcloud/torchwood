@@ -118,7 +118,8 @@ func (f *fakeExt) DeleteFunction(_ context.Context, req *serverv1.GetFunctionReq
 }
 
 func (f *fakeExt) CreateDeployment(_ context.Context, req *serverv1.CreateDeploymentRequest) (*serverv1.Deployment, error) {
-	return &serverv1.Deployment{FunctionId: req.FunctionId, Size: int64(len(req.Code))}, nil
+	// 部署源 oneof（二期）：fake 只消费 zip 通道。
+	return &serverv1.Deployment{FunctionId: req.FunctionId, Size: int64(len(req.GetCode()))}, nil
 }
 
 func (f *fakeExt) ListDeployments(_ context.Context, req *serverv1.GetFunctionRequest) (*serverv1.ListDeploymentsResponse, error) {

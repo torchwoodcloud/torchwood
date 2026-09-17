@@ -733,9 +733,12 @@
         "code": {
           "type": "string",
           "format": "byte"
+        },
+        "git": {
+          "$ref": "#/definitions/v1GitSource"
         }
       },
-      "title": "code 为 zip 代码包，≤1MiB 走此通道；更大的包走 multipart 上传\n（POST /v1/server/functions/{function_id}/deployments/code）。"
+      "title": "部署源 oneof（二期，docs/design/functions-runtimes-and-sources.md §0）：\ncode 为 zip 代码包，≤1MiB 走此通道；更大的 zip 包走 multipart 上传\n（POST /v1/server/functions/{function_id}/deployments/code，仅承载 zip）。\ngit 源载荷极小（url/ref/子目录/一次性凭证），仅走本 gRPC JSON 通道、\n不设 multipart 形态；由独立 functions-packer 服务物化为 zip 落既有构建\n路径（阶段 3 接线）。字段号 2 原号移入 oneof，wire 兼容。"
     },
     "FunctionsServiceCreateExecutionBody": {
       "type": "object",
@@ -954,6 +957,22 @@
         "updated_at": {
           "type": "string",
           "format": "date-time"
+        },
+        "source_type": {
+          "type": "string",
+          "title": "——部署源只读投影（二期，docs/design/functions-runtimes-and-sources.md\n§0；source 列 INSERT 期写全、之后不可变）——\n部署源类型：zip | git（image 三期启用；词表与 DB CHECK 同源）。"
+        },
+        "source_url": {
+          "type": "string",
+          "title": "git 仓库 url；zip 源恒空。"
+        },
+        "source_ref": {
+          "type": "string",
+          "title": "git 钉死的 commit SHA；zip 源恒空。"
+        },
+        "source_dir": {
+          "type": "string",
+          "title": "git 构建上下文子目录；zip 源恒空。凭证字段不出现在任何响应面。"
         }
       }
     },
@@ -1224,6 +1243,31 @@
         }
       },
       "title": "FunctionTrigger 是触发器视图。http 专有字段（token/invoke_path/response_mode/\nack_body/handshake/body_limit_bytes）与 cron 专有字段（expr/misfire/\nnext_run_at）按 type 取用；token 明文仅在管理面返回。"
+    },
+    "v1GitSource": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "title": "仓库 HTTPS 地址；SSRF 防护（拨号点 IP guard）与 userinfo 拒绝由\npacker 服务执行。"
+        },
+        "ref": {
+          "type": "string",
+          "title": "branch/tag/commit；缺省 HEAD（服务端解析并钉死为 commit SHA）。"
+        },
+        "directory": {
+          "type": "string",
+          "title": "仓库内子目录 = 构建上下文根；缺省根目录。"
+        },
+        "username": {
+          "type": "string",
+          "title": "可选 Basic 凭证（PAT）。username/token 均一次性凭证：仅本次请求内存、\n不落库不回显（D8），审计载荷由敏感键 mask 兜底。"
+        },
+        "token": {
+          "type": "string"
+        }
+      },
+      "title": "GitSource 是 git 仓库部署源（functions-packer 归一为 zip，设计 §2）。"
     },
     "v1HttpTriggerConfig": {
       "type": "object",

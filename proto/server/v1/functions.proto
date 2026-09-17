@@ -283,6 +283,16 @@ message Deployment {
   string error = 5;
   google.protobuf.Timestamp created_at = 6;
   google.protobuf.Timestamp updated_at = 7;
+  // ——部署源只读投影（二期，docs/design/functions-runtimes-and-sources.md
+  // §0；source 列 INSERT 期写全、之后不可变）——
+  // 部署源类型：zip | git（image 三期启用；词表与 DB CHECK 同源）。
+  string source_type = 8;
+  // git 仓库 url；zip 源恒空。
+  string source_url = 9;
+  // git 钉死的 commit SHA；zip 源恒空。
+  string source_ref = 10;
+  // git 构建上下文子目录；zip 源恒空。凭证字段不出现在任何响应面。
+  string source_dir = 11;
 }
 
 message Variables {
@@ -375,11 +385,37 @@ message GetFunctionRequest {
   string function_id = 1;
 }
 
-// code 为 zip 代码包，≤1MiB 走此通道；更大的包走 multipart 上传
-// （POST /v1/server/functions/{function_id}/deployments/code）。
+// 部署源 oneof（二期，docs/design/functions-runtimes-and-sources.md §0）：
+// code 为 zip 代码包，≤1MiB 走此通道；更大的 zip 包走 multipart 上传
+// （POST /v1/server/functions/{function_id}/deployments/code，仅承载 zip）。
+// git 源载荷极小（url/ref/子目录/一次性凭证），仅走本 gRPC JSON 通道、
+// 不设 multipart 形态；由独立 functions-packer 服务物化为 zip 落既有构建
+// 路径（阶段 3 接线）。字段号 2 原号移入 oneof，wire 兼容。
 message CreateDeploymentRequest {
   string function_id = 1;
-  bytes code = 2;
+  oneof source {
+    bytes code = 2;
+    GitSource git = 3;
+  }
+}
+
+// GitSource 是 git 仓库部署源（functions-packer 归一为 zip，设计 §2）。
+message GitSource {
+  // 仓库 HTTPS 地址；SSRF 防护（拨号点 IP guard）与 userinfo 拒绝由
+  // packer 服务执行。
+  string url = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.max_len = 2048,
+    (buf.validate.field).string.pattern = "^https://"
+  ];
+  // branch/tag/commit；缺省 HEAD（服务端解析并钉死为 commit SHA）。
+  string ref = 2 [(buf.validate.field).string.max_len = 256];
+  // 仓库内子目录 = 构建上下文根；缺省根目录。
+  string directory = 3 [(buf.validate.field).string.max_len = 512];
+  // 可选 Basic 凭证（PAT）。username/token 均一次性凭证：仅本次请求内存、
+  // 不落库不回显（D8），审计载荷由敏感键 mask 兜底。
+  string username = 4 [(buf.validate.field).string.max_len = 256];
+  string token = 5 [(buf.validate.field).string.max_len = 4096];
 }
 
 message GetDeploymentRequest {

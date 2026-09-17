@@ -185,8 +185,18 @@ type Deployment struct {
 	// TemplateVersion 是构建所用镜像模板版本（P0.5 模板版本化重建；构建时
 	// 由 runner 模板版本写入，0 = v1 模板或未知）。
 	TemplateVersion int32
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	// ——部署源快照（二期，迁移 000023；INSERT 期写全、之后不可变——
+	// UpdateDeployment 列白名单有意不含 source 列）——SourceType ∈
+	// zip|git|image（DeploymentSource* 词表）；zip 源的 URL/Ref/Dir 恒空串；
+	// git 源 Ref = 钉死 commit SHA；ContextSHA256 是物化 zip sha256
+	// （zip/git 共用的可复现性锚，D9）。凭证不出现在任何字段。
+	SourceType    string
+	SourceURL     string
+	SourceRef     string
+	SourceDir     string
+	ContextSHA256 string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // Variable 是函数环境变量实体。Kind 区分 text（普通文本）与 secret

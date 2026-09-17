@@ -29,6 +29,10 @@ func TestApply_IdempotentCatalogAndOAuth(t *testing.T) {
 	var version int64
 	require.NoError(t, db.QueryRowContext(ctx,
 		"SELECT MAX(version) FROM "+quoted+".schema_migrations").Scan(&version))
+	// 000023（Functions 部署源多元化二期阶段 1/4，
+	// docs/design/functions-runtimes-and-sources.md §0/§2）：
+	// function_deployments 源快照五列（source_type/source_url/source_ref/
+	// source_dir/context_sha256）。
 	// 000022（Analytics PR1 地基，docs/design/analytics.md §5）：事件分析
 	// 六表——analytics_events 月 RANGE 分区（2026-09/2026-10 静态预建 +
 	// DEFAULT 兜底）+ 字典/聚合/活跃集/首见/清洗队列五表。
@@ -39,7 +43,7 @@ func TestApply_IdempotentCatalogAndOAuth(t *testing.T) {
 	// functions.concurrency 池策略列（CHECK 1..16）。000016（P2 客户端调用面）：
 	// functions 策略四列 + function_executions invoking_user_id/
 	// client_idempotency_key（partial 唯一索引 + 限频计数 partial 索引）。
-	require.Equal(t, int64(22), version)
+	require.Equal(t, int64(23), version)
 
 	var dirty bool
 	require.NoError(t, db.QueryRowContext(ctx,

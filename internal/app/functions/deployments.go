@@ -30,12 +30,21 @@ type CreateDeploymentCommand struct {
 	ProjectID  string
 	FunctionID string
 	Code       []byte // zip 字节流
+	// Git 是 git 仓库源（二期，设计 §2）：非 nil 时走 functions-packer
+	// 物化分支——本阶段占位拒绝（Unimplemented），packer 服务的 SourcePacker
+	// 端口与真实分支在阶段 3 接线；zip 路径行为完全不变。
+	Git *domainfunctions.GitSource
 }
 
 func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCommand) (*domainfunctions.Deployment, error) {
 	// 纵深防御（G2-1/R06-P0，G12 调整）：部署写操作允许 admin 会话与 API key。
 	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return nil, err
+	}
+	// git 源占位拒绝（二期阶段 1/4）：schema/proto/DB 已落，物化链路
+	// （SourcePacker → functions-packer）待阶段 3；zip 路径不受影响。
+	if cmd.Git != nil {
+		return nil, status.Error(codes.Unimplemented, "git deployment source requires functions-packer service (phase 2 wiring)")
 	}
 	if len(cmd.Code) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "code is required")
@@ -64,8 +73,10 @@ func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCo
 		// 模板版本化（P0.5）：记录构建所用 runner 模板版本（存量 deployment
 		// 据此判定按新模板重建）。
 		TemplateVersion: domainfunctions.RunnerTemplateVersion,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		// zip 通道源类型显式登记（迁移 000023；git 源在 packer 分支落 git 词表值）。
+		SourceType: domainfunctions.DeploymentSourceZip,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 	if err := f.repo.CreateDeployment(ctx, dep); err != nil {
 		return nil, err
