@@ -18,6 +18,9 @@ type mockRepo struct {
 	recoverEach   int
 	recoverCalls  []string
 	recoverLimits []int
+	// createDeploymentErr 非空时 CreateDeployment 返回该错误（git 源
+	// INSERT 失败清理路径的注入点，deployments_sources_test）。
+	createDeploymentErr error
 }
 
 func newMockRepo() *mockRepo {
@@ -77,6 +80,9 @@ func (r *mockRepo) DeleteFunction(_ context.Context, projectID, functionID strin
 func (r *mockRepo) CreateDeployment(_ context.Context, d *domainfunctions.Deployment) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.createDeploymentErr != nil {
+		return r.createDeploymentErr
+	}
 	r.deployments[d.ID] = d
 	return nil
 }

@@ -344,3 +344,71 @@ func sameFileStates(a, b map[string]time.Time) bool {
 	}
 	return true
 }
+
+// ——git 部署源（二期阶段 3，docs/design/functions-runtimes-and-sources.md
+// §2）：functions deployments create-from-git——服务端 functions-packer 把
+// url@ref[:directory] 物化为同一 zip 构建路径，CLI 只组装 GitSource 请求——
+// token 从环境变量读（缺省变量名 TORCHWOOD_GIT_TOKEN，--git-token-env 可
+// 覆盖），绝不进 argv/shell history。凭证为一次性：server 落库投影只有
+// url/钉死 commit SHA/子目录/zip 校验和。——
+
+// defaultGitTokenEnv 是 --git-token-env 缺省的环境变量名。
+const defaultGitTokenEnv = "TORCHWOOD_GIT_TOKEN"
+
+// lookupEnvFunc 是环境变量读取的注入点（os.LookupEnv 签名；测试替换）。
+type lookupEnvFunc func(string) (string, bool)
+
+// newFunctionsDeploymentsCreateFromGitCmd 从 git 仓库创建部署。
+func newFunctionsDeploymentsCreateFromGitCmd(g *GlobalFlags) *verb {
+	var url, ref, dir, username, tokenEnv string
+	return newVerb(g, "create-from-git", "create a deployment from a git repository (the server-side functions-packer service materializes it to the same zip build path)", "functions deployments create-from-git <function-id> --url <repo-url> [--ref <branch|tag|commit>] [--dir <subdir>] [--git-username <user>] [--git-token-env <VAR>]",
+		func(fs *flag.FlagSet) {
+			fs.StringVar(&url, "url", "", "git repository HTTPS URL (required)")
+			fs.StringVar(&ref, "ref", "", "branch, tag or commit SHA (defaults to the repository HEAD; the server pins the resolved commit into the deployment)")
+			fs.StringVar(&dir, "dir", "", "repository subdirectory used as the build context root (defaults to the repository root)")
+			fs.StringVar(&username, "git-username", "", "basic auth username for private repositories (defaults to \"git\" server-side when a token is set)")
+			fs.StringVar(&tokenEnv, "git-token-env", "", "name of the environment variable holding the git access token (default "+defaultGitTokenEnv+")")
+		},
+		func(v *verb, env *commands.Environment, args []string) error {
+			if err := exactArgs(v, args, 1); err != nil {
+				return err
+			}
+			req, err := buildCreateDeploymentFromGitReq(args[0], url, ref, dir, username, tokenEnv, os.LookupEnv)
+			if err != nil {
+				return err
+			}
+			return call(g, env, methodFunctionsCreateDeployment, req)
+		})
+}
+
+// buildCreateDeploymentFromGitReq 组装 CreateDeploymentRequest 的 git oneof
+// 请求：token 从 tokenEnv（缺省 TORCHWOOD_GIT_TOKEN）环境变量读取，未设置
+// 或为空即报错（私有仓库缺凭证会在 packer 侧失败；公开仓库也请设一个占位
+// 值——显式优于静默匿名拉取）。空值可选字段（ref/directory/username）不进
+// 请求（proto 未设置语义）。
+func buildCreateDeploymentFromGitReq(functionID, url, ref, dir, username, tokenEnv string, lookup lookupEnvFunc) (map[string]any, error) {
+	if functionID == "" {
+		return nil, fmt.Errorf("missing function-id")
+	}
+	if url == "" {
+		return nil, fmt.Errorf("--url is required (git repository HTTPS URL)")
+	}
+	if tokenEnv == "" {
+		tokenEnv = defaultGitTokenEnv
+	}
+	token, ok := lookup(tokenEnv)
+	if !ok || token == "" {
+		return nil, fmt.Errorf("environment variable %s is not set; export it with a git access token (any non-empty placeholder works for public repositories) or point --git-token-env at another variable", tokenEnv)
+	}
+	git := map[string]any{"url": url, "token": token}
+	if ref != "" {
+		git["ref"] = ref
+	}
+	if dir != "" {
+		git["directory"] = dir
+	}
+	if username != "" {
+		git["username"] = username
+	}
+	return map[string]any{"functionId": functionID, "git": git}, nil
+}

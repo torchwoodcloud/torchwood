@@ -594,10 +594,14 @@ func prepareBuildContext(buildDir string, opts BuildImageOptions) error {
 	}
 	_ = tmpZip.Close()
 
-	// 解压 + 探测：复用 v1 防炸弹/路径穿越预算；SourceContents 附带部署源
-	// 探测结果，逐字段映射为 runner 包的模板载体（runner 保持叶子资产包，
-	// 不 import infra/functions 根包）。
-	contents, err := infrafunctions.ExtractZip(tmpZip.Name(), buildDir)
+	// 解压 + 探测：复用 v1 防炸弹/路径穿越预算，条目预算用放宽版（二期
+	// 阶段 3，设计 §2 条目维链条）——BuildImage 无法区分 zip/git 源（同
+	// base64 内联通道），统一放宽到 packer 物化口径（条目 5000；单条
+	// 100MiB / 总量 200MiB 解压预算维持），防 git 源合法 zip 被默认 1000
+	// 条目预算击毙。SourceContents 附带部署源探测结果，逐字段映射为
+	// runner 包的模板载体（runner 保持叶子资产包，不 import infra/functions
+	// 根包）。
+	contents, err := infrafunctions.ExtractZipRelaxed(tmpZip.Name(), buildDir)
 	if err != nil {
 		return err
 	}

@@ -30,9 +30,9 @@ type CreateDeploymentCommand struct {
 	ProjectID  string
 	FunctionID string
 	Code       []byte // zip 字节流
-	// Git 是 git 仓库源（二期，设计 §2）：非 nil 时走 functions-packer
-	// 物化分支——本阶段占位拒绝（Unimplemented），packer 服务的 SourcePacker
-	// 端口与真实分支在阶段 3 接线；zip 路径行为完全不变。
+	// Git 是 git 仓库源（二期，设计 §2）：非 nil 时经 SourcePacker
+	// （functions-packer 服务）物化为同一 zip 构建路径——pack 在 deployment
+	// 行落库之前，失败路径无行无 zip；zip 路径行为完全不变。
 	Git *domainfunctions.GitSource
 }
 
@@ -41,10 +41,10 @@ func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCo
 	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return nil, err
 	}
-	// git 源占位拒绝（二期阶段 1/4）：schema/proto/DB 已落，物化链路
-	// （SourcePacker → functions-packer）待阶段 3；zip 路径不受影响。
+	// git 源分支（二期阶段 3 接线）：形状校验 → packer 物化 → 写盘 →
+	// INSERT（source 投影 + 钉死 SHA + checksum）→ 与 zip 源同构构建。
 	if cmd.Git != nil {
-		return nil, status.Error(codes.Unimplemented, "git deployment source requires functions-packer service (phase 2 wiring)")
+		return f.createDeploymentFromGit(ctx, cmd, cmd.Git)
 	}
 	if len(cmd.Code) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "code is required")
@@ -138,8 +138,13 @@ func (f *Functions) buildDeployment(ctx context.Context, fn *domainfunctions.Fun
 		dep.Status = domainfunctions.DeploymentStatusFailed
 		dep.Error = truncate(err.Error(), maxOutputBytes)
 		_ = f.repo.UpdateDeployment(buildCtx, dep)
-		// 清理本地 zip 与可能残留的镜像（幂等）。
-		_ = removeZip(dep.ProjectID, dep.FunctionID, dep.ID)
+		// 清理本地 zip 与可能残留的镜像（幂等）。zip 按源类型分流（设计
+		// §2 重建语义）：zip 源构建失败即删（D13 一期形态）；git 源 zip
+		// 保留——物化快照在盘上、worker 补构建不依赖一次性凭证， redeploy
+		// 只在 zip 缺失（磁盘被清）时才必须。
+		if dep.SourceType != domainfunctions.DeploymentSourceGit {
+			_ = removeZip(dep.ProjectID, dep.FunctionID, dep.ID)
+		}
 		_ = f.executor.RemoveImage(buildCtx, dep.FunctionID, dep.ID)
 		return nil
 	}

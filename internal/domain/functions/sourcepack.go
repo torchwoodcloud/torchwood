@@ -1,5 +1,7 @@
 package functions
 
+import "context"
+
 // ——部署源词表（迁移 000023 function_deployments.source_type CHECK 同源；
 // docs/design/functions-runtimes-and-sources.md §0）——
 const (
@@ -22,4 +24,17 @@ type GitSource struct {
 	Directory string // 仓库内子目录 = 构建上下文根；空 = 根目录
 	Username  string // 可选 Basic 凭证（PAT）；一次性
 	Token     string // 一次性凭证
+}
+
+// SourcePacker 是 git 部署源的打包端口（二期阶段 3，设计 §2）：由独立
+// functions-packer 服务承载不可信 git 输入的重资源操作（浅克隆 + 子目录
+// 物化），把 GitSource 归一为与 zip 源同构的代码包交回 server 落既有
+// zipPath。zip 流向反转：packer 打好 zip → server 落盘（设计 §2 裁决）。
+type SourcePacker interface {
+	// PackGit 把 git 部署源打包为 zip 代码包（调 functions-packer 服务）。
+	// 返回值：commitSHA 是解析后钉死的提交（落 source_ref，审计四件之一——
+	// 分支后续移动不影响已部署内容）；checksum 是 zip 字节的 hex sha256
+	// （落 context_sha256）；zip 是代码包字节流（≤ functions.packer.max_zip_bytes）。
+	// 凭证只在调用栈内存，实现不得持久化/记日志。
+	PackGit(ctx context.Context, src GitSource) (commitSHA, checksum string, zip []byte, err error)
 }

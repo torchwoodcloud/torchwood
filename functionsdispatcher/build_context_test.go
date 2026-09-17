@@ -1,12 +1,14 @@
 package functionsdispatcher
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/torchwoodcloud/torchwood/functionspacker"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -205,4 +207,35 @@ func TestPrepareBuildContext_NodeDepsLayered(t *testing.T) {
 	dockerfile, err := os.ReadFile(filepath.Join(buildDir, "Dockerfile"))
 	require.NoError(t, err)
 	require.True(t, strings.Contains(string(dockerfile), "npm ci --omit=dev --ignore-scripts"))
+}
+
+// TestPrepareBuildContext_RelaxedEntryBudget 二期阶段 3（设计 §2 条目维链条）：
+// BuildImage 的解压走放宽版预算（ExtractZipRelaxed，条目对齐 packer 物化
+// 口径 5000）——超过默认 zip 上传预算（1000 条目）的 zip 照常构建；超过
+// 放宽上限仍 InvalidArgument。
+func TestPrepareBuildContext_RelaxedEntryBudget(t *testing.T) {
+	files := map[string]string{"index.js": "module.exports.main = () => ({})"}
+	for i := 0; i < 1001; i++ {
+		files[fmt.Sprintf("pkg/dir%d/file%04d.txt", i%37, i)] = "x"
+	}
+	err := prepareBuildContext(t.TempDir(), BuildImageOptions{
+		FunctionID: "fn1", DeploymentID: "dep1",
+		Zip:     makeEntryZipFiles(t, files),
+		Runtime: "node-18.0",
+	})
+	require.NoError(t, err, "1001 条目 zip 须被放宽预算放行（默认 1000 条目预算会击毙 git 源合法 zip）")
+
+	// 超过放宽上限（5000）仍拒绝。
+	overLimit := make(map[string]string, functionspacker.MaxPackEntries+1)
+	overLimit["index.js"] = "module.exports.main = () => ({})"
+	for i := 0; i < functionspacker.MaxPackEntries; i++ {
+		overLimit[fmt.Sprintf("pkg/dir%d/file%04d.txt", i%37, i)] = "x"
+	}
+	err = prepareBuildContext(t.TempDir(), BuildImageOptions{
+		FunctionID: "fn1", DeploymentID: "dep1",
+		Zip:     makeEntryZipFiles(t, overLimit),
+		Runtime: "node-18.0",
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Contains(t, status.Convert(err).Message(), fmt.Sprintf("max %d", functionspacker.MaxPackEntries))
 }

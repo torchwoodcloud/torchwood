@@ -173,11 +173,12 @@ func newFunctionsDeleteCmd(g *GlobalFlags) *verb {
 		})
 }
 
-// newFunctionsDeploymentsCmd: functions deployments create/list/get/delete。
+// newFunctionsDeploymentsCmd: functions deployments create/create-from-git/list/get/delete。
 func newFunctionsDeploymentsCmd(g *GlobalFlags) *group {
-	return newGroup(g, "deployments", "function deployment management (code is a zip archive)", func(sub *commands.App) {
+	return newGroup(g, "deployments", "function deployment management (code is a zip archive, or a git repository materialized server-side)", func(sub *commands.App) {
 		sub.Register(
 			newFunctionsDeploymentsCreateCmd(g),
+			newFunctionsDeploymentsCreateFromGitCmd(g),
 			newFunctionsDeploymentsListCmd(g),
 			newFunctionsDeploymentsGetCmd(g),
 			newFunctionsDeploymentsDeleteCmd(g),

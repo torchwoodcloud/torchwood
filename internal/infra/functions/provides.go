@@ -20,4 +20,8 @@ var ProviderSet = wire.NewSet(
 	// P2 客户端调用面：每用户限频 Redis 固定窗口（端口绑定在 infra
 	// ProviderSet：wire.Bind(domainfunctions.ClientQuotaLimiter)）。
 	NewClientQuotaLimiter,
+	// 二期阶段 3（git 部署源）：functions-packer HTTP 客户端（url 未配置
+	// 仍可装配——PackGit 调用时才报 FailedPrecondition，增量启用）。
+	NewPackerClient,
+	wire.Bind(new(domainfunctions.SourcePacker), new(*PackerClient)),
 )

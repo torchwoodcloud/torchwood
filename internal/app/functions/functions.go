@@ -38,6 +38,10 @@ type Functions struct {
 	// clientQuota 是客户端调用面每用户限频端口（P2；nil 时跳过 Redis 直接
 	// 走 DB 计数降级——语义仍 fail-closed，见 clientinvoke.go）。
 	clientQuota functions.ClientQuotaLimiter
+	// packer 是 git 部署源打包端口（二期阶段 3，设计 §2；nil 时 git 部署
+	// fail-fast 报「functions.packer.url is not configured」——worker 补构建
+	// 读盘上 zip 不需要 packer，旧构造保持 nil，zip 路径不受影响）。
+	packer functions.SourcePacker
 	// userGate 是每用户并发闸门（P2：进程内 keyed 信号量，默认每用户 2）。
 	userGate *userGateLimiter
 }
@@ -70,6 +74,18 @@ func NewFunctionsWithUsage(cfg *config.AppConfig, executor functions.Executor, r
 func NewFunctionsWithClientQuota(cfg *config.AppConfig, executor functions.Executor, repo functions.FunctionRepo, queue shared.Queue, usage domainbilling.UsageCounter, projectRepo projects.Repository, sems Semaphores, execTokens functions.ExecutionTokenService, triggers functions.TriggerRepo, clientQuota functions.ClientQuotaLimiter) *Functions {
 	f := NewFunctionsWithUsage(cfg, executor, repo, queue, usage, projectRepo, sems, execTokens, triggers)
 	f.clientQuota = clientQuota
+	return f
+}
+
+// NewFunctionsWithSourcePacker 是 Wire 装配入口（二期阶段 3，git 部署源）：
+// 在 NewFunctionsWithClientQuota 之上注入 SourcePacker（functions-packer
+// HTTP 客户端）。测试侧仍用 NewFunctions/NewFunctionsWithUsage/
+// NewFunctionsWithClientQuota（packer nil = git 源 fail-fast，zip 路径不
+// 受影响）；worker 装配保持 NewFunctionsWithUsage（补构建以盘上 zip 为
+// 输入，不调 packer）。
+func NewFunctionsWithSourcePacker(cfg *config.AppConfig, executor functions.Executor, repo functions.FunctionRepo, queue shared.Queue, usage domainbilling.UsageCounter, projectRepo projects.Repository, sems Semaphores, execTokens functions.ExecutionTokenService, triggers functions.TriggerRepo, clientQuota functions.ClientQuotaLimiter, packer functions.SourcePacker) *Functions {
+	f := NewFunctionsWithClientQuota(cfg, executor, repo, queue, usage, projectRepo, sems, execTokens, triggers, clientQuota)
+	f.packer = packer
 	return f
 }
 

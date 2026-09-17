@@ -4,12 +4,14 @@ import (
 	"archive/zip"
 	"bufio"
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/torchwoodcloud/torchwood/functionspacker"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -675,4 +677,60 @@ func TestExtractZip_PriorityIndexJSOverGoMod(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "node-18.0", contents.Runtime)
 	require.Empty(t, contents.GoModulePath, "混装按 node：Go 探测字段不投影")
+}
+
+// craftEntryZipN 构造 n 条目 zip（根含 index.js 保证探测通过；其余为分散
+// 子目录的小文件）。
+func craftEntryZipN(t *testing.T, n int) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for i := 0; i < n-1; i++ {
+		f, err := zw.Create(fmt.Sprintf("pkg/dir%d/file%04d.txt", i%37, i))
+		require.NoError(t, err)
+		_, err = f.Write([]byte("x"))
+		require.NoError(t, err)
+	}
+	f, err := zw.Create("index.js")
+	require.NoError(t, err)
+	_, err = f.Write([]byte("exports.main = () => ({});"))
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+	return buf.Bytes()
+}
+
+// writeCraftedZip 把构造的 zip 字节落盘并返回路径。
+func writeCraftedZip(t *testing.T, data []byte) string {
+	t.Helper()
+	zipPath := filepath.Join(t.TempDir(), "code.zip")
+	require.NoError(t, os.WriteFile(zipPath, data, 0o600))
+	return zipPath
+}
+
+// TestExtractZipRelaxed_EntryBudgetWidened 二期阶段 3（设计 §2 条目维链条）：
+// git 源物化 zip 条目上限对齐 packer 物化口径（5000）——默认预算（1000）
+// 拒绝的 1001 条目 zip 经 ExtractZipRelaxed 正常解压探测；5001 条目仍按
+// 放宽上限拒绝；单条/总量预算与默认一致（字面断言防漂移）。
+func TestExtractZipRelaxed_EntryBudgetWidened(t *testing.T) {
+	zip1001 := writeCraftedZip(t, craftEntryZipN(t, 1001))
+
+	// 默认预算击毙 1001 条目（现行 zip 上传通道口径不变）。
+	_, err := ExtractZip(zip1001, filepath.Join(t.TempDir(), "out-default"))
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.ErrorContains(t, err, "too many entries")
+
+	// 放宽预算放行同一 zip（git 源构建路径）。
+	contents, err := ExtractZipRelaxed(zip1001, filepath.Join(t.TempDir(), "out-relaxed"))
+	require.NoError(t, err)
+	require.Equal(t, "node-18.0", contents.Runtime)
+
+	// 放宽上限 = functionspacker.MaxPackEntries（5000）：5001 条目仍拒绝。
+	zip5001 := writeCraftedZip(t, craftEntryZipN(t, functionspacker.MaxPackEntries+1))
+	_, err = ExtractZipRelaxed(zip5001, filepath.Join(t.TempDir(), "out-5001"))
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.ErrorContains(t, err, fmt.Sprintf("zip contains too many entries (max %d)", functionspacker.MaxPackEntries))
+
+	// 单条与总量预算维持默认口径（100MiB / 200MiB）。
+	require.Equal(t, int64(maxZipEntryBytes), gitPackZipExtractLimits.maxEntryBytes)
+	require.Equal(t, int64(maxZipTotalBytes), gitPackZipExtractLimits.maxTotalBytes)
 }

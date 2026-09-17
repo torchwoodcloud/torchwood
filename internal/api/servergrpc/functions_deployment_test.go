@@ -26,7 +26,8 @@ func gitSourceReq() *serverv1.GitSource {
 
 // TestFunctionsService_CreateDeploymentOneOfDispatch oneof 分发表驱动：
 //   - 纯 code：进 zip 路径（stubRepo 无函数 → NotFound，而非 source 缺失）；
-//   - 纯 git：映射为命令 Git 字段 → app 层占位拒绝 Unimplemented；
+//   - 纯 git：映射为命令 Git 字段 → 进入 app 层真实 git 分支（阶段 3 接线
+//     后形状校验通过、stubRepo 无函数 → NotFound，证明未被分发层拦截）；
 //   - 双空：InvalidArgument（分发层拦截，app 层 code required 为纵深防御）。
 func TestFunctionsService_CreateDeploymentOneOfDispatch(t *testing.T) {
 	s := newTestService(&stubRepo{})
@@ -40,13 +41,14 @@ func TestFunctionsService_CreateDeploymentOneOfDispatch(t *testing.T) {
 	require.Equal(t, codes.NotFound, status.Code(err), "code oneof 应进入 zip 用例路径")
 	require.ErrorContains(t, err, "function not found")
 
-	// 纯 git（app 层占位拒绝：阶段 3 换 packer 真实调用）。
+	// 纯 git（阶段 3 换 packer 真实调用：形状校验 → GetFunction NotFound；
+	// 未配置 packer 的 fail-fast 在 packer 端口缺失/url 未配置时才发生）。
 	_, err = s.CreateDeployment(ctx, &serverv1.CreateDeploymentRequest{
 		FunctionId: "fn_1",
 		Source:     &serverv1.CreateDeploymentRequest_Git{Git: gitSourceReq()},
 	})
-	require.Equal(t, codes.Unimplemented, status.Code(err))
-	require.ErrorContains(t, err, "git deployment source requires functions-packer service")
+	require.Equal(t, codes.NotFound, status.Code(err), "git oneof 应进入 app 层真实 git 分支")
+	require.ErrorContains(t, err, "function not found")
 
 	// 双空 → InvalidArgument。
 	_, err = s.CreateDeployment(ctx, &serverv1.CreateDeploymentRequest{FunctionId: "fn_1"})

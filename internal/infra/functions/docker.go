@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/torchwoodcloud/torchwood/functionspacker"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/ident"
 	"google.golang.org/grpc/codes"
@@ -49,6 +50,17 @@ type zipExtractLimits struct {
 
 var defaultZipExtractLimits = zipExtractLimits{
 	maxEntries:    maxZipEntries,
+	maxEntryBytes: maxZipEntryBytes,
+	maxTotalBytes: maxZipTotalBytes,
+}
+
+// gitPackZipExtractLimits 是 git 源物化 zip 的放宽解压预算（二期阶段 3，
+// 设计 §2「条目维链条」）：条目对齐 packer 物化上限
+// （functionspacker.MaxPackEntries=5000——git worktree 是真实文件，宽于
+// zip 上传通道的 1000 反炸弹声明侧预检）；单条 100MiB 与总量 200MiB 解压
+// 预算维持。诚实声明：>5000 条的典型 vendor 项目仍受限，属设计声明边界。
+var gitPackZipExtractLimits = zipExtractLimits{
+	maxEntries:    functionspacker.MaxPackEntries,
 	maxEntryBytes: maxZipEntryBytes,
 	maxTotalBytes: maxZipTotalBytes,
 }
@@ -198,6 +210,14 @@ func extractZip(zipPath, destDir string) (SourceContents, error) {
 // 同一防 zip 炸弹/路径穿越预算与依赖探测）。
 func ExtractZip(zipPath, destDir string) (SourceContents, error) {
 	return extractZip(zipPath, destDir)
+}
+
+// ExtractZipRelaxed 是 git 源物化 zip 的放宽预算导出版（functionsdispatcher
+// 的 BuildImage 消费）：条目上限放宽到 packer 物化口径（5000），防 git 源
+// 合法 zip 被 zip 上传通道的 1000 条目预算击毙（设计 §2 条目维链条）。
+// 导出函数形态保持 zipExtractLimits 封装（调用方不接触预算结构体）。
+func ExtractZipRelaxed(zipPath, destDir string) (SourceContents, error) {
+	return extractZipWithLimits(zipPath, destDir, gitPackZipExtractLimits)
 }
 
 // extractZipWithLimits 是 extractZip 的可注入预算版本（测试用）：除声明侧
