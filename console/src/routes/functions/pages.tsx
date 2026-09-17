@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Play, UploadCloud, Trash2 } from "lucide-react";
+import { Plus, Play, UploadCloud, Trash2, GitBranch, Container } from "lucide-react";
 import {
   listFunctions,
   getFunction,
@@ -13,6 +13,8 @@ import {
   listSpecifications,
   listDeployments,
   uploadDeployment,
+  createDeploymentGit,
+  createDeploymentImage,
   deleteDeployment,
   getVariables,
   setVariables,
@@ -350,6 +352,34 @@ function deploymentStatusBadge(status: string) {
   }
 }
 
+// 源徽章（部署源只读投影）：git@<短SHA> / digest 短码 / zip；title 提示
+// 完整 source_url / source_ref（钉死值全貌）。
+function deploymentSourceBadge(d: Deployment) {
+  switch (d.source_type) {
+    case "git": {
+      const sha = (d.source_ref ?? "").slice(0, 7);
+      return (
+        <Badge variant="outline" className="font-mono" title={`${d.source_url ?? ""} @ ${d.source_ref ?? ""}`}>
+          git@{sha}
+        </Badge>
+      );
+    }
+    case "image": {
+      const ref = d.source_ref ?? "";
+      const short = ref.startsWith("sha256:")
+        ? `sha256:${ref.slice(7, 15)}`
+        : ref.slice(0, 15);
+      return (
+        <Badge variant="outline" className="font-mono" title={`${d.source_url ?? ""} @ ${ref}`}>
+          {short}
+        </Badge>
+      );
+    }
+    default:
+      return <Badge variant="outline">zip</Badge>;
+  }
+}
+
 function TruncatedNotice({ truncated }: { truncated?: boolean }) {
   if (!truncated) return null;
   return (
@@ -433,6 +463,16 @@ export function FunctionDetailPage() {
   const [selectedExecution, setSelectedExecution] = useState<Execution | null>(null);
   const [variables, setVariablesState] = useState<Variable[]>([]);
   const [scopesText, setScopesText] = useState("");
+  // ——部署源三入口（zip 既有 / git 二期 / image 三期）——
+  const [deploySource, setDeploySource] = useState<"zip" | "git" | "image">("zip");
+  const [gitUrl, setGitUrl] = useState("");
+  const [gitRef, setGitRef] = useState("");
+  const [gitDir, setGitDir] = useState("");
+  const [gitUsername, setGitUsername] = useState("");
+  const [gitToken, setGitToken] = useState("");
+  const [imageRefStr, setImageRefStr] = useState("");
+  const [imageUsername, setImageUsername] = useState("");
+  const [imageToken, setImageToken] = useState("");
 
   const { data: fn, isLoading } = useQuery({
     queryKey: ["functions", projectId, functionId],
@@ -525,6 +565,38 @@ export function FunctionDetailPage() {
     mutationFn: (file: File) => uploadDeployment(functionId!, file),
     onSuccess: () => {
       toast.success("代码包上传成功，正在构建");
+      queryClient.invalidateQueries({ queryKey: ["deployments", functionId] });
+    },
+  });
+
+  // ——git / image 部署源（CreateDeployment JSON 通道）——同步长请求
+  // （git 物化+构建 / 镜像导入+强制验证），isPending 覆盖整个过程。
+  const deployGit = useMutation({
+    mutationFn: () =>
+      createDeploymentGit(functionId!, {
+        url: gitUrl.trim(),
+        ref: gitRef.trim() || undefined,
+        directory: gitDir.trim() || undefined,
+        username: gitUsername.trim() || undefined,
+        token: gitToken || undefined,
+      }),
+    onSuccess: () => {
+      toast.success("git 部署完成（物化 + 构建 + 验证已终态）");
+      setGitToken("");
+      queryClient.invalidateQueries({ queryKey: ["deployments", functionId] });
+    },
+  });
+
+  const deployImage = useMutation({
+    mutationFn: () =>
+      createDeploymentImage(functionId!, {
+        image: imageRefStr.trim(),
+        registry_username: imageUsername.trim() || undefined,
+        registry_token: imageToken || undefined,
+      }),
+    onSuccess: () => {
+      toast.success("镜像导入完成（digest 已钉死，契约验证已通过）");
+      setImageToken("");
       queryClient.invalidateQueries({ queryKey: ["deployments", functionId] });
     },
   });
@@ -790,29 +862,181 @@ export function FunctionDetailPage() {
           <CardTitle className="text-sm">部署</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-2">
-            <UploadCloud className="h-4 w-4 text-muted-foreground" />
-            <Input
-              type="file"
-              accept=".zip"
-              className="max-w-sm"
-              disabled={!writeable}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  upload.mutate(file);
-                  e.target.value = "";
-                }
-              }}
-            />
-            <span className="text-xs text-muted-foreground">
-              zip 代码包（≤50MiB，入口 index.js/main.py 的 main）
-            </span>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <UploadCloud className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <Select
+                value={deploySource}
+                onValueChange={(v) => setDeploySource(v as "zip" | "git" | "image")}
+                disabled={!writeable}
+              >
+                <SelectTrigger className="w-[190px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="zip">上传 zip 代码包</SelectItem>
+                  <SelectItem value="git">Git 仓库</SelectItem>
+                  <SelectItem value="image">镜像引用（BYO）</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="text-xs text-muted-foreground">
+                {deploySource === "zip" && "zip 代码包（≤50MiB，入口 index.js/main.py 的 main）"}
+                {deploySource === "git" && "仓库在服务端物化为代码包并钉死 commit"}
+                {deploySource === "image" && "契约镜像导入（需符合 Runner 协议，验证强制）"}
+              </span>
+            </div>
+
+            {deploySource === "zip" && (
+              <div className="flex items-center gap-2">
+                <Input
+                  type="file"
+                  accept=".zip"
+                  className="max-w-sm"
+                  disabled={!writeable}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      upload.mutate(file);
+                      e.target.value = "";
+                    }
+                  }}
+                />
+                {upload.isPending && (
+                  <span className="text-xs text-muted-foreground">上传中...</span>
+                )}
+              </div>
+            )}
+
+            {deploySource === "git" && (
+              <form
+                className="space-y-3 max-w-3xl"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!gitUrl.trim()) {
+                    toast.error("仓库地址必填");
+                    return;
+                  }
+                  deployGit.mutate();
+                }}
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="deploy-git-url">仓库地址（HTTPS）</Label>
+                    <Input
+                      id="deploy-git-url"
+                      className="font-mono text-xs"
+                      placeholder="https://github.com/acme/functions.git"
+                      value={gitUrl}
+                      onChange={(e) => setGitUrl(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="deploy-git-ref">Ref（分支 / tag / commit，缺省 HEAD）</Label>
+                    <Input
+                      id="deploy-git-ref"
+                      className="font-mono text-xs"
+                      placeholder="main"
+                      value={gitRef}
+                      onChange={(e) => setGitRef(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="deploy-git-dir">子目录（构建上下文根，缺省仓库根）</Label>
+                    <Input
+                      id="deploy-git-dir"
+                      className="font-mono text-xs"
+                      placeholder="functions/greet"
+                      value={gitDir}
+                      onChange={(e) => setGitDir(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="deploy-git-user">用户名（私有仓库可选）</Label>
+                    <Input
+                      id="deploy-git-user"
+                      autoComplete="off"
+                      value={gitUsername}
+                      onChange={(e) => setGitUsername(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="deploy-git-token">访问 Token（PAT，一次性凭证不落库）</Label>
+                    <Input
+                      id="deploy-git-token"
+                      type="password"
+                      autoComplete="new-password"
+                      value={gitToken}
+                      onChange={(e) => setGitToken(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <Button type="submit" size="sm" disabled={!writeable || deployGit.isPending}>
+                  <GitBranch className="h-4 w-4 mr-2" />
+                  {deployGit.isPending ? "物化并构建中（可能需要数十秒）..." : "从 Git 部署"}
+                </Button>
+              </form>
+            )}
+
+            {deploySource === "image" && (
+              <form
+                className="space-y-3 max-w-3xl"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!imageRefStr.trim()) {
+                    toast.error("镜像引用必填");
+                    return;
+                  }
+                  deployImage.mutate();
+                }}
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="deploy-image-ref">镜像引用（host/repo[:tag|@sha256:...]）</Label>
+                    <Input
+                      id="deploy-image-ref"
+                      className="font-mono text-xs"
+                      placeholder="registry.example.com/acme/greet:v1"
+                      value={imageRefStr}
+                      onChange={(e) => setImageRefStr(e.target.value)}
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      仅 runtime=image 的函数接受镜像源；tag 在导入期钉死为 digest；
+                      基础镜像见 docker/functions-runtime-node。
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="deploy-image-user">Registry 用户名（私有镜像可选）</Label>
+                    <Input
+                      id="deploy-image-user"
+                      autoComplete="off"
+                      value={imageUsername}
+                      onChange={(e) => setImageUsername(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="deploy-image-token">Registry Token（一次性凭证不落库）</Label>
+                    <Input
+                      id="deploy-image-token"
+                      type="password"
+                      autoComplete="new-password"
+                      value={imageToken}
+                      onChange={(e) => setImageToken(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <Button type="submit" size="sm" disabled={!writeable || deployImage.isPending}>
+                  <Container className="h-4 w-4 mr-2" />
+                  {deployImage.isPending ? "导入并验证中（可能需要数十秒）..." : "从镜像部署"}
+                </Button>
+              </form>
+            )}
           </div>
           {deploymentsLoading ? (
             <p className="text-sm text-muted-foreground">加载中...</p>
           ) : deployments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">暂无部署，上传 zip 代码包开始构建</p>
+            <p className="text-sm text-muted-foreground">暂无部署，选择部署源开始</p>
           ) : (
             <div className="divide-y">
               {deployments.map((d: Deployment) => (
@@ -821,6 +1045,7 @@ export function FunctionDetailPage() {
                     <div className="font-mono text-xs truncate">{d.id}</div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       {deploymentStatusBadge(d.status)}
+                      {deploymentSourceBadge(d)}
                       <span>{formatBytes(d.size)}</span>
                       <span>{formatDateTime(d.created_at, tz)}</span>
                     </div>

@@ -232,6 +232,41 @@ token 未设置即报错（不静默匿名拉取私有仓库）；服务端 `fun
 
   错误映射（与 dispatcher 同款）：并发饱和 429 → ResourceExhausted、超预算 429 → ResourceExhausted、fetch_timeout 504 → DeadlineExceeded、形状错误 400 → InvalidArgument、仓库/ref 未命中 404 → NotFound、git 凭证认证失败 400 → InvalidArgument；packer API 自身的共享密钥校验失败为 401，server 侧 `PackerClient`（`internal/infra/functions/packer_client.go`）按码还原 grpc status（401 → FailedPrecondition）。
 
+### 3.6 部署源：镜像引用（BYO 契约镜像）
+
+三期（设计 `docs/design/functions-runtimes-and-sources.md` §3）：`CreateDeployment` 的 `source` oneof 第三选支 `image`（`ImageSource`）——**免构建路径**：平台拉取用户引用的镜像 → digest 钉死 → retag 进平台命名 → 强制契约验证。仅 `runtime = image` 的函数接受（源/运行时互斥 D7 双向：image 函数拒收 zip/git 源，反之亦然；`ListRuntimes` 增 `{ID: "image", Name: "Bring your own image"}` 表项）。git/image 载荷极小，仅走 gRPC JSON 通道（请求体为顶层扁平 oneof 投影 `{"git":{...}}` / `{"image":{...}}`），不设 multipart 形态。
+
+**流程**（`internal/app/functions/deployments_image.go` → dispatcher `POST /v1/dispatch/images/import`）：
+
+1. server 侧形状校验（引用非空、≤500 字节）→ GetFunction 互斥校验 → **首次 ImportImage 在 INSERT 之前**（digest 是 `source_ref` 不可变写入的前提；失败无行，与 git pack→INSERT 同构；INSERT 失败由 `RemoveImage` 幂等清理兜底）；
+2. dispatcher 编排（`functionsdispatcher/daemon.go` `importImage`）：registry host 名称级准入（先于一切 docker 操作，本地直导同样受约束）→ 取得钉死内容（`ExpectedDigest` 命中本地平台镜像**零 pull**；引用本地已存在——本地构建/本地 tag 直导——直接用本地内容跳过 pull；否则 pull，`RegistryAuth` 内联单次转发）→ digest 钉死 → retag 成 `<registry>/func-<fid>-<did>` 并删原始引用标签 → **强制契约验证 spawn** → 返回钉死 digest；
+3. INSERT 行（`source_ref` = digest、`template_version = 0`）→ `buildDeployment` 按 `source_type` 分流：image → 幂等 ImportImage 复检（spec 带预期 digest = 行内 `source_ref`；本地命中零操作，镜像被外部删除则重 pull）→ ready。
+
+**引用语义与 digest 钉死**：引用形态 `host/repo[:tag|@sha256:...]`（无显式 host 归属 docker.io）。tag 在导入期钉死为 digest 落 `source_ref`——tag 上游漂移不影响已部署内容；引用自带 `@sha256:` 时校验与拉取结果一致（不匹配 InvalidArgument，防 tag 漂移）；本地构建/tag 直导不经 registry（无 manifest digest）回落镜像 ID（内容寻址钉死值）。`source_url` 保留原始引用（审计四件之一），删除部署走 `RemoveImage` 只删本地平台镜像、不动上游 registry。
+
+**registry host 准入（`functionsdispatcher/imageref.go`，名称级校验）**：pull 的网络发起方是宿主 docker daemon（IP 拨号点 guard 不可实施于 daemon），故采用**名称级校验 + 白名单 + 信任级论证**（部署者 = functions.write 特权主体，与 zip 上传同级）：
+
+- 默认拒 **IP 字面量**（IPv4/IPv6，含端口形态）与 **`localhost` / `*.localhost`**——消灭「引用直接写 IP 打内网」的最廉价攻击形态，错误信息明示命中规则与放行通道；
+- `functions.image.allowed_registries`（可选正向白名单，空 = 不设）：条目为精确域名或后缀域（`example.com` 同时命中自身与子域 `registry.example.com:5000`，不命中 `badexample.com`；含端口 host 需整体精确登记）；**白名单命中优先放行**——显式登记 = 运维明确意图（含内网 registry 直连 IP 的显式白名单场景）；白名单非空时未命中一律拒绝（正向白名单语义）；
+- `functions.image.allow_insecure=true` 整体放行（自托管内网 registry 的显式开关，而非逼出危险旁路）；
+- 诚实声明的残余面：公网域名解析到内网（DNS rebinding 形态）、错误回显的端口扫描侧信道——随 egress 原语后置。
+
+**契约验证强制**：验证 spawn 与 zip/git 源同一机制（§3.3：health 探针、池外用完即删、携带函数 variables、untrusted 挂 internal 变体网络、失败回收容器日志尾进 `deployment.error`），且**无开关**——`functions.dispatcher.verify_build` 关不掉它：镜像内容不经平台构建护栏，验证是镜像源唯一的质量门。非契约镜像（无 runner 监听）在 boot 预算内判失败 → deployment 标 `failed`。
+
+**并发降级**：image 部署 `template_version = 0`（未知模板，D12）——既有 `< MinConcurrencyTemplateVersion` 判定自动把 `concurrency > 1` 降为 1：BYO 镜像是否真支持并发无从验证，fail-safe 白拿（写 5 等于做无法验证的承诺）。
+
+**一次性 registry 凭证**：`registry_username` / `registry_token` 构造 base64 RegistryAuth 单次转发 daemon pull，不落库、不写日志、不回显（D8，与 git 凭证同款）。凭证不落库的代价（声明边界）：私有镜像的 worker 补拉无凭证可用——公共镜像可补，私有补拉失败标 `failed`（重新部署时再给凭证）。
+
+**契约基础镜像**：`docker/functions-runtime-node/` 随仓交付（FROM node:18-alpine + 预置 `.tw-runner.js` = Runner 协议 node 参考实现，与平台 bootstrap 共享单一 `RunnerTemplateVersion` 纪律）。用户 `FROM` 后 `COPY index.js /app/index.js` 即得合规镜像，无需自行实现协议；构建、推送与部署前本地自测（`docker run --rm -p 18080:18080 <image>` 后 curl `/_tw/health` 与 `POST /`，Lambda RIE 等效物）见 `docker/functions-runtime-node/README.md`。执行面（封套、`x-tw-*` header、协议演进宪法）与 §3.2 完全一致——retag 后镜像源函数与平台构建函数全链路零改动。
+
+**CLI**（阶段 3）：
+
+```bash
+./bin/torchwood functions create --id greet --name greet --runtime image
+./bin/torchwood functions deployments create-from-image greet \
+  --image <registry>/my-function:1
+```
+
 ## 4. 执行（同步 / 异步）
 
 `CreateExecution` 校验 `data ≤32KB` 且为 JSON object（数组 / 标量 / null 拒绝）、`data+env ≤32KB`；缺省取最新 `ready` 部署。
@@ -461,6 +496,8 @@ go test ./functionsdispatcher -run TestIntegration_Dispatcher -count=1
 | `functions.packer.concurrency` | 并发打包上限，默认 4；饱和立即 429（仅 packer 进程消费） |
 | `functions.packer.allow_insecure` | 放行 http:// 与私网/回环目标（SSRF guard 整体放行，自托管内网 git 场景），默认 false |
 | `functions.packer.addr` | packer HTTP 监听地址，默认 `:9071`（仅 packer 进程消费） |
+| `functions.image.allowed_registries` | registry host 正向白名单（空 = 不设白名单）：条目为精确域名或后缀域（`example.com` 命中自身与子域，含端口需整体精确登记）；命中优先放行，非空时未命中一律拒绝（仅 functions-dispatcher 进程消费，§3.6） |
+| `functions.image.allow_insecure` | 放行 IP 字面量与 `localhost`/`*.localhost` 形态的 registry host（自托管内网 registry 显式开关），默认 false（仅 functions-dispatcher 进程消费，§3.6） |
 
 `functions.executor` 键已删除（reserved；残留配置键被静默忽略）。`task build` 同时产出 server / worker / torchwood / functions-dispatcher / functions-packer 五个二进制。
 
@@ -483,7 +520,7 @@ go test ./functionsdispatcher -run TestIntegration_Dispatcher -count=1
 
 - 单元：`internal/app/functions/`（并发上限、截断、队列 payload 校验、鉴权分支）；`internal/infra/queue/redis_queue_test.go`。
 - 安全：`security_test.go`（zip slip / 符号链接 / size 上限）；`authz_test.go`（写方法鉴权）；`semaphore_test.go`（SETNX + Lua 互斥）。
-- 集成：`functionsdispatcher/daemon_integration_test.go`（门控 `TORCHWOOD_FUNCTIONS_DOCKER_HOST`，CI 预拉 node:18-alpine / golang:1.26-alpine；含 python zip 构建期拒绝用例）；Go 端到端（`TestIntegration_GoMainFunctionE2E` / `GoFetchFunctionE2E` 双风格执行断言、`NodeVerifyStillGreenE2E` 护栏、`GoVerifyFailureCapturesLogTail` 验证失败日志尾回收、`GoMissingEntryRejected` 缺入口拒收）；git 源 docker 集成（`functionsdispatcher/git_source_integration_test.go`：`GitSourceGoFunctionFullChainE2E` git fixture → PackGit → BuildImage(verify) → 池执行全链 + `GitWideEntryZipBuild` >1000 条目放宽预算构建回归）；worker 的消费 / requeue 测试（attempt 持久化、Transition CAS）；app 层 git 源进程内冒烟（`deployments_git_e2e_test.go`，真实 DB + fake packer/executor）。
+- 集成：`functionsdispatcher/daemon_integration_test.go`（门控 `TORCHWOOD_FUNCTIONS_DOCKER_HOST`，CI 预拉 node:18-alpine / golang:1.26-alpine；含 python zip 构建期拒绝用例）；Go 端到端（`TestIntegration_GoMainFunctionE2E` / `GoFetchFunctionE2E` 双风格执行断言、`NodeVerifyStillGreenE2E` 护栏、`GoVerifyFailureCapturesLogTail` 验证失败日志尾回收、`GoMissingEntryRejected` 缺入口拒收）；git 源 docker 集成（`functionsdispatcher/git_source_integration_test.go`：`GitSourceGoFunctionFullChainE2E` git fixture → PackGit → BuildImage(verify) → 池执行全链 + `GitWideEntryZipBuild` >1000 条目放宽预算构建回归）；**镜像源 docker 集成**（`functionsdispatcher/image_source_integration_test.go`：`ImageSourceFullChainE2E` 旗舰全链——BuildImage 产物即契约镜像 tag 带域名引用 → ImportImage 本地直导（host 准入拒 IP 字面量 / digest 钉死 = Image ID / retag 进平台命名 / 原始引用删除 / 强制验证）→ 池执行封套断言；`ImageSourceNonContractRejected` 非契约镜像验证拒收 + 残留断言；`ImageSourceDigestPinIdempotentResummon` ExpectedDigest 命中零 pull（不可解析 `.invalid` 域名实证——实现若违规 pull 必炸）+ 本地 miss 重拉真实触网报错）；worker 的消费 / requeue 测试（attempt 持久化、Transition CAS）；app 层 git 源进程内冒烟（`deployments_git_e2e_test.go`，真实 DB + fake packer/executor）；app 层镜像源分支（`deployments_image_test.go` 互斥校验/形状校验/降级 + `deployments_image_dispatch_e2e_test.go` 真实 DB + fake executor）。
 - **未落地清单**：独立构建队列（CreateDeployment 同步构建，worker 消费前补构建兜底）；重试无死信队列（超限直接标 failed）；变量明文；`entrypoint` 固定入口；多机需对象存储承载 zip；池策略管理 API 面（min/max_instances、idle_ttl、max_requests、concurrency 的 UpdateFunction 字段 + Console 卡片未落地）——**concurrency 现无管理入口，恒为列默认 1**，行为与 v2 串行等价。
 
 ## 13. 触发器（HTTP + cron + 事件）

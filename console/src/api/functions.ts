@@ -50,6 +50,13 @@ export interface Deployment {
   error: string;
   created_at: string;
   updated_at: string;
+  // ——部署源只读投影（二期起）：source_type ∈ zip | git | image；
+  // source_url = git 仓库 url / image 原始引用（zip 恒空）；source_ref =
+  // 钉死 commit SHA / digest（zip 恒空）；凭证字段不在任何响应面。
+  source_type?: string;
+  source_url?: string;
+  source_ref?: string;
+  source_dir?: string;
 }
 
 export interface Execution {
@@ -161,6 +168,48 @@ export async function uploadDeployment(
     `/server/functions/${functionId}/deployments/code`,
     form,
     { headers: { "Content-Type": "multipart/form-data" } }
+  );
+  return res.data;
+}
+
+// ——git / image 部署源（二期/三期）：走 CreateDeployment 的 gRPC JSON 通道
+// （POST /v1/server/functions/{id}/deployments），请求体为顶层扁平 oneof 投影
+// {"git":{...}} / {"image":{...}}（形状按 genproto/server/v1/functions.swagger.json
+// 核对；不设 multipart 形态）。username/token 与 registry 凭证均为一次性凭证：
+// 仅本次请求内存送达，不落库不回显。——
+
+export interface GitDeploymentInput {
+  url: string;
+  ref?: string;
+  directory?: string;
+  username?: string;
+  token?: string;
+}
+
+export async function createDeploymentGit(
+  functionId: string,
+  input: GitDeploymentInput
+): Promise<Deployment> {
+  const res = await api.post<Deployment>(
+    `/server/functions/${functionId}/deployments`,
+    { git: input }
+  );
+  return res.data;
+}
+
+export interface ImageDeploymentInput {
+  image: string;
+  registry_username?: string;
+  registry_token?: string;
+}
+
+export async function createDeploymentImage(
+  functionId: string,
+  input: ImageDeploymentInput
+): Promise<Deployment> {
+  const res = await api.post<Deployment>(
+    `/server/functions/${functionId}/deployments`,
+    { image: input }
   );
   return res.data;
 }
