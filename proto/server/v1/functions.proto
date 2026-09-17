@@ -283,15 +283,15 @@ message Deployment {
   string error = 5;
   google.protobuf.Timestamp created_at = 6;
   google.protobuf.Timestamp updated_at = 7;
-  // ——部署源只读投影（二期，docs/design/functions-runtimes-and-sources.md
+  // ——部署源只读投影（二期起，docs/design/functions-runtimes-and-sources.md
   // §0；source 列 INSERT 期写全、之后不可变）——
-  // 部署源类型：zip | git（image 三期启用；词表与 DB CHECK 同源）。
+  // 部署源类型：zip | git | image（词表与 DB CHECK 同源）。
   string source_type = 8;
-  // git 仓库 url；zip 源恒空。
+  // git 仓库 url / image 原始引用（host/repo[:tag|@sha256:...]）；zip 源恒空。
   string source_url = 9;
-  // git 钉死的 commit SHA；zip 源恒空。
+  // git 钉死的 commit SHA / image 钉死的 digest（sha256:...）；zip 源恒空。
   string source_ref = 10;
-  // git 构建上下文子目录；zip 源恒空。凭证字段不出现在任何响应面。
+  // git 构建上下文子目录；zip/image 源恒空。凭证字段不出现在任何响应面。
   string source_dir = 11;
 }
 
@@ -385,17 +385,19 @@ message GetFunctionRequest {
   string function_id = 1;
 }
 
-// 部署源 oneof（二期，docs/design/functions-runtimes-and-sources.md §0）：
+// 部署源 oneof（二期起，docs/design/functions-runtimes-and-sources.md §0）：
 // code 为 zip 代码包，≤1MiB 走此通道；更大的 zip 包走 multipart 上传
 // （POST /v1/server/functions/{function_id}/deployments/code，仅承载 zip）。
-// git 源载荷极小（url/ref/子目录/一次性凭证），仅走本 gRPC JSON 通道、
-// 不设 multipart 形态；由独立 functions-packer 服务物化为 zip 落既有构建
-// 路径（阶段 3 接线）。字段号 2 原号移入 oneof，wire 兼容。
+// git/image 源载荷极小，仅走本 gRPC JSON 通道、不设 multipart 形态：git 由
+// 独立 functions-packer 服务物化为 zip 落既有构建路径；image 为免构建路径
+// （pull + digest 钉死 + retag + 契约验证，runtime 专用 ID `image`，源/运行时
+// 互斥见 §0）。字段号 2 原号移入 oneof，wire 兼容。
 message CreateDeploymentRequest {
   string function_id = 1;
   oneof source {
     bytes code = 2;
     GitSource git = 3;
+    ImageSource image = 4;
   }
 }
 
@@ -416,6 +418,25 @@ message GitSource {
   // 不落库不回显（D8），审计载荷由敏感键 mask 兜底。
   string username = 4 [(buf.validate.field).string.max_len = 256];
   string token = 5 [(buf.validate.field).string.max_len = 4096];
+}
+
+// ImageSource 是 BYO 镜像部署源（三期，设计 §3）：免构建路径——平台拉取
+// 引用镜像（tag 构建期钉死为 digest）→ retag 进平台命名 → 强制契约验证
+// （:18080 /_tw/health 探针）。仅 runtime = `image` 的函数接受（源/运行时
+// 互斥，§0/D7）。
+message ImageSource {
+  // 镜像引用：host/repo[:tag|@sha256:...]。tag 在导入期钉死为 digest（落
+  // Deployment.source_ref，防 tag 漂移）；host 侧 SSRF 防护与 registry
+  // 白名单由 dispatcher 侧执行（阶段 2 接线）。
+  string image = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.max_len = 500
+  ];
+  // 可选 registry 凭证。username/token 均一次性凭证：仅本次请求内存、转发
+  // dispatcher 拉取用、不落库不回显（D8），审计载荷由敏感键 mask 兜底；
+  // 私有镜像的 worker 补拉因凭证不落库而受限（声明边界，§3）。
+  string registry_username = 2 [(buf.validate.field).string.max_len = 256];
+  string registry_token = 3 [(buf.validate.field).string.max_len = 4096];
 }
 
 message GetDeploymentRequest {

@@ -176,6 +176,15 @@ func (d *DispatcherExecutor) Build(ctx context.Context, spec functions.BuildSpec
 	return nil
 }
 
+// ImportImage 拉取外部镜像并钉死 digest 后 retag 进平台命名（Executor 端口
+// 三期阶段 1 新增方法，设计 §3）。阶段 1 占位：dispatcher 侧
+// /v1/dispatch/images/import 端点与真实 pull/retag/契约验证在阶段 2 接线，
+// 本占位恒返回 Unimplemented——首次导入失败无行、复检路径收敛 failed，
+// 语义 = image 源在阶段 2 之前未开放（zip/git 源不受影响）。
+func (d *DispatcherExecutor) ImportImage(ctx context.Context, spec functions.ImportImageSpec) (string, error) {
+	return "", status.Error(codes.Unimplemented, "image import not wired yet (phase 3 stage 2: dispatcher /v1/dispatch/images/import)")
+}
+
 // Execute 经 dispatcher 分发执行（池管理在 dispatcher 侧；本进程只做协议
 // 适配）。执行身份注入通道切换：TW_EXECUTION_TOKEN 从 env 摘出经分发
 // header 传递——P0 的 mint→注入→defer revoke 链路不变，只换注入通道。

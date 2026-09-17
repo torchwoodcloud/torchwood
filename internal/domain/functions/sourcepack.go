@@ -26,6 +26,18 @@ type GitSource struct {
 	Token     string // 一次性凭证
 }
 
+// ImageSource 是 BYO 镜像部署源值对象（三期阶段 1，设计 §3）：免构建路径，
+// 仅 runtime = "image" 的函数接受（源/运行时互斥，§0/D7）。
+// RegistryUsername/RegistryToken 是一次性凭证——仅本次请求内存、转发
+// dispatcher 拉取用、不落库不回显（D8）；私有镜像的 worker 补拉因凭证不
+// 落库而受限（声明边界，设计 §3）。Reference 形如 host/repo[:tag|@sha256:...]，
+// tag 在导入期钉死为 digest（落 source_ref）。
+type ImageSource struct {
+	Reference        string
+	RegistryUsername string // 可选；一次性
+	RegistryToken    string // 一次性凭证
+}
+
 // SourcePacker 是 git 部署源的打包端口（二期阶段 3，设计 §2）：由独立
 // functions-packer 服务承载不可信 git 输入的重资源操作（浅克隆 + 子目录
 // 物化），把 GitSource 归一为与 zip 源同构的代码包交回 server 落既有

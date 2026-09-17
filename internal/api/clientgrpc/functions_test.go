@@ -63,6 +63,9 @@ func (stubFnExecutor) Build(context.Context, domainfunctions.BuildSpec) error { 
 func (stubFnExecutor) Execute(_ context.Context, _ domainfunctions.Execution) (*domainfunctions.ExecutionResult, error) {
 	return &domainfunctions.ExecutionResult{StatusCode: 0, Response: `{"ok":true}`}, nil
 }
+func (stubFnExecutor) ImportImage(context.Context, domainfunctions.ImportImageSpec) (string, error) {
+	return "", nil // image 源不在本文件测试路径
+}
 func (stubFnExecutor) RemoveImage(context.Context, string, string) error { return nil }
 
 type stubFnQueue struct{}

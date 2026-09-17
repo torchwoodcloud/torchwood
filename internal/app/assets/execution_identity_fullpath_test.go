@@ -80,6 +80,9 @@ func (m *fullpathExecutor) Execute(_ context.Context, e domainfunctions.Executio
 	}
 	return &domainfunctions.ExecutionResult{StatusCode: 0}, nil
 }
+func (m *fullpathExecutor) ImportImage(context.Context, domainfunctions.ImportImageSpec) (string, error) {
+	return "", nil // image 源不在本文件测试路径
+}
 func (m *fullpathExecutor) RemoveImage(context.Context, string, string) error { return nil }
 
 type fullpathQueue struct{}

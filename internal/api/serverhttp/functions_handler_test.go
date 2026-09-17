@@ -504,6 +504,9 @@ func (e *functionsRecordingExecutor) Build(ctx context.Context, _ domainfunction
 func (e *functionsRecordingExecutor) Execute(context.Context, domainfunctions.Execution) (*domainfunctions.ExecutionResult, error) {
 	return nil, nil
 }
+func (e *functionsRecordingExecutor) ImportImage(context.Context, domainfunctions.ImportImageSpec) (string, error) {
+	return "", nil // image 源不在本文件测试路径（multipart 维持 zip-only）
+}
 func (e *functionsRecordingExecutor) RemoveImage(context.Context, string, string) error {
 	return nil
 }

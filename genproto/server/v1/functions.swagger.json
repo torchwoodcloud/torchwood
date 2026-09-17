@@ -736,9 +736,12 @@
         },
         "git": {
           "$ref": "#/definitions/v1GitSource"
+        },
+        "image": {
+          "$ref": "#/definitions/v1ImageSource"
         }
       },
-      "title": "部署源 oneof（二期，docs/design/functions-runtimes-and-sources.md §0）：\ncode 为 zip 代码包，≤1MiB 走此通道；更大的 zip 包走 multipart 上传\n（POST /v1/server/functions/{function_id}/deployments/code，仅承载 zip）。\ngit 源载荷极小（url/ref/子目录/一次性凭证），仅走本 gRPC JSON 通道、\n不设 multipart 形态；由独立 functions-packer 服务物化为 zip 落既有构建\n路径（阶段 3 接线）。字段号 2 原号移入 oneof，wire 兼容。"
+      "title": "部署源 oneof（二期起，docs/design/functions-runtimes-and-sources.md §0）：\ncode 为 zip 代码包，≤1MiB 走此通道；更大的 zip 包走 multipart 上传\n（POST /v1/server/functions/{function_id}/deployments/code，仅承载 zip）。\ngit/image 源载荷极小，仅走本 gRPC JSON 通道、不设 multipart 形态：git 由\n独立 functions-packer 服务物化为 zip 落既有构建路径；image 为免构建路径\n（pull + digest 钉死 + retag + 契约验证，runtime 专用 ID `image`，源/运行时\n互斥见 §0）。字段号 2 原号移入 oneof，wire 兼容。"
     },
     "FunctionsServiceCreateExecutionBody": {
       "type": "object",
@@ -960,19 +963,19 @@
         },
         "source_type": {
           "type": "string",
-          "title": "——部署源只读投影（二期，docs/design/functions-runtimes-and-sources.md\n§0；source 列 INSERT 期写全、之后不可变）——\n部署源类型：zip | git（image 三期启用；词表与 DB CHECK 同源）。"
+          "title": "——部署源只读投影（二期起，docs/design/functions-runtimes-and-sources.md\n§0；source 列 INSERT 期写全、之后不可变）——\n部署源类型：zip | git | image（词表与 DB CHECK 同源）。"
         },
         "source_url": {
           "type": "string",
-          "title": "git 仓库 url；zip 源恒空。"
+          "title": "git 仓库 url / image 原始引用（host/repo[:tag|@sha256:...]）；zip 源恒空。"
         },
         "source_ref": {
           "type": "string",
-          "title": "git 钉死的 commit SHA；zip 源恒空。"
+          "title": "git 钉死的 commit SHA / image 钉死的 digest（sha256:...）；zip 源恒空。"
         },
         "source_dir": {
           "type": "string",
-          "title": "git 构建上下文子目录；zip 源恒空。凭证字段不出现在任何响应面。"
+          "title": "git 构建上下文子目录；zip/image 源恒空。凭证字段不出现在任何响应面。"
         }
       }
     },
@@ -1291,6 +1294,23 @@
         }
       },
       "title": "HttpTriggerConfig 是 HTTP 触发器配置。"
+    },
+    "v1ImageSource": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "string",
+          "title": "镜像引用：host/repo[:tag|@sha256:...]。tag 在导入期钉死为 digest（落\nDeployment.source_ref，防 tag 漂移）；host 侧 SSRF 防护与 registry\n白名单由 dispatcher 侧执行（阶段 2 接线）。"
+        },
+        "registry_username": {
+          "type": "string",
+          "title": "可选 registry 凭证。username/token 均一次性凭证：仅本次请求内存、转发\ndispatcher 拉取用、不落库不回显（D8），审计载荷由敏感键 mask 兜底；\n私有镜像的 worker 补拉因凭证不落库而受限（声明边界，§3）。"
+        },
+        "registry_token": {
+          "type": "string"
+        }
+      },
+      "title": "ImageSource 是 BYO 镜像部署源（三期，设计 §3）：免构建路径——平台拉取\n引用镜像（tag 构建期钉死为 digest）→ retag 进平台命名 → 强制契约验证\n（:18080 /_tw/health 探针）。仅 runtime = `image` 的函数接受（源/运行时\n互斥，§0/D7）。"
     },
     "v1ListDeploymentsResponse": {
       "type": "object",

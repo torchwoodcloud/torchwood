@@ -126,6 +126,38 @@ type BuildSpec struct {
 	Verify bool
 }
 
+// ImportImageSpec 是镜像导入链载荷（三期阶段 1 定稿，设计 §3）：BYO 镜像
+// 源免构建路径的全量上下文随端口携带——dispatcher 侧据此 pull（digest 钉死）
+// → retag 进平台命名 → 强制契约验证 spawn。字段与 BuildSpec 同源对齐
+// （Env/EgressUntrusted/FunctionTimeoutSeconds 语义一致）。
+type ImportImageSpec struct {
+	ProjectID    string
+	FunctionID   string
+	DeploymentID string
+	// Reference 是用户提交的原始镜像引用（host/repo[:tag|@sha256:...]）：
+	// digest 钉死与 retag 的输入，与部署行 source_url 同值。
+	Reference string
+	// ExpectedDigest 是预期 digest（部署行 source_ref 已钉死值）：首次导入为
+	// 空；worker 补构建 / ready 门禁复检场景非空——实现本地已持有该 digest
+	// 的平台镜像时应零 pull 直接确认（幂等语义，设计 §3「本地命中则零
+	// pull」），实际解析结果与该值不一致时报错（防 tag 漂移）。
+	ExpectedDigest string
+	// RegistryUsername/RegistryToken 是一次性 registry 凭证（不落库）：仅
+	// 首次导入随请求携带；补构建/复检路径为空——私有镜像补拉失败标 failed
+	// 属声明边界（设计 §3）。
+	RegistryUsername string
+	RegistryToken    string
+	// FunctionTimeoutSeconds 是函数超时（fn.timeout_seconds 原值）：与
+	// BuildSpec 同语义——旧池 drain 宽限上限（镜像部署也会触发旧池换版）。
+	FunctionTimeoutSeconds int64
+	// Env 是契约验证 spawn 携带的函数 variables（与 BuildSpec.Env 同源组装：
+	// sanitizeEnv 剔除非法键 + TW_API_BASE_URL 注入；不含执行身份 token）。
+	Env map[string]string
+	// EgressUntrusted 是 egress 分类结果（与 BuildSpec.EgressUntrusted 同
+	// 语义）：untrusted 函数的验证实例挂 internal 变体网络（对抗审查 A1）。
+	EgressUntrusted bool
+}
+
 // Executor is the function runtime port.
 //
 // 事务边界（redesign §4.8 Phase 2 形态乙，阶段③-b 定稿）：函数代码运行在
@@ -138,6 +170,13 @@ type Executor interface {
 	// Dockerfile → docker build）；构建上下文全量随 BuildSpec 携带（一期
 	// 定稿形态，见 BuildSpec 注释）。
 	Build(ctx context.Context, spec BuildSpec) error
+	// ImportImage 拉取引用镜像并导入为平台镜像（三期阶段 1 端口定稿，设计
+	// §3）：pull（用户引用带 tag 时构建期钉死为 digest）→ retag 为平台镜像
+	// 名（ImageName(functionID, deploymentID)，本地原始引用不残留）→ 强制
+	// 契约验证 spawn → 返回钉死的 digest（调用方落 source_ref）。幂等：
+	// spec.ExpectedDigest 非空且本地已持有时零 pull 直接确认（worker 补构建
+	// / ready 门禁复检）。
+	ImportImage(ctx context.Context, spec ImportImageSpec) (digest string, err error)
 	Execute(ctx context.Context, exec Execution) (*ExecutionResult, error)
 	// RemoveImage 删除构建产物镜像（幂等，失败由调用方记日志）。
 	RemoveImage(ctx context.Context, functionID, deploymentID string) error

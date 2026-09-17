@@ -97,6 +97,9 @@ func (s *stubExecutor) Build(context.Context, domainfunctions.BuildSpec) error {
 func (s *stubExecutor) Execute(context.Context, domainfunctions.Execution) (*domainfunctions.ExecutionResult, error) {
 	return &domainfunctions.ExecutionResult{StatusCode: 0, Stdout: "ok"}, nil
 }
+func (s *stubExecutor) ImportImage(context.Context, domainfunctions.ImportImageSpec) (string, error) {
+	return "", nil // image 源不在本文件测试路径
+}
 func (s *stubExecutor) RemoveImage(context.Context, string, string) error { return nil }
 
 type stubQueue struct{}

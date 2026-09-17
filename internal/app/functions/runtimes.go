@@ -9,10 +9,13 @@ import domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/func
 // 日落——go1.x 废弃教训）。entrypoint 字段 MVP 仅占位，执行入口固定（见
 // 实现方案 §8）。python-3.11 已随 v1 docker 执行器移除（常驻执行器
 // node-only，python runner 未实现）；历史 python 函数再次部署将在构建期
-// 明确报错。
+// 明确报错。image 为 BYO 镜像专用 runtime（三期阶段 1，设计 §3）：只接受
+// ImageSource 部署（源/运行时互斥，§0/D7），平台零构建——entrypoint 无意义
+// 占位（入口契约由镜像自身 :18080 runner 协议承载）。
 var runtimes = []domainfunctions.RuntimeInfo{
 	{ID: "node-18.0", Name: "Node.js 18", Entrypoint: "index.main"},
 	{ID: "go-1.26", Name: "Go 1.26", Entrypoint: "Main"},
+	{ID: "image", Name: "Bring your own image", Entrypoint: "-"},
 }
 
 var specifications = []domainfunctions.SpecificationInfo{

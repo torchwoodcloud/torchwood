@@ -418,7 +418,11 @@ func (f *Functions) ProcessExecution(ctx context.Context, msg queueMessage) erro
 	// deployment 非 ready 先补构建：构建 ctx 解耦与超时预算统一收敛在
 	// buildDeployment（WithoutCancel + functions.dispatcher.build_timeout，
 	// 默认 5m = 原 workerRebuildTimeout 口径；worker 本就是后台 ctx，行为
-	// 不变，config 调大后补构建同享更长预算）。构建失败（含信号量满）按
+	// 不变）。产物化调用点按 dep.SourceType 在 buildDeployment 内分流
+	//（三期阶段 1，设计 §3）：image 源 → 幂等 ImportImage（预期 digest =
+	// 行内 source_ref，本地命中零 pull；一次性凭证不落库，私有镜像补拉失败
+	// 标 failed 属声明边界），zip/git 源 → 盘上 zip 构建——本调用点无需感知
+	// 源类型（zipPath 参数对 image 源不被消费）。构建失败（含信号量满）按
 	// 可重试处理：归还 queued 并返回错误，由 worker requeue 在退避后重试；
 	// 重试超限走 failPayload 兜底。
 	if dep.Status != domainfunctions.DeploymentStatusReady {

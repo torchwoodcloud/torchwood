@@ -34,6 +34,29 @@ type CreateDeploymentCommand struct {
 	// （functions-packer 服务）物化为同一 zip 构建路径——pack 在 deployment
 	// 行落库之前，失败路径无行无 zip；zip 路径行为完全不变。
 	Git *domainfunctions.GitSource
+	// Image 是 BYO 镜像源（三期阶段 1，设计 §3）：非 nil 时走免构建路径
+	//（ImportImage 钉死 digest → INSERT（source_ref=digest）→ ready 门禁
+	// 复检）；仅 runtime = "image" 的函数接受（源/运行时互斥，D7）。
+	Image *domainfunctions.ImageSource
+}
+
+// imageRuntimeID 是 BYO 镜像专用 runtime ID（runtimes.go 表项同值；源/运行时
+// 互斥判定的 image 侧基准）。
+const imageRuntimeID = "image"
+
+// validateSourceRuntimePair 校验部署源与函数运行时的互斥（D7 双向，设计 §0）：
+//   - runtime = image 只接受 image 源（zip/git 一律拒绝）；
+//   - runtime ≠ image（node/go）拒绝 image 源（zip/git 均可）。
+//
+// 错误为 InvalidArgument 且同时携带两侧取值（source 与 runtime），不做单侧
+// 指认——双向互斥的任一侧违反都呈现同一事实。
+func validateSourceRuntimePair(runtime, sourceType string) error {
+	if (runtime == imageRuntimeID) == (sourceType == domainfunctions.DeploymentSourceImage) {
+		return nil
+	}
+	return status.Errorf(codes.InvalidArgument,
+		"deployment source %q and function runtime %q are incompatible: the image runtime only accepts image sources, and image sources require the image runtime",
+		sourceType, runtime)
 }
 
 func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCommand) (*domainfunctions.Deployment, error) {
@@ -41,8 +64,12 @@ func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCo
 	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return nil, err
 	}
-	// git 源分支（二期阶段 3 接线）：形状校验 → packer 物化 → 写盘 →
-	// INSERT（source 投影 + 钉死 SHA + checksum）→ 与 zip 源同构构建。
+	// 部署源分支：image（三期阶段 1，免构建路径）与 git（二期，packer 物化）
+	// 均在 deployment 行落库之前完成源物化——失败路径无行无残留；zip 路径
+	// 行为不变。
+	if cmd.Image != nil {
+		return f.createDeploymentFromImage(ctx, cmd, cmd.Image)
+	}
 	if cmd.Git != nil {
 		return f.createDeploymentFromGit(ctx, cmd, cmd.Git)
 	}
@@ -61,6 +88,11 @@ func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCo
 	}
 	if fn == nil {
 		return nil, status.Error(codes.NotFound, "function not found")
+	}
+	// 源/运行时互斥（D7 双向）：image runtime 只收 image 源，zip 源对 image
+	// runtime 函数拒绝。
+	if err := validateSourceRuntimePair(fn.Runtime, domainfunctions.DeploymentSourceZip); err != nil {
+		return nil, err
 	}
 
 	now := time.Now()
@@ -98,17 +130,24 @@ func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCo
 	return dep, nil
 }
 
-// buildDeployment 占用构建信号量并同步构建镜像；结果写入 dep 状态并落库。
-// 信号量满仅返回 ResourceExhausted——是否清理 deployment 行与 zip 是调用方
-// 的决策（CreateDeployment 清理本次刚建的 pending 行；worker 补构建路径
-// 保留既有 deployment，靠队列重试在信号量释放后重建）。
+// buildDeployment 占用构建信号量并同步构建/导入镜像；结果写入 dep 状态并
+// 落库。信号量满仅返回 ResourceExhausted——是否清理 deployment 行与 zip 是
+// 调用方的决策（CreateDeployment 清理本次刚建的 pending 行；worker 补构建
+// 路径保留既有 deployment，靠队列重试在信号量释放后重建）。
 //
-// fn 是部署所属函数记录（BuildSpec 的 runtime/timeout/variables/egress
-// 分类来源）。ctx 解耦（D11）：信号量获取之后的全部动作（building 落库 →
-// executor.Build → 终态落库 → ActivateDeployment）运行在
-// context.WithoutCancel + build_timeout 封顶的独立预算上——客户端断开后
-// 构建继续、状态照常落库，客户端以 deployment.status 轮询兜底；孤儿构建
-// 的信号量占用有界（build_timeout 到点释放，对抗审查 A6 接受）。
+// fn 是部署所属函数记录（BuildSpec/ImportImageSpec 的 runtime/timeout/
+// variables/egress 分类来源）。ctx 解耦（D11）：信号量获取之后的全部动作
+// （building 落库 → executor.Build / executor.ImportImage → 终态落库 →
+// ActivateDeployment）运行在 context.WithoutCancel + build_timeout 封顶的
+// 独立预算上——客户端断开后构建继续、状态照常落库，客户端以
+// deployment.status 轮询兜底；孤儿构建的信号量占用有界（build_timeout 到点
+// 释放，对抗审查 A6 接受）。
+//
+// 产物化调用点按部署源分流（三期阶段 1，设计 §3「worker 补构建分流」）：
+// image 源 → 幂等 ImportImage（spec 带预期 digest = 行内 source_ref，本地
+// 命中则零 pull；一次性凭证不落库，本路径凭证恒空——私有镜像补拉失败标
+// failed 属声明边界）；zip/git 源 → Build（盘上 zip 为输入）。worker 补构建
+// 与首次部署共用本分流，无需感知源类型。
 func (f *Functions) buildDeployment(ctx context.Context, fn *domainfunctions.Function, dep *domainfunctions.Deployment, path string) error {
 	ok, release, err := f.getBuildSemaphore().TryAcquire(ctx)
 	if err != nil {
@@ -128,15 +167,24 @@ func (f *Functions) buildDeployment(ctx context.Context, fn *domainfunctions.Fun
 		return err
 	}
 
-	spec, err := f.buildSpec(buildCtx, fn, dep, path)
-	if err != nil {
-		return err
+	var buildErr error
+	if dep.SourceType == domainfunctions.DeploymentSourceImage {
+		spec, specErr := f.importImageSpec(buildCtx, fn, dep.ID, &domainfunctions.ImageSource{Reference: dep.SourceURL}, dep.SourceRef)
+		if specErr != nil {
+			return specErr
+		}
+		_, buildErr = f.executor.ImportImage(buildCtx, spec)
+	} else {
+		spec, specErr := f.buildSpec(buildCtx, fn, dep, path)
+		if specErr != nil {
+			return specErr
+		}
+		buildErr = f.executor.Build(buildCtx, spec)
 	}
-	err = f.executor.Build(buildCtx, spec)
 	dep.UpdatedAt = time.Now()
-	if err != nil {
+	if buildErr != nil {
 		dep.Status = domainfunctions.DeploymentStatusFailed
-		dep.Error = truncate(err.Error(), maxOutputBytes)
+		dep.Error = truncate(buildErr.Error(), maxOutputBytes)
 		_ = f.repo.UpdateDeployment(buildCtx, dep)
 		// 清理本地 zip 与可能残留的镜像（幂等）。zip 按源类型分流（设计
 		// §2 重建语义）：zip 源构建失败即删（D13 一期形态）；git 源 zip
@@ -165,22 +213,15 @@ func (f *Functions) buildDeployment(ctx context.Context, fn *domainfunctions.Fun
 //   - Runtime = fn.runtime 原值（daemon 侧 D7 对账基准）；
 //   - FunctionTimeoutSeconds = fn.timeout_seconds（旧池 drain 宽限上限，
 //     D14：载荷补齐后 drain 真正生效）；
-//   - Env 与执行链 env 组装同源（sanitizeEnv 剔除非法键 + TW_API_BASE_URL
-//     注入），不含 TW_EXECUTION_TOKEN——构建/验证期无执行身份（无常驻
-//     凭证注入，验证 spawn 仅做 health 探针）；v2 语义下 TW_DATA 走请求体
-//     通道，本就不在 env；
+//   - Env 与执行链 env 组装同源（见 buildFunctionEnv）；
 //   - EgressUntrusted 与执行路径同一分类规则（client_callable 或存在
 //     http/cron 触发器 = 不可信，对抗审查 A1：验证实例与执行同网）；
 //   - Verify 取 config functions.dispatcher.verify_build 的 presence 解析
 //     （未配置 = 默认开启，显式 false 关闭，D10）。
 func (f *Functions) buildSpec(ctx context.Context, fn *domainfunctions.Function, dep *domainfunctions.Deployment, zipPath string) (domainfunctions.BuildSpec, error) {
-	vars, err := f.getCachedVariables(ctx, dep.ProjectID, dep.FunctionID)
+	env, err := f.buildFunctionEnv(ctx, dep.ProjectID, dep.FunctionID)
 	if err != nil {
 		return domainfunctions.BuildSpec{}, err
-	}
-	env := sanitizeEnv(vars)
-	if apiBaseURL := f.executionAPIBaseURL(); apiBaseURL != "" {
-		env[twAPIBaseURLEnv] = apiBaseURL
 	}
 	return domainfunctions.BuildSpec{
 		ProjectID:              dep.ProjectID,
@@ -192,6 +233,45 @@ func (f *Functions) buildSpec(ctx context.Context, fn *domainfunctions.Function,
 		Env:                    env,
 		EgressUntrusted:        fn.ClientCallable || f.hasTriggersCached(ctx, dep.ProjectID, dep.FunctionID),
 		Verify:                 f.verifyBuildEnabled(),
+	}, nil
+}
+
+// buildFunctionEnv 组装构建/验证链 env（与执行链同源）：sanitizeEnv 剔除
+// 非法键 + 注入 TW_API_BASE_URL；不含 TW_EXECUTION_TOKEN——构建/验证期无
+// 执行身份（无常驻凭证注入，验证 spawn 仅做 health 探针）。
+func (f *Functions) buildFunctionEnv(ctx context.Context, projectID, functionID string) (map[string]string, error) {
+	vars, err := f.getCachedVariables(ctx, projectID, functionID)
+	if err != nil {
+		return nil, err
+	}
+	env := sanitizeEnv(vars)
+	if apiBaseURL := f.executionAPIBaseURL(); apiBaseURL != "" {
+		env[twAPIBaseURLEnv] = apiBaseURL
+	}
+	return env, nil
+}
+
+// importImageSpec 组装 ImportImageSpec（三期阶段 1，设计 §3）：Env 与
+// EgressUntrusted 同构建链 buildSpec 组装（契约验证 spawn 携带函数
+// variables、untrusted 验证实例挂 internal 变体网络——A1 同款约束）；
+// expectedDigest 非空 = 幂等补拉/复检（ready 门禁与 worker 补构建），首次
+// 导入为空。src 的一次性凭证仅随本 spec 进入调用栈，不落库。
+func (f *Functions) importImageSpec(ctx context.Context, fn *domainfunctions.Function, deploymentID string, src *domainfunctions.ImageSource, expectedDigest string) (domainfunctions.ImportImageSpec, error) {
+	env, err := f.buildFunctionEnv(ctx, fn.ProjectID, fn.ID)
+	if err != nil {
+		return domainfunctions.ImportImageSpec{}, err
+	}
+	return domainfunctions.ImportImageSpec{
+		ProjectID:              fn.ProjectID,
+		FunctionID:             fn.ID,
+		DeploymentID:           deploymentID,
+		Reference:              src.Reference,
+		ExpectedDigest:         expectedDigest,
+		RegistryUsername:       src.RegistryUsername,
+		RegistryToken:          src.RegistryToken,
+		FunctionTimeoutSeconds: int64(fn.TimeoutSeconds),
+		Env:                    env,
+		EgressUntrusted:        fn.ClientCallable || f.hasTriggersCached(ctx, fn.ProjectID, fn.ID),
 	}, nil
 }
 

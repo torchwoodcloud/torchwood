@@ -245,10 +245,11 @@ func (s *FunctionsService) CreateDeployment(ctx context.Context, req *serverv1.C
 		return nil, err
 	}
 	ctx = contexts.WithAuditResource(ctx, req.GetFunctionId())
-	// 部署源 oneof 分发（二期，设计 §0）：code = zip 通道（≤1MiB；大包另经
-	// serverhttp multipart，仍 zip-only）；git 映射为命令 Git 字段（本阶段
-	// app 层占位拒绝 Unimplemented，阶段 3 换 packer 真实调用）；两者皆空
-	// = InvalidArgument。
+	// 部署源 oneof 分发（二期起，设计 §0）：code = zip 通道（≤1MiB；大包另经
+	// serverhttp multipart，仍 zip-only）；git 映射为命令 Git 字段（packer
+	// 物化为 zip）；image 映射为命令 Image 字段（BYO 免构建路径，三期阶段 1
+	// ——DispatcherExecutor.ImportImage 阶段 2 接线，当前 Unimplemented 透
+	// 传）。三者皆空 = InvalidArgument。
 	cmd := appfunctions.CreateDeploymentCommand{
 		ProjectID:  projectID,
 		FunctionID: req.GetFunctionId(),
@@ -258,8 +259,10 @@ func (s *FunctionsService) CreateDeployment(ctx context.Context, req *serverv1.C
 		cmd.Code = req.GetCode()
 	case *serverv1.CreateDeploymentRequest_Git:
 		cmd.Git = mapGitSource(req.GetGit())
+	case *serverv1.CreateDeploymentRequest_Image:
+		cmd.Image = mapImageSource(req.GetImage())
 	default:
-		return nil, status.Error(codes.InvalidArgument, "source is required: set either code (zip) or git")
+		return nil, status.Error(codes.InvalidArgument, "source is required: set either code (zip), git, or image")
 	}
 	dep, err := s.functions.CreateDeployment(ctx, cmd)
 	if err != nil {
@@ -599,6 +602,20 @@ func mapGitSource(g *serverv1.GitSource) *domainfunctions.GitSource {
 		Directory: g.GetDirectory(),
 		Username:  g.GetUsername(),
 		Token:     g.GetToken(),
+	}
+}
+
+// mapImageSource 把 proto ImageSource 映射为领域值对象（三期阶段 1，设计
+// §3；一次性 registry 凭证随结构体仅在请求生命周期内存活——不落库不回显，
+// D8）。
+func mapImageSource(g *serverv1.ImageSource) *domainfunctions.ImageSource {
+	if g == nil {
+		return nil
+	}
+	return &domainfunctions.ImageSource{
+		Reference:        g.GetImage(),
+		RegistryUsername: g.GetRegistryUsername(),
+		RegistryToken:    g.GetRegistryToken(),
 	}
 }
 

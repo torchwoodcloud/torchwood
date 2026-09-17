@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // TestDispatcherExecutor_BuildCarriesFullPayload 构建链载荷一期定稿（设计
@@ -164,4 +166,33 @@ func TestDispatcherExecutor_ExecuteCarriesIdentityFields(t *testing.T) {
 			require.Equal(t, "p1", body["project_id"], "project_id 既有字段随行（ctx.projectId 来源）")
 		})
 	}
+}
+
+// TestDispatcherExecutor_ImportImagePlaceholderUnimplemented 三期阶段 1 占位
+// 断言（设计 §3）：ImportImage 在阶段 2 dispatcher 端点接线前恒返回
+// Unimplemented（image 源未开放），且不发出任何 HTTP 请求——zip/git 源
+// 不受影响。
+func TestDispatcherExecutor_ImportImagePlaceholderUnimplemented(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	cfg := &config.AppConfig{Functions: &config.Functions{
+		Dispatcher: &config.Functions_Dispatcher{Url: srv.URL},
+	}}
+	exec := NewDispatcherExecutor(cfg)
+	digest, err := exec.ImportImage(context.Background(), domainfunctions.ImportImageSpec{
+		ProjectID:    "p1",
+		FunctionID:   "fn_1",
+		DeploymentID: "dep_1",
+		Reference:    "registry.example.com/acme/greet:v1",
+	})
+	require.Empty(t, digest)
+	require.Equal(t, codes.Unimplemented, status.Code(err), "占位实现恒 Unimplemented（phase 3 stage 2 wiring）")
+	require.ErrorContains(t, err, "phase 3 stage 2")
+	require.False(t, called, "占位实现不得发出任何 dispatcher 请求")
 }

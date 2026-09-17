@@ -55,6 +55,10 @@ func (f *Functions) createDeploymentFromGit(ctx context.Context, cmd CreateDeplo
 	if fn == nil {
 		return nil, status.Error(codes.NotFound, "function not found")
 	}
+	// 源/运行时互斥（D7 双向）：git/zip 源对 image runtime 函数拒绝。
+	if err := validateSourceRuntimePair(fn.Runtime, domainfunctions.DeploymentSourceGit); err != nil {
+		return nil, err
+	}
 	// pack（在行落库之前）：失败路径无行无 zip，与 zip 魔数校验失败同类。
 	if f.packer == nil {
 		return nil, errPackerUnavailable()

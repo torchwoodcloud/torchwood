@@ -383,7 +383,10 @@ func (m *blockingExecutor) Execute(_ context.Context, _ domainfunctions.Executio
 }
 
 func (m *blockingExecutor) Build(context.Context, domainfunctions.BuildSpec) error { return nil }
-func (m *blockingExecutor) RemoveImage(context.Context, string, string) error      { return nil }
+func (m *blockingExecutor) ImportImage(context.Context, domainfunctions.ImportImageSpec) (string, error) {
+	return "", nil // image 源不在本文件测试路径
+}
+func (m *blockingExecutor) RemoveImage(context.Context, string, string) error { return nil }
 
 // TestEgressClassification：client_callable=true 或存在 http/cron 触发器 →
 // 不可信；纯 server 函数 → 可信。分类随 Execution 传给 executor。
