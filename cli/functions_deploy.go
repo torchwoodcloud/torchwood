@@ -412,3 +412,62 @@ func buildCreateDeploymentFromGitReq(functionID, url, ref, dir, username, tokenE
 	}
 	return map[string]any{"functionId": functionID, "git": git}, nil
 }
+
+// ——镜像部署源（三期阶段 3，docs/design/functions-runtimes-and-sources.md
+// §3）：functions deployments create-from-image——服务端把用户引用 pull 后
+// digest 钉死（落 source_ref）、retag 进平台命名并强制契约验证 spawn，CLI
+// 只组装 ImageSource 请求——registry token 从环境变量读（缺省变量名
+// TORCHWOOD_REGISTRY_TOKEN，--registry-token-env 可覆盖），绝不进 argv/
+// shell history。凭证为一次性：仅随本次请求转发 dispatcher 拉取，不落库
+// 不回显（D8）。——
+//
+// defaultRegistryTokenEnv 是 --registry-token-env 缺省的环境变量名。
+const defaultRegistryTokenEnv = "TORCHWOOD_REGISTRY_TOKEN"
+
+// newFunctionsDeploymentsCreateFromImageCmd 从容器镜像引用创建部署。
+func newFunctionsDeploymentsCreateFromImageCmd(g *GlobalFlags) *verb {
+	var image, username, tokenEnv string
+	return newVerb(g, "create-from-image", "create a deployment from a container image reference (the server pins the resolved digest, re-tags it into the platform namespace and runs the contract verify spawn)", "functions deployments create-from-image <function-id> --image <host/repo[:tag|@digest]> [--registry-username <user>] [--registry-token-env <VAR>]",
+		func(fs *flag.FlagSet) {
+			fs.StringVar(&image, "image", "", "container image reference host/repo[:tag|@sha256:...] (required; the server pins the resolved digest into the deployment, so a tag is resolved exactly once)")
+			fs.StringVar(&username, "registry-username", "", "registry username for private images (sent once with the token to the dispatcher pull, never persisted; omit for registries that authenticate by token alone)")
+			fs.StringVar(&tokenEnv, "registry-token-env", "", "name of the environment variable holding the registry access token (default "+defaultRegistryTokenEnv+")")
+		},
+		func(v *verb, env *commands.Environment, args []string) error {
+			if err := exactArgs(v, args, 1); err != nil {
+				return err
+			}
+			req, err := buildCreateDeploymentFromImageReq(args[0], image, username, tokenEnv, os.LookupEnv)
+			if err != nil {
+				return err
+			}
+			return call(g, env, methodFunctionsCreateDeployment, req)
+		})
+}
+
+// buildCreateDeploymentFromImageReq 组装 CreateDeploymentRequest 的 image
+// oneof 请求：token 从 tokenEnv（缺省 TORCHWOOD_REGISTRY_TOKEN）环境变量
+// 读取，未设置或为空即报错——与 git 源同款「显式优于静默匿名拉取」（公开
+// 镜像也请设一个非空占位值；登录态不一致在 dispatcher 拉取期才暴露）。空值
+// 可选字段（registryUsername）不进请求（proto 未设置语义）。token 只进
+// 请求体，绝不进 argv / shell history。
+func buildCreateDeploymentFromImageReq(functionID, image, username, tokenEnv string, lookup lookupEnvFunc) (map[string]any, error) {
+	if functionID == "" {
+		return nil, fmt.Errorf("missing function-id")
+	}
+	if image == "" {
+		return nil, fmt.Errorf("--image is required (container image reference host/repo[:tag|@sha256:...])")
+	}
+	if tokenEnv == "" {
+		tokenEnv = defaultRegistryTokenEnv
+	}
+	token, ok := lookup(tokenEnv)
+	if !ok || token == "" {
+		return nil, fmt.Errorf("environment variable %s is not set; export it with a registry access token (any non-empty placeholder works for public images) or point --registry-token-env at another variable", tokenEnv)
+	}
+	img := map[string]any{"image": image, "registryToken": token}
+	if username != "" {
+		img["registryUsername"] = username
+	}
+	return map[string]any{"functionId": functionID, "image": img}, nil
+}

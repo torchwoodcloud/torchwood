@@ -1,0 +1,33 @@
+Torchwood functions 最小示例（main 风格）
+========================================
+
+index.js 是一个最小函数：exports.main = (data, ctx) => ({ ok: true, echo: data })。
+
+把它做成本地镜像并在部署前自测 Runner 协议（契约全文见
+docs/developer/08-functions.md §3.2）：
+
+1. 在本 example 目录创建一个 Dockerfile（用户镜像的构建上下文 = 本目录）：
+
+   FROM <registry>/functions-runtime-node:1
+   COPY index.js /app/index.js
+
+2. 构建（在本 example 目录内执行；该 Dockerfile 由用户自建，仓库不预置）：
+
+   docker build -t my-function:dev .
+
+3. 本地契约自测（Lambda RIE 等效物；部署前即可验证 :18080 契约符合性）：
+
+   docker run --rm -p 18080:18080 my-function:dev
+   curl http://127.0.0.1:18080/_tw/health
+   curl -X POST -d '{"hello":"world"}' http://127.0.0.1:18080/
+
+   预期：health 返回 {"ok":true,"ready":true,...}；POST 返回
+   {"ok":true,"result":{"ok":true,"echo":{"hello":"world"}},"stdout":"...","stderr":"..."}。
+
+4. 推送镜像后即可走镜像源部署（runtime=image 的函数）：
+
+   ./bin/torchwood functions deployments create-from-image <function-id> \
+     --image <registry>/my-function:1
+
+（example/ 目录不参与契约基础镜像自身的构建——基础镜像只 COPY
+runner.js 单文件；本目录仅是 BYO 用户的参考起点。）
