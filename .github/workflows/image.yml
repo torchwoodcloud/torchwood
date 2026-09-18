@@ -87,3 +87,39 @@ jobs:
             VERSION=${{ steps.meta.outputs.version }}
             COMMIT=${{ steps.meta.outputs.commit }}
             DATE=${{ steps.meta.outputs.date }}
+
+  # 契约镜像（五期镜像部署源）：官方 BYO 基座 + 最小可运行示例。
+  # 首次发布后 GHCR 包默认私有 → 需在 GitHub 包设置改为 Public（dev/部署机
+  # 匿名拉取）；context = 仓库根（基座 COPY internal/ 下的 runner.js）。
+  contract-images:
+    name: Build & push contract images (BYO base + hello)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 1) 官方契约基座：用户 Dockerfile FROM 本镜像 + COPY 代码即得合规镜像
+      - name: functions-runtime-node (contract base)
+        run: |
+          docker build -f docker/functions-runtime-node/Dockerfile \
+            -t ${{ env.REGISTRY }}/${{ github.repository_owner }}/functions-runtime-node:1 \
+            -t ${{ env.REGISTRY }}/${{ github.repository_owner }}/functions-runtime-node:latest .
+          docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/functions-runtime-node:1
+          docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/functions-runtime-node:latest
+
+      # 2) 最小可运行示例（FROM 上一步推送的基座；login 已含 ghcr 凭证）
+      - name: functions-hello (example image)
+        run: |
+          docker build -f docker/functions-hello/Dockerfile \
+            -t ${{ env.REGISTRY }}/${{ github.repository_owner }}/functions-hello:v1 \
+            -t ${{ env.REGISTRY }}/${{ github.repository_owner }}/functions-hello:latest .
+          docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/functions-hello:v1
+          docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/functions-hello:latest
