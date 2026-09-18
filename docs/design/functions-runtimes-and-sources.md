@@ -1,6 +1,6 @@
 # Functions 运行时扩展与部署源多元化（Go / Git / 镜像）
 
-> **⚠ 五期立项（2026-09-18 owner）：双语言 SDK 方案推翻 D3 生成式 bootstrap。**
+> **⚠ 五期立项（2026-09-18 owner，已实现）：双语言 SDK 方案推翻 D3 生成式 bootstrap。**
 > owner 裁决：不向后兼容、以最好设计为准——Go 函数改为「用户持有 main +
 > SDK」（context.Context 标准签名、typed 事件、平台 API 客户端入 SDK——
 > 「没有 SDK 做不了真实业务」）；TS 同走 npm SDK（typed defineMain +
@@ -21,6 +21,13 @@
 > 命名定案：`DocumentChange`（弃 DocumentEvent）、`CronTick`、
 > `StartInvoke[Req,Resp]`（client call 编译期契约）。npm 包
 > `@torchwood/functions`；TS 多源 = 对象字面量多具名导出（TS 惯用法）。
+>
+> **五期已实现**（2026-09-18，还原点 351d70e / b9c7236 / 7a23271 / 2c6aa94）：
+> 5a Go SDK（契约 serve + Start 系列 + Mux + Identity + Client 雏形，36 单测，
+> 零 internal 依赖）；5b dispatcher 简化（删 gorunner/-1757 行，`go build .`
+> 根 main 包，非 main 根包行为实测锚定）；5c TS SDK（@torchwood/functions，
+> 21 单测，fail-closed Client）；5d examples Go 三例 SDK 重写 + §3.1 文档
+> 重写 + 带真实 DSN 全量回归零失败。
 
 > 状态：**已拍板（2026-09-17 owner）→ 同日复查修正 → 独立设计交叉验证
 > 修订 → 二轮深度复查修正 → 对抗审查（4 处修复并入）→ 竞品调研
