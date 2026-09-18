@@ -217,7 +217,7 @@ token 未设置即报错（不静默匿名拉取私有仓库）；服务端 `fun
 
 ### 3.5 packer 服务（运维）
 
-独立进程（`cmd/packer`，`task build` 一并产出；实现包 `packer/`）专职承载**不可信 git 输入**的重资源操作：浅克隆 + worktree 核算 + 子目录物化为 zip（go-git 纯 Go 实现，无系统 git 依赖）。
+独立进程（`cmd/packer`，`mise run build` 一并产出；实现包 `packer/`）专职承载**不可信 git 输入**的重资源操作：浅克隆 + worktree 核算 + 子目录物化为 zip（go-git 纯 Go 实现，无系统 git 依赖）。
 
 - **无状态、可牺牲**：零 Redis / DB / docker 依赖；单请求内存上界 ≈ 物化 zip 预算（默认 50MiB）+ base64 膨胀（×4/3）。它挂了只有 git 部署不可用（重启即恢复），API / 函数执行 / node 构建无感；可独立重启 / 扩缩（多副本无亲和需求——zip 由 server 落构建亲和节点本地盘）。
 - **并发自限**：进程内信号量（容量 = `concurrency`，默认 4），饱和**立即 429**——与 dispatcher 的构建信号量成两道独立闸、无嵌套（pack 在构建信号量之外）。
@@ -499,7 +499,7 @@ go test ./dispatcher -run TestIntegration_Dispatcher -count=1
 | `functions.image.allowed_registries` | registry host 正向白名单（空 = 不设白名单）：条目为精确域名或后缀域（`example.com` 命中自身与子域，含端口需整体精确登记）；命中优先放行，非空时未命中一律拒绝（仅 dispatcher 进程消费，§3.6） |
 | `functions.image.allow_insecure` | 放行 IP 字面量与 `localhost`/`*.localhost` 形态的 registry host（自托管内网 registry 显式开关），默认 false（仅 dispatcher 进程消费，§3.6） |
 
-`functions.executor` 键已删除（reserved；残留配置键被静默忽略）。`task build` 同时产出 server / worker / torchwood / dispatcher / packer 五个二进制。
+`functions.executor` 键已删除（reserved；残留配置键被静默忽略）。`mise run build` 同时产出 server / worker / torchwood / dispatcher / packer 五个二进制。
 
 ## 10. 变量与保留策略
 

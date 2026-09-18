@@ -21,7 +21,7 @@ import (
 )
 
 // 端到端最小冒烟（二期阶段 3，真实 DB；DSN 未配置时跳过——集成链路在
-// `task test`/带 DSN 的验收跑法覆盖）：httptest 起 fake packer
+// `mise run test`/带 DSN 的验收跑法覆盖）：httptest 起 fake packer
 // → PackerClient（真实 infra 适配）→ app CreateDeployment(git)（fake
 // executor）→ 断言 zipPath 文件存在 + DB 行 source 列正确。
 

@@ -96,7 +96,7 @@ const tool = lookupAgentTool("list_users"); // { name, description, method, sche
 
 - SDK 总览与 Web 演示站点：[`sdk/README.md`](https://github.com/torchwoodcloud/torchwood/blob/main/sdk/README.md)
 - SDK 开发指南：[`docs/developer/12-sdk.md`](https://github.com/torchwoodcloud/torchwood/blob/main/docs/developer/12-sdk.md)
-- OpenAPI 定义：`task generate:proto` 后在 `genproto/**/*.swagger.json` 获取
+- OpenAPI 定义：`mise run generate:proto` 后在 `genproto/**/*.swagger.json` 获取
 
 ## License
 

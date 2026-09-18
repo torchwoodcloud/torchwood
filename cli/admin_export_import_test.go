@@ -41,7 +41,7 @@ func TestAdminExportImportRoundTripViaCLI(t *testing.T) {
 	}
 	dsn := testutil.TestDSN()
 	if dsn == "" || testutil.AdminDSN() == "" {
-		t.Skip("TORCHWOOD_TEST_* not set (run via `task test`, which loads .env)")
+		t.Skip("TORCHWOOD_TEST_* not set (run via `mise run test`, which loads .env)")
 	}
 	ctx := context.Background()
 	db := testutil.SetupTestDB(t)

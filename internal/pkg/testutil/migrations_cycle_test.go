@@ -31,7 +31,7 @@ import (
 // runInDBLifecycleLock 与其他测试互斥（db.go 包注释）。
 //
 // 环境快失败模式与 SetupTestDB 一致：TORCHWOOD_TEST_* 未设置时跳过
-// （CI backend job 与本地 `task docker:up` + .env 均提供）。
+// （CI backend job 与本地 `mise run docker:up` + .env 均提供）。
 func TestMigrations_UpDownUpCycle(t *testing.T) {
 	adminDSN := AdminDSN()
 	baseDSN := TestDSN()

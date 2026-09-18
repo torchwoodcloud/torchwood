@@ -104,7 +104,7 @@ message DeleteSessionRequest {
 ## 3. 步骤二：生成
 
 ```bash
-task generate:proto    # buf lint + buf generate（四插件 → genproto/，paths=source_relative）
+mise run generate:proto    # buf lint + buf generate（四插件 → genproto/，paths=source_relative）
 ```
 
 产物：`*_grpc.pb.go`（`XxxServiceServer` + `Register...`）、`*.pb.gw.go`（gateway handler）、`*.swagger.json`、`*.pb.go` 描述符（供 `BuildMethodPolicies` 收集鉴权策略）。
@@ -214,7 +214,7 @@ wire.NewSet(server.NewProjects)
 wire.Bind(new(projects.Repository), new(*bunrepo.ProjectRepo))
 ```
 
-改构造器签名后 `task wire:all` 重生成三份 `wire_gen.go`。
+改构造器签名后 `mise run wire:all` 重生成三份 `wire_gen.go`。
 
 **注册**：业务 proto 文件清单单一登记在 `cmd/server/internal/runtime/grpc.go` 的 `authzFileDescriptors()`（新增服务文件只登记此处）；`ProvideMethodPolicies` → `BuildMethodPolicies` 启动期收集策略并过语义断言，`assertRegisteredMethodsHaveAuthz` fail-closed。gateway 侧在 `cmd/server/internal/runtime/grpc_gateway.go` 登记 `RegisterXxxHandlerFromEndpoint`。
 
@@ -265,7 +265,7 @@ service OutboxService {
 }
 ```
 
-步骤复盘：proto 定义 → `task generate:proto` → `internal/domain/events/outbox.go` 扩展端口 → `internal/app/events/outbox_admin.go` 用例（5s per-statement 超时）→ `internal/infra/events/outbox.go` 适配 → `internal/api/servergrpc/outbox.go` handler（`ListRequest → crud.ParseListParams`）→ grpc.go / grpc_gateway.go 注册 → `task wire:all`。
+步骤复盘：proto 定义 → `mise run generate:proto` → `internal/domain/events/outbox.go` 扩展端口 → `internal/app/events/outbox_admin.go` 用例（5s per-statement 超时）→ `internal/infra/events/outbox.go` 适配 → `internal/api/servergrpc/outbox.go` handler（`ListRequest → crud.ParseListParams`）→ grpc.go / grpc_gateway.go 注册 → `mise run wire:all`。
 
 CLI 调用验证：`torchwood outbox list-dead --project <id>` 或 `torchwood rpc /torchwood.server.v1.OutboxService/ListDeadLetters --data '{"pageSize":20}'`。
 
@@ -282,8 +282,8 @@ CLI 调用验证：`torchwood outbox list-dead --project <id>` 或 `torchwood rp
 
 ## 13. 自检清单
 
-1. `task generate:proto && go build ./...` 通过，`genproto/` 无手改；
-2. `task wire:all` 已重生成；
+1. `mise run generate:proto && go build ./...` 通过，`genproto/` 无手改；
+2. `mise run wire:all` 已重生成；
 3. `go vet` + `gofmt -l` 干净；
 4. 错误码与分页符合 §7 / §9；
 5. swagger 一致性测试通过；

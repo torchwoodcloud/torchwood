@@ -2,7 +2,7 @@
 
 面向运维 / 部署负责人：运行形态（四进程）、外部依赖、构建发布、生产配置要点（含双账号契约与 roles-sig 部署时序）、健康检查、备份与升级、运维操作 runbook。
 
-> 事实源：`cmd/server/main.go`、`Taskfile.yml`、`docker/local/docker-compose.yml`、`internal/pkg/config/config.proto`、`internal/infra/health/checks.go`、`docker/dokploy/README.md`。
+> 事实源：`cmd/server/main.go`、`mise.toml`、`docker/local/docker-compose.yml`、`internal/pkg/config/config.proto`、`internal/infra/health/checks.go`、`docker/dokploy/README.md`。
 
 ## 1. 运行形态：四进程
 
@@ -16,8 +16,8 @@
 本地开发：
 
 ```bash
-task dev:server   # go run ./cmd/server
-task dev:worker   # go run ./cmd/worker
+mise run dev:server   # go run ./cmd/server
+mise run dev:worker   # go run ./cmd/worker
 ```
 
 > worker 承载支付关单、订阅计费、资产过期、用量落表、outbox 分发、排行榜结榜 / 清理、analytics 聚合维护等周期作业——**任何生产部署都需要 worker**，不只 Functions。本地仅调试数据库 / 存储时可不跑 dispatcher（Functions 执行走不通而已）。
@@ -56,7 +56,7 @@ server 注入 `lynx.WithDrainTimeout`（§4.3）与 `lynx.WithShutdownTimeout(30
 
 ## 2. 外部依赖
 
-`task docker:up` / `docker:down` / `docker:purge`（`-v` 删卷）一键启停本地三件套：
+`mise run docker:up` / `docker:down` / `docker:purge`（`-v` 删卷）一键启停本地三件套：
 
 | 依赖 | 镜像 | 端口 | 用途 |
 |------|------|------|------|
@@ -70,22 +70,22 @@ server 注入 `lynx.WithDrainTimeout`（§4.3）与 `lynx.WithShutdownTimeout(30
 
 ## 3. 构建与发布
 
-### 3.1 task build
+### 3.1 mise run build
 
 ```bash
-task build
-# = console:build + go build 四个二进制（server / worker / dispatcher / torchwood）
+mise run build
+# = console:build + go build 五个二进制（server / worker / dispatcher / packer / torchwood）
 # ldflags 注入 VERSION/COMMIT/DATE（git describe / rev-parse / date），由 GET /v1/server/health/version 暴露
 ```
 
 - `console:build` 产物 `console/dist/` 经 `//go:embed` 打进 server 二进制，由 `NewConsoleHandler` 在 `/console/` 下 serve（SPA fallback + 安全头）。
-- **修改 Console 后必先 `task console:build` 再 `task build`**，否则 embed 旧 dist。
+- **修改 Console 后必先 `mise run console:build` 再 `mise run build`**，否则 embed 旧 dist。
 - Windows 产物为对应 `.exe`。
 
 ### 3.2 Docker 镜像与 Dokploy
 
 ```bash
-task docker:build   # 多阶段 Dockerfile：builder 构 console + 四二进制，runner 最小运行时
+mise run docker:build   # 多阶段 Dockerfile：builder 构 console + 五二进制，runner 最小运行时
 docker run --env-file .env -p 9080:9080 -p 9060:9060 torchwood:<tag>
 ```
 
@@ -139,7 +139,7 @@ K8s 的 `terminationGracePeriodSeconds` 应大于 `drainTimeout + shutdownTimeou
 
 | 账号 | 身份 | 用途 | 不出现在 |
 |------|------|------|----------|
-| **owner 引导账号**（如 compose / CI 的 `POSTGRES_USER`） | superuser | 仅 `task db:migrate` 与扩展引导（§6.6） | 运行时配置 |
+| **owner 引导账号**（如 compose / CI 的 `POSTGRES_USER`） | superuser | 仅 `mise run db:migrate` 与扩展引导（§6.6） | 运行时配置 |
 | **`tw_authenticator`** | 非 superuser、无 BYPASSRLS / CREATEDB / CREATEROLE | server / worker 运行态 DSN | 迁移作业 |
 
 **为什么运行 DSN 不能是 superuser**：文档面权限判定的唯一执行点是每集合物理表上的 RLS policy。superuser 隐式 BYPASSRLS，**绕过全部 policy**——每请求 `SET LOCAL ROLE` + `app.roles` 注入、roles_sig 验签、"漏注入 → 恒 false"的 fail-closed 语义全部失效，任何 SQL 逃逸直接升级为跨租户全量读写 + 任意 DDL。
@@ -330,10 +330,10 @@ groups:
 ### 6.1 迁移
 
 ```bash
-task db:migrate
+mise run db:migrate
 ```
 
-DSN 优先级：`TORCHWOOD_DATA_DATABASE_SOURCE` → 由 `POSTGRES_*` 拼接。发布前先迁移再启动新进程。
+DSN 优先级：`MIGRATE_DSN` → `TORCHWOOD_DATA_DATABASE_SOURCE` → 由 `POSTGRES_*` 拼接（`MIGRATE_DSN` 是不入 `.env` 的一次性覆盖口，见 `02-quickstart.md`）。发布前先迁移再启动新进程。
 
 **B15 部署时序契约**：迁移（含 000004）→ `torchwood admin sync-roles-sig`（owner / 引导 DSN，§4.5）→ server / worker 启动。首次部署或换钥后未跑 sync 作业前，文档查询 fail-closed 属预期，跑完作业即恢复。换钥流程：改运行态 `security.jwt.secret` → 重跑 sync 作业 → 滚动重启（previous 槽保换钥窗口）。
 
@@ -391,7 +391,7 @@ bin/torchwood admin import --project <project_id> --in /backup/p1 --dsn "$TORCHW
 ### 6.4 升级
 
 1. 备份 PG + MinIO；
-2. `task db:migrate`（+ roles_sig 时序，见 §6.1）；
+2. `mise run db:migrate`（+ roles_sig 时序，见 §6.1）；
 3. 滚动 `server`（校验 `/healthz/readiness` 200 与 `/v1/server/health/version`）；
 4. 重启 `worker`；同批滚动 `dispatcher`；
 5. 灰度验证 Client / Server API；
@@ -403,7 +403,7 @@ bin/torchwood admin import --project <project_id> --in /backup/p1 --dsn "$TORCHW
 |------|------|
 | 健康 unavailable | 看 `dependencies[].name/error` 定位 PG / Redis / MinIO |
 | 代理后登录异常 | 检查 `trusted_proxies` 是否含代理网段 |
-| Console 旧页面 | `task console:build && task build` |
+| Console 旧页面 | `mise run console:build && mise run build` |
 | 慢查询无日志 | 确认阈值非 `"0"` 且日志级别 ≥ Warn |
 | 首次引导被拒 | 确认 `TORCHWOOD_SECURITY_SETUP_TOKEN` 已设且进程已重启 |
 | 文档查询全不可见 | roles_sig 时序未走完（§6.1）或 `--jwt-secret` 与运行态不同值 |
@@ -426,9 +426,9 @@ SELECT extname, extversion FROM pg_extension WHERE extname='vector';
 **路径二：自备 PG 实例，迁移身份为非 superuser**
 
 1. **每库一次**：由 DBA 以 superuser 在目标库执行 `CREATE EXTENSION IF NOT EXISTS vector;`；
-2. 非 superuser 迁移身份照常 `task db:migrate`——000005 命中 `IF NOT EXISTS` 幂等分支，输出 NOTICE 后继续，迁移不报错。
+2. 非 superuser 迁移身份照常 `mise run db:migrate`——000005 命中 `IF NOT EXISTS` 幂等分支，输出 NOTICE 后继续，迁移不报错。
 
-**失败自诊断**（`task db:migrate` 在 000005 失败时按报错形态分流）：
+**失败自诊断**（`mise run db:migrate` 在 000005 失败时按报错形态分流）：
 
 | 报错形态 | 原因 | 处置 |
 |----------|------|------|

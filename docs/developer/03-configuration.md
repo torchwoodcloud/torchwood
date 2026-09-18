@@ -8,7 +8,7 @@
 
 ## 1. config.proto：单一事实源
 
-配置 schema 定义在 `internal/pkg/config/config.proto`（顶层 message `AppConfig`），经 `task generate:config` 生成 `config.pb.go`。YAML 与结构体都从它派生，避免两处维护。生成流程见 `04-codegen.md`。
+配置 schema 定义在 `internal/pkg/config/config.proto`（顶层 message `AppConfig`），经 `mise run generate:config` 生成 `config.pb.go`。YAML 与结构体都从它派生，避免两处维护。生成流程见 `04-codegen.md`。
 
 | 分组 | 说明 |
 |------|------|
@@ -174,7 +174,7 @@ security:
 
 ### 6.3 测试 DSN
 
-`TORCHWOOD_TEST_DATABASE_SOURCE` 与 `TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE` 不属于 `AppConfig`，由 `internal/pkg/testutil/db.go` 直接 `os.Getenv` 读取。每个集成测试创建独立的 `TORCHWOOD_test_<pid>_<seq>` 隔离库；`task test` 自动从 `.env` 加载这些变量；`go test -short` 时跳过集成测试。
+`TORCHWOOD_TEST_DATABASE_SOURCE` 与 `TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE` 不属于 `AppConfig`，由 `internal/pkg/testutil/db.go` 直接 `os.Getenv` 读取。每个集成测试创建独立的 `TORCHWOOD_test_<pid>_<seq>` 隔离库；`mise run test` 自动从 `.env` 加载这些变量；`go test -short` 时跳过集成测试。
 
 ---
 

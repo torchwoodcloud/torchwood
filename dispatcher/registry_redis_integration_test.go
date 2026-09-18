@@ -16,7 +16,7 @@ import (
 )
 
 // newRegistryTestRedis 构造集成测试用 Redis 客户端：优先 TORCHWOOD_TEST_REDIS_ADDR
-// 指向的真 redis-server（本地 task docker:up / CI redis service），否则退回
+// 指向的真 redis-server（本地 mise run docker:up / CI redis service），否则退回
 // miniredis（内嵌 Lua 解释器，claimIdleLua/releaseInstanceLua 真实求值——
 // 不是绕过脚本的桩）。
 func newRegistryTestRedis(t *testing.T) *redis.Client {

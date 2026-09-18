@@ -1,7 +1,7 @@
 # golangci-lint v2 配置。
 #
 # J6-3（Round 4）：standard 五件套之外新增 bodyclose / gosec / sqlclosecheck /
-# noctx；存量遗留债已清零，CI 与 Taskfile 均为全量门禁（不再使用
+# noctx；存量遗留债已清零，CI 与 mise（lint:golangci）均为全量门禁（不再使用
 # --new-from-rev 棘轮）。
 #
 # 新增 linter 首跑共发现 77 条。测试文件中的发现已全部修复；以下 exclusions

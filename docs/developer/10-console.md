@@ -138,17 +138,17 @@ api.interceptors.request.use((config) => {
 ## 5. 开发与构建
 
 ```bash
-task console:install   # pnpm install
-task console:dev       # vite dev server
-task console:build     # tsc -b && vite build → dist/
-task build             # 依赖 console:build → go build 四二进制
+mise run console:install   # pnpm install
+mise run console:dev       # vite dev server
+mise run console:build     # tsc -b && vite build → dist/
+mise run build             # 依赖 console:build → go build 五个二进制
 ```
 
 - `vite.config.ts`：`base: '/console/'`，`@` 别名 → `./src`（tsconfig + vite 双处声明）。
 - dev 代理：`server.proxy['/v1'] → http://localhost:9080`（与 `server.http.addr` 对齐），保证 dev 下 `/v1` 同源、HttpOnly cookie 正常工作。
 - `console/embed.go` 的 `//go:embed dist` 由 runtime 的 `NewConsoleHandler` 挂载：SPA fallback（未知路径回 index.html）+ 安全头（X-Frame-Options / CSP / X-Content-Type-Options）。
 
-> **必做**：修改 Console 后先 `task console:build` 再 `task build`，否则 `go:embed` 打包旧 `dist/`。
+> **必做**：修改 Console 后先 `mise run console:build` 再 `mise run build`，否则 `go:embed` 打包旧 `dist/`。
 
 ## 6. 新增页面流程（以 admins 为模板）
 
@@ -197,8 +197,8 @@ import { AdminsListPage } from "@/routes/admins/pages";
 ### 6.5 验证
 
 ```bash
-task console:build && task build
-# 或 task console:dev 手工走查：登录 → 切换项目 → 列表/创建/删除 → 刷新鉴权
+mise run console:build && mise run build
+# 或 mise run console:dev 手工走查：登录 → 切换项目 → 列表/创建/删除 → 刷新鉴权
 ```
 
 ## 7. 常见坑

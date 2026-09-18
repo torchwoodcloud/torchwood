@@ -32,7 +32,7 @@ Torchwood 是 **AI/Agent-Native 的 BaaS**（Backend as a Service），用 Go + 
 | 存储 | bun（静态表 ORM）· PostgreSQL · Redis · MinIO / S3 |
 | 前端 | React + TypeScript + Vite + TanStack Query + Tailwind / shadcn/ui |
 
-工具链：Task（`Taskfile.yml`，任务编排入口）、golang-migrate（`db/migrations/`）、Docker Compose（`docker/local/docker-compose.yml`，本地 PG / Redis / MinIO）。
+工具链：mise（`mise.toml`，工具版本与任务编排唯一入口）、golang-migrate（`db/migrations/`）、Docker Compose（`docker/local/docker-compose.yml`，本地 PG / Redis / MinIO）。
 
 ---
 
@@ -98,7 +98,7 @@ torchwood/
 ├── configs/config.yaml.template  # 全部配置键与默认值，敏感键以环境变量注入
 ├── db/migrations/              # golang-migrate SQL（public 控制面 + 全局 catalog + RLS 函数）
 ├── buf.yaml / buf.gen.yaml     # Buf v2 生成驱动
-└── Taskfile.yml                # 任务全表（task list 一览）
+└── mise.toml                # 工具钉版与任务全表（mise tasks 一览）
 ```
 
 ---

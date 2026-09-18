@@ -1,31 +1,31 @@
 # 代码生成与工具链
 
-本章面向后端开发者，说明仓库的三套代码生成机制（Buf proto 生成、config proto 生成、Wire 依赖注入）与 Task 任务编排，以及配套的漂移门禁。原则只有一条：**生成产物一律不手改，一切改动回到源头（proto / provider 声明）后重新生成。**
+本章面向后端开发者，说明仓库的三套代码生成机制（Buf proto 生成、config proto 生成、Wire 依赖注入）与 mise 任务编排，以及配套的漂移门禁。原则只有一条：**生成产物一律不手改，一切改动回到源头（proto / provider 声明）后重新生成。**
 
-> 事实源：`Taskfile.yml`、`buf.yaml`、`buf.gen.yaml`、`cmd/*/provides.go` → `wire_gen.go`。
+> 事实源：`mise.toml`、`buf.yaml`、`buf.gen.yaml`、`cmd/*/provides.go` → `wire_gen.go`。
 
 ---
 
-## 1. Task 工作流
+## 1. mise 工作流
 
-`Taskfile.yml` 顶部声明 `dotenv: ['.env']`，所有任务自动加载 `.env`（迁移与测试 DSN 依赖于此）。常用任务：
+`mise.toml` 的 `[env]` 声明 `_.file = ".env"`，所有任务自动加载仓库根 `.env`（迁移与测试 DSN 依赖于此）；`[tools]` 钉住全部工具版本（与 CI 同源），`[task_config].shell` 统一任务 shell。常用任务（`mise tasks` 可随时列出全量）：
 
 | 任务 | 命令内容 | 用途 |
 |------|----------|------|
-| `tools:install` | `go install` protoc-gen-go / migrate / buf@v1.65.0 / wire / golangci-lint | 首次安装工具链 |
-| `generate:proto` | `buf lint` + `buf generate` | proto → `genproto/`（§2） |
-| `generate:config` | 在 `internal/pkg/config` 内执行 protoc | 生成 `config.pb.go`（§3） |
-| `wire:server` / `wire:worker` / `wire:dispatcher` | `go mod tidy` + wire | 重算各自的 `wire_gen.go`（§4） |
-| `wire:all` | 上述三个 wire 任务 | 全量 Wire |
-| `generate:all` | generate:proto → generate:config → wire:all | 一键全量生成（§5） |
-| `lint:proto` | `buf lint` + `buf breaking --against '.git#branch=origin/main'` | proto 兼容门禁 |
-| `lint:go` | `go vet ./...` + `gofmt -l .` | Go 静态与格式检查 |
-| `lint:golangci` | `golangci-lint run ./...` | 全量 lint 门禁 |
-| `db:migrate` | `migrate -path ./db/migrations -database <DSN> up` | 数据库迁移（DSN 优先 `TORCHWOOD_DATA_DATABASE_SOURCE`） |
-| `build` | console:build + `go build` 四个二进制（带 version/commit/date ldflags） | 产出 `bin/server`、`bin/worker`、`bin/dispatcher`、`bin/torchwood` |
-| `test` | lint:go + lint:golangci + test:sdk-go + test:sdk-ts + `go test -race -v ./... -cover` | 全量测试 |
+| `mise install` | 按 `[tools]` 安装 go / node / pnpm / buf / protoc / protoc-gen-go / golangci-lint | 首次安装工具链 |
+| `mise run generate:proto` | `buf lint` + `buf generate` | proto → `genproto/`（§2） |
+| `mise run generate:config` | 在 `internal/pkg/config` 内执行 protoc | 生成 `config.pb.go`（§3） |
+| `mise run wire:server` / `wire:worker` / `wire:dispatcher` / `wire:packer` | `go mod tidy` + wire | 重算各自的 `wire_gen.go`（§4） |
+| `mise run wire:all` | 上述四个 wire 任务依次执行 | 全量 Wire |
+| `mise run generate:all` | generate:proto → generate:config → wire:all | 一键全量生成（§5） |
+| `mise run lint:proto` | `buf lint` + `buf breaking --against '.git#branch=origin/main'` | proto 兼容门禁 |
+| `mise run lint:go` | `go vet ./...` + `gofmt -l .` | Go 静态与格式检查 |
+| `mise run lint:golangci` | `golangci-lint run ./...` | 全量 lint 门禁 |
+| `mise run db:migrate` | `go run -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate ... up`（版本走 go.mod 钉版） | 数据库迁移（DSN 优先 `MIGRATE_DSN`，其次 `TORCHWOOD_DATA_DATABASE_SOURCE`） |
+| `mise run build` | console:build + `go build` 五个二进制（带 version/commit/date ldflags） | 产出 `bin/server`、`bin/worker`、`bin/dispatcher`、`bin/packer`、`bin/torchwood` |
+| `mise run test` | lint:go + lint:golangci + test:sdk-go + test:sdk-ts + `go test -race -v ./... -cover` | 全量测试 |
 
-常用组合：开工前 `task docker:up && task db:migrate`；改 proto / config / provider 后 `task generate:all && task build`；改 Console 后 `task console:build && task build`。
+常用组合：开工前 `mise run docker:up && mise run db:migrate`；改 proto / config / provider 后 `mise run generate:all && mise run build`；改 Console 后 `mise run console:build && mise run build`。
 
 ---
 
@@ -96,7 +96,7 @@ protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto
 
 `cmd/worker/` 与 `cmd/dispatcher/` 同构。worker 的 `provides.go` 另行校验 `data.database.source` 必填。
 
-**改动 provider（新增 / 删除 / 改签名）后必须 `task wire:all`**，否则 `wire_gen.go` 与 provider 声明失步，编译或启动失败。
+**改动 provider（新增 / 删除 / 改签名）后必须 `mise run wire:all`**，否则 `wire_gen.go` 与 provider 声明失步，编译或启动失败。
 
 ---
 
@@ -113,15 +113,15 @@ generate:all
 
 | 改了什么 | 跑什么 |
 |----------|--------|
-| `proto/**/*.proto` | `task generate:proto` |
-| `internal/pkg/config/config.proto` | `task generate:config` |
-| 任意 `provides.go` / provider 签名 | `task wire:all` |
-| 首次拉取 / 全量验证 | `task generate:all && task build` |
+| `proto/**/*.proto` | `mise run generate:proto` |
+| `internal/pkg/config/config.proto` | `mise run generate:config` |
+| 任意 `provides.go` / provider 签名 | `mise run wire:all` |
+| 首次拉取 / 全量验证 | `mise run generate:all && mise run build` |
 
 三道门禁（本地提交前与 CI 一致）：
 
-1. **proto 兼容**：`task lint:proto` 执行 `buf breaking --against '.git#branch=origin/main'`，禁止字段号复用、未 `reserved` 的删除等破坏性变更。
-2. **codegen 零漂移**：`task generate:all && git diff --exit-code`——任何生成物（`genproto/`、`config.pb.go`、`wire_gen.go`）与提交不一致即失败。同一 commit 下重复生成应零 diff。
+1. **proto 兼容**：`mise run lint:proto` 执行 `buf breaking --against '.git#branch=origin/main'`，禁止字段号复用、未 `reserved` 的删除等破坏性变更。
+2. **codegen 零漂移**：`mise run generate:all && git diff --exit-code`——任何生成物（`genproto/`、`config.pb.go`、`wire_gen.go`）与提交不一致即失败。同一 commit 下重复生成应零 diff。
 3. **lint 全量门禁**：`golangci-lint run ./...`（无棘轮豁免），`go vet` + `gofmt` 为前置。
 
 ### 新增 gRPC 方法的生成侧清单
@@ -129,7 +129,7 @@ generate:all
 1. 在 proto 方法上声明 `(method_auth)` 注解（或依赖服务级 `service_auth` 默认）——策略唯一声明源在 proto，缺失时启动报 `missing auth policy`；
 2. 同步 OpenAPI 扩展 `x-torchwood-access`（`public` / `end_user` / `server` / `permission`），一致性由 `cmd/server/internal/runtime/grpc_swagger_test.go` 断言；
 3. 在 `internal/app/shared/authz.go` 按语义选择 `RequireServerPrincipal`（业务写，API Key 可调用）或 `RequirePlatformPrincipal`（平台级）做纵深防御；
-4. `task generate:all && task build && go vet ./...` 验证零漂移。
+4. `mise run generate:all && mise run build && go vet ./...` 验证零漂移。
 
 完整流程与鉴权细节见 `09-api-guide.md` 与 `05-authentication.md`。
 
@@ -139,10 +139,10 @@ generate:all
 
 | 现象 | 原因与处理 |
 |------|-----------|
-| 改了 proto 后 `go build` 报方法缺失 | 忘跑 `buf generate`，`genproto/` 还是旧代码。先 `task generate:proto` 再 build |
-| Wire 编译报类型不匹配 | 改了 provider 签名未重算。`task wire:all` |
+| 改了 proto 后 `go build` 报方法缺失 | 忘跑 `buf generate`，`genproto/` 还是旧代码。先 `mise run generate:proto` 再 build |
+| Wire 编译报类型不匹配 | 改了 provider 签名未重算。`mise run wire:all` |
 | 新配置键环境变量覆盖不生效 | 改了 `config.proto` 未 `generate:config`，`bind.go` 反射不到新键 |
-| CI 漂移检查失败 | 生成物未提交。本地 `task generate:all` 后将全部生成物一并提交 |
+| CI 漂移检查失败 | 生成物未提交。本地 `mise run generate:all` 后将全部生成物一并提交 |
 
 ---
 

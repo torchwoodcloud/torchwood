@@ -1,7 +1,7 @@
 # 镜像发布流水线：GitHub Actions 构建仓库根 Dockerfile → 推 GHCR
 # （ghcr.io/torchwoodcloud/torchwood）。
 #
-# 背景：Dokploy/小内存 VPS 上 `docker compose build` 会在 go build 三个二进制
+# 背景：Dokploy/小内存 VPS 上 `docker compose build` 会在 go build 多个二进制
 # 时触发 OOM（部署进程被内核杀死，状态表现为 cancelled 而非 error）。改为
 # CI 预构建、部署机仅 pull（docker/dokploy/docker-compose.yml 的
 # pull_policy: always），Redeploy 即取 main 最新镜像。
@@ -13,7 +13,7 @@
 # Package settings），或让部署机 docker login ghcr.io（PAT read:packages）。
 #
 # 版本元数据经 build-args 注入 -ldflags（main.version/commit/date），由
-# GET /v1/server/health/version 暴露；本地 task docker:build 不传参时为
+# GET /v1/server/health/version 暴露；本地 mise run docker:build 不传参时为
 # dev/unknown，行为不变。
 
 name: Image
@@ -44,7 +44,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # 版本元数据：tag 构建用 tag 名（vX.Y.Z），分支构建用 sha-<short>；
-      # 与 task build 的 git describe/短 commit/UTC 时间戳形态对齐。
+      # 与 mise run build 的 git describe/短 commit/UTC 时间戳形态对齐。
       - id: meta
         run: |
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then

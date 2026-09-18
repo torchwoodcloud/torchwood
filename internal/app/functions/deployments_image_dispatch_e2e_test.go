@@ -19,7 +19,7 @@ import (
 )
 
 // 进程内端到端冒烟（三期阶段 3，镜像源 BYO；真实 DB；DSN 未配置时跳过——
-// 集成链路在 `task test`/带 DSN 的验收跑法覆盖）：与 git 源冒烟
+// 集成链路在 `mise run test`/带 DSN 的验收跑法覆盖）：与 git 源冒烟
 // （deployments_git_e2e_test.go）同风格，差异在 executor 侧——httptest 起
 // fake dispatcher（实现 /v1/dispatch/images/import 返回固定
 // digest、/v1/dispatch/executions 返回固定 ok 封套），经**真实**

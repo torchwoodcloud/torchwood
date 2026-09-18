@@ -56,7 +56,7 @@ func consoleNotBuiltHandler() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Torchwood Console</title></head>` +
-			`<body><p>Console 未构建 — 执行 <code>task console:build</code> 后重新 <code>task build</code>。</p></body></html>`))
+			`<body><p>Console 未构建 — 执行 <code>mise run console:build</code> 后重新 <code>mise run build</code>。</p></body></html>`))
 	})
 }
 

@@ -1,8 +1,8 @@
 # 环境搭建与快速开始
 
-本章面向新加入的开发者，覆盖从零到本地跑通全系统的完整路径：前置条件、本地基础设施、数据库双账号准备、六步启动、端点速查、常用 Task 命令、常见问题与 CLI 上手。
+本章面向新加入的开发者，覆盖从零到本地跑通全系统的完整路径：前置条件、本地基础设施、数据库双账号准备、六步启动、端点速查、常用 mise 命令、常见问题与 CLI 上手。
 
-> 事实源：`Taskfile.yml`、`docker/local/docker-compose.yml`、`configs/config.yaml.template`、`.env.example`、`cmd/server/main.go`。
+> 事实源：`mise.toml`、`docker/local/docker-compose.yml`、`configs/config.yaml.template`、`.env.example`、`cmd/server/main.go`。
 
 ---
 
@@ -10,12 +10,12 @@
 
 | 依赖 | 版本 | 用途 |
 |------|------|------|
-| Go | 1.26.5 | `go.mod` 要求 |
-| Node.js + pnpm | 22 + pnpm 11.20 | 构建 Console 前端 |
+| Go | 1.26.5 | `go.mod` / `mise.toml` 钉版 |
+| Node.js + pnpm | 24 + pnpm 11.20 | 构建 Console 前端（mise 管理） |
 | Docker + Compose | 近期版本 | 运行 PostgreSQL / Redis / MinIO |
-| Task | 最新 | 任务编排，安装：`go install github.com/go-task/task/v3/cmd/task@latest` |
+| mise | 2026.9+ | 工具链与任务编排，安装：`curl https://mise.run \| sh` |
 
-代码生成与质量工具（`protoc-gen-go`、`migrate`、`buf@v1.65.0`、`wire`、`golangci-lint`）不必手动逐个安装，`task tools:install` 一次装齐。
+代码生成与质量工具（`buf@1.65.0`、`protoc@31.1`、`protoc-gen-go@1.36.11`、`golangci-lint@2.12.2` 等）不必手动逐个安装，`mise install` 按 `mise.toml` 钉版一次装齐。
 
 ---
 
@@ -65,23 +65,23 @@ cp .env.example .env
 ### 步骤 1 — 启动基础设施
 
 ```bash
-task docker:up     # docker compose up -d（docker/local/）
+mise run docker:up     # docker compose up -d（docker/local/）
 docker ps          # 三个容器均为 healthy
 ```
 
 ### 步骤 2 — 数据库迁移
 
 ```bash
-task db:migrate    # migrate -path ./db/migrations -database <DSN> up
+mise run db:migrate    # go run migrate -path ./db/migrations -database <DSN> up
 ```
 
-迁移 DSN 优先取 `TORCHWOOD_DATA_DATABASE_SOURCE`，否则由 `POSTGRES_*` 变量拼接。**迁移必须用 owner 引导账号**（`torchwood/torchwood`）。如果 `.env` 里的运行态 DSN 已换成 authenticator（如上方示例），迁移时临时用引导账号覆盖：
+迁移 DSN 优先级：`MIGRATE_DSN` → `TORCHWOOD_DATA_DATABASE_SOURCE` → `POSTGRES_*` 拼接。**迁移必须用 owner 引导账号**（`torchwood/torchwood`）。如果 `.env` 里的运行态 DSN 已换成 authenticator（如上方示例），迁移时用 `MIGRATE_DSN` 一次性覆盖：
 
 ```bash
-TORCHWOOD_DATA_DATABASE_SOURCE="postgres://torchwood:torchwood@127.0.0.1:5432/torchwood?sslmode=disable" task db:migrate
+MIGRATE_DSN="postgres://torchwood:torchwood@127.0.0.1:5432/torchwood?sslmode=disable" mise run db:migrate
 ```
 
-（命令行环境变量优先于 Task 的 dotenv 加载。）
+（mise 的 `[env]` 会覆盖同名 shell 变量，所以不能直接传 `TORCHWOOD_DATA_DATABASE_SOURCE=...`；`MIGRATE_DSN` 不在 `.env` 中，shell 值可穿透。）
 
 ### 步骤 2.5 — 创建 authenticator 角色（迁移之后、启动之前）
 
@@ -113,35 +113,35 @@ SQL
 ### 步骤 3 — 安装工具与依赖
 
 ```bash
-task tools:install     # protoc-gen-go / migrate / buf / wire / golangci-lint
-task console:install   # pnpm install（console/）
+mise install     # go / node / pnpm / buf / protoc / protoc-gen-go / golangci-lint
+mise run console:install   # pnpm install（console/）
 ```
 
 ### 步骤 4 — 生成代码
 
 ```bash
-task generate:all      # generate:proto → generate:config → wire:all
+mise run generate:all      # generate:proto → generate:config → wire:all
 ```
 
 | 任务 | 产物 |
 |------|------|
 | `generate:proto` | `buf lint` + `buf generate` → `genproto/` |
 | `generate:config` | 由 `internal/pkg/config/config.proto` 产出 `config.pb.go` |
-| `wire:all` | server / worker / dispatcher 三份 `wire_gen.go` |
+| `wire:all` | server / worker / dispatcher / packer 四份 `wire_gen.go` |
 
 生成物零漂移校验（生成后 `git diff --exit-code`）见 `04-codegen.md`。
 
 ### 步骤 5 — 构建并启动
 
 ```bash
-task build             # console:build → go build 四个二进制（server / worker / dispatcher / torchwood）到 ./bin/
+mise run build             # console:build → go build 五个二进制（server / worker / dispatcher / packer / torchwood）到 ./bin/
 ./bin/server           # Windows 下为 ./bin/server.exe
 # 开发态直跑：
-task dev:server        # go run ./cmd/server
-task dev:worker        # go run ./cmd/worker（独立进程）
+mise run dev:server        # go run ./cmd/server
+mise run dev:worker        # go run ./cmd/worker（独立进程）
 ```
 
-修改 `console/src/` 之后必须 `task console:build && task build`，否则 Go embed 打包的仍是旧版前端产物。
+修改 `console/src/` 之后必须 `mise run console:build && mise run build`，否则 Go embed 打包的仍是旧版前端产物。
 
 ### 步骤 6 — 首次引导（bootstrap）
 
@@ -168,7 +168,7 @@ task dev:worker        # go run ./cmd/worker（独立进程）
 | Metrics | `http://127.0.0.1:9040/metrics` |
 | 健康检查 | `http://127.0.0.1:9080/healthz/liveness`、`/healthz/readiness` |
 
-`task console:dev` 的 Vite 开发代理指向同源 `/v1`。
+`mise run console:dev` 的 Vite 开发代理指向同源 `/v1`。
 
 ---
 
@@ -176,21 +176,21 @@ task dev:worker        # go run ./cmd/worker（独立进程）
 
 | 任务 | 用途 |
 |------|------|
-| `task list` | 列出全部任务 |
-| `tools:install` | 安装 buf / wire / migrate 等工具 |
-| `docker:up` / `docker:down` / `docker:purge` | 启动 / 停止 / 删卷重置（`docker compose down -v`） |
-| `db:migrate` | 执行 `db/migrations` 迁移 |
-| `generate:proto` / `generate:config` / `wire:all` / `generate:all` | proto / 配置 / Wire 代码生成 |
-| `gen:authz-matrix` | 从策略注册表重新生成 `docs/developer/authz-matrix.md` |
-| `lint:proto` | `buf lint` + `buf breaking --against '.git#branch=origin/main'` |
-| `console:install` / `console:build` / `console:dev` | 前端依赖 / 构建 / 开发服务器 |
-| `dev:server` / `dev:worker` | 直跑 server / worker |
-| `build` | console:build + 四个二进制 |
-| `test` | lint:go + lint:golangci + test:sdk-go + test:sdk-ts + `go test -race -v ./... -cover` |
-| `lint` | lint:go + lint:golangci + lint:sdk-go + lint:console |
-| `docker:build` | 构建发布镜像 |
+| `mise tasks` | 列出全部任务 |
+| `mise install` | 按 `[tools]` 安装 go / node / pnpm / buf / protoc / protoc-gen-go / golangci-lint |
+| `mise run docker:up` / `docker:down` / `docker:purge` | 启动 / 停止 / 删卷重置（`docker compose down -v`） |
+| `mise run db:migrate` | 执行 `db/migrations` 迁移 |
+| `mise run generate:proto` / `generate:config` / `wire:all` / `generate:all` | proto / 配置 / Wire 代码生成 |
+| `mise run gen:authz-matrix` | 从策略注册表重新生成 `docs/developer/authz-matrix.md` |
+| `mise run lint:proto` | `buf lint` + `buf breaking --against '.git#branch=origin/main'` |
+| `mise run console:install` / `console:build` / `console:dev` | 前端依赖 / 构建 / 开发服务器 |
+| `mise run dev:server` / `dev:worker` | 直跑 server / worker |
+| `mise run build` | console:build + 五个二进制 |
+| `mise run test` | lint:go + lint:golangci + test:sdk-go + test:sdk-ts + `go test -race -v ./... -cover` |
+| `mise run lint` | lint:go + lint:golangci + lint:sdk-go + lint:console |
+| `mise run docker:build` | 构建发布镜像 |
 
-`task test` 自动从 `.env` 加载 `TORCHWOOD_TEST_*`；`lint:golangci` 是全量门禁（无棘轮豁免）。
+`mise run test` 自动从 `.env` 加载 `TORCHWOOD_TEST_*`；`lint:golangci` 是全量门禁（无棘轮豁免）。
 
 ---
 
@@ -198,12 +198,12 @@ task dev:worker        # go run ./cmd/worker（独立进程）
 
 | 现象 | 处理 |
 |------|------|
-| 端口占用 | 基础设施端口改 `.env`（`POSTGRES_PORT` 等）后重跑 `task docker:up`；应用端口改 `configs/config.yaml` |
-| `task db:migrate` 失败 | 确认 `docker ps` 三容器 healthy；确认 DSN 与 `POSTGRES_*` 一致；需重置时 `task docker:purge` |
-| Console 改动不生效 | embed 的是 `console/dist`，须先 `console:build` 再 `build`；开发调试用 `task console:dev` |
+| 端口占用 | 基础设施端口改 `.env`（`POSTGRES_PORT` 等）后重跑 `mise run docker:up`；应用端口改 `configs/config.yaml` |
+| `mise run db:migrate` 失败 | 确认 `docker ps` 三容器 healthy；确认 DSN 与 `POSTGRES_*` 一致；需重置时 `mise run docker:purge` |
+| Console 改动不生效 | embed 的是 `console/dist`，须先 `mise run console:build` 再 `mise run build`；开发调试用 `mise run console:dev` |
 | 鉴权失败 | 检查 JWT secret 长度与弱子串、`SETUP_TOKEN` 是否已配；API Key 放 `x-api-key` 头；跨项目调用带 `X-Torchwood-Project` |
 | 反向代理后 IP 不准 | 默认不信任 `X-Forwarded-For`，需配置 `security.trusted_proxies`（如 `TORCHWOOD_SECURITY_TRUSTED_PROXIES=127.0.0.1/32`） |
-| 直接 `go test` 报错 | 集成测试需要 `TORCHWOOD_TEST_*` 环境变量，改用 `task test` 或手动导出 |
+| 直接 `go test` 报错 | 集成测试需要 `TORCHWOOD_TEST_*` 环境变量，改用 `mise run test` 或手动导出 |
 
 ---
 
@@ -258,4 +258,4 @@ TORCHWOOD_GIT_TOKEN=ghp_xxx ./bin/torchwood functions deployments create-from-gi
 - `03-configuration.md` — 配置体系与 `TORCHWOOD_` 环境变量映射
 - `13-operations.md` — 生产部署与双账号契约
 - `19-runbook.md` — runbook 资源迁移命令
-- `11-testing.md` — 测试分层与 `task test` 细节
+- `11-testing.md` — 测试分层与 `mise run test` 细节

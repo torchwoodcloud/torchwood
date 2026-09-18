@@ -31,12 +31,12 @@ Torchwood 是一个 **AI/Agent-Native** 的后端即服务（BaaS）平台，使
 
 ### 前置要求
 
-Go 1.26.5+、Node.js 22+ + pnpm、Docker + Compose、[Task](https://taskfile.dev/)（`go install github.com/go-task/task/v3/cmd/task@latest`）。
+Docker + Compose 与 [mise](https://mise.jdx.dev/)（`curl https://mise.run | sh`）；`mise install` 按 `mise.toml` 钉版装齐 Go、Node、pnpm、buf、protoc(+protoc-gen-go) 与 golangci-lint。
 
 ### 1. 启动基础设施
 
 ```bash
-task docker:up
+mise run docker:up
 ```
 
 启动 PostgreSQL（5432）、Redis（6379）与 MinIO（9000/9001）。端口可通过 `.env` 中的 `POSTGRES_PORT`/`REDIS_PORT`/`MINIO_API_PORT`/`MINIO_CONSOLE_PORT` 覆盖。
@@ -63,27 +63,27 @@ TORCHWOOD_STORAGE_S3_SECRET_ACCESS_KEY=minioadmin
 ### 3. 数据库迁移
 
 ```bash
-task db:migrate
+mise run db:migrate
 ```
 
 ### 4. 工具链与代码生成
 
 ```bash
-task tools:install   # buf、wire、migrate、protoc-gen-go、golangci-lint（首次）
-task generate:all    # buf generate + config proto + wire:all
-task console:install # pnpm install（首次）
+mise install   # go、node、pnpm、buf、protoc、protoc-gen-go、golangci-lint（首次）
+mise run generate:all    # buf generate + config proto + wire:all
+mise run console:install # pnpm install（首次）
 ```
 
 ### 5. 构建并运行
 
 ```bash
-task build        # 先 console:build，再编译 server + worker + CLI 到 ./bin/
+mise run build        # 先 console:build，再编译 server/worker/dispatcher/packer/torchwood 到 ./bin/
 ./bin/server.exe  # Windows；Linux/macOS 为 ./bin/server
 # 开发模式：
-task dev:server   # go run ./cmd/server
+mise run dev:server   # go run ./cmd/server
 ```
 
-修改 Console 后需先 `task console:build` 再 `task build`，否则 `//go:embed` 打包的是旧 `dist`。
+修改 Console 后需先 `mise run console:build` 再 `mise run build`，否则 `//go:embed` 打包的是旧 `dist`。
 
 ### 6. 首次引导（bootstrap）
 
@@ -108,14 +108,14 @@ API Key 不在注册时生成，登录后在 Console **API Keys** 页面创建�
 
 | 任务 | 说明 |
 |------|------|
-| `task docker:up` / `down` / `clean` | 启动 / 停止 / 清空本地基础设施 |
-| `task db:migrate` | 执行 `db/migrations` |
-| `task generate:proto` / `generate:config` / `wire:all` / `generate:all` | buf / config proto / Wire |
-| `task console:install` / `console:build` / `console:dev` | 前端 pnpm 工作流 |
-| `task dev:server` / `task dev:worker` | 直接运行 server/worker |
-| `task build` | 构建前端 + server + worker + `bin/torchwood` CLI |
-| `task test` | SDK Go/TS 测试 + `go test -v ./... -cover` |
-| `task lint` | `go vet` + `golangci-lint` + console lint |
+| `mise run docker:up` / `docker:down` / `docker:purge` | 启动 / 停止 / 清空本地基础设施 |
+| `mise run db:migrate` | 执行 `db/migrations` |
+| `mise run generate:proto` / `generate:config` / `wire:all` / `generate:all` | buf / config proto / Wire |
+| `mise run console:install` / `console:build` / `console:dev` | 前端 pnpm 工作流 |
+| `mise run dev:server` / `mise run dev:worker` | 直接运行 server/worker |
+| `mise run build` | 构建前端 + server/worker/dispatcher/packer + `bin/torchwood` CLI |
+| `mise run test` | SDK Go/TS 测试 + `go test -v ./... -cover` |
+| `mise run lint` | `go vet` + `golangci-lint` + console lint |
 
 ## 项目结构
 
@@ -141,14 +141,14 @@ API Key 不在注册时生成，登录后在 Console **API Keys** 页面创建�
 ├── pkg/                 # 可复用库（crud / query DSL / jwtparser / password / idgen / semaphore / secretbox）
 ├── sdk/                 # 官方 SDK：typescript/ + go/ + demo/
 ├── buf.yaml / buf.gen.yaml
-├── Taskfile.yml
+├── mise.toml
 └── README.md / README_ZH.md
 ```
 
 ## 架构说明
 
 - **Clean Architecture 四层**：`internal/api`（传输层）→ `internal/app`（用例层）→ `internal/domain`（领域模型与端口）→ `internal/infra`（适配器层）。`domain` 定义接口，`infra` 实现。
-- **Wire 注入**：`cmd/server/provides.go` 声明 provider 集合，`cmd/server/wire_gen.go`（`cmd/worker` 同理）由 `task wire:all` 生成；provider 变更后需重新生成。
+- **Wire 注入**：`cmd/server/provides.go` 声明 provider 集合，`cmd/server/wire_gen.go`（`cmd/worker` 同理）由 `mise run wire:all` 生成；provider 变更后需重新生成。
 - **三进程**：`server`（gRPC + gateway + 自定义 HTTP handler + metrics + 嵌入式 Console）、`worker`（函数执行队列消费者，独立 Wire 装配）、`CLI`（`bin/torchwood`，lynx-go/commands + `sdk/go/server` 的 `InvokeJSON`，不直接 import `genproto`/gRPC，`rpc` 逃生舱自动覆盖新增 RPC）。
 - **三类数据库**：`public` 控制面与事件脊柱（`projects`、`admins`、`api_keys`、`audit_logs`、`outbox`/`outbox_dead`、全局 catalog 两表 `catalog_databases`/`catalog_collections`，bun + golang-migrate）；`tw_<project.id>` 项目数据面——系统静态表（`users`/`sessions`/`identities`/`groups`/`memberships`/`buckets`/`files`）+ 账本/Functions/OAuth（`internal/infra/projectschema/`）；`tw_<project.id>_<database.id>` 业务文档面——仅放用户 collection（真实表，表名 = collectionID，`_tenant` + `_acl` 内嵌 + RLS policy）。
 - **API 形态**：Protobuf 为单一事实来源（`proto/` → `genproto/`），REST 由 grpc-gateway 暴露，文件 multipart 与 OAuth 回调走 `internal/api/serverhttp`；gRPC 方法须带 `method_auth` 注解（启动期收集为策略注册表）。
@@ -158,10 +158,10 @@ API Key 不在注册时生成，登录后在 Console **API Keys** 页面创建�
 ## 测试
 
 ```bash
-task test   # lint:go + sdk/go + sdk/typescript + go test -v ./... -cover
+mise run test   # lint:go + sdk/go + sdk/typescript + go test -v ./... -cover
 ```
 
-集成测试（`internal/infra/documentdb/postgres_test.go`、`internal/app/client/account_test.go` 等）自动创建/销毁 `TORCHWOOD_test` 库。DSN 来自 `TORCHWOOD_TEST_DATABASE_SOURCE` / `TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE`（见 `.env.example`），`task test` 自动从 `.env` 加载。
+集成测试（`internal/infra/documentdb/postgres_test.go`、`internal/app/client/account_test.go` 等）自动创建/销毁 `TORCHWOOD_test` 库。DSN 来自 `TORCHWOOD_TEST_DATABASE_SOURCE` / `TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE`（见 `.env.example`），`mise run test` 自动从 `.env` 加载。
 
 ## SDK
 
@@ -171,8 +171,8 @@ task test   # lint:go + sdk/go + sdk/typescript + go test -v ./... -cover
 - **Go**（`sdk/go`，`github.com/torchwoodcloud/torchwood/sdk/go`）—— gRPC 直连薄封装：`client`（终端用户认证，自动刷新 token）与 `server`（API Key + `InvokeJSON` 动态分发，CLI 即基于此）。
 
 ```bash
-task sdk:install && task sdk:build
-task sdk:demo   # http://localhost:5174
+mise run sdk:install && mise run sdk:build
+mise run sdk:demo   # http://localhost:5174
 ```
 
 ## 开发者文档
@@ -184,7 +184,7 @@ task sdk:demo   # http://localhost:5174
 | [01-overview](docs/developer/01-overview.md) | 架构总览、技术栈、分层、调用链 |
 | [02-quickstart](docs/developer/02-quickstart.md) | 环境搭建、bootstrap、端点、CLI |
 | [03-configuration](docs/developer/03-configuration.md) | config.proto、`TORCHWOOD_` 环境变量映射 |
-| [04-codegen](docs/developer/04-codegen.md) | Task / Buf / Wire |
+| [04-codegen](docs/developer/04-codegen.md) | mise / Buf / Wire |
 | [05-authentication](docs/developer/05-authentication.md) | JWT / session / API Key / scopes |
 | [06-databases](docs/developer/06-databases.md) | 动态文档、`_acl` + RLS 权限、查询 AST |
 | [07-storage](docs/developer/07-storage.md) | S3/MinIO、分片上传、File Token |

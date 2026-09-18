@@ -32,15 +32,15 @@
 | `sdk/go/client/` | end-user 客户端（Bearer JWT + 自动刷新） |
 | `sdk/go/server/` | 管理面客户端（`x-api-key` + `InvokeJSON` + `Tools`） |
 | `sdk/go/internal/conn/` | 拨号封装 |
-| `sdk/demo/` | Vite 演示站（`task sdk:demo`，端口 5174） |
+| `sdk/demo/` | Vite 演示站（`mise run sdk:demo`，端口 5174） |
 
 ### 2.2 构建与安装
 
 ```bash
-task sdk:install   # sdk/typescript + sdk/demo 各 npm install
-task sdk:build     # tsc → dist/（不含 __tests__）
-task sdk:demo      # vite dev（http://localhost:5174）
-task sdk:publish   # 发布 npm
+mise run sdk:install   # sdk/typescript + sdk/demo 各 npm install
+mise run sdk:build     # tsc → dist/（不含 __tests__）
+mise run sdk:demo      # vite dev（http://localhost:5174）
+mise run sdk:publish   # 发布 npm
 ```
 
 - 外部用户直接 `npm install @torchwood/sdk`。
@@ -209,7 +209,7 @@ _ = me
 - 文档：入参 `map[string]any` → structpb，读回数值多为 `float64`。
 - 查询：文档面收 typed AST（`*sharedv1.Query`，`sdk/go/query` 提供 `Eq/Gt/...` 构造器与链式 Builder）；DSL 串经 `query.FromDSL` 在**客户端**解析为 AST 后发送（服务端零字符串解析）；`ListDatabases` 等静态面仍走 `queries` 串参数。
 - CLI：`cmd/torchwood`（实现随仓库根 `cli/` 包）**仅依赖 `sdk/go/server`** 的 InvokeJSON，源码不直连 genproto（`cli/import_guard_test.go` 兜底），新增 RPC 无需 CLI 登记。
-- 测试：bufconn 内存 gRPC 无外部依赖，纳入 `task test` 与 `task lint`；文档示例可编译性由 `sdk/go/docexamples`（build tag `docexample`）保证。
+- 测试：bufconn 内存 gRPC 无外部依赖，纳入 `mise run test` 与 `mise run lint`；文档示例可编译性由 `sdk/go/docexamples`（build tag `docexample`）保证。
 
 ## 5. 错误与类型
 

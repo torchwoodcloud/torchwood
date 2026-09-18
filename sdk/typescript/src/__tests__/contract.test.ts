@@ -40,7 +40,7 @@ import {
 } from "../server/index.js";
 
 // ---- 契约测试：proto（swagger.json 产物）↔ TS SDK 方法集合比对（F11-2）----
-// 前提：仓库根目录执行过 `task generate-proto`（genproto/**/*.swagger.json 存在）。
+// 前提：仓库根目录执行过 `mise run generate:proto`（genproto/**/*.swagger.json 存在）。
 // 任一 proto 新增 RPC 后，本测试失败并提示在 SDK 补齐对应方法。
 
 const GENPROTO_DIR = join(dirname(fileURLToPath(import.meta.url)), "../../../../genproto");
@@ -457,7 +457,7 @@ function loadSwaggerFiles(): SwaggerFile[] {
 
 describe("contract: swagger ↔ TS SDK", () => {
   const files = loadSwaggerFiles();
-  assert.ok(files.length >= 14, `genproto swagger 文件缺失（当前 ${files.length} 个），请先执行 task generate-proto`);
+  assert.ok(files.length >= 14, `genproto swagger 文件缺失（当前 ${files.length} 个），请先执行 mise run generate:proto`);
 
   it("所有服务 swagger 声明统一 securityDefinitions", () => {
     for (const f of files) {
@@ -771,7 +771,7 @@ it("Torchwood.server 门面可达全部 Server swagger 服务（含 functions）
     for (const tc of cases) {
       const op = opsBySide.get(tc.side)?.get(tc.operationId);
       if (!op) {
-        throw new Error(`swagger 缺少 ${tc.side} operation ${tc.operationId}（先执行 task generate-proto）`);
+        throw new Error(`swagger 缺少 ${tc.side} operation ${tc.operationId}（先执行 mise run generate:proto）`);
       }
       const calls: { method: string; url: URL; body?: Record<string, unknown> }[] = [];
       const http = new HttpTransport({

@@ -227,10 +227,10 @@ func SetupTestDB(t *testing.T) *clients.Database {
 	adminDSN := AdminDSN()
 	baseDSN := TestDSN()
 	if adminDSN == "" {
-		t.Fatal("TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE is not set (run via `task test`, which loads .env, or export it manually)")
+		t.Fatal("TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE is not set (run via `mise run test`, which loads .env, or export it manually)")
 	}
 	if baseDSN == "" {
-		t.Fatal("TORCHWOOD_TEST_DATABASE_SOURCE is not set (run via `task test`, which loads .env, or export it manually)")
+		t.Fatal("TORCHWOOD_TEST_DATABASE_SOURCE is not set (run via `mise run test`, which loads .env, or export it manually)")
 	}
 	dbName := uniqueTestDBName()
 

@@ -34,7 +34,7 @@ const GENPROTO_SERVER_DIR = join(
 
 function serverSwaggerOperationIds(): Set<string> {
   const ids = new Set<string>();
-  assert.ok(existsSync(GENPROTO_SERVER_DIR), "genproto/server/v1 缺失，请先 task generate-proto");
+  assert.ok(existsSync(GENPROTO_SERVER_DIR), "genproto/server/v1 缺失，请先 mise run generate:proto");
   for (const f of readdirSync(GENPROTO_SERVER_DIR).filter((n) => n.endsWith(".swagger.json"))) {
     const doc = JSON.parse(readFileSync(join(GENPROTO_SERVER_DIR, f), "utf8")) as {
       paths?: Record<string, Record<string, { operationId?: string }>>;

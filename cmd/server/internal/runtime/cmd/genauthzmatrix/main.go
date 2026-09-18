@@ -1,5 +1,5 @@
 // genauthzmatrix 生成 docs/developer/authz-matrix.md（授权矩阵文档）：
-// 数据源 = 真实 proto 的 PolicySet（与启动期同源）。再生方式：task gen:authz-matrix。
+// 数据源 = 真实 proto 的 PolicySet（与启动期同源）。再生方式：mise run gen:authz-matrix。
 package main
 
 import (

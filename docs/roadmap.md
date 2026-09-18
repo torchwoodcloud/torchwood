@@ -278,11 +278,11 @@ concurrency 策略链与函数内执行身份 `fromExecution`）。详见
 | 集成测试 | Account、Databases Documents、Storage 端到端测试；本次补 UpdateCollection/DeleteAttribute/DeleteIndex/increment 路径 | `internal/app/**/*_integration_test.go` | ✅ 完成 |
 | Seed 数据增强 | 提供示例 collection、文件、函数 | ~~`cmd/seed/main.go`~~ | 已由首个管理员 bootstrap 取代（`docs/implementation-bootstrap-and-cli.md`），`cmd/seed` 移除 |
 | GitHub Actions CI | lint（gofmt/vet/eslint）、test（含 Postgres 集成）、build、console-build | `.github/workflows/ci.yml` | ✅ 完成 |
-| 代码格式化 | `gofmt`、`eslint`（prettier 未启用） | `Taskfile.yml`（`task lint`）、`console/eslint.config.js` | ✅ 完成 |
+| 代码格式化 | `gofmt`、`eslint`（prettier 未启用） | `mise.toml`（`mise run lint`）、`console/eslint.config.js` | ✅ 完成 |
 
 **验收标准**：
 
-- CI 每次 PR 触发 `go test ./...` 和 `task build` 并通过。
+- CI 每次 PR 触发 `go test ./...` 和 `mise run build` 并通过。
 - API Key 没有 `users.write` scope 时无法调用 `UpdateUser`。
 
 ---

@@ -19,6 +19,9 @@ data/files/
 coverage.html
 coverage.out
 
+# mise 本地覆盖（个人环境差异不入库）
+mise.local.toml
+
 # Console（构建产物全部忽略；dist/.gitkeep 经 git add -f 入库作 go:embed
 # 占位，见 console/embed.go，vite 构建后由插件自动补回）
 console/node_modules/

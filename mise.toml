@@ -1,0 +1,215 @@
+# Torchwood 开发环境与任务（mise-en-place）
+#
+#   mise install      安装 [tools] 钉版的全部开发工具（原 task tools:install）
+#   mise tasks        列出全部任务（原 task list）
+#   mise run <task>   执行任务（原 task <task>）
+#
+# 任务统一用 sh 执行：Linux 自带，Windows 需 Git Bash 的 sh 在 PATH。
+# [env] 自动加载仓库根 .env（等价原 Taskfile 的 dotenv: ['.env']）。
+
+[env]
+_.file = ".env"
+
+[tools]
+go = "1.26.5"              # go.mod `go 1.26.5`
+node = "24.19.0"           # console / sdk 前端工具链
+pnpm = "11.20.0"           # console/package.json packageManager
+buf = "1.65.0"             # buf lint / buf generate（生成物零漂移）
+protoc = "31.1"            # generate:config（config.pb.go 生成工具锁定）
+protoc-gen-go = "1.36.11"  # generate:config（与 config.pb.go 头注释一致）
+golangci-lint = "2.12.2"   # lint:golangci（与 CI 同版本）
+
+[task_config]
+shell = "sh -o errexit -c"
+
+[tasks."generate:config"]
+description = "config.proto -> config.pb.go"
+dir = "internal/pkg/config"
+run = "protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto"
+
+[tasks."generate:proto"]
+description = "buf lint + buf generate（genproto/**）"
+run = ["buf lint", "buf generate"]
+
+[tasks."lint:proto"]
+description = "buf lint + 对 origin/main 的 breaking 检查"
+run = ["buf lint", "buf breaking --against '.git#branch=origin/main'"]
+
+[tasks."docker:up"]
+description = "启动本地 Postgres / Redis / MinIO"
+dir = "docker/local"
+run = "docker compose up -d"
+
+[tasks."docker:down"]
+description = "停止本地三件套"
+dir = "docker/local"
+run = "docker compose down"
+
+[tasks."docker:purge"]
+description = "停止并删除本地三件套数据卷"
+dir = "docker/local"
+run = "docker compose down -v"
+
+[tasks."db:migrate"]
+description = "执行数据库迁移（DSN 优先 MIGRATE_DSN，其次 TORCHWOOD_DATA_DATABASE_SOURCE）"
+run = '''
+DSN="${MIGRATE_DSN:-${TORCHWOOD_DATA_DATABASE_SOURCE:-postgres://${POSTGRES_USER:-torchwood}:${POSTGRES_PASSWORD:-torchwood}@${POSTGRES_HOST:-127.0.0.1}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-torchwood}?sslmode=disable}}"
+go run -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate -path ./db/migrations -database "$DSN" up
+'''
+
+[tasks."wire:server"]
+description = "重生成 cmd/server/wire_gen.go"
+dir = "cmd/server"
+run = ["go mod tidy", "go run -mod=mod github.com/google/wire/cmd/wire"]
+
+[tasks."wire:worker"]
+description = "重生成 cmd/worker/wire_gen.go"
+dir = "cmd/worker"
+run = ["go mod tidy", "go run -mod=mod github.com/google/wire/cmd/wire"]
+
+[tasks."wire:dispatcher"]
+description = "重生成 cmd/dispatcher/wire_gen.go"
+dir = "cmd/dispatcher"
+run = ["go mod tidy", "go run -mod=mod github.com/google/wire/cmd/wire"]
+
+[tasks."wire:packer"]
+description = "重生成 cmd/packer/wire_gen.go"
+dir = "cmd/packer"
+run = ["go mod tidy", "go run -mod=mod github.com/google/wire/cmd/wire"]
+
+[tasks."wire:all"]
+description = "依次重生成全部 wire_gen.go"
+run = [
+  { task = "wire:server" },
+  { task = "wire:worker" },
+  { task = "wire:dispatcher" },
+  { task = "wire:packer" },
+]
+
+[tasks."generate:all"]
+description = "generate:proto + generate:config + wire:all"
+run = [
+  { task = "generate:proto" },
+  { task = "generate:config" },
+  { task = "wire:all" },
+]
+
+[tasks."gen:authz-matrix"]
+description = "生成 docs/developer/authz-matrix.md（策略注册表派生，漂移即红）"
+run = "go run ./cmd/server/internal/runtime/cmd/genauthzmatrix"
+
+[tasks."console:install"]
+description = "pnpm install（console/）"
+dir = "console"
+run = "pnpm install"
+
+[tasks."console:build"]
+description = "console 构建（tsc + vite -> console/dist）"
+dir = "console"
+run = "pnpm run build"
+
+[tasks."console:dev"]
+description = "console 开发服务器（vite）"
+dir = "console"
+run = "pnpm run dev"
+
+[tasks."sdk:install"]
+description = "npm install（sdk/typescript + sdk/demo）"
+dir = "sdk/typescript"
+run = ["npm install", "npm --prefix ../demo install"]
+
+[tasks."sdk:build"]
+description = "构建 TS SDK（tsc -> dist/）"
+dir = "sdk/typescript"
+run = "npm run build"
+
+[tasks."sdk:publish"]
+description = "发布 @torchwood/sdk 到 npm"
+dir = "sdk/typescript"
+run = "npm publish"
+
+[tasks."sdk:demo"]
+description = "构建 SDK 后启动 demo（:5174）"
+depends = ["sdk:build"]
+dir = "sdk/demo"
+run = "npm run dev"
+
+[tasks."sdk:demo-build"]
+description = "构建 SDK 后构建 demo"
+depends = ["sdk:build"]
+dir = "sdk/demo"
+run = ["npm ci", "npm run build"]
+
+[tasks."dev:server"]
+description = "启动 server（go run ./cmd/server）"
+run = "go run ./cmd/server"
+
+[tasks."dev:worker"]
+description = "启动 worker（go run ./cmd/worker）"
+run = "go run ./cmd/worker"
+
+[tasks.build]
+description = "console 构建 + go build 五个二进制到 ./bin/"
+depends = ["console:build"]
+run = '''
+VERSION="$(git describe --tags --always)"
+COMMIT="$(git rev-parse --short HEAD)"
+DATE="$(date +%Y%m%d%H%M%S)"
+LDFLAGS="-X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE"
+go build -ldflags "$LDFLAGS" -o ./bin/ ./cmd/server
+go build -ldflags "$LDFLAGS" -o ./bin/ ./cmd/worker
+go build -ldflags "$LDFLAGS" -o ./bin/ ./cmd/dispatcher
+go build -ldflags "$LDFLAGS" -o ./bin/ ./cmd/packer
+go build -ldflags "$LDFLAGS" -o ./bin/ ./cmd/torchwood
+'''
+
+[tasks."test:sdk-go"]
+description = "SDK Go 测试"
+dir = "sdk/go"
+run = "go test -v ./... -cover"
+
+[tasks."test:sdk-ts"]
+description = "SDK TypeScript 测试"
+dir = "sdk/typescript"
+run = ["npm ci", "npm run test"]
+
+[tasks.test]
+description = "全量门禁：lint + sdk 测试 + go test -race（.env 已自动加载）"
+depends = ["lint:go", "lint:golangci", "test:sdk-go", "test:sdk-ts"]
+run = "go test -race -v ./... -cover"
+
+[tasks."lint:go"]
+description = "go vet + gofmt 检查"
+run = '''
+go vet ./...
+test -z "$(gofmt -l .)"
+'''
+
+[tasks."lint:golangci"]
+description = "golangci-lint 全量门禁（无棘轮豁免，见 .golangci.yml）"
+run = "golangci-lint run ./..."
+
+[tasks."lint:sdk-go"]
+description = "SDK Go vet + gofmt 检查"
+dir = "sdk/go"
+run = '''
+go vet ./...
+test -z "$(gofmt -l .)"
+'''
+
+[tasks."lint:console"]
+description = "console eslint"
+dir = "console"
+run = "pnpm lint"
+
+[tasks.lint]
+description = "lint:go + lint:golangci + lint:sdk-go + lint:console"
+depends = ["lint:go", "lint:golangci", "lint:sdk-go", "lint:console"]
+
+[tasks."docker:build"]
+description = "构建本地 Docker 镜像 torchwood:1.0.0-<git>-<ts>"
+run = '''
+GIT_VERSION="$(git describe --tags --always)"
+TIMESTAMP="$(date +%Y%m%d%H%M%S)"
+docker build -t "torchwood:1.0.0-${GIT_VERSION}-${TIMESTAMP}" .
+'''

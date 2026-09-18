@@ -26,7 +26,7 @@ COPY --from=console-builder /console/dist ./console/dist
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 # 版本元数据：CI 构建注入（.github/workflows/image.yml），缺省 dev/unknown
-# 与 task build 的本地形态对齐；由 /v1/server/health/version 暴露
+# 与 mise run build 的本地形态对齐；由 /v1/server/health/version 暴露
 ARG VERSION=dev
 ARG COMMIT=unknown
 ARG DATE=unknown

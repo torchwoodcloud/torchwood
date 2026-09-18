@@ -2,7 +2,7 @@
 
 Overlay，不是新 API。完整产品面仍是全部 RPC（当前 **247 个**：Client 68 + Server 155 + Console 24），Agent 默认仅暴露 **18 个动词**。
 
-> 计数权威：`docs/developer/authz-matrix.md` 头部（生成物，`task gen:authz-matrix` 渲染）。
+> 计数权威：`docs/developer/authz-matrix.md` 头部（生成物，`mise run gen:authz-matrix` 渲染）。
 > 动词映射：`sdk/go/server/tools.go`（`Tools`）与 `sdk/typescript/src/server/tools.ts`（`agentTools`）。
 > OpenAPI 以 `genproto/**/*.swagger.json` 为权威。
 
@@ -112,7 +112,7 @@ TS 不提供 `InvokeJSON`；catalog 仅提供名字与 `fullMethod`，实际执�
 ## 5. 完整 API 权威来源
 
 - **Proto**：`proto/client/`、`proto/server/`、`proto/console/`、`proto/shared/`；
-- **OpenAPI**：`task generate:proto` 后的 `genproto/**/*.swagger.json`（snake_case 字段名，时间 RFC3339）；
+- **OpenAPI**：`mise run generate:proto` 后的 `genproto/**/*.swagger.json`（snake_case 字段名，时间 RFC3339）；
 - **Scope**：Server RPC 的 scope 门随 `method_auth` 声明在 proto（策略唯一声明源），启动期收集进 PolicySet 并 fail-closed 校验（见 `05-authentication.md` §3/§7）；
 - **计数**：以 `authz-matrix.md` 头部与 `grep -r "^\s*rpc " proto | wc -l` 实时结果为准（数字随 API 演进变化）。
 
@@ -141,12 +141,12 @@ TS 属 fetch 层，`HttpTransport.request` 已支持 `auth:"apiKey"` 的任意�
 - Proto 层：按 `09-api-guide.md` 加 `method_auth`（access + admin_roles / api_key_scope）与 `google.api.http`，字段删除必 `reserved`；
 - 注解即策略：无需在任何 Go 侧登记 scope / 角色——启动期从 proto 收集并过语义断言，漏配直接启动失败；
 - 工具层（可选）：仅当产品决定收录为默认动词时，才在 `tools.go` / `tools.ts` 追加；
-- 生成物：`task generate:proto` 后提交 genproto，`buf breaking` 拦截不兼容变更；`task gen:authz-matrix` 重新生成矩阵文档。
+- 生成物：`mise run generate:proto` 后提交 genproto，`buf breaking` 拦截不兼容变更；`mise run gen:authz-matrix` 重新生成矩阵文档。
 
 ## 7. 本地验证
 
 ```bash
-task generate:proto                               # 生成 genproto
+mise run generate:proto                               # 生成 genproto
 buf breaking --against '.git#branch=origin/main'  # 无 breaking change
 golangci-lint run ./...                           # 全量门禁
 go test ./sdk/go/server -run TestTools -v         # 校验 18 条 catalog 与 FullMethod 存在性

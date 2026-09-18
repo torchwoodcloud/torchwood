@@ -2,7 +2,7 @@
 
 说明测试分层、`internal/pkg/testutil` 集成测试库约定、CI 门禁与 lint 全量门禁。所有提交代码的开发者必读。
 
-> 关联：`AGENTS.md`、`Taskfile.yml`、`.github/workflows/ci.yml`。
+> 关联：`AGENTS.md`、`mise.toml`、`.github/workflows/ci.yml`。
 
 ## 1. 测试分层
 
@@ -20,17 +20,12 @@
 - gRPC 错误用 `status.Code(err)` + `codes.*`；
 - API handler 测试用最小 stub 端口注入 Principal，不连 DB。
 
-## 2. `task test` 是唯一入口
+## 2. `mise run test` 是唯一入口
 
-```yaml
-test:
-  deps:
-    - task: lint:go
-    - task: lint:golangci   # gosec 等本地同拦，不等 CI
-    - task: test:sdk-go
-    - task: test:sdk-ts
-  cmds:
-    - go test -race -v ./... -cover
+```toml
+[tasks.test]
+depends = ["lint:go", "lint:golangci", "test:sdk-go", "test:sdk-ts"]
+run = "go test -race -v ./... -cover"
 ```
 
 | 子任务 | 命令 |
@@ -41,9 +36,9 @@ test:
 | `test:sdk-ts` | sdk/typescript 内 `npm ci && npm run test` |
 | 主测 | 根 module `go test -race -v ./... -cover`（含集成测试） |
 
-- Taskfile 声明 `dotenv: ['.env']`，所有 task 自动加载根 `.env`，集成测试所需环境变量由 `task test` 注入；**直接 `go test ./...` 会 `t.Fatal`**（缺 DSN，见 §3）。
+- `mise.toml` 的 `[env]` 声明 `_.file = ".env"`，所有任务自动加载根 `.env`，集成测试所需环境变量由 `mise run test` 注入；**直接 `go test ./...` 会 `t.Fatal`**（缺 DSN，见 §3）。
 - 手工等价：导出 `TORCHWOOD_TEST_DATABASE_SOURCE` 与 `TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE` 后再 `go test ./...`。
-- 前置：`task docker:up` 启动本地三件套。
+- 前置：`mise run docker:up` 启动本地三件套。
 
 ## 3. 集成测试数据库（internal/pkg/testutil）
 
@@ -54,7 +49,7 @@ test:
 | `TORCHWOOD_TEST_DATABASE_SOURCE` | `postgres://torchwood:torchwood@127.0.0.1:5432/TORCHWOOD_test?sslmode=disable` | 测试 DSN 模板，**库名会被替换** |
 | `TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE` | `postgres://torchwood:torchwood@127.0.0.1:5432/postgres?sslmode=disable` | 维护库 DSN（建库 / 删库） |
 
-无硬编码回退，缺失时 `SetupTestDB` 直接 `t.Fatal` 提示 `run via task test`。
+无硬编码回退，缺失时 `SetupTestDB` 直接 `t.Fatal` 提示 `mise run test`（自动加载 `.env`）。
 
 两个测试 DSN 保持 **owner 引导账号**（superuser）：testutil 的建隔离库 + 跑全量迁移是双账号契约的迁移侧（`CREATE EXTENSION vector`、public 建表、membership GRANT 都是引导面）。非 superuser 运行态形态由独立测试端到端锁定——owner 跑迁移 + 建 authenticator，再以 authenticator 完成 roles_sig 同步、项目 / 业务库 / 集合创建与文档读写冒烟，并断言 `rolsuper=false`。
 
@@ -113,10 +108,10 @@ golangci-lint run ./...
 ```
 
 - 启用 `bodyclose` / `gosec` / `noctx` / `sqlclosecheck` 等；仅剩行内圈定的 exclusions 暂挂项（`.golangci.yml` 头注释）。
-- `task test` 的 deps 已含 `lint:golangci`——本地裸跑 `go test` 全绿但 lint 红仍会翻车。
-- 本地自检：`task lint` 依次执行 `lint:go` + `lint:golangci` + `lint:sdk-go` + `lint:console`。
+- `mise run test` 的 deps 已含 `lint:golangci`——本地裸跑 `go test` 全绿但 lint 红仍会翻车。
+- 本地自检：`mise run lint` 依次执行 `lint:go` + `lint:golangci` + `lint:sdk-go` + `lint:console`。
 
-提交前：`task lint && task test`（或至少 `task lint` + `go test -short ./...`）。
+提交前：`mise run lint && mise run test`（或至少 `mise run lint` + `go test -short ./...`）。
 
 ## 5. CI 流水线
 
@@ -128,16 +123,16 @@ Services：`percona/percona-distribution-postgresql:18`（发行版基座内置 
 
 步骤（精简）：
 
-1. checkout + setup-go（`go-version-file: go.mod`）+ buf（钉 v1.65.0）；
+1. checkout + `jdx/mise-action`（按 `mise.toml` 装齐 go / node / pnpm / buf / protoc / protoc-gen-go / golangci-lint）；
 2. `buf lint` → **`buf breaking --against '.git#branch=origin/main'`**；
 3. 预拉 `node:18-alpine`（Functions 运行时基镜像）；
-4. gofmt / go vet / golangci-lint 全量门禁；
+4. `mise run lint:go` / `mise run lint:golangci` 全量门禁；
 5. `go test -race -covermode=atomic ./...`（单元 + 集成）→ sdk/go 测试；
 6. **RLS 相对基准门禁**：RLS 查询耗时相对基准 30x 阈值；
 7. **Coverage gate**：总覆盖率 ≥48%，只升不降；
 8. **functions docker e2e 断言**：输出无 `--- SKIP`（防静默跳过）；
-9. **Codegen 漂移门禁**：钉版本安装 `protoc v31.1` + `protoc-gen-go`（apt 版本产物即漂移），跑 `buf generate` + config 生成 + `task wire:all` 后 `git diff --exit-code`；
-10. pnpm + node → sdk/typescript 测试 → sdk demo build → `task build`（含 console embed 链路验证）。
+9. **Codegen 漂移门禁**：`mise run generate:all`（protoc 31.1 + protoc-gen-go 1.36.11 由 mise 钉版）后 `git diff --exit-code`；
+10. sdk/typescript 测试 → `mise run sdk:demo-build` → `mise run build`（含 console embed 链路验证）。
 
 ### 5.2 frontend job
 
@@ -159,7 +154,7 @@ Services：`percona/percona-distribution-postgresql:18`（发行版基座内置 
 ```bash
 buf breaking --against '.git#branch=origin/main'
 golangci-lint run ./...
-task generate:all && git diff --exit-code -- genproto internal/pkg/config cmd go.mod go.sum
+mise run generate:all && git diff --exit-code -- genproto internal/pkg/config cmd go.mod go.sum
 ```
 
 ## 7. 健康检查与可观测（测试相关）
@@ -171,10 +166,10 @@ task generate:all && git diff --exit-code -- genproto internal/pkg/config cmd go
 ## 8. 本地验证清单
 
 ```bash
-task docker:up    # Postgres / Redis / MinIO
-task lint         # go vet + gofmt + golangci-lint(全量) + sdk vet + eslint
-task test         # sdk-go + sdk-ts + go test -race -cover（自动加载 .env）
-task build        # console:build + go build（ldflags 注入 version/commit/date）
+mise run docker:up    # Postgres / Redis / MinIO
+mise run lint         # go vet + gofmt + golangci-lint(全量) + sdk vet + eslint
+mise run test         # sdk-go + sdk-ts + go test -race -cover（自动加载 .env）
+mise run build        # console:build + go build（ldflags 注入 version/commit/date）
 # 手工：curl /v1/health  /v1/server/health/version  /healthz/readiness
 ```
 

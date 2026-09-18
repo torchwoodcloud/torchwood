@@ -90,7 +90,7 @@ message ServiceAuth { AccessLevel default_access = 1; }  // 服务级默认（�
 | `interceptor.NewAuthInterceptor(validator, policySet)` | 请求期门禁执行（§4） |
 | `serverhttp` / `realtime` 镜像点 | 经 `AllowedAdminRoles` / `HasAPIKeyScope` 派生，禁止手写角色集 |
 | `ProvideScopeVocabulary` → `ScopeVocabulary` | API Key 创建校验与 well-known 下发的合法 scope 词表 |
-| `task gen:authz-matrix` | 生成 `docs/developer/authz-matrix.md`（字节级漂移锁定，勿手改） |
+| `mise run gen:authz-matrix` | 生成 `docs/developer/authz-matrix.md`（字节级漂移锁定，勿手改） |
 | 启动期断言（§7） | 完备性 / 语义 / 项目寻址 fail-closed |
 
 ---
@@ -223,7 +223,7 @@ secret 无原地轮换。平滑轮换流程（Console 详情页「轮换」引�
 
 **3. 注册完备断言**（`assertRegisteredMethodsHaveAuthz`）：每个已注册 gRPC 方法必须命中 PolicySet，缺失即 `registered grpc methods missing authz annotation`；`grpc.health.v1` / `grpc.reflection` 框架服务豁免（由部署层网络策略保护）。
 
-策略变更后 `task gen:authz-matrix` 重新生成矩阵文档，漂移由 `authz_matrix_doc_test.go` 字节级锁定。
+策略变更后 `mise run gen:authz-matrix` 重新生成矩阵文档，漂移由 `authz_matrix_doc_test.go` 字节级锁定。
 
 ---
 

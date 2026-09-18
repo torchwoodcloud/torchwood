@@ -154,7 +154,7 @@ gRPC 侧认证即 API Key（`x-api-key` metadata），限流维度同理。
 - **GHCR 可见性**：首次发布后包默认**私有**，二选一：
   - 改 Public：GitHub org → Packages → `torchwood` → Package settings → Danger Zone → Change visibility（推荐）；
   - 保持私有：部署机 `docker login ghcr.io -u <用户名> -p <PAT(read:packages)>` 后再 Deploy。
-- **本地出镜像**：`task docker:build` 仍可用（同 Dockerfile，版本元数据为 dev/unknown）。
+- **本地出镜像**：`mise run docker:build` 仍可用（同 Dockerfile，版本元数据为 dev/unknown）。
 
 ## 6. 首次引导（bootstrap）
 
