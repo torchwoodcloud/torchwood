@@ -59,7 +59,9 @@ func (r *stubFnRepo) CountClientInvocations(context.Context, string, string, str
 
 type stubFnExecutor struct{}
 
-func (stubFnExecutor) Build(context.Context, domainfunctions.BuildSpec) error { return nil }
+func (stubFnExecutor) Build(context.Context, domainfunctions.BuildSpec) (string, error) {
+	return "", nil
+}
 func (stubFnExecutor) Execute(_ context.Context, _ domainfunctions.Execution) (*domainfunctions.ExecutionResult, error) {
 	return &domainfunctions.ExecutionResult{StatusCode: 0, Response: `{"ok":true}`}, nil
 }

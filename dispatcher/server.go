@@ -150,7 +150,9 @@ func (s *dispatchServer) handleBuild(w http.ResponseWriter, r *http.Request) {
 		s.pool.DrainForDeployment(r.Context(), req.ProjectID, req.FunctionID, req.DeploymentID,
 			time.Duration(req.FunctionTimeoutSeconds)*time.Second)
 	}
-	writeJSON(w, http.StatusOK, BuildResponse{})
+	// 构建亲和（四期 4a-1 M5）：响应携带本节点 ID，server 侧落
+	// function_deployments.build_node（local 路由模式 4a-2 固定路由该节点）。
+	writeJSON(w, http.StatusOK, BuildResponse{NodeID: s.pool.NodeID()})
 }
 
 func (s *dispatchServer) handleExecute(w http.ResponseWriter, r *http.Request) {

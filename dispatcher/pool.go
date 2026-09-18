@@ -284,6 +284,12 @@ type PoolManager struct {
 	registry Registry
 	runner   runnerClient
 	cfg      PoolConfig
+	// nodeID 是本进程的 dispatcher 节点 ID（四期 4a-1 M2/M8；service 装配
+	// 处经 SetNodeID 注入，测试可直接置字段）：spawnInstance 固化进实例
+	// 记录，reaper 据此收窄对账范围（他节点的实例归他节点的 reaper）。
+	// 空串 = 未装配节点身份（单测缺省形态）——reaper 把 node 为空的记录
+	// 视为本节点（旧记录兼容），但显式他节点记录仍被收窄。
+	nodeID string
 
 	// clock/sleep 可注入（表驱动测试）；生产用 time.Now/timer。
 	clock func() time.Time
@@ -349,6 +355,22 @@ func normalDur(v, def time.Duration) time.Duration {
 		return def
 	}
 	return v
+}
+
+// SetNodeID 注入本进程节点身份（service 装配处调用；须在任何 spawn 之前）。
+func (p *PoolManager) SetNodeID(nodeID string) { p.nodeID = nodeID }
+
+// NodeID 返回本进程节点 ID（service 装配处解析；未注入为空串——观测与
+// BuildResponse.node_id 填充用）。
+func (p *PoolManager) NodeID() string { return p.nodeID }
+
+// ownedBySelf 报告实例记录是否归属本节点对账（M8 ①收窄判定）：
+//   - rec.Node == 本节点 → 本节点；
+//   - rec.Node 为空 = 本特性之前的旧记录（单机时代存量），按本节点处理
+//     （自然老化，无升级 runbook；否则存量健康实例会被死节点收敛蒸发）；
+//   - 显式他节点 ID → 他节点（本节点 reaper 跳过 Inspect 与一切清理）。
+func (p *PoolManager) ownedBySelf(rec InstanceRecord) bool {
+	return rec.Node == "" || rec.Node == p.nodeID
 }
 
 func defaultSleep(ctx context.Context, d time.Duration) bool {
@@ -632,7 +654,10 @@ func (p *PoolManager) spawnInstance(ctx context.Context, req ExecuteRequest, pol
 		ContainerID:  inst.ContainerID,
 		IP:           inst.IP,
 		DeploymentID: req.DeploymentID,
-		Inflight:     0,
+		// 节点归属固化（四期 4a-1 M3/M8）：实例终生属于 spawn 它的节点，
+		// reaper 对账范围据此收窄（他节点的实例归他节点的 reaper）。
+		Node:     p.nodeID,
+		Inflight: 0,
 		// 并发上限 spawn 时固化（v3 §1.1「生效时机」）：实例终生按 spawn 时
 		// 策略服务，函数调大后存量实例按旧值服务至 idle 回收/部署更替。
 		Concurrency:    policy.Concurrency,
@@ -781,7 +806,24 @@ func (p *PoolManager) DrainForDeployment(ctx context.Context, projectID, functio
 
 // Reaper 单轮对账：idle 回收 / 幽灵清理 / stuck-busy 强杀 / 水位与存活计量。
 // 由 Service 周期调度（ReaperInterval）。
+//
+// 多机收窄（四期 4a-1，设计 §4 M8——M2/M3 同片硬前提，否则多节点共享
+// fninst 后互相残杀）：①只对 rec.Node 归属本节点（ownedBySelf）的记录做
+// InspectInstance 与一切清理——本机 daemon Inspect 他节点容器必然
+// NotFound，误入幽灵清理会把健康实例从池中蒸发；②死节点收敛——每轮先
+// ListNodes 取心跳快照，显式他节点记录若其心跳键已消失（≥defaultNodeTTL
+// 无心跳 = 节点已死，容器随机器消失），由本节点批量删除记录（只删记录、
+// 不碰 daemon——与幽灵清理严格区分）。快照读取失败时跳过收敛（fail-safe
+// 不得因 Redis 抖动批量误删活节点记录）。
 func (p *PoolManager) Reaper(ctx context.Context) {
+	// M8 ②：节点心跳快照（每轮一次；nil = 快照不可用，本轮跳过死节点收敛）。
+	var liveNodes map[string]bool
+	if nodes, err := p.registry.ListNodes(ctx); err == nil {
+		liveNodes = make(map[string]bool, len(nodes))
+		for _, n := range nodes {
+			liveNodes[n.NodeID] = true
+		}
+	}
 	refs, err := p.registry.ListFunctions(ctx)
 	if err != nil {
 		return
@@ -800,6 +842,15 @@ func (p *PoolManager) Reaper(ctx context.Context) {
 		var uptimeMS float64
 		for i := range records {
 			rec := records[i]
+			if !p.ownedBySelf(rec) {
+				// M8 ①：他节点的实例归他节点的 reaper——跳过 InspectInstance
+				// 与一切清理。仅当其心跳已消失（死节点收敛）时删记录。
+				if liveNodes != nil && !liveNodes[rec.Node] {
+					DeadNodeReclaimedTotal.WithLabelValues(ref.ProjectID, ref.FunctionID).Inc()
+					_ = p.registry.Delete(ctx, ref, rec.InstanceID)
+				}
+				continue
+			}
 			inflightTotal += rec.Inflight
 			running, _, err := p.daemon.InspectInstance(ctx, rec.ContainerID)
 			if err != nil || !running {

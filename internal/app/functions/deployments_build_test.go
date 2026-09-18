@@ -154,6 +154,41 @@ func TestBuildDeployment_SurvivesParentCancel(t *testing.T) {
 	require.Equal(t, "dep_1", fn.LatestReadyDeploymentID, "ActivateDeployment 照常维护 latest 指针")
 }
 
+// TestBuildDeployment_BuildNodePersisted 四期 4a-1（设计 §4 M5 构建亲和）：
+// Build 返回的节点 ID（BuildResponse.node_id 的端口投影）随成功路径经
+// UpdateDeployment 落 deployment.build_node；构建失败不落（failed 行无
+// 路由亲和语义）。
+func TestBuildDeployment_BuildNodePersisted(t *testing.T) {
+	t.Run("成功：build_node 落库", func(t *testing.T) {
+		exec := newMockExecutor(nil, nil)
+		exec.buildNodeID = "dispatcher-1"
+		fn := &domainfunctions.Function{ID: "fn_1", ProjectID: "p1", Runtime: "go-1.26", TimeoutSeconds: 10, Enabled: true}
+		uc, repo, dep := buildTestUC(t, exec, fn, nil, &config.AppConfig{})
+		require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, t.TempDir()+"/code.zip"))
+		require.Equal(t, "dispatcher-1", dep.BuildNode, "成功路径 dep.BuildNode = Build 返回的节点 ID")
+
+		stored, err := repo.GetDeployment(context.Background(), "p1", "fn_1", "dep_1")
+		require.NoError(t, err)
+		require.Equal(t, "dispatcher-1", stored.BuildNode, "build_node 必须经 UpdateDeployment 落库（白名单已登记）")
+		require.Equal(t, domainfunctions.DeploymentStatusReady, stored.Status)
+	})
+
+	t.Run("失败：不落 build_node", func(t *testing.T) {
+		exec := newMockExecutor(nil, nil)
+		exec.buildNodeID = "dispatcher-1"
+		exec.buildErr = context.DeadlineExceeded
+		fn := &domainfunctions.Function{ID: "fn_1", ProjectID: "p1", Runtime: "go-1.26", TimeoutSeconds: 10, Enabled: true}
+		uc, repo, dep := buildTestUC(t, exec, fn, nil, &config.AppConfig{})
+		require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, t.TempDir()+"/code.zip"))
+		require.Empty(t, dep.BuildNode, "failed 行无路由亲和语义")
+
+		stored, err := repo.GetDeployment(context.Background(), "p1", "fn_1", "dep_1")
+		require.NoError(t, err)
+		require.Empty(t, stored.BuildNode)
+		require.Equal(t, domainfunctions.DeploymentStatusFailed, stored.Status)
+	})
+}
+
 // TestBuildDeployment_FailureCleanup 构建失败分支：failed 落库 + zip 清理 +
 // 镜像清理（RemoveImage 走 buildCtx），返回 nil（状态机内收敛，不向上抛）。
 func TestBuildDeployment_FailureCleanup(t *testing.T) {

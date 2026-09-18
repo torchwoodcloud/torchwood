@@ -26,6 +26,7 @@ type fakeDaemon struct {
 	running       map[string]bool   // containerID -> running
 	stopped       []string
 	removed       []string
+	inspects      []string // InspectInstance 收到的 containerID 次序（reaper 收窄断言面）
 	builtImages   []string
 	removedImages []string
 	nextIP        int
@@ -89,6 +90,7 @@ func (d *fakeDaemon) SpawnInstance(_ context.Context, opts SpawnOptions) (Instan
 func (d *fakeDaemon) InspectInstance(_ context.Context, containerID string) (bool, string, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.inspects = append(d.inspects, containerID)
 	if _, ok := d.spawned[containerID]; !ok {
 		return false, "", fmt.Errorf("no such container: %w", errdefs.ErrNotFound)
 	}
@@ -154,10 +156,16 @@ type fakeRegistry struct {
 	mu    sync.Mutex
 	pools map[string]map[string]*InstanceRecord
 	locks map[string]bool
+	// nodes 是节点注册表（四期 4a-1 M2：SaveNode/GetNode/DeleteNode/
+	// ListNodes 的内存实现；nodeID -> 记录）。nodeErr 非空时 ListNodes
+	// 返回该错误（reaper 死节点收敛的 fail-safe 断言面）。
+	nodes   map[string]NodeRecord
+	nodeErr error
 }
 
 func newFakeRegistry() *fakeRegistry {
-	return &fakeRegistry{pools: map[string]map[string]*InstanceRecord{}, locks: map[string]bool{}}
+	return &fakeRegistry{pools: map[string]map[string]*InstanceRecord{}, locks: map[string]bool{},
+		nodes: map[string]NodeRecord{}}
 }
 
 func regKey(ref FunctionRef) string { return ref.ProjectID + ":" + ref.FunctionID }

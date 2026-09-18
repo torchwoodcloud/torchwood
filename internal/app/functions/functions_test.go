@@ -19,6 +19,9 @@ type mockExecutor struct {
 	// builds 是 Build 载荷断言面：specs 收集每次 BuildSpec（构建链一期
 	// 定稿载荷，deployments 构建测试用）。
 	specs []domainfunctions.BuildSpec
+	// buildNodeID 是 Build 返回的构建亲和节点 ID（四期 4a-1：断言
+	// dep.BuildNode 落库链路；空 = 旧形态无节点语义）。
+	buildNodeID string
 	// buildFn 非空时接管 Build 行为（ctx 形态/超时预算断言、可编程返回）。
 	buildFn func(ctx context.Context, spec domainfunctions.BuildSpec) error
 	// ——镜像导入（三期阶段 1）——imports 计数、importSpecs 收集每次
@@ -38,13 +41,13 @@ func (m *mockExecutor) Execute(_ context.Context, exec domainfunctions.Execution
 	return m.result, m.err
 }
 
-func (m *mockExecutor) Build(ctx context.Context, spec domainfunctions.BuildSpec) error {
+func (m *mockExecutor) Build(ctx context.Context, spec domainfunctions.BuildSpec) (string, error) {
 	m.specs = append(m.specs, spec)
 	m.builds++
 	if m.buildFn != nil {
-		return m.buildFn(ctx, spec)
+		return m.buildNodeID, m.buildFn(ctx, spec)
 	}
-	return m.buildErr
+	return m.buildNodeID, m.buildErr
 }
 
 func (m *mockExecutor) ImportImage(_ context.Context, spec domainfunctions.ImportImageSpec) (string, error) {

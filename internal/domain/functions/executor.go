@@ -43,6 +43,11 @@ type Execution struct {
 	// header x-tw-execution-id 透传给 runner（ctx.executionId / 日志关联）；
 	// 空则不发 header。
 	ExecutionID string
+	// BuildNode 是该 deployment 首个构建落成的 dispatcher 节点 ID（四期
+	// 4a-1，设计 §4 M3/M5：deployment.build_node 随执行规格透传）。本阶段
+	// 只透传落类型——dispatcher 侧不消费（local 路由按 build_node 固定路由
+	// 目标节点是 4a-2），空串 = 无亲和（存量行/镜像导入路径）。
+	BuildNode string
 	// ——调用身份投影（runner v5，mlbridge fn-rpc 设计 §2.5 第 1 项）——
 	// 把执行记录的调用身份随执行规格贯通到 runner ctx（source /
 	// invokingUserId；projectId 由 ProjectID 字段承载），handler 据此做 op
@@ -168,8 +173,11 @@ type ImportImageSpec struct {
 type Executor interface {
 	// Build 将 zip 代码包构建为镜像（解压校验 → runtime 对账 → 生成
 	// Dockerfile → docker build）；构建上下文全量随 BuildSpec 携带（一期
-	// 定稿形态，见 BuildSpec 注释）。
-	Build(ctx context.Context, spec BuildSpec) error
+	// 定稿形态，见 BuildSpec 注释）。返回执行构建的 dispatcher 节点 ID
+	//（四期 4a-1，设计 §4 M5 构建亲和：调用方落 deployment.build_node，
+	// local 路由模式下执行/补构建固定路由该节点；签名扩展是 M5 亲和通道
+	// ——路由决策本身仍收敛在适配器内部，不受影响）；构建失败返回空串。
+	Build(ctx context.Context, spec BuildSpec) (buildNode string, err error)
 	// ImportImage 拉取引用镜像并导入为平台镜像（三期阶段 1 端口定稿，设计
 	// §3）：pull（用户引用带 tag 时构建期钉死为 digest）→ retag 为平台镜像
 	// 名（ImageName(functionID, deploymentID)，本地原始引用不残留）→ 强制

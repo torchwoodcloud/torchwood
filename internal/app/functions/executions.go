@@ -310,7 +310,7 @@ func (f *Functions) runExecution(ctx context.Context, fn *domainfunctions.Functi
 	token := f.mintExecutionToken(ctx, fn, rec)
 	defer f.revokeExecutionToken(token)
 
-	result, err := f.executor.Execute(ctx, f.buildExecution(fn, rec, dep.TemplateVersion, vars, data, token, f.executionAPIBaseURL(), triggerEnvelope, rawBody, egressUntrusted))
+	result, err := f.executor.Execute(ctx, f.buildExecution(fn, rec, dep.TemplateVersion, dep.BuildNode, vars, data, token, f.executionAPIBaseURL(), triggerEnvelope, rawBody, egressUntrusted))
 	now := time.Now()
 	rec.UpdatedAt = now
 	if err != nil {
@@ -462,7 +462,7 @@ func (f *Functions) ProcessExecution(ctx context.Context, msg queueMessage) erro
 	// egress 分类（P2）：异步路径（http async_ack / cron）的函数按同一分类
 	// 规则判定——存在 http/cron 触发器即不可信（与 createExecution 同口径）。
 	untrusted := fn.ClientCallable || f.hasTriggersCached(ctx, msg.ProjectID, msg.FunctionID)
-	result, err := f.executor.Execute(runCtx, f.buildExecution(fn, rec, dep.TemplateVersion, vars, msg.Data, token, f.executionAPIBaseURL(), msg.TriggerEnvelope, msg.RawBody, untrusted))
+	result, err := f.executor.Execute(runCtx, f.buildExecution(fn, rec, dep.TemplateVersion, dep.BuildNode, vars, msg.Data, token, f.executionAPIBaseURL(), msg.TriggerEnvelope, msg.RawBody, untrusted))
 	execStart := time.Now()
 	now := time.Now()
 	rec.UpdatedAt = now
@@ -602,12 +602,15 @@ func (f *Functions) ListExecutions(ctx context.Context, projectID, functionID st
 // concurrency > 1 而模板 < v3（MinConcurrencyTemplateVersion，不支持
 // ctx/分桶/per-request 超时）时静默按并发 1 执行 + 指标观测，存量函数不因
 // 新列拒绝执行，重部署后自然生效。
+// depBuildNode 是本次执行所用 deployment 的构建亲和节点（四期 4a-1，设计
+// §4 M3/M5：deployment.build_node 随执行规格透传，dispatcher 侧 4a-2 消费
+// 路由；空串 = 无亲和）。
 // 执行 ID 取自预占 INSERT 已生成的 rec.ID（v3 §1.2：经分发 header
 // x-tw-execution-id 透传给 runner 的 ctx.executionId）。
 // triggerEnvelope/rawBody 是 HTTP 触发器封套通道（v3 §2.3/D10）：**恒填充**
 // （app 不探测 runner 风格——fetch 与否由 runner 入口探测决定）；runner
 // fetch 风格还原 Request、main 风格重组 TW_DATA（与现状等价，双轨 D9）。
-func (f *Functions) buildExecution(fn *domainfunctions.Function, rec *domainfunctions.ExecutionRecord, depTemplateVersion int32, vars map[string]string, data, execToken, apiBaseURL string, triggerEnvelope *domainfunctions.TriggerEnvelope, rawBody []byte, egressUntrusted bool) domainfunctions.Execution {
+func (f *Functions) buildExecution(fn *domainfunctions.Function, rec *domainfunctions.ExecutionRecord, depTemplateVersion int32, depBuildNode string, vars map[string]string, data, execToken, apiBaseURL string, triggerEnvelope *domainfunctions.TriggerEnvelope, rawBody []byte, egressUntrusted bool) domainfunctions.Execution {
 	env := sanitizeEnv(vars)
 	// 执行身份 env（P0）：为空则不注入对应变量（api_base_url 未配置时函数
 	// 需自行解析平台地址；token 为空 = 无平台身份）。v2 路径下 dispatcher
@@ -645,6 +648,9 @@ func (f *Functions) buildExecution(fn *domainfunctions.Function, rec *domainfunc
 		// 单实例并发（v3 §1.1，降级判定后的生效值）+ 执行 ID 透传。
 		Concurrency: concurrency,
 		ExecutionID: rec.ID,
+		// 构建亲和透传（四期 4a-1）：deployment.build_node 随执行规格携带
+		//（dispatcher 侧 4a-2 消费路由，本阶段只透传）。
+		BuildNode: depBuildNode,
 		// 调用身份投影（runner v5）：执行行的 trigger_source/invoking_user_id
 		// 随执行规格贯通到 runner ctx（source/invokingUserId/projectId）——
 		// server 面空 trigger_source 映射为 "server" 字面值（runner ctx.source

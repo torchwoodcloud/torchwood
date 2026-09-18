@@ -55,13 +55,17 @@ type FunctionDeployment struct {
 	// UpdateDeployment 列白名单有意不含 source 列，对齐 update_guard 的
 	// 不可变列语义）。source_type CHECK 词表 zip|git|image 与迁移同源；
 	// 凭证（GitSource.username/token）任何列不落库（D8）。
-	SourceType    string    `bun:"source_type,notnull,default:'zip'"`
-	SourceURL     string    `bun:"source_url,notnull,default:''"`
-	SourceRef     string    `bun:"source_ref,notnull,default:''"`
-	SourceDir     string    `bun:"source_dir,notnull,default:''"`
-	ContextSHA256 string    `bun:"context_sha256,notnull,default:''"`
-	CreatedAt     time.Time `bun:"created_at,notnull"`
-	UpdatedAt     time.Time `bun:"updated_at,notnull"`
+	SourceType    string `bun:"source_type,notnull,default:'zip'"`
+	SourceURL     string `bun:"source_url,notnull,default:''"`
+	SourceRef     string `bun:"source_ref,notnull,default:''"`
+	SourceDir     string `bun:"source_dir,notnull,default:''"`
+	ContextSHA256 string `bun:"context_sha256,notnull,default:''"`
+	// BuildNode 是首个构建落成的 dispatcher 节点 ID（四期 4a-1，迁移 000024；
+	// 构建后写入的操作列——UpdateDeployment 列白名单已登记，与 source 快照
+	// 五列的不可变语义不同）。空串 = 无亲和（存量行回填）。
+	BuildNode string    `bun:"build_node,notnull,default:''"`
+	CreatedAt time.Time `bun:"created_at,notnull"`
+	UpdatedAt time.Time `bun:"updated_at,notnull"`
 }
 
 type FunctionVariable struct {

@@ -195,8 +195,15 @@ type Deployment struct {
 	SourceRef     string
 	SourceDir     string
 	ContextSHA256 string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	// BuildNode 是首个构建落成的 dispatcher 节点 ID（四期 4a-1，设计
+	// functions-runtimes-and-sources.md §4 M5 构建亲和；迁移 000024）：由
+	// buildDeployment 成功路径按 BuildResponse.node_id 写入（UpdateDeployment
+	// 列白名单登记——与 source 快照列不同，这是构建后写入的操作列）。
+	// 空串 = 无亲和（存量行/镜像导入路径，任意节点等价）。local 路由模式下
+	// 执行/补构建固定路由该节点（4a-2 消费）。
+	BuildNode string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // Variable 是函数环境变量实体。Kind 区分 text（普通文本）与 secret

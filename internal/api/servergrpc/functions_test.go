@@ -93,7 +93,9 @@ func (r *stubRepo) FailExecutionIfActive(context.Context, string, string, string
 
 type stubExecutor struct{}
 
-func (s *stubExecutor) Build(context.Context, domainfunctions.BuildSpec) error { return nil }
+func (s *stubExecutor) Build(context.Context, domainfunctions.BuildSpec) (string, error) {
+	return "", nil
+}
 func (s *stubExecutor) Execute(context.Context, domainfunctions.Execution) (*domainfunctions.ExecutionResult, error) {
 	return &domainfunctions.ExecutionResult{StatusCode: 0, Stdout: "ok"}, nil
 }

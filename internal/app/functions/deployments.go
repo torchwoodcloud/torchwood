@@ -168,18 +168,21 @@ func (f *Functions) buildDeployment(ctx context.Context, fn *domainfunctions.Fun
 	}
 
 	var buildErr error
+	var buildNode string
 	if dep.SourceType == domainfunctions.DeploymentSourceImage {
 		spec, specErr := f.importImageSpec(buildCtx, fn, dep.ID, &domainfunctions.ImageSource{Reference: dep.SourceURL}, dep.SourceRef)
 		if specErr != nil {
 			return specErr
 		}
+		// 镜像导入路径暂不落 build_node（四期 4a-1 范围仅 Build 响应通道；
+		// BYO 镜像经 M1 registry 全局化后亲和语义弱化，随 4a-2 路由一并收口）。
 		_, buildErr = f.executor.ImportImage(buildCtx, spec)
 	} else {
 		spec, specErr := f.buildSpec(buildCtx, fn, dep, path)
 		if specErr != nil {
 			return specErr
 		}
-		buildErr = f.executor.Build(buildCtx, spec)
+		buildNode, buildErr = f.executor.Build(buildCtx, spec)
 	}
 	dep.UpdatedAt = time.Now()
 	if buildErr != nil {
@@ -195,6 +198,15 @@ func (f *Functions) buildDeployment(ctx context.Context, fn *domainfunctions.Fun
 		}
 		_ = f.executor.RemoveImage(buildCtx, dep.FunctionID, dep.ID)
 		return nil
+	}
+	// 构建亲和落账（四期 4a-1，设计 §4 M5）：首个构建落成的 dispatcher
+	// 节点 ID（BuildResponse.node_id）随成功路径经 UpdateDeployment 落库。
+	// build_node 是构建后写入的操作列（迁移 000024；UpdateDeployment 列
+	// 白名单已登记，与 INSERT 期写全、之后不可变的 source 快照列不同）。
+	// 失败路径不落：failed 行无路由亲和语义。
+	dep.BuildNode = buildNode
+	if err := f.repo.UpdateDeployment(buildCtx, dep); err != nil {
+		return err
 	}
 	dep.Status = domainfunctions.DeploymentStatusReady
 	dep.Error = ""

@@ -382,7 +382,9 @@ func (m *blockingExecutor) Execute(_ context.Context, _ domainfunctions.Executio
 	return &domainfunctions.ExecutionResult{StatusCode: 0}, nil
 }
 
-func (m *blockingExecutor) Build(context.Context, domainfunctions.BuildSpec) error { return nil }
+func (m *blockingExecutor) Build(context.Context, domainfunctions.BuildSpec) (string, error) {
+	return "", nil
+}
 func (m *blockingExecutor) ImportImage(context.Context, domainfunctions.ImportImageSpec) (string, error) {
 	return "", nil // image 源不在本文件测试路径
 }

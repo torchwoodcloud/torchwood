@@ -15,8 +15,8 @@ import (
 // （迁移 000023，Functions 部署源多元化二期阶段 1/4，
 // docs/design/functions-runtimes-and-sources.md §0/§2）：
 //  1. git 源行 INSERT → Get/List 读回五列一致（INSERT 期写全）；
-//  2. UpdateDeployment（列白名单 status/error/updated_at）不得触碰 source 列
-//     ——不可变语义（update_guard 约定：漏登记正是期望行为）；
+//  2. UpdateDeployment（列白名单 status/error/build_node/updated_at）不得
+//     触碰 source 列——不可变语义（update_guard 约定：漏登记正是期望行为）；
 //  3. 未感知 source 的调用方（SourceType 零值）落库归一 'zip'（迁移 000023
 //     列 DEFAULT 同值；空串会违反 CHECK）。
 func TestFunctionRepository_DeploymentSourceRoundTrip(t *testing.T) {

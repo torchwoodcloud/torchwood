@@ -41,7 +41,7 @@ func TestDispatcherExecutor_BuildCarriesFullPayload(t *testing.T) {
 	zipPath := filepath.Join(t.TempDir(), "code.zip")
 	zipBytes := []byte("PK\x03\x04-fake-code")
 	require.NoError(t, os.WriteFile(zipPath, zipBytes, 0o600))
-	err := exec.Build(context.Background(), domainfunctions.BuildSpec{
+	_, err := exec.Build(context.Background(), domainfunctions.BuildSpec{
 		ProjectID:              "p1",
 		FunctionID:             "fn_1",
 		DeploymentID:           "dep_1",
@@ -63,6 +63,48 @@ func TestDispatcherExecutor_BuildCarriesFullPayload(t *testing.T) {
 	require.Equal(t, true, body["verify"])
 	require.Equal(t, base64.StdEncoding.EncodeToString(zipBytes), body["zip_base64"],
 		"zip base64 内联通道不变（字节级一致）")
+}
+
+// TestDispatcherExecutor_BuildReturnsNodeID 四期 4a-1（设计 §4 M5 构建
+// 亲和）：Build 解析 BuildResponse.node_id 返回给调用方（app 层落
+// deployment.build_node）；构建失败（200 + Error）返回空串。
+func TestDispatcherExecutor_BuildReturnsNodeID(t *testing.T) {
+	cases := []struct {
+		name     string
+		respBody string
+		wantNode string
+		wantErr  bool
+	}{
+		{name: "成功：node_id 透传", respBody: `{"node_id":"dispatcher-1"}`, wantNode: "dispatcher-1"},
+		{name: "成功：旧 dispatcher 无 node_id 字段（兼容空串）", respBody: `{}`, wantNode: ""},
+		{name: "失败：Error 非空返回空串", respBody: `{"error":"docker build failed","node_id":"dispatcher-1"}`, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.respBody))
+			}))
+			defer srv.Close()
+
+			cfg := &config.AppConfig{Functions: &config.Functions{
+				Dispatcher: &config.Functions_Dispatcher{Url: srv.URL},
+			}}
+			exec := NewDispatcherExecutor(cfg)
+			zipPath := filepath.Join(t.TempDir(), "code.zip")
+			require.NoError(t, os.WriteFile(zipPath, []byte("PK\x03\x04"), 0o600))
+			nodeID, err := exec.Build(context.Background(), domainfunctions.BuildSpec{
+				ProjectID: "p1", FunctionID: "fn_1", DeploymentID: "dep_1", ZipPath: zipPath,
+			})
+			if tc.wantErr {
+				require.Error(t, err)
+				require.Empty(t, nodeID, "构建失败不返回节点 ID（failed 行无亲和语义）")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.wantNode, nodeID)
+		})
+	}
 }
 
 // TestDispatcherExecutor_ExecuteCarriesConcurrencyAndExecutionID v3 透传链
@@ -101,6 +143,42 @@ func TestDispatcherExecutor_ExecuteCarriesConcurrencyAndExecutionID(t *testing.T
 	env, ok := body["env"].(map[string]any)
 	require.True(t, ok)
 	require.NotContains(t, env, twExecutionTokenEnv)
+}
+
+// TestDispatcherExecutor_ExecuteCarriesBuildNode 四期 4a-1（设计 §4 M3/M5）：
+// domain Execution 的 BuildNode（deployment.build_node 亲和节点）进分发
+// 请求体；本阶段 dispatcher 侧不消费（路由是 4a-2），只透传落类型。
+func TestDispatcherExecutor_ExecuteCarriesBuildNode(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(raw, &body))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","duration_ms":1}`))
+	}))
+	defer srv.Close()
+
+	cfg := &config.AppConfig{Functions: &config.Functions{
+		Dispatcher: &config.Functions_Dispatcher{Url: srv.URL},
+	}}
+	exec := NewDispatcherExecutor(cfg)
+	_, err := exec.Execute(context.Background(), domainfunctions.Execution{
+		FunctionID:   "fn_1",
+		DeploymentID: "dep_1",
+		ProjectID:    "p1",
+		BuildNode:    "dispatcher-1",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "dispatcher-1", body["build_node"], "build_node 必须随分发请求透传")
+
+	// 无亲和（空串）不发键（omitempty，兼容旧 dispatcher 的请求形状）。
+	body = nil
+	_, err = exec.Execute(context.Background(), domainfunctions.Execution{
+		FunctionID: "fn_1", DeploymentID: "dep_1", ProjectID: "p1",
+	})
+	require.NoError(t, err)
+	require.NotContains(t, body, "build_node", "空 build_node 不发键")
 }
 
 // TestDispatcherExecutor_ExecuteCarriesIdentityFields 调用身份贯通（runner

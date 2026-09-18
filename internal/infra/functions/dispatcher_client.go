@@ -121,9 +121,12 @@ func (d *DispatcherExecutor) do(ctx context.Context, path string, in any, out an
 	return nil
 }
 
-// dispatchBuildResponse 是 builds 端点出参（Error 非空 = 构建失败）。
+// dispatchBuildResponse 是 builds 端点出参（Error 非空 = 构建失败；
+// NodeID 是执行构建的 dispatcher 节点 ID，四期 4a-1 M5 构建亲和——调用方
+// 落 deployment.build_node）。
 type dispatchBuildResponse struct {
-	Error string `json:"error,omitempty"`
+	Error  string `json:"error,omitempty"`
+	NodeID string `json:"node_id,omitempty"`
 }
 
 // dispatchExecuteResponse 是 executions 端点出参。
@@ -147,10 +150,13 @@ type dispatchExecuteResponse struct {
 // 全量组装（一期定稿，设计 §0/D14）：project_id/runtime/function_timeout_
 // seconds/env/egress_untrusted/verify 齐备——drain 精确化、D7 runtime 对账
 // 与阶段 3 验证 spawn 的通道自本端点贯通；zip base64 内联通道不变。
-func (d *DispatcherExecutor) Build(ctx context.Context, spec functions.BuildSpec) error {
+// 返回执行构建的 dispatcher 节点 ID（四期 4a-1，设计 §4 M5 构建亲和：
+// BuildResponse.node_id 透传，调用方落 deployment.build_node）；构建失败
+// 返回空串。
+func (d *DispatcherExecutor) Build(ctx context.Context, spec functions.BuildSpec) (string, error) {
 	zip, err := os.ReadFile(spec.ZipPath)
 	if err != nil {
-		return status.Errorf(codes.Internal, "read function code package: %v", err)
+		return "", status.Errorf(codes.Internal, "read function code package: %v", err)
 	}
 	var out dispatchBuildResponse
 	err = d.do(ctx, "/v1/dispatch/builds", map[string]any{
@@ -168,12 +174,12 @@ func (d *DispatcherExecutor) Build(ctx context.Context, spec functions.BuildSpec
 		"verify":           spec.Verify,
 	}, &out, maxBuildLogBytes)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if out.Error != "" {
-		return fmt.Errorf("docker build failed: %s", out.Error)
+		return "", fmt.Errorf("docker build failed: %s", out.Error)
 	}
-	return nil
+	return out.NodeID, nil
 }
 
 // dispatchImportImageResponse 是 images/import 端点出参（Error 非空 = 导入
@@ -264,6 +270,12 @@ func (d *DispatcherExecutor) Execute(ctx context.Context, exec functions.Executi
 			// 单实例并发（v3 §1.1；<=0 由 dispatcher applyDefaults 归一化 1）。
 			"concurrency": exec.Concurrency,
 		},
+	}
+	// 构建亲和透传（四期 4a-1，设计 §4 M3/M5）：deployment.build_node 随
+	// 分发请求携带；本阶段 dispatcher 侧不消费（路由是 4a-2），只透传。
+	// 空串不发键（无亲和的存量行保持请求形状最小）。
+	if exec.BuildNode != "" {
+		reqBody["build_node"] = exec.BuildNode
 	}
 	// HTTP 触发器封套通道（v3 §2.3/D10）：封套元数据 + 原始 body 随分发
 	// 请求透传（[]byte 经 JSON 自动 base64）；无封套（invoke/cron/main 风格

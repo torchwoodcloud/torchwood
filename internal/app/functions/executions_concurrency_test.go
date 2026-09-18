@@ -34,9 +34,10 @@ func TestBuildExecution_ConcurrencyAndExecutionIDPassthrough(t *testing.T) {
 	fn := &domainfunctions.Function{ID: "fn_c", ProjectID: "p1", Concurrency: 8}
 	rec := &domainfunctions.ExecutionRecord{ID: "exe_1", DeploymentID: "dep_ready"}
 
-	exec := uc.buildExecution(fn, rec, domainfunctions.RunnerTemplateVersion, nil, "{}", "", "", nil, nil, false)
+	exec := uc.buildExecution(fn, rec, domainfunctions.RunnerTemplateVersion, "", nil, "{}", "", "", nil, nil, false)
 	require.Equal(t, 8, exec.Concurrency, "v3 模板：并发原样透传")
 	require.Equal(t, "exe_1", exec.ExecutionID, "执行 ID 透传给 runner ctx.executionId")
+	require.Empty(t, exec.BuildNode, "无亲和（空 build_node）不透传")
 	require.Nil(t, exec.TriggerEnvelope, "非触发器调用不携带封套")
 	require.Nil(t, exec.RawBody, "非触发器调用无 RawBody")
 }

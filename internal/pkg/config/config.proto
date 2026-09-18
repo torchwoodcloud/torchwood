@@ -203,6 +203,16 @@ message Functions {
     // Go 强制、node 同开）。optional presence 语义：未配置 = 默认开启，
     // 显式 false = 关闭（先例：security.rate_limit.enabled）。
     optional bool verify_build = 11;
+    // 本 dispatcher 进程的节点 ID（四期 4a-1 多机细胞模型，设计
+    // functions-runtimes-and-sources.md §4 M2/M5）：节点注册表
+    // （torchwood:fnnodes:*）与构建亲和（function_deployments.build_node）
+    // 的节点标识。空 = os.Hostname 兜底。
+    string node_id = 12;
+    // 本节点对等互达的 dispatcher URL（M3 执行路由的寻址基准，4a-2 消费），
+    // 如 http://dispatcher-1:9070。空 = "http://127.0.0.1:" + addr 端口推导
+    // （仅单机部署成立）。**多机部署必须显式配置**：跨节点回连地址无法从
+    // 监听地址推导（127.0.0.1 对其他节点不可达）。
+    string node_url = 13;
   }
   // executor（字段号 1）已删除：v1 docker 执行器（每请求一容器、进程内
   // docker.sock）已移除，函数执行统一经 dispatcher 分发。

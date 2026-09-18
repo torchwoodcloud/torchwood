@@ -55,6 +55,12 @@ type InstanceRecord struct {
 	MinInstances   int `json:"min_instances"`
 	IdleTTLSeconds int `json:"idle_ttl_seconds"`
 	MaxRequests    int `json:"max_requests"`
+	// Node 是 spawn 落成的 dispatcher 节点 ID（四期 4a-1，设计 §4 M3/M8）：
+	// spawn 时固化本进程节点身份，多机共享 fninst 下 reaper 据此收窄对账
+	// 范围（他节点实例归他节点的 reaper，M8 ①）。空串 = 本特性之前的旧
+	// 记录（单机时代存量）——按本节点处理（自然老化，无升级 runbook；
+	// 若按「空 ≠ self」处理，存量健康实例会被死节点收敛批量蒸发）。
+	Node string `json:"node,omitempty"`
 }
 
 // UnmarshalJSON 双读兼容旧版记录（v3 §1.3「兼容陷阱」）：
@@ -102,7 +108,10 @@ type FunctionRef struct {
 }
 
 // Registry 是常驻实例注册表端口（Redis 实现；fake 测试用内存实现）。
+// 组合 NodeRegistry（节点注册表 M2，类型与实现在 nodes.go）——PoolManager/
+// service 经同一端口访问实例与节点两面。
 type Registry interface {
+	NodeRegistry
 	// List 返回函数池内全部实例记录。
 	List(ctx context.Context, ref FunctionRef) ([]InstanceRecord, error)
 	// ClaimIdle 原子认领一个可服务（inflight < concurrency 且 draining=false

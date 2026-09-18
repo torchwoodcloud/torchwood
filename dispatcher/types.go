@@ -108,6 +108,11 @@ type BuildRequest struct {
 // BuildResponse 是 builds 出参；Error 非空 = 构建失败（含日志尾部）。
 type BuildResponse struct {
 	Error string `json:"error,omitempty"`
+	// NodeID 是执行构建的 dispatcher 节点 ID（四期 4a-1，设计 §4 M5 构建
+	// 亲和）：server 侧落 function_deployments.build_node——local 路由模式
+	// 下执行/补构建固定路由该节点（4a-2 消费）。构建失败不填（failed 行无
+	// 亲和语义）。
+	NodeID string `json:"node_id,omitempty"`
 }
 
 // PoolPolicy 是单次执行携带的函数池策略（dispatcher 无 DB 依赖，策略由
@@ -169,6 +174,11 @@ type ExecuteRequest struct {
 	// docker internal: true——出网全 deny）；false = 常规网络。分类在 app 层
 	// 完成（函数属性），dispatcher 只消费。
 	EgressUntrusted bool `json:"egress_untrusted,omitempty"`
+	// BuildNode 是该 deployment 首个构建落成的 dispatcher 节点 ID（四期
+	// 4a-1，设计 §4 M3/M5：随 deployment.build_node 透传）。**本阶段只透传
+	// 落类型，不参与路由**——local 路由模式按 build_node 固定路由目标节点
+	// 是 4a-2 的工作；当前所有执行仍由本节点消化（与单机行为一致）。
+	BuildNode string `json:"build_node,omitempty"`
 }
 
 // ExecuteResponse 是 executions 出参。

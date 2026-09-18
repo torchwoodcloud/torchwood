@@ -173,8 +173,10 @@ func (r *functionRepo) UpdateDeployment(ctx context.Context, d *domainfunctions.
 	// 部署源快照五列（迁移 000023，source_type/source_url/source_ref/
 	// source_dir/context_sha256）INSERT 期写全、之后不可变：**有意不登记**
 	// 本白名单（对齐 update_guard 护栏约定——不可变列漏登记正是期望行为）。
+	// build_node（迁移 000024，四期 4a-1）是构建后写入的操作列：成功路径经
+	// buildDeployment 落库，必须登记（与 source 快照列的不可变语义相反）。
 	_, err = conn.NewUpdate().Model(m).ModelTableExpr(expr, sch).
-		Column("status", "error", "updated_at").
+		Column("status", "error", "build_node", "updated_at").
 		WherePK().
 		Where("fd.project_id = ?", d.ProjectID).
 		Where("fd.function_id = ?", d.FunctionID).
@@ -702,8 +704,10 @@ func mapDeploymentToModel(d *domainfunctions.Deployment) *model.FunctionDeployme
 		SourceRef:     d.SourceRef,
 		SourceDir:     d.SourceDir,
 		ContextSHA256: d.ContextSHA256,
-		CreatedAt:     d.CreatedAt,
-		UpdatedAt:     d.UpdatedAt,
+		// 构建亲和（迁移 000024，四期 4a-1）：构建后写入的操作列。
+		BuildNode: d.BuildNode,
+		CreatedAt: d.CreatedAt,
+		UpdatedAt: d.UpdatedAt,
 	}
 }
 
@@ -721,6 +725,7 @@ func mapDeploymentToDomain(m *model.FunctionDeployment) *domainfunctions.Deploym
 		SourceRef:       m.SourceRef,
 		SourceDir:       m.SourceDir,
 		ContextSHA256:   m.ContextSHA256,
+		BuildNode:       m.BuildNode,
 		CreatedAt:       m.CreatedAt,
 		UpdatedAt:       m.UpdatedAt,
 	}

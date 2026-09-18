@@ -496,10 +496,10 @@ type functionsRecordingExecutor struct {
 	builds   int
 }
 
-func (e *functionsRecordingExecutor) Build(ctx context.Context, _ domainfunctions.BuildSpec) error {
+func (e *functionsRecordingExecutor) Build(ctx context.Context, _ domainfunctions.BuildSpec) (string, error) {
 	e.buildCtx = ctx
 	e.builds++
-	return nil
+	return "node-test", nil
 }
 func (e *functionsRecordingExecutor) Execute(context.Context, domainfunctions.Execution) (*domainfunctions.ExecutionResult, error) {
 	return nil, nil

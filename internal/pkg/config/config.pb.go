@@ -1986,7 +1986,17 @@ type Functions_Dispatcher struct {
 	// 部署后验证 spawn（build 成功后起池外实例轮询 /_tw/health 的质量门；
 	// Go 强制、node 同开）。optional presence 语义：未配置 = 默认开启，
 	// 显式 false = 关闭（先例：security.rate_limit.enabled）。
-	VerifyBuild   *bool `protobuf:"varint,11,opt,name=verify_build,json=verifyBuild,proto3,oneof" json:"verify_build,omitempty"`
+	VerifyBuild *bool `protobuf:"varint,11,opt,name=verify_build,json=verifyBuild,proto3,oneof" json:"verify_build,omitempty"`
+	// 本 dispatcher 进程的节点 ID（四期 4a-1 多机细胞模型，设计
+	// functions-runtimes-and-sources.md §4 M2/M5）：节点注册表
+	// （torchwood:fnnodes:*）与构建亲和（function_deployments.build_node）
+	// 的节点标识。空 = os.Hostname 兜底。
+	NodeId string `protobuf:"bytes,12,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	// 本节点对等互达的 dispatcher URL（M3 执行路由的寻址基准，4a-2 消费），
+	// 如 http://dispatcher-1:9070。空 = "http://127.0.0.1:" + addr 端口推导
+	// （仅单机部署成立）。**多机部署必须显式配置**：跨节点回连地址无法从
+	// 监听地址推导（127.0.0.1 对其他节点不可达）。
+	NodeUrl       string `protobuf:"bytes,13,opt,name=node_url,json=nodeUrl,proto3" json:"node_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2096,6 +2106,20 @@ func (x *Functions_Dispatcher) GetVerifyBuild() bool {
 		return *x.VerifyBuild
 	}
 	return false
+}
+
+func (x *Functions_Dispatcher) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *Functions_Dispatcher) GetNodeUrl() string {
+	if x != nil {
+		return x.NodeUrl
+	}
+	return ""
 }
 
 // Trigger 是触发器模块平台级配置（P1 触发器模块）。
@@ -3154,7 +3178,7 @@ const file_config_proto_rawDesc = "" +
 	"\x11secret_access_key\x18\x05 \x01(\tR\x0fsecretAccessKey\x12\x17\n" +
 	"\ause_ssl\x18\x06 \x01(\bR\x06useSsl\x1a\x1b\n" +
 	"\x05Local\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\"\xcd\f\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\"\x81\r\n" +
 	"\tFunctions\x12>\n" +
 	"\x06docker\x18\x02 \x01(\v2&.torchwood.api.config.Functions.DockerR\x06docker\x12G\n" +
 	"\texecution\x18\x03 \x01(\v2).torchwood.api.config.Functions.ExecutionR\texecution\x12J\n" +
@@ -3171,7 +3195,7 @@ const file_config_proto_rawDesc = "" +
 	"\bregistry\x18\x03 \x01(\tR\bregistry\x1a-\n" +
 	"\tExecution\x12 \n" +
 	"\fapi_base_url\x18\x01 \x01(\tR\n" +
-	"apiBaseUrl\x1a\xb1\x03\n" +
+	"apiBaseUrl\x1a\xe5\x03\n" +
 	"\n" +
 	"Dispatcher\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12!\n" +
@@ -3186,7 +3210,9 @@ const file_config_proto_rawDesc = "" +
 	"\x0etimeout_budget\x18\t \x01(\rR\rtimeoutBudget\x12#\n" +
 	"\rbuild_timeout\x18\n" +
 	" \x01(\tR\fbuildTimeout\x12&\n" +
-	"\fverify_build\x18\v \x01(\bH\x00R\vverifyBuild\x88\x01\x01B\x0f\n" +
+	"\fverify_build\x18\v \x01(\bH\x00R\vverifyBuild\x88\x01\x01\x12\x17\n" +
+	"\anode_id\x18\f \x01(\tR\x06nodeId\x12\x19\n" +
+	"\bnode_url\x18\r \x01(\tR\anodeUrlB\x0f\n" +
 	"\r_verify_build\x1a6\n" +
 	"\aTrigger\x12+\n" +
 	"\x12http_ip_per_minute\x18\x01 \x01(\x05R\x0fhttpIpPerMinute\x1an\n" +
