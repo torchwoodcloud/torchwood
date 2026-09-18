@@ -8,4 +8,5 @@
 FROM ghcr.io/torchwoodcloud/functions-runtime-node:1
 
 # 用户代码（runner 启动即 require /app/index.js，导出 main 或 fetch）
-COPY app/index.js /app/index.js
+# 路径相对仓库根：CI/本地构建上下文均为仓库根（与基座同构）。
+COPY docker/functions-hello/app/index.js /app/index.js
