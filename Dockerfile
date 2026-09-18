@@ -37,6 +37,8 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/dispatcher ./cmd/dispatcher && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/packer ./cmd/packer && \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/torchwood ./cmd/torchwood
 
 # ---------- 3) 运行时 ----------
@@ -47,6 +49,9 @@ COPY --from=go-builder /out/worker /usr/local/bin/worker
 # dispatcher：执行器 v2 独立分发进程（compose dispatcher
 # 服务专用；docker.sock 只挂给它，server/worker 零 daemon 依赖）
 COPY --from=go-builder /out/dispatcher /usr/local/bin/dispatcher
+# packer：git 部署源打包服务（compose packer 服务专用；无 docker.sock、
+# 无业务依赖，clone 资源尖峰隔离在可牺牲进程）
+COPY --from=go-builder /out/packer /usr/local/bin/packer
 # torchwood CLI：部署期 owner 作业（admin sync-roles-sig）与项目级备份（admin export/import）
 COPY --from=go-builder /out/torchwood /usr/local/bin/torchwood
 COPY configs/ /app/configs/
