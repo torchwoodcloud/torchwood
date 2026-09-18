@@ -30,6 +30,8 @@ console/dist/
 # SDK
 sdk/typescript/node_modules/
 sdk/typescript/dist/
+sdk/typescript/functions/node_modules/
+sdk/typescript/functions/dist/
 sdk/demo/node_modules/
 sdk/demo/dist/
 *.tsbuildinfo

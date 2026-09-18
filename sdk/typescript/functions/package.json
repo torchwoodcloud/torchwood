@@ -1,0 +1,50 @@
+{
+  "name": "@torchwood/functions",
+  "version": "0.1.0",
+  "description": "Torchwood Functions TypeScript runtime SDK — typed defineMain + platform API client（函数五期 5c）",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "test": "tsc -p tsconfig.json && node --test \"dist/__tests__/*.test.js\"",
+    "prepublishOnly": "npm run test && npm run build",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "keywords": [
+    "torchwood",
+    "functions",
+    "serverless",
+    "sdk"
+  ],
+  "author": "Torchwood",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/torchwoodcloud/torchwood.git",
+    "directory": "sdk/typescript/functions"
+  },
+  "homepage": "https://github.com/torchwoodcloud/torchwood/tree/main/sdk/typescript/functions#readme",
+  "bugs": {
+    "url": "https://github.com/torchwoodcloud/torchwood/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
