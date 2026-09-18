@@ -238,6 +238,11 @@ services:
       # 函数执行统一经 dispatcher 分发（唯一执行路径）。
       TORCHWOOD_FUNCTIONS_DISPATCHER_URL: http://dispatcher:9070
       TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN: ${TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN:?请在 Dokploy Environment 设置 openssl rand -hex 32}
+      # git 部署源打包服务（packer）：server 在 CreateDeployment(git) 时调用
+      # （worker 补构建走盘上 zip 快照，不经 packer）。SHARED_TOKEN 与 packer
+      # 服务同值。
+      TORCHWOOD_FUNCTIONS_PACKER_URL: http://packer:9071
+      TORCHWOOD_FUNCTIONS_PACKER_SHARED_TOKEN: ${TORCHWOOD_FUNCTIONS_PACKER_SHARED_TOKEN:?请在 Dokploy Environment 设置 openssl rand -hex 32}
       # 函数回访平台 API 的地址（注入执行容器 TW_API_BASE_URL）。必须是
       # 函数网络内可达地址：dispatcher 按 callback_container 把本容器
       # attach 进 tw-func-<project>[-int]，容器名 DNS 直接解析（internal
