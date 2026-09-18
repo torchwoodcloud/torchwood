@@ -86,6 +86,14 @@ var (
 		Name: "torchwood_functions_dead_node_records_reclaimed_total",
 		Help: "Instance records reclaimed because their owning dispatcher node lost its heartbeat.",
 	}, []string{"project", "function"})
+
+	// DispatchForwardedTotal 是执行跨节点转发计数（四期 4a-2，M3 路由层）：
+	// 按目标节点与结果（ok/error）计。频发 error = 目标节点失联（进程死/
+	// node_url 误配）——local 模式下该函数在转发失败节点上不可用的信号。
+	DispatchForwardedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "torchwood_functions_dispatch_forwarded_total",
+		Help: "Executions forwarded to a peer dispatcher node (instance affinity / build-node cold start).",
+	}, []string{"project", "function", "target", "result"})
 )
 
 func init() {
@@ -103,5 +111,6 @@ func init() {
 		InstanceInflight,
 		TimeoutFuseTotal,
 		DeadNodeReclaimedTotal,
+		DispatchForwardedTotal,
 	)
 }

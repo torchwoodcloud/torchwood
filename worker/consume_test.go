@@ -126,7 +126,9 @@ type retryExecutor struct{}
 func (retryExecutor) Execute(context.Context, domainfunctions.Execution) (*domainfunctions.ExecutionResult, error) {
 	return nil, nil
 }
-func (retryExecutor) Build(context.Context, domainfunctions.BuildSpec) error { return nil }
+func (retryExecutor) Build(context.Context, domainfunctions.BuildSpec) (string, error) {
+	return "", nil
+}
 func (retryExecutor) ImportImage(context.Context, domainfunctions.ImportImageSpec) (string, error) {
 	return "", nil // image 源不在本文件测试路径
 }

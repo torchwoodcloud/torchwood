@@ -290,6 +290,11 @@ type PoolManager struct {
 	// 空串 = 未装配节点身份（单测缺省形态）——reaper 把 node 为空的记录
 	// 视为本节点（旧记录兼容），但显式他节点记录仍被收窄。
 	nodeID string
+	// forwarder 是节点转发客户端（四期 4a-2 M3 路由层；service 装配处经
+	// SetForwarder 注入）：实例亲和 / BuildNode 冷启动的跨节点手段。
+	// nil = 转发能力未装配——路由需要转发时以 FailedPrecondition 明确
+	// 失败，绝不静默回落本地 spawn（local 模式下本节点无镜像）。
+	forwarder nodeForwarder
 
 	// clock/sleep 可注入（表驱动测试）；生产用 time.Now/timer。
 	clock func() time.Time
@@ -363,6 +368,10 @@ func (p *PoolManager) SetNodeID(nodeID string) { p.nodeID = nodeID }
 // NodeID 返回本进程节点 ID（service 装配处解析；未注入为空串——观测与
 // BuildResponse.node_id 填充用）。
 func (p *PoolManager) NodeID() string { return p.nodeID }
+
+// SetForwarder 注入节点转发客户端（service 装配处调用；须在任何 Dispatch
+// 之前——装配时序与 SetNodeID 同拍）。
+func (p *PoolManager) SetForwarder(f nodeForwarder) { p.forwarder = f }
 
 // ownedBySelf 报告实例记录是否归属本节点对账（M8 ①收窄判定）：
 //   - rec.Node == 本节点 → 本节点；
@@ -446,9 +455,23 @@ func (p *PoolManager) applyDefaults(policy PoolPolicy) PoolPolicy {
 	}
 }
 
-// Dispatch 分发一次执行（热路径）：认领空闲实例 → runner HTTP；无空闲则
-// 冷启动（池 0→1 扩容，spawn 收敛）或有界排队；超限 ResourceExhausted。
+// Dispatch 分发一次执行（热路径）：先过路由层（四期 4a-2 M3 实例亲和 +
+// M7 local 冷启动语义，route），未在路由层跨节点收场则按单机池路径处理
+// ——认领空闲实例 → runner HTTP；无空闲则冷启动（池 0→1 扩容，spawn 收敛）
+// 或有界排队；超限 ResourceExhausted。
 func (p *PoolManager) Dispatch(ctx context.Context, req ExecuteRequest) (*ExecuteResponse, error) {
+	return p.dispatch(ctx, req, "")
+}
+
+// DispatchForwarded 处理他节点转发来的执行请求（四期 4a-2 M3 防环铁律）：
+// fromNode 是转发方节点 ID（观测用）。请求强制走本地池路径，不再路由
+// 转发——转发发起方已按实例亲和/BuildNode 语义选定本节点为镜像所在节点
+// （local 模式），二次转发只会指向没有镜像的第三方节点且可能成环。
+func (p *PoolManager) DispatchForwarded(ctx context.Context, req ExecuteRequest, fromNode string) (*ExecuteResponse, error) {
+	return p.dispatch(ctx, req, fromNode)
+}
+
+func (p *PoolManager) dispatch(ctx context.Context, req ExecuteRequest, fromNode string) (*ExecuteResponse, error) {
 	if req.ProjectID == "" || req.FunctionID == "" || req.DeploymentID == "" || req.Image == "" {
 		return nil, status.Error(codes.InvalidArgument, "project/function/deployment/image are required")
 	}
@@ -457,6 +480,18 @@ func (p *PoolManager) Dispatch(ctx context.Context, req ExecuteRequest) (*Execut
 	if req.TriggerEnvelope != nil {
 		if _, err := triggerEnvelopeHeader(req.TriggerEnvelope); err != nil {
 			return nil, err
+		}
+	}
+	// ——路由层（M3/M7 local 模式）：转发来的请求强制本地（防环），直连
+	// 请求先求落点——
+	if fromNode != "" {
+		slog.Debug("dispatcher: forwarded execution forced local",
+			"project", req.ProjectID, "function", req.FunctionID,
+			"self", p.nodeID, "from_node", fromNode)
+	} else {
+		resp, handled, err := p.route(ctx, req)
+		if err != nil || handled {
+			return resp, err
 		}
 	}
 	ref := FunctionRef{ProjectID: req.ProjectID, FunctionID: req.FunctionID}

@@ -47,6 +47,10 @@ func NewService(cfg *config.AppConfig, rdb *redis.Client, logger *slog.Logger) *
 	// 节点身份注入（M2/M3/M8）：spawn 固化进实例记录 + BuildResponse.node_id
 	// + reaper 对账收窄判定基准。
 	pool.SetNodeID(nodeID)
+	// 节点转发客户端（四期 4a-2 M3 路由层）：实例亲和/BuildNode 冷启动的
+	// 跨节点手段；节点身份与共享 token 同源注入（节点间鉴权与
+	// server→dispatcher 同一面）。
+	pool.SetForwarder(newNodeForwarder(nodeID, cfg.GetFunctions().GetDispatcher().GetSharedToken()))
 	addr := cfg.GetFunctions().GetDispatcher().GetAddr()
 	if addr == "" {
 		addr = ":9070"

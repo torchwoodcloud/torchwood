@@ -161,6 +161,18 @@ func (s *dispatchServer) handleExecute(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	// 节点转发防环（四期 4a-2 M3）：带 X-Tw-Forwarded-For-Node 的请求来自
+	// 他节点转发——强制本地池路径（DispatchForwarded），不得再转发。转发
+	// 发起方已按实例亲和/BuildNode 语义选定本节点为镜像所在节点。
+	if from := r.Header.Get(forwardedForNodeHeader); from != "" {
+		resp, err := s.pool.DispatchForwarded(r.Context(), req, from)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
 	// DrainForDeployment 的 project 语义由执行/构建请求一并携带（BuildRequest
 	// 一期定稿含 project_id，D14）——drain 按 (project, function) 精确收窄。
 	resp, err := s.pool.Dispatch(r.Context(), req)
