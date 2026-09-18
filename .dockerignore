@@ -11,7 +11,12 @@ sdk/demo
 docs
 *.md
 !README.md
-docker
+# docker/* 默认排除（compose/文档不入上下文）；契约镜像目录豁免：
+# functions-runtime-node 需 COPY internal/ runner.js，functions-hello 需
+# COPY app/index.js（CI 契约镜像 job 与本地 docker build -f 均依赖）。
+docker/*
+!docker/functions-runtime-node
+!docker/functions-hello
 .env
 .env.*
 *.local
