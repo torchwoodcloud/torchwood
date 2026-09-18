@@ -147,7 +147,7 @@ func newSubsPlanUpdateCmd(g *GlobalFlags) *verb {
 	var name, currency, interval, status, benefits, stripePriceID string
 	var amount, intervalDays int64
 	var graceDays, trialDays int
-	return newVerb(g, "update", "update a plan (subscriptions.write; only explicitly passed fields)", "subscriptions plans update <plan-id> [--name] [--amount] [--currency] [--interval] [--interval-days] [--grace-days] [--trial-days] [--status active|archived] [--benefits '<json>'] [--stripe-price-id]",
+	return newVerb(g, "update", "update a plan (subscriptions.write; only explicitly passed fields)", "subscriptions plans update [--name] [--amount] [--currency] [--interval] [--interval-days] [--grace-days] [--trial-days] [--status active|archived] [--benefits '<json>'] [--stripe-price-id] <plan-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&name, "name", "", "display name")
 			fs.Int64Var(&amount, "amount", 0, "recurring amount in minimal currency units")

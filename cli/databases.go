@@ -119,7 +119,7 @@ func newDatabasesCollectionsCmd(g *GlobalFlags) *group {
 func newDatabasesCollectionsCreateCmd(g *GlobalFlags) *verb {
 	var id, name, permissions string
 	var documentSecurity bool
-	return newVerb(g, "create", "create a collection", "databases collections create <database-id> --id <id> --name <name>",
+	return newVerb(g, "create", "create a collection", "databases collections create --id <id> --name <name> <database-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&id, "id", "", "collection ID (required)")
 			fs.StringVar(&name, "name", "", "collection name (required)")
@@ -259,7 +259,7 @@ func newDatabasesIndexesCmd(g *GlobalFlags) *group {
 
 func newDatabasesIndexesCreateCmd(g *GlobalFlags) *verb {
 	var id, typ, attributes, orders string
-	return newVerb(g, "create", "create an index (types: key/unique/fulltext)", "databases indexes create <database-id> <collection-id> --id <id> --type <type> --attributes '[...]'",
+	return newVerb(g, "create", "create an index (types: key/unique/fulltext)", "databases indexes create --id <id> --type <type> --attributes '[...]' <database-id> <collection-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&id, "id", "", "index ID (required)")
 			fs.StringVar(&typ, "type", "", "index type (required: key/unique/fulltext)")

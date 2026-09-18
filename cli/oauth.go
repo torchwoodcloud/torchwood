@@ -41,7 +41,7 @@ func newOAuthProvidersListCmd(g *GlobalFlags) *verb {
 func newOAuthProvidersUpsertCmd(g *GlobalFlags) *verb {
 	var enabled bool
 	var clientID, clientSecret, scopes string
-	return newVerb(g, "upsert", "create or update an OAuth provider (e.g. google/github)", "oauth-providers upsert <provider> --client-id <id>",
+	return newVerb(g, "upsert", "create or update an OAuth provider (e.g. google/github)", "oauth-providers upsert --client-id <id> <provider>",
 		func(fs *flag.FlagSet) {
 			fs.BoolVar(&enabled, "enabled", false, "whether enabled (when enabling with no existing secret, the server requires --client-secret)")
 			fs.StringVar(&clientID, "client-id", "", "OAuth client ID (required)")

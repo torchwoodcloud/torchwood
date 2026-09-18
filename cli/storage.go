@@ -91,7 +91,7 @@ func newStorageBucketsGetCmd(g *GlobalFlags) *verb {
 func newStorageBucketsUpdateCmd(g *GlobalFlags) *verb {
 	var name string
 	var public bool
-	return newVerb(g, "update", "update a bucket (only explicitly passed fields)", "storage buckets update <id> [--name] [--public]",
+	return newVerb(g, "update", "update a bucket (only explicitly passed fields)", "storage buckets update [--name] [--public] <id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&name, "name", "", "new name")
 			fs.BoolVar(&public, "public", false, "public-read switch (pass --public=true/false explicitly to take effect)")

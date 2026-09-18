@@ -154,7 +154,7 @@ func newRunbookStatusCmd(g *GlobalFlags) *verb {
 // 全清，不执行任何资源动作；随后重跑 up 即以新 checksum 重放。
 func newRunbookForgiveCmd(g *GlobalFlags) *verb {
 	var dir string
-	return newVerb(g, "forgive", "drop server-side step records >= N without touching resources (checksum escape hatch, D21)", "runbook forgive <version> [--dir <dir>]",
+	return newVerb(g, "forgive", "drop server-side step records >= N without touching resources (checksum escape hatch, D21)", "runbook forgive [--dir <dir>] <version>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&dir, "dir", runbook.DefaultDir, "runbook directory")
 		},

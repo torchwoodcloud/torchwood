@@ -40,7 +40,7 @@ func newLeaderboardsCmd(g *GlobalFlags) *group {
 func newLeaderboardsSubmitCmd(g *GlobalFlags) *verb {
 	var value, tiebreakValue int64
 	var period, requestID string
-	return newVerb(g, "submit", "submit a score on behalf of a subject (leaderboards.write)", "leaderboards submit <board-id> <subject-id> --value <n> [--tiebreak-value <n>] [--period <p>] [--request-id <id>]",
+	return newVerb(g, "submit", "submit a score on behalf of a subject (leaderboards.write)", "leaderboards submit --value <n> [--tiebreak-value <n>] [--period <p>] [--request-id <id>] <board-id> <subject-id>",
 		func(fs *flag.FlagSet) {
 			fs.Int64Var(&value, "value", 0, "score value (required; pass explicitly even for 0)")
 			fs.Int64Var(&tiebreakValue, "tiebreak-value", 0, "tiebreak column value (direction must match the board's tiebreak declaration)")

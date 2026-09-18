@@ -82,7 +82,7 @@ func newUsersCreateCmd(g *GlobalFlags) *verb {
 func newUsersUpdateCmd(g *GlobalFlags) *verb {
 	var emailVerified bool
 	var name, email, status, data string
-	return newVerb(g, "update", "update a user (only explicitly passed fields; use --data to clear fields)", "users update <id> [--name] [--email] [--status] [--email-verified] [--data]",
+	return newVerb(g, "update", "update a user (only explicitly passed fields; use --data to clear fields)", "users update [--name] [--email] [--status] [--email-verified] [--data] <id>",
 		func(fs *flag.FlagSet) {
 			fs.BoolVar(&emailVerified, "email-verified", false, "whether the email is verified (pass --email-verified=true/false explicitly to take effect)")
 			fs.StringVar(&name, "name", "", "display name")
@@ -104,7 +104,7 @@ func newUsersUpdateCmd(g *GlobalFlags) *verb {
 
 func newUsersUpdatePasswordCmd(g *GlobalFlags) *verb {
 	var password string
-	return newVerb(g, "update-password", "reset a user's password", "users update-password <id> --password <p>",
+	return newVerb(g, "update-password", "reset a user's password", "users update-password --password <p> <id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&password, "password", "", "new password (required)")
 		},

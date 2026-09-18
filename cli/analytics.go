@@ -233,7 +233,7 @@ func newAnalyticsRetentionCmd(g *GlobalFlags) *verb {
 func newAnalyticsUserEventsCmd(g *GlobalFlags) *verb {
 	var from, to, pageToken string
 	var pageSize int
-	return newVerb(g, "user-events", "drill into one user's event trail (raw, newest first, keyset pagination, window ≤92 days)", "analytics user-events <user-id> [--page-size <n>] [--page-token <t>] [--from <ts>] [--to <ts>]",
+	return newVerb(g, "user-events", "drill into one user's event trail (raw, newest first, keyset pagination, window ≤92 days)", "analytics user-events [--page-size <n>] [--page-token <t>] [--from <ts>] [--to <ts>] <user-id>",
 		func(fs *flag.FlagSet) {
 			fs.IntVar(&pageSize, "page-size", 0, "page size (0-100, server default when omitted)")
 			fs.StringVar(&pageToken, "page-token", "", "opaque cursor from the previous page")

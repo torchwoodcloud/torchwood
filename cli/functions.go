@@ -131,7 +131,7 @@ func newFunctionsUpdateCmd(g *GlobalFlags) *verb {
 	var clientCallable bool
 	var clientPerUserLimit int
 	var clientLimitWindow string
-	return newVerb(g, "update", "update a function (only explicitly passed fields)", "functions update <function-id> [--name] [--entrypoint] [--timeout-seconds] [--spec] [--enabled] [--min-instances] [--max-instances] [--idle-ttl-seconds] [--max-requests-per-instance] [--concurrency] [--client-callable] [--client-per-user-limit] [--client-limit-window]",
+	return newVerb(g, "update", "update a function (only explicitly passed fields)", "functions update [--name] [--entrypoint] [--timeout-seconds] [--spec] [--enabled] [--min-instances] [--max-instances] [--idle-ttl-seconds] [--max-requests-per-instance] [--concurrency] [--client-callable] [--client-per-user-limit] [--client-limit-window] <function-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&name, "name", "", "function name")
 			fs.StringVar(&entrypoint, "entrypoint", "", "entrypoint file")
@@ -190,7 +190,7 @@ func newFunctionsDeploymentsCmd(g *GlobalFlags) *group {
 
 func newFunctionsDeploymentsCreateCmd(g *GlobalFlags) *verb {
 	var code string
-	return newVerb(g, "create", "create a deployment by uploading a zip archive (gRPC message channel, 8MiB max)", "functions deployments create <function-id> --code <zip-file>",
+	return newVerb(g, "create", "create a deployment by uploading a zip archive (gRPC message channel, 8MiB max)", "functions deployments create --code <zip-file> <function-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&code, "code", "", "path to the zip archive (required; gRPC message channel caps at 8MiB, single package ≤1MiB recommended; for larger packages use the multipart upload API, 50MiB max)")
 		},
@@ -254,7 +254,7 @@ func newFunctionsVariablesCmd(g *GlobalFlags) *group {
 
 func newFunctionsVariablesSetCmd(g *GlobalFlags) *verb {
 	var vars string
-	return newVerb(g, "set", "replace environment variables (--vars is a JSON object)", "functions variables set <function-id> --vars '{...}'",
+	return newVerb(g, "set", "replace environment variables (--vars is a JSON object)", "functions variables set --vars '{...}' <function-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&vars, "vars", "", "environment variables JSON object (required, e.g. '{\"FOO\":\"bar\"}')")
 		},
@@ -296,7 +296,7 @@ func newFunctionsExecutionsCmd(g *GlobalFlags) *group {
 func newFunctionsExecutionsCreateCmd(g *GlobalFlags) *verb {
 	var input, deploymentID string
 	var async bool
-	return newVerb(g, "create", "create an execution (latest ready deployment by default)", "functions executions create <function-id> --input <json>",
+	return newVerb(g, "create", "create an execution (latest ready deployment by default)", "functions executions create --input <json> <function-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&input, "input", "", "execution input (required, must be a valid JSON string, ≤64KB)")
 			fs.StringVar(&deploymentID, "deployment-id", "", "target deployment (latest ready deployment by default)")

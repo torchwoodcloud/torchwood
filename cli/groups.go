@@ -105,7 +105,7 @@ func newGroupsPrefsCmd(g *GlobalFlags) *group {
 
 func newGroupsPrefsUpdateCmd(g *GlobalFlags) *verb {
 	var data string
-	return newVerb(g, "update", "replace group preferences (--data is the prefs object itself)", "groups prefs update <id> --data '{...}'",
+	return newVerb(g, "update", "replace group preferences (--data is the prefs object itself)", "groups prefs update --data '{...}' <id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&data, "data", "", "prefs JSON object (required, e.g. '{\"theme\":\"dark\"}')")
 		},

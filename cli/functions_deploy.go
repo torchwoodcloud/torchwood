@@ -361,7 +361,7 @@ type lookupEnvFunc func(string) (string, bool)
 // newFunctionsDeploymentsCreateFromGitCmd 从 git 仓库创建部署。
 func newFunctionsDeploymentsCreateFromGitCmd(g *GlobalFlags) *verb {
 	var url, ref, dir, username, tokenEnv string
-	return newVerb(g, "create-from-git", "create a deployment from a git repository (the server-side packer service materializes it to the same zip build path)", "functions deployments create-from-git <function-id> --url <repo-url> [--ref <branch|tag|commit>] [--dir <subdir>] [--git-username <user>] [--git-token-env <VAR>]",
+	return newVerb(g, "create-from-git", "create a deployment from a git repository (the server-side packer service materializes it to the same zip build path)", "functions deployments create-from-git --url <repo-url> [--ref <branch|tag|commit>] [--dir <subdir>] [--git-username <user>] [--git-token-env <VAR>] <function-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&url, "url", "", "git repository HTTPS URL (required)")
 			fs.StringVar(&ref, "ref", "", "branch, tag or commit SHA (defaults to the repository HEAD; the server pins the resolved commit into the deployment)")
@@ -427,7 +427,7 @@ const defaultRegistryTokenEnv = "TORCHWOOD_REGISTRY_TOKEN"
 // newFunctionsDeploymentsCreateFromImageCmd 从容器镜像引用创建部署。
 func newFunctionsDeploymentsCreateFromImageCmd(g *GlobalFlags) *verb {
 	var image, username, tokenEnv string
-	return newVerb(g, "create-from-image", "create a deployment from a container image reference (the server pins the resolved digest, re-tags it into the platform namespace and runs the contract verify spawn)", "functions deployments create-from-image <function-id> --image <host/repo[:tag|@digest]> [--registry-username <user>] [--registry-token-env <VAR>]",
+	return newVerb(g, "create-from-image", "create a deployment from a container image reference (the server pins the resolved digest, re-tags it into the platform namespace and runs the contract verify spawn)", "functions deployments create-from-image --image <host/repo[:tag|@digest]> [--registry-username <user>] [--registry-token-env <VAR>] <function-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&image, "image", "", "container image reference host/repo[:tag|@sha256:...] (required; the server pins the resolved digest into the deployment, so a tag is resolved exactly once)")
 			fs.StringVar(&username, "registry-username", "", "registry username for private images (sent once with the token to the dispatcher pull, never persisted; omit for registries that authenticate by token alone)")

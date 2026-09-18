@@ -153,7 +153,7 @@ func newAssetsDefUpdateCmd(g *GlobalFlags) *verb {
 	var decimals int
 	var maxQuantity, expiresIn int64
 	var tradable, uniquePerOwner, upgradeable bool
-	return newVerb(g, "update", "update an asset definition (assets.write; only explicitly passed fields — pass bools as --tradable=true/false explicitly)", "assets defs update <def-id> [--name] [--decimals] [--max-quantity] [--expires-in] [--tradable] [--unique-per-owner] [--upgradeable] [--metadata '<json>'] [--status active|archived]",
+	return newVerb(g, "update", "update an asset definition (assets.write; only explicitly passed fields — pass bools as --tradable=true/false explicitly)", "assets defs update [--name] [--decimals] [--max-quantity] [--expires-in] [--tradable] [--unique-per-owner] [--upgradeable] [--metadata '<json>'] [--status active|archived] <def-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&name, "name", "", "display name")
 			fs.IntVar(&decimals, "decimals", 0, "decimal places (currency class)")
@@ -241,7 +241,7 @@ func newAssetsGrantCmd(g *GlobalFlags) *verb {
 	var quantity int64
 	var idempotencyKey, expiresAt, metadata, refType, refID string
 	var level int
-	return newVerb(g, "grant", "grant assets to an owner (assets.write, admin; audit-logged)", "assets grant <owner-id> <def-code> --quantity <n> [--idempotency-key <k>] [--expires-at <ts>] [--level <n>] [--metadata '<json>'] [--ref-type <t>] [--ref-id <id>]",
+	return newVerb(g, "grant", "grant assets to an owner (assets.write, admin; audit-logged)", "assets grant --quantity <n> [--idempotency-key <k>] [--expires-at <ts>] [--level <n>] [--metadata '<json>'] [--ref-type <t>] [--ref-id <id>] <owner-id> <def-code>",
 		func(fs *flag.FlagSet) {
 			fs.Int64Var(&quantity, "quantity", 0, "amount to grant (required; must be positive)")
 			idempotencyFlag(fs, &idempotencyKey)
@@ -299,7 +299,7 @@ func buildGrantReq(ownerID, defCode string, quantity int64, idempotencyKey, expi
 func newAssetsConsumeCmd(g *GlobalFlags) *verb {
 	var quantity int64
 	var idempotencyKey, refType, refID string
-	return newVerb(g, "consume", "consume (deduct) assets from an owner (assets.write, admin; audit-logged)", "assets consume <owner-id> <def-code> --quantity <n> [--idempotency-key <k>] [--ref-type <t>] [--ref-id <id>]",
+	return newVerb(g, "consume", "consume (deduct) assets from an owner (assets.write, admin; audit-logged)", "assets consume --quantity <n> [--idempotency-key <k>] [--ref-type <t>] [--ref-id <id>] <owner-id> <def-code>",
 		func(fs *flag.FlagSet) {
 			fs.Int64Var(&quantity, "quantity", 0, "amount to consume (required; must be positive)")
 			idempotencyFlag(fs, &idempotencyKey)
@@ -341,7 +341,7 @@ func buildConsumeReq(ownerID, defCode string, quantity int64, idempotencyKey, re
 func newAssetsTransferCmd(g *GlobalFlags) *verb {
 	var quantity int64
 	var idempotencyKey, refType, refID string
-	return newVerb(g, "transfer", "transfer assets between owners (assets.write, admin; def must be tradable)", "assets transfer <from-owner-id> <to-owner-id> <def-code> --quantity <n> [--idempotency-key <k>] [--ref-type <t>] [--ref-id <id>]",
+	return newVerb(g, "transfer", "transfer assets between owners (assets.write, admin; def must be tradable)", "assets transfer --quantity <n> [--idempotency-key <k>] [--ref-type <t>] [--ref-id <id>] <from-owner-id> <to-owner-id> <def-code>",
 		func(fs *flag.FlagSet) {
 			fs.Int64Var(&quantity, "quantity", 0, "amount to transfer (required; must be positive)")
 			idempotencyFlag(fs, &idempotencyKey)
@@ -383,7 +383,7 @@ func buildTransferReq(fromOwnerID, toOwnerID, defCode string, quantity int64, id
 func newAssetsMutateCmd(g *GlobalFlags) *verb {
 	var idempotencyKey, expiresAt, metadata, refType, refID string
 	var level int
-	return newVerb(g, "mutate", "mutate a holding in place (level / expiry / metadata; assets.write, admin)", "assets mutate <holding-id> [--idempotency-key <k>] [--level <n>] [--expires-at <ts>] [--metadata '<json>'] [--ref-type <t>] [--ref-id <id>]",
+	return newVerb(g, "mutate", "mutate a holding in place (level / expiry / metadata; assets.write, admin)", "assets mutate [--idempotency-key <k>] [--level <n>] [--expires-at <ts>] [--metadata '<json>'] [--ref-type <t>] [--ref-id <id>] <holding-id>",
 		func(fs *flag.FlagSet) {
 			idempotencyFlag(fs, &idempotencyKey)
 			fs.IntVar(&level, "level", 0, "new level (upgradeable defs)")
