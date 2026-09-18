@@ -157,8 +157,8 @@ func TestDockerfileFor_UnknownRuntime(t *testing.T) {
 	}
 }
 
-// TestDockerfileFor_GoGolden go 分支两形态快照（设计
-// functions-runtimes-and-sources.md §1 构建模板 + 二轮复查 GOFLAGS 修正）：
+// TestDockerfileFor_GoGolden go 分支两形态快照（五期 5b：用户持有根 main 包，
+// 构建 = `go build .`，设计 functions-runtimes-and-sources.md 顶部立项段）：
 // 无 vendor（-mod=readonly + go mod download 层 + go.sum 通配）与 vendor
 // （-mod=vendor + 免 download 层）。多阶段：golang 构建段 CGO_ENABLED=0、
 // alpine 运行段 + ca-certificates + 非 root 数字 UID + CMD = 平台产物
@@ -171,8 +171,7 @@ func TestDockerfileFor_GoGolden(t *testing.T) {
 		"COPY go.mod go.sum* ./\n" +
 		"RUN go mod download\n" +
 		"COPY . .\n" +
-		"COPY twmain/ ./twmain/\n" +
-		"RUN go build -trimpath -ldflags=\"-s -w\" -o /out/tw-app ./twmain\n" +
+		"RUN go build -trimpath -ldflags=\"-s -w\" -o /out/tw-app .\n" +
 		"\n" +
 		"FROM alpine:3.22\n" +
 		"RUN apk add --no-cache ca-certificates\n" +
@@ -186,8 +185,7 @@ func TestDockerfileFor_GoGolden(t *testing.T) {
 		"ENV GOFLAGS=-mod=vendor\n" +
 		"COPY go.mod go.sum* ./\n" +
 		"COPY . .\n" +
-		"COPY twmain/ ./twmain/\n" +
-		"RUN go build -trimpath -ldflags=\"-s -w\" -o /out/tw-app ./twmain\n" +
+		"RUN go build -trimpath -ldflags=\"-s -w\" -o /out/tw-app .\n" +
 		"\n" +
 		"FROM alpine:3.22\n" +
 		"RUN apk add --no-cache ca-certificates\n" +
@@ -219,11 +217,18 @@ func TestDockerfileFor_GoGolden(t *testing.T) {
 	}
 
 	// 不变量抽查（两形态公共面）：go.sum 必须带 * 通配（纯 stdlib 函数合法
-	// 无 go.sum，COPY 任一源缺失即失败）；CMD 恒为平台产物（用户入口不进
-	// CMD）；无 ENTRYPOINT。
+	// 无 go.sum，COPY 任一源缺失即失败）；构建目标 = zip 根 main 包（.
+	// 而非 ./twmain——平台零注入）；CMD 恒为平台产物（用户入口不进 CMD）；
+	// 无 ENTRYPOINT；无 twmain 痕迹（五期 5b 概念已删）。
 	for _, df := range []string{goldenNoVendor, goldenVendor} {
 		if !strings.Contains(df, "COPY go.mod go.sum* ./\n") {
 			t.Errorf("go.sum 必须带通配（node package-lock.json* 先例同构）:\n%s", df)
+		}
+		if !strings.Contains(df, `RUN go build -trimpath -ldflags="-s -w" -o /out/tw-app .`+"\n") {
+			t.Errorf("构建目标必须是根 main 包（go build .）:\n%s", df)
+		}
+		if strings.Contains(df, "twmain") {
+			t.Errorf("twmain 生成机制已删除，模板不得出现该概念:\n%s", df)
 		}
 		if !strings.HasSuffix(df, "CMD [\"/tw-app\"]\n") {
 			t.Errorf("CMD 必须是平台产物 tw-app:\n%s", df)
@@ -256,26 +261,13 @@ func TestDockerfileFor_GoMissingGoSum(t *testing.T) {
 	}
 }
 
-// TestDockerfileFor_GoTwmainConflict twmain/ 保留目录冲突拒收，错误文案
-// 指明改名（设计 §1「错误文案指明改名」）。
-func TestDockerfileFor_GoTwmainConflict(t *testing.T) {
-	_, err := DockerfileFor(goContents(func(c *SourceContents) {
-		c.TwmainConflict = true
-	}))
-	if err == nil {
-		t.Fatal("twmain/ reserved dir conflict must be rejected")
-	}
-	if !strings.Contains(err.Error(), "twmain") || !strings.Contains(err.Error(), "改名") {
-		t.Errorf("error must point at renaming: %v", err)
-	}
-}
-
 // TestTemplateVersion_v5 模板版本单一事实源（v5 = 调用身份 ctx 三件，
 // mlbridge fn-rpc 设计 §2.5：RunnerTemplateVersion 4 → 5，runner.go 编译期
 // 引用防漂移；并发降级判定基准固定在 MinConcurrencyTemplateVersion=3，
-// 不随本版本漂移）。Go 分支新增不改存量语义：D5/OQ2 裁决不 bump（v5 从此
-// 管 node runner.js 与 Go bootstrap 双实现——任一语义变更同步另一实现并
-// 递增同一常量）。
+// 不随本版本漂移）。Go 分支两次变更均不 bump（D5/OQ2 裁决 + 五期 5b 构建
+// 管道简化：零存量 go deployment、node 语义未变、CMD/ENV 产物等价）——
+// 五期 5b 起 Go 契约参考实现移交 sdk/go/functions，平台模板不再承载 Go
+// 协议实现。本阶段确认常量维持 5。
 func TestTemplateVersion_v5(t *testing.T) {
 	if TemplateVersion != 5 {
 		t.Fatalf("TemplateVersion = %d, want 5 (Go 分支新增不改存量语义，不 bump)", TemplateVersion)

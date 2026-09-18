@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -454,46 +455,89 @@ func TestIntegration_ImageReadableAsTemplateUser(t *testing.T) {
 	require.Equal(t, 0, probeCode, "runner 健康探针必须可达（镜像起不来 = 部署即坏，构建态不可见）:\n%s", probeOut)
 }
 
-// —— 部署后验证 spawn e2e（Go 一期阶段 3，设计
-// docs/design/functions-runtimes-and-sources.md §1/D10）——
+// —— 部署后验证 spawn e2e（Go 用户契约反转后形态，五期 5b，设计
+// docs/design/functions-runtimes-and-sources.md 顶部立项段）——
 //
 // 门控与 TestIntegration_DispatcherBuildSpawnDispatch 同一口径：验证探针与
 // 池执行都依赖宿主进程 → 容器 bridge IP 的 Linux 直连路由（生产拓扑 =
 // dispatcher 容器自 attach，非 Linux 宿主的 Docker Desktop 上容器 IP 不可
 // 宿主路由，跳过）。IP 路由型用例另见各测试注释。
+//
+// Go fixture 契约（用户持有 main + SDK）：zip 根 = package main，入口
+// `func main()` 调 SDK（github.com/torchwoodcloud/torchwood/sdk/go/functions）
+// 的 StartInvoke / StartHTTP 承接 :18080 平台契约；平台零注入，构建 =
+// `go build .`。
+//
+// SDK 的容器内解析（vendor 方案）：docker build 只见 zip 构建上下文，不能
+// 假设出网/可拉 proxy，go.work 与指向仓库的 replace 在镜像内均不存在——
+// fixture 直接自带 SDK vendor 树（vendor/modules.txt + vendor/<sdk
+// module>/functions/*.go，模板走 -mod=vendor 离线分支，免 go.sum 免
+// download 层）。SDK functions 包仅依赖标准库，vendor 树 = 单模块单包，
+// 由 goSDKModuleFiles 在测试运行期从仓库真实 SDK 源码生成（不做源码副本
+// 冻结——始终与主仓当前 SDK 同源）。
 
-// go e2e fixture：module 根 = zip 根，非 main 的任意包名（D3 生成路线）。
-const goE2EMod = "module example.com/hello\n\ngo 1.26\n"
+// sdkModulePath 是 SDK module 路径（zip 内 vendor 树的挂载点）。
+const sdkModulePath = "github.com/torchwoodcloud/torchwood/sdk/go"
 
-// goMainE2ESrc main 风格契约入口：返回固定封套供 e2e 断言（ctx.source 经
-// 分发 header 缺省回落 "server"，runner v5 契约）。
-const goMainE2ESrc = `package hello
+// sdkModuleVersion 是 vendor/modules.txt 记录的占位版本（-mod=vendor 不消费
+// 版本/校验和，仅要求与 go.mod require 行一致）。
+const sdkModuleVersion = "v0.0.0-00010101000000-000000000000"
 
-func Main(data map[string]any, ctx map[string]string) (any, error) {
-	return map[string]any{"got": data["n"], "runtime": "go", "src": ctx["source"]}, nil
+// goE2EMod 是用户模块 go.mod：require SDK + go 1.26（vendor 分支免 go.sum；
+// `go 1.26` 与 modules.txt 的 `## explicit; go 1.26` 一致，低于该版本的
+// golang:1.26-alpine 工具链也能满足，避免 1.26.x 补丁号触发的 toolchain
+// 切换下载）。
+const goE2EMod = "module example.com/hello\n\ngo 1.26\n\nrequire " +
+	sdkModulePath + " " + sdkModuleVersion + "\n"
+
+// goMainE2ESrc main 风格契约（SDK StartInvoke）：返回固定封套供 e2e 断言
+// （ctx.source 经分发 header 缺省回落 "server"，SDK 与 runner v5 契约对齐）。
+const goMainE2ESrc = `package main
+
+import (
+	"context"
+
+	"github.com/torchwoodcloud/torchwood/sdk/go/functions"
+)
+
+type e2eReq struct {
+	N int ` + "`json:\"n\"`" + `
+}
+
+func main() {
+	_ = functions.StartInvoke(func(ctx context.Context, req e2eReq) (map[string]any, error) {
+		return map[string]any{"got": req.N, "runtime": "go", "src": functions.FromContext(ctx).Source}, nil
+	})
 }
 `
 
-// goFetchE2ESrc fetch 风格契约入口：自定义 status/header/body 供 fetch 封套
-// 断言（status/headers/body_base64，v4 §2.2）。
-const goFetchE2ESrc = `package hello
+// goFetchE2ESrc fetch 风格契约（SDK StartHTTP）：自定义 status/header/body
+// 供 fetch 封套断言（status/headers/body_base64，v4 §2.2）。
+const goFetchE2ESrc = `package main
 
-import "net/http"
+import (
+	"net/http"
 
-func Fetch(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("X-Tw-E2E", "go-fetch")
-	w.WriteHeader(http.StatusTeapot)
-	_, _ = w.Write([]byte("brew:" + r.URL.Query().Get("q")))
+	"github.com/torchwoodcloud/torchwood/sdk/go/functions"
+)
+
+func main() {
+	_ = functions.StartHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Tw-E2E", "go-fetch")
+		w.WriteHeader(http.StatusTeapot)
+		_, _ = w.Write([]byte("brew:" + r.URL.Query().Get("q")))
+	}))
 }
 `
 
-// goBlockedE2ESrc 编译通过但 health 永不就绪：init 永久阻塞 → runner 永不
-// 监听 → 验证 spawn 必须在 boot 预算内判失败，且错误携带容器日志尾部
-// （init 的 println 是第一现场）；Main 合法保证失败只能来自运行期而非探测/
-// 编译。注意阻塞形态必须带 pending timer（永久 Sleep）——裸 select{} 会被
+// goBlockedE2ESrc 编译通过但 health 永不就绪：init 永久阻塞 → main 永不
+// 执行 → 验证 spawn 必须在 boot 预算内判失败，且错误携带容器日志尾部
+// （init 的 println 是第一现场）。纯 stdlib 形态（无 SDK 依赖即无 vendor
+// 树：require 空 = 合法无 go.sum，-mod=readonly + go mod download 空转）。
+// 注意阻塞形态必须带 pending timer（永久 Sleep）——裸 select{} 会被
 // runtime 全局死锁检测直接杀进程（唯一 goroutine 全眠 → fatal error
 // deadlock，容器秒退），走不到 health 探针路径（本套件首次实跑实证）。
-const goBlockedE2ESrc = `package blocked
+const goBlockedE2ESrc = `package main
 
 import (
 	"fmt"
@@ -507,10 +551,53 @@ func init() {
 	}
 }
 
-func Main(data map[string]any, ctx map[string]string) (any, error) {
-	return map[string]any{"ok": true}, nil
-}
+func main() {}
 `
+
+// sdkFunctionsDir 解析仓库内 sdk/go/functions 源目录（测试二进制编译期
+// 源码路径；容器内实跑 = /src/sdk/go/functions）。
+func sdkFunctionsDir(t *testing.T) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "runtime.Caller 必须可解析测试源码路径")
+	dir := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "sdk", "go", "functions"))
+	require.FileExists(t, filepath.Join(dir, "functions.go"), "SDK functions 源目录必须存在: %s", dir)
+	return dir
+}
+
+// goSDKModuleFiles 构造「用户 main + SDK vendor」形态的 zip 文件集：
+// mainSrc 为根 main.go；SDK 源文件逐个拷入 vendor 树（非 test .go）。
+func goSDKModuleFiles(t *testing.T, mainSrc string) map[string]string {
+	t.Helper()
+	sdkDir := sdkFunctionsDir(t)
+	entries, err := os.ReadDir(sdkDir)
+	require.NoError(t, err)
+	files := map[string]string{
+		"go.mod":  goE2EMod,
+		"main.go": mainSrc,
+		"vendor/modules.txt": "# " + sdkModulePath + " " + sdkModuleVersion + "\n" +
+			"## explicit; go 1.26\n" + sdkModulePath + "/functions\n",
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(sdkDir, name)) // #nosec G304 -- 目录由测试自解析（仓库 SDK 源码）
+		require.NoError(t, err)
+		files["vendor/"+sdkModulePath+"/functions/"+name] = string(raw)
+	}
+	return files
+}
+
+// goStdlibModuleFiles 构造纯 stdlib 用户 main 模块的 zip 文件集（无 SDK
+// 依赖 → require 空 → 无 go.sum 亦合法，走模板 -mod=readonly 分支）。
+func goStdlibModuleFiles(modulePath, mainSrc string) map[string]string {
+	return map[string]string{
+		"go.mod":  "module " + modulePath + "\n\ngo 1.26\n",
+		"main.go": mainSrc,
+	}
+}
 
 // requireIPRoutingHost 汇总 IP 路由型 e2e 门控：short 模式与非 Linux 宿主
 // 跳过（理由见文件头 TestIntegration_DispatcherBuildSpawnDispatch 注释），
@@ -575,9 +662,10 @@ func cleanupPool(t *testing.T, pool *PoolManager, projectID, fnID string) {
 	})
 }
 
-// TestIntegration_GoMainFunctionE2E go main 风格端到端：BuildImage（verify
-// 默认开 = 验证 spawn 内联通过）→ 断言验证实例已回收 → 真实 spawn 执行一次
-// → 断言 main 封套（result JSON）。
+// TestIntegration_GoMainFunctionE2E go main 风格端到端（SDK StartInvoke，
+// 用户持有 main + vendor 自带 SDK）：BuildImage（verify 默认开 = 验证 spawn
+// 内联通过）→ 断言验证实例已回收 → 真实 spawn 执行一次 → 断言 main 封套
+// （result JSON）。
 func TestIntegration_GoMainFunctionE2E(t *testing.T) {
 	requireIPRoutingHost(t)
 	cli := requireDockerClient(t)
@@ -597,13 +685,13 @@ func TestIntegration_GoMainFunctionE2E(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	zip := makeEntryZipFiles(t, map[string]string{"go.mod": goE2EMod, "main.go": goMainE2ESrc})
+	zip := makeEntryZipFiles(t, goSDKModuleFiles(t, goMainE2ESrc))
 	require.NoError(t, d.BuildImage(ctx, BuildImageOptions{
 		ProjectID: "goeit", FunctionID: fnID, DeploymentID: depID,
 		Zip: zip, Runtime: "go-1.26",
 		Env:    map[string]string{"GREETING": "e2e"},
 		Verify: true,
-	}), "go main 风格构建 + 验证 spawn 必须成功")
+	}), "go main 风格（用户 main + SDK vendor）构建 + 验证 spawn 必须成功")
 
 	// 验证实例已回收（此刻池尚未 spawn，凡挂本镜像的容器只能是验证残留）。
 	requireNoLeftoverVerifyContainers(t, cli, imageRef)
@@ -627,9 +715,9 @@ func TestIntegration_GoMainFunctionE2E(t *testing.T) {
 	waitPoolDrained(t, pool, ctx)
 }
 
-// TestIntegration_GoFetchFunctionE2E go fetch 风格端到端：触发器封套分发 →
-// gorunner 还原为真 *http.Request → fetch 封套（status/headers/body_base64）
-// 断言（v4 §2.2 语义在 Go 实现上的回归锚）。
+// TestIntegration_GoFetchFunctionE2E go fetch 风格端到端（SDK StartHTTP）：
+// 触发器封套分发 → SDK 还原为真 *http.Request → fetch 封套
+// （status/headers/body_base64）断言（v4 §2.2 语义在 SDK 实现上的回归锚）。
 func TestIntegration_GoFetchFunctionE2E(t *testing.T) {
 	requireIPRoutingHost(t)
 	cfg := testDispatcherConfig(t)
@@ -648,15 +736,13 @@ func TestIntegration_GoFetchFunctionE2E(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	zip := makeEntryZipFiles(t, map[string]string{"go.mod": goE2EMod, "main.go": goFetchE2ESrc})
+	zip := makeEntryZipFiles(t, goSDKModuleFiles(t, goFetchE2ESrc))
 	require.NoError(t, d.BuildImage(ctx, BuildImageOptions{
 		ProjectID: "goeft", FunctionID: fnID, DeploymentID: depID,
 		Zip: zip, Runtime: "go-1.26",
 		Verify: true,
-	}), "go fetch 风格构建 + 验证 spawn 必须成功")
+	}), "go fetch 风格（SDK StartHTTP）构建 + 验证 spawn 必须成功")
 
-	// AST 探测 Fetch 优先：验证实例的启动行应为 style=fetch（借执行前的
-	// 一次性容器日志无法观测——已删除；此处以 fetch 封套行为断言兜底）。
 	resp, err := pool.Dispatch(ctx, ExecuteRequest{
 		Image: imageRef, ProjectID: "goeft", FunctionID: fnID, DeploymentID: depID,
 		Runtime: "go-1.26", Spec: "shared-1x", TimeoutSeconds: 30,
@@ -742,7 +828,7 @@ func TestIntegration_GoVerifyFailureCapturesLogTail(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	zip := makeEntryZipFiles(t, map[string]string{"go.mod": goE2EMod, "main.go": goBlockedE2ESrc})
+	zip := makeEntryZipFiles(t, goStdlibModuleFiles("example.com/blocked", goBlockedE2ESrc))
 	err := d.BuildImage(ctx, BuildImageOptions{
 		ProjectID: "goefail", FunctionID: fnID, DeploymentID: depID,
 		Zip: zip, Runtime: "go-1.26",
@@ -759,10 +845,14 @@ func TestIntegration_GoVerifyFailureCapturesLogTail(t *testing.T) {
 	requireNoLeftoverVerifyContainers(t, cli, imageRef)
 }
 
-// TestIntegration_GoMissingEntryRejected 非契约镜像路径：双缺（无 Fetch 无
-// Main）的 go zip 在 prepareBuildContext 构建期报错（先于 docker build，
-// 单测 TestPrepareBuildContext_GoMissingEntry 的真实 daemon 形态对照）。
-func TestIntegration_GoMissingEntryRejected(t *testing.T) {
+// TestIntegration_GoNonMainRootBuildRejected 根包非 main 的用户 zip：平台
+// 不做前置校验（探测层放行，单测 TestPrepareBuildContext_GoNonMainRootNoPrecheck
+// 锚定）。实测行为（go1.26）：`go build -o /out/tw-app .` 对非 main 根包
+// exit 0，产物是包档案（!<arch>，非 ELF 可执行）——镜像构建成功，失败推迟
+// 到验证 spawn（容器起不来，exec format error），deployment 以 failed 收场：
+// 不会产出可部署的假镜像，代价是报错形态不如前置校验友好（任务裁决接受，
+// 最小变更）。
+func TestIntegration_GoNonMainRootBuildRejected(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -770,18 +860,18 @@ func TestIntegration_GoMissingEntryRejected(t *testing.T) {
 		t.Skip("docker daemon unavailable")
 	}
 	d := NewDockerDaemon(testDispatcherConfig(t))
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
 
-	zip := makeEntryZipFiles(t, map[string]string{
-		"go.mod":  goE2EMod,
-		"util.go": "package hello\n\nfunc A() {}\n",
-	})
+	zip := makeEntryZipFiles(t, goStdlibModuleFiles("example.com/lib", `package lib
+
+func A() {}
+`))
 	err := d.BuildImage(ctx, BuildImageOptions{
-		ProjectID: "goemiss", FunctionID: "fngomiss", DeploymentID: "depmiss",
+		ProjectID: "gononmain", FunctionID: "fngononmain", DeploymentID: "depnonmain",
 		Zip: zip, Runtime: "go-1.26",
 		Verify: true,
 	})
-	require.Error(t, err, "非契约入口必须在构建期被拒收（不会产出跑不起来的镜像）")
-	require.Contains(t, err.Error(), "must export Fetch or Main")
+	require.Error(t, err, "根包非 main 必须在验证 spawn 被拦截（/tw-app 是包档案非可执行，不会产出可部署镜像）")
+	require.Contains(t, err.Error(), "verify", "失败必须来自验证门（verify spawn / verification failed）:\n%s", err)
 }

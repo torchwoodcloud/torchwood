@@ -13,26 +13,22 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// 本文件覆盖构建上下文准备接线（Go 一期阶段 2，设计
-// docs/design/functions-runtimes-and-sources.md §0/§1）：prepareBuildContext
-// 的顺序敏感编排——解压探测 → D7 runtime 一致性对账 → go 分支 twmain
-// bootstrap 生成（DetectEntry 在写 twmain 之前）→ Dockerfile 渲染。
+// 本文件覆盖构建上下文准备接线（五期 5b：Go 用户契约反转，设计
+// docs/design/functions-runtimes-and-sources.md 顶部立项段）：prepareBuildContext
+// 的顺序敏感编排——解压探测 → D7 runtime 一致性对账 → Dockerfile 渲染；
+// go 分支零平台注入（zip 根 = 用户 package main，构建 = go build .），
+// node 分支照旧写 .tw-runner.js。
 
+// goModFixture 是纯 stdlib go 模块的 go.mod（require 空 = 合法无 go.sum）。
 const goModFixture = "module example.com/fn\n\ngo 1.26\n"
 
-const goMainFixture = "package fn\n\n" +
-	"import \"net/http\"\n\n" +
-	"func Main(data map[string]any, ctx map[string]string) (any, error) { return data, nil }\n\n" +
-	"func Fetch(w http.ResponseWriter, r *http.Request) {}\n"
-
-// goZip 无 Fetch/Main 会报错，这里 Main/Fetch 双轨并存（探测 Fetch 优先）。
-const goFetchOnlyFixture = "package fn\n\n" +
-	"import \"net/http\"\n\n" +
-	"func Fetch(w http.ResponseWriter, r *http.Request) {}\n"
+// goMainFixture 是用户持有的根 main 包（五期 5b 契约：SDK 或自写 HTTP 服务
+// 在 main 里承接平台分发；本单测不编译，形态正确即可）。
+const goMainFixture = "package main\n\nfunc main() {}\n"
 
 func TestPrepareBuildContext_RuntimeMismatch(t *testing.T) {
 	buildDir := t.TempDir()
-	// zip 探测为 go（go.mod + Main），声明 runtime 为 node → InvalidArgument
+	// zip 探测为 go（go.mod），声明 runtime 为 node → InvalidArgument
 	// 且错误信息含两侧值（D7）。
 	err := prepareBuildContext(buildDir, BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
@@ -45,9 +41,9 @@ func TestPrepareBuildContext_RuntimeMismatch(t *testing.T) {
 	require.Contains(t, msg, "node-18.0", "错误信息须含声明 runtime")
 	require.Contains(t, msg, "go-1.26", "错误信息须含探测 runtime")
 
-	// 对账先于 bootstrap 生成：mismatch 时 twmain/ 不得已写入。
-	_, statErr := os.Stat(filepath.Join(buildDir, "twmain"))
-	require.True(t, os.IsNotExist(statErr), "runtime 对账失败时不得生成 twmain/")
+	// 对账先于模板渲染：mismatch 时 Dockerfile 不得已落盘。
+	_, statErr := os.Stat(filepath.Join(buildDir, "Dockerfile"))
+	require.True(t, os.IsNotExist(statErr), "runtime 对账失败时不得渲染 Dockerfile")
 
 	// 反向：zip 探测为 node（index.js）、声明 go-1.26 → 同样 InvalidArgument。
 	err = prepareBuildContext(t.TempDir(), BuildImageOptions{
@@ -76,10 +72,10 @@ func TestPrepareBuildContext_RuntimeEmptySkipsReconcile(t *testing.T) {
 	require.NoError(t, statErr, "node 分支照旧写入 .tw-runner.js")
 }
 
-// TestPrepareBuildContext_GoBootstrapWiring go 分支接线（fake/临时目录驱动，
-// 不依赖真实 docker）：twmain 两文件生成、内容含 module import 与 serve 入口、
-// Dockerfile 渲染前 twmain 已写入（COPY twmain/ 的源存在）。
-func TestPrepareBuildContext_GoBootstrapWiring(t *testing.T) {
+// TestPrepareBuildContext_GoUserMainContract go 分支接线（fake/临时目录驱动，
+// 不依赖真实 docker；五期 5b 用户契约反转）：平台零注入——不生成 twmain/、
+// 不做入口探测，Dockerfile 构建目标 = zip 根 main 包（go build .）。
+func TestPrepareBuildContext_GoUserMainContract(t *testing.T) {
 	buildDir := t.TempDir()
 	err := prepareBuildContext(buildDir, BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
@@ -88,59 +84,39 @@ func TestPrepareBuildContext_GoBootstrapWiring(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mainGo, err := os.ReadFile(filepath.Join(buildDir, "twmain", "main.go"))
-	require.NoError(t, err, "twmain/main.go 必须生成")
-	require.Contains(t, string(mainGo), `import user "example.com/fn"`, "生成入口必须引用用户 module path")
-	require.Contains(t, string(mainGo), "func main()", "生成入口必须是 main 包入口")
-	require.Contains(t, string(mainGo), "serve(entry{fetch: user.Fetch})", "Fetch 优先（探测双轨优先级同 runner.js）")
-
-	runtimeGo, err := os.ReadFile(filepath.Join(buildDir, "twmain", "runtime.go"))
-	require.NoError(t, err, "twmain/runtime.go 必须生成")
-	require.Contains(t, string(runtimeGo), "package main")
+	// 平台零注入：无 twmain/ 目录（twmain 概念已删，平台不再生成任何 Go 源码）。
+	_, statErr := os.Stat(filepath.Join(buildDir, "twmain"))
+	require.True(t, os.IsNotExist(statErr), "平台不得生成 twmain/（零注入契约）")
 
 	dockerfile, err := os.ReadFile(filepath.Join(buildDir, "Dockerfile"))
 	require.NoError(t, err)
 	require.Contains(t, string(dockerfile), "FROM golang:1.26-alpine")
-	require.Contains(t, string(dockerfile), "COPY twmain/ ./twmain/",
-		"go 模板 COPY twmain/——写入时点必须在 DockerfileFor 之前")
+	require.Contains(t, string(dockerfile), `RUN go build -trimpath -ldflags="-s -w" -o /out/tw-app .`,
+		"构建目标 = zip 根 main 包（go build .）")
+	require.NotContains(t, string(dockerfile), "twmain", "twmain 生成机制已删除")
 	require.NotContains(t, string(dockerfile), "node:18-alpine")
 }
 
-// TestPrepareBuildContext_GoMainFallback main 风格兜底：仅 Main 时 serve
-// 入口走 main 轨。
-func TestPrepareBuildContext_GoMainFallback(t *testing.T) {
-	buildDir := t.TempDir()
-	goMainOnly := "package fn\n\nfunc Main(data map[string]any, ctx map[string]string) (any, error) { return nil, nil }\n"
-	err := prepareBuildContext(buildDir, BuildImageOptions{
-		FunctionID: "fn1", DeploymentID: "dep1",
-		Zip:     makeEntryZipFiles(t, map[string]string{"go.mod": goModFixture, "main.go": goMainOnly}),
-		Runtime: "go-1.26",
-	})
-	require.NoError(t, err)
-	mainGo, err := os.ReadFile(filepath.Join(buildDir, "twmain", "main.go"))
-	require.NoError(t, err)
-	require.Contains(t, string(mainGo), "serve(entry{main: user.Main})")
-}
-
-// TestPrepareBuildContext_GoMissingEntry 两者皆无 → 构建期明确报错（对齐
-// node「index.js must export main or fetch」）。
-func TestPrepareBuildContext_GoMissingEntry(t *testing.T) {
+// TestPrepareBuildContext_GoNonMainRootNoPrecheck 根包非 main 不做前置校验
+// （最小变更取舍）：平台不在探测层校验根包形态——实测 `go build -o` 对非
+// main 根包 exit 0（产物为包档案非可执行），失败推迟到验证 spawn 拦截
+// （真实 daemon 形态对照 TestIntegration_GoNonMainRootBuildRejected）。
+func TestPrepareBuildContext_GoNonMainRootNoPrecheck(t *testing.T) {
 	buildDir := t.TempDir()
 	err := prepareBuildContext(buildDir, BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
-		Zip:     makeEntryZipFiles(t, map[string]string{"go.mod": goModFixture, "util.go": "package fn\n\nfunc A() {}\n"}),
+		Zip: makeEntryZipFiles(t, map[string]string{
+			"go.mod":  goModFixture,
+			"util.go": "package hello\n\nfunc A() {}\n",
+		}),
 		Runtime: "go-1.26",
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "must export Fetch or Main")
-	_, statErr := os.Stat(filepath.Join(buildDir, "twmain"))
-	require.True(t, os.IsNotExist(statErr), "探测失败不得留下半成品 twmain/")
+	require.NoError(t, err, "平台不做根包 main 前置校验（构建日志透传）")
 }
 
-// TestPrepareBuildContext_GoTwmainConflict zip 携带 twmain/ 保留目录 →
-// DockerfileFor 拒收（TwmainConflict 基于解压期 zip 条目清单，先于平台
-// 写入判定——写入时点正确性的另一面：平台产物不会先落盘再被冲突检查误伤）。
-func TestPrepareBuildContext_GoTwmainConflict(t *testing.T) {
+// TestPrepareBuildContext_GoTwmainDirAccepted twmain/ 不再是平台保留目录
+// （五期 5b：生成式 bootstrap 已删）：用户 zip 携带同名目录照常构建上下文。
+func TestPrepareBuildContext_GoTwmainDirAccepted(t *testing.T) {
 	err := prepareBuildContext(t.TempDir(), BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip: makeEntryZipFiles(t, map[string]string{
@@ -150,8 +126,7 @@ func TestPrepareBuildContext_GoTwmainConflict(t *testing.T) {
 		}),
 		Runtime: "go-1.26",
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "twmain")
+	require.NoError(t, err, "twmain/ 概念已删，用户目录不受平台约束")
 }
 
 // TestPrepareBuildContext_GoMissingSum 纯 stdlib（require 空）无 go.sum 合法；
@@ -188,6 +163,7 @@ func TestPrepareBuildContext_GoVendorBranch(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(dockerfile), "ENV GOFLAGS=-mod=vendor")
 	require.NotContains(t, string(dockerfile), "go mod download")
+	require.Contains(t, string(dockerfile), `-o /out/tw-app .`, "vendor 分支构建目标同样是根 main 包")
 }
 
 // TestPrepareBuildContext_NodeDepsLayerfile node 代装模板回归（接线不回退）：

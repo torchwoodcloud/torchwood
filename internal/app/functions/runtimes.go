@@ -3,9 +3,11 @@ package functions
 import domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 
 // runtimes 静态运行时表：node-18.0 → node:18-alpine（入口 index.js 的
-// main）；go-1.26 → golang:1.26-alpine 多阶段构建 + 平台生成 twmain
-// bootstrap（Go 一期，设计 docs/design/functions-runtimes-and-sources.md
-// §1；基础镜像 tag 与 runtime ID 同步定稿，升级 = 新 runtime ID、旧 ID 不
+// main）；go-1.26 → golang:1.26-alpine 多阶段构建，zip 根 = 用户持有
+// package main（SDK github.com/torchwoodcloud/torchwood/sdk/go/functions
+// 或自写 HTTP 服务实现 :18080 公开契约），构建 = `go build .` 平台零注入
+// （五期 5b，设计 docs/design/functions-runtimes-and-sources.md 顶部立项段；
+// 基础镜像 tag 与 runtime ID 同步定稿，升级 = 新 runtime ID、旧 ID 不
 // 日落——go1.x 废弃教训）。entrypoint 字段 MVP 仅占位，执行入口固定（见
 // 实现方案 §8）。python-3.11 已随 v1 docker 执行器移除（常驻执行器
 // node-only，python runner 未实现）；历史 python 函数再次部署将在构建期
@@ -14,7 +16,7 @@ import domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/func
 // 占位（入口契约由镜像自身 :18080 runner 协议承载）。
 var runtimes = []domainfunctions.RuntimeInfo{
 	{ID: "node-18.0", Name: "Node.js 18", Entrypoint: "index.main"},
-	{ID: "go-1.26", Name: "Go 1.26", Entrypoint: "Main"},
+	{ID: "go-1.26", Name: "Go 1.26", Entrypoint: "main"},
 	{ID: "image", Name: "Bring your own image", Entrypoint: "-"},
 }
 

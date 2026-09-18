@@ -169,8 +169,8 @@ func ResolveInternalNetworkName(cfg *config.AppConfig, projectID string) (string
 
 // SourceContents 是 zip 解压校验的产出：部署源探测结果（runtime 判定 +
 // 平台代装依赖 / Go 模块形态的探测字段），供 runner.DockerfileFor 做模板
-// 分支与确定性强制决策（node lockfile 强制 / go 缺 go.sum 与 twmain 冲突
-// 拒收——报错收敛在模板层，探测层只产出标记，与 node 同构）。
+// 分支与确定性强制决策（node lockfile 强制 / go 缺 go.sum 拒收——报错收敛
+// 在模板层，探测层只产出标记，与 node 同构）。
 type SourceContents struct {
 	// Runtime 是运行时 ID（node-18.0 / go-1.26；python-3.11 仅探测保留，
 	// 构建期报错）。探测优先级 index.js > go.mod > main.py（混装按 node，
@@ -182,7 +182,9 @@ type SourceContents struct {
 	// HasLockfile 表示 zip 根含 package-lock.json。
 	HasLockfile bool
 	// GoModulePath 是 zip 根 go.mod 的 module 行路径（引号形态剥壳、行尾
-	// 注释剥离；仅 Runtime=go-1.26 时有值）。
+	// 注释剥离；仅 Runtime=go-1.26 时有值）。五期 5b 起平台不再消费
+	// （生成式 bootstrap 已删），保留作信息字段；其解析同时承载坏 go.mod
+	// 的前置校验（缺/malformed module 行 → 明确 InvalidArgument）。
 	GoModulePath string
 	// GoHasRequires 表示 go.mod 存在非空 require（单行或块形态；行尾注释
 	// 剥离后判定）。
@@ -195,10 +197,6 @@ type SourceContents struct {
 	// 与拒收 node_modules 的理由本质不同，受纳；vendor 存在时 go.sum 不作
 	// 要求（go build -mod=vendor 不消费 go.sum）。
 	HasVendor bool
-	// TwmainConflict 表示 zip 根存在 twmain/ 前缀条目——该目录名是平台
-	// 构建期生成 Go runner bootstrap 的保留目录，冲突在模板层拒收（错误
-	// 文案指明改名）。
-	TwmainConflict bool
 }
 
 // extractZip 解压 zip 到 destDir（防 zip 炸弹与路径穿越），返回内容探测结果。
@@ -223,9 +221,10 @@ func ExtractZipRelaxed(zipPath, destDir string) (SourceContents, error) {
 // extractZipWithLimits 是 extractZip 的可注入预算版本（测试用）：除声明侧
 // UncompressedSize64 预检外，写入侧按实际字节计数强制预算，超限清理半成品。
 // 同处逐条收集部署源探测信息：node_modules 拒收、zip 根 package.json 的
-// dependencies 非空判定、package-lock.json / go.mod / go.sum / vendor/ /
-// twmain/ 存在性与 go.mod 内容解析（Go 一期，设计
-// functions-runtimes-and-sources.md §1）。
+// dependencies 非空判定、package-lock.json / go.mod / go.sum / vendor/ 存在
+// 性与 go.mod 内容解析（Go 运行时，设计
+// functions-runtimes-and-sources.md §1；五期 5b 起 Go 平台零注入，探测只
+// 服务模板分支）。
 func extractZipWithLimits(zipPath, destDir string, limits zipExtractLimits) (SourceContents, error) {
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
@@ -249,7 +248,6 @@ func extractZipWithLimits(zipPath, destDir string, limits zipExtractLimits) (Sou
 	goHasRequires := false
 	goHasSum := false
 	hasVendor := false
-	twmainConflict := false
 	root := filepath.Clean(destDir)
 
 	for _, f := range zr.File {
@@ -264,15 +262,8 @@ func extractZipWithLimits(zipPath, destDir string, limits zipExtractLimits) (Sou
 		if firstPathSegment(f.Name) == "node_modules" {
 			return SourceContents{}, status.Error(codes.InvalidArgument, "请勿在代码包中携带 node_modules——平台将在构建期代装依赖（跨平台二进制不兼容）")
 		}
-		// twmain/ 是平台构建期生成 Go runner bootstrap 的保留目录名（无点
-		// 前缀，规避 go build 点目录边角行为）：用户 zip 携带同名目录会在
-		// 构建期被平台产物覆盖/撞包，标记拒收（报错收敛在模板层，错误文案
-		// 指明改名）。判定口径与 node_modules 同（路径第一段，目录与文件
-		// 条目一并命中）。
-		if firstPathSegment(f.Name) == "twmain" {
-			twmainConflict = true
-		}
-		// vendor/ 目录存在性探测（Go vendor 受纳，钉版依赖形态）。
+		// vendor/ 目录存在性探测（Go vendor 受纳，钉版依赖形态；五期 5b 起
+		// SDK 依赖在用户 zip 内自带 vendor 树即走模板 -mod=vendor 离线分支）。
 		if firstPathSegment(f.Name) == "vendor" {
 			hasVendor = true
 		}
@@ -367,14 +358,13 @@ func extractZipWithLimits(zipPath, destDir string, limits zipExtractLimits) (Sou
 		return SourceContents{Runtime: "node-18.0", NodeDeps: nodeDeps, HasLockfile: hasLockfile}, nil
 	case hasGoMod:
 		return SourceContents{
-			Runtime:        "go-1.26",
-			NodeDeps:       nodeDeps,
-			HasLockfile:    hasLockfile,
-			GoModulePath:   goModulePath,
-			GoHasRequires:  goHasRequires,
-			GoHasSum:       goHasSum,
-			HasVendor:      hasVendor,
-			TwmainConflict: twmainConflict,
+			Runtime:       "go-1.26",
+			NodeDeps:      nodeDeps,
+			HasLockfile:   hasLockfile,
+			GoModulePath:  goModulePath,
+			GoHasRequires: goHasRequires,
+			GoHasSum:      goHasSum,
+			HasVendor:     hasVendor,
 		}, nil
 	case hasMainPy:
 		// python 探测保留（报错信息可指认根因），构建期由 runner.DockerfileFor
@@ -390,11 +380,12 @@ func extractZipWithLimits(zipPath, destDir string, limits zipExtractLimits) (Sou
 var goModModuleLineRe = regexp.MustCompile(`^module\s+(\S+)$`)
 
 // parseGoMod 只读 zip 条目（根 go.mod）并解析 module 行与 require 非空判定
-// （Go 一期探测，设计 functions-runtimes-and-sources.md §1）：读取上限
+// （Go 运行时探测，设计 functions-runtimes-and-sources.md §1）：读取上限
 // maxGoModBytes 防恶意巨型条目；module 行支持引号形态与行尾注释
 // （`module "example.com/x" // prod` 合法）；require 判定覆盖单行与块形态，
 // 行尾注释剥离后按字段数判定。module path 为空或含引号/空白 → 明确报错
-// （module path 会被注入生成 bootstrap 的 import 语句，先拦截注入面）。
+// （五期 5b 起该路径仅作信息字段不进构建产物，前置校验保留——坏 go.mod 的
+// InvalidArgument 比 `go build` 的构建日志更可指认）。
 func parseGoMod(f *zip.File) (modulePath string, hasRequires bool, err error) {
 	src, err := f.Open()
 	if err != nil {

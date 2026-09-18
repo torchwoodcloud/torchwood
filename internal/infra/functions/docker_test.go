@@ -518,13 +518,14 @@ func TestExtractZip_MissingEntrypoint(t *testing.T) {
 // ---- Go 一期探测（设计 functions-runtimes-and-sources.md §1）----
 
 // TestExtractZip_DetectsGoMod go.mod zip 探测为 go-1.26：module 行解析
-// （引号与行尾注释形态剥壳）、require 非空（单行与块形态）、go.sum/vendor/
-// twmain 标记。
+// （引号与行尾注释形态剥壳）、require 非空（单行与块形态）、go.sum/vendor
+// 标记（五期 5b：twmain 保留目录概念已删，携带 twmain/ 目录的用户 zip
+// 不再被标记/拒收）。
 func TestExtractZip_DetectsGoMod(t *testing.T) {
 	contents, err := extractZipFromFiles(t, map[string]string{
 		"go.mod":  "module example.com/fn\n\ngo 1.26\n\nrequire github.com/x/y v1.2.3\n",
 		"go.sum":  "github.com/x/y v1.2.3 h1:abc=\n",
-		"main.go": "package fn\n\nfunc Main(data map[string]any, ctx map[string]string) (any, error) { return nil, nil }\n",
+		"main.go": "package main\n\nfunc main() {}\n",
 	})
 	require.NoError(t, err)
 	require.Equal(t, "go-1.26", contents.Runtime)
@@ -532,7 +533,6 @@ func TestExtractZip_DetectsGoMod(t *testing.T) {
 	require.True(t, contents.GoHasRequires)
 	require.True(t, contents.GoHasSum)
 	require.False(t, contents.HasVendor)
-	require.False(t, contents.TwmainConflict)
 }
 
 // TestExtractZip_GoModParseForms module 行与 require 判定的形态矩阵：
@@ -580,7 +580,7 @@ func TestExtractZip_GoModParseForms(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			contents, err := extractZipFromFiles(t, map[string]string{
 				"go.mod":  tc.goMod,
-				"main.go": "package fn\n",
+				"main.go": "package main\n",
 			})
 			require.NoError(t, err)
 			require.Equal(t, "go-1.26", contents.Runtime)
@@ -591,8 +591,9 @@ func TestExtractZip_GoModParseForms(t *testing.T) {
 }
 
 // TestExtractZip_GoModInvalid 坏 go.mod（module 行缺失/空路径）是明确错误，
-// 不静默按零值处理（module path 会注入生成 bootstrap 的 import 语句）。
-// 合法引号形态由 TestExtractZip_GoModParseForms 覆盖，不在此列。
+// 不静默按零值处理（五期 5b 起该校验前置坏 go.mod 的失败点：InvalidArgument
+// 比 go build 的构建日志更可指认）。合法引号形态由 TestExtractZip_GoModParseForms
+// 覆盖，不在此列。
 func TestExtractZip_GoModInvalid(t *testing.T) {
 	for _, goMod := range []string{
 		"go 1.26\n",     // 无 module 行
@@ -601,7 +602,7 @@ func TestExtractZip_GoModInvalid(t *testing.T) {
 	} {
 		_, err := extractZipFromFiles(t, map[string]string{
 			"go.mod":  goMod,
-			"main.go": "package fn\n",
+			"main.go": "package main\n",
 		})
 		require.Error(t, err, "go.mod %q must be rejected", goMod)
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -614,56 +615,45 @@ func TestExtractZip_GoModInvalid(t *testing.T) {
 func TestExtractZip_GoModTooLarge(t *testing.T) {
 	_, err := extractZipFromFiles(t, map[string]string{
 		"go.mod":  "module example.com/x\n\n// " + strings.Repeat("pad", maxGoModBytes) + "\n",
-		"main.go": "package fn\n",
+		"main.go": "package main\n",
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.ErrorContains(t, err, "go.mod exceeds")
 }
 
-// TestExtractZip_GoDetectionMarkers vendor/ 与 twmain/ 标记：任一根下
-// vendor 前缀条目命中 HasVendor；twmain 前缀条目（目录与文件形态）命中
-// TwmainConflict。
+// TestExtractZip_GoDetectionMarkers vendor/ 标记：任一根下 vendor 前缀条目
+// 命中 HasVendor。五期 5b：twmain 保留目录概念已删——用户 zip 携带 twmain/
+// 目录不再被标记/拒收（与平台无关的普通用户目录）。
 func TestExtractZip_GoDetectionMarkers(t *testing.T) {
 	// vendor/ 目录（zip 显式目录条目 + 目录下文件条目均命中）。
 	contents, err := extractZipFromFiles(t, map[string]string{
 		"go.mod":                     "module example.com/x\n\nrequire github.com/x/y v1.2.3\n",
 		"vendor/":                    "",
 		"vendor/github.com/x/y/y.go": "package y\n",
-		"main.go":                    "package fn\n",
+		"main.go":                    "package main\n",
 	})
 	require.NoError(t, err)
 	require.True(t, contents.HasVendor)
-	require.False(t, contents.TwmainConflict)
 
-	// twmain/ 目录条目形态。
+	// twmain/ 目录条目形态：不再是保留目录，照常解压且无任何标记语义。
 	contents, err = extractZipFromFiles(t, map[string]string{
 		"go.mod":      "module example.com/x\n",
 		"twmain/":     "",
 		"twmain/x.go": "package main\n",
-		"main.go":     "package fn\n",
+		"main.go":     "package main\n",
 	})
-	require.NoError(t, err)
-	require.True(t, contents.TwmainConflict)
+	require.NoError(t, err, "twmain/ 不再是平台保留目录，携带同名目录合法")
 	require.False(t, contents.HasVendor)
 
-	// twmain 文件条目形态（无显式目录条目）。
-	contents, err = extractZipFromFiles(t, map[string]string{
-		"go.mod":            "module example.com/x\n",
-		"twmain/runtime.go": "package main\n",
-		"main.go":           "package fn\n",
-	})
-	require.NoError(t, err)
-	require.True(t, contents.TwmainConflict)
-
-	// 子目录中的 twmain 同名目录不受影响（判定口径 = 路径第一段）。
+	// 子目录中的 twmain 同名目录同样无关（判定口径 = 路径第一段，历史上
+	// 也只对根 twmain 标记）。
 	contents, err = extractZipFromFiles(t, map[string]string{
 		"go.mod":                "module example.com/x\n",
 		"test/twmain-helper.go": "package test\n",
-		"main.go":               "package fn\n",
+		"main.go":               "package main\n",
 	})
 	require.NoError(t, err)
-	require.False(t, contents.TwmainConflict)
 }
 
 // TestExtractZip_PriorityIndexJSOverGoMod 混装探测优先级：index.js > go.mod
@@ -672,7 +662,7 @@ func TestExtractZip_PriorityIndexJSOverGoMod(t *testing.T) {
 	contents, err := extractZipFromFiles(t, map[string]string{
 		"index.js": "exports.main = () => ({});",
 		"go.mod":   "module example.com/mixed\n",
-		"main.go":  "package fn\n",
+		"main.go":  "package main\n",
 	})
 	require.NoError(t, err)
 	require.Equal(t, "node-18.0", contents.Runtime)

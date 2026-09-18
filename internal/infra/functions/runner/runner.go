@@ -10,8 +10,10 @@
 // 本包保持叶子资产包形态（CLI functions dev 与 dispatcher 双
 // 消费方），不 import infra/functions 根包：DockerfileFor 的入参载体
 // SourceContents 在本包定义，探测层产物（infrafunctions.SourceContents）
-// 由调用方逐字段映射，杜绝潜在 import 环。Go 模板资产（twmain bootstrap
-// 源码模板与渲染器）在子包 gorunner——它同样不回溯 import 本包与根包。
+// 由调用方逐字段映射，杜绝潜在 import 环。Go 的 runner 契约参考实现已
+// 随五期 5b（docs/design/functions-runtimes-and-sources.md 顶部立项段，
+// owner 裁决「用户持有 main + SDK」）移交 sdk/go/functions——平台侧
+// Go 构建分支坍缩为 `go build .`（zip 根 package main），零平台注入。
 //
 // python 探测保留但构建期明确报错（不静默构建一个跑不起来的镜像——
 // resident 语义下一次性 CMD 跑完即退，实例永远不会 ready，错误会被推迟到
@@ -43,9 +45,11 @@ const RunnerPort = 18080
 // 此处编译期引用防漂移。v4 = fetch 入口探测/触发器封套还原/Response 封套
 // 扩展，v3 §2.1–§2.4；v5 = ctx/env 调用身份三件
 // source/invokingUserId/projectId，mlbridge fn-rpc 设计 §2.5）。
-// Go 分支新增（go-1.26 模板）不改存量 node 语义，按 D5/OQ2 裁决不 bump；
-// Go runner 协议实现（gorunner 资产）与本常量同源——双实现同版本纪律：
-// 任一实现的语义变更必须同步另一实现并递增同一常量。
+// Go 分支两次变更均不 bump：go-1.26 模板新增（D5/OQ2 裁决）与五期 5b 构建
+// 管道简化（COPY twmain/ + go build ./twmain → go build .；零存量 go
+// deployment，node 分支语义未变，CMD/ENV 产物等价）——五期 5b 起 Go 的
+// runner 契约参考实现是 sdk/go/functions（用户侧依赖），平台模板不再承载
+// Go 协议实现。
 const TemplateVersion = int(domainfunctions.RunnerTemplateVersion)
 
 // NodeRunnerJS 返回嵌入的 node runner 源码（构建镜像时写入 build context）。
@@ -53,7 +57,7 @@ func NodeRunnerJS() []byte { return nodeRunnerJS }
 
 // SourceContents 是 DockerfileFor 的入参载体：部署源探测结果的模板投影，
 // 字段与探测层产物（infrafunctions.SourceContents）一一对应。探测层只产出
-// 标记；报错收敛在本包（缺 go.sum / twmain 冲突拒收），与 node 缺 lockfile
+// 标记；报错收敛在本包（缺 go.sum 拒收），与 node 缺 lockfile
 // 同构——构建期错误统一从 DockerfileFor 冒出。
 type SourceContents struct {
 	// Runtime 是运行时 ID（node-18.0 / go-1.26；python-3.11 仅探测保留）。
@@ -63,6 +67,9 @@ type SourceContents struct {
 	// HasLockfile 表示 zip 根含 package-lock.json。
 	HasLockfile bool
 	// GoModulePath 是 zip 根 go.mod 的 module 行路径（探测层已剥引号/注释）。
+	// 五期 5b 起平台不再消费（生成式 bootstrap 已删），保留作信息字段——
+	// 探测层对坏 go.mod（缺/malformed module 行）的前置 InvalidArgument 校验
+	// 仍由该解析承载，错误比 `go build` 的构建日志更可指认。
 	GoModulePath string
 	// GoHasRequires 表示 go.mod 存在非空 require（单行或块形态）。
 	GoHasRequires bool
@@ -70,8 +77,6 @@ type SourceContents struct {
 	GoHasSum bool
 	// HasVendor 表示 zip 根存在 vendor/ 目录（受纳；存在时 go.sum 不作要求）。
 	HasVendor bool
-	// TwmainConflict 表示 zip 根存在 twmain/ 前缀条目（平台保留目录名）。
-	TwmainConflict bool
 }
 
 // DockerfileFor 生成常驻执行模型的运行时 Dockerfile（唯一执行路径，经
@@ -85,15 +90,19 @@ type SourceContents struct {
 // 强制在此决策。无依赖函数维持一次性 COPY 模板（零变化、不白跑 npm ci）。
 // 模板语义变化不 bump 模板版本：构建管道变化、产物等价（CMD/ENV 不动）。
 //
-// go 分支（Go 一期，设计 functions-runtimes-and-sources.md §1）多阶段构建：
-// 构建段 golang:1.26-alpine（CGO_ENABLED=0 结构化消灭 #cgo/pkg-config 构建
-// 期命令执行面；GOFLAGS 按 vendor 探测分支——显式 -mod=readonly 会覆盖
-// 「vendor 目录存在时自动 -mod=vendor」的默认行为，HasVendor=true 时必须
-// 显式 -mod=vendor），运行段 alpine + ca-certificates（函数 HTTPS 出访需要
-// CA 证书而基础 alpine 不自带）+ 非 root 数字 UID。go.sum 通配
-// （`go.sum*`）：纯 stdlib 函数合法无 go.sum，COPY 任一源缺失即失败——
-// node 模板 package-lock.json* 先例同构。go build 只编译不执行（Go modules
-// 无 npm 生命周期脚本等价物），「构建期不执行用户代码」强于 node。
+// go 分支（五期 5b 起，设计 functions-runtimes-and-sources.md 顶部立项段
+// owner 裁决「用户持有 main + SDK」）多阶段构建：构建段 golang:1.26-alpine
+// （CGO_ENABLED=0 结构化消灭 #cgo/pkg-config 构建期命令执行面；GOFLAGS 按
+// vendor 探测分支——显式 -mod=readonly 会覆盖「vendor 目录存在时自动
+// -mod=vendor」的默认行为，HasVendor=true 时必须显式 -mod=vendor），
+// 运行段 alpine + ca-certificates（函数 HTTPS 出访需要 CA 证书而基础 alpine
+// 不自带）+ 非 root 数字 UID。go.sum 通配（`go.sum*`）：纯 stdlib 函数合法
+// 无 go.sum，COPY 任一源缺失即失败——node 模板 package-lock.json* 先例同构。
+// 构建目标 = zip 根 main 包（`go build .`）：用户以 SDK
+// （github.com/torchwoodcloud/torchwood/sdk/go/functions）或任意自写 HTTP
+// 服务实现 :18080 公开契约，平台零注入（原 twmain 生成式 bootstrap 已删，
+// twmain/ 不再是保留目录名）。go build 只编译不执行（Go modules 无 npm
+// 生命周期脚本等价物），「构建期不执行用户代码」强于 node。
 func DockerfileFor(contents SourceContents) (string, error) {
 	switch contents.Runtime {
 	case "node-18.0":
@@ -127,11 +136,6 @@ func DockerfileFor(contents SourceContents) (string, error) {
 			fmt.Sprintf("ENV TW_RUNNER_PORT=%d\n", RunnerPort) +
 			fmt.Sprintf("CMD [\"node\",%q]\n", RunnerFileName), nil
 	case "go-1.26":
-		// twmain/ 保留目录冲突拒收（设计 §1「错误文案指明改名」）：用户 zip
-		// 携带同名目录会与平台构建期生成的 bootstrap 撞包。
-		if contents.TwmainConflict {
-			return "", fmt.Errorf("请勿在代码包中携带 twmain/ 目录——该目录为平台保留（构建期生成 Go runner bootstrap），请改名后重试")
-		}
 		// 依赖确定性（对齐 node lockfile 强制口径）：require 非空且无 go.sum
 		// 且无 vendor → 拒收（无锁依赖不可复现）；vendor 存在时 go build
 		// -mod=vendor 不消费 go.sum，不作要求（D4）。
@@ -143,7 +147,8 @@ func DockerfileFor(contents SourceContents) (string, error) {
 		if contents.HasVendor {
 			// GOFLAGS 显式 -mod=vendor：否则显式 -mod=readonly 会覆盖 Go
 			// 「vendor 目录存在时自动切换」的默认行为，vendor 形同虚设
-			// （二轮复查修正）；vendor 分支免 go mod download 层。
+			// （二轮复查修正）；vendor 分支免 go mod download 层（离线构建，
+			// SDK 依赖由用户 zip 自带 vendor 树解析）。
 			goFlags = "-mod=vendor"
 			downloadLayer = ""
 		}
@@ -154,8 +159,7 @@ func DockerfileFor(contents SourceContents) (string, error) {
 			"COPY go.mod go.sum* ./\n" +
 			downloadLayer +
 			"COPY . .\n" +
-			"COPY twmain/ ./twmain/\n" +
-			"RUN go build -trimpath -ldflags=\"-s -w\" -o /out/tw-app ./twmain\n" +
+			"RUN go build -trimpath -ldflags=\"-s -w\" -o /out/tw-app .\n" +
 			"\n" +
 			"FROM alpine:3.22\n" +
 			"RUN apk add --no-cache ca-certificates\n" +

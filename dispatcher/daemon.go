@@ -26,7 +26,6 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	infrafunctions "github.com/torchwoodcloud/torchwood/internal/infra/functions"
 	"github.com/torchwoodcloud/torchwood/internal/infra/functions/runner"
-	"github.com/torchwoodcloud/torchwood/internal/infra/functions/runner/gorunner"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -65,8 +64,10 @@ type Daemon interface {
 	// stdout，设计 §1「失败时回收容器日志尾部」）；容器已退出仍可读。
 	InstanceLogsTail(ctx context.Context, containerID string, limit int64) (string, error)
 	// BuildImage 以 runner 模板构建镜像（zip 字节内联；构建期不执行用户
-	// 代码的不变量由模板层保持——runner 仅被 COPY/编译）。构建链载荷一期
-	// 定稿形态（设计 §0），runtime 对账与 go bootstrap 生成在实现内完成。
+	// 代码的不变量由模板层保持——node runner 仅被 COPY，go 只编译不执行）。
+	// 构建链载荷一期定稿形态（设计 §0），runtime 对账在实现内完成；Go 分支
+	// 零平台注入（五期 5b：用户 zip 根 = package main + SDK，构建 =
+	// go build .）。
 	// 四期 4b（M1）：build → verify → push 顺序定稿（验证失败不污染
 	// registry）——routing_mode="registry" 且 registry_push=true 时，构建
 	// 与验证成功后把镜像 push 到 functions.docker.registry（镜像全局化）；
@@ -150,10 +151,10 @@ type BuildImageOptions struct {
 
 // SpawnOptions 是 SpawnInstance 的入参。
 type SpawnOptions struct {
-	ProjectID string
+	ProjectID  string
 	FunctionID string
-	Image     string
-	Network   string
+	Image      string
+	Network    string
 	// Env 为容器环境变量（用户 variables + runner 控制变量；不含
 	// TW_DATA/TW_EXECUTION_TOKEN——v2 语义下二者经请求体/分发 header 传递）。
 	Env         []string
@@ -981,17 +982,15 @@ func (d *dockerDaemon) InstanceLogsTail(ctx context.Context, containerID string,
 }
 
 // prepareBuildContext 在 buildDir 准备镜像构建上下文（无 docker 依赖，纯
-// 文件编排，单测以临时 zip 直接驱动）。顺序敏感（Go 一期接线，设计 §1）：
+// 文件编排，单测以临时 zip 直接驱动）。顺序敏感（runtime 对账先于模板
+// 渲染）：
 //
-//  1. 解压 zip 并探测部署源（ExtractZip；twmain/ 保留目录冲突在此探测为
-//     TwmainConflict 标记——基于 zip 条目清单而非落盘目录）；
+//  1. 解压 zip 并探测部署源（ExtractZipRelaxed）；
 //  2. runtime 一致性对账（D7）：opts.Runtime 非空且 ≠ 探测结果 →
 //     InvalidArgument（错误信息含两侧值）；
-//  3. go 分支：gorunner.DetectEntry 扫根包选入口（此时尚无 twmain/，探测
-//     时点正确）→ RenderBootstrap 渲染 → 写 <buildDir>/twmain/{runtime,main}.go
-//     ——写入必须在 DockerfileFor 渲染之前（模板 COPY twmain/）；
-//  4. node 分支照旧写 .tw-runner.js；最后渲染 Dockerfile（缺 go.sum /
-//     twmain 冲突等拒收错误在此冒出）。
+//  3. node 分支写 .tw-runner.js；go 分支零平台注入（五期 5b：用户 zip 根 =
+//     package main + SDK，构建 = go build .，无 bootstrap 生成/入口探测）；
+//     最后渲染 Dockerfile（缺 go.sum 等拒收错误在此冒出）。
 func prepareBuildContext(buildDir string, opts BuildImageOptions) error {
 	tmpZip, err := os.CreateTemp("", "torchwood-dispatch-src-*.zip")
 	if err != nil {
@@ -1025,26 +1024,14 @@ func prepareBuildContext(buildDir string, opts BuildImageOptions) error {
 			opts.Runtime, contents.Runtime)
 	}
 
-	// go 分支：平台生成 twmain/ bootstrap（Detect → Render → 落盘），写入
-	// 时点在 DockerfileFor 之前（模板 COPY twmain/）、在 DetectEntry 之后
-	// （根包扫描不受影响——twmain 是子目录，且 TwmainConflict 基于 zip 条目
-	// 清单）。权限 0644 对齐既有 runner 写入约定（镜像内 USER 须可读，
-	// tarDir 收口点再归一化）。
-	if contents.Runtime == "go-1.26" {
-		if err := writeGoBootstrap(buildDir, contents.GoModulePath); err != nil {
-			return err
-		}
-	}
-
 	dockerfile, err := runner.DockerfileFor(runner.SourceContents{
-		Runtime:        contents.Runtime,
-		NodeDeps:       contents.NodeDeps,
-		HasLockfile:    contents.HasLockfile,
-		GoModulePath:   contents.GoModulePath,
-		GoHasRequires:  contents.GoHasRequires,
-		GoHasSum:       contents.GoHasSum,
-		HasVendor:      contents.HasVendor,
-		TwmainConflict: contents.TwmainConflict,
+		Runtime:       contents.Runtime,
+		NodeDeps:      contents.NodeDeps,
+		HasLockfile:   contents.HasLockfile,
+		GoModulePath:  contents.GoModulePath,
+		GoHasRequires: contents.GoHasRequires,
+		GoHasSum:      contents.GoHasSum,
+		HasVendor:     contents.HasVendor,
 	})
 	if err != nil {
 		return err
@@ -1058,32 +1045,6 @@ func prepareBuildContext(buildDir string, opts BuildImageOptions) error {
 	}
 	if err := os.WriteFile(filepath.Join(buildDir, "Dockerfile"), []byte(dockerfile), 0o644); err != nil { // #nosec G306 -- 镜像内 USER 须可读
 		return fmt.Errorf("write dockerfile: %w", err)
-	}
-	return nil
-}
-
-// writeGoBootstrap 在构建上下文生成保留目录 twmain/ 的两份 bootstrap 源码
-// （AST 入口探测 → 渲染 → 落盘；Go 一期，设计 §1/D3 生成路线）。
-func writeGoBootstrap(buildDir, modulePath string) error {
-	entry, err := gorunner.DetectEntry(buildDir)
-	if err != nil {
-		return err
-	}
-	runtimeGo, mainGo, err := gorunner.RenderBootstrap(modulePath, entry)
-	if err != nil {
-		return err
-	}
-	twDir := filepath.Join(buildDir, "twmain")
-	if err := os.MkdirAll(twDir, 0o755); err != nil {
-		return fmt.Errorf("create twmain dir: %w", err)
-	}
-	// 0644 对齐既有 runner 写入注释（镜像内非 root USER 须可读；tarDir 收口
-	// 点对落盘 mode 再归一化，防 umask 漂移）。
-	if err := os.WriteFile(filepath.Join(twDir, "runtime.go"), runtimeGo, 0o644); err != nil { // #nosec G306 -- 镜像内 USER 须可读
-		return fmt.Errorf("write twmain/runtime.go: %w", err)
-	}
-	if err := os.WriteFile(filepath.Join(twDir, "main.go"), mainGo, 0o644); err != nil { // #nosec G306 -- 镜像内 USER 须可读
-		return fmt.Errorf("write twmain/main.go: %w", err)
 	}
 	return nil
 }

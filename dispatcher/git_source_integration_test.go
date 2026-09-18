@@ -53,23 +53,33 @@ func (fx *gitE2ERepo) fileURL() string {
 	return "file:///" + strings.TrimPrefix(filepath.ToSlash(fx.dir), "/")
 }
 
-// gitE2EGoMod 是 greet 子目录 module 的 go.mod：require 空 = 纯 stdlib
-// （合法无 go.sum，模板 COPY go.mod go.sum* ./ 通配）。
-const gitE2EGoMod = "module example.com/greet\n\ngo 1.26\n"
+// gitE2EMainGo 是 main 风格契约入口（五期 5b 用户持有 main + SDK，返回
+// 固定封套供执行断言；vendor 树由 goSDKModuleFiles 注入 fixture 仓）。
+const gitE2EMainGo = `package main
 
-// gitE2EMainGo 是 main 风格契约入口（返回固定封套供执行断言）。
-const gitE2EMainGo = `package greet
+import (
+	"context"
 
-func Main(data map[string]any, ctx map[string]string) (any, error) {
-	return map[string]any{"got": data["n"], "src": "git"}, nil
+	"github.com/torchwoodcloud/torchwood/sdk/go/functions"
+)
+
+type greetReq struct {
+	N int ` + "`json:\"n\"`" + `
+}
+
+func main() {
+	_ = functions.StartInvoke(func(ctx context.Context, req greetReq) (map[string]any, error) {
+		return map[string]any{"got": req.N, "src": "git"}, nil
+	})
 }
 `
 
 // writeGitE2EFixtureRepo 造 fixture 仓库：
 //
-//	README.md                    仓库根杂项（Directory 子目录物化后不入 zip）
-//	functions/greet/go.mod       module 根 = 构建上下文根
-//	functions/greet/main.go      Main 契约入口
+//	README.md                            仓库根杂项（Directory 子目录物化后不入 zip）
+//	functions/greet/go.mod               module 根 = 构建上下文根（require SDK）
+//	functions/greet/main.go              用户 main 契约入口（SDK StartInvoke）
+//	functions/greet/vendor/...           SDK vendor 树（容器内离线 -mod=vendor 构建）
 func writeGitE2EFixtureRepo(t *testing.T) *gitE2ERepo {
 	t.Helper()
 	dir := t.TempDir()
@@ -77,10 +87,10 @@ func writeGitE2EFixtureRepo(t *testing.T) *gitE2ERepo {
 	require.NoError(t, err)
 	wt, err := repo.Worktree()
 	require.NoError(t, err)
-	files := map[string]string{
-		"README.md":               "# git e2e fixture\n",
-		"functions/greet/go.mod":  gitE2EGoMod,
-		"functions/greet/main.go": gitE2EMainGo,
+	base := goSDKModuleFiles(t, gitE2EMainGo)
+	files := map[string]string{"README.md": "# git e2e fixture\n"}
+	for name, content := range base {
+		files["functions/greet/"+name] = content
 	}
 	for rel, content := range files {
 		abs := filepath.Join(dir, filepath.FromSlash(rel))
@@ -142,8 +152,11 @@ func TestIntegration_GitSourceGoFunctionFullChainE2E(t *testing.T) {
 	sum := sha256.Sum256(zipBytes)
 	require.Equal(t, hex.EncodeToString(sum[:]), packResp.Checksum,
 		"checksum = zip 字节的 hex sha256（可审计一致性）")
-	require.Equal(t, []string{"go.mod", "main.go"}, zipEntryNames(t, zipBytes),
-		"zip 根 = directory 子目录（README 不入构建上下文；物化条目字典序）")
+	names := zipEntryNames(t, zipBytes)
+	require.GreaterOrEqual(t, len(names), 3, "物化条目 = go.mod + main.go + SDK vendor 树")
+	require.Equal(t, []string{"go.mod", "main.go"}, names[:2],
+		"zip 根前两条 = directory 子目录（README 不入构建上下文；物化条目字典序）")
+	require.Contains(t, names, "vendor/modules.txt", "SDK vendor 树随子目录物化")
 
 	// —— BuildImage（verify=true = 验证 spawn 内联通过）——
 	cfg := testDispatcherConfig(t)
