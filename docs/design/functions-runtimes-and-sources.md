@@ -11,7 +11,16 @@
 > DX：Lambda/Azure-native/OpenFaaS 均为「用户持有 main + SDK」行业主流；
 > twmain 不可见接线 = 签名错误部署期才暴露 + ctx 魔法串 + 无本地运行形态）。
 > 落位：Go module `.../sdk/go/functions`（monorepo 子目录，伪版本/tag 均可
-> 拉）、npm `@torchwoodcloud/functions`（sdk/typescript 扩展）。
+> 拉）、npm org **`@torchwood`**（`@torchwood/functions`，sdk/typescript 扩展）。
+> **SDK 面修订（2026-09-18 owner 反馈：Handlers 结构体不符 Go 惯用法）**：
+> 主面 = 四个单源 Start（`StartInvoke[Req,Resp]` client/server 编译期契约、
+> `StartHTTP(http.Handler)`、`StartCron`、`StartEvent`），平台组合单位 =
+> function 本身（invoke 与 cron 应为两个函数各自订阅）；多源单二进制为
+> 显式组合：`functions.NewMux()`（Invoke/Cron/Event 方法注册，按 ctx.source
+> 分发）+ `functions.Listen(mux)`，复用 ServeMux/chi 心智，无配置结构体。
+> 命名定案：`DocumentChange`（弃 DocumentEvent）、`CronTick`、
+> `StartInvoke[Req,Resp]`（client call 编译期契约）。npm 包
+> `@torchwood/functions`；TS 多源 = 对象字面量多具名导出（TS 惯用法）。
 
 > 状态：**已拍板（2026-09-17 owner）→ 同日复查修正 → 独立设计交叉验证
 > 修订 → 二轮深度复查修正 → 对抗审查（4 处修复并入）→ 竞品调研
