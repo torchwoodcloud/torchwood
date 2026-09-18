@@ -1,5 +1,18 @@
 # Functions 运行时扩展与部署源多元化（Go / Git / 镜像）
 
+> **⚠ 五期立项（2026-09-18 owner）：双语言 SDK 方案推翻 D3 生成式 bootstrap。**
+> owner 裁决：不向后兼容、以最好设计为准——Go 函数改为「用户持有 main +
+> SDK」（context.Context 标准签名、typed 事件、平台 API 客户端入 SDK——
+> 「没有 SDK 做不了真实业务」）；TS 同走 npm SDK（typed defineMain +
+> Databases/Assets 客户端）；服务端删除 twmain 生成/AST 探测/保留目录
+> 拒收，Go 构建分支坍缩为 `go build .`（根 main 包）。node 注入 runner
+> 机制保留（SDK 为用户侧依赖，走代装链路）。设计依据：docs/developer/
+> 08-functions.md §3.1 将随实施重写；动机与竞品对照见会话记录（编辑器
+> DX：Lambda/Azure-native/OpenFaaS 均为「用户持有 main + SDK」行业主流；
+> twmain 不可见接线 = 签名错误部署期才暴露 + ctx 魔法串 + 无本地运行形态）。
+> 落位：Go module `.../sdk/go/functions`（monorepo 子目录，伪版本/tag 均可
+> 拉）、npm `@torchwoodcloud/functions`（sdk/typescript 扩展）。
+
 > 状态：**已拍板（2026-09-17 owner）→ 同日复查修正 → 独立设计交叉验证
 > 修订 → 二轮深度复查修正 → 对抗审查（4 处修复并入）→ 竞品调研
 > （业界对照，零推翻 + 2 处补强）→ 多机演进立项（owner 裁决路径 1
