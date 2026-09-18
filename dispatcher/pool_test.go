@@ -1089,3 +1089,57 @@ func TestPoolDispatch_ExecutionIDHeader(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "exec-42", runner.invokedExecution)
 }
+
+// TestPoolSpawn_ReadableContainerName：常驻实例容器名 = tw-fn-<project>-
+// <function>-<rand>（四期运维可读性），且同函数两次 spawn 名字唯一。
+func TestPoolSpawn_ReadableContainerName(t *testing.T) {
+	d := newFakeDaemon()
+	reg := newFakeRegistry()
+	runner := &fakeRunner{}
+	runner.healthy = true
+	pool := newTestPool(d, reg, runner, nil)
+	ctx := context.Background()
+
+	req := dispatchReq()
+	req.BuildNode = "self"
+	for i := 0; i < 2; i++ {
+		if _, err := pool.Dispatch(ctx, req); err != nil {
+			t.Fatalf("dispatch %d: %v", i, err)
+		}
+	}
+	if d.lastSpawn.Name == "" {
+		t.Fatal("SpawnOptions.Name 必须设置（空 = Docker 随机名，运维不可读）")
+	}
+	if !strings.HasPrefix(d.lastSpawn.Name, "tw-fn-p1-fn1-") {
+		t.Fatalf("容器名必须以 tw-fn-<project>-<function>- 开头: %q", d.lastSpawn.Name)
+	}
+}
+
+// TestContainerName_Builder：名字构造器的合法字符/小写化/唯一性。
+func TestContainerName_Builder(t *testing.T) {
+	n1 := containerName("accdemo", "greet-go")
+	if !strings.HasPrefix(n1, "tw-fn-accdemo-greet-go-") {
+		t.Fatalf("prefix mismatch: %q", n1)
+	}
+	if len(n1) > 128 {
+		t.Fatalf("容器名过长: %q", n1)
+	}
+	for _, r := range n1 {
+		ok := r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '.'
+		if !ok {
+			t.Fatalf("非法字符 %q in %q", r, n1)
+		}
+	}
+	// 历史遗留大写 functionID 小写化（G6-3 同口径）+ 非法字符折叠为 '-'。
+	if n2 := containerName("P1", "Weird~Fn"); !strings.HasPrefix(n2, "tw-fn-p1-weird-fn-") {
+		t.Fatalf("sanitize mismatch: %q", n2)
+	}
+	// 唯一性：随机后缀使同函数多次构造不撞名（128 位空间，采样 100 次）。
+	seen := map[string]bool{}
+	for i := 0; i < 100; i++ {
+		seen[containerName("p1", "fn1")] = true
+	}
+	if len(seen) != 100 {
+		t.Fatalf("随机后缀撞名: %d/100", len(seen))
+	}
+}

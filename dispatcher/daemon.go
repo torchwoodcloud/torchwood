@@ -4,7 +4,9 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	cryptorand "crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -149,6 +151,7 @@ type BuildImageOptions struct {
 // SpawnOptions 是 SpawnInstance 的入参。
 type SpawnOptions struct {
 	ProjectID string
+	FunctionID string
 	Image     string
 	Network   string
 	// Env 为容器环境变量（用户 variables + runner 控制变量；不含
@@ -156,6 +159,33 @@ type SpawnOptions struct {
 	Env         []string
 	Spec        string // 资源规格（shared-1x / shared-2x）
 	MaxRequests int    // 写入 TW_MAX_REQUESTS（runner 自回收阈值）
+	// Name 为容器可读名（tw-fn-<project>-<function>-<rand>，四期运维可读
+	// 性；空 = Docker 随机名兜底）。同函数多实例靠随机后缀唯一。
+	Name string
+}
+
+// containerName 生成可读容器名：tw-fn-<project>-<function>-<rand6>。
+// 与镜像名 func-<fid>-<did> 同族的可读性——docker ps 一眼对上项目/函数
+// （四期运维诉求：随机名 stoic_engelbart 无法定位函数）。project/function
+// 上游已过 ID 白名单（project ^[a-z][a-z0-9]{0,27}$、function
+// ^[a-z0-9][a-z0-9_-]{0,63}$），此处防御性小写化 + 非法字符折叠为 '-'；
+// 随机后缀（6 hex）保证同函数多实例/反复部署在全 daemon 唯一（总长
+// ≤106 < Docker 名上限）。历史遗留大写 functionID 同步小写（G6-3 同口径）。
+func containerName(projectID, functionID string) string {
+	sanitize := func(s string) string {
+		s = strings.ToLower(s)
+		return strings.Map(func(r rune) rune {
+			switch {
+			case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+				return r
+			default:
+				return '-'
+			}
+		}, s)
+	}
+	suffix := make([]byte, 3)
+	_, _ = cryptorand.Read(suffix)
+	return fmt.Sprintf("tw-fn-%s-%s-%s", sanitize(projectID), sanitize(functionID), hex.EncodeToString(suffix))
 }
 
 // dockerCleanupTimeout 是清理类操作（stop/remove）的独立超时：不继承已
@@ -368,9 +398,9 @@ func (d *dockerDaemon) SpawnInstance(ctx context.Context, opts SpawnOptions) (In
 			PidsLimit: int64Ptr(512),
 		},
 	}
-	created, err := cli.ContainerCreate(ctx, cfg, hostCfg, &network.NetworkingConfig{}, nil, "")
+	created, err := cli.ContainerCreate(ctx, cfg, hostCfg, &network.NetworkingConfig{}, nil, opts.Name)
 	if err != nil {
-		return Instance{}, fmt.Errorf("create resident instance: %w", err)
+		return Instance{}, fmt.Errorf("create resident instance %s: %w", opts.Name, err)
 	}
 	cleanup := func() {
 		rmCtx, cancel := context.WithTimeout(context.Background(), dockerCleanupTimeout)
@@ -872,11 +902,13 @@ func spawnVerifyInstance(ctx context.Context, d Daemon, probe healthProber, opts
 	}
 	inst, err := d.SpawnInstance(ctx, SpawnOptions{
 		ProjectID:   opts.ProjectID,
+		FunctionID:  opts.FunctionID,
 		Image:       vc.Image,
 		Network:     network,
 		Env:         env,
 		Spec:        "shared-1x",
 		MaxRequests: vc.MaxRequests,
+		Name:        containerName(opts.ProjectID, opts.FunctionID),
 	})
 	if err != nil {
 		return fmt.Errorf("verify spawn: %w", err)

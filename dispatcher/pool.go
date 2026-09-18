@@ -694,11 +694,13 @@ func (p *PoolManager) spawnInstance(ctx context.Context, req ExecuteRequest, pol
 	}
 	inst, err := p.daemon.SpawnInstance(ctx, SpawnOptions{
 		ProjectID:   req.ProjectID,
+		FunctionID:  req.FunctionID,
 		Image:       req.Image,
 		Network:     network,
 		Env:         env,
 		Spec:        req.Spec,
 		MaxRequests: policy.MaxRequestsPerInstance,
+		Name:        containerName(req.ProjectID, req.FunctionID),
 	})
 	if err != nil {
 		return nil, err
