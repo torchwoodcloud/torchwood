@@ -55,6 +55,82 @@ func TestValidateJWTSecret_WeakSubstringNeverPasses(t *testing.T) {
 	}
 }
 
+// TestValidateFunctionsRoutingConfig 执行路由模式校验（四期 4b M7）表驱动：
+// local（缺省/显式）通过；registry 全要素通过；非法值 / registry 缺
+// registry_push / 缺 node_url 拒绝启动（fail-fast 优于静默降级）。
+func TestValidateFunctionsRoutingConfig(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name         string
+		routingMode  string
+		registryPush bool
+		nodeURL      string
+		wantErr      string // 空串表示期望通过
+	}{
+		{name: "local 缺省通过（向后兼容）", routingMode: ""},
+		{name: "local 显式通过", routingMode: "local"},
+		{name: "registry 全要素通过", routingMode: "registry", registryPush: true, nodeURL: "http://dispatcher-1:9070"},
+		{name: "非法值拒绝（replicated 实验档不在实现范围）", routingMode: "replicated", registryPush: true, nodeURL: "http://d:9070", wantErr: `routing_mode "replicated" is invalid`},
+		{name: "非法值拒绝（任意串）", routingMode: "registory", wantErr: `routing_mode "registory" is invalid`},
+		{name: "registry 缺 registry_push 拒绝", routingMode: "registry", registryPush: false, nodeURL: "http://d:9070", wantErr: "registry_push must be true"},
+		{name: "registry 缺 node_url 拒绝", routingMode: "registry", registryPush: true, nodeURL: "", wantErr: "node_url is required"},
+		{name: "registry node_url 空白拒绝", routingMode: "registry", registryPush: true, nodeURL: "   ", wantErr: "node_url is required"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := &config.AppConfig{Functions: &config.Functions{
+				Dispatcher: &config.Functions_Dispatcher{
+					Url:          "http://dispatcher:9070",
+					RoutingMode:  tc.routingMode,
+					RegistryPush: tc.registryPush,
+					NodeUrl:      tc.nodeURL,
+				},
+			}}
+			err := ValidateFunctionsRoutingConfig(cfg)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
+// TestValidateFunctionsDispatchConfig_Composition 组合口径：url 必填保持在
+// 前；路由模式校验并入后非法 routing_mode 同样经 DispatchConfig 入口拒绝
+// （server/worker 组合根单一调用面）。
+func TestValidateFunctionsDispatchConfig_Composition(t *testing.T) {
+	t.Parallel()
+
+	t.Run("url 缺失仍最先拒绝", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.AppConfig{Functions: &config.Functions{
+			Dispatcher: &config.Functions_Dispatcher{RoutingMode: "bogus"},
+		}}
+		err := ValidateFunctionsDispatchConfig(cfg)
+		require.ErrorContains(t, err, "functions.dispatcher.url is required")
+	})
+
+	t.Run("非法 routing_mode 经组合入口拒绝", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.AppConfig{Functions: &config.Functions{
+			Dispatcher: &config.Functions_Dispatcher{Url: "http://dispatcher:9070", RoutingMode: "bogus"},
+		}}
+		require.ErrorContains(t, ValidateFunctionsDispatchConfig(cfg), "is invalid")
+	})
+
+	t.Run("local 缺省仅 url 必填即通过", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.AppConfig{Functions: &config.Functions{
+			Dispatcher: &config.Functions_Dispatcher{Url: "http://dispatcher:9070"},
+		}}
+		require.NoError(t, ValidateFunctionsDispatchConfig(cfg))
+	})
+}
+
 // M5 C8：setup_token 非空时套用主密钥强度下界（≥32 字节 + 弱子串拒绝）；
 // 空值（未启用 setup 面）跳过。
 func TestValidateAppConfig_SetupToken(t *testing.T) {

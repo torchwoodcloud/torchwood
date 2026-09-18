@@ -40,9 +40,9 @@ func digest64(seed string) string {
 func streamBody(s string) io.ReadCloser { return io.NopCloser(strings.NewReader(s)) }
 
 // fakeImageClient 是 imageClient 的可编程 fake：记录调用流水（"pull <ref>"
-// / "inspect <name>" / "tag <src>-><target>" / "remove <name>"），按 key 弹出
-// 预置错误（耗尽后默认成功），images 表模拟本地镜像（pull 成功按 pullAdds
-// 落表，模拟远端内容进本地）。
+// / "push <ref>" / "inspect <name>" / "tag <src>-><target>" / "remove <name>"），
+// 按 key 弹出预置错误（耗尽后默认成功），images 表模拟本地镜像（pull 成功按
+// pullAdds 落表，模拟远端内容进本地）。
 type fakeImageClient struct {
 	mu    sync.Mutex
 	calls []string
@@ -56,6 +56,10 @@ type fakeImageClient struct {
 	// lastPullRef/lastPullAuth 断言 RegistryAuth 构造。
 	lastPullRef  string
 	lastPullAuth string
+	// lastPushRef/lastPushAuth 断言 push 引用与凭证形态（四期 4b M1：
+	// RegistryAuth 留空 = daemon 侧已登录凭证）。
+	lastPushRef  string
+	lastPushAuth string
 }
 
 func newFakeImageClient() *fakeImageClient {
@@ -100,6 +104,26 @@ func (f *fakeImageClient) ImagePull(_ context.Context, ref string, opts image.Pu
 		f.images[ref] = add
 	}
 	body := f.pullStreams[ref]
+	f.mu.Unlock()
+	return streamBody(body), nil
+}
+
+// ImagePush 记录 push 调用（四期 4b M1 pushBuiltImage 的确定性驱动面）：
+// 流内错误按 "push/<ref>" 键弹出（与 BuildKit error 流同形的 JSON）。
+func (f *fakeImageClient) ImagePush(_ context.Context, ref string, opts image.PushOptions) (io.ReadCloser, error) {
+	f.mu.Lock()
+	f.lastPushRef = ref
+	f.lastPushAuth = opts.RegistryAuth
+	f.mu.Unlock()
+	f.record("push " + ref)
+	if err := f.pop("push", ref); err != nil {
+		return nil, err
+	}
+	body := ""
+	f.mu.Lock()
+	if s, ok := f.pullStreams["push/"+ref]; ok {
+		body = s
+	}
 	f.mu.Unlock()
 	return streamBody(body), nil
 }

@@ -1995,8 +1995,25 @@ type Functions_Dispatcher struct {
 	// 本节点对等互达的 dispatcher URL（M3 执行路由的寻址基准，4a-2 消费），
 	// 如 http://dispatcher-1:9070。空 = "http://127.0.0.1:" + addr 端口推导
 	// （仅单机部署成立）。**多机部署必须显式配置**：跨节点回连地址无法从
-	// 监听地址推导（127.0.0.1 对其他节点不可达）。
-	NodeUrl       string `protobuf:"bytes,13,opt,name=node_url,json=nodeUrl,proto3" json:"node_url,omitempty"`
+	// 监听地址推导（127.0.0.1 对其他节点不可达）。routing_mode="registry"
+	// 时必填（启动期校验——对等必须能反连本节点，推导地址跨节点不可达）。
+	NodeUrl string `protobuf:"bytes,13,opt,name=node_url,json=nodeUrl,proto3" json:"node_url,omitempty"`
+	// 执行路由模式（四期 4b M7，设计 §4 三档模型的两档可实现形态）：
+	//   - "local"（缺省，向后兼容）：镜像不分发——函数镜像只存在于其构建
+	//     节点，冷启动转发 BuildNode（4a-2 语义）；
+	//   - "registry"：M1 镜像全局化——构建成功后 push
+	//     functions.docker.registry，任意节点冷启动本地 miss 则 pull 后本地
+	//     spawn（跨节点冷启动自愈解锁；实例亲和转发语义不变）。
+	//
+	// 其他值启动期 ValidateFunctionsDispatchConfig 拒绝。设计中的
+	// "replicated" 实验档不在实现范围（设计 §4 M7 降档裁决）。
+	RoutingMode string `protobuf:"bytes,14,opt,name=routing_mode,json=routingMode,proto3" json:"routing_mode,omitempty"`
+	// 构建成功（含验证 spawn 通过）后把镜像 push 到
+	// functions.docker.registry（M1；此时该前缀从命名前缀升格为真实
+	// registry）。routing_mode="registry" 时必须显式 true（启动期校验——
+	// 镜像全局化是该模式的硬前提）；local 模式忽略该值（镜像不分发，
+	// 配 true 也不 push）。默认 false。
+	RegistryPush  bool `protobuf:"varint,15,opt,name=registry_push,json=registryPush,proto3" json:"registry_push,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2120,6 +2137,20 @@ func (x *Functions_Dispatcher) GetNodeUrl() string {
 		return x.NodeUrl
 	}
 	return ""
+}
+
+func (x *Functions_Dispatcher) GetRoutingMode() string {
+	if x != nil {
+		return x.RoutingMode
+	}
+	return ""
+}
+
+func (x *Functions_Dispatcher) GetRegistryPush() bool {
+	if x != nil {
+		return x.RegistryPush
+	}
+	return false
 }
 
 // Trigger 是触发器模块平台级配置（P1 触发器模块）。
@@ -3178,7 +3209,7 @@ const file_config_proto_rawDesc = "" +
 	"\x11secret_access_key\x18\x05 \x01(\tR\x0fsecretAccessKey\x12\x17\n" +
 	"\ause_ssl\x18\x06 \x01(\bR\x06useSsl\x1a\x1b\n" +
 	"\x05Local\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\"\x81\r\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\"\xc9\r\n" +
 	"\tFunctions\x12>\n" +
 	"\x06docker\x18\x02 \x01(\v2&.torchwood.api.config.Functions.DockerR\x06docker\x12G\n" +
 	"\texecution\x18\x03 \x01(\v2).torchwood.api.config.Functions.ExecutionR\texecution\x12J\n" +
@@ -3195,7 +3226,7 @@ const file_config_proto_rawDesc = "" +
 	"\bregistry\x18\x03 \x01(\tR\bregistry\x1a-\n" +
 	"\tExecution\x12 \n" +
 	"\fapi_base_url\x18\x01 \x01(\tR\n" +
-	"apiBaseUrl\x1a\xe5\x03\n" +
+	"apiBaseUrl\x1a\xad\x04\n" +
 	"\n" +
 	"Dispatcher\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12!\n" +
@@ -3212,7 +3243,9 @@ const file_config_proto_rawDesc = "" +
 	" \x01(\tR\fbuildTimeout\x12&\n" +
 	"\fverify_build\x18\v \x01(\bH\x00R\vverifyBuild\x88\x01\x01\x12\x17\n" +
 	"\anode_id\x18\f \x01(\tR\x06nodeId\x12\x19\n" +
-	"\bnode_url\x18\r \x01(\tR\anodeUrlB\x0f\n" +
+	"\bnode_url\x18\r \x01(\tR\anodeUrl\x12!\n" +
+	"\frouting_mode\x18\x0e \x01(\tR\vroutingMode\x12#\n" +
+	"\rregistry_push\x18\x0f \x01(\bR\fregistryPushB\x0f\n" +
 	"\r_verify_build\x1a6\n" +
 	"\aTrigger\x12+\n" +
 	"\x12http_ip_per_minute\x18\x01 \x01(\x05R\x0fhttpIpPerMinute\x1an\n" +

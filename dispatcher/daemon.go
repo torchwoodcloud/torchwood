@@ -65,7 +65,17 @@ type Daemon interface {
 	// BuildImage 以 runner 模板构建镜像（zip 字节内联；构建期不执行用户
 	// 代码的不变量由模板层保持——runner 仅被 COPY/编译）。构建链载荷一期
 	// 定稿形态（设计 §0），runtime 对账与 go bootstrap 生成在实现内完成。
+	// 四期 4b（M1）：build → verify → push 顺序定稿（验证失败不污染
+	// registry）——routing_mode="registry" 且 registry_push=true 时，构建
+	// 与验证成功后把镜像 push 到 functions.docker.registry（镜像全局化）；
+	// push 失败 = 构建失败（deployment failed）。
 	BuildImage(ctx context.Context, opts BuildImageOptions) error
+	// EnsureImage 确保部署镜像在本节点 docker 可用（四期 4b M1 registry
+	// 模式冷启动的前置钩子）：本地命中（ImageInspect）零网络直接返回；
+	// miss → ImagePull（RegistryAuth 留空 = daemon 侧已登录凭证）后返回；
+	// pull 失败以明确错误收场（含 pull 摘要）。调用方（池）按 routing_mode
+	// 门控——local 模式镜像不分发，不会到达这里。
+	EnsureImage(ctx context.Context, imageRef string) error
 	// ImportImage 拉取外部镜像导入为平台镜像（三期阶段三，设计 §3）：host
 	// 名称级校验 → pull（ExpectedDigest 本地命中零 pull）→ digest 钉死 →
 	// retag 进平台命名并删原始引用标签 → 强制契约验证 spawn → 返回钉死
@@ -101,11 +111,13 @@ type ImportImageOptions struct {
 	EgressUntrusted bool
 }
 
-// imageClient 收窄 ImportImage 依赖的 docker 镜像操作面（真实实现 =
-// *client.Client；单测注入 fake 驱动 pull→inspect→tag→remove 序列的确定性
-// 验证，不依赖真实 daemon——与 netCli 同款收窄注入模式）。
+// imageClient 收窄镜像导入/推送/补拉依赖的 docker 镜像操作面（真实实现 =
+// *client.Client；单测注入 fake 驱动 pull→inspect→tag→remove 与
+// push→pull 序列的确定性验证，不依赖真实 daemon——与 netCli 同款收窄注入
+// 模式）。
 type imageClient interface {
 	ImagePull(ctx context.Context, ref string, options image.PullOptions) (io.ReadCloser, error)
+	ImagePush(ctx context.Context, ref string, options image.PushOptions) (io.ReadCloser, error)
 	ImageInspect(ctx context.Context, imageID string, inspectOpts ...client.ImageInspectOption) (image.InspectResponse, error)
 	ImageTag(ctx context.Context, source, target string) error
 	ImageRemove(ctx context.Context, imageID string, options image.RemoveOptions) ([]image.DeleteResponse, error)
@@ -439,6 +451,10 @@ func (d *dockerDaemon) RemoveInstance(ctx context.Context, containerID string) e
 // 对账 → Go bootstrap 生成 / node runner 写入 → Dockerfile 渲染，见
 // prepareBuildContext）→ tar build context → docker build。构建期不执行
 // 用户代码。
+//
+// 四期 4b（M1 顺序裁决，设计 §4「构建 → 验证 spawn → push」）：构建成功
+// 后先验证 spawn（配置开启时）再 push——验证失败直接以失败收场，不污染
+// registry；push 门控与失败语义见 pushBuiltImage。
 func (d *dockerDaemon) BuildImage(ctx context.Context, opts BuildImageOptions) error {
 	cli, err := d.client()
 	if err != nil {
@@ -458,8 +474,9 @@ func (d *dockerDaemon) BuildImage(ctx context.Context, opts BuildImageOptions) e
 	if err != nil {
 		return fmt.Errorf("tar build context: %w", err)
 	}
+	ref := infrafunctions.ImageName(d.cfg, opts.FunctionID, opts.DeploymentID)
 	buildOpts := build.ImageBuildOptions{
-		Tags:       []string{infrafunctions.ImageName(d.cfg, opts.FunctionID, opts.DeploymentID)},
+		Tags:       []string{ref},
 		Dockerfile: "Dockerfile",
 		Remove:     true,
 	}
@@ -475,10 +492,87 @@ func (d *dockerDaemon) BuildImage(ctx context.Context, opts BuildImageOptions) e
 	}
 	// 部署后验证 spawn（D10，设计 §1）：opts.Verify=false（config
 	// verify_build 显式关闭）跳过整段。
-	if !opts.Verify {
+	if opts.Verify {
+		if err := d.verifyBuild(ctx, opts); err != nil {
+			return err
+		}
+	}
+	// M1 镜像全局化（四期 4b）：registry 模式且 registry_push=true 时把
+	// 构建产物 push 到 functions.docker.registry；local 模式（及未开 push
+	// 的 registry 模式——启动期校验已拒绝该组合，此处兜底）到此为止。
+	if !dispatcherPushEnabled(d.cfg) {
 		return nil
 	}
-	return d.verifyBuild(ctx, opts)
+	imgs, err := d.images()
+	if err != nil {
+		return err
+	}
+	return pushBuiltImage(ctx, imgs, ref)
+}
+
+// dispatcherPushEnabled 报告构建产物是否应 push 到 registry（M1 门控）：
+// routing_mode="registry" 且 registry_push=true。local 模式忽略
+// registry_push（镜像不分发，配 true 也不 push）；启动期
+// ValidateFunctionsRoutingConfig 已保证 registry 模式必开 push，此处按
+// 字面语义独立判定，不依赖调用方先过校验。
+func dispatcherPushEnabled(cfg *config.AppConfig) bool {
+	d := cfg.GetFunctions().GetDispatcher()
+	return config.NormalizedFunctionsRoutingMode(d.GetRoutingMode()) == config.FunctionsRoutingModeRegistry && d.GetRegistryPush()
+}
+
+// pushBuiltImage 把构建产物镜像 push 到 registry（M1）：push 失败 = 构建
+// 失败（deployment failed，错误含 push 摘要）——registry 模式下镜像全局化
+// 是跨节点冷启动的硬前提，静默吞掉 push 失败会把故障推迟到首次跨节点
+// spawn（更难归因），故在构建链上立即失败。RegistryAuth 留空 = 用 daemon
+// 侧已登录凭证（docker login 的主机级凭证即 push 凭证，不新增凭证配置面）；
+// 无整体超时，由调用方 ctx（构建链 build_timeout 预算）封顶。push 的
+// 失败详情（认证失败/manifest 错误）与 BuildKit error 流同形，复用同一
+// 读取/裁剪逻辑。
+func pushBuiltImage(ctx context.Context, imgs imageClient, ref string) error {
+	pr, err := imgs.ImagePush(ctx, ref, image.PushOptions{})
+	if err != nil {
+		return fmt.Errorf("docker push %q failed: %s", ref, infrafunctions.TruncateBuildLog(err.Error()))
+	}
+	_, streamErr := infrafunctions.ReadBuildOutput(pr)
+	_ = pr.Close()
+	if streamErr != nil {
+		return fmt.Errorf("docker push %q failed: %s", ref, infrafunctions.TruncateBuildLog(streamErr.Error()))
+	}
+	return nil
+}
+
+// EnsureImage 确保部署镜像在本节点可用（M1 registry 模式冷启动前置钩子，
+// 编排见 ensureImage）。
+func (d *dockerDaemon) EnsureImage(ctx context.Context, imageRef string) error {
+	imgs, err := d.images()
+	if err != nil {
+		return err
+	}
+	return ensureImage(ctx, imgs, imageRef)
+}
+
+// ensureImage 是 EnsureImage 的编排实现：本地命中（ImageInspect 成功）零
+// 网络直接返回；miss（NotFound）→ ImagePull（RegistryAuth 留空 = daemon
+// 侧已登录凭证）；pull 失败（传输错误或流内 JSON error——registry 认证
+// 失败/引用不存在在此冒出）以明确错误收场（含 pull 摘要），由池记为
+// spawn 失败现场。inspect 的非 NotFound 错误原样上抛（daemon 不可达时
+// 后续 pull 也必败，fail-fast）。幂等：并发 pull 由池的 spawn 锁收敛。
+func ensureImage(ctx context.Context, imgs imageClient, imageRef string) error {
+	if _, err := imgs.ImageInspect(ctx, imageRef); err == nil {
+		return nil // 本地命中：直接 spawn
+	} else if !errdefs.IsNotFound(err) {
+		return fmt.Errorf("inspect image %q: %w", imageRef, err)
+	}
+	pr, err := imgs.ImagePull(ctx, imageRef, image.PullOptions{})
+	if err != nil {
+		return fmt.Errorf("docker pull %q failed: %s", imageRef, infrafunctions.TruncateBuildLog(err.Error()))
+	}
+	_, streamErr := infrafunctions.ReadBuildOutput(pr)
+	_ = pr.Close()
+	if streamErr != nil {
+		return fmt.Errorf("docker pull %q failed: %s", imageRef, infrafunctions.TruncateBuildLog(streamErr.Error()))
+	}
+	return nil
 }
 
 // verifyBuild 是 dockerDaemon 的验证 spawn 入口：探针复用池的 HTTP runner

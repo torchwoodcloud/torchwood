@@ -51,6 +51,15 @@ type fakeDaemon struct {
 	imports      []string
 	importDigest string
 	importErr    error
+	// ——EnsureImage（四期 4b M1 registry 模式冷启动）——
+	// ensures 记录 EnsureImage 收到的镜像引用次序（池门控断言面：local
+	// 模式不得发生调用）。localImages 模拟本节点镜像表（命中 = 零 pull）；
+	// pulls 记录触发的 pull 次序；ensureErr/pullErr 为可编程错误。
+	ensures     []string
+	localImages map[string]bool
+	pulls       []string
+	ensureErr   error
+	pullErr     error
 }
 
 func newFakeDaemon() *fakeDaemon {
@@ -60,7 +69,30 @@ func newFakeDaemon() *fakeDaemon {
 		nextIP:       1,
 		networkFlags: map[string]bool{},
 		logs:         map[string]string{},
+		localImages:  map[string]bool{},
 	}
+}
+
+// EnsureImage 模拟真实 ensureImage 编排（四期 4b M1）：本地命中零 pull；
+// miss 记 pull（可编程失败）。ensureErr = inspect 前置失败（daemon 不可达
+// 形态）。
+func (d *fakeDaemon) EnsureImage(_ context.Context, imageRef string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.ensures = append(d.ensures, imageRef)
+	if d.ensureErr != nil {
+		return d.ensureErr
+	}
+	if d.localImages[imageRef] {
+		return nil
+	}
+	if d.pullErr != nil {
+		return d.pullErr
+	}
+	d.pulls = append(d.pulls, imageRef)
+	// pull 成功落本地表（幂等命中语义与真实 inspect 同构）。
+	d.localImages[imageRef] = true
+	return nil
 }
 
 func (d *fakeDaemon) EnsureProjectNetwork(_ context.Context, projectID string, untrusted bool) (string, error) {

@@ -15,11 +15,12 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
 // 执行路由层（四期 4a-2，设计 docs/design/functions-runtimes-and-sources.md
-// §4 M3 实例亲和 + M7 local 模式语义；本阶段仅 local 模式，registry 模式的
-// 多节点选点/跨节点冷启动自愈在 4b）。
+// §4 M3 实例亲和 + M7 local 模式语义；registry 模式的冷启动差异在 4b 补齐）。
 //
 // local 模式铁律（M7）：镜像不分发——函数镜像只存在于其构建节点上，因此
 //  1. 绝不在本节点 spawn「镜像在别处」的函数（跨节点手段只有转发）；
@@ -28,6 +29,11 @@ import (
 //     节点（镜像只在那儿）；BuildNode 空 / == self / 指向已失联节点
 //     （fnnodes 查无）→ 本地 spawn 回落（单机与 self-build 场景天然回落；
 //     镜像确实不在本节点时 spawn 自然失败并留现场，不吞错误）。
+//
+// registry 模式差异（四期 4b M1）：镜像全局化后决策 3 的冷启动半边不再
+// 转发——无实例时直接 handled=false 走本地池路径（spawn 前 EnsureImage
+// 按需 pull，任何节点都能拉到全局镜像，跨节点冷启动自愈就地完成）；
+// 实例亲和转发（决策 2/3 的转发半边）保持不变。
 //
 // 防环（M3）：转发请求携带 X-Tw-Forwarded-For-Node: <转发方节点 ID>；目标
 // 节点收到带该 header 的请求强制本地池路径，不得再转发——转发发起方已按
@@ -222,8 +228,15 @@ func (p *PoolManager) route(ctx context.Context, req ExecuteRequest) (*ExecuteRe
 		resp, err := p.forward(ctx, *node, req)
 		return resp, true, err
 	}
-	// 冷启动亲和（决策 4/5）。
-	if req.BuildNode != "" && req.BuildNode != p.nodeID {
+	// 冷启动亲和（决策 4/5；local 模式专属——M7 铁律「镜像不分发」的冷
+	// 启动半边）。registry 模式（四期 4b M1）镜像全局化：任意节点都能从
+	// registry pull 到构建产物，冷启动不再转发 BuildNode——直接 handled=false
+	// 走本地池路径（spawnInstance 在 spawn 前 EnsureImage 按需 pull， miss
+	// 即拉，跨节点自愈就地完成）；实例亲和（决策 2/3）不受模式影响，照旧
+	// 转发——实例终生属于 spawn 它的节点，其容器 IP 仅在其节点 docker 网络
+	// 内可达，与镜像分布无关。
+	if req.BuildNode != "" && req.BuildNode != p.nodeID &&
+		p.cfg.RoutingMode != config.FunctionsRoutingModeRegistry {
 		node, err := p.registry.GetNode(ctx, req.BuildNode)
 		if err != nil {
 			return nil, false, err

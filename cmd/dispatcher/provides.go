@@ -29,12 +29,19 @@ var ProviderSet = wire.NewSet(
 )
 
 // NewAppConfig 解析并校验 AppConfig（与 server/worker 同一安全校验口径）。
+// 路由模式校验（四期 4b）与 server/worker 对齐——dispatcher 是
+// routing_mode/registry_push 的直接消费方，字符串笔误在此 fail-fast，
+// 不得静默降级 local。url 校验（ValidateFunctionsDispatchConfig）不适用
+// ——dispatcher 自身是通路终点，不消费该键。
 func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 	var c config.AppConfig
 	if err := config.UnmarshalConfig(app.Config(), &c); err != nil {
 		return nil, err
 	}
 	if err := bootkit.ValidateAppConfig(app.Logger(), &c); err != nil {
+		return nil, err
+	}
+	if err := bootkit.ValidateFunctionsRoutingConfig(&c); err != nil {
 		return nil, err
 	}
 	return &c, nil

@@ -38,6 +38,11 @@ type PoolConfig struct {
 	// 累加 timeouts 计数，达阈值杀实例重建（堵住「超时不杀」打开的僵尸负载
 	// 通道——毒化实例慢性塞满事件循环而 health 仍响应、永不回收）。
 	TimeoutBudget int
+	// RoutingMode 是执行路由模式（四期 4b M7；config
+	// functions.dispatcher.routing_mode，"" 缺省 = local）：local = 镜像
+	// 不分发（冷启动转发 BuildNode）；registry = M1 镜像全局化（冷启动
+	// 本地 spawn + spawn 前 EnsureImage 按需 pull，不转发）。
+	RoutingMode string
 }
 
 // DefaultPoolConfig 返回平台默认池参数（设计 §6 池策略 + Q11 拍板）。
@@ -83,6 +88,7 @@ func PoolConfigFromConfig(cfg *config.AppConfig) PoolConfig {
 	if d.GetTimeoutBudget() > 0 {
 		pc.TimeoutBudget = int(d.GetTimeoutBudget())
 	}
+	pc.RoutingMode = config.NormalizedFunctionsRoutingMode(d.GetRoutingMode())
 	return pc
 }
 
@@ -632,6 +638,18 @@ func (p *PoolManager) trySpawn(ctx context.Context, req ExecuteRequest, policy P
 func (p *PoolManager) spawnInstance(ctx context.Context, req ExecuteRequest, policy PoolPolicy) (*InstanceRecord, error) {
 	bootStart := p.clock()
 	ColdStartsTotal.WithLabelValues(req.ProjectID, req.FunctionID).Inc()
+
+	// M1 registry 模式冷启动（四期 4b）：镜像全局化后任意节点都能拉到构建
+	// 产物——spawn 前确保部署镜像本节点可用（本地命中零网络；miss 则
+	// pull）。失败以明确错误收场（含 pull 摘要）：spawn 失败进队首超时
+	// 消息（trySpawn 的吞错路径记录现场），不静默。local 模式跳过一切
+	// pull 逻辑（镜像只在其构建节点，本节点 miss 属异常，spawn 自然失败
+	// 并留现场）。调用点在 spawn 锁内，并发 pull 天然由锁收敛。
+	if p.cfg.RoutingMode == config.FunctionsRoutingModeRegistry {
+		if err := p.daemon.EnsureImage(ctx, req.Image); err != nil {
+			return nil, err
+		}
+	}
 
 	network, err := p.daemon.EnsureProjectNetwork(ctx, req.ProjectID, req.EgressUntrusted)
 	if err != nil {

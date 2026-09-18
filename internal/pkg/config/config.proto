@@ -211,8 +211,24 @@ message Functions {
     // 本节点对等互达的 dispatcher URL（M3 执行路由的寻址基准，4a-2 消费），
     // 如 http://dispatcher-1:9070。空 = "http://127.0.0.1:" + addr 端口推导
     // （仅单机部署成立）。**多机部署必须显式配置**：跨节点回连地址无法从
-    // 监听地址推导（127.0.0.1 对其他节点不可达）。
+    // 监听地址推导（127.0.0.1 对其他节点不可达）。routing_mode="registry"
+    // 时必填（启动期校验——对等必须能反连本节点，推导地址跨节点不可达）。
     string node_url = 13;
+    // 执行路由模式（四期 4b M7，设计 §4 三档模型的两档可实现形态）：
+    //   - "local"（缺省，向后兼容）：镜像不分发——函数镜像只存在于其构建
+    //     节点，冷启动转发 BuildNode（4a-2 语义）；
+    //   - "registry"：M1 镜像全局化——构建成功后 push
+    //     functions.docker.registry，任意节点冷启动本地 miss 则 pull 后本地
+    //     spawn（跨节点冷启动自愈解锁；实例亲和转发语义不变）。
+    // 其他值启动期 ValidateFunctionsDispatchConfig 拒绝。设计中的
+    // "replicated" 实验档不在实现范围（设计 §4 M7 降档裁决）。
+    string routing_mode = 14;
+    // 构建成功（含验证 spawn 通过）后把镜像 push 到
+    // functions.docker.registry（M1；此时该前缀从命名前缀升格为真实
+    // registry）。routing_mode="registry" 时必须显式 true（启动期校验——
+    // 镜像全局化是该模式的硬前提）；local 模式忽略该值（镜像不分发，
+    // 配 true 也不 push）。默认 false。
+    bool registry_push = 15;
   }
   // executor（字段号 1）已删除：v1 docker 执行器（每请求一容器、进程内
   // docker.sock）已移除，函数执行统一经 dispatcher 分发。
