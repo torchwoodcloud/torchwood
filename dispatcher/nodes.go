@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,10 +29,32 @@ import (
 //     的实例记录由任意存活节点批量清除（只删记录、不碰 daemon；与幽灵
 //     清理严格区分）。idle 记录无 lease 过期回收的现状（只有 busy stuck
 //     有 grace）由此路径补齐。
+//
+// 节点容量键（四期 4c M4 容量共享，同文件交付）：torchwood:fncap:resident:
+// <node_id> SET+TTL——值 = 该节点进程内常驻计数（spawn 成功 / terminate /
+// reaper 刷新），全局上限 = 全部节点键之和（SCAN 求和）；Redis 不可用时
+// 全局检查 fail-open 退化为仅本节点上限（容量门不是安全门）。
 const (
 	// nodeKeyPrefix 是节点注册表键前缀：torchwood:fnnodes:<node_id> 为
 	// SET（value = NodeRecord JSON，TTL 心跳刷新）。
 	nodeKeyPrefix = "torchwood:fnnodes:"
+
+	// nodeCapacityKeyPrefix 是节点容量键前缀（四期 4c M4 容量共享，设计 §4）：
+	// torchwood:fncap:resident:<node_id> 为 SET（value = 该节点当前常驻实例
+	// 数的十进制文本，TTL 与心跳同宽）。全局常驻总量 = 全部节点键之和
+	//（SCAN 求和；节点数小，可接受）——max_resident_instances 只是每节点
+	// 进程内计数互不知，全局配额必须跨节点可见。
+	nodeCapacityKeyPrefix = "torchwood:fncap:resident:"
+
+	// capacityKeyTTL 是节点容量键的 TTL（与节点心跳 defaultNodeTTL 同宽）：
+	// 刷新点 = spawn 成功 / terminate / reaper（reaper 每轮无条件刷一次，
+	// ReaperInterval 15s = TTL 的 1/2，连续两轮失败仍在 TTL 内）。节点死后
+	// 键在 TTL 内消失，全局求和自动不再计入死节点（心跳死亡判定同款语义）。
+	capacityKeyTTL = defaultNodeTTL
+
+	// capacityWriteTimeout 是容量键单次写操作的独立超时（与 nodeHBTimeout
+	// 同款纪律：容量刷新不得占用调用路径的超时预算）。
+	capacityWriteTimeout = 5 * time.Second
 
 	// defaultNodeTTL 是节点心跳 TTL（心跳间隔的 3 倍容忍度）：最后一次
 	// 心跳后 30s 键自动消失 = 节点失联判定基准（M8 死节点收敛的宽限）。
@@ -73,6 +96,15 @@ type NodeRegistry interface {
 	DeleteNode(ctx context.Context, nodeID string) error
 	// ListNodes 枚举当前存活（心跳未过期）的全部节点（SCAN）。
 	ListNodes(ctx context.Context) ([]NodeRecord, error)
+	// SaveNodeCapacity 写本节点常驻容量键（四期 4c M4）：SET
+	// torchwood:fncap:resident:<node_id> = resident（TTL 与心跳同宽）。
+	// 幂等覆写语义——值 = 写入方进程内权威计数（SET 实际值而非增量运算，
+	// 失败重试/写丢失不产生漂移）。
+	SaveNodeCapacity(ctx context.Context, nodeID string, resident int, ttl time.Duration) error
+	// SumNodeCapacity 汇总全部节点的常驻容量键（SCAN + GET 求和，M4 全局
+	// 上限的读取面）：SCAN 与 GET 之间过期的键按 0 计（死节点自然退出求和）。
+	// 错误非 nil = Redis 不可用，调用方 fail-open（容量门退化为仅本节点上限）。
+	SumNodeCapacity(ctx context.Context) (int, error)
 }
 
 // nodeKey 拼节点注册表键。
@@ -138,6 +170,43 @@ func decodeNodeRecord(raw string) (*NodeRecord, error) {
 		return nil, errors.New("node record missing id")
 	}
 	return &rec, nil
+}
+
+// SaveNodeCapacity 写本节点容量键（M4；SET + TTL）。值 = 调用方进程内权威
+// 计数（负值防御性钳 0——SET 实际值语义下不应出现，出现即调用方计数已错）。
+func (r *redisRegistry) SaveNodeCapacity(ctx context.Context, nodeID string, resident int, ttl time.Duration) error {
+	if resident < 0 {
+		resident = 0
+	}
+	return r.rdb.Set(ctx, nodeCapacityKeyPrefix+nodeID, strconv.Itoa(resident), ttl).Err()
+}
+
+func (r *redisRegistry) SumNodeCapacity(ctx context.Context) (int, error) {
+	total := 0
+	var cursor uint64
+	for {
+		keys, next, err := r.rdb.Scan(ctx, cursor, nodeCapacityKeyPrefix+"*", 100).Result()
+		if err != nil {
+			return 0, fmt.Errorf("scan node capacity keys: %w", err)
+		}
+		for _, k := range keys {
+			raw, err := r.rdb.Get(ctx, k).Result()
+			if err != nil {
+				continue // SCAN 与 GET 之间过期的键：按 0 计（死节点自然退出求和）
+			}
+			n, err := strconv.Atoi(strings.TrimSpace(raw))
+			if err != nil {
+				continue // 半写/损坏值跳过，不得毒化整个求和
+			}
+			if n > 0 {
+				total += n
+			}
+		}
+		if next == 0 {
+			return total, nil
+		}
+		cursor = next
+	}
 }
 
 // ResolveNodeIdentity 解析本 dispatcher 进程的节点身份（M2；service 装配处

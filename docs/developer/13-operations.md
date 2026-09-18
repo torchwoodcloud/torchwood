@@ -484,9 +484,56 @@ REVOKE tw_owner, tw_app, tw_system FROM <bootstrap_account>;
 
 **跨库影响（实测结论）**：`GRANT/REVOKE membership` 是**集群级**操作——在库 A 执行 000004 down 后，引导账号在库 B 的 membership 同步清空（跨库一致）；恢复方式 = 在任一库重新 GRANT（等价重跑 000004 up 段）。**结论：共享集群上对任一库跑 down，等于对全集群撤销运行时身份——其他库需重新 GRANT 后方可继续服务**。另注：`tw_system` 的 BYPASSRLS 属性独立于 membership 存续（down 后仍为 t），属预期。
 
+## 7. 多机部署（细胞模型，四期）
+
+设计源：`docs/design/functions-runtimes-and-sources.md` §4（M1-M8）；函数面语义见 `08-functions.md` §15。**细胞模型**：N 节点 ×（dispatcher 进程 + 本机 docker daemon），控制面共享（Redis：实例注册表 / spawn 锁 / 节点注册表 / 容量键；Postgres 元数据），**函数容器生命周期完全本机**——无 overlay 网络，函数容器只与本机 dispatcher 和本机 attach 的 server 回调容器通信。
+
+### 7.1 拓扑与每节点一份 compose
+
+`docker/dokploy/docker-compose.yml` 是**单节点模板**：多机时按节点复制部署（每节点独立 dokploy / compose 实例、各自 docker 网络隔离），仅以下服务只在**主节点**保留一份，其余节点整段删除、并把 `x-app-env` 中三个依赖地址指回主节点：
+
+| 服务 | 部署位置 | 说明 |
+|------|----------|------|
+| postgres / redis / minio | 仅主节点 | 共享控制面；其余节点 DSN / Redis addr / S3 endpoint 指主节点 |
+| migrate / db-grants / roles-sig | 仅主节点 | 一次性作业链（幂等），多节点重复跑无益 |
+| server + worker | **每节点一份（成对）** | M6 回调多节点化 + M5 worker 拓扑（见下） |
+| dispatcher | **每节点一份** | 唯一 docker.sock 持有方；`node_id` / `node_url` 各节点不同 |
+| packer | 每节点一份或集中均可 | 无状态（git clone + 物化 zip 回传 server），无 docker.sock、无业务依赖，可独立多副本 |
+
+各节点配置差异（其余同值）：
+
+- `functions.dispatcher.node_id`：全集群唯一（缺省 hostname 可用但跨重启可能变，**显式配置**）；
+- `functions.dispatcher.node_url`：本节点对等互达地址（如 `http://dispatcher-1:9070`）——**多机必须显式**，缺省的 `http://127.0.0.1:<port>` 推导对其他节点不可达；registry 模式启动期强制校验非空；
+- `functions.dispatcher.max_resident_instances_global`（M4）：全集群常驻总量上限，各节点同值；
+- container_name 冲突问题：`torchwood-server` 多机**不冲突**——各节点 compose 实例的 docker 网络互不相通，函数网络 DNS 各自解析**本节点**的 server（每节点一份 server，函数回调只达本节点，这是 M6「callback_container 语义 = 每节点可达的回调地址」的实现形态）。
+
+### 7.2 路由模式选型（local vs registry）
+
+| | `local`（缺省） | `registry`（完整形态） |
+|------|------|------|
+| 镜像分布 | 只在构建节点（不 push） | 构建后 push `functions.docker.registry`，任意节点按需 pull |
+| 冷启动 | 转发构建节点（BuildNode 亲和） | 本地 spawn（spawn 前 EnsureImage，miss 即 pull） |
+| 节点死时 | 该节点函数**全部不可用**，恢复 = 重新部署（重建即迁移） | **自动冷启动到幸存节点**（自愈，无需人工） |
+| 额外组件 | 无 | 一个真实 registry（官方 `registry:2` 自包含，支持 filesystem 或 S3/MinIO 后端） |
+| 启动期约束 | — | `registry_push=true` + `node_url` 非空（fail-fast 校验） |
+
+**何时切 registry**：要求「节点故障函数自动恢复」（可用性升级）或单节点容量不够、需要跨节点冷启动分流时。推荐路径：`local` 起步 → `registry`（把 `TORCHWOOD_FUNCTIONS_DOCKER_REGISTRY` 从命名前缀升格为真实 registry 地址 + `routing_mode=registry` + `registry_push=true`）。设计中的 `replicated` 实验档不在实现范围（§4 M7 降档裁决）。
+
+### 7.3 容量共享（M4）与节点故障语义
+
+- **两层上限**：`max_resident_instances`（每节点，进程内计数）→ `max_resident_instances_global`（全集群，Redis 容量键 `torchwood:fncap:resident:<node_id>` SET+TTL 求和）。容量键刷新点：spawn 成功 +1 / terminate / reaper 回收 -1，reaper 每轮（15s）再刷一次保 TTL；节点死后键 30s 内消失，全局求和自动不再计入。**Redis 不可用时全局检查 fail-open**（退化为仅本节点上限 + 限频告警）——容量门是可用性门不是安全门，与 M8 死节点收敛的 fail-safe（快照失败跳过收敛、绝不误删）语义方向相反。
+- **节点故障语义**（设计 §4 原文精简）：
+
+| 故障 | local 模式 | registry 模式 |
+|------|-----------|---------------|
+| 节点死（机器/daemon） | 该节点函数不可用；实例随机器消失，记录由幸存节点按心跳过期收敛（M8）；恢复 = 重新部署 | 幸存节点 pull 镜像自动冷启动自愈 |
+| dispatcher 进程崩（机器活） | 实例存活但无分发；重启后 reaper 对账收敛，或转发方按不可达处理 | 同左 |
+| Redis 抖动 | 全局上限退化为仅本节点（fail-open），心跳/收敛停摆但不误删 | 同左 |
+
 ## 相关文档
 
 - `02-quickstart.md` — 本地开发环境（含 authenticator 引导的最小流程）
 - `03-configuration.md` — 配置项全景与环境变量映射
 - `06-databases.md` — RLS 与角色注入语义（双账号契约的机制侧）
+- `08-functions.md` §15 — 函数面多机语义（路由模式 / 容量共享 / reaper 收窄）
 - `15-exit-poc.md` — 发布前门禁与决议记录

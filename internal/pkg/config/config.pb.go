@@ -2013,9 +2013,17 @@ type Functions_Dispatcher struct {
 	// registry）。routing_mode="registry" 时必须显式 true（启动期校验——
 	// 镜像全局化是该模式的硬前提）；local 模式忽略该值（镜像不分发，
 	// 配 true 也不 push）。默认 false。
-	RegistryPush  bool `protobuf:"varint,15,opt,name=registry_push,json=registryPush,proto3" json:"registry_push,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RegistryPush bool `protobuf:"varint,15,opt,name=registry_push,json=registryPush,proto3" json:"registry_push,omitempty"`
+	// 全集群常驻实例总量上限（四期 4c M4 容量共享，设计 §4）：多节点部署下
+	// max_resident_instances 只是每节点各管各的（进程内计数互不知），集群
+	// 总量由 Redis 容量键 torchwood:fncap:resident:<node_id>（SET+TTL，值 =
+	// 该节点当前常驻数）SCAN 求和约束，trySpawn 在本节点上限之后检查。
+	// 0 = 不设全局上限（缺省；单机部署无需配置）。Redis 不可用时全局检查
+	// fail-open 退化为仅本节点上限（容量门是可用性门不是安全门，限频告警；
+	// 与 M8 死节点收敛的 fail-safe 语义方向相反，不得混淆）。
+	MaxResidentInstancesGlobal uint32 `protobuf:"varint,16,opt,name=max_resident_instances_global,json=maxResidentInstancesGlobal,proto3" json:"max_resident_instances_global,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *Functions_Dispatcher) Reset() {
@@ -2151,6 +2159,13 @@ func (x *Functions_Dispatcher) GetRegistryPush() bool {
 		return x.RegistryPush
 	}
 	return false
+}
+
+func (x *Functions_Dispatcher) GetMaxResidentInstancesGlobal() uint32 {
+	if x != nil {
+		return x.MaxResidentInstancesGlobal
+	}
+	return 0
 }
 
 // Trigger 是触发器模块平台级配置（P1 触发器模块）。
@@ -3209,7 +3224,7 @@ const file_config_proto_rawDesc = "" +
 	"\x11secret_access_key\x18\x05 \x01(\tR\x0fsecretAccessKey\x12\x17\n" +
 	"\ause_ssl\x18\x06 \x01(\bR\x06useSsl\x1a\x1b\n" +
 	"\x05Local\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\"\xc9\r\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\"\x8c\x0e\n" +
 	"\tFunctions\x12>\n" +
 	"\x06docker\x18\x02 \x01(\v2&.torchwood.api.config.Functions.DockerR\x06docker\x12G\n" +
 	"\texecution\x18\x03 \x01(\v2).torchwood.api.config.Functions.ExecutionR\texecution\x12J\n" +
@@ -3226,7 +3241,7 @@ const file_config_proto_rawDesc = "" +
 	"\bregistry\x18\x03 \x01(\tR\bregistry\x1a-\n" +
 	"\tExecution\x12 \n" +
 	"\fapi_base_url\x18\x01 \x01(\tR\n" +
-	"apiBaseUrl\x1a\xad\x04\n" +
+	"apiBaseUrl\x1a\xf0\x04\n" +
 	"\n" +
 	"Dispatcher\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12!\n" +
@@ -3245,7 +3260,8 @@ const file_config_proto_rawDesc = "" +
 	"\anode_id\x18\f \x01(\tR\x06nodeId\x12\x19\n" +
 	"\bnode_url\x18\r \x01(\tR\anodeUrl\x12!\n" +
 	"\frouting_mode\x18\x0e \x01(\tR\vroutingMode\x12#\n" +
-	"\rregistry_push\x18\x0f \x01(\bR\fregistryPushB\x0f\n" +
+	"\rregistry_push\x18\x0f \x01(\bR\fregistryPush\x12A\n" +
+	"\x1dmax_resident_instances_global\x18\x10 \x01(\rR\x1amaxResidentInstancesGlobalB\x0f\n" +
 	"\r_verify_build\x1a6\n" +
 	"\aTrigger\x12+\n" +
 	"\x12http_ip_per_minute\x18\x01 \x01(\x05R\x0fhttpIpPerMinute\x1an\n" +

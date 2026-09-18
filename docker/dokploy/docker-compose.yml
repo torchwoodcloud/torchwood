@@ -15,6 +15,18 @@
 #
 # 必填环境变量（Dokploy「Environment」或 compose 同目录 .env）见 README.md。
 # 路径约定：本文件内的相对路径均相对本文件所在目录（compose 规范）。
+#
+# ——多机部署（细胞模型，四期；docs/developer/13-operations.md §7）——
+# 本文件是「每节点一份」的单节点模板：多机时按节点复制部署（每节点独立
+# dokploy/compose 实例、各自 docker 网络隔离），仅 postgres/redis/minio +
+# migrate/db-grants/roles-sig 作业链只保留在「主节点」一份，其余节点删掉这
+# 五个服务、把 app-env 里三个依赖地址指回主节点（Postgres DSN / Redis /
+# MinIO endpoint）。dispatcher 各节点必须配置不同的 node_id 与对等互达的
+# node_url；server/worker 每节点一份（worker 与 server 同节点：补构建读本
+# 节点 zip，M5 拓扑裁决）。container_name torchwood-server 多机不冲突——
+# 各节点的 compose 实例网络互不相通，函数网络 DNS 各自解析本节点 server。
+# 详细选型（routing_mode 的 local vs registry）与节点故障语义见
+# docs/developer/13-operations.md §7 与 docs/developer/08-functions.md §15。
 
 name: torchwood
 
@@ -180,6 +192,9 @@ services:
     <<: *app-image
     # 容器名钉死：函数网络（tw-func-<project>[-int]，dispatcher 动态 attach）
     # 上的 DNS 以容器名解析——functions.execution.api_base_url 即指向它。
+    # 多机部署（四期 M6）不冲突：每节点是独立 compose 实例、docker 网络
+    # 互不相通，该名字在各节点各自解析本节点的 server（每节点一份 server
+    # ——函数回调只达本节点，细胞不变量「函数容器只与本机通信」）。
     container_name: torchwood-server
     # gRPC(:9060，明文 h2c) + grpc-gateway HTTP + Console SPA + Storage serverhttp
     # + healthz。对外两条域名路由直接以 Traefik label 声明在本文件（不用 Dokploy
@@ -249,7 +264,11 @@ services:
 
   worker:
     <<: *app-image
-    # Functions 异步执行消费者；不启用 Functions 时可整段删除（纯空闲队列消费者）
+    # Functions 异步执行消费者；不启用 Functions 时可整段删除（纯空闲队列消费者）。
+    # M5 worker 拓扑裁决（四期 4d）：worker 与 server 同节点部署——补构建
+    # 固定读本节点盘上的部署 zip（构建亲和节点的本地快照，不跨节点迁移），
+    # worker 集中部署会让按 build_node 路由补构建落空。多机时每节点
+    # server + worker 成对部署，各只服务本节点 zip。
     entrypoint: ["/usr/local/bin/worker"]
     environment:
       <<: *app-env
@@ -290,6 +309,27 @@ services:
       TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN: ${TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN:?请在 Dokploy Environment 设置 openssl rand -hex 32}
       # 每 daemon 常驻实例总量上限（Q11 默认 8；防单项目耗尽宿主内存）
       TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES: ${TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES:-8}
+      # 全集群常驻总量上限（四期 M4 容量共享）：各节点 Redis 容量键求和后
+      # 检查，在本节点上限之后生效；Redis 不可用 fail-open 退化为仅本节点
+      # 上限。0 = 不设全局上限（缺省）。多机建议按集群内存画像设置。
+      TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES_GLOBAL: ${TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES_GLOBAL:-0}
+      # ——多机节点身份（四期 M2/M3；单机可全部留缺省）——
+      # node_id：本节点标识（缺省 hostname；多机必须显式且全集群唯一）。
+      TORCHWOOD_FUNCTIONS_DISPATCHER_NODE_ID: ${TORCHWOOD_FUNCTIONS_DISPATCHER_NODE_ID:-}
+      # node_url：本节点对等互达地址（缺省 http://127.0.0.1:9070，仅单机
+      # 成立；多机必须显式配置——他节点经它反连本节点，registry 模式必填）。
+      TORCHWOOD_FUNCTIONS_DISPATCHER_NODE_URL: ${TORCHWOOD_FUNCTIONS_DISPATCHER_NODE_URL:-}
+      # 执行路由模式（四期 M7）：local（缺省，镜像不分发，冷启动转发构建
+      # 节点）| registry（M1 镜像全局化，需 registry_push=true + 下方
+      # functions.docker.registry 指向真实 registry）。选型见
+      # docs/developer/13-operations.md §7.1。
+      TORCHWOOD_FUNCTIONS_DISPATCHER_ROUTING_MODE: ${TORCHWOOD_FUNCTIONS_DISPATCHER_ROUTING_MODE:-local}
+      # registry 模式下构建成功后 push（local 模式忽略该值）。
+      TORCHWOOD_FUNCTIONS_DISPATCHER_REGISTRY_PUSH: ${TORCHWOOD_FUNCTIONS_DISPATCHER_REGISTRY_PUSH:-false}
+      # 镜像命名前缀 / 真实 registry 地址（config functions.docker.registry；
+      # local 模式仅作镜像命名空间，registry 模式须指向全部节点可 pull 的
+      # 真实 registry，如 registry.example.com/torchwood-funcs）。
+      TORCHWOOD_FUNCTIONS_DOCKER_REGISTRY: ${TORCHWOOD_FUNCTIONS_DOCKER_REGISTRY:-torchwood-funcs}
       # join 项目网络时把 server 容器一并 attach：函数经容器名 DNS 回访
       # 平台 API（internal 网络无 NAT 出口，这是不可信函数回访的唯一通路）。
       # 与 server 的 container_name 严格一致；attach 失败仅告警不阻断执行。

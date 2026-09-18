@@ -695,9 +695,63 @@ const handlers = {
 - **应答约定（result / error 二分）**：函数返回值即响应的 `result` 成员；返回 `{"error":{"code":<int>,"message":<string>,"data"?:<any>}}` 形状即 `error` 成员（恰含其一，永不共存）。authored 错误码建议用保留区 `-32000..-32099`；分发级失败复用规范自带码（`-32601` method not found、`-32602` invalid params）。合法结果恰为该形状时须嵌套一层。
 - **身份不入请求对象**：客户端可绕过调用方直调本面伪造任意 `data`，封套是路由约定不是信任边界——method 级鉴权与审计读 `ctx.invokingUserId` / `ctx.source`（§4.3.3，平台可信注入）。
 
+## 15. 多机部署（四期）
+
+设计源：`docs/design/functions-runtimes-and-sources.md` §4（M1-M8）。拓扑 = **细胞模型**：N 节点 ×（dispatcher 进程 + 本机 docker daemon），控制面共享（Redis 实例注册表 / spawn 锁 / 节点注册表 / 容量键 + Postgres 元数据），函数容器生命周期完全本机、无 overlay 网络。运维部署形态与 compose 改动见 `13-operations.md` §7。四期切片：4a = 节点注册（M2）+ 执行路由（M3）+ reaper 收窄（M8）→ 4a-2 路由层 → 4b = 镜像全局化（M1，`routing_mode=registry`）→ 4c = 容量共享（M4）→ 4d = M6/M5 部署拓扑收口。
+
+### 15.1 路由模式（`functions.dispatcher.routing_mode`）
+
+| | `local`（缺省，向后兼容） | `registry`（M1 完整形态） |
+|------|------|------|
+| 镜像分布 | 只在其构建节点（不 push） | 构建后 push `functions.docker.registry`；本地 `func-<fid>-<did>` 保留为 pull 后的本地别名（retag 语义不变） |
+| 有实例 | 实例亲和：转发实例所在节点 | 同左（不受模式影响） |
+| 无实例冷启动 | BuildNode 亲和：转发构建节点；BuildNode 空 / == self / 指向失联节点 → 本地 spawn 回落 | 不转发：本地 spawn，spawn 前 `EnsureImage`（本地命中零 pull、miss 重拉）——跨节点冷启动自愈 |
+| 转发错误 | 明确错误收场（Unavailable/DeadlineExceeded），不回落本地 spawn | 同左 |
+| 启动期校验 | — | 必须显式 `registry_push=true` + `node_url` 非空（fail-fast） |
+
+防环铁律：转发请求携带 `X-Tw-Forwarded-For-Node: <转发方节点>`，目标节点强制本地池路径、不得二次转发。请求时点遇到「他节点实例但心跳已消失」的记录视为孤儿顺手删除（与 M8 ②同证据同动作），继续走冷启动规则。
+
+### 15.2 节点身份与构建亲和（M2/M5）
+
+- `functions.dispatcher.node_id`（缺省 hostname）：节点注册表 `torchwood:fnnodes:<node_id>`（SET+TTL 30s，10s 心跳续期）与构建亲和的标识；spawn 时固化进 `InstanceRecord.Node`，Build 时经 `BuildResponse.node_id` 落 `function_deployments.build_node`。
+- `functions.dispatcher.node_url`（缺省 `http://127.0.0.1:<addr 端口>` 推导）：对等互达地址，**多机必须显式配置**（推导值只对同机成立；registry 模式启动期强制非空）。
+- 构建亲和（M5）：deployment 首次构建落成的节点即该函数的构建节点，zip（含 git 物化快照）只落该节点本地盘、不迁移；worker 补构建固定读本节点 zip（**worker 与 server 同节点部署**，M5 拓扑裁决——worker 集中部署会让按 build_node 路由的补构建读不到盘）。节点死 = 在途 deployment 标 failed 要求重部署（语义损失明示）；ready deployment 无损（registry 模式下任意节点 pull 即可补建）。
+
+### 15.3 容量共享（M4，四期 4c）
+
+- **两层上限**：`max_resident_instances`（每 daemon，进程内计数，Q11 语义保留为节点层）→ `max_resident_instances_global`（全集群，uint32，**0 = 不设全局上限**）。trySpawn 检查顺序：本节点上限 → 全局上限（读 Redis 求和）。
+- **容量键**：`torchwood:fncap:resident:<node_id>`（SET+TTL 30s，值 = 该节点当前常驻数）。全局总量 = 各节点键 SCAN 求和（节点数小，可接受）。刷新点与进程内 `residentTotal` 同步：spawn 成功 +1 / terminate / reaper 回收 -1；reaper 每轮（15s）无条件再刷一次保 TTL。值写**实际计数**而非增量运算（写丢失/重试不漂移）；节点死后键随 TTL 消失，求和自动不再计入死节点。
+- **fail-open 裁决**：Redis 不可用时全局检查退化为仅本节点上限 + 限频告警（`capacity channel degraded`）。容量门是可用性门不是安全门——fail-closed 会把 Redis 抖动放大成全部冷启动失败；与 M8 死节点收敛的 fail-safe（快照失败跳过收敛、绝不误删健康记录）语义方向相反，不得混淆。门是软的：求和含本节点可能滞后一个增量的键，精度 ±1 常驻额。
+- 全局上限未配置（缺省 0）时热路径零额外 Redis 读。
+
+### 15.4 reaper 收窄与死节点收敛（M8）
+
+多节点共享实例注册表后，reaper 两条例外铁律（没有它多节点互相残杀——本机 daemon Inspect 他节点容器必然 NotFound，误入幽灵清理会把健康实例从池中蒸发）：
+
+1. **对账收窄**：只处理 `rec.Node == 本节点` 的记录（他节点实例归他节点的 reaper）；`Node` 为空的旧记录（单机存量）按本节点自然老化。
+2. **死节点收敛**：心跳键消失（≥30s 无心跳 = 节点已死）的节点的实例记录由任意存活节点批量删除——只删记录、不碰 daemon（容器随机器已消失）。心跳快照读取失败时本轮跳过收敛（fail-safe，绝不因 Redis 抖动误删活节点记录）。idle 记录无 lease 过期回收的现状由此路径补齐。
+
+### 15.5 镜像全局化（M1，四期 4b）
+
+- **push 顺序裁决：构建 → 验证 spawn → push**——验证失败不污染 registry；push 失败 = 构建失败（deployment failed，错误含 push 摘要）。push 凭证 = 宿主 daemon 侧已登录凭证（`docker login` 主机级凭证，不新增凭证配置面）。
+- **pull**：registry 模式冷启动 spawn 前 `EnsureImage`——本地命中（inspect 成功）零网络，miss 才 pull（调用点在 spawn 锁内，并发 pull 天然收敛）。local 模式跳过一切 pull 逻辑。
+- **BYO image 源豁免**：原始引用记录在 `source_url`，任意节点缺镜像可重 pull 原始引用再 retag（worker 补构建按 `source_type` 分支：image → 幂等 `ImportImage`，digest 已知时本地命中零 pull）；仅 zip/git 构建产物受路由档位约束。
+- registry host 准入沿用三期 SSRF 基线（IP 拨号点 guard 默认拒内网，`functions.image.allow_insecure` 显式放行自托管内网 registry）。
+
+### 15.6 节点故障语义
+
+| 故障 | local 模式 | registry 模式 |
+|------|-----------|---------------|
+| 节点死（机器/daemon 消失） | 该节点函数全部不可用；恢复 = **重新部署**（构建路由按水位选存活节点，重建即迁移） | **自动冷启动到幸存节点**（自愈） |
+| dispatcher 进程崩（机器活着） | 实例存活但无分发；路由层按节点不可达处理，旧实例由本机 dispatcher 重启后的 reaper 或 TTL 收敛 | 同左 |
+| Redis 不可用 | 全局上限 fail-open（§15.3）；心跳/收敛停摆但不误删 | 同左 |
+
+节点级冗余取代节点内双副本仲裁——多节点互为冗余，同时解决可用性与吞吐。
+
 ## 相关文档
 
 - `06-databases.md` §8.1 — execute-tx 事务内核（函数多写原子性的承载）
 - `05-authentication.md` — `RequireServerPrincipal` 与 execution principal 凭证族
 - `07-storage.md` — Redis 原子语义对照（分片锁）
-- `docs/design/functions-execution-identity-and-triggers.md` / `docs/design/functions-v3.md` / `docs/design/functions-runtimes-and-sources.md`（§2 git 部署源）— 设计文档
+- `13-operations.md` §7 — 多机部署的运维形态（每节点 compose / 选型 / 容量上限配置）
+- `docs/design/functions-execution-identity-and-triggers.md` / `docs/design/functions-v3.md` / `docs/design/functions-runtimes-and-sources.md`（§2 git 部署源、§4 多机执行面）— 设计文档

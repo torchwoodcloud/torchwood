@@ -43,6 +43,12 @@ type PoolConfig struct {
 	// 不分发（冷启动转发 BuildNode）；registry = M1 镜像全局化（冷启动
 	// 本地 spawn + spawn 前 EnsureImage 按需 pull，不转发）。
 	RoutingMode string
+	// MaxResidentInstancesGlobal 是全集群常驻总量上限（四期 4c M4 容量共享；
+	// config functions.dispatcher.max_resident_instances_global）：多节点下
+	// MaxResidentInstances 只是每节点各管各的，全局配额经 Redis 容量键
+	// （torchwood:fncap:resident:<node_id>）求和约束，trySpawn 在本节点上限
+	// 之后检查。0 = 不设全局上限（缺省；单机部署无意义）。
+	MaxResidentInstancesGlobal int
 }
 
 // DefaultPoolConfig 返回平台默认池参数（设计 §6 池策略 + Q11 拍板）。
@@ -87,6 +93,9 @@ func PoolConfigFromConfig(cfg *config.AppConfig) PoolConfig {
 	}
 	if d.GetTimeoutBudget() > 0 {
 		pc.TimeoutBudget = int(d.GetTimeoutBudget())
+	}
+	if d.GetMaxResidentInstancesGlobal() > 0 {
+		pc.MaxResidentInstancesGlobal = int(d.GetMaxResidentInstancesGlobal())
 	}
 	pc.RoutingMode = config.NormalizedFunctionsRoutingMode(d.GetRoutingMode())
 	return pc
@@ -317,6 +326,8 @@ type PoolManager struct {
 	// 完全吞掉（EACCES 秒退事故的排障放大器）。lastSpawnWarnAt 供告警限频。
 	lastSpawnErr    map[string]error
 	lastSpawnWarnAt map[string]time.Time
+	// lastCapWarnAt 是容量通道（Redis 容量键，M4）故障告警的限频时间戳。
+	lastCapWarnAt time.Time
 }
 
 // NewPoolManager 构造池管理器（生产装配）。
@@ -572,7 +583,9 @@ func (p *PoolManager) dispatch(ctx context.Context, req ExecuteRequest, fromNode
 
 // trySpawn 尝试冷启动一个新实例（池 0→1 扩容）：同函数并发 spawn 用 Redis
 // SETNX 锁收敛为一次（其余请求等注册表，防 daemon 重启后全量冷启动风暴）；
-// 常驻总量受 daemon 级上限约束（独立于全局 run 信号量，Q11）。
+// 常驻总量受两层上限约束（独立于全局 run 信号量，Q11）：本节点 daemon 级
+// 上限（现状）→ 全集群总量上限（四期 4c M4，Redis 容量键求和；Redis 不可用
+// fail-open，见 capacity.go）。
 func (p *PoolManager) trySpawn(ctx context.Context, req ExecuteRequest, policy PoolPolicy) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -603,6 +616,17 @@ func (p *PoolManager) trySpawn(ctx context.Context, req ExecuteRequest, policy P
 	p.residentTotal++ // 先占额：spawn 失败路径负责回退
 	p.mu.Unlock()
 
+	// 全局容量门（四期 4c M4）：本节点上限让路后查 Redis 全局总量（各节点
+	// 容量键之和）；满 → 回退本节点预留、交给排队路径（与本地池满同款）。
+	// Redis 不可用 fail-open（capacity.go 文件头裁决），不回退。
+	if !p.tryReserveGlobal(ctx) {
+		p.mu.Lock()
+		p.booting[key]--
+		p.residentTotal--
+		p.mu.Unlock()
+		return nil
+	}
+
 	rec, err := p.spawnInstance(ctx, req, policy)
 	if err != nil {
 		p.mu.Lock()
@@ -630,6 +654,8 @@ func (p *PoolManager) trySpawn(ctx context.Context, req ExecuteRequest, policy P
 	p.mu.Lock()
 	p.booting[key]--
 	p.mu.Unlock()
+	// spawn 成功：本节点常驻 +1 落定，刷新容量键（M4；best-effort）。
+	p.refreshCapacity()
 	return nil
 }
 
@@ -820,6 +846,8 @@ func (p *PoolManager) terminate(ctx context.Context, containerID string) {
 		p.residentTotal--
 	}
 	p.mu.Unlock()
+	// 常驻 -1 落定：刷新容量键（M4；best-effort，幂等调用无变化时零成本刷新 TTL）。
+	p.refreshCapacity()
 }
 
 // DrainForDeployment 在部署更新后排空旧 deployment 池（上限 ≤ 函数超时，
@@ -858,7 +886,8 @@ func (p *PoolManager) DrainForDeployment(ctx context.Context, projectID, functio
 }
 
 // Reaper 单轮对账：idle 回收 / 幽灵清理 / stuck-busy 强杀 / 水位与存活计量。
-// 由 Service 周期调度（ReaperInterval）。
+// 由 Service 周期调度（ReaperInterval）。入口处顺带刷新本节点容量键保 TTL
+// （四期 4c M4，见 capacity.go）。
 //
 // 多机收窄（四期 4a-1，设计 §4 M8——M2/M3 同片硬前提，否则多节点共享
 // fninst 后互相残杀）：①只对 rec.Node 归属本节点（ownedBySelf）的记录做
@@ -869,6 +898,12 @@ func (p *PoolManager) DrainForDeployment(ctx context.Context, projectID, functio
 // 不碰 daemon——与幽灵清理严格区分）。快照读取失败时跳过收敛（fail-safe
 // 不得因 Redis 抖动批量误删活节点记录）。
 func (p *PoolManager) Reaper(ctx context.Context) {
+	// 容量键 TTL 保鲜（四期 4c M4）：每轮无条件刷新本节点容量键（best-effort
+	// ——有回收的轮次 terminate/revokeCounted 已各刷一次，这里兜住「无变化
+	// 轮次」：无流量实例不因键过期从全局求和中漏计）。放在快照读取之前，
+	// ListFunctions 失败早退也不影响保鲜。
+	p.refreshCapacity()
+
 	// M8 ②：节点心跳快照（每轮一次；nil = 快照不可用，本轮跳过死节点收敛）。
 	var liveNodes map[string]bool
 	if nodes, err := p.registry.ListNodes(ctx); err == nil {
@@ -983,6 +1018,8 @@ func (p *PoolManager) revokeCounted(containerID string) {
 		p.residentTotal--
 	}
 	p.mu.Unlock()
+	// 常驻 -1 落定：刷新容量键（M4；best-effort）。
+	p.refreshCapacity()
 }
 
 func isTimeoutErr(err error) bool {

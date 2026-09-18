@@ -130,7 +130,8 @@ func (s *Service) Start(ctx context.Context) error {
 	})
 	s.logger.Info("dispatcher started", "addr", s.http.Addr,
 		"node", s.nodeID, "node_url", s.nodeURL,
-		"max_resident_instances", s.pool.cfg.MaxResidentInstances)
+		"max_resident_instances", s.pool.cfg.MaxResidentInstances,
+		"max_resident_instances_global", s.pool.cfg.MaxResidentInstancesGlobal)
 
 	<-ctx.Done()
 	return nil

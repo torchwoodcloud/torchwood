@@ -193,11 +193,20 @@ type fakeRegistry struct {
 	// 返回该错误（reaper 死节点收敛的 fail-safe 断言面）。
 	nodes   map[string]NodeRecord
 	nodeErr error
+	// ——节点容量键（四期 4c M4）——
+	// caps 是容量键内存表（nodeID -> 最近一次 SaveNodeCapacity 写入的常驻
+	// 数；全局拒绝/刷新点断言面）。capWrites 记写次数；capSumCalls 记求和
+	// 次数（全局上限未配置时必须零调用——热路径零额外 Redis 往返断言面）；
+	// capErr 非空时 SumNodeCapacity 返回该错误（fail-open 断言面）。
+	caps        map[string]int
+	capWrites   int
+	capSumCalls int
+	capErr      error
 }
 
 func newFakeRegistry() *fakeRegistry {
 	return &fakeRegistry{pools: map[string]map[string]*InstanceRecord{}, locks: map[string]bool{},
-		nodes: map[string]NodeRecord{}}
+		nodes: map[string]NodeRecord{}, caps: map[string]int{}}
 }
 
 func regKey(ref FunctionRef) string { return ref.ProjectID + ":" + ref.FunctionID }
@@ -326,6 +335,39 @@ func (r *fakeRegistry) AcquireSpawnLock(_ context.Context, ref FunctionRef, _ ti
 		delete(r.locks, key)
 		r.mu.Unlock()
 	}, nil
+}
+
+// SaveNodeCapacity 容量键内存写（四期 4c M4）：覆写 nodeID 的常驻数并计次。
+func (r *fakeRegistry) SaveNodeCapacity(_ context.Context, nodeID string, resident int, _ time.Duration) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.capWrites++
+	r.caps[nodeID] = resident
+	return nil
+}
+
+// SumNodeCapacity 容量键求和（四期 4c M4）：capErr 模拟 Redis 不可用；
+// seedCapacity 是测试预置他节点容量键的入口（真实 SET 通道经 SaveNodeCapacity）。
+func (r *fakeRegistry) SumNodeCapacity(_ context.Context) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.capSumCalls++
+	if r.capErr != nil {
+		return 0, r.capErr
+	}
+	total := 0
+	for _, v := range r.caps {
+		if v > 0 {
+			total += v
+		}
+	}
+	return total, nil
+}
+
+func (r *fakeRegistry) seedCapacity(nodeID string, resident int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.caps[nodeID] = resident
 }
 
 type fakeRunner struct {

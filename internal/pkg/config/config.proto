@@ -229,6 +229,14 @@ message Functions {
     // 镜像全局化是该模式的硬前提）；local 模式忽略该值（镜像不分发，
     // 配 true 也不 push）。默认 false。
     bool registry_push = 15;
+    // 全集群常驻实例总量上限（四期 4c M4 容量共享，设计 §4）：多节点部署下
+    // max_resident_instances 只是每节点各管各的（进程内计数互不知），集群
+    // 总量由 Redis 容量键 torchwood:fncap:resident:<node_id>（SET+TTL，值 =
+    // 该节点当前常驻数）SCAN 求和约束，trySpawn 在本节点上限之后检查。
+    // 0 = 不设全局上限（缺省；单机部署无需配置）。Redis 不可用时全局检查
+    // fail-open 退化为仅本节点上限（容量门是可用性门不是安全门，限频告警；
+    // 与 M8 死节点收敛的 fail-safe 语义方向相反，不得混淆）。
+    uint32 max_resident_instances_global = 16;
   }
   // executor（字段号 1）已删除：v1 docker 执行器（每请求一容器、进程内
   // docker.sock）已移除，函数执行统一经 dispatcher 分发。

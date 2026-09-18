@@ -404,3 +404,49 @@ func TestRedisRegistry_AcquireSpawnLock(t *testing.T) {
 	require.True(t, acquired4, "持锁者释放后必须可重获")
 	release4()
 }
+
+// TestRedisRegistry_NodeCapacityKeys 真 Redis 上的节点容量键往返（四期 4c
+// M4）：SET+TTL 键形态、SCAN 求和、损坏值/过期键按 0 计（不毒化求和）。
+func TestRedisRegistry_NodeCapacityKeys(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	rdb := newRegistryTestRedis(t)
+	reg := NewRedisRegistry(rdb)
+	ctx := context.Background()
+	require.NoError(t, rdb.Del(ctx,
+		nodeCapacityKeyPrefix+"cap-a", nodeCapacityKeyPrefix+"cap-b", nodeCapacityKeyPrefix+"cap-bad").Err())
+
+	require.NoError(t, reg.SaveNodeCapacity(ctx, "cap-a", 3, capacityKeyTTL))
+	require.NoError(t, reg.SaveNodeCapacity(ctx, "cap-b", 2, capacityKeyTTL))
+
+	// 键形态与 TTL：torchwood:fncap:resident:<node_id>，值为十进制常驻数。
+	raw, err := rdb.Get(ctx, nodeCapacityKeyPrefix+"cap-a").Result()
+	require.NoError(t, err)
+	require.Equal(t, "3", raw)
+	ttl, err := rdb.TTL(ctx, nodeCapacityKeyPrefix+"cap-a").Result()
+	require.NoError(t, err)
+	require.Greater(t, ttl, time.Duration(0), "容量键必须带 TTL")
+	require.LessOrEqual(t, ttl, capacityKeyTTL)
+
+	// 幂等覆写（SET 实际值语义）：同键重写覆盖旧值。
+	require.NoError(t, reg.SaveNodeCapacity(ctx, "cap-a", 4, capacityKeyTTL))
+
+	total, err := reg.SumNodeCapacity(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 6, total, "全局总量 = 各节点键之和（4+2）")
+
+	// 损坏值按 0 计（不毒化求和）。
+	require.NoError(t, rdb.Set(ctx, nodeCapacityKeyPrefix+"cap-bad", "not-a-number", capacityKeyTTL).Err())
+	total, err = reg.SumNodeCapacity(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 6, total)
+
+	// 键过期（节点死亡）= 自然退出求和。
+	require.NoError(t, rdb.Del(ctx, nodeCapacityKeyPrefix+"cap-b").Err())
+	total, err = reg.SumNodeCapacity(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 4, total)
+
+	require.NoError(t, rdb.Del(ctx, nodeCapacityKeyPrefix+"cap-a", nodeCapacityKeyPrefix+"cap-bad").Err())
+}
