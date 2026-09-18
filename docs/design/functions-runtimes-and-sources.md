@@ -14,12 +14,19 @@
 > 容器内实跑全绿、带 DSN 全量回归 79 包零失败；Console 三入口 + 源
 > 徽章同批交付；实施修正一处：registry host 防护为名称级校验——
 > daemon pull 拨号点 guard 不可实施，残余面随 egress 原语后置，§3
-> 诚实口径）**。
-> Key Decisions 与 Open Questions 记录保留（D2/D6 按 packer 案修订）；
+> 诚实口径）→ **四期已实现**（2026-09-18，还原点 71727ac / e164ca6 /
+> 438be50 / f7b0fb5；4a 节点注册+亲和路由+reaper 收窄（local 模式）、
+> 4b registry push/pull + registry 模式（registry:2 真实全链取证）、
+> 4c M4 容量共享、4d 多机拓扑文档；实施修正两处：孤儿记录路由时点
+> 顺手删（否则被本地认领打向不可达 IP）、删原始引用连带摘 RepoDigest
+> 的三态幂等判定；单节点行为零变化回归锚在列）**。
+> Key Decisions 与 Open Questions 记录保留（D2/D6 按 packer 案修订；
+> 四期纪律①措辞修订：Executor.Build 以返回值承载 build_node——路由
+> 演化仍收敛在适配器内部，未新增端口方法）；
 > 交叉验证推翻项已全部收口：D3 一期落地验证、D2 owner 再裁决、OQ5 随
 > packer 案成立；后续各轮记录见文末各节。
-> 现状基线：`docs/developer/08-functions.md`（§3.1-§3.6 已含 Go 运行时 /
-> Runner 协议 / 验证 spawn 质量门 / git 部署源 / packer 运维 / 镜像源）。
+> 现状基线：`docs/developer/08-functions.md`（§3.1-§3.6 + §15 多机部署）、
+> `docs/developer/13-operations.md` §7（多机细胞模型运维）。
 > **v3 裁决边界修正（独立复核 A7）**：functions-v3.md Non-Goals 点名的
 > 「多机分发」经 owner 2026-09-17 裁决**显式推翻**（阶段四细胞模型）；
 > v3 其余 Non-Goals（WASM/isolate/Firecracker/K8s/每实例多进程等）
