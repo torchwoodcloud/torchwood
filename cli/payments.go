@@ -57,7 +57,7 @@ func newPaymentsOrderGetCmd(g *GlobalFlags) *verb {
 func newPaymentsRefundCmd(g *GlobalFlags) *verb {
 	var amount int64
 	var reason string
-	return newVerb(g, "refund", "refund a paid order (payments.write; audit-logged; does not revoke granted assets)", "payments refund <order-id> [--amount <n>] [--reason <text>]",
+	return newVerb(g, "refund", "refund a paid order (payments.write; audit-logged; does not revoke granted assets)", "payments refund [--amount <n>] [--reason <text>] <order-id>",
 		func(fs *flag.FlagSet) {
 			fs.Int64Var(&amount, "amount", 0, "refund amount in minimal currency units (omitted/0 = full refund)")
 			fs.StringVar(&reason, "reason", "", "reason (for audit)")
@@ -91,7 +91,7 @@ func buildRefundReq(orderID string, amount int64, reason string) (map[string]any
 
 func newPaymentsFulfillCmd(g *GlobalFlags) *verb {
 	var reason string
-	return newVerb(g, "fulfill", "manually mark a paid order fulfilled (fallback when fulfillment failed; payments.write; audit-logged)", "payments fulfill <order-id> [--reason <text>]",
+	return newVerb(g, "fulfill", "manually mark a paid order fulfilled (fallback when fulfillment failed; payments.write; audit-logged)", "payments fulfill [--reason <text>] <order-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&reason, "reason", "", "reason (for audit)")
 		},

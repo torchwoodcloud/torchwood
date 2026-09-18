@@ -164,7 +164,7 @@ func newStorageFilesGetCmd(g *GlobalFlags) *verb {
 
 func newStorageFilesUpdateCmd(g *GlobalFlags) *verb {
 	var name, mimeType, metadata string
-	return newVerb(g, "update", "update file metadata (only explicitly passed fields)", "storage files update <bucket-id> <file-id> [--name] [--mime-type] [--metadata]",
+	return newVerb(g, "update", "update file metadata (only explicitly passed fields)", "storage files update [--name] [--mime-type] [--metadata] <bucket-id> <file-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&name, "name", "", "new file name")
 			fs.StringVar(&mimeType, "mime-type", "", "new MIME type")

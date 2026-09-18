@@ -438,7 +438,7 @@ func buildMutateReq(v *verb, holdingID, idempotencyKey string, level int, expire
 
 func newAssetsExpireCmd(g *GlobalFlags) *verb {
 	var idempotencyKey string
-	return newVerb(g, "expire", "expire a holding immediately (assets.write, admin)", "assets expire <holding-id> [--idempotency-key <k>]",
+	return newVerb(g, "expire", "expire a holding immediately (assets.write, admin)", "assets expire [--idempotency-key <k>] <holding-id>",
 		func(fs *flag.FlagSet) {
 			idempotencyFlag(fs, &idempotencyKey)
 		},
@@ -470,7 +470,7 @@ func newAssetsReconcileCmd(g *GlobalFlags) *verb {
 func newAssetsHoldingsCmd(g *GlobalFlags) *verb {
 	var pageSize int
 	var pageToken string
-	return newVerb(g, "holdings", "list an owner's asset holdings", "assets holdings <owner-id> [--page-size <n>] [--page-token <t>]",
+	return newVerb(g, "holdings", "list an owner's asset holdings", "assets holdings [--page-size <n>] [--page-token <t>] <owner-id>",
 		func(fs *flag.FlagSet) {
 			fs.IntVar(&pageSize, "page-size", 0, "page size (server default when omitted)")
 			fs.StringVar(&pageToken, "page-token", "", "next page token from the previous response")
@@ -488,7 +488,7 @@ func newAssetsHoldingsCmd(g *GlobalFlags) *verb {
 func newAssetsLedgerCmd(g *GlobalFlags) *verb {
 	var pageSize int
 	var pageToken, defCode string
-	return newVerb(g, "ledger", "list an owner's ledger entries (audit trail)", "assets ledger <owner-id> [--def-code <c>] [--page-size <n>] [--page-token <t>]",
+	return newVerb(g, "ledger", "list an owner's ledger entries (audit trail)", "assets ledger [--def-code <c>] [--page-size <n>] [--page-token <t>] <owner-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&defCode, "def-code", "", "filter by asset code")
 			fs.IntVar(&pageSize, "page-size", 0, "page size (server default when omitted)")

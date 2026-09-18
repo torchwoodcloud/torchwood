@@ -82,7 +82,7 @@ func buildSubmitLeaderboardReq(v *verb, boardID, subjectID string, value, tiebre
 
 func newLeaderboardsGetEntryCmd(g *GlobalFlags) *verb {
 	var period string
-	return newVerb(g, "get-entry", "get a subject's score snapshot in a board", "leaderboards get-entry <board-id> <subject-id> [--period <p>]",
+	return newVerb(g, "get-entry", "get a subject's score snapshot in a board", "leaderboards get-entry [--period <p>] <board-id> <subject-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&period, "period", "", "period (defaults to the current period)")
 		},
@@ -101,7 +101,7 @@ func newLeaderboardsGetEntryCmd(g *GlobalFlags) *verb {
 func newLeaderboardsTopCmd(g *GlobalFlags) *verb {
 	var period, pageToken string
 	var pageSize int
-	return newVerb(g, "top", "list a board's top entries", "leaderboards top <board-id> [--period <p>] [--page-size <n>] [--page-token <t>]",
+	return newVerb(g, "top", "list a board's top entries", "leaderboards top [--period <p>] [--page-size <n>] [--page-token <t>] <board-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&period, "period", "", "period (defaults to the current period)")
 			fs.IntVar(&pageSize, "page-size", 0, "page size (0-100, server default when omitted)")
@@ -144,7 +144,7 @@ func newLeaderboardsSettlementsCmd(g *GlobalFlags) *group {
 
 func newLeaderboardsSettlementListCmd(g *GlobalFlags) *verb {
 	var limit int
-	return newVerb(g, "list", "list a board's settled periods", "leaderboards settlements list <board-id> [--limit <n>]",
+	return newVerb(g, "list", "list a board's settled periods", "leaderboards settlements list [--limit <n>] <board-id>",
 		func(fs *flag.FlagSet) {
 			fs.IntVar(&limit, "limit", 0, "max settlements to return (0-200, server default when omitted)")
 		},
@@ -202,7 +202,7 @@ func registerBoardConfigFlags(fs *flag.FlagSet, c *boardConfig) {
 
 func newLeaderboardsBoardCreateCmd(g *GlobalFlags) *verb {
 	var c boardConfig
-	return newVerb(g, "create", "idempotently create a board (leaderboards.admin): existing with identical config → 200 + current state; differs → 409 with field diff", "leaderboards boards create <board-id> [--sort asc|desc] [--policy best|latest|sum] [--period-kind none|daily|weekly|monthly] [...]",
+	return newVerb(g, "create", "idempotently create a board (leaderboards.admin): existing with identical config → 200 + current state; differs → 409 with field diff", "leaderboards boards create [--sort asc|desc] [--policy best|latest|sum] [--period-kind none|daily|weekly|monthly] [...] <board-id>",
 		func(fs *flag.FlagSet) {
 			registerBoardConfigFlags(fs, &c)
 		},
@@ -274,7 +274,7 @@ func newLeaderboardsBoardsListCmd(g *GlobalFlags) *verb {
 
 func newLeaderboardsBoardPeriodsCmd(g *GlobalFlags) *verb {
 	var limit int
-	return newVerb(g, "periods", "list a board's period keys (newest first)", "leaderboards boards periods <board-id> [--limit <n>]",
+	return newVerb(g, "periods", "list a board's period keys (newest first)", "leaderboards boards periods [--limit <n>] <board-id>",
 		func(fs *flag.FlagSet) {
 			fs.IntVar(&limit, "limit", 0, "max period keys to return (0-200, server default when omitted)")
 		},
@@ -293,7 +293,7 @@ func newLeaderboardsBoardPeriodsCmd(g *GlobalFlags) *verb {
 func newLeaderboardsBoardUpdateCmd(g *GlobalFlags) *verb {
 	var c boardConfig
 	var clearTiebreak, clearValueBounds bool
-	return newVerb(g, "update", "update a board (leaderboards.admin; only explicitly passed fields — pass --client-submit=true/false explicitly to take effect)", "leaderboards boards update <board-id> [--sort] [--tiebreak-order] [--tie-break] [--period-kind] [--period-tz] [--policy] [--value-min] [--value-max] [--client-submit] [--per-subject-submit-limit] [--retention-periods] [--subject-kind] [--clear-tiebreak] [--clear-value-bounds]",
+	return newVerb(g, "update", "update a board (leaderboards.admin; only explicitly passed fields — pass --client-submit=true/false explicitly to take effect)", "leaderboards boards update [--sort] [--tiebreak-order] [--tie-break] [--period-kind] [--period-tz] [--policy] [--value-min] [--value-max] [--client-submit] [--per-subject-submit-limit] [--retention-periods] [--subject-kind] [--clear-tiebreak] [--clear-value-bounds] <board-id>",
 		func(fs *flag.FlagSet) {
 			registerBoardConfigFlags(fs, &c)
 			fs.BoolVar(&clearTiebreak, "clear-tiebreak", false, "remove the tiebreak declaration")

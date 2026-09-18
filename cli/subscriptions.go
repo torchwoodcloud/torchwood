@@ -255,7 +255,7 @@ func newSubsGetCmd(g *GlobalFlags) *verb {
 // period end）是 Client 面另一条路径，不经此动词。
 func newSubsCancelCmd(g *GlobalFlags) *verb {
 	var reason string
-	return newVerb(g, "cancel", "force-cancel a subscription immediately (subscriptions.write, admin; status → canceled)", "subscriptions cancel <subscription-id> [--reason <text>]",
+	return newVerb(g, "cancel", "force-cancel a subscription immediately (subscriptions.write, admin; status → canceled)", "subscriptions cancel [--reason <text>] <subscription-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&reason, "reason", "", "reason (for audit)")
 		},
@@ -273,7 +273,7 @@ func newSubsCancelCmd(g *GlobalFlags) *verb {
 
 func newSubsExpireCmd(g *GlobalFlags) *verb {
 	var reason string
-	return newVerb(g, "expire", "expire a subscription immediately (subscriptions.write, admin)", "subscriptions expire <subscription-id> [--reason <text>]",
+	return newVerb(g, "expire", "expire a subscription immediately (subscriptions.write, admin)", "subscriptions expire [--reason <text>] <subscription-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&reason, "reason", "", "reason (for audit)")
 		},

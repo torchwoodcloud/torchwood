@@ -138,7 +138,7 @@ func newGroupsMembershipsCmd(g *GlobalFlags) *group {
 
 func newGroupsMembershipsCreateCmd(g *GlobalFlags) *verb {
 	var userID, email, name, roles, status string
-	return newVerb(g, "create", "create a membership (--user-id or --email, at least one)", "groups memberships create <group-id> [--user-id <uid> | --email <email>]",
+	return newVerb(g, "create", "create a membership (--user-id or --email, at least one)", "groups memberships create [--user-id <uid> | --email <email>] <group-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&userID, "user-id", "", "user ID (registered user)")
 			fs.StringVar(&email, "email", "", "email (invite an unregistered user)")
@@ -192,7 +192,7 @@ func newGroupsMembershipsGetCmd(g *GlobalFlags) *verb {
 
 func newGroupsMembershipsUpdateCmd(g *GlobalFlags) *verb {
 	var roles string
-	return newVerb(g, "update", "replace membership roles", "groups memberships update <group-id> <membership-id> --roles '[...]'",
+	return newVerb(g, "update", "replace membership roles", "groups memberships update --roles '[...]' <group-id> <membership-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&roles, "roles", "", "roles JSON array (required, full replacement)")
 		},
@@ -210,7 +210,7 @@ func newGroupsMembershipsUpdateCmd(g *GlobalFlags) *verb {
 
 func newGroupsMembershipsUpdateStatusCmd(g *GlobalFlags) *verb {
 	var status string
-	return newVerb(g, "update-status", "update membership status (active/blocked; pending cannot come back)", "groups memberships update-status <group-id> <membership-id> --status <status>",
+	return newVerb(g, "update-status", "update membership status (active/blocked; pending cannot come back)", "groups memberships update-status --status <status> <group-id> <membership-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&status, "status", "", "target status (required: active/blocked)")
 		},
