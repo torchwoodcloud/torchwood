@@ -67,7 +67,7 @@ func TestCreateDeployment_GitEndToEndSmoke(t *testing.T) {
 	now := time.Now()
 	fn := &domainfunctions.Function{
 		ID: "fn_e2e", ProjectID: projectID, Name: "e2e",
-		Runtime: "node-18.0", TimeoutSeconds: 15, Spec: "shared-1x", Enabled: true,
+		Runtime: "node-24.0", TimeoutSeconds: 15, Spec: "shared-1x", Enabled: true,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	require.NoError(t, repo.CreateFunction(ctx, fn))

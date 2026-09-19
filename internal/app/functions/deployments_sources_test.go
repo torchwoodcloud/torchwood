@@ -74,7 +74,7 @@ func gitTestUC(t *testing.T, exec *mockExecutor, packer domainfunctions.SourcePa
 	t.Helper()
 	repo := newMockRepo()
 	require.NoError(t, repo.CreateFunction(context.Background(), &domainfunctions.Function{
-		ID: "fn_1", ProjectID: "p1", Runtime: "node-18.0", TimeoutSeconds: 10, Enabled: true,
+		ID: "fn_1", ProjectID: "p1", Runtime: "node-24.0", TimeoutSeconds: 10, Enabled: true,
 	}))
 	uc := NewFunctions(&config.AppConfig{}, exec, repo, newMockQueue())
 	uc.packer = packer

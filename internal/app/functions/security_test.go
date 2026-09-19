@@ -33,7 +33,7 @@ func TestCreateFunction_RejectsMaliciousIDs(t *testing.T) {
 		strings.Repeat("a", 65), // 超长
 	} {
 		_, err := uc.CreateFunction(ctx, CreateFunctionCommand{
-			ID: id, ProjectID: "p1", Name: "f", Runtime: "node-18.0", TimeoutSeconds: timeoutPtr(15),
+			ID: id, ProjectID: "p1", Name: "f", Runtime: "node-24.0", TimeoutSeconds: timeoutPtr(15),
 		})
 		require.Equal(t, codes.InvalidArgument, status.Code(err), "id %q 应被拒绝", id)
 	}
@@ -42,7 +42,7 @@ func TestCreateFunction_RejectsMaliciousIDs(t *testing.T) {
 	// 迁移（R10-P1-3/B3）后不再是保留字，可作 function id 合法创建。
 	for _, id := range []string{"fn_1", "fn-1", "a", "0", "runtimes", "specifications", strings.Repeat("a", 64)} {
 		fn, err := uc.CreateFunction(ctx, CreateFunctionCommand{
-			ID: id, ProjectID: "p1", Name: "f", Runtime: "node-18.0", TimeoutSeconds: timeoutPtr(15),
+			ID: id, ProjectID: "p1", Name: "f", Runtime: "node-24.0", TimeoutSeconds: timeoutPtr(15),
 		})
 		require.NoError(t, err, "id %q 应被接受", id)
 		require.Equal(t, id, fn.ID)
@@ -59,7 +59,7 @@ func TestCreateFunction_FormerReservedIDsAreRegularIDs(t *testing.T) {
 
 	for _, id := range []string{"runtimes", "specifications"} {
 		fn, err := uc.CreateFunction(ctx, CreateFunctionCommand{
-			ID: id, ProjectID: "p1", Name: "f", Runtime: "node-18.0", TimeoutSeconds: timeoutPtr(15),
+			ID: id, ProjectID: "p1", Name: "f", Runtime: "node-24.0", TimeoutSeconds: timeoutPtr(15),
 		})
 		require.NoError(t, err, "function id %q 应可正常创建", id)
 		require.Equal(t, id, fn.ID)

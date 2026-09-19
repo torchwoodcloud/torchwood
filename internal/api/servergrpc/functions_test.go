@@ -173,7 +173,7 @@ func TestFunctionsService_CreateFunctionHappyPath(t *testing.T) {
 	timeout := int32(15)
 	spec := "shared-1x"
 	fn, err := s.CreateFunction(principalCtx("p1"), &serverv1.CreateFunctionRequest{
-		Id: "fn_1", Name: "hello", Runtime: "node-18.0", TimeoutSeconds: &timeout, Spec: &spec,
+		Id: "fn_1", Name: "hello", Runtime: "node-24.0", TimeoutSeconds: &timeout, Spec: &spec,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, fn)
@@ -189,4 +189,67 @@ func TestFunctionsService_GetFunctionNotFound(t *testing.T) {
 	s := newTestService(&stubRepo{})
 	_, err := s.GetFunction(principalCtx("p1"), &serverv1.GetFunctionRequest{FunctionId: "missing"})
 	require.Equal(t, codes.NotFound, status.Code(err))
+}
+
+// TestFunctionsService_ListRuntimesProjection 运行时指定扩展投影
+// （functions-runtime-selection.md §1/§6）：family/status/is_default/eol_at
+// 随 ListRuntimes 投影，node-18.0 以 eol 状态暴露，缺省项唯一。
+func TestFunctionsService_ListRuntimesProjection(t *testing.T) {
+	s := newTestService(&stubRepo{})
+	resp, err := s.ListRuntimes(principalCtx("p1"), &sharedv1.Empty{})
+	require.NoError(t, err)
+
+	defaults := 0
+	byID := map[string]*serverv1.RuntimeInfo{}
+	for _, r := range resp.Runtimes {
+		require.NotEmpty(t, r.Family)
+		require.NotEmpty(t, r.Status)
+		if r.IsDefault {
+			defaults++
+		}
+		byID[r.Id] = r
+	}
+	require.Equal(t, 1, defaults, "缺省 runtime 有且仅有一个")
+
+	node18, ok := byID["node-18.0"]
+	require.True(t, ok, "node-18.0 保留在表（旧 ID 不日落）")
+	require.Equal(t, "eol", node18.Status)
+	require.NotNil(t, node18.EolAt)
+
+	node24, ok := byID["node-24.0"]
+	require.True(t, ok)
+	require.Equal(t, "active", node24.Status)
+	require.Equal(t, "node", node24.Family)
+	require.True(t, node24.IsDefault)
+}
+
+// TestFunctionsService_UpdateFunctionRuntime UpdateFunction.runtime 接线
+// （functions-runtime-selection.md §3）：存在性 + eol 状态门在 app 层；
+// 合法变更落 repo。
+func TestFunctionsService_UpdateFunctionRuntime(t *testing.T) {
+	repo := &stubRepo{}
+	s := newTestService(repo)
+
+	timeout := int32(15)
+	_, err := s.CreateFunction(principalCtx("p1"), &serverv1.CreateFunctionRequest{
+		Id: "fn_rt", Name: "f", Runtime: "node-22.0", TimeoutSeconds: &timeout,
+	})
+	require.NoError(t, err)
+
+	// eol runtime 拒绝。
+	runtime := "node-18.0"
+	_, err = s.UpdateFunction(principalCtx("p1"), &serverv1.UpdateFunctionRequest{
+		FunctionId: "fn_rt", Runtime: &runtime,
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.ErrorContains(t, err, "end-of-life")
+
+	// 合法变更（node-22.0 → node-24.0）落库。
+	runtime = "node-24.0"
+	fn, err := s.UpdateFunction(principalCtx("p1"), &serverv1.UpdateFunctionRequest{
+		FunctionId: "fn_rt", Runtime: &runtime,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "node-24.0", fn.Runtime)
+	require.Equal(t, "node-24.0", repo.fn.Runtime)
 }

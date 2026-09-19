@@ -135,15 +135,14 @@ func TestDockerfileFor_NodeDepsWithoutLockfile(t *testing.T) {
 	}
 }
 
-// TestDockerfileFor_PythonExplicitError 常驻路径下 python 明确报错（探测
-// 保留、构建期拒绝；v1 docker 执行器已移除，报错不得引导切换执行器）。
+// TestDockerfileFor_PythonExplicitError python family 无 runtime 表项 →
+// 模板层显式拒绝（family 对账（D7'）在 dispatcher 侧先行拦截——探测产出
+// python family 而声明 runtime 恒为 node/go family，此处兜底直调路径）。
+// 报错不得引导切换执行器（v1 docker 执行器已移除，无选择面）。
 func TestDockerfileFor_PythonExplicitError(t *testing.T) {
 	_, err := DockerfileFor(SourceContents{Runtime: "python-3.11"})
 	if err == nil {
 		t.Fatal("python on the resident executor must fail explicitly")
-	}
-	if !strings.Contains(err.Error(), "node-only") {
-		t.Errorf("错误应说明常驻执行器仅支持 node： %v", err)
 	}
 	if strings.Contains(err.Error(), "executor=") {
 		t.Errorf("错误不应引导配置执行器选择（已无选择面）： %v", err)
@@ -154,6 +153,41 @@ func TestDockerfileFor_PythonExplicitError(t *testing.T) {
 func TestDockerfileFor_UnknownRuntime(t *testing.T) {
 	if _, err := DockerfileFor(SourceContents{Runtime: "deno-2.0"}); err == nil {
 		t.Fatal("unknown runtime must be rejected")
+	}
+}
+
+// TestDockerfileFor_AllTableEntriesRender 表↔模板完整性护栏
+// （docs/design/functions-runtime-selection.md §1）：每个非 image 的表项
+// 必须能渲染出 Dockerfile（防「表里有 ID、模板没分支」的半截状态——新增
+// runtime 只改 domain 表，本测试强制模板侧同步可用），且 FROM 行 = 表内
+// BaseImage、image family（平台零构建）显式拒绝。
+func TestDockerfileFor_AllTableEntriesRender(t *testing.T) {
+	for _, r := range domainfunctions.Runtimes() {
+		if r.Family == domainfunctions.RuntimeFamilyImage {
+			continue // BYO 镜像源免构建，无 Dockerfile 语义
+		}
+		var c SourceContents
+		switch r.Family {
+		case domainfunctions.RuntimeFamilyNode:
+			c = nodeContents(false, false)
+		case domainfunctions.RuntimeFamilyGo:
+			c = goContents(nil)
+		default:
+			// python 等：无表项化构建分支（探测保留），允许显式报错。
+			if _, err := DockerfileFor(SourceContents{Runtime: r.ID}); r.Status == domainfunctions.RuntimeStatusActive && err == nil {
+				t.Errorf("runtime %q (family %q) must fail explicitly", r.ID, r.Family)
+			}
+			continue
+		}
+		c.Runtime = r.ID
+		df, err := DockerfileFor(c)
+		if err != nil {
+			t.Errorf("runtime %q must render a Dockerfile: %v", r.ID, err)
+			continue
+		}
+		if !strings.Contains(df, "FROM "+r.BaseImage) {
+			t.Errorf("runtime %q FROM line must match table BaseImage %q:\n%s", r.ID, r.BaseImage, df)
+		}
 	}
 }
 

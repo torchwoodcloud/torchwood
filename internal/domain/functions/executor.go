@@ -22,7 +22,7 @@ type Execution struct {
 	FunctionID   string
 	DeploymentID string // 构建产物镜像标识（{registry}/func-{functionID}-{deploymentID}）
 	ProjectID    string // 所属项目：决定执行容器网络（tw-func-<project.id>，Round4 J5-4）
-	Runtime      string // e.g. node-18.0（常驻执行器仅 node；python runner 未实现）
+	Runtime      string // 运行时 ID（运行时表见 runtime.go；构建链取 deployment 行内快照）
 	SourcePath   string // path or archive location of function source
 	Entrypoint   string // e.g. "index.main"
 	Spec         string // 资源规格（shared-1x / shared-2x）

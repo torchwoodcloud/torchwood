@@ -54,7 +54,7 @@ func TestBuildDeployment_BuildSpecPayload(t *testing.T) {
 	require.Equal(t, "p1", spec.ProjectID)
 	require.Equal(t, "fn_1", spec.FunctionID)
 	require.Equal(t, "dep_1", spec.DeploymentID)
-	require.Equal(t, "go-1.26", spec.Runtime, "runtime = fn.runtime 原值（D7 对账基准）")
+	require.Equal(t, "go-1.26", spec.Runtime, "runtime = dep 快照回退 fn.runtime（存量 mock 行无快照列值）")
 	require.Equal(t, int64(30), spec.FunctionTimeoutSeconds, "函数超时原值（旧池 drain 宽限，D14）")
 	require.Equal(t, map[string]string{
 		"FOO":           "bar",
@@ -63,6 +63,30 @@ func TestBuildDeployment_BuildSpecPayload(t *testing.T) {
 	require.NotContains(t, spec.Env, twExecutionTokenEnv, "构建/验证期无执行身份 token")
 	require.True(t, spec.EgressUntrusted, "client_callable → untrusted（验证实例与执行同网，A1）")
 	require.True(t, spec.Verify, "verify_build 未配置 = 默认开启（D10 presence 语义）")
+}
+
+// TestBuildDeployment_RuntimeSnapshot buildSpec 的 runtime 取行内快照
+// （functions-runtime-selection.md §4）：dep.Runtime 非空时快照胜出——
+// UpdateFunction 变更 runtime 后，旧 deployment 的补构建/审计仍以构建时
+// runtime 为准；dep.Runtime 为空（迁移 000025 已回填，理论上不出现）
+// 防御性回退 fn.Runtime。
+func TestBuildDeployment_RuntimeSnapshot(t *testing.T) {
+	exec := newMockExecutor(nil, nil)
+	fn := &domainfunctions.Function{ID: "fn_1", ProjectID: "p1", Runtime: "node-24.0", TimeoutSeconds: 10, Enabled: true}
+	repo := newMockRepo()
+	require.NoError(t, repo.CreateFunction(context.Background(), fn))
+	dep := &domainfunctions.Deployment{
+		ID: "dep_1", FunctionID: "fn_1", ProjectID: "p1",
+		Status: domainfunctions.DeploymentStatusPending,
+		// 快照记录的是部署时的 node-18.0；函数此后迁到 node-24.0。
+		Runtime: "node-18.0",
+	}
+	require.NoError(t, repo.CreateDeployment(context.Background(), dep))
+	uc := NewFunctions(&config.AppConfig{}, exec, repo, newMockQueue())
+
+	require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, t.TempDir()+"/code.zip"))
+	require.Len(t, exec.specs, 1)
+	require.Equal(t, "node-18.0", exec.specs[0].Runtime, "快照胜出：补构建与首次构建永远同一 runtime")
 }
 
 // TestBuildDeployment_VerifyBuildPresence verify_build presence 表驱动：
@@ -82,7 +106,7 @@ func TestBuildDeployment_VerifyBuildPresence(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			exec := newMockExecutor(nil, nil)
-			fn := &domainfunctions.Function{ID: "fn_1", ProjectID: "p1", Runtime: "node-18.0", TimeoutSeconds: 10, Enabled: true}
+			fn := &domainfunctions.Function{ID: "fn_1", ProjectID: "p1", Runtime: "node-24.0", TimeoutSeconds: 10, Enabled: true}
 			uc, _, dep := buildTestUC(t, exec, fn, nil,
 				&config.AppConfig{Functions: &config.Functions{Dispatcher: tc.dispatcher}})
 			require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, t.TempDir()+"/code.zip"))

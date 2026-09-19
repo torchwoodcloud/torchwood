@@ -22,7 +22,7 @@ func TestCreateFunction_DeclaredScopes(t *testing.T) {
 
 	t.Run("校验通过并规范化（去重 + 排序）", func(t *testing.T) {
 		fn, err := uc.CreateFunction(ctx, CreateFunctionCommand{
-			ID: "fn_scopes", ProjectID: "p1", Name: "f", Runtime: "node-18.0",
+			ID: "fn_scopes", ProjectID: "p1", Name: "f", Runtime: "node-24.0",
 			DeclaredScopes: []string{"users:read", "assets:write", "assets:write"},
 		})
 		require.NoError(t, err)
@@ -31,7 +31,7 @@ func TestCreateFunction_DeclaredScopes(t *testing.T) {
 
 	t.Run("空集合法（无平台访问权限）", func(t *testing.T) {
 		fn, err := uc.CreateFunction(ctx, CreateFunctionCommand{
-			ID: "fn_noscope", ProjectID: "p1", Name: "f", Runtime: "node-18.0",
+			ID: "fn_noscope", ProjectID: "p1", Name: "f", Runtime: "node-24.0",
 		})
 		require.NoError(t, err)
 		require.Empty(t, fn.DeclaredScopes)
@@ -39,7 +39,7 @@ func TestCreateFunction_DeclaredScopes(t *testing.T) {
 
 	t.Run("危险资源拒绝（functions 自我复制面）", func(t *testing.T) {
 		_, err := uc.CreateFunction(ctx, CreateFunctionCommand{
-			ID: "fn_bad", ProjectID: "p1", Name: "f", Runtime: "node-18.0",
+			ID: "fn_bad", ProjectID: "p1", Name: "f", Runtime: "node-24.0",
 			DeclaredScopes: []string{"functions:write"},
 		})
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -47,7 +47,7 @@ func TestCreateFunction_DeclaredScopes(t *testing.T) {
 
 	t.Run("非法形态拒绝", func(t *testing.T) {
 		_, err := uc.CreateFunction(ctx, CreateFunctionCommand{
-			ID: "fn_bad2", ProjectID: "p1", Name: "f", Runtime: "node-18.0",
+			ID: "fn_bad2", ProjectID: "p1", Name: "f", Runtime: "node-24.0",
 			DeclaredScopes: []string{"assets.write"},
 		})
 		require.Equal(t, codes.InvalidArgument, status.Code(err))

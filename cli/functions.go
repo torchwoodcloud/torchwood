@@ -124,17 +124,21 @@ func newFunctionsGetCmd(g *GlobalFlags) *verb {
 }
 
 func newFunctionsUpdateCmd(g *GlobalFlags) *verb {
-	var name, entrypoint, spec string
+	var name, entrypoint, spec, runtime string
 	var timeoutSeconds int
 	var enabled bool
 	var minInstances, maxInstances, idleTTLSeconds, maxRequests, concurrency int
 	var clientCallable bool
 	var clientPerUserLimit int
 	var clientLimitWindow string
-	return newVerb(g, "update", "update a function (only explicitly passed fields)", "functions update [--name] [--entrypoint] [--timeout-seconds] [--spec] [--enabled] [--min-instances] [--max-instances] [--idle-ttl-seconds] [--max-requests-per-instance] [--concurrency] [--client-callable] [--client-per-user-limit] [--client-limit-window] <function-id>",
+	return newVerb(g, "update", "update a function (only explicitly passed fields)", "functions update [--name] [--entrypoint] [--runtime] [--timeout-seconds] [--spec] [--enabled] [--min-instances] [--max-instances] [--idle-ttl-seconds] [--max-requests-per-instance] [--concurrency] [--client-callable] [--client-per-user-limit] [--client-limit-window] <function-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&name, "name", "", "function name")
 			fs.StringVar(&entrypoint, "entrypoint", "", "entrypoint file")
+			// 运行时（functions-runtime-selection.md §3；proto3 optional——
+			// 显式传入才生效）：只影响后续新 deployment 的构建；eol runtime
+			// 拒绝（可用项见 functions runtimes 输出的 status/is_default 投影）。
+			fs.StringVar(&runtime, "runtime", "", "runtime id (e.g. node-24.0, node-22.0, go-1.26; affects subsequent deployments)")
 			fs.IntVar(&timeoutSeconds, "timeout-seconds", 0, "timeout in seconds (1-300)")
 			fs.StringVar(&spec, "spec", "", "resource specification")
 			fs.BoolVar(&enabled, "enabled", false, "whether enabled (pass --enabled=true/false explicitly to take effect)")
@@ -153,7 +157,7 @@ func newFunctionsUpdateCmd(g *GlobalFlags) *verb {
 			if err := exactArgs(v, args, 1); err != nil {
 				return err
 			}
-			req, err := buildUpdateFunctionReq(v, args[0], name, entrypoint, timeoutSeconds, spec, enabled,
+			req, err := buildUpdateFunctionReq(v, args[0], name, entrypoint, runtime, timeoutSeconds, spec, enabled,
 				minInstances, maxInstances, idleTTLSeconds, maxRequests, concurrency,
 				clientCallable, clientPerUserLimit, clientLimitWindow)
 			if err != nil {
@@ -343,7 +347,7 @@ func buildCreateFunctionReq(v *verb, id, name, runtime, entrypoint string, timeo
 // buildUpdateFunctionReq 构造 UpdateFunctionRequest：仅设置显式传入的字段
 // （含池策略五列——v3 §5/OQ2，与客户端调用面策略三列——P2 设计 §4；
 // min/max/…/concurrency、client-* 显式传入才生效）。
-func buildUpdateFunctionReq(v *verb, functionID string, name, entrypoint string, timeoutSeconds int, spec string, enabled bool,
+func buildUpdateFunctionReq(v *verb, functionID string, name, entrypoint, runtime string, timeoutSeconds int, spec string, enabled bool,
 	minInstances, maxInstances, idleTTLSeconds, maxRequests, concurrency int,
 	clientCallable bool, clientPerUserLimit int, clientLimitWindow string) (map[string]any, error) {
 	if functionID == "" {
@@ -352,6 +356,7 @@ func buildUpdateFunctionReq(v *verb, functionID string, name, entrypoint string,
 	req := map[string]any{"functionId": functionID}
 	setChanged(v, "name", req, "name", name)
 	setChanged(v, "entrypoint", req, "entrypoint", entrypoint)
+	setChanged(v, "runtime", req, "runtime", runtime)
 	setChanged(v, "timeout-seconds", req, "timeoutSeconds", timeoutSeconds)
 	setChanged(v, "spec", req, "spec", spec)
 	setChanged(v, "enabled", req, "enabled", enabled)

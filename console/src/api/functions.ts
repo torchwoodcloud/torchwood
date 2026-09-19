@@ -34,6 +34,15 @@ export interface RuntimeInfo {
   id: string;
   name: string;
   entrypoint: string;
+  // ——运行时指定扩展（functions-runtime-selection.md §1/§6）——
+  // family = 语言族（node | go | image | python）；status = 生命周期
+  // （active | deprecated | eol，eol 拒绝新建/新部署，存量部署不受影响）；
+  // is_default = 新建函数缺省项（node 家族内有且仅有一个）；eol_at = 上游
+  // EOL 日期（active 恒缺省）。
+  family: string;
+  status: "active" | "deprecated" | "eol";
+  is_default: boolean;
+  eol_at?: string;
 }
 
 export interface SpecificationInfo {
@@ -57,6 +66,8 @@ export interface Deployment {
   source_url?: string;
   source_ref?: string;
   source_dir?: string;
+  // 构建所用 runtime ID 快照（迁移 000025；INSERT 期写全、之后不可变）。
+  runtime?: string;
 }
 
 export interface Execution {
@@ -127,6 +138,9 @@ export async function updateFunction(
   input: {
     name?: string;
     entrypoint?: string;
+    // 运行时（functions-runtime-selection.md §3；proto3 optional——只影响
+    // 后续新 deployment 的构建；eol runtime 服务端拒绝）。
+    runtime?: string;
     timeout_seconds?: number;
     spec?: string;
     enabled?: boolean;

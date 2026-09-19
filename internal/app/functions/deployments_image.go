@@ -92,8 +92,11 @@ func (f *Functions) createDeploymentFromImage(ctx context.Context, cmd CreateDep
 		SourceType: domainfunctions.DeploymentSourceImage,
 		SourceURL:  src.Reference,
 		SourceRef:  digest,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		// runtime 快照（迁移 000025）：image 源专用 runtime ID（源/运行时
+		// 互斥 D7 已校验 fn.Runtime == image）。
+		Runtime:   imageRuntimeID,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	if err := f.repo.CreateDeployment(ctx, dep); err != nil {
 		_ = f.executor.RemoveImage(ctx, cmd.FunctionID, depID)

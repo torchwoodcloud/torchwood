@@ -449,7 +449,7 @@ func TestClientManagement_AnonymousNotAllowed(t *testing.T) {
 	uc := newTestUC(newMockExecutor(nil, nil), repo, newMockQueue())
 
 	_, err := uc.CreateFunction(platformAdminCtx(), CreateFunctionCommand{
-		ID: "fn_new", ProjectID: "p1", Name: "f", Runtime: "node-18.0",
+		ID: "fn_new", ProjectID: "p1", Name: "f", Runtime: "node-24.0",
 		ClientAnonymousAllowed: boolPtr(true),
 	})
 	require.Error(t, err)

@@ -60,6 +60,10 @@ type FunctionDeployment struct {
 	SourceRef     string `bun:"source_ref,notnull,default:''"`
 	SourceDir     string `bun:"source_dir,notnull,default:''"`
 	ContextSHA256 string `bun:"context_sha256,notnull,default:''"`
+	// Runtime 是构建所用 runtime ID 快照（迁移 000025；INSERT 期写全、
+	// 之后不可变——UpdateDeployment 列白名单有意不含，快照忠实性见
+	// docs/design/functions-runtime-selection.md §4）。
+	Runtime string `bun:"runtime,notnull,default:''"`
 	// BuildNode 是首个构建落成的 dispatcher 节点 ID（四期 4a-1，迁移 000024；
 	// 构建后写入的操作列——UpdateDeployment 列白名单已登记，与 source 快照
 	// 五列的不可变语义不同）。空串 = 无亲和（存量行回填）。

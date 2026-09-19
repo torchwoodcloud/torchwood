@@ -311,7 +311,7 @@ func seedReadyFunction(repo *mockRepo, projectID, functionID string, enabled boo
 		ID:             functionID,
 		ProjectID:      projectID,
 		Name:           "fn",
-		Runtime:        "node-18.0",
+		Runtime:        "node-24.0",
 		Entrypoint:     "index.main",
 		TimeoutSeconds: timeout,
 		Spec:           "shared-1x",

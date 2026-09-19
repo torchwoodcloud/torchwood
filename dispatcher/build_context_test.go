@@ -29,7 +29,8 @@ const goMainFixture = "package main\n\nfunc main() {}\n"
 func TestPrepareBuildContext_RuntimeMismatch(t *testing.T) {
 	buildDir := t.TempDir()
 	// zip 探测为 go（go.mod），声明 runtime 为 node → InvalidArgument
-	// 且错误信息含两侧值（D7）。
+	// 且错误信息含声明 ID 与探测 family（D7'：探测产出语言族，版本轴来自
+	// 声明，docs/design/functions-runtime-selection.md §2）。
 	err := prepareBuildContext(buildDir, BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip:     makeEntryZipFiles(t, map[string]string{"go.mod": goModFixture, "main.go": goMainFixture}),
@@ -39,7 +40,7 @@ func TestPrepareBuildContext_RuntimeMismatch(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	msg := status.Convert(err).Message()
 	require.Contains(t, msg, "node-18.0", "错误信息须含声明 runtime")
-	require.Contains(t, msg, "go-1.26", "错误信息须含探测 runtime")
+	require.Contains(t, msg, `"go"`, "错误信息须含探测 family")
 
 	// 对账先于模板渲染：mismatch 时 Dockerfile 不得已落盘。
 	_, statErr := os.Stat(filepath.Join(buildDir, "Dockerfile"))
@@ -54,12 +55,45 @@ func TestPrepareBuildContext_RuntimeMismatch(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.Contains(t, status.Convert(err).Message(), "go-1.26")
+
+	// 未知 runtime ID 同样 fail-closed（表外 ID 无法解析 family）。
+	err = prepareBuildContext(t.TempDir(), BuildImageOptions{
+		FunctionID: "fn1", DeploymentID: "dep1",
+		Zip:     makeEntryZip(t, "index.js", "module.exports.main = () => ({})"),
+		Runtime: "node-99.0",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Contains(t, status.Convert(err).Message(), "node-99.0")
+}
+
+// TestPrepareBuildContext_VersionAxisFromDeclaration 版本轴来自声明（D7'
+// 核心）：同 family（node）下探测恒产出 node 标记，声明的 runtime ID 决定
+// 渲染基座——node-22.0 声明渲染 node:22-alpine，与 node-18.0 声明互不干扰。
+func TestPrepareBuildContext_VersionAxisFromDeclaration(t *testing.T) {
+	for _, tc := range []struct{ runtime, baseImage string }{
+		{"node-18.0", "node:18-alpine"},
+		{"node-22.0", "node:22-alpine"},
+		{"node-24.0", "node:24-alpine"},
+	} {
+		buildDir := t.TempDir()
+		err := prepareBuildContext(buildDir, BuildImageOptions{
+			FunctionID: "fn1", DeploymentID: "dep1",
+			Zip:     makeEntryZip(t, "index.js", "module.exports.main = () => ({})"),
+			Runtime: tc.runtime,
+		})
+		require.NoError(t, err)
+		dockerfile, err := os.ReadFile(filepath.Join(buildDir, "Dockerfile")) // #nosec G304 -- 读取本测试 t.TempDir() 构建目录内的产物
+		require.NoError(t, err)
+		require.Contains(t, string(dockerfile), "FROM "+tc.baseImage,
+			"声明的 runtime ID 决定渲染基座")
+	}
 }
 
 func TestPrepareBuildContext_RuntimeEmptySkipsReconcile(t *testing.T) {
 	buildDir := t.TempDir()
-	// Runtime 空 = 跳过对账（兼容未携带 runtime 的历史调用方）：node zip 照常
-	// 出 node 模板。
+	// Runtime 空 = 遗留调用方（跳过对账）：渲染基准取探测 family 的首个
+	// active 表项（node-24.0，平台缺省）——不再隐含历史 node:18 耦合（D8）。
 	err := prepareBuildContext(buildDir, BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip: makeEntryZip(t, "index.js", "module.exports.main = () => ({})"),
@@ -67,7 +101,7 @@ func TestPrepareBuildContext_RuntimeEmptySkipsReconcile(t *testing.T) {
 	require.NoError(t, err)
 	dockerfile, err := os.ReadFile(filepath.Join(buildDir, "Dockerfile"))
 	require.NoError(t, err)
-	require.Contains(t, string(dockerfile), "FROM node:18-alpine")
+	require.Contains(t, string(dockerfile), "FROM node:24-alpine")
 	_, statErr := os.Stat(filepath.Join(buildDir, ".tw-runner.js"))
 	require.NoError(t, statErr, "node 分支照旧写入 .tw-runner.js")
 }
@@ -183,6 +217,47 @@ func TestPrepareBuildContext_NodeDepsLayered(t *testing.T) {
 	dockerfile, err := os.ReadFile(filepath.Join(buildDir, "Dockerfile"))
 	require.NoError(t, err)
 	require.True(t, strings.Contains(string(dockerfile), "npm ci --omit=dev --ignore-scripts"))
+}
+
+// TestPrepareBuildContext_EnginesNodeReconcile engines.node 接线
+// （functions-runtime-selection.md §5）：声明 range 排除所选 runtime 的
+// major → 构建期 InvalidArgument（错误含声明 range 与可选 runtime）；相交
+// 或未声明 → 照常渲染。
+func TestPrepareBuildContext_EnginesNodeReconcile(t *testing.T) {
+	mkZip := func(engines string) []byte {
+		pkg := `{"dependencies": {"left-pad": "1.3.0"}`
+		if engines != "" {
+			pkg += `, "engines": {"node": "` + engines + `"}`
+		}
+		pkg += `}`
+		return makeEntryZipFiles(t, map[string]string{
+			"index.js":          "module.exports.main = () => ({})",
+			"package.json":      pkg,
+			"package-lock.json": `{"lockfileVersion": 1}`,
+		})
+	}
+
+	// 不相交：engines 要求 <23、声明 node-24.0 → InvalidArgument。
+	err := prepareBuildContext(t.TempDir(), BuildImageOptions{
+		FunctionID: "fn1", DeploymentID: "dep1",
+		Zip:     mkZip("<23"),
+		Runtime: "node-24.0",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	msg := status.Convert(err).Message()
+	require.Contains(t, msg, "<23")
+	require.Contains(t, msg, "node-24.0")
+
+	// 相交（宽松范围）与未声明：照常构建。
+	for _, engines := range []string{"", ">=18", "^24"} {
+		err := prepareBuildContext(t.TempDir(), BuildImageOptions{
+			FunctionID: "fn1", DeploymentID: "dep1",
+			Zip:     mkZip(engines),
+			Runtime: "node-24.0",
+		})
+		require.NoError(t, err, "engines %q", engines)
+	}
 }
 
 // TestPrepareBuildContext_RelaxedEntryBudget 二期阶段 3（设计 §2 条目维链条）：

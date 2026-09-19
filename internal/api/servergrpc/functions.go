@@ -42,7 +42,21 @@ func (s *FunctionsService) ListRuntimes(ctx context.Context, _ *sharedv1.Empty) 
 	out := s.functions.ListRuntimes()
 	resp := &serverv1.ListRuntimesResponse{Runtimes: make([]*serverv1.RuntimeInfo, len(out))}
 	for i, r := range out {
-		resp.Runtimes[i] = &serverv1.RuntimeInfo{Id: r.ID, Name: r.Name, Entrypoint: r.Entrypoint}
+		ri := &serverv1.RuntimeInfo{
+			Id:         r.ID,
+			Name:       r.Name,
+			Entrypoint: r.Entrypoint,
+			// 运行时指定扩展（functions-runtime-selection.md §1/§6）：
+			// family 对账轴 + 生命周期状态 + 缺省标记，Console 徽章与 CLI
+			// 提示的数据源。
+			Family:    r.Family,
+			Status:    r.Status,
+			IsDefault: r.IsDefault,
+		}
+		if r.EolAt != nil {
+			ri.EolAt = timestamppb.New(*r.EolAt)
+		}
+		resp.Runtimes[i] = ri
 	}
 	return resp, nil
 }
@@ -219,6 +233,11 @@ func (s *FunctionsService) UpdateFunction(ctx context.Context, req *serverv1.Upd
 	if req.Concurrency != nil {
 		v := int(req.GetConcurrency())
 		cmd.Concurrency = &v
+	}
+	// 运行时（functions-runtime-selection.md §3）：proto3 optional 的
+	// presence 语义——未设置不修改；存在性/状态门在 app 用例层。
+	if req.Runtime != nil {
+		cmd.Runtime = req.Runtime
 	}
 	fn, err := s.functions.UpdateFunction(ctx, cmd)
 	if err != nil {
@@ -585,8 +604,11 @@ func mapDeployment(d *domainfunctions.Deployment) *serverv1.Deployment {
 		SourceUrl:  d.SourceURL,
 		SourceRef:  d.SourceRef,
 		SourceDir:  d.SourceDir,
-		CreatedAt:  timestamppb.New(d.CreatedAt),
-		UpdatedAt:  timestamppb.New(d.UpdatedAt),
+		// 构建所用 runtime ID 快照（functions-runtime-selection.md §4，迁移
+		// 000025）：INSERT 期写全、之后不可变。
+		Runtime:   d.Runtime,
+		CreatedAt: timestamppb.New(d.CreatedAt),
+		UpdatedAt: timestamppb.New(d.UpdatedAt),
 	}
 }
 

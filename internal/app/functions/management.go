@@ -76,6 +76,10 @@ type UpdateFunctionCommand struct {
 	IdleTTLSeconds         *int
 	MaxRequestsPerInstance *int
 	Concurrency            *int
+	// Runtime 是运行时 ID（functions-runtime-selection.md §3；nil = 未设置，
+	// 不修改）：只影响后续新 deployment 的构建，存量 ready 部署不受影响；
+	// 从 eol 迁出到新版本是合法且期望的操作路径。
+	Runtime *string
 }
 
 func (f *Functions) CreateFunction(ctx context.Context, cmd CreateFunctionCommand) (*domainfunctions.Function, error) {
@@ -94,8 +98,10 @@ func (f *Functions) CreateFunction(ctx context.Context, cmd CreateFunctionComman
 	if strings.TrimSpace(cmd.Name) == "" {
 		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
-	if !runtimeExists(cmd.Runtime) {
-		return nil, status.Errorf(codes.InvalidArgument, "unsupported runtime %q", cmd.Runtime)
+	// 运行时校验：存在性 + 状态门（functions-runtime-selection.md §6）——
+	// eol 拒绝新建，deprecated 允许（客户端按 ListRuntimes 投影提示）。
+	if err := validateRuntimeSelectable(cmd.Runtime); err != nil {
+		return nil, err
 	}
 	timeoutSeconds := defaultTimeoutSeconds
 	if cmd.TimeoutSeconds != nil {
@@ -196,6 +202,19 @@ func (f *Functions) UpdateFunction(ctx context.Context, cmd UpdateFunctionComman
 			return nil, status.Errorf(codes.InvalidArgument, "unsupported spec %q", *cmd.Spec)
 		}
 		fn.Spec = *cmd.Spec
+	}
+	// 运行时（functions-runtime-selection.md §3）：存在性 + 状态门（eol 拒绝，
+	// deprecated 允许）。生效语义 = 只影响后续新 deployment 的构建；存量
+	// ready 部署镜像已构建完毕不受影响（快照忠实性由迁移 000025 的
+	// deployment.runtime 列承载，buildSpec 读行内快照）。
+	if cmd.Runtime != nil {
+		if !runtimeExists(*cmd.Runtime) {
+			return nil, status.Errorf(codes.InvalidArgument, "unsupported runtime %q", *cmd.Runtime)
+		}
+		if err := validateRuntimeSelectable(*cmd.Runtime); err != nil {
+			return nil, err
+		}
+		fn.Runtime = *cmd.Runtime
 	}
 	if cmd.Enabled != nil {
 		fn.Enabled = *cmd.Enabled

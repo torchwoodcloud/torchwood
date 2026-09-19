@@ -36,7 +36,7 @@ func TestFunctionsWriteMethods_RequireServerPrincipal(t *testing.T) {
 
 	endUser := &shared.Principal{ActorID: "user-1", ActorKind: shared.ActorKindEndUser, UserID: "user-1"}
 	ctx := contexts.WithPrincipal(context.Background(), endUser)
-	base := CreateFunctionCommand{ID: "fn_new", ProjectID: "p1", Name: "f", Runtime: "node-18.0", TimeoutSeconds: timeoutPtr(15)}
+	base := CreateFunctionCommand{ID: "fn_new", ProjectID: "p1", Name: "f", Runtime: "node-24.0", TimeoutSeconds: timeoutPtr(15)}
 
 	_, err := uc.CreateFunction(ctx, base)
 	require.Equal(t, codes.PermissionDenied, status.Code(err), "端用户 CreateFunction 应被拒")
@@ -72,12 +72,12 @@ func TestFunctionsWriteMethods_RequireServerPrincipal(t *testing.T) {
 	}
 	for _, p := range allowed {
 		actx := contexts.WithPrincipal(context.Background(), p)
-		_, err := uc.CreateFunction(actx, CreateFunctionCommand{ID: "bad id!", ProjectID: "p1", Name: "f", Runtime: "node-18.0"})
+		_, err := uc.CreateFunction(actx, CreateFunctionCommand{ID: "bad id!", ProjectID: "p1", Name: "f", Runtime: "node-24.0"})
 		require.Equal(t, codes.InvalidArgument, status.Code(err), "%+v 应通过守卫进入业务校验", p)
 	}
 
 	// 平台 admin 放行（既有语义保持）。
-	_, err = uc.CreateFunction(platformAdminCtx(), CreateFunctionCommand{ID: "bad id!", ProjectID: "p1", Name: "f", Runtime: "node-18.0"})
+	_, err = uc.CreateFunction(platformAdminCtx(), CreateFunctionCommand{ID: "bad id!", ProjectID: "p1", Name: "f", Runtime: "node-24.0"})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 

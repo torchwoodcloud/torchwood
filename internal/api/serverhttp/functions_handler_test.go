@@ -540,7 +540,7 @@ func TestFunctionsHandler_Upload_InjectsPrincipalIntoCtx(t *testing.T) {
 
 	t.Run("admin session", func(t *testing.T) {
 		repo := &functionsTestRepo{fn: &domainfunctions.Function{
-			ID: "fn-1", ProjectID: projectID, Runtime: "node-18.0", TimeoutSeconds: 15,
+			ID: "fn-1", ProjectID: projectID, Runtime: "node-24.0", TimeoutSeconds: 15,
 		}}
 		executor := &functionsRecordingExecutor{}
 		uc := appfunctions.NewFunctions(functionsTestConfig(), executor, repo, nil)
@@ -573,7 +573,7 @@ func TestFunctionsHandler_Upload_InjectsPrincipalIntoCtx(t *testing.T) {
 
 	t.Run("api key with functions.write", func(t *testing.T) {
 		repo := &functionsTestRepo{fn: &domainfunctions.Function{
-			ID: "fn-1", ProjectID: projectID, Runtime: "node-18.0", TimeoutSeconds: 15,
+			ID: "fn-1", ProjectID: projectID, Runtime: "node-24.0", TimeoutSeconds: 15,
 		}}
 		executor := &functionsRecordingExecutor{}
 		uc := appfunctions.NewFunctions(functionsTestConfig(), executor, repo, nil)

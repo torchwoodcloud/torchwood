@@ -293,7 +293,7 @@ func TestExtractZipWithLimits_ValidZipWithinBudget(t *testing.T) {
 		maxTotalBytes: 1 << 20,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "node-18.0", contents.Runtime)
+	require.Equal(t, "node", contents.Family)
 	require.False(t, contents.NodeDeps)
 	require.False(t, contents.HasLockfile)
 }
@@ -420,7 +420,7 @@ func TestExtractZip_AllowsNestedNodeModulesDirName(t *testing.T) {
 		maxTotalBytes: 1 << 20,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "node-18.0", contents.Runtime)
+	require.Equal(t, "node", contents.Family)
 }
 
 // TestExtractZip_PackageJSONManifest 探测收集：dependencies 非空 → NodeDeps；
@@ -499,7 +499,7 @@ func TestExtractZip_DetectsPythonEntrypoint(t *testing.T) {
 		"main.py": "def main(data):\n    return {}\n",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "python-3.11", contents.Runtime)
+	require.Equal(t, "python", contents.Family)
 }
 
 // TestExtractZip_MissingEntrypoint 既无 index.js 也无 go.mod / main.py →
@@ -528,7 +528,7 @@ func TestExtractZip_DetectsGoMod(t *testing.T) {
 		"main.go": "package main\n\nfunc main() {}\n",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "go-1.26", contents.Runtime)
+	require.Equal(t, "go", contents.Family)
 	require.Equal(t, "example.com/fn", contents.GoModulePath)
 	require.True(t, contents.GoHasRequires)
 	require.True(t, contents.GoHasSum)
@@ -583,7 +583,7 @@ func TestExtractZip_GoModParseForms(t *testing.T) {
 				"main.go": "package main\n",
 			})
 			require.NoError(t, err)
-			require.Equal(t, "go-1.26", contents.Runtime)
+			require.Equal(t, "go", contents.Family)
 			require.Equal(t, tc.wantModule, contents.GoModulePath)
 			require.Equal(t, tc.wantRequires, contents.GoHasRequires)
 		})
@@ -665,7 +665,7 @@ func TestExtractZip_PriorityIndexJSOverGoMod(t *testing.T) {
 		"main.go":  "package main\n",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "node-18.0", contents.Runtime)
+	require.Equal(t, "node", contents.Family)
 	require.Empty(t, contents.GoModulePath, "混装按 node：Go 探测字段不投影")
 }
 
@@ -712,7 +712,7 @@ func TestExtractZipRelaxed_EntryBudgetWidened(t *testing.T) {
 	// 放宽预算放行同一 zip（git 源构建路径）。
 	contents, err := ExtractZipRelaxed(zip1001, filepath.Join(t.TempDir(), "out-relaxed"))
 	require.NoError(t, err)
-	require.Equal(t, "node-18.0", contents.Runtime)
+	require.Equal(t, "node", contents.Family)
 
 	// 放宽上限 = packer.MaxPackEntries（5000）：5001 条目仍拒绝。
 	zip5001 := writeCraftedZip(t, craftEntryZipN(t, packer.MaxPackEntries+1))

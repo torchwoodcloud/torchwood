@@ -46,12 +46,29 @@ HTTP multipart FunctionsHandler（POST .../deployments/code，≤50MiB）──�
 
 ## 3. 运行时与构建
 
-**运行时**：`node-18.0`（`index.js` 导出 `main`/`fetch`，node:18-alpine）与 `go-1.26`（用户持有 main + Go SDK，golang:1.26-alpine 多阶段构建 `go build .`，见 §3.1）。python-3.11 探测保留但构建期明确报错（python runner 未实现），历史 python zip 在构建期明确报错。规格：`shared-1x`（0.5CPU/256MB）、`shared-2x`（1CPU/512MB）。
+**运行时**（指定机制：设计 `docs/design/functions-runtime-selection.md`）：运行时表（`internal/domain/functions/runtime.go`，单一事实源）列出平台支持的版本化 runtime ID：
 
-**node runner 模板**（常驻执行模型模板，CMD = 平台 runner）：
+| runtime ID | family | 状态 | 基座镜像 |
+|---|---|---|---|
+| `node-24.0` | node | active（**缺省**） | node:24-alpine |
+| `node-22.0` | node | active | node:22-alpine |
+| `node-18.0` | node | **eol**（2025-04 上游 EOL） | node:18-alpine |
+| `go-1.26` | go | active | golang:1.26-alpine（多阶段，§3.1） |
+| `image` | image | active | 平台零构建（BYO，§3.2） |
+
+选择与生效语义：
+
+- **函数级选择**：CreateFunction 必填 `runtime`；UpdateFunction 可改（proto3 optional，未设置 = 不修改）——只影响后续新 deployment 的构建，存量 ready 部署的镜像已构建完毕不受影响。升级 = 改 runtime → 建新 deployment；回滚 = 改回 → 重部署旧源。
+- **部署级快照**：`function_deployments.runtime`（迁移 000025）在 INSERT 期写全、之后不可变——补构建/审计以行内快照为准，不随 `fn.runtime` 后续变更漂移（deployment = 源 + 运行时 + 模板版本的完整不可变快照）。
+- **版本轴语义**（Lambda `nodejs20.x` 同款）：同 runtime ID 内 minor/patch 由平台滚动升级（基座镜像 digest bump，用户无感）；major 升级 = 新 runtime ID、旧 ID 不日落。
+- **生命周期**：`active` → `deprecated`（可用，客户端按 `ListRuntimes` 的 `status`/`eol_at`/`is_default` 投影提示）→ `eol`（拒绝新建函数与新部署构建；**存量 ready 部署继续运行**，仅补构建失败时才被迫迁移）。执行面永不因状态停机。
+- **`engines.node` 校验**（Node 生态正规声明位，npm 自身消费它）：zip 根 `package.json` 声明的 `engines.node` 范围与所选 runtime 的 major 不相交 → 构建期 InvalidArgument（错误列出可选 runtime）；宽松范围（`>=18`）相交即放行。`.nvmrc` / `.mise.toml` 不消费——engines 是唯一校验位。未声明零变化。
+- node 运行时入口 `index.js` 导出 `main`/`fetch`；python 探测保留但构建侧无表项、明确报错（python runner 未实现）。规格：`shared-1x`（0.5CPU/256MB）、`shared-2x`（1CPU/512MB）。
+
+**node runner 模板**（常驻执行模型模板，CMD = 平台 runner；以缺省 `node-24.0` 为例）：
 
 ```dockerfile
-FROM node:18-alpine
+FROM node:24-alpine
 WORKDIR /app
 COPY . .; USER node
 ENV TW_RUNNER_PORT=18080
@@ -61,7 +78,7 @@ CMD ["node",".tw-runner.js"]
 **平台代装依赖**（node 运行时）：zip 根含 `package.json` 且 `dependencies` 非空时，构建改用经典分层模板——依赖由平台在构建期安装，用户代码包不再携带 `node_modules`：
 
 ```dockerfile
-FROM node:18-alpine
+FROM node:24-alpine
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev --ignore-scripts
@@ -77,13 +94,13 @@ CMD ["node",".tw-runner.js"]
 - **`node_modules` 拒收**：代码包中任意条目路径第一段为 `node_modules` → 构建失败（跨平台二进制不兼容）。CLI deploy 打包时已同步排除 `node_modules` / `.git`。
 - **`--ignore-scripts` 恒定**（一期不提供 opt-in）：不变量"构建期不执行用户代码 / 第三方脚本"——npm 生命周期脚本（postinstall）可执行任意代码。代价：依赖原生编译（node-gyp）或 postinstall 下载二进制的包不可用（如 esbuild / swc 安装版——函数执行时报"找不到可执行文件"即此原因，改用纯 JS 等价物或 WASM 构建）。残余风险（lockfile 为用户可控输入、npm 解析器漏洞）经 lockfile integrity hash 固定 + 构建容器 hardening 兜底；构建出网白名单后置（一期不限制，registry 拉包必需）。
 - **层缓存加速**：`package.json` / lockfile 不变的重新部署直接命中 Docker 层缓存，跳过 `npm ci`，只有代码层重建。
-- 探测与拒收实现在 zip 解压校验层（`extractZipWithLimits`，与 zip slip / 符号链接校验同处逐条判定）；部署源探测产出 `SourceContents`（runtime 判定 + node/go 依赖标记）；模板决策在 `runner.DockerfileFor`。
+- 探测与拒收实现在 zip 解压校验层（`extractZipWithLimits`，与 zip slip / 符号链接校验同处逐条判定）；部署源探测产出 `SourceContents`（**语言族 family** 判定 + node/go 依赖标记 + `engines.node` 原始串）；版本轴来自声明的 runtime ID；模板决策在 `runner.DockerfileFor`（按表内 BaseImage 渲染）。
 
-**构建流程**（`internal/app/functions/deployments.go`）：校验 zip 魔数 `PK\x03\x04` + 50MiB 限制 → 落库 `pending` → 占构建信号量 → `building` → zip base64 内联经 dispatcher `/v1/dispatch/builds` 构建（解压 ≤1000 条 / 单条 ≤100MiB / 总量 ≤200MiB，拒绝符号链接与 zip slip，拒收 node_modules；探测优先级 `index.js` > `go.mod` > `main.py`，混装按 node 不报错；**runtime 对账**：探测结果 ≠ `fn.runtime` 声明 → 构建期 InvalidArgument；go 分支构建 zip 根 main 包（用户以 SDK 承接 runner 契约，`go build .`），见 §3.1）→ `ready` / `failed`。镜像名 `<registry>/func-<fid>-<did>`（registry 默认 `torchwood-funcs`）。构建 ctx 与客户端断开解耦（`context.WithoutCancel` + `functions.dispatcher.build_timeout` 默认 5m 封顶），客户端断开后构建继续、状态照常落库，以 `deployment.status` 轮询兜底。
+**构建流程**（`internal/app/functions/deployments.go`）：校验 zip 魔数 `PK\x03\x04` + 50MiB 限制 → 落库 `pending` → 占构建信号量 → `building` → zip base64 内联经 dispatcher `/v1/dispatch/builds` 构建（解压 ≤1000 条 / 单条 ≤100MiB / 总量 ≤200MiB，拒绝符号链接与 zip slip，拒收 node_modules；探测优先级 `index.js` > `go.mod` > `main.py`，混装按 node 不报错；**family 对账**（D7'）：探测 family ≠ 声明 runtime 的 family → 构建期 InvalidArgument；**engines.node 校验**：声明范围排除所选 runtime 的 major → 构建期 InvalidArgument；go 分支构建 zip 根 main 包（用户以 SDK 承接 runner 契约，`go build .`），见 §3.1）→ `ready` / `failed`。镜像名 `<registry>/func-<fid>-<did>`（registry 默认 `torchwood-funcs`）。构建 ctx 与客户端断开解耦（`context.WithoutCancel` + `functions.dispatcher.build_timeout` 默认 5m 封顶），客户端断开后构建继续、状态照常落库，以 `deployment.status` 轮询兜底。
 
 ### 3.1 Go 运行时（go-1.26）
 
-Go 运行时采用「用户持有 main + SDK」模型（五期 5b，设计 `docs/design/functions-runtimes-and-sources.md` 顶部立项段 owner 裁决）：用户代码编译为 zip 根 `main` 包，`:18080` runner 契约（§3.2）由官方 SDK **`github.com/torchwoodcloud/torchwood/sdk/go/functions`**（`sdk/go/functions`，仅标准库依赖、零 internal import）承接，平台构建分支坍缩为 `go build .`——twmain 生成式 bootstrap、AST 入口探测（`Fetch`/`Main` 双轨探测）、`twmain/` 保留目录拒收均已退役。运行时表项 `go-1.26`（`internal/app/functions/runtimes.go`；entrypoint 字段 MVP 仅占位，升级 = 新 runtime ID、旧 ID 不日落）。构建段 `golang:1.26-alpine`（`CGO_ENABLED=0`），运行段 `alpine:3.22` + `ca-certificates`（函数 HTTPS 出访需要，基础 alpine 不自带）+ 非 root 数字 UID（65534）：
+Go 运行时采用「用户持有 main + SDK」模型（五期 5b，设计 `docs/design/functions-runtimes-and-sources.md` 顶部立项段 owner 裁决）：用户代码编译为 zip 根 `main` 包，`:18080` runner 契约（§3.2）由官方 SDK **`github.com/torchwoodcloud/torchwood/sdk/go/functions`**（`sdk/go/functions`，仅标准库依赖、零 internal import）承接，平台构建分支坍缩为 `go build .`——twmain 生成式 bootstrap、AST 入口探测（`Fetch`/`Main` 双轨探测）、`twmain/` 保留目录拒收均已退役。运行时表项 `go-1.26`（表单一事实源在 `internal/domain/functions/runtime.go`；entrypoint 字段 MVP 仅占位，升级 = 新 runtime ID、旧 ID 不日落）。构建段 `golang:1.26-alpine`（`CGO_ENABLED=0`），运行段 `alpine:3.22` + `ca-certificates`（函数 HTTPS 出访需要，基础 alpine 不自带）+ 非 root 数字 UID（65534）：
 
 ```dockerfile
 FROM golang:1.26-alpine AS build
@@ -792,4 +809,4 @@ const handlers = {
 - `05-authentication.md` — `RequireServerPrincipal` 与 execution principal 凭证族
 - `07-storage.md` — Redis 原子语义对照（分片锁）
 - `13-operations.md` §7 — 多机部署的运维形态（每节点 compose / 选型 / 容量上限配置）
-- `docs/design/functions-execution-identity-and-triggers.md` / `docs/design/functions-v3.md` / `docs/design/functions-runtimes-and-sources.md`（§2 git 部署源、§4 多机执行面）— 设计文档
+- `docs/design/functions-execution-identity-and-triggers.md` / `docs/design/functions-v3.md` / `docs/design/functions-runtimes-and-sources.md`（§2 git 部署源、§4 多机执行面）/ `docs/design/functions-runtime-selection.md`（运行时指定：版本化枚举、函数级选择、部署级快照、engines.node 校验、生命周期）— 设计文档

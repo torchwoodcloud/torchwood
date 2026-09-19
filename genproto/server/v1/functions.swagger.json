@@ -866,6 +866,10 @@
           "type": "integer",
           "format": "int32",
           "title": "单实例并发上限（v3 实例内多路复用；默认 1 = v2 串行等价，\u003e1 要求函数\n可重入；CHECK 上限 16）。"
+        },
+        "runtime": {
+          "type": "string",
+          "title": "运行时 ID（docs/design/functions-runtime-selection.md §3）：未设置 =\n不修改。只影响后续新 deployment 的构建（存量 ready 部署镜像已构建\n完毕不受影响）；eol runtime 拒绝（app 层状态门，错误文案列出可选\nruntime）。从 eol 迁出到新版本是合法且期望的操作路径。"
         }
       }
     },
@@ -976,6 +980,10 @@
         "source_dir": {
           "type": "string",
           "title": "git 构建上下文子目录；zip/image 源恒空。凭证字段不出现在任何响应面。"
+        },
+        "runtime": {
+          "type": "string",
+          "title": "构建所用 runtime ID 快照（docs/design/functions-runtime-selection.md\n§4；迁移 000025：INSERT 期写全、之后不可变）——补构建/审计以行内\n快照为准，不随后续 fn.runtime 变更漂移。"
         }
       }
     },
@@ -1420,6 +1428,23 @@
         },
         "entrypoint": {
           "type": "string"
+        },
+        "family": {
+          "type": "string",
+          "title": "——运行时指定扩展（docs/design/functions-runtime-selection.md §1/§6）——\n语言族（node | go | image | python）：探测对账轴，客户端可据此做源\n形态提示。"
+        },
+        "status": {
+          "type": "string",
+          "title": "生命周期状态（active | deprecated | eol；deprecated 可用但客户端应\n提示；eol 拒绝新建函数/新部署，存量 ready 部署不受影响）。"
+        },
+        "is_default": {
+          "type": "boolean",
+          "title": "新建函数的缺省 runtime（node 家族内有且仅有一个）。"
+        },
+        "eol_at": {
+          "type": "string",
+          "format": "date-time",
+          "title": "上游 EOL 日期（如 Node.js 官方时间表）；active 恒缺省。"
         }
       }
     },

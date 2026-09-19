@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -25,6 +25,7 @@ import {
   type FunctionItem,
   type Deployment,
   type Execution,
+  type RuntimeInfo,
   type Variable,
 } from "@/api/functions";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
@@ -67,8 +68,36 @@ import { FunctionTriggersCard } from "./triggers-card";
 import { FunctionClientPolicyCard } from "./client-policy-card";
 import { FunctionPoolPolicyCard } from "./pool-policy-card";
 
-// 模块级 columns 无法用 hook，工厂化注入管理员时区偏好。
-const functionColumns = (tz: string): ColumnDef<FunctionItem>[] => [
+// ——运行时指定（functions-runtime-selection.md §1/§6）的展示助手——
+
+// runtimeStatusLabel 下拉项里的生命周期标注：eol 禁选、deprecated 可选
+// 但提示、active 显示缺省标记。
+function runtimeStatusLabel(r: RuntimeInfo): string {
+  if (r.status === "eol") return "已 EOL";
+  if (r.status === "deprecated") return "即将弃用";
+  return r.is_default ? "默认" : "";
+}
+
+// runtimeBadge 非 active runtime 的行内徽章（列表/详情/部署快照共用）。
+function runtimeBadge(r?: RuntimeInfo) {
+  if (!r || r.status === "active") return null;
+  return r.status === "eol" ? (
+    <Badge variant="destructive" className="px-1 py-0 text-[10px]">
+      EOL
+    </Badge>
+  ) : (
+    <Badge variant="outline" className="px-1 py-0 text-[10px]">
+      弃用
+    </Badge>
+  );
+}
+
+// 模块级 columns 工厂注入管理员时区偏好与运行时表（eol 徽章需要按
+// runtime ID 查表）；runtimes 引用稳定后 useMemo 化避免列表重渲染。
+const functionColumns = (
+  tz: string,
+  runtimes: RuntimeInfo[]
+): ColumnDef<FunctionItem>[] => [
   {
     key: "id",
     header: "ID",
@@ -80,7 +109,16 @@ const functionColumns = (tz: string): ColumnDef<FunctionItem>[] => [
     header: "名称",
     cell: (f) => f.name,
   },
-  { key: "runtime", header: "Runtime", cell: (f) => f.runtime },
+  {
+    key: "runtime",
+    header: "Runtime",
+    cell: (f) => (
+      <span className="flex items-center gap-1">
+        {f.runtime}
+        {runtimeBadge(runtimes.find((r) => r.id === f.runtime))}
+      </span>
+    ),
+  },
   {
     key: "enabled",
     header: "状态",
@@ -114,7 +152,9 @@ export function FunctionsListPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
-  const [runtime, setRuntime] = useState("node-18.0");
+  // runtime 置空 = 未选择：由运行时表的 is_default 项回填（不再硬编码
+  // node-18.0——eol 项不可作为新函数缺省，functions-runtime-selection.md §1）。
+  const [runtime, setRuntime] = useState("");
   const [timeoutSeconds, setTimeoutSeconds] = useState("15");
   const [spec, setSpec] = useState("shared-1x");
   const [enabled, setEnabled] = useState(true);
@@ -136,6 +176,14 @@ export function FunctionsListPage() {
     queryFn: listSpecifications,
   });
 
+  const defaultRuntimeId =
+    runtimes.find((r) => r.is_default)?.id ??
+    runtimes.find((r) => r.status === "active")?.id ??
+    "";
+  const effectiveRuntime = runtime || defaultRuntimeId;
+
+  const columns = useMemo(() => functionColumns(tz, runtimes), [tz, runtimes]);
+
   const remove = useMutation({
     mutationFn: (id: string) => deleteFunction(id),
     onSuccess: () => {
@@ -151,7 +199,7 @@ export function FunctionsListPage() {
       queryClient.invalidateQueries({ queryKey: ["functions", projectId] });
       setCreateOpen(false);
       setName("");
-      setRuntime("node-18.0");
+      setRuntime("");
       setTimeoutSeconds("15");
       setSpec("shared-1x");
       setEnabled(true);
@@ -192,7 +240,7 @@ export function FunctionsListPage() {
         searchPlaceholder="搜索函数名称或 ID..."
         isLoading={isLoading}
         items={functions}
-        columns={functionColumns(tz)}
+        columns={columns}
         getSearchText={getSearchText}
         detailPath={(f) => `/console/functions/${f.id}`}
         toolbarActions={
@@ -268,18 +316,27 @@ export function FunctionsListPage() {
             </div>
             <div className="space-y-2">
               <Label>Runtime</Label>
-              <Select value={runtime} onValueChange={setRuntime}>
+              <Select value={effectiveRuntime} onValueChange={setRuntime}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="选择运行时" />
                 </SelectTrigger>
                 <SelectContent>
                   {runtimes.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.name} ({r.id})
+                    <SelectItem
+                      key={r.id}
+                      value={r.id}
+                      disabled={r.status === "eol"}
+                    >
+                      {r.name}（{r.id}）
+                      {runtimeStatusLabel(r) && ` · ${runtimeStatusLabel(r)}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                同 runtime ID 内小版本/补丁由平台滚动升级；主版本升级 =
+                新 runtime ID（旧 ID 不日落）。eol 项仅供存量函数查看，不可新建。
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="fn-timeout">超时（秒，1..300）</Label>
@@ -455,6 +512,9 @@ export function FunctionDetailPage() {
 
   const [name, setName] = useState("");
   const [entrypoint, setEntrypoint] = useState("");
+  // runtime 可变更（functions-runtime-selection.md §3）：只影响后续新
+  // deployment 的构建；eol 项禁选（若存量函数停留在 eol runtime，提示迁移）。
+  const [runtime, setRuntime] = useState("");
   const [timeoutSeconds, setTimeoutSeconds] = useState("15");
   const [spec, setSpec] = useState("shared-1x");
   const [enabled, setEnabled] = useState(true);
@@ -478,6 +538,11 @@ export function FunctionDetailPage() {
     queryKey: ["functions", projectId, functionId],
     queryFn: () => getFunction(functionId!),
     enabled: !!functionId,
+  });
+
+  const { data: runtimes = [] } = useQuery({
+    queryKey: ["functions-runtimes"],
+    queryFn: listRuntimes,
   });
 
   const { data: specifications = [] } = useQuery({
@@ -508,6 +573,7 @@ export function FunctionDetailPage() {
     if (!fn) return;
     setName(fn.name);
     setEntrypoint(fn.entrypoint);
+    setRuntime(fn.runtime);
     setTimeoutSeconds(String(fn.timeout_seconds));
     setSpec(fn.spec);
     setEnabled(fn.enabled);
@@ -522,6 +588,7 @@ export function FunctionDetailPage() {
     mutationFn: (input: {
       name?: string;
       entrypoint?: string;
+      runtime?: string;
       timeout_seconds?: number;
       spec?: string;
       enabled?: boolean;
@@ -632,6 +699,8 @@ export function FunctionDetailPage() {
   if (isLoading) return <DetailSkeleton />;
   if (!fn) return <NotFound backTo="/console/functions" />;
 
+  const fnRuntimeInfo = runtimes.find((r) => r.id === fn.runtime);
+
   const setVariable = (idx: number, key: string, value: string) => {
     setVariablesState((prev) =>
       prev.map((v, i) => (i === idx ? { key, value } : v))
@@ -661,7 +730,20 @@ export function FunctionDetailPage() {
         <DetailGrid
           items={[
             { label: "ID", value: fn.id, mono: true },
-            { label: "Runtime", value: fn.runtime },
+            {
+              label: "Runtime",
+              value: (
+                <span className="flex items-center gap-1.5">
+                  {fn.runtime}
+                  {runtimeBadge(fnRuntimeInfo)}
+                  {fnRuntimeInfo?.status === "eol" && (
+                    <span className="text-xs font-normal text-muted-foreground">
+                      已停止上游安全补丁，建议迁移到新版本
+                    </span>
+                  )}
+                </span>
+              ),
+            },
             { label: "Entrypoint", value: fn.entrypoint },
             { label: "创建时间", value: formatDateTime(fn.created_at, tz) },
           ]}
@@ -685,6 +767,7 @@ export function FunctionDetailPage() {
               update.mutate({
                 name,
                 entrypoint,
+                runtime,
                 timeout_seconds: timeout,
                 spec,
                 enabled,
@@ -707,6 +790,32 @@ export function FunctionDetailPage() {
                 value={entrypoint}
                 onChange={(e) => setEntrypoint(e.target.value)}
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Runtime</Label>
+              <Select value={runtime} onValueChange={setRuntime}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择运行时" />
+                </SelectTrigger>
+                <SelectContent>
+                  {runtimes.map((r) => (
+                    <SelectItem
+                      key={r.id}
+                      value={r.id}
+                      disabled={r.status === "eol"}
+                    >
+                      {r.name}（{r.id}）
+                      {runtimeStatusLabel(r) && ` · ${runtimeStatusLabel(r)}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                变更只影响后续新部署的构建，存量 ready
+                部署按其构建时快照继续运行。
+                {fnRuntimeInfo?.status === "eol" &&
+                  " 当前 runtime 已 EOL（选项已禁用），请迁移到新版本后重新部署。"}
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="fn-timeout">超时（秒，1..300）</Label>
@@ -1046,6 +1155,15 @@ export function FunctionDetailPage() {
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       {deploymentStatusBadge(d.status)}
                       {deploymentSourceBadge(d)}
+                      {d.runtime && (
+                        <Badge
+                          variant="outline"
+                          className="font-mono"
+                          title="构建所用 runtime 快照（补构建/审计以此为准）"
+                        >
+                          {d.runtime}
+                        </Badge>
+                      )}
                       <span>{formatBytes(d.size)}</span>
                       <span>{formatDateTime(d.created_at, tz)}</span>
                     </div>

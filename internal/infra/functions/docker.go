@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/packer"
 	"github.com/torchwoodcloud/torchwood/pkg/ident"
@@ -167,15 +168,17 @@ func ResolveInternalNetworkName(cfg *config.AppConfig, projectID string) (string
 	return base + perProjectInternalNetworkSuffix, nil
 }
 
-// SourceContents 是 zip 解压校验的产出：部署源探测结果（runtime 判定 +
-// 平台代装依赖 / Go 模块形态的探测字段），供 runner.DockerfileFor 做模板
-// 分支与确定性强制决策（node lockfile 强制 / go 缺 go.sum 拒收——报错收敛
-// 在模板层，探测层只产出标记，与 node 同构）。
+// SourceContents 是 zip 解压校验的产出：部署源探测结果（**语言族**判定 +
+// 平台代装依赖 / Go 模块形态的探测字段），供 dispatcher 做 D7' family
+// 对账与 runner.DockerfileFor 做确定性强制决策（node lockfile 强制 / go
+// 缺 go.sum 拒收——报错收敛在模板层，探测层只产出标记，与 node 同构）。
 type SourceContents struct {
-	// Runtime 是运行时 ID（node-18.0 / go-1.26；python-3.11 仅探测保留，
-	// 构建期报错）。探测优先级 index.js > go.mod > main.py（混装按 node，
-	// 不报冲突——与「探测即入口」现状一致，误部署由 runtime 一致性对账兜底）。
-	Runtime string
+	// Family 是语言族标记（domainfunctions.RuntimeFamily* 词表：node/go/
+	// python；版本轴不在探测侧——声明的 runtime ID 经 family 对账后决定
+	// 渲染基座，D7' 修订见 docs/design/functions-runtime-selection.md §2）。
+	// 探测优先级 index.js > go.mod > main.py（混装按 node，
+	// 不报冲突——与「探测即入口」现状一致，误部署由 family 一致性对账兜底）。
+	Family string
 	// NodeDeps 表示 zip 根 package.json 的 dependencies 键非空（探测条件；
 	// devDependencies 不触发代装）。
 	NodeDeps bool
@@ -197,6 +200,11 @@ type SourceContents struct {
 	// 与拒收 node_modules 的理由本质不同，受纳；vendor 存在时 go.sum 不作
 	// 要求（go build -mod=vendor 不消费 go.sum）。
 	HasVendor bool
+	// NodeEngines 是 zip 根 package.json 的 engines.node 原始串（Node 生态
+	// 的运行时声明正规位置——npm 自身消费它；空 = 未声明）。范围校验
+	// 收敛在 dispatcher 构建期（与 family 对账同处），探测层只提取，
+	// functions-runtime-selection.md §5。
+	NodeEngines string
 }
 
 // extractZip 解压 zip 到 destDir（防 zip 炸弹与路径穿越），返回内容探测结果。
@@ -244,6 +252,7 @@ func extractZipWithLimits(zipPath, destDir string, limits zipExtractLimits) (Sou
 	hasGoMod := false
 	hasLockfile := false
 	nodeDeps := false
+	nodeEngines := ""
 	var goModulePath string
 	goHasRequires := false
 	goHasSum := false
@@ -344,21 +353,23 @@ func extractZipWithLimits(zipPath, destDir string, limits zipExtractLimits) (Sou
 		case "package-lock.json":
 			hasLockfile = true
 		case "package.json":
-			// 依赖探测（v3 §3.1）：只读根 package.json 的 dependencies 键。
-			deps, parseErr := packageJSONHasDeps(f)
+			// 依赖探测（v3 §3.1）+ engines.node 提取（runtime-selection §5）：
+			// 只读根 package.json 的两个探测位。
+			deps, engines, parseErr := packageJSONProbe(f)
 			if parseErr != nil {
 				return SourceContents{}, parseErr
 			}
 			nodeDeps = deps
+			nodeEngines = engines
 		}
 	}
 
 	switch {
 	case hasIndexJS:
-		return SourceContents{Runtime: "node-18.0", NodeDeps: nodeDeps, HasLockfile: hasLockfile}, nil
+		return SourceContents{Family: functions.RuntimeFamilyNode, NodeDeps: nodeDeps, HasLockfile: hasLockfile, NodeEngines: nodeEngines}, nil
 	case hasGoMod:
 		return SourceContents{
-			Runtime:       "go-1.26",
+			Family:        functions.RuntimeFamilyGo,
 			NodeDeps:      nodeDeps,
 			HasLockfile:   hasLockfile,
 			GoModulePath:  goModulePath,
@@ -367,9 +378,10 @@ func extractZipWithLimits(zipPath, destDir string, limits zipExtractLimits) (Sou
 			HasVendor:     hasVendor,
 		}, nil
 	case hasMainPy:
-		// python 探测保留（报错信息可指认根因），构建期由 runner.DockerfileFor
-		// 明确拒绝——常驻执行器仅支持 node，python runner 未实现。
-		return SourceContents{Runtime: "python-3.11", NodeDeps: nodeDeps, HasLockfile: hasLockfile}, nil
+		// python family 探测保留（报错信息可指认根因）；platform 构建侧无
+		// python runtime 表项—— family 对账/渲染基准解析处明确拒绝（常驻
+		// 执行器 node-only，python runner 未实现）。
+		return SourceContents{Family: functions.RuntimeFamilyPython, NodeDeps: nodeDeps, HasLockfile: hasLockfile}, nil
 	default:
 		return SourceContents{}, status.Error(codes.InvalidArgument, "missing entrypoint file: expected index.js (node) or go.mod (go)")
 	}
@@ -441,31 +453,38 @@ func parseGoMod(f *zip.File) (modulePath string, hasRequires bool, err error) {
 	return modulePath, hasRequires, nil
 }
 
-// packageJSONHasDeps 只读 zip 条目（根 package.json）的 dependencies 键并
-// 判定非空（v3 §3.1 探测条件；devDependencies 不触发代装）。坏 JSON 是
-// 用户代码包的明确错误——报错并携带解析错误，不静默按无依赖处理。
-func packageJSONHasDeps(f *zip.File) (bool, error) {
+// packageJSONProbe 只读 zip 条目（根 package.json）的两个探测位：
+//   - dependencies 键非空（v3 §3.1 代装触发条件；devDependencies 不触发）；
+//   - engines.node 原始串（Node 生态运行时声明的正规位置——npm 自身消费它；
+//     functions-runtime-selection.md §5。范围校验收敛在 dispatcher 构建期，
+//     探测层只提取原始串）。
+//
+// 坏 JSON 是用户代码包的明确错误——报错并携带解析错误，不静默按无依赖处理。
+func packageJSONProbe(f *zip.File) (nodeDeps bool, enginesNode string, err error) {
 	src, err := f.Open()
 	if err != nil {
-		return false, status.Errorf(codes.InvalidArgument, "open package.json: %v", err)
+		return false, "", status.Errorf(codes.InvalidArgument, "open package.json: %v", err)
 	}
 	defer func() { _ = src.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(src, maxPackageJSONBytes+1))
 	if err != nil {
-		return false, status.Errorf(codes.InvalidArgument, "read package.json: %v", err)
+		return false, "", status.Errorf(codes.InvalidArgument, "read package.json: %v", err)
 	}
 	if len(raw) > maxPackageJSONBytes {
-		return false, status.Errorf(codes.InvalidArgument, "package.json exceeds %d bytes", maxPackageJSONBytes)
+		return false, "", status.Errorf(codes.InvalidArgument, "package.json exceeds %d bytes", maxPackageJSONBytes)
 	}
-	// 值用 RawMessage 承接（官方依赖值为 string，但对象简写等历史形态合法）
-	// ——只判键非空，不做 schema 校验。
+	// 依赖值用 RawMessage 承接（官方依赖值为 string，但对象简写等历史形态
+	// 合法）——只判键非空，不做 schema 校验；engines.node 只取原始串。
 	var pkg struct {
 		Dependencies map[string]json.RawMessage `json:"dependencies"`
+		Engines      struct {
+			Node string `json:"node"`
+		} `json:"engines"`
 	}
 	if err := json.Unmarshal(raw, &pkg); err != nil {
-		return false, status.Errorf(codes.InvalidArgument, "invalid package.json: %v", err)
+		return false, "", status.Errorf(codes.InvalidArgument, "invalid package.json: %v", err)
 	}
-	return len(pkg.Dependencies) > 0, nil
+	return len(pkg.Dependencies) > 0, strings.TrimSpace(pkg.Engines.Node), nil
 }
 
 // firstPathSegment 返回 zip 条目名的第一段（归一化反斜杠与前导 "./"）。

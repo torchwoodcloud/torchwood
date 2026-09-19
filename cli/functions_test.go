@@ -18,6 +18,7 @@ func funcFlagsDecl(fs *flag.FlagSet) {
 	fs.Bool("enabled", false, "")
 	fs.String("name", "", "")
 	fs.String("entrypoint", "", "")
+	fs.String("runtime", "", "")
 	fs.String("deployment-id", "", "")
 	fs.Bool("async", false, "")
 	// 池策略五列（v3 §5/OQ2）。
@@ -126,6 +127,7 @@ func TestBuildUpdateFunctionReq(t *testing.T) {
 		functionID         string
 		newName            string
 		entrypoint         string
+		runtime            string
 		timeoutSeconds     int
 		spec               string
 		enabled            bool
@@ -137,15 +139,15 @@ func TestBuildUpdateFunctionReq(t *testing.T) {
 	}{
 		{name: "缺 function-id", wantErr: "missing function-id"},
 		{name: "仅 name", functionID: "f1", newName: "new", set: map[string]string{"name": "new"}, wantErr: ""},
-		{name: "全字段", functionID: "f1", newName: "new", entrypoint: "main.py",
+		{name: "全字段", functionID: "f1", newName: "new", entrypoint: "main.py", runtime: "node-24.0",
 			timeoutSeconds: 60, spec: "shared-1x", enabled: false,
-			set: map[string]string{"name": "new", "entrypoint": "main.py", "timeout-seconds": "60", "spec": "shared-1x", "enabled": "false"}, wantErr: ""},
+			set: map[string]string{"name": "new", "entrypoint": "main.py", "runtime": "node-24.0", "timeout-seconds": "60", "spec": "shared-1x", "enabled": "false"}, wantErr: ""},
 		{name: "客户端调用面策略", functionID: "f1", clientCallable: true, clientPerUserLimit: 20,
 			set: map[string]string{"client-callable": "true", "client-per-user-limit": "20"}, wantErr: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, err := buildUpdateFunctionReq(newPresenceVerb(t, funcFlagsDecl, tt.set), tt.functionID, tt.newName, tt.entrypoint,
+			req, err := buildUpdateFunctionReq(newPresenceVerb(t, funcFlagsDecl, tt.set), tt.functionID, tt.newName, tt.entrypoint, tt.runtime,
 				tt.timeoutSeconds, tt.spec, tt.enabled, 0, 0, 0, 0, 0, tt.clientCallable, tt.clientPerUserLimit, tt.clientLimitWindow)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {

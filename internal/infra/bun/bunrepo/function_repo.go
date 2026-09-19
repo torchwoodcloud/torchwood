@@ -80,14 +80,17 @@ func (r *functionRepo) UpdateFunction(ctx context.Context, fn *domainfunctions.F
 		return err
 	}
 	m := mapFunctionToModel(fn)
-	// 列白名单（bun 更新写规范）：id/project_id/runtime/created_at 不可变。
+	// 列白名单（bun 更新写规范）：id/project_id/created_at 不可变。
+	// runtime 自迁移 000025 起为可变列（UpdateFunction 支持；deployment 行
+	// 的 runtime 快照仍不可变——快照忠实性见
+	// docs/design/functions-runtime-selection.md §3/§4）。
 	// declared_scopes 为 P0 执行身份可变列（SetFunctionScopes 全量替换）；
 	// 池策略五列为 P0.5 可变列（latest_ready_deployment_id 由
 	// ActivateDeployment/DeleteDeployment 事务维护，应用层更新不直写）；
 	// concurrency 为 v3 可变列（迁移 000017，docs/design/functions-v3.md §1.5）；
 	// client 四列为 P2 客户端调用面策略列。
 	_, err = conn.NewUpdate().Model(m).ModelTableExpr(expr, sch).
-		Column("name", "entrypoint", "timeout_seconds", "spec", "enabled", "declared_scopes",
+		Column("name", "entrypoint", "runtime", "timeout_seconds", "spec", "enabled", "declared_scopes",
 			"min_instances", "max_instances", "idle_ttl_seconds", "max_requests_per_instance",
 			"concurrency",
 			"client_callable", "client_anonymous_allowed", "client_per_user_limit", "client_limit_window",
@@ -704,6 +707,9 @@ func mapDeploymentToModel(d *domainfunctions.Deployment) *model.FunctionDeployme
 		SourceRef:     d.SourceRef,
 		SourceDir:     d.SourceDir,
 		ContextSHA256: d.ContextSHA256,
+		// runtime 快照（迁移 000025）：同 source 列的不可变语义
+		// （functions-runtime-selection.md §4）。
+		Runtime: d.Runtime,
 		// 构建亲和（迁移 000024，四期 4a-1）：构建后写入的操作列。
 		BuildNode: d.BuildNode,
 		CreatedAt: d.CreatedAt,
@@ -725,6 +731,7 @@ func mapDeploymentToDomain(m *model.FunctionDeployment) *domainfunctions.Deploym
 		SourceRef:       m.SourceRef,
 		SourceDir:       m.SourceDir,
 		ContextSHA256:   m.ContextSHA256,
+		Runtime:         m.Runtime,
 		BuildNode:       m.BuildNode,
 		CreatedAt:       m.CreatedAt,
 		UpdatedAt:       m.UpdatedAt,

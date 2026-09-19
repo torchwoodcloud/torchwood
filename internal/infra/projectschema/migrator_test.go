@@ -29,6 +29,8 @@ func TestApply_IdempotentCatalogAndOAuth(t *testing.T) {
 	var version int64
 	require.NoError(t, db.QueryRowContext(ctx,
 		"SELECT MAX(version) FROM "+quoted+".schema_migrations").Scan(&version))
+	// 000025（Functions 运行时指定，docs/design/functions-runtime-selection.md
+	// §4）：function_deployments.runtime 快照列（INSERT 期写全、之后不可变）。
 	// 000024（Functions 多机执行面构建亲和，四期 4a-1，
 	// docs/design/functions-runtimes-and-sources.md §4 M5）：
 	// function_deployments.build_node 列。
@@ -46,7 +48,7 @@ func TestApply_IdempotentCatalogAndOAuth(t *testing.T) {
 	// functions.concurrency 池策略列（CHECK 1..16）。000016（P2 客户端调用面）：
 	// functions 策略四列 + function_executions invoking_user_id/
 	// client_idempotency_key（partial 唯一索引 + 限频计数 partial 索引）。
-	require.Equal(t, int64(24), version)
+	require.Equal(t, int64(25), version)
 
 	var dirty bool
 	require.NoError(t, db.QueryRowContext(ctx,

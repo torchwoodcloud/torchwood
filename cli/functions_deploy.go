@@ -72,8 +72,8 @@ type deployOptions struct {
 }
 
 // validateDeployDir 校验 deploy 目录形态（zip 根二选一，Go 一期放宽，设计
-// functions-runtimes-and-sources.md Rollout）：index.js（node-18.0 运行时）
-// 或 go.mod（go-1.26 运行时，zip 根 = module 根）。判定优先级与服务端 zip
+// functions-runtimes-and-sources.md Rollout）：index.js（node 运行时族）或
+// go.mod（go-1.26 运行时，zip 根 = module 根）。判定优先级与服务端 zip
 // 探测一致（index.js > go.mod，混装按 node）。注意 dev 命令不走本校验——
 // 本地 runner 是 node 本体，go 函数本地无法运行（validateFunctionDir 保持
 // index.js 单一口径）。

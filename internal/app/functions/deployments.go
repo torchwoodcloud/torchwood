@@ -90,8 +90,12 @@ func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCo
 		return nil, status.Error(codes.NotFound, "function not found")
 	}
 	// 源/运行时互斥（D7 双向）：image runtime 只收 image 源，zip 源对 image
-	// runtime 函数拒绝。
+	// runtime 函数拒绝；运行时状态门：eol runtime 拒绝新的部署构建（存量
+	// ready 部署执行面不受影响，functions-runtime-selection.md §6）。
 	if err := validateSourceRuntimePair(fn.Runtime, domainfunctions.DeploymentSourceZip); err != nil {
+		return nil, err
+	}
+	if err := validateRuntimeSelectable(fn.Runtime); err != nil {
 		return nil, err
 	}
 
@@ -107,8 +111,11 @@ func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCo
 		TemplateVersion: domainfunctions.RunnerTemplateVersion,
 		// zip 通道源类型显式登记（迁移 000023；git 源在 packer 分支落 git 词表值）。
 		SourceType: domainfunctions.DeploymentSourceZip,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		// runtime 快照（迁移 000025）：INSERT 期写全、之后不可变——补构建/
+		// 审计以行内快照为准（functions-runtime-selection.md §4）。
+		Runtime:   fn.Runtime,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	if err := f.repo.CreateDeployment(ctx, dep); err != nil {
 		return nil, err
@@ -222,7 +229,10 @@ func (f *Functions) buildDeployment(ctx context.Context, fn *domainfunctions.Fun
 }
 
 // buildSpec 组装 BuildSpec（构建链载荷一期定稿，设计 §0）：
-//   - Runtime = fn.runtime 原值（daemon 侧 D7 对账基准）；
+//   - Runtime = dep.Runtime 行内快照（迁移 000025；快照忠实：补构建/审计
+//     与首次构建永远同一 runtime，不随 UpdateFunction 变更漂移——
+//     functions-runtime-selection.md §4。存量行迁移已回填，零值防御性回退
+//     fn.Runtime）；
 //   - FunctionTimeoutSeconds = fn.timeout_seconds（旧池 drain 宽限上限，
 //     D14：载荷补齐后 drain 真正生效）；
 //   - Env 与执行链 env 组装同源（见 buildFunctionEnv）；
@@ -235,12 +245,16 @@ func (f *Functions) buildSpec(ctx context.Context, fn *domainfunctions.Function,
 	if err != nil {
 		return domainfunctions.BuildSpec{}, err
 	}
+	runtime := dep.Runtime
+	if runtime == "" {
+		runtime = fn.Runtime
+	}
 	return domainfunctions.BuildSpec{
 		ProjectID:              dep.ProjectID,
 		FunctionID:             dep.FunctionID,
 		DeploymentID:           dep.ID,
 		ZipPath:                zipPath,
-		Runtime:                fn.Runtime,
+		Runtime:                runtime,
 		FunctionTimeoutSeconds: int64(fn.TimeoutSeconds),
 		Env:                    env,
 		EgressUntrusted:        fn.ClientCallable || f.hasTriggersCached(ctx, dep.ProjectID, dep.FunctionID),

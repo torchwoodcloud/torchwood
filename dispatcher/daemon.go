@@ -24,6 +24,7 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	infrafunctions "github.com/torchwoodcloud/torchwood/internal/infra/functions"
 	"github.com/torchwoodcloud/torchwood/internal/infra/functions/runner"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
@@ -134,8 +135,10 @@ type BuildImageOptions struct {
 	DeploymentID string
 	// Zip 是 zip 字节（base64 解码后；dispatcher 内网 API 的传输形态）。
 	Zip []byte
-	// Runtime 是 fn.runtime 原值：与 zip 探测结果对账（D7），不一致
-	// InvalidArgument；空 = 跳过对账（兼容历史调用方）。
+	// Runtime 是 fn.runtime 原值：与 zip 探测的 family 对账（D7'，探测产出
+	// 语言族、版本轴来自声明——functions-runtime-selection.md §2），family
+	// 不一致或 ID 未知 → InvalidArgument；空 = 遗留调用方，渲染基准取探测
+	// family 的首个 active 表项。
 	Runtime string
 	// FunctionTimeoutSeconds 是旧池 drain 宽限上限（由 handleBuild 在构建
 	// 成功后消费，BuildImage 实现自身不消费——保留在 opts 供 fake 断言与
@@ -986,8 +989,10 @@ func (d *dockerDaemon) InstanceLogsTail(ctx context.Context, containerID string,
 // 渲染）：
 //
 //  1. 解压 zip 并探测部署源（ExtractZipRelaxed）；
-//  2. runtime 一致性对账（D7）：opts.Runtime 非空且 ≠ 探测结果 →
-//     InvalidArgument（错误信息含两侧值）；
+//  2. runtime 一致性对账（D7'）：探测产出语言族（family），版本轴来自
+//     声明——opts.Runtime 非空且其 family ≠ 探测 family → InvalidArgument
+//     （错误信息含声明 ID 与探测 family）；未知 runtime ID 同样拒绝
+//     （fail-closed）；
 //  3. node 分支写 .tw-runner.js；go 分支零平台注入（五期 5b：用户 zip 根 =
 //     package main + SDK，构建 = go build .，无 bootstrap 生成/入口探测）；
 //     最后渲染 Dockerfile（缺 go.sum 等拒收错误在此冒出）。
@@ -1007,25 +1012,47 @@ func prepareBuildContext(buildDir string, opts BuildImageOptions) error {
 	// 阶段 3，设计 §2 条目维链条）——BuildImage 无法区分 zip/git 源（同
 	// base64 内联通道），统一放宽到 packer 物化口径（条目 5000；单条
 	// 100MiB / 总量 200MiB 解压预算维持），防 git 源合法 zip 被默认 1000
-	// 条目预算击毙。SourceContents 附带部署源探测结果，逐字段映射为
-	// runner 包的模板载体（runner 保持叶子资产包，不 import infra/functions
-	// 根包）。
+	// 条目预算击毙。SourceContents 附带部署源探测结果（family 标记），
+	// 逐字段映射为 runner 包的模板载体（runner 保持叶子资产包，不 import
+	// infra/functions 根包）。
 	contents, err := infrafunctions.ExtractZipRelaxed(tmpZip.Name(), buildDir)
 	if err != nil {
 		return err
 	}
 
-	// runtime 一致性对账（D7）：探测结果必须与 fn.runtime 一致，不一致在
-	// 构建期报 InvalidArgument（收严无存量负担）；opts.Runtime 为空跳过
-	// （兼容未携带 runtime 的历史调用方）。
-	if opts.Runtime != "" && opts.Runtime != contents.Runtime {
-		return status.Errorf(codes.InvalidArgument,
-			"runtime mismatch: function declares %q but source probes as %q (redeploy with the matching runtime)",
-			opts.Runtime, contents.Runtime)
+	// runtime 一致性对账（D7'，functions-runtime-selection.md §2）：探测产出
+	// 语言族，版本轴来自声明——声明的 runtime ID 的 family 必须与探测
+	// family 一致，否则构建期 InvalidArgument。opts.Runtime 为空 = 遗留
+	// 调用方（跳过对账）：渲染基准取探测 family 的首个 active 表项（平台
+	// 缺省 runtime），不再隐含历史 node:18 耦合。
+	renderRuntime := opts.Runtime
+	if opts.Runtime != "" {
+		declaredFamily := domainfunctions.FamilyOf(opts.Runtime)
+		if declaredFamily == "" {
+			return status.Errorf(codes.InvalidArgument, "unsupported runtime %q", opts.Runtime)
+		}
+		if declaredFamily != contents.Family {
+			return status.Errorf(codes.InvalidArgument,
+				"runtime mismatch: function declares %q (family %q) but source probes as %q family (redeploy with a runtime whose family matches the source)",
+				opts.Runtime, declaredFamily, contents.Family)
+		}
+	} else {
+		def, ok := domainfunctions.DefaultRuntimeForFamily(contents.Family)
+		if !ok {
+			return status.Errorf(codes.InvalidArgument, "source probes as %q family but no runtime is available for platform builds", contents.Family)
+		}
+		renderRuntime = def.ID
+	}
+
+	// engines.node 校验（functions-runtime-selection.md §5）：Node 生态正规
+	// 声明位与所选 runtime 的 major 相交性——「本地 node 22、线上 node 18」
+	// 类漂移在部署期显式化。与 D11 正交（纯读取 + 比较，零新执行面）。
+	if err := checkNodeEngines(contents.NodeEngines, renderRuntime); err != nil {
+		return err
 	}
 
 	dockerfile, err := runner.DockerfileFor(runner.SourceContents{
-		Runtime:       contents.Runtime,
+		Runtime:       renderRuntime,
 		NodeDeps:      contents.NodeDeps,
 		HasLockfile:   contents.HasLockfile,
 		GoModulePath:  contents.GoModulePath,

@@ -61,7 +61,7 @@ func TestCreateDeployment_SourceRuntimeMutualExclusion(t *testing.T) {
 		{name: "image runtime + image 源 放行", runtime: "image", source: "image", wantOK: true},
 		{name: "image runtime + zip 源 拒绝", runtime: "image", source: "zip", notCalled: "build"},
 		{name: "image runtime + git 源 拒绝", runtime: "image", source: "git", notCalled: "pack"},
-		{name: "node runtime + image 源 拒绝", runtime: "node-18.0", source: "image", notCalled: "import"},
+		{name: "node runtime + image 源 拒绝", runtime: "node-24.0", source: "image", notCalled: "import"},
 		{name: "go runtime + image 源 拒绝", runtime: "go-1.26", source: "image", notCalled: "import"},
 	}
 	for _, tc := range cases {

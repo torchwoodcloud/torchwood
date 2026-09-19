@@ -264,20 +264,20 @@ func TestCreateFunction_Validation(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.ErrorContains(t, err, "unsupported runtime")
 
-	_, err = uc.CreateFunction(ctx, CreateFunctionCommand{ID: "fn_x", ProjectID: "p1", Name: "f", Runtime: "node-18.0", TimeoutSeconds: timeoutPtr(0)})
+	_, err = uc.CreateFunction(ctx, CreateFunctionCommand{ID: "fn_x", ProjectID: "p1", Name: "f", Runtime: "node-24.0", TimeoutSeconds: timeoutPtr(0)})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, err = uc.CreateFunction(ctx, CreateFunctionCommand{ID: "fn_x", ProjectID: "p1", Name: "f", Runtime: "node-18.0", TimeoutSeconds: timeoutPtr(301)})
+	_, err = uc.CreateFunction(ctx, CreateFunctionCommand{ID: "fn_x", ProjectID: "p1", Name: "f", Runtime: "node-24.0", TimeoutSeconds: timeoutPtr(301)})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, err = uc.CreateFunction(ctx, CreateFunctionCommand{ID: "fn_x", ProjectID: "p1", Name: "f", Runtime: "node-18.0", TimeoutSeconds: timeoutPtr(15), Spec: "bogus"})
+	_, err = uc.CreateFunction(ctx, CreateFunctionCommand{ID: "fn_x", ProjectID: "p1", Name: "f", Runtime: "node-24.0", TimeoutSeconds: timeoutPtr(15), Spec: "bogus"})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.ErrorContains(t, err, "unsupported spec")
 
-	_, err = uc.CreateFunction(ctx, CreateFunctionCommand{ID: "fn_x", ProjectID: "p1", Name: "", Runtime: "node-18.0", TimeoutSeconds: timeoutPtr(15)})
+	_, err = uc.CreateFunction(ctx, CreateFunctionCommand{ID: "fn_x", ProjectID: "p1", Name: "", Runtime: "node-24.0", TimeoutSeconds: timeoutPtr(15)})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	_, err = uc.CreateFunction(ctx, CreateFunctionCommand{ProjectID: "p1", Name: "f", Runtime: "node-18.0", TimeoutSeconds: timeoutPtr(15)})
+	_, err = uc.CreateFunction(ctx, CreateFunctionCommand{ProjectID: "p1", Name: "f", Runtime: "node-24.0", TimeoutSeconds: timeoutPtr(15)})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.ErrorContains(t, err, "id is required")
 
@@ -296,7 +296,7 @@ func TestCreateFunction_TimeoutDefault(t *testing.T) {
 	ctx := platformAdminCtx()
 
 	fn, err := uc.CreateFunction(ctx, CreateFunctionCommand{
-		ID: "fn_default", ProjectID: "p1", Name: "f", Runtime: "node-18.0",
+		ID: "fn_default", ProjectID: "p1", Name: "f", Runtime: "node-24.0",
 	})
 	require.NoError(t, err)
 	require.Equal(t, defaultTimeoutSeconds, fn.TimeoutSeconds, "未显式指定 timeout_seconds 时应用服务端默认值")
@@ -310,7 +310,7 @@ func TestCreateFunction_EnabledFalsePersists(t *testing.T) {
 
 	disabled := false
 	fn, err := uc.CreateFunction(ctx, CreateFunctionCommand{
-		ID: "fn_disabled", ProjectID: "p1", Name: "f", Runtime: "node-18.0", Enabled: &disabled,
+		ID: "fn_disabled", ProjectID: "p1", Name: "f", Runtime: "node-24.0", Enabled: &disabled,
 	})
 	require.NoError(t, err)
 	require.False(t, fn.Enabled, "显式 enabled=false 必须保留")

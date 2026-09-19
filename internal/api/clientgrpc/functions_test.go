@@ -84,7 +84,7 @@ func (stubFnQueue) Ack(context.Context, string, string) error { return nil }
 // 响应映射 execution_id/status/response。
 func TestClientGRPC_InvokeFunction(t *testing.T) {
 	repo := &stubFnRepo{fn: &domainfunctions.Function{
-		ID: "fn-1", ProjectID: "proj-1", Name: "fn", Runtime: "node-18.0",
+		ID: "fn-1", ProjectID: "proj-1", Name: "fn", Runtime: "node-24.0",
 		Enabled: true, ClientCallable: true, ClientPerUserLimit: 10,
 		ClientLimitWindow: domainfunctions.ClientLimitWindowDay,
 	}}
@@ -106,7 +106,7 @@ func TestClientGRPC_InvokeFunction(t *testing.T) {
 	// 非 client_callable → PermissionDenied 透传（独立用例实例：函数记录
 	// 会进 use-case 30s 缓存，直接改 stub 行不影响已缓存条目）。
 	deniedRepo := &stubFnRepo{fn: &domainfunctions.Function{
-		ID: "fn-1", ProjectID: "proj-1", Name: "fn", Runtime: "node-18.0",
+		ID: "fn-1", ProjectID: "proj-1", Name: "fn", Runtime: "node-24.0",
 		Enabled: true, ClientCallable: false,
 	}}
 	deniedSvc := NewFunctionsService(appfunctions.NewFunctions(&config.AppConfig{}, stubFnExecutor{}, deniedRepo, stubFnQueue{}))

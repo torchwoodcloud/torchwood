@@ -55,12 +55,16 @@ const TemplateVersion = int(domainfunctions.RunnerTemplateVersion)
 // NodeRunnerJS 返回嵌入的 node runner 源码（构建镜像时写入 build context）。
 func NodeRunnerJS() []byte { return nodeRunnerJS }
 
-// SourceContents 是 DockerfileFor 的入参载体：部署源探测结果的模板投影，
-// 字段与探测层产物（infrafunctions.SourceContents）一一对应。探测层只产出
-// 标记；报错收敛在本包（缺 go.sum 拒收），与 node 缺 lockfile
+// SourceContents 是 DockerfileFor 的入参载体：Runtime 是**声明**的运行时
+// ID（已通过与探测 family 的一致性对账，D7'——对账在 dispatcher
+// prepareBuildContext，语义见 docs/design/functions-runtime-selection.md §2），
+// 模板据此查 domain 运行时表渲染基座镜像；探测层产物（infrafunctions
+// .SourceContents）只带 family 与内容标记，由调用方逐字段映射，杜绝潜在
+// import 环。报错收敛在本包（缺 go.sum 拒收），与 node 缺 lockfile
 // 同构——构建期错误统一从 DockerfileFor 冒出。
 type SourceContents struct {
-	// Runtime 是运行时 ID（node-18.0 / go-1.26；python-3.11 仅探测保留）。
+	// Runtime 是声明的运行时 ID（node-24.0 / node-22.0 / node-18.0 /
+	// go-1.26；须存在于 domain 运行时表）。
 	Runtime string
 	// NodeDeps 表示 zip 根 package.json 的 dependencies 键非空。
 	NodeDeps bool
@@ -91,7 +95,8 @@ type SourceContents struct {
 // 模板语义变化不 bump 模板版本：构建管道变化、产物等价（CMD/ENV 不动）。
 //
 // go 分支（五期 5b 起，设计 functions-runtimes-and-sources.md 顶部立项段
-// owner 裁决「用户持有 main + SDK」）多阶段构建：构建段 golang:1.26-alpine
+// owner 裁决「用户持有 main + SDK」）多阶段构建：构建段基座镜像查 domain
+// 运行时表（BaseImage，e.g. golang:1.26-alpine）
 // （CGO_ENABLED=0 结构化消灭 #cgo/pkg-config 构建期命令执行面；GOFLAGS 按
 // vendor 探测分支——显式 -mod=readonly 会覆盖「vendor 目录存在时自动
 // -mod=vendor」的默认行为，HasVendor=true 时必须显式 -mod=vendor），
@@ -103,9 +108,17 @@ type SourceContents struct {
 // 服务实现 :18080 公开契约，平台零注入（原 twmain 生成式 bootstrap 已删，
 // twmain/ 不再是保留目录名）。go build 只编译不执行（Go modules 无 npm
 // 生命周期脚本等价物），「构建期不执行用户代码」强于 node。
+//
+// 模板按 family 分派、基座镜像查 domain 运行时表（单一事实源，
+// functions-runtime-selection.md §1）——新增 runtime = 表加一行 + golden
+// 测试，本函数无 per-runtime 分支。
 func DockerfileFor(contents SourceContents) (string, error) {
-	switch contents.Runtime {
-	case "node-18.0":
+	rec, ok := domainfunctions.RuntimeByID(contents.Runtime)
+	if !ok {
+		return "", fmt.Errorf("unsupported runtime %q", contents.Runtime)
+	}
+	switch rec.Family {
+	case domainfunctions.RuntimeFamilyNode:
 		if contents.NodeDeps {
 			// lockfile 强制（v3 §3.1）：无锁安装不可复现，与「构建是平台
 			// 确定性操作」不变量对齐。
@@ -120,7 +133,7 @@ func DockerfileFor(contents SourceContents) (string, error) {
 			// 既有 hardening（非 root、无 sock、资源限额），见 functions-v3.md
 			// §3.2。代价：依赖原生编译/postinstall 下载二进制的包不可用（如
 			// esbuild/swc 安装版），文档明示（docs/developer/08-functions.md §3）。
-			return "FROM node:18-alpine\n" +
+			return fmt.Sprintf("FROM %s\n", rec.BaseImage) +
 				"WORKDIR /app\n" +
 				"COPY package.json package-lock.json* ./\n" +
 				"RUN npm ci --omit=dev --ignore-scripts\n" +
@@ -129,13 +142,13 @@ func DockerfileFor(contents SourceContents) (string, error) {
 				fmt.Sprintf("ENV TW_RUNNER_PORT=%d\n", RunnerPort) +
 				fmt.Sprintf("CMD [\"node\",%q]\n", RunnerFileName), nil
 		}
-		return "FROM node:18-alpine\n" +
+		return fmt.Sprintf("FROM %s\n", rec.BaseImage) +
 			"WORKDIR /app\n" +
 			"COPY . .\n" +
 			"USER node\n" +
 			fmt.Sprintf("ENV TW_RUNNER_PORT=%d\n", RunnerPort) +
 			fmt.Sprintf("CMD [\"node\",%q]\n", RunnerFileName), nil
-	case "go-1.26":
+	case domainfunctions.RuntimeFamilyGo:
 		// 依赖确定性（对齐 node lockfile 强制口径）：require 非空且无 go.sum
 		// 且无 vendor → 拒收（无锁依赖不可复现）；vendor 存在时 go build
 		// -mod=vendor 不消费 go.sum，不作要求（D4）。
@@ -152,7 +165,7 @@ func DockerfileFor(contents SourceContents) (string, error) {
 			goFlags = "-mod=vendor"
 			downloadLayer = ""
 		}
-		return "FROM golang:1.26-alpine AS build\n" +
+		return fmt.Sprintf("FROM %s AS build\n", rec.BaseImage) +
 			"WORKDIR /src\n" +
 			"ENV CGO_ENABLED=0\n" +
 			fmt.Sprintf("ENV GOFLAGS=%s\n", goFlags) +
@@ -167,12 +180,10 @@ func DockerfileFor(contents SourceContents) (string, error) {
 			"USER 65534:65534\n" +
 			fmt.Sprintf("ENV TW_RUNNER_PORT=%d\n", RunnerPort) +
 			"CMD [\"/tw-app\"]\n", nil
-	case "python-3.11":
-		// TODO(P1+)：python runner（常驻 WSGI/ASGI 形态）。python 探测保留、
-		// 构建期明确报错（见包注释）——无 v1 回退路径，报错不得引导用户切换
-		// 执行器。
-		return "", fmt.Errorf("runtime %q is not available: the resident executor is node-only (python runner not implemented yet)", contents.Runtime)
 	default:
-		return "", fmt.Errorf("unsupported runtime %q", contents.Runtime)
+		// python family（探测保留）等：无 runtime 表项/无构建分支——显式报错
+		// 不静默构建跑不起来的镜像（见包注释）。实际错误形态大多在更早的
+		// family 对账处冒出（声明的 runtime 不可能是 python family）。
+		return "", fmt.Errorf("runtime %q (family %q) is not available for platform builds", rec.ID, rec.Family)
 	}
 }

@@ -195,6 +195,11 @@ type Deployment struct {
 	SourceRef     string
 	SourceDir     string
 	ContextSHA256 string
+	// Runtime 是构建所用 runtime ID 快照（functions-runtime-selection.md
+	// §4，迁移 000025）：INSERT 期写全、之后不可变——补构建/审计以行内
+	// 快照为准，不随后续 fn.runtime 变更漂移（deployment = 源 + 运行时 +
+	// 模板版本的完整不可变快照）。
+	Runtime string
 	// BuildNode 是首个构建落成的 dispatcher 节点 ID（四期 4a-1，设计
 	// functions-runtimes-and-sources.md §4 M5 构建亲和；迁移 000024）：由
 	// buildDeployment 成功路径按 BuildResponse.node_id 写入（UpdateDeployment

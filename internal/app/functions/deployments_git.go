@@ -56,8 +56,13 @@ func (f *Functions) createDeploymentFromGit(ctx context.Context, cmd CreateDeplo
 	if fn == nil {
 		return nil, status.Error(codes.NotFound, "function not found")
 	}
-	// 源/运行时互斥（D7 双向）：git/zip 源对 image runtime 函数拒绝。
+	// 源/运行时互斥（D7 双向）：git/zip 源对 image runtime 函数拒绝；
+	// 运行时状态门：eol runtime 拒绝新的部署构建（functions-runtime-
+	// selection.md §6）。
 	if err := validateSourceRuntimePair(fn.Runtime, domainfunctions.DeploymentSourceGit); err != nil {
+		return nil, err
+	}
+	if err := validateRuntimeSelectable(fn.Runtime); err != nil {
 		return nil, err
 	}
 	// pack（在行落库之前）：失败路径无行无 zip，与 zip 魔数校验失败同类。
@@ -87,8 +92,11 @@ func (f *Functions) createDeploymentFromGit(ctx context.Context, cmd CreateDeplo
 		SourceRef:     commitSHA,
 		SourceDir:     src.Directory,
 		ContextSHA256: checksum,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		// runtime 快照（迁移 000025）：与 zip 源同口径（functions-runtime-
+		// selection.md §4）。
+		Runtime:   fn.Runtime,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	// 先写盘后 INSERT：盘上快照就绪才开行；任一失败清理 zip + 行。
 	path := zipPath(cmd.ProjectID, cmd.FunctionID, dep.ID)
