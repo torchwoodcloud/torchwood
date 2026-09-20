@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { getProjectID, setProjectID } from "@/api/client";
+import { getProjectID, PROJECT_STORAGE_KEY, setProjectID } from "@/api/client";
 import {
   login as apiLogin,
   logout as apiLogout,
@@ -56,6 +56,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // 跨标签同步项目作用域：请求拦截器每次实时读 localStorage 注入
+  // X-Torchwood-Project，而本标签的 React 状态只在挂载时读一次——标签 A
+  // 切项目/登出后，标签 B 会"显示旧项目、写请求却带新项目 header"。订阅
+  // storage 事件（仅其它标签的写入会触发）重新读取，让展示与实际作用域
+  // 一致：A 切项目 → B 跟随；A 登出清项目 key → B 状态复位。key 为 null
+  // 表示整体 clear()，同样按重读处理；本标签自身的写入不触发 storage
+  // 事件，selectProject/logout 原路径不受影响。
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== PROJECT_STORAGE_KEY) {
+        return;
+      }
+      setProjectIdState(getProjectID());
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {

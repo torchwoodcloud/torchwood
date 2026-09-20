@@ -105,7 +105,7 @@ torchwood/
 
 ## 5. 进程拓扑
 
-系统由四个独立进程组成，均通过 `godotenv.Load()` 加载 `.env`，配置统一经 `internal/pkg/config/bind.go` 绑定：
+系统由四个独立进程组成。server / worker / dispatcher 等服务端常驻入口通过 `godotenv.Load()` 加载部署环境的 `.env`；torchwood CLI **不加载 `.env`**（CLI 常在不可信仓库目录运行，自动加载会被恶意 `.env` 重定向 endpoint/DSN 窃取凭据，`TORCHWOOD_CLI_*` 环境变量需自行 export）。服务端配置统一经 `internal/pkg/config/bind.go` 绑定：
 
 | 进程 | 入口 | 职责 | 启动期校验 |
 |------|------|------|-----------|

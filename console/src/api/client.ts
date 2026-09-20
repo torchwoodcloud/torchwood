@@ -47,16 +47,19 @@ export function refreshAuthTokenSingleFlight(): Promise<void> {
   return refreshPromise;
 }
 
+// 项目作用域的 localStorage key：跨标签 storage 事件按它过滤（见 useAuth）。
+export const PROJECT_STORAGE_KEY = "TORCHWOOD_console_project";
+
 export function setProjectID(projectID: string | null) {
   if (projectID) {
-    localStorage.setItem("TORCHWOOD_console_project", projectID);
+    localStorage.setItem(PROJECT_STORAGE_KEY, projectID);
   } else {
-    localStorage.removeItem("TORCHWOOD_console_project");
+    localStorage.removeItem(PROJECT_STORAGE_KEY);
   }
 }
 
 export function getProjectID(): string | null {
-  return localStorage.getItem("TORCHWOOD_console_project");
+  return localStorage.getItem(PROJECT_STORAGE_KEY);
 }
 
 api.interceptors.request.use((config) => {

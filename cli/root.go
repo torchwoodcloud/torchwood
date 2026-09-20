@@ -21,6 +21,10 @@ const (
 )
 
 // TORCHWOOD_CLI_* 环境变量（优先级介于显式旗标与配置文件 profile 之间）。
+// 只读进程真实环境：CLI 不自动加载 cwd 的 .env（常在不可信仓库目录运行，
+// 自动加载会被恶意 .env 重定向 endpoint/DSN 窃取 API Key；守卫见
+// cmd/torchwood 的 TestMainNoDotEnvAutoLoad）。需要 .env 时请自行 export，
+// 或在 shell 里 set -a; source .env; set +a。
 const (
 	envEndpoint = "TORCHWOOD_CLI_ENDPOINT"
 	envAPIKey   = "TORCHWOOD_CLI_API_KEY" //nolint:gosec // 环境变量名，非硬编码凭据
