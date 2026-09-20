@@ -29,7 +29,7 @@ func (s *AuthService) SignIn(ctx context.Context, req *consolev1.SignInRequest) 
 		return nil, err
 	}
 	setSessionCookies(ctx, s.auth, tokens)
-	return mapSignInResponse(tokens), nil
+	return sessionResponse(ctx, tokens), nil
 }
 
 func (s *AuthService) RefreshToken(ctx context.Context, req *consolev1.RefreshTokenRequest) (*consolev1.SignInResponse, error) {
@@ -45,7 +45,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, req *consolev1.RefreshTo
 		return nil, err
 	}
 	setSessionCookies(ctx, s.auth, tokens)
-	return mapSignInResponse(tokens), nil
+	return sessionResponse(ctx, tokens), nil
 }
 
 func (s *AuthService) SignOut(ctx context.Context, _ *consolev1.SignOutRequest) (*sharedv1.Empty, error) {
@@ -80,11 +80,14 @@ func (s *AuthService) SignUp(ctx context.Context, req *consolev1.SignUpRequest) 
 	}
 	// 与 SignIn 一致：注册成功后下发会话 cookie，浏览器端免再次登录。
 	setSessionCookies(ctx, s.auth, result.Tokens)
-	return &consolev1.SignUpResponse{
-		Admin:        mapAdmin(result.Admin),
-		AccessToken:  result.Tokens.AccessToken,
-		RefreshToken: result.Tokens.RefreshToken,
-	}, nil
+	res := &consolev1.SignUpResponse{Admin: mapAdmin(result.Admin)}
+	// gateway（浏览器）流响应体不带 token（见 sessionResponse）；直连 gRPC
+	// 的客户端从响应体取。
+	if !fromGateway(ctx) {
+		res.AccessToken = result.Tokens.AccessToken
+		res.RefreshToken = result.Tokens.RefreshToken
+	}
+	return res, nil
 }
 
 func mapSignInResponse(tokens *console.TokenPair) *consolev1.SignInResponse {
@@ -96,4 +99,18 @@ func mapSignInResponse(tokens *console.TokenPair) *consolev1.SignInResponse {
 		RefreshToken: tokens.RefreshToken,
 		ExpiresAt:    timestamppb.New(time.Unix(tokens.ExpiresAt, 0)),
 	}
+}
+
+// sessionResponse 构造 SignIn/RefreshToken 的响应：gateway（浏览器）流的
+// 响应体不携带 token——HttpOnly cookie 是浏览器唯一凭证通道，token 进响应体
+// 会抵消 cookies.go 声明的 XSS 免疫（同域 XSS 可直接读响应体外带，7 天
+// refresh token 可在任意位置兑换会话）；ExpiresAt 无敏感语义，保留供前端
+// 做续期预估。直连 gRPC 的客户端（SDK/测试）行为不变。
+func sessionResponse(ctx context.Context, tokens *console.TokenPair) *consolev1.SignInResponse {
+	res := mapSignInResponse(tokens)
+	if fromGateway(ctx) {
+		res.AccessToken = ""
+		res.RefreshToken = ""
+	}
+	return res
 }

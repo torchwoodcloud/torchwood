@@ -397,14 +397,19 @@ func (t *Groups) DeleteMembership(ctx context.Context, projectID, groupID, membe
 	if err := groupsWriteGuard(ctx); err != nil {
 		return err
 	}
-	m, err := t.getMembership(ctx, projectID, groupID, membershipID)
-	if err != nil {
+	// 快速 404（事务外预检）；权威判定在 repo 删除事务内完成。
+	if _, err := t.getMembership(ctx, projectID, groupID, membershipID); err != nil {
 		return err
 	}
-	if err := t.guardLastOwner(ctx, projectID, groupID, m); err != nil {
-		return err
-	}
-	return t.memberships.Delete(ctx, projectID, membershipID)
+	// last-owner 守卫在 repo 删除事务内、组行锁下判定（guardLastOwnerLocked），
+	// 拒绝语义不变（FailedPrecondition），但 count 检查与删除之间不再有并发
+	// 窗口——两个"最后一个 owner"的并发降级/删除只有一个能提交。
+	return t.memberships.Delete(ctx, projectID, membershipID, func(txCtx context.Context, current *groups.Membership) error {
+		if current.GroupID != groupID {
+			return status.Error(codes.NotFound, "membership not found")
+		}
+		return t.guardLastOwnerLocked(txCtx, projectID, groupID, current)
+	})
 }
 
 func (t *Groups) ListAcceptedGroupRoles(ctx context.Context, projectID, userID string) ([]string, error) {
@@ -457,15 +462,16 @@ func (t *Groups) getMembership(ctx context.Context, projectID, groupID, membersh
 	return m, nil
 }
 
-func (t *Groups) guardLastOwner(ctx context.Context, projectID, groupID string, target *groups.Membership) error {
-	list, err := t.memberships.ListByGroup(ctx, projectID, groupID)
-	if err != nil {
+// guardLastOwnerLocked 是 last-owner 守卫的唯一实现（原 guardLastOwner/
+// guardLastOwnerLocked 两份相同实现合并）：先对组行取 FOR UPDATE 锁再
+// ListByGroup 计数。组行锁是全部 owner 变更（降级/删除）的公共串行化点：
+// 并发事务在锁上排队，后提交者看到前者已落库的结果再判定，消除「count
+// 检查通过后、变更提交前另一 owner 被并发移除」的 TOCTOU。必须在变更的
+// 事务内调用（txCtx 需携带事务），否则锁无串行化效果。
+func (t *Groups) guardLastOwnerLocked(ctx context.Context, projectID, groupID string, target *groups.Membership) error {
+	if err := t.groupsRepo.LockByID(ctx, projectID, groupID); err != nil {
 		return err
 	}
-	return guardLastOwnerFromList(list, target)
-}
-
-func (t *Groups) guardLastOwnerLocked(ctx context.Context, projectID, groupID string, target *groups.Membership) error {
 	list, err := t.memberships.ListByGroup(ctx, projectID, groupID)
 	if err != nil {
 		return err

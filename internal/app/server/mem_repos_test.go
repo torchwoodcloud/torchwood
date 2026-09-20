@@ -117,6 +117,7 @@ func (r *memGroupRepo) GetByID(_ context.Context, _, id string) (*domaingroups.G
 	return &cp, nil
 }
 func (r *memGroupRepo) Update(context.Context, string, string, map[string]any) error { return nil }
+func (r *memGroupRepo) LockByID(context.Context, string, string) error               { return nil }
 func (r *memGroupRepo) Delete(_ context.Context, _, id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -216,10 +217,21 @@ func (r *memMembershipRepo) ListByUser(_ context.Context, _, userID string) ([]*
 	return out, nil
 }
 
-func (r *memMembershipRepo) Delete(_ context.Context, _, id string) error {
+func (r *memMembershipRepo) Delete(_ context.Context, _, id string, guard func(ctx context.Context, current *domaingroups.Membership) error) error {
 	r.mu.Lock()
 	m := r.rows[id]
-	delete(r.rows, id)
+	if m != nil && guard != nil {
+		cp := *m
+		r.mu.Unlock()
+		if err := guard(context.Background(), &cp); err != nil {
+			return err
+		}
+		r.mu.Lock()
+		m = r.rows[id]
+	}
+	if m != nil {
+		delete(r.rows, id)
+	}
 	r.mu.Unlock()
 	if m != nil && m.Status == domaingroups.StatusAccepted && r.groups != nil {
 		_ = r.groups.AddTotal(context.Background(), "", m.GroupID, -1)

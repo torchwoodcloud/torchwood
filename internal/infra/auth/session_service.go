@@ -215,6 +215,24 @@ func (s *SessionService) EnsureActiveSession(ctx context.Context, projectID, ses
 	return nil
 }
 
+// DeleteSession 删除单会话（登出 / refresh 轮换失配 / 用户自删会话的单一
+// 咽喉），成功后写 principal 缓存失效标记。与 DeleteSessionsByUser 同一语义
+// 的单会话版本：本进程删本地缓存条目，跨实例经 Redis 标记即时拒绝——否则
+// 缓存命中的 validator 跳过会话存在性检查，旧 access token 在 TTL 30s 内
+// 仍可用。
+func (s *SessionService) DeleteSession(ctx context.Context, projectID, sessionID string) error {
+	if err := s.sessions.Delete(ctx, projectID, sessionID); err != nil {
+		return err
+	}
+	if s.principalCache != nil {
+		if err := s.principalCache.InvalidateSession(ctx, projectID, sessionID); err != nil {
+			// 标记写失败不回滚删除：仍有 TTL 30s 上界兜底（注释见 principalcache）。
+			slog.Warn("invalidate principal cache failed", "project_id", projectID, "session_id", sessionID, "error", err)
+		}
+	}
+	return nil
+}
+
 // DeleteSessionsByUser 删除该用户全部会话（FK 级联之外的显式清会话：
 // 登出全部/改密/封禁的单一咽喉）。成功后写 principal 缓存失效标记（P0.5：
 // 缓存命中最坏吊销延迟 = TTL 30s，主动标记把本进程与跨实例都收敛到即时）。

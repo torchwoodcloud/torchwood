@@ -130,7 +130,7 @@ func (r *MembershipRepository) ListByUser(ctx context.Context, projectID, userID
 	return mapMembershipsToDomain(ms), nil
 }
 
-func (r *MembershipRepository) Delete(ctx context.Context, projectID, id string) error {
+func (r *MembershipRepository) Delete(ctx context.Context, projectID, id string, guard func(ctx context.Context, current *domaingroups.Membership) error) error {
 	if strings.TrimSpace(id) == "" {
 		return domaingroups.ErrMembershipIDRequired
 	}
@@ -141,6 +141,13 @@ func (r *MembershipRepository) Delete(ctx context.Context, projectID, id string)
 				return nil
 			}
 			return err
+		}
+		// 守卫在锁定目标行的同一事务内判定（如 last-owner 预检），报错即
+		// 整体回滚——count 检查与删除之间无其他事务可插入变更。
+		if guard != nil {
+			if err := guard(txCtx, mapMembershipToDomain(row)); err != nil {
+				return err
+			}
 		}
 		if row.Status == domaingroups.StatusAccepted {
 			if err := NewGroupRepository(r.db).AddTotal(txCtx, projectID, row.GroupID, -1); err != nil {

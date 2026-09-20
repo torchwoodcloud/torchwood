@@ -162,7 +162,9 @@ func (r *verifyMembershipRepo) GetByID(context.Context, string, string) (*domain
 func (r *verifyMembershipRepo) ListByGroup(context.Context, string, string) ([]*domaingroups.Membership, error) {
 	return nil, nil
 }
-func (r *verifyMembershipRepo) Delete(context.Context, string, string) error { return nil }
+func (r *verifyMembershipRepo) Delete(context.Context, string, string, func(context.Context, *domaingroups.Membership) error) error {
+	return nil
+}
 func (r *verifyMembershipRepo) Accept(context.Context, string, string, string, time.Time) error {
 	return nil
 }

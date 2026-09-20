@@ -170,6 +170,7 @@ func TestClientGRPC_ListGroups_EchoesNextPageToken(t *testing.T) {
 type clientGroupsRepo struct{}
 
 func (clientGroupsRepo) Insert(context.Context, string, *domaingroups.Group) error { return nil }
+func (clientGroupsRepo) LockByID(context.Context, string, string) error            { return nil }
 func (clientGroupsRepo) GetByID(context.Context, string, string) (*domaingroups.Group, error) {
 	return nil, nil
 }

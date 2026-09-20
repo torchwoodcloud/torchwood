@@ -114,8 +114,11 @@ func TestBootstrap_SignUpEndToEnd(t *testing.T) {
 	require.NotEmpty(t, payload.Admin.Role)
 	require.Equal(t, "owner", payload.Admin.Role)
 	require.Equal(t, "owner@torchwood.local", payload.Admin.Email)
-	require.NotEmpty(t, payload.AccessToken)
-	require.NotEmpty(t, payload.RefreshToken)
+	// 缺陷修复验收：gateway（浏览器）流响应体不回传 token——HttpOnly cookie
+	// 是唯一凭证通道（auth.go sessionResponse）；直连 gRPC 流才带响应体 token
+	// （auth_test.go 单测覆盖）。
+	require.Empty(t, payload.AccessToken)
+	require.Empty(t, payload.RefreshToken)
 
 	project, err := fixture.projectRepo.GetProject(ctx, "shop")
 	require.NoError(t, err)

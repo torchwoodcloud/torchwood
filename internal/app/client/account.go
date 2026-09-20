@@ -130,8 +130,8 @@ func NewAccount(
 		auditRepo:          auditRepo,
 		sessionCookies:     sessionCookies,
 		analyticsDeletions: analyticsDeletions,
-		db:                db,
-		events:            events,
+		db:                 db,
+		events:             events,
 	}
 }
 
@@ -633,13 +633,13 @@ func (a *Account) SignOut(ctx context.Context) error {
 	if !ok || p.SessionID == "" {
 		return nil
 	}
-	if a.sessionRepo == nil {
+	if a.sessions == nil && a.sessionRepo == nil {
 		return nil
 	}
 	// 会话删除与 signed_out 事件同一事务（attrs 仅 user_id——登出时手头
 	// 只有 principal，无用户档案可脱敏携带）。
 	return a.runInTx(ctx, func(txCtx context.Context) error {
-		if err := a.sessionRepo.Delete(txCtx, p.ProjectID, p.SessionID); err != nil {
+		if err := a.deleteSession(txCtx, p.ProjectID, p.SessionID); err != nil {
 			return err
 		}
 		return a.publishAuthUsersEvent(txCtx, p.ProjectID, domainevents.EventAuthUsersSignedOut, &User{ID: p.UserID}, nil)
@@ -692,9 +692,9 @@ func (a *Account) RefreshToken(ctx context.Context, cmd RefreshTokenCommand) (*T
 		// 链不推进;判重用会删除会话,把好会话一起杀掉。
 		return a.sessions.IssueTokensWithRefreshID(ctx, projectID, claims.UserID, claims.Username, claims.SessionID, currentTokenID)
 	case domainauth.RotateMismatch:
-		if a.sessionRepo != nil {
-			_ = a.sessionRepo.Delete(ctx, projectID, claims.SessionID)
-		}
+		// 轮换失配 = refresh token 重放：删会话并联动 principal 缓存失效
+		// （best-effort，与旧行为一致不向调用方暴露删除失败）。
+		_ = a.deleteSession(ctx, projectID, claims.SessionID)
 		return nil, "", status.Error(codes.Unauthenticated, "refresh token reuse detected")
 	default: // RotateMissing
 		return nil, "", status.Error(codes.Unauthenticated, "session expired")
@@ -1043,7 +1043,21 @@ func (a *Account) deleteUserSession(ctx context.Context, p *shared.Principal, se
 	if sess.UserID != p.UserID {
 		return status.Error(codes.PermissionDenied, "cannot delete another user's session")
 	}
-	return a.sessionRepo.Delete(ctx, p.ProjectID, sessionID)
+	return a.deleteSession(ctx, p.ProjectID, sessionID)
+}
+
+// deleteSession 删除单会话的统一入口：经 SessionService.DeleteSession（域
+// 端口实现侧联动 principal 缓存失效——登出/撤销后缓存命中的旧 access token
+// 立即被拒，不再有 ≤30s TTL 的残余可用窗口）。sessions 未装配（部分单测）
+// 时回退裸 repo 删除，语义同旧行为。
+func (a *Account) deleteSession(ctx context.Context, projectID, sessionID string) error {
+	if a.sessions != nil {
+		return a.sessions.DeleteSession(ctx, projectID, sessionID)
+	}
+	if a.sessionRepo == nil {
+		return nil
+	}
+	return a.sessionRepo.Delete(ctx, projectID, sessionID)
 }
 
 func (a *Account) requireAccountUser(ctx context.Context, projectID, userID string) (*User, error) {

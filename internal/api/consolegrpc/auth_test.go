@@ -168,6 +168,46 @@ func TestSignIn_IssuesSessionCookies(t *testing.T) {
 	require.NotContains(t, refresh, "Secure")
 }
 
+// TestSignIn_DirectGRPC_KeepsBodyTokens 直连 gRPC 流（无 grpcgateway- 前缀
+// metadata）行为不变：响应体仍携带 token，供 SDK/测试消费。
+func TestSignIn_DirectGRPC_KeepsBodyTokens(t *testing.T) {
+	t.Parallel()
+	svc := newSignInService(t, testConfig("http://localhost:9099"))
+	ctx, _ := testCtx(t)
+
+	res, err := svc.SignIn(ctx, &consolev1.SignInRequest{
+		Email:    "admin@torchwood.local",
+		Password: "Admin@123",
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, res.GetAccessToken())
+	require.NotEmpty(t, res.GetRefreshToken())
+}
+
+// TestSignIn_GatewayFlow_OmitsBodyTokens 缺陷修复验收：gateway（浏览器）流
+// 响应体不得携带 token——HttpOnly cookie 是唯一凭证通道，否则同域 XSS 可从
+// 响应体外带 7 天 refresh token。判据：incoming metadata 含 grpcgateway-
+// 前缀 key（grpc-gateway 对永久 HTTP 头的标准注入）。
+func TestSignIn_GatewayFlow_OmitsBodyTokens(t *testing.T) {
+	t.Parallel()
+	svc := newSignInService(t, testConfig("http://localhost:9099"))
+	ctx, stream := testCtx(t)
+	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(
+		"grpcgateway-user-agent", "Mozilla/5.0 vitest",
+	))
+
+	res, err := svc.SignIn(ctx, &consolev1.SignInRequest{
+		Email:    "admin@torchwood.local",
+		Password: "Admin@123",
+	})
+	require.NoError(t, err)
+	require.Empty(t, res.GetAccessToken(), "gateway 流响应体不得回传 access token")
+	require.Empty(t, res.GetRefreshToken(), "gateway 流响应体不得回传 refresh token")
+	// Cookie 下发不受影响。
+	findCookie(t, stream, "TORCHWOOD_session_console")
+	findCookie(t, stream, "TORCHWOOD_console_refresh")
+}
+
 func TestSignIn_SecureCookiesOnTLS(t *testing.T) {
 	t.Parallel()
 	svc := newSignInService(t, testConfig("https://console.example.com"))
@@ -239,6 +279,33 @@ func TestRefreshToken_BodyTakesPrecedenceOverCookie(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, res.GetAccessToken())
+}
+
+// TestRefreshToken_GatewayFlow_OmitsBodyTokens 缺陷修复验收：cookie-only
+// 浏览器流刷新后响应体同样不携带 token（rotation 后的新 refresh token 只进
+// Set-Cookie），堵住「请求体裸 refresh token + 响应体回传」的外带面。
+func TestRefreshToken_GatewayFlow_OmitsBodyTokens(t *testing.T) {
+	t.Parallel()
+	cfg := testConfig("http://localhost:9099")
+	svc := NewAuthService(console.NewAuth(cfg, &stubAdminRepo{admin: &projects.Admin{
+		ID:    "admin-1",
+		Email: "admin@torchwood.local",
+		Role:  "admin",
+	}}, nil, nil, nil), newTestSetup())
+	ctx, stream := testCtx(t)
+	refresh := adminRefreshToken(t, cfg)
+	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(
+		"grpcgateway-user-agent", "Mozilla/5.0 vitest",
+		"cookie", "other=1; TORCHWOOD_console_refresh="+refresh,
+	))
+
+	res, err := svc.RefreshToken(ctx, &consolev1.RefreshTokenRequest{})
+	require.NoError(t, err)
+	require.Empty(t, res.GetAccessToken(), "gateway 流响应体不得回传 access token")
+	require.Empty(t, res.GetRefreshToken(), "gateway 流响应体不得回传 refresh token")
+	// rotation 后的新 cookie 正常下发。
+	findCookie(t, stream, "TORCHWOOD_session_console")
+	findCookie(t, stream, "TORCHWOOD_console_refresh")
 }
 
 func TestSignOut_ClearsSessionCookies(t *testing.T) {

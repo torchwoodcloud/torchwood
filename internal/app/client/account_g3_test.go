@@ -51,6 +51,10 @@ func (f *failableSessionService) EnsureActiveSession(ctx context.Context, projec
 	return f.real.EnsureActiveSession(ctx, projectID, sessionID, userID)
 }
 
+func (f *failableSessionService) DeleteSession(ctx context.Context, projectID, sessionID string) error {
+	return f.real.DeleteSession(ctx, projectID, sessionID)
+}
+
 func (f *failableSessionService) DeleteSessionsByUser(ctx context.Context, projectID, userID string) error {
 	if f.fail {
 		return status.Error(codes.Internal, "injected session revocation failure")

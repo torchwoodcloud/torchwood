@@ -150,3 +150,51 @@ func TestValidator_PrincipalCacheInvalidateOnLogout(t *testing.T) {
 	require.NoError(t, err, "登出失效后回退 DB 实时校验（stub 会话仍在）")
 	require.EqualValues(t, 2, usersRepo.getByID.Load(), "失效后必须重新实时校验")
 }
+
+// TestValidator_DeleteSessionRejectsCachedAccessToken（缺陷修复验收）：
+// 单会话删除（SessionService.DeleteSession，登出/refresh 轮换失配/自删会话
+// 的咽喉）后，缓存命中的旧 access token 必须立即被拒——此前删除直连
+// sessionRepo.Delete 不写失效标记，validator 缓存命中跳过会话存在性检查，
+// 旧 token 在 TTL 30s 内仍可用。
+func TestValidator_DeleteSessionRejectsCachedAccessToken(t *testing.T) {
+	ctx := context.Background()
+	projectID := idgen.UUID().String()
+	userID := idgen.UUID().String()
+	sessionID := idgen.UUID().String()
+
+	sessionsRepo := newStubSessionRepo()
+	sessionsRepo.seed(projectID, &domainauth.Session{ID: sessionID, UserID: userID, ExpireAt: time.Now().Add(time.Hour)})
+	usersRepo := &countingUserRepo{stubUserRepo: newStubUserRepo()}
+	usersRepo.seed(projectID, activeUser(userID))
+	// validator 与 SessionService 共享同一会话 repo 与缓存实例（对齐生产装配：
+	// 同一 *bunrepo.SessionRepository + 同一 principalcache.Cache）。
+	cache := principalcache.New(nil)
+	svc := auth.NewSessionService(nil, sessionsRepo, nil, nil)
+	svc.SetPrincipalCache(cache)
+	v := auth.NewValidator(testValidatorConfig(), &stubAPIKeyRepo{}, nil, &stubAdminRepo{}, &stubAdminProjectRepo{}, nil, sessionsRepo, usersRepo, &countingRoles{})
+	v.SetPrincipalCache(cache)
+
+	token := signToken(t, jwtparser.Claims{
+		UserID:    userID,
+		ProjectID: projectID,
+		SessionID: sessionID,
+		ActorKind: "end_user",
+		TokenType: jwtparser.TokenTypeAccess,
+		IssuedAt:  time.Now().Unix(),
+		ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	})
+
+	// 首次实时校验并写入缓存；第二次命中缓存（不再查 sessions）。
+	_, err := v.ValidateToken(ctx, token)
+	require.NoError(t, err)
+	_, err = v.ValidateToken(ctx, token)
+	require.NoError(t, err)
+
+	// 单会话删除（登出语义）：会话行删除 + 缓存失效联动。
+	require.NoError(t, svc.DeleteSession(ctx, projectID, sessionID))
+
+	// 旧 access token 立即失效：缓存命中路径也被拒（Unauthenticated），
+	// 而不是靠 30s TTL 自然过期。
+	_, err = v.ValidateToken(ctx, token)
+	require.Error(t, err, "已删除会话的旧 access token 必须立即被拒")
+}

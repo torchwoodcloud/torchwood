@@ -244,7 +244,10 @@ func (stubSessionService) IssueTokensWithRefreshID(context.Context, string, stri
 func (stubSessionService) EnsureActiveSession(context.Context, string, string, string) error {
 	return nil
 }
-func (stubSessionService) DeleteSessionsByUser(context.Context, string, string) error { return nil }
+func (stubSessionService) DeleteSession(context.Context, string, string) error { return nil }
+func (stubSessionService) DeleteSessionsByUser(context.Context, string, string) error {
+	return nil
+}
 
 // usersCollectionGuardDocDB 在 users 集合上 List/Create 直接 panic，防止用例走文档 DSL 换皮。
 type usersCollectionGuardDocDB struct{}

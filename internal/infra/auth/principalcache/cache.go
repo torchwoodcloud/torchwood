@@ -11,7 +11,8 @@
 //
 // 独立小包的原因：infra/auth（validator）与 SessionService 都要引用，且
 // 避免与 app 层失效写点构成 import 环——失效写点在 infra/auth 内部
-// （SessionService.DeleteSessionsByUser 是全部登出/封禁会话删除的单一咽喉）。
+// （SessionService.DeleteSession / DeleteSessionsByUser 是登出/撤销会话
+// 删除的单一咽喉）。
 package principalcache
 
 import (
@@ -140,8 +141,8 @@ func (c *Cache) Put(key Key, principal *shared.Principal) {
 }
 
 // InvalidateSession 使单会话的缓存条目失效（写 Redis 标记 + 删本地条目；
-// 单会话登出路径用——当前全部删除走 DeleteSessionsByUser，本方法为单会话
-// 撤销预留）。
+// 单会话登出路径用——SessionService.DeleteSession 是登出/轮换失配/自删
+// 会话的单一咽喉，全部删除走 DeleteSessionsByUser）。
 func (c *Cache) InvalidateSession(ctx context.Context, projectID, sessionID string) error {
 	c.invalidateLocal(func(p *shared.Principal) bool {
 		return p != nil && p.ProjectID == projectID && p.SessionID == sessionID

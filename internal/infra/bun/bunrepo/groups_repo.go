@@ -66,6 +66,32 @@ func (r *GroupRepository) GetByID(ctx context.Context, projectID, id string) (*d
 	return mapGroupToDomain(m), nil
 }
 
+// LockByID 在当前事务内对组行取 FOR UPDATE 锁（组不存在时返回 NotFound）。
+// 作为 last-owner 守卫等组内不变量的串行化点：锁随事务提交/回滚释放，
+// 并发的 owner 变更在锁上排队后再 count-act。
+func (r *GroupRepository) LockByID(ctx context.Context, projectID, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return domaingroups.ErrGroupIDRequired
+	}
+	conn, sch, expr, err := Scoped(ctx, r.db, projectID, groupTable, "g")
+	if err != nil {
+		return err
+	}
+	m := new(model.Group)
+	err = conn.NewSelect().Model(m).ModelTableExpr(expr, sch).
+		Where("g.id = ?", id).
+		Limit(1).
+		For("UPDATE").
+		Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return status.Error(codes.NotFound, "group not found")
+		}
+		return err
+	}
+	return nil
+}
+
 func (r *GroupRepository) Update(ctx context.Context, projectID, id string, cols map[string]any) error {
 	if strings.TrimSpace(id) == "" {
 		return domaingroups.ErrGroupIDRequired

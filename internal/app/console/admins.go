@@ -155,49 +155,74 @@ func (a *Admins) Update(ctx context.Context, cmd UpdateAdminCommand) (*projects.
 	if admin == nil {
 		return nil, status.Error(codes.NotFound, "admin not found")
 	}
+	// owner 降级路径：校验（含 last-owner count）与变更收进 advisory lock
+	// 同一事务，串行化并发降级（TOCTOU 修复，见 withOwnerGuardLock）。
+	demotingOwner := cmd.Role != "" && cmd.Role != admin.Role && admin.Role == AdminRoleOwner
 
-	if cmd.Role != "" && cmd.Role != admin.Role {
-		if err := validateAdminRole(cmd.Role); err != nil {
+	apply := func(txCtx context.Context) error {
+		if demotingOwner {
+			// 锁内重读：锁排队期间可能有并发降级已提交，避免基于过期角色
+			// 判定（setup.go SignUp 同款「锁内重检」模式）。
+			fresh, err := a.repo.GetAdmin(txCtx, cmd.ID)
+			if err != nil {
+				return status.Errorf(codes.Internal, "get admin: %v", err)
+			}
+			if fresh == nil {
+				return status.Error(codes.NotFound, "admin not found")
+			}
+			admin = fresh
+		}
+		if cmd.Role != "" && cmd.Role != admin.Role {
+			if err := validateAdminRole(cmd.Role); err != nil {
+				return err
+			}
+			if cmd.CallerID == admin.ID {
+				return status.Error(codes.InvalidArgument, "cannot change your own role")
+			}
+			// 防止把最后一个 owner 降级导致系统失去管理入口。
+			if admin.Role == AdminRoleOwner {
+				if err := a.ensureNotLastOwner(txCtx, admin.ID); err != nil {
+					return err
+				}
+			}
+			admin.Role = cmd.Role
+		}
+
+		if cmd.Password != "" {
+			if err := users.ValidatePasswordStrength(cmd.Password); err != nil {
+				return status.Error(codes.InvalidArgument, err.Error())
+			}
+			hash, err := password.Hash(cmd.Password)
+			if err != nil {
+				return status.Errorf(codes.Internal, "hash password: %v", err)
+			}
+			admin.PasswordHash = hash
+		}
+
+		admin.UpdatedAt = time.Now()
+		// M5 C1：改密即撤销既有凭证——撤销时间戳与密码哈希同事务落库，消除
+		// "密码已改但改密前签发的 access/refresh token 仍有效"窗口。
+		// （iat <= revoked_at 即拒，正在同秒签发的 token 一并覆盖。）
+		return a.runInTx(txCtx, func(tx2Ctx context.Context) error {
+			if err := a.repo.UpdateAdmin(tx2Ctx, admin); err != nil {
+				return status.Errorf(codes.Internal, "update admin: %v", err)
+			}
+			if cmd.Password != "" {
+				if err := a.repo.RevokeCredentials(tx2Ctx, admin.ID, admin.UpdatedAt); err != nil {
+					return status.Errorf(codes.Internal, "revoke admin credentials: %v", err)
+				}
+			}
+			return nil
+		})
+	}
+
+	if demotingOwner {
+		if err := a.withOwnerGuardLock(ctx, apply); err != nil {
 			return nil, err
 		}
-		if cmd.CallerID == admin.ID {
-			return nil, status.Error(codes.InvalidArgument, "cannot change your own role")
-		}
-		// 防止把最后一个 owner 降级导致系统失去管理入口。
-		if admin.Role == AdminRoleOwner {
-			if err := a.ensureNotLastOwner(ctx, admin.ID); err != nil {
-				return nil, err
-			}
-		}
-		admin.Role = cmd.Role
+		return admin, nil
 	}
-
-	if cmd.Password != "" {
-		if err := users.ValidatePasswordStrength(cmd.Password); err != nil {
-			return nil, status.Error(codes.InvalidArgument, err.Error())
-		}
-		hash, err := password.Hash(cmd.Password)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "hash password: %v", err)
-		}
-		admin.PasswordHash = hash
-	}
-
-	admin.UpdatedAt = time.Now()
-	// M5 C1：改密即撤销既有凭证——撤销时间戳与密码哈希同事务落库，消除
-	// "密码已改但改密前签发的 access/refresh token 仍有效"窗口。
-	// （iat <= revoked_at 即拒，正在同秒签发的 token 一并覆盖。）
-	if err := a.runInTx(ctx, func(txCtx context.Context) error {
-		if err := a.repo.UpdateAdmin(txCtx, admin); err != nil {
-			return status.Errorf(codes.Internal, "update admin: %v", err)
-		}
-		if cmd.Password != "" {
-			if err := a.repo.RevokeCredentials(txCtx, admin.ID, admin.UpdatedAt); err != nil {
-				return status.Errorf(codes.Internal, "revoke admin credentials: %v", err)
-			}
-		}
-		return nil
-	}); err != nil {
+	if err := apply(ctx); err != nil {
 		return nil, err
 	}
 	return admin, nil
@@ -330,29 +355,47 @@ func (a *Admins) Delete(ctx context.Context, id, callerID string) error {
 	if admin == nil {
 		return status.Error(codes.NotFound, "admin not found")
 	}
-	if callerID != "" && admin.ID == callerID {
-		return status.Error(codes.InvalidArgument, "cannot delete your own account")
-	}
-	if admin.Role == AdminRoleOwner {
-		if err := a.ensureNotLastOwner(ctx, admin.ID); err != nil {
-			return err
+	// owner 删除路径与降级同理收进 advisory lock（TOCTOU 修复）。
+	deletingOwner := admin.Role == AdminRoleOwner
+
+	apply := func(txCtx context.Context) error {
+		if deletingOwner {
+			// 锁内重读（对齐 Update 的降级路径）。
+			fresh, err := a.repo.GetAdmin(txCtx, id)
+			if err != nil {
+				return status.Errorf(codes.Internal, "get admin: %v", err)
+			}
+			if fresh == nil {
+				return status.Error(codes.NotFound, "admin not found")
+			}
+			admin = fresh
 		}
-	}
-	// M5 C1：删除前先落撤销痕迹再删行（同事务）。行删除本身已令后续验证
-	// 以 admin not found 拒绝，撤销痕迹是纵深防御：保留不变量"管理面凭证
-	// 生命周期动作必有持久撤销记录"，也为将来软删除演进兜底。
-	if err := a.runInTx(ctx, func(txCtx context.Context) error {
-		if err := a.repo.RevokeCredentials(txCtx, id, time.Now()); err != nil {
-			return status.Errorf(codes.Internal, "revoke admin credentials: %v", err)
+		if callerID != "" && admin.ID == callerID {
+			return status.Error(codes.InvalidArgument, "cannot delete your own account")
 		}
-		if err := a.repo.DeleteAdmin(txCtx, id); err != nil {
-			return status.Errorf(codes.Internal, "delete admin: %v", err)
+		if deletingOwner {
+			if err := a.ensureNotLastOwner(txCtx, admin.ID); err != nil {
+				return err
+			}
 		}
-		return nil
-	}); err != nil {
-		return err
+		// M5 C1：删除前先落撤销痕迹再删行（同事务）。行删除本身已令后续验证
+		// 以 admin not found 拒绝，撤销痕迹是纵深防御：保留不变量"管理面凭证
+		// 生命周期动作必有持久撤销记录"，也为将来软删除演进兜底。
+		return a.runInTx(txCtx, func(tx2Ctx context.Context) error {
+			if err := a.repo.RevokeCredentials(tx2Ctx, id, time.Now()); err != nil {
+				return status.Errorf(codes.Internal, "revoke admin credentials: %v", err)
+			}
+			if err := a.repo.DeleteAdmin(tx2Ctx, id); err != nil {
+				return status.Errorf(codes.Internal, "delete admin: %v", err)
+			}
+			return nil
+		})
 	}
-	return nil
+
+	if deletingOwner {
+		return a.withOwnerGuardLock(ctx, apply)
+	}
+	return apply(ctx)
 }
 
 // runInTx 在可用的工作单元内执行 fn；runner 未装配时直接执行
@@ -362,6 +405,16 @@ func (a *Admins) runInTx(ctx context.Context, fn func(ctx context.Context) error
 		return fn(ctx)
 	}
 	return a.db.Run(ctx, fn)
+}
+
+// withOwnerGuardLock 把 owner 降级/删除的「校验（last-owner count）+ 变更」
+// 收进 pg_advisory_xact_lock（复用 bootstrapLockKey，与 Setup.SignUp 的首次性
+// 检查同款串行化，setup.go:139）：并发降级/删除在锁上排队，后到者在锁内
+// count 看到前者已提交的结果再判定，消除「剩 2 个 owner 的并发变更双双通过
+// count 检查 → 平台失去全部管理入口」的 TOCTOU。锁随事务提交/回滚释放；
+// fn 内的 repo 调用经注入 txCtx 复用同一事务连接。
+func (a *Admins) withOwnerGuardLock(ctx context.Context, fn func(txCtx context.Context) error) error {
+	return a.repo.WithBootstrapLock(ctx, bootstrapLockKey, fn)
 }
 
 // ensureNotLastOwner 拒绝删除/降级系统中最后一个 owner。

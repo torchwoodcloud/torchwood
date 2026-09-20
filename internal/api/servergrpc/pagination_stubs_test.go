@@ -41,6 +41,7 @@ func (paginationUserRepo) UpdateFactors(context.Context, string, string, func(js
 type paginationGroupRepo struct{}
 
 func (paginationGroupRepo) Insert(context.Context, string, *domaingroups.Group) error { return nil }
+func (paginationGroupRepo) LockByID(context.Context, string, string) error            { return nil }
 func (paginationGroupRepo) GetByID(_ context.Context, _, id string) (*domaingroups.Group, error) {
 	return &domaingroups.Group{ID: id, Name: "T", Total: 1}, nil
 }
@@ -76,7 +77,9 @@ func (paginationMembershipRepo) ListByGroup(context.Context, string, string) ([]
 func (paginationMembershipRepo) ListByUser(context.Context, string, string) ([]*domaingroups.Membership, error) {
 	return nil, nil
 }
-func (paginationMembershipRepo) Delete(context.Context, string, string) error { return nil }
+func (paginationMembershipRepo) Delete(context.Context, string, string, func(context.Context, *domaingroups.Membership) error) error {
+	return nil
+}
 func (paginationMembershipRepo) Accept(context.Context, string, string, string, time.Time) error {
 	return nil
 }

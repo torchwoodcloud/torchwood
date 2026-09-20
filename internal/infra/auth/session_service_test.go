@@ -12,6 +12,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"github.com/torchwoodcloud/torchwood/internal/domain/users"
 	"github.com/torchwoodcloud/torchwood/internal/infra/auth"
+	"github.com/torchwoodcloud/torchwood/internal/infra/auth/principalcache"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"github.com/torchwoodcloud/torchwood/pkg/jwtparser"
@@ -287,6 +288,32 @@ func TestSessionService_DeleteSessionsByUser_BulkDelete(t *testing.T) {
 	require.NoError(t, svc.DeleteSessionsByUser(ctx, "proj-1", "user-1"))
 	require.Equal(t, 1, sessions.len("proj-1"))
 	require.NotNil(t, sessions.get("proj-1", "sess-3"), "其他用户的会话不得被误删")
+}
+
+// TestSessionService_DeleteSession_RemovesSessionAndCacheEntry（缺陷修复验收）：
+// 单会话删除（登出/轮换失配/自删会话的咽喉）删会话行并联动 principal 缓存
+// 条目失效——此前 app 层直连 repo.Delete，缓存不失效，旧 access token 在
+// TTL 30s 内仍可用。
+func TestSessionService_DeleteSession_RemovesSessionAndCacheEntry(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	sessions := newStubSessionRepo()
+	sessions.seed("proj-1", &domainauth.Session{ID: "sess-1", UserID: "user-1", ExpireAt: time.Now().Add(time.Hour)})
+	svc := auth.NewSessionService(nil, sessions, nil, nil)
+	cache := principalcache.New(nil)
+	svc.SetPrincipalCache(cache)
+
+	cache.Put(principalcache.Key{ProjectID: "proj-1", SessionID: "sess-1"}, &shared.Principal{
+		ActorKind: shared.ActorKindEndUser,
+		ProjectID: "proj-1",
+		UserID:    "user-1",
+		SessionID: "sess-1",
+	})
+	require.NotNil(t, cache.Get(ctx, principalcache.Key{ProjectID: "proj-1", SessionID: "sess-1"}), "前置：缓存条目存在")
+
+	require.NoError(t, svc.DeleteSession(ctx, "proj-1", "sess-1"))
+	require.Nil(t, sessions.get("proj-1", "sess-1"), "会话行必须被删除")
+	require.Nil(t, cache.Get(ctx, principalcache.Key{ProjectID: "proj-1", SessionID: "sess-1"}), "缓存条目必须被联动失效")
 }
 
 // TestSessionService_ImpersonationClaim（B2）：admin 调用方（CreateUserToken 路径）

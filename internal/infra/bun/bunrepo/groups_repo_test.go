@@ -342,12 +342,12 @@ func TestMembershipRepository_AcceptedInsertDeleteAdjustsTotal(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), g.Total, "pending Insert 不得 AddTotal")
 
-	require.NoError(t, memRepo.Delete(ctx, projectID, "m-pend"))
+	require.NoError(t, memRepo.Delete(ctx, projectID, "m-pend", nil))
 	g, err = groupsRepo.GetByID(ctx, projectID, "g-ins")
 	require.NoError(t, err)
 	require.Equal(t, int64(1), g.Total, "pending Delete 不得 AddTotal")
 
-	require.NoError(t, memRepo.Delete(ctx, projectID, "m-acc"))
+	require.NoError(t, memRepo.Delete(ctx, projectID, "m-acc", nil))
 	g, err = groupsRepo.GetByID(ctx, projectID, "g-ins")
 	require.NoError(t, err)
 	require.Equal(t, int64(0), g.Total, "accepted Delete 必须 AddTotal(-1)")

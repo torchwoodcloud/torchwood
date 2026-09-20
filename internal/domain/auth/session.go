@@ -52,6 +52,9 @@ type SessionService interface {
 	// (jti) so the rotation store and the issued token stay in sync.
 	IssueTokensWithRefreshID(ctx context.Context, projectID, userID, email, sessionID, refreshTokenID string) (*TokenBundle, string, error)
 	EnsureActiveSession(ctx context.Context, projectID, sessionID, userID string) error
+	// DeleteSession 删除单会话并联动 principal 缓存失效（登出/refresh 轮换
+	// 失配/用户自删会话的单一咽喉；整用户撤销走 DeleteSessionsByUser）。
+	DeleteSession(ctx context.Context, projectID, sessionID string) error
 	// DeleteSessionsByUser removes every session of the user (e.g. after a password change).
 	DeleteSessionsByUser(ctx context.Context, projectID, userID string) error
 }
