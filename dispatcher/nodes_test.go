@@ -266,7 +266,8 @@ func TestPoolReaper_ForeignLiveNodeSkipped(t *testing.T) {
 
 // TestPoolReaper_DeadNodeConverged M8 ②：他节点心跳消失（键不存在）→ 其
 // 实例记录被本节点批量收敛删除——只删记录，不碰 daemon（容器随死节点已
-// 消失，记录清理无需本机 daemon）。
+// 消失，记录清理无需本机 daemon）。P2 S13 二次确认：单轮快照缺失只登记
+// （deadNodePending），连续两轮快照缺失才动手。
 func TestPoolReaper_DeadNodeConverged(t *testing.T) {
 	d := newFakeDaemon()
 	reg := newFakeRegistry()
@@ -281,15 +282,75 @@ func TestPoolReaper_DeadNodeConverged(t *testing.T) {
 	seedForeignRecord(t, reg, ref, "dead-node-rec", "node-b")
 	require.NoError(t, reg.SaveNode(ctx, NodeRecord{NodeID: "node-c", URL: "http://c:9070"}, defaultNodeTTL))
 	seedForeignRecord(t, reg, ref, "live-node-rec", "node-c")
-	pool.Reaper(ctx)
 
-	records, err := reg.List(ctx, ref)
-	require.NoError(t, err)
-	require.Len(t, records, 1)
-	require.Equal(t, "live-node-rec", records[0].InstanceID, "仅死节点的记录被收敛")
+	// 第一轮：node-b 首次缺失 → 只登记，不删（瞬时抖动误判窗口的降噪）。
+	pool.Reaper(ctx)
+	ids := recordIDs(t, reg, ref)
+	require.True(t, ids["dead-node-rec"], "单轮快照缺失不得删记录（二次确认）")
+	require.True(t, ids["live-node-rec"], "存活节点记录原样保留")
+
+	// 第二轮：连续缺失 → 确认收敛。
+	pool.Reaper(ctx)
+	ids = recordIDs(t, reg, ref)
+	require.False(t, ids["dead-node-rec"], "连续两轮缺失后死节点记录被收敛")
+	require.True(t, ids["live-node-rec"], "仅死节点的记录被收敛")
 	require.Empty(t, d.stopped, "死节点收敛只删记录、绝不碰本机 daemon")
 	require.Empty(t, d.removed)
 	require.NotContains(t, d.inspects, "dead-node-rec")
+}
+
+// TestPoolReaper_DeadNodeConfirmResetsOnRevival 二次确认状态机（P2 S13）：
+// 节点复活（心跳回归）清空缺失登记——再次失联须重新走两轮确认；快照失败
+// 不登记不确认（fail-safe，与收敛跳过同口径）。
+func TestPoolReaper_DeadNodeConfirmResetsOnRevival(t *testing.T) {
+	d := newFakeDaemon()
+	reg := newFakeRegistry()
+	runner := &fakeRunner{}
+	runner.healthy = true
+	pool := newTestPool(d, reg, runner, nil)
+	pool.SetNodeID("node-a")
+	ctx := context.Background()
+	ref := FunctionRef{ProjectID: "p1", FunctionID: "fn1"}
+	seedForeignRecord(t, reg, ref, "flap-rec", "node-b")
+
+	// 第一轮缺失：登记。
+	pool.Reaper(ctx)
+	require.True(t, recordIDs(t, reg, ref)["flap-rec"])
+
+	// 节点复活：登记清账；记录照常保留。
+	require.NoError(t, reg.SaveNode(ctx, NodeRecord{NodeID: "node-b", URL: "http://b:9070"}, defaultNodeTTL))
+	pool.Reaper(ctx)
+	require.True(t, recordIDs(t, reg, ref)["flap-rec"])
+
+	// 再次失联：又要两轮才收敛（复活清账生效）。
+	require.NoError(t, reg.DeleteNode(ctx, "node-b"))
+	pool.Reaper(ctx)
+	require.True(t, recordIDs(t, reg, ref)["flap-rec"], "复活后的首次缺失重新只登记")
+	pool.Reaper(ctx)
+	require.False(t, recordIDs(t, reg, ref)["flap-rec"], "复活后再连续两轮缺失才收敛")
+
+	// 快照失败：不登记、不确认。
+	seedForeignRecord(t, reg, ref, "flap2-rec", "node-c")
+	reg.nodeErr = errors.New("redis boom")
+	pool.Reaper(ctx)
+	pool.Reaper(ctx)
+	require.True(t, recordIDs(t, reg, ref)["flap2-rec"], "快照失败期间死节点收敛整体跳过")
+	reg.nodeErr = nil
+	pool.Reaper(ctx)
+	require.True(t, recordIDs(t, reg, ref)["flap2-rec"], "快照恢复后的首轮只登记")
+	pool.Reaper(ctx)
+	require.False(t, recordIDs(t, reg, ref)["flap2-rec"], "快照恢复后再一轮缺失即收敛")
+}
+
+// TestNodeHeartbeatTimingContract 心跳节拍契约（P2 S13 放宽）：TTL 90s /
+// 间隔 15s——连续两次心跳失败（2×间隔 = 30s 空白）仍远在 TTL 内，容量键
+// TTL 与心跳同宽。
+func TestNodeHeartbeatTimingContract(t *testing.T) {
+	require.Equal(t, 90*time.Second, defaultNodeTTL, "TTL 必须为 90s（30s 只容忍 2 次连续失败，抖动即误判）")
+	require.Equal(t, 15*time.Second, nodeHeartbeatInterval, "间隔必须为 15s")
+	require.Equal(t, defaultNodeTTL, capacityKeyTTL, "容量键 TTL 与心跳同宽")
+	require.Less(t, 2*nodeHeartbeatInterval, defaultNodeTTL, "连续两次失败必须仍在 TTL 内")
+	require.Equal(t, 6*nodeHeartbeatInterval, defaultNodeTTL, "TTL = 6×间隔（任务口径 90/15）")
 }
 
 // TestPoolReaper_LegacyRecordTreatedAsSelf 旧记录兼容：node 为空（本特性

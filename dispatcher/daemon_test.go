@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -36,8 +37,8 @@ func TestTarDir_NormalizesModesIndependentOfUmask(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib", "util.js"), []byte("util"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM x"), 0o600))
 
-	rd, err := tarDir(dir)
-	require.NoError(t, err)
+	rd := tarDir(dir)
+	defer func() { _ = rd.Close() }()
 	tr := tar.NewReader(rd)
 	sawFile, sawDir := 0, 0
 	for {
@@ -58,6 +59,48 @@ func TestTarDir_NormalizesModesIndependentOfUmask(t *testing.T) {
 	}
 	require.Positive(t, sawFile)
 	require.Equal(t, 1, sawDir)
+}
+
+// TestTarDir_StreamingContentRoundTrip 流式等价性（P2 S13）：tarDir 改
+// io.Pipe 流式后，tar 字节语义与全量缓冲版一致——条目集合、条目名（目录
+// 带尾斜杠）、文件内容逐字节保真；流正常收尾（EOF 即写侧 Close(nil)）。
+func TestTarDir_StreamingContentRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"Dockerfile":      "FROM scratch\nCOPY . .\n",
+		".tw-runner.js":   "runner script \x00 binary-safe",
+		"lib/util.js":     "module.exports = 42;",
+		"deep/a/b/c.txt":  "nested",
+	}
+	for rel, content := range files {
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o750))
+		require.NoError(t, os.WriteFile(p, []byte(content), 0o600))
+	}
+
+	rd := tarDir(dir)
+	defer func() { _ = rd.Close() }()
+	got := map[string]string{}
+	sawDirs := map[string]bool{}
+	tr := tar.NewReader(rd)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		if hdr.Typeflag == tar.TypeDir {
+			require.True(t, strings.HasSuffix(hdr.Name, "/"), "目录条目必须带尾斜杠: %s", hdr.Name)
+			sawDirs[hdr.Name] = true
+			continue
+		}
+		b, err := io.ReadAll(tr)
+		require.NoError(t, err)
+		got[hdr.Name] = string(b)
+	}
+	require.Equal(t, files, got, "流式 tar 的文件内容必须与源逐字节一致")
+	require.Contains(t, sawDirs, "lib/", "目录条目保留")
+	require.Contains(t, sawDirs, "deep/a/b/", "嵌套目录条目保留")
 }
 
 // —— EnsureProjectNetwork attach 幂等/陈旧 endpoint 自愈（2026-09-14 dev

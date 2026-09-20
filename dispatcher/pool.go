@@ -328,6 +328,11 @@ type PoolManager struct {
 	lastSpawnWarnAt map[string]time.Time
 	// lastCapWarnAt 是容量通道（Redis 容量键，M4）故障告警的限频时间戳。
 	lastCapWarnAt time.Time
+	// deadNodePending 是 reaper 死节点二次确认状态（P2 S13）：上一轮心跳
+	// 快照中已缺失、待本轮再确认的他节点 ID（进程内存即够——reaper 串行
+	// 周期状态，进程重启后重新走两轮，代价只是收敛晚一轮）。单轮快照缺失
+	// 不删：配合 90s 心跳 TTL 进一步压低瞬时 Redis/网络抖动误判窗口。
+	deadNodePending map[string]bool
 }
 
 // NewPoolManager 构造池管理器（生产装配）。
@@ -369,6 +374,7 @@ func newPoolManager(daemon Daemon, registry Registry, runner runnerClient, cfg P
 		counted:         map[string]bool{},
 		lastSpawnErr:    map[string]error{},
 		lastSpawnWarnAt: map[string]time.Time{},
+		deadNodePending: map[string]bool{},
 	}
 }
 
@@ -545,7 +551,10 @@ func (p *PoolManager) dispatch(ctx context.Context, req ExecuteRequest, fromNode
 
 	started := p.clock()
 	for {
-		rec, err := p.registry.ClaimIdle(ctx, ref, req.DeploymentID, p.clock().Add(p.cfg.LeaseTTL))
+		// 本节点 ID 随认领下发（P2 S13 节点收窄）：只认领 rec.node 归属本
+		// 节点（或旧记录空 node）的实例——他节点实例的容器 IP 仅在其节点
+		// docker 网络内可达，本地认领必然不可达（实例亲和转发由 route 负责）。
+		rec, err := p.registry.ClaimIdle(ctx, ref, req.DeploymentID, p.nodeID, p.clock().Add(p.cfg.LeaseTTL))
 		if err != nil {
 			return nil, err
 		}
@@ -836,7 +845,19 @@ func (p *PoolManager) executeOn(ctx context.Context, req ExecuteRequest, rec Ins
 
 // killInstance 强杀实例并彻底清账（ContainerStop SIGKILL，复用 v1 原语；
 // 幂等：容器已消失不报错）。
+//
+// 记录归属校验（P2 S13）：显式他节点记录整体跳过（不杀容器也不删记录，
+// 留给对端 reaper 收敛）——跨节点竞态/nodeID 漂移（容器重建 hostname 变化）
+// 下无条件删记录会误删他节点活实例的账：对端容器因此失去 reaper 保护而
+// 泄漏，容量计数随之漂移。死节点收敛（Reaper M8 ②）不经本方法——那是
+// 「只删记录、不碰 daemon」的独立路径，天然不受此约束。
 func (p *PoolManager) killInstance(ctx context.Context, ref FunctionRef, rec *InstanceRecord) {
+	if !p.ownedBySelf(*rec) {
+		slog.Warn("dispatcher: skip killing instance owned by another node (left to its reaper)",
+			"project", ref.ProjectID, "function", ref.FunctionID,
+			"self", p.nodeID, "owner", rec.Node, "instance", rec.InstanceID)
+		return
+	}
 	p.terminate(ctx, rec.ContainerID)
 	_ = p.registry.Delete(ctx, ref, rec.InstanceID)
 }
@@ -903,7 +924,9 @@ func (p *PoolManager) DrainForDeployment(ctx context.Context, projectID, functio
 // ListNodes 取心跳快照，显式他节点记录若其心跳键已消失（≥defaultNodeTTL
 // 无心跳 = 节点已死，容器随机器消失），由本节点批量删除记录（只删记录、
 // 不碰 daemon——与幽灵清理严格区分）。快照读取失败时跳过收敛（fail-safe
-// 不得因 Redis 抖动批量误删活节点记录）。
+// 不得因 Redis 抖动批量误删活节点记录）。P2 S13 起删除前须二次确认：
+// 连续两轮快照均缺失（deadNodePending 跨轮登记）才动手——心跳 TTL 已放宽
+// 到 90s，再加一轮 reaper 间隔余量，进一步压低瞬时抖动误判窗口。
 func (p *PoolManager) Reaper(ctx context.Context) {
 	// 容量键 TTL 保鲜（四期 4c M4）：每轮无条件刷新本节点容量键（best-effort
 	// ——有回收的轮次 terminate/revokeCounted 已各刷一次，这里兜住「无变化
@@ -913,11 +936,30 @@ func (p *PoolManager) Reaper(ctx context.Context) {
 
 	// M8 ②：节点心跳快照（每轮一次；nil = 快照不可用，本轮跳过死节点收敛）。
 	var liveNodes map[string]bool
+	// confirmedDead 是「上一轮已见缺失、本轮再确认」的死节点集合（二次确认
+	// 的本轮读取面）；missingNodes 收集本轮新见缺失（并入 deadNodePending，
+	// 下轮确认）。快照不可用时不登记不确认（fail-safe 同口径）。
+	confirmedDead := map[string]bool{}
+	missingNodes := map[string]bool{}
 	if nodes, err := p.registry.ListNodes(ctx); err == nil {
 		liveNodes = make(map[string]bool, len(nodes))
 		for _, n := range nodes {
 			liveNodes[n.NodeID] = true
 		}
+		p.mu.Lock()
+		if p.deadNodePending == nil {
+			p.deadNodePending = map[string]bool{}
+		}
+		for nodeID := range liveNodes {
+			delete(p.deadNodePending, nodeID) // 节点复活：清账
+		}
+		for nodeID := range p.deadNodePending {
+			if !liveNodes[nodeID] {
+				confirmedDead[nodeID] = true
+				delete(p.deadNodePending, nodeID) // 确认即出队（下轮仍缺失重新入队）
+			}
+		}
+		p.mu.Unlock()
 	}
 	refs, err := p.registry.ListFunctions(ctx)
 	if err != nil {
@@ -939,10 +981,14 @@ func (p *PoolManager) Reaper(ctx context.Context) {
 			rec := records[i]
 			if !p.ownedBySelf(rec) {
 				// M8 ①：他节点的实例归他节点的 reaper——跳过 InspectInstance
-				// 与一切清理。仅当其心跳已消失（死节点收敛）时删记录。
+				// 与一切清理。仅当其心跳已消失（死节点收敛）时删记录，且须
+				// 二次确认（连续两轮快照缺失，P2 S13）。
 				if liveNodes != nil && !liveNodes[rec.Node] {
-					DeadNodeReclaimedTotal.WithLabelValues(ref.ProjectID, ref.FunctionID).Inc()
-					_ = p.registry.Delete(ctx, ref, rec.InstanceID)
+					missingNodes[rec.Node] = true
+					if confirmedDead[rec.Node] {
+						DeadNodeReclaimedTotal.WithLabelValues(ref.ProjectID, ref.FunctionID).Inc()
+						_ = p.registry.Delete(ctx, ref, rec.InstanceID)
+					}
 				}
 				continue
 			}
@@ -958,8 +1004,23 @@ func (p *PoolManager) Reaper(ctx context.Context) {
 			switch {
 			case rec.Draining:
 				draining++
-				// runner 应自退出；仍存活超 30s 兜底强杀。
-				if now.Sub(time.UnixMilli(rec.IdleSinceMS)) > 30*time.Second {
+				// draining 态不接新请求（claim Lua 拒绝）不变；兜底判杀锚修正
+				// （P2 S13）：busy（inflight>0）实例的 idle_since_ms 停留在上次
+				// 释放时刻（release Lua 只在 inflight 归零时刷新），按它判杀会把
+				// DrainForDeployment 的在途宽限（≤ 函数超时，最长 300s）压到
+				// ~30s，在途长请求被提前切断。分两支：
+				//   - busy：退回判活规则——租约过期超 stuckBusyGrace（请求方
+				//     已消失，无人再 Release）才强杀；宽限内的在途请求不动，
+				//     请求完成后走下方 idle 分支或 DrainForDeployment 宽限杀。
+				//   - idle（inflight==0）：release 归零时已把 idle_since_ms 刷
+				//     新到释放时刻，它是新鲜锚——30s 未自退出（runner 达
+				//     max_requests 后应自退出）兜底强杀。
+				if rec.Inflight > 0 {
+					if now.UnixMilli() > rec.LeaseUntilMS+stuckBusyGrace.Milliseconds() {
+						p.killInstance(ctx, ref, &rec)
+						draining--
+					}
+				} else if now.Sub(time.UnixMilli(rec.IdleSinceMS)) > 30*time.Second {
 					p.killInstance(ctx, ref, &rec)
 					draining--
 				}
@@ -1007,6 +1068,14 @@ func (p *PoolManager) Reaper(ctx context.Context) {
 		// 在途水位（v3 Observability：reaper 周期从注册表聚合 inflight 总和，
 		// 与 PoolReady 同路）。
 		InstanceInflight.WithLabelValues(ref.ProjectID, ref.FunctionID).Set(float64(inflightTotal))
+	}
+	// 本轮新见缺失的他节点入队（下轮再缺失即确认，二次确认语义）。
+	if len(missingNodes) > 0 {
+		p.mu.Lock()
+		for nodeID := range missingNodes {
+			p.deadNodePending[nodeID] = true
+		}
+		p.mu.Unlock()
 	}
 }
 

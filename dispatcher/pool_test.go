@@ -227,13 +227,17 @@ func (r *fakeRegistry) List(_ context.Context, ref FunctionRef) ([]InstanceRecor
 	return out, nil
 }
 
-func (r *fakeRegistry) ClaimIdle(_ context.Context, ref FunctionRef, deploymentID string, leaseUntil time.Time) (*InstanceRecord, error) {
+func (r *fakeRegistry) ClaimIdle(_ context.Context, ref FunctionRef, deploymentID string, selfNodeID string, leaseUntil time.Time) (*InstanceRecord, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, rec := range r.pools[regKey(ref)] {
 		// inflight 语义（v3 §1.1）：可服务 = inflight < concurrency 且非
-		// draining 且部署匹配；concurrency 零值按 1 兜底（与 Lua 同款）。
+		// draining 且部署匹配且节点归属 selfNodeID；concurrency 零值按 1 兜底
+		//（与 Lua 同款）；node 为空的旧记录放行（P2 S13 升级窗口共存语义）。
 		if rec.Draining || rec.DeploymentID != deploymentID {
+			continue
+		}
+		if rec.Node != "" && rec.Node != selfNodeID {
 			continue
 		}
 		concurrency := rec.Concurrency
@@ -968,6 +972,160 @@ func recordIDs(t *testing.T, reg *fakeRegistry, ref FunctionRef) map[string]bool
 	return ids
 }
 
+// TestKillInstance_SkipsForeignRecord 记录归属校验（P2 S13）：killInstance
+// 对显式他节点记录整体跳过——不杀容器也不删记录（跨节点竞态/nodeID 漂移下
+// 误删会让对端容器失去 reaper 保护而泄漏、容量计数漂移）；记录留给对端
+// reaper 收敛。死节点收敛（Reaper M8 ②）不经 killInstance，不受此约束。
+func TestKillInstance_SkipsForeignRecord(t *testing.T) {
+	d := newFakeDaemon()
+	reg := newFakeRegistry()
+	runner := &fakeRunner{}
+	runner.healthy = true
+	pool := newTestPool(d, reg, runner, nil)
+	pool.SetNodeID("node-a")
+	ctx := context.Background()
+	ref := FunctionRef{ProjectID: "p1", FunctionID: "fn1"}
+	seedForeignRecord(t, reg, ref, "foreign-1", "node-b")
+
+	pool.killInstance(ctx, ref, &InstanceRecord{InstanceID: "foreign-1", ContainerID: "foreign-1", Node: "node-b"})
+
+	require.True(t, recordIDs(t, reg, ref)["foreign-1"], "他节点记录不得被删除")
+	require.Empty(t, d.stopped, "他节点容器不得由本节点杀")
+	require.Empty(t, d.removed)
+
+	// 本节点记录照旧强杀清账。
+	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "self-1", ContainerID: "self-1", IP: "10.0.0.1",
+		DeploymentID: "dep1", Node: "node-a", SpawnedAtMS: time.Now().UnixMilli(),
+		IdleSinceMS: time.Now().UnixMilli(), LeaseUntilMS: time.Now().Add(time.Minute).UnixMilli()}))
+	pool.killInstance(ctx, ref, &InstanceRecord{InstanceID: "self-1", ContainerID: "self-1", Node: "node-a"})
+	require.False(t, recordIDs(t, reg, ref)["self-1"], "本节点记录照旧删除")
+	require.Contains(t, d.stopped, "self-1")
+}
+
+// TestDrainForDeployment_ForeignRecordsLeftToOwnerReaper drain 他节点语义
+//（P2 S13）：Draining 标记照置（全局停接新请求，跨节点共享状态），但
+// killInstance 跳过他节点记录——本节点宽限 goroutine 不代杀，记录由对端
+// reaper 按 draining 语义收敛；本节点记录的宽限强杀照旧。
+func TestDrainForDeployment_ForeignRecordsLeftToOwnerReaper(t *testing.T) {
+	d := newFakeDaemon()
+	reg := newFakeRegistry()
+	runner := &fakeRunner{}
+	runner.healthy = true
+	pool := newTestPool(d, reg, runner, nil)
+	pool.SetNodeID("node-a")
+	ctx := context.Background()
+
+	now := time.Now()
+	ref := FunctionRef{ProjectID: "p1", FunctionID: "fn1"}
+	lease := now.Add(time.Minute).UnixMilli()
+	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "foreign-idle", ContainerID: "foreign-idle", IP: "10.7.0.1",
+		DeploymentID: "dep-old", Node: "node-b", SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.UnixMilli(), LeaseUntilMS: lease}))
+	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "self-busy", ContainerID: "self-busy", IP: "10.7.0.2",
+		DeploymentID: "dep-old", Node: "node-a", Inflight: 1, SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.UnixMilli(), LeaseUntilMS: lease}))
+
+	pool.DrainForDeployment(ctx, "p1", "fn1", "dep-new", 20*time.Millisecond)
+
+	// 他节点 idle 记录：标记已置、但不删（对端收敛）；本节点 busy 记录宽限到点强杀。
+	records, err := reg.List(ctx, ref)
+	require.NoError(t, err)
+	byID := map[string]InstanceRecord{}
+	for _, r := range records {
+		byID[r.InstanceID] = r
+	}
+	require.True(t, byID["foreign-idle"].Draining, "他节点记录的 draining 标记必须照置（全局停接新请求）")
+	time.Sleep(60 * time.Millisecond)
+	ids := recordIDs(t, reg, ref)
+	require.True(t, ids["foreign-idle"], "他节点记录不代杀，留给对端 reaper")
+	require.False(t, ids["self-busy"], "本节点 busy 记录宽限到点强杀照旧")
+}
+
+// TestPoolReaper_DrainingKillAnchor 项 3（P2 S13）判杀锚修正：busy draining
+// 实例（在途长请求）的 idle_since 停留在上次释放时刻——宽限内不得被 30s
+// 兜底判杀误杀，busy 态收敛只按判活规则（租约过期超 stuckBusyGrace，请求方
+// 已消失）；idle draining（inflight==0，release 归零时刷新过 idle_since）
+// 维持 30s 未自退出兜底强杀。
+func TestPoolReaper_DrainingKillAnchor(t *testing.T) {
+	d := newFakeDaemon()
+	reg := newFakeRegistry()
+	runner := &fakeRunner{}
+	runner.healthy = true
+	pool := newTestPool(d, reg, runner, nil)
+	pool.SetNodeID("node-a")
+	ctx := context.Background()
+	ref := FunctionRef{ProjectID: "p1", FunctionID: "fn1"}
+	now := time.Now()
+	lease := now.Add(time.Minute).UnixMilli()
+	staleIdle := now.Add(-60 * time.Second).UnixMilli() // 远超 30s 兜底窗口
+
+	// ① busy draining + 陈旧 idle_since + 租约有效：宽限内必须保留。
+	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "drain-busy", ContainerID: "drain-busy", IP: "10.7.0.1",
+		DeploymentID: "dep-old", Node: "node-a", Draining: true, Inflight: 1,
+		SpawnedAtMS: now.UnixMilli(), IdleSinceMS: staleIdle, LeaseUntilMS: lease}))
+	d.spawned["drain-busy"], d.running["drain-busy"] = "10.7.0.1", true
+	pool.Reaper(ctx)
+	require.True(t, recordIDs(t, reg, ref)["drain-busy"], "busy draining 实例宽限内不得被陈旧 idle_since 判杀")
+	require.Empty(t, d.stopped)
+
+	// ② busy draining + 租约过期超 stuckBusyGrace：请求方已消失，收敛。
+	_, _ = reg.Update(ctx, ref, "drain-busy", func(r *InstanceRecord) {
+		r.LeaseUntilMS = now.Add(-2 * stuckBusyGrace).UnixMilli()
+	})
+	pool.Reaper(ctx)
+	require.False(t, recordIDs(t, reg, ref)["drain-busy"], "busy draining 残留（请求方消失）必须收敛")
+
+	// ③ idle draining + 陈旧 idle_since：30s 未自退出兜底强杀（原语义保留）。
+	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "drain-idle", ContainerID: "drain-idle", IP: "10.7.0.2",
+		DeploymentID: "dep-old", Node: "node-a", Draining: true, Inflight: 0,
+		SpawnedAtMS: now.UnixMilli(), IdleSinceMS: staleIdle, LeaseUntilMS: lease}))
+	d.spawned["drain-idle"], d.running["drain-idle"] = "10.7.0.2", true
+	pool.Reaper(ctx)
+	require.False(t, recordIDs(t, reg, ref)["drain-idle"], "idle draining 30s 未自退出必须兜底强杀")
+
+	// ④ idle draining + 新鲜 idle_since：不动。
+	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "drain-fresh", ContainerID: "drain-fresh", IP: "10.7.0.3",
+		DeploymentID: "dep-old", Node: "node-a", Draining: true, Inflight: 0,
+		SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.Add(-5 * time.Second).UnixMilli(), LeaseUntilMS: lease}))
+	d.spawned["drain-fresh"], d.running["drain-fresh"] = "10.7.0.3", true
+	pool.Reaper(ctx)
+	require.True(t, recordIDs(t, reg, ref)["drain-fresh"], "新鲜 idle_since 的 draining 实例保留")
+}
+
+// TestPoolDispatch_ClaimNeverTakesForeignRecord 池级认领收窄（P2 S13）：
+// dispatch 认领传入本节点 ID，混池（他节点记录 + 旧记录）下只认领归属
+// 匹配的记录——他节点记录的 inflight 保持不动（不产生必然不可达的请求）。
+func TestPoolDispatch_ClaimNeverTakesForeignRecord(t *testing.T) {
+	d := newFakeDaemon()
+	reg := newFakeRegistry()
+	runner := &fakeRunner{}
+	runner.healthy = true
+	pool := newTestPool(d, reg, runner, nil)
+	pool.SetNodeID("node-a")
+	ctx := context.Background()
+
+	now := time.Now()
+	ref := FunctionRef{ProjectID: "p1", FunctionID: "fn1"}
+	lease := now.Add(time.Minute).UnixMilli()
+	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "foreign-1", ContainerID: "foreign-1", IP: "10.7.0.9",
+		DeploymentID: "dep1", Node: "node-b", SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.UnixMilli(), LeaseUntilMS: lease}))
+	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "legacy-1", ContainerID: "legacy-1", IP: "10.0.0.5",
+		DeploymentID: "dep1", SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.UnixMilli(), LeaseUntilMS: lease}))
+	d.spawned["legacy-1"], d.spawned["foreign-1"] = "10.0.0.5", "10.7.0.9"
+	d.running["legacy-1"], d.running["foreign-1"] = true, true
+
+	resp, err := pool.Dispatch(ctx, dispatchReq())
+	require.NoError(t, err)
+	require.Equal(t, "ok", resp.Status)
+
+	records, _ := reg.List(ctx, ref)
+	for _, r := range records {
+		if r.InstanceID == "foreign-1" {
+			require.Zero(t, r.Inflight, "他节点记录不得被本地认领")
+		}
+	}
+	require.Contains(t, runner.invokedData, `"a":1`, "请求在本节点可服务实例上执行")
+	require.Zero(t, d.spawnCount, "既有可服务实例存在时不得冷启动")
+}
+
 // TestApplyDefaults 池策略零值取平台默认（调用方零值时 dispatcher 侧兜底）。
 func TestApplyDefaults(t *testing.T) {
 	pool := newTestPool(newFakeDaemon(), newFakeRegistry(), &fakeRunner{}, nil)
@@ -1074,7 +1232,7 @@ func TestRegistryClaimRelease_ConcurrencyCap(t *testing.T) {
 				go func() {
 					defer wg.Done()
 					<-start
-					rec, err := reg.ClaimIdle(ctx, ref, "dep-1", time.Now().Add(leaseTTL))
+					rec, err := reg.ClaimIdle(ctx, ref, "dep-1", "", time.Now().Add(leaseTTL))
 					require.NoError(t, err)
 					if rec != nil {
 						mu.Lock()

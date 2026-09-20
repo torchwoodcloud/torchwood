@@ -115,9 +115,13 @@ type Registry interface {
 	// List 返回函数池内全部实例记录。
 	List(ctx context.Context, ref FunctionRef) ([]InstanceRecord, error)
 	// ClaimIdle 原子认领一个可服务（inflight < concurrency 且 draining=false
-	// 且部署匹配）实例并 inflight+1 + 续租；无可用实例返回 (nil, nil)。
-	// （v3 §1.1 背压顺序①；concurrency=1 时与 v2 busy 互斥语义逐步等价。）
-	ClaimIdle(ctx context.Context, ref FunctionRef, deploymentID string, leaseUntil time.Time) (*InstanceRecord, error)
+	// 且部署匹配且节点归属 selfNodeID）实例并 inflight+1 + 续租；无可用实例
+	// 返回 (nil, nil)。（v3 §1.1 背压顺序①；concurrency=1 时与 v2 busy 互斥
+	// 语义逐步等价。）节点收窄（P2 S13）：rec.node 显式他节点 → 不认领——
+	// 实例容器 IP 只在其节点的 docker 网络内可达，跨节点认领的请求必然
+	// 不可达；rec.node 为空（本特性之前的旧记录，单机时代存量）放行——升级
+	// 窗口共存语义，与 ownedBySelf 同口径。
+	ClaimIdle(ctx context.Context, ref FunctionRef, deploymentID string, selfNodeID string, leaseUntil time.Time) (*InstanceRecord, error)
 	// Save 写回/创建实例记录。
 	Save(ctx context.Context, ref FunctionRef, rec InstanceRecord) error
 	// Release 原子释放一次在途请求（v3 §1.3 释放脚本——Go 读改写释放与
@@ -163,9 +167,12 @@ func spawnLockKey(ref FunctionRef) string {
 
 // claimIdleLua 在 Redis 侧原子完成「找可服务实例 → inflight+1 → 续租」
 // （v3 §1.3 认领脚本）：可服务 = inflight < concurrency 且未 draining 且
-// 部署匹配。旧记录兼容（v3 §1.3）：inflight 缺省由 busy 推导、concurrency
-// 缺省 1。记录时间字段已全部数值毫秒化，Lua cjson 往返不改写任何形态
-// （v3 §1.3「时间字段毫秒化（排雷）」）。脚本失败即无实例返回。
+// 部署匹配且节点归属本节点。旧记录兼容（v3 §1.3）：inflight 缺省由 busy
+// 推导、concurrency 缺省 1、node 缺省/空串按旧记录放行（P2 S13 节点收窄的
+// 升级窗口共存语义）。记录时间字段已全部数值毫秒化，Lua cjson 往返不改写
+// 任何形态（v3 §1.3「时间字段毫秒化（排雷）」）。脚本失败即无实例返回。
+//
+// ARGV：①deployment_id ②lease_until_ms ③self_node_id。
 var claimIdleLua = redis.NewScript(`
 local vals = redis.call('HVALS', KEYS[1])
 for i = 1, #vals do
@@ -175,7 +182,8 @@ for i = 1, #vals do
     if inf == nil then inf = (rec.busy == true) and 1 or 0 end
     local c = rec.concurrency
     if c == nil or c <= 0 then c = 1 end
-    if rec.draining == false and rec.deployment_id == ARGV[1] and inf < c then
+    local foreign = type(rec.node) == 'string' and rec.node ~= '' and rec.node ~= ARGV[3]
+    if not foreign and rec.draining == false and rec.deployment_id == ARGV[1] and inf < c then
       rec.inflight = inf + 1
       rec.lease_until_ms = tonumber(ARGV[2])
       redis.call('HSET', KEYS[1], rec.instance_id, cjson.encode(rec))
@@ -235,9 +243,9 @@ func (r *redisRegistry) List(ctx context.Context, ref FunctionRef) ([]InstanceRe
 	return out, nil
 }
 
-func (r *redisRegistry) ClaimIdle(ctx context.Context, ref FunctionRef, deploymentID string, leaseUntil time.Time) (*InstanceRecord, error) {
+func (r *redisRegistry) ClaimIdle(ctx context.Context, ref FunctionRef, deploymentID string, selfNodeID string, leaseUntil time.Time) (*InstanceRecord, error) {
 	raw, err := claimIdleLua.Run(ctx, r.rdb, []string{registryKey(ref)},
-		deploymentID, leaseUntil.UnixMilli()).Text()
+		deploymentID, leaseUntil.UnixMilli(), selfNodeID).Text()
 	if errors.Is(err, redis.Nil) {
 		return nil, nil
 	}

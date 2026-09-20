@@ -532,18 +532,19 @@ func (d *dockerDaemon) BuildImage(ctx context.Context, opts BuildImageOptions) e
 		return err
 	}
 
-	tarCtx, err := tarDir(buildDir)
-	if err != nil {
-		return fmt.Errorf("tar build context: %w", err)
-	}
 	ref := infrafunctions.ImageName(d.cfg, opts.FunctionID, opts.DeploymentID)
 	buildOpts := build.ImageBuildOptions{
 		Tags:       []string{ref},
 		Dockerfile: "Dockerfile",
 		Remove:     true,
 	}
+	// 流式 build context（tarDir）：ImageBuild 失败路径必须 Close 读端——
+	// 唤醒可能仍阻塞在 pipe 写侧的打包 goroutine（HTTP transport 不会读到
+	// EOF）；成功路径由 transport 关闭请求 body，goroutine 自然收尾。
+	tarCtx := tarDir(buildDir)
 	resp, err := cli.ImageBuild(ctx, tarCtx, buildOpts)
 	if err != nil {
+		_ = tarCtx.Close()
 		return fmt.Errorf("docker build failed: %s", infrafunctions.TruncateBuildLog(err.Error()))
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -1116,11 +1117,33 @@ func (d *dockerDaemon) RemoveImage(ctx context.Context, functionID, deploymentID
 	return nil
 }
 
-// tarDir 将目录打包为 build context tar（与 infra/functions 同构；dispatcher
-// 侧独立实现避免导出面扩散）。
-func tarDir(dir string) (io.Reader, error) {
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
+// tarDir 将目录流式打包为 build context tar（与 infra/functions 同构；
+// dispatcher 侧独立实现避免导出面扩散）。
+//
+// P2 S13 流式化：原实现把整棵 tar 缓冲进 bytes.Buffer——50MiB zip 场景
+// （解压预算 200MiB）构建峰值内存 ≈ tar 缓冲 + 解压目录 + base64 载荷
+// ≈ 800MB 量级。现改 io.Pipe + goroutine 边 WalkDir 边写，调用方
+//（ImageBuild 接受 io.Reader，无 ReadSeeker 要求）直接消费读端，峰值内存
+// 降为单文件拷贝缓冲。错误经 pipe 传播（CloseWithError，读侧/HTTP 请求
+// 以读错误收场——遍历目录是刚由 prepareBuildContext 写出的自有文件，
+// 出错概率极低，接受错误文案不经「tar build context」包装）。调用方在
+// ImageBuild 失败路径须 Close 读端，唤醒阻塞中的写侧（防 goroutine 悬挂）；
+// 成功路径由 HTTP transport 关闭请求 body。
+//
+// umask 归一化语义（EACCES 秒退事故的坏档修复）原样保留：文件恒 0644、
+// 目录恒 0755、属主归零——见循环内注释。
+func tarDir(dir string) io.ReadCloser {
+	pr, pw := io.Pipe()
+	go func() {
+		pw.CloseWithError(writeBuildContext(pw, dir))
+	}()
+	return pr
+}
+
+// writeBuildContext 是 tarDir 的写侧：遍历 dir 逐条目写入 tar 流（与流式化
+// 前的字节语义一致）。
+func writeBuildContext(w io.Writer, dir string) error {
+	tw := tar.NewWriter(w)
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -1175,12 +1198,9 @@ func tarDir(dir string) (io.Reader, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if err := tw.Close(); err != nil {
-		return nil, err
-	}
-	return &buf, nil
+	return tw.Close()
 }
 
 func int64Ptr(v int64) *int64 { return &v }

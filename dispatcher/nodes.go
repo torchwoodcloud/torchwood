@@ -48,7 +48,7 @@ const (
 
 	// capacityKeyTTL 是节点容量键的 TTL（与节点心跳 defaultNodeTTL 同宽）：
 	// 刷新点 = spawn 成功 / terminate / reaper（reaper 每轮无条件刷一次，
-	// ReaperInterval 15s = TTL 的 1/2，连续两轮失败仍在 TTL 内）。节点死后
+	// ReaperInterval 15s = TTL 的 1/6，连续多轮失败仍在 TTL 内）。节点死后
 	// 键在 TTL 内消失，全局求和自动不再计入死节点（心跳死亡判定同款语义）。
 	capacityKeyTTL = defaultNodeTTL
 
@@ -56,13 +56,17 @@ const (
 	// 同款纪律：容量刷新不得占用调用路径的超时预算）。
 	capacityWriteTimeout = 5 * time.Second
 
-	// defaultNodeTTL 是节点心跳 TTL（心跳间隔的 3 倍容忍度）：最后一次
-	// 心跳后 30s 键自动消失 = 节点失联判定基准（M8 死节点收敛的宽限）。
-	defaultNodeTTL = 30 * time.Second
+	// defaultNodeTTL 是节点心跳 TTL（心跳间隔的 6 倍容忍度）：最后一次
+	// 心跳后 90s 键自动消失 = 节点失联判定基准（M8 死节点收敛的宽限）。
+	// P2 S13 由 30s 放宽：30s/10s 只容忍 2 次连续心跳失败，瞬时 Redis
+	// 抖动/网络闪断即误判节点死亡、触发存活节点的记录误删（容器还活着
+	// → 泄漏）；90s/15s 容忍连续 2 次失败仍余 4 个心跳周期，配合 reaper
+	// 死节点二次确认（连续两轮快照缺失，pool.go deadNodePending）双重降噪。
+	defaultNodeTTL = 90 * time.Second
 
-	// nodeHeartbeatInterval 是心跳周期（TTL 的 1/3：连续两次失败仍能在
-	// TTL 内刷新成功）。
-	nodeHeartbeatInterval = 10 * time.Second
+	// nodeHeartbeatInterval 是心跳周期（TTL 的 1/6：连续两次失败仍有充足
+	// 余量在 TTL 内刷新成功）。
+	nodeHeartbeatInterval = 15 * time.Second
 
 	// nodeHBTimeout 是单次心跳写操作的独立超时（心跳不得占用 reaper 的
 	// dockerCleanupTimeout 预算）。
@@ -71,6 +75,37 @@ const (
 	// defaultDispatcherPort 是 addr 缺省时的监听端口（service.go 同值）。
 	defaultDispatcherPort = "9070"
 )
+
+// ——多副本/容器化部署前置条件（P2 S13 登记；现状单机 Dokploy 部署均不
+// 触发，扩副本或容器化重建 dispatcher 前逐项核对）——
+//
+//  1. node_id / node_url 必须显式配置。ResolveNodeIdentity 缺省回落
+//     os.Hostname：容器化部署 hostname 随容器重建变化，node_id 漂移后旧
+//     实例记录（旧 node）要等旧「节点」失联才被收敛，期间对账/认领按孤儿
+//     处理；node_url 缺省推导 http://127.0.0.1:<port> 只对同机调用方成立，
+//     多机转发必败。二者均无静态默认可依——部署清单强制落配置。
+//  2. Redis 是单点：fninst（实例注册表）/ fnnodes（节点心跳）/
+//     fncap（容量键）/ fnspawn（spawn 锁）全部依赖单一 Redis 实例，无
+//     HA/仲裁。Redis 不可达时的降级语义分散在各文件头（容量门 fail-open、
+//     死节点收敛 fail-safe 跳过、spawn 锁获取失败即 spawn 失败），扩副本前
+//     需按部署形态评估（哨兵/集群或接受单点）。
+//  3. S13 修复的语义边界：
+//     - ClaimIdle 按 node 收窄（registry.go claimIdleLua）：显式他节点记录
+//       不认领；node 为空的旧记录放行（升级窗口共存语义，自然老化）；
+//     - killInstance 归属校验（pool.go）：执行错误/drain/idle 回收路径不删
+//       他节点记录——留给对端 reaper 收敛；死节点收敛（Reaper M8 ②）不经
+//       killInstance，仍可删他节点记录（连续两轮快照缺失二次确认后）；
+//     - reaper draining 兜底判杀分 busy/idle 两支（pool.go）：busy 走判活
+//       规则（租约过期超 stuckBusyGrace），idle 按 release 刷新过的
+//       idle_since_ms 判 30s 未自退出——DrainForDeployment 的在途宽限不再
+//       被压到 30s；
+//     - 心跳 defaultNodeTTL=90s / 间隔 15s：容忍连续 2 次心跳失败。
+//  4. 已知残余（有意不做）：route 的孤儿记录收敛（routing.go
+//     dropOrphanRecords）是请求时点单次判定，无二次确认——GetNode 确定性
+//     miss 即删，依赖 90s TTL 保证误判窗口足够窄；DrainForDeployment 对
+//     他节点实例只置 draining 标记、不代杀（killInstance 跳过他节点），
+//     对端收敛节奏（busy 实例等在途请求结束后 ≤30s+reaper 间隔）可能慢于
+//     本节点宽限，属接受的最终一致。
 
 // NodeRecord 是节点注册表成员：一个 dispatcher 节点的投影。时间字段沿用
 // 实例注册表约定：数值 Unix 毫秒（无 Lua 改写路径，纯一致性口径）。

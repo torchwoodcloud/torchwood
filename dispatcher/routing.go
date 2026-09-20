@@ -221,10 +221,11 @@ func (p *PoolManager) route(ctx context.Context, req ExecuteRequest) (*ExecuteRe
 			// 决策 3：节点已失联（心跳键消失，GetNode 确定性 miss）——
 			// 其记录视为孤儿，顺手收敛后走冷启动规则。收敛与 reaper M8 ②
 			// 同证据同动作（键消失 = 节点已死，只删记录不碰 daemon），只是
-			// 提前到请求时点：不删则本地 ClaimIdle（按 deployment 匹配、
-			// 不识节点）会认领孤儿记录，把请求浪费在必然不可达的容器 IP 上
-			//（真实故障被「resident instance failed: dial tcp …」掩盖，
-			// 自愈多绕一圈）。
+			// 提前到请求时点。P2 S13 后 ClaimIdle 已按 node 收窄（孤儿记录
+			// 不会再被认领、把请求浪费在必然不可达的容器 IP 上），此处保留
+			// 的价值 = 注册表状态提前收敛（不等到 reaper 轮次）：单次判定
+			// 无二次确认，依赖 90s 心跳 TTL 保证误判窗口足够窄（见 nodes.go
+			// 「多副本前置条件」第 4 条）。
 			p.dropOrphanRecords(ctx, ref, nodeID, heRecs)
 			continue
 		}

@@ -74,7 +74,7 @@ func TestRedisRegistry_ClaimReleaseRoundTrip(t *testing.T) {
 	})
 
 	// ① claim 返回记录必须可反序列化且 inflight=1。
-	rec, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
+	rec, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
 	require.NoError(t, err)
 	require.NotNil(t, rec)
 	require.Equal(t, "inst-1", rec.InstanceID)
@@ -105,7 +105,7 @@ func TestRedisRegistry_ClaimReleaseRoundTrip(t *testing.T) {
 	require.Equal(t, now.UnixMilli(), out.IdleSinceMS)
 	require.Equal(t, leaseUntil.UnixMilli(), out.LeaseUntilMS, "release 必须续租")
 
-	rec2, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
+	rec2, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
 	require.NoError(t, err)
 	require.NotNil(t, rec2, "release 后二次 claim 必须成功")
 	require.Equal(t, "inst-1", rec2.InstanceID)
@@ -150,7 +150,7 @@ func TestRedisRegistry_InflightConcurrency(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			rec, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
+			rec, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
 			require.NoError(t, err)
 			if rec != nil {
 				successes.Add(1)
@@ -173,7 +173,7 @@ func TestRedisRegistry_InflightConcurrency(t *testing.T) {
 	require.Zero(t, records[0].Inflight, "4 claim + 4 release 后 inflight 必须归零")
 	require.Equal(t, int64(4), records[0].Requests)
 
-	rec, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
+	rec, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
 	require.NoError(t, err)
 	require.NotNil(t, rec, "计数收敛后必须可再次认领（无永久「满载」漂移）")
 }
@@ -215,7 +215,7 @@ func TestRedisRegistry_ClaimIdleMutex(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			rec, err := reg.ClaimIdle(ctx, ref, "dep-1", time.Now().Add(leaseTTL))
+			rec, err := reg.ClaimIdle(ctx, ref, "dep-1", "", time.Now().Add(leaseTTL))
 			require.NoError(t, err)
 			if rec != nil {
 				successes.Add(1)
@@ -266,7 +266,7 @@ func TestRedisRegistry_LegacyRecordCompat(t *testing.T) {
 	require.NotZero(t, records[0].SpawnedAtMS, "RFC3339 spawned_at 必须解析为毫秒")
 	require.NotZero(t, records[0].IdleSinceMS, "RFC3339 idle_since 必须解析为毫秒")
 
-	rec, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
+	rec, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
 	require.NoError(t, err)
 	require.NotNil(t, rec, "旧记录可被认领（Lua inflight/busy 兜底）")
 	require.Equal(t, "inst-legacy", rec.InstanceID)
@@ -311,7 +311,7 @@ func TestRedisRegistry_ReleaseTimeoutFuse(t *testing.T) {
 		LeaseUntilMS: now.Add(leaseTTL).UnixMilli(),
 	})
 
-	_, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
+	_, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
 	require.NoError(t, err)
 	_, err = reg.Release(ctx, ref, "inst-1", now, now.Add(leaseTTL), false)
 	require.NoError(t, err)
@@ -320,7 +320,7 @@ func TestRedisRegistry_ReleaseTimeoutFuse(t *testing.T) {
 
 	// 超时释放路径 ×3：timeouts 累加到 3。
 	for i := 0; i < 3; i++ {
-		_, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
+		_, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
 		require.NoError(t, err)
 		out, err := reg.Release(ctx, ref, "inst-1", now, now.Add(leaseTTL), true)
 		require.NoError(t, err)
@@ -356,22 +356,92 @@ func TestRedisRegistry_ReleaseMaxRequestsDrains(t *testing.T) {
 	})
 
 	// 第 1 次：requests=1 < 2，不 draining。
-	_, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
+	_, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
 	require.NoError(t, err)
 	out, err := reg.Release(ctx, ref, "inst-1", now, now.Add(leaseTTL), false)
 	require.NoError(t, err)
 	require.False(t, out.Draining)
 
 	// 第 2 次：requests=2 >= max_requests → draining（实例不再可认领）。
-	_, err = reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
+	_, err = reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
 	require.NoError(t, err)
 	out, err = reg.Release(ctx, ref, "inst-1", now, now.Add(leaseTTL), false)
 	require.NoError(t, err)
 	require.True(t, out.Draining, "达记录固化 max_requests 后必须判 draining")
 
-	rec, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
+	rec, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
 	require.NoError(t, err)
 	require.Nil(t, rec, "draining 实例不得被认领")
+}
+
+// TestRedisRegistry_ClaimIdleNodeScoping 双节点记录互相不认领（P2 S13，
+// miniredis 真 Lua 求值）：ClaimIdle 按 selfNodeID 收窄——显式他节点记录
+// 不认领（其容器 IP 仅在其节点 docker 网络内可达，跨节点认领必败）；
+// node 为空的旧记录放行（升级窗口共存语义，与 ownedBySelf 同口径）。
+func TestRedisRegistry_ClaimIdleNodeScoping(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	rdb := newRegistryTestRedis(t)
+	reg := NewRedisRegistry(rdb)
+	ctx := context.Background()
+	now := time.Now()
+	lease := now.Add(leaseTTL)
+
+	seed := func(ref FunctionRef, id, node string) {
+		t.Helper()
+		require.NoError(t, rdb.Del(ctx, registryKey(ref)).Err())
+		seedInstance(t, rdb, ref, InstanceRecord{
+			InstanceID:   id,
+			ContainerID:  id,
+			IP:           "10.0.0.1",
+			DeploymentID: "dep-1",
+			Node:         node,
+			SpawnedAtMS:  now.UnixMilli(),
+			IdleSinceMS:  now.UnixMilli(),
+			LeaseUntilMS: lease.UnixMilli(),
+		})
+	}
+
+	// ① 他节点记录：node-a 认领必败、node-b 认领成功。
+	refB := FunctionRef{ProjectID: "redis-it", FunctionID: "fn-node-b"}
+	seed(refB, "inst-b", "node-b")
+	rec, err := reg.ClaimIdle(ctx, refB, "dep-1", "node-a", lease)
+	require.NoError(t, err)
+	require.Nil(t, rec, "node-a 不得认领 node-b 的记录")
+	rec, err = reg.ClaimIdle(ctx, refB, "dep-1", "node-b", lease)
+	require.NoError(t, err)
+	require.NotNil(t, rec, "归属节点本人可认领")
+	require.Equal(t, "inst-b", rec.InstanceID)
+
+	// ② 旧记录（node 为空）：任意节点放行（升级窗口共存）。
+	refL := FunctionRef{ProjectID: "redis-it", FunctionID: "fn-node-legacy"}
+	seed(refL, "inst-legacy", "")
+	rec, err = reg.ClaimIdle(ctx, refL, "dep-1", "node-a", lease)
+	require.NoError(t, err)
+	require.NotNil(t, rec, "node 为空的旧记录必须放行")
+	require.Equal(t, "inst-legacy", rec.InstanceID)
+
+	// ③ 混合池：归属匹配的记录可认领，他节点记录被跳过（不互相挡道）。
+	refM := FunctionRef{ProjectID: "redis-it", FunctionID: "fn-node-mixed"}
+	require.NoError(t, rdb.Del(ctx, registryKey(refM)).Err())
+	seedInstance(t, rdb, refM, InstanceRecord{
+		InstanceID: "mix-b", ContainerID: "mix-b", IP: "10.0.0.2", DeploymentID: "dep-1",
+		Node: "node-b", SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.UnixMilli(), LeaseUntilMS: lease.UnixMilli(),
+	})
+	seedInstance(t, rdb, refM, InstanceRecord{
+		InstanceID: "mix-a", ContainerID: "mix-a", IP: "10.0.0.3", DeploymentID: "dep-1",
+		Node: "node-a", SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.UnixMilli(), LeaseUntilMS: lease.UnixMilli(),
+	})
+	rec, err = reg.ClaimIdle(ctx, refM, "dep-1", "node-a", lease)
+	require.NoError(t, err)
+	require.NotNil(t, rec)
+	require.Equal(t, "mix-a", rec.InstanceID, "混合池只认领归属本节点的记录")
+
+	// ④ 无主节点 ID（node-c）：池内全是 node-a/node-b 记录 → nil。
+	rec, err = reg.ClaimIdle(ctx, refM, "dep-1", "node-c", lease)
+	require.NoError(t, err)
+	require.Nil(t, rec, "无关节点 ID 不得认领任何显式归属记录")
 }
 
 // TestRedisRegistry_AcquireSpawnLock 真 Redis 上的 spawn 锁语义：互斥获取 +

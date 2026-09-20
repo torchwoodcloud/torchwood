@@ -147,8 +147,8 @@ func buildNonContractImage(t *testing.T, ctx context.Context, cli *client.Client
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte(
 		"FROM node:18-alpine\n"+
 			"CMD [\"node\",\"-e\",\"setInterval(function(){},1000)\"]\n"), 0o600))
-	tarCtx, err := tarDir(dir)
-	require.NoError(t, err)
+	tarCtx := tarDir(dir)
+	defer func() { _ = tarCtx.Close() }()
 	resp, err := cli.ImageBuild(ctx, tarCtx, build.ImageBuildOptions{
 		Tags: []string{ref}, Dockerfile: "Dockerfile", Remove: true,
 	})
