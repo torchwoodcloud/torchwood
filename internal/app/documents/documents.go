@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/torchwoodcloud/torchwood/internal/app/shared"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
@@ -37,18 +39,31 @@ const (
 	MaxObjectDepth       = 8
 )
 
-// ValidateDocumentPayload 校验写入载荷大小与结构（Create/Update/Upsert/Bulk/
-// execute-tx 共用）。Update 是部分更新，总量按本次提交的载荷计（合并后全量
-// 在 infra 读回后自然受单属性与列宽约束）。超限/不可序列化 → InvalidArgument，
-// 违规属性定位走 BadRequest violations（redesign §4.1，域码 TOO_LARGE/
-// ATTRIBUTE_UNSERIALIZABLE）；数组元素数与 object 嵌套深度属同一结构尺寸族
-// （redesign §11-J H2），复用 TOO_LARGE。
+// attributeKeyRe 与 maxAttributeKeyBytes 是数据键前置校验规则（S6 fail-closed：
+// 非法键历史上被静默丢弃——200 成功但字段未落库）。规则与 DDL 通道
+// （server.ValidateIdentifier：identifierRe + 63 字节）及 infra 兜底
+// （documentdb.validateDataKey：safeNameRe + `_` 保留 + maxIdentifierBytes）
+// 三处同源；此处是写入面早拒（省一次 DB 往返），infra 是直调 adapter 的
+// 第二道防线。
+var attributeKeyRe = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+
+const maxAttributeKeyBytes = 63
+
+// ValidateDocumentPayload 校验写入载荷的键名、大小与结构（Create/Update/
+// Upsert/Bulk/execute-tx 共用）。Update 是部分更新，总量按本次提交的载荷计
+// （合并后全量在 infra 读回后自然受单属性与列宽约束）。超限/不可序列化/
+// 非法键 → InvalidArgument，违规属性定位走 BadRequest violations（redesign
+// §4.1，域码 TOO_LARGE/ATTRIBUTE_UNSERIALIZABLE/INVALID_ARGUMENT）；数组元素
+// 数与 object 嵌套深度属同一结构尺寸族（redesign §11-J H2），复用 TOO_LARGE。
 func ValidateDocumentPayload(data map[string]any) error {
 	if len(data) == 0 {
 		return nil
 	}
 	total := 0
 	for k, v := range data {
+		if err := validateAttributeKey("data."+k, k); err != nil {
+			return err
+		}
 		b, err := json.Marshal(v)
 		if err != nil {
 			return shared.DomainStatusWithViolations(databases.ErrCodeAttributeUnserializable,
@@ -136,6 +151,43 @@ func ValidateArrayUpdates(arrayUpdates map[string]databases.ArrayUpdate) error {
 		if n := len(arrayUpdates[k].Values); n > MaxArrayElements {
 			return shared.DomainStatusWithViolations(databases.ErrCodeTooLarge,
 				shared.FieldViolation{Field: "array_updates." + k, Description: fmt.Sprintf("array update %q has %d values, exceeds the %d-element limit", k, n, MaxArrayElements)})
+		}
+	}
+	return nil
+}
+
+// validateAttributeKey 校验单个数据键可映射为物理列名（`_` 前缀系统列保留 /
+// 标识符语法 / ≤63 字节，规则见 attributeKeyRe 注释）。field 为 violations 的
+// 定位路径（"data.<k>" / "increment.<k>"）。
+func validateAttributeKey(field, k string) error {
+	desc := fmt.Sprintf("attribute %q", k)
+	if strings.HasPrefix(k, "_") {
+		return shared.DomainStatusWithViolations(databases.ErrCodeInvalidArgument,
+			shared.FieldViolation{Field: field, Description: desc + ": keys with \"_\" prefix are reserved for system columns"})
+	}
+	if !attributeKeyRe.MatchString(k) {
+		return shared.DomainStatusWithViolations(databases.ErrCodeInvalidArgument,
+			shared.FieldViolation{Field: field, Description: desc + ": invalid attribute key, must match " + attributeKeyRe.String()})
+	}
+	if len(k) > maxAttributeKeyBytes {
+		return shared.DomainStatusWithViolations(databases.ErrCodeInvalidArgument,
+			shared.FieldViolation{Field: field, Description: fmt.Sprintf("attribute %q exceeds the %d-byte identifier limit", k, maxAttributeKeyBytes)})
+	}
+	return nil
+}
+
+// ValidateIncrement 校验 increment 通道的数据键（S6：Update 的 increment 键
+// 不经 ValidateDocumentPayload，历史上同样被 infra 静默丢弃；此处早拒，execute-tx
+// op 的 increment 由 infra validateDataKey 兜底）。键排序保证多键违规时报错
+// 确定性（与 ValidateArrayUpdates 同法）。
+func ValidateIncrement(increment map[string]int64) error {
+	keys := make([]string, 0, len(increment))
+	for k := range increment {
+		keys = append(keys, k)
+	}
+	for _, k := range sortedStrings(keys) {
+		if err := validateAttributeKey("increment."+k, k); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -282,6 +334,9 @@ func (d *Documents) UpdateDocument(
 		return nil, false, err
 	}
 	if err := ValidateArrayUpdates(arrayUpdates); err != nil {
+		return nil, false, err
+	}
+	if err := ValidateIncrement(increment); err != nil {
 		return nil, false, err
 	}
 	return idempotentExec(ctx, d.idem, projectID, requestID, "databases.UpdateDocument", principal,

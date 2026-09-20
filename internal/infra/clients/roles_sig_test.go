@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -25,11 +26,11 @@ func TestSignRolesSig_FormatAndVerify(t *testing.T) {
 	sig := SignRolesSig(keyHex, tenant, "any\x1fuser:bob", now)
 	parts := strings.SplitN(sig, "|", 2)
 	require.Len(t, parts, 2)
-	require.Equal(t, "1750000060", parts[0], "exp = now + 60s")
+	require.Equal(t, "1750000180", parts[0], "exp = now + rolesSigTTL(180s)")
 
 	// 独立重算（不依赖实现自身）验证 mac——消息含 tenant（R16 ①）。
 	mac := hmac.New(sha256.New, []byte(keyHex))
-	_, _ = mac.Write([]byte("42|any\x1fuser:bob|1750000060"))
+	_, _ = mac.Write([]byte("42|any\x1fuser:bob|1750000180"))
 	require.Equal(t, hex.EncodeToString(mac.Sum(nil)), parts[1])
 
 	// 主密钥派生：与 page-token 同模式（HMAC-SHA256(master, purpose)）。
@@ -80,4 +81,26 @@ func TestSameExecIdentity_TenantAware(t *testing.T) {
 	base := ExecIdentity{Role: RoleApp, Roles: []string{"any"}, Tenant: 7}
 	require.True(t, SameExecIdentity(base, ExecIdentity{Role: RoleApp, Roles: []string{"any"}, Tenant: 7}))
 	require.False(t, SameExecIdentity(base, ExecIdentity{Role: RoleApp, Roles: []string{"any"}, Tenant: 8}))
+}
+
+// TestRolesSigTTL_CoversLongTransaction（S6 缺陷 2）：sig 的 exp 从事务首条
+// 注入起算、事务内不再续签，TTL 必须显著大于 pgdriver ReadTimeout（60s），
+// 否则接近/超过 TTL 的长事务后半段 tw_roles() 验签过期 → 零角色 fail-closed。
+// 函数级断言：注入时刻起 170s（≈事务内长尾语句仍需通过验签的最坏窗）exp
+// 未到、sig 仍有效；TTL 时刻整点过期。不真等——exp 由 SignRolesSig 从
+// now+TTL 起算，直接对常量与 exp 差值断言。
+func TestRolesSigTTL_CoversLongTransaction(t *testing.T) {
+	require.Greater(t, RolesSigTTL, 2*60*time.Second,
+		"RolesSigTTL 必须显著大于 ReadTimeout(60s)，长事务后半段验签才不塌缩")
+
+	now := time.Unix(1750000000, 0).UTC()
+	sig := SignRolesSig("aa", 1, "any", now)
+	expStr := strings.SplitN(sig, "|", 2)[0]
+	exp, err := strconv.ParseInt(expStr, 10, 64)
+	require.NoError(t, err)
+
+	require.GreaterOrEqual(t, exp, now.Add(170*time.Second).Unix(),
+		"注入后 170s（长事务后半段）sig 仍未过期")
+	require.LessOrEqual(t, exp, now.Add(RolesSigTTL).Unix(),
+		"exp 恰为 now+TTL，窗口不超发")
 }

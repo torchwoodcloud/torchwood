@@ -106,9 +106,9 @@ func SameExecIdentity(a, b ExecIdentity) bool {
 //
 // roles_sig（阶段③-b 包 C，A2 简化版 + R16 ①）：tw_app 身份同时注入
 // app.tenant 与 app.roles_sig = HMAC-SHA256(密钥, tenant|roles|exp)
-// （"<exp>|<hexmac>"，60s 窗口），供 tw_roles()/tw_tenant() 验签——app.roles
-// 与 app.tenant GUC 本身可被任何持 SQL 会话者 set_config 伪造，验签后伪造
-// 通道封死（密钥仅存在于 Go 进程与 tw_secrets 表，tw_app 不可读）。
+// （"<exp>|<hexmac>"，窗口见 rolesSigTTL），供 tw_roles()/tw_tenant() 验签——
+// app.roles 与 app.tenant GUC 本身可被任何持 SQL 会话者 set_config 伪造，验签后
+// 伪造通道封死（密钥仅存在于 Go 进程与 tw_secrets 表，tw_app 不可读）。
 // 密钥未初始化时不注入 sig → 验签失败 → 零角色/NULL tenant fail-closed
 // （与漏注入同语义）。
 func InjectExecIdentity(ctx context.Context, idb bun.IDB, id ExecIdentity) error {
@@ -162,9 +162,25 @@ func ResetExecIdentity(ctx context.Context, idb bun.IDB) error {
 // RolesSigPurpose 是 roles GUC 签名的密钥派生域（HMAC-SHA256(master, purpose)）。
 const RolesSigPurpose = "tw-roles-guc-v1"
 
-// rolesSigTTL 是签名有效期窗口（注入时刻起 60s：文档事务为短事务，窗口
-// 同时是 DB 时钟偏差容差）。
-const rolesSigTTL = 60 * time.Second
+// RolesSigTTL 是签名有效期窗口（注入时刻起 180s，S6 前为 60s）。约束关系
+// （改任一方须同步评估另一方）：sig 的 exp 从事务首条注入（injectIdentitySQL）
+// 时刻起算、事务内不再续签，而 pgdriver ReadTimeout（database.go，当前 60s）
+// 是单条语句的客户端读超时上限——TTL 必须显著大于 ReadTimeout，否则接近/超过
+// TTL 的长事务（如 execute-tx 最多 1000 op）后半段每条语句的 tw_roles() 验签
+// 过期 → 零角色 fail-closed，同一事务"前半可见后半不可见"，UPDATE 0 行被误判
+// PERMISSION_DENIED / SELECT 误判 NotFound。180s = 3×ReadTimeout，覆盖长事务
+// 与 DB 时钟偏差；若调大 ReadTimeout（如容纳更长的索引构建），须同步上调本值。
+//
+// 安全评估（为什么可以更长）：TTL 变长唯一放大的是被窃取 sig 的重放窗口。但
+// sig 只能经 set_config 注入到我们自己在事务内开的连接（SET LOCAL ROLE +
+// set_config(..., true) 随事务结束一并失效），跨会话/跨事务不可重放；而能
+// set_config 的前提是已持有 SQL 会话（tw_app 连接本身），此时 sig 并不提供
+// 超出该会话已有的能力——真实威胁（伪造 app.roles GUC）由 HMAC 验签封死，
+// 与窗口长短无关。
+//
+// 导出供测试构造"确定过期/确定有效"的 sig（TTL 相对偏移，硬编码会随 TTL
+// 调整腐化）。
+const RolesSigTTL = 180 * time.Second
 
 var rolesSigKeyHex atomic.Value // string
 
@@ -196,7 +212,7 @@ func RolesSigKeyHex() (string, bool) {
 // 派生钥（RolesSigKeyHex），经 SyncRolesSigKey 落库为 tw_secrets 的 current
 // 位——签名恒用 current，验证侧（tw_sig_match）再兼容 previous。
 func SignRolesSig(keyHex string, tenant int64, roles string, now time.Time) string {
-	exp := now.Add(rolesSigTTL).Unix()
+	exp := now.Add(RolesSigTTL).Unix()
 	mac := hmac.New(sha256.New, []byte(keyHex))
 	_, _ = mac.Write([]byte(strconv.FormatInt(tenant, 10) + "|" + roles + "|" + strconv.FormatInt(exp, 10)))
 	return strconv.FormatInt(exp, 10) + "|" + hex.EncodeToString(mac.Sum(nil))

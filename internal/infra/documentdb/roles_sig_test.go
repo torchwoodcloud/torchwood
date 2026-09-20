@@ -112,8 +112,9 @@ func TestRolesSig_FailClosed(t *testing.T) {
 		return nil
 	}))
 
-	// 态③：过期 sig（密钥正确、exp 在过去）。
-	expired := clients.SignRolesSig(keyHex, f.internalID, "any", time.Now().Add(-2*time.Minute))
+	// 态③：过期 sig（密钥正确、exp 在过去）。按 TTL 相对偏移构造（S6 前
+	// TTL=60s、硬编码 -2min；TTL 调整后硬编码会静默失效）。
+	expired := clients.SignRolesSig(keyHex, f.internalID, "any", time.Now().Add(-clients.RolesSigTTL-time.Minute))
 	require.NoError(t, asAppWithGUC(ctx, f.db, f.internalID, "any", expired, func(txCtx context.Context) error {
 		require.EqualValues(t, 0, rolesN(txCtx), "过期 sig 必须解包为零角色")
 		require.EqualValues(t, 0, count(txCtx))

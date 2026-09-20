@@ -74,6 +74,34 @@ func validatePhysicalNameLen(kind, name string) error {
 	return nil
 }
 
+// validateDataKey 校验文档数据键可安全映射为物理列名（S6 fail-closed：非法键
+// 历史上在 build*Parts 被静默丢弃——客户端 200 成功但字段未落库，改为
+// InvalidArgument 显式拒绝，与同路径"合法标识符但未声明属性"硬拒 42703 的
+// 纪律对齐）。规则与 DDL 通道（attributeColumnSQL + app 层 ValidateIdentifier）
+// 同源，按定位价值排序：
+//   - `_` 前缀：系统列保留（_id/_tenant/_acl/…），数据通道永不可写；
+//   - 标识符语法：须匹配 safeNameRe（同 app 层 identifierRe）；
+//   - ≤maxIdentifierBytes：超长被 PG 静默截断，两个仅超长部分不同的键会映射
+//     到同一物理列（见 maxIdentifierBytes 注释）。
+//
+// 系统集合（sentinel 静态表）经同一 CRUD 路径写入，但投影键均为合法标识符
+// （users.DocumentData / sessionAsDocument），不受影响。
+func validateDataKey(k string) error {
+	if strings.HasPrefix(k, "_") {
+		return status.Errorf(codes.InvalidArgument,
+			"attribute %q: keys with %q prefix are reserved for system columns", k, "_")
+	}
+	if !safeNameRe.MatchString(k) {
+		return status.Errorf(codes.InvalidArgument,
+			"attribute %q: invalid attribute key, must match %s", k, safeNameRe.String())
+	}
+	if len(k) > maxIdentifierBytes {
+		return status.Errorf(codes.InvalidArgument,
+			"attribute %q exceeds %d-byte identifier limit", k, maxIdentifierBytes)
+	}
+	return nil
+}
+
 // validateIndexNameLen 拒绝拼接超长的物理索引名 idx_<coll>_<suffix>（suffix 为
 // 索引 ID 或固定后缀 tenant_created）。静态段上限封不死组合长度，必须在有
 // collectionID 上下文的 DDL 入口叠加本校验。

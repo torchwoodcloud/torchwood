@@ -87,6 +87,11 @@ func newDatabase(cfg *config.Database, logger *slog.Logger) (*Database, func(), 
 	// 杀掉长查询（大集合 CREATE INDEX / 迁移）而服务端继续执行，重试放大
 	// 负载。ReadTimeout 放宽到 60s 容纳索引构建；不设服务端
 	// statement_timeout（会误杀控制面迁移与拷贝任务）。
+	//
+	// 与 rolesSigTTL 的约束关系（tx.go，当前 180s = 3×本值）：roles_sig 的
+	// exp 从事务首条注入起算，TTL 必须显著大于本值，否则超过 TTL 的长事务
+	// 后半段 tw_roles() 验签过期 → 零角色 fail-closed（S6）。调大本值时须
+	// 同步上调 rolesSigTTL。
 	sqldb := sql.OpenDB(pgdriver.NewConnector(
 		pgdriver.WithDSN(source),
 		pgdriver.WithBufferSize(2<<20),

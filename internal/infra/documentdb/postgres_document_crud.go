@@ -559,7 +559,10 @@ func (p *postgresDocumentDB) updateDocument(ctx context.Context, projectID, data
 	if err != nil {
 		return doc, err
 	}
-	incParts, incArgs := buildIncrementParts(update.Increment)
+	incParts, incArgs, err := buildIncrementParts(update.Increment)
+	if err != nil {
+		return doc, err
+	}
 	setParts = append(setParts, incParts...)
 	args = append(args, incArgs...)
 	// 数组列原子更新（阶段③-b 预决策 3）：需要 catalog attrs 做白名单与
@@ -858,6 +861,9 @@ func (p *postgresDocumentDB) publishDocumentEvent(
 // 字面量字符串，目标列类型由 INSERT VALUES 推断（text[]/bigint[] 等按列解析，
 // 与标量值的绑定路径同机制）；vector 值（会话 #10）编码为 pgvector 字面量 +
 // ?::vector 绑定（列类型信息由 vectorCols 提供，nil = 无 vector 列）。
+// 数据键经 validateDataKey fail-closed（S6）：非法键（`_` 前缀/标识符语法/
+// 超长）返回 InvalidArgument，不再静默丢弃——静默丢字段使客户端误以为写入
+// 成功，且覆盖 create/upsert/execute-tx create op 全部 INSERT 通道。
 func buildInsertParts(doc databases.Document, vectorCols map[string]int) (columns string, placeholders string, args []any, err error) {
 	if len(doc.Data) == 0 {
 		return "", "", nil, nil
@@ -865,8 +871,8 @@ func buildInsertParts(doc databases.Document, vectorCols map[string]int) (column
 	var cols []string
 	var phs []string
 	for k, v := range doc.Data {
-		if !safeNameRe.MatchString(k) || strings.HasPrefix(k, "_") {
-			continue
+		if err := validateDataKey(k); err != nil {
+			return "", "", nil, err
 		}
 		if dims, isVec := vectorCols[k]; isVec {
 			if verr := validateVectorValue(k, v, dims); verr != nil {
@@ -920,8 +926,10 @@ func conflictWhereClause(conflictColumns []string) string {
 
 func buildUpdateParts(doc databases.Document, updatedBy string, vectorCols map[string]int) (setParts []string, args []any, err error) {
 	for k, v := range doc.Data {
-		if !safeNameRe.MatchString(k) || strings.HasPrefix(k, "_") {
-			continue
+		// 数据键 fail-closed 同 buildInsertParts（S6）：覆盖 update/upsert
+		// 更新支/bulk/execute-tx update op 全部 UPDATE 通道。
+		if err := validateDataKey(k); err != nil {
+			return nil, nil, err
 		}
 		// vector 值（会话 #10）：字面量 + ::vector cast + 维度校验（同 INSERT）。
 		if dims, isVec := vectorCols[k]; isVec {

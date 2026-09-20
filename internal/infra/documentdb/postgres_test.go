@@ -2126,15 +2126,11 @@ func TestCreateDocument_AuditColumns(t *testing.T) {
 		{ID: "title", Key: "title", Type: "string", Size: 256},
 	}, nil, perms, false))
 
-	// user:abc principal: spoofed _created_at/_created_by/_updated_by in data
-	// are ignored; audit columns carry "abc".
+	// user:abc principal: clean data → audit columns carry "abc"（系统注入，
+	// 与数据通道无关）。
 	created, err := docDB.CreateDocument(ctx, projectID, "app", "audit", databases.Document{
 		Data: map[string]any{
-			"title":       "t1",
-			"_created_at": "2000-01-01T00:00:00Z",
-			"_created_by": "spoof",
-			"_updated_by": "spoof",
-			"not_a_col!":  "ignored",
+			"title": "t1",
 		},
 	}, nil, databases.Principal{Roles: []string{"user:abc"}})
 	require.NoError(t, err)
@@ -2142,10 +2138,23 @@ func TestCreateDocument_AuditColumns(t *testing.T) {
 	require.Equal(t, "abc", created.UpdatedBy)
 	require.False(t, created.CreatedAt.IsZero())
 	require.WithinDuration(t, time.Now(), created.CreatedAt, time.Hour)
-	require.NotContains(t, created.Data, "_created_at")
-	require.NotContains(t, created.Data, "_created_by")
-	require.NotContains(t, created.Data, "_updated_by")
 	require.Equal(t, "t1", created.Data["title"])
+
+	// 伪造审计列（S6 前：数据通道静默丢弃 `_` 键、审计列由系统注入，伪造"无
+	// 效果"但客户端无感知；S6 起：显式 InvalidArgument 拒绝——不变量"用户数据
+	// 不可伪造审计列"不变，机制从静默忽略升级为 fail-closed）。非法标识符
+	// （not_a_col!）同拒。
+	for _, spoofed := range []map[string]any{
+		{"title": "t", "_created_at": "2000-01-01T00:00:00Z"},
+		{"title": "t", "_created_by": "spoof"},
+		{"title": "t", "_updated_by": "spoof"},
+		{"title": "t", "not_a_col!": "x"},
+	} {
+		_, err := docDB.CreateDocument(ctx, projectID, "app", "audit", databases.Document{
+			Data: spoofed,
+		}, nil, databases.Principal{Roles: []string{"user:abc"}})
+		require.Equal(t, codes.InvalidArgument, status.Code(err), "data %v", spoofed)
+	}
 
 	// Update as user:abc → UpdatedBy == "abc".
 	updated, err := docDB.UpdateDocument(ctx, projectID, "app", "audit", databases.DocumentUpdate{

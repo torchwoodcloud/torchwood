@@ -82,13 +82,15 @@ func TestRolesSig_DualKeyRotationWindow(t *testing.T) {
 
 	// 初始态：fixture 的 SetupTestDB 已同步测试主密钥（仅 current 一行）。
 	require.EqualValues(t, 1, rowsFor(), "初始仅 current 一行")
-	// 换钥前：G1 为 current，签发"换钥前时代"的 sig（exp = now+60s，窗口内）
-	// 与一份窗口外（exp 已过期）的 G1 sig。
+	// 换钥前：G1 为 current，签发"换钥前时代"的 sig（exp = now+RolesSigTTL，
+	// 窗口内）与一份窗口外（exp 已过期）的 G1 sig。
 	k1 := rotate(dualKeyMasterG1)
 	require.Equal(t, k1, slotKey(true))
 	require.EqualValues(t, 2, rowsFor(), "G1 换钥后 current+previous 两行")
 	g1Sig := clients.SignRolesSig(k1, f.internalID, "any", time.Now())
-	g1Expired := clients.SignRolesSig(k1, f.internalID, "any", time.Now().Add(-2*time.Minute))
+	// 过期样本按 TTL 相对偏移构造（S6 前 TTL=60s、硬编码 -2min；TTL 调整后
+	// 硬编码会静默失效）。
+	g1Expired := clients.SignRolesSig(k1, f.internalID, "any", time.Now().Add(-clients.RolesSigTTL-time.Minute))
 
 	// 换钥（G1→G2）：旧 current 降级 previous，新钥落 current。
 	k2 := rotate(dualKeyMasterG2)

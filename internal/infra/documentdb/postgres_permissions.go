@@ -211,15 +211,22 @@ func (p *postgresDocumentDB) missingRowsError(ctx context.Context, tbl string, m
 	return fmt.Errorf("%w", databases.ErrDocumentNotFound)
 }
 
-func buildIncrementParts(increment map[string]int64) (setParts []string, args []any) {
+// buildIncrementParts 拼接 increment 的 SET 片段。delta == 0 是语义 no-op
+// （跳过合法）；数据键 fail-closed 同 buildInsertParts/buildUpdateParts（S6），
+// 非法键（`_` 前缀/标识符语法/超长）返回 InvalidArgument——键校验先于
+// delta == 0 判定，非法键即使 delta 为 0 也拒绝（fail-closed 不因数值取巧）。
+func buildIncrementParts(increment map[string]int64) (setParts []string, args []any, err error) {
 	for k, delta := range increment {
-		if !safeNameRe.MatchString(k) || strings.HasPrefix(k, "_") || delta == 0 {
+		if err := validateDataKey(k); err != nil {
+			return nil, nil, err
+		}
+		if delta == 0 {
 			continue
 		}
 		setParts = append(setParts, fmt.Sprintf("%s = COALESCE(%s, 0) + ?", quoteIdent(k), quoteIdent(k)))
 		args = append(args, delta)
 	}
-	return setParts, args
+	return setParts, args, nil
 }
 
 // buildArrayParts 编译数组列原子更新（阶段③-b 预决策 3；Intersect/Diff/
