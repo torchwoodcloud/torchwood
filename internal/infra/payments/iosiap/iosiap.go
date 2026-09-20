@@ -1,6 +1,6 @@
 // Package iosiap 是 iOS IAP 适配器（v3 设计 §1.1/§1.2）：无服务端下单
 // （CreatePayment=ErrUnsupported），ReceiptVerifier 走 StoreKit 2 JWS
-//（legacy verifyReceipt 收据路径已显式下线，成功解析也返回明确错误），
+// （legacy verifyReceipt 收据路径已显式下线，成功解析也返回明确错误），
 // 回调走 App Store Server Notifications V2（JWS）。
 // 退款不支持（引导用户找 Apple）。
 package iosiap

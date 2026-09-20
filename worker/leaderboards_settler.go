@@ -12,7 +12,7 @@ import (
 
 // leaderboardsSettleInterval 是结榜发奖扫描周期。结算以期为粒度（日/周），
 // 分钟级扫描没有必要——10 分钟与 retention 清理同一量级；扫描基于状态
-//（已封榜 && 无结算行）而非定时投放，停机恢复自动补算，慢一轮无影响。
+// （已封榜 && 无结算行）而非定时投放，停机恢复自动补算，慢一轮无影响。
 const leaderboardsSettleInterval = 10 * time.Minute
 
 // ——worker 侧 Prometheus 指标（P2 观测补全；全局无 label，理由同

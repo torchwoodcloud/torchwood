@@ -67,10 +67,10 @@ func TestTarDir_NormalizesModesIndependentOfUmask(t *testing.T) {
 func TestTarDir_StreamingContentRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	files := map[string]string{
-		"Dockerfile":      "FROM scratch\nCOPY . .\n",
-		".tw-runner.js":   "runner script \x00 binary-safe",
-		"lib/util.js":     "module.exports = 42;",
-		"deep/a/b/c.txt":  "nested",
+		"Dockerfile":     "FROM scratch\nCOPY . .\n",
+		".tw-runner.js":  "runner script \x00 binary-safe",
+		"lib/util.js":    "module.exports = 42;",
+		"deep/a/b/c.txt": "nested",
 	}
 	for rel, content := range files {
 		p := filepath.Join(dir, filepath.FromSlash(rel))

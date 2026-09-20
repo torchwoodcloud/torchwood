@@ -1003,7 +1003,7 @@ func TestKillInstance_SkipsForeignRecord(t *testing.T) {
 }
 
 // TestDrainForDeployment_ForeignRecordsLeftToOwnerReaper drain 他节点语义
-//（P2 S13）：Draining 标记照置（全局停接新请求，跨节点共享状态），但
+// （P2 S13）：Draining 标记照置（全局停接新请求，跨节点共享状态），但
 // killInstance 跳过他节点记录——本节点宽限 goroutine 不代杀，记录由对端
 // reaper 按 draining 语义收敛；本节点记录的宽限强杀照旧。
 func TestDrainForDeployment_ForeignRecordsLeftToOwnerReaper(t *testing.T) {

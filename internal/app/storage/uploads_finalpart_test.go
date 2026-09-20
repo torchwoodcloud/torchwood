@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	domainstorage "github.com/torchwoodcloud/torchwood/internal/domain/storage"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
+	domainstorage "github.com/torchwoodcloud/torchwood/internal/domain/storage"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 	"google.golang.org/grpc/codes"

@@ -1123,7 +1123,7 @@ func (d *dockerDaemon) RemoveImage(ctx context.Context, functionID, deploymentID
 // P2 S13 流式化：原实现把整棵 tar 缓冲进 bytes.Buffer——50MiB zip 场景
 // （解压预算 200MiB）构建峰值内存 ≈ tar 缓冲 + 解压目录 + base64 载荷
 // ≈ 800MB 量级。现改 io.Pipe + goroutine 边 WalkDir 边写，调用方
-//（ImageBuild 接受 io.Reader，无 ReadSeeker 要求）直接消费读端，峰值内存
+// （ImageBuild 接受 io.Reader，无 ReadSeeker 要求）直接消费读端，峰值内存
 // 降为单文件拷贝缓冲。错误经 pipe 传播（CloseWithError，读侧/HTTP 请求
 // 以读错误收场——遍历目录是刚由 prepareBuildContext 写出的自有文件，
 // 出错概率极低，接受错误文案不经「tar build context」包装）。调用方在

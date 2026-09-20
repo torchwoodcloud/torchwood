@@ -1117,8 +1117,8 @@ func TestHandleCallback_RefundedReverseFailureRecordsCompensation(t *testing.T) 
 	env.store.fulfillments[order.ID] = &domainpayments.Fulfillment{
 		ID: "ful-cb", OrderID: order.ID, ProjectID: order.ProjectID,
 		PurposeKind: domainpayments.PurposeTopup, Ref: "order:" + order.ID,
-		Status:  domainpayments.FulfillmentDone,
-		Detail:  map[string]any{"kind": "topup"},
+		Status: domainpayments.FulfillmentDone,
+		Detail: map[string]any{"kind": "topup"},
 	}
 
 	before := testutil.ToFloat64(paymentReverseFailuresTotal)
@@ -1147,8 +1147,8 @@ func TestRefund_ReverseFailureRecordsCompensation(t *testing.T) {
 	env.store.fulfillments[order.ID] = &domainpayments.Fulfillment{
 		ID: "ful-1", OrderID: order.ID, ProjectID: order.ProjectID,
 		PurposeKind: domainpayments.PurposeTopup, Ref: "order:" + order.ID,
-		Status:      domainpayments.FulfillmentDone,
-		Detail:      map[string]any{"kind": "topup"},
+		Status: domainpayments.FulfillmentDone,
+		Detail: map[string]any{"kind": "topup"},
 	}
 	admin := contexts.WithPrincipal(context.Background(), &domainshared.Principal{
 		ActorKind:      domainshared.ActorKindAdmin,

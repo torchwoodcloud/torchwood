@@ -338,11 +338,11 @@ func (r *AnalyticsWorkerRepository) EnqueueUserDeletion(ctx context.Context, pro
 // ---------------------------------------------------------------------------
 
 // analyticsRollupDailySQL 事件×日覆盖 upsert：GROUP BY 全量重算 + ON CONFLICT
-// 整值替换（不累加）。unique_users 排除空归属事件（user_id = ''，与 raw 面
+// 整值替换（不累加）。unique_users 排除空归属事件（user_id = ”，与 raw 面
 // FILTER 及 user_days 基座口径统一——S12 修复前三处口径不一致：raw 计入、
 // user_days 排除、daily 含空）。收敛边界：rollup 每轮只覆盖重写 [昨日, 今日]
-//——口径切换后这两个日由下轮覆盖式重算自愈；更早历史日的 daily 行是旧口径
-//（含空归属）产物，不会被被动重写，直到全量重算入口（S8 已登记遗留）统一。
+// ——口径切换后这两个日由下轮覆盖式重算自愈；更早历史日的 daily 行是旧口径
+// （含空归属）产物，不会被被动重写，直到全量重算入口（S8 已登记遗留）统一。
 // 口径声明见 docs/design/analytics.md §6。
 func analyticsRollupDailySQL(schema string) string {
 	return fmt.Sprintf(`INSERT INTO %s.analytics_daily (day, name, total, unique_users, updated_at)

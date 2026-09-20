@@ -1,6 +1,6 @@
 // 外部测试包（analytics_test）：S12 UV 口径统一验收——同一批 raw 事件
-//（含无归属 user_id='' 事件）在 raw 面与 rollup 面的 UV 数字严格一致
-//（排除空归属口径）。口径声明与收敛边界见 docs/design/analytics.md §6。
+// （含无归属 user_id=” 事件）在 raw 面与 rollup 面的 UV 数字严格一致
+// （排除空归属口径）。口径声明与收敛边界见 docs/design/analytics.md §6。
 package analytics_test
 
 import (
@@ -13,7 +13,7 @@ import (
 )
 
 // TestRollupIntegration_UVCaliberConsistency（S12 项4）：修复前 raw 面
-//（COUNT(DISTINCT user_id)）计入空归属、rollup 面（user_days 基座 /
+// （COUNT(DISTINCT user_id)）计入空归属、rollup 面（user_days 基座 /
 // daily.unique_users）排除——同一数据两分支数字漂移；统一为排除后一致。
 func TestRollupIntegration_UVCaliberConsistency(t *testing.T) {
 	dayD := time.Date(2026, 9, 11, 0, 0, 0, 0, time.UTC)
