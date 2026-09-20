@@ -90,15 +90,15 @@ func TestResolveSystemPatterns(t *testing.T) {
 
 	t.Run("非法形态 fail-closed", func(t *testing.T) {
 		bad := []string{
-			"",                     // 空
-			"*",                    // 裸通配（无域名）
-			"auth",                 // 裸域名（非订阅串——域级订阅须显式 auth.*）
-			"typo.users.*",         // 未登记域
-			"authx.*",              // 域名拼错
-			"auth.unknown.*",       // 域对但前缀无命中
-			"auth.orders.*",        // 域对但 resource 拼错
-			"auth.*.created",       // 中间段通配（一期不允许）
-			"auth.users.created.*", // 精确事件名后跟通配（前缀无命中）
+			"",                      // 空
+			"*",                     // 裸通配（无域名）
+			"auth",                  // 裸域名（非订阅串——域级订阅须显式 auth.*）
+			"typo.users.*",          // 未登记域
+			"authx.*",               // 域名拼错
+			"auth.unknown.*",        // 域对但前缀无命中
+			"auth.orders.*",         // 域对但 resource 拼错
+			"auth.*.created",        // 中间段通配（一期不允许）
+			"auth.users.created.*",  // 精确事件名后跟通配（前缀无命中）
 			"payments.orders.paidx", // 事件名拼错（前缀无命中）
 		}
 		for _, s := range bad {

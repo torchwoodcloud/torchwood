@@ -341,11 +341,11 @@ func (c *eventTriggerConsumer) processEntry(ctx context.Context, msg *redis.XMes
 }
 
 // deliver 匹配并投递单个信封（命中触发器逐条异步入队）。系统行为事件
-//（Domain 非空：auth/payments/economy/subscriptions，词表 events.catalog）
+// （Domain 非空：auth/payments/economy/subscriptions，词表 events.catalog）
 // 走 deliverSystem；文档事件走既有三段匹配；未知事件形态/无命中均静默
 // 通过（照常推进水位；no_match 不记投递指标——OQ9：只记命中的）。enqueue
 // 失败时条目仍会被调用方 ACK：该事件对本订阅者的投递延迟至停机补投路径
-//（不再是永久丢失，v3 §4.2）。
+// （不再是永久丢失，v3 §4.2）。
 func (c *eventTriggerConsumer) deliver(ctx context.Context, ev *domainevents.Envelope) {
 	if ev.Domain != "" {
 		c.deliverSystem(ctx, ev)

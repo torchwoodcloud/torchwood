@@ -10,8 +10,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
-	domainstorage "github.com/torchwoodcloud/torchwood/internal/domain/storage"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
+	domainstorage "github.com/torchwoodcloud/torchwood/internal/domain/storage"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 	"google.golang.org/grpc/codes"

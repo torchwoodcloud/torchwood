@@ -326,7 +326,7 @@ func (s *Storage) CompleteUpload(ctx context.Context, projectID, uploadID, owner
 
 // completeCleanupBestEffort 主流程成功（或幂等重入确认文档已存在）后的清理：
 // 逐片删除分片对象 + 删会话，全部 best-effort——任何失败仅 Warn，不影响成功返回
-//（J2-2/E-P1-2）。兜底依据：孤儿分片由 48h 清理任务回收（CleanupOrphanChunks，
+// （J2-2/E-P1-2）。兜底依据：孤儿分片由 48h 清理任务回收（CleanupOrphanChunks，
 // 见 cleanup.go）；残留会话由 24h TTL（storage.UploadSessionTTL）自然过期。
 func (s *Storage) completeCleanupBestEffort(ctx context.Context, uploadID string, session *storage.UploadSession, chunkKeys []string) {
 	for i := 1; i <= session.PartCount; i++ {
