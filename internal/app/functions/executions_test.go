@@ -2,8 +2,11 @@ package functions
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"os"
 	"testing"
 	"time"
 
@@ -322,7 +325,11 @@ func TestProcessExecution_RebuildsWhenDeploymentNotReady(t *testing.T) {
 	require.NoError(t, repo.DeleteDeployment(context.Background(), "p1", fn.ID, "dep_ready"))
 	require.NoError(t, repo.CreateDeployment(context.Background(), &domainfunctions.Deployment{
 		ID: "dep_pending", FunctionID: "fn_1", ProjectID: "p1", Status: domainfunctions.DeploymentStatusPending,
+		SourceType: domainfunctions.DeploymentSourceZip,
 	}))
+	// 盘上 zip 健在（对齐 createDeployment 真实时序：writeZip 先于构建）。
+	require.NoError(t, writeZip(zipPath("p1", "fn_1", "dep_pending"), []byte("PK\x03\x04fake-zip")))
+	t.Cleanup(func() { _ = removeZip("p1", "fn_1", "dep_pending") })
 
 	executor := newMockExecutor(&domainfunctions.ExecutionResult{StatusCode: 0, Stdout: "ok"}, nil)
 	uc := newTestUC(executor, repo, newMockQueue())
@@ -341,6 +348,75 @@ func TestProcessExecution_RebuildsWhenDeploymentNotReady(t *testing.T) {
 	require.Equal(t, domainfunctions.DeploymentStatusReady, dep.Status)
 	got, _ := repo.GetExecution(context.Background(), "p1", "fn_1", "e1")
 	require.Equal(t, domainfunctions.ExecutionStatusCompleted, got.Status)
+}
+
+// 盘上 zip 丢失（server/worker 分容器不共享 /tmp、磁盘清理、环境迁移）时，
+// worker 补构建从持久桶拉回复核后落盘再构建——补构建路径与执行自愈路径
+// （rebuild.go）共享同一源物化分流。
+func TestProcessExecution_RebuildRestoresZipFromBucket(t *testing.T) {
+	repo := newMockRepo()
+	fn := seedReadyFunction(repo, "p1", "fn_1", true, 15)
+	require.NoError(t, repo.DeleteDeployment(context.Background(), "p1", fn.ID, "dep_ready"))
+	zip := []byte("PK\x03\x04fake-zip-restored")
+	sum := sha256.Sum256(zip)
+	require.NoError(t, repo.CreateDeployment(context.Background(), &domainfunctions.Deployment{
+		ID: "dep_pending", FunctionID: "fn_1", ProjectID: "p1", Status: domainfunctions.DeploymentStatusPending,
+		SourceType: domainfunctions.DeploymentSourceZip, ContextSHA256: hex.EncodeToString(sum[:]),
+	}))
+	t.Cleanup(func() { _ = removeZip("p1", "fn_1", "dep_pending") })
+	_, statErr := os.Stat(zipPath("p1", "fn_1", "dep_pending"))
+	require.True(t, os.IsNotExist(statErr), "前置：盘上无 zip（跨容器形态）")
+
+	executor := newMockExecutor(&domainfunctions.ExecutionResult{StatusCode: 0, Stdout: "ok"}, nil)
+	uc := newTestUC(executor, repo, newMockQueue())
+	uc.zipStore = &fakeZipStore{get: zip}
+
+	rec := &domainfunctions.ExecutionRecord{
+		ID: "e1", FunctionID: "fn_1", ProjectID: "p1", DeploymentID: "dep_pending",
+		Status: domainfunctions.ExecutionStatusQueued, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	require.NoError(t, repo.CreateExecution(context.Background(), rec))
+
+	require.NoError(t, uc.ProcessExecutionPayload(context.Background(), []byte(
+		`{"execution_id":"e1","function_id":"fn_1","project_id":"p1","data":"{}"}`)))
+	require.Equal(t, 1, executor.builds, "盘 miss 从桶拉回复核后补构建")
+	_, statErr = os.Stat(zipPath("p1", "fn_1", "dep_pending"))
+	require.NoError(t, statErr, "拉回的代码包落盘（供后续构建/自愈复用）")
+	dep, _ := repo.GetDeployment(context.Background(), "p1", "fn_1", "dep_pending")
+	require.Equal(t, domainfunctions.DeploymentStatusReady, dep.Status)
+	got, _ := repo.GetExecution(context.Background(), "p1", "fn_1", "e1")
+	require.Equal(t, domainfunctions.ExecutionStatusCompleted, got.Status)
+}
+
+// 盘、桶双 miss（存量部署或桶副本被删）：拉回失败按可重试失败上抛，
+// 不进入构建与执行；执行归还 queued，重试超限由 worker failPayload 兜底。
+func TestProcessExecution_RebuildZipSourceWithoutSnapshotFails(t *testing.T) {
+	repo := newMockRepo()
+	fn := seedReadyFunction(repo, "p1", "fn_1", true, 15)
+	require.NoError(t, repo.DeleteDeployment(context.Background(), "p1", fn.ID, "dep_ready"))
+	require.NoError(t, repo.CreateDeployment(context.Background(), &domainfunctions.Deployment{
+		ID: "dep_pending", FunctionID: "fn_1", ProjectID: "p1", Status: domainfunctions.DeploymentStatusPending,
+		SourceType: domainfunctions.DeploymentSourceZip,
+	}))
+	t.Cleanup(func() { _ = removeZip("p1", "fn_1", "dep_pending") })
+
+	executor := newMockExecutor(&domainfunctions.ExecutionResult{StatusCode: 0, Stdout: "ok"}, nil)
+	uc := newTestUC(executor, repo, newMockQueue())
+	uc.zipStore = &fakeZipStore{} // Get → ErrZipNotFound
+
+	rec := &domainfunctions.ExecutionRecord{
+		ID: "e1", FunctionID: "fn_1", ProjectID: "p1", DeploymentID: "dep_pending",
+		Status: domainfunctions.ExecutionStatusQueued, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	require.NoError(t, repo.CreateExecution(context.Background(), rec))
+
+	err := uc.ProcessExecutionPayload(context.Background(), []byte(
+		`{"execution_id":"e1","function_id":"fn_1","project_id":"p1","data":"{}"}`))
+	require.ErrorIs(t, err, domainfunctions.ErrZipNotFound)
+	require.Zero(t, executor.builds, "无构建输入不得进入构建")
+	require.Empty(t, executor.calls, "不得进入执行")
+	got, _ := repo.GetExecution(context.Background(), "p1", "fn_1", "e1")
+	require.Equal(t, domainfunctions.ExecutionStatusQueued, got.Status, "归还 queued 与构建失败同语义")
 }
 
 func TestProcessExecution_MissingExecutionSilentlyIgnored(t *testing.T) {
@@ -393,7 +469,11 @@ func TestProcessExecution_SemaphoreFullReleasesAndKeepsDeployment(t *testing.T) 
 	require.NoError(t, repo.DeleteDeployment(context.Background(), "p1", fn.ID, "dep_ready"))
 	require.NoError(t, repo.CreateDeployment(context.Background(), &domainfunctions.Deployment{
 		ID: "dep_pending", FunctionID: "fn_1", ProjectID: "p1", Status: domainfunctions.DeploymentStatusPending,
+		SourceType: domainfunctions.DeploymentSourceZip,
 	}))
+	// 盘上 zip 健在：本用例聚焦构建信号量满，排除盘 miss 拉桶分支。
+	require.NoError(t, writeZip(zipPath("p1", "fn_1", "dep_pending"), []byte("PK\x03\x04fake-zip")))
+	t.Cleanup(func() { _ = removeZip("p1", "fn_1", "dep_pending") })
 
 	executor := newMockExecutor(&domainfunctions.ExecutionResult{StatusCode: 0, Stdout: "ok"}, nil)
 	uc := newTestUC(executor, repo, newMockQueue())

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
@@ -424,16 +425,28 @@ func (f *Functions) ProcessExecution(ctx context.Context, msg queueMessage) erro
 	// 不变）。产物化调用点按 dep.SourceType 在 buildDeployment 内分流
 	//（三期阶段 1，设计 §3）：image 源 → 幂等 ImportImage（预期 digest =
 	// 行内 source_ref，本地命中零 pull；一次性凭证不落库，私有镜像补拉失败
-	// 标 failed 属声明边界），zip/git 源 → 盘上 zip 构建——本调用点无需感知
-	// 源类型（zipPath 参数对 image 源不被消费）。构建失败（含信号量满）按
-	// 可重试处理：归还 queued 并返回错误，由 worker requeue 在退避后重试；
-	// 重试超限走 failPayload 兜底。
+	// 标 failed 属声明边界），zip/git 源 → 盘上 zip 构建。构建失败（含信号
+	// 量满）按可重试处理：归还 queued 并返回错误，由 worker requeue 在退避
+	// 后重试；重试超限走 failPayload 兜底。
 	if dep.Status != domainfunctions.DeploymentStatusReady {
 		if err := f.repo.UpdateExecution(ctx, rec); err != nil {
 			release()
 			return err
 		}
-		if buildErr := f.buildDeployment(ctx, fn, dep, zipPath(msg.ProjectID, msg.FunctionID, dep.ID)); buildErr != nil {
+		path := zipPath(msg.ProjectID, msg.FunctionID, dep.ID)
+		// 盘 miss 拉桶（与 rebuild.go 的源物化分流同构）：server/worker 分属
+		// 容器不共享 /tmp，初次构建中断的部署其 zip 只在构建发起方容器内，
+		// worker 补构建须从持久桶拉回复核落盘（git 源桶 miss 回退 packer
+		// 重物化）。image 源免 zip（zipPath 参数本就不被消费）。拉回失败按
+		// 可重试处理与构建失败同语义（暂态故障重试可恢复；桶 miss 的存量
+		// 部署重试超限走 failPayload，与盘 miss 时构建失败的行为一致）。
+		if _, statErr := os.Stat(path); statErr != nil && dep.SourceType != domainfunctions.DeploymentSourceImage {
+			if restoreErr := f.restoreDeploymentZip(ctx, dep, path); restoreErr != nil {
+				release()
+				return restoreErr
+			}
+		}
+		if buildErr := f.buildDeployment(ctx, fn, dep, path); buildErr != nil {
 			release()
 			return buildErr
 		}
