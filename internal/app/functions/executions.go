@@ -325,6 +325,9 @@ func (f *Functions) runExecution(ctx context.Context, fn *domainfunctions.Functi
 			rec.Stderr, rec.StderrTruncated = truncateWithFlag(result.Stderr, maxOutputBytes)
 		}
 		_ = f.repo.UpdateExecution(ctx, rec)
+		// 镜像缺失自愈：识别 dispatcher 的类型化错误并后台重建（rebuild.go；
+		// 当次执行仍按失败返回，重建完成后执行面自愈）。
+		f.maybeRebuildMissingImage(ctx, err, fn, dep)
 		f.meterDuration(ctx, rec.ProjectID, rec.DurationMS)
 		f.observeExecution(rec.ProjectID, rec.FunctionID, metricSource(rec.TriggerSource), started, rec.Status)
 		return rec, err
@@ -479,6 +482,9 @@ func (f *Functions) ProcessExecution(ctx context.Context, msg queueMessage) erro
 			rec.Stderr, rec.StderrTruncated = truncateWithFlag(result.Stderr, maxOutputBytes)
 		}
 		_ = f.repo.UpdateExecution(ctx, rec)
+		// 镜像缺失自愈（与同步路径同口径，rebuild.go）：后台重建，当次执行
+		// 仍按失败写回。
+		f.maybeRebuildMissingImage(ctx, err, fn, dep)
 		f.meterDuration(ctx, rec.ProjectID, rec.DurationMS)
 		f.observeExecution(rec.ProjectID, rec.FunctionID, metricSource(rec.TriggerSource), execStart, rec.Status)
 		return nil

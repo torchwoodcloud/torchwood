@@ -191,6 +191,13 @@ functions:
     # 退化为仅本节点上限。0 = 不设全局上限（缺省；单机部署无需配置）。
     # env: TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES_GLOBAL
     max_resident_instances_global: 0
+    # 镜像缺失自动重建（执行链自愈）：执行命中「部署镜像在本节点缺失」
+    # （宿主镜像被 prune -a 等清理/环境迁移）时，server 侧异步触发该部署
+    # 重建——git 源 zip 缺失经 packer 按行内源快照重新物化并复核 checksum；
+    # zip 源原始字节不在平台存储内，无法自动重建（错误文案引导 redeploy）。
+    # 未配置 = 默认开启；显式 false = 关闭。
+    # env: TORCHWOOD_FUNCTIONS_DISPATCHER_REBUILD_ON_MISSING_IMAGE
+    rebuild_on_missing_image: true
   trigger:
     # P1 触发器模块：HTTP 触发器公开端点（/f/{project}/{token}）的 per-IP
     # 固定窗口限频（次/分钟，默认 3000）。独立更高默认：微信等回调出口 IP

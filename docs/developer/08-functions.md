@@ -375,7 +375,7 @@ CGI 形态（每请求一容器）为设计缺陷，常驻 runner 是唯一执�
 | `POST /v1/dispatch/executions` | 执行规格 `{image, project_id, function_id, deployment_id, runtime, spec, timeout_seconds, env, execution_token, execution_id, source, invoking_user_id, data, pool}` → `{status, response, stdout_tail, stderr_tail, duration_ms, status_code, error}` | 池管理热路径；接受调用方 ctx 超时；`source` / `invoking_user_id` 经分发 header 进 runner ctx（§4.3.3） |
 | `POST /v1/dispatch/images/remove` | `{function_id, deployment_id}` | 幂等 |
 
-错误映射：排队超限 429 → ResourceExhausted、执行超时 504 → DeadlineExceeded、缺参 400。`TW_EXECUTION_TOKEN` 经分发 header 传递——**mint → 注入 → defer revoke 链路不变，常驻的是容器不是凭证**。
+错误映射：排队超限 429 → ResourceExhausted、执行超时 504 → DeadlineExceeded、缺参 400、镜像缺失 412 → FailedPrecondition（§4.5）。`TW_EXECUTION_TOKEN` 经分发 header 传递——**mint → 注入 → defer revoke 链路不变，常驻的是容器不是凭证**。
 
 **池策略**（平台默认 + per-function 列覆盖，projectschema 迁移 000014）：`min_instances`（默认 0 = 纯 scale-from-zero；≥1 保温）、`max_instances`（默认 2）、`idle_ttl_seconds`（默认 300）、`max_requests_per_instance`（默认 1000，Lambda 同款防泄漏回收）+ 平台级常驻总量上限（每 daemon 默认 8，`functions.dispatcher.max_resident_instances`）。实现语义（`dispatcher/pool.go`，Redis 注册表 `torchwood:fninst:{project}:{function}`）：
 
@@ -460,6 +460,18 @@ exports.main = async (data, ctx) => {
 ### 4.4 同步快路径两写预占记账
 
 同步执行跳过 queued / building 中间态：分发前 `INSERT (status='running', timeout_seconds 快照)` 直接预占——预占行即刻成为审计 / 限频计数依据（"先占位后执行"），执行中崩溃行留在 running、由周期孤儿恢复按 `staleAfter = timeout_seconds + 120s` 宽限判 failed（timeout 快照为 NULL 的存量行回退 1h；扫描范围 queued / building / running——修掉 v1"同步崩溃留 queued 永不入队"的洞）。结束后 `UPDATE` 终态（completed / failed + outputs + duration_ms）。孤儿恢复为 worker 每分钟周期 ticker；Prune（保留最近 100 条）移出同步热路径，由 worker 10min 低频 ticker 承接。异步路径状态机 `queued → building → running` 原样保留。
+
+### 4.5 镜像缺失自动重建（执行链自愈）
+
+**问题**：部署状态存 Postgres（跨栈重建持久），镜像存宿主 docker daemon（dispatcher 唯一 docker.sock 持有方）——宿主镜像被清理（`docker system prune -a` / 磁盘压力清理）或环境迁移会让「DB 说 ready、daemon 无镜像」漂移。local 路由模式无 pull 自愈（镜像只在其构建节点），spawn 以 `No such image` 失败且每次执行都复现。
+
+**机制**（`internal/app/functions/rebuild.go` + dispatcher 侧类型化错误）：
+
+1. **识别**：dispatcher `SpawnInstance` 命中 `ContainerCreate` 的 `NotFound + "No such image"` → 以 `FailedPrecondition` + 稳定标记 `deployment image missing`（`domainfunctions.ImageMissingMarker`）上抛；pool 对该错误 **fail-fast**（不烧队首超时——等待不会让镜像出现）。错误经内网 API 按 **412** 双向映射保真传递（dispatcher writeError / forwarder 逆映射 / client `do()` 同构）。
+2. **触发**：server/worker 在执行错误路径（同步 `runExecution` / 异步 `ProcessExecution`）凭「code + 标记」识别，**异步触发**该部署重建（当次执行仍按原始错误失败——构建分钟级，同步调用方不得被连坐；重建期间后续执行以「no ready deployment」fail-fast，完成后自愈）。进程内按 deployment 去重 + 非 ready 让路（worker 补构建优先）。
+3. **源物化分流**：zip/git 源以盘上 zip 重建；git 源 zip 缺失时按行内源快照（URL + **钉死 commit SHA** + 子目录）经 packer 重新物化并复核 `ContextSHA256`（D9 可复现锚——不一致 = 仓库历史改写，拒绝重建）；image 源分流为幂等 ImportImage（预期 digest = source_ref）；**zip 源原始字节不在平台任何存储内，无法自动重建**（记录日志，错误文案 `rebuild required` 引导 redeploy）。私有仓库重物化因凭证不落库（D8）可能失败——声明边界与 worker 补拉私有镜像同口径。
+
+**开关**：`functions.dispatcher.rebuild_on_missing_image`（optional presence：未配置 = 默认开启，显式 `false` 关闭；先例 `verify_build`）。
 
 ## 5. 构建信号量
 

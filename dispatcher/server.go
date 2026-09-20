@@ -74,8 +74,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 // writeError 把 dispatcher 侧错误映射为 HTTP 状态码：ResourceExhausted → 429，
-// DeadlineExceeded → 504，InvalidArgument → 400，其余 → 500（内网 API，
-// 调用方是 server/worker 的 DispatcherExecutor，按码还原 grpc status）。
+// DeadlineExceeded → 504，InvalidArgument → 400，FailedPrecondition（镜像
+// 缺失类型化上抛，rebuild 链路）→ 412，其余 → 500（内网 API，调用方是
+// server/worker 的 DispatcherExecutor，按码还原 grpc status）。
 func writeError(w http.ResponseWriter, err error) {
 	code := status.Code(err)
 	httpStatus := http.StatusInternalServerError
@@ -88,6 +89,8 @@ func writeError(w http.ResponseWriter, err error) {
 		httpStatus = http.StatusBadRequest
 	case codes.NotFound:
 		httpStatus = http.StatusNotFound
+	case codes.FailedPrecondition:
+		httpStatus = http.StatusPreconditionFailed
 	}
 	writeJSON(w, httpStatus, map[string]string{"error": errorMessage(err)})
 }

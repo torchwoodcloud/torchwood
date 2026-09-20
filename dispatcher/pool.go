@@ -556,7 +556,12 @@ func (p *PoolManager) dispatch(ctx context.Context, req ExecuteRequest, fromNode
 		if err := p.trySpawn(ctx, req, policy); err != nil {
 			// spawn 失败（daemon 故障等）：不立刻失败整个请求——继续等待
 			// 其他请求的 spawn 成果或空闲实例，直至队首超时。ctx 取消例外。
-			if errors.Is(err, context.Canceled) || status.Code(err) == codes.ResourceExhausted {
+			// 镜像缺失（FailedPrecondition）同样例外：local 模式无 pull 自愈，
+			// 等待不会让镜像出现——立即上抛（server 侧凭该错误触发自动重建，
+			// rebuild.go），继续等只会烧满队首超时。
+			if errors.Is(err, context.Canceled) ||
+				status.Code(err) == codes.ResourceExhausted ||
+				status.Code(err) == codes.FailedPrecondition {
 				return nil, err
 			}
 			// 被吞掉的失败必须留现场：全量告警（限频防刷屏）+ 保存最近失败

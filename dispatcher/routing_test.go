@@ -407,6 +407,7 @@ func TestNodeForwarder_ErrorMapping(t *testing.T) {
 		{name: "429→ResourceExhausted", httpStatus: http.StatusTooManyRequests, body: `{"error":"queue full"}`, want: codes.ResourceExhausted, wantMsg: "queue full"},
 		{name: "504→DeadlineExceeded", httpStatus: http.StatusGatewayTimeout, body: `{"error":"timed out"}`, want: codes.DeadlineExceeded, wantMsg: "timed out"},
 		{name: "400→InvalidArgument", httpStatus: http.StatusBadRequest, body: `{"error":"bad request"}`, want: codes.InvalidArgument, wantMsg: "bad request"},
+		{name: "412→FailedPrecondition", httpStatus: http.StatusPreconditionFailed, body: `{"error":"deployment image missing (rebuild required)"}`, want: codes.FailedPrecondition, wantMsg: "deployment image missing"},
 		{name: "401→PermissionDenied", httpStatus: http.StatusUnauthorized, body: `{"error":"nope"}`, want: codes.PermissionDenied, wantMsg: "authentication failed"},
 		{name: "500→Internal", httpStatus: http.StatusInternalServerError, body: `{"error":"boom"}`, want: codes.Internal, wantMsg: "boom"},
 		{name: "503 无错误体→Internal 兜底消息", httpStatus: http.StatusServiceUnavailable, body: ``, want: codes.Internal, wantMsg: "http 503"},

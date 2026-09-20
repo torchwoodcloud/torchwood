@@ -107,6 +107,10 @@ func (d *DispatcherExecutor) do(ctx context.Context, path string, in any, out an
 			return status.Error(codes.DeadlineExceeded, msg)
 		case http.StatusBadRequest:
 			return status.Error(codes.InvalidArgument, msg)
+		case http.StatusPreconditionFailed:
+			// 镜像缺失类型化错误（rebuild 链路）按码还原，与 forwarder 逆
+			// 映射同构。
+			return status.Error(codes.FailedPrecondition, msg)
 		case http.StatusUnauthorized, http.StatusForbidden:
 			return status.Error(codes.PermissionDenied, "dispatcher authentication failed")
 		default:

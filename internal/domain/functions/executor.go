@@ -163,6 +163,13 @@ type ImportImageSpec struct {
 	EgressUntrusted bool
 }
 
+// ImageMissingMarker 是「部署镜像在执行节点缺失」错误的稳定子串（错误消息
+// 契约，跨 dispatcher → server/worker 传递）：dispatcher 在 spawn 命中
+// No such image 时以 FailedPrecondition + 本标记上抛；server/worker 在执行
+// 错误路径凭「code + 本标记」识别镜像缺失并触发自动重建（rebuild.go）。
+// 修改 dispatcher 侧文案必须同步此处。
+const ImageMissingMarker = "deployment image missing"
+
 // Executor is the function runtime port.
 //
 // 事务边界（redesign §4.8 Phase 2 形态乙，阶段③-b 定稿）：函数代码运行在

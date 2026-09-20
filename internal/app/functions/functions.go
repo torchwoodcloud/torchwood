@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 
 	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
 	domainbilling "github.com/torchwoodcloud/torchwood/internal/domain/billing"
@@ -44,10 +45,14 @@ type Functions struct {
 	packer functions.SourcePacker
 	// userGate 是每用户并发闸门（P2：进程内 keyed 信号量，默认每用户 2）。
 	userGate *userGateLimiter
+	// rebuildMu/rebuilding 是镜像缺失自动重建的在途去重（rebuild.go；并发
+	// 执行同时命中同一缺失镜像只触发一次后台重建）。
+	rebuildMu  sync.Mutex
+	rebuilding map[rebuildKey]struct{}
 }
 
 func NewFunctions(cfg *config.AppConfig, executor functions.Executor, repo functions.FunctionRepo, queue shared.Queue) *Functions {
-	f := &Functions{cfg: cfg, executor: executor, repo: repo, queue: queue, cache: newFnCache()}
+	f := &Functions{cfg: cfg, executor: executor, repo: repo, queue: queue, cache: newFnCache(), rebuilding: map[rebuildKey]struct{}{}}
 	f.buildSem = semaphore.NewInMemory(4)
 	f.initUserGate(cfg)
 	return f

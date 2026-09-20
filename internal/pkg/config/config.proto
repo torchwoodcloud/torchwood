@@ -237,6 +237,15 @@ message Functions {
     // fail-open 退化为仅本节点上限（容量门是可用性门不是安全门，限频告警；
     // 与 M8 死节点收敛的 fail-safe 语义方向相反，不得混淆）。
     uint32 max_resident_instances_global = 16;
+    // 镜像缺失自动重建（执行链自愈）：执行分发命中「部署镜像在本节点缺失」
+    // （宿主镜像被清理/环境迁移导致 Postgres ready 状态与宿主 docker 镜像
+    // 存量漂移）时，server/worker 凭 FailedPrecondition + 稳定标记识别并
+    // 异步触发该部署重建——zip/git 源以盘上 zip 重建（git 源 zip 缺失时按
+    // 行内源快照 URL+钉死 SHA+目录经 packer 重新物化并复核 ContextSHA256）；
+    // image 源为幂等 ImportImage；zip 源原始字节不在平台存储内无法自动重建
+    // （执行错误文案含 rebuild required 引导 redeploy）。optional presence
+    // 语义：未配置 = 默认开启，显式 false = 关闭。先例：verify_build。
+    optional bool rebuild_on_missing_image = 17;
   }
   // executor（字段号 1）已删除：v1 docker 执行器（每请求一容器、进程内
   // docker.sock）已移除，函数执行统一经 dispatcher 分发。

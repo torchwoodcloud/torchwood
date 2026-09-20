@@ -24,6 +24,7 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	infrafunctions "github.com/torchwoodcloud/torchwood/internal/infra/functions"
 	"github.com/torchwoodcloud/torchwood/internal/infra/functions/runner"
@@ -127,6 +128,15 @@ type imageClient interface {
 	ImageRemove(ctx context.Context, imageID string, options image.RemoveOptions) ([]image.DeleteResponse, error)
 }
 
+// containerClient 是 cli 的容器操作收窄视图（生产与 cli 同一对象；独立
+// 字段仅为单测可注入——与 netCli/imgCli 同款）。覆盖 SpawnInstance 的
+// create + start + 失败清理 remove 原语（镜像缺失类型化上抛的判定面）。
+type containerClient interface {
+	ContainerCreate(ctx context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, platform *ocispec.Platform, containerName string) (container.CreateResponse, error)
+	ContainerStart(ctx context.Context, containerID string, options container.StartOptions) error
+	ContainerRemove(ctx context.Context, containerID string, options container.RemoveOptions) error
+}
+
 // BuildImageOptions 是 BuildImage 的入参（设计 §0 定稿形态）：构建链载荷
 // 全量（zip + 上下文字段），由 handleBuild 从 BuildRequest 组装。
 type BuildImageOptions struct {
@@ -223,6 +233,9 @@ type dockerDaemon struct {
 	// imgCli 是 cli 的镜像操作收窄视图（生产与 cli 同一对象；独立字段仅为
 	// 单测可注入——与 netCli 同款）。
 	imgCli imageClient
+	// containerCli 是 cli 的容器创建操作收窄视图（生产与 cli 同一对象；独立
+	// 字段仅为单测可注入——与 netCli/imgCli 同款）。
+	containerCli containerClient
 	// selfContainerID 非空 = dispatcher 自身运行在容器内（自 attach 需要）。
 	selfContainerID string
 	// ——部署后验证 spawn 参数（D10；从 config 一次性解析，与池共享语义）——
@@ -253,6 +266,7 @@ func NewDockerDaemon(cfg *config.AppConfig) Daemon {
 	d.cli = cli
 	d.netCli = cli
 	d.imgCli = cli
+	d.containerCli = cli
 	d.selfContainerID = detectSelfContainerID(cli)
 	return d
 }
@@ -373,9 +387,15 @@ func (d *dockerDaemon) EnsureProjectNetwork(ctx context.Context, projectID strin
 // SpawnInstance 创建并启动容器；返回前 inspect 取 IP（分配失败即报错，
 // 不返回无 IP 的半成品实例）。
 func (d *dockerDaemon) SpawnInstance(ctx context.Context, opts SpawnOptions) (Instance, error) {
-	cli, err := d.client()
-	if err != nil {
-		return Instance{}, err
+	// 创建视图优先取单测注入的收窄缝（containerCli），缺省回落完整 client
+	//（生产路径两值同一对象）。
+	createCli := d.containerCli
+	if createCli == nil {
+		cli, err := d.client()
+		if err != nil {
+			return Instance{}, err
+		}
+		createCli = cli
 	}
 	res := infrafunctions.SpecResources(opts.Spec)
 	stopTimeout := 10
@@ -402,16 +422,24 @@ func (d *dockerDaemon) SpawnInstance(ctx context.Context, opts SpawnOptions) (In
 			PidsLimit: int64Ptr(512),
 		},
 	}
-	created, err := cli.ContainerCreate(ctx, cfg, hostCfg, &network.NetworkingConfig{}, nil, opts.Name)
+	created, err := createCli.ContainerCreate(ctx, cfg, hostCfg, &network.NetworkingConfig{}, nil, opts.Name)
 	if err != nil {
+		// 镜像缺失类型化上抛（执行链自愈，rebuild.go 语义）：local 路由模式
+		// 无 pull 自愈，spawn 必然反复失败——与其烧满队首超时，不如立即以
+		// FailedPrecondition + ImageMissingMarker 上抛，server 侧据此触发
+		// 自动重建。NotFound 兜底含网络缺失等形态，以 daemon 文案二次收窄。
+		if errdefs.IsNotFound(err) && strings.Contains(err.Error(), "No such image") {
+			return Instance{}, status.Errorf(codes.FailedPrecondition, "%s %q on this node (rebuild required): %v",
+				domainfunctions.ImageMissingMarker, opts.Image, err)
+		}
 		return Instance{}, fmt.Errorf("create resident instance %s: %w", opts.Name, err)
 	}
 	cleanup := func() {
 		rmCtx, cancel := context.WithTimeout(context.Background(), dockerCleanupTimeout)
-		_ = cli.ContainerRemove(rmCtx, created.ID, container.RemoveOptions{Force: true})
+		_ = createCli.ContainerRemove(rmCtx, created.ID, container.RemoveOptions{Force: true})
 		cancel()
 	}
-	if err := cli.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
+	if err := createCli.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
 		cleanup()
 		return Instance{}, fmt.Errorf("start resident instance: %w", err)
 	}

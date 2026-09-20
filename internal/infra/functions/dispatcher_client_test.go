@@ -319,6 +319,14 @@ func TestDispatcherExecutor_ImportImageErrorMapping(t *testing.T) {
 			wantCode:   codes.InvalidArgument,
 		},
 		{
+			// 镜像缺失类型化错误（rebuild 链路）按码还原（do() 412 通道）。
+			name:       "precondition-failed-412",
+			status:     http.StatusPreconditionFailed,
+			respBody:   `{"error":"deployment image missing \"x\" on this node (rebuild required)"}`,
+			wantErrHas: "rebuild required",
+			wantCode:   codes.FailedPrecondition,
+		},
+		{
 			name:       "empty-digest-500",
 			status:     http.StatusOK,
 			respBody:   `{}`,

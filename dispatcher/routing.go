@@ -150,6 +150,9 @@ func (f *httpNodeForwarder) Forward(ctx context.Context, target NodeRecord, req 
 			return nil, status.Errorf(codes.DeadlineExceeded, "node %s: %s", target.NodeID, msg)
 		case http.StatusBadRequest:
 			return nil, status.Errorf(codes.InvalidArgument, "node %s: %s", target.NodeID, msg)
+		case http.StatusPreconditionFailed:
+			// 镜像缺失类型化错误（rebuild 链路）语义保真转发回源节点。
+			return nil, status.Errorf(codes.FailedPrecondition, "node %s: %s", target.NodeID, msg)
 		case http.StatusUnauthorized, http.StatusForbidden:
 			return nil, status.Errorf(codes.PermissionDenied, "node %s authentication failed", target.NodeID)
 		default:

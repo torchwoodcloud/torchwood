@@ -2022,8 +2022,17 @@ type Functions_Dispatcher struct {
 	// fail-open 退化为仅本节点上限（容量门是可用性门不是安全门，限频告警；
 	// 与 M8 死节点收敛的 fail-safe 语义方向相反，不得混淆）。
 	MaxResidentInstancesGlobal uint32 `protobuf:"varint,16,opt,name=max_resident_instances_global,json=maxResidentInstancesGlobal,proto3" json:"max_resident_instances_global,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	// 镜像缺失自动重建（执行链自愈）：执行分发命中「部署镜像在本节点缺失」
+	// （宿主镜像被清理/环境迁移导致 Postgres ready 状态与宿主 docker 镜像
+	// 存量漂移）时，server/worker 凭 FailedPrecondition + 稳定标记识别并
+	// 异步触发该部署重建——zip/git 源以盘上 zip 重建（git 源 zip 缺失时按
+	// 行内源快照 URL+钉死 SHA+目录经 packer 重新物化并复核 ContextSHA256）；
+	// image 源为幂等 ImportImage；zip 源原始字节不在平台存储内无法自动重建
+	// （执行错误文案含 rebuild required 引导 redeploy）。optional presence
+	// 语义：未配置 = 默认开启，显式 false = 关闭。先例：verify_build。
+	RebuildOnMissingImage *bool `protobuf:"varint,17,opt,name=rebuild_on_missing_image,json=rebuildOnMissingImage,proto3,oneof" json:"rebuild_on_missing_image,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *Functions_Dispatcher) Reset() {
@@ -2166,6 +2175,13 @@ func (x *Functions_Dispatcher) GetMaxResidentInstancesGlobal() uint32 {
 		return x.MaxResidentInstancesGlobal
 	}
 	return 0
+}
+
+func (x *Functions_Dispatcher) GetRebuildOnMissingImage() bool {
+	if x != nil && x.RebuildOnMissingImage != nil {
+		return *x.RebuildOnMissingImage
+	}
+	return false
 }
 
 // Trigger 是触发器模块平台级配置（P1 触发器模块）。
@@ -3224,7 +3240,7 @@ const file_config_proto_rawDesc = "" +
 	"\x11secret_access_key\x18\x05 \x01(\tR\x0fsecretAccessKey\x12\x17\n" +
 	"\ause_ssl\x18\x06 \x01(\bR\x06useSsl\x1a\x1b\n" +
 	"\x05Local\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\"\x8c\x0e\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\"\xe7\x0e\n" +
 	"\tFunctions\x12>\n" +
 	"\x06docker\x18\x02 \x01(\v2&.torchwood.api.config.Functions.DockerR\x06docker\x12G\n" +
 	"\texecution\x18\x03 \x01(\v2).torchwood.api.config.Functions.ExecutionR\texecution\x12J\n" +
@@ -3241,7 +3257,7 @@ const file_config_proto_rawDesc = "" +
 	"\bregistry\x18\x03 \x01(\tR\bregistry\x1a-\n" +
 	"\tExecution\x12 \n" +
 	"\fapi_base_url\x18\x01 \x01(\tR\n" +
-	"apiBaseUrl\x1a\xf0\x04\n" +
+	"apiBaseUrl\x1a\xcb\x05\n" +
 	"\n" +
 	"Dispatcher\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12!\n" +
@@ -3261,8 +3277,10 @@ const file_config_proto_rawDesc = "" +
 	"\bnode_url\x18\r \x01(\tR\anodeUrl\x12!\n" +
 	"\frouting_mode\x18\x0e \x01(\tR\vroutingMode\x12#\n" +
 	"\rregistry_push\x18\x0f \x01(\bR\fregistryPush\x12A\n" +
-	"\x1dmax_resident_instances_global\x18\x10 \x01(\rR\x1amaxResidentInstancesGlobalB\x0f\n" +
-	"\r_verify_build\x1a6\n" +
+	"\x1dmax_resident_instances_global\x18\x10 \x01(\rR\x1amaxResidentInstancesGlobal\x12<\n" +
+	"\x18rebuild_on_missing_image\x18\x11 \x01(\bH\x01R\x15rebuildOnMissingImage\x88\x01\x01B\x0f\n" +
+	"\r_verify_buildB\x1b\n" +
+	"\x19_rebuild_on_missing_image\x1a6\n" +
 	"\aTrigger\x12+\n" +
 	"\x12http_ip_per_minute\x18\x01 \x01(\x05R\x0fhttpIpPerMinute\x1an\n" +
 	"\fClientInvoke\x120\n" +

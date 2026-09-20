@@ -60,6 +60,9 @@ type fakeDaemon struct {
 	pulls       []string
 	ensureErr   error
 	pullErr     error
+	// spawnErr 非空 = SpawnInstance 可编程失败（镜像缺失 fail-fast 语义的
+	// 池传播断言面）。
+	spawnErr error
 }
 
 func newFakeDaemon() *fakeDaemon {
@@ -108,6 +111,9 @@ func (d *fakeDaemon) EnsureProjectNetwork(_ context.Context, projectID string, u
 func (d *fakeDaemon) SpawnInstance(_ context.Context, opts SpawnOptions) (Instance, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if d.spawnErr != nil {
+		return Instance{}, d.spawnErr
+	}
 	d.spawnCount++
 	d.lastNetwork = opts.Network
 	d.lastSpawn = opts
@@ -643,6 +649,30 @@ func TestPoolDispatch_QueueTimeoutCarriesLastSpawnError(t *testing.T) {
 		}
 	}
 	require.Equal(t, 1, warns, "spawn 失败告警在限频窗口内只落一条: %v", records.snapshot())
+}
+
+// TestPoolDispatch_ImageMissingFailsFast 镜像缺失类型化错误（FailedPrecondition
+// + ImageMissingMarker，daemon.go SpawnInstance 上抛）必须 fail-fast：local
+// 模式无 pull 自愈，等待不会让镜像出现——继续排队只会烧满队首超时（原始
+// No such image 事故的表现形态），server 侧凭该错误触发自动重建（rebuild.go）。
+func TestPoolDispatch_ImageMissingFailsFast(t *testing.T) {
+	d := newFakeDaemon()
+	d.spawnErr = status.Errorf(codes.FailedPrecondition,
+		"%s %q on this node (rebuild required): Error response from daemon: No such image",
+		domainfunctions.ImageMissingMarker, dispatchReq().Image)
+	reg := newFakeRegistry()
+	pool := newTestPool(d, reg, &fakeRunner{}, func(c *PoolConfig) {
+		c.QueueHeadTimeout = 500 * time.Millisecond
+	})
+
+	start := time.Now()
+	_, err := pool.Dispatch(context.Background(), dispatchReq())
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	msg := status.Convert(err).Message()
+	require.Contains(t, msg, domainfunctions.ImageMissingMarker)
+	require.Contains(t, msg, "rebuild required", "错误必须引导重建语义（server 据此触发自动重建）")
+	require.Less(t, time.Since(start), 400*time.Millisecond,
+		"镜像缺失必须 fail-fast，不得烧满队首超时（%v）", time.Since(start))
 }
 
 // TestPoolDispatch_TimeoutKeepsInstance 超时不杀实例（v3 §1.4，本切片唯一
