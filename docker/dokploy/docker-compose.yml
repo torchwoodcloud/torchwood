@@ -117,6 +117,9 @@ services:
   minio:
     # SILO（pgsty/silo）：MinIO 社区延续分支，与 MinIO 完全兼容（S3 API /
     # MINIO_* 变量 / 磁盘格式），换镜像即接管存量卷；钉 release tag 勿用 latest。
+    # 兼用户对象存储（torchwood-storage）与函数部署代码包持久桶
+    # （torchwood-functions，config.yaml functions.storage——镜像缺失自动
+    # 重建的源，Functions 启用时为硬依赖）。
     image: pgsty/silo:RELEASE.2026-09-03T13-18-01Z
     command: server /data --console-address ":9001"
     environment:

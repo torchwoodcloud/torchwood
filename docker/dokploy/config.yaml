@@ -84,6 +84,18 @@ functions:
     # 默认 per-project 隔离网络 tw-func-<project_id>；勿配全局网络（跨租户横向风险）
     network: ""
     registry: "torchwood-funcs"
+  dispatcher:
+    # 镜像缺失自动重建（执行链自愈）：宿主镜像被清理（prune -a / 磁盘压力）
+    # 导致 ready 状态与 docker 镜像存量漂移时，执行命中即异步触发重建——
+    # zip/git 源从持久桶（下方 functions.storage）拉回复核重建，git 源桶
+    # miss 回退 packer 重物化。关闭后仅剩 412 报错引导人工 redeploy。
+    rebuild_on_missing_image: true
+  storage:
+    # 部署代码包持久桶：镜像重建的源。桶为平台内部资源（不进用户 bucket
+    # 命名空间），连接复用上方 storage.s3 的 endpoint/凭证——MinIO/S3 因此
+    # 是函数部署的硬依赖。存量部署（持久层上线前创建）桶内无副本，镜像
+    # 丢失后无法自愈，须 redeploy。
+    bucket: "torchwood-functions"
 
 payments:
   stripe:

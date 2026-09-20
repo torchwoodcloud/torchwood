@@ -184,13 +184,21 @@ torchwood health get --endpoint <gRPC域名>:443 --tls   # gRPC 经 Traefik TLS�
   之后改 `TORCHWOOD_AUTH_PASSWORD` 不会同步数据库角色口令，需在 Dokploy 打开 postgres 终端手工执行：
   `ALTER ROLE tw_authenticator PASSWORD '<新口令>';`（同步改 Environment 后重启 server/worker）。
 - **MinIO bucket**：应用启动时自动创建（`torchwood-storage`，小写），无需 mc 初始化。
+  函数部署代码包专用桶 `torchwood-functions`（config.yaml `functions.storage.bucket`）
+  在首次函数部署时按需创建——MinIO/S3 因此是 Functions 的硬依赖（部署写路径失败整体回滚）。
 - **Redis AOF**：compose 已带 `--appendonly yes`——refresh 轮换记录存 Redis，
   无持久化时容器重启 = 全部已登录会话下次刷新即失效（重新登录即恢复，非故障）。
   换 Redis 实例同理（`docs/developer/13-operations.md` §6.1）。
-- **Functions（可选）**：worker 常驻消费函数执行队列；启用 docker executor 需放开 compose 中
-  `docker.sock` 挂载（⚠ 等同宿主 root 权限）。dispatcher 以 `user: root` 运行
-  （镜像缺省 torchwood 用户读不了宿主 `root:docker` 的 sock）；server/worker 不挂 sock 不受影响。
-  不用 Functions 可删除 worker 服务。
+- **Functions（可选）**：worker 常驻消费函数执行队列；执行/构建统一经 dispatcher
+  （唯一 docker.sock 持有方，⚠ 等同宿主 root 权限），以 `user: root` 运行
+  （镜像缺省 torchwood 用户读不了宿主 `root:docker` 的 sock）；server/worker/packer
+  不挂 sock 不受影响。不用 Functions 可删除 worker/dispatcher/packer 服务。
+- **函数镜像持久化模型**：构建产物镜像只存在宿主 docker（local 路由模式不分发），
+  zip 代码包在 MinIO 持久桶留副本。宿主镜像被清理（`docker prune -a` / 磁盘压力 /
+  Dokploy 清理选项）后：有桶副本的部署在下次执行时自动识别 412 并后台重建
+  （`functions.dispatcher.rebuild_on_missing_image`，默认开）；持久层上线前的存量
+  部署桶内无副本，无法自愈，须 redeploy。备份时 `mc mirror` 连同
+  `torchwood-functions` 桶一起备份。
 
 ## 9. 日常运维
 
