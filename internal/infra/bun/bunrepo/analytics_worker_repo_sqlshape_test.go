@@ -13,16 +13,26 @@ import (
 // 家族技法）。护栏点：
 //   - rollup upsert 冲突分支整体替换（重跑不翻倍，D7 红线：禁止出现
 //     `total = analytics_daily.total +` 之类的累加语义）；
-//   - user_days/first_seen 只消费归属事件（user_id <> ''）；
+//   - user_days/first_seen 只消费归属事件（user_id <> ''）；daily 的
+//     unique_users 同口径排除空归属（S12 三处口径统一）；
 //   - 表名恒 schema 限定；值全部绑定参数；
+//   - rollup 写事务前置语句锁形态（statement_timeout 兜底 + UTC 时区）；
 //   - DDL 分区名/日期字面量经形状正则约束；
 //   - tombstone 清洗语句有界（LIMIT）且重删幂等。
+
+func TestAnalyticsRollupPreamble_Shape(t *testing.T) {
+	require.Equal(t,
+		"SET LOCAL statement_timeout = '2min'; SET LOCAL TimeZone = 'UTC'",
+		analyticsRollupPreamble,
+		"rollup 写事务前置语句：逐语句超时兜底 + UTC 时区（analyticsQueryPreamble 同款）")
+}
 
 func TestAnalyticsRollupDaily_SQLShape(t *testing.T) {
 	q := analyticsRollupDailySQL(`"tw_shapecheck"`)
 	require.True(t, strings.HasPrefix(q, `INSERT INTO "tw_shapecheck".analytics_daily`),
 		"表名必须 schema 限定且为 analytics_daily: %q", q)
-	require.Contains(t, q, "SELECT ?::date AS day, name, COUNT(*) AS total, COUNT(DISTINCT user_id) AS unique_users")
+	require.Contains(t, q, "SELECT ?::date AS day, name, COUNT(*) AS total, COUNT(DISTINCT user_id) FILTER (WHERE user_id <> '') AS unique_users",
+		"daily unique_users 排除空归属（S12 口径统一；total 仍计全部事件）")
 	require.Contains(t, q, "FROM \"tw_shapecheck\".analytics_events WHERE occurred_at >= ? AND occurred_at < ?")
 	require.Contains(t, q, "GROUP BY name")
 	require.Contains(t, q, "ON CONFLICT (day, name) DO UPDATE")

@@ -30,13 +30,31 @@ func NewRollup(repo domainanalytics.RollupRepository, projectsRepo projects.Repo
 	return &Rollup{repo: repo, projects: projectsRepo, logger: logger}
 }
 
+// RollupRoundStats 是单轮 rollup 的计数摘要（worker 侧 metrics 埋点消费；
+// P2 观测补全——失败归因细节仍走结构化日志，指标不携带 project 维度）。
+type RollupRoundStats struct {
+	// Projects 是本轮实际执行重算的 active 项目数。
+	Projects int
+	// Failures 是本轮失败的仓储操作数（RollupDay /
+	// RefreshDefinitionTotals30d 每次报错各计 1；单项目失败不阻断后续项目）。
+	Failures int
+}
+
 // RunWorkerOnce 单轮 rollup：对每个 active 项目重算 [昨日, 今日] 两个 UTC 日
 // （昨日终算 + 当日部分聚合——摄入钳制窗 ±24h 保证两天窗口是新增事件的完备
 // 覆盖，D4/D7；worker 停摆 ≤1 天由「昨日终算」覆盖式补算自愈）。幂等性由
 // 覆盖式 upsert 保证：同窗口重跑不翻倍。
 func (u *Rollup) RunWorkerOnce(ctx context.Context, now time.Time) error {
+	_, err := u.RunWorkerOnceStats(ctx, now)
+	return err
+}
+
+// RunWorkerOnceStats 语义同 RunWorkerOnce 并返回计数摘要（worker metrics
+// 埋点入口；RunWorkerOnce 委托本方法，既有调用方与测试不受影响）。
+func (u *Rollup) RunWorkerOnceStats(ctx context.Context, now time.Time) (RollupRoundStats, error) {
+	var stats RollupRoundStats
 	if u.repo == nil || u.projects == nil {
-		return nil
+		return stats, nil
 	}
 	now = now.UTC()
 	today := dayStart(now)
@@ -45,15 +63,17 @@ func (u *Rollup) RunWorkerOnce(ctx context.Context, now time.Time) error {
 
 	list, err := u.projects.ListProjects(ctx)
 	if err != nil {
-		return err
+		return stats, err
 	}
 	for i := range list {
 		p := &list[i]
 		if p.Status != "active" {
 			continue
 		}
+		stats.Projects++
 		for _, day := range []time.Time{yesterday, today} {
 			if err := u.repo.RollupDay(ctx, p.ID, day); err != nil {
+				stats.Failures++
 				u.logger.ErrorContext(ctx, "analytics rollup day failed",
 					slog.String("project_id", p.ID),
 					slog.String("day", day.Format("2006-01-02")),
@@ -62,12 +82,13 @@ func (u *Rollup) RunWorkerOnce(ctx context.Context, now time.Time) error {
 			}
 		}
 		if err := u.repo.RefreshDefinitionTotals30d(ctx, p.ID, since); err != nil {
+			stats.Failures++
 			u.logger.ErrorContext(ctx, "analytics refresh definition totals failed",
 				slog.String("project_id", p.ID),
 				slog.String("error", err.Error()))
 		}
 	}
-	return nil
+	return stats, nil
 }
 
 // dayStart 归一到 UTC 零点。

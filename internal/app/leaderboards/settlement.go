@@ -18,30 +18,52 @@ const settleScanLimit = 50
 // winnerLimit 是单规则获奖者的硬上限（护栏，正常远达不到）。
 const winnerLimit = 100000
 
+// SettleRoundStats 是单轮结榜扫描的计数摘要（worker 侧 metrics 埋点消费；
+// P2 观测补全——失败归因细节仍走结构化日志，指标不携带 project/board 维度）。
+type SettleRoundStats struct {
+	// Settled 是本轮成功结算的期数。
+	Settled int
+	// Failed 是本轮结算出错的期数（记 error 状态，重跑入口兜底）。
+	Failed int
+	// Backlog 是本轮扫描发现的待结算期总数（各榜 ListSettlablePeriods 枚举
+	// 数之和；单榜受 settleScanLimit 截断时为下界——结算积压观测基线）。
+	Backlog int
+}
+
 // SettleDue 是结榜发奖扫描入口（worker 低频 ticker 驱动）：active 项目 ×
 // 配置了 rewards 的榜 × 已封榜且无结算行的期 → 逐期结算。
 // 单期失败不阻断其他期（记 error 状态，重跑入口兜底）。
 func (a *Leaderboards) SettleDue(ctx context.Context) (int, error) {
+	stats, err := a.SettleDueStats(ctx)
+	return stats.Settled, err
+}
+
+// SettleDueStats 语义同 SettleDue 并返回计数摘要（worker metrics 埋点入口；
+// SettleDue 委托本方法，既有调用方与测试不受影响）。扫描广度用
+// ListWithRewards 在 SQL 侧预过滤——无 rewards 的榜永不产生结算。
+func (a *Leaderboards) SettleDueStats(ctx context.Context) (SettleRoundStats, error) {
+	var stats SettleRoundStats
 	if a.projects == nil || a.settlements == nil {
-		return 0, nil
+		return stats, nil
 	}
 	all, err := a.projects.ListProjects(ctx)
 	if err != nil {
-		return 0, err
+		return stats, err
 	}
 	now := a.ts()
-	settled := 0
 	for i := range all {
 		if all[i].Status != "active" {
 			continue
 		}
-		boards, err := a.boards.List(ctx, all[i].ID)
+		boards, err := a.boards.ListWithRewards(ctx, all[i].ID)
 		if err != nil {
 			a.logger.Warn("leaderboards settle: list boards failed", "project_id", all[i].ID, "error", err)
 			continue
 		}
 		for j := range boards {
 			b := &boards[j]
+			// 防御：rewards JSON 损坏时映射为空（mapBoardToDomain）——
+			// SQL 过滤拦不住它，这里兜底跳过。
 			if len(b.Rewards) == 0 || b.PeriodKind == domainleaderboards.PeriodNone {
 				continue
 			}
@@ -51,19 +73,21 @@ func (a *Leaderboards) SettleDue(ctx context.Context) (int, error) {
 				a.logger.Warn("leaderboards settle: list periods failed", "project_id", all[i].ID, "board_id", b.ID, "error", err)
 				continue
 			}
+			stats.Backlog += len(periods)
 			for _, periodKey := range periods {
 				ok, err := a.settleOne(ctx, b, periodKey, now)
 				if err != nil {
+					stats.Failed++
 					a.logger.Error("leaderboards settle failed", "project_id", all[i].ID, "board_id", b.ID, "period", periodKey, "error", err)
 					continue
 				}
 				if ok {
-					settled++
+					stats.Settled++
 				}
 			}
 		}
 	}
-	return settled, nil
+	return stats, nil
 }
 
 // settleOne 结算单期：认领（唯一键仲裁）→ 规则快照 → 逐规则算获奖者 →

@@ -100,6 +100,17 @@ func (r *boardRepo) Delete(ctx context.Context, projectID, boardID string) error
 }
 
 func (r *boardRepo) List(ctx context.Context, projectID string) ([]leaderboards.Board, error) {
+	return r.listBoards(ctx, projectID, false)
+}
+
+// ListWithRewards 只返回配置了奖励规则的榜（结算扫描专用：rewards 为 jsonb
+// 列，NULL / 空数组均被 `jsonb_array_length > 0` 排除——无奖励榜永不产生
+// 结算，无需物化）。
+func (r *boardRepo) ListWithRewards(ctx context.Context, projectID string) ([]leaderboards.Board, error) {
+	return r.listBoards(ctx, projectID, true)
+}
+
+func (r *boardRepo) listBoards(ctx context.Context, projectID string, onlyRewarded bool) ([]leaderboards.Board, error) {
 	ctx2, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	conn, sch, expr, err := Scoped(ctx2, r.db, projectID, "leaderboard_boards", "lb")
@@ -107,10 +118,12 @@ func (r *boardRepo) List(ctx context.Context, projectID string) ([]leaderboards.
 		return nil, err
 	}
 	var rows []model.LeaderboardBoard
-	err = conn.NewSelect().Model(&rows).ModelTableExpr(expr, sch).
-		Where("lb.project_id = ?", projectID).
-		Order("lb.created_at DESC").
-		Scan(ctx2)
+	sel := conn.NewSelect().Model(&rows).ModelTableExpr(expr, sch).
+		Where("lb.project_id = ?", projectID)
+	if onlyRewarded {
+		sel = sel.Where("jsonb_array_length(lb.rewards) > 0")
+	}
+	err = sel.Order("lb.created_at DESC").Scan(ctx2)
 	if err != nil {
 		return nil, err
 	}

@@ -241,11 +241,11 @@ CREATE TABLE IF NOT EXISTS {{schema}}.analytics_user_deletions (
 ```sql
 -- Timeseries：DAY → analytics_daily 直读（毫秒级）；HOUR → raw 分区裁剪
 SELECT day, total, unique_users FROM analytics_daily WHERE name = ANY($1) AND day BETWEEN $2 AND $3;
-SELECT date_trunc('hour', occurred_at) AS bucket, COUNT(*), COUNT(DISTINCT user_id)
+SELECT date_trunc('hour', occurred_at) AS bucket, COUNT(*), COUNT(DISTINCT user_id) FILTER (WHERE user_id <> '')
 FROM analytics_events WHERE name = ANY($1) AND occurred_at >= $2 AND occurred_at < $3 GROUP BY 1;
 
 -- Breakdown（raw + Top-N + __other__ 应用层归并）
-SELECT COALESCE(props->>$key, '(unset)') AS val, COUNT(*) AS cnt, COUNT(DISTINCT user_id) AS uv
+SELECT COALESCE(props->>$key, '(unset)') AS val, COUNT(*) AS cnt, COUNT(DISTINCT user_id) FILTER (WHERE user_id <> '') AS uv
 FROM analytics_events WHERE name = $1 AND occurred_at >= $2 AND occurred_at < $3
 GROUP BY 1 ORDER BY cnt DESC LIMIT $top_n;
 
@@ -260,6 +260,16 @@ WHERE fs.first_day BETWEEN $1 AND $2 GROUP BY 1;   -- k=0..14 逐列（15 次毫
 SELECT name, occurred_at, ingested_at, source, platform, app_version, session_id, props
 FROM analytics_events WHERE user_id = $1 AND occurred_at < $cursor ORDER BY occurred_at DESC LIMIT $page_size;
 ```
+
+**UV 口径声明（S12 统一，已实现）**：所有「独立访客」口径一律**排除无归属事件**
+（`user_id = ''`——客户端匿名无登录身份流量、server 面无归属上报）：raw 面为
+`COUNT(DISTINCT user_id) FILTER (WHERE user_id <> '')`，无归属事件计入 total、
+不计入 UV；rollup 面 user_days 基座本身只消费归属事件（`user_id <> ''`），
+`analytics_daily.unique_users` 以同一 FILTER 口径计算。三处口径严格一致，
+source 切换数字无缝衔接。**收敛边界**：rollup 每轮只覆盖重写 [昨日, 今日]
+（每小时），口径切换后这两日自愈；更早历史日的 daily 行是旧口径（含空归属）
+产物、不被被动重写——存在跨历史日的口径分层，直到全量重算入口（已登记遗留
+项）统一。
 
 ## 7. Worker 职责（`worker/`，Lynx service + Wire，`projects.ListProjects` 遍历，单项目失败仅记日志）
 

@@ -392,6 +392,12 @@ func (r *AnalyticsQueryRepository) ListUserEvents(ctx context.Context, projectID
 // SQL 构造器（SQL 形状护栏测试的锚点：schema 名为唯一 fmt 注入物——经
 // ident 校验 + 引号转义；值全部 `?` 绑定参数；聚合字面量（'(unset)'、
 // date_trunc 单位、D+k 整数）为域常量，非用户输入）。
+//
+// UV 口径（S12 统一，排除空归属）：raw 面全部 unique_users 一律
+// `COUNT(DISTINCT user_id) FILTER (WHERE user_id <> '')`——与 rollup 写侧
+// （user_days 基座只消费归属事件、daily.unique_users 同口径 FILTER）严格
+// 一致，无归属事件（server 无归属上报等）计入 total、不计入 UV。口径声明
+// 见 docs/design/analytics.md §6。
 // ---------------------------------------------------------------------------
 
 // DATE 列读取口径（pgdriver 把 DATE 以字符串返回，database/sql 无法直接
@@ -437,17 +443,18 @@ func analyticsListDefinitionsSQL(schema string) string {
 }
 
 // analyticsRawTimeseriesSQL：withNames=false 无名谓词（全事件）。unit 经
-// analyticsTruncUnit 白名单产出（'day'/'hour'）。
+// analyticsTruncUnit 白名单产出（'day'/'hour'）。UV FILTER 排除空归属（口径
+// 统一见文件头注释）。
 func analyticsRawTimeseriesSQL(schema, unit string, withNames bool) string {
 	namePred := ""
 	if withNames {
 		namePred = " AND name = ANY(?::text[])"
 	}
-	return fmt.Sprintf(`SELECT date_trunc('%s', occurred_at) AS bucket, COUNT(*) AS total, COUNT(DISTINCT user_id) AS unique_users FROM %s.analytics_events WHERE occurred_at >= ? AND occurred_at < ?%s GROUP BY 1 ORDER BY 1 ASC`, unit, schema, namePred)
+	return fmt.Sprintf(`SELECT date_trunc('%s', occurred_at) AS bucket, COUNT(*) AS total, COUNT(DISTINCT user_id) FILTER (WHERE user_id <> '') AS unique_users FROM %s.analytics_events WHERE occurred_at >= ? AND occurred_at < ?%s GROUP BY 1 ORDER BY 1 ASC`, unit, schema, namePred)
 }
 
 func analyticsRawOverviewKPISQL(schema string) string {
-	return fmt.Sprintf(`SELECT COUNT(*) AS total, COUNT(DISTINCT user_id) AS unique_users FROM %s.analytics_events WHERE occurred_at >= ? AND occurred_at < ?`, schema)
+	return fmt.Sprintf(`SELECT COUNT(*) AS total, COUNT(DISTINCT user_id) FILTER (WHERE user_id <> '') AS unique_users FROM %s.analytics_events WHERE occurred_at >= ? AND occurred_at < ?`, schema)
 }
 
 func analyticsRawTopEventsSQL(schema string) string {
@@ -455,15 +462,15 @@ func analyticsRawTopEventsSQL(schema string) string {
 }
 
 func analyticsRawTodayStatsSQL(schema string) string {
-	return fmt.Sprintf(`SELECT COUNT(*) AS total, COUNT(DISTINCT user_id) AS unique_users FROM %s.analytics_events WHERE occurred_at >= ?`, schema)
+	return fmt.Sprintf(`SELECT COUNT(*) AS total, COUNT(DISTINCT user_id) FILTER (WHERE user_id <> '') AS unique_users FROM %s.analytics_events WHERE occurred_at >= ?`, schema)
 }
 
 func analyticsBreakdownTopSQL(schema string) string {
-	return fmt.Sprintf(`SELECT COALESCE(props->>?, '(unset)') AS val, COUNT(*) AS total, COUNT(DISTINCT user_id) AS unique_users FROM %s.analytics_events WHERE name = ? AND occurred_at >= ? AND occurred_at < ? GROUP BY 1 ORDER BY total DESC, val ASC LIMIT ?`, schema)
+	return fmt.Sprintf(`SELECT COALESCE(props->>?, '(unset)') AS val, COUNT(*) AS total, COUNT(DISTINCT user_id) FILTER (WHERE user_id <> '') AS unique_users FROM %s.analytics_events WHERE name = ? AND occurred_at >= ? AND occurred_at < ? GROUP BY 1 ORDER BY total DESC, val ASC LIMIT ?`, schema)
 }
 
 func analyticsBreakdownRestSQL(schema string) string {
-	return fmt.Sprintf(`SELECT COUNT(*) AS total, COUNT(DISTINCT user_id) AS unique_users FROM %s.analytics_events WHERE name = ? AND occurred_at >= ? AND occurred_at < ? AND COALESCE(props->>?, '(unset)') NOT IN (SELECT val FROM (SELECT COALESCE(props->>?, '(unset)') AS val, COUNT(*) AS total FROM %s.analytics_events WHERE name = ? AND occurred_at >= ? AND occurred_at < ? GROUP BY 1 ORDER BY total DESC, val ASC LIMIT ?) top_buckets)`, schema, schema)
+	return fmt.Sprintf(`SELECT COUNT(*) AS total, COUNT(DISTINCT user_id) FILTER (WHERE user_id <> '') AS unique_users FROM %s.analytics_events WHERE name = ? AND occurred_at >= ? AND occurred_at < ? AND COALESCE(props->>?, '(unset)') NOT IN (SELECT val FROM (SELECT COALESCE(props->>?, '(unset)') AS val, COUNT(*) AS total FROM %s.analytics_events WHERE name = ? AND occurred_at >= ? AND occurred_at < ? GROUP BY 1 ORDER BY total DESC, val ASC LIMIT ?) top_buckets)`, schema, schema)
 }
 
 // analyticsRetentionMatrixSQL：D0–D14 列由常量循环展开（整数与别名为编译期

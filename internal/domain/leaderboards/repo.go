@@ -16,6 +16,10 @@ type BoardRepo interface {
 	Update(ctx context.Context, b *Board) error
 	Delete(ctx context.Context, projectID, boardID string) error
 	List(ctx context.Context, projectID string) ([]Board, error)
+	// ListWithRewards 只返回配置了奖励规则的榜（结算扫描专用入口：无
+	// rewards 的榜永不产生结算，SQL 侧预过滤（jsonb_array_length(rewards) > 0）
+	// 省去全榜物化与逐榜判断；List 面向 console/清理保持全量语义）。
+	ListWithRewards(ctx context.Context, projectID string) ([]Board, error)
 	// Count 是项目内榜配置总数（MaxBoardsPerProject 上限判定）。
 	Count(ctx context.Context, projectID string) (int, error)
 }

@@ -60,7 +60,8 @@ func TestAnalyticsTimeseriesSQL_Shape(t *testing.T) {
 	rawNames := analyticsRawTimeseriesSQL(shapeSchema, "hour", true)
 	require.Contains(t, rawNames, `date_trunc('hour', occurred_at)`)
 	require.Contains(t, rawNames, `AND name = ANY(?::text[])`, "事件名集合经数组字面量绑定，不拼接: %s", rawNames)
-	require.Contains(t, rawNames, "COUNT(DISTINCT user_id)")
+	require.Contains(t, rawNames, "COUNT(DISTINCT user_id) FILTER (WHERE user_id <> '')",
+		"UV 排除空归属（S12 口径统一，与 user_days 基座同源）: %s", rawNames)
 }
 
 // TestAnalyticsTruncUnitWhitelist：date_trunc 单位只出自枚举白名单。
@@ -97,7 +98,8 @@ func TestAnalyticsBreakdownSQL_Shape(t *testing.T) {
 	// 主查询 + Top-N 子查询各持一套绑定参数（name/边界/prop_key ×2 + limit）。
 	require.Equal(t, 9, strings.Count(rest, "?"), "rest 语句绑定参数计数: %s", rest)
 	require.Contains(t, rest, "NOT IN (SELECT val FROM")
-	require.Contains(t, rest, "COUNT(DISTINCT user_id)", "__other__ UV 必须整体去重（非差值近似）")
+	require.Contains(t, rest, "COUNT(DISTINCT user_id) FILTER (WHERE user_id <> '')",
+		"__other__ UV 必须整体去重（非差值近似）且排除空归属（口径统一）")
 }
 
 // TestAnalyticsRetentionSQL_Shape：矩阵语句展开 D0–D14（整数/别名来自域常量）
@@ -163,9 +165,12 @@ func TestAnalyticsDefinitionsAndKpiSQL_Shape(t *testing.T) {
 	today := analyticsRawTodayStatsSQL(shapeSchema)
 	require.Contains(t, today, `occurred_at >= ?`)
 	require.Equal(t, 1, strings.Count(today, "?"))
+	require.Contains(t, today, "COUNT(DISTINCT user_id) FILTER (WHERE user_id <> '')",
+		"今日块 UV 排除空归属（口径统一）")
 
 	kpi := analyticsRawOverviewKPISQL(shapeSchema)
-	require.Contains(t, kpi, "COUNT(DISTINCT user_id)")
+	require.Contains(t, kpi, "COUNT(DISTINCT user_id) FILTER (WHERE user_id <> '')",
+		"KPI UV 排除空归属（total 仍计全部事件，仅 UV 列 FILTER）")
 	require.Equal(t, 2, strings.Count(kpi, "?"))
 
 	topDaily := analyticsTopEventsFromDailySQL(shapeSchema)

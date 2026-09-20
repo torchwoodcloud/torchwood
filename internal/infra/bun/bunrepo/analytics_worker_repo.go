@@ -105,6 +105,15 @@ func (r *AnalyticsWorkerRepository) queryList(ctx context.Context, projectID, qu
 	return out, rows.Err()
 }
 
+// analyticsRollupPreamble 是 rollup 写事务的首语句（simple protocol 单次
+// 往返；analyticsQueryPreamble 同款先例，SET LOCAL 事务结束自动失效零残留）：
+//   - SET LOCAL statement_timeout = '2min'：大事件量日的聚合语句允许重扫，
+//     但不允许挂死——逐语句兜底（worker 轮次另有 10min 预算封顶）；语句超时
+//     使单项目 RollupDay 报错，上层仅记日志继续下一项目（下一轮幂等重算自愈）；
+//   - SET LOCAL TimeZone = 'UTC'：会话时区钉死 UTC（日期以 'YYYY-MM-DD'
+//     字面量传 ?::date 本与会话时区无关，属同款防御姿势，与查询面前后一致）。
+const analyticsRollupPreamble = "SET LOCAL statement_timeout = '2min'; SET LOCAL TimeZone = 'UTC'"
+
 // RollupDay 幂等重算单日（同事务三表覆盖，D7；day = UTC 零点）。
 func (r *AnalyticsWorkerRepository) RollupDay(ctx context.Context, projectID string, day time.Time) error {
 	quoted, err := r.schemaQuoted(ctx, projectID, analyticsDailyTable, "ad")
@@ -116,6 +125,9 @@ func (r *AnalyticsWorkerRepository) RollupDay(ctx context.Context, projectID str
 	dayLiteral := dayStart.Format("2006-01-02")
 	return r.db.RunInTx(ctx, func(txCtx context.Context) error {
 		conn := r.db.Conn(txCtx)
+		if _, err := conn.ExecContext(txCtx, analyticsRollupPreamble); err != nil {
+			return fmt.Errorf("analytics rollup preamble: %w", err)
+		}
 		if _, err := conn.ExecContext(txCtx, analyticsRollupDailySQL(quoted), dayLiteral, dayStart, dayEnd); err != nil {
 			return fmt.Errorf("rollup daily: %w", err)
 		}
@@ -326,11 +338,15 @@ func (r *AnalyticsWorkerRepository) EnqueueUserDeletion(ctx context.Context, pro
 // ---------------------------------------------------------------------------
 
 // analyticsRollupDailySQL 事件×日覆盖 upsert：GROUP BY 全量重算 + ON CONFLICT
-// 整值替换（不累加）。unique_users 口径与 raw 路径一致（COUNT(DISTINCT
-// user_id)，含空归属）——source 切换时数字无缝衔接。
+// 整值替换（不累加）。unique_users 排除空归属事件（user_id = ''，与 raw 面
+// FILTER 及 user_days 基座口径统一——S12 修复前三处口径不一致：raw 计入、
+// user_days 排除、daily 含空）。收敛边界：rollup 每轮只覆盖重写 [昨日, 今日]
+//——口径切换后这两个日由下轮覆盖式重算自愈；更早历史日的 daily 行是旧口径
+//（含空归属）产物，不会被被动重写，直到全量重算入口（S8 已登记遗留）统一。
+// 口径声明见 docs/design/analytics.md §6。
 func analyticsRollupDailySQL(schema string) string {
 	return fmt.Sprintf(`INSERT INTO %s.analytics_daily (day, name, total, unique_users, updated_at)
-SELECT ?::date AS day, name, COUNT(*) AS total, COUNT(DISTINCT user_id) AS unique_users, NOW()
+SELECT ?::date AS day, name, COUNT(*) AS total, COUNT(DISTINCT user_id) FILTER (WHERE user_id <> '') AS unique_users, NOW()
 FROM %s.analytics_events WHERE occurred_at >= ? AND occurred_at < ?
 GROUP BY name
 ON CONFLICT (day, name) DO UPDATE
