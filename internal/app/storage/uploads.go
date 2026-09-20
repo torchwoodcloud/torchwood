@@ -112,7 +112,9 @@ func (s *Storage) GetUploadSession(ctx context.Context, projectID, uploadID stri
 }
 
 // UploadChunk 上传一个分片（同号覆盖 = 幂等）。校验顺序：
-// size 上限 → part 越界 → 分片大小严格校验（非末片 == chunkSize，末片 1..chunkSize）。
+// size 上限 → part 越界 → 分片大小严格校验（非末片 == chunkSize，末片精确等于
+// session.Size-(PartCount-1)*ChunkSize 的余量，P2 修复：旧实现只查 1..chunkSize
+// 区间，末片多传/少传会合成出与 session.Size 不符的文件且 size 元数据失真）。
 // 返回该会话已收分片总数（CountChunks，原子准确）。
 func (s *Storage) UploadChunk(ctx context.Context, projectID, uploadID string, partNumber int, content io.Reader, size int64, ownerUserID string, principal databases.Principal) (int, error) {
 	session, err := s.uploads.Get(ctx, uploadID)
@@ -137,8 +139,13 @@ func (s *Storage) UploadChunk(ctx context.Context, projectID, uploadID string, p
 	if partNumber < session.PartCount && size != session.ChunkSize {
 		return 0, status.Error(codes.InvalidArgument, "chunk size must equal chunk_size for non-final parts")
 	}
-	if partNumber == session.PartCount && (size < 1 || size > session.ChunkSize) {
-		return 0, status.Error(codes.InvalidArgument, "chunk size out of range for final part")
+	// P2 修复：末片大小精确校验（旧实现只查 1..chunkSize 区间）。期望值 =
+	// session.Size - 已定片占用，与会话创建时的 ceil 分配自洽（1..chunkSize）。
+	if partNumber == session.PartCount {
+		expected := session.Size - int64(session.PartCount-1)*session.ChunkSize
+		if size != expected {
+			return 0, status.Errorf(codes.InvalidArgument, "final part size must be exactly %d bytes", expected)
+		}
 	}
 	project, err := s.resolveProject(ctx, projectID)
 	if err != nil {

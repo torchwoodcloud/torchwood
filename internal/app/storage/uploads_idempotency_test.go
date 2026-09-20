@@ -43,8 +43,8 @@ func (r *idemFileRepo) GetByID(context.Context, string, string) (*domainstorage.
 	return r.doc, nil
 }
 
-func (r *idemFileRepo) ListByBucket(context.Context, string, string) ([]*domainstorage.File, error) {
-	return nil, nil
+func (r *idemFileRepo) ListByBucket(context.Context, string, string, string, int, int) ([]*domainstorage.File, int64, error) {
+	return nil, 0, nil
 }
 
 func (r *idemFileRepo) Count(context.Context, string) (int64, error) { return 0, nil }

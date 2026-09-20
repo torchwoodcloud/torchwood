@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"strings"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -60,6 +59,12 @@ func (m *minioObjectStore) EnsureBucket(ctx context.Context, name string) error 
 		return nil
 	}
 	if err := m.client.MakeBucket(ctx, name, minio.MakeBucketOptions{Region: "us-east-1"}); err != nil {
+		// P2 修复：BucketExists 与 MakeBucket 之间存在竞态（并发写路径同时
+		// ensure、另一实例已建桶），S3 以 BucketAlreadyOwnedByYou/BucketAlreadyExists
+		// 应答——视为创建成功，不再误报失败。
+		if code := minio.ToErrorResponse(err).Code; code == "BucketAlreadyOwnedByYou" || code == "BucketAlreadyExists" {
+			return nil
+		}
 		return fmt.Errorf("make bucket: %w", err)
 	}
 	return nil
@@ -76,17 +81,25 @@ func (m *minioObjectStore) Put(ctx context.Context, bucket, key string, data io.
 func (m *minioObjectStore) Get(ctx context.Context, bucket, key string) (io.ReadCloser, error) {
 	obj, err := m.client.GetObject(ctx, bucket, key, minio.GetObjectOptions{})
 	if err != nil {
-		return nil, err
+		return nil, m.mapObjectMiss(err, bucket, key)
 	}
 	// Check existence by reading stat.
 	if _, err := obj.Stat(); err != nil {
 		_ = obj.Close()
-		if strings.Contains(err.Error(), "NoSuchKey") || strings.Contains(err.Error(), "not found") {
-			return nil, fmt.Errorf("%w: %s/%s", storage.ErrObjectNotFound, bucket, key)
-		}
-		return nil, err
+		return nil, m.mapObjectMiss(err, bucket, key)
 	}
 	return obj, nil
+}
+
+// mapObjectMiss 把 S3 的对象缺失应答（NoSuchKey；HEAD 无响应体时 minio-go
+// 合成 NotFound）归一为 ErrObjectNotFound 哨兵，供跨层 errors.Is 区分 miss 与
+// 传输/暂态错误。P2 修复：改用 ToErrorResponse 的结构化 Code 判定，不再对错误
+// 文本做子串匹配（文本随 SDK/后端措辞变化，且会误吞含同名字样的暂态错误）。
+func (m *minioObjectStore) mapObjectMiss(err error, bucket, key string) error {
+	if code := minio.ToErrorResponse(err).Code; code == "NoSuchKey" || code == "NotFound" {
+		return fmt.Errorf("%w: %s/%s", storage.ErrObjectNotFound, bucket, key)
+	}
+	return err
 }
 
 func (m *minioObjectStore) Delete(ctx context.Context, bucket, key string) error {
@@ -104,6 +117,22 @@ func (m *minioObjectStore) List(ctx context.Context, bucket, prefix string) ([]s
 		out = append(out, storage.ObjectMeta{Key: info.Key, LastModified: info.LastModified})
 	}
 	return out, nil
+}
+
+// StreamPrefix 实现域层 PrefixStreamer（P2 修复：PurgePrefix 不再把全量清单
+// 物化进内存）。minio-go ListObjects 返回的 channel 本身就是分页拉取的迭代器，
+// 逐条回调；fn 返回错误（如 ctx 取消）即停止枚举并透传。
+func (m *minioObjectStore) StreamPrefix(ctx context.Context, bucket, prefix string, fn func(storage.ObjectMeta) error) error {
+	opts := minio.ListObjectsOptions{Prefix: prefix, Recursive: true}
+	for info := range m.client.ListObjects(ctx, bucket, opts) {
+		if info.Err != nil {
+			return info.Err
+		}
+		if err := fn(storage.ObjectMeta{Key: info.Key, LastModified: info.LastModified}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Compose 将 srcKeys 按序服务端合并为 dstKey（映射 minio-go ComposeObject）。

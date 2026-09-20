@@ -74,3 +74,13 @@ type ObjectStore interface {
 	// Ping probes connectivity to the underlying store.
 	Ping(ctx context.Context) error
 }
+
+// PrefixStreamer 是 ObjectStore 的可选扩展接口：流式枚举指定前缀下的对象
+// （分页拉取、逐条回调，不把全量清单物化进内存；P2 修复：大前缀清理曾整表
+// 入内存）。不强制所有 ObjectStore 实现提供——消费方（Purger）类型断言使用，
+// 未实现时回退 List 全量路径。
+type PrefixStreamer interface {
+	// StreamPrefix 逐个回调前缀下的对象；fn 返回错误（如 ctx 取消）即终止
+	// 枚举并透传该错误。
+	StreamPrefix(ctx context.Context, bucket, prefix string, fn func(ObjectMeta) error) error
+}

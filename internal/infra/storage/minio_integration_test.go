@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"io"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	domainstorage "github.com/torchwoodcloud/torchwood/internal/domain/storage"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 )
@@ -128,4 +130,52 @@ func TestMinio_ListPrefix(t *testing.T) {
 	for _, o := range objects {
 		require.False(t, o.LastModified.IsZero(), "LastModified 必须非零")
 	}
+}
+
+// TestMinio_GetMissingObjectMapsErrObjectNotFound：对象缺失经 ToErrorResponse 的
+// 结构化 Code（NoSuchKey/NotFound）归一为 ErrObjectNotFound 哨兵。
+func TestMinio_GetMissingObjectMapsErrObjectNotFound(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	m, bucket := newMinioTestStore(t)
+
+	_, err := m.Get(context.Background(), bucket, "no/such/key")
+	require.ErrorIs(t, err, domainstorage.ErrObjectNotFound)
+}
+
+// TestMinio_StreamPrefix：StreamPrefix 与 List 枚举结果一致；缺失前缀返回空。
+func TestMinio_StreamPrefix(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	m, bucket := newMinioTestStore(t)
+	ctx := context.Background()
+
+	require.NoError(t, m.Put(ctx, bucket, "sp/a", bytes.NewReader([]byte("a")), 1, ""))
+	require.NoError(t, m.Put(ctx, bucket, "sp/b/c", bytes.NewReader([]byte("b")), 1, ""))
+	require.NoError(t, m.Put(ctx, bucket, "other/x", bytes.NewReader([]byte("c")), 1, ""))
+
+	var keys []string
+	require.NoError(t, m.StreamPrefix(ctx, bucket, "sp/", func(o domainstorage.ObjectMeta) error {
+		keys = append(keys, o.Key)
+		return nil
+	}))
+	require.Len(t, keys, 2)
+	require.ElementsMatch(t, []string{"sp/a", "sp/b/c"}, keys)
+
+	// fn 返回错误即终止枚举。
+	stopped := errors.New("stop")
+	require.ErrorIs(t, m.StreamPrefix(ctx, bucket, "sp/", func(domainstorage.ObjectMeta) error {
+		return stopped
+	}), stopped)
+
+	// PurgePrefix 走流式路径清尾。
+	purger := NewObjectPurger(m)
+	n, err := purger.PurgePrefix(ctx, bucket, "sp/")
+	require.NoError(t, err)
+	require.Equal(t, 2, n)
+	objects, err := m.List(ctx, bucket, "sp/")
+	require.NoError(t, err)
+	require.Empty(t, objects)
 }

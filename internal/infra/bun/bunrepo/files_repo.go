@@ -78,27 +78,66 @@ func (r *FileRepository) GetByID(ctx context.Context, projectID, id string) (*do
 	return mapFileToDomain(projectID, m), nil
 }
 
-func (r *FileRepository) ListByBucket(ctx context.Context, projectID, bucketID string) ([]*domainstorage.File, error) {
+// fileListPage 是 ListByBucket 的分页参数边界：沿用旧内存分页默认 25；
+// 上限 clamp 对齐 users_repo 先例（防止超大 pageSize 全量捞取）。
+const (
+	fileListDefaultLimit = 25
+	fileListMaxLimit     = 100
+)
+
+// clampListPage 归一化列表分页参数：limit<=0 取默认，超上限 clamp，
+// offset 负数拒绝（storage 面的 bucket/file 列表共用）。
+func clampListPage(limit, offset, def, max int) (int, int, error) {
+	if limit <= 0 {
+		limit = def
+	}
+	if limit > max {
+		limit = max
+	}
+	if offset < 0 {
+		return 0, 0, status.Error(codes.InvalidArgument, "offset must be non-negative")
+	}
+	return limit, offset, nil
+}
+
+func (r *FileRepository) ListByBucket(ctx context.Context, projectID, bucketID, ownerUserID string, limit, offset int) ([]*domainstorage.File, int64, error) {
 	if strings.TrimSpace(bucketID) == "" {
-		return nil, nil
+		return nil, 0, nil
+	}
+	limit, offset, err := clampListPage(limit, offset, fileListDefaultLimit, fileListMaxLimit)
+	if err != nil {
+		return nil, 0, err
 	}
 	conn, sch, expr, err := Scoped(ctx, r.db, projectID, fileTable, "f")
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	countQ := conn.NewSelect().Model((*model.File)(nil)).ModelTableExpr(expr, sch).
+		Where("f.bucket_id = ?", bucketID)
+	if ownerUserID != "" {
+		countQ = countQ.Where("f.owner_user_id = ?", ownerUserID)
+	}
+	total, err := countQ.Count(ctx)
+	if err != nil {
+		return nil, 0, err
 	}
 	var ms []model.File
-	err = conn.NewSelect().Model(&ms).ModelTableExpr(expr, sch).
-		Where("f.bucket_id = ?", bucketID).
-		OrderExpr("f.created_at DESC, f.id DESC").
+	sel := conn.NewSelect().Model(&ms).ModelTableExpr(expr, sch).
+		Where("f.bucket_id = ?", bucketID)
+	if ownerUserID != "" {
+		sel = sel.Where("f.owner_user_id = ?", ownerUserID)
+	}
+	err = sel.OrderExpr("f.created_at DESC, f.id DESC").
+		Limit(limit).Offset(offset).
 		Scan(ctx)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	out := make([]*domainstorage.File, len(ms))
 	for i := range ms {
 		out[i] = mapFileToDomain(projectID, &ms[i])
 	}
-	return out, nil
+	return out, int64(total), nil
 }
 
 func (r *FileRepository) Count(ctx context.Context, projectID string) (int64, error) {

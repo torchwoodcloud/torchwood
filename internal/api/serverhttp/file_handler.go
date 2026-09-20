@@ -26,6 +26,7 @@ import (
 	domainstorage "github.com/torchwoodcloud/torchwood/internal/domain/storage"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
+	"github.com/torchwoodcloud/torchwood/pkg/semaphore"
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
@@ -48,13 +49,14 @@ var inlineSafeMimeTypes = map[string]struct{}{
 
 // FileHandler provides HTTP multipart upload/download for storage.
 type FileHandler struct {
-	policies  *domainauth.PolicySet
-	cfg       *config.AppConfig
-	auth      *httpAuth
-	storage   *appstorage.Storage
-	trusted   *interceptor.TrustedProxies
-	auditRepo audit.Repository
-	logger    *slog.Logger
+	policies    *domainauth.PolicySet
+	cfg         *config.AppConfig
+	auth        *httpAuth
+	storage     *appstorage.Storage
+	trusted     *interceptor.TrustedProxies
+	auditRepo   audit.Repository
+	logger      *slog.Logger
+	previewGate semaphore.Semaphore
 }
 
 // NewFileHandler creates a new file HTTP handler.
@@ -74,7 +76,8 @@ func NewFileHandler(
 		return nil, fmt.Errorf("parse security.trusted_proxies: %w", err)
 	}
 	return &FileHandler{cfg: cfg, auth: newHTTPAuth(validator, policies), storage: storage, auditRepo: auditRepo,
-		trusted: trusted, logger: logger, policies: policies}, nil
+		trusted: trusted, logger: logger, policies: policies,
+		previewGate: semaphore.NewInMemory(previewMaxConcurrent)}, nil
 }
 
 // clientIP 与 gRPC ClientInfoInterceptor 走同一 trusted-proxy 规则。
@@ -625,6 +628,13 @@ const maxPreviewSourceDimension = 8192
 // maxPreviewDimension 限制缩放后的输出尺寸。
 const maxPreviewDimension = 4096
 
+// previewMaxConcurrent 是单实例并发图片解码/缩放请求数上限。单请求峰值内存
+// 可达 ~300MB（50MiB 源图受 header 宽高闸后仍可解出 8192² RGBA 位图 ≈ 268MB，
+// 叠加 Lanczos 缩放与编码缓冲），2 并发 ≈ 600MB 峰值，是内存安全与预览可用性
+// 的折中（取值 2-4 区间的下限：预览可缓存、可重试，宁可快速 429 也不挤压
+// 进程内其他请求的存活空间）；超出的请求立即 429 由客户端退避重试。
+const previewMaxConcurrent = 2
+
 // previewSourceConfig 只读有限 header 解析并校验预览源图像：
 // 先读最多 maxPreviewHeaderBytes 字节解析宽高，任一维度超限直接拒绝（不读全量）；
 // 非图片/损坏图片返回 InvalidArgument（400），读源失败返回 Internal。
@@ -657,6 +667,21 @@ func (h *FileHandler) preview(w http.ResponseWriter, r *http.Request, pathParams
 	if bucketID == "" || fileID == "" {
 		httpError(w, status.Error(codes.InvalidArgument, "missing bucket or file id"))
 		return
+	}
+
+	// P2 修复：preview 并发闸。解码/缩放单请求峰值内存高（见 previewMaxConcurrent
+	// 注释），满载时先于鉴权与读流快速 429（ResourceExhausted），防解码积压把
+	// 进程内存挤爆。信号量故障（Redis 实现抖动）时放行降级，不因闸故障拒绝预览。
+	if h.previewGate != nil {
+		acquired, release, err := h.previewGate.TryAcquire(ctx)
+		if err != nil {
+			h.logger.Warn("preview semaphore acquire failed; serving ungated", "error", err)
+		} else if !acquired {
+			httpError(w, status.Error(codes.ResourceExhausted, "too many concurrent preview requests"))
+			return
+		} else {
+			defer release()
+		}
 	}
 
 	projectID, principal, actor, public, err := h.resolveReadContext(ctx, r, bucketID, fileID)

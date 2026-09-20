@@ -180,7 +180,9 @@ func (s *StorageService) GetFile(ctx context.Context, req *serverv1.GetFileReque
 	if projectID == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing project context")
 	}
-	file, _, err := s.storage.GetFile(ctx, projectID, req.GetBucketId(), req.GetFileId(), dbPrincipal(ctx))
+	// P2 修复：元数据读取走 GetFileMeta（不开对象内容流）。旧实现复用 GetFile
+	// 用 _ 丢弃 reader 且不 Close，每次调用泄漏一条对象存储 HTTP 连接。
+	file, err := s.storage.GetFileMeta(ctx, projectID, req.GetBucketId(), req.GetFileId(), dbPrincipal(ctx))
 	if err != nil {
 		return nil, err
 	}

@@ -65,23 +65,39 @@ func (r *BucketRepository) GetByID(ctx context.Context, projectID, id string) (*
 	return mapBucketToDomain(projectID, m), nil
 }
 
-func (r *BucketRepository) List(ctx context.Context, projectID string) ([]*domainstorage.Bucket, error) {
+// bucketListPage 是 List 的分页参数边界：沿用旧内存分页默认 25；
+// 上限 clamp 对齐 users_repo 先例（防止超大 pageSize 全量捞取）。
+const (
+	bucketListDefaultLimit = 25
+	bucketListMaxLimit     = 100
+)
+
+func (r *BucketRepository) List(ctx context.Context, projectID string, limit, offset int) ([]*domainstorage.Bucket, int64, error) {
+	limit, offset, err := clampListPage(limit, offset, bucketListDefaultLimit, bucketListMaxLimit)
+	if err != nil {
+		return nil, 0, err
+	}
 	conn, sch, expr, err := Scoped(ctx, r.db, projectID, bucketTable, "b")
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	total, err := conn.NewSelect().Model((*model.Bucket)(nil)).ModelTableExpr(expr, sch).Count(ctx)
+	if err != nil {
+		return nil, 0, err
 	}
 	var ms []model.Bucket
 	err = conn.NewSelect().Model(&ms).ModelTableExpr(expr, sch).
 		OrderExpr("b.created_at DESC, b.id DESC").
+		Limit(limit).Offset(offset).
 		Scan(ctx)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	out := make([]*domainstorage.Bucket, len(ms))
 	for i := range ms {
 		out[i] = mapBucketToDomain(projectID, &ms[i])
 	}
-	return out, nil
+	return out, int64(total), nil
 }
 
 func (r *BucketRepository) Count(ctx context.Context, projectID string) (int64, error) {

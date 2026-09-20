@@ -224,8 +224,17 @@ func TestUploads_Validation(t *testing.T) {
 	_, err = uc.UploadChunk(ctx, projectID, session.ID, 2, bytes.NewReader(nil), (16<<20)+1, "", principal)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 
-	// 大小 < 5MiB 的末片合法（5MiB 约束仅对非末片）。
-	_, err = uc.UploadChunk(ctx, projectID, session.ID, 2, bytes.NewReader(content[16<<20:16<<20+100]), 100, "", principal)
+	// P2 修复：末片大小精确校验——期望值 = 24MiB - 16MiB = 8MiB。
+	// 偏差（8MiB±1）一律拒绝，不再只查 1..chunkSize 区间。
+	_, err = uc.UploadChunk(ctx, projectID, session.ID, 2, bytes.NewReader(content[16<<20:(16<<20)+(8<<20)-1]), (8<<20)-1, "", principal)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Contains(t, err.Error(), "final part size must be exactly")
+	_, err = uc.UploadChunk(ctx, projectID, session.ID, 2, bytes.NewReader(make([]byte, (8<<20)+1)), (8<<20)+1, "", principal)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Contains(t, err.Error(), "final part size must be exactly")
+
+	// 精确末片（8MiB）合法。
+	_, err = uc.UploadChunk(ctx, projectID, session.ID, 2, bytes.NewReader(content[16<<20:]), 8<<20, "", principal)
 	require.NoError(t, err)
 
 	// size > MaxUploadSize → InvalidArgument。

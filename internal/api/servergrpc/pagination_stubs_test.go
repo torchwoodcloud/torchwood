@@ -97,11 +97,10 @@ func (paginationBucketRepo) GetByID(_ context.Context, _, id string) (*domainsto
 	}
 	return nil, nil
 }
-func (paginationBucketRepo) List(context.Context, string) ([]*domainstorage.Bucket, error) {
+func (paginationBucketRepo) List(context.Context, string, int, int) ([]*domainstorage.Bucket, int64, error) {
 	return []*domainstorage.Bucket{
 		{ID: "b-1", Name: "B", Permissions: []string{"read"}},
-		{ID: "b-2", Name: "C"},
-	}, nil
+	}, 2, nil
 }
 func (paginationBucketRepo) Count(context.Context, string) (int64, error) { return 2, nil }
 func (paginationBucketRepo) Update(context.Context, string, string, map[string]any) error {
@@ -115,11 +114,10 @@ func (paginationFileRepo) Insert(context.Context, string, *domainstorage.File) e
 func (paginationFileRepo) GetByID(context.Context, string, string) (*domainstorage.File, error) {
 	return nil, nil
 }
-func (paginationFileRepo) ListByBucket(context.Context, string, string) ([]*domainstorage.File, error) {
+func (paginationFileRepo) ListByBucket(context.Context, string, string, string, int, int) ([]*domainstorage.File, int64, error) {
 	return []*domainstorage.File{
 		{ID: "f-1", BucketID: "b-1", Name: "x.png", MimeType: "image/png", Size: 3},
-		{ID: "f-2", BucketID: "b-1", Name: "y.png", MimeType: "image/png", Size: 1},
-	}, nil
+	}, 2, nil
 }
 func (paginationFileRepo) Count(context.Context, string) (int64, error) { return 2, nil }
 func (paginationFileRepo) Update(context.Context, string, string, map[string]any) error {

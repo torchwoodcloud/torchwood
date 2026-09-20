@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -125,14 +126,19 @@ func (s *Storage) CreateBucket(ctx context.Context, cmd CreateBucketCommand) (*s
 }
 
 // ListBuckets 返回 (buckets, total, nextPageToken, error)；nextPageToken 供
-// 分页续拉（Round3 H6-1：此前被丢弃导致列表截断不可翻页）。
+// 分页续拉（Round3 H6-1：此前被丢弃导致列表截断不可翻页）。分页在 SQL 侧
+// LIMIT/OFFSET 下推（P2 修复：旧实现全量捞取后内存分页）。
 func (s *Storage) ListBuckets(ctx context.Context, projectID string, q databases.Query, principal databases.Principal) ([]storage.Bucket, int64, string, error) {
 	project, err := s.resolveProject(ctx, projectID)
 	if err != nil {
 		return nil, 0, "", err
 	}
 
-	list, err := s.buckets.List(ctx, project.ID)
+	offset, err := decodeListOffset(q.PageToken)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	list, total, err := s.buckets.List(ctx, project.ID, listLimit(q.PageSize), offset)
 	if err != nil {
 		return nil, 0, "", err
 	}
@@ -142,7 +148,11 @@ func (s *Storage) ListBuckets(ctx context.Context, projectID string, q databases
 			docs = append(docs, *b)
 		}
 	}
-	return paginateBuckets(docs, q.PageSize, q.PageToken)
+	next, err := listNextToken(offset, len(docs), total)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	return docs, total, next, nil
 }
 
 func (s *Storage) GetBucket(ctx context.Context, projectID, bucketID string, _ databases.Principal) (*storage.Bucket, error) {
@@ -300,33 +310,58 @@ func (s *Storage) CreateFile(ctx context.Context, cmd CreateFileCommand, content
 	return file, nil
 }
 
-func (s *Storage) GetFile(ctx context.Context, projectID, bucketID, fileID string, principal databases.Principal) (*storage.File, io.ReadCloser, error) {
+// resolveFileForRead 完成文件读路径（GetFile/GetFileMeta）共有的定位与鉴权：
+// 项目解析 → bucket 存在 → 文件文档存在且归属该 bucket → canAccessFile。
+func (s *Storage) resolveFileForRead(ctx context.Context, projectID, bucketID, fileID string, principal databases.Principal) (*storage.File, error) {
 	project, err := s.resolveProject(ctx, projectID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	bucket, err := s.buckets.GetByID(ctx, project.ID, bucketID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if bucket == nil {
-		return nil, nil, status.Error(codes.NotFound, "bucket not found")
+		return nil, status.Error(codes.NotFound, "bucket not found")
 	}
 	file, err := s.files.GetByID(ctx, project.ID, fileID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if file == nil || file.BucketID != bucketID {
-		return nil, nil, status.Error(codes.NotFound, "file not found")
+		return nil, status.Error(codes.NotFound, "file not found")
 	}
 	if !canAccessFile(bucket, file, principal) {
-		return nil, nil, status.Error(codes.PermissionDenied, "permission denied")
+		return nil, status.Error(codes.PermissionDenied, "permission denied")
 	}
-	reader, err := s.store.Get(ctx, defaultBucketName(s.cfg), objectKey(project.ID, bucketID, fileID))
+	return file, nil
+}
+
+func (s *Storage) GetFile(ctx context.Context, projectID, bucketID, fileID string, principal databases.Principal) (*storage.File, io.ReadCloser, error) {
+	file, err := s.resolveFileForRead(ctx, projectID, bucketID, fileID, principal)
 	if err != nil {
+		return nil, nil, err
+	}
+	reader, err := s.store.Get(ctx, defaultBucketName(s.cfg), objectKey(projectID, bucketID, fileID))
+	if err != nil {
+		// 对象缺失（文档在而对象丢失的不一致态）统一映射 NotFound：
+		// 旧实现把底层错误原样透传，HTTP 侧映射为 500，调用方无法与
+		// 暂态故障区分是否值得重试。
+		if errors.Is(err, storage.ErrObjectNotFound) {
+			return file, nil, status.Error(codes.NotFound, "file content not found")
+		}
 		return file, nil, err
 	}
 	return file, reader, nil
+}
+
+// GetFileMeta 返回文件元数据，不打开对象内容流（P2 修复：gRPC GetFile 元数据
+// 路径此前复用 GetFile 却丢弃 reader 且不 Close——minio GetObject+Stat 已建立
+// HTTP 连接，元数据读取场景每次调用泄漏一条 S3 连接）。元数据以 DB 文档为权威，
+// 不做对象存在性校验：对象缺失属存储不一致态，由下载/预览路径统一映射 404
+// （见 GetFile 错误映射），元数据读取不应为此付出一次对象存储往返。
+func (s *Storage) GetFileMeta(ctx context.Context, projectID, bucketID, fileID string, principal databases.Principal) (*storage.File, error) {
+	return s.resolveFileForRead(ctx, projectID, bucketID, fileID, principal)
 }
 
 func (s *Storage) DeleteFile(ctx context.Context, projectID, bucketID, fileID string, principal databases.Principal) error {
@@ -351,8 +386,14 @@ func (s *Storage) DeleteFile(ctx context.Context, projectID, bucketID, fileID st
 	if !canAccessFile(bucket, file, principal) {
 		return status.Error(codes.PermissionDenied, "permission denied")
 	}
-	if err := s.store.Delete(ctx, defaultBucketName(s.cfg), objectKey(project.ID, bucketID, fileID)); err != nil { //nolint:staticcheck
-		// Continue to delete metadata even if object missing.
+	// P2 修复：对象删除失败必须返回错误且保留 DB 行（旧行为静默 continue 后
+	// 仍删行，留下「行已删、对象在」的永久孤儿字节，且调用方无从重试）。
+	// 「对象不存在」类错误视为删除成功（幂等），继续删行；其余错误向上透传
+	// （gRPC 侧非 status 错误 → Unknown → HTTP 5xx，保持现状语义）。
+	if err := s.store.Delete(ctx, defaultBucketName(s.cfg), objectKey(project.ID, bucketID, fileID)); err != nil {
+		if !errors.Is(err, storage.ErrObjectNotFound) {
+			return fmt.Errorf("delete file object: %w", err)
+		}
 	}
 	return s.files.Delete(ctx, project.ID, fileID)
 }
@@ -370,7 +411,21 @@ func (s *Storage) ListFiles(ctx context.Context, projectID, bucketID string, q d
 		return nil, 0, "", status.Error(codes.NotFound, "bucket not found")
 	}
 
-	list, err := s.files.ListByBucket(ctx, project.ID, bucketID)
+	// A8：EndUser 仅见自己文件，public bucket 或特权主体可见全部。owner 过滤
+	// 由 SQL 侧下推（P2 修复：旧实现全量捞取后内存过滤/分页）。
+	owner := ""
+	if !bucket.Public && !isStoragePrivileged(principal) {
+		uid := storageEndUserID(principal)
+		if uid == "" {
+			return nil, 0, "", status.Error(codes.PermissionDenied, "permission denied")
+		}
+		owner = uid
+	}
+	offset, err := decodeListOffset(q.PageToken)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	list, total, err := s.files.ListByBucket(ctx, project.ID, bucketID, owner, listLimit(q.PageSize), offset)
 	if err != nil {
 		return nil, 0, "", err
 	}
@@ -380,21 +435,11 @@ func (s *Storage) ListFiles(ctx context.Context, projectID, bucketID string, q d
 			out = append(out, *f)
 		}
 	}
-	// A8：EndUser 仅见自己文件，public bucket 或特权主体可见全部。
-	if !bucket.Public && !isStoragePrivileged(principal) {
-		uid := storageEndUserID(principal)
-		if uid == "" {
-			return nil, 0, "", status.Error(codes.PermissionDenied, "permission denied")
-		}
-		filtered := make([]storage.File, 0, len(out))
-		for _, f := range out {
-			if f.OwnerUserID == uid {
-				filtered = append(filtered, f)
-			}
-		}
-		out = filtered
+	next, err := listNextToken(offset, len(out), total)
+	if err != nil {
+		return nil, 0, "", err
 	}
-	return paginateFiles(out, q.PageSize, q.PageToken)
+	return out, total, next, nil
 }
 
 // UpdateFileCommand 携带可更新的文件元数据字段；空值表示不修改。
@@ -581,11 +626,15 @@ func (s *Storage) resolveProject(ctx context.Context, projectID string) (*projec
 // normalizeMimeType 归一化客户端声明的 Content-Type：
 // 空值与可执行/危险类型（含带参数的，取分号前 base 判断）一律改判为 application/octet-stream，
 // 防止存储型 XSS 经 /view 端点内联执行。
+// image/svg+xml 同样降级（P2 修复：旧实现依赖 serverhttp 的 inlineSafeMime 单点
+// 防御，把 SVG 按附件下载；新增传输端点或第三方读方容易漏掉该约定）。SVG 是
+// 完整的 XML 文档、可内嵌 <script>，存储侧统一落 octet-stream；白名单内联展示
+// 能力不受影响（SVG 本就不该内联）。此降级在写入时生效，DB 中不再存有 svg mime。
 func normalizeMimeType(mime string) string {
 	base := strings.Split(mime, ";")[0]
 	switch base {
 	case "text/html", "application/xhtml+xml", "application/javascript",
-		"text/javascript", "application/xml", "text/xml":
+		"text/javascript", "application/xml", "text/xml", "image/svg+xml":
 		return "application/octet-stream"
 	}
 	if base == "" {
@@ -655,66 +704,37 @@ func canAccessFile(bucket *storage.Bucket, file *storage.File, principal databas
 	return false
 }
 
-func paginateBuckets(items []storage.Bucket, pageSize int32, pageToken string) ([]storage.Bucket, int64, string, error) {
-	total := int64(len(items))
-	offset := 0
-	if pageToken != "" {
-		var err error
-		offset, err = crud.DecodePageToken(pageToken)
-		if err != nil {
-			return nil, 0, "", status.Error(codes.InvalidArgument, "invalid page_token")
-		}
+// storageListDefaultLimit 沿用旧内存分页默认页大小；上限 clamp 在 repo 侧。
+const storageListDefaultLimit = 25
+
+// decodeListOffset 解码分页 token 为 SQL offset（空 token=0）。
+func decodeListOffset(pageToken string) (int, error) {
+	if pageToken == "" {
+		return 0, nil
 	}
-	limit := int(pageSize)
-	if limit <= 0 {
-		limit = 25
+	offset, err := crud.DecodePageToken(pageToken)
+	if err != nil {
+		return 0, status.Error(codes.InvalidArgument, "invalid page_token")
 	}
-	if offset > len(items) {
-		offset = len(items)
-	}
-	end := offset + limit
-	if end > len(items) {
-		end = len(items)
-	}
-	next := ""
-	if end < len(items) {
-		token, err := crud.EncodePageToken(end)
-		if err != nil {
-			return nil, 0, "", status.Error(codes.Internal, err.Error())
-		}
-		next = token
-	}
-	return items[offset:end], total, next, nil
+	return offset, nil
 }
 
-func paginateFiles(items []storage.File, pageSize int32, pageToken string) ([]storage.File, int64, string, error) {
-	total := int64(len(items))
-	offset := 0
-	if pageToken != "" {
-		var err error
-		offset, err = crud.DecodePageToken(pageToken)
-		if err != nil {
-			return nil, 0, "", status.Error(codes.InvalidArgument, "invalid page_token")
-		}
+// listLimit 把 pageSize 归一为正数（<=0 取默认 25；上限 clamp 由 repo 侧完成）。
+func listLimit(pageSize int32) int {
+	if pageSize <= 0 {
+		return storageListDefaultLimit
 	}
-	limit := int(pageSize)
-	if limit <= 0 {
-		limit = 25
+	return int(pageSize)
+}
+
+// listNextToken 在还有剩余数据时产出续页 offset token（与旧内存分页语义一致）。
+func listNextToken(offset, pageLen int, total int64) (string, error) {
+	if int64(offset+pageLen) >= total {
+		return "", nil
 	}
-	if offset > len(items) {
-		offset = len(items)
+	token, err := crud.EncodePageToken(offset + pageLen)
+	if err != nil {
+		return "", status.Error(codes.Internal, err.Error())
 	}
-	end := offset + limit
-	if end > len(items) {
-		end = len(items)
-	}
-	next := ""
-	if end < len(items) {
-		token, err := crud.EncodePageToken(end)
-		if err != nil {
-			return nil, 0, "", status.Error(codes.Internal, err.Error())
-		}
-		next = token
-	}
-	return items[offset:end], total, next, nil
+	return token, nil
 }

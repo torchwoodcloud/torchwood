@@ -257,10 +257,12 @@ func TestFileHandler_DangerousMimeHardening(t *testing.T) {
 	require.Contains(t, respHeaders.Get("Content-Disposition"), "attachment")
 	require.NotContains(t, respHeaders.Get("Content-Disposition"), "inline")
 
-	// SVG 可内嵌脚本：即使 MIME 未归一化，/view 也强制降级为附件下载。
+	// SVG 可内嵌脚本：P2 修复后写入侧 normalizeMimeType 即降级为
+	// application/octet-stream（不再依赖 /view 的 inlineSafeMime 单点防御），
+	// 存储的 mime 不再是 image/svg+xml，/view 按附件下载。
 	svgID, svgMime, status := fix.upload([]byte(`<svg onload="alert(1)"/>`), headers, "image/svg+xml")
 	require.Equal(t, http.StatusCreated, status)
-	require.Equal(t, "image/svg+xml", svgMime)
+	require.Equal(t, "application/octet-stream", svgMime, "SVG mime 应在写入侧降级")
 
 	svgViewPath := "/v1/storage/buckets/" + fix.bucketID + "/files/" + svgID + "/view"
 	code, _, svgHeaders := fix.download(svgViewPath, headers)

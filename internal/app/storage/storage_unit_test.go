@@ -78,8 +78,8 @@ func (r *memBucketRepo) GetByID(_ context.Context, _, id string) (*domainstorage
 	}
 	return r.byID[id], nil
 }
-func (r *memBucketRepo) List(context.Context, string) ([]*domainstorage.Bucket, error) {
-	return nil, nil
+func (r *memBucketRepo) List(context.Context, string, int, int) ([]*domainstorage.Bucket, int64, error) {
+	return nil, 0, nil
 }
 func (r *memBucketRepo) Count(context.Context, string) (int64, error) { return 0, nil }
 func (r *memBucketRepo) Update(context.Context, string, string, map[string]any) error {
@@ -99,8 +99,8 @@ func (r *memFileRepo) Insert(_ context.Context, _ string, file *domainstorage.Fi
 func (r *memFileRepo) GetByID(context.Context, string, string) (*domainstorage.File, error) {
 	return nil, nil
 }
-func (r *memFileRepo) ListByBucket(context.Context, string, string) ([]*domainstorage.File, error) {
-	return nil, nil
+func (r *memFileRepo) ListByBucket(context.Context, string, string, string, int, int) ([]*domainstorage.File, int64, error) {
+	return nil, 0, nil
 }
 func (r *memFileRepo) Count(context.Context, string) (int64, error) { return 0, nil }
 func (r *memFileRepo) Update(context.Context, string, string, map[string]any) error {
@@ -448,14 +448,27 @@ func (r *listableFileRepo) GetByID(_ context.Context, _, id string) (*domainstor
 	return nil, nil
 }
 
-func (r *listableFileRepo) ListByBucket(_ context.Context, _, bucketID string) ([]*domainstorage.File, error) {
-	var out []*domainstorage.File
+func (r *listableFileRepo) ListByBucket(_ context.Context, _, bucketID, ownerUserID string, limit, offset int) ([]*domainstorage.File, int64, error) {
+	// 镜像 SQL 下推语义：owner 非空时过滤 + LIMIT/OFFSET，返回过滤后总数。
+	var matched []*domainstorage.File
 	for _, f := range r.files {
-		if f.BucketID == bucketID {
-			out = append(out, f)
+		if f.BucketID != bucketID {
+			continue
 		}
+		if ownerUserID != "" && f.OwnerUserID != ownerUserID {
+			continue
+		}
+		matched = append(matched, f)
 	}
-	return out, nil
+	total := int64(len(matched))
+	if offset > len(matched) {
+		offset = len(matched)
+	}
+	end := offset + limit
+	if end > len(matched) {
+		end = len(matched)
+	}
+	return matched[offset:end], total, nil
 }
 
 func endUserFilePrincipal(userID string) databases.Principal {
