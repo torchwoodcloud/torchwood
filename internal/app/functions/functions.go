@@ -49,10 +49,17 @@ type Functions struct {
 	zipStore functions.ZipStore
 	// userGate 是每用户并发闸门（P2：进程内 keyed 信号量，默认每用户 2）。
 	userGate *userGateLimiter
-	// rebuildMu/rebuilding 是镜像缺失自动重建的在途去重（rebuild.go；并发
-	// 执行同时命中同一缺失镜像只触发一次后台重建）。
+	// rebuildMu/rebuilding 是镜像缺失自动重建的进程内在途去重（rebuild.go；
+	// 并发执行同时命中同一缺失镜像只触发一次后台重建）。跨副本去重走
+	// dedup 端口（server/worker 多副本都触发重建），本 map 恒参与、作
+	// 单进程第一道闸。
 	rebuildMu  sync.Mutex
 	rebuilding map[rebuildKey]struct{}
+	// dedup 是在途重建去重的跨进程端口（Redis SETNX；缺陷 B——进程内 map
+	// 无法去重 server 与 worker 并发触发的重建）。nil = 回落纯进程内 map
+	// （旧构造/测试兼容）；Redis 故障 fail-open（去重是效率优化，不阻断
+	// 自愈链）。
+	dedup RebuildDedup
 }
 
 func NewFunctions(cfg *config.AppConfig, executor functions.Executor, repo functions.FunctionRepo, queue shared.Queue) *Functions {
@@ -65,13 +72,17 @@ func NewFunctions(cfg *config.AppConfig, executor functions.Executor, repo funct
 // NewFunctionsWithUsage 注入用量计数器、项目目录与执行身份端口（Wire）；
 // 测试仍用 NewFunctions。triggers 是触发器仓储（P1）；zipStore 是部署
 // 代码包持久层（worker 装配入口——worker 的异步执行错误路径同样触发
-// 镜像缺失重建，需要从持久层拉回；测试传 nil 即旧语义）。
+// 镜像缺失重建，需要从持久层拉回；测试传 nil 即旧语义）。sems.RebuildDedup
+// 是在途重建跨进程去重端口（nil = 回落进程内 map）。
 func NewFunctionsWithUsage(cfg *config.AppConfig, executor functions.Executor, repo functions.FunctionRepo, queue shared.Queue, usage domainbilling.UsageCounter, projectRepo projects.Repository, sems Semaphores, execTokens functions.ExecutionTokenService, triggers functions.TriggerRepo, zipStore functions.ZipStore) *Functions {
 	f := NewFunctions(cfg, executor, repo, queue)
 	f.usage = usage
 	f.projects = projectRepo
 	if sems.Build != nil {
 		f.buildSem = sems.Build
+	}
+	if sems.RebuildDedup != nil {
+		f.dedup = sems.RebuildDedup
 	}
 	f.execTokens = execTokens
 	f.triggers = triggers

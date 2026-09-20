@@ -30,6 +30,16 @@ const maxDeploymentCodeBytes = 50 << 20 // 50 MiB
 // 专用桶——盘上丢失可拉回，见 rebuild.go）。
 const zipDir = "torchwood-functions"
 
+// buildOptions 是 buildDeployment 的调用方语义（重建路径与首次部署路径
+// 的失败分流，缺陷 A）：
+//   - 零值 = 首次部署/补构建（CreateDeployment 三源与 worker 补构建）：
+//     buildErr 落 Failed 终态 + 非 git 源清代码包（D13 一期形态）；
+//   - rebuild = true = 镜像缺失自动重建（rebuild.go）：失败不落终态、
+//     不清代码包（保留自愈源），恢复 ready 原状可重试。
+type buildOptions struct {
+	rebuild bool
+}
+
 type CreateDeploymentCommand struct {
 	ProjectID  string
 	FunctionID string
@@ -144,7 +154,7 @@ func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCo
 
 	// 同步构建（MVP 定案：不在独立构建队列，请求内完成；构建 ctx 与请求
 	// ctx 解耦，见 buildDeployment）。
-	if err := f.buildDeployment(ctx, fn, dep, path); err != nil {
+	if err := f.buildDeployment(ctx, fn, dep, path, buildOptions{}); err != nil {
 		// 信号量满或状态写回失败：删除 deployment 行与代码包，避免残留 pending 行。
 		_ = f.repo.DeleteDeployment(ctx, cmd.ProjectID, cmd.FunctionID, dep.ID)
 		f.removeCodePackage(ctx, cmd.ProjectID, cmd.FunctionID, dep.ID)
@@ -171,7 +181,15 @@ func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCo
 // 命中则零 pull；一次性凭证不落库，本路径凭证恒空——私有镜像补拉失败标
 // failed 属声明边界）；zip/git 源 → Build（盘上 zip 为输入）。worker 补构建
 // 与首次部署共用本分流，无需感知源类型。
-func (f *Functions) buildDeployment(ctx context.Context, fn *domainfunctions.Function, dep *domainfunctions.Deployment, path string) error {
+//
+// 失败语义按 opts 分流（缺陷 A）：首次部署（opts 零值）维持 D13——buildErr
+// 落 Failed 终态、非 git 源清代码包、返回 nil（状态机内收敛）；重建
+// （opts.rebuild）失败不落终态——恢复 ready 原状并记录 error 列、保留代码
+// 包（桶副本 + 本地 zip 是下次执行重进自愈链的源）、RemoveImage 幂等保留
+// （镜像本来缺失），buildErr 上抛给调用方记日志。两类路径的错误出口（spec
+// 组装失败 / 构建失败 / 成功路径状态写回失败）同口径分流，杜绝重建把
+// ready 部署永久带离可自愈状态。
+func (f *Functions) buildDeployment(ctx context.Context, fn *domainfunctions.Function, dep *domainfunctions.Deployment, path string, opts buildOptions) error {
 	ok, release, err := f.getBuildSemaphore().TryAcquire(ctx)
 	if err != nil {
 		return status.Errorf(codes.Internal, "acquire build semaphore: %v", err)
@@ -195,6 +213,9 @@ func (f *Functions) buildDeployment(ctx context.Context, fn *domainfunctions.Fun
 	if dep.SourceType == domainfunctions.DeploymentSourceImage {
 		spec, specErr := f.importImageSpec(buildCtx, fn, dep.ID, &domainfunctions.ImageSource{Reference: dep.SourceURL}, dep.SourceRef)
 		if specErr != nil {
+			if opts.rebuild {
+				f.restoreRebuildDeployment(buildCtx, dep, specErr)
+			}
 			return specErr
 		}
 		// 镜像导入路径暂不落 build_node（四期 4a-1 范围仅 Build 响应通道；
@@ -203,12 +224,23 @@ func (f *Functions) buildDeployment(ctx context.Context, fn *domainfunctions.Fun
 	} else {
 		spec, specErr := f.buildSpec(buildCtx, fn, dep, path)
 		if specErr != nil {
+			if opts.rebuild {
+				f.restoreRebuildDeployment(buildCtx, dep, specErr)
+			}
 			return specErr
 		}
 		buildNode, buildErr = f.executor.Build(buildCtx, spec)
 	}
 	dep.UpdatedAt = time.Now()
 	if buildErr != nil {
+		if opts.rebuild {
+			// 重建失败不落 Failed 终态（自愈反噬，缺陷 A）：恢复 ready 可重试，
+			// 代码包（桶副本 + 本地 zip）保留为下次自愈的源；RemoveImage 幂等
+			// 保留——镜像本来缺失。buildErr 上抛由调用方记日志。
+			f.restoreRebuildDeployment(buildCtx, dep, buildErr)
+			_ = f.executor.RemoveImage(buildCtx, dep.FunctionID, dep.ID)
+			return buildErr
+		}
 		dep.Status = domainfunctions.DeploymentStatusFailed
 		dep.Error = truncate(buildErr.Error(), maxOutputBytes)
 		_ = f.repo.UpdateDeployment(buildCtx, dep)
@@ -229,6 +261,9 @@ func (f *Functions) buildDeployment(ctx context.Context, fn *domainfunctions.Fun
 	// 失败路径不落：failed 行无路由亲和语义。
 	dep.BuildNode = buildNode
 	if err := f.repo.UpdateDeployment(buildCtx, dep); err != nil {
+		if opts.rebuild {
+			f.restoreRebuildDeployment(buildCtx, dep, err)
+		}
 		return err
 	}
 	dep.Status = domainfunctions.DeploymentStatusReady
@@ -237,11 +272,31 @@ func (f *Functions) buildDeployment(ctx context.Context, fn *domainfunctions.Fun
 	// functions.latest_ready_deployment_id（热路径清账，P0.5——
 	// selectDeployment 优先读指针，消灭 ListDeployments 全量拉取）。
 	if err := f.repo.ActivateDeployment(buildCtx, dep); err != nil {
+		if opts.rebuild {
+			f.restoreRebuildDeployment(buildCtx, dep, err)
+		}
 		return err
 	}
 	// 缓存失效：latest 指针投影随函数记录缓存（P0.5）。
 	f.cache.invalidate(dep.ProjectID, dep.FunctionID)
 	return nil
+}
+
+// restoreRebuildDeployment 重建路径失败后的状态恢复（缺陷 A）：把 building
+// 中的部署行写回 ready 并把失败原因落 error 列（便于排查），代码包（本地
+// zip + 桶副本）原样保留——镜像仍缺失，下次执行凭「No such image」重进
+// 自愈链。恢复走普通 UpdateDeployment（列白名单 status/error/updated_at）：
+// 该部署重建前就是 ready，latest_ready 指针从未转移，不走
+// ActivateDeployment（那会把指针从可能已易主的新部署上抢回来）。best-effort：
+// 恢复写失败只记日志——行停在 building 时下次执行报 no ready deployment，
+// 与既有让路语义一致，等下次重建成功收敛。
+func (f *Functions) restoreRebuildDeployment(ctx context.Context, dep *domainfunctions.Deployment, cause error) {
+	dep.Status = domainfunctions.DeploymentStatusReady
+	dep.Error = truncate(cause.Error(), maxOutputBytes)
+	if err := f.repo.UpdateDeployment(ctx, dep); err != nil {
+		f.logger().Warn("functions: image-missing rebuild state restore failed",
+			"project", dep.ProjectID, "function", dep.FunctionID, "deployment", dep.ID, "error", err)
+	}
 }
 
 // buildSpec 组装 BuildSpec（构建链载荷一期定稿，设计 §0）：

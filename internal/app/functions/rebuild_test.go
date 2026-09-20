@@ -2,16 +2,20 @@ package functions
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
+	infrafunctions "github.com/torchwoodcloud/torchwood/internal/infra/functions"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
@@ -222,4 +226,80 @@ func TestCreateExecution_ImageMissingTriggersRebuild(t *testing.T) {
 		cur, gerr := repo.GetDeployment(context.Background(), "p1", "fn_1", "dep_ready")
 		return gerr == nil && cur != nil && cur.Status == domainfunctions.DeploymentStatusReady
 	}, 2*time.Second, 10*time.Millisecond, "重建完成后执行面恢复 ready")
+}
+
+// ——缺陷 A：重建路径与首次部署路径的失败语义分流——
+
+// TestRebuild_BuildFailureKeepsReadyAndCodePackage ready 部署重建遇瞬态
+// buildErr：不落 Failed 终态（保持 ready 可重试 + error 列留痕）、桶副本
+// 与本地 zip 保留（自愈源）、后续 prepare 不被 Status 门挡住——自愈链
+// 可重进并收敛 ready。
+func TestRebuild_BuildFailureKeepsReadyAndCodePackage(t *testing.T) {
+	exec := newMockExecutor(nil, nil)
+	exec.buildErr = errors.New("npm registry timeout")
+	store := &fakeZipStore{get: zipCode}
+	uc, repo, fn, dep := rebuildStoreUC(t, exec, store, domainfunctions.DeploymentSourceZip, sha256Hex(zipCode))
+
+	build := uc.prepareImageMissingRebuild(context.Background(), fn, dep)
+	require.NotNil(t, build)
+	build()
+	require.Equal(t, 1, exec.builds)
+
+	cur, gerr := repo.GetDeployment(context.Background(), fn.ProjectID, fn.ID, dep.ID)
+	require.NoError(t, gerr)
+	require.Equal(t, domainfunctions.DeploymentStatusReady, cur.Status, "重建失败不落 Failed 终态：部署保持可重试")
+	require.NotEmpty(t, cur.Error, "失败原因落 error 列便于排查")
+	require.Equal(t, 1, exec.removes, "RemoveImage 幂等保留（镜像本来缺失）")
+	require.Empty(t, store.removes, "桶副本是 zip 源唯一自愈源：构建失败不得删除")
+	require.FileExists(t, zipPath(fn.ProjectID, fn.ID, dep.ID), "拉回落盘的本地 zip 保留")
+
+	// 自愈链可重进：瞬态故障恢复后下一次执行重进本链即可收敛。
+	exec.buildErr = nil
+	retry := uc.prepareImageMissingRebuild(context.Background(), fn, dep)
+	require.NotNil(t, retry, "失败后部署仍 ready：不被 Status 门挡住")
+	retry()
+	require.Equal(t, 2, exec.builds)
+	cur, gerr = repo.GetDeployment(context.Background(), fn.ProjectID, fn.ID, dep.ID)
+	require.NoError(t, gerr)
+	require.Equal(t, domainfunctions.DeploymentStatusReady, cur.Status)
+	require.Empty(t, cur.Error, "重建成功清空 error 列")
+}
+
+// ——缺陷 B：在途重建跨进程去重——
+
+// TestPrepareImageMissingRebuild_CrossProcessDedup 两副本（独立进程内 map）
+// 共享同一 Redis：在途期间后到副本让路；构建结束主动释放后可再触发；
+// 持有方崩溃未释放时 TTL 到期解封（SETNX + TTL 语义，miniredis）。
+func TestPrepareImageMissingRebuild_CrossProcessDedup(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+	dedup := infrafunctions.NewRedisRebuildDedup(redis.NewClient(&redis.Options{Addr: mr.Addr()}))
+
+	exec := newMockExecutor(nil, nil)
+	uc, repo, fn, dep := rebuildUC(t, exec, nil, domainfunctions.DeploymentSourceZip)
+	uc.dedup = dedup
+	execB := newMockExecutor(nil, nil)
+	ucB := NewFunctions(nil, execB, repo, newMockQueue())
+	ucB.dedup = dedup
+
+	first := uc.prepareImageMissingRebuild(context.Background(), fn, dep)
+	require.NotNil(t, first)
+	second := ucB.prepareImageMissingRebuild(context.Background(), fn, dep)
+	require.Nil(t, second, "跨进程去重：他副本在途重建时让路（Redis SETNX）")
+	require.Equal(t, 0, execB.builds)
+
+	first() // 构建结束主动释放（成败都释放）
+	retry := ucB.prepareImageMissingRebuild(context.Background(), fn, dep)
+	require.NotNil(t, retry, "键释放后可再次触发")
+	retry()
+	require.Equal(t, 1, execB.builds)
+
+	// TTL 兜底：third 模拟持有方崩溃（抢键后不释放），到期后自愈链解封。
+	third := uc.prepareImageMissingRebuild(context.Background(), fn, dep)
+	require.NotNil(t, third)
+	mr.FastForward(uc.buildTimeout() + rebuildDedupTTLGrace + time.Second)
+	fourth := ucB.prepareImageMissingRebuild(context.Background(), fn, dep)
+	require.NotNil(t, fourth, "TTL 过期后可再次触发（崩溃残留兜底）")
+	fourth()
 }

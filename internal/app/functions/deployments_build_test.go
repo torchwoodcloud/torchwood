@@ -47,7 +47,7 @@ func TestBuildDeployment_BuildSpecPayload(t *testing.T) {
 			Execution: &config.Functions_Execution{ApiBaseUrl: "http://torchwood-server:9080"},
 		}})
 
-	require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, t.TempDir()+"/code.zip"))
+	require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, t.TempDir()+"/code.zip", buildOptions{}))
 	require.Equal(t, domainfunctions.DeploymentStatusReady, dep.Status)
 	require.Len(t, exec.specs, 1)
 	spec := exec.specs[0]
@@ -84,7 +84,7 @@ func TestBuildDeployment_RuntimeSnapshot(t *testing.T) {
 	require.NoError(t, repo.CreateDeployment(context.Background(), dep))
 	uc := NewFunctions(&config.AppConfig{}, exec, repo, newMockQueue())
 
-	require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, t.TempDir()+"/code.zip"))
+	require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, t.TempDir()+"/code.zip", buildOptions{}))
 	require.Len(t, exec.specs, 1)
 	require.Equal(t, "node-18.0", exec.specs[0].Runtime, "快照胜出：补构建与首次构建永远同一 runtime")
 }
@@ -109,7 +109,7 @@ func TestBuildDeployment_VerifyBuildPresence(t *testing.T) {
 			fn := &domainfunctions.Function{ID: "fn_1", ProjectID: "p1", Runtime: "node-24.0", TimeoutSeconds: 10, Enabled: true}
 			uc, _, dep := buildTestUC(t, exec, fn, nil,
 				&config.AppConfig{Functions: &config.Functions{Dispatcher: tc.dispatcher}})
-			require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, t.TempDir()+"/code.zip"))
+			require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, t.TempDir()+"/code.zip", buildOptions{}))
 			require.Len(t, exec.specs, 1)
 			require.Equal(t, tc.want, exec.specs[0].Verify)
 		})
@@ -145,7 +145,7 @@ func TestBuildDeployment_BuildTimeoutParsing(t *testing.T) {
 				&config.AppConfig{Functions: &config.Functions{
 					Dispatcher: &config.Functions_Dispatcher{BuildTimeout: tc.timeout},
 				}})
-			require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, t.TempDir()+"/code.zip"))
+			require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, t.TempDir()+"/code.zip", buildOptions{}))
 			require.Equal(t, domainfunctions.DeploymentStatusReady, dep.Status)
 		})
 	}
@@ -168,7 +168,7 @@ func TestBuildDeployment_SurvivesParentCancel(t *testing.T) {
 	}
 	fn := &domainfunctions.Function{ID: "fn_1", ProjectID: "p1", Runtime: "go-1.26", TimeoutSeconds: 10, Enabled: true}
 	uc, repo, dep := buildTestUC(t, exec, fn, nil, &config.AppConfig{})
-	require.NoError(t, uc.buildDeployment(parentCtx, fn, dep, t.TempDir()+"/code.zip"))
+	require.NoError(t, uc.buildDeployment(parentCtx, fn, dep, t.TempDir()+"/code.zip", buildOptions{}))
 	require.Equal(t, domainfunctions.DeploymentStatusReady, dep.Status)
 
 	// 状态照常落库（父 ctx 已取消，落库走 buildCtx）。
@@ -188,7 +188,7 @@ func TestBuildDeployment_BuildNodePersisted(t *testing.T) {
 		exec.buildNodeID = "dispatcher-1"
 		fn := &domainfunctions.Function{ID: "fn_1", ProjectID: "p1", Runtime: "go-1.26", TimeoutSeconds: 10, Enabled: true}
 		uc, repo, dep := buildTestUC(t, exec, fn, nil, &config.AppConfig{})
-		require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, t.TempDir()+"/code.zip"))
+		require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, t.TempDir()+"/code.zip", buildOptions{}))
 		require.Equal(t, "dispatcher-1", dep.BuildNode, "成功路径 dep.BuildNode = Build 返回的节点 ID")
 
 		stored, err := repo.GetDeployment(context.Background(), "p1", "fn_1", "dep_1")
@@ -203,7 +203,7 @@ func TestBuildDeployment_BuildNodePersisted(t *testing.T) {
 		exec.buildErr = context.DeadlineExceeded
 		fn := &domainfunctions.Function{ID: "fn_1", ProjectID: "p1", Runtime: "go-1.26", TimeoutSeconds: 10, Enabled: true}
 		uc, repo, dep := buildTestUC(t, exec, fn, nil, &config.AppConfig{})
-		require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, t.TempDir()+"/code.zip"))
+		require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, t.TempDir()+"/code.zip", buildOptions{}))
 		require.Empty(t, dep.BuildNode, "failed 行无路由亲和语义")
 
 		stored, err := repo.GetDeployment(context.Background(), "p1", "fn_1", "dep_1")
@@ -224,7 +224,7 @@ func TestBuildDeployment_FailureCleanup(t *testing.T) {
 	zipPath := zipPath("p1", "fn_1", "dep_1")
 	t.Cleanup(func() { _ = removeZip("p1", "fn_1", "dep_1") })
 	require.NoError(t, writeZip(zipPath, []byte("PK\x03\x04")))
-	require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, zipPath))
+	require.NoError(t, uc.buildDeployment(context.Background(), fn, dep, zipPath, buildOptions{}))
 	require.Equal(t, domainfunctions.DeploymentStatusFailed, dep.Status)
 	require.NotEmpty(t, dep.Error)
 

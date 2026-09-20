@@ -81,6 +81,12 @@ var ProviderSet = wire.NewSet(
 	// worker 依赖图禁入 infra/auth（import guard）。
 	infrafunctions.NewRedisExecutionTokenService,
 	wire.Bind(new(domainfunctions.ExecutionTokenService), new(*infrafunctions.RedisExecutionTokenService)),
+	// 在途重建跨进程去重（镜像缺失自动重建缺陷 B）：worker 的异步执行错误
+	// 路径同样触发重建，与 server 多副本并发时经 Redis SETNX 收敛为一次
+	// （app 端口在组合根 Bind；具体类型 provider 不进桶包，同
+	// NewRedisExecutionTokenService 模式）。
+	infrafunctions.NewRedisRebuildDedup,
+	wire.Bind(new(appfunctions.RebuildDedup), new(*infrafunctions.RedisRebuildDedup)),
 	bunrepo.NewProjectRepository,
 	bunrepo.NewFunctionRepository,
 	// P1 触发器模块：cron 调度循环经 Functions 聚合领取到期触发器。

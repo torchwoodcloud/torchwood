@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	"google.golang.org/grpc/codes"
@@ -37,10 +38,17 @@ import (
 // selectDeployment 拒绝），完成后执行面自愈。开关 functions.dispatcher.
 // rebuild_on_missing_image 未配置 = 默认开启，显式 false 关闭。
 
-// rebuildKey 是在途重建去重键（进程内；并发执行同时命中同一缺失镜像只触发
-// 一次重建）。
+// rebuildKey 是在途重建去重键（进程内 map + 可选跨进程端口双层；并发执行
+// 同时命中同一缺失镜像只触发一次重建——server 与 worker 多副本场景由
+// dedup 端口收敛，见 rebuild_dedup.go）。
 type rebuildKey struct {
 	projectID, functionID, deploymentID string
+}
+
+// string 是跨进程去重键的逻辑标识投影（Redis 实现再加 torchwood:fnrebuild:
+// 前缀）；组件为平台内部 ID，不含分隔符歧义。
+func (k rebuildKey) string() string {
+	return k.projectID + "/" + k.functionID + "/" + k.deploymentID
 }
 
 // isImageMissingExecErr 判定执行错误是否为 dispatcher 的镜像缺失类型化错误
@@ -63,26 +71,19 @@ func (f *Functions) maybeRebuildMissingImage(ctx context.Context, execErr error,
 	}
 }
 
+// rebuildDedupTTLGrace 是在途去重键 TTL 在构建超时预算之上的余量：构建
+// ctx 由 build_timeout 封顶、闭包结束主动 Release，TTL 只是进程崩溃后键
+// 残留的兜底（到期自愈链自然解封）。
+const rebuildDedupTTLGrace = time.Minute
+
 // prepareImageMissingRebuild 执行触发前置（在途去重 → 现读部署状态 → 源
 // 物化），返回后台重建闭包；nil = 不触发（让路 / 无法物化 / 已有在途）。
 // 闭包单独返回供测试同步执行；生产路径由 maybeRebuildMissingImage 起
 // goroutine（buildDeployment 内部 WithoutCancel + build_timeout 封顶）。
 func (f *Functions) prepareImageMissingRebuild(ctx context.Context, fn *domainfunctions.Function, dep *domainfunctions.Deployment) func() {
-	key := rebuildKey{dep.ProjectID, dep.FunctionID, dep.ID}
-	f.rebuildMu.Lock()
-	if f.rebuilding == nil {
-		f.rebuilding = make(map[rebuildKey]struct{})
-	}
-	if _, busy := f.rebuilding[key]; busy {
-		f.rebuildMu.Unlock()
+	release := f.acquireRebuildDedup(ctx, rebuildKey{dep.ProjectID, dep.FunctionID, dep.ID})
+	if release == nil {
 		return nil
-	}
-	f.rebuilding[key] = struct{}{}
-	f.rebuildMu.Unlock()
-	release := func() {
-		f.rebuildMu.Lock()
-		delete(f.rebuilding, key)
-		f.rebuildMu.Unlock()
 	}
 
 	// 现读现状（dep 可能已被并发路径翻转）；非 ready = worker 补构建或在途
@@ -117,9 +118,9 @@ func (f *Functions) prepareImageMissingRebuild(ctx context.Context, fn *domainfu
 	rebuildDep := *cur
 	return func() {
 		defer release()
-		buildErr := f.buildDeployment(context.WithoutCancel(ctx), fn, &rebuildDep, path)
+		buildErr := f.buildDeployment(context.WithoutCancel(ctx), fn, &rebuildDep, path, buildOptions{rebuild: true})
 		if buildErr != nil {
-			f.logger().Warn("functions: image-missing rebuild failed",
+			f.logger().Warn("functions: image-missing rebuild failed (deployment kept ready for retry; code package retained)",
 				"project", dep.ProjectID, "function", dep.FunctionID, "deployment", dep.ID,
 				"status", rebuildDep.Status, "error", buildErr)
 			return
@@ -128,6 +129,58 @@ func (f *Functions) prepareImageMissingRebuild(ctx context.Context, fn *domainfu
 			"project", dep.ProjectID, "function", dep.FunctionID, "deployment", dep.ID,
 			"status", rebuildDep.Status)
 	}
+}
+
+// acquireRebuildDedup 抢占在途重建（双层：进程内 map 恒参与作单进程第一道
+// 闸；dedup 端口非 nil 时再抢跨进程键）。返回 release 闭包（本地与远端键
+// 一起释放）；nil = 已有在途重建（本地或远端副本），让路。Redis 故障
+// fail-open：去重是效率优化不是正确性门槛——缺陷 A 修复后重复构建幂等
+// 收敛 ready，阻断自愈链的代价更高。
+func (f *Functions) acquireRebuildDedup(ctx context.Context, key rebuildKey) func() {
+	f.rebuildMu.Lock()
+	if f.rebuilding == nil {
+		f.rebuilding = make(map[rebuildKey]struct{})
+	}
+	if _, busy := f.rebuilding[key]; busy {
+		f.rebuildMu.Unlock()
+		return nil
+	}
+	f.rebuilding[key] = struct{}{}
+	f.rebuildMu.Unlock()
+
+	remote := f.dedup != nil
+	if remote {
+		acquired, err := f.dedup.TryAcquire(ctx, key.string(), f.buildTimeout()+rebuildDedupTTLGrace)
+		if err == nil && !acquired {
+			// 其他副本已在途重建：释放本地标记并让路。
+			f.releaseLocalRebuild(key)
+			return nil
+		}
+		if err != nil {
+			f.logger().Warn("functions: rebuild dedup probe failed; proceeding without cross-process dedupe",
+				"project", key.projectID, "function", key.functionID, "deployment", key.deploymentID, "error", err)
+		}
+	}
+	return func() {
+		f.releaseLocalRebuild(key)
+		if remote {
+			// 释放用独立短超时 ctx：闭包在 WithoutCancel 预算上运行，但
+			// 让路/早退路径的调用方 ctx 可能随时被取消，释放必须可靠。
+			rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := f.dedup.Release(rctx, key.string()); err != nil {
+				f.logger().Warn("functions: rebuild dedup release failed (key expires via TTL)",
+					"project", key.projectID, "function", key.functionID, "deployment", key.deploymentID, "error", err)
+			}
+		}
+	}
+}
+
+// releaseLocalRebuild 释放进程内去重标记（rebuilding map）。
+func (f *Functions) releaseLocalRebuild(key rebuildKey) {
+	f.rebuildMu.Lock()
+	delete(f.rebuilding, key)
+	f.rebuildMu.Unlock()
 }
 
 // restoreDeploymentZip 让盘上 zip 缺失的部署重新具备构建输入（zip 源自愈

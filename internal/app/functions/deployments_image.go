@@ -105,7 +105,7 @@ func (f *Functions) createDeploymentFromImage(ctx context.Context, cmd CreateDep
 	// ready 门禁（与 zip/git 源同路进入 buildDeployment；image 分流为幂等
 	// ImportImage 复检——spec 带预期 digest = 行内 source_ref）。返回 err =
 	// 请求级失败（信号量满/状态写回失败）：删行，不留残骸。
-	if err := f.buildDeployment(ctx, fn, dep, ""); err != nil {
+	if err := f.buildDeployment(ctx, fn, dep, "", buildOptions{}); err != nil {
 		_ = f.repo.DeleteDeployment(ctx, cmd.ProjectID, cmd.FunctionID, dep.ID)
 		_ = f.executor.RemoveImage(ctx, cmd.FunctionID, dep.ID)
 		return nil, err

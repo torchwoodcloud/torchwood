@@ -446,7 +446,10 @@ func (f *Functions) ProcessExecution(ctx context.Context, msg queueMessage) erro
 				return restoreErr
 			}
 		}
-		if buildErr := f.buildDeployment(ctx, fn, dep, path); buildErr != nil {
+		// 零值 opts：补构建是首次构建语义（D13——buildErr 落 failed 终态、
+		// 非 git 源清代码包；与 rebuild 自愈路径的失败分流不同，见
+		// buildOptions 注释）。
+		if buildErr := f.buildDeployment(ctx, fn, dep, path, buildOptions{}); buildErr != nil {
 			release()
 			return buildErr
 		}

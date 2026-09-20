@@ -28,4 +28,8 @@ var ProviderSet = wire.NewSet(
 	// NewMinioObjectStore 先例，不加 wire.Bind）。server/worker 均消费——
 	// 重建链路在两进程的执行错误路径都会触发。
 	NewBucketZipStore,
+	// 在途重建跨进程去重（镜像缺失自动重建缺陷 B；app 端口
+	// appfunctions.RebuildDedup 在组合根 wire.Bind——infra 不反向 import
+	// app）。server/worker 均消费：两进程的执行错误路径都会触发重建。
+	NewRedisRebuildDedup,
 )

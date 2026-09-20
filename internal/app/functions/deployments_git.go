@@ -116,7 +116,7 @@ func (f *Functions) createDeploymentFromGit(ctx context.Context, cmd CreateDeplo
 	// 同步构建（与 zip 源同路，D11 ctx 解耦不变）。返回 err = 请求级失败
 	// （信号量满/状态写回失败）：删行删 zip——git 源的 zip 保留语义只属于
 	// 「构建已发生并收敛为 failed」的快照场景，请求被拒绝时不留残骸。
-	if err := f.buildDeployment(ctx, fn, dep, path); err != nil {
+	if err := f.buildDeployment(ctx, fn, dep, path, buildOptions{}); err != nil {
 		_ = f.repo.DeleteDeployment(ctx, cmd.ProjectID, cmd.FunctionID, dep.ID)
 		f.removeCodePackage(ctx, cmd.ProjectID, cmd.FunctionID, dep.ID)
 		return nil, err
