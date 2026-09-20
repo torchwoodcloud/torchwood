@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
 	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
@@ -262,6 +263,36 @@ func (r memFulfillments) MarkFailed(_ context.Context, _, fulfillmentID, reason 
 	f := r.s.fulfillments[oid]
 	f.Status = domainpayments.FulfillmentFailed
 	f.Detail = map[string]any{"reason": reason}
+	return nil
+}
+
+// MarkReverseFailed 镜像 bunrepo 实现：合并 reverse_error / previous_status
+// 进 detail，原履约信息保留；无履约行时插入一条 reverse_failed 行。
+func (r memFulfillments) MarkReverseFailed(_ context.Context, order *domainpayments.Order, reason string) error {
+	existing := r.s.fulfillments[order.ID]
+	if existing == nil {
+		r.s.fulfillments[order.ID] = &domainpayments.Fulfillment{
+			ID:          newOrderID(),
+			OrderID:     order.ID,
+			ProjectID:   order.ProjectID,
+			PurposeKind: order.PurposeKind,
+			Ref:         "reverse:" + order.ID,
+			Status:      domainpayments.FulfillmentReverseFailed,
+			Detail:      map[string]any{"reverse_error": reason},
+		}
+		return nil
+	}
+	detail := map[string]any{
+		"reverse_error":   reason,
+		"previous_status": string(existing.Status),
+	}
+	for k, v := range existing.Detail {
+		if _, taken := detail[k]; !taken {
+			detail[k] = v
+		}
+	}
+	existing.Status = domainpayments.FulfillmentReverseFailed
+	existing.Detail = detail
 	return nil
 }
 
@@ -847,6 +878,23 @@ func TestVerifyReceipt_LegacyZeroAmountRefused(t *testing.T) {
 	require.Empty(t, env.store.outbox)
 }
 
+// TestVerifyReceipt_LegacyReceiptRejectedWithFailedPrecondition（P2 经济杂项 3）：
+// legacy verifyReceipt 路径的拒绝映射为 FailedPrecondition（客户端可理解，
+// 非 500 / 非 Unauthenticated），订单保持原状不履约。
+func TestVerifyReceipt_LegacyReceiptRejectedWithFailedPrecondition(t *testing.T) {
+	ios := &fakeIOS{err: domainpayments.ErrLegacyReceiptUnsupported}
+	env := setupUnit(t, ios, NewRecordOnlyFulfiller())
+	order := seedIOSOrder(t, env.store, "ord-ios-legacy-off", "u1", domainpayments.OrderStatusCreated, "")
+	ctx := unitUserCtx("proj-1", "u1")
+
+	_, err := env.payments.VerifyReceipt(ctx, order.ID, []byte("legacy-receipt-blob"))
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.Contains(t, status.Convert(err).Message(), "legacy verifyReceipt receipts are not supported")
+	require.Equal(t, domainpayments.OrderStatusCreated, env.store.orders[order.ID].Status)
+	require.Empty(t, env.store.fulfillments)
+	require.Empty(t, env.store.outbox)
+}
+
 func TestCreateOrder_RejectsPurposeSubscription(t *testing.T) {
 	env := setupUnit(t, &fakeProvider{}, NewRecordOnlyFulfiller())
 	_, err := env.payments.CreateOrder(unitUserCtx("proj-1", "u1"), CreateOrderCommand{
@@ -1057,6 +1105,89 @@ func TestCreateOrder_CreatePaymentAlwaysHasURLs(t *testing.T) {
 	require.Equal(t, 1, env.provider.createCalls)
 	require.NotEmpty(t, env.provider.lastInput.SuccessURL)
 	require.NotEmpty(t, env.provider.lastInput.CancelURL)
+}
+
+// TestHandleCallback_RefundedReverseFailureRecordsCompensation（P2 经济杂项 1）：
+// 退款回调 Reverse 失败不阻塞翻单，但必须落 reverse_failed 补偿记录
+// （含 order_id + 原因 + 原履约信息），指标递增，refunded 事件照发。
+func TestHandleCallback_RefundedReverseFailureRecordsCompensation(t *testing.T) {
+	fulfiller := &countingFulfiller{reverseErr: errors.New("asset consume failed")}
+	env := setupUnit(t, &fakeProvider{}, fulfiller)
+	order := seedPaidOrder(t, env.store, "ord-reverse-cb", 500)
+	env.store.fulfillments[order.ID] = &domainpayments.Fulfillment{
+		ID: "ful-cb", OrderID: order.ID, ProjectID: order.ProjectID,
+		PurposeKind: domainpayments.PurposeTopup, Ref: "order:" + order.ID,
+		Status:  domainpayments.FulfillmentDone,
+		Detail:  map[string]any{"kind": "topup"},
+	}
+
+	before := testutil.ToFloat64(paymentReverseFailuresTotal)
+	body := refundedCallbackJSON(t, "evt_reverse_refund", order.ID, 500)
+	require.NoError(t, env.payments.HandleCallback(context.Background(), domainpayments.ProviderStripe, nil, body))
+
+	require.Equal(t, domainpayments.OrderStatusRefunded, env.store.orders[order.ID].Status, "Reverse 失败不阻塞翻单")
+	require.Equal(t, 1, fulfiller.reverseCalls)
+	f := env.store.fulfillments[order.ID]
+	require.Equal(t, domainpayments.FulfillmentReverseFailed, f.Status, "必须落 reverse_failed 补偿记录")
+	require.Equal(t, "asset consume failed", f.Detail["reverse_error"])
+	require.Equal(t, string(domainpayments.FulfillmentDone), f.Detail["previous_status"], "原履约信息不丢")
+	require.Equal(t, "topup", f.Detail["kind"])
+	require.Equal(t, 1.0, testutil.ToFloat64(paymentReverseFailuresTotal)-before)
+	require.Equal(t, 1, len(env.store.outbox))
+	require.Equal(t, domainpayments.EventOrderRefunded, env.store.outbox[0].Event, "refunded 事件照发")
+}
+
+// TestRefund_ReverseFailureRecordsCompensation（P2 经济杂项 1）：Server 面退款
+// 同步成功路径的 Reverse 失败同样落 reverse_failed 补偿记录且不阻塞翻单。
+func TestRefund_ReverseFailureRecordsCompensation(t *testing.T) {
+	provider := &fakeProvider{refundRes: &domainpayments.RefundResult{Succeeded: true}}
+	fulfiller := &countingFulfiller{reverseErr: errors.New("grant missing")}
+	env := setupUnit(t, provider, fulfiller)
+	order := seedPaidOrder(t, env.store, "ord-reserve-rpc", 300)
+	env.store.fulfillments[order.ID] = &domainpayments.Fulfillment{
+		ID: "ful-1", OrderID: order.ID, ProjectID: order.ProjectID,
+		PurposeKind: domainpayments.PurposeTopup, Ref: "order:" + order.ID,
+		Status:      domainpayments.FulfillmentDone,
+		Detail:      map[string]any{"kind": "topup"},
+	}
+	admin := contexts.WithPrincipal(context.Background(), &domainshared.Principal{
+		ActorKind:      domainshared.ActorKindAdmin,
+		ProjectID:      "proj-1",
+		CredentialType: domainshared.CredentialTypeSession,
+	})
+
+	before := testutil.ToFloat64(paymentReverseFailuresTotal)
+	got, err := env.payments.Refund(admin, order.ID, 0)
+	require.NoError(t, err)
+	require.Equal(t, domainpayments.OrderStatusRefunded, got.Status)
+
+	f := env.store.fulfillments[order.ID]
+	require.Equal(t, domainpayments.FulfillmentReverseFailed, f.Status)
+	require.Equal(t, "grant missing", f.Detail["reverse_error"])
+	require.Equal(t, string(domainpayments.FulfillmentDone), f.Detail["previous_status"])
+	require.Equal(t, "topup", f.Detail["kind"])
+	require.Equal(t, 1.0, testutil.ToFloat64(paymentReverseFailuresTotal)-before)
+}
+
+// TestMarkReverseFailed_InsertsArrearsRowWithoutFulfillment（P2 经济杂项 1 补充）：
+// 订单无履约行（历史存量单）时补插一条 reverse_failed 欠账行而非静默丢弃。
+func TestMarkReverseFailed_InsertsArrearsRowWithoutFulfillment(t *testing.T) {
+	provider := &fakeProvider{refundRes: &domainpayments.RefundResult{Succeeded: true}}
+	env := setupUnit(t, provider, &countingFulfiller{reverseErr: errors.New("no grant")})
+	order := seedPaidOrder(t, env.store, "ord-arrears", 300)
+	admin := contexts.WithPrincipal(context.Background(), &domainshared.Principal{
+		ActorKind:      domainshared.ActorKindAdmin,
+		ProjectID:      "proj-1",
+		CredentialType: domainshared.CredentialTypeSession,
+	})
+
+	_, err := env.payments.Refund(admin, order.ID, 0)
+	require.NoError(t, err)
+	f := env.store.fulfillments[order.ID]
+	require.NotNil(t, f)
+	require.Equal(t, domainpayments.FulfillmentReverseFailed, f.Status)
+	require.Equal(t, "reverse:"+order.ID, f.Ref)
+	require.Equal(t, "no grant", f.Detail["reverse_error"])
 }
 
 // TestRefund_RejectsPartialRefund（A5）：一期仅支持全额退款，amount != 0 且

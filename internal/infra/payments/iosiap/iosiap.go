@@ -1,6 +1,7 @@
 // Package iosiap 是 iOS IAP 适配器（v3 设计 §1.1/§1.2）：无服务端下单
-// （CreatePayment=ErrUnsupported），ReceiptVerifier 走 verifyReceipt /
-// StoreKit 2 JWS，回调走 App Store Server Notifications V2（JWS）。
+// （CreatePayment=ErrUnsupported），ReceiptVerifier 走 StoreKit 2 JWS
+//（legacy verifyReceipt 收据路径已显式下线，成功解析也返回明确错误），
+// 回调走 App Store Server Notifications V2（JWS）。
 // 退款不支持（引导用户找 Apple）。
 package iosiap
 
@@ -283,6 +284,7 @@ func (a *Adapter) verifyReceiptAPI(ctx context.Context, receiptData string) (*pa
 	if resp.Status != 0 {
 		return nil, payments.ErrSignatureInvalid
 	}
+	// 错误优先级保持现状：畸形 / 无效收据（解析不出 in_app 项）仍按验签失败。
 	item, err := pickLatestInApp(resp)
 	if err != nil {
 		return nil, err
@@ -290,19 +292,14 @@ func (a *Adapter) verifyReceiptAPI(ctx context.Context, receiptData string) (*pa
 	if item.TransactionID == "" {
 		return nil, payments.ErrSignatureInvalid
 	}
-	paidAt := a.now()
-	if ms, err := strconv.ParseInt(item.PurchaseDateMS, 10, 64); err == nil && ms > 0 {
-		paidAt = time.UnixMilli(ms)
-	}
-	env := resp.Environment
-	return &payments.VerifiedPurchase{
-		TransactionID:         item.TransactionID,
-		OriginalTransactionID: item.OriginalTransactionID,
-		ProductID:             item.ProductID,
-		PaidAt:                paidAt,
-		Environment:           env,
-		BundleID:              item.BundleID,
-	}, nil
+	// legacy verifyReceipt 成功解析出收据：显式下线，不再放行。原因有二：
+	// 1) verifyReceipt 响应不携带价格，归一化 Amount 恒 0，应用层 fail-closed
+	//    （R5 J1-1）永远拒绝结算——本就是功能死路；2) 响应 BundleID 从未与
+	//    配置比对（不再补放行校验：放行一条永远走不通的路只会扩大伪造面，
+	//    JWS 路径 verifyJWSTransaction 已有 BundleID 校验）。21007 等 status
+	//    类环境错保持上方原有语义（sandbox 重试 / 验签失败）。
+	// TODO(admin): 如需彻底退役可移除本方法与 SharedSecret 配置。
+	return nil, payments.ErrLegacyReceiptUnsupported
 }
 
 func (a *Adapter) postVerify(ctx context.Context, endpoint, receiptData string) (*verifyReceiptResponse, error) {

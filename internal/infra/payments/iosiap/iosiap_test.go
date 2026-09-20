@@ -206,18 +206,21 @@ func TestVerifyReceipt_JWS(t *testing.T) {
 	require.Equal(t, int64(499), got.Amount)
 }
 
-func TestVerifyReceipt_LegacyAPI(t *testing.T) {
+// TestVerifyReceipt_LegacyAPIRejected（P2 经济杂项 3）：legacy verifyReceipt
+// 收据即使成功解析也显式拒绝（ErrLegacyReceiptUnsupported）——不再靠下游
+// 0 金额 fail-closed 巧合挡住；21007 sandbox 重试语义见 SandboxRetry 用例。
+func TestVerifyReceipt_LegacyAPIRejected(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"status":0,"environment":"Sandbox","latest_receipt_info":[{"transaction_id":"txn-legacy","original_transaction_id":"txn-legacy","product_id":"gold_pack","purchase_date_ms":"1700000000000"}]}`))
 	}))
 	defer srv.Close()
 	a := New(Config{SharedSecret: "s", VerifyReceiptURL: srv.URL, SandboxVerifyURL: srv.URL, AppleRootCert: appleRootCAG3PEM})
-	got, err := a.VerifyReceipt(context.Background(), payments.VerifyReceiptInput{Receipt: []byte("base64receipt")})
-	require.NoError(t, err)
-	require.Equal(t, "txn-legacy", got.TransactionID)
-	require.Equal(t, "gold_pack", got.ProductID)
+	_, err := a.VerifyReceipt(context.Background(), payments.VerifyReceiptInput{Receipt: []byte("base64receipt")})
+	require.ErrorIs(t, err, payments.ErrLegacyReceiptUnsupported)
 }
 
+// TestVerifyReceipt_SandboxRetry（P2 经济杂项 3）：status=21007 环境错保持
+// 现状（生产 → sandbox 重试），但最终解析出的 legacy 收据仍显式拒绝。
 func TestVerifyReceipt_SandboxRetry(t *testing.T) {
 	var hits []string
 	prod := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -231,9 +234,8 @@ func TestVerifyReceipt_SandboxRetry(t *testing.T) {
 	}))
 	defer sand.Close()
 	a := New(Config{SharedSecret: "s", VerifyReceiptURL: prod.URL, SandboxVerifyURL: sand.URL, AppleRootCert: appleRootCAG3PEM})
-	got, err := a.VerifyReceipt(context.Background(), payments.VerifyReceiptInput{Receipt: []byte("r")})
-	require.NoError(t, err)
-	require.Equal(t, "txn-sb", got.TransactionID)
+	_, err := a.VerifyReceipt(context.Background(), payments.VerifyReceiptInput{Receipt: []byte("r")})
+	require.ErrorIs(t, err, payments.ErrLegacyReceiptUnsupported)
 	require.Equal(t, []string{"prod", "sand"}, hits)
 }
 

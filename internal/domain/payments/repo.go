@@ -44,6 +44,10 @@ const (
 	FulfillmentPending FulfillmentStatus = "pending"
 	FulfillmentDone    FulfillmentStatus = "done"
 	FulfillmentFailed  FulfillmentStatus = "failed"
+	// FulfillmentReverseFailed 表示退款时 Fulfiller.Reverse 失败的补偿欠账：
+	// 渠道已退款但资产未回收，行即人工排查/补回收清单（status 列为 TEXT，
+	// 新值无需迁移）。
+	FulfillmentReverseFailed FulfillmentStatus = "reverse_failed"
 )
 
 // Fulfillment 是订单 paid 同事务内落下的履约记录（设计 §1.5）。
@@ -69,6 +73,12 @@ type FulfillmentRepo interface {
 	// MarkFailed 把履约行置 failed（事务整体回滚路径一般用不到，
 	// 留给人工排查标记）。
 	MarkFailed(ctx context.Context, projectID, fulfillmentID, reason string) error
+	// MarkReverseFailed 把订单的履约行置 reverse_failed 并把原因合并进
+	// detail（退款时 Fulfiller.Reverse 失败的可查询补偿记录，含 order_id
+	// 与原因；订单无履约行时插入一条 reverse_failed 行）。与订单翻转同一
+	// 工作单元执行；失败不阻塞退款翻单（调用方仅记日志 + 指标）。
+	// 管理员手动补回收（reverse 重试）入口暂缺，本行即人工欠账清单。
+	MarkReverseFailed(ctx context.Context, order *Order, reason string) error
 	// GetByOrder 按订单取履约行。
 	GetByOrder(ctx context.Context, projectID, orderID string) (*Fulfillment, error)
 }

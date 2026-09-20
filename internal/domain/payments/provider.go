@@ -21,6 +21,12 @@ const (
 // ErrUnsupported 表示渠道不支持该操作（如 iOS IAP 无 CreatePayment）。
 var ErrUnsupported = errors.New("payments: operation unsupported by provider")
 
+// ErrLegacyReceiptUnsupported 表示 legacy verifyReceipt 收据路径已显式下线：
+// 该路径解析出的收据不携带价格（归一化 Amount 恒 0，应用层 fail-closed 下
+// 永远无法结算，功能死路）且 BundleID 从未与配置比对。JWS transaction ID
+// 是唯一受支持的验票入口。
+var ErrLegacyReceiptUnsupported = errors.New("payments: legacy verifyReceipt receipts are not supported; use JWS transaction IDs")
+
 // ErrSignatureInvalid 表示回调验签失败：调用方必须 401 且不落任何行
 // （设计 §Security：验签是唯一信任根，不返回区分性错误）。
 var ErrSignatureInvalid = errors.New("payments: callback signature invalid")
@@ -215,7 +221,7 @@ type VerifiedPurchase struct {
 	TransactionID         string
 	OriginalTransactionID string
 	ProductID             string
-	Amount                int64 // 最小货币单位；legacy receipt 可能为 0
+	Amount                int64 // 最小货币单位
 	Currency              string
 	PaidAt                time.Time
 	Environment           string // Sandbox | Production

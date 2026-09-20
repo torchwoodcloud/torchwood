@@ -242,7 +242,7 @@ func (a *Adapter) Refund(ctx context.Context, in payments.RefundInput) (*payment
 	}
 	bizMap := map[string]any{
 		"refund_amount":  fenToYuan(refund),
-		"out_request_no": firstNonEmpty(in.IdempotencyKey, in.OrderID),
+		"out_request_no": refundRequestNo(in),
 	}
 	if in.ProviderOrderID != "" {
 		bizMap["trade_no"] = in.ProviderOrderID
@@ -270,6 +270,19 @@ type refundAPIResponse struct {
 		Msg     string `json:"msg"`
 		TradeNo string `json:"trade_no"`
 	} `json:"alipay_trade_refund_response"`
+}
+
+// refundRequestNo 生成支付宝退款请求号 out_request_no（限 64 字符，仅允许
+// 字母/数字/下划线等安全字符）：幂等键可能含冒号（app 层传 "refund:{orderID}"），
+// 与微信 refundOutNo 同样做确定性字符清洗——同一订单的重试恒映射同一请求号，
+// 幂等语义不变。清洗后可能撞唯一性的取舍与微信侧一致地接受：orderID 为
+// ULID（无冒号），实际不会相撞。
+func refundRequestNo(in payments.RefundInput) string {
+	s := strings.ReplaceAll(firstNonEmpty(in.IdempotencyKey, in.OrderID), ":", "")
+	if len(s) > 64 {
+		s = s[:64]
+	}
+	return s
 }
 
 // CallbackAck 支付宝约定纯文本 success / fail。

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -218,4 +219,16 @@ func TestRefund_FormAndResponse(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, methodRefund, form.Get("method"))
 	require.Contains(t, form.Get("biz_content"), `"refund_amount":"19.99"`)
+	require.Contains(t, form.Get("biz_content"), `"out_request_no":"refundorder_1"`,
+		"out_request_no 必须清洗冒号（对齐微信 refundOutNo）")
+}
+
+// TestRefund_RequestNoSanitizesColons（P2 经济杂项 2）：幂等键含冒号
+// （app 层传 "refund:{orderID}"）时 out_request_no 做确定性清洗，重试恒映射
+// 同一请求号；空幂等键回退 orderID。
+func TestRefund_RequestNoSanitizesColons(t *testing.T) {
+	require.Equal(t, "refundord1", refundRequestNo(payments.RefundInput{OrderID: "ord1", IdempotencyKey: "refund:ord1"}))
+	require.Equal(t, "ord1", refundRequestNo(payments.RefundInput{OrderID: "ord1"}))
+	long := strings.Repeat("a", 70)
+	require.Len(t, refundRequestNo(payments.RefundInput{OrderID: "o", IdempotencyKey: long}), 64)
 }

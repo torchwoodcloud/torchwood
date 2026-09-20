@@ -292,8 +292,18 @@ func (p *Payments) applyRefunded(ctx context.Context, order *domainpayments.Orde
 		return err
 	}
 	if err := p.fulfiller.Reverse(ctx, order); err != nil {
-		p.logger.Error("reverse fulfillment on refund callback failed",
+		// Reverse 失败不阻塞翻单（资产可能已过期/耗尽），但必须留下可查询的
+		// 补偿记录：履约行置 reverse_failed（含 order_id + 原因），即「渠道已退、
+		// 资产未回收」的欠账清单；指标供告警。补记失败仅降级为 Error 日志
+		// （不回滚翻单），事件行仍在 payment_callback_events 供对账。
+		// TODO(admin): 管理员手动补回收（reverse 重试）入口待建，届时消费该清单。
+		paymentReverseFailuresTotal.Inc()
+		p.logger.Error("reverse fulfillment on refund callback failed; recorded reverse_failed compensation row",
 			"order_id", order.ID, "provider_event_id", event.ProviderEventID, "error", err)
+		if markErr := p.fulfillments.MarkReverseFailed(ctx, order, err.Error()); markErr != nil {
+			p.logger.Error("record reverse_failed compensation row failed",
+				"order_id", order.ID, "error", markErr)
+		}
 	}
 	paymentOrdersTotal.WithLabelValues(order.Provider, string(order.Status)).Inc()
 	return p.events.Publish(ctx, orderEnvelope(order, domainpayments.EventOrderRefunded, now))

@@ -176,6 +176,19 @@ func (b *Billing) upsertMonth(ctx context.Context, monthStart time.Time, want do
 			continue
 		}
 		projectID := p.ID
+		// final 时点 = 跨月后首个计费轮次：final 行落定后不再重算/刷新
+		// （接受取舍——Redis 48h 补写窗口内的迟到计量在 final 后到达时
+		// 不再入账，如需修正走人工）。repo Upsert 亦有「已 final 不回退」
+		// 兜底，这里提前短路，省掉每轮对上月账单的重复聚合查询。
+		if want == domainbilling.StatementFinal {
+			existing, err := b.statements.Get(ctx, projectID, monthStart)
+			if err != nil {
+				return err
+			}
+			if existing != nil && existing.Status == domainbilling.StatementFinal {
+				continue
+			}
+		}
 		metrics, err := b.rollups.SumByMetric(ctx, projectID, monthStart, monthEnd)
 		if err != nil {
 			return err

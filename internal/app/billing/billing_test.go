@@ -115,12 +115,13 @@ func (m *memRollups) DistinctHours(_ context.Context, projectID string, from, to
 }
 
 type memStatements struct {
-	mu   sync.Mutex
-	rows map[string]*domainbilling.Statement
+	mu      sync.Mutex
+	rows    map[string]*domainbilling.Statement
+	upserts map[string]int // key 的 Upsert 调用次数（断言 final 行被 app 层短路）
 }
 
 func newMemStatements() *memStatements {
-	return &memStatements{rows: map[string]*domainbilling.Statement{}}
+	return &memStatements{rows: map[string]*domainbilling.Statement{}, upserts: map[string]int{}}
 }
 
 func statementKey(projectID string, start time.Time) string {
@@ -131,6 +132,7 @@ func (m *memStatements) Upsert(_ context.Context, s *domainbilling.Statement) er
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	k := statementKey(s.ProjectID, s.PeriodStart)
+	m.upserts[k]++
 	if existing, ok := m.rows[k]; ok && existing.Status == domainbilling.StatementFinal {
 		return nil
 	}
@@ -272,6 +274,50 @@ func TestStatementFinalizesPreviousMonth(t *testing.T) {
 	st2, err := statements.Get(ctx, "proj-1", july)
 	require.NoError(t, err)
 	require.Equal(t, int64(3), st2.Details.Metrics[domainbilling.MetricAPICalls])
+}
+
+// TestStatementFinalImmutableAcrossRounds（P2 经济杂项 4）：final 行只在
+// 不存在或 draft 时写入；已 final 后再跑一轮，updated_at / finalized_at /
+// 金额明细全部不变，且 app 层对 final 月短路（不再发起 Upsert——upserts
+// 计数停在首轮）。final 时点 = 跨月后首个计费轮次，迟到计量不再入账。
+func TestStatementFinalImmutableAcrossRounds(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	counter, rollups, statements, b := newTestBilling(t)
+	july := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	hour := time.Date(2026, 7, 31, 23, 0, 0, 0, time.UTC)
+	require.NoError(t, counter.IncrAt(ctx, "proj-1", domainbilling.MetricAPICalls, hour, 5))
+
+	// 第一轮（8 月初，7 月已成过去月）：provisional/draft → final。
+	require.NoError(t, b.RunWorkerOnce(ctx, time.Date(2026, 8, 1, 0, 10, 0, 0, time.UTC)))
+	first, err := statements.Get(ctx, "proj-1", july)
+	require.NoError(t, err)
+	require.NotNil(t, first)
+	require.Equal(t, domainbilling.StatementFinal, first.Status)
+	require.NotNil(t, first.FinalizedAt)
+	require.Equal(t, 1, statements.upserts[statementKey("proj-1", july)])
+
+	// 迟到计量（Redis 48h 补写窗口）在 final 后到达：不再入账。
+	require.NoError(t, counter.IncrAt(ctx, "proj-1", domainbilling.MetricAPICalls, hour, 7))
+	require.NoError(t, rollups.Upsert(ctx, &domainbilling.Rollup{
+		ID: "r-late", ProjectID: "proj-1",
+		Metric: domainbilling.MetricStorageBytes, PeriodStart: hour, Value: 123,
+	}))
+
+	require.NoError(t, b.RunWorkerOnce(ctx, time.Date(2026, 8, 20, 16, 5, 0, 0, time.UTC)))
+	second, err := statements.Get(ctx, "proj-1", july)
+	require.NoError(t, err)
+	require.Equal(t, first.UpdatedAt, second.UpdatedAt, "final 行 updated_at 不再刷新")
+	require.Equal(t, first.FinalizedAt, second.FinalizedAt, "final 行 finalized_at 不再刷新")
+	require.Equal(t, int64(5), second.Details.Metrics[domainbilling.MetricAPICalls])
+	require.NotContains(t, second.Details.Metrics, domainbilling.MetricStorageBytes)
+	require.Equal(t, 1, statements.upserts[statementKey("proj-1", july)], "已 final 后 app 层短路，不再 Upsert")
+
+	// 当月账单仍是 draft：不受 final 短路影响，正常重算。
+	cur, err := statements.Get(ctx, "proj-1", domainbilling.MonthBucket(time.Date(2026, 8, 20, 16, 5, 0, 0, time.UTC)))
+	require.NoError(t, err)
+	require.NotNil(t, cur)
+	require.Equal(t, domainbilling.StatementDraft, cur.Status)
 }
 
 func TestGetUsageRejectsUnknownMetric(t *testing.T) {

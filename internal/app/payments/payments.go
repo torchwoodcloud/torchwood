@@ -42,10 +42,17 @@ var (
 		Name: "torchwood_payment_callback_verify_fail_total",
 		Help: "Total payment callback signature verification failures.",
 	}, []string{"provider"})
+	// paymentReverseFailuresTotal 是退款资产回收失败计数（对齐 S12 metrics
+	// 先例）：Reverse 失败不阻塞翻单，欠账落 payment_fulfillments
+	// reverse_failed 行（可查询补偿记录），本指标供告警聚合。
+	paymentReverseFailuresTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "torchwood_payments_reverse_failures_total",
+		Help: "Total refund fulfillment reversals that failed; see payment_fulfillments rows with status='reverse_failed' for the arrears list.",
+	})
 )
 
 func init() {
-	prometheus.MustRegister(paymentOrdersTotal, paymentCallbackVerifyFailTotal)
+	prometheus.MustRegister(paymentOrdersTotal, paymentCallbackVerifyFailTotal, paymentReverseFailuresTotal)
 }
 
 // Payments 是支付子域 use-case 聚合。

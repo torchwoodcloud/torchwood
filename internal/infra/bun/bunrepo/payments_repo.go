@@ -359,6 +359,56 @@ func (r *paymentFulfillmentRepo) MarkFailed(ctx context.Context, projectID, fulf
 	return err
 }
 
+// MarkReverseFailed 记录退款时 Fulfiller.Reverse 失败的补偿欠账（渠道已退、
+// 资产未回收的可查询清单）：履约行 status 置 reverse_failed（TEXT 列新值，
+// 无需迁移），detail 合并 reverse_error / previous_status，原履约信息不丢；
+// 订单无履约行（历史存量单）时插入一条 ref = "reverse:{orderID}" 的欠账行。
+// 在调用方 uow.Run 事务内执行；管理员手动补回收（reverse 重试）入口暂缺，
+// 本行即人工排查清单（见 app 层调用点注释）。
+func (r *paymentFulfillmentRepo) MarkReverseFailed(ctx context.Context, order *payments.Order, reason string) error {
+	ctx2, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	conn, sch, expr, err := Scoped(ctx2, r.db, order.ProjectID, "payment_fulfillments", "pf")
+	if err != nil {
+		return err
+	}
+	existing, err := r.GetByOrder(ctx2, order.ProjectID, order.ID)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	if existing == nil {
+		_, err = conn.NewInsert().Model(&model.PaymentFulfillment{
+			ID:          idgen.ULID().String(),
+			OrderID:     order.ID,
+			ProjectID:   order.ProjectID,
+			PurposeKind: string(order.PurposeKind),
+			Ref:         "reverse:" + order.ID,
+			Status:      string(payments.FulfillmentReverseFailed),
+			Detail:      map[string]any{"reverse_error": reason},
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}).ModelTableExpr(expr, sch).On("CONFLICT (order_id, purpose_kind) DO NOTHING").Exec(ctx2)
+		return err
+	}
+	detail := map[string]any{
+		"reverse_error":   reason,
+		"previous_status": string(existing.Status),
+	}
+	for k, v := range existing.Detail {
+		if _, taken := detail[k]; !taken {
+			detail[k] = v
+		}
+	}
+	_, err = conn.NewUpdate().Model((*model.PaymentFulfillment)(nil)).ModelTableExpr(expr, sch).
+		Set("status = ?", string(payments.FulfillmentReverseFailed)).
+		Set("detail = ?", detail).
+		Set("updated_at = ?", now).
+		Where("pf.id = ?", existing.ID).
+		Exec(ctx2)
+	return err
+}
+
 func (r *paymentFulfillmentRepo) GetByOrder(ctx context.Context, projectID, orderID string) (*payments.Fulfillment, error) {
 	ctx2, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

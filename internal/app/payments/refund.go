@@ -91,8 +91,18 @@ func (p *Payments) Refund(ctx context.Context, orderID string, amount int64) (*d
 			return err
 		}
 		if to == domainpayments.OrderStatusRefunded {
+			// Reverse 失败不阻塞翻单（资产可能已过期/耗尽），但必须留下可查询的
+			// 补偿记录：履约行置 reverse_failed（含 order_id + 原因），即「渠道已退、
+			// 资产未回收」的欠账清单；指标供告警。补记失败仅降级为 Error 日志
+			// （不回滚翻单）。TODO(admin): 管理员手动补回收入口待建。
 			if err := p.fulfiller.Reverse(txCtx, locked); err != nil {
-				p.logger.Error("reverse fulfillment on refund failed", "order_id", locked.ID, "error", err)
+				paymentReverseFailuresTotal.Inc()
+				p.logger.Error("reverse fulfillment on refund failed; recorded reverse_failed compensation row",
+					"order_id", locked.ID, "error", err)
+				if markErr := p.fulfillments.MarkReverseFailed(txCtx, locked, err.Error()); markErr != nil {
+					p.logger.Error("record reverse_failed compensation row failed",
+						"order_id", locked.ID, "error", markErr)
+				}
 			}
 			paymentOrdersTotal.WithLabelValues(locked.Provider, string(locked.Status)).Inc()
 			return p.events.Publish(txCtx, orderEnvelope(locked, eventName, now))
@@ -217,6 +227,10 @@ func mapProviderError(err error) error {
 	}
 	if errors.Is(err, domainpayments.ErrUnsupported) {
 		return status.Error(codes.Unimplemented, "payment provider does not support this operation")
+	}
+	if errors.Is(err, domainpayments.ErrLegacyReceiptUnsupported) {
+		return status.Error(codes.FailedPrecondition,
+			"legacy verifyReceipt receipts are not supported; use JWS transaction IDs")
 	}
 	if errors.Is(err, domainpayments.ErrSignatureInvalid) {
 		return status.Error(codes.Unauthenticated, "receipt verification failed")
