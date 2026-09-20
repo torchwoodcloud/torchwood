@@ -250,7 +250,7 @@ func (f *Functions) UpdateFunction(ctx context.Context, cmd UpdateFunctionComman
 // nil 字段 = 未设置（不修改现有值；Create 路径现有值即零值 FALSE）。
 func applyClientPolicy(fn *domainfunctions.Function, callable, anonymous *bool, limit *int, window *string) error {
 	if anonymous != nil && *anonymous {
-		return status.Error(codes.InvalidArgument, "client_anonymous_allowed is not open in this release (一期未开放)")
+		return status.Error(codes.InvalidArgument, "client_anonymous_allowed is not open in this release")
 	}
 	if limit != nil {
 		if *limit < 0 {

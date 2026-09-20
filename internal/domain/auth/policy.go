@@ -302,7 +302,7 @@ func ClassifyTier(p MethodPolicy) (Tier, error) {
 	switch p.Access {
 	case AccessServer:
 		if p.Scope == nil {
-			return "", fmt.Errorf("method %s: SERVER 面缺 api_key_scope", p.Method)
+			return "", fmt.Errorf("method %s: SERVER access requires api_key_scope", p.Method)
 		}
 		roles := roleSet(p.AdminRoles)
 		platformOnly := len(roles) == 2 && hasRole(roles, AdminRoleAdmin) && hasRole(roles, AdminRoleOwner)
@@ -316,7 +316,7 @@ func ClassifyTier(p MethodPolicy) (Tier, error) {
 		case business && p.Scope.Op == ScopeWrite:
 			return TierBusinessWrite, nil
 		default:
-			return "", fmt.Errorf("method %s: (admin_roles=%v, scope=%s.%s) 不属于任何已声明档位（read+不限角色 / write+{member,admin,owner} / {admin,owner}+读写）",
+			return "", fmt.Errorf("method %s: (admin_roles=%v, scope=%s.%s) matches no declared tier (read+any roles / write+{member,admin,owner} / {admin,owner}+read-write)",
 				p.Method, p.AdminRoles, p.Scope.Resource, p.Scope.Op)
 		}
 	case AccessPermission:
@@ -324,12 +324,12 @@ func ClassifyTier(p MethodPolicy) (Tier, error) {
 			switch AdminRole(perm) {
 			case AdminRoleAdmin, AdminRoleOwner:
 			default:
-				return "", fmt.Errorf("method %s: PERMISSION 面只允许 owner/admin（得到 %q）", p.Method, perm)
+				return "", fmt.Errorf("method %s: PERMISSION access allows only owner/admin (got %q)", p.Method, perm)
 			}
 		}
 		return TierPlatformOnly, nil
 	default:
-		return "", fmt.Errorf("method %s: 档位仅定义在 SERVER/PERMISSION 面", p.Method)
+		return "", fmt.Errorf("method %s: tiers are defined only for SERVER/PERMISSION access", p.Method)
 	}
 }
 
@@ -361,11 +361,11 @@ func AssertPolicy(p MethodPolicy) error {
 	case AccessPublic:
 	case AccessEndUser:
 		if !isClientFace(p.Service) {
-			errs = append(errs, fmt.Sprintf("%s: END_USER 级仅允许 client 面", p.Method))
+			errs = append(errs, fmt.Sprintf("%s: END_USER access is allowed only on the client face", p.Method))
 		}
 	case AccessServer:
 		if p.Scope == nil {
-			errs = append(errs, fmt.Sprintf("%s: SERVER 面必须声明 api_key_scope（不对 key 开放请改 PERMISSION）", p.Method))
+			errs = append(errs, fmt.Sprintf("%s: SERVER access must declare api_key_scope (use PERMISSION if not exposed to API keys)", p.Method))
 			break
 		}
 		if _, badScope := validScope(*p.Scope); badScope != nil {
@@ -376,7 +376,7 @@ func AssertPolicy(p MethodPolicy) error {
 		}
 	case AccessPermission:
 		if len(p.Permissions) == 0 {
-			errs = append(errs, fmt.Sprintf("%s: PERMISSION 面必须显式 permissions", p.Method))
+			errs = append(errs, fmt.Sprintf("%s: PERMISSION access must declare explicit permissions", p.Method))
 			break
 		}
 		if isServerFace(p.Service) {
@@ -385,13 +385,13 @@ func AssertPolicy(p MethodPolicy) error {
 			}
 		}
 	case AccessSystem:
-		errs = append(errs, fmt.Sprintf("%s: SYSTEM 级当前无对外契约，禁止使用", p.Method))
+		errs = append(errs, fmt.Sprintf("%s: SYSTEM access has no external contract yet and is forbidden", p.Method))
 	default:
-		errs = append(errs, fmt.Sprintf("%s: access 未声明", p.Method))
+		errs = append(errs, fmt.Sprintf("%s: access is not declared", p.Method))
 	}
 	if p.RequestHasProjectID && isServerFace(p.Service) && !isProjectsService(p.Service) {
 		if _, ok := ProjectIDAllowlist[p.Method]; !ok {
-			errs = append(errs, fmt.Sprintf("%s: server 面请求体不得携带 project_id（项目上下文来自凭证；存量迁移请登记 ProjectIDAllowlist）", p.Method))
+			errs = append(errs, fmt.Sprintf("%s: server-face request body must not carry project_id (project context comes from credentials; for legacy migration register in ProjectIDAllowlist)", p.Method))
 		}
 	}
 	if isConsoleFace(p.Service) {
@@ -406,7 +406,7 @@ func AssertPolicy(p MethodPolicy) error {
 	}
 	if len(errs) > 0 {
 		sort.Strings(errs)
-		return fmt.Errorf("策略语义断言失败 (fail-closed):\n  - %s", strings.Join(errs, "\n  - "))
+		return fmt.Errorf("policy semantic assertion failed (fail-closed):\n  - %s", strings.Join(errs, "\n  - "))
 	}
 	return nil
 }
@@ -426,20 +426,20 @@ func AssertSemantic(set *PolicySet) error {
 			referenced[p.Scope.Resource] = struct{}{}
 		}
 		if p.IsStreaming {
-			errs = append(errs, fmt.Sprintf("%s: streaming RPC 未接入认证拦截器（fail-closed）", p.Method))
+			errs = append(errs, fmt.Sprintf("%s: streaming RPC is not wired into the auth interceptor (fail-closed)", p.Method))
 		}
 	}
 
 	// 死 scope 检测：词表内每个资源必须被至少一个方法引用。
 	for _, r := range AllScopeResources {
 		if _, ok := referenced[r]; !ok {
-			errs = append(errs, fmt.Sprintf("死 scope：资源 %q 未被任何方法引用（词表演进后残留）", r))
+			errs = append(errs, fmt.Sprintf("dead scope: resource %q is not referenced by any method (leftover from vocabulary evolution)", r))
 		}
 	}
 
 	if len(errs) > 0 {
 		sort.Strings(errs)
-		return fmt.Errorf("策略语义断言失败 (fail-closed):\n  - %s", strings.Join(errs, "\n  - "))
+		return fmt.Errorf("policy semantic assertion failed (fail-closed):\n  - %s", strings.Join(errs, "\n  - "))
 	}
 	return nil
 }
@@ -476,15 +476,15 @@ var clientPublicMethodWhitelist = map[string]struct{}{
 func assertClientValueDomain(p MethodPolicy) error {
 	if p.Access == AccessPublic {
 		if _, ok := clientPublicMethodWhitelist[p.Method]; !ok {
-			return fmt.Errorf("%s: client 面 PUBLIC 方法必须显式登记白名单（防误标公开）", p.Method)
+			return fmt.Errorf("%s: client-face PUBLIC method must be explicitly allowlisted (guards against accidental public exposure)", p.Method)
 		}
 		return nil
 	}
 	if p.Access != AccessEndUser {
-		return fmt.Errorf("%s: client 面只允许 PUBLIC/END_USER 级", p.Method)
+		return fmt.Errorf("%s: client face allows only PUBLIC/END_USER access", p.Method)
 	}
 	if len(p.Permissions) != 1 || p.Permissions[0] != RoleEndUserTag {
-		return fmt.Errorf("%s: client 面 END_USER 方法 permissions 必须恰为 [%q]", p.Method, RoleEndUserTag)
+		return fmt.Errorf("%s: client-face END_USER method permissions must be exactly [%q]", p.Method, RoleEndUserTag)
 	}
 	return nil
 }
@@ -502,19 +502,19 @@ func assertConsoleValueDomain(p MethodPolicy) error {
 		return nil // ConsoleAuthService 的自证凭证型公开方法
 	}
 	if p.Access != AccessPermission {
-		return fmt.Errorf("%s: console 面只允许 PUBLIC/PERMISSION 级", p.Method)
+		return fmt.Errorf("%s: console face allows only PUBLIC/PERMISSION access", p.Method)
 	}
 	perms := strings.Join(p.Permissions, ",")
 	switch perms {
 	case RoleConsoleTag, "owner", "owner,admin", "admin,owner":
 	default:
-		return fmt.Errorf("%s: console 面 permissions 值域为 [console]/[owner]/[owner,admin]（得到 %q）", p.Method, perms)
+		return fmt.Errorf("%s: console-face permissions must be one of [console]/[owner]/[owner,admin] (got %q)", p.Method, perms)
 	}
 	// 写动词方法最严：仅 owner（自助偏好类方法经白名单显式豁免）。
 	name := p.Method[strings.LastIndex(p.Method, "/")+1:]
 	if strings.HasPrefix(name, "Create") || strings.HasPrefix(name, "Update") || strings.HasPrefix(name, "Delete") {
 		if _, selfService := consoleSelfServiceWriteWhitelist[p.Method]; !selfService && perms != "owner" {
-			return fmt.Errorf("%s: console 面写方法 permissions 必须为 [owner]（得到 %q）", p.Method, perms)
+			return fmt.Errorf("%s: console-face write method permissions must be [owner] (got %q)", p.Method, perms)
 		}
 	}
 	return nil
@@ -529,10 +529,10 @@ func validScope(rule ScopeRule) (ScopeRule, error) {
 		}
 	}
 	if !validRes {
-		return rule, fmt.Errorf("scope 资源 %q 不在词表", rule.Resource)
+		return rule, fmt.Errorf("scope resource %q is not in the vocabulary", rule.Resource)
 	}
 	if rule.Op != ScopeRead && rule.Op != ScopeWrite && rule.Op != ScopeAdmin {
-		return rule, fmt.Errorf("scope 方向 %q 非法", rule.Op)
+		return rule, fmt.Errorf("invalid scope op %q", rule.Op)
 	}
 	return rule, nil
 }

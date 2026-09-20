@@ -2828,16 +2828,16 @@ const file_server_v1_functions_proto_rawDesc = "" +
 	"\x15DeleteFunctionTrigger\x121.torchwood.server.v1.DeleteFunctionTriggerRequest\x1a\x1a.torchwood.shared.v1.Empty\"N\x8a\xb2\x19\n" +
 	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x02:*8/v1/server/functions/{function_id}/triggers/{trigger_id}\x12\xda\x01\n" +
 	"\x1aRotateFunctionTriggerToken\x126.torchwood.server.v1.RotateFunctionTriggerTokenRequest\x1a$.torchwood.server.v1.FunctionTrigger\"^\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x02J:\x01*\"E/v1/server/functions/{function_id}/triggers/{trigger_id}:rotate-token\x1a\x06\x92\xb2\x19\x02\b\x03B\xdb\x03\x92A\x96\x03RR\n" +
+	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x02J:\x01*\"E/v1/server/functions/{function_id}/triggers/{trigger_id}:rotate-token\x1a\x06\x92\xb2\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
-	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
+	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +
 	"3\n" +
-	"\x06Bearer\x12)\b\x02\x12\x14格式: Bearer <jwt>\x1a\rAuthorization \x02\n" +
-	"\x86\x01\n" +
-	"\x06apiKey\x12|\b\x02\x12k项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。\x1a\tX-API-Key \x02\n" +
-	"Q\n" +
-	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
+	"\x06Bearer\x12)\b\x02\x12\x14Format: Bearer <jwt>\x1a\rAuthorization \x02\n" +
+	"\xab\x01\n" +
+	"\x06apiKey\x12\xa0\x01\b\x02\x12\x8e\x01The project is bound to the API key row; X-Torchwood-Project is not needed. This header is only for Console admin sessions switching projects.\x1a\tX-API-Key \x02\n" +
+	"O\n" +
+	"\x06cookie\x12E\b\x02\x127TORCHWOOD_session_console=<sid> (Console admin session)\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
 	"\x06apiKey\x12\x00z\x1e\n" +

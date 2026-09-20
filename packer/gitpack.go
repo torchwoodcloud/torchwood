@@ -569,7 +569,7 @@ func materializeZip(ctxRoot string, opts PackOptions) ([]byte, error) {
 		name := filepath.ToSlash(rel)
 		if firstPathSegment(name) == "node_modules" {
 			return status.Error(codes.InvalidArgument,
-				"请勿在代码包中携带 node_modules——平台将在构建期代装依赖（跨平台二进制不兼容）")
+				"code packages must not include node_modules — the platform installs dependencies at build time (cross-platform binaries are incompatible)")
 		}
 		f, err := os.Open(p)
 		if err != nil {

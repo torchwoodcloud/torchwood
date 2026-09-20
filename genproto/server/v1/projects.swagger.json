@@ -590,19 +590,19 @@
   "securityDefinitions": {
     "Bearer": {
       "type": "apiKey",
-      "description": "格式: Bearer \u003cjwt\u003e",
+      "description": "Format: Bearer \u003cjwt\u003e",
       "name": "Authorization",
       "in": "header"
     },
     "apiKey": {
       "type": "apiKey",
-      "description": "项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。",
+      "description": "The project is bound to the API key row; X-Torchwood-Project is not needed. This header is only for Console admin sessions switching projects.",
       "name": "X-API-Key",
       "in": "header"
     },
     "cookie": {
       "type": "apiKey",
-      "description": "TORCHWOOD_session_console=\u003csid\u003e（Console admin 会话）",
+      "description": "TORCHWOOD_session_console=\u003csid\u003e (Console admin session)",
       "name": "Cookie",
       "in": "header"
     }

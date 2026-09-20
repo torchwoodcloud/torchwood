@@ -24,7 +24,7 @@ func main() {
 	if err := os.WriteFile(target, payload, 0o600); err != nil {
 		fail(err)
 	}
-	fmt.Printf("authz-matrix 文档已生成：%s（%d 字节）\n", target, len(payload))
+	fmt.Printf("authz-matrix doc generated: %s (%d bytes)\n", target, len(payload))
 }
 
 // repoRoot 以本文件编译期位置向上回溯到仓库根
@@ -32,7 +32,7 @@ func main() {
 func repoRoot() string {
 	_, thisFile, _, ok := goruntime.Caller(0)
 	if !ok {
-		fail(fmt.Errorf("无法定位源文件位置"))
+		fail(fmt.Errorf("cannot locate source file position"))
 	}
 	return filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", "..", ".."))
 }

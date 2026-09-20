@@ -56,11 +56,11 @@ const authzMatrixThreatModelAppendix = `
 // 服务按序遍历，列值全部来自 MethodPolicy 派生）。
 func RenderAuthzMatrix(set *domainauth.PolicySet) ([]byte, error) {
 	if set == nil {
-		return nil, fmt.Errorf("策略注册表为 nil")
+		return nil, fmt.Errorf("policy registry is nil")
 	}
 	methods := set.Methods()
 	if len(methods) == 0 {
-		return nil, fmt.Errorf("策略注册表为空")
+		return nil, fmt.Errorf("policy registry is empty")
 	}
 
 	var buf bytes.Buffer

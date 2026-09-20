@@ -61,14 +61,14 @@ func ValidateScopeTargetID(r ScopeResource, id string) error {
 	switch r {
 	case ScopeDatabases:
 		if !databaseIDPattern.MatchString(id) {
-			return fmt.Errorf("database id %q 必须匹配 ^[a-z][a-z0-9]{0,27}$", id)
+			return fmt.Errorf("database id %q must match ^[a-z][a-z0-9]{0,27}$", id)
 		}
 	case ScopeStorage:
 		if !bucketIDPattern.MatchString(id) {
-			return fmt.Errorf("bucket id %q 必须匹配 ^[0-9a-zA-Z_-]{1,64}$", id)
+			return fmt.Errorf("bucket id %q must match ^[0-9a-zA-Z_-]{1,64}$", id)
 		}
 	default:
-		return fmt.Errorf("资源 %q 不支持实例级 scope", string(r))
+		return fmt.Errorf("resource %q does not support instance-level scope", string(r))
 	}
 	return nil
 }

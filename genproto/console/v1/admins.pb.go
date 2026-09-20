@@ -531,16 +531,16 @@ const file_console_v1_admins_proto_rawDesc = "" +
 	"\vCreateAdmin\x12(.torchwood.console.v1.CreateAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"*\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x17:\x01*\"\x12/v1/console/admins\x12\x85\x01\n" +
 	"\vUpdateAdmin\x12(.torchwood.console.v1.UpdateAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"/\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x1c:\x01*2\x17/v1/console/admins/{id}\x12\x93\x01\n" +
 	"\x12UpdateCurrentAdmin\x12/.torchwood.console.v1.UpdateCurrentAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"/\x8a\xb2\x19\v\b\x04\x12\aconsole\x82\xd3\xe4\x93\x02\x1a:\x01*2\x15/v1/console/admins/me\x12\x81\x01\n" +
-	"\vDeleteAdmin\x12(.torchwood.console.v1.DeleteAdminRequest\x1a\x1a.torchwood.shared.v1.Empty\",\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x19*\x17/v1/console/admins/{id}\x1a\x06\x92\xb2\x19\x02\b\x04B\xe1\x03\x92A\x9a\x03RR\n" +
+	"\vDeleteAdmin\x12(.torchwood.console.v1.DeleteAdminRequest\x1a\x1a.torchwood.shared.v1.Empty\",\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x19*\x17/v1/console/admins/{id}\x1a\x06\x92\xb2\x19\x02\b\x04B\x84\x04\x92A\xbd\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
-	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
+	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +
 	"3\n" +
-	"\x06Bearer\x12)\b\x02\x12\x14格式: Bearer <jwt>\x1a\rAuthorization \x02\n" +
-	"\x86\x01\n" +
-	"\x06apiKey\x12|\b\x02\x12k项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。\x1a\tX-API-Key \x02\n" +
-	"Q\n" +
-	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
+	"\x06Bearer\x12)\b\x02\x12\x14Format: Bearer <jwt>\x1a\rAuthorization \x02\n" +
+	"\xab\x01\n" +
+	"\x06apiKey\x12\xa0\x01\b\x02\x12\x8e\x01The project is bound to the API key row; X-Torchwood-Project is not needed. This header is only for Console admin sessions switching projects.\x1a\tX-API-Key \x02\n" +
+	"O\n" +
+	"\x06cookie\x12E\b\x02\x127TORCHWOOD_session_console=<sid> (Console admin session)\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
 	"\x06cookie\x12\x00z\"\n" +

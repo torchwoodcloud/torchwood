@@ -1273,16 +1273,16 @@ const file_console_v1_leaderboards_proto_rawDesc = "" +
 	"\x18GetLeaderboardSettlement\x125.torchwood.console.v1.GetLeaderboardSettlementRequest\x1a6.torchwood.console.v1.GetLeaderboardSettlementResponse\"[\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02A\x12?/v1/console/leaderboards/boards/{board_id}/settlements/{period}\x12\xe3\x01\n" +
 	"\x1aListLeaderboardSettlements\x127.torchwood.console.v1.ListLeaderboardSettlementsRequest\x1a8.torchwood.console.v1.ListLeaderboardSettlementsResponse\"R\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x028\x126/v1/console/leaderboards/boards/{board_id}/settlements\x12\xde\x01\n" +
 	"\x19VoidLeaderboardSettlement\x126.torchwood.console.v1.VoidLeaderboardSettlementRequest\x1a..torchwood.console.v1.LeaderboardSettlementAck\"Y\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02F\"D/v1/console/leaderboards/boards/{board_id}/settlements/{period}:void\x12\xe1\x01\n" +
-	"\x1aRerunLeaderboardSettlement\x127.torchwood.console.v1.RerunLeaderboardSettlementRequest\x1a..torchwood.console.v1.LeaderboardSettlementAck\"Z\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02G\"E/v1/console/leaderboards/boards/{board_id}/settlements/{period}:rerun\x1a\x06\x92\xb2\x19\x02\b\x04B\xe1\x03\x92A\x9a\x03RR\n" +
+	"\x1aRerunLeaderboardSettlement\x127.torchwood.console.v1.RerunLeaderboardSettlementRequest\x1a..torchwood.console.v1.LeaderboardSettlementAck\"Z\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02G\"E/v1/console/leaderboards/boards/{board_id}/settlements/{period}:rerun\x1a\x06\x92\xb2\x19\x02\b\x04B\x84\x04\x92A\xbd\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
-	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
+	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +
 	"3\n" +
-	"\x06Bearer\x12)\b\x02\x12\x14格式: Bearer <jwt>\x1a\rAuthorization \x02\n" +
-	"\x86\x01\n" +
-	"\x06apiKey\x12|\b\x02\x12k项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。\x1a\tX-API-Key \x02\n" +
-	"Q\n" +
-	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
+	"\x06Bearer\x12)\b\x02\x12\x14Format: Bearer <jwt>\x1a\rAuthorization \x02\n" +
+	"\xab\x01\n" +
+	"\x06apiKey\x12\xa0\x01\b\x02\x12\x8e\x01The project is bound to the API key row; X-Torchwood-Project is not needed. This header is only for Console admin sessions switching projects.\x1a\tX-API-Key \x02\n" +
+	"O\n" +
+	"\x06cookie\x12E\b\x02\x127TORCHWOOD_session_console=<sid> (Console admin session)\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
 	"\x06cookie\x12\x00z\"\n" +

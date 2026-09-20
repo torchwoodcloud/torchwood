@@ -47,7 +47,7 @@ var Tools = []Tool{
 	{
 		Name:       ToolListUsers,
 		FullMethod: serverv1.UsersService_ListUsers_FullMethodName,
-		InputNotes: "shared.v1.ListRequest：page_size / page_token / queries[]string",
+		InputNotes: "shared.v1.ListRequest: page_size / page_token / queries[]string",
 	},
 	{
 		Name:       ToolGetUser,
@@ -57,12 +57,12 @@ var Tools = []Tool{
 	{
 		Name:       ToolCreateUser,
 		FullMethod: serverv1.UsersService_CreateUser_FullMethodName,
-		InputNotes: "email, password；可选 name / status / labels / prefs",
+		InputNotes: "email, password; optional name / status / labels / prefs",
 	},
 	{
 		Name:       ToolQueryDocuments,
 		FullMethod: serverv1.DatabasesService_ListDocuments_FullMethodName,
-		InputNotes: "必填 database_id、collection_id。优先 query（shared.v1.Query AST：filter/orders/page_size/page_token）；仍接受 queries[]string + page_size/page_token。两者同时提供且冲突 → InvalidArgument",
+		InputNotes: "required: database_id, collection_id. Prefer query (shared.v1.Query AST: filter/orders/page_size/page_token); queries[]string + page_size/page_token still accepted. Providing both with conflicts → InvalidArgument",
 	},
 	{
 		Name:       ToolGetDocument,
@@ -72,27 +72,27 @@ var Tools = []Tool{
 	{
 		Name:       ToolCreateDocument,
 		FullMethod: serverv1.DatabasesService_CreateDocument_FullMethodName,
-		InputNotes: "database_id, collection_id, document_id, data；可选 permissions",
+		InputNotes: "database_id, collection_id, document_id, data; optional permissions",
 	},
 	{
 		Name:       ToolUpdateDocument,
 		FullMethod: serverv1.DatabasesService_UpdateDocument_FullMethodName,
-		InputNotes: "database_id, collection_id, document_id；可选 data / permissions / increment。用户集合须带 version（OCC）",
+		InputNotes: "database_id, collection_id, document_id; optional data / permissions / increment. User collections require version (OCC)",
 	},
 	{
 		Name:       ToolUpsertDocument,
 		FullMethod: serverv1.DatabasesService_UpsertDocument_FullMethodName,
-		InputNotes: "database_id, collection_id, document_id, data；可选 permissions、conflict_columns",
+		InputNotes: "database_id, collection_id, document_id, data; optional permissions, conflict_columns",
 	},
 	{
 		Name:       ToolDeleteDocument,
 		FullMethod: serverv1.DatabasesService_DeleteDocument_FullMethodName,
-		InputNotes: "database_id, collection_id, document_id。用户集合须带 version（OCC）",
+		InputNotes: "database_id, collection_id, document_id. User collections require version (OCC)",
 	},
 	{
 		Name:       ToolListCollections,
 		FullMethod: serverv1.DatabasesService_ListCollections_FullMethodName,
-		InputNotes: "database_id；可选 queries[]string、page_size、page_token",
+		InputNotes: "database_id; optional queries[]string, page_size, page_token",
 	},
 	{
 		Name:       ToolGetCollection,
@@ -102,12 +102,12 @@ var Tools = []Tool{
 	{
 		Name:       ToolInvokeFunction,
 		FullMethod: serverv1.FunctionsService_CreateExecution_FullMethodName,
-		InputNotes: "function_id；可选 deployment_id、data、async",
+		InputNotes: "function_id; optional deployment_id, data, async",
 	},
 	{
 		Name:       ToolListFiles,
 		FullMethod: serverv1.StorageService_ListFiles_FullMethodName,
-		InputNotes: "bucket_id；可选 queries[]string、page_size、page_token",
+		InputNotes: "bucket_id; optional queries[]string, page_size, page_token",
 	},
 	{
 		Name:       ToolGetFile,
@@ -117,12 +117,12 @@ var Tools = []Tool{
 	{
 		Name:       ToolGrantAsset,
 		FullMethod: serverv1.AssetsService_Grant_FullMethodName,
-		InputNotes: "owner_id, def_code, quantity, idempotency_key；可选 expires_at / level / metadata / ref_type / ref_id",
+		InputNotes: "owner_id, def_code, quantity, idempotency_key; optional expires_at / level / metadata / ref_type / ref_id",
 	},
 	{
 		Name:       ToolListUserAssets,
 		FullMethod: serverv1.AssetsService_ListUserAssets_FullMethodName,
-		InputNotes: "owner_id；可选 page_size、page_token",
+		InputNotes: "owner_id; optional page_size, page_token",
 	},
 	{
 		Name:       ToolGetOrder,
@@ -132,7 +132,7 @@ var Tools = []Tool{
 	{
 		Name:       ToolGetHealth,
 		FullMethod: serverv1.HealthService_Check_FullMethodName,
-		InputNotes: "无入参",
+		InputNotes: "no input",
 	},
 }
 

@@ -278,7 +278,7 @@ func runDev(ctx context.Context, opts devOptions) error {
 	banner := func(format string, a ...any) {
 		_, _ = fmt.Fprintf(opts.stdout, format, a...)
 	}
-	banner("torchwood functions dev (runner template v%d; 比对目标 server 的 RunnerTemplateVersion，functions-v3.md §5.2)\n", runner.TemplateVersion)
+	banner("torchwood functions dev (runner template v%d; compare against server RunnerTemplateVersion, functions-v3.md §5.2)\n", runner.TemplateVersion)
 	banner("  dir:      %s\n", abs)
 	banner("  endpoint: POST http://127.0.0.1:%d/  (body = TW_DATA JSON)\n", opts.port)
 	if opts.dataFile != "" {

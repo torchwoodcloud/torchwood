@@ -453,14 +453,14 @@ func TestClientManagement_AnonymousNotAllowed(t *testing.T) {
 		ClientAnonymousAllowed: boolPtr(true),
 	})
 	require.Error(t, err)
-	require.Contains(t, status.Convert(err).Message(), "一期未开放")
+	require.Contains(t, status.Convert(err).Message(), "not open in this release")
 
 	_, err = uc.UpdateFunction(platformAdminCtx(), UpdateFunctionCommand{
 		ProjectID: "p1", FunctionID: "fn_1",
 		ClientAnonymousAllowed: boolPtr(true),
 	})
 	require.Error(t, err)
-	require.Contains(t, status.Convert(err).Message(), "一期未开放")
+	require.Contains(t, status.Convert(err).Message(), "not open in this release")
 
 	// client_callable=true 但 limit<1 → InvalidArgument。
 	_, err = uc.UpdateFunction(platformAdminCtx(), UpdateFunctionCommand{

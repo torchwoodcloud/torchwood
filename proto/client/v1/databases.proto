@@ -24,7 +24,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
         type: TYPE_API_KEY
         in: IN_HEADER
         name: "X-API-Key"
-        description: "项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。"
+        description: "The project is bound to the API key row; X-Torchwood-Project is not needed. This header is only for Console admin sessions switching projects."
       }
     }
     security: {
@@ -33,7 +33,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
         type: TYPE_API_KEY
         in: IN_HEADER
         name: "Authorization"
-        description: "格式: Bearer <jwt>（Client API 登录态）"
+        description: "Format: Bearer <jwt> (Client API session)"
       }
     }
     security: {
@@ -42,7 +42,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
         type: TYPE_API_KEY
         in: IN_HEADER
         name: "Cookie"
-        description: "TORCHWOOD_session_console=<sid>（Console admin 会话）"
+        description: "TORCHWOOD_session_console=<sid> (Console admin session)"
       }
     }
   }

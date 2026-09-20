@@ -314,16 +314,16 @@ const file_client_v1_runtime_vars_proto_rawDesc = "" +
 	"\x04kind\x12\x05\xbaH\x02\b\x012\xda\x01\n" +
 	"\x12RuntimeVarsService\x12\xbb\x01\n" +
 	"\x0eGetRuntimeVars\x12*.torchwood.client.v1.GetRuntimeVarsRequest\x1a+.torchwood.client.v1.GetRuntimeVarsResponse\"P\x92A\"b\x00j\x1e\n" +
-	"\x12x-torchwood-access\x12\b\x1a\x06public\x8a\xb2\x19\x02\b\x01\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/runtime-vars/{var_set_id}\x1a\x06\x92\xb2\x19\x02\b\x02B\xf7\x03\x92A\xb2\x03RR\n" +
+	"\x12x-torchwood-access\x12\b\x1a\x06public\x8a\xb2\x19\x02\b\x01\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/runtime-vars/{var_set_id}\x1a\x06\x92\xb2\x19\x02\b\x02B\x95\x04\x92A\xd0\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
-	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xab\x02\n" +
-	"M\n" +
-	"\x06Bearer\x12C\b\x02\x12.格式: Bearer <jwt>（Client API 登录态）\x1a\rAuthorization \x02\n" +
-	"\x86\x01\n" +
-	"\x06apiKey\x12|\b\x02\x12k项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。\x1a\tX-API-Key \x02\n" +
-	"Q\n" +
-	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
+	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xc9\x02\n" +
+	"H\n" +
+	"\x06Bearer\x12>\b\x02\x12)Format: Bearer <jwt> (Client API session)\x1a\rAuthorization \x02\n" +
+	"\xab\x01\n" +
+	"\x06apiKey\x12\xa0\x01\b\x02\x12\x8e\x01The project is bound to the API key row; X-Torchwood-Project is not needed. This header is only for Console admin sessions switching projects.\x1a\tX-API-Key \x02\n" +
+	"O\n" +
+	"\x06cookie\x12E\b\x02\x127TORCHWOOD_session_console=<sid> (Console admin session)\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
 	"\x06Bearer\x12\x00z \n" +

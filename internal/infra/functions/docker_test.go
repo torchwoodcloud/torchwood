@@ -369,7 +369,7 @@ func TestExtractZip_RejectsNodeModulesEntry(t *testing.T) {
 		})
 		require.Error(t, err, "entry %q must be rejected", name)
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
-		require.ErrorContains(t, err, "请勿在代码包中携带 node_modules")
+		require.ErrorContains(t, err, "must not include node_modules")
 	}
 }
 
@@ -394,7 +394,7 @@ func TestExtractZip_RejectsNodeModulesDirEntry(t *testing.T) {
 		maxTotalBytes: 1 << 20,
 	})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.ErrorContains(t, err, "请勿在代码包中携带 node_modules")
+	require.ErrorContains(t, err, "must not include node_modules")
 }
 
 // TestExtractZip_AllowsNestedNodeModulesDirName 拒收只针对 zip 根第一段：

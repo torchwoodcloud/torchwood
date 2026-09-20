@@ -3976,16 +3976,16 @@ const file_server_v1_databases_proto_rawDesc = "" +
 	"\x13BulkDeleteDocuments\x12/.torchwood.server.v1.BulkDeleteDocumentsRequest\x1a*.torchwood.server.v1.BulkDocumentsResponse\"m\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02X:\x01*\"S/v1/server/databases/{database_id}/collections/{collection_id}/documents:bulkDelete\x12\xcb\x01\n" +
 	"\x13ExecuteTransactions\x12/.torchwood.server.v1.ExecuteTransactionsRequest\x1a0.torchwood.server.v1.ExecuteTransactionsResponse\"Q\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x01\x10\x02\x82\xd3\xe4\x93\x02<:\x01*\"7/v1/server/databases/{database_id}/documents:execute-tx\x12\xba\x01\n" +
 	"\vListChanges\x12'.torchwood.server.v1.ListChangesRequest\x1a(.torchwood.server.v1.ListChangesResponse\"X\x8a\xb2\x19\x06\"\x04\b\x01\x10\x01\x82\xd3\xe4\x93\x02H\x12F/v1/server/databases/{database_id}/collections/{collection_id}/changes\x12\xe0\x01\n" +
-	"\x16ExportCollectionSchema\x122.torchwood.server.v1.ExportCollectionSchemaRequest\x1a3.torchwood.server.v1.ExportCollectionSchemaResponse\"]\x8a\xb2\x19\x06\"\x04\b\x01\x10\x01\x82\xd3\xe4\x93\x02M\x12K/v1/server/databases/{database_id}/collections/{collection_id}:exportSchema\x1a\x06\x92\xb2\x19\x02\b\x03B\xdb\x03\x92A\x96\x03RR\n" +
+	"\x16ExportCollectionSchema\x122.torchwood.server.v1.ExportCollectionSchemaRequest\x1a3.torchwood.server.v1.ExportCollectionSchemaResponse\"]\x8a\xb2\x19\x06\"\x04\b\x01\x10\x01\x82\xd3\xe4\x93\x02M\x12K/v1/server/databases/{database_id}/collections/{collection_id}:exportSchema\x1a\x06\x92\xb2\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
-	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x91\x02\n" +
+	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +
 	"3\n" +
-	"\x06Bearer\x12)\b\x02\x12\x14格式: Bearer <jwt>\x1a\rAuthorization \x02\n" +
-	"\x86\x01\n" +
-	"\x06apiKey\x12|\b\x02\x12k项目绑定在密钥行上，不需要 X-Torchwood-Project。该头仅 Console admin 会话切换项目。\x1a\tX-API-Key \x02\n" +
-	"Q\n" +
-	"\x06cookie\x12G\b\x02\x129TORCHWOOD_session_console=<sid>（Console admin 会话）\x1a\x06Cookie \x02b\f\n" +
+	"\x06Bearer\x12)\b\x02\x12\x14Format: Bearer <jwt>\x1a\rAuthorization \x02\n" +
+	"\xab\x01\n" +
+	"\x06apiKey\x12\xa0\x01\b\x02\x12\x8e\x01The project is bound to the API key row; X-Torchwood-Project is not needed. This header is only for Console admin sessions switching projects.\x1a\tX-API-Key \x02\n" +
+	"O\n" +
+	"\x06cookie\x12E\b\x02\x127TORCHWOOD_session_console=<sid> (Console admin session)\x1a\x06Cookie \x02b\f\n" +
 	"\n" +
 	"\n" +
 	"\x06apiKey\x12\x00z\x1e\n" +

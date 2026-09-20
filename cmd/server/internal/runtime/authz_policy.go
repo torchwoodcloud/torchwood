@@ -86,7 +86,7 @@ func protoAccessLevel(l sharedv1.AccessLevel) (domainauth.AccessLevel, error) {
 	case sharedv1.AccessLevel_ACCESS_SYSTEM:
 		return domainauth.AccessSystem, nil
 	default:
-		return domainauth.AccessLevelUnspecified, fmt.Errorf("access level %s 未登记", l)
+		return domainauth.AccessLevelUnspecified, fmt.Errorf("access level %s is not registered", l)
 	}
 }
 
@@ -157,14 +157,14 @@ func buildMethodPolicy(serviceName string, method protoreflect.MethodDescriptor,
 	for _, r := range auth.GetAdminRoles() {
 		role, ok := protoAdminRole(r)
 		if !ok {
-			return p, fmt.Errorf("method %s: admin_roles 值 %s 未登记", p.Method, r)
+			return p, fmt.Errorf("method %s: admin_roles value %s is not registered", p.Method, r)
 		}
 		p.AdminRoles = append(p.AdminRoles, role)
 	}
 	if scope := auth.GetApiKeyScope(); scope != nil {
 		res, ok := protoScopeResource(scope.GetResource())
 		if !ok {
-			return p, fmt.Errorf("method %s: api_key_scope 资源 %s 未登记", p.Method, scope.GetResource())
+			return p, fmt.Errorf("method %s: api_key_scope resource %s is not registered", p.Method, scope.GetResource())
 		}
 		var op domainauth.ScopeOp
 		switch scope.GetOp() {
@@ -175,7 +175,7 @@ func buildMethodPolicy(serviceName string, method protoreflect.MethodDescriptor,
 		case sharedv1.ScopeOp_SCOPE_OP_ADMIN:
 			op = domainauth.ScopeAdmin
 		default:
-			return p, fmt.Errorf("method %s: api_key_scope 方向 %s 未登记", p.Method, scope.GetOp())
+			return p, fmt.Errorf("method %s: api_key_scope op %s is not registered", p.Method, scope.GetOp())
 		}
 		p.Scope = &domainauth.ScopeRule{Resource: res, Op: op}
 	}

@@ -269,7 +269,7 @@ func extractZipWithLimits(zipPath, destDir string, limits zipExtractLimits) (Sou
 		// （含 node_modules 自身与 node_modules/...，目录与文件条目一并拒绝，
 		// 逐条判定即可，无需等解压完成）；子目录中的同名目录不受影响。
 		if firstPathSegment(f.Name) == "node_modules" {
-			return SourceContents{}, status.Error(codes.InvalidArgument, "请勿在代码包中携带 node_modules——平台将在构建期代装依赖（跨平台二进制不兼容）")
+			return SourceContents{}, status.Error(codes.InvalidArgument, "code packages must not include node_modules — the platform installs dependencies at build time (cross-platform binaries are incompatible)")
 		}
 		// vendor/ 目录存在性探测（Go vendor 受纳，钉版依赖形态；五期 5b 起
 		// SDK 依赖在用户 zip 内自带 vendor 树即走模板 -mod=vendor 离线分支）。
