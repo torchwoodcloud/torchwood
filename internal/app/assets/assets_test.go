@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -770,6 +771,22 @@ func TestMapWriteError_PreservesInvalidArgumentMessages(t *testing.T) {
 		require.Equal(t, tc.code, status.Code(got), tc.msg)
 		require.Equal(t, tc.msg, status.Convert(got).Message())
 	}
+}
+
+// TestMapWriteError_PreservesSentinelForErrorsIs（S5 缺陷 2）：映射产物经
+// Unwrap 保留领域 sentinel，errors.Is 穿透——上游（订阅计费）不再依赖错误
+// 文案子串判定；同时映射后的 code/message 与旧行为逐字一致。
+func TestMapWriteError_PreservesSentinelForErrorsIs(t *testing.T) {
+	t.Parallel()
+	raw := fmt.Errorf("%w: have 1, want 2", domainassets.ErrInsufficient)
+	got := mapWriteError(raw)
+	require.True(t, errors.Is(got, domainassets.ErrInsufficient))
+	require.Equal(t, codes.FailedPrecondition, status.Code(got))
+	require.Equal(t, "assets: insufficient quantity: have 1, want 2", status.Convert(got).Message())
+
+	notFound := mapWriteError(fmt.Errorf("load holding: %w", domainassets.ErrHoldingNotFound))
+	require.True(t, errors.Is(notFound, domainassets.ErrHoldingNotFound))
+	require.Equal(t, codes.NotFound, status.Code(notFound))
 }
 
 func TestGrantTransfer_InvalidArgumentMessages(t *testing.T) {

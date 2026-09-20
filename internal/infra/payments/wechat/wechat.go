@@ -46,19 +46,22 @@ type Config struct {
 	APIV3Key           string // 32 字节 APIv3 密钥
 	MerchantSerialNo   string
 	MerchantPrivateKey string // PEM
-	PlatformCert       string // PEM
-	NotifyURL          string
-	APIBaseURL         string
+	// PlatformCert 是微信平台证书 PEM，可含多块 CERTIFICATE：平台证书按
+	// serial 定期轮换、轮换窗口内新旧并行，回调验签按 Wechatpay-Serial 头
+	// 自动选择对应证书。
+	PlatformCert string
+	NotifyURL    string
+	APIBaseURL   string
 }
 
 // Adapter 实现 payments.PaymentProvider 与 CallbackAcker。
 type Adapter struct {
-	cfg      Config
-	client   *http.Client
-	priv     *rsa.PrivateKey
-	platform *x509.Certificate
-	now      func() time.Time
-	nonce    func() string
+	cfg           Config
+	client        *http.Client
+	priv          *rsa.PrivateKey
+	platformCerts map[string]*x509.Certificate // 归一化序列号 → 平台证书
+	now           func() time.Time
+	nonce         func() string
 }
 
 // New 构造适配器。凭据缺失时构造不失败（服务可启动），操作 fail-closed。
@@ -75,8 +78,11 @@ func New(cfg Config) *Adapter {
 	if key, err := parseRSAPrivateKey(cfg.MerchantPrivateKey); err == nil {
 		a.priv = key
 	}
-	if cert, err := parseCertificate(cfg.PlatformCert); err == nil {
-		a.platform = cert
+	if certs, err := parseCertificates(cfg.PlatformCert); err == nil {
+		a.platformCerts = make(map[string]*x509.Certificate, len(certs))
+		for _, cert := range certs {
+			a.platformCerts[serialHex(cert.SerialNumber.Text(16))] = cert
+		}
 	}
 	return a
 }
@@ -89,7 +95,7 @@ func (a *Adapter) configured() bool {
 }
 
 func (a *Adapter) callbackConfigured() bool {
-	return a.platform != nil && a.cfg.APIV3Key != ""
+	return len(a.platformCerts) > 0 && a.cfg.APIV3Key != ""
 }
 
 // CreatePayment 调用 Native 下单，返回 code_url 作为 PaymentURL。
@@ -178,9 +184,13 @@ func (a *Adapter) verifySignature(headers http.Header, rawBody []byte) error {
 	if err != nil {
 		return payments.ErrSignatureInvalid
 	}
+	cert := a.platformCertFor(headers.Get(headerSerial))
+	if cert == nil {
+		return payments.ErrSignatureInvalid
+	}
 	message := ts + "\n" + nonce + "\n" + string(rawBody) + "\n"
 	sum := sha256.Sum256([]byte(message))
-	pub, ok := a.platform.PublicKey.(*rsa.PublicKey)
+	pub, ok := cert.PublicKey.(*rsa.PublicKey)
 	if !ok {
 		return payments.ErrSignatureInvalid
 	}
@@ -188,6 +198,36 @@ func (a *Adapter) verifySignature(headers http.Header, rawBody []byte) error {
 		return payments.ErrSignatureInvalid
 	}
 	return nil
+}
+
+// platformCertFor 按 Wechatpay-Serial 头选平台证书（serial 大小写与前导零
+// 归一化后匹配）。头缺失时仅在唯一证书配置下回退（多证书无法消歧，
+// fail-closed）；未知 serial 返回 nil（fail-closed）。
+func (a *Adapter) platformCertFor(serialHeader string) *x509.Certificate {
+	if len(a.platformCerts) == 0 {
+		return nil
+	}
+	if serialHeader == "" {
+		if len(a.platformCerts) == 1 {
+			for _, cert := range a.platformCerts {
+				return cert
+			}
+		}
+		return nil
+	}
+	return a.platformCerts[serialHex(serialHeader)]
+}
+
+// serialHex 归一化证书序列号 / Wechatpay-Serial 头：小写十六进制、去 0x
+// 前缀与前导零（微信回调头为证书序列号十六进制串，大小写不保证一致）。
+func serialHex(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.TrimPrefix(s, "0x")
+	s = strings.TrimLeft(s, "0")
+	if s == "" {
+		s = "0"
+	}
+	return s
 }
 
 type notifyEnvelope struct {
@@ -463,16 +503,33 @@ func parseRSAPrivateKey(pemData string) (*rsa.PrivateKey, error) {
 	return x509.ParsePKCS1PrivateKey(block.Bytes)
 }
 
-func parseCertificate(pemData string) (*x509.Certificate, error) {
-	pemData = strings.TrimSpace(pemData)
-	if pemData == "" {
+// parseCertificates 解析 PEM 中的全部 CERTIFICATE 块（平台证书轮换窗口内
+// 新旧证书并行配置，各块按 serial 建立映射）。
+func parseCertificates(pemData string) ([]*x509.Certificate, error) {
+	rest := []byte(strings.TrimSpace(pemData))
+	if len(rest) == 0 {
 		return nil, fmt.Errorf("empty cert")
 	}
-	block, _ := pem.Decode([]byte(pemData))
-	if block == nil {
+	var out []*x509.Certificate
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, cert)
+	}
+	if len(out) == 0 {
 		return nil, fmt.Errorf("invalid pem")
 	}
-	return x509.ParseCertificate(block.Bytes)
+	return out, nil
 }
 
 func randomNonce() string {

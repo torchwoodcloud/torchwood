@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -125,6 +126,19 @@ func validateCode(code string) (string, error) {
 	return c, nil
 }
 
+// statusError 是领域错误 → gRPC status 的映射载体：对 grpc 层经 GRPCStatus
+// 呈现映射后的 code/message（行为同 status.Error），同时经 Unwrap 保留原领域
+// sentinel，errors.Is 可穿透（S5 缺陷 2：订阅侧余额不足判定依赖此，不再
+// 退化为错误文案子串匹配）。
+type statusError struct {
+	st  *status.Status
+	err error
+}
+
+func (e *statusError) Error() string              { return e.st.Err().Error() }
+func (e *statusError) GRPCStatus() *status.Status { return e.st }
+func (e *statusError) Unwrap() error              { return e.err }
+
 func mapWriteError(err error) error {
 	if err == nil {
 		return nil
@@ -137,40 +151,46 @@ func mapWriteError(err error) error {
 	}
 	switch {
 	case errors.Is(err, domainassets.ErrProjectRequired):
-		return status.Error(codes.Unauthenticated, "missing project context")
+		return newStatusError(err, codes.Unauthenticated, "missing project context")
 	case errors.Is(err, domainassets.ErrSameOwner):
-		return status.Error(codes.InvalidArgument, "cannot transfer to the same owner")
+		return newStatusError(err, codes.InvalidArgument, "cannot transfer to the same owner")
 	case errors.Is(err, domainassets.ErrTransferOwnersRequired):
-		return status.Error(codes.InvalidArgument, "from_owner_id and to_owner_id are required")
+		return newStatusError(err, codes.InvalidArgument, "from_owner_id and to_owner_id are required")
 	case errors.Is(err, domainassets.ErrHoldingIDRequired):
-		return status.Error(codes.InvalidArgument, "holding_id is required")
+		return newStatusError(err, codes.InvalidArgument, "holding_id is required")
 	case errors.Is(err, domainassets.ErrOwnerRequired):
-		return status.Error(codes.InvalidArgument, "owner_id is required")
+		return newStatusError(err, codes.InvalidArgument, "owner_id is required")
 	case errors.Is(err, domainassets.ErrInvalidCode):
-		return status.Error(codes.InvalidArgument, "def code must match ^[a-z][a-z0-9_]{0,63}$")
+		return newStatusError(err, codes.InvalidArgument, "def code must match ^[a-z][a-z0-9_]{0,63}$")
 	case errors.Is(err, domainassets.ErrIdempotencyTooLong):
-		return status.Errorf(codes.InvalidArgument, "idempotency_key exceeds %d characters", domainassets.MaxIdempotencyKey)
+		return newStatusError(err, codes.InvalidArgument,
+			fmt.Sprintf("idempotency_key exceeds %d characters", domainassets.MaxIdempotencyKey))
 	case errors.Is(err, domainassets.ErrMatrix),
 		errors.Is(err, domainassets.ErrInvalidQuantity),
 		errors.Is(err, domainassets.ErrExpiresAtRequired),
 		errors.Is(err, domainassets.ErrIdempotencyRequired),
 		errors.Is(err, domainassets.ErrInvalidOwnerType):
-		return status.Error(codes.InvalidArgument, err.Error())
+		return newStatusError(err, codes.InvalidArgument, err.Error())
 	case errors.Is(err, domainassets.ErrInsufficient),
 		errors.Is(err, domainassets.ErrMaxQuantity),
 		errors.Is(err, domainassets.ErrNotTradable),
 		errors.Is(err, domainassets.ErrUniquePerOwner),
 		errors.Is(err, domainassets.ErrDefArchived),
 		errors.Is(err, domainassets.ErrDuplicateCode):
-		return status.Error(codes.FailedPrecondition, err.Error())
+		return newStatusError(err, codes.FailedPrecondition, err.Error())
 	case errors.Is(err, domainassets.ErrDefNotFound),
 		errors.Is(err, domainassets.ErrHoldingNotFound):
-		return status.Error(codes.NotFound, err.Error())
+		return newStatusError(err, codes.NotFound, err.Error())
 	case errors.Is(err, domainassets.ErrConcurrent):
-		return status.Error(codes.Aborted, err.Error())
+		return newStatusError(err, codes.Aborted, err.Error())
 	default:
 		return err
 	}
+}
+
+// newStatusError 以映射后的 status 包装原错误，原错误链保持可达。
+func newStatusError(err error, code codes.Code, msg string) error {
+	return &statusError{st: status.New(code, msg), err: err}
 }
 
 func operatorFrom(ctx context.Context) json.RawMessage {

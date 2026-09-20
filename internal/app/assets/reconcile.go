@@ -3,25 +3,9 @@ package assets
 import (
 	"context"
 	"fmt"
-	"time"
 
 	domainassets "github.com/torchwoodcloud/torchwood/internal/domain/assets"
 )
-
-type replayKey struct {
-	ownerType string
-	ownerID   string
-	defID     string
-	bucketKey string
-	expUnix   int64 // 0 = nil expires_at
-}
-
-func expUnix(t *time.Time) int64 {
-	if t == nil {
-		return 0
-	}
-	return t.UTC().UnixMicro()
-}
 
 // Reconcile 校验流水重放 = holdings 快照（含 quantity_after 链路）。
 // 一期手动触发（Server RPC / 测试）。
@@ -36,6 +20,12 @@ func (a *Assets) Reconcile(ctx context.Context) (*domainassets.ReconcileReport, 
 	return a.reconcileProject(ctx, projectID)
 }
 
+// replayAgg 是单个 holding 的流水重放聚合。
+type replayAgg struct {
+	sum  int64
+	last *domainassets.LedgerEntry // 时间序最后一条（删行后 drift 归因用）
+}
+
 func (a *Assets) reconcileProject(ctx context.Context, projectID string) (*domainassets.ReconcileReport, error) {
 	now := a.ts()
 	holdings, err := a.holdings.ListAllInProject(ctx, projectID)
@@ -47,7 +37,12 @@ func (a *Assets) reconcileProject(ctx context.Context, projectID string) (*domai
 		return nil, err
 	}
 
-	replayed := map[replayKey]int64{}
+	// 重放按 holding 维度聚合（S5 缺陷 1）：每个 holding_id 唯一映射到其
+	// 当前桶，Mutate 迁移 expires_at 落的 delta=0 流水天然不破坏等式。
+	// 旧实现按 (owner,def,bucket,expires_at) 分桶累加，续期把桶从 T1 迁到
+	// T2 后被撕成两个假桶，产生双重假 drift 持续污染 assetLedgerDriftTotal。
+	// 消耗/过期删行后 Σdelta 应为 0；所有写动词的流水均带 HoldingID。
+	replayed := map[string]*replayAgg{}
 	type step struct {
 		delta, after int64
 	}
@@ -55,32 +50,28 @@ func (a *Assets) reconcileProject(ctx context.Context, projectID string) (*domai
 
 	for i := range entries {
 		e := entries[i]
-		k := replayKey{
-			ownerType: string(e.OwnerType),
-			ownerID:   e.OwnerID,
-			defID:     e.DefID,
-			bucketKey: e.BucketKey,
-			expUnix:   expUnix(e.ExpiresAt),
+		if e.HoldingID == "" {
+			continue
 		}
-		replayed[k] += e.Delta
-		if e.HoldingID != "" {
-			chains[e.HoldingID] = append(chains[e.HoldingID], step{delta: e.Delta, after: e.QuantityAfter})
+		agg := replayed[e.HoldingID]
+		if agg == nil {
+			agg = &replayAgg{}
+			replayed[e.HoldingID] = agg
 		}
+		agg.sum += e.Delta
+		agg.last = &entries[i]
+		chains[e.HoldingID] = append(chains[e.HoldingID], step{delta: e.Delta, after: e.QuantityAfter})
 	}
 
 	var drifts []domainassets.Drift
-	seen := map[replayKey]struct{}{}
+	byID := make(map[string]struct{}, len(holdings))
 	for i := range holdings {
 		h := holdings[i]
-		k := replayKey{
-			ownerType: string(h.OwnerType),
-			ownerID:   h.OwnerID,
-			defID:     h.DefID,
-			bucketKey: h.BucketKey,
-			expUnix:   expUnix(h.ExpiresAt),
+		byID[h.ID] = struct{}{}
+		var want int64
+		if agg := replayed[h.ID]; agg != nil {
+			want = agg.sum
 		}
-		seen[k] = struct{}{}
-		want := replayed[k]
 		if want != h.Quantity {
 			drifts = append(drifts, domainassets.Drift{
 				ProjectID:   projectID,
@@ -96,28 +87,25 @@ func (a *Assets) reconcileProject(ctx context.Context, projectID string) (*domai
 			})
 		}
 	}
-	for k, qty := range replayed {
-		if _, ok := seen[k]; ok {
+	for id, agg := range replayed {
+		if _, ok := byID[id]; ok {
 			continue
 		}
-		if qty == 0 {
-			continue // 消耗/过期删行后重放为 0，属正常
+		if agg.sum == 0 {
+			continue // 消耗/过期删行后重放归零，属正常
 		}
-		var exp *time.Time
-		if k.expUnix != 0 {
-			t := time.UnixMicro(k.expUnix).UTC()
-			exp = &t
-		}
+		last := agg.last
 		drifts = append(drifts, domainassets.Drift{
 			ProjectID:   projectID,
-			OwnerType:   domainassets.OwnerType(k.ownerType),
-			OwnerID:     k.ownerID,
-			DefID:       k.defID,
-			ExpiresAt:   exp,
-			BucketKey:   k.bucketKey,
+			OwnerType:   last.OwnerType,
+			OwnerID:     last.OwnerID,
+			DefID:       last.DefID,
+			ExpiresAt:   last.ExpiresAt,
+			BucketKey:   last.BucketKey,
 			HoldingQty:  0,
-			ReplayedQty: qty,
-			Detail:      fmt.Sprintf("replayed qty %d but holding missing", qty),
+			ReplayedQty: agg.sum,
+			HoldingID:   id,
+			Detail:      fmt.Sprintf("replayed qty %d but holding missing", agg.sum),
 		})
 	}
 

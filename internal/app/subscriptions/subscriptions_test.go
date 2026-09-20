@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -612,6 +613,49 @@ func TestBillingInsufficientUsesFailedPreconditionMessage(t *testing.T) {
 	err := status.Error(codes.FailedPrecondition, "assets: insufficient quantity: have 0, want 10")
 	require.True(t, isInsufficient(err))
 	require.False(t, isInsufficient(fmt.Errorf("boom")))
+}
+
+// rewrittenErr 模拟 app/assets mapWriteError 的产物契约：gRPC status 呈现
+// （GRPCStatus）+ Unwrap 保留领域 sentinel；Error() 文案刻意不含
+// "insufficient"——子串匹配路径应失效，判定必须走 errors.Is。
+type rewrittenErr struct{ cause error }
+
+func (e rewrittenErr) Error() string { return "assets: 余额不足: have 1, want 2" }
+func (e rewrittenErr) GRPCStatus() *status.Status {
+	return status.New(codes.FailedPrecondition, e.Error())
+}
+func (e rewrittenErr) Unwrap() error { return e.cause }
+
+// TestIsInsufficient_RewrittenMessageStillDetected（S5 缺陷 2）：领域错误
+// 文案被改写后，isInsufficient 仍经 errors.Is 正确识别（第一层生效）；
+// 无 sentinel 的 FailedPrecondition 不误判。
+func TestIsInsufficient_RewrittenMessageStillDetected(t *testing.T) {
+	err := rewrittenErr{cause: fmt.Errorf("wrapped: %w", domainassets.ErrInsufficient)}
+	require.NotContains(t, strings.ToLower(err.Error()), "insufficient")
+	require.True(t, errors.Is(err, domainassets.ErrInsufficient))
+	require.True(t, isInsufficient(err))
+
+	require.False(t, isInsufficient(status.Error(codes.FailedPrecondition, "assets: 余额不足")))
+	require.False(t, isInsufficient(rewrittenErr{cause: domainassets.ErrMaxQuantity}))
+}
+
+// TestBilling_InsufficientWithRewrittenMessageMarksPastDue（S5 缺陷 2）：
+// 端到端——余额不足错误即使文案不含 "insufficient"，计费循环仍应转
+// past_due 而非把错误当系统故障空转回滚。
+func TestBilling_InsufficientWithRewrittenMessageMarksPastDue(t *testing.T) {
+	now := time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)
+	assets := &stubAssets{consErr: rewrittenErr{cause: fmt.Errorf("%w", domainassets.ErrInsufficient)}}
+	uc, store, _ := setupSub(t, now, assets)
+	plan := seedPlan(t, store, now)
+	seedPlatformSub(t, store, plan, now, domainsubs.StatusActive)
+
+	n, err := uc.RunBillingCycle(context.Background(), now)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n)
+	sub := store.subs["sub_1"]
+	require.Equal(t, domainsubs.StatusPastDue, sub.Status)
+	require.NotNil(t, sub.GraceUntil)
+	require.Equal(t, domainsubs.EventPastDue, store.outbox[len(store.outbox)-1].Event)
 }
 
 type memPayStore struct {

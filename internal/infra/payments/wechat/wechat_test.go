@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,14 +32,19 @@ type testKeys struct {
 	priv    *rsa.PrivateKey
 	certPEM string
 	keyPEM  string
+	serial  string // 平台证书序列号归一化十六进制串
 }
 
 func generateTestKeys(t *testing.T) testKeys {
+	return generateTestKeysWithSerial(t, 1)
+}
+
+func generateTestKeysWithSerial(t *testing.T, serial int64) testKeys {
 	t.Helper()
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	tmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
+		SerialNumber: big.NewInt(serial),
 		Subject:      pkix.Name{CommonName: "WeChat Pay Test"},
 		NotBefore:    time.Now().Add(-time.Hour),
 		NotAfter:     time.Now().Add(24 * time.Hour),
@@ -50,7 +56,7 @@ func generateTestKeys(t *testing.T) testKeys {
 	keyDER, err := x509.MarshalPKCS8PrivateKey(priv)
 	require.NoError(t, err)
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
-	return testKeys{priv: priv, certPEM: string(certPEM), keyPEM: string(keyPEM)}
+	return testKeys{priv: priv, certPEM: string(certPEM), keyPEM: string(keyPEM), serial: serialHex(big.NewInt(serial).Text(16))}
 }
 
 func newTestAdapter(t *testing.T, keys testKeys) *Adapter {
@@ -99,7 +105,7 @@ func signedNotifyFixed(t *testing.T, keys testKeys, envelope notifyEnvelope, ts 
 	h.Set(headerTimestamp, tsStr)
 	h.Set(headerNonce, nonce)
 	h.Set(headerSignature, base64.StdEncoding.EncodeToString(sig))
-	h.Set(headerSerial, "SERIAL1")
+	h.Set(headerSerial, keys.serial)
 	return h, body
 }
 
@@ -163,6 +169,83 @@ func TestVerifyCallback_MissingHeader(t *testing.T) {
 	a := newTestAdapter(t, keys)
 	_, err := a.VerifyCallback(context.Background(), http.Header{}, []byte(`{}`))
 	require.ErrorIs(t, err, payments.ErrSignatureInvalid)
+}
+
+// newMultiCertAdapter 构造挂两块平台证书（serial 1 / serial n）的适配器，
+// 模拟轮换窗口内新旧证书并行配置。
+func newMultiCertAdapter(t *testing.T, k1, k2 testKeys) *Adapter {
+	t.Helper()
+	a := New(Config{
+		MchID:              "mch_test",
+		AppID:              "wx_test",
+		APIV3Key:           testAPIV3Key,
+		MerchantSerialNo:   "SERIAL1",
+		MerchantPrivateKey: k1.keyPEM,
+		PlatformCert:       k1.certPEM + "\n" + k2.certPEM,
+		NotifyURL:          "https://example.com/v1/payments/callbacks/wechat",
+	})
+	a.now = func() time.Time { return time.Unix(1700000000, 0) }
+	return a
+}
+
+// TestVerifyCallback_MultiCertSelectsBySerialHeader（S5 缺陷 3）：轮换窗口内
+// 双平台证书并存，验签按 Wechatpay-Serial 头选择对应证书；serial 大小写
+// 归一化生效（十六进制串大写同样命中）。
+func TestVerifyCallback_MultiCertSelectsBySerialHeader(t *testing.T) {
+	k1 := generateTestKeys(t)
+	k2 := generateTestKeysWithSerial(t, 0xABCDEF)
+	a := newMultiCertAdapter(t, k1, k2)
+
+	h, body := signedNotifyFixed(t, k2, paidEnvelope(t, "EV-2", "order_2", 1999), 1700000000)
+	ev, err := a.VerifyCallback(context.Background(), h, body)
+	require.NoError(t, err, "新证书签名的回调应按 serial 头选中对应证书")
+	require.Equal(t, payments.CallbackPaid, ev.Type)
+
+	h, body = signedNotifyFixed(t, k1, paidEnvelope(t, "EV-1", "order_1", 1999), 1700000000)
+	ev, err = a.VerifyCallback(context.Background(), h, body)
+	require.NoError(t, err, "旧证书签名的回调在轮换窗口内仍应验签通过")
+	require.Equal(t, payments.CallbackPaid, ev.Type)
+
+	h, body = signedNotifyFixed(t, k2, paidEnvelope(t, "EV-3", "order_3", 1999), 1700000000)
+	h.Set(headerSerial, strings.ToUpper(k2.serial))
+	_, err = a.VerifyCallback(context.Background(), h, body)
+	require.NoError(t, err, "serial 头大小写不敏感")
+}
+
+// TestVerifyCallback_UnknownSerialRejected（S5 缺陷 3）：签名合法但 serial 头
+// 未知 → fail-closed 拒绝，不得回退到任意已配置证书。
+func TestVerifyCallback_UnknownSerialRejected(t *testing.T) {
+	k1 := generateTestKeys(t)
+	k2 := generateTestKeysWithSerial(t, 2)
+	a := newMultiCertAdapter(t, k1, k2)
+	h, body := signedNotifyFixed(t, k1, paidEnvelope(t, "EV-1", "order_1", 1999), 1700000000)
+	h.Set(headerSerial, "feedface")
+	_, err := a.VerifyCallback(context.Background(), h, body)
+	require.ErrorIs(t, err, payments.ErrSignatureInvalid)
+}
+
+// TestVerifyCallback_MultiCertMissingSerialRejected（S5 缺陷 3）：多证书配置
+// 且回调不带 serial 头时无法消歧 → fail-closed 拒绝。
+func TestVerifyCallback_MultiCertMissingSerialRejected(t *testing.T) {
+	k1 := generateTestKeys(t)
+	k2 := generateTestKeysWithSerial(t, 2)
+	a := newMultiCertAdapter(t, k1, k2)
+	h, body := signedNotifyFixed(t, k1, paidEnvelope(t, "EV-1", "order_1", 1999), 1700000000)
+	h.Del(headerSerial)
+	_, err := a.VerifyCallback(context.Background(), h, body)
+	require.ErrorIs(t, err, payments.ErrSignatureInvalid)
+}
+
+// TestVerifyCallback_SingleCertFallbackWithoutSerial（S5 缺陷 3）：单证书配置
+// 且回调不带 Wechatpay-Serial 头时回退唯一证书，兼容存量部署。
+func TestVerifyCallback_SingleCertFallbackWithoutSerial(t *testing.T) {
+	keys := generateTestKeys(t)
+	a := newTestAdapter(t, keys)
+	h, body := signedNotifyFixed(t, keys, paidEnvelope(t, "EV-1", "order_1", 1999), 1700000000)
+	h.Del(headerSerial)
+	ev, err := a.VerifyCallback(context.Background(), h, body)
+	require.NoError(t, err)
+	require.Equal(t, payments.CallbackPaid, ev.Type)
 }
 
 func TestVerifyCallback_NotConfigured(t *testing.T) {

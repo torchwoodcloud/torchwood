@@ -287,6 +287,8 @@ payments:
     #   TORCHWOOD_PAYMENTS_WECHAT_MERCHANT_SERIAL_NO
     #   TORCHWOOD_PAYMENTS_WECHAT_MERCHANT_PRIVATE_KEY
     #   TORCHWOOD_PAYMENTS_WECHAT_PLATFORM_CERT
+    #     （平台证书 PEM 可含多块 CERTIFICATE：轮换窗口内新旧证书并行粘贴，
+    #      回调验签按 Wechatpay-Serial 头自动选择对应证书）
     notify_url: ""           # 空 = server.http.public_url + /v1/payments/callbacks/wechat
     api_base_url: ""         # 空 = https://api.mch.weixin.qq.com
   alipay:
