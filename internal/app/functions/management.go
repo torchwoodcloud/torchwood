@@ -346,14 +346,15 @@ func (f *Functions) DeleteFunction(ctx context.Context, projectID, functionID st
 	if err != nil {
 		return err
 	}
-	// 先 DB 级联删除，再清理镜像与本地 zip（全部幂等，失败仅记日志）。
+	// 先 DB 级联删除，再清理镜像与代码包（本地 + 持久层，全部幂等，失败仅
+	// 记日志）。
 	if err := f.repo.DeleteFunction(ctx, projectID, functionID); err != nil {
 		return err
 	}
 	f.cache.invalidate(projectID, functionID)
 	for i := range deps {
 		_ = f.executor.RemoveImage(ctx, deps[i].FunctionID, deps[i].ID)
-		_ = removeZip(deps[i].ProjectID, deps[i].FunctionID, deps[i].ID)
+		f.removeCodePackage(ctx, deps[i].ProjectID, deps[i].FunctionID, deps[i].ID)
 	}
 	return nil
 }

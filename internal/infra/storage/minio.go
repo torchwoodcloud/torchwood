@@ -82,7 +82,7 @@ func (m *minioObjectStore) Get(ctx context.Context, bucket, key string) (io.Read
 	if _, err := obj.Stat(); err != nil {
 		_ = obj.Close()
 		if strings.Contains(err.Error(), "NoSuchKey") || strings.Contains(err.Error(), "not found") {
-			return nil, fmt.Errorf("object not found: %s/%s", bucket, key)
+			return nil, fmt.Errorf("%w: %s/%s", storage.ErrObjectNotFound, bucket, key)
 		}
 		return nil, err
 	}

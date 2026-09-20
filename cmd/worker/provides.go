@@ -119,6 +119,9 @@ var ProviderSet = wire.NewSet(
 	// worker 零 docker.sock 依赖。
 	infrafunctions.NewDispatcherExecutor,
 	wire.Bind(new(domainfunctions.Executor), new(*infrafunctions.DispatcherExecutor)),
+	// 部署代码包持久层（zip 持久桶）：worker 异步执行错误路径同样触发
+	// 镜像缺失重建，需要从持久层拉回（ObjectStore 来自 infrastorage 集）。
+	infrafunctions.NewBucketZipStore,
 	infrapayments.ProviderSet,
 	infrabilling.ProviderSet,
 	infraqueue.ProviderSet,

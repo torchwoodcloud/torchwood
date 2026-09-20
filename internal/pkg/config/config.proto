@@ -240,11 +240,13 @@ message Functions {
     // 镜像缺失自动重建（执行链自愈）：执行分发命中「部署镜像在本节点缺失」
     // （宿主镜像被清理/环境迁移导致 Postgres ready 状态与宿主 docker 镜像
     // 存量漂移）时，server/worker 凭 FailedPrecondition + 稳定标记识别并
-    // 异步触发该部署重建——zip/git 源以盘上 zip 重建（git 源 zip 缺失时按
-    // 行内源快照 URL+钉死 SHA+目录经 packer 重新物化并复核 ContextSHA256）；
-    // image 源为幂等 ImportImage；zip 源原始字节不在平台存储内无法自动重建
-    // （执行错误文案含 rebuild required 引导 redeploy）。optional presence
-    // 语义：未配置 = 默认开启，显式 false = 关闭。先例：verify_build。
+    // 异步触发该部署重建——zip/git 源以盘上 zip 重建；盘缺失时优先从
+    // functions.storage 专用桶拉回复核（zip 源自愈主通路），git 源桶 miss
+    // 再按行内源快照 URL+钉死 SHA+目录经 packer 重新物化并复核
+    // ContextSHA256；image 源为幂等 ImportImage；桶未启用（存量部署/
+    // zipStore 未注入）且 zip 源盘缺失时退回声明边界（执行错误文案含
+    // rebuild required 引导 redeploy）。optional presence 语义：未配置 =
+    // 默认开启，显式 false = 关闭。先例：verify_build。
     optional bool rebuild_on_missing_image = 17;
   }
   // executor（字段号 1）已删除：v1 docker 执行器（每请求一容器、进程内
@@ -325,6 +327,16 @@ message Functions {
     bool allow_insecure = 2;
   }
   Image image = 8;
+  // Storage 是部署代码包持久层（zip 持久桶）配置：本地盘之外的对象存储
+  // 副本——盘上 zip 丢失（磁盘清理/环境迁移/多节点不共享盘）时部署重建
+  // 链路可从桶拉回复核后重建（zip 源自愈；git 源优先拉回、桶 miss 回退
+  // packer 重物化）。桶为平台内部资源，不进用户 bucket 命名空间（项目
+  // buckets 表无行、API 不可见）；连接复用 storage.s3 的 endpoint/凭证。
+  message Storage {
+    // 部署代码包专用物理桶名（空 = 缺省 torchwood-functions）。
+    string bucket = 1;
+  }
+  Storage storage = 10;
 }
 
 message Telemetry {

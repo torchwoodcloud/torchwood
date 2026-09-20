@@ -82,6 +82,7 @@ func TestCreateDeployment_GitEndToEndSmoke(t *testing.T) {
 		newMockQueue(),
 		nil, nil, Semaphores{}, nil, nil, nil,
 		infrafunctions.NewPackerClient(cfg), // 真实 SourcePacker 适配
+		nil,
 	)
 
 	dep, err := uc.CreateDeployment(contexts.WithPrincipal(ctx, &shared.Principal{

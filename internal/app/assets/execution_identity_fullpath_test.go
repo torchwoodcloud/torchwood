@@ -142,7 +142,7 @@ func TestExecutionIdentity_FullPathMintValidateOperator(t *testing.T) {
 	fnUC := appfunctions.NewFunctionsWithUsage(
 		&config.AppConfig{}, executor, &fullpathFnRepo{fn: fn,
 			dep: &domainfunctions.Deployment{ID: "dep_1", Status: domainfunctions.DeploymentStatusReady}},
-		fullpathQueue{}, nil, nil, appfunctions.Semaphores{}, tokenSvc, nil,
+		fullpathQueue{}, nil, nil, appfunctions.Semaphores{}, tokenSvc, nil, nil,
 	)
 
 	// ① mint：端用户经客户端调用面触发执行（真实 token 服务落 Redis 投影）。

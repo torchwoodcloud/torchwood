@@ -678,6 +678,7 @@ type Functions struct {
 	ClientInvoke  *Functions_ClientInvoke `protobuf:"bytes,6,opt,name=client_invoke,json=clientInvoke,proto3" json:"client_invoke,omitempty"`
 	Packer        *Functions_Packer       `protobuf:"bytes,9,opt,name=packer,proto3" json:"packer,omitempty"`
 	Image         *Functions_Image        `protobuf:"bytes,8,opt,name=image,proto3" json:"image,omitempty"`
+	Storage       *Functions_Storage      `protobuf:"bytes,10,opt,name=storage,proto3" json:"storage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -757,6 +758,13 @@ func (x *Functions) GetPacker() *Functions_Packer {
 func (x *Functions) GetImage() *Functions_Image {
 	if x != nil {
 		return x.Image
+	}
+	return nil
+}
+
+func (x *Functions) GetStorage() *Functions_Storage {
+	if x != nil {
+		return x.Storage
 	}
 	return nil
 }
@@ -2025,11 +2033,13 @@ type Functions_Dispatcher struct {
 	// 镜像缺失自动重建（执行链自愈）：执行分发命中「部署镜像在本节点缺失」
 	// （宿主镜像被清理/环境迁移导致 Postgres ready 状态与宿主 docker 镜像
 	// 存量漂移）时，server/worker 凭 FailedPrecondition + 稳定标记识别并
-	// 异步触发该部署重建——zip/git 源以盘上 zip 重建（git 源 zip 缺失时按
-	// 行内源快照 URL+钉死 SHA+目录经 packer 重新物化并复核 ContextSHA256）；
-	// image 源为幂等 ImportImage；zip 源原始字节不在平台存储内无法自动重建
-	// （执行错误文案含 rebuild required 引导 redeploy）。optional presence
-	// 语义：未配置 = 默认开启，显式 false = 关闭。先例：verify_build。
+	// 异步触发该部署重建——zip/git 源以盘上 zip 重建；盘缺失时优先从
+	// functions.storage 专用桶拉回复核（zip 源自愈主通路），git 源桶 miss
+	// 再按行内源快照 URL+钉死 SHA+目录经 packer 重新物化并复核
+	// ContextSHA256；image 源为幂等 ImportImage；桶未启用（存量部署/
+	// zipStore 未注入）且 zip 源盘缺失时退回声明边界（执行错误文案含
+	// rebuild required 引导 redeploy）。optional presence 语义：未配置 =
+	// 默认开启，显式 false = 关闭。先例：verify_build。
 	RebuildOnMissingImage *bool `protobuf:"varint,17,opt,name=rebuild_on_missing_image,json=rebuildOnMissingImage,proto3,oneof" json:"rebuild_on_missing_image,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
@@ -2478,6 +2488,56 @@ func (x *Functions_Image) GetAllowInsecure() bool {
 	return false
 }
 
+// Storage 是部署代码包持久层（zip 持久桶）配置：本地盘之外的对象存储
+// 副本——盘上 zip 丢失（磁盘清理/环境迁移/多节点不共享盘）时部署重建
+// 链路可从桶拉回复核后重建（zip 源自愈；git 源优先拉回、桶 miss 回退
+// packer 重物化）。桶为平台内部资源，不进用户 bucket 命名空间（项目
+// buckets 表无行、API 不可见）；连接复用 storage.s3 的 endpoint/凭证。
+type Functions_Storage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 部署代码包专用物理桶名（空 = 缺省 torchwood-functions）。
+	Bucket        string `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Functions_Storage) Reset() {
+	*x = Functions_Storage{}
+	mi := &file_config_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Functions_Storage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Functions_Storage) ProtoMessage() {}
+
+func (x *Functions_Storage) ProtoReflect() protoreflect.Message {
+	mi := &file_config_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Functions_Storage.ProtoReflect.Descriptor instead.
+func (*Functions_Storage) Descriptor() ([]byte, []int) {
+	return file_config_proto_rawDescGZIP(), []int{9, 7}
+}
+
+func (x *Functions_Storage) GetBucket() string {
+	if x != nil {
+		return x.Bucket
+	}
+	return ""
+}
+
 type Messaging_SMTP struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Host          string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
@@ -2492,7 +2552,7 @@ type Messaging_SMTP struct {
 
 func (x *Messaging_SMTP) Reset() {
 	*x = Messaging_SMTP{}
-	mi := &file_config_proto_msgTypes[34]
+	mi := &file_config_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2504,7 +2564,7 @@ func (x *Messaging_SMTP) String() string {
 func (*Messaging_SMTP) ProtoMessage() {}
 
 func (x *Messaging_SMTP) ProtoReflect() protoreflect.Message {
-	mi := &file_config_proto_msgTypes[34]
+	mi := &file_config_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2574,7 +2634,7 @@ type IdGen_Random struct {
 
 func (x *IdGen_Random) Reset() {
 	*x = IdGen_Random{}
-	mi := &file_config_proto_msgTypes[35]
+	mi := &file_config_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2586,7 +2646,7 @@ func (x *IdGen_Random) String() string {
 func (*IdGen_Random) ProtoMessage() {}
 
 func (x *IdGen_Random) ProtoReflect() protoreflect.Message {
-	mi := &file_config_proto_msgTypes[35]
+	mi := &file_config_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2639,7 +2699,7 @@ type IdGen_Snowflake struct {
 
 func (x *IdGen_Snowflake) Reset() {
 	*x = IdGen_Snowflake{}
-	mi := &file_config_proto_msgTypes[36]
+	mi := &file_config_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2651,7 +2711,7 @@ func (x *IdGen_Snowflake) String() string {
 func (*IdGen_Snowflake) ProtoMessage() {}
 
 func (x *IdGen_Snowflake) ProtoReflect() protoreflect.Message {
-	mi := &file_config_proto_msgTypes[36]
+	mi := &file_config_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2683,7 +2743,7 @@ type IdGen_Sequence struct {
 
 func (x *IdGen_Sequence) Reset() {
 	*x = IdGen_Sequence{}
-	mi := &file_config_proto_msgTypes[37]
+	mi := &file_config_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2695,7 +2755,7 @@ func (x *IdGen_Sequence) String() string {
 func (*IdGen_Sequence) ProtoMessage() {}
 
 func (x *IdGen_Sequence) ProtoReflect() protoreflect.Message {
-	mi := &file_config_proto_msgTypes[37]
+	mi := &file_config_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2729,7 +2789,7 @@ type IdGen_Resources struct {
 
 func (x *IdGen_Resources) Reset() {
 	*x = IdGen_Resources{}
-	mi := &file_config_proto_msgTypes[38]
+	mi := &file_config_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2741,7 +2801,7 @@ func (x *IdGen_Resources) String() string {
 func (*IdGen_Resources) ProtoMessage() {}
 
 func (x *IdGen_Resources) ProtoReflect() protoreflect.Message {
-	mi := &file_config_proto_msgTypes[38]
+	mi := &file_config_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2792,7 +2852,7 @@ type Payments_Stripe struct {
 
 func (x *Payments_Stripe) Reset() {
 	*x = Payments_Stripe{}
-	mi := &file_config_proto_msgTypes[39]
+	mi := &file_config_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2804,7 +2864,7 @@ func (x *Payments_Stripe) String() string {
 func (*Payments_Stripe) ProtoMessage() {}
 
 func (x *Payments_Stripe) ProtoReflect() protoreflect.Message {
-	mi := &file_config_proto_msgTypes[39]
+	mi := &file_config_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2863,7 +2923,7 @@ type Payments_WeChat struct {
 
 func (x *Payments_WeChat) Reset() {
 	*x = Payments_WeChat{}
-	mi := &file_config_proto_msgTypes[40]
+	mi := &file_config_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2875,7 +2935,7 @@ func (x *Payments_WeChat) String() string {
 func (*Payments_WeChat) ProtoMessage() {}
 
 func (x *Payments_WeChat) ProtoReflect() protoreflect.Message {
-	mi := &file_config_proto_msgTypes[40]
+	mi := &file_config_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2964,7 +3024,7 @@ type Payments_Alipay struct {
 
 func (x *Payments_Alipay) Reset() {
 	*x = Payments_Alipay{}
-	mi := &file_config_proto_msgTypes[41]
+	mi := &file_config_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2976,7 +3036,7 @@ func (x *Payments_Alipay) String() string {
 func (*Payments_Alipay) ProtoMessage() {}
 
 func (x *Payments_Alipay) ProtoReflect() protoreflect.Message {
-	mi := &file_config_proto_msgTypes[41]
+	mi := &file_config_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3050,7 +3110,7 @@ type Payments_IosIap struct {
 
 func (x *Payments_IosIap) Reset() {
 	*x = Payments_IosIap{}
-	mi := &file_config_proto_msgTypes[42]
+	mi := &file_config_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3062,7 +3122,7 @@ func (x *Payments_IosIap) String() string {
 func (*Payments_IosIap) ProtoMessage() {}
 
 func (x *Payments_IosIap) ProtoReflect() protoreflect.Message {
-	mi := &file_config_proto_msgTypes[42]
+	mi := &file_config_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3240,7 +3300,7 @@ const file_config_proto_rawDesc = "" +
 	"\x11secret_access_key\x18\x05 \x01(\tR\x0fsecretAccessKey\x12\x17\n" +
 	"\ause_ssl\x18\x06 \x01(\bR\x06useSsl\x1a\x1b\n" +
 	"\x05Local\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\"\xe7\x0e\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\"\xcd\x0f\n" +
 	"\tFunctions\x12>\n" +
 	"\x06docker\x18\x02 \x01(\v2&.torchwood.api.config.Functions.DockerR\x06docker\x12G\n" +
 	"\texecution\x18\x03 \x01(\v2).torchwood.api.config.Functions.ExecutionR\texecution\x12J\n" +
@@ -3250,7 +3310,9 @@ const file_config_proto_rawDesc = "" +
 	"\atrigger\x18\x05 \x01(\v2'.torchwood.api.config.Functions.TriggerR\atrigger\x12Q\n" +
 	"\rclient_invoke\x18\x06 \x01(\v2,.torchwood.api.config.Functions.ClientInvokeR\fclientInvoke\x12>\n" +
 	"\x06packer\x18\t \x01(\v2&.torchwood.api.config.Functions.PackerR\x06packer\x12;\n" +
-	"\x05image\x18\b \x01(\v2%.torchwood.api.config.Functions.ImageR\x05image\x1aR\n" +
+	"\x05image\x18\b \x01(\v2%.torchwood.api.config.Functions.ImageR\x05image\x12A\n" +
+	"\astorage\x18\n" +
+	" \x01(\v2'.torchwood.api.config.Functions.StorageR\astorage\x1aR\n" +
 	"\x06Docker\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x18\n" +
 	"\anetwork\x18\x02 \x01(\tR\anetwork\x12\x1a\n" +
@@ -3297,7 +3359,9 @@ const file_config_proto_rawDesc = "" +
 	"\x04addr\x18\b \x01(\tR\x04addr\x1a]\n" +
 	"\x05Image\x12-\n" +
 	"\x12allowed_registries\x18\x01 \x03(\tR\x11allowedRegistries\x12%\n" +
-	"\x0eallow_insecure\x18\x02 \x01(\bR\rallowInsecureJ\x04\b\x01\x10\x02R\bexecutor\"m\n" +
+	"\x0eallow_insecure\x18\x02 \x01(\bR\rallowInsecure\x1a!\n" +
+	"\aStorage\x12\x16\n" +
+	"\x06bucket\x18\x01 \x01(\tR\x06bucketJ\x04\b\x01\x10\x02R\bexecutor\"m\n" +
 	"\tTelemetry\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12#\n" +
 	"\rotlp_endpoint\x18\x02 \x01(\tR\fotlpEndpoint\x12!\n" +
@@ -3399,7 +3463,7 @@ func file_config_proto_rawDescGZIP() []byte {
 	return file_config_proto_rawDescData
 }
 
-var file_config_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
+var file_config_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
 var file_config_proto_goTypes = []any{
 	(*AppConfig)(nil),                    // 0: torchwood.api.config.AppConfig
 	(*Server)(nil),                       // 1: torchwood.api.config.Server
@@ -3435,15 +3499,16 @@ var file_config_proto_goTypes = []any{
 	(*Functions_ClientInvoke)(nil),       // 31: torchwood.api.config.Functions.ClientInvoke
 	(*Functions_Packer)(nil),             // 32: torchwood.api.config.Functions.Packer
 	(*Functions_Image)(nil),              // 33: torchwood.api.config.Functions.Image
-	(*Messaging_SMTP)(nil),               // 34: torchwood.api.config.Messaging.SMTP
-	(*IdGen_Random)(nil),                 // 35: torchwood.api.config.IdGen.Random
-	(*IdGen_Snowflake)(nil),              // 36: torchwood.api.config.IdGen.Snowflake
-	(*IdGen_Sequence)(nil),               // 37: torchwood.api.config.IdGen.Sequence
-	(*IdGen_Resources)(nil),              // 38: torchwood.api.config.IdGen.Resources
-	(*Payments_Stripe)(nil),              // 39: torchwood.api.config.Payments.Stripe
-	(*Payments_WeChat)(nil),              // 40: torchwood.api.config.Payments.WeChat
-	(*Payments_Alipay)(nil),              // 41: torchwood.api.config.Payments.Alipay
-	(*Payments_IosIap)(nil),              // 42: torchwood.api.config.Payments.IosIap
+	(*Functions_Storage)(nil),            // 34: torchwood.api.config.Functions.Storage
+	(*Messaging_SMTP)(nil),               // 35: torchwood.api.config.Messaging.SMTP
+	(*IdGen_Random)(nil),                 // 36: torchwood.api.config.IdGen.Random
+	(*IdGen_Snowflake)(nil),              // 37: torchwood.api.config.IdGen.Snowflake
+	(*IdGen_Sequence)(nil),               // 38: torchwood.api.config.IdGen.Sequence
+	(*IdGen_Resources)(nil),              // 39: torchwood.api.config.IdGen.Resources
+	(*Payments_Stripe)(nil),              // 40: torchwood.api.config.Payments.Stripe
+	(*Payments_WeChat)(nil),              // 41: torchwood.api.config.Payments.WeChat
+	(*Payments_Alipay)(nil),              // 42: torchwood.api.config.Payments.Alipay
+	(*Payments_IosIap)(nil),              // 43: torchwood.api.config.Payments.IosIap
 }
 var file_config_proto_depIdxs = []int32{
 	1,  // 0: torchwood.api.config.AppConfig.server:type_name -> torchwood.api.config.Server
@@ -3477,30 +3542,31 @@ var file_config_proto_depIdxs = []int32{
 	31, // 28: torchwood.api.config.Functions.client_invoke:type_name -> torchwood.api.config.Functions.ClientInvoke
 	32, // 29: torchwood.api.config.Functions.packer:type_name -> torchwood.api.config.Functions.Packer
 	33, // 30: torchwood.api.config.Functions.image:type_name -> torchwood.api.config.Functions.Image
-	34, // 31: torchwood.api.config.Messaging.smtp:type_name -> torchwood.api.config.Messaging.SMTP
-	12, // 32: torchwood.api.config.Messaging.sms:type_name -> torchwood.api.config.SMS
-	13, // 33: torchwood.api.config.SMS.twilio:type_name -> torchwood.api.config.Twilio
-	35, // 34: torchwood.api.config.IdGen.random:type_name -> torchwood.api.config.IdGen.Random
-	36, // 35: torchwood.api.config.IdGen.snowflake:type_name -> torchwood.api.config.IdGen.Snowflake
-	37, // 36: torchwood.api.config.IdGen.sequence:type_name -> torchwood.api.config.IdGen.Sequence
-	38, // 37: torchwood.api.config.IdGen.resources:type_name -> torchwood.api.config.IdGen.Resources
-	39, // 38: torchwood.api.config.Payments.stripe:type_name -> torchwood.api.config.Payments.Stripe
-	40, // 39: torchwood.api.config.Payments.wechat:type_name -> torchwood.api.config.Payments.WeChat
-	41, // 40: torchwood.api.config.Payments.alipay:type_name -> torchwood.api.config.Payments.Alipay
-	42, // 41: torchwood.api.config.Payments.ios_iap:type_name -> torchwood.api.config.Payments.IosIap
-	23, // 42: torchwood.api.config.Security.RateLimit.ip:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	23, // 43: torchwood.api.config.Security.RateLimit.user:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	23, // 44: torchwood.api.config.Security.RateLimit.api_key:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	23, // 45: torchwood.api.config.Security.RateLimit.functions_execution:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	23, // 46: torchwood.api.config.Security.LoginThrottle.email:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	23, // 47: torchwood.api.config.Security.LoginThrottle.ip:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	23, // 48: torchwood.api.config.Security.LoginThrottle.signup_ip:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	23, // 49: torchwood.api.config.Security.LoginThrottle.api_key_auth:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	50, // [50:50] is the sub-list for method output_type
-	50, // [50:50] is the sub-list for method input_type
-	50, // [50:50] is the sub-list for extension type_name
-	50, // [50:50] is the sub-list for extension extendee
-	0,  // [0:50] is the sub-list for field type_name
+	34, // 31: torchwood.api.config.Functions.storage:type_name -> torchwood.api.config.Functions.Storage
+	35, // 32: torchwood.api.config.Messaging.smtp:type_name -> torchwood.api.config.Messaging.SMTP
+	12, // 33: torchwood.api.config.Messaging.sms:type_name -> torchwood.api.config.SMS
+	13, // 34: torchwood.api.config.SMS.twilio:type_name -> torchwood.api.config.Twilio
+	36, // 35: torchwood.api.config.IdGen.random:type_name -> torchwood.api.config.IdGen.Random
+	37, // 36: torchwood.api.config.IdGen.snowflake:type_name -> torchwood.api.config.IdGen.Snowflake
+	38, // 37: torchwood.api.config.IdGen.sequence:type_name -> torchwood.api.config.IdGen.Sequence
+	39, // 38: torchwood.api.config.IdGen.resources:type_name -> torchwood.api.config.IdGen.Resources
+	40, // 39: torchwood.api.config.Payments.stripe:type_name -> torchwood.api.config.Payments.Stripe
+	41, // 40: torchwood.api.config.Payments.wechat:type_name -> torchwood.api.config.Payments.WeChat
+	42, // 41: torchwood.api.config.Payments.alipay:type_name -> torchwood.api.config.Payments.Alipay
+	43, // 42: torchwood.api.config.Payments.ios_iap:type_name -> torchwood.api.config.Payments.IosIap
+	23, // 43: torchwood.api.config.Security.RateLimit.ip:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	23, // 44: torchwood.api.config.Security.RateLimit.user:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	23, // 45: torchwood.api.config.Security.RateLimit.api_key:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	23, // 46: torchwood.api.config.Security.RateLimit.functions_execution:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	23, // 47: torchwood.api.config.Security.LoginThrottle.email:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	23, // 48: torchwood.api.config.Security.LoginThrottle.ip:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	23, // 49: torchwood.api.config.Security.LoginThrottle.signup_ip:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	23, // 50: torchwood.api.config.Security.LoginThrottle.api_key_auth:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	51, // [51:51] is the sub-list for method output_type
+	51, // [51:51] is the sub-list for method input_type
+	51, // [51:51] is the sub-list for extension type_name
+	51, // [51:51] is the sub-list for extension extendee
+	0,  // [0:51] is the sub-list for field type_name
 }
 
 func init() { file_config_proto_init() }
@@ -3516,7 +3582,7 @@ func file_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_config_proto_rawDesc), len(file_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   43,
+			NumMessages:   44,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

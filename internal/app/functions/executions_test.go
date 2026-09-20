@@ -504,7 +504,7 @@ func TestCreateExecution_MetersFunctionDuration(t *testing.T) {
 	seedReadyFunction(repo, "p1", "fn_1", true, 15)
 	executor := newMockExecutor(&domainfunctions.ExecutionResult{StatusCode: 0, DurationMS: 42}, nil)
 	meter := &recUsage{}
-	uc := NewFunctionsWithUsage(&config.AppConfig{}, executor, repo, newMockQueue(), meter, nil, Semaphores{}, nil, nil)
+	uc := NewFunctionsWithUsage(&config.AppConfig{}, executor, repo, newMockQueue(), meter, nil, Semaphores{}, nil, nil, nil)
 
 	rec, err := uc.CreateExecution(platformAdminCtx(), CreateExecutionCommand{ProjectID: "p1", FunctionID: "fn_1"})
 	require.NoError(t, err)
@@ -542,7 +542,7 @@ func TestRecoverOrphanExecutions_EnumeratesActiveProjectsWithBudget(t *testing.T
 		{ID: "p-off", Status: "suspended"},
 		{ID: "p2", Status: "active"},
 	}}
-	uc := NewFunctionsWithUsage(&config.AppConfig{}, newMockExecutor(nil, nil), repo, newMockQueue(), nil, projects, Semaphores{}, nil, nil)
+	uc := NewFunctionsWithUsage(&config.AppConfig{}, newMockExecutor(nil, nil), repo, newMockQueue(), nil, projects, Semaphores{}, nil, nil, nil)
 
 	n, err := uc.RecoverOrphanExecutions(context.Background(), time.Hour)
 	require.NoError(t, err)

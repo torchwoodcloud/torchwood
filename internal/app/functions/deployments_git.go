@@ -39,9 +39,9 @@ func errPackerUnavailable() error {
 }
 
 // createDeploymentFromGit 是 CreateDeployment 的 git 源分支（设计 §2 app
-// 时序）。失败清理分流：pack 失败/写盘失败/INSERT 失败/构建信号量满 →
-// 无行无 zip（请求级失败不留残骸）；buildDeployment 内的构建失败收敛为
-// failed 状态且 git zip 保留（重建语义，见 buildDeployment）。
+// 时序）。失败清理分流：pack 失败/写盘失败/落桶失败/INSERT 失败/构建信号
+// 量满 → 无行无 zip（请求级失败不留残骸）；buildDeployment 内的构建失败
+// 收敛为 failed 状态且 git zip 保留（重建语义，见 buildDeployment）。
 func (f *Functions) createDeploymentFromGit(ctx context.Context, cmd CreateDeploymentCommand, src *domainfunctions.GitSource) (*domainfunctions.Deployment, error) {
 	// 形状校验：url https（allow_insecure 时放行 http）/ref 白名单/dir 无
 	// 穿越段——packer 侧还有完整的 SSRF guard 与 userinfo 拒绝，此处是
@@ -98,14 +98,19 @@ func (f *Functions) createDeploymentFromGit(ctx context.Context, cmd CreateDeplo
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	// 先写盘后 INSERT：盘上快照就绪才开行；任一失败清理 zip + 行。
+	// 先写盘后落桶再 INSERT：盘上与持久层快照都就绪才开行；任一失败清理
+	// zip + 行。
 	path := zipPath(cmd.ProjectID, cmd.FunctionID, dep.ID)
 	if err := writeZip(path, zip); err != nil {
 		_ = removeZip(cmd.ProjectID, cmd.FunctionID, dep.ID)
 		return nil, status.Errorf(codes.Internal, "write code package: %v", err)
 	}
-	if err := f.repo.CreateDeployment(ctx, dep); err != nil {
+	if err := f.storeZip(ctx, cmd.ProjectID, cmd.FunctionID, dep.ID, zip); err != nil {
 		_ = removeZip(cmd.ProjectID, cmd.FunctionID, dep.ID)
+		return nil, status.Errorf(codes.Internal, "persist code package: %v", err)
+	}
+	if err := f.repo.CreateDeployment(ctx, dep); err != nil {
+		f.removeCodePackage(ctx, cmd.ProjectID, cmd.FunctionID, dep.ID)
 		return nil, err
 	}
 	// 同步构建（与 zip 源同路，D11 ctx 解耦不变）。返回 err = 请求级失败
@@ -113,7 +118,7 @@ func (f *Functions) createDeploymentFromGit(ctx context.Context, cmd CreateDeplo
 	// 「构建已发生并收敛为 failed」的快照场景，请求被拒绝时不留残骸。
 	if err := f.buildDeployment(ctx, fn, dep, path); err != nil {
 		_ = f.repo.DeleteDeployment(ctx, cmd.ProjectID, cmd.FunctionID, dep.ID)
-		_ = removeZip(cmd.ProjectID, cmd.FunctionID, dep.ID)
+		f.removeCodePackage(ctx, cmd.ProjectID, cmd.FunctionID, dep.ID)
 		return nil, err
 	}
 	return dep, nil

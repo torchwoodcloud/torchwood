@@ -164,7 +164,7 @@ func newEventTestConsumerWithEvents(t *testing.T, rdb *redis.Client, events []st
 		Config: domainfunctions.TriggerConfig{Events: events},
 	}}}
 	fn := appfunctions.NewFunctionsWithUsage(&config.AppConfig{}, retryExecutor{}, repo, queue,
-		nil, eventProjectsStub{}, appfunctions.Semaphores{}, nil, triggers)
+		nil, eventProjectsStub{}, appfunctions.Semaphores{}, nil, triggers, nil)
 	c := newEventTriggerConsumer(fn, rdb, &clients.Database{}, slog.New(slog.DiscardHandler))
 	return c, repo, queue
 }
@@ -204,7 +204,7 @@ func testSystemEnvelope(id string, seq int64, event, domain string) *domainevent
 
 // TestEventConsumer_SystemEventRoundTrip 系统行为事件消费全链路（§4.1 增补）：
 // auth 域事件命中 auth.users.* 订阅入队；payments 目录事件命中精确订阅
-//（历史认知坑回归：经济事件自增补起可触发）；目录外事件名静默通过。
+// （历史认知坑回归：经济事件自增补起可触发）；目录外事件名静默通过。
 func TestEventConsumer_SystemEventRoundTrip(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -419,7 +419,7 @@ func TestWorkerEventLoop_GracefulShutdown(t *testing.T) {
 	repo := &eventCaptureRepo{retryRepo: retryRepo{}}
 	queue := newChannelQueue()
 	fn := appfunctions.NewFunctionsWithUsage(&config.AppConfig{}, retryExecutor{}, repo, queue,
-		nil, eventProjectsStub{}, appfunctions.Semaphores{}, nil, &eventTriggerRepoStub{})
+		nil, eventProjectsStub{}, appfunctions.Semaphores{}, nil, &eventTriggerRepoStub{}, nil)
 	w := NewWorkerWithEventTriggers(fn, queue, slog.New(slog.DiscardHandler), rdb, &clients.Database{})
 	require.NotNil(t, w.events)
 

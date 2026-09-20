@@ -2,6 +2,10 @@ package functions
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -17,14 +21,16 @@ import (
 // 该失败识别为 FailedPrecondition + ImageMissingMarker 类型化上抛（pool 对
 // 其 fail-fast 不烧队首超时），server/worker 在执行错误路径凭「code + 标记」
 // 识别并触发本文件的异步重建。源物化分流：
-//   - zip/git 源：盘上 zip 命中直接重建；git 源缺失时按行内源快照（URL +
-//     钉死 commit SHA + 子目录）经 packer 重新物化并复核 ContextSHA256
-//     （D9 可复现锚——钉死 SHA 下重物化应逐字节一致，不一致 = 仓库历史
-//     改写，拒绝以漂移源覆盖快照）；
+//   - zip/git 源：盘上 zip 命中直接重建；盘缺失时优先从持久层（zip 专用
+//     桶，functions.storage）拉回复核行内锚（ContextSHA256 全量复核；空锚
+//     存量 zip 部署按 Size 复核），git 源拉回 miss/暂态失败再按行内源快照
+//     （URL + 钉死 commit SHA + 子目录）经 packer 重新物化并复核
+//     ContextSHA256（D9 可复现锚——钉死 SHA 下重物化应逐字节一致，不一致
+//     = 仓库历史改写，拒绝以漂移源覆盖快照）；
 //   - image 源：无需 zip，buildDeployment 按 SourceType 分流为幂等
 //     ImportImage（预期 digest = 行内 source_ref）；
-//   - zip 源：原始字节不在平台任何存储内，无法自动重建——记录日志，执行
-//     错误文案（rebuild required）引导 redeploy。
+//   - zip 源且桶内无副本（存量部署/zipStore 未注入）：退回声明边界——记录
+//     日志，执行错误文案（rebuild required）引导 redeploy。
 //
 // 当次执行不等待重建（构建分钟级，同步调用方不得被连坐）：以原始错误失败，
 // 重建期间后续执行以「no ready deployment」fail-fast（building 非 ready，
@@ -93,21 +99,16 @@ func (f *Functions) prepareImageMissingRebuild(ctx context.Context, fn *domainfu
 
 	path := zipPath(dep.ProjectID, dep.FunctionID, dep.ID)
 	if _, err := os.Stat(path); err != nil {
-		switch cur.SourceType {
-		case domainfunctions.DeploymentSourceGit:
-			if err := f.rematerializeGitZip(ctx, cur, path); err != nil {
-				f.logger().Warn("functions: image-missing rebuild skipped (git source re-materialization failed)",
+		if cur.SourceType != domainfunctions.DeploymentSourceImage {
+			// image 源免 zip（buildDeployment 分流为幂等 ImportImage）；zip/git
+			// 源盘缺失：持久层拉回优先（restoreDeploymentZip 内含 git 源回退
+			// packer 重物化）。
+			if err := f.restoreDeploymentZip(ctx, cur, path); err != nil {
+				f.logger().Warn("functions: image-missing rebuild skipped (code package unavailable)",
 					"project", dep.ProjectID, "function", dep.FunctionID, "deployment", dep.ID, "error", err)
 				release()
 				return nil
 			}
-		case domainfunctions.DeploymentSourceImage:
-			// 无需 zip：buildDeployment 按 SourceType 分流为幂等 ImportImage。
-		default:
-			f.logger().Warn("functions: image-missing rebuild skipped (zip source snapshot lost; redeploy required)",
-				"project", dep.ProjectID, "function", dep.FunctionID, "deployment", dep.ID)
-			release()
-			return nil
 		}
 	}
 
@@ -127,6 +128,58 @@ func (f *Functions) prepareImageMissingRebuild(ctx context.Context, fn *domainfu
 			"project", dep.ProjectID, "function", dep.FunctionID, "deployment", dep.ID,
 			"status", rebuildDep.Status)
 	}
+}
+
+// restoreDeploymentZip 让盘上 zip 缺失的部署重新具备构建输入（zip 源自愈
+// 主通路 + git 源省一次 packer 重克隆的捷径）：
+//   - 持久层拉回（zipStore 注入时）：复核行内锚后落盘 zipPath；
+//   - git 源拉回 miss/暂态失败：回退 packer 重物化（既有通路，checksum
+//     复核）——packer 与对象存储互为独立通路，任一暂态故障不连坐；
+//   - zip 源拉回 miss/暂态失败：无其他源，返回错误让路（镜像仍缺失，
+//     下次执行重进本链；miss = 存量部署或桶副本被删，引导 redeploy）。
+//
+// image 源不经本函数（调用方已分流）。返回 nil = path 就绪可构建。
+func (f *Functions) restoreDeploymentZip(ctx context.Context, dep *domainfunctions.Deployment, path string) error {
+	if f.zipStore != nil {
+		zip, err := f.zipStore.Get(ctx, dep.ProjectID, dep.FunctionID, dep.ID)
+		if err == nil {
+			if verr := verifyRestoredZip(dep, zip); verr != nil {
+				return verr
+			}
+			return writeZip(path, zip)
+		}
+		if !errors.Is(err, domainfunctions.ErrZipNotFound) && dep.SourceType != domainfunctions.DeploymentSourceGit {
+			return err
+		}
+		// ErrZipNotFound，或 git 源的暂态取回失败：git 源回退重物化，zip 源
+		// 落下方 miss 分支。
+	}
+	if dep.SourceType == domainfunctions.DeploymentSourceGit {
+		return f.rematerializeGitZip(ctx, dep, path)
+	}
+	return fmt.Errorf("%w: zip source snapshot lost and no stored copy; redeploy required", domainfunctions.ErrZipNotFound)
+}
+
+// verifyRestoredZip 复核持久层拉回的字节与部署行内锚一致，防漂移副本进入
+// 构建：ContextSHA256 非空（git 源与新 zip 源）→ sha256 全量复核（与
+// rematerializeGitZip 复核同锚，D9）；空锚的存量 zip 部署 → Size 长度复核
+// （浅校验兜底：桶内对象由平台写入，完整性威胁模型以长度漂移为界）。
+func verifyRestoredZip(dep *domainfunctions.Deployment, zip []byte) error {
+	if dep.ContextSHA256 != "" {
+		sum := sha256.Sum256(zip)
+		if hex.EncodeToString(sum[:]) != dep.ContextSHA256 {
+			return status.Errorf(codes.FailedPrecondition,
+				"stored code package checksum %q does not match pinned %q (stored copy drifted; redeploy required)",
+				hex.EncodeToString(sum[:]), dep.ContextSHA256)
+		}
+		return nil
+	}
+	if dep.Size > 0 && int64(len(zip)) != dep.Size {
+		return status.Errorf(codes.FailedPrecondition,
+			"stored code package size %d does not match recorded %d (stored copy drifted; redeploy required)",
+			len(zip), dep.Size)
+	}
+	return nil
 }
 
 // rematerializeGitZip 按部署行内源快照（URL + 钉死 commit SHA + 子目录）经

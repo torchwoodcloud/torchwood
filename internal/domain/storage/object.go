@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
 )
@@ -48,6 +49,11 @@ type ObjectMeta struct {
 // S3/MinIO bucket 命名规范要求全小写（大写名 MakeBucket 会失败），
 // app 层 defaultBucketName 与 infra 层默认值共用此单一常量。
 const DefaultBucketName = "torchwood-files"
+
+// ErrObjectNotFound 表示对象在底层存储中不存在（Get 按键寻址的 miss 形态；
+// 供跨域调用方 errors.Is 区分 miss 与传输/暂态错误——先例：functions 的
+// zip 持久层拉回复核链路）。
+var ErrObjectNotFound = errors.New("object not found")
 
 // ObjectStore abstracts binary object storage (S3 / MinIO).
 type ObjectStore interface {

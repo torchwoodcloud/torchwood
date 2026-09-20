@@ -332,3 +332,45 @@ func seedReadyFunction(repo *mockRepo, projectID, functionID string, enabled boo
 	_ = repo.CreateDeployment(context.Background(), dep)
 	return fn
 }
+
+// fakeZipStore 是 ZipStore 端口的可编程 fake：记录 Put/Remove 调用；Get 按
+// get/getErr 返回（get 为 nil 且 getErr 为 nil = miss → ErrZipNotFound）。
+type fakeZipStore struct {
+	puts      []fakeZipPut
+	removes   []string
+	get       []byte
+	getErr    error
+	putErr    error
+	removeErr error
+}
+
+type fakeZipPut struct {
+	projectID, functionID, deploymentID string
+	zip                                 []byte
+}
+
+func (s *fakeZipStore) Put(_ context.Context, projectID, functionID, deploymentID string, zip []byte) error {
+	if s.putErr != nil {
+		return s.putErr
+	}
+	s.puts = append(s.puts, fakeZipPut{projectID, functionID, deploymentID, zip})
+	return nil
+}
+
+func (s *fakeZipStore) Get(_ context.Context, _, _, _ string) ([]byte, error) {
+	if s.getErr != nil {
+		return nil, s.getErr
+	}
+	if s.get == nil {
+		return nil, domainfunctions.ErrZipNotFound
+	}
+	return s.get, nil
+}
+
+func (s *fakeZipStore) Remove(_ context.Context, _, _, deploymentID string) error {
+	if s.removeErr != nil {
+		return s.removeErr
+	}
+	s.removes = append(s.removes, deploymentID)
+	return nil
+}

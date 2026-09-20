@@ -148,7 +148,7 @@ func (r *mockTriggerRepo) ListEnabledEventTriggers(_ context.Context, projectID 
 }
 
 func newTriggerTestUC(executor *mockExecutor, repo *mockRepo, queue *mockQueue, triggers *mockTriggerRepo, projects domainprojects.Repository) *Functions {
-	uc := NewFunctionsWithUsage(&config.AppConfig{}, executor, repo, queue, nil, projects, Semaphores{}, nil, triggers)
+	uc := NewFunctionsWithUsage(&config.AppConfig{}, executor, repo, queue, nil, projects, Semaphores{}, nil, triggers, nil)
 	return uc
 }
 

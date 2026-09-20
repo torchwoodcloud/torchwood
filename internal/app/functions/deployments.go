@@ -3,6 +3,9 @@ package functions
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,7 +26,8 @@ const defaultBuildTimeout = 5 * time.Minute
 // maxDeploymentCodeBytes 是 zip 代码包上限（multipart 路径限流）。
 const maxDeploymentCodeBytes = 50 << 20 // 50 MiB
 
-// zipDir 是本地 zip 代码包根目录（单机部署假设：server 与 worker 共享文件系统）。
+// zipDir 是本地 zip 代码包根目录（构建输入第一层；持久副本在 zipStore
+// 专用桶——盘上丢失可拉回，见 rebuild.go）。
 const zipDir = "torchwood-functions"
 
 type CreateDeploymentCommand struct {
@@ -100,6 +104,10 @@ func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCo
 	}
 
 	now := time.Now()
+	// zip 源同填可复现性锚（repo.go Deployment.ContextSHA256 已声明 zip/git
+	// 共用）：持久层拉回复核的强校验基准（无锚的存量 zip 部署回退 Size
+	// 复核，见 rebuild.go verifyRestoredZip）。
+	zipSum := sha256.Sum256(cmd.Code)
 	dep := &domainfunctions.Deployment{
 		ID:         idgen.UUID().String(),
 		FunctionID: cmd.FunctionID,
@@ -113,9 +121,10 @@ func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCo
 		SourceType: domainfunctions.DeploymentSourceZip,
 		// runtime 快照（迁移 000025）：INSERT 期写全、之后不可变——补构建/
 		// 审计以行内快照为准（functions-runtime-selection.md §4）。
-		Runtime:   fn.Runtime,
-		CreatedAt: now,
-		UpdatedAt: now,
+		Runtime:       fn.Runtime,
+		ContextSHA256: hex.EncodeToString(zipSum[:]),
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 	if err := f.repo.CreateDeployment(ctx, dep); err != nil {
 		return nil, err
@@ -125,13 +134,20 @@ func (f *Functions) CreateDeployment(ctx context.Context, cmd CreateDeploymentCo
 	if err := writeZip(path, cmd.Code); err != nil {
 		return nil, fmt.Errorf("write code package: %w", err)
 	}
+	// 持久副本（zip 持久桶）：失败整体回滚（行 + 本地 zip）——持久层是
+	// 重建自愈的源，best-effort 会静默退化回「zip 源不可自愈」声明边界。
+	if err := f.storeZip(ctx, cmd.ProjectID, cmd.FunctionID, dep.ID, cmd.Code); err != nil {
+		_ = f.repo.DeleteDeployment(ctx, cmd.ProjectID, cmd.FunctionID, dep.ID)
+		_ = removeZip(cmd.ProjectID, cmd.FunctionID, dep.ID)
+		return nil, fmt.Errorf("persist code package: %w", err)
+	}
 
 	// 同步构建（MVP 定案：不在独立构建队列，请求内完成；构建 ctx 与请求
 	// ctx 解耦，见 buildDeployment）。
 	if err := f.buildDeployment(ctx, fn, dep, path); err != nil {
-		// 信号量满或状态写回失败：删除 deployment 行与本地 zip，避免残留 pending 行。
+		// 信号量满或状态写回失败：删除 deployment 行与代码包，避免残留 pending 行。
 		_ = f.repo.DeleteDeployment(ctx, cmd.ProjectID, cmd.FunctionID, dep.ID)
-		_ = removeZip(cmd.ProjectID, cmd.FunctionID, dep.ID)
+		f.removeCodePackage(ctx, cmd.ProjectID, cmd.FunctionID, dep.ID)
 		return nil, err
 	}
 	return dep, nil
@@ -196,12 +212,12 @@ func (f *Functions) buildDeployment(ctx context.Context, fn *domainfunctions.Fun
 		dep.Status = domainfunctions.DeploymentStatusFailed
 		dep.Error = truncate(buildErr.Error(), maxOutputBytes)
 		_ = f.repo.UpdateDeployment(buildCtx, dep)
-		// 清理本地 zip 与可能残留的镜像（幂等）。zip 按源类型分流（设计
-		// §2 重建语义）：zip 源构建失败即删（D13 一期形态）；git 源 zip
-		// 保留——物化快照在盘上、worker 补构建不依赖一次性凭证， redeploy
+		// 清理本地与持久层代码包及可能残留的镜像（幂等）。zip 按源类型分流
+		// （设计 §2 重建语义）：zip 源构建失败即删（D13 一期形态）；git 源
+		// zip 保留——物化快照在盘上、worker 补构建不依赖一次性凭证， redeploy
 		// 只在 zip 缺失（磁盘被清）时才必须。
 		if dep.SourceType != domainfunctions.DeploymentSourceGit {
-			_ = removeZip(dep.ProjectID, dep.FunctionID, dep.ID)
+			f.removeCodePackage(buildCtx, dep.ProjectID, dep.FunctionID, dep.ID)
 		}
 		_ = f.executor.RemoveImage(buildCtx, dep.FunctionID, dep.ID)
 		return nil
@@ -347,8 +363,9 @@ func (f *Functions) GetDeployment(ctx context.Context, projectID, functionID, de
 	return dep, nil
 }
 
-// DeleteDeployment 删除顺序：先 DB 级联删除 → 再 docker image rm → 最后删本地 zip
-// （全部幂等，失败仅记日志），避免进行中构建/执行读到半删除状态。
+// DeleteDeployment 删除顺序：先 DB 级联删除 → 再 docker image rm → 最后删
+// 本地与持久层代码包（全部幂等，失败仅记日志），避免进行中构建/执行读到
+// 半删除状态。
 func (f *Functions) DeleteDeployment(ctx context.Context, projectID, functionID, deploymentID string) error {
 	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return err
@@ -373,7 +390,7 @@ func (f *Functions) DeleteDeployment(ctx context.Context, projectID, functionID,
 	// 缓存失效：删除可能清掉 latest 指针（P0.5）。
 	f.cache.invalidate(projectID, functionID)
 	_ = f.executor.RemoveImage(ctx, functionID, deploymentID)
-	_ = removeZip(projectID, functionID, deploymentID)
+	f.removeCodePackage(ctx, projectID, functionID, deploymentID)
 	return nil
 }
 
@@ -414,6 +431,33 @@ func removeZip(projectID, functionID, deploymentID string) error {
 		return err
 	}
 	return os.Remove(path)
+}
+
+// storeZip 把部署代码包写入持久层（zipStore nil = 未注入，跳过——旧构造/
+// 测试，语义与仅本地盘时代一致）。调用方对失败整体回滚：持久副本是重建
+// 自愈的源，best-effort 会静默退化回「盘缺失即不可自愈」的声明边界。
+func (f *Functions) storeZip(ctx context.Context, projectID, functionID, deploymentID string, zip []byte) error {
+	if f.zipStore == nil {
+		return nil
+	}
+	return f.zipStore.Put(ctx, projectID, functionID, deploymentID, zip)
+}
+
+// removeCodePackage 删除本地盘与持久层代码包（调用方均为清理路径：幂等、
+// best-effort——失败仅记日志不影响主流程语义，镜像 removeZip 的 `_ =`
+// 形态但保留可观测性）。
+func (f *Functions) removeCodePackage(ctx context.Context, projectID, functionID, deploymentID string) {
+	if err := removeZip(projectID, functionID, deploymentID); err != nil && !errors.Is(err, os.ErrNotExist) {
+		f.logger().Warn("functions: remove local code package failed",
+			"project", projectID, "function", functionID, "deployment", deploymentID, "error", err)
+	}
+	if f.zipStore == nil {
+		return
+	}
+	if err := f.zipStore.Remove(ctx, projectID, functionID, deploymentID); err != nil {
+		f.logger().Warn("functions: remove stored code package failed",
+			"project", projectID, "function", functionID, "deployment", deploymentID, "error", err)
+	}
 }
 
 // isZip 校验 zip 魔数 PK\x03\x04（空 zip 为 PK\x05\x06，一并拒绝）。

@@ -261,6 +261,16 @@ functions:
     # 与 localhost host，错误明示放行开关）。
     # env: TORCHWOOD_FUNCTIONS_IMAGE_ALLOW_INSECURE
     allow_insecure: false
+  storage:
+    # 部署代码包持久层（zip 持久桶）：本地盘之外的对象存储副本——盘上
+    # zip 丢失（磁盘清理/环境迁移/多节点不共享盘）时，镜像缺失自动重建
+    # 可从桶拉回复核后重建（zip 源自愈；git 源优先拉回、桶 miss 回退
+    # packer 重物化）。桶为平台内部资源，不进用户 bucket 命名空间
+    # （项目 buckets 表无行、API 不可见）；连接复用 storage.s3 的
+    # endpoint/凭证（同一对象存储后端）。写路径失败整体回滚（部署失败
+    # 而非静默降级），故 MinIO/S3 是函数部署的硬依赖。
+    # env: TORCHWOOD_FUNCTIONS_STORAGE_BUCKET
+    bucket: "torchwood-functions"
 
 payments:
   stripe:

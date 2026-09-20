@@ -43,6 +43,10 @@ type Functions struct {
 	// fail-fast 报「functions.packer.url is not configured」——worker 补构建
 	// 读盘上 zip 不需要 packer，旧构造保持 nil，zip 路径不受影响）。
 	packer functions.SourcePacker
+	// zipStore 是部署代码包持久层端口（zip 持久桶；nil 时写路径仅落本地
+	// 盘、重建链路退化为既有声明边界——zip 源盘缺失不可自愈。server 与
+	// worker 均注入：worker 异步执行错误路径同样触发镜像缺失重建）。
+	zipStore functions.ZipStore
 	// userGate 是每用户并发闸门（P2：进程内 keyed 信号量，默认每用户 2）。
 	userGate *userGateLimiter
 	// rebuildMu/rebuilding 是镜像缺失自动重建的在途去重（rebuild.go；并发
@@ -59,8 +63,10 @@ func NewFunctions(cfg *config.AppConfig, executor functions.Executor, repo funct
 }
 
 // NewFunctionsWithUsage 注入用量计数器、项目目录与执行身份端口（Wire）；
-// 测试仍用 NewFunctions。triggers 是触发器仓储（P1）。
-func NewFunctionsWithUsage(cfg *config.AppConfig, executor functions.Executor, repo functions.FunctionRepo, queue shared.Queue, usage domainbilling.UsageCounter, projectRepo projects.Repository, sems Semaphores, execTokens functions.ExecutionTokenService, triggers functions.TriggerRepo) *Functions {
+// 测试仍用 NewFunctions。triggers 是触发器仓储（P1）；zipStore 是部署
+// 代码包持久层（worker 装配入口——worker 的异步执行错误路径同样触发
+// 镜像缺失重建，需要从持久层拉回；测试传 nil 即旧语义）。
+func NewFunctionsWithUsage(cfg *config.AppConfig, executor functions.Executor, repo functions.FunctionRepo, queue shared.Queue, usage domainbilling.UsageCounter, projectRepo projects.Repository, sems Semaphores, execTokens functions.ExecutionTokenService, triggers functions.TriggerRepo, zipStore functions.ZipStore) *Functions {
 	f := NewFunctions(cfg, executor, repo, queue)
 	f.usage = usage
 	f.projects = projectRepo
@@ -69,6 +75,7 @@ func NewFunctionsWithUsage(cfg *config.AppConfig, executor functions.Executor, r
 	}
 	f.execTokens = execTokens
 	f.triggers = triggers
+	f.zipStore = zipStore
 	return f
 }
 
@@ -77,20 +84,20 @@ func NewFunctionsWithUsage(cfg *config.AppConfig, executor functions.Executor, r
 // 测试侧仍用 NewFunctions/NewFunctionsWithUsage（clientQuota nil = 直接走
 // DB 计数降级路径）。
 func NewFunctionsWithClientQuota(cfg *config.AppConfig, executor functions.Executor, repo functions.FunctionRepo, queue shared.Queue, usage domainbilling.UsageCounter, projectRepo projects.Repository, sems Semaphores, execTokens functions.ExecutionTokenService, triggers functions.TriggerRepo, clientQuota functions.ClientQuotaLimiter) *Functions {
-	f := NewFunctionsWithUsage(cfg, executor, repo, queue, usage, projectRepo, sems, execTokens, triggers)
+	f := NewFunctionsWithUsage(cfg, executor, repo, queue, usage, projectRepo, sems, execTokens, triggers, nil)
 	f.clientQuota = clientQuota
 	return f
 }
 
 // NewFunctionsWithSourcePacker 是 Wire 装配入口（二期阶段 3，git 部署源）：
 // 在 NewFunctionsWithClientQuota 之上注入 SourcePacker（packer
-// HTTP 客户端）。测试侧仍用 NewFunctions/NewFunctionsWithUsage/
-// NewFunctionsWithClientQuota（packer nil = git 源 fail-fast，zip 路径不
-// 受影响）；worker 装配保持 NewFunctionsWithUsage（补构建以盘上 zip 为
-// 输入，不调 packer）。
-func NewFunctionsWithSourcePacker(cfg *config.AppConfig, executor functions.Executor, repo functions.FunctionRepo, queue shared.Queue, usage domainbilling.UsageCounter, projectRepo projects.Repository, sems Semaphores, execTokens functions.ExecutionTokenService, triggers functions.TriggerRepo, clientQuota functions.ClientQuotaLimiter, packer functions.SourcePacker) *Functions {
+// HTTP 客户端）与部署代码包持久层 zipStore。测试侧仍用 NewFunctions/
+// NewFunctionsWithUsage/NewFunctionsWithClientQuota（packer/zipStore nil =
+// git 源 fail-fast、代码包仅落本地盘，zip 路径不受影响）。
+func NewFunctionsWithSourcePacker(cfg *config.AppConfig, executor functions.Executor, repo functions.FunctionRepo, queue shared.Queue, usage domainbilling.UsageCounter, projectRepo projects.Repository, sems Semaphores, execTokens functions.ExecutionTokenService, triggers functions.TriggerRepo, clientQuota functions.ClientQuotaLimiter, packer functions.SourcePacker, zipStore functions.ZipStore) *Functions {
 	f := NewFunctionsWithClientQuota(cfg, executor, repo, queue, usage, projectRepo, sems, execTokens, triggers, clientQuota)
 	f.packer = packer
+	f.zipStore = zipStore
 	return f
 }
 

@@ -114,6 +114,7 @@ func TestCreateDeployment_ImageDispatcherEndToEndSmoke(t *testing.T) {
 		newMockQueue(),
 		nil, nil, Semaphores{}, nil, nil, nil,
 		nil, // packer：image 源不需要
+		nil, // zipStore：本用例不覆盖持久层
 	)
 
 	principal := contexts.WithPrincipal(ctx, &shared.Principal{

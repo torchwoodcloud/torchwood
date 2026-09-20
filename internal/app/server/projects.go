@@ -9,6 +9,7 @@ import (
 
 	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
+	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	domainstorage "github.com/torchwoodcloud/torchwood/internal/domain/storage"
@@ -40,24 +41,33 @@ type Projects struct {
 	// settings 是项目 settings JSONB 的单键写端口（配置管理路径专用，
 	// 独立小端口；nil 仅供不触达配置路径的旧单测装配，使用处 fail-closed）。
 	settings projects.SettingsWriter
-	// purger/cfg 由 WithObjectPurger 注入（组合根装配）：项目事务提交后异步
-	// 清空共享桶 {projectID}/ 前缀。未注入时跳过 purge（单测/旧构造路径）。
+	// purger/buckets 由 WithObjectPurger 注入（组合根装配）：项目事务提交后
+	// 异步清空各对象桶的 {projectID}/ 前缀。未注入时跳过 purge（单测/旧
+	// 构造路径）。
 	purger domainstorage.Purger
-	bucket string
+	// buckets 是项目删除后须清空的对象桶：用户文件桶 + 函数代码包持久桶
+	// （zip 持久层；J5-2 同口径——用户代码同为项目数据，删除项目不得
+	// 残留）。
+	buckets []string
 }
 
 // ProjectsOption 定制 Projects 可选依赖。
 type ProjectsOption func(*Projects)
 
-// WithObjectPurger 注入对象存储 Purger 与存储配置（解析共享桶名）。
+// WithObjectPurger 注入对象存储 Purger 与存储配置（解析用户文件桶与
+// 函数代码包持久桶）。
 func WithObjectPurger(purger domainstorage.Purger, cfg *config.AppConfig) ProjectsOption {
 	return func(s *Projects) {
 		s.purger = purger
-		if b := cfg.GetStorage().GetS3().GetBucket(); b != "" {
-			s.bucket = b
-		} else {
-			s.bucket = domainstorage.DefaultBucketName
+		files := cfg.GetStorage().GetS3().GetBucket()
+		if files == "" {
+			files = domainstorage.DefaultBucketName
 		}
+		zip := cfg.GetFunctions().GetStorage().GetBucket()
+		if zip == "" {
+			zip = domainfunctions.DefaultZipBucketName
+		}
+		s.buckets = []string{files, zip}
 	}
 }
 
@@ -225,35 +235,37 @@ func (s *Projects) DeleteProjectInternal(ctx context.Context, id string) error {
 	return nil
 }
 
-// purgeObjectsAsync 异步清空项目的对象存储前缀（60s 总预算 + 失败重试一次）。
-// goroutine 脱离请求与停机编排运行（见 projectObjectPurgeTimeout 注释）；
-// 错误只留可追踪日志（含 bucket/prefix 定位残留），由运维按日志前缀手工清理
-// 或重放删除。
+// purgeObjectsAsync 异步清空项目的各对象桶前缀（每桶 60s 总预算 + 失败
+// 重试一次）。goroutine 脱离请求与停机编排运行（见 projectObjectPurgeTimeout
+// 注释）；错误只留可追踪日志（含 bucket/prefix 定位残留），由运维按日志
+// 前缀手工清理或重放删除。
 func (s *Projects) purgeObjectsAsync(projectID string) {
 	if s.purger == nil {
 		return
 	}
-	bucket := s.bucket
 	prefix := projectID + "/"
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), projectObjectPurgeTimeout)
-		defer cancel()
-		n, err := s.purger.PurgePrefix(ctx, bucket, prefix)
-		if err != nil {
-			slog.Warn("project object purge failed; retrying once",
-				"project_id", projectID, "bucket", bucket, "prefix", prefix,
-				"purged", n, "error", err)
-			n, err = s.purger.PurgePrefix(ctx, bucket, prefix)
-		}
-		if err != nil {
-			slog.Error("project object purge failed after retry; orphan objects remain",
-				"project_id", projectID, "bucket", bucket, "prefix", prefix,
-				"purged", n, "error", err)
-			return
-		}
-		slog.Info("project objects purged",
-			"project_id", projectID, "bucket", bucket, "prefix", prefix, "objects", n)
-	}()
+	for _, bucket := range s.buckets {
+		bucket := bucket
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), projectObjectPurgeTimeout)
+			defer cancel()
+			n, err := s.purger.PurgePrefix(ctx, bucket, prefix)
+			if err != nil {
+				slog.Warn("project object purge failed; retrying once",
+					"project_id", projectID, "bucket", bucket, "prefix", prefix,
+					"purged", n, "error", err)
+				n, err = s.purger.PurgePrefix(ctx, bucket, prefix)
+			}
+			if err != nil {
+				slog.Error("project object purge failed after retry; orphan objects remain",
+					"project_id", projectID, "bucket", bucket, "prefix", prefix,
+					"purged", n, "error", err)
+				return
+			}
+			slog.Info("project objects purged",
+				"project_id", projectID, "bucket", bucket, "prefix", prefix, "objects", n)
+		}()
+	}
 }
 
 func (s *Projects) ListProjects(ctx context.Context, pageSize int32, pageToken string) ([]projects.Project, *crud.PaginationInfo, error) {

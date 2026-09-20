@@ -188,8 +188,9 @@ type Deployment struct {
 	// ——部署源快照（二期，迁移 000023；INSERT 期写全、之后不可变——
 	// UpdateDeployment 列白名单有意不含 source 列）——SourceType ∈
 	// zip|git|image（DeploymentSource* 词表）；zip 源的 URL/Ref/Dir 恒空串；
-	// git 源 Ref = 钉死 commit SHA；ContextSHA256 是物化 zip sha256
-	// （zip/git 共用的可复现性锚，D9）。凭证不出现在任何字段。
+	// git 源 Ref = 钉死 commit SHA；ContextSHA256 是代码包字节 sha256
+	// （git 源 = packer 物化产物、zip 源 = 上传字节——zip/git 共用的可复现
+	// 性锚，D9；空锚 = 持久层之前的存量 zip 部署）。凭证不出现在任何字段。
 	SourceType    string
 	SourceURL     string
 	SourceRef     string

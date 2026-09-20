@@ -14,7 +14,7 @@ gRPC FunctionsService (proto/server/v1/functions.proto) ─→ app/functions ─
 HTTP multipart FunctionsHandler（POST .../deployments/code，≤50MiB）────────┘
 ```
 
-- **执行统一经 dispatcher 分发**（`dispatcher/`，独立进程、平台唯一 docker.sock 持有方）。v1 docker 执行器（每请求一容器、server/worker 进程内挂 docker.sock）已于 2026-09 移除。MVP 为单机形态，部署包落在共享文件系统 `os.TempDir()/torchwood-functions/<project>/<function>/<deployment>.zip`；多机部署需对象存储承载 zip。
+- **执行统一经 dispatcher 分发**（`dispatcher/`，独立进程、平台唯一 docker.sock 持有方）。v1 docker 执行器（每请求一容器、server/worker 进程内挂 docker.sock）已于 2026-09 移除。部署代码包两层存储：本地盘 `os.TempDir()/torchwood-functions/<project>/<function>/<deployment>.zip` 是构建输入第一层，另有对象存储持久副本（`functions.storage.bucket` 专用桶，缺省 `torchwood-functions`，键布局与本地路径同构；见 §4.5）——盘上 zip 丢失（磁盘清理/环境迁移/多节点不共享盘）时重建链路可从桶拉回。
 - 四张表由 projectschema 迁移维护（`internal/infra/projectschema/migrations/000003_functions`）；执行身份 / 池策略 / 触发器 / 客户端调用 / 并发分别为 000013 / 000014 / 000015 / 000016 / 000017 / 000018。模型与端口在 `internal/domain/functions/`（`Execution` / `Deployment` / `Repository` / `Executor`）。
 
 ### 1.1 运行限制速查
@@ -469,7 +469,8 @@ exports.main = async (data, ctx) => {
 
 1. **识别**：dispatcher `SpawnInstance` 命中 `ContainerCreate` 的 `NotFound + "No such image"` → 以 `FailedPrecondition` + 稳定标记 `deployment image missing`（`domainfunctions.ImageMissingMarker`）上抛；pool 对该错误 **fail-fast**（不烧队首超时——等待不会让镜像出现）。错误经内网 API 按 **412** 双向映射保真传递（dispatcher writeError / forwarder 逆映射 / client `do()` 同构）。
 2. **触发**：server/worker 在执行错误路径（同步 `runExecution` / 异步 `ProcessExecution`）凭「code + 标记」识别，**异步触发**该部署重建（当次执行仍按原始错误失败——构建分钟级，同步调用方不得被连坐；重建期间后续执行以「no ready deployment」fail-fast，完成后自愈）。进程内按 deployment 去重 + 非 ready 让路（worker 补构建优先）。
-3. **源物化分流**：zip/git 源以盘上 zip 重建；git 源 zip 缺失时按行内源快照（URL + **钉死 commit SHA** + 子目录）经 packer 重新物化并复核 `ContextSHA256`（D9 可复现锚——不一致 = 仓库历史改写，拒绝重建）；image 源分流为幂等 ImportImage（预期 digest = source_ref）；**zip 源原始字节不在平台任何存储内，无法自动重建**（记录日志，错误文案 `rebuild required` 引导 redeploy）。私有仓库重物化因凭证不落库（D8）可能失败——声明边界与 worker 补拉私有镜像同口径。
+3. **源物化分流**：zip/git 源以盘上 zip 重建；盘缺失时优先从**持久层**（`domainfunctions.ZipStore` → ObjectStore 专用物理桶，`functions.storage.bucket`，缺省 `torchwood-functions`，键 `<project>/<function>/<deployment>.zip`）拉回并复核行内锚——`ContextSHA256` 非空（git 源及 2026-09-20 后的 zip 源部署）做 sha256 全量复核，空锚的存量 zip 部署回退 `Size` 长度复核；git 源拉回 miss/暂态失败再按行内源快照（URL + **钉死 commit SHA** + 子目录）经 packer 重新物化并复核 `ContextSHA256`（D9 可复现锚——不一致 = 仓库历史改写，拒绝重建；packer 与对象存储互为独立通路，任一暂态故障不连坐）；image 源分流为幂等 ImportImage（预期 digest = source_ref）；zip 源且桶内无副本（存量部署/`zipStore` 未注入的旧构造）退回声明边界——记录日志，错误文案 `rebuild required` 引导 redeploy。私有仓库重物化因凭证不落库（D8）可能失败——声明边界与 worker 补拉私有镜像同口径。
+4. **持久层写路径**：`writeZip` 落盘成功后同步 `Put` 落桶（zip 源在 `CreateDeployment`、git 源在 packer 物化后、INSERT 前）——失败整体回滚（无行无 zip 无桶对象），持久副本是重建自愈的源、不做 best-effort 静默降级。清理路径（`DeleteDeployment` / 请求级回滚 / zip 源构建失败 D13）本地与桶副本同删（幂等 best-effort，漏删只留孤儿对象）。桶是平台内部资源：不进用户 bucket 命名空间（项目 `buckets` 表无行、API 不可见），创建走写路径懒 ensure（`EnsureBucket` 幂等），连接复用 `storage.s3` 的 endpoint/凭证。server 与 worker 均注入（worker 异步执行错误路径同样触发重建）。
 
 **开关**：`functions.dispatcher.rebuild_on_missing_image`（optional presence：未配置 = 默认开启，显式 `false` 关闭；先例 `verify_build`）。
 

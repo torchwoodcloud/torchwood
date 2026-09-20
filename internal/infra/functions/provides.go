@@ -24,4 +24,8 @@ var ProviderSet = wire.NewSet(
 	// 仍可装配——PackGit 调用时才报 FailedPrecondition，增量启用）。
 	NewPackerClient,
 	wire.Bind(new(domainfunctions.SourcePacker), new(*PackerClient)),
+	// 部署代码包持久层（zip 持久桶）：ObjectStore 适配器（直接返回接口，
+	// NewMinioObjectStore 先例，不加 wire.Bind）。server/worker 均消费——
+	// 重建链路在两进程的执行错误路径都会触发。
+	NewBucketZipStore,
 )

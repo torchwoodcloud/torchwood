@@ -63,13 +63,14 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	semaphores := functions2.ProvideSemaphores(client, appConfig)
 	redisExecutionTokenService := functions.NewRedisExecutionTokenService(client)
 	triggerRepo := bunrepo.NewFunctionTriggerRepository(database)
-	functionsFunctions := functions2.NewFunctionsWithUsage(appConfig, dispatcherExecutor, functionRepo, sharedQueue, redisCounter, repository, semaphores, redisExecutionTokenService, triggerRepo)
-	workerWorker := worker.NewWorkerWithEventTriggers(functionsFunctions, sharedQueue, logger, client, database)
 	objectStore, err := storage.NewMinioObjectStore(appConfig)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
+	zipStore := functions.NewBucketZipStore(appConfig, objectStore)
+	functionsFunctions := functions2.NewFunctionsWithUsage(appConfig, dispatcherExecutor, functionRepo, sharedQueue, redisCounter, repository, semaphores, redisExecutionTokenService, triggerRepo, zipStore)
+	workerWorker := worker.NewWorkerWithEventTriggers(functionsFunctions, sharedQueue, logger, client, database)
 	uploadSessionStore := storage.NewRedisUploadSessionStore(client)
 	bucketRepository := bunrepo.NewBucketRepository(database)
 	fileRepository := bunrepo.NewFileRepository(database)

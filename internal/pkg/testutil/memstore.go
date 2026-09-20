@@ -56,11 +56,11 @@ func (m *MemObjectStore) Get(_ context.Context, bucket, key string) (io.ReadClos
 	defer m.mu.Unlock()
 	objects, ok := m.buckets[bucket]
 	if !ok {
-		return nil, fmt.Errorf("object not found: %s/%s", bucket, key)
+		return nil, fmt.Errorf("%w: %s/%s", domainstorage.ErrObjectNotFound, bucket, key)
 	}
 	obj, ok := objects[key]
 	if !ok {
-		return nil, fmt.Errorf("object not found: %s/%s", bucket, key)
+		return nil, fmt.Errorf("%w: %s/%s", domainstorage.ErrObjectNotFound, bucket, key)
 	}
 	return io.NopCloser(bytes.NewReader(bytes.Clone(obj.data))), nil
 }
