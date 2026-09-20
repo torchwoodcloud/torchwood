@@ -21,23 +21,23 @@ func TestParseEventPattern(t *testing.T) {
 		}{
 			{
 				in:   "databases.app.collections.notes.documents.create",
-				want: EventPattern{DatabaseID: "app", CollectionID: "notes", Op: EventOpCreate},
+				want: EventPattern{Kind: EventPatternKindDocument, DatabaseID: "app", CollectionID: "notes", Op: EventOpCreate},
 			},
 			{
 				in:   "databases.app.collections.notes.documents.delete",
-				want: EventPattern{DatabaseID: "app", CollectionID: "notes", Op: EventOpDelete},
+				want: EventPattern{Kind: EventPatternKindDocument, DatabaseID: "app", CollectionID: "notes", Op: EventOpDelete},
 			},
 			{ // collection 级通配（设计 §4.1 规范形态 collections.*.documents.*）
 				in:   "databases.app.collections.*.documents.*",
-				want: EventPattern{DatabaseID: "app", CollectionID: "*", Op: "*"},
+				want: EventPattern{Kind: EventPatternKindDocument, DatabaseID: "app", CollectionID: "*", Op: "*"},
 			},
 			{ // 精确 collection + 任意 op（语法超集，自然允许）
 				in:   "databases.app.collections.notes.documents.*",
-				want: EventPattern{DatabaseID: "app", CollectionID: "notes", Op: "*"},
+				want: EventPattern{Kind: EventPatternKindDocument, DatabaseID: "app", CollectionID: "notes", Op: "*"},
 			},
 			{ // 通配 collection + 精确 op
 				in:   "databases.app.collections.*.documents.update",
-				want: EventPattern{DatabaseID: "app", CollectionID: "*", Op: EventOpUpdate},
+				want: EventPattern{Kind: EventPatternKindDocument, DatabaseID: "app", CollectionID: "*", Op: EventOpUpdate},
 			},
 		}
 		for _, c := range cases {
@@ -177,6 +177,130 @@ func TestEventTriggerIndexMatchAndSwap(t *testing.T) {
 	require.Len(t, subs, 1, "trg_1 通配仅 delete 不命中 update；trg_2 通配全命中")
 	require.Equal(t, "trg_2", subs[0].TriggerID)
 	_ = idx // 旧快照引用仍持有原数据（atomic.Pointer 换入换出的测试语义）
+}
+
+// ——系统事件第二形态（§4.1 增补：目录展开、fail-closed、系统索引）——
+
+func TestParseEventPatternSystem(t *testing.T) {
+	t.Run("合法形态", func(t *testing.T) {
+		cases := []struct {
+			in   string
+			want []string
+		}{
+			{"auth.*", []string{domainevents.EventAuthUsersCreated, domainevents.EventAuthUsersSignedIn, domainevents.EventAuthUsersSignedOut}},
+			{"auth.users.signed_in", []string{domainevents.EventAuthUsersSignedIn}},
+			{"payments.orders.paid", []string{"payments.orders.paid"}},
+			{"subscriptions.*", []string{"subscriptions.activated", "subscriptions.renewed", "subscriptions.past_due", "subscriptions.canceled", "subscriptions.expired"}},
+		}
+		for _, c := range cases {
+			got, err := ParseEventPattern(c.in)
+			require.NoError(t, err, c.in)
+			require.Equal(t, EventPatternKindSystem, got.Kind, c.in)
+			require.ElementsMatch(t, c.want, got.SystemEvents, c.in)
+		}
+	})
+	t.Run("非法形态 fail-closed", func(t *testing.T) {
+		for _, s := range []string{
+			"typo.users.*",          // 未登记域
+			"auth.unknown.*",        // 域对前缀空
+			"auth.*.created",        // 中间段通配
+			"auth",                  // 裸域名
+			"payments.orders.paidx", // 事件名拼错
+		} {
+			_, err := ParseEventPattern(s)
+			require.Error(t, err, s)
+		}
+	})
+	t.Run("文档前缀仍走 6 段解析", func(t *testing.T) {
+		// databasesFoo 不带点前缀误入系统形态 → 未知域报错（而非 6 段报错），
+		// 两个错误都可接受；关键断言：合法文档串不受第二形态影响。
+		got, err := ParseEventPattern("databases.app.collections.*.documents.*")
+		require.NoError(t, err)
+		require.Equal(t, EventPatternKindDocument, got.Kind)
+		require.Empty(t, got.SystemEvents)
+	})
+}
+
+func TestEventTriggerIndexMatchSystem(t *testing.T) {
+	triggers := []Trigger{
+		{
+			ID: "trg_auth", ProjectID: "p1", FunctionID: "fn_1", Type: TriggerTypeEvent, Enabled: true,
+			Config: TriggerConfig{Events: []string{"auth.users.*"}},
+		},
+		{
+			ID: "trg_created", ProjectID: "p1", FunctionID: "fn_2", Type: TriggerTypeEvent, Enabled: true,
+			Config: TriggerConfig{Events: []string{"auth.users.created"}},
+		},
+		{
+			ID: "trg_paid", ProjectID: "p1", FunctionID: "fn_3", Type: TriggerTypeEvent, Enabled: true,
+			Config: TriggerConfig{Events: []string{"payments.orders.paid"}},
+		},
+		{
+			ID: "trg_other_project", ProjectID: "p2", FunctionID: "fn_4", Type: TriggerTypeEvent, Enabled: true,
+			Config: TriggerConfig{Events: []string{"auth.users.created"}},
+		},
+		{ID: "trg_disabled", ProjectID: "p1", FunctionID: "fn_5", Type: TriggerTypeEvent, Enabled: false,
+			Config: TriggerConfig{Events: []string{"auth.users.*"}}}, // 禁用不进索引
+	}
+	idx := NewEventTriggerIndex(triggers)
+	// auth.users.* 展开 3 事件 + 精确 1 + payments 1 + p2 精确 1 = 6 条目。
+	require.Equal(t, 6, idx.Len())
+
+	// created 事件：域通配 + 精确名双命中（同触发器两条订阅串语义 → 两触发器各投一次）。
+	subs := idx.MatchSystem("p1", domainevents.EventAuthUsersCreated)
+	require.Len(t, subs, 2)
+
+	// signed_in 只被域通配命中。
+	subs = idx.MatchSystem("p1", domainevents.EventAuthUsersSignedIn)
+	require.Len(t, subs, 1)
+	require.Equal(t, "trg_auth", subs[0].TriggerID)
+
+	// payments 域事件（历史认知坑回归：经济事件现可触发）。
+	subs = idx.MatchSystem("p1", "payments.orders.paid")
+	require.Len(t, subs, 1)
+	require.Equal(t, "trg_paid", subs[0].TriggerID)
+
+	// 项目隔离与未命中；文档/系统索引互不串。
+	require.Empty(t, idx.MatchSystem("p1", "payments.orders.failed"))
+	require.Empty(t, idx.MatchSystem("p2", domainevents.EventAuthUsersSignedIn))
+	require.Empty(t, idx.Match("p1", "app", "notes", "create"))
+
+	// nil 安全。
+	var nilIdx *EventTriggerIndex
+	require.Empty(t, nilIdx.MatchSystem("p1", domainevents.EventAuthUsersCreated))
+}
+
+func TestBuildSystemEventInvocationData(t *testing.T) {
+	ev := &domainevents.Envelope{
+		EventID:   "evt_1",
+		Event:     domainevents.EventAuthUsersCreated,
+		ProjectID: "p1",
+		Domain:    domainevents.AuthEventDomain,
+		Channel:   "accounts.u_1",
+		Version:   42,
+		Attrs:     map[string]any{"user_id": "u_1", "email": "a@b.c"},
+	}
+	data, err := BuildSystemEventInvocationData(ev)
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(data), EventDataBudgetBytes)
+	var m map[string]any
+	require.NoError(t, json.Unmarshal([]byte(data), &m))
+	require.Equal(t, "event", m["type"])
+	require.Equal(t, domainevents.EventAuthUsersCreated, m["event"])
+	require.Equal(t, domainevents.AuthEventDomain, m["domain"])
+	require.Equal(t, "u_1", m["attrs"].(map[string]any)["user_id"])
+	require.NotContains(t, m, "database_id", "系统事件投影不含文档字段")
+
+	t.Run("超预算剥离 attrs 并标记", func(t *testing.T) {
+		big := make([]byte, EventDataBudgetBytes)
+		ev.Attrs = map[string]any{"blob": string(big)}
+		data, err := BuildSystemEventInvocationData(ev)
+		require.NoError(t, err)
+		var m map[string]any
+		require.NoError(t, json.Unmarshal([]byte(data), &m))
+		require.NotContains(t, m, "attrs")
+		require.Equal(t, true, m["attrs_truncated"])
+	})
 }
 
 // ——投影（§4.2：32KB 预算、两级截断分名）——

@@ -1915,13 +1915,19 @@ func (x *CronTriggerConfig) GetMisfire() string {
 	return ""
 }
 
-// EventTriggerConfig 是数据库事件触发器配置（v3 切片 D，functions-v3.md
-// §4.1/D12）。订阅串格式（业界同构）：
+// EventTriggerConfig 是事件触发器配置（v3 切片 D，functions-v3.md §4.1/D12
+//   - §4.1 增补）。订阅串双形态：
+//     文档写事件（业界同构）：
+//     databases.{database_id}.collections.{collection_id}.documents.{op}
+//     op ∈ {create, update, delete, *}；collection 段可为 `*`；database 段一期
+//     必须精确（database 级通配后置）。
+//     系统行为事件（§4.1 增补）：
+//     {domain}.* | {domain}.{resource}.* | {domain}.{resource}.{op}（精确全名）
+//     域词表 = 平台系统事件目录（auth / payments / economy / subscriptions，
+//     唯一声明源 internal/domain/events/catalog.go，如 auth.users.created、
+//     payments.orders.paid）；`*` 仅允许尾段；目录内无命中的前缀直接拒绝
+//     （fail-closed，拼错立刻 400）。格式校验在服务端（领域层 eventmatch）。
 //
-//	databases.{database_id}.collections.{collection_id}.documents.{op}
-//
-// op ∈ {create, update, delete, *}；collection 段可为 `*`；database 段一期
-// 必须精确（database 级通配后置）。格式校验在服务端（领域层 eventmatch）。
 // 自环警告（D13）：订阅本函数自身写入的集合会形成「写→事件→再触发」循环，
 // 平台一期不做硬防护，Console 编辑处文案警告。
 type EventTriggerConfig struct {

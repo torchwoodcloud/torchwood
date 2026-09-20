@@ -57,10 +57,11 @@ type Envelope struct {
 	// WithTransactionID 经 ctx 传播、Publish 落入 outbox。
 	TransactionID string
 
-	// v3 经济事件扩展（设计 §5.1）：Domain 非空表示非文档事件
-	// （payments / economy / subscriptions），Channel 显式给出扇出频道
-	// （D17 单一 accounts.{userId}），Attrs 携带事件专属字段且不含隐私。
-	// 文档事件三个字段均为零值，序列化与扇出行为与 v2 完全一致。
+	// v3 非文档事件扩展（设计 §5.1 + §4.1 增补）：Domain 非空表示非文档
+	// 事件（payments / economy / subscriptions / auth——词表见 catalog.go
+	// 系统事件目录），Channel 显式给出扇出频道（D17 单一 accounts.{userId}），
+	// Attrs 携带事件专属字段且不含隐私。文档事件三个字段均为零值，序列化
+	// 与扇出行为与 v2 完全一致。
 	Domain  string
 	Channel string
 	Attrs   map[string]any
@@ -83,7 +84,8 @@ func TransactionIDFrom(ctx context.Context) string {
 	return v
 }
 
-// IsEconomy 报告是否为 v3 经济事件（显式 domain/channel 的非文档事件）。
+// IsEconomy 报告是否为非文档事件（显式 domain/channel 的系统事件——
+// payments / economy / subscriptions / auth；历史名保留，语义见 catalog.go）。
 func (e Envelope) IsEconomy() bool { return e.Domain != "" }
 
 // CollectionChannel 返回集合频道名（topic 与订阅用）。

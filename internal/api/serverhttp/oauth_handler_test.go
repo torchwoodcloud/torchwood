@@ -123,6 +123,7 @@ func newAuthorizeTestHandler(t *testing.T, projectSettings map[string]any, provi
 		nil, // sessionCookies
 		nil, // analyticsDeletions
 		nil, // uow.Runner
+		nil, // EventPublisher
 	)
 	h, err := NewOAuthHandler(account, cfg, nil, limiter)
 	require.NoError(t, err)

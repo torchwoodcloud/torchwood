@@ -122,6 +122,7 @@ func setupG3Account(t *testing.T) (context.Context, *Account, string, *failableS
 		nil,
 		nil, // analyticsDeletions
 		nil, // uow.Runner
+		nil, // EventPublisher
 	)
 	return ctx, account, projectID, sessions, mr, mailer
 }

@@ -525,6 +525,7 @@ Console 分析区 / 合规钩子与 TS SDK 缓冲器全部交付（开发者文�
 ### M2：P2 / v2 内测可用（中期结束）
 
 - [x] 用户 collection 的文档写路径经 outbox 发布事件（与写同一 `COMMIT`）。
+- [x] 系统行为事件接入事件脊柱并可触发 Function（2026-09-20，functions-v3 §4.1 增补）：系统事件目录（`internal/domain/events/catalog.go`）登记 auth/payments/economy/subscriptions 全量词表；auth.users.created/signed_in/signed_out 由 Account 用例同事务发布（signed_in 单点覆盖密码/MFA/magic link/OAuth）；event 触发器订阅串第二形态 `{domain}.*` 目录展开 fail-closed；worker 消费端由 `IsEconomy` 一刀切改为目录路由——payments 等经济事件同时获得触发能力。§3.1 挂账的「目录可扩展」自此为目录登记 + 用例 Publish 两步，管道零改动。
 - [x] 轻量 Realtime：已鉴权客户端可订阅文档变更并收到提交后的事件。
 - [x] staged transaction API：**已删除（D-6，内测无兼容）**。
 - [ ] Bulk API 行为不变（立即、非原子）。

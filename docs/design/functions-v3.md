@@ -307,6 +307,18 @@ python 随其 v2 支持：`requirements.txt` + `pip install --no-cache-dir`（pi
 - 事件字符串格式业界同构（`databases.*.documents.*` 通行形态）；一期支持精确三事件（create/update/delete）+ collection 级通配（`collections.*.documents.*`）；database 级通配后置；
 - 管理 RPC 复用既有触发器四方法（type 值域扩展 + config 校验：事件串格式、集合存在性 best-effort）。
 
+#### 4.1.1 系统行为事件订阅（增补 2026-09-20：auth 等非文档事件接入）
+
+切片 D 落地后，事件触发器词表为 databases-only、worker 消费端对 `Domain` 非空信封（payments/economy/subscriptions）硬跳过——「支付完成触发函数」「注册完成触发函数」属于同一机制缺口（历史成因：v3 经济事件只为 WS `accounts.{userId}` 频道扇出打开了 Envelope 扩展，未接入触发器消费组）。本增补把缺口类别化消灭：**系统事件目录**。
+
+- **双形态订阅串**：文档形态（上述 6 段）之外，新增系统形态 `{domain}.*` / `{domain}.{resource}.*` / 精确全名（如 `auth.users.created`、`payments.orders.paid`）。`*` 仅允许尾段；**域名与展开都 fail-closed**——目录内无此前缀直接 400，不允许静默永不触发的订阅。
+- **事件目录（唯一声明源 `internal/domain/events/catalog.go`）**：域 → 事件全名列表，不假设段数（`subscriptions.activated` 两段、`auth.users.created` 三段并存）。首期登记：auth（users.created/signed_in/signed_out）、payments（orders.paid/failed/refunded）、economy（assets 五事件）、subscriptions（五事件）。后三域复用 v3 既有词表，登记后**立即**获得触发能力——worker 消费端不再按 `IsEconomy` 一刀切跳过，改为目录路由。
+- **接入三步（机制验收）**：下一个行为事件需求（如 `storage.files.uploaded`）= ① 目录登记事件全名 ② 产生用例在与业务写同一 uow 内 `Publish`（信封 `Domain`/`Channel=accounts.{userId}`/`Attrs` 白名单脱敏，复用 v3 经济事件扩展）③ 用户订阅 `storage.files.*`——outbox/worker/匹配器/订阅语法/迁移零改动。契约测试（catalog 全量事件 × deliver 全链路可达）冻结该验收。
+- **auth 域语义**：`signed_in` 唯一插桩点在 `finishSignInWithProvider` 会话签发成功后（密码/MFA 完成/magic link/OAuth/注册自动登录全部覆盖；MFA 挑战中途不算成功）；`created` 在 SignUp 的 Insert 同事务；`signed_out` 在 SignOut 同事务。发布失败即用例失败——outbox 与 users/sessions 同库，「用户已创建但事件丢失」不允许存在。Attrs 脱敏白名单：user_id/email/name（created）、+provider（signed_in）、仅 user_id（signed_out）；密码哈希/token/IP 绝不进载荷。
+- **data 投影差异**：系统事件无文档回读面，`{type:"event", event, event_id, seq, domain, created_at, version, attrs?, attrs_truncated?}`——Attrs（白名单载荷）即本体，超 32KB 预算剥除标 `attrs_truncated`（与文档路径两级截断分名惯例一致）。
+- **与 audit_logs 划界**：拦截器自动落的 audit_logs（AccountService 非读动词，含失败/拒绝/throttled）是**审计查询面**；本事件是**触发面**（仅成功动作、携带业务载荷、at-least-once）。双轨有意，不合并。
+- WS 侧零改动即收益：auth 事件 Channel 复用 `accounts.{userId}`（D17 单频道），本人订阅既有授权链路直接收到。
+
 #### 4.2 投递链路（独立消费组，零侵入 outbox 主链）
 
 ```

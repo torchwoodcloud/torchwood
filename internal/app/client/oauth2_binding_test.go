@@ -202,6 +202,7 @@ func newOAuthBindingAccount() (*Account, *memOAuthStateStore, *memBindingSession
 		verifier,
 		nil, // analyticsDeletions
 		nil, // uow.Runner
+		nil, // EventPublisher
 	)
 	return a, states, sessions, verifier, identities
 }

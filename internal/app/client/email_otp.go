@@ -10,6 +10,7 @@ import (
 
 	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
+	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
 	"github.com/torchwoodcloud/torchwood/internal/domain/users"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"google.golang.org/grpc/codes"
@@ -175,6 +176,14 @@ func (a *Account) finishSignInWithProvider(ctx context.Context, projectID string
 	tokens, cookie, err := a.sessions.CreateSessionAndTokens(ctx, projectID, user.ID, user.Email, provider)
 	if err != nil {
 		return nil, nil, "", nil, err
+	}
+	// auth.users.signed_in 唯一插桩点：所有登录方式（密码 / MFA 完成 /
+	// magic link / OAuth / 注册自动登录）都在会话签发成功后汇到此处的同
+	// 一语义——MFA 挑战中途不算登录成功、不发事件。uow 内与 session 同
+	// COMMIT；无事务调用方走 outbox 短事务。发布失败即登录失败：outbox
+	// 与 sessions 同库，会话成功而事件失败的形态不允许存在。
+	if err := a.publishAuthUsersEvent(ctx, projectID, domainevents.EventAuthUsersSignedIn, user, map[string]any{"provider": provider}); err != nil {
+		return nil, nil, "", nil, fmt.Errorf("publish auth.users.signed_in: %w", err)
 	}
 	return user, tokens, cookie, nil, nil
 }

@@ -335,7 +335,7 @@ func newAcceptanceTestAccount(cfg *config.AppConfig, projectRepo projects.Reposi
 	sessions := infrAuth.NewSessionService(cfg, sessionRepo, roles, nil)
 	mailer := inframessaging.NewMailer(cfg)
 	sms := inframessaging.NewSMSService(cfg)
-	return client.NewAccount(cfg, projectRepo, nil, nil, sessions, nil, nil, nil, nil, nil, nil, mailer, sms, nil, roles, nil, nil, nil, nil, usersRepo, identities, sessionRepo, nil, nil, nil, nil, nil, nil)
+	return client.NewAccount(cfg, projectRepo, nil, nil, sessions, nil, nil, nil, nil, nil, nil, mailer, sms, nil, roles, nil, nil, nil, nil, usersRepo, identities, sessionRepo, nil, nil, nil, nil, nil, nil, nil)
 }
 
 // ——P2 客户端调用面 × P0 执行身份 端到端验收（分层集成）——

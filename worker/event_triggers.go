@@ -340,12 +340,15 @@ func (c *eventTriggerConsumer) processEntry(ctx context.Context, msg *redis.XMes
 	return ev.Seq
 }
 
-// deliver 匹配并投递单个信封（命中触发器逐条异步入队）。经济事件（v3
-// §5.1）/未知事件形态/无命中均静默通过（照常推进水位；no_match 不记投递
-// 指标——OQ9：只记命中的）。enqueue 失败时条目仍会被调用方 ACK：该事件
-// 对本订阅者的投递延迟至停机补投路径（不再是永久丢失，v3 §4.2）。
+// deliver 匹配并投递单个信封（命中触发器逐条异步入队）。系统行为事件
+//（Domain 非空：auth/payments/economy/subscriptions，词表 events.catalog）
+// 走 deliverSystem；文档事件走既有三段匹配；未知事件形态/无命中均静默
+// 通过（照常推进水位；no_match 不记投递指标——OQ9：只记命中的）。enqueue
+// 失败时条目仍会被调用方 ACK：该事件对本订阅者的投递延迟至停机补投路径
+//（不再是永久丢失，v3 §4.2）。
 func (c *eventTriggerConsumer) deliver(ctx context.Context, ev *domainevents.Envelope) {
-	if ev.IsEconomy() {
+	if ev.Domain != "" {
+		c.deliverSystem(ctx, ev)
 		return
 	}
 	op := domainfunctions.EventOpFromEnvelope(ev.Event)
@@ -364,6 +367,33 @@ func (c *eventTriggerConsumer) deliver(ctx context.Context, ev *domainevents.Env
 		c.logger.Error("event invocation data marshal failed", "event_id", ev.EventID, "error", err)
 		return
 	}
+	c.invokeSubs(ctx, ev, subs, data)
+}
+
+// deliverSystem 投递系统行为事件（functions-v3 §4.1 增补）：按事件全名查
+// 系统订阅索引。事件名不在目录内（防御产生侧坏数据——目录外事件不应被
+// 任何合法订阅串匹配到）静默通过，照常推进水位。
+func (c *eventTriggerConsumer) deliverSystem(ctx context.Context, ev *domainevents.Envelope) {
+	if !domainevents.IsSystemEventName(ev.Event) {
+		return
+	}
+	subs := c.index.Load().MatchSystem(ev.ProjectID, ev.Event)
+	if len(subs) == 0 {
+		return
+	}
+	// 系统事件无文档回读面：Attrs（产生侧白名单脱敏）即业务载荷本体
+	//（BuildSystemEventInvocationData）。
+	data, err := domainfunctions.BuildSystemEventInvocationData(ev)
+	if err != nil {
+		c.logger.Error("system event invocation data marshal failed", "event_id", ev.EventID, "error", err)
+		return
+	}
+	c.invokeSubs(ctx, ev, subs, data)
+}
+
+// invokeSubs 把投影后的 data 逐命中订阅异步入队（文档/系统两路共用的
+// 投递尾段：指标与失败语义一致——enqueue 失败不阻断其余订阅）。
+func (c *eventTriggerConsumer) invokeSubs(ctx context.Context, ev *domainevents.Envelope, subs []domainfunctions.EventSubscription, data string) {
 	for _, s := range subs {
 		_, ierr := c.functions.InvokeTrigger(ctx, appfunctions.InvokeTriggerCommand{
 			ProjectID:  s.ProjectID,

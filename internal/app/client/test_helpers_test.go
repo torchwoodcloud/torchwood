@@ -11,6 +11,7 @@ import (
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/messaging"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	infraauth "github.com/torchwoodcloud/torchwood/internal/infra/auth"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
@@ -73,7 +74,15 @@ func NewTestAccountWithDeps(
 	if sms == nil {
 		sms = inframessaging.NewSMSService(cfg)
 	}
-	return NewAccount(cfg, projectRepo, nil, oauthProviders, sessions, otp, oauthState, tokens, loginThrottle, rotation, nil, mailer, sms, rateLimiter, roles, mfa, mfaChallenges, oneTimeTokens, nil, usersRepo, identities, sessionRepo, infraauth.NewOAuthAuthenticatorFactory(), infraauth.NewWeChatMiniProgramExchanger(), infraauth.NewOTPGenerator(), nil, nil, nil)
+	return NewAccount(cfg, projectRepo, nil, oauthProviders, sessions, otp, oauthState, tokens, loginThrottle, rotation, nil, mailer, sms, rateLimiter, roles, mfa, mfaChallenges, oneTimeTokens, nil, usersRepo, identities, sessionRepo, infraauth.NewOAuthAuthenticatorFactory(), infraauth.NewWeChatMiniProgramExchanger(), infraauth.NewOTPGenerator(), nil, nil, nil, nil)
+}
+
+// NewTestAccountWithEvents 构造带事件发布桩的 Account（auth.users.* 行为
+// 事件用例；同包测试可直接注入，此构造器供需要完整依赖面的调用方使用）。
+func NewTestAccountWithEvents(cfg *config.AppConfig, projectRepo projects.Repository, db *clients.Database, events shared.EventPublisher) *Account {
+	a := NewTestAccountWithDeps(cfg, projectRepo, nil, db, nil, nil, nil)
+	a.events = events
+	return a
 }
 
 // CaptureMailer records sent messages for tests.

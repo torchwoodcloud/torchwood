@@ -293,6 +293,47 @@ func TestCreateFunctionTrigger_EventValidatesSubscriptions(t *testing.T) {
 	require.Equal(t, trg.Config.Events, list[0].Config.Events)
 }
 
+// TestCreateFunctionTrigger_SystemEventSubscriptions §4.1 增补：系统事件
+// 订阅串第二形态——目录内合法、目录外/中间通配 fail-closed、双形态可混订。
+func TestCreateFunctionTrigger_SystemEventSubscriptions(t *testing.T) {
+	repo := newMockRepo()
+	seedReadyFunction(repo, "p1", "fn_1", true, 15)
+	triggers := newMockTriggerRepo()
+	uc := newTriggerTestUC(newMockExecutor(nil, nil), repo, newMockQueue(), triggers, nil)
+
+	// 合法：系统形态（域通配 + 精确名）与文档形态混订，去重保序。
+	trg, err := uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
+		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeEvent,
+		Events: []string{
+			"auth.users.*",
+			"payments.orders.paid",
+			"databases.app.collections.notes.documents.create",
+			"auth.users.*", // 重复 → 去重
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"auth.users.*",
+		"payments.orders.paid",
+		"databases.app.collections.notes.documents.create",
+	}, trg.Config.Events)
+
+	// 未登记域 / 域对前缀空 / 中间段通配：全部 InvalidArgument 带条目。
+	for _, bad := range []string{
+		"typo.users.*",
+		"auth.orders.*",
+		"auth.*.created",
+		"auth.users.creatd",
+	} {
+		_, err := uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
+			ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeEvent,
+			Events: []string{bad},
+		})
+		require.Equal(t, codes.InvalidArgument, status.Code(err), bad)
+		require.Contains(t, err.Error(), bad, "错误文案携带具体条目")
+	}
+}
+
 // TestRefreshEventTriggerIndex 快照扫描：跨项目聚合、非 active/非 event/
 // 禁用触发器排除、任一项目扫描失败返回错误（worker 只在完整快照成功时换入）。
 func TestRefreshEventTriggerIndex(t *testing.T) {

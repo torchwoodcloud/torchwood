@@ -16,6 +16,7 @@ import (
 	domainanalytics "github.com/torchwoodcloud/torchwood/internal/domain/analytics"
 	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
+	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
 	domainidgen "github.com/torchwoodcloud/torchwood/internal/domain/idgen"
 	"github.com/torchwoodcloud/torchwood/internal/domain/messaging"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
@@ -65,6 +66,9 @@ type Account struct {
 	// db 是注销原子性所需的 uow 端口：软删 UPDATE 与 tombstone INSERT
 	// 同事务（设计稿 §7；nil = 测试装配，退化为顺序执行）。
 	db uow.Runner
+	// events 是 auth.users.* 系统事件发布端口（functions-v3 §4.1 增补；
+	// nil = 未装配——测试兼容跳过发布）。
+	events shared.EventPublisher
 }
 
 func NewAccount(
@@ -96,6 +100,7 @@ func NewAccount(
 	sessionCookies domainauth.SessionCookieVerifier,
 	analyticsDeletions domainanalytics.DeletionQueueRepository,
 	db uow.Runner,
+	events shared.EventPublisher,
 ) *Account {
 	return &Account{
 		cfg:                cfg,
@@ -125,7 +130,8 @@ func NewAccount(
 		auditRepo:          auditRepo,
 		sessionCookies:     sessionCookies,
 		analyticsDeletions: analyticsDeletions,
-		db:                 db,
+		db:                db,
+		events:            events,
 	}
 }
 
@@ -328,14 +334,42 @@ func (a *Account) SignUp(ctx context.Context, cmd SignUpCommand) (*User, *TokenB
 	if err != nil {
 		return nil, nil, "", nil, appshared.MapUserError(err)
 	}
-	if err := a.usersRepo.Insert(ctx, project.ID, registered); err != nil {
-		if errors.Is(err, users.ErrEmailAlreadyRegistered) {
-			return nil, nil, "", nil, appshared.MapUserError(err)
+	// 用户行、created 事件、会话签发（含 signed_in 事件，插桩点在
+	// finishSignInWithProvider）同一事务——事件脊柱不变量：注册成功必有
+	// auth.users.created 事件，反之亦然。
+	var (
+		outUser      *User
+		outTokens    *TokenBundle
+		outCookie    string
+		outChallenge *MFASignInChallenge
+	)
+	runErr := a.runInTx(ctx, func(txCtx context.Context) error {
+		if err := a.usersRepo.Insert(txCtx, project.ID, registered); err != nil {
+			return fmt.Errorf("insert user: %w", err)
 		}
-		return nil, nil, "", nil, fmt.Errorf("insert user: %w", err)
+		if err := a.publishAuthUsersEvent(txCtx, project.ID, domainevents.EventAuthUsersCreated, accountUser(registered), nil); err != nil {
+			return fmt.Errorf("publish auth.users.created: %w", err)
+		}
+		var err error
+		outUser, outTokens, outCookie, outChallenge, err = a.finishSignIn(txCtx, project.ID, accountUser(registered))
+		return err
+	})
+	if runErr != nil {
+		if errors.Is(runErr, users.ErrEmailAlreadyRegistered) {
+			return nil, nil, "", nil, appshared.MapUserError(runErr)
+		}
+		return nil, nil, "", nil, runErr
 	}
+	return outUser, outTokens, outCookie, outChallenge, nil
+}
 
-	return a.finishSignIn(ctx, project.ID, accountUser(registered))
+// runInTx 在 db 装配时于 uow 内执行 run（业务写与 auth 事件同 COMMIT）；
+// nil db = 测试装配，退化为顺序执行。
+func (a *Account) runInTx(ctx context.Context, run func(context.Context) error) error {
+	if a.db != nil {
+		return a.db.Run(ctx, run)
+	}
+	return run(ctx)
 }
 
 func (a *Account) generateUserID(ctx context.Context, projectID string) (string, error) {
@@ -463,6 +497,7 @@ func (a *Account) DeleteAccount(ctx context.Context) error {
 	return runDelete(ctx)
 }
 
+// finishSignIn 是密码登录与注册自动登录的公共尾段（provider=email）。
 func (a *Account) finishSignIn(ctx context.Context, projectID string, user *User) (*User, *TokenBundle, string, *MFASignInChallenge, error) {
 	return a.finishSignInWithProvider(ctx, projectID, user, domainauth.ProviderEmail)
 }
@@ -519,7 +554,23 @@ func (a *Account) SignIn(ctx context.Context, cmd SignInCommand) (*User, *TokenB
 		return nil, nil, "", nil, status.Error(codes.Unauthenticated, "user account is not active")
 	}
 	a.resetLoginThrottle(ctx, email, clientInfo.IP)
-	return a.finishSignIn(ctx, project.ID, accountUser(found))
+	// 会话签发与 signed_in 事件同一事务（对齐 SignUp；事件插桩点在
+	// finishSignInWithProvider，所有登录方式共用）。
+	var (
+		outUser      *User
+		outTokens    *TokenBundle
+		outCookie    string
+		outChallenge *MFASignInChallenge
+	)
+	runErr := a.runInTx(ctx, func(txCtx context.Context) error {
+		var err error
+		outUser, outTokens, outCookie, outChallenge, err = a.finishSignIn(txCtx, project.ID, accountUser(found))
+		return err
+	})
+	if runErr != nil {
+		return nil, nil, "", nil, runErr
+	}
+	return outUser, outTokens, outCookie, outChallenge, nil
 }
 
 // checkLoginThrottle / recordLoginFailure / resetLoginThrottle 不再判 nil
@@ -585,7 +636,14 @@ func (a *Account) SignOut(ctx context.Context) error {
 	if a.sessionRepo == nil {
 		return nil
 	}
-	return a.sessionRepo.Delete(ctx, p.ProjectID, p.SessionID)
+	// 会话删除与 signed_out 事件同一事务（attrs 仅 user_id——登出时手头
+	// 只有 principal，无用户档案可脱敏携带）。
+	return a.runInTx(ctx, func(txCtx context.Context) error {
+		if err := a.sessionRepo.Delete(txCtx, p.ProjectID, p.SessionID); err != nil {
+			return err
+		}
+		return a.publishAuthUsersEvent(txCtx, p.ProjectID, domainevents.EventAuthUsersSignedOut, &User{ID: p.UserID}, nil)
+	})
 }
 
 func (a *Account) RefreshToken(ctx context.Context, cmd RefreshTokenCommand) (*TokenBundle, string, error) {

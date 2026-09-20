@@ -5,6 +5,7 @@ package functions
 
 import (
 	"encoding/json"
+	"time"
 
 	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
 )
@@ -70,6 +71,52 @@ func BuildEventInvocationData(ev *domainevents.Envelope) (string, error) {
 	// 信封级语义，见上）。
 	out.Data = nil
 	out.DataTruncated = true
+	payload, err = json.Marshal(out)
+	if err != nil {
+		return "", err
+	}
+	return string(payload), nil
+}
+
+// SystemEventInvocationData 是系统行为事件（Domain 非空信封）投递给函数的
+// data 投影。系统事件无文档回读面——Attrs（产生侧白名单脱敏）就是业务
+// 载荷本体，与文档路径「ID+摘要、全量回读」哲学的差异点。
+type SystemEventInvocationData struct {
+	Type      string `json:"type"` // 恒 "event"
+	Event     string `json:"event"`
+	EventID   string `json:"event_id"`
+	Seq       int64  `json:"seq"`
+	Domain    string `json:"domain"`
+	CreatedAt string `json:"created_at"`
+	Version   int64  `json:"version"`
+	// Attrs 是信封 Attrs 透传（白名单载荷）；超预算剥离并标 attrs_truncated。
+	Attrs map[string]any `json:"attrs,omitempty"`
+	// AttrsTruncated = 投影级截断（Attrs 超出 32KB 预算被剥除）。
+	AttrsTruncated bool `json:"attrs_truncated,omitempty"`
+}
+
+// BuildSystemEventInvocationData 由系统事件信封构建入队 data 投影。预算与
+// 降级策略与文档路径同源（EventDataBudgetBytes；单次降级保持 JSON 完整）。
+func BuildSystemEventInvocationData(ev *domainevents.Envelope) (string, error) {
+	out := SystemEventInvocationData{
+		Type:      "event",
+		Event:     ev.Event,
+		EventID:   ev.EventID,
+		Seq:       ev.Seq,
+		Domain:    ev.Domain,
+		CreatedAt: ev.CreatedAt.UTC().Format(time.RFC3339Nano),
+		Version:   ev.Version,
+		Attrs:     ev.Attrs,
+	}
+	payload, err := json.Marshal(out)
+	if err != nil {
+		return "", err
+	}
+	if len(payload) <= EventDataBudgetBytes {
+		return string(payload), nil
+	}
+	out.Attrs = nil
+	out.AttrsTruncated = true
 	payload, err = json.Marshal(out)
 	if err != nil {
 		return "", err

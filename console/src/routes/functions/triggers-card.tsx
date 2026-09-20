@@ -168,7 +168,7 @@ export function FunctionTriggersCard({
                   <SelectContent>
                     <SelectItem value="http">HTTP 回调</SelectItem>
                     <SelectItem value="cron">定时（cron）</SelectItem>
-                    <SelectItem value="event">数据库事件</SelectItem>
+                    <SelectItem value="event">事件（文档/系统行为）</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -269,15 +269,19 @@ export function FunctionTriggersCard({
                       spellCheck={false}
                     />
                     <p className="text-xs text-muted-foreground">
-                      一行一条，格式
+                      一行一条，两种格式：文档写事件
                       <code className="font-mono">
                         {" "}
                         databases.&#123;database&#125;.collections.&#123;collection&#125;.documents.&#123;create|update|delete|*&#125;
                       </code>
-                      ；collection 与 op 段可为 <code className="font-mono">*</code>，
-                      database 段一期必须精确。函数收到的 data 只带事件摘要
-                      （event_id/seq/文档 ID 等），全量文档按 document_id 用
-                      databases:read 回读。
+                      （collection 与 op 段可为 <code className="font-mono">*</code>，
+                      database 段一期必须精确）；系统行为事件
+                      <code className="font-mono"> auth.users.* / payments.orders.* </code>
+                      等（域 = auth/payments/economy/subscriptions，尾段可为
+                      <code className="font-mono">*</code>，拼错域名会被直接拒绝）。
+                      文档事件的 data 只带摘要，全量按 document_id 用
+                      databases:read 回读；系统事件的 data 直接携带脱敏载荷
+                     （attrs）。
                     </p>
                   </div>
                   {/* 自环警告（v3 D13：平台一期不做硬防护，Console 编辑处警告） */}

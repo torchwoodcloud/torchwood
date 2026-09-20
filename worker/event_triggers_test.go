@@ -192,6 +192,57 @@ func testEnvelope(id string, seq int64, event string) *domainevents.Envelope {
 	}
 }
 
+// testSystemEnvelope 构造系统行为事件信封（Domain 非空形态）。
+func testSystemEnvelope(id string, seq int64, event, domain string) *domainevents.Envelope {
+	return &domainevents.Envelope{
+		EventID: id, Event: event, ProjectID: "p1",
+		Domain: domain, Channel: "accounts.u1", Version: seq, Seq: seq,
+		CreatedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC),
+		Attrs:     map[string]any{"user_id": "u1"},
+	}
+}
+
+// TestEventConsumer_SystemEventRoundTrip 系统行为事件消费全链路（§4.1 增补）：
+// auth 域事件命中 auth.users.* 订阅入队；payments 目录事件命中精确订阅
+//（历史认知坑回归：经济事件自增补起可触发）；目录外事件名静默通过。
+func TestEventConsumer_SystemEventRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	rdb := newEventTestRedis(t)
+	c, repo, queue := newEventTestConsumerWithEvents(t, rdb,
+		[]string{"auth.users.*", "payments.orders.paid"})
+	ctx := context.Background()
+	require.NoError(t, c.refreshIndex(ctx))
+	require.NoError(t, c.ensureGroup(ctx, "0"))
+
+	// 1. auth.users.created 命中域通配订阅。
+	xaddEnvelope(t, rdb, testSystemEnvelope("ev-auth", 10, domainevents.EventAuthUsersCreated, domainevents.AuthEventDomain))
+	require.NoError(t, c.consumeSession(ctx))
+	caps := repo.captured()
+	require.Len(t, caps, 1)
+	require.Equal(t, "event:trg_1", caps[0].TriggerSource)
+	var payload QueuePayloadShape
+	require.NoError(t, json.Unmarshal(queue.enqueued[0], &payload))
+	var proj map[string]any
+	require.NoError(t, json.Unmarshal([]byte(payload.Data), &proj))
+	require.Equal(t, "event", proj["type"])
+	require.Equal(t, domainevents.EventAuthUsersCreated, proj["event"])
+	require.Equal(t, domainevents.AuthEventDomain, proj["domain"])
+	require.Equal(t, "u1", proj["attrs"].(map[string]any)["user_id"], "系统事件投影携带脱敏 attrs")
+
+	// 2. payments.orders.paid 命中精确订阅（经济事件触发能力回归）。
+	xaddEnvelope(t, rdb, testSystemEnvelope("ev-paid", 11, "payments.orders.paid", "payments"))
+	require.NoError(t, c.consumeSession(ctx))
+	require.Len(t, repo.captured(), 2)
+
+	// 3. 目录外事件名：静默通过 + 水位照推。
+	xaddEnvelope(t, rdb, testSystemEnvelope("ev-unknown", 12, "payments.order.settled", "payments"))
+	require.NoError(t, c.consumeSession(ctx))
+	require.Len(t, repo.captured(), 2, "目录外事件不投递")
+	require.Equal(t, int64(12), c.getWatermark(ctx))
+}
+
 // TestEventTriggerIndex_SwapInAndOut 匹配器快照的原子换入换出（worker 侧）：
 // refreshIndex 拉全量快照存入 atomic.Pointer；失败时保留旧快照。
 func TestEventTriggerIndex_SwapInAndOut(t *testing.T) {
@@ -248,7 +299,8 @@ func TestEventConsumer_DeliverRoundTrip(t *testing.T) {
 	// 水位推进到 10。
 	require.Equal(t, int64(10), c.getWatermark(ctx))
 
-	// 2. 经济事件：跳过匹配（不投递）但条目消费 + 水位推进。
+	// 2. 目录外系统事件（Domain 非空但事件名不在 catalog）：静默通过
+	// （不投递）但条目消费 + 水位推进。
 	economy := &domainevents.Envelope{
 		EventID: "ev-eco", Event: "payments.order.settled", Domain: "payments",
 		Channel: "accounts.u1", ProjectID: "p1", Seq: 11,
@@ -256,8 +308,8 @@ func TestEventConsumer_DeliverRoundTrip(t *testing.T) {
 	}
 	xaddEnvelope(t, rdb, economy)
 	require.NoError(t, c.consumeSession(ctx))
-	require.Len(t, repo.captured(), 1, "经济事件不投递文档事件触发器")
-	require.Equal(t, int64(11), c.getWatermark(ctx), "经济事件 seq 占位照常推进水位")
+	require.Len(t, repo.captured(), 1, "目录外系统事件不投递文档事件触发器")
+	require.Equal(t, int64(11), c.getWatermark(ctx), "目录外系统事件 seq 占位照常推进水位")
 
 	// 3. no_match 事件：消费 + ACK + 水位推进，不投递。
 	xaddEnvelope(t, rdb, testEnvelope("ev-update", 12, domainevents.EventDocumentsUpdate))
