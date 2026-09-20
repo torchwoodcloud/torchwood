@@ -234,7 +234,7 @@
         "x-torchwood-access": "permission"
       },
       "post": {
-        "summary": "---- 邀请码（T-03，invite_only 注册策略）----\n平台专属面（key 凭证禁入）：邀请码是注册凭证的逆向物，泄漏可绕过\n注册策略，故管理权仅 owner/admin console 会话。",
+        "summary": "---- 邀请码（T-03，invite_only 注册策略）----\n平台专属面（key 凭证禁入）：邀请码是注册凭证的逆向物，泄漏可绕过\n注册策略，故管理权仅 owner/admin console 会话。\n实际准入比声明的 permissions 通道更窄：以下三个 RPC 的 use-case 层\n额外要求 platform admin（internal/app/server RequirePlatformPrincipal，\nfail-closed 纵深防御）。proto 侧放开 owner/admin 角色访问通道 + app 层\n收窄属有意分层，声明保持不变；authorization matrix 由 method_auth 派生，\n只反映本声明，不反映 app 层收窄。",
         "operationId": "ProjectsService_CreateInviteCode",
         "responses": {
           "200": {

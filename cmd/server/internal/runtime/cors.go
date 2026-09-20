@@ -56,6 +56,12 @@ func CORSMiddleware(cfg *config.Http_Cors, logger *slog.Logger) func(http.Handle
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
+			// S11-契约修复：expose_headers 此前只声明无实现。浏览器仅在实际
+			// （非预检）响应上读取 Expose-Headers，故放在预检短路之后输出；
+			// 空配置不输出该头。
+			if len(cfg.GetExposeHeaders()) > 0 {
+				w.Header().Set("Access-Control-Expose-Headers", strings.Join(cfg.GetExposeHeaders(), ", "))
+			}
 			next.ServeHTTP(w, r)
 		})
 	}

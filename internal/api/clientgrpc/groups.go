@@ -2,10 +2,10 @@ package clientgrpc
 
 import (
 	"context"
-	"time"
 
 	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	apishared "github.com/torchwoodcloud/torchwood/internal/api/shared"
 	"github.com/torchwoodcloud/torchwood/internal/app/client"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"google.golang.org/grpc/codes"
@@ -154,19 +154,9 @@ func mapClientMembershipDoc(doc *databases.Document) *clientv1.Membership {
 			}
 		}
 	}
-	m.InvitedAt = clientDocTimeField(doc.Data, "invited_at")
-	m.JoinedAt = clientDocTimeField(doc.Data, "joined_at")
+	// S11 契约修复：与 server 面同口径——双形态共享 helper，此前 string-only
+	// 映射使 app 层 time.Time 装配的 invited_at/joined_at 恒空。
+	m.InvitedAt = apishared.DocTimeField(doc.Data, "invited_at")
+	m.JoinedAt = apishared.DocTimeField(doc.Data, "joined_at")
 	return m
-}
-
-func clientDocTimeField(data map[string]any, key string) *timestamppb.Timestamp {
-	v, ok := data[key].(string)
-	if !ok || v == "" {
-		return nil
-	}
-	t, err := time.Parse(time.RFC3339Nano, v)
-	if err != nil {
-		return nil
-	}
-	return timestamppb.New(t)
 }

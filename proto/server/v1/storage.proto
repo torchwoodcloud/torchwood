@@ -6,6 +6,7 @@ option go_package = "github.com/torchwoodcloud/torchwood/genproto/server/v1;serv
 
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
 import "shared/v1/authz.proto";
 import "shared/v1/common.proto";
@@ -160,7 +161,8 @@ service StorageService {
 }
 
 message CreateBucketRequest {
-  string name = 1;
+  // 逻辑桶显示名（服务端校验仅要求非空，与 app 层一致；不设字符集/长度约束）。
+  string name = 1 [(buf.validate.field).required = true];
   repeated string permissions = 2;
   bool public = 3;
 }
@@ -190,8 +192,11 @@ message Bucket {
 }
 
 message CreateFileRequest {
-  string bucket_id = 1;
-  string name = 2;
+  string bucket_id = 1 [(buf.validate.field).required = true];
+  string name = 2 [(buf.validate.field).required = true];
+  // 客户端声明的 Content-Type；服务端不做形状校验——可执行/危险类型与空值
+  // 一律归一化为 application/octet-stream（防存储型 XSS，见 app 层
+  // normalizeMimeType），故此处不设 pattern 约束。
   string mime_type = 3;
   bytes data = 4;
   map<string, string> metadata = 5;
@@ -244,8 +249,9 @@ message UpdateFileRequest {
 message CreateFileTokenRequest {
   string bucket_id = 1;
   string file_id = 2;
-  // 有效期秒数，默认 3600（1 小时）。
-  optional int64 expires_in = 3;
+  // 有效期秒数（1–3600）；未设置默认 900（15 分钟），上限对齐服务端
+  // maxFileTokenLifetime = 3600（此前注释误写「默认 3600」——默认实为 900）。
+  optional int64 expires_in = 3 [(buf.validate.field).int64 = { gt: 0, lte: 3600 }];
 }
 
 message FileToken {

@@ -10,7 +10,6 @@ message AppConfig {
   Data data = 3;
   Storage storage = 4;
   Functions functions = 5;
-  Telemetry telemetry = 6;
   Messaging messaging = 7;
   IdGen idgen = 8;
   Payments payments = 9;
@@ -337,12 +336,6 @@ message Functions {
     string bucket = 1;
   }
   Storage storage = 10;
-}
-
-message Telemetry {
-  bool enabled = 1;
-  string otlp_endpoint = 2;
-  string service_name = 3;
 }
 
 message Messaging {

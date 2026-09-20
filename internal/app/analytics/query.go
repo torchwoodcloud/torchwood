@@ -485,6 +485,9 @@ func (u *Query) ListUserEvents(ctx context.Context, cmd UserEventsCommand) (*Use
 		return nil, err
 	}
 	res := &UserEventsResult{Events: events, PageSize: int32(limit)}
+	// 注：UserEvent.Platform/AppVersion 为 v1 预留展示位，恒空——v1 摄入
+	// 链路（IngestEvents/normalizeEvent）不接受 platform/app_version，存储列
+	// 落空串，本响应装配如实透传；v1 不支持，非缺陷。
 	if hasMore && len(events) > 0 {
 		last := events[len(events)-1]
 		next, err := encodeUserEventCursor(domainanalytics.UserEventCursor{OccurredAt: last.OccurredAt, ID: last.ID})

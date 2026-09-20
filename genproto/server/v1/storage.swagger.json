@@ -465,7 +465,8 @@
           "type": "string"
         },
         "mime_type": {
-          "type": "string"
+          "type": "string",
+          "title": "客户端声明的 Content-Type；服务端不做形状校验——可执行/危险类型与空值\n一律归一化为 application/octet-stream（防存储型 XSS，见 app 层\nnormalizeMimeType），故此处不设 pattern 约束。"
         },
         "data": {
           "type": "string",
@@ -485,7 +486,7 @@
         "expires_in": {
           "type": "string",
           "format": "int64",
-          "title": "有效期秒数，默认 3600（1 小时）。"
+          "title": "有效期秒数（1–3600）；未设置默认 900（15 分钟），上限对齐服务端\nmaxFileTokenLifetime = 3600（此前注释误写「默认 3600」——默认实为 900）。"
         }
       }
     },
@@ -550,7 +551,8 @@
       "type": "object",
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "title": "逻辑桶显示名（服务端校验仅要求非空，与 app 层一致；不设字符集/长度约束）。"
         },
         "permissions": {
           "type": "array",

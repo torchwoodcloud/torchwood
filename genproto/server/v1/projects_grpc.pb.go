@@ -43,6 +43,11 @@ type ProjectsServiceClient interface {
 	// ---- 邀请码（T-03，invite_only 注册策略）----
 	// 平台专属面（key 凭证禁入）：邀请码是注册凭证的逆向物，泄漏可绕过
 	// 注册策略，故管理权仅 owner/admin console 会话。
+	// 实际准入比声明的 permissions 通道更窄：以下三个 RPC 的 use-case 层
+	// 额外要求 platform admin（internal/app/server RequirePlatformPrincipal，
+	// fail-closed 纵深防御）。proto 侧放开 owner/admin 角色访问通道 + app 层
+	// 收窄属有意分层，声明保持不变；authorization matrix 由 method_auth 派生，
+	// 只反映本声明，不反映 app 层收窄。
 	CreateInviteCode(ctx context.Context, in *CreateInviteCodeRequest, opts ...grpc.CallOption) (*InviteCode, error)
 	ListInviteCodes(ctx context.Context, in *ListInviteCodesRequest, opts ...grpc.CallOption) (*ListInviteCodesResponse, error)
 	// 吊销邀请码（软删：revoked_at 置位，消费路径立即拒绝）。
@@ -164,6 +169,11 @@ type ProjectsServiceServer interface {
 	// ---- 邀请码（T-03，invite_only 注册策略）----
 	// 平台专属面（key 凭证禁入）：邀请码是注册凭证的逆向物，泄漏可绕过
 	// 注册策略，故管理权仅 owner/admin console 会话。
+	// 实际准入比声明的 permissions 通道更窄：以下三个 RPC 的 use-case 层
+	// 额外要求 platform admin（internal/app/server RequirePlatformPrincipal，
+	// fail-closed 纵深防御）。proto 侧放开 owner/admin 角色访问通道 + app 层
+	// 收窄属有意分层，声明保持不变；authorization matrix 由 method_auth 派生，
+	// 只反映本声明，不反映 app 层收窄。
 	CreateInviteCode(context.Context, *CreateInviteCodeRequest) (*InviteCode, error)
 	ListInviteCodes(context.Context, *ListInviteCodesRequest) (*ListInviteCodesResponse, error)
 	// 吊销邀请码（软删：revoked_at 置位，消费路径立即拒绝）。

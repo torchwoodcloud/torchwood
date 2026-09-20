@@ -7,6 +7,7 @@
 package serverv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
@@ -26,10 +27,11 @@ const (
 )
 
 type CreateBucketRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Permissions   []string               `protobuf:"bytes,2,rep,name=permissions,proto3" json:"permissions,omitempty"`
-	Public        bool                   `protobuf:"varint,3,opt,name=public,proto3" json:"public,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 逻辑桶显示名（服务端校验仅要求非空，与 app 层一致；不设字符集/长度约束）。
+	Name          string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Permissions   []string `protobuf:"bytes,2,rep,name=permissions,proto3" json:"permissions,omitempty"`
+	Public        bool     `protobuf:"varint,3,opt,name=public,proto3" json:"public,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -326,12 +328,15 @@ func (x *Bucket) GetPublic() bool {
 }
 
 type CreateFileRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	BucketId      string                 `protobuf:"bytes,1,opt,name=bucket_id,json=bucketId,proto3" json:"bucket_id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	MimeType      string                 `protobuf:"bytes,3,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
-	Data          []byte                 `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
-	Metadata      map[string]string      `protobuf:"bytes,5,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	BucketId string                 `protobuf:"bytes,1,opt,name=bucket_id,json=bucketId,proto3" json:"bucket_id,omitempty"`
+	Name     string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// 客户端声明的 Content-Type；服务端不做形状校验——可执行/危险类型与空值
+	// 一律归一化为 application/octet-stream（防存储型 XSS，见 app 层
+	// normalizeMimeType），故此处不设 pattern 约束。
+	MimeType      string            `protobuf:"bytes,3,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
+	Data          []byte            `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
+	Metadata      map[string]string `protobuf:"bytes,5,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -758,7 +763,8 @@ type CreateFileTokenRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	BucketId string                 `protobuf:"bytes,1,opt,name=bucket_id,json=bucketId,proto3" json:"bucket_id,omitempty"`
 	FileId   string                 `protobuf:"bytes,2,opt,name=file_id,json=fileId,proto3" json:"file_id,omitempty"`
-	// 有效期秒数，默认 3600（1 小时）。
+	// 有效期秒数（1–3600）；未设置默认 900（15 分钟），上限对齐服务端
+	// maxFileTokenLifetime = 3600（此前注释误写「默认 3600」——默认实为 900）。
 	ExpiresIn     *int64 `protobuf:"varint,3,opt,name=expires_in,json=expiresIn,proto3,oneof" json:"expires_in,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -969,9 +975,9 @@ var File_server_v1_storage_proto protoreflect.FileDescriptor
 
 const file_server_v1_storage_proto_rawDesc = "" +
 	"\n" +
-	"\x17server/v1/storage.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"c\n" +
-	"\x13CreateBucketRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\x17server/v1/storage.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"k\n" +
+	"\x13CreateBucketRequest\x12\x1a\n" +
+	"\x04name\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x04name\x12 \n" +
 	"\vpermissions\x18\x02 \x03(\tR\vpermissions\x12\x16\n" +
 	"\x06public\x18\x03 \x01(\bR\x06public\"\"\n" +
 	"\x10GetBucketRequest\x12\x0e\n" +
@@ -993,10 +999,10 @@ const file_server_v1_storage_proto_rawDesc = "" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x16\n" +
-	"\x06public\x18\x06 \x01(\bR\x06public\"\x97\x02\n" +
-	"\x11CreateFileRequest\x12\x1b\n" +
-	"\tbucket_id\x18\x01 \x01(\tR\bbucketId\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1b\n" +
+	"\x06public\x18\x06 \x01(\bR\x06public\"\xa7\x02\n" +
+	"\x11CreateFileRequest\x12#\n" +
+	"\tbucket_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\bbucketId\x12\x1a\n" +
+	"\x04name\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x04name\x12\x1b\n" +
 	"\tmime_type\x18\x03 \x01(\tR\bmimeType\x12\x12\n" +
 	"\x04data\x18\x04 \x01(\fR\x04data\x12P\n" +
 	"\bmetadata\x18\x05 \x03(\v24.torchwood.server.v1.CreateFileRequest.MetadataEntryR\bmetadata\x1a;\n" +
@@ -1040,12 +1046,13 @@ const file_server_v1_storage_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\a\n" +
 	"\x05_nameB\f\n" +
 	"\n" +
-	"_mime_type\"\x81\x01\n" +
+	"_mime_type\"\x8d\x01\n" +
 	"\x16CreateFileTokenRequest\x12\x1b\n" +
 	"\tbucket_id\x18\x01 \x01(\tR\bbucketId\x12\x17\n" +
-	"\afile_id\x18\x02 \x01(\tR\x06fileId\x12\"\n" +
+	"\afile_id\x18\x02 \x01(\tR\x06fileId\x12.\n" +
 	"\n" +
-	"expires_in\x18\x03 \x01(\x03H\x00R\texpiresIn\x88\x01\x01B\r\n" +
+	"expires_in\x18\x03 \x01(\x03B\n" +
+	"\xbaH\a\"\x05\x18\x90\x1c \x00H\x00R\texpiresIn\x88\x01\x01B\r\n" +
 	"\v_expires_in\"\\\n" +
 	"\tFileToken\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x129\n" +

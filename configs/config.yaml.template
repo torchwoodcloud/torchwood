@@ -316,11 +316,6 @@ analytics:
   # env: TORCHWOOD_ANALYTICS_RETENTION_DAYS
   retention_days: 90
 
-telemetry:
-  enabled: false
-  otlp_endpoint: ""
-  service_name: "Torchwood"
-
 messaging:
   smtp:
     host: ""                # env: TORCHWOOD_MESSAGING_SMTP_HOST

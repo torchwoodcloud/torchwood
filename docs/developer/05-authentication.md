@@ -301,7 +301,7 @@ security:
 | `closed` | 一律 403 `ACCOUNT.REGISTRATION_CLOSED` |
 
 - 错误码走 `"CODE: message"` 消息前缀约定（对齐 docdb 域码体系），HTTP 403 + `permission_error`。
-- **邀请码**：存控制面 `public.invite_codes` 表，`twi_` 前缀 128-bit 随机（无枚举面）；一次性为默认，可限次（1..10000）、可过期、可吊销（owner / admin 管理：Create / List / DeleteInviteCode，key 凭证禁入）。**消费原子**：单语句 `UPDATE … WHERE 有效性 AND used_count < max_uses RETURNING`，行锁串行化——并发同码恰好一个成功。
+- **邀请码**：存控制面 `public.invite_codes` 表，`twi_` 前缀 128-bit 随机（无枚举面）；一次性为默认，可限次（1..10000）、可过期、可吊销（owner / admin 管理：Create / List / DeleteInviteCode，key 凭证禁入；服务端 use-case 层额外要求 platform admin——proto 声明 owner/admin 通道 + app 层收窄属纵深分层，授权矩阵只反映 proto 声明）。**消费原子**：单语句 `UPDATE … WHERE 有效性 AND used_count < max_uses RETURNING`，行锁串行化——并发同码恰好一个成功。
 - 未知策略值 fail-closed（按 closed 处理，防脏数据意外开放注册）。
 
 ### 11.2 DeleteAccount：匿名化软删

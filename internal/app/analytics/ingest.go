@@ -215,6 +215,9 @@ func normalizeEvent(cmd IngestEventsCommand, e IncomingEvent, now time.Time) (do
 		OccurredAt: occurredAt,
 		IngestedAt: now,
 		Props:      props,
+		// Platform/AppVersion 刻意不填：v1 摄入契约不支持（IngestEvents 请求
+		// 无此字段），列落 notnull 空串 → 查询响应（AnalyticsEvent/UserEvent
+		// proto 的 platform/app_version）恒为空，属 v1 预留展示位而非缺陷。
 	}, true
 }
 

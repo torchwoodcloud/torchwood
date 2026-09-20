@@ -2,10 +2,10 @@ package servergrpc
 
 import (
 	"context"
-	"time"
 
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	apishared "github.com/torchwoodcloud/torchwood/internal/api/shared"
 	appserver "github.com/torchwoodcloud/torchwood/internal/app/server"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
@@ -289,19 +289,9 @@ func mapMembershipDoc(doc *databases.Document) *serverv1.Membership {
 			}
 		}
 	}
-	m.InvitedAt = docTimeField(doc.Data, "invited_at")
-	m.JoinedAt = docTimeField(doc.Data, "joined_at")
+	// S11 契约修复：invited_at/joined_at 走双形态共享 helper（app 层装配
+	// time.Time、文档面 JSON 往返 string），此前只认 string 导致恒空。
+	m.InvitedAt = apishared.DocTimeField(doc.Data, "invited_at")
+	m.JoinedAt = apishared.DocTimeField(doc.Data, "joined_at")
 	return m
-}
-
-func docTimeField(data map[string]any, key string) *timestamppb.Timestamp {
-	v, ok := data[key].(string)
-	if !ok || v == "" {
-		return nil
-	}
-	t, err := time.Parse(time.RFC3339Nano, v)
-	if err != nil {
-		return nil
-	}
-	return timestamppb.New(t)
 }

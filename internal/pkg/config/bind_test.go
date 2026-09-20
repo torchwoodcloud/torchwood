@@ -135,9 +135,9 @@ func TestUnmarshalConfig(t *testing.T) {
 	// 特意保留该残留键，钉住「proto 反序列化容忍未知字段、不报错」的兼容行为。
 	require.Equal(t, "unix:///var/run/docker.sock", out.GetFunctions().GetDocker().GetHost())
 
-	require.True(t, out.GetTelemetry().GetEnabled())
-	require.Equal(t, "http://otel:4317", out.GetTelemetry().GetOtlpEndpoint())
-	require.Equal(t, "torchwood", out.GetTelemetry().GetServiceName())
+	// telemetry 节是死配置退役（config.proto 已删 Telemetry message）后的同类
+	// 残留键：存量部署 yaml 携带它仍须无损反序列化（容忍未知字段，同 executor）；
+	// Telemetry 访问器已随消息删除，此处以 UnmarshalConfig 不报错钉住容忍行为。
 
 	require.EqualValues(t, 587, out.GetMessaging().GetSmtp().GetPort())
 	require.True(t, out.GetMessaging().GetSmtp().GetUseTls())
