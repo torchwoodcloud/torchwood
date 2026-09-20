@@ -59,6 +59,10 @@ type wechatTestKeys struct {
 	priv    *rsa.PrivateKey
 	keyPEM  string
 	certPEM string
+	// serial 是平台证书的序列号十六进制串（SerialNumber.Text(16)）——
+	// 验签按 Wechatpay-Serial 头选平台证书，头必须与证书真实序列号一致
+	//（旧夹具硬编码 "SERIAL1" 恰好被旧实现「忽略头」掩盖）。
+	serial string
 }
 
 func generateWeChatTestKeys(t *testing.T) wechatTestKeys {
@@ -78,7 +82,7 @@ func generateWeChatTestKeys(t *testing.T) wechatTestKeys {
 	keyDER, err := x509.MarshalPKCS8PrivateKey(priv)
 	require.NoError(t, err)
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
-	return wechatTestKeys{priv: priv, keyPEM: string(keyPEM), certPEM: string(certPEM)}
+	return wechatTestKeys{priv: priv, keyPEM: string(keyPEM), certPEM: string(certPEM), serial: tmpl.SerialNumber.Text(16)}
 }
 
 func encryptWeChatResource(t *testing.T, plaintext []byte) wechatResource {
@@ -112,7 +116,7 @@ func signWeChatNotify(t *testing.T, keys wechatTestKeys, envelope wechatEnvelope
 	h.Set("Wechatpay-Timestamp", tsStr)
 	h.Set("Wechatpay-Nonce", nonce)
 	h.Set("Wechatpay-Signature", base64.StdEncoding.EncodeToString(sig))
-	h.Set("Wechatpay-Serial", "SERIAL1")
+	h.Set("Wechatpay-Serial", keys.serial)
 	return h, body
 }
 
