@@ -35,7 +35,7 @@ func TestSnowflake_ClockRollbackWaitsUntilCatchUp(t *testing.T) {
 	require.NotEqual(t, idBefore, idDuring, "回拨窗口内不得发出与回拨前相同的 ID")
 	// 时间字段不回退：不低于回拨前的 lastMs（旧实现按回拨后时钟直接发号，
 	// ms 必然小于 target——本断言即缺陷回归锚点）。
-	ms := (idDuring>>(snowflakeNodeBits+snowflakeSeqBits)) + snowflakeEpochMs
+	ms := (idDuring >> (snowflakeNodeBits + snowflakeSeqBits)) + snowflakeEpochMs
 	require.GreaterOrEqual(t, ms, target, "追平前不得发出时间字段早于 lastMs 的 ID")
 
 	// 追平后恢复：连续发号保持唯一。

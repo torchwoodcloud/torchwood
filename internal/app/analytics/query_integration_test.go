@@ -20,9 +20,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	appanalytics "github.com/torchwoodcloud/torchwood/internal/app/analytics"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	"github.com/torchwoodcloud/torchwood/internal/api/servergrpc"
+	appanalytics "github.com/torchwoodcloud/torchwood/internal/app/analytics"
 	domainanalytics "github.com/torchwoodcloud/torchwood/internal/domain/analytics"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"

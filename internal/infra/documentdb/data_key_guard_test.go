@@ -26,14 +26,14 @@ func TestValidateDataKey(t *testing.T) {
 		key    string
 		reason string
 	}{
-		{"my key", "invalid attribute key"},        // 空格：标识符语法
-		{"a.b", "invalid attribute key"},           // 点：标识符语法
-		{"", "invalid attribute key"},              // 空：标识符语法
-		{"9start", "invalid attribute key"},        // 数字开头：标识符语法
-		{"café", "invalid attribute key"},          // 非 ASCII：标识符语法
-		{"_foo", "reserved for system columns"},    // `_` 前缀：系统列保留
-		{"_id", "reserved for system columns"},     // 系统列本身
-		{"_acl", "reserved for system columns"},    // ACL 系统列
+		{"my key", "invalid attribute key"},           // 空格：标识符语法
+		{"a.b", "invalid attribute key"},              // 点：标识符语法
+		{"", "invalid attribute key"},                 // 空：标识符语法
+		{"9start", "invalid attribute key"},           // 数字开头：标识符语法
+		{"café", "invalid attribute key"},             // 非 ASCII：标识符语法
+		{"_foo", "reserved for system columns"},       // `_` 前缀：系统列保留
+		{"_id", "reserved for system columns"},        // 系统列本身
+		{"_acl", "reserved for system columns"},       // ACL 系统列
 		{strings.Repeat("x", 64), "identifier limit"}, // 超长：PG 静默截断
 	}
 	for _, tc := range invalid {

@@ -24,7 +24,7 @@ const overviewTopEventsLimit = 10
 
 // rollupFreshnessTolerance 是覆盖判定的最新日容差：daily 全表最新 day 落后
 // 窗口末日多少天内仍视为 rollup 覆盖。rollup worker 每小时重算 [昨日, 今日]
-//（停摆 ≤1 天由昨日终算自愈），零事件日/当日部分聚合滞后都表现为"最新日
+// （停摆 ≤1 天由昨日终算自愈），零事件日/当日部分聚合滞后都表现为"最新日
 // 落后"而非缺行——容差 3 天 ≈ 2 个整日停摆裕量 + 1 个日界余量（窗口末日
 // 为"明日起"的 now 窗口，worker 只算到昨日时需 2 天）。
 const rollupFreshnessTolerance = 3 * 24 * time.Hour
