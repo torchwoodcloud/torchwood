@@ -15,7 +15,7 @@ import (
 // 判定量）+ 可编程返回值。
 type queryRepoSpy struct {
 	calls          []string
-	coveredDays    int
+	coverage       domainanalytics.DailyCoverage
 	dailySeries    []domainanalytics.DailyPoint
 	userDaySeries  []domainanalytics.DailyPoint
 	rawPoints      []domainanalytics.TimeseriesPoint
@@ -32,9 +32,9 @@ func (s *queryRepoSpy) touched() bool { return len(s.calls) > 0 }
 
 func (s *queryRepoSpy) mark(call string) { s.calls = append(s.calls, call) }
 
-func (s *queryRepoSpy) DailyCoveredDays(_ context.Context, _ string, _, _ time.Time) (int, error) {
-	s.mark("DailyCoveredDays")
-	return s.coveredDays, nil
+func (s *queryRepoSpy) DailyCoverage(_ context.Context, _ string, _, _ time.Time) (domainanalytics.DailyCoverage, error) {
+	s.mark("DailyCoverage")
+	return s.coverage, nil
 }
 
 func (s *queryRepoSpy) DailySeries(_ context.Context, _, _ string, _, _ time.Time) ([]domainanalytics.DailyPoint, error) {
@@ -211,49 +211,68 @@ func TestQueryGuards_RejectWithoutRepoAccess(t *testing.T) {
 	require.False(t, spy.touched())
 }
 
-// TestQueryTimeseries_FallbackRouting：覆盖检测择路——daily 无覆盖（含
-// rollup 表空）回退 raw；多事件名恒 raw；单名且覆盖走 rollup。
+// freshCoverage 产生活性 rollup 的覆盖信号（窗口有行 + 最新日 = 窗口末日
+// 前一天——worker 每小时重算 [昨日, 今日] 的常态形态）。
+func freshCoverage(windowRows int64, dayEnd time.Time) domainanalytics.DailyCoverage {
+	return domainanalytics.DailyCoverage{WindowRows: windowRows, LatestDay: dayEnd.Add(-24 * time.Hour)}
+}
+
+// TestQueryTimeseries_FallbackRouting：覆盖检测择路——rollup 无信号（表空）
+// 回退 raw；新鲜度口径下窗口含零事件日仍走 rollup（旧行数口径的回归锁：
+// 3 天窗只有 2 行也判覆盖）；多事件名恒 raw；停摆（最新日超容差）回退 raw。
 func TestQueryTimeseries_FallbackRouting(t *testing.T) {
 	ctx := context.Background()
 	start := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
 	end := start.Add(3 * 24 * time.Hour)
 
 	// 覆盖缺失（表空）：回退 raw，source=raw。
-	spy := &queryRepoSpy{coveredDays: 0}
+	spy := &queryRepoSpy{}
 	res, err := newQueryForTest(spy).QueryTimeseries(ctx, TimeseriesCommand{
 		ProjectID: "p1", PeriodStart: start, PeriodEnd: end, Granularity: domainanalytics.GranularityDay})
 	require.NoError(t, err)
 	require.Equal(t, domainanalytics.QuerySourceRaw, res.Source)
-	require.Equal(t, []string{"DailyCoveredDays", "RawTimeseries"}, spy.calls)
+	require.Equal(t, []string{"DailyCoverage", "RawTimeseries"}, spy.calls)
 	require.Len(t, res.Points, 3, "DAY 零桶补齐为 3 个日桶")
 
-	// 覆盖完整：rollup 单名路径（DailySeries name=evt）。
-	spy = &queryRepoSpy{coveredDays: 3, dailySeries: []domainanalytics.DailyPoint{
+	// 新鲜度覆盖（窗口 3 天仅 2 行——零事件日按 0 参与，不再回退 raw）：
+	// rollup 单名路径（DailySeries name=evt）。
+	spy = &queryRepoSpy{coverage: freshCoverage(2, end), dailySeries: []domainanalytics.DailyPoint{
 		{Day: start, Total: 5, UniqueUsers: 2},
 		{Day: start.Add(24 * time.Hour), Total: 7, UniqueUsers: 3},
-		{Day: start.Add(48 * time.Hour), Total: 0, UniqueUsers: 0},
 	}}
 	res, err = newQueryForTest(spy).QueryTimeseries(ctx, TimeseriesCommand{
 		ProjectID: "p1", Names: []string{"evt"}, PeriodStart: start, PeriodEnd: end,
 		Granularity: domainanalytics.GranularityDay})
 	require.NoError(t, err)
 	require.Equal(t, domainanalytics.QuerySourceRollup, res.Source)
-	require.Equal(t, []string{"DailyCoveredDays", "DailySeries"}, spy.calls)
+	require.Equal(t, []string{"DailyCoverage", "DailySeries"}, spy.calls)
 	require.Equal(t, int64(5), res.Points[0].Total)
+	require.Equal(t, int64(0), res.Points[2].Total, "缺行零事件日补零")
 
-	// 覆盖完整 + 全事件：daily 总量 + user_days UV 合并。
-	spy = &queryRepoSpy{coveredDays: 3,
+	// 新鲜度覆盖 + 全事件：daily 总量 + user_days UV 合并。
+	spy = &queryRepoSpy{
+		coverage:      freshCoverage(2, end),
 		dailySeries:   []domainanalytics.DailyPoint{{Day: start, Total: 5}},
 		userDaySeries: []domainanalytics.DailyPoint{{Day: start, UniqueUsers: 4}}}
 	res, err = newQueryForTest(spy).QueryTimeseries(ctx, TimeseriesCommand{
 		ProjectID: "p1", PeriodStart: start, PeriodEnd: end, Granularity: domainanalytics.GranularityDay})
 	require.NoError(t, err)
 	require.Equal(t, domainanalytics.QuerySourceRollup, res.Source)
-	require.Equal(t, []string{"DailyCoveredDays", "DailySeries", "UserDaySeries"}, spy.calls)
+	require.Equal(t, []string{"DailyCoverage", "DailySeries", "UserDaySeries"}, spy.calls)
 	require.Equal(t, int64(4), res.Points[0].UniqueUsers)
 
+	// rollup 停摆（有行但最新日落后窗口末日超过容差）：回退 raw。
+	stale := domainanalytics.DailyCoverage{WindowRows: 2, LatestDay: end.Add(-4 * 24 * time.Hour)}
+	spy = &queryRepoSpy{coverage: stale, rawPoints: []domainanalytics.TimeseriesPoint{
+		{Bucket: start, Total: 1, UniqueUsers: 1}}}
+	res, err = newQueryForTest(spy).QueryTimeseries(ctx, TimeseriesCommand{
+		ProjectID: "p1", PeriodStart: start, PeriodEnd: end, Granularity: domainanalytics.GranularityDay})
+	require.NoError(t, err)
+	require.Equal(t, domainanalytics.QuerySourceRaw, res.Source, "最新日超容差必须判未覆盖")
+	require.Equal(t, []string{"DailyCoverage", "RawTimeseries"}, spy.calls)
+
 	// 多事件名：并集 UV 不可从 rollup 导出 → 恒 raw（跳过覆盖检测）。
-	spy = &queryRepoSpy{coveredDays: 3}
+	spy = &queryRepoSpy{coverage: freshCoverage(2, end)}
 	res, err = newQueryForTest(spy).QueryTimeseries(ctx, TimeseriesCommand{
 		ProjectID: "p1", Names: []string{"a", "b"}, PeriodStart: start, PeriodEnd: end,
 		Granularity: domainanalytics.GranularityDay})
@@ -267,9 +286,9 @@ func TestQueryTimeseries_FallbackRouting(t *testing.T) {
 		ProjectID: "p1", PeriodStart: start, PeriodEnd: start.Add(91 * 24 * time.Hour),
 		Granularity: domainanalytics.GranularityDay})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.Equal(t, []string{"DailyCoveredDays"}, spy.calls, "仅覆盖检测触库，raw 不扫")
+	require.Equal(t, []string{"DailyCoverage"}, spy.calls, "仅覆盖检测触库，raw 不扫")
 
-	// HOUR：恒 raw、零桶补齐按小时。
+	// HOUR：恒 raw、零桶补齐按小时（无覆盖检测调用）。
 	spy = &queryRepoSpy{}
 	res, err = newQueryForTest(spy).QueryTimeseries(ctx, TimeseriesCommand{
 		ProjectID: "p1", PeriodStart: start, PeriodEnd: start.Add(3 * time.Hour),
@@ -279,13 +298,35 @@ func TestQueryTimeseries_FallbackRouting(t *testing.T) {
 	require.Len(t, res.Points, 3)
 }
 
+// TestQueryTimeseries_FreshnessTolerance：容差边界——最新日恰落在容差线上
+// 判覆盖、落后一天判未覆盖（3 天容差的语义锚点）。
+func TestQueryTimeseries_FreshnessTolerance(t *testing.T) {
+	ctx := context.Background()
+	start := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
+	end := start.Add(3 * 24 * time.Hour) // dayEnd = 9/11，容差下界 = 9/8
+
+	atBoundary := domainanalytics.DailyCoverage{WindowRows: 1, LatestDay: end.Add(-3 * 24 * time.Hour)}
+	spy := &queryRepoSpy{coverage: atBoundary, dailySeries: []domainanalytics.DailyPoint{{Day: start, Total: 1}}}
+	res, err := newQueryForTest(spy).QueryTimeseries(ctx, TimeseriesCommand{
+		ProjectID: "p1", PeriodStart: start, PeriodEnd: end, Granularity: domainanalytics.GranularityDay})
+	require.NoError(t, err)
+	require.Equal(t, domainanalytics.QuerySourceRollup, res.Source, "最新日 = 窗口末日 - 3d 恰在容差线上，判覆盖")
+
+	oneDayLater := domainanalytics.DailyCoverage{WindowRows: 1, LatestDay: end.Add(-4 * 24 * time.Hour)}
+	spy = &queryRepoSpy{coverage: oneDayLater}
+	res, err = newQueryForTest(spy).QueryTimeseries(ctx, TimeseriesCommand{
+		ProjectID: "p1", PeriodStart: start, PeriodEnd: end, Granularity: domainanalytics.GranularityDay})
+	require.NoError(t, err)
+	require.Equal(t, domainanalytics.QuerySourceRaw, res.Source, "再落后一天即超容差")
+}
+
 // TestQueryOverview_Fallback：概览覆盖择路（raw 回退 + retention 超窗拒绝）。
 func TestQueryOverview_Fallback(t *testing.T) {
 	ctx := context.Background()
 	start := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 	end := start.Add(2 * 24 * time.Hour)
 
-	spy := &queryRepoSpy{coveredDays: 0, rawKpiTotal: 9, rawKpiUV: 3, newUsers: 2}
+	spy := &queryRepoSpy{rawKpiTotal: 9, rawKpiUV: 3, newUsers: 2}
 	res, err := newQueryForTest(spy).GetOverview(ctx, OverviewCommand{ProjectID: "p1", PeriodStart: start, PeriodEnd: end})
 	require.NoError(t, err)
 	require.Equal(t, domainanalytics.QuerySourceRaw, res.Source)
@@ -293,10 +334,10 @@ func TestQueryOverview_Fallback(t *testing.T) {
 	require.Equal(t, int64(3), res.Kpi.UniqueUsers)
 	require.Equal(t, int64(2), res.Kpi.NewUsers)
 	require.InDelta(t, 3.0, res.Kpi.EventsPerUser, 1e-9)
-	require.Equal(t, []string{"DailyCoveredDays", "RawOverviewKPI", "RawTopEvents", "CountNewUsers", "RawTodayStats"}, spy.calls)
+	require.Equal(t, []string{"DailyCoverage", "RawOverviewKPI", "RawTopEvents", "CountNewUsers", "RawTodayStats"}, spy.calls)
 
-	// rollup 覆盖路径。
-	spy = &queryRepoSpy{coveredDays: 2,
+	// rollup 新鲜度覆盖（窗口 2 天仅 2 行，含零事件日的形态不受影响）。
+	spy = &queryRepoSpy{coverage: freshCoverage(2, end),
 		dailySeries: []domainanalytics.DailyPoint{{Day: start, Total: 5}, {Day: start.Add(24 * time.Hour), Total: 4}},
 		activeUsers: 6}
 	res, err = newQueryForTest(spy).GetOverview(ctx, OverviewCommand{ProjectID: "p1", PeriodStart: start, PeriodEnd: end})
@@ -304,7 +345,7 @@ func TestQueryOverview_Fallback(t *testing.T) {
 	require.Equal(t, domainanalytics.QuerySourceRollup, res.Source)
 	require.Equal(t, int64(9), res.Kpi.TotalEvents)
 	require.Equal(t, int64(6), res.Kpi.UniqueUsers)
-	require.Equal(t, []string{"DailyCoveredDays", "DailySeries", "CountActiveUsers", "TopEventsFromDaily", "CountNewUsers", "RawTodayStats"}, spy.calls)
+	require.Equal(t, []string{"DailyCoverage", "DailySeries", "CountActiveUsers", "TopEventsFromDaily", "CountNewUsers", "RawTodayStats"}, spy.calls)
 
 	// 覆盖缺失且超保留期：拒绝。
 	spy = &queryRepoSpy{}

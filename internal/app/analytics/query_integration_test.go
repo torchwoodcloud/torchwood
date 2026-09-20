@@ -20,9 +20,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	appanalytics "github.com/torchwoodcloud/torchwood/internal/app/analytics"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	"github.com/torchwoodcloud/torchwood/internal/api/servergrpc"
 	domainanalytics "github.com/torchwoodcloud/torchwood/internal/domain/analytics"
+	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -741,6 +743,176 @@ func TestQueryIntegration_GetOverview(t *testing.T) {
 	require.Equal(t, "level_complete", rollup.GetTopEvents()[0].GetName())
 	require.Equal(t, int64(7), rollup.GetTopEvents()[0].GetTotal(), "3+4")
 	require.Equal(t, int64(2), rollup.GetToday().GetTotalEvents(), "今日块恒 raw（不随窗口口径变化）")
+}
+
+// runRollupOnce 用真实 rollup worker（注入当前时钟）跑一轮 [昨日, 今日] 重算。
+func (e *ingestTestEnv) runRollupOnce(t *testing.T) {
+	t.Helper()
+	rollup := appanalytics.NewRollup(
+		bunrepo.NewAnalyticsWorkerRepository(e.db),
+		bunrepo.NewProjectRepository(e.db),
+		nil)
+	require.NoError(t, rollup.RunWorkerOnce(e.ctx, time.Now().UTC()))
+}
+
+// TestQueryIntegration_TimeseriesRollupZeroEventDays（S8 缺陷 2 回归）：
+// 真实 rollup 一轮后 8 天窗只有 2 天有行（零事件日无行属正常态）——
+// 新鲜度口径判覆盖 → source=rollup，缺行日补 0；旧行数口径会把零事件日
+// 误判为未覆盖回退 raw。
+func TestQueryIntegration_TimeseriesRollupZeroEventDays(t *testing.T) {
+	e := setupIngestEnv(t)
+	md := e.apiKeyMD(t, "analytics.read")
+
+	today := dayUTC(time.Now())
+	yesterday := today.Add(-24 * time.Hour)
+	e.seedRawEvents(t, []seedEvent{
+		{name: "level_complete", userID: "u1", at: yesterday.Add(9 * time.Hour)},
+		{name: "level_complete", userID: "u1", at: yesterday.Add(10 * time.Hour)},
+		{name: "ad_watch", userID: "u2", at: today.Add(1 * time.Hour)},
+	})
+	e.runRollupOnce(t)
+
+	start := today.AddDate(0, 0, -7)
+	end := today.Add(24 * time.Hour) // 8 天窗，其中 6 天零事件
+	respAny, err := e.runServerQuery(t, testutil.MethodAnalyticsQueryTimeseries, md,
+		func(ctx context.Context, h *servergrpc.AnalyticsService) (any, error) {
+			return h.QueryTimeseries(ctx, &serverv1.QueryTimeseriesRequest{
+				PeriodStart: timestamppb.New(start),
+				PeriodEnd:   timestamppb.New(end),
+				Granularity: serverv1.AnalyticsGranularity_ANALYTICS_GRANULARITY_DAY,
+			})
+		})
+	require.NoError(t, err)
+	res := respAny.(*serverv1.QueryTimeseriesResponse)
+	require.Equal(t, domainanalytics.QuerySourceRollup, res.GetSource(),
+		"窗口含零事件日必须仍走 rollup 口径（新鲜度覆盖判定）")
+	require.Len(t, res.GetPoints(), 8, "DAY 零桶补齐为 8 个日桶")
+	type pt struct {
+		total, uv int64
+	}
+	got := map[string]pt{}
+	for _, p := range res.GetPoints() {
+		got[p.GetBucket().AsTime().Format("2006-01-02")] = pt{p.GetTotal(), p.GetUniqueUsers()}
+	}
+	require.Equal(t, pt{0, 0}, got[start.Format("2006-01-02")], "零事件日缺行按 0 参与")
+	require.Equal(t, pt{0, 0}, got[today.Add(-24*time.Hour*2).Format("2006-01-02")])
+	require.Equal(t, pt{2, 1}, got[yesterday.Format("2006-01-02")], "昨日 rollup 行 2 事件 / u1")
+	require.Equal(t, pt{1, 1}, got[today.Format("2006-01-02")], "今日部分聚合行 1 事件 / u2")
+
+	// 概览同窗口：KPI 走 rollup（缺日零贡献），今日块恒 raw。
+	respAny, err = e.runServerQuery(t, testutil.MethodAnalyticsGetOverview, md,
+		func(ctx context.Context, h *servergrpc.AnalyticsService) (any, error) {
+			return h.GetOverview(ctx, &serverv1.GetAnalyticsOverviewRequest{
+				PeriodStart: timestamppb.New(start),
+				PeriodEnd:   timestamppb.New(end)})
+		})
+	require.NoError(t, err)
+	overview := respAny.(*serverv1.AnalyticsOverview)
+	require.Equal(t, domainanalytics.QuerySourceRollup, overview.GetSource())
+	require.Equal(t, int64(3), overview.GetKpi().GetTotalEvents(), "2+1，零事件日零贡献")
+	require.Equal(t, int64(2), overview.GetKpi().GetUniqueUsers(), "user_days 跨日去重 {u1,u2}")
+	require.Equal(t, int64(2), overview.GetKpi().GetNewUsers(), "first_seen：u1 昨日、u2 今日")
+	require.Equal(t, int64(1), overview.GetToday().GetTotalEvents(), "今日块恒 raw")
+}
+
+// TestQueryIntegration_WindowBeyondRetentionWithRollup（S8 缺陷 2 回归）：
+// >90 天窗（raw 保留期之外）在 rollup 新鲜覆盖下不再 InvalidArgument——
+// 旧行数口径下零事件日必然导致覆盖缺口、超窗拒绝（错误信息误导为部署
+// rollup worker）。
+func TestQueryIntegration_WindowBeyondRetentionWithRollup(t *testing.T) {
+	e := setupIngestEnv(t)
+	md := e.apiKeyMD(t, "analytics.read")
+
+	today := dayUTC(time.Now())
+	e.seedRawEvents(t, []seedEvent{
+		{name: "level_complete", userID: "u1", at: today.Add(10 * time.Hour)},
+		{name: "level_complete", userID: "u2", at: today.Add(11 * time.Hour)},
+	})
+	e.runRollupOnce(t)
+
+	start := today.AddDate(0, 0, -99)
+	end := today.Add(24 * time.Hour) // 100 天窗 ≤ 366d 上限、> 90d raw 保留期
+
+	respAny, err := e.runServerQuery(t, testutil.MethodAnalyticsGetOverview, md,
+		func(ctx context.Context, h *servergrpc.AnalyticsService) (any, error) {
+			return h.GetOverview(ctx, &serverv1.GetAnalyticsOverviewRequest{
+				PeriodStart: timestamppb.New(start),
+				PeriodEnd:   timestamppb.New(end)})
+		})
+	require.NoError(t, err, "rollup 覆盖时超保留期窗口不得报错")
+	overview := respAny.(*serverv1.AnalyticsOverview)
+	require.Equal(t, domainanalytics.QuerySourceRollup, overview.GetSource())
+	require.Equal(t, int64(2), overview.GetKpi().GetTotalEvents())
+	require.Equal(t, int64(2), overview.GetKpi().GetUniqueUsers())
+
+	respAny, err = e.runServerQuery(t, testutil.MethodAnalyticsQueryTimeseries, md,
+		func(ctx context.Context, h *servergrpc.AnalyticsService) (any, error) {
+			return h.QueryTimeseries(ctx, &serverv1.QueryTimeseriesRequest{
+				PeriodStart: timestamppb.New(start),
+				PeriodEnd:   timestamppb.New(end),
+				Granularity: serverv1.AnalyticsGranularity_ANALYTICS_GRANULARITY_DAY,
+			})
+		})
+	require.NoError(t, err)
+	res := respAny.(*serverv1.QueryTimeseriesResponse)
+	require.Equal(t, domainanalytics.QuerySourceRollup, res.GetSource())
+	require.Len(t, res.GetPoints(), 100)
+	require.Equal(t, int64(2), res.GetPoints()[99].GetTotal(), "末日桶 = 今日 rollup 行")
+}
+
+// TestQueryIntegration_RollupStaleFallsBackToRaw（S8 缺陷 2 的守恒面）：
+// rollup 真停摆（最新 daily 行落后窗口末日超容差）→ 仍回退 raw（≤保留期）
+// / 超窗拒绝——新鲜度口径不放过真实停摆。
+func TestQueryIntegration_RollupStaleFallsBackToRaw(t *testing.T) {
+	e := setupIngestEnv(t)
+	md := e.apiKeyMD(t, "analytics.read")
+
+	// 停摆前：worker 最后一次成功运行在 D-2（计算 [D-3, D-2]），D-3 有事件。
+	today := dayUTC(time.Now())
+	dayDm2 := today.AddDate(0, 0, -2)
+	dayDm3 := today.AddDate(0, 0, -3)
+	e.seedRawEvents(t, []seedEvent{
+		{name: "level_complete", userID: "u1", at: dayDm3.Add(9 * time.Hour)},
+		{name: "level_complete", userID: "u2", at: dayDm3.Add(10 * time.Hour)},
+	})
+	staleClock := dayDm2.Add(12 * time.Hour)
+	rollup := appanalytics.NewRollup(
+		bunrepo.NewAnalyticsWorkerRepository(e.db),
+		bunrepo.NewProjectRepository(e.db),
+		nil)
+	require.NoError(t, rollup.RunWorkerOnce(e.ctx, staleClock))
+
+	// 停摆期间：D-2 与今日各有新事件落 raw（daily 无行——worker 未再跑）。
+	e.seedRawEvents(t, []seedEvent{
+		{name: "level_complete", userID: "u3", at: dayDm2.Add(8 * time.Hour)},
+		{name: "ad_watch", userID: "u1", at: today.Add(2 * time.Hour)},
+	})
+
+	// ≤保留期窗口：新鲜度不足（最新 daily 行 = D-3 < 窗口末日 - 3d）→ 回退
+	// raw，数字取自 raw（含停摆期间的事件）。
+	start := today.AddDate(0, 0, -7)
+	end := today.Add(24 * time.Hour)
+	respAny, err := e.runServerQuery(t, testutil.MethodAnalyticsGetOverview, md,
+		func(ctx context.Context, h *servergrpc.AnalyticsService) (any, error) {
+			return h.GetOverview(ctx, &serverv1.GetAnalyticsOverviewRequest{
+				PeriodStart: timestamppb.New(start),
+				PeriodEnd:   timestamppb.New(end)})
+		})
+	require.NoError(t, err)
+	overview := respAny.(*serverv1.AnalyticsOverview)
+	require.Equal(t, domainanalytics.QuerySourceRaw, overview.GetSource(), "停摆必须判未覆盖回退 raw")
+	require.Equal(t, int64(4), overview.GetKpi().GetTotalEvents(), "raw 直读：D-3×2 + D-2×1 + 今日×1")
+	require.Equal(t, int64(3), overview.GetKpi().GetUniqueUsers())
+
+	// 超保留期窗口 + 停摆：明确报错（不静默返回残缺窗口）。
+	_, err = e.runServerQuery(t, testutil.MethodAnalyticsGetOverview, md,
+		func(ctx context.Context, h *servergrpc.AnalyticsService) (any, error) {
+			return h.GetOverview(ctx, &serverv1.GetAnalyticsOverviewRequest{
+				PeriodStart: timestamppb.New(today.AddDate(0, 0, -99)),
+				PeriodEnd:   timestamppb.New(end)})
+		})
+	require.Equal(t, codes.InvalidArgument, status.Code(err), "停摆 + 超保留期必须拒绝")
+	require.Contains(t, status.Convert(err).Message(), "rollup")
 }
 
 // TestQueryIntegration_ListDefinitionsPaging（PR3 验收）：字典分页

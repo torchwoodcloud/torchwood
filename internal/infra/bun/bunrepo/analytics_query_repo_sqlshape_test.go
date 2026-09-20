@@ -31,8 +31,10 @@ func TestAnalyticsQueryPreamble_Shape(t *testing.T) {
 
 // TestAnalyticsTimeseriesSQL_Shape：覆盖检测/rollup 序列/raw 分桶的形状锁。
 func TestAnalyticsTimeseriesSQL_Shape(t *testing.T) {
-	covered := analyticsDailyCoveredDaysSQL(shapeSchema)
+	covered := analyticsDailyCoverageSQL(shapeSchema)
 	require.Contains(t, covered, `FROM "tw_shapecheck".analytics_daily`)
+	require.Contains(t, covered, `(SELECT MAX(day)::timestamptz FROM "tw_shapecheck".analytics_daily)`,
+		"全表最新日经 timestamptz 投影（DATE→time.Time 扫描口径；表空 NULL 由 NullTime 承接）")
 	require.Equal(t, 2, strings.Count(covered, "?"), "窗口双边界全绑定: %s", covered)
 
 	totals := analyticsDailyTotalsSQL(shapeSchema)

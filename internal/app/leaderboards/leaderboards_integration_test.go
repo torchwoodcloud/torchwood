@@ -11,6 +11,7 @@ import (
 	domainleaderboards "github.com/torchwoodcloud/torchwood/internal/domain/leaderboards"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
+	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
@@ -462,6 +463,205 @@ func TestIntegration_ProvisionBoardIdempotent(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "per_subject_submit_limit") {
 		t.Fatalf("diff missing field: %v", err)
+	}
+}
+
+// 同 (board, period, subject) 并发首插的确定性交错回归（S8 缺陷 1）：手工
+// 事务持有胜者未提交行，令 doSubmit 的 INSERT 阻塞在唯一仲裁（transactionid
+// 锁等待）上；胜者提交后败者收到 23505——其事务已 aborted，事务内重试必然
+// 25P02（修复前的失败形态），补偿必须在事务外整体重开并走合并路径。
+func TestIntegration_ConcurrentFirstInsertSameSubject(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	db := testutil.SetupTestDB(t)
+	ctx := context.Background()
+	projectID, _, cleanup := testutil.CreateTestProject(ctx, db)
+	t.Cleanup(cleanup)
+	uc := NewLeaderboards(
+		db,
+		bunrepo.NewLeaderboardBoardRepository(db),
+		bunrepo.NewLeaderboardEntryRepository(db),
+		bunrepo.NewLeaderboardSettlementRepository(db),
+		nil,
+		nil,
+		bunrepo.NewIdempotencyStore(db),
+		nil,
+		bunrepo.NewProjectRepository(db),
+	)
+	admin := contexts.WithPrincipal(ctx, &shared.Principal{
+		ActorKind:      shared.ActorKindService,
+		CredentialType: shared.CredentialTypeAPIKey,
+		ProjectID:      projectID,
+		APIKeyID:       "k1",
+		ActorID:        "actor1",
+	})
+
+	b := &domainleaderboards.Board{
+		ID:              "sum_board",
+		Sort:            domainleaderboards.SortDesc,
+		TieBreak:        domainleaderboards.TieBreakParallel,
+		Policy:          domainleaderboards.PolicySum,
+		PeriodKind:      domainleaderboards.PeriodNone,
+		PerSubjectLimit: 10,
+	}
+	if _, err := uc.CreateBoard(admin, b); err != nil {
+		t.Fatal(err)
+	}
+	period := domainleaderboards.PeriodKey(domainleaderboards.PeriodNone, nil, time.Now())
+
+	// 胜者：手工事务内首插，保持未提交（持有唯一键仲裁权）。
+	entries := bunrepo.NewLeaderboardEntryRepository(db)
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	txCtx := clients.WithTx(ctx, tx)
+	now := time.Now().UTC()
+	if err := entries.Insert(txCtx, &domainleaderboards.Entry{
+		ProjectID:   projectID,
+		BoardID:     b.ID,
+		PeriodKey:   period,
+		SubjectID:   "u1",
+		Value:       10,
+		SubmitCount: 1,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+
+	// 败者：同键提交，其 INSERT 阻塞至胜者提交后以 23505 落败。
+	type submitResult struct {
+		snap *domainleaderboards.Snapshot
+		err  error
+	}
+	done := make(chan submitResult, 1)
+	go func() {
+		snap, _, err := uc.Submit(admin, SubmitCommand{BoardID: b.ID, SubjectID: "u1", Value: 7})
+		done <- submitResult{snap, err}
+	}()
+
+	// 等待败者真正进入 transactionid 锁等待，保证交错必然形成。
+	deadline := time.Now().Add(5 * time.Second)
+	blocked := false
+	for time.Now().Before(deadline) {
+		var n int
+		qerr := db.QueryRowContext(ctx,
+			`SELECT count(*) FROM pg_stat_activity
+			 WHERE datname = current_database() AND pid <> pg_backend_pid()
+			   AND wait_event_type = 'Lock' AND wait_event = 'transactionid'`).Scan(&n)
+		if qerr != nil {
+			_ = tx.Rollback()
+			t.Fatal(qerr)
+		}
+		if n > 0 {
+			blocked = true
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !blocked {
+		_ = tx.Rollback()
+		t.Fatal("败者 INSERT 未进入唯一仲裁等待（交错未形成，测试前提失效）")
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	r := <-done
+	if r.err != nil {
+		t.Fatalf("败者应经重开事务的合并路径成功: %v", r.err)
+	}
+	if r.snap.Entry.Value != 17 || r.snap.Entry.SubmitCount != 2 {
+		t.Fatalf("merged value=%d count=%d, want 17/2（胜者 10 + 败者 7 sum 合并）", r.snap.Entry.Value, r.snap.Entry.SubmitCount)
+	}
+	// 落库终态复核（提交链路以外的持久化证据）。
+	got, err := entries.Get(ctx, projectID, b.ID, period, "u1")
+	if err != nil || got == nil {
+		t.Fatalf("read back: %v %v", got, err)
+	}
+	if got.Value != 17 || got.SubmitCount != 2 {
+		t.Fatalf("final row value=%d count=%d, want 17/2", got.Value, got.SubmitCount)
+	}
+}
+
+// 同 subject 多轮并发首插压力（S8 缺陷 1 补充）：每轮两个 goroutine 同时对
+// 新鲜 (board, period, subject) 首插，双方都必须成功（一方 insert、一方经
+// 补偿重开事务合并）；sum 合并值 201 校验更新不丢。
+func TestIntegration_ConcurrentFirstInsertRounds(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	db := testutil.SetupTestDB(t)
+	ctx := context.Background()
+	projectID, _, cleanup := testutil.CreateTestProject(ctx, db)
+	t.Cleanup(cleanup)
+	uc := NewLeaderboards(
+		db,
+		bunrepo.NewLeaderboardBoardRepository(db),
+		bunrepo.NewLeaderboardEntryRepository(db),
+		bunrepo.NewLeaderboardSettlementRepository(db),
+		nil,
+		nil,
+		bunrepo.NewIdempotencyStore(db),
+		nil,
+		bunrepo.NewProjectRepository(db),
+	)
+	admin := contexts.WithPrincipal(ctx, &shared.Principal{
+		ActorKind:      shared.ActorKindService,
+		CredentialType: shared.CredentialTypeAPIKey,
+		ProjectID:      projectID,
+		APIKeyID:       "k1",
+		ActorID:        "actor1",
+	})
+	b := &domainleaderboards.Board{
+		ID:              "sum_rounds",
+		Sort:            domainleaderboards.SortDesc,
+		TieBreak:        domainleaderboards.TieBreakParallel,
+		Policy:          domainleaderboards.PolicySum,
+		PeriodKind:      domainleaderboards.PeriodNone,
+		PerSubjectLimit: 10,
+	}
+	if _, err := uc.CreateBoard(admin, b); err != nil {
+		t.Fatal(err)
+	}
+	period := domainleaderboards.PeriodKey(domainleaderboards.PeriodNone, nil, time.Now())
+	entries := bunrepo.NewLeaderboardEntryRepository(db)
+
+	const rounds = 10
+	for i := 0; i < rounds; i++ {
+		subject := fmt.Sprintf("round%02d", i)
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		errs := make([]error, 2)
+		for g := 0; g < 2; g++ {
+			wg.Add(1)
+			go func(g int) {
+				defer wg.Done()
+				<-start
+				_, _, errs[g] = uc.Submit(admin, SubmitCommand{
+					BoardID:   b.ID,
+					SubjectID: subject,
+					Value:     int64(100 + g),
+				})
+			}(g)
+		}
+		close(start)
+		wg.Wait()
+		for g, err := range errs {
+			if err != nil {
+				t.Fatalf("round %d goroutine %d: %v", i, g, err)
+			}
+		}
+		got, err := entries.Get(ctx, projectID, b.ID, period, subject)
+		if err != nil || got == nil {
+			t.Fatalf("round %d read back: %v %v", i, got, err)
+		}
+		if got.Value != 201 || got.SubmitCount != 2 {
+			t.Fatalf("round %d value=%d count=%d, want 201/2（100+101 sum 合并）", i, got.Value, got.SubmitCount)
+		}
 	}
 }
 

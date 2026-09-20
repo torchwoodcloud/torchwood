@@ -57,15 +57,24 @@ func (r *AnalyticsQueryRepository) readTx(ctx context.Context, projectID string,
 	})
 }
 
-// DailyCoveredDays 覆盖检测（保守：零事件日无 daily 行 → 计为未覆盖 → 调用方
-// 回退 raw，恒正确）。
-func (r *AnalyticsQueryRepository) DailyCoveredDays(ctx context.Context, projectID string, startDay, endDayExclusive time.Time) (int, error) {
-	var n int
+// DailyCoverage 覆盖检测双信号（单语句同快照）：窗口内 daily 行数（区域
+// 计算过的证据）+ 全表最新 day（worker 活性）。零事件日无行是正常态——
+// 覆盖判定在用例层按新鲜度口径执行（见 analytics.Query.rollupCovered），
+// 本方法只取信号。
+func (r *AnalyticsQueryRepository) DailyCoverage(ctx context.Context, projectID string, startDay, endDayExclusive time.Time) (analytics.DailyCoverage, error) {
+	var cov analytics.DailyCoverage
 	err := r.readTx(ctx, projectID, func(ctx context.Context, conn bun.IDB, schema string) error {
-		return conn.QueryRowContext(ctx, analyticsDailyCoveredDaysSQL(schema),
-			startDay, endDayExclusive).Scan(&n)
+		var latest sql.NullTime
+		if err := conn.QueryRowContext(ctx, analyticsDailyCoverageSQL(schema),
+			startDay, endDayExclusive).Scan(&cov.WindowRows, &latest); err != nil {
+			return err
+		}
+		if latest.Valid {
+			cov.LatestDay = latest.Time
+		}
+		return nil
 	})
-	return n, err
+	return cov, err
 }
 
 // DailySeries rollup 按日序列：name 空集 = 全事件总量（UniqueUsers 置零——
@@ -391,8 +400,8 @@ func (r *AnalyticsQueryRepository) ListUserEvents(ctx context.Context, projectID
 // time.Time（UTC）。WHERE 侧保持 DATE 原列（参数为 timestamptz，比较走
 // 会话时区 = UTC 的隐式转换，语义不变）。
 
-func analyticsDailyCoveredDaysSQL(schema string) string {
-	return fmt.Sprintf(`SELECT COUNT(DISTINCT day) FROM %s.analytics_daily WHERE day >= ? AND day < ?`, schema)
+func analyticsDailyCoverageSQL(schema string) string {
+	return fmt.Sprintf(`SELECT COUNT(*), (SELECT MAX(day)::timestamptz FROM %s.analytics_daily) FROM %s.analytics_daily WHERE day >= ? AND day < ?`, schema, schema)
 }
 
 func analyticsDailyTotalsSQL(schema string) string {

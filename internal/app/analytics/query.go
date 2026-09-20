@@ -22,6 +22,13 @@ import (
 // 概览 Top 事件行数（设计未定值；Console 概览卡片容量级）。
 const overviewTopEventsLimit = 10
 
+// rollupFreshnessTolerance 是覆盖判定的最新日容差：daily 全表最新 day 落后
+// 窗口末日多少天内仍视为 rollup 覆盖。rollup worker 每小时重算 [昨日, 今日]
+//（停摆 ≤1 天由昨日终算自愈），零事件日/当日部分聚合滞后都表现为"最新日
+// 落后"而非缺行——容差 3 天 ≈ 2 个整日停摆裕量 + 1 个日界余量（窗口末日
+// 为"明日起"的 now 窗口，worker 只算到昨日时需 2 天）。
+const rollupFreshnessTolerance = 3 * 24 * time.Hour
+
 // ListUserEvents 缺省页大小（proto3 零值 = 未给出）。
 const userEventsDefaultPageSize = 50
 
@@ -158,19 +165,16 @@ func (u *Query) GetOverview(ctx context.Context, cmd OverviewCommand) (*Overview
 	}
 	dayStart, dayEnd := dayWindowBounds(cmd.PeriodStart, cmd.PeriodEnd)
 
-	var (
-		kpi      domainanalytics.OverviewKpi
-		top      []domainanalytics.TopEvent
-		source   string
-		covered  bool
-		coveredN int
-		err      error
-	)
-	if coveredN, err = u.repo.DailyCoveredDays(ctx, cmd.ProjectID, dayStart, dayEnd); err != nil {
+	covered, err := u.rollupCovered(ctx, cmd.ProjectID, dayStart, dayEnd)
+	if err != nil {
 		return nil, err
 	}
-	covered = coveredN >= expectedDays(dayStart, dayEnd)
 
+	var (
+		kpi    domainanalytics.OverviewKpi
+		top    []domainanalytics.TopEvent
+		source string
+	)
 	if covered {
 		// rollup 口径：total 从 daily 求和（精确）、UV 从 user_days 窗口去重
 		//（精确——跨日不重复计数，不可按日求和）、Top 从 daily。
@@ -193,8 +197,8 @@ func (u *Query) GetOverview(ctx context.Context, cmd OverviewCommand) (*Overview
 		kpi.UniqueUsers = uv
 		source = domainanalytics.QuerySourceRollup
 	} else {
-		// 覆盖缺失（worker 未部署/停摆/零事件日）：窗口 ≤ raw 保留期才回退
-		// raw 扫描；超窗明确报错（不静默返回残缺窗口）。
+		// 覆盖缺失（worker 未部署/停摆/窗口区域从未计算）：窗口 ≤ raw 保留期
+		// 才回退 raw 扫描；超窗明确报错（不静默返回残缺窗口）。
 		if err := u.ensureRawFallbackWindow(dayStart, dayEnd); err != nil {
 			return nil, err
 		}
@@ -321,12 +325,12 @@ func (u *Query) QueryTimeseries(ctx context.Context, cmd TimeseriesCommand) (*Ti
 		}, nil
 	}
 
-	coveredN, err := u.repo.DailyCoveredDays(ctx, cmd.ProjectID, dayStart, dayEnd)
+	covered, err := u.rollupCovered(ctx, cmd.ProjectID, dayStart, dayEnd)
 	if err != nil {
 		return nil, err
 	}
-	if coveredN < expectedDays(dayStart, dayEnd) {
-		// 覆盖缺失（worker 未部署/停摆/零事件日）→ 回退 raw（≤保留期）。
+	if !covered {
+		// 覆盖缺失（worker 未部署/停摆/窗口区域从未计算）→ 回退 raw（≤保留期）。
 		if err := u.ensureRawFallbackWindow(dayStart, dayEnd); err != nil {
 			return nil, err
 		}
@@ -532,6 +536,24 @@ func dayWindowBounds(start, end time.Time) (time.Time, time.Time) {
 // expectedDays 返回 [dayStart, dayEnd) 的天数。
 func expectedDays(dayStart, dayEnd time.Time) int {
 	return int(dayEnd.Sub(dayStart) / (24 * time.Hour))
+}
+
+// rollupCovered 覆盖判定（新鲜度口径，双信号缺一不可）：
+//  1. 窗口内有 daily 行——该窗口区域曾被 rollup 计算过（缺该信号时，从未
+//     计算的历史日会以 0 顶掉 raw 保留期内的真实数据）；
+//  2. daily 全表最新 day ≥ 窗口末日 - 容差——worker 仍在滚动重算，窗口内
+//     缺行的日子是真实零事件日（rollup 的 INSERT..GROUP BY 在零事件日产出
+//     零行，按 0 参与聚合：DailySeries/CountActiveUsers 缺日无行、趋势序列
+//     经 fillDayBuckets 补零），停摆超容差 → 判未覆盖回退 raw。
+func (u *Query) rollupCovered(ctx context.Context, projectID string, dayStart, dayEnd time.Time) (bool, error) {
+	cov, err := u.repo.DailyCoverage(ctx, projectID, dayStart, dayEnd)
+	if err != nil {
+		return false, err
+	}
+	if cov.WindowRows == 0 || cov.LatestDay.IsZero() {
+		return false, nil
+	}
+	return !cov.LatestDay.Before(dayEnd.Add(-rollupFreshnessTolerance)), nil
 }
 
 // ensureRawFallbackWindow 回退 raw 的窗口护栏：day 桶跨度 ≤ analytics

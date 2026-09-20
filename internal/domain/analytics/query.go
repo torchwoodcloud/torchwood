@@ -160,13 +160,24 @@ type UserEventsQuery struct {
 	Limit       int              // 页大小（不含探测行）
 }
 
+// DailyCoverage 是 rollup 覆盖检测信号（新鲜度口径：零事件日无 daily 行属
+// 正常态，值为 0；不以"逐日行数 = 天数"判覆盖——那会把零事件日误判为未覆盖）。
+type DailyCoverage struct {
+	// WindowRows 是 [startDay, endDayExclusive) 内 analytics_daily 行数
+	//（>0 = 该窗口区域曾被 rollup 计算过；=0 时缺省日不可与"值为 0"区分）。
+	WindowRows int64
+	// LatestDay 是 analytics_daily 全表最新 day（UTC 零点）——worker 活性的
+	// 新鲜度信号（与窗口无关；全表空时为零值）。
+	LatestDay time.Time
+}
+
 // QueryRepository 是查询面存储端口（bunrepo 提供 Scoped 读事务实现：
 // SET LOCAL statement_timeout='15s' + TimeZone='UTC'，全参数化 SQL）。
 type QueryRepository interface {
-	// DailyCoveredDays 返回 [startDay, endDayExclusive) 内 analytics_daily
-	// 有行的去重天数（覆盖检测：与期望天数相等 = rollup 可服务；零事件日
-	// 无行 → 视为未覆盖回退 raw，保守但恒正确）。
-	DailyCoveredDays(ctx context.Context, projectID string, startDay, endDayExclusive time.Time) (int, error)
+	// DailyCoverage 返回覆盖检测双信号（单语句同快照）：窗口内行数 + 全表
+	// 最新 day。调用方按新鲜度口径判覆盖（rollup 停摆/窗口区域从未计算 →
+	// 回退 raw；零事件日缺行 → 视为值 0，聚合语义不变）。
+	DailyCoverage(ctx context.Context, projectID string, startDay, endDayExclusive time.Time) (DailyCoverage, error)
 	// DailySeries 单事件名（或 name=="" 全事件）的按日聚合：
 	//   - name != ""：total/unique_users 直读（(day,name) 主键行，精确 UV）；
 	//   - name == ""：total = SUM(total)（全事件精确），UniqueUsers 不填
