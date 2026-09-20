@@ -47,6 +47,12 @@ const cronScanInterval = time.Minute
 // recoverOrphanBatch 的轮转游标模式；补跑风暴由异步通道 + run 信号量兜底）。
 const cronClaimBudget = 100
 
+// ackTimeout 是 Ack 在消费 ctx 之外的独立超时：优雅关停窗口内消费 ctx 已
+// 取消，XACK 仍须完成（否则已执行成功的任务重启后被重复消费），故用
+// context.WithoutCancel 派生（对齐 internal/app/storage unlockCompleteTimeout
+// 样板与 infra/queue 坏消息 ack 的 5s 独立超时先例）。
+const ackTimeout = 5 * time.Second
+
 // Worker 消费函数异步执行队列（torchwood:queue:functions-executions）。
 type Worker struct {
 	functions *appfunctions.Functions
@@ -252,9 +258,7 @@ func (w *Worker) consume(ctx context.Context) {
 			continue
 		}
 		ackDone := func() {
-			if ack != "" {
-				_ = w.queue.Ack(ctx, domainshared.QueueFunctionsExecutions, ack)
-			}
+			w.ackMessage(ctx, domainshared.QueueFunctionsExecutions, ack)
 		}
 		if err := w.functions.ProcessExecutionPayload(ctx, payload); err != nil {
 			if ctx.Err() != nil {
@@ -269,9 +273,16 @@ func (w *Worker) consume(ctx context.Context) {
 			// 瞬时失败重抛回队，最多 maxProcessAttempts 次；超限兜底标 failed。
 			if next, ok := requeue(payload); ok {
 				if qerr := w.queue.Enqueue(ctx, domainshared.QueueFunctionsExecutions, next); qerr != nil {
-					w.logger.Error("re-enqueue failed", "error", qerr)
+					// Enqueue 失败**不 Ack**：消息留在 PEL，由 Dequeue 的
+					// XAUTOCLAIM（claimMinIdle 窗口后）重投。此处 Ack 掉会把
+					// 任务从 Stream/PEL 双双抹掉——蒸发后只剩孤儿恢复兜底标
+					// failed、不再重试。重投后 attempt 计数随原消息保留，重试
+					// 语义不变；与关停交互安全（ctx 取消后 Dequeue 直接返回，
+					// PEL 交给下一个 worker 进程认领）。
+					w.logger.Error("re-enqueue failed; PEL entry kept for claim redelivery", "error", qerr)
+				} else {
+					ackDone()
 				}
-				ackDone()
 			} else {
 				ackDone()
 				w.failPayload(ctx, payload, "worker retries exhausted")
@@ -280,6 +291,19 @@ func (w *Worker) consume(ctx context.Context) {
 		}
 		ackDone()
 	}
+}
+
+// ackMessage 对单条已消费消息 Ack。ctx 用 context.WithoutCancel 派生独立
+// 超时（ackTimeout）：优雅关停窗口内消费 ctx 已取消，XACK 若随 ctx 失败，
+// 已执行成功的任务会留 PEL、重启后被重复消费——ack 是收尾动作，必须越过
+// ctx 取消完成。
+func (w *Worker) ackMessage(ctx context.Context, queue, ack string) {
+	if ack == "" {
+		return
+	}
+	actx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ackTimeout)
+	defer cancel()
+	_ = w.queue.Ack(actx, queue, ack)
 }
 
 // requeue 将瞬时失败的任务重抛回队：解析 payload 内嵌 attempt 计数并 +1，

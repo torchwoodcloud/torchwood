@@ -192,6 +192,15 @@ func testEnvelope(id string, seq int64, event string) *domainevents.Envelope {
 	}
 }
 
+// watermarkOf 读取消费水位并断言读取成功（键缺失 = 合法 0；读取失败即测试
+// 失败——S7 后 getWatermark 以 (int64, error) 区分键缺失与瞬断）。
+func watermarkOf(t *testing.T, c *eventTriggerConsumer, ctx context.Context) int64 {
+	t.Helper()
+	n, err := c.getWatermark(ctx)
+	require.NoError(t, err)
+	return n
+}
+
 // testSystemEnvelope 构造系统行为事件信封（Domain 非空形态）。
 func testSystemEnvelope(id string, seq int64, event, domain string) *domainevents.Envelope {
 	return &domainevents.Envelope{
@@ -240,7 +249,7 @@ func TestEventConsumer_SystemEventRoundTrip(t *testing.T) {
 	xaddEnvelope(t, rdb, testSystemEnvelope("ev-unknown", 12, "payments.order.settled", "payments"))
 	require.NoError(t, c.consumeSession(ctx))
 	require.Len(t, repo.captured(), 2, "目录外事件不投递")
-	require.Equal(t, int64(12), c.getWatermark(ctx))
+	require.Equal(t, int64(12), watermarkOf(t, c, ctx))
 }
 
 // TestEventTriggerIndex_SwapInAndOut 匹配器快照的原子换入换出（worker 侧）：
@@ -297,7 +306,7 @@ func TestEventConsumer_DeliverRoundTrip(t *testing.T) {
 	require.Equal(t, int64(0), pending.Count)
 
 	// 水位推进到 10。
-	require.Equal(t, int64(10), c.getWatermark(ctx))
+	require.Equal(t, int64(10), watermarkOf(t, c, ctx))
 
 	// 2. 目录外系统事件（Domain 非空但事件名不在 catalog）：静默通过
 	// （不投递）但条目消费 + 水位推进。
@@ -309,13 +318,13 @@ func TestEventConsumer_DeliverRoundTrip(t *testing.T) {
 	xaddEnvelope(t, rdb, economy)
 	require.NoError(t, c.consumeSession(ctx))
 	require.Len(t, repo.captured(), 1, "目录外系统事件不投递文档事件触发器")
-	require.Equal(t, int64(11), c.getWatermark(ctx), "目录外系统事件 seq 占位照常推进水位")
+	require.Equal(t, int64(11), watermarkOf(t, c, ctx), "目录外系统事件 seq 占位照常推进水位")
 
 	// 3. no_match 事件：消费 + ACK + 水位推进，不投递。
 	xaddEnvelope(t, rdb, testEnvelope("ev-update", 12, domainevents.EventDocumentsUpdate))
 	require.NoError(t, c.consumeSession(ctx))
 	require.Len(t, repo.captured(), 1, "no_match 不投递（也不计投递指标）")
-	require.Equal(t, int64(12), c.getWatermark(ctx))
+	require.Equal(t, int64(12), watermarkOf(t, c, ctx))
 }
 
 // TestEventConsumer_WatermarkMonotonic 水位单调推进（多副本共组 ACK 交错下
@@ -326,9 +335,9 @@ func TestEventConsumer_WatermarkMonotonic(t *testing.T) {
 	ctx := context.Background()
 	c.advanceWatermark(ctx, 5)
 	c.advanceWatermark(ctx, 3)
-	require.Equal(t, int64(5), c.getWatermark(ctx))
+	require.Equal(t, int64(5), watermarkOf(t, c, ctx))
 	c.advanceWatermark(ctx, 9)
-	require.Equal(t, int64(9), c.getWatermark(ctx))
+	require.Equal(t, int64(9), watermarkOf(t, c, ctx))
 }
 
 // TestEventConsumer_StreamFirstSeqGapDetection gap 判定（D12）：Stream 首条
@@ -346,7 +355,7 @@ func TestEventConsumer_StreamFirstSeqGapDetection(t *testing.T) {
 
 	// 水位 98：first(100) > 98+1 → 缺口。水位 99：无缺口。
 	c.advanceWatermark(ctx, 99)
-	watermark := c.getWatermark(ctx)
+	watermark := watermarkOf(t, c, ctx)
 	first := c.streamFirstSeq(ctx)
 	require.False(t, first > watermark+1, "水位 99 + 首条 100 = 无缺口")
 }
@@ -393,7 +402,7 @@ func TestEventConsumer_BackfillFromOutbox(t *testing.T) {
 		ProjectID: "p1", DatabaseID: "app", CollectionID: "notes", DocumentID: "doc_x",
 		Version: last, Seq: last, CreatedAt: time.Now(),
 		Data: &domaindatabases.Document{ID: "doc_x", Version: last, Data: map[string]any{"k": "v"}}})
-	require.Greater(t, c.streamFirstSeq(ctx), c.getWatermark(ctx)+1, "缺口判定成立")
+	require.Greater(t, c.streamFirstSeq(ctx), watermarkOf(t, c, ctx)+1, "缺口判定成立")
 
 	// 删除事件（testEnvelope(3, delete) 无 Data）也必须可补投。
 	c.backfill(ctx)
@@ -403,7 +412,7 @@ func TestEventConsumer_BackfillFromOutbox(t *testing.T) {
 		require.Equal(t, "event:trg_1", e.TriggerSource)
 		require.Equal(t, domainfunctions.ExecutionStatusQueued, e.Status)
 	}
-	require.Equal(t, last, c.getWatermark(ctx), "水位推进到区间上界")
+	require.Equal(t, last, watermarkOf(t, c, ctx), "水位推进到区间上界")
 
 	// 幂等收口：水位到位后二次执行无补投。
 	n := len(repo.captured())
@@ -437,6 +446,57 @@ func TestWorkerEventLoop_GracefulShutdown(t *testing.T) {
 	defer stopCancel()
 	require.NoError(t, w.Stop(stopCtx))
 	startCancel()
+}
+
+// TestEventConsumer_WatermarkKeyMissingIsZero 键缺失 = 合法 0（从未消费过）
+// 而非错误（S7 缺陷 2 语义面）：redis.Nil 与读取失败自此分道——前者回 0
+// 起步（首次部署对存量 Stream 的一次性全量核对），后者跳过本轮补投。
+func TestEventConsumer_WatermarkKeyMissingIsZero(t *testing.T) {
+	rdb := newEventTestRedis(t)
+	c, _, _ := newEventTestConsumer(t, rdb)
+	ctx := context.Background()
+
+	n, err := c.getWatermark(ctx)
+	require.NoError(t, err, "键缺失（redis.Nil）是合法起点")
+	require.Equal(t, int64(0), n)
+
+	c.advanceWatermark(ctx, 7)
+	n, err = c.getWatermark(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(7), n)
+}
+
+// TestEventConsumer_BackfillSkipsOnWatermarkError 水位读取瞬断不补投（S7
+// 缺陷 2 回归）：Get 失败（非 redis.Nil）时本轮跳过补投、不 panic；旧实现
+// 把一切错误按 0 起步——worker 重启恰逢瞬断时 (0, first] 全窗被误判为停机
+// 缺口、从 outbox 全量重补投。
+func TestEventConsumer_BackfillSkipsOnWatermarkError(t *testing.T) {
+	// 独立 miniredis 实例（需要句柄注入命令级错误；对 Get 而言与连接瞬断
+	// 同为非 redis.Nil 错误路径）。
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	logs := &captureHandler{}
+	c, repo, _ := newEventTestConsumer(t, rdb)
+	c.logger = slog.New(logs) // 断言 Warn 分支触达
+	ctx := context.Background()
+
+	// 缺口前置条件就位：水位键缺失、Stream 首条 seq=100（first > 0+1）。
+	xaddEnvelope(t, rdb, testEnvelope("ev-skip", 100, domainevents.EventDocumentsCreate))
+
+	// 注入命令级故障 → backfill 本轮跳过（Warn + 零投递 + 不崩）。
+	mr.SetError("LOADING Redis is loading the dataset in memory")
+	require.NotPanics(t, func() { c.backfill(ctx) })
+	require.True(t, logs.has("event trigger watermark read failed; skipping backfill this round"),
+		"水位读取失败须跳过本轮补投并记 Warn")
+	require.Empty(t, repo.captured(), "水位读取失败不得触发补投")
+
+	// 故障恢复（错误清除）：键缺失按合法 0 起步，读取路径恢复正常。
+	mr.SetError("")
+	n, err := c.getWatermark(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), n)
 }
 
 // QueuePayloadShape 是 worker 侧解析队列 payload 的最小字段集（与 app 层

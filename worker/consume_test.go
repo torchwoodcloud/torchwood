@@ -9,9 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	appfunctions "github.com/torchwoodcloud/torchwood/internal/app/functions"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
+	domainshared "github.com/torchwoodcloud/torchwood/internal/domain/shared"
+	infraqueue "github.com/torchwoodcloud/torchwood/internal/infra/queue"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
@@ -136,10 +140,14 @@ func (retryExecutor) RemoveImage(context.Context, string, string) error { return
 
 // channelQueue 是 shared.Queue 的测试桩：Enqueue 记录 payload 并送入有缓冲
 // channel，Dequeue 取出；空时按 timeout 返回 nil（与真实 BRPOP 语义对齐）。
+// acked 记录 Ack 调用（不 ack 断言用）；enqueueErr 非 nil 时 Enqueue 失败
+// （重入队失败路径驱动）。
 type channelQueue struct {
-	mu       sync.Mutex
-	ch       chan []byte
-	enqueued [][]byte
+	mu         sync.Mutex
+	ch         chan []byte
+	enqueued   [][]byte
+	acked      []string
+	enqueueErr error
 }
 
 func newChannelQueue() *channelQueue {
@@ -150,6 +158,10 @@ func (q *channelQueue) Trim(context.Context, string, int64) error { return nil }
 
 func (q *channelQueue) Enqueue(_ context.Context, _ string, payload []byte) error {
 	q.mu.Lock()
+	if err := q.enqueueErr; err != nil {
+		q.mu.Unlock()
+		return err
+	}
 	q.enqueued = append(q.enqueued, payload)
 	q.mu.Unlock()
 	q.ch <- payload
@@ -167,7 +179,42 @@ func (q *channelQueue) Dequeue(ctx context.Context, _ string, timeout time.Durat
 	}
 }
 
-func (q *channelQueue) Ack(_ context.Context, _ string, _ string) error { return nil }
+func (q *channelQueue) Ack(_ context.Context, _ string, ack string) error {
+	q.mu.Lock()
+	q.acked = append(q.acked, ack)
+	q.mu.Unlock()
+	return nil
+}
+
+// captureHandler 是捕获 slog 记录的测试桩：按消息文本断言日志路径触达
+// （重入队失败、水位读取失败等无返回值可观察的分支）。
+type captureHandler struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (h *captureHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *captureHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r)
+	return nil
+}
+
+func (h *captureHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *captureHandler) WithGroup(string) slog.Handler      { return h }
+
+func (h *captureHandler) has(msg string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for i := range h.records {
+		if h.records[i].Message == msg {
+			return true
+		}
+	}
+	return false
+}
 
 // TestConsume_RetryAttemptsInPayloadAndExhausts 驱动 consume 循环验证（B2）：
 // 瞬时失败任务重抛回队时 payload 携带递增 attempt（计数随队列消息持久，
@@ -283,4 +330,82 @@ func TestConsume_OldFormatPayloadRetriesOnce(t *testing.T) {
 
 	cancel()
 	<-done
+}
+
+// TestConsume_RequeueEnqueueFailureDoesNotAck 重入队失败不 Ack（S7 缺陷 1a
+// 回归）：Enqueue 失败时消息必须留在 PEL（由 infra/queue 的 claimMinIdle
+// 认领机制重投，TestRedisQueue_NotAckRedelivers 覆盖认领语义）；旧实现
+// 无条件 AckDone 把消息从 Stream/PEL 双双抹掉——任务蒸发，只剩孤儿恢复
+// 兜底标 failed、不再重试。
+func TestConsume_RequeueEnqueueFailureDoesNotAck(t *testing.T) {
+	repo := &retryRepo{
+		rec: &domainfunctions.ExecutionRecord{
+			ID: "e1", FunctionID: "fn_1", ProjectID: "p1", DeploymentID: "dep_1",
+			Status: domainfunctions.ExecutionStatusQueued,
+		},
+		getFnErr: errors.New("db unavailable"), // 瞬时失败驱动重试路径
+	}
+	logs := &captureHandler{}
+	q := newChannelQueue()
+	q.enqueueErr = errors.New("redis unavailable") // 重入队失败
+	fn := appfunctions.NewFunctions(&config.AppConfig{}, retryExecutor{}, repo, q)
+	w := NewWorker(fn, q, slog.New(logs))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		w.consume(ctx)
+	}()
+
+	q.ch <- []byte(`{"execution_id":"e1","function_id":"fn_1","project_id":"p1","data":"{}"}`)
+
+	// 等待 Enqueue 失败分支触达（无返回值可观察，经日志同步）。
+	require.Eventually(t, func() bool {
+		return logs.has("re-enqueue failed; PEL entry kept for claim redelivery")
+	}, 5*time.Second, 5*time.Millisecond)
+
+	q.mu.Lock()
+	require.Empty(t, q.acked, "重入队失败不得 Ack（任务蒸发缺陷回归）")
+	require.Empty(t, q.enqueued)
+	q.mu.Unlock()
+
+	cancel()
+	<-done
+}
+
+// TestConsume_AckSucceedsAfterContextCancelled 关停后 Ack 仍须成功（S7 缺陷
+// 1b 回归）：用真实 Redis Stream 语义验证——消费 ctx 取消（模拟优雅关停）
+// 后 XACK 仍落盘（WithoutCancel 派生独立超时）；旧实现透传已取消 ctx，
+// XACK 必败 → 已执行成功的任务留 PEL、重启后被重复消费。
+func TestConsume_AckSucceedsAfterContextCancelled(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	q := infraqueue.NewRedisQueue(rdb)
+	// ackMessage 不触达 functions，nil 即可。
+	w := NewWorker(nil, q, slog.New(slog.DiscardHandler))
+	group := domainshared.QueueFunctionsExecutions + "-group"
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	require.NoError(t, q.Enqueue(ctx, domainshared.QueueFunctionsExecutions, []byte(`{"execution_id":"e1"}`)))
+	payload, ack, err := q.Dequeue(ctx, domainshared.QueueFunctionsExecutions, time.Second)
+	require.NoError(t, err)
+	require.NotNil(t, payload)
+	require.NotEmpty(t, ack)
+
+	// 前置确认：消息在 PEL 中。
+	pending, err := rdb.XPending(context.Background(), domainshared.QueueFunctionsExecutions, group).Result()
+	require.NoError(t, err)
+	require.Equal(t, int64(1), pending.Count)
+
+	// 取消消费 ctx 后 Ack：必须落盘。
+	cancel()
+	w.ackMessage(ctx, domainshared.QueueFunctionsExecutions, ack)
+
+	pending, err = rdb.XPending(context.Background(), domainshared.QueueFunctionsExecutions, group).Result()
+	require.NoError(t, err)
+	require.Equal(t, int64(0), pending.Count, "ctx 取消后 XACK 仍须完成（重复消费缺陷回归）")
 }

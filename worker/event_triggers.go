@@ -18,6 +18,8 @@ package worker
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"strconv"
@@ -433,7 +435,14 @@ func (c *eventTriggerConsumer) invokeSubs(ctx context.Context, ev *domainevents.
 // 同一口径）。**补投发生即告警锚点**：eventBackfillTotal 非零 = 存在
 // 停机窗口（本函数同时打 Warn 日志）。
 func (c *eventTriggerConsumer) backfill(ctx context.Context) {
-	watermark := c.getWatermark(ctx)
+	watermark, err := c.getWatermark(ctx)
+	if err != nil {
+		// 瞬断等读取失败：本轮跳过补投（水位留待下轮）。按 0 起步会把
+		// (0, first] 全窗误判为停机缺口、触发全量重补投（最坏 24h outbox
+		// 窗口整体重新匹配入队——幂等有保障但性能冲击真实）。
+		c.logger.Warn("event trigger watermark read failed; skipping backfill this round", "error", err)
+		return
+	}
 	first := c.streamFirstSeq(ctx)
 	if first <= 0 || first <= watermark+1 {
 		return
@@ -479,17 +488,25 @@ func (c *eventTriggerConsumer) backfill(ctx context.Context) {
 	}
 }
 
-// getWatermark 读自管消费水位（键缺失 = 0：从未消费过 → 全区间按缺口
-// 处理——首次部署对存量 Stream 的一次性全量核对，无订阅时零投递纯扫描）。
-func (c *eventTriggerConsumer) getWatermark(ctx context.Context) int64 {
+// getWatermark 读自管消费水位。键缺失（redis.Nil）= 合法 0：从未消费过 →
+// 全区间按缺口处理——首次部署对存量 Stream 的一次性全量核对，无订阅时零
+// 投递纯扫描。其他错误（连接瞬断等）上抛给调用方跳过本轮补投：静默按 0
+// 起步会让 backfill 把已消费区间误判为停机缺口、全窗重补投。
+func (c *eventTriggerConsumer) getWatermark(ctx context.Context) (int64, error) {
 	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	v, err := c.rdb.Get(wctx, domainshared.FunctionsEventLastSeqKey).Result()
 	if err != nil {
-		return 0 // redis.Nil（缺失）或瞬断：按 0 起步，advance 单调纠偏
+		if errors.Is(err, redis.Nil) {
+			return 0, nil
+		}
+		return 0, err
 	}
-	n, _ := strconv.ParseInt(v, 10, 64)
-	return n
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("watermark %q: %w", v, err)
+	}
+	return n, nil
 }
 
 // advanceWatermark 原子推进消费水位（Lua 单调：仅新值更大才写）。
