@@ -64,10 +64,10 @@ func writeFixtureRepo(t *testing.T) *fixtureRepo {
 	}
 	for rel, content := range fx.files {
 		abs := filepath.Join(dir, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(abs), 0o750); err != nil {
 			t.Fatalf("mkdir %s: %v", rel, err)
 		}
-		if err := os.WriteFile(abs, []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(abs, []byte(content), 0o600); err != nil {
 			t.Fatalf("write %s: %v", rel, err)
 		}
 		if _, err := wt.Add(rel); err != nil {
@@ -118,10 +118,10 @@ func writeNodeModulesRepo(t *testing.T) string {
 	}
 	for rel, content := range files {
 		abs := filepath.Join(dir, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(abs), 0o750); err != nil {
 			t.Fatalf("mkdir %s: %v", rel, err)
 		}
-		if err := os.WriteFile(abs, []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(abs, []byte(content), 0o600); err != nil {
 			t.Fatalf("write %s: %v", rel, err)
 		}
 		if _, err := wt.Add(rel); err != nil {
@@ -153,7 +153,7 @@ func writeBigFileRepo(t *testing.T, size int) string {
 	if _, err := rand.Read(blob); err != nil {
 		t.Fatalf("rand: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "big.bin"), blob, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "big.bin"), blob, 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	if _, err := wt.Add("big.bin"); err != nil {
@@ -180,7 +180,7 @@ func writeManyFilesRepo(t *testing.T, n int) string {
 	}
 	for i := 0; i < n; i++ {
 		rel := fmt.Sprintf("f%03d.txt", i)
-		if err := os.WriteFile(filepath.Join(dir, rel), []byte(rel), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, rel), []byte(rel), 0o600); err != nil {
 			t.Fatalf("write: %v", err)
 		}
 		if _, err := wt.Add(rel); err != nil {

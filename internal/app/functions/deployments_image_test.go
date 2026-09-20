@@ -29,7 +29,7 @@ const sampleImageDigest = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b93
 
 // imageSource 是测试用镜像源样板（一次性凭证随结构体）。
 func imageSource() *domainfunctions.ImageSource {
-	return &domainfunctions.ImageSource{
+	return &domainfunctions.ImageSource{ // #nosec G101 -- 测试夹具伪凭证
 		Reference:        "registry.example.com/acme/greet:v1",
 		RegistryUsername: "bot",
 		RegistryToken:    "one-shot-registry-token",

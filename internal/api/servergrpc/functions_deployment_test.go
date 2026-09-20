@@ -25,7 +25,7 @@ func gitSourceReq() *serverv1.GitSource {
 }
 
 func imageSourceReq() *serverv1.ImageSource {
-	return &serverv1.ImageSource{
+	return &serverv1.ImageSource{ // #nosec G101 -- 测试夹具伪凭证
 		Image:            "registry.example.com/acme/greet:v1",
 		RegistryUsername: "bot",
 		RegistryToken:    "one-shot-registry-token",

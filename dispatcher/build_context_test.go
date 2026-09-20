@@ -99,7 +99,7 @@ func TestPrepareBuildContext_RuntimeEmptySkipsReconcile(t *testing.T) {
 		Zip: makeEntryZip(t, "index.js", "module.exports.main = () => ({})"),
 	})
 	require.NoError(t, err)
-	dockerfile, err := os.ReadFile(filepath.Join(buildDir, "Dockerfile"))
+	dockerfile, err := os.ReadFile(filepath.Join(buildDir, "Dockerfile")) // #nosec G304 -- 读取本测试 t.TempDir() 构建目录内的产物
 	require.NoError(t, err)
 	require.Contains(t, string(dockerfile), "FROM node:24-alpine")
 	_, statErr := os.Stat(filepath.Join(buildDir, ".tw-runner.js"))
@@ -122,7 +122,7 @@ func TestPrepareBuildContext_GoUserMainContract(t *testing.T) {
 	_, statErr := os.Stat(filepath.Join(buildDir, "twmain"))
 	require.True(t, os.IsNotExist(statErr), "平台不得生成 twmain/（零注入契约）")
 
-	dockerfile, err := os.ReadFile(filepath.Join(buildDir, "Dockerfile"))
+	dockerfile, err := os.ReadFile(filepath.Join(buildDir, "Dockerfile")) // #nosec G304 -- 读取本测试 t.TempDir() 构建目录内的产物
 	require.NoError(t, err)
 	require.Contains(t, string(dockerfile), "FROM golang:1.26-alpine")
 	require.Contains(t, string(dockerfile), `RUN go build -trimpath -ldflags="-s -w" -o /out/tw-app .`,
@@ -193,7 +193,7 @@ func TestPrepareBuildContext_GoVendorBranch(t *testing.T) {
 		Runtime: "go-1.26",
 	})
 	require.NoError(t, err)
-	dockerfile, err := os.ReadFile(filepath.Join(buildDir, "Dockerfile"))
+	dockerfile, err := os.ReadFile(filepath.Join(buildDir, "Dockerfile")) // #nosec G304 -- 读取本测试 t.TempDir() 构建目录内的产物
 	require.NoError(t, err)
 	require.Contains(t, string(dockerfile), "ENV GOFLAGS=-mod=vendor")
 	require.NotContains(t, string(dockerfile), "go mod download")
@@ -214,7 +214,7 @@ func TestPrepareBuildContext_NodeDepsLayered(t *testing.T) {
 		Runtime: "node-18.0",
 	})
 	require.NoError(t, err)
-	dockerfile, err := os.ReadFile(filepath.Join(buildDir, "Dockerfile"))
+	dockerfile, err := os.ReadFile(filepath.Join(buildDir, "Dockerfile")) // #nosec G304 -- 读取本测试 t.TempDir() 构建目录内的产物
 	require.NoError(t, err)
 	require.True(t, strings.Contains(string(dockerfile), "npm ci --omit=dev --ignore-scripts"))
 }

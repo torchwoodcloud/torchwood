@@ -336,7 +336,7 @@ func TestValidateSourceURL(t *testing.T) {
 		{name: "https 放行", raw: "https://github.com/o/r.git", wantCode: codes.OK},
 		{name: "http 默认拒绝", raw: "http://github.com/o/r.git", wantCode: codes.InvalidArgument},
 		{name: "http + allow_insecure 放行", raw: "http://gitea.internal/o/r.git", allowInsecure: true, wantCode: codes.OK},
-		{name: "userinfo 拒绝（防 URL 落日志泄密）", raw: "https://user:tok@github.com/o/r.git", wantCode: codes.InvalidArgument},
+		{name: "userinfo 拒绝（防 URL 落日志泄密）", raw: "https://user:tok@github.com/o/r.git", wantCode: codes.InvalidArgument}, // #nosec G101 -- 测试夹具伪凭证（负向用例：断言该形态被拒绝）
 		{name: "ssh scheme 拒绝", raw: "ssh://git@github.com/o/r.git", wantCode: codes.InvalidArgument},
 		{name: "file:// 非 dev 拒绝", raw: "file:///tmp/repo", wantCode: codes.InvalidArgument},
 		{name: "file:// dev 放行并归一本地路径", raw: "file:///tmp/repo", devEnv: true, wantCode: codes.OK, wantLocal: true},

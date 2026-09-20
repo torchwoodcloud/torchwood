@@ -177,7 +177,7 @@ func TestSpawnVerifyInstance_EgressNetworkSelection(t *testing.T) {
 func TestSpawnVerifyInstance_EnvAssembly(t *testing.T) {
 	d := newFakeDaemon()
 	opts := verifyOpts()
-	opts.Env = map[string]string{
+	opts.Env = map[string]string{ // #nosec G101 -- 测试夹具伪凭证（断言不进容器 env）
 		"GREETING":           "hi",
 		"TW_DATA":            `{"secret":"must-not-leak"}`,
 		"TW_EXECUTION_TOKEN": "twx_must-not-leak",

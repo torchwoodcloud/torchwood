@@ -346,15 +346,15 @@ func materializeLocalSource(srcURL, root string, req PackRequest) (string, strin
 			return nil // 不物化：symlink blob 内容是 target 字符串，非文件内容
 		}
 		abs := filepath.Join(root, filepath.FromSlash(f.Name))
-		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil { // #nosec G301 -- git 物化目录沿用 git 惯例权限，内容为仓库工作树非机密
 			return err
 		}
-		out, err := os.OpenFile(abs, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+		out, err := os.OpenFile(abs, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644) // #nosec G302 G304 -- 本地源 git tree 条目物化到进程临时根（MkdirTemp），仅 development 放行，条目名来自仓库自身 tree 非外部任意路径；权限沿用 git 惯例非机密
 		if err != nil {
 			return err
 		}
 		defer func() { _ = out.Close() }()
-		in, err := f.Blob.Reader()
+		in, err := f.Reader()
 		if err != nil {
 			return err
 		}
@@ -571,7 +571,7 @@ func materializeZip(ctxRoot string, opts PackOptions) ([]byte, error) {
 			return status.Error(codes.InvalidArgument,
 				"code packages must not include node_modules — the platform installs dependencies at build time (cross-platform binaries are incompatible)")
 		}
-		f, err := os.Open(p)
+		f, err := os.Open(p) // #nosec G122 G304 -- p 来自 WalkDir 遍历自身物化的临时树（symlink 等非常规条目已跳过），非外部任意路径
 		if err != nil {
 			return err
 		}

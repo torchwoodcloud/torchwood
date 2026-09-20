@@ -162,7 +162,7 @@ func TestAuditRequestSummary_TruncatesHugeStrings(t *testing.T) {
 func TestAuditRequestSummary_GitSourceTokenRedacted(t *testing.T) {
 	req := &serverv1.CreateDeploymentRequest{
 		FunctionId: "fn-1",
-		Source: &serverv1.CreateDeploymentRequest_Git{Git: &serverv1.GitSource{
+		Source: &serverv1.CreateDeploymentRequest_Git{Git: &serverv1.GitSource{ // #nosec G101 -- 测试夹具伪凭证（断言审计打码）
 			Url:       "https://git.example.com/acme/widget.git",
 			Ref:       "main",
 			Directory: "functions/greet",

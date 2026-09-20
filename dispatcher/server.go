@@ -221,18 +221,9 @@ func (s *dispatchServer) handleImportImage(w http.ResponseWriter, r *http.Reques
 		writeError(w, status.Error(codes.InvalidArgument, "project_id/function_id/deployment_id/reference are required"))
 		return
 	}
-	digest, err := s.daemon.ImportImage(r.Context(), ImportImageOptions{
-		ProjectID:              req.ProjectID,
-		FunctionID:             req.FunctionID,
-		DeploymentID:           req.DeploymentID,
-		Reference:              req.Reference,
-		RegistryUsername:       req.RegistryUsername,
-		RegistryToken:          req.RegistryToken,
-		ExpectedDigest:         req.ExpectedDigest,
-		FunctionTimeoutSeconds: req.FunctionTimeoutSeconds,
-		Env:                    req.Env,
-		EgressUntrusted:        req.EgressUntrusted,
-	})
+	// ImportImageRequest 与 ImportImageOptions 字段名/类型/顺序全同构
+	//（tag 差异不影响转换），直接转换替代逐字段拷贝（同字段增改只改一处）。
+	digest, err := s.daemon.ImportImage(r.Context(), ImportImageOptions(req))
 	if err != nil {
 		writeJSON(w, http.StatusOK, ImportImageResponse{Error: errorMessage(err)})
 		return

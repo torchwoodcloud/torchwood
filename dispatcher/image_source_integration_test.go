@@ -119,7 +119,7 @@ func TestIntegration_ImageSourceFullChainE2E(t *testing.T) {
 	requireNoLeftoverVerifyContainers(t, cli, platformRef)
 
 	// —— 池 spawn 执行（复用既有执行断言路径：冷启动 → 健康握手 → 分发）——
-	resp, err := pool.Dispatch(ctx, ExecuteRequest{
+	resp, err := pool.Dispatch(ctx, ExecuteRequest{ // #nosec G101 -- 测试夹具伪凭证
 		Image: platformRef, ProjectID: "imgeit", FunctionID: impFn, DeploymentID: impDep,
 		// runtime=image：BYO 镜像函数的专用 runtime ID（ListRuntimes 增项，
 		// 设计 §3）；池分发只消费 Image/Spec，runtime 值原样透传。
@@ -146,7 +146,7 @@ func buildNonContractImage(t *testing.T, ctx context.Context, cli *client.Client
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte(
 		"FROM node:18-alpine\n"+
-			"CMD [\"node\",\"-e\",\"setInterval(function(){},1000)\"]\n"), 0o644))
+			"CMD [\"node\",\"-e\",\"setInterval(function(){},1000)\"]\n"), 0o600))
 	tarCtx, err := tarDir(dir)
 	require.NoError(t, err)
 	resp, err := cli.ImageBuild(ctx, tarCtx, build.ImageBuildOptions{

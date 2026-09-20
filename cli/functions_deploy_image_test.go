@@ -40,7 +40,7 @@ func TestBuildCreateDeploymentFromImageReq(t *testing.T) {
 			name:       "最小字段（缺省 token 变量）",
 			functionID: "fn_1",
 			image:      "registry.example.com/acme/greet:v1",
-			wantImage: map[string]any{
+			wantImage: map[string]any{ // #nosec G101 -- 测试夹具伪凭证
 				"image":         "registry.example.com/acme/greet:v1",
 				"registryToken": "reg-tok-default",
 			},
@@ -51,7 +51,7 @@ func TestBuildCreateDeploymentFromImageReq(t *testing.T) {
 			image:      "registry.example.com/acme/greet@sha256:1111111111111111111111111111111111111111111111111111111111111111",
 			username:   "bot",
 			tokenEnv:   "MY_REGISTRY_TOKEN",
-			wantImage: map[string]any{
+			wantImage: map[string]any{ // #nosec G101 -- 测试夹具伪凭证
 				"image":            "registry.example.com/acme/greet@sha256:1111111111111111111111111111111111111111111111111111111111111111",
 				"registryToken":    "reg-tok-my",
 				"registryUsername": "bot",

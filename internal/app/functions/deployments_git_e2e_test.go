@@ -73,7 +73,7 @@ func TestCreateDeployment_GitEndToEndSmoke(t *testing.T) {
 	require.NoError(t, repo.CreateFunction(ctx, fn))
 
 	cfg := &config.AppConfig{Functions: &config.Functions{
-		Packer: &config.Functions_Packer{Url: packerSrv.URL, SharedToken: "e2e-shared-token"},
+		Packer: &config.Functions_Packer{Url: packerSrv.URL, SharedToken: "e2e-shared-token"}, // #nosec G101 -- 测试夹具伪凭证
 	}}
 	uc := NewFunctionsWithSourcePacker(
 		cfg,
@@ -90,7 +90,7 @@ func TestCreateDeployment_GitEndToEndSmoke(t *testing.T) {
 	}), CreateDeploymentCommand{
 		ProjectID:  projectID,
 		FunctionID: fn.ID,
-		Git: &domainfunctions.GitSource{
+		Git: &domainfunctions.GitSource{ // #nosec G101 -- 测试夹具伪凭证
 			URL:       "https://git.example.com/acme/widget.git",
 			Ref:       "main",
 			Directory: "functions/greet",
@@ -107,7 +107,7 @@ func TestCreateDeployment_GitEndToEndSmoke(t *testing.T) {
 	path := zipPath(projectID, fn.ID, dep.ID)
 	t.Cleanup(func() { _ = removeZip(projectID, fn.ID, dep.ID) })
 	require.FileExists(t, path)
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- 读取本测试自建的盘上 zip 快照（zipPath 产物）
 	require.NoError(t, err)
 	require.Equal(t, zipBytes, string(data), "盘上 zip = packer 物化产物（字节级）")
 

@@ -94,8 +94,8 @@ func writeGitE2EFixtureRepo(t *testing.T) *gitE2ERepo {
 	}
 	for rel, content := range files {
 		abs := filepath.Join(dir, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(content), 0o644))
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o750))
+		require.NoError(t, os.WriteFile(abs, []byte(content), 0o600))
 		_, err := wt.Add(rel)
 		require.NoError(t, err)
 	}
@@ -185,7 +185,7 @@ func TestIntegration_GitSourceGoFunctionFullChainE2E(t *testing.T) {
 	requireNoLeftoverVerifyContainers(t, cli, imageRef)
 
 	// —— 真实 spawn 执行（池冷启动 → 健康握手 → 分发）——
-	resp, err := pool.Dispatch(ctx, ExecuteRequest{
+	resp, err := pool.Dispatch(ctx, ExecuteRequest{ // #nosec G101 -- 测试夹具伪凭证
 		Image: imageRef, ProjectID: "giteit", FunctionID: fnID, DeploymentID: depID,
 		Runtime: "go-1.26", Spec: "shared-1x", TimeoutSeconds: 30,
 		Data:           `{"n":41}`,

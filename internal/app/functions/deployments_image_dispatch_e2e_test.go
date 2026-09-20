@@ -45,8 +45,8 @@ func TestCreateDeployment_ImageDispatcherEndToEndSmoke(t *testing.T) {
 	const (
 		imageRef      = "registry.example.com/acme/greet:v1"
 		pinnedDigest  = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
-		sharedToken   = "e2e-dispatcher-token"
-		oneShotToken  = "one-shot-registry-token"
+		sharedToken   = "e2e-dispatcher-token"    // #nosec G101 -- 测试夹具伪凭证
+		oneShotToken  = "one-shot-registry-token" // #nosec G101 -- 测试夹具伪凭证
 		executionData = `{"hello":"world"}`
 	)
 

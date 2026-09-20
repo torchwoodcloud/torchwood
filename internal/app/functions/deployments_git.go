@@ -144,7 +144,7 @@ func (f *Functions) validateGitSource(src *domainfunctions.GitSource) error {
 			if os.Getenv("TORCHWOOD_ENV") != "development" {
 				return status.Error(codes.InvalidArgument, "git source url file:// is only allowed in development environment")
 			}
-		} else if !(allowInsecure && strings.HasPrefix(src.URL, "http://")) {
+		} else if !allowInsecure || !strings.HasPrefix(src.URL, "http://") {
 			return status.Error(codes.InvalidArgument, "git source url must use https:// (http is only allowed with functions.packer.allow_insecure)")
 		}
 	}

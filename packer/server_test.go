@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,9 +25,11 @@ func stubPack(resp *PackResponse, err error) func(context.Context, PackRequest, 
 	}
 }
 
-func postPack(t *testing.T, url string, headers map[string]string, body string) *http.Response {
+// postPack 发送打包请求，在 helper 内读全响应体并关闭（*http.Response 不
+// 外泄，调用方只拿状态码与响应体字节——响应生命周期收敛在单点）。
+func postPack(t *testing.T, url string, headers map[string]string, body string) (int, []byte) {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodPost, url+"/v1/pack/git", strings.NewReader(body))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url+"/v1/pack/git", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
@@ -37,8 +40,12 @@ func postPack(t *testing.T, url string, headers map[string]string, body string) 
 	if err != nil {
 		t.Fatalf("do request: %v", err)
 	}
-	t.Cleanup(func() { _ = resp.Body.Close() })
-	return resp
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	return resp.StatusCode, raw
 }
 
 // TestPackServerTokenMiddleware：token 配置时缺/错 401、对 200；token 空
@@ -60,15 +67,19 @@ func TestPackServerTokenMiddleware(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := postPack(t, ts.URL, tc.headers, `{"url":"https://example.com/o/r"}`)
-			if resp.StatusCode != tc.want {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.want)
+			code, _ := postPack(t, ts.URL, tc.headers, `{"url":"https://example.com/o/r"}`)
+			if code != tc.want {
+				t.Fatalf("status = %d, want %d", code, tc.want)
 			}
 		})
 	}
 
 	t.Run("healthz 豁免 token", func(t *testing.T) {
-		resp, err := http.Get(ts.URL + "/healthz")
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/healthz", nil)
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("get healthz: %v", err)
 		}
@@ -83,9 +94,9 @@ func TestPackServerTokenMiddleware(t *testing.T) {
 		open.pack = stubPack(&PackResponse{}, nil)
 		ots := httptest.NewServer(open)
 		defer ots.Close()
-		resp := postPack(t, ots.URL, nil, `{"url":"https://example.com/o/r"}`)
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		code, _ := postPack(t, ots.URL, nil, `{"url":"https://example.com/o/r"}`)
+		if code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", code)
 		}
 	})
 }
@@ -104,19 +115,20 @@ func TestPackServerConcurrencyLimit(t *testing.T) {
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
 
-	firstDone := make(chan *http.Response, 1)
+	firstDone := make(chan int, 1)
 	go func() {
-		firstDone <- postPack(t, ts.URL, nil, `{"url":"https://example.com/o/r"}`)
+		code, _ := postPack(t, ts.URL, nil, `{"url":"https://example.com/o/r"}`)
+		firstDone <- code
 	}()
 	<-started
 
-	second := postPack(t, ts.URL, nil, `{"url":"https://example.com/o/r"}`)
-	if second.StatusCode != http.StatusTooManyRequests {
-		t.Fatalf("second request status = %d, want 429", second.StatusCode)
+	second, _ := postPack(t, ts.URL, nil, `{"url":"https://example.com/o/r"}`)
+	if second != http.StatusTooManyRequests {
+		t.Fatalf("second request status = %d, want 429", second)
 	}
 	close(release)
-	if first := <-firstDone; first.StatusCode != http.StatusOK {
-		t.Fatalf("first request status = %d, want 200", first.StatusCode)
+	if first := <-firstDone; first != http.StatusOK {
+		t.Fatalf("first request status = %d, want 200", first)
 	}
 }
 
@@ -130,9 +142,9 @@ func TestPackServerTimeoutMapping(t *testing.T) {
 	}
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
-	resp := postPack(t, ts.URL, nil, `{"url":"https://example.com/o/r"}`)
-	if resp.StatusCode != http.StatusGatewayTimeout {
-		t.Fatalf("status = %d, want 504", resp.StatusCode)
+	code, _ := postPack(t, ts.URL, nil, `{"url":"https://example.com/o/r"}`)
+	if code != http.StatusGatewayTimeout {
+		t.Fatalf("status = %d, want 504", code)
 	}
 }
 
@@ -147,15 +159,15 @@ func TestPackServerBadRequest(t *testing.T) {
 	defer ts.Close()
 
 	t.Run("非法 JSON → 400", func(t *testing.T) {
-		resp := postPack(t, ts.URL, nil, `{not-json`)
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("status = %d, want 400", resp.StatusCode)
+		code, _ := postPack(t, ts.URL, nil, `{not-json`)
+		if code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400", code)
 		}
 	})
 	t.Run("url 缺失 → 400", func(t *testing.T) {
-		resp := postPack(t, ts.URL, nil, `{"ref":"main"}`)
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("status = %d, want 400", resp.StatusCode)
+		code, _ := postPack(t, ts.URL, nil, `{"ref":"main"}`)
+		if code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400", code)
 		}
 	})
 }
@@ -176,12 +188,12 @@ func TestPackGitEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	resp := postPack(t, ts.URL, nil, string(body))
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	code, respBody := postPack(t, ts.URL, nil, string(body))
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", code)
 	}
 	var got PackResponse
-	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+	if err := json.Unmarshal(respBody, &got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
