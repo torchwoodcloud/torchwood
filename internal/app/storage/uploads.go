@@ -164,7 +164,9 @@ func (s *Storage) UploadChunk(ctx context.Context, projectID, uploadID string, p
 const unlockCompleteTimeout = 2 * time.Second
 
 // CompleteUpload 合并分片并创建文件文档。时序：
-// Lock → 缺片校验 → Compose → 建文档 → 删分片 → 删会话 → Unlock（defer）。
+// Lock → 缺片校验 → 幂等重入检查 → Compose → 建文档 → 删分片 → 删会话 → Unlock（defer）。
+// 幂等保证：文档已存在（上次 complete 已建文档但清理被取消，或锁过期窗口内另一
+// complete 已成功）时直接返回已有文档，绝不删 dstKey。
 func (s *Storage) CompleteUpload(ctx context.Context, projectID, uploadID, ownerUserID string, principal databases.Principal) (*storage.File, error) {
 	session, err := s.uploads.Get(ctx, uploadID)
 	if err != nil {
@@ -234,6 +236,19 @@ func (s *Storage) CompleteUpload(ctx context.Context, projectID, uploadID, owner
 	for i := 1; i <= session.PartCount; i++ {
 		chunkKeys = append(chunkKeys, chunkKey(project.ID, session.BucketID, session.FileID, i))
 	}
+	// 幂等重入检查（complete 非幂等数据损坏缺陷修复）：首次 complete 可能在
+	// files.Insert 成功后、分片清理开始前被取消（grpc_gateway 的 60s TimeoutHandler
+	// 对大文件是常态，见上方 J2-1 注释；进程崩溃、锁 1h TTL 过期同理），会话与
+	// 分片保留而文档已落地。这里先查文档：已存在则跳过 Compose/Insert 直接幂等
+	// 成功——否则重试要么因 fileID 主键冲突进入回滚分支误删已落地对象（旧实现的
+	// 数据损坏：files 行在、对象没了，下载永久 404），要么在分片清理中段被取消后
+	// 因分片缺失 Compose 永远失败。清理照常 best-effort（J2-2 口径：剩余分片与
+	// 会话回收，失败仅 Warn）。GetByID 失败按文档不存在继续走主流程（Insert 会
+	// 给出权威判定，冲突分支兜底）。
+	if existing, gerr := s.files.GetByID(ctx, project.ID, session.FileID); gerr == nil && existing != nil {
+		s.completeCleanupBestEffort(ctx, uploadID, session, chunkKeys)
+		return existing, nil
+	}
 	if err := s.store.Compose(ctx, defaultBucketName(s.cfg), dstKey, chunkKeys); err != nil {
 		// Compose 失败不删任何东西：可重试（分片与会话保留）。
 		return nil, fmt.Errorf("compose file: %w", err)
@@ -264,9 +279,23 @@ func (s *Storage) CompleteUpload(ctx context.Context, projectID, uploadID, owner
 		UpdatedAt:   now,
 	}
 	if err := s.files.Insert(ctx, project.ID, file); err != nil {
-		// 回滚：确认「自己仍是锁持有者 + 会话仍存在」双重条件后才删最终对象。
-		// 锁 TTL（1h）若已过期，第二个 complete 可能已重新加锁并成功建文档，
-		// 此时无条件删对象会误删其成果 → 数据损坏。
+		// 主键冲突（repo 将 PG 23505 映射为 AlreadyExists；files 表唯一约束仅
+		// id PRIMARY KEY）→ 同 fileID 文档已存在：几乎只发生在锁 TTL（1h）过期后
+		// 另一 complete 已重新加锁并成功建文档的窗口。幂等返回已存在的文档，绝不删
+		// dstKey——旧实现此处无条件回滚删对象，把上一次成功的成果撕成「files 行在、
+		// 对象没了」的永久 404。AlreadyExists 但读取未命中/失败（DB 抖动，理论上
+		// 不可达）时同样不回滚：23505 只能来自 id 主键、文档必然在，原样返回插入
+		// 错误让调用方重试（重试将命中上方幂等重入检查）。
+		if status.Code(err) == codes.AlreadyExists {
+			if existing, gerr := s.files.GetByID(ctx, project.ID, session.FileID); gerr == nil && existing != nil {
+				s.completeCleanupBestEffort(ctx, uploadID, session, chunkKeys)
+				return existing, nil
+			}
+			return nil, fmt.Errorf("create file document: %w", err)
+		}
+		// 真插入失败（文档确不存在）：回滚删最终对象。确认「自己仍是锁持有者 +
+		// 会话仍存在」双重条件后才删——锁 TTL（1h）若已过期，第二个 complete 可能
+		// 已重新加锁并成功建文档，此时无条件删对象会误删其成果 → 数据损坏。
 		if owner, oerr := s.uploads.IsLockOwner(ctx, uploadID, token); oerr == nil && owner {
 			if s2, gerr := s.uploads.Get(ctx, uploadID); gerr == nil && s2 != nil {
 				_ = s.store.Delete(ctx, defaultBucketName(s.cfg), dstKey)
@@ -275,20 +304,11 @@ func (s *Storage) CompleteUpload(ctx context.Context, projectID, uploadID, owner
 		return nil, fmt.Errorf("create file document: %w", err)
 	}
 
-	// J2-2/E-P1-2：主流程（Compose + files.Insert）已成功，文件对象与文档均已
-	// 落地，此后的清理全部 best-effort——任何失败仅 Warn，不影响成功返回。
-	// 原实现删会话失败会向上抛：请求 ctx 在删分片中段超时取消时会话残留而分片
-	// 已部分删除，重试 complete 将因分片对象缺失永远失败（大文件永久无法完成）。
-	// 兜底依据：孤儿分片由 48h 清理任务回收（CleanupOrphanChunks，见 cleanup.go）；
-	// 残留会话由 24h TTL（storage.UploadSessionTTL）自然过期。
-	for i := 1; i <= session.PartCount; i++ {
-		if derr := s.store.Delete(ctx, defaultBucketName(s.cfg), chunkKeys[i-1]); derr != nil {
-			slog.Warn("delete chunk object failed", "upload_id", uploadID, "key", chunkKeys[i-1], "error", derr)
-		}
-	}
-	if derr := s.uploads.Delete(ctx, uploadID); derr != nil {
-		slog.Warn("delete upload session failed", "upload_id", uploadID, "error", derr)
-	}
+	// J2-2/E-P1-2：主流程（Compose + files.Insert）已成功，此后的清理全部
+	// best-effort（见 completeCleanupBestEffort）——原实现删会话失败会向上抛：
+	// 请求 ctx 在删分片中段超时取消时会话残留而分片已部分删除（重试侧现已由
+	// 上方幂等重入检查兜底：文档已存在直接成功，不再依赖分片齐全）。
+	s.completeCleanupBestEffort(ctx, uploadID, session, chunkKeys)
 
 	return &storage.File{
 		ID:          session.FileID,
@@ -302,6 +322,21 @@ func (s *Storage) CompleteUpload(ctx context.Context, projectID, uploadID, owner
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}, nil
+}
+
+// completeCleanupBestEffort 主流程成功（或幂等重入确认文档已存在）后的清理：
+// 逐片删除分片对象 + 删会话，全部 best-effort——任何失败仅 Warn，不影响成功返回
+//（J2-2/E-P1-2）。兜底依据：孤儿分片由 48h 清理任务回收（CleanupOrphanChunks，
+// 见 cleanup.go）；残留会话由 24h TTL（storage.UploadSessionTTL）自然过期。
+func (s *Storage) completeCleanupBestEffort(ctx context.Context, uploadID string, session *storage.UploadSession, chunkKeys []string) {
+	for i := 1; i <= session.PartCount; i++ {
+		if derr := s.store.Delete(ctx, defaultBucketName(s.cfg), chunkKeys[i-1]); derr != nil {
+			slog.Warn("delete chunk object failed", "upload_id", uploadID, "key", chunkKeys[i-1], "error", derr)
+		}
+	}
+	if derr := s.uploads.Delete(ctx, uploadID); derr != nil {
+		slog.Warn("delete upload session failed", "upload_id", uploadID, "error", derr)
+	}
 }
 
 // AbortUpload 取消上传：删会话后清理全部暂存分片对象（逐片 Delete，幂等）。

@@ -46,6 +46,13 @@ func (r *FileRepository) Insert(ctx context.Context, projectID string, file *dom
 		return err
 	}
 	_, err = conn.NewInsert().Model(m).ModelTableExpr(expr, sch).Exec(ctx)
+	// files 表唯一约束仅 id PRIMARY KEY：23505 即同 fileID 已存在（complete 幂等
+	// 重试窗口等）。映射为 AlreadyExists 供用例层区分「冲突」与「真插入失败」——
+	// 前者幂等返回已有文档，后者才回滚删对象（对齐 identities/runbook 的
+	// isUniqueViolation 映射先例）。
+	if isUniqueViolation(err) {
+		return status.Error(codes.AlreadyExists, "file already exists")
+	}
 	return err
 }
 
