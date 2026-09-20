@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS document_events_outbox_project_topic_seq;
