@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"sort"
 	"testing"
 
@@ -21,10 +22,21 @@ import (
 	"github.com/torchwoodcloud/torchwood/pkg/ident"
 )
 
+// skipWithoutTestDB 集成测试环境未配置时跳过而非 FAIL：本文件两个用例都以
+// 真库为前提，而 testutil.SetupTestDB 缺 env 是 fail-fast 的 t.Fatal——在
+// 无 docker/.env 的环境（如随手 `go test ./...`）下应归为 SKIP。
+func skipWithoutTestDB(t *testing.T) {
+	t.Helper()
+	if os.Getenv("TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE") == "" || os.Getenv("TORCHWOOD_TEST_DATABASE_SOURCE") == "" {
+		t.Skipf("TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE / TORCHWOOD_TEST_DATABASE_SOURCE not set; skipping integration test (run via `mise run test`, which loads .env)")
+	}
+}
+
 func TestCollectionGrantsReconcileHook_WiredInPreStarts(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
+	skipWithoutTestDB(t)
 	ctx := context.Background()
 	db := testutil.SetupTestDB(t)
 
@@ -90,6 +102,7 @@ func TestScaleMetricsHook_WiredInPreStarts(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
+	skipWithoutTestDB(t)
 	ctx := context.Background()
 	db := testutil.SetupTestDB(t)
 

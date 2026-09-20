@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lynx-go/commands"
 	"github.com/stretchr/testify/require"
@@ -95,4 +96,27 @@ func TestRunbookUpCmdUsageErrorSurface(t *testing.T) {
 	err := wrapRunbookUsageError(v, &runbook.UsageError{Err: errors.New("boom")})
 	var ue *commands.UsageError
 	require.ErrorAs(t, err, &ue)
+}
+
+// TestNewInvokeRunbookCallerSharedConnection：newInvokeRunbookCaller 全程持有
+// 单条 server.Client（gRPC 惰性建连，构造不触发网络）——不可达 endpoint 上
+// 首次调用以引擎 CallError 收敛（与短连接路径同一报错面），cleanup 可重复
+// 调用（连接复用对测试透明：引擎注入假 caller 的既有用例不受影响）。
+func TestNewInvokeRunbookCallerSharedConnection(t *testing.T) {
+	isolateConfig(t)
+	g := &GlobalFlags{
+		endpoint:   "127.0.0.1:1", // 不可达端口：连接立即被拒
+		timeoutDur: 200 * time.Millisecond,
+		output:     "json",
+	}
+	caller, cleanup := newInvokeRunbookCaller(g)
+	t.Cleanup(cleanup)
+
+	_, err := caller("/torchwood.server.v1.RunbookService/GetRunbookState", map[string]any{"id": "x"})
+	require.Error(t, err)
+	var ce *runbook.CallError
+	require.ErrorAs(t, err, &ce, "RPC 失败必须分类为引擎的 CallError")
+
+	cleanup()
+	cleanup() // 幂等：重复 Close 不 panic
 }

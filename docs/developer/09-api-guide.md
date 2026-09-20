@@ -271,7 +271,7 @@ CLI 调用验证：`torchwood outbox list-dead --project <id>` 或 `torchwood rp
 
 ## 12. 审计日志
 
-写入侧在 gRPC 审计拦截器（`internal/api/interceptor/audit.go`，`auditRowEligible` 噪声治理准入门）：server / console 面规则是"非读动词默认落审计、豁免必须显式登记"——`auditSilentServerMethods` 显式静默清单（首例 AnalyticsService/IngestEvents），新增高频写方法需同步该清单（护栏测试同步）；client 面仅 AccountService 安全动作落库；拒绝与限速审计不经此门、全部保留。
+写入侧在 gRPC 审计拦截器（`internal/api/interceptor/audit.go`，`auditRowEligible` 噪声治理准入门）：server / console 面规则是"非读动词默认落审计、豁免必须显式登记"——`auditSilentServerMethods` 显式静默清单（首例 AnalyticsService/IngestEvents），新增高频写方法需同步该清单（护栏测试同步）；client 面仅 AccountService 安全动作落库；拒绝与限速审计不经此门、全部保留。交付语义为 **best-effort**（`internal/api/interceptor` 包级注释）：审计行在业务提交后落库（3s 超时、不重试、不落死信），失败仅记 Warn——审计查询结果不承诺与业务操作一一对应，窗口内崩溃可能丢行。
 
 `AuditLogsService`（`proto/server/v1/audit_logs.proto`）只提供读取：
 

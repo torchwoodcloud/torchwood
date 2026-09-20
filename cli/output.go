@@ -14,6 +14,17 @@ import (
 // invoke 建立连接并以全局超时发起一次 InvokeJSON 调用。
 // req 为 nil / string（原始 JSON，如 --data）/ map[string]any。
 func invoke(g *GlobalFlags, method string, req any) ([]byte, error) {
+	c, err := newServerClient(g)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = c.Close() }()
+	return invokeClient(c, g, method, req)
+}
+
+// newServerClient 按全局旗标构造 Server API 客户端（普通 invoke 的短连接
+// 与 runbook 的全程复用连接共用此入口）。
+func newServerClient(g *GlobalFlags) (*server.Client, error) {
 	var opts []server.Option
 	if g.apiKey != "" {
 		opts = append(opts, server.WithAPIKey(g.apiKey))
@@ -26,12 +37,12 @@ func invoke(g *GlobalFlags, method string, req any) ([]byte, error) {
 	if g.version != "" {
 		opts = append(opts, server.WithUserAgent("torchwood-cli/"+g.version))
 	}
-	c, err := server.New(g.endpoint, opts...)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = c.Close() }()
+	return server.New(g.endpoint, opts...)
+}
 
+// invokeClient 在既有连接上以全局超时发起一次 InvokeJSON 调用（连接生命
+// 周期归调用方）。
+func invokeClient(c *server.Client, g *GlobalFlags, method string, req any) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), g.timeoutDur)
 	defer cancel()
 

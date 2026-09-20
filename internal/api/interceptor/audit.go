@@ -1,3 +1,16 @@
+// Package interceptor 承载 gRPC 服务端的认证/审计/限流等一元拦截器。
+//
+// 审计子系统的交付语义（best-effort 契约，架构评审确认的有意取舍）：
+//   - 审计行在业务 handler 提交之后写入（UnaryAuditMiddleware 的收尾段，
+//     见 R01-F7-6：带 3s 超时、不继承 RPC 取消）；
+//   - 写入失败只 Warn，不重试、不落死信队列，也不影响 RPC 响应——审计
+//     永远不让业务调用失败；
+//   - 业务提交与审计落库之间没有事务原子性：进程在窗口内（含 3s 在途
+//     写入）崩溃会丢该请求的审计行。
+//
+// 因此 AuditLogsService 读到的数据是"至少反映成功写入的行"，不承诺与
+// 业务操作一一对应；需要更强保证的合规场景应在消费侧结合业务记录
+// （如 function_executions）与 Warn 日志对账。
 package interceptor
 
 import (

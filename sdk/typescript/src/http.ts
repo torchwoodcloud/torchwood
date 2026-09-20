@@ -15,6 +15,26 @@ import { TorchwoodError, parseErrorResponse } from "./errors.js";
  */
 export type AuthMode = "apiKey" | "user" | "execution" | "none";
 
+/** timeoutMs 缺省值：单请求 30s 兜底（对齐 Go SDK conn.DefaultTimeout）。 */
+export const DEFAULT_TIMEOUT_MS = 30000;
+
+/**
+ * timeoutSignal 为单次请求构造超时中止信号；ms<=0 返回 undefined（禁用）。
+ * AbortSignal.timeout 在 Node >=17.3（SDK engines 为 >=18）与各常青浏览器
+ * 均可用，是主路径；仅在缺失该 API 的老运行时降级为 AbortController +
+ * setTimeout 等价实现，dispose 清掉定时器避免请求完成后仍悬挂事件循环
+ * （AbortSignal.timeout 的内置定时器由运行时自动弱化，无需清理）。
+ */
+function timeoutSignal(ms: number): { signal?: AbortSignal; dispose(): void } {
+  if (ms <= 0) return { dispose() {} };
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    return { signal: AbortSignal.timeout(ms), dispose() {} };
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return { signal: controller.signal, dispose: () => clearTimeout(timer) };
+}
+
 export interface TorchwoodConfig {
   endpoint: string;
   /**
@@ -26,6 +46,14 @@ export interface TorchwoodConfig {
   accessToken?: string;
   /** 函数执行身份短期凭证（functions-v3.md §5.1；优先经 fromExecution 注入）。 */
   executionToken?: string;
+  /**
+   * 单请求超时（毫秒）。缺省 / 显式 undefined = 30000（与 Go SDK
+   * conn.DefaultTimeout 的 30s 兜底对齐）；传 0 = 显式禁用超时——服务端
+   * 停顿时调用将无限挂起，由调用方自行治理（例如外层已有多余超时的场景）。
+   * undefined 不作"禁用"解，保证 `{...defaults, cfg}` 展开合并时不会意外
+   * 关掉超时。
+   */
+  timeoutMs?: number;
   fetch?: typeof fetch;
 }
 
@@ -41,6 +69,7 @@ export class HttpTransport {
   private apiKey?: string;
   private accessToken?: string;
   private executionToken?: string;
+  private timeoutMs: number;
   private fetchImpl: typeof fetch;
 
   constructor(config: TorchwoodConfig) {
@@ -49,6 +78,9 @@ export class HttpTransport {
     this.apiKey = config.apiKey;
     this.accessToken = config.accessToken;
     this.executionToken = config.executionToken;
+    // undefined 与缺省同义（默认 30s）；仅显式 0（及负数）禁用——见
+    // TorchwoodConfig.timeoutMs 注释。
+    this.timeoutMs = config.timeoutMs === undefined ? DEFAULT_TIMEOUT_MS : config.timeoutMs;
     this.fetchImpl = config.fetch ?? ((input, init) => globalThis.fetch(input, init));
   }
 
@@ -96,6 +128,43 @@ export class HttpTransport {
     headers.Authorization = `Bearer ${this.executionToken}`;
   }
 
+  /**
+   * doFetch 是 fetch 的统一出口：注入单请求超时信号（timeoutMs，见
+   * TorchwoodConfig 注释），并把超时中止转译成可辨识的 TorchwoodError
+   * （code "timeout"）。响应头到达后的响应体读取阶段，主路径（AbortSignal.
+   * timeout）同样受同一信号约束；降级路径只覆盖到响应头。
+   */
+  private async doFetch(url: URL | string, init: RequestInit): Promise<Response> {
+    const { signal, dispose } = timeoutSignal(this.timeoutMs);
+    try {
+      return await this.fetchImpl(url, { ...init, signal });
+    } catch (e) {
+      // fetch 因超时信号中止时：规范运行时抛 TimeoutError（AbortSignal.
+      // timeout），老运行时抛 AbortError——两者且信号已触发才归因为超时，
+      // 调用方自建 fetch 的其他 AbortError 原样透传。
+      if (signal?.aborted && e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) {
+        throw new TorchwoodError(
+          `Request timed out after ${this.timeoutMs}ms: ${init.method ?? "GET"} ${String(url)}`,
+          0,
+          "timeout",
+        );
+      }
+      throw e;
+    } finally {
+      dispose();
+    }
+  }
+
+  /**
+   * isEmptyBody 是 request()/requestForm() 共用的空响应体判定。注意两处的
+   * 求值次序有意不同：request() 沿袭原实现先判空体后判 !ok（content-length
+   * 为 0 的非 2xx 响应返回 undefined）；requestForm() 先判 !ok（非 2xx 一律
+   * 抛错），空体判定只作用于成功响应。
+   */
+  private isEmptyBody(res: Response): boolean {
+    return res.status === 204 || res.headers.get("content-length") === "0";
+  }
+
   async request<T>(method: string, path: string, options: RequestOptions = {}): Promise<T> {
     const url = new URL(`${this.endpoint}${path.startsWith("/") ? path : `/${path}`}`);
     if (options.query) {
@@ -141,13 +210,13 @@ export class HttpTransport {
       }
     }
 
-    const res = await this.fetchImpl(url, {
+    const res = await this.doFetch(url, {
       method,
       headers,
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     });
 
-    if (res.status === 204 || res.headers.get("content-length") === "0") {
+    if (this.isEmptyBody(res)) {
       return undefined as T;
     }
 
@@ -188,11 +257,20 @@ export class HttpTransport {
       headers.Authorization = `Bearer ${this.accessToken}`;
     }
 
-    const res = await this.fetchImpl(url, { method, headers, body: form });
+    const res = await this.doFetch(url, { method, headers, body: form });
     if (!res.ok) {
       throw await parseErrorResponse(res);
     }
-    return (await res.json()) as T;
+    // 与 request() 同款空体判定：204 / content-length: 0 / 空文本一律返回
+    // undefined，不做 res.json()（空体直接解析会抛 SyntaxError）。
+    if (this.isEmptyBody(res)) {
+      return undefined as T;
+    }
+    const text = await res.text();
+    if (!text) {
+      return undefined as T;
+    }
+    return JSON.parse(text) as T;
   }
 }
 

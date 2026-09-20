@@ -43,6 +43,11 @@ func (v *verb) Run(_ context.Context, env *commands.Environment, args []string) 
 		if err := v.g.validate(!v.noKey); err != nil {
 			return err
 		}
+		// 明文连非 loopback 远端的一行告警（仅提示不阻断；语义见
+		// insecureRemoteWarning）。
+		if msg := insecureRemoteWarning(v.g.endpoint, v.g.tls); msg != "" {
+			_, _ = fmt.Fprint(env.Stderr, msg)
+		}
 	}
 	return v.run(v, env, args)
 }

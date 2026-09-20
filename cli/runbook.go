@@ -43,9 +43,21 @@ func sdkServerErrorCode(err error) string {
 // Caller：响应 protojson 解码为 map（UseNumber 保整型精度）；错误经 SDK 的
 // ErrorCode 取 gRPC code 名分类为 *runbook.CallError（引擎据此走
 // NotFound/AlreadyExists/FailedPrecondition 收敛分支）。
-func newInvokeRunbookCaller(g *GlobalFlags) runbook.Caller {
-	return func(method string, req map[string]any) (map[string]any, error) {
-		respJSON, err := invoke(g, method, req)
+//
+// 连接复用：一次复合动作（up/down/status/forgive）是 2+N+M 条 RPC，全部
+// 贯穿同一条 server.Client（server.New 一次，每条 RPC 只发 InvokeJSON），
+// 结束后由返回的 cleanup 关闭——把原先每条 RPC 一建一断的短连接收敛为
+// 一条。引擎串行调用 Caller（单协程对账循环），无需并发防护。
+// newServerClient 对 gRPC 而言是惰性建连，此处立即构造不会提前触发网络
+// 拨号；构造失败（如 endpoint 为空）时错误延后到首次调用以 CallError
+// 形态暴露，与短连接路径的报错面一致。
+func newInvokeRunbookCaller(g *GlobalFlags) (runbook.Caller, func()) {
+	c, newErr := newServerClient(g)
+	caller := func(method string, req map[string]any) (map[string]any, error) {
+		if newErr != nil {
+			return nil, runbook.NewCallError("", newErr)
+		}
+		respJSON, err := invokeClient(c, g, method, req)
 		if err != nil {
 			code := ""
 			var rpcErr *rpcError
@@ -64,6 +76,12 @@ func newInvokeRunbookCaller(g *GlobalFlags) runbook.Caller {
 		}
 		return out, nil
 	}
+	cleanup := func() {
+		if c != nil {
+			_ = c.Close()
+		}
+	}
+	return caller, cleanup
 }
 
 // shortRunbookMethod 把全方法名缩为 Service/Method（错误信息可读性）。
@@ -102,7 +120,9 @@ func newRunbookUpCmd(g *GlobalFlags) *verb {
 			if err := noArgs(v, args); err != nil {
 				return err
 			}
-			err := runbook.RunUp(newInvokeRunbookCaller(g), runbook.RunOptions{
+			caller, closeCaller := newInvokeRunbookCaller(g)
+			defer closeCaller()
+			err := runbook.RunUp(caller, runbook.RunOptions{
 				Dir: dir, To: to, ToSet: v.changed("to"), DryRun: dryRun, Quiet: quiet,
 			}, env.Stdout, env.Stderr)
 			return wrapRunbookUsageError(v, err)
@@ -127,7 +147,9 @@ func newRunbookDownCmd(g *GlobalFlags) *verb {
 			if err := noArgs(v, args); err != nil {
 				return err
 			}
-			err := runbook.RunDown(newInvokeRunbookCaller(g), runbook.RunOptions{
+			caller, closeCaller := newInvokeRunbookCaller(g)
+			defer closeCaller()
+			err := runbook.RunDown(caller, runbook.RunOptions{
 				Dir: dir, To: to, ToSet: v.changed("to"), All: all, DryRun: dryRun, Quiet: quiet,
 			}, env.Stdout, env.Stderr)
 			return wrapRunbookUsageError(v, err)
@@ -146,7 +168,9 @@ func newRunbookStatusCmd(g *GlobalFlags) *verb {
 			if err := noArgs(v, args); err != nil {
 				return err
 			}
-			return runbook.RunStatus(newInvokeRunbookCaller(g), dir, env.Stdout)
+			caller, closeCaller := newInvokeRunbookCaller(g)
+			defer closeCaller()
+			return runbook.RunStatus(caller, dir, env.Stdout)
 		})
 }
 
@@ -166,7 +190,9 @@ func newRunbookForgiveCmd(g *GlobalFlags) *verb {
 			if err != nil {
 				return &commands.UsageError{Usage: v.usage, Err: fmt.Errorf("version must be an integer, got %q", args[0])}
 			}
-			return runbook.RunForgive(newInvokeRunbookCaller(g), dir, version, env.Stdout)
+			caller, closeCaller := newInvokeRunbookCaller(g)
+			defer closeCaller()
+			return runbook.RunForgive(caller, dir, version, env.Stdout)
 		})
 }
 
