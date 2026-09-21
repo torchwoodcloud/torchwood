@@ -134,9 +134,10 @@ jobs:
   #   按钮），因此 Dokploy 侧 Autodeploy 保持关闭：push 不自动部署，由本 job
   #   在镜像推完后精确触发一次，git pull 同 commit compose + 拉新 latest，
   #   镜像与配置天然同版本；任一构建 job 失败则不部署。
-  # secrets：DOKPLOY_API_TOKEN（面板 API Keys 创建）；composeId 为面板地址栏
-  # services/compose/<id> 段（非敏感，硬编码；注意不是 webhook URL 里的
-  # refreshToken）。
+  # secrets：DOKPLOY_API_TOKEN（面板 API Keys 创建）、DOKPLOY_URL（实例地址）、
+  # DOKPLOY_COMPOSE_ID（面板地址栏 services/compose/<id> 段；注意不是 webhook
+  # URL 里的 refreshToken）。仓库公开，实例地址与 composeId 一律不硬编码；
+  # token 由 Actions 日志自动 mask。
   # 仅 main 分支自动部署：v* tag 发布的 compose 取默认分支文件、可能与
   # tag 代码有出入，tag 发布手动 Redeploy。
   deploy:
@@ -144,13 +145,12 @@ jobs:
     needs: [build-push, contract-images]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    env:
-      DOKPLOY_URL: http://dokploy.deeploop.net:3000
-      DOKPLOY_COMPOSE_ID: "9hJe2ifSfp9ckiiN4ynFz"
     steps:
       - name: Trigger Dokploy deploy (compose.deploy)
         env:
           DOKPLOY_API_TOKEN: ${{ secrets.DOKPLOY_API_TOKEN }}
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
         run: |
           payload=$(jq -n \
             --arg composeId "$DOKPLOY_COMPOSE_ID" \
