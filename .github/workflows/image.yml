@@ -124,18 +124,19 @@ jobs:
           docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/functions-hello:v1
           docker push ${{ env.REGISTRY }}/${{ github.repository_owner }}/functions-hello:latest
 
-  # 部署回调：镜像全部推送成功后 POST Dokploy 服务 webhook 触发部署。
-  # 背景：Dokploy Compose 服务若开 Auto Deploy，push 即部署——与 CI 推镜像
-  # 竞态（pull_policy: always 拉到上一轮 latest）。约定 Dokploy 侧关闭
-  # Auto Deploy，触发源唯一化为本 job：push → 构建推 GHCR → 成功才回调，
-  # webhook 部署 git pull 同一 commit 的 compose/config.yaml，镜像与配置
-  # 天然同版本对齐；任一构建 job 失败则不部署。
-  # 契约（2026-09-21 排障确认，Dokploy pages/api/deploy/compose/[refreshToken].ts）：
-  # webhook 按 GitHub push event 契约校验——必须带 x-github-event 头 + body
-  # {"ref":"refs/heads/main"}（extractBranchName 只认这两个，URL query 参数
-  # 一律被忽略，缺任意一个即 301 "Branch Not Match"）；且 compose 的
-  # Autodeploy 总闸必须开着，关闸时 webhook 一并禁用（"Automatic deployments
-  # are disabled"）。secret DOKPLOY_WEBHOOK_URL = 面板复制的裸 URL。
+  # 部署回调：镜像全部推送成功后调 Dokploy API（compose.deploy）触发部署。
+  # 为什么用 API 而不是 webhook（2026-09-21 排障定案，源码
+  # pages/api/deploy/compose/[refreshToken].ts + server/api/routers/compose.ts）：
+  # - webhook 按 GitHub push event 契约校验（x-github-event 头 + body.ref），
+  #   且受 compose 的 Autodeploy 总闸管辖（关闸即 400 disabled）——总闸开着
+  #   又会导致 push 自动部署与 CI 推镜像竞态（拉到上一轮 latest）。
+  # - compose.deploy API 只做权限检查、不读 autoDeploy 开关（等价面板 Deploy
+  #   按钮），因此 Dokploy 侧 Autodeploy 保持关闭：push 不自动部署，由本 job
+  #   在镜像推完后精确触发一次，git pull 同 commit compose + 拉新 latest，
+  #   镜像与配置天然同版本；任一构建 job 失败则不部署。
+  # secrets：DOKPLOY_API_TOKEN（面板 API Keys 创建）；composeId 为面板地址栏
+  # services/compose/<id> 段（非敏感，硬编码；注意不是 webhook URL 里的
+  # refreshToken）。
   # 仅 main 分支自动部署：v* tag 发布的 compose 取默认分支文件、可能与
   # tag 代码有出入，tag 发布手动 Redeploy。
   deploy:
@@ -143,16 +144,21 @@ jobs:
     needs: [build-push, contract-images]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      DOKPLOY_URL: http://dokploy.deeploop.net:3000
+      DOKPLOY_COMPOSE_ID: "9hJe2ifSfp9ckiiN4ynFz"
     steps:
-      - name: Notify Dokploy webhook
+      - name: Trigger Dokploy deploy (compose.deploy)
+        env:
+          DOKPLOY_API_TOKEN: ${{ secrets.DOKPLOY_API_TOKEN }}
         run: |
           payload=$(jq -n \
-            --arg ref "refs/heads/${GITHUB_REF_NAME}" \
-            --arg id "$GITHUB_SHA" \
-            --arg msg "${{ github.event.head_commit.message }}" \
-            '{ref: $ref, head_commit: {id: $id, message: $msg}}')
-          response=$(curl -sS -X POST "${{ secrets.DOKPLOY_WEBHOOK_URL }}" \
-            -H "x-github-event: push" \
+            --arg composeId "$DOKPLOY_COMPOSE_ID" \
+            --arg title "${{ github.event.head_commit.message }}" \
+            --arg desc "image sha-${GITHUB_SHA::7}" \
+            '{composeId: $composeId, title: $title, description: $desc}')
+          response=$(curl -sS -X POST "$DOKPLOY_URL/api/compose.deploy" \
+            -H "x-api-key: $DOKPLOY_API_TOKEN" \
             -H "Content-Type: application/json" \
             -d "$payload" \
             --max-time 30 --retry 3 --retry-delay 5 --retry-connrefused \
@@ -160,7 +166,7 @@ jobs:
           code=$(tail -n1 <<<"$response")
           body=$(sed '$d' <<<"$response")
           if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
-            echo "webhook failed with HTTP $code: $body"
+            echo "Dokploy deploy API failed with HTTP $code: $body"
             exit 1
           fi
-          echo "webhook accepted (HTTP $code): $body"
+          echo "deploy accepted (HTTP $code): $body"
