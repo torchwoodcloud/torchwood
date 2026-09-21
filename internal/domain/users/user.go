@@ -28,6 +28,7 @@ type User struct {
 	Email         string
 	PasswordHash  string
 	Name          string
+	Avatar        string
 	Status        string
 	EmailVerified bool
 	Phone         string
@@ -178,6 +179,7 @@ func (u *User) DocumentData() map[string]any {
 	data := map[string]any{
 		"email":          u.Email,
 		"name":           u.Name,
+		"avatar":         u.Avatar,
 		"status":         u.Status,
 		"email_verified": u.EmailVerified,
 		"labels":         labels,

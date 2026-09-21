@@ -23,6 +23,8 @@ export interface Account {
   id: string;
   email: string;
   name: string;
+  /** 对外展示头像（https URL）；匿名注册默认空串。 */
+  avatar: string;
   status: string;
   email_verified: boolean;
   created_at: string;

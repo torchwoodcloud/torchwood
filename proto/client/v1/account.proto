@@ -529,6 +529,8 @@ message Account {
   bool email_verified = 5;
   google.protobuf.Timestamp created_at = 6;
   google.protobuf.Timestamp updated_at = 7;
+  // 对外展示头像（https URL）；匿名注册默认空串。
+  string avatar = 8;
 }
 
 message TokenBundle {
@@ -564,12 +566,22 @@ message RefreshTokenResponse {
 
 message UpdateAccountRequest {
   // name/email 为 optional：未设置 = 不修改；设置（含空串）= 更新/清空。
-  optional string name = 1;
+  // name ≤64 码点（len 族按 Unicode 码点计）且不含控制字符（U+0000–U+001F、U+007F）。
+  optional string name = 1 [(buf.validate.field).string = {
+    max_len: 64,
+    pattern: "^[^\x00-\x1f\x7f]*$"
+  }];
   optional string email = 2;
   string password = 3;
   string old_password = 4;
   // 改邮箱时必填：用于拼接新邮箱验证链接（语义同 CreateVerificationRequest.url）。
   string url = 5;
+  // avatar 为 optional：未设置 = 不修改；空串 = 清除；非空必须 https URL 且 ≤1024 字节
+  // （对外展示头像，下游 UI 直载，拒非 https scheme）。
+  optional string avatar = 6 [(buf.validate.field).string = {
+    max_bytes: 1024,
+    pattern: "^($|https://)"
+  }];
 }
 
 // DELETE /v1/account 无请求体（REST 不带 body）；目标 = 凭证主体自身。
@@ -615,6 +627,8 @@ message GetPrefsResponse {
 }
 
 message UpdatePrefsRequest {
+  // 语义为 RFC 7386 JSON Merge Patch：对象递归合并、null = 删除该键、
+  // 未提及的键保留、非对象值整体替换、空对象 = 无变化；校验对象为合并结果。
   // 形状约束（buf.validate）由 validate 拦截器统一求值（09-api-guide §2.3）；
   // 业务规则仍留在 app 用例层。
   google.protobuf.Struct prefs = 1 [(buf.validate.field).required = true];

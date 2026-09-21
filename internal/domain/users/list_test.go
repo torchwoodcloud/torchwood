@@ -43,10 +43,12 @@ func TestNormalizeUpdateColumns(t *testing.T) {
 	got, err := NormalizeUpdateColumns(map[string]any{
 		"email":         " Alice@Torchwood.local ",
 		"password_hash": "h1",
+		"avatar":        "https://cdn.example.test/a.png",
 	})
 	require.NoError(t, err)
 	require.Equal(t, "alice@torchwood.local", got["email"])
 	require.Equal(t, "h1", got["password_hash"])
+	require.Equal(t, "https://cdn.example.test/a.png", got["avatar"])
 
 	_, err = NormalizeUpdateColumns(map[string]any{"unknown": 1})
 	require.ErrorIs(t, err, ErrInvalidUpdate)

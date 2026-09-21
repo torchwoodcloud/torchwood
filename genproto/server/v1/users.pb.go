@@ -7,6 +7,7 @@
 package serverv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
@@ -159,12 +160,15 @@ type UpdateUserRequest struct {
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// status/name/email 为 optional：未设置 = 不修改；设置（含空串）= 更新/清空。
 	// labels/prefs 为 Struct：空对象 = 不修改（清空需置空对象键值，v2 再 optional 化）。
+	// prefs 管理面为权威整体覆写（客户端 /v1/account/prefs 才是 merge 语义）。
+	// name/avatar 校验与客户端面同口径（≤64 码点拒控制字符 / https ≤1024 字节）。
 	Status        *string          `protobuf:"bytes,2,opt,name=status,proto3,oneof" json:"status,omitempty"`
 	Labels        *structpb.Struct `protobuf:"bytes,3,opt,name=labels,proto3" json:"labels,omitempty"`
 	Prefs         *structpb.Struct `protobuf:"bytes,4,opt,name=prefs,proto3" json:"prefs,omitempty"`
 	EmailVerified *bool            `protobuf:"varint,5,opt,name=email_verified,json=emailVerified,proto3,oneof" json:"email_verified,omitempty"`
 	Name          *string          `protobuf:"bytes,6,opt,name=name,proto3,oneof" json:"name,omitempty"`
 	Email         *string          `protobuf:"bytes,7,opt,name=email,proto3,oneof" json:"email,omitempty"`
+	Avatar        *string          `protobuf:"bytes,8,opt,name=avatar,proto3,oneof" json:"avatar,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -244,6 +248,13 @@ func (x *UpdateUserRequest) GetName() string {
 func (x *UpdateUserRequest) GetEmail() string {
 	if x != nil && x.Email != nil {
 		return *x.Email
+	}
+	return ""
+}
+
+func (x *UpdateUserRequest) GetAvatar() string {
+	if x != nil && x.Avatar != nil {
+		return *x.Avatar
 	}
 	return ""
 }
@@ -460,6 +471,8 @@ type User struct {
 	Labels        *structpb.Struct       `protobuf:"bytes,8,opt,name=labels,proto3" json:"labels,omitempty"`
 	Prefs         *structpb.Struct       `protobuf:"bytes,9,opt,name=prefs,proto3" json:"prefs,omitempty"`
 	Phone         string                 `protobuf:"bytes,10,opt,name=phone,proto3" json:"phone,omitempty"`
+	// 对外展示头像（https URL）；注册默认空串。
+	Avatar        string `protobuf:"bytes,11,opt,name=avatar,proto3" json:"avatar,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -560,6 +573,13 @@ func (x *User) GetPrefs() *structpb.Struct {
 func (x *User) GetPhone() string {
 	if x != nil {
 		return x.Phone
+	}
+	return ""
+}
+
+func (x *User) GetAvatar() string {
+	if x != nil {
+		return x.Avatar
 	}
 	return ""
 }
@@ -765,7 +785,7 @@ var File_server_v1_users_proto protoreflect.FileDescriptor
 
 const file_server_v1_users_proto_rawDesc = "" +
 	"\n" +
-	"\x15server/v1/users.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\" \n" +
+	"\x15server/v1/users.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\" \n" +
 	"\x0eGetUserRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\xd1\x01\n" +
 	"\x11CreateUserRequest\x12\x14\n" +
@@ -774,19 +794,22 @@ const file_server_v1_users_proto_rawDesc = "" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12\x16\n" +
 	"\x06status\x18\x04 \x01(\tR\x06status\x12/\n" +
 	"\x06labels\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x06labels\x12-\n" +
-	"\x05prefs\x18\x06 \x01(\v2\x17.google.protobuf.StructR\x05prefs\"\xb1\x02\n" +
+	"\x05prefs\x18\x06 \x01(\v2\x17.google.protobuf.StructR\x05prefs\"\x87\x03\n" +
 	"\x11UpdateUserRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\x06status\x18\x02 \x01(\tH\x00R\x06status\x88\x01\x01\x12/\n" +
 	"\x06labels\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x06labels\x12-\n" +
 	"\x05prefs\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x05prefs\x12*\n" +
-	"\x0eemail_verified\x18\x05 \x01(\bH\x01R\remailVerified\x88\x01\x01\x12\x17\n" +
-	"\x04name\x18\x06 \x01(\tH\x02R\x04name\x88\x01\x01\x12\x19\n" +
-	"\x05email\x18\a \x01(\tH\x03R\x05email\x88\x01\x01B\t\n" +
+	"\x0eemail_verified\x18\x05 \x01(\bH\x01R\remailVerified\x88\x01\x01\x12,\n" +
+	"\x04name\x18\x06 \x01(\tB\x13\xbaH\x10r\x0e\x18@2\n" +
+	"^[^\x00-\x1f\x7f]*$H\x02R\x04name\x88\x01\x01\x12\x19\n" +
+	"\x05email\x18\a \x01(\tH\x03R\x05email\x88\x01\x01\x124\n" +
+	"\x06avatar\x18\b \x01(\tB\x17\xbaH\x14r\x12(\x80\b2\r^($|https://)H\x04R\x06avatar\x88\x01\x01B\t\n" +
 	"\a_statusB\x11\n" +
 	"\x0f_email_verifiedB\a\n" +
 	"\x05_nameB\b\n" +
-	"\x06_email\"G\n" +
+	"\x06_emailB\t\n" +
+	"\a_avatar\"G\n" +
 	"\x19UpdateUserPasswordRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\"I\n" +
@@ -798,7 +821,7 @@ const file_server_v1_users_proto_rawDesc = "" +
 	"\x05users\x18\x01 \x03(\v2\x19.torchwood.server.v1.UserR\x05users\x129\n" +
 	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"T\n" +
 	"\x18ListUserSessionsResponse\x128\n" +
-	"\bsessions\x18\x01 \x03(\v2\x1c.torchwood.server.v1.SessionR\bsessions\"\xeb\x02\n" +
+	"\bsessions\x18\x01 \x03(\v2\x1c.torchwood.server.v1.SessionR\bsessions\"\x83\x03\n" +
 	"\x04User\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x12\n" +
@@ -812,7 +835,8 @@ const file_server_v1_users_proto_rawDesc = "" +
 	"\x06labels\x18\b \x01(\v2\x17.google.protobuf.StructR\x06labels\x12-\n" +
 	"\x05prefs\x18\t \x01(\v2\x17.google.protobuf.StructR\x05prefs\x12\x14\n" +
 	"\x05phone\x18\n" +
-	" \x01(\tR\x05phone\"\xf1\x01\n" +
+	" \x01(\tR\x05phone\x12\x16\n" +
+	"\x06avatar\x18\v \x01(\tR\x06avatar\"\xf1\x01\n" +
 	"\aSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x1a\n" +

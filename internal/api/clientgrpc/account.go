@@ -113,7 +113,7 @@ func (s *AccountService) RefreshToken(ctx context.Context, req *clientv1.Refresh
 
 func (s *AccountService) UpdateAccount(ctx context.Context, req *clientv1.UpdateAccountRequest) (*clientv1.Account, error) {
 	// D-1 presence 语义（本仓生成物无 HasXxx，用非 nil 判断）：
-	// name/email 未设置=不修改；设置（含空串）=更新/清空。
+	// name/email/avatar 未设置=不修改；设置（含空串）=更新/清空。
 	cmd := client.UpdateAccountCommand{
 		URL:         req.GetUrl(),
 		Password:    req.GetPassword(),
@@ -124,6 +124,9 @@ func (s *AccountService) UpdateAccount(ctx context.Context, req *clientv1.Update
 	}
 	if req.Email != nil {
 		cmd.Email = req.Email
+	}
+	if req.Avatar != nil {
+		cmd.Avatar = req.Avatar
 	}
 	user, err := s.account.UpdateAccount(ctx, cmd)
 	if err != nil {
@@ -657,6 +660,7 @@ func mapUser(u *client.User) *clientv1.Account {
 		Id:            u.ID,
 		Email:         u.Email,
 		Name:          u.Name,
+		Avatar:        u.Avatar,
 		Status:        u.Status,
 		EmailVerified: u.EmailVerified,
 		CreatedAt:     timestamppb.New(u.CreatedAt),

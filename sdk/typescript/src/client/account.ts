@@ -85,6 +85,7 @@ export class AccountService {
 
   async updateAccount(input: {
     name?: string;
+    avatar?: string;
     email?: string;
     password?: string;
     old_password?: string;
@@ -138,6 +139,8 @@ export class AccountService {
     return res.prefs ?? {};
   }
 
+  // RFC 7386 JSON Merge Patch 语义：对象递归合并、null = 删键、未提及键保留、
+  // 非对象值整体替换；服务端读-合并-写原子完成，无需先 getPrefs 回写。
   async updatePrefs(prefs: Record<string, unknown>): Promise<Record<string, unknown>> {
     const res = await this.http.request<{ prefs: Record<string, unknown> }>(
       "PUT",

@@ -261,6 +261,8 @@ type Account struct {
 	EmailVerified bool                   `protobuf:"varint,5,opt,name=email_verified,json=emailVerified,proto3" json:"email_verified,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// 对外展示头像（https URL）；匿名注册默认空串。
+	Avatar        string `protobuf:"bytes,8,opt,name=avatar,proto3" json:"avatar,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -342,6 +344,13 @@ func (x *Account) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *Account) GetAvatar() string {
+	if x != nil {
+		return x.Avatar
+	}
+	return ""
 }
 
 type TokenBundle struct {
@@ -655,12 +664,16 @@ func (x *RefreshTokenResponse) GetTokens() *TokenBundle {
 type UpdateAccountRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// name/email 为 optional：未设置 = 不修改；设置（含空串）= 更新/清空。
+	// name ≤64 码点（len 族按 Unicode 码点计）且不含控制字符（U+0000–U+001F、U+007F）。
 	Name        *string `protobuf:"bytes,1,opt,name=name,proto3,oneof" json:"name,omitempty"`
 	Email       *string `protobuf:"bytes,2,opt,name=email,proto3,oneof" json:"email,omitempty"`
 	Password    string  `protobuf:"bytes,3,opt,name=password,proto3" json:"password,omitempty"`
 	OldPassword string  `protobuf:"bytes,4,opt,name=old_password,json=oldPassword,proto3" json:"old_password,omitempty"`
 	// 改邮箱时必填：用于拼接新邮箱验证链接（语义同 CreateVerificationRequest.url）。
-	Url           string `protobuf:"bytes,5,opt,name=url,proto3" json:"url,omitempty"`
+	Url string `protobuf:"bytes,5,opt,name=url,proto3" json:"url,omitempty"`
+	// avatar 为 optional：未设置 = 不修改；空串 = 清除；非空必须 https URL 且 ≤1024 字节
+	// （对外展示头像，下游 UI 直载，拒非 https scheme）。
+	Avatar        *string `protobuf:"bytes,6,opt,name=avatar,proto3,oneof" json:"avatar,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -726,6 +739,13 @@ func (x *UpdateAccountRequest) GetOldPassword() string {
 func (x *UpdateAccountRequest) GetUrl() string {
 	if x != nil {
 		return x.Url
+	}
+	return ""
+}
+
+func (x *UpdateAccountRequest) GetAvatar() string {
+	if x != nil && x.Avatar != nil {
+		return *x.Avatar
 	}
 	return ""
 }
@@ -1179,6 +1199,8 @@ func (x *GetPrefsResponse) GetPrefs() *structpb.Struct {
 
 type UpdatePrefsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
+	// 语义为 RFC 7386 JSON Merge Patch：对象递归合并、null = 删除该键、
+	// 未提及的键保留、非对象值整体替换、空对象 = 无变化；校验对象为合并结果。
 	// 形状约束（buf.validate）由 validate 拦截器统一求值（09-api-guide §2.3）；
 	// 业务规则仍留在 app 用例层。
 	Prefs         *structpb.Struct `protobuf:"bytes,1,opt,name=prefs,proto3" json:"prefs,omitempty"`
@@ -3090,7 +3112,7 @@ const file_client_v1_account_proto_rawDesc = "" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\"*\n" +
 	"\tMeRequest\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\"\xf8\x01\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\"\x90\x02\n" +
 	"\aAccount\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x12\n" +
@@ -3100,7 +3122,8 @@ const file_client_v1_account_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x90\x01\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x16\n" +
+	"\x06avatar\x18\b \x01(\tR\x06avatar\"\x90\x01\n" +
 	"\vTokenBundle\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
 	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken\x129\n" +
@@ -3123,15 +3146,18 @@ const file_client_v1_account_proto_rawDesc = "" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12#\n" +
 	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken\"P\n" +
 	"\x14RefreshTokenResponse\x128\n" +
-	"\x06tokens\x18\x01 \x01(\v2 .torchwood.client.v1.TokenBundleR\x06tokens\"\xae\x01\n" +
-	"\x14UpdateAccountRequest\x12\x17\n" +
-	"\x04name\x18\x01 \x01(\tH\x00R\x04name\x88\x01\x01\x12\x19\n" +
+	"\x06tokens\x18\x01 \x01(\v2 .torchwood.client.v1.TokenBundleR\x06tokens\"\x84\x02\n" +
+	"\x14UpdateAccountRequest\x12,\n" +
+	"\x04name\x18\x01 \x01(\tB\x13\xbaH\x10r\x0e\x18@2\n" +
+	"^[^\x00-\x1f\x7f]*$H\x00R\x04name\x88\x01\x01\x12\x19\n" +
 	"\x05email\x18\x02 \x01(\tH\x01R\x05email\x88\x01\x01\x12\x1a\n" +
 	"\bpassword\x18\x03 \x01(\tR\bpassword\x12!\n" +
 	"\fold_password\x18\x04 \x01(\tR\voldPassword\x12\x10\n" +
-	"\x03url\x18\x05 \x01(\tR\x03urlB\a\n" +
+	"\x03url\x18\x05 \x01(\tR\x03url\x124\n" +
+	"\x06avatar\x18\x06 \x01(\tB\x17\xbaH\x14r\x12(\x80\b2\r^($|https://)H\x02R\x06avatar\x88\x01\x01B\a\n" +
 	"\x05_nameB\b\n" +
-	"\x06_email\"\x16\n" +
+	"\x06_emailB\t\n" +
+	"\a_avatar\"\x16\n" +
 	"\x14DeleteAccountRequest\"k\n" +
 	"\x19ConfirmEmailChangeRequest\x12\x1d\n" +
 	"\n" +

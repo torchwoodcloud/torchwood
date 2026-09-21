@@ -1454,6 +1454,10 @@
         "updated_at": {
           "type": "string",
           "format": "date-time"
+        },
+        "avatar": {
+          "type": "string",
+          "title": "对外展示头像（https URL）；匿名注册默认空串。"
         }
       }
     },
@@ -1848,7 +1852,7 @@
       "properties": {
         "name": {
           "type": "string",
-          "title": "name/email 为 optional：未设置 = 不修改；设置（含空串）= 更新/清空。"
+          "title": "name/email 为 optional：未设置 = 不修改；设置（含空串）= 更新/清空。\nname ≤64 码点（len 族按 Unicode 码点计）且不含控制字符（U+0000–U+001F、U+007F）。"
         },
         "email": {
           "type": "string"
@@ -1862,6 +1866,10 @@
         "url": {
           "type": "string",
           "title": "改邮箱时必填：用于拼接新邮箱验证链接（语义同 CreateVerificationRequest.url）。"
+        },
+        "avatar": {
+          "type": "string",
+          "title": "avatar 为 optional：未设置 = 不修改；空串 = 清除；非空必须 https URL 且 ≤1024 字节\n（对外展示头像，下游 UI 直载，拒非 https scheme）。"
         }
       }
     },
@@ -1884,7 +1892,7 @@
       "properties": {
         "prefs": {
           "type": "object",
-          "title": "形状约束（buf.validate）由 validate 拦截器统一求值（09-api-guide §2.3）；\n业务规则仍留在 app 用例层。"
+          "title": "语义为 RFC 7386 JSON Merge Patch：对象递归合并、null = 删除该键、\n未提及的键保留、非对象值整体替换、空对象 = 无变化；校验对象为合并结果。\n形状约束（buf.validate）由 validate 拦截器统一求值（09-api-guide §2.3）；\n业务规则仍留在 app 用例层。"
         }
       }
     },

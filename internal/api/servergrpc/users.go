@@ -110,6 +110,9 @@ func (s *UsersService) UpdateUser(ctx context.Context, req *serverv1.UpdateUserR
 	if req.Name != nil {
 		updates["name"] = req.GetName()
 	}
+	if req.Avatar != nil {
+		updates["avatar"] = req.GetAvatar()
+	}
 	if req.Email != nil {
 		updates["email"] = req.GetEmail()
 	}
@@ -205,6 +208,9 @@ func mapUserDoc(doc *databases.Document) *serverv1.User {
 	}
 	if v, ok := doc.Data["name"].(string); ok {
 		u.Name = v
+	}
+	if v, ok := doc.Data["avatar"].(string); ok {
+		u.Avatar = v
 	}
 	if v, ok := doc.Data["status"].(string); ok {
 		u.Status = v

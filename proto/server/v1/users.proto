@@ -7,6 +7,7 @@ option go_package = "github.com/torchwoodcloud/torchwood/genproto/server/v1;serv
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
+import "buf/validate/validate.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
 import "shared/v1/authz.proto";
 import "shared/v1/common.proto";
@@ -158,12 +159,21 @@ message UpdateUserRequest {
   string id = 1;
   // status/name/email 为 optional：未设置 = 不修改；设置（含空串）= 更新/清空。
   // labels/prefs 为 Struct：空对象 = 不修改（清空需置空对象键值，v2 再 optional 化）。
+  // prefs 管理面为权威整体覆写（客户端 /v1/account/prefs 才是 merge 语义）。
+  // name/avatar 校验与客户端面同口径（≤64 码点拒控制字符 / https ≤1024 字节）。
   optional string status = 2;
   google.protobuf.Struct labels = 3;
   google.protobuf.Struct prefs = 4;
   optional bool email_verified = 5;
-  optional string name = 6;
+  optional string name = 6 [(buf.validate.field).string = {
+    max_len: 64,
+    pattern: "^[^\x00-\x1f\x7f]*$"
+  }];
   optional string email = 7;
+  optional string avatar = 8 [(buf.validate.field).string = {
+    max_bytes: 1024,
+    pattern: "^($|https://)"
+  }];
 }
 
 message UpdateUserPasswordRequest {
@@ -196,6 +206,8 @@ message User {
   google.protobuf.Struct labels = 8;
   google.protobuf.Struct prefs = 9;
   string phone = 10;
+  // 对外展示头像（https URL）；注册默认空串。
+  string avatar = 11;
 }
 
 message Session {

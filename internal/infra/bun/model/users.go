@@ -15,6 +15,7 @@ type User struct {
 	Email         string          `bun:"email,notnull"`
 	PasswordHash  string          `bun:"password_hash,notnull,default:''"`
 	Name          string          `bun:"name,notnull,default:''"`
+	Avatar        string          `bun:"avatar,notnull,default:''"`
 	Status        string          `bun:"status,notnull,default:'active'"`
 	EmailVerified bool            `bun:"email_verified,notnull,default:false"`
 	PendingEmail  string          `bun:"pending_email,notnull,default:''"`

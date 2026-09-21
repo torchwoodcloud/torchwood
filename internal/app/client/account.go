@@ -198,6 +198,7 @@ type User struct {
 	ID            string
 	Email         string
 	Name          string
+	Avatar        string
 	Status        string
 	EmailVerified bool
 	CreatedAt     time.Time
@@ -218,9 +219,11 @@ type Session struct {
 }
 
 type UpdateAccountCommand struct {
-	// Name/Email 为指针（D-1 presence 语义）：nil=不修改；非 nil（含空串）=更新/清空。
+	// Name/Email/Avatar 为指针（D-1 presence 语义）：nil=不修改；非 nil（含空串）=更新/清空。
+	// 格式门禁（name ≤64 码点拒控制字符 / avatar https ≤1024 字节）在 proto validate 注解。
 	Name        *string
 	Email       *string
+	Avatar      *string
 	URL         string // 改邮箱时必填：新邮箱验证链接模板（语义同 CreateVerificationRequest.url）
 	Password    string
 	OldPassword string
@@ -718,6 +721,9 @@ func (a *Account) UpdateAccount(ctx context.Context, cmd UpdateAccountCommand) (
 	if cmd.Name != nil {
 		updates["name"] = *cmd.Name
 	}
+	if cmd.Avatar != nil {
+		updates["avatar"] = *cmd.Avatar
+	}
 	hash := found.PasswordHash
 	oldEmail := normalizeEmail(found.Email)
 	emailChanging := false
@@ -968,6 +974,11 @@ func (a *Account) GetPrefs(ctx context.Context) (map[string]any, error) {
 	return found.Prefs, nil
 }
 
+// UpdatePrefs 以 RFC 7386 JSON Merge Patch 语义合并写入：patch 对象递归合并进
+// 服务端现值（null = 删键、未提及键保留、非对象值整体替换），读-合并-写单次
+// 用例内完成——调用方无需先 GET 再回写，无并发丢键窗口。校验对象为合并结果
+// （输入合规但合并后超限 → InvalidArgument 且不落库）；管理面 UpdateUser 的
+// prefs 仍是权威整体覆写，两语义刻意不同。
 func (a *Account) UpdatePrefs(ctx context.Context, prefs map[string]any) (map[string]any, error) {
 	p, err := a.requireUser(ctx)
 	if err != nil {
@@ -976,20 +987,52 @@ func (a *Account) UpdatePrefs(ctx context.Context, prefs map[string]any) (map[st
 	if prefs == nil {
 		return nil, status.Error(codes.InvalidArgument, "prefs is required")
 	}
-	if err := validatePrefs(prefs); err != nil {
-		return nil, err
-	}
-	if err := a.usersRepo.Update(ctx, p.ProjectID, p.UserID, map[string]any{"prefs": prefs}); err != nil {
-		return nil, fmt.Errorf("update prefs: %w", err)
-	}
 	found, err := a.usersRepo.GetByID(ctx, p.ProjectID, p.UserID)
 	if err != nil {
 		return nil, err
 	}
-	if found == nil || found.Prefs == nil {
+	if found == nil {
+		return nil, status.Error(codes.NotFound, "user not found")
+	}
+	merged := MergePrefs(found.Prefs, prefs)
+	if err := validatePrefs(merged); err != nil {
+		return nil, err
+	}
+	if err := a.usersRepo.Update(ctx, p.ProjectID, p.UserID, map[string]any{"prefs": merged}); err != nil {
+		return nil, fmt.Errorf("update prefs: %w", err)
+	}
+	next, err := a.usersRepo.GetByID(ctx, p.ProjectID, p.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if next == nil || next.Prefs == nil {
 		return map[string]any{}, nil
 	}
-	return found.Prefs, nil
+	return next.Prefs, nil
+}
+
+// MergePrefs 按 RFC 7386 JSON Merge Patch 把 patch 合并进 current 的纯函数：
+// 对象递归合并；patch 值为 null（Go nil）= 删除该键；未提及的键保留；
+// 非对象值（标量/数组）整体替换；空 patch = 原样返回浅拷贝。不修改任何入参。
+func MergePrefs(current, patch map[string]any) map[string]any {
+	out := make(map[string]any, len(current)+len(patch))
+	for k, v := range current {
+		out[k] = v
+	}
+	for k, v := range patch {
+		if v == nil {
+			delete(out, k)
+			continue
+		}
+		if pm, ok := v.(map[string]any); ok {
+			if cm, ok := out[k].(map[string]any); ok {
+				out[k] = MergePrefs(cm, pm)
+				continue
+			}
+		}
+		out[k] = v
+	}
+	return out
 }
 
 // prefs 大小与嵌套深度上限。
@@ -1101,6 +1144,7 @@ func accountUser(u *users.User) *User {
 		ID:            u.ID,
 		Email:         u.Email,
 		Name:          u.Name,
+		Avatar:        u.Avatar,
 		Status:        u.Status,
 		EmailVerified: u.EmailVerified,
 		CreatedAt:     u.CreatedAt,

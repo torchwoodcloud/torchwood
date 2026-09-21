@@ -330,7 +330,7 @@
       "properties": {
         "status": {
           "type": "string",
-          "title": "status/name/email 为 optional：未设置 = 不修改；设置（含空串）= 更新/清空。\nlabels/prefs 为 Struct：空对象 = 不修改（清空需置空对象键值，v2 再 optional 化）。"
+          "title": "status/name/email 为 optional：未设置 = 不修改；设置（含空串）= 更新/清空。\nlabels/prefs 为 Struct：空对象 = 不修改（清空需置空对象键值，v2 再 optional 化）。\nprefs 管理面为权威整体覆写（客户端 /v1/account/prefs 才是 merge 语义）。\nname/avatar 校验与客户端面同口径（≤64 码点拒控制字符 / https ≤1024 字节）。"
         },
         "labels": {
           "type": "object"
@@ -345,6 +345,9 @@
           "type": "string"
         },
         "email": {
+          "type": "string"
+        },
+        "avatar": {
           "type": "string"
         }
       }
@@ -573,6 +576,10 @@
         },
         "phone": {
           "type": "string"
+        },
+        "avatar": {
+          "type": "string",
+          "title": "对外展示头像（https URL）；注册默认空串。"
         }
       }
     }

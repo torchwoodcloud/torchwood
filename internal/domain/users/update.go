@@ -10,6 +10,7 @@ var UserUpdateColumns = map[string]struct{}{
 	"email":          {},
 	"password_hash":  {},
 	"name":           {},
+	"avatar":         {},
 	"status":         {},
 	"email_verified": {},
 	"pending_email":  {},
