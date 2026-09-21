@@ -163,6 +163,14 @@ service AssetsService {
       api_key_scope: { resource: SCOPE_RESOURCE_ASSETS, op: SCOPE_OP_READ }
     };
   }
+  // ListDefAssets：定义维度的用户持有列表（Console 资产详情页，只读）。
+  // owner_id 为可选过滤（按 UserID 查询）；仅返回 owner_type=user 的持有。
+  rpc ListDefAssets(ListDefAssetsRequest) returns (ListDefAssetsResponse) {
+    option (google.api.http) = { get: "/v1/server/assets/defs/{def_id}/holders" };
+    option (torchwood.shared.v1.method_auth) = {
+      api_key_scope: { resource: SCOPE_RESOURCE_ASSETS, op: SCOPE_OP_READ }
+    };
+  }
 }
 
 message AssetDef {
@@ -348,5 +356,18 @@ message ListUserLedgerRequest {
 
 message ListUserLedgerResponse {
   repeated AssetLedgerEntry entries = 1;
+  shared.v1.ListResponseMeta meta = 2;
+}
+
+message ListDefAssetsRequest {
+  string def_id = 1 [(buf.validate.field).required = true];
+  // 可选 owner_id 过滤（空 = 该定义全部用户持有）。
+  string owner_id = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListDefAssetsResponse {
+  repeated AssetHolding holdings = 1;
   shared.v1.ListResponseMeta meta = 2;
 }

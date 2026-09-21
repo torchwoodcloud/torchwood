@@ -10,6 +10,7 @@ import {
   deleteAssetDef,
   getAssetDef,
   listAssetDefs,
+  listDefHolders,
   listUserAssets,
   listUserLedger,
   type AssetDef,
@@ -31,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ColumnDef } from "@/components/list/DataTable";
 import {
   DeleteButton,
@@ -225,6 +227,33 @@ export function AssetDefDetailPage() {
     },
   });
 
+  // 用户持有列表（定义维度）：UserID 过滤 + keyset 分页；过滤条件变化 reset 回第一页。
+  const [ownerInput, setOwnerInput] = useState("");
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const holdersPaging = useServerPaging();
+  const holders = useQuery({
+    queryKey: ["def-holders", projectId, id, ownerFilter, holdersPaging.pageSize, holdersPaging.pageToken],
+    queryFn: () =>
+      listDefHolders(id!, {
+        ownerId: ownerFilter || undefined,
+        pageSize: holdersPaging.pageSize,
+        pageToken: holdersPaging.pageToken,
+      }),
+    enabled: !!id,
+    placeholderData: (prev) => prev,
+  });
+  const holderRows = holders.data?.rows ?? [];
+
+  const applyOwnerFilter = () => {
+    setOwnerFilter(ownerInput.trim());
+    holdersPaging.reset();
+  };
+  const clearOwnerFilter = () => {
+    setOwnerInput("");
+    setOwnerFilter("");
+    holdersPaging.reset();
+  };
+
   if (isLoading) return <DetailSkeleton />;
   if (!def) return <NotFound backTo="/console/assets" />;
 
@@ -246,6 +275,86 @@ export function AssetDefDetailPage() {
           { label: "创建时间", value: formatDateTime(def.created_at, tz) },
         ]}
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>用户持有（只读）</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            className="mb-4 flex flex-wrap items-end gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              applyOwnerFilter();
+            }}
+          >
+            <div className="space-y-2 min-w-[240px]">
+              <Label htmlFor="holder-owner">用户 ID</Label>
+              <Input
+                id="holder-owner"
+                value={ownerInput}
+                onChange={(e) => setOwnerInput(e.target.value)}
+                placeholder="按 UserID 过滤，留空显示全部"
+              />
+            </div>
+            <Button type="submit" variant="outline">
+              查询
+            </Button>
+            {ownerFilter ? (
+              <Button type="button" variant="ghost" onClick={clearOwnerFilter}>
+                清除
+              </Button>
+            ) : null}
+          </form>
+          {holders.isLoading ? (
+            <p className="text-sm text-muted-foreground">加载中…</p>
+          ) : holderRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {ownerFilter ? "该用户无此资产持有" : "暂无用户持有"}
+            </p>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>用户 ID</TableHead>
+                    <TableHead>数量</TableHead>
+                    <TableHead>等级</TableHead>
+                    <TableHead>到期时间</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {holderRows.map((h) => (
+                    <TableRow key={h.id}>
+                      <TableCell>
+                        <Link
+                          to={`/console/users/${encodeURIComponent(h.owner_id ?? "")}`}
+                          className="font-mono text-xs hover:underline"
+                        >
+                          {h.owner_id}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{formatInt64(h.quantity)}</TableCell>
+                      <TableCell>{h.level ?? "—"}</TableCell>
+                      <TableCell>{h.expires_at ? formatDateTime(h.expires_at, tz) : "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <ListPaginationKeyset
+                page={holdersPaging.page}
+                pageSize={holdersPaging.pageSize}
+                rowCount={holderRows.length}
+                hasPrev={holdersPaging.hasPrev}
+                hasNext={!!holders.data?.nextPageToken}
+                onPrev={holdersPaging.goPrev}
+                onNext={() => holdersPaging.goNext(holders.data?.nextPageToken)}
+                onPageSizeChange={holdersPaging.setPageSize}
+              />
+            </>
+          )}
+        </CardContent>
+      </Card>
     </DetailPageWrapper>
   );
 }

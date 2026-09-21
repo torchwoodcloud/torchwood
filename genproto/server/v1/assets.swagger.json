@@ -188,6 +188,57 @@
         ]
       }
     },
+    "/v1/server/assets/defs/{def_id}/holders": {
+      "get": {
+        "summary": "ListDefAssets：定义维度的用户持有列表（Console 资产详情页，只读）。\nowner_id 为可选过滤（按 UserID 查询）；仅返回 owner_type=user 的持有。",
+        "operationId": "AssetsService_ListDefAssets",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListDefAssetsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "def_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "owner_id",
+            "description": "可选 owner_id 过滤（空 = 该定义全部用户持有）。",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "page_token",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "AssetsService"
+        ]
+      }
+    },
     "/v1/server/assets/users/{owner_id}": {
       "get": {
         "summary": "ListUserAssets / ListUserLedger：Console 用户资产查询（PR6，只读）。",
@@ -872,6 +923,21 @@
         },
         "ref_id": {
           "type": "string"
+        }
+      }
+    },
+    "v1ListDefAssetsResponse": {
+      "type": "object",
+      "properties": {
+        "holdings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/torchwoodserverv1AssetHolding"
+          }
+        },
+        "meta": {
+          "$ref": "#/definitions/v1ListResponseMeta"
         }
       }
     },

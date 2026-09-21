@@ -33,6 +33,7 @@ const (
 	AssetsService_Reconcile_FullMethodName      = "/torchwood.server.v1.AssetsService/Reconcile"
 	AssetsService_ListUserAssets_FullMethodName = "/torchwood.server.v1.AssetsService/ListUserAssets"
 	AssetsService_ListUserLedger_FullMethodName = "/torchwood.server.v1.AssetsService/ListUserLedger"
+	AssetsService_ListDefAssets_FullMethodName  = "/torchwood.server.v1.AssetsService/ListDefAssets"
 )
 
 // AssetsServiceClient is the client API for AssetsService service.
@@ -58,6 +59,9 @@ type AssetsServiceClient interface {
 	// ListUserAssets / ListUserLedger：Console 用户资产查询（PR6，只读）。
 	ListUserAssets(ctx context.Context, in *ListUserAssetsRequest, opts ...grpc.CallOption) (*ListUserAssetsResponse, error)
 	ListUserLedger(ctx context.Context, in *ListUserLedgerRequest, opts ...grpc.CallOption) (*ListUserLedgerResponse, error)
+	// ListDefAssets：定义维度的用户持有列表（Console 资产详情页，只读）。
+	// owner_id 为可选过滤（按 UserID 查询）；仅返回 owner_type=user 的持有。
+	ListDefAssets(ctx context.Context, in *ListDefAssetsRequest, opts ...grpc.CallOption) (*ListDefAssetsResponse, error)
 }
 
 type assetsServiceClient struct {
@@ -198,6 +202,16 @@ func (c *assetsServiceClient) ListUserLedger(ctx context.Context, in *ListUserLe
 	return out, nil
 }
 
+func (c *assetsServiceClient) ListDefAssets(ctx context.Context, in *ListDefAssetsRequest, opts ...grpc.CallOption) (*ListDefAssetsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDefAssetsResponse)
+	err := c.cc.Invoke(ctx, AssetsService_ListDefAssets_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AssetsServiceServer is the server API for AssetsService service.
 // All implementations must embed UnimplementedAssetsServiceServer
 // for forward compatibility.
@@ -221,6 +235,9 @@ type AssetsServiceServer interface {
 	// ListUserAssets / ListUserLedger：Console 用户资产查询（PR6，只读）。
 	ListUserAssets(context.Context, *ListUserAssetsRequest) (*ListUserAssetsResponse, error)
 	ListUserLedger(context.Context, *ListUserLedgerRequest) (*ListUserLedgerResponse, error)
+	// ListDefAssets：定义维度的用户持有列表（Console 资产详情页，只读）。
+	// owner_id 为可选过滤（按 UserID 查询）；仅返回 owner_type=user 的持有。
+	ListDefAssets(context.Context, *ListDefAssetsRequest) (*ListDefAssetsResponse, error)
 	mustEmbedUnimplementedAssetsServiceServer()
 }
 
@@ -269,6 +286,9 @@ func (UnimplementedAssetsServiceServer) ListUserAssets(context.Context, *ListUse
 }
 func (UnimplementedAssetsServiceServer) ListUserLedger(context.Context, *ListUserLedgerRequest) (*ListUserLedgerResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListUserLedger not implemented")
+}
+func (UnimplementedAssetsServiceServer) ListDefAssets(context.Context, *ListDefAssetsRequest) (*ListDefAssetsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListDefAssets not implemented")
 }
 func (UnimplementedAssetsServiceServer) mustEmbedUnimplementedAssetsServiceServer() {}
 func (UnimplementedAssetsServiceServer) testEmbeddedByValue()                       {}
@@ -525,6 +545,24 @@ func _AssetsService_ListUserLedger_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AssetsService_ListDefAssets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDefAssetsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AssetsServiceServer).ListDefAssets(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AssetsService_ListDefAssets_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AssetsServiceServer).ListDefAssets(ctx, req.(*ListDefAssetsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AssetsService_ServiceDesc is the grpc.ServiceDesc for AssetsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -583,6 +621,10 @@ var AssetsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListUserLedger",
 			Handler:    _AssetsService_ListUserLedger_Handler,
+		},
+		{
+			MethodName: "ListDefAssets",
+			Handler:    _AssetsService_ListDefAssets_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

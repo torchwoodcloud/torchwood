@@ -240,6 +240,24 @@ func (s *memStore) ListByOwner(_ context.Context, projectID string, ownerType do
 	return out, nil
 }
 
+func (s *memStore) ListByDef(_ context.Context, projectID string, ownerType domainassets.OwnerType, ownerID, defID string, limit int, before time.Time) ([]domainassets.Holding, error) {
+	var out []domainassets.Holding
+	for _, h := range s.holdings {
+		if h.ProjectID != projectID || h.OwnerType != ownerType || h.DefID != defID || !h.CreatedAt.Before(before) {
+			continue
+		}
+		if ownerID != "" && h.OwnerID != ownerID {
+			continue
+		}
+		out = append(out, *cloneHolding(h))
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 func (s *memStore) UpdateHolding(_ context.Context, h *domainassets.Holding, expectVersion int64) error {
 	cur := s.holdings[h.ID]
 	if cur == nil || cur.Version != expectVersion {
@@ -375,6 +393,9 @@ func (r memHoldings) ListForUpdate(ctx context.Context, p string, ot domainasset
 }
 func (r memHoldings) ListByOwner(ctx context.Context, p string, ot domainassets.OwnerType, oid string, limit int, before time.Time) ([]domainassets.Holding, error) {
 	return r.s.ListByOwner(ctx, p, ot, oid, limit, before)
+}
+func (r memHoldings) ListByDef(ctx context.Context, p string, ot domainassets.OwnerType, oid, def string, limit int, before time.Time) ([]domainassets.Holding, error) {
+	return r.s.ListByDef(ctx, p, ot, oid, def, limit, before)
 }
 func (r memHoldings) Update(ctx context.Context, h *domainassets.Holding, v int64) error {
 	return r.s.UpdateHolding(ctx, h, v)
@@ -855,4 +876,57 @@ func TestOrderFulfiller_TopupQuantityFromOrderAmount(t *testing.T) {
 	_, err := f.Fulfill(context.Background(), order)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), anyHolding(env.store).Quantity)
+}
+
+// TestListDefAssets_FiltersByDefAndOwner：定义维度持有列表——跨定义隔离、
+// owner 过滤、过期持有懒过滤、def 不存在 NotFound。
+func TestListDefAssets_FiltersByDefAndOwner(t *testing.T) {
+	env := setupAssets(t)
+	gold := env.createDef(t, domainassets.ClassCurrency, "gold")
+	silver := env.createDef(t, domainassets.ClassCurrency, "silver")
+
+	_, err := env.assets.Grant(adminCtx("p1"), GrantCommand{
+		OwnerID: "u1", DefCode: "gold", Quantity: 10, IdempotencyKey: "g1",
+	})
+	require.NoError(t, err)
+	_, err = env.assets.Grant(adminCtx("p1"), GrantCommand{
+		OwnerID: "u2", DefCode: "gold", Quantity: 5, IdempotencyKey: "g2",
+	})
+	require.NoError(t, err)
+	_, err = env.assets.Grant(adminCtx("p1"), GrantCommand{
+		OwnerID: "u1", DefCode: "silver", Quantity: 7, IdempotencyKey: "g3",
+	})
+	require.NoError(t, err)
+
+	rows, err := env.assets.ListDefAssets(adminCtx("p1"), gold.ID, "", 0, time.Time{})
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	for _, r := range rows {
+		require.Equal(t, "gold", r.DefCode)
+		require.Equal(t, domainassets.ClassCurrency, r.Class)
+	}
+
+	rows, err = env.assets.ListDefAssets(adminCtx("p1"), gold.ID, "u1", 0, time.Time{})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "u1", rows[0].Holding.OwnerID)
+	require.Equal(t, int64(10), rows[0].Holding.Quantity)
+
+	rows, err = env.assets.ListDefAssets(adminCtx("p1"), silver.ID, "", 0, time.Time{})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "u1", rows[0].Holding.OwnerID)
+
+	ticket := env.createDef(t, domainassets.ClassStack, "ticket")
+	past := env.now.Add(-time.Hour)
+	_, err = env.assets.Grant(adminCtx("p1"), GrantCommand{
+		OwnerID: "u1", DefCode: "ticket", Quantity: 1, ExpiresAt: &past, IdempotencyKey: "g4",
+	})
+	require.NoError(t, err)
+	rows, err = env.assets.ListDefAssets(adminCtx("p1"), ticket.ID, "", 0, time.Time{})
+	require.NoError(t, err)
+	require.Empty(t, rows, "过期持有懒过滤")
+
+	_, err = env.assets.ListDefAssets(adminCtx("p1"), "missing", "", 0, time.Time{})
+	require.Equal(t, codes.NotFound, status.Code(err))
 }

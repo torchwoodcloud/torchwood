@@ -29,6 +29,9 @@ type HoldingRepo interface {
 	ListForUpdate(ctx context.Context, projectID string, ownerType OwnerType, ownerID, defID string) ([]Holding, error)
 	// ListByOwner 读路径（懒过滤由 use-case 做）；created_at DESC 分页。
 	ListByOwner(ctx context.Context, projectID string, ownerType OwnerType, ownerID string, limit int, before time.Time) ([]Holding, error)
+	// ListByDef 读路径：定义维度持有列表（ownerID 非空时过滤单业主，
+	// 空时返回该定义全部持有）；懒过滤与分页约定同 ListByOwner。
+	ListByDef(ctx context.Context, projectID string, ownerType OwnerType, ownerID, defID string, limit int, before time.Time) ([]Holding, error)
 	Update(ctx context.Context, h *Holding, expectVersion int64) error
 	Delete(ctx context.Context, projectID, holdingID string, expectVersion int64) error
 	// ListExpiredInProject 到期扫描（worker）：expires_at <= now，FOR UPDATE SKIP LOCKED。

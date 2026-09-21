@@ -90,7 +90,10 @@ func TestInvokeJSONBadJSON(t *testing.T) {
 // ——阶段②（docs/design/runtime-vars.md §2.3），wrapper：RuntimeVarsService
 // 集合 CRUD 5 + 变量 CRUD 5 + 版本 3，同名透传）。
 
-const expectedServerMethodCount = 163
+// 163 → 164（2026-09-21，assets.proto 新增 ListDefAssets——定义维度持有
+// 查询（Console 资产详情页），wrapper：AssetsService.ListDefAssets）。
+
+const expectedServerMethodCount = 164
 
 // TestInvokeJSONCompleteness 遍历 protoregistry.GlobalFiles 中 torchwood.server.v1
 // 包的全部方法（排除 APIKeysService），断言每个方法都能被解析并用空 JSON 构造

@@ -217,6 +217,29 @@ func (r *assetHoldingRepo) ListByOwner(ctx context.Context, projectID string, ow
 	return mapHoldingsToDomain(rows), nil
 }
 
+func (r *assetHoldingRepo) ListByDef(ctx context.Context, projectID string, ownerType assets.OwnerType, ownerID, defID string, limit int, before time.Time) ([]assets.Holding, error) {
+	ctx2, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	conn, sch, expr, err := Scoped(ctx2, r.db, projectID, "asset_holdings", "ah")
+	if err != nil {
+		return nil, err
+	}
+	var rows []model.AssetHolding
+	q := conn.NewSelect().Model(&rows).ModelTableExpr(expr, sch).
+		Where("ah.project_id = ?", projectID).
+		Where("ah.owner_type = ?", string(ownerType)).
+		Where("ah.def_id = ?", defID).
+		Where("ah.created_at < ?", before)
+	if ownerID != "" {
+		q = q.Where("ah.owner_id = ?", ownerID)
+	}
+	err = q.Order("ah.created_at DESC").Limit(limit).Scan(ctx2)
+	if err != nil {
+		return nil, err
+	}
+	return mapHoldingsToDomain(rows), nil
+}
+
 func (r *assetHoldingRepo) Update(ctx context.Context, h *assets.Holding, expectVersion int64) error {
 	ctx2, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()

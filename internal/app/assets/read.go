@@ -43,6 +43,39 @@ func (a *Assets) ListUserAssets(ctx context.Context, ownerID string, limit int, 
 	return a.listOwnerAssets(ctx, projectID, ownerID, limit, before)
 }
 
+// ListDefAssets 返回定义维度的用户持有（Server / Console 只读查询）；
+// ownerID 非空时过滤单业主。
+func (a *Assets) ListDefAssets(ctx context.Context, defID, ownerID string, limit int, before time.Time) ([]HoldingView, error) {
+	projectID, err := projectScope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if defID == "" {
+		return nil, status.Error(codes.InvalidArgument, "def_id is required")
+	}
+	def, err := a.defs.GetByID(ctx, projectID, defID)
+	if err != nil {
+		return nil, err
+	}
+	if def == nil {
+		return nil, status.Error(codes.NotFound, "asset def not found")
+	}
+	limit, before = normalizeList(limit, before)
+	rows, err := a.holdings.ListByDef(ctx, projectID, domainassets.OwnerTypeUser, ownerID, defID, limit, before)
+	if err != nil {
+		return nil, err
+	}
+	now := a.ts()
+	out := make([]HoldingView, 0, len(rows))
+	for i := range rows {
+		if rows[i].Expired(now) {
+			continue
+		}
+		out = append(out, HoldingView{Holding: rows[i], DefCode: def.Code, Class: def.Class})
+	}
+	return out, nil
+}
+
 func (a *Assets) listOwnerAssets(ctx context.Context, projectID, ownerID string, limit int, before time.Time) ([]HoldingView, error) {
 	limit, before = normalizeList(limit, before)
 	rows, err := a.holdings.ListByOwner(ctx, projectID, domainassets.OwnerTypeUser, ownerID, limit, before)

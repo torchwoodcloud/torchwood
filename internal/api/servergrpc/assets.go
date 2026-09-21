@@ -314,6 +314,31 @@ func (s *AssetsService) ListUserLedger(ctx context.Context, req *serverv1.ListUs
 	return &serverv1.ListUserLedgerResponse{Entries: out, Meta: meta}, nil
 }
 
+func (s *AssetsService) ListDefAssets(ctx context.Context, req *serverv1.ListDefAssetsRequest) (*serverv1.ListDefAssetsResponse, error) {
+	// def_id required 由 buf.validate 注解承担。
+	before, err := decodeServerOrderCursor(req.GetPageToken())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid page token")
+	}
+	rows, err := s.assets.ListDefAssets(ctx, req.GetDefId(), req.GetOwnerId(), int(req.GetPageSize()), before)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*serverv1.AssetHolding, len(rows))
+	for i := range rows {
+		mapped, err := mapServerHolding(rows[i])
+		if err != nil {
+			return nil, err
+		}
+		out[i] = mapped
+	}
+	meta := &sharedv1.ListResponseMeta{PageSize: req.GetPageSize()}
+	if len(rows) > 0 {
+		meta.NextPageToken = encodeServerOrderCursor(rows[len(rows)-1].Holding.CreatedAt)
+	}
+	return &serverv1.ListDefAssetsResponse{Holdings: out, Meta: meta}, nil
+}
+
 func (s *AssetsService) Reconcile(ctx context.Context, _ *serverv1.ReconcileRequest) (*serverv1.ReconcileResponse, error) {
 	report, err := s.assets.Reconcile(ctx)
 	if err != nil {

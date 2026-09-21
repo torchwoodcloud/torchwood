@@ -63,6 +63,11 @@ func (s *AssetsService) ListUserAssets(ctx context.Context, req *serverv1.ListUs
 	return s.api.ListUserAssets(ctx, req)
 }
 
+// ListDefAssets 按定义维度列出用户持有（owner_id 可选过滤）。
+func (s *AssetsService) ListDefAssets(ctx context.Context, req *serverv1.ListDefAssetsRequest) (*serverv1.ListDefAssetsResponse, error) {
+	return s.api.ListDefAssets(ctx, req)
+}
+
 func (s *AssetsService) ListUserLedger(ctx context.Context, req *serverv1.ListUserLedgerRequest) (*serverv1.ListUserLedgerResponse, error) {
 	return s.api.ListUserLedger(ctx, req)
 }

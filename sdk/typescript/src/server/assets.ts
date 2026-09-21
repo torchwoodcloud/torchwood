@@ -149,6 +149,21 @@ export class ServerAssetsService {
     return res.holdings ?? [];
   }
 
+  async listDefAssets(
+    defId: string,
+    params?: ListParams & { owner_id?: string }
+  ): Promise<AssetHolding[]> {
+    const res = await this.http.request<{ holdings: AssetHolding[] }>(
+      "GET",
+      `/v1/server/assets/defs/${defId}/holders`,
+      {
+        auth: "apiKey",
+        query: { ...listQuery(params), owner_id: params?.owner_id },
+      }
+    );
+    return res.holdings ?? [];
+  }
+
   async listUserLedger(
     ownerId: string,
     params?: ListParams & { def_code?: string }

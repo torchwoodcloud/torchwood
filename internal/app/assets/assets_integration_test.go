@@ -72,6 +72,20 @@ func TestIntegration_PaidTopupGrantsInSameTx(t *testing.T) {
 	require.Len(t, holdings, 1)
 	require.Equal(t, int64(100), holdings[0].Quantity)
 
+	// ListByDef（定义维度）：def 过滤命中、owner 过滤命中与落空。
+	def, err := bunrepo.NewAssetDefRepository(db).GetByCode(ctx, projectID, "gold")
+	require.NoError(t, err)
+	require.NotNil(t, def)
+	byDef, err := bunrepo.NewAssetHoldingRepository(db).ListByDef(ctx, projectID, domainassets.OwnerTypeUser, "", def.ID, 10, time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	require.Len(t, byDef, 1)
+	byDef, err = bunrepo.NewAssetHoldingRepository(db).ListByDef(ctx, projectID, domainassets.OwnerTypeUser, "u1", def.ID, 10, time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	require.Len(t, byDef, 1)
+	byDef, err = bunrepo.NewAssetHoldingRepository(db).ListByDef(ctx, projectID, domainassets.OwnerTypeUser, "u2", def.ID, 10, time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	require.Empty(t, byDef)
+
 	report, err := uc.Reconcile(admin)
 	require.NoError(t, err)
 	require.True(t, report.ZeroDrift)

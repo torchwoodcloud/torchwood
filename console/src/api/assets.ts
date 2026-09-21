@@ -94,6 +94,18 @@ export async function listUserAssets(
   return { rows: res.data.holdings ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
+// 定义维度持有列表（资产详情页）：ownerId 可选过滤（按 UserID 查询，空 = 全部持有者）。
+export async function listDefHolders(
+  defId: string,
+  params: ListParams & { ownerId?: string }
+): Promise<Page<AssetHolding>> {
+  const res = await api.get<{ holdings: AssetHolding[] } & ListMeta>(
+    `/server/assets/defs/${defId}/holders`,
+    { params: { ...pageQuery(params), owner_id: params.ownerId || undefined } }
+  );
+  return { rows: res.data.holdings ?? [], nextPageToken: res.data.meta?.next_page_token };
+}
+
 export async function listUserLedger(
   ownerId: string,
   params: ListParams

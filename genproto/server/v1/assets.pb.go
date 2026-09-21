@@ -1712,6 +1712,127 @@ func (x *ListUserLedgerResponse) GetMeta() *v1.ListResponseMeta {
 	return nil
 }
 
+type ListDefAssetsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	DefId string                 `protobuf:"bytes,1,opt,name=def_id,json=defId,proto3" json:"def_id,omitempty"`
+	// 可选 owner_id 过滤（空 = 该定义全部用户持有）。
+	OwnerId       string `protobuf:"bytes,2,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`
+	PageSize      int32  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDefAssetsRequest) Reset() {
+	*x = ListDefAssetsRequest{}
+	mi := &file_server_v1_assets_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDefAssetsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDefAssetsRequest) ProtoMessage() {}
+
+func (x *ListDefAssetsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_assets_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDefAssetsRequest.ProtoReflect.Descriptor instead.
+func (*ListDefAssetsRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_assets_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ListDefAssetsRequest) GetDefId() string {
+	if x != nil {
+		return x.DefId
+	}
+	return ""
+}
+
+func (x *ListDefAssetsRequest) GetOwnerId() string {
+	if x != nil {
+		return x.OwnerId
+	}
+	return ""
+}
+
+func (x *ListDefAssetsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListDefAssetsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListDefAssetsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Holdings      []*AssetHolding        `protobuf:"bytes,1,rep,name=holdings,proto3" json:"holdings,omitempty"`
+	Meta          *v1.ListResponseMeta   `protobuf:"bytes,2,opt,name=meta,proto3" json:"meta,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDefAssetsResponse) Reset() {
+	*x = ListDefAssetsResponse{}
+	mi := &file_server_v1_assets_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDefAssetsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDefAssetsResponse) ProtoMessage() {}
+
+func (x *ListDefAssetsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_assets_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDefAssetsResponse.ProtoReflect.Descriptor instead.
+func (*ListDefAssetsResponse) Descriptor() ([]byte, []int) {
+	return file_server_v1_assets_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ListDefAssetsResponse) GetHoldings() []*AssetHolding {
+	if x != nil {
+		return x.Holdings
+	}
+	return nil
+}
+
+func (x *ListDefAssetsResponse) GetMeta() *v1.ListResponseMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
 var File_server_v1_assets_proto protoreflect.FileDescriptor
 
 const file_server_v1_assets_proto_rawDesc = "" +
@@ -1892,7 +2013,16 @@ const file_server_v1_assets_proto_rawDesc = "" +
 	"\bdef_code\x18\x04 \x01(\tR\adefCode\"\x94\x01\n" +
 	"\x16ListUserLedgerResponse\x12?\n" +
 	"\aentries\x18\x01 \x03(\v2%.torchwood.server.v1.AssetLedgerEntryR\aentries\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xf4\x0e\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\x8c\x01\n" +
+	"\x14ListDefAssetsRequest\x12\x1d\n" +
+	"\x06def_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05defId\x12\x19\n" +
+	"\bowner_id\x18\x02 \x01(\tR\aownerId\x12\x1b\n" +
+	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\"\x91\x01\n" +
+	"\x15ListDefAssetsResponse\x12=\n" +
+	"\bholdings\x18\x01 \x03(\v2!.torchwood.server.v1.AssetHoldingR\bholdings\x129\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\x98\x10\n" +
 	"\rAssetsService\x12\x8d\x01\n" +
 	"\x0eCreateAssetDef\x12*.torchwood.server.v1.CreateAssetDefRequest\x1a\x1d.torchwood.server.v1.AssetDef\"0\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\t\x10\x02\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/v1/server/assets/defs\x12\x87\x01\n" +
 	"\rListAssetDefs\x12 .torchwood.shared.v1.ListRequest\x1a*.torchwood.server.v1.ListAssetDefsResponse\"(\x8a\xb2\x19\x06\"\x04\b\t\x10\x01\x82\xd3\xe4\x93\x02\x18\x12\x16/v1/server/assets/defs\x12\x88\x01\n" +
@@ -1912,7 +2042,8 @@ const file_server_v1_assets_proto_rawDesc = "" +
 	"\tReconcile\x12%.torchwood.server.v1.ReconcileRequest\x1a&.torchwood.server.v1.ReconcileResponse\"4\x8a\xb2\x19\n" +
 	"\x1a\x02\x03\x04\"\x04\b\t\x10\x02\x82\xd3\xe4\x93\x02 :\x01*\"\x1b/v1/server/assets:reconcile\x12\x9f\x01\n" +
 	"\x0eListUserAssets\x12*.torchwood.server.v1.ListUserAssetsRequest\x1a+.torchwood.server.v1.ListUserAssetsResponse\"4\x8a\xb2\x19\x06\"\x04\b\t\x10\x01\x82\xd3\xe4\x93\x02$\x12\"/v1/server/assets/users/{owner_id}\x12\xa6\x01\n" +
-	"\x0eListUserLedger\x12*.torchwood.server.v1.ListUserLedgerRequest\x1a+.torchwood.server.v1.ListUserLedgerResponse\";\x8a\xb2\x19\x06\"\x04\b\t\x10\x01\x82\xd3\xe4\x93\x02+\x12)/v1/server/assets/users/{owner_id}/ledger\x1a\x06\x92\xb2\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
+	"\x0eListUserLedger\x12*.torchwood.server.v1.ListUserLedgerRequest\x1a+.torchwood.server.v1.ListUserLedgerResponse\";\x8a\xb2\x19\x06\"\x04\b\t\x10\x01\x82\xd3\xe4\x93\x02+\x12)/v1/server/assets/users/{owner_id}/ledger\x12\xa1\x01\n" +
+	"\rListDefAssets\x12).torchwood.server.v1.ListDefAssetsRequest\x1a*.torchwood.server.v1.ListDefAssetsResponse\"9\x8a\xb2\x19\x06\"\x04\b\t\x10\x01\x82\xd3\xe4\x93\x02)\x12'/v1/server/assets/defs/{def_id}/holders\x1a\x06\x92\xb2\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +
@@ -1939,7 +2070,7 @@ func file_server_v1_assets_proto_rawDescGZIP() []byte {
 	return file_server_v1_assets_proto_rawDescData
 }
 
-var file_server_v1_assets_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_server_v1_assets_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_server_v1_assets_proto_goTypes = []any{
 	(*AssetDef)(nil),               // 0: torchwood.server.v1.AssetDef
 	(*CreateAssetDefRequest)(nil),  // 1: torchwood.server.v1.CreateAssetDefRequest
@@ -1962,65 +2093,71 @@ var file_server_v1_assets_proto_goTypes = []any{
 	(*ListUserAssetsResponse)(nil), // 18: torchwood.server.v1.ListUserAssetsResponse
 	(*ListUserLedgerRequest)(nil),  // 19: torchwood.server.v1.ListUserLedgerRequest
 	(*ListUserLedgerResponse)(nil), // 20: torchwood.server.v1.ListUserLedgerResponse
-	(*structpb.Struct)(nil),        // 21: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),  // 22: google.protobuf.Timestamp
-	(*v1.ListResponseMeta)(nil),    // 23: torchwood.shared.v1.ListResponseMeta
-	(*v1.ListRequest)(nil),         // 24: torchwood.shared.v1.ListRequest
-	(*v1.Empty)(nil),               // 25: torchwood.shared.v1.Empty
+	(*ListDefAssetsRequest)(nil),   // 21: torchwood.server.v1.ListDefAssetsRequest
+	(*ListDefAssetsResponse)(nil),  // 22: torchwood.server.v1.ListDefAssetsResponse
+	(*structpb.Struct)(nil),        // 23: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),  // 24: google.protobuf.Timestamp
+	(*v1.ListResponseMeta)(nil),    // 25: torchwood.shared.v1.ListResponseMeta
+	(*v1.ListRequest)(nil),         // 26: torchwood.shared.v1.ListRequest
+	(*v1.Empty)(nil),               // 27: torchwood.shared.v1.Empty
 }
 var file_server_v1_assets_proto_depIdxs = []int32{
-	21, // 0: torchwood.server.v1.AssetDef.metadata:type_name -> google.protobuf.Struct
-	22, // 1: torchwood.server.v1.AssetDef.created_at:type_name -> google.protobuf.Timestamp
-	22, // 2: torchwood.server.v1.AssetDef.updated_at:type_name -> google.protobuf.Timestamp
-	21, // 3: torchwood.server.v1.CreateAssetDefRequest.metadata:type_name -> google.protobuf.Struct
-	21, // 4: torchwood.server.v1.UpdateAssetDefRequest.metadata:type_name -> google.protobuf.Struct
+	23, // 0: torchwood.server.v1.AssetDef.metadata:type_name -> google.protobuf.Struct
+	24, // 1: torchwood.server.v1.AssetDef.created_at:type_name -> google.protobuf.Timestamp
+	24, // 2: torchwood.server.v1.AssetDef.updated_at:type_name -> google.protobuf.Timestamp
+	23, // 3: torchwood.server.v1.CreateAssetDefRequest.metadata:type_name -> google.protobuf.Struct
+	23, // 4: torchwood.server.v1.UpdateAssetDefRequest.metadata:type_name -> google.protobuf.Struct
 	0,  // 5: torchwood.server.v1.ListAssetDefsResponse.defs:type_name -> torchwood.server.v1.AssetDef
-	23, // 6: torchwood.server.v1.ListAssetDefsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
-	22, // 7: torchwood.server.v1.AssetLedgerEntry.expires_at:type_name -> google.protobuf.Timestamp
-	22, // 8: torchwood.server.v1.AssetLedgerEntry.created_at:type_name -> google.protobuf.Timestamp
+	25, // 6: torchwood.server.v1.ListAssetDefsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	24, // 7: torchwood.server.v1.AssetLedgerEntry.expires_at:type_name -> google.protobuf.Timestamp
+	24, // 8: torchwood.server.v1.AssetLedgerEntry.created_at:type_name -> google.protobuf.Timestamp
 	6,  // 9: torchwood.server.v1.AssetOpResponse.entries:type_name -> torchwood.server.v1.AssetLedgerEntry
-	22, // 10: torchwood.server.v1.GrantRequest.expires_at:type_name -> google.protobuf.Timestamp
-	21, // 11: torchwood.server.v1.GrantRequest.metadata:type_name -> google.protobuf.Struct
-	22, // 12: torchwood.server.v1.MutateRequest.expires_at:type_name -> google.protobuf.Timestamp
-	21, // 13: torchwood.server.v1.MutateRequest.metadata:type_name -> google.protobuf.Struct
+	24, // 10: torchwood.server.v1.GrantRequest.expires_at:type_name -> google.protobuf.Timestamp
+	23, // 11: torchwood.server.v1.GrantRequest.metadata:type_name -> google.protobuf.Struct
+	24, // 12: torchwood.server.v1.MutateRequest.expires_at:type_name -> google.protobuf.Timestamp
+	23, // 13: torchwood.server.v1.MutateRequest.metadata:type_name -> google.protobuf.Struct
 	15, // 14: torchwood.server.v1.ReconcileResponse.drifts:type_name -> torchwood.server.v1.AssetDrift
-	22, // 15: torchwood.server.v1.AssetHolding.expires_at:type_name -> google.protobuf.Timestamp
-	21, // 16: torchwood.server.v1.AssetHolding.metadata:type_name -> google.protobuf.Struct
+	24, // 15: torchwood.server.v1.AssetHolding.expires_at:type_name -> google.protobuf.Timestamp
+	23, // 16: torchwood.server.v1.AssetHolding.metadata:type_name -> google.protobuf.Struct
 	16, // 17: torchwood.server.v1.ListUserAssetsResponse.holdings:type_name -> torchwood.server.v1.AssetHolding
-	23, // 18: torchwood.server.v1.ListUserAssetsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	25, // 18: torchwood.server.v1.ListUserAssetsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
 	6,  // 19: torchwood.server.v1.ListUserLedgerResponse.entries:type_name -> torchwood.server.v1.AssetLedgerEntry
-	23, // 20: torchwood.server.v1.ListUserLedgerResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
-	1,  // 21: torchwood.server.v1.AssetsService.CreateAssetDef:input_type -> torchwood.server.v1.CreateAssetDefRequest
-	24, // 22: torchwood.server.v1.AssetsService.ListAssetDefs:input_type -> torchwood.shared.v1.ListRequest
-	2,  // 23: torchwood.server.v1.AssetsService.GetAssetDef:input_type -> torchwood.server.v1.GetAssetDefRequest
-	3,  // 24: torchwood.server.v1.AssetsService.UpdateAssetDef:input_type -> torchwood.server.v1.UpdateAssetDefRequest
-	4,  // 25: torchwood.server.v1.AssetsService.DeleteAssetDef:input_type -> torchwood.server.v1.DeleteAssetDefRequest
-	8,  // 26: torchwood.server.v1.AssetsService.Grant:input_type -> torchwood.server.v1.GrantRequest
-	9,  // 27: torchwood.server.v1.AssetsService.Consume:input_type -> torchwood.server.v1.ConsumeRequest
-	10, // 28: torchwood.server.v1.AssetsService.Transfer:input_type -> torchwood.server.v1.TransferRequest
-	11, // 29: torchwood.server.v1.AssetsService.Mutate:input_type -> torchwood.server.v1.MutateRequest
-	12, // 30: torchwood.server.v1.AssetsService.Expire:input_type -> torchwood.server.v1.ExpireRequest
-	13, // 31: torchwood.server.v1.AssetsService.Reconcile:input_type -> torchwood.server.v1.ReconcileRequest
-	17, // 32: torchwood.server.v1.AssetsService.ListUserAssets:input_type -> torchwood.server.v1.ListUserAssetsRequest
-	19, // 33: torchwood.server.v1.AssetsService.ListUserLedger:input_type -> torchwood.server.v1.ListUserLedgerRequest
-	0,  // 34: torchwood.server.v1.AssetsService.CreateAssetDef:output_type -> torchwood.server.v1.AssetDef
-	5,  // 35: torchwood.server.v1.AssetsService.ListAssetDefs:output_type -> torchwood.server.v1.ListAssetDefsResponse
-	0,  // 36: torchwood.server.v1.AssetsService.GetAssetDef:output_type -> torchwood.server.v1.AssetDef
-	0,  // 37: torchwood.server.v1.AssetsService.UpdateAssetDef:output_type -> torchwood.server.v1.AssetDef
-	25, // 38: torchwood.server.v1.AssetsService.DeleteAssetDef:output_type -> torchwood.shared.v1.Empty
-	7,  // 39: torchwood.server.v1.AssetsService.Grant:output_type -> torchwood.server.v1.AssetOpResponse
-	7,  // 40: torchwood.server.v1.AssetsService.Consume:output_type -> torchwood.server.v1.AssetOpResponse
-	7,  // 41: torchwood.server.v1.AssetsService.Transfer:output_type -> torchwood.server.v1.AssetOpResponse
-	7,  // 42: torchwood.server.v1.AssetsService.Mutate:output_type -> torchwood.server.v1.AssetOpResponse
-	7,  // 43: torchwood.server.v1.AssetsService.Expire:output_type -> torchwood.server.v1.AssetOpResponse
-	14, // 44: torchwood.server.v1.AssetsService.Reconcile:output_type -> torchwood.server.v1.ReconcileResponse
-	18, // 45: torchwood.server.v1.AssetsService.ListUserAssets:output_type -> torchwood.server.v1.ListUserAssetsResponse
-	20, // 46: torchwood.server.v1.AssetsService.ListUserLedger:output_type -> torchwood.server.v1.ListUserLedgerResponse
-	34, // [34:47] is the sub-list for method output_type
-	21, // [21:34] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	25, // 20: torchwood.server.v1.ListUserLedgerResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	16, // 21: torchwood.server.v1.ListDefAssetsResponse.holdings:type_name -> torchwood.server.v1.AssetHolding
+	25, // 22: torchwood.server.v1.ListDefAssetsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	1,  // 23: torchwood.server.v1.AssetsService.CreateAssetDef:input_type -> torchwood.server.v1.CreateAssetDefRequest
+	26, // 24: torchwood.server.v1.AssetsService.ListAssetDefs:input_type -> torchwood.shared.v1.ListRequest
+	2,  // 25: torchwood.server.v1.AssetsService.GetAssetDef:input_type -> torchwood.server.v1.GetAssetDefRequest
+	3,  // 26: torchwood.server.v1.AssetsService.UpdateAssetDef:input_type -> torchwood.server.v1.UpdateAssetDefRequest
+	4,  // 27: torchwood.server.v1.AssetsService.DeleteAssetDef:input_type -> torchwood.server.v1.DeleteAssetDefRequest
+	8,  // 28: torchwood.server.v1.AssetsService.Grant:input_type -> torchwood.server.v1.GrantRequest
+	9,  // 29: torchwood.server.v1.AssetsService.Consume:input_type -> torchwood.server.v1.ConsumeRequest
+	10, // 30: torchwood.server.v1.AssetsService.Transfer:input_type -> torchwood.server.v1.TransferRequest
+	11, // 31: torchwood.server.v1.AssetsService.Mutate:input_type -> torchwood.server.v1.MutateRequest
+	12, // 32: torchwood.server.v1.AssetsService.Expire:input_type -> torchwood.server.v1.ExpireRequest
+	13, // 33: torchwood.server.v1.AssetsService.Reconcile:input_type -> torchwood.server.v1.ReconcileRequest
+	17, // 34: torchwood.server.v1.AssetsService.ListUserAssets:input_type -> torchwood.server.v1.ListUserAssetsRequest
+	19, // 35: torchwood.server.v1.AssetsService.ListUserLedger:input_type -> torchwood.server.v1.ListUserLedgerRequest
+	21, // 36: torchwood.server.v1.AssetsService.ListDefAssets:input_type -> torchwood.server.v1.ListDefAssetsRequest
+	0,  // 37: torchwood.server.v1.AssetsService.CreateAssetDef:output_type -> torchwood.server.v1.AssetDef
+	5,  // 38: torchwood.server.v1.AssetsService.ListAssetDefs:output_type -> torchwood.server.v1.ListAssetDefsResponse
+	0,  // 39: torchwood.server.v1.AssetsService.GetAssetDef:output_type -> torchwood.server.v1.AssetDef
+	0,  // 40: torchwood.server.v1.AssetsService.UpdateAssetDef:output_type -> torchwood.server.v1.AssetDef
+	27, // 41: torchwood.server.v1.AssetsService.DeleteAssetDef:output_type -> torchwood.shared.v1.Empty
+	7,  // 42: torchwood.server.v1.AssetsService.Grant:output_type -> torchwood.server.v1.AssetOpResponse
+	7,  // 43: torchwood.server.v1.AssetsService.Consume:output_type -> torchwood.server.v1.AssetOpResponse
+	7,  // 44: torchwood.server.v1.AssetsService.Transfer:output_type -> torchwood.server.v1.AssetOpResponse
+	7,  // 45: torchwood.server.v1.AssetsService.Mutate:output_type -> torchwood.server.v1.AssetOpResponse
+	7,  // 46: torchwood.server.v1.AssetsService.Expire:output_type -> torchwood.server.v1.AssetOpResponse
+	14, // 47: torchwood.server.v1.AssetsService.Reconcile:output_type -> torchwood.server.v1.ReconcileResponse
+	18, // 48: torchwood.server.v1.AssetsService.ListUserAssets:output_type -> torchwood.server.v1.ListUserAssetsResponse
+	20, // 49: torchwood.server.v1.AssetsService.ListUserLedger:output_type -> torchwood.server.v1.ListUserLedgerResponse
+	22, // 50: torchwood.server.v1.AssetsService.ListDefAssets:output_type -> torchwood.server.v1.ListDefAssetsResponse
+	37, // [37:51] is the sub-list for method output_type
+	23, // [23:37] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_server_v1_assets_proto_init() }
@@ -2039,7 +2176,7 @@ func file_server_v1_assets_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_server_v1_assets_proto_rawDesc), len(file_server_v1_assets_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   21,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

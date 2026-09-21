@@ -305,6 +305,7 @@ const RPC_TO_METHOD: Record<string, Record<string, string>> = {
     Reconcile: "reconcile",
     ListUserAssets: "listUserAssets",
     ListUserLedger: "listUserLedger",
+    ListDefAssets: "listDefAssets",
   },
   SubscriptionsService: {
     CreatePlan: "createPlan",

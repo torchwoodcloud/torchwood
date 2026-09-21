@@ -12,7 +12,7 @@
 >   SERVER admin 会话（admin_roles）或 API key（scope）；PERMISSION admin 会话
 >   专属（permissions），key 一律拒绝；SYSTEM 预留禁用。
 
-方法总数 262：PUBLIC 30 · END_USER 47 · SERVER 155 · PERMISSION 30 · SYSTEM 0。
+方法总数 263：PUBLIC 30 · END_USER 47 · SERVER 156 · PERMISSION 30 · SYSTEM 0。
 
 ## /torchwood.client.v1.AccountService
 
@@ -206,6 +206,7 @@
 | `/torchwood.server.v1.AssetsService/GetAssetDef` | SERVER | 不限角色 | assets.read | read_only | |
 | `/torchwood.server.v1.AssetsService/Grant` | SERVER | admin, owner | assets.write | delegated_platform | |
 | `/torchwood.server.v1.AssetsService/ListAssetDefs` | SERVER | 不限角色 | assets.read | read_only | |
+| `/torchwood.server.v1.AssetsService/ListDefAssets` | SERVER | 不限角色 | assets.read | read_only | |
 | `/torchwood.server.v1.AssetsService/ListUserAssets` | SERVER | 不限角色 | assets.read | read_only | |
 | `/torchwood.server.v1.AssetsService/ListUserLedger` | SERVER | 不限角色 | assets.read | read_only | |
 | `/torchwood.server.v1.AssetsService/Mutate` | SERVER | admin, owner | assets.write | delegated_platform | |
