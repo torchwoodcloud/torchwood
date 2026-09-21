@@ -220,7 +220,7 @@ func TestCreateExecution_ImageMissingTriggersRebuild(t *testing.T) {
 	require.Contains(t, status.Convert(err).Message(), domainfunctions.ImageMissingMarker)
 	require.Equal(t, domainfunctions.ExecutionStatusFailed, rec.Status)
 
-	require.Eventually(t, func() bool { return exec.builds == 1 },
+	require.Eventually(t, func() bool { return exec.buildCount() == 1 },
 		2*time.Second, 10*time.Millisecond, "执行错误路径必须触发后台重建")
 	require.Eventually(t, func() bool {
 		cur, gerr := repo.GetDeployment(context.Background(), "p1", "fn_1", "dep_ready")

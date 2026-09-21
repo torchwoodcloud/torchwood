@@ -2,6 +2,7 @@ package functions
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,6 +11,9 @@ import (
 )
 
 type mockExecutor struct {
+	// mu 保护可变计数与切片：镜像缺失重建在后台 goroutine 调 Build/
+	// ImportImage，与测试断言（require.Eventually 轮询）并发。
+	mu       sync.Mutex
 	calls    []domainfunctions.Execution
 	result   *domainfunctions.ExecutionResult
 	err      error
@@ -37,13 +41,17 @@ type mockExecutor struct {
 }
 
 func (m *mockExecutor) Execute(_ context.Context, exec domainfunctions.Execution) (*domainfunctions.ExecutionResult, error) {
+	m.mu.Lock()
 	m.calls = append(m.calls, exec)
+	m.mu.Unlock()
 	return m.result, m.err
 }
 
 func (m *mockExecutor) Build(ctx context.Context, spec domainfunctions.BuildSpec) (string, error) {
+	m.mu.Lock()
 	m.specs = append(m.specs, spec)
 	m.builds++
+	m.mu.Unlock()
 	if m.buildFn != nil {
 		return m.buildNodeID, m.buildFn(ctx, spec)
 	}
@@ -51,8 +59,10 @@ func (m *mockExecutor) Build(ctx context.Context, spec domainfunctions.BuildSpec
 }
 
 func (m *mockExecutor) ImportImage(_ context.Context, spec domainfunctions.ImportImageSpec) (string, error) {
+	m.mu.Lock()
 	m.importSpecs = append(m.importSpecs, spec)
 	m.imports++
+	m.mu.Unlock()
 	if m.importFn != nil {
 		return m.importFn(spec)
 	}
@@ -66,8 +76,24 @@ func (m *mockExecutor) ImportImage(_ context.Context, spec domainfunctions.Impor
 }
 
 func (m *mockExecutor) RemoveImage(_ context.Context, _, _ string) error {
+	m.mu.Lock()
 	m.removes++
+	m.mu.Unlock()
 	return nil
+}
+
+// buildCount / importCount 是并发安全读取面：镜像缺失重建的计数由后台
+// goroutine 写入，断言（require.Eventually 轮询）必须经此读取。
+func (m *mockExecutor) buildCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.builds
+}
+
+func (m *mockExecutor) importCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.imports
 }
 
 func newMockExecutor(result *domainfunctions.ExecutionResult, err error) *mockExecutor {
