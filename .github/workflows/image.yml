@@ -130,8 +130,12 @@ jobs:
   # Auto Deploy，触发源唯一化为本 job：push → 构建推 GHCR → 成功才回调，
   # webhook 部署 git pull 同一 commit 的 compose/config.yaml，镜像与配置
   # 天然同版本对齐；任一构建 job 失败则不部署。
-  # DOKPLOY_WEBHOOK_URL secret = Dokploy 面板复制的完整可 POST URL（含
-  # 面板要求的 ?ref= 等 query 参数，形态以其 curl 示例为准），body 恒空。
+  # 契约（2026-09-21 排障确认，Dokploy pages/api/deploy/compose/[refreshToken].ts）：
+  # webhook 按 GitHub push event 契约校验——必须带 x-github-event 头 + body
+  # {"ref":"refs/heads/main"}（extractBranchName 只认这两个，URL query 参数
+  # 一律被忽略，缺任意一个即 301 "Branch Not Match"）；且 compose 的
+  # Autodeploy 总闸必须开着，关闸时 webhook 一并禁用（"Automatic deployments
+  # are disabled"）。secret DOKPLOY_WEBHOOK_URL = 面板复制的裸 URL。
   # 仅 main 分支自动部署：v* tag 发布的 compose 取默认分支文件、可能与
   # tag 代码有出入，tag 发布手动 Redeploy。
   deploy:
@@ -142,7 +146,15 @@ jobs:
     steps:
       - name: Notify Dokploy webhook
         run: |
+          payload=$(jq -n \
+            --arg ref "refs/heads/${GITHUB_REF_NAME}" \
+            --arg id "$GITHUB_SHA" \
+            --arg msg "${{ github.event.head_commit.message }}" \
+            '{ref: $ref, head_commit: {id: $id, message: $msg}}')
           response=$(curl -sS -X POST "${{ secrets.DOKPLOY_WEBHOOK_URL }}" \
+            -H "x-github-event: push" \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
             --max-time 30 --retry 3 --retry-delay 5 --retry-connrefused \
             -w '\n%{http_code}')
           code=$(tail -n1 <<<"$response")
