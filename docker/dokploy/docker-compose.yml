@@ -315,8 +315,9 @@ services:
       <<: *app-env
       TORCHWOOD_FUNCTIONS_DISPATCHER_ADDR: ":9070"
       TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN: ${TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN:?请在 Dokploy Environment 设置 openssl rand -hex 32}
-      # 每 daemon 常驻实例总量上限（Q11 默认 8；防单项目耗尽宿主内存）
-      TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES: ${TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES:-8}
+      # 每 daemon 常驻实例总量上限（2026-09-21 上调缺省 16，原 Q11 拍板 8；
+      # 内存敞口 = 实例数 × spec 内存：全 shared-1x ≈4GiB、全 shared-2x ≈8GiB）
+      TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES: ${TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES:-16}
       # 全集群常驻总量上限（四期 M4 容量共享）：各节点 Redis 容量键求和后
       # 检查，在本节点上限之后生效；Redis 不可用 fail-open 退化为仅本节点
       # 上限。0 = 不设全局上限（缺省）。多机建议按集群内存画像设置。

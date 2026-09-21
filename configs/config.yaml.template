@@ -150,9 +150,11 @@ functions:
     # 可信内网）。env: TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN
     shared_token: ""
     # ——以下仅 dispatcher 进程消费——
-    # 每 daemon 常驻实例总量上限（防单项目耗尽宿主内存；Q11 默认 8）。
+    # 每 daemon 常驻实例总量上限（防单项目耗尽宿主内存；Q11 拍板 8，
+    # 2026-09-21 上调缺省 16。内存敞口 = 实例数 × spec 内存：全 shared-1x
+    # ≈4GiB、全 shared-2x ≈8GiB，按宿主余量调整）。
     # env: TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES
-    max_resident_instances: 8
+    max_resident_instances: 16
     # 单函数有界排队深度上限（超限立即 ResourceExhausted）。
     # env: TORCHWOOD_FUNCTIONS_DISPATCHER_QUEUE_DEPTH
     queue_depth: 32
@@ -207,13 +209,15 @@ functions:
   client_invoke:
     # P2 客户端调用面平台级参数（per-function 的配额/窗口在 functions 表
     # 策略列上，Console「客户端调用」卡片管理）。
-    # 每用户并发闸门上限（进程内 keyed 信号量——多实例部署下为近似全局，
+    # 每用户并发闸门上限（2026-09-21 上调缺省 8，原 2：Agent 场景单用户
+    # 并发突发是常态；进程内 keyed 信号量——多实例部署下为近似全局，
     # 全局上限 = 上限 × 实例数）。
     # env: TORCHWOOD_FUNCTIONS_CLIENT_INVOKE_PER_USER_CONCURRENCY
-    per_user_concurrency: 2
-    # 并发闸门排队队首超时（超时 ResourceExhausted，同步调用方不无界等待）。
+    per_user_concurrency: 8
+    # 并发闸门排队队首超时（超时 ResourceExhausted，同步调用方不无界等待；
+    # 默认 10s 与 dispatcher 池队首口径一致）。
     # env: TORCHWOOD_FUNCTIONS_CLIENT_INVOKE_QUEUE_HEAD_TIMEOUT
-    queue_head_timeout: "5s"
+    queue_head_timeout: "10s"
   packer:
     # git 部署源打包服务（packer，二期阶段二）：独立进程把
     # git 仓库 @ref 物化为 zip 交回 server 落既有构建路径（与 dispatcher

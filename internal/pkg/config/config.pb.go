@@ -1895,7 +1895,10 @@ type Functions_Dispatcher struct {
 	// 静态共享密钥（内网专用可选认证；空 = 不校验，仅限可信内网）。
 	SharedToken string `protobuf:"bytes,2,opt,name=shared_token,json=sharedToken,proto3" json:"shared_token,omitempty"`
 	// ——以下仅 dispatcher 进程消费（池策略全局参数）——
-	// 每 daemon 常驻实例总量上限（设计 Q11 拍板：默认 8；防单项目耗尽宿主内存）。
+	// 每 daemon 常驻实例总量上限（设计 Q11 拍板 8，2026-09-21 上调缺省
+	// 16：Agent-Native 高并发场景默认容量翻倍；内存敞口随实例数线性放大，
+	// 全 shared-1x ≈4GiB、全 shared-2x ≈8GiB，自托管按宿主余量回调）。
+	// 防单项目耗尽宿主内存的语义不变。
 	MaxResidentInstances int32 `protobuf:"varint,3,opt,name=max_resident_instances,json=maxResidentInstances,proto3" json:"max_resident_instances,omitempty"`
 	// 单函数有界排队深度上限（超限立即 ResourceExhausted；默认 32）。
 	QueueDepth int32 `protobuf:"varint,4,opt,name=queue_depth,json=queueDepth,proto3" json:"queue_depth,omitempty"`
@@ -2178,11 +2181,14 @@ func (x *Functions_Trigger) GetHttpIpPerMinute() int32 {
 // 限频配额/窗口在 functions 表策略列上，不在本节）。
 type Functions_ClientInvoke struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// 每用户并发闸门上限（默认 2，防单用户挤占执行槽）。进程内 keyed
-	// 信号量——多实例部署下为近似全局（每实例各 2）。
+	// 每用户并发闸门上限（默认 8，2026-09-21 上调原 2：Agent 场景单用户
+	// 并发突发是常态，2 会在第 3 个请求就排队、5s 超时 429；防单用户挤占
+	// 语义不变——真正防耗尽在 dispatcher 容量门）。进程内 keyed
+	// 信号量——多实例部署下为近似全局（每实例各 8）。
 	PerUserConcurrency int32 `protobuf:"varint,1,opt,name=per_user_concurrency,json=perUserConcurrency,proto3" json:"per_user_concurrency,omitempty"`
-	// 并发闸门排队队首超时（如 "5s"；默认 5s，超时 ResourceExhausted——
-	// 同步调用方不得无界等待）。
+	// 并发闸门排队队首超时（如 "10s"；默认 10s——2026-09-21 上调原 5s，
+	// 与 dispatcher 池队首超时口径一致，闸门先超时等于放行后仍要在池队列
+	// 上白等；超时 ResourceExhausted——同步调用方不得无界等待）。
 	QueueHeadTimeout string `protobuf:"bytes,2,opt,name=queue_head_timeout,json=queueHeadTimeout,proto3" json:"queue_head_timeout,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache

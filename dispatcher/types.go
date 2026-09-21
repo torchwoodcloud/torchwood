@@ -33,7 +33,11 @@ const (
 	spawnLockPrefix = "torchwood:fnspawn:"
 
 	// 默认池参数（config 可覆盖）。
-	defaultMaxResidentInstances = 8  // 每 daemon 常驻总量上限（Q11 拍板）
+	// 16（2026-09-21 上调，原 8）：Agent-Native 高并发场景下调大默认容量；
+	// 内存敞口随实例数线性放大——全 shared-1x（256MiB）≈4GiB、全 shared-2x
+	// （512MiB）≈8GiB，自托管部署按宿主余量用
+	// functions.dispatcher.max_resident_instances 回调。
+	defaultMaxResidentInstances = 16 // 每 daemon 常驻总量上限（Q11 拍板 8 → 16）
 	defaultQueueDepth           = 32 // 单函数排队深度上限
 	defaultQueueHeadTimeout     = 10 * time.Second
 	defaultBootTimeout          = 60 * time.Second

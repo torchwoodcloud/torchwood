@@ -30,9 +30,15 @@ const (
 	// torchwood:fnq:{project}:{function}:{user}:{bucket}。
 	clientQuotaKeyPrefix = "torchwood:fnq:"
 	// defaultPerUserConcurrency 是每用户并发闸门默认上限（config 可覆盖）。
-	defaultPerUserConcurrency = 2
-	// defaultUserQueueHeadTimeout 是并发闸门排队队首默认超时。
-	defaultUserQueueHeadTimeout = 5 * time.Second
+	// 默认 8（2026-09-21 上调，原 2）：Agent-Native 定位下单用户（同一 API
+	// key / 会话）并发突发是常态，2 会在第 3 个请求就排队、5s 超时 429；8
+	// 配合函数层 max_instances/池总量上限仍约束单用户挤占（闸门是每用户
+	// 近似全局的，真正防耗尽在 dispatcher 容量门）。
+	defaultPerUserConcurrency = 8
+	// defaultUserQueueHeadTimeout 是并发闸门排队队首默认超时。默认 10s
+	// （2026-09-21 上调，原 5s）：与 dispatcher 池队首超时口径一致——闸门
+	// 放行后仍可能在该函数的池队列上等，闸门先超时等于白等。
+	defaultUserQueueHeadTimeout = 10 * time.Second
 	// quotaReason 是配额超额错误的 ErrorInfo.Reason。
 	quotaReason = "FUNCTIONS.INVOKE_QUOTA_EXCEEDED"
 )

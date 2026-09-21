@@ -24,7 +24,7 @@ import (
 
 // PoolConfig 是池管理器的全局参数（config functions.dispatcher.*；零值取默认）。
 type PoolConfig struct {
-	MaxResidentInstances int           // 每 daemon 常驻总量上限（默认 8，Q11）
+	MaxResidentInstances int           // 每 daemon 常驻总量上限（默认 16，Q11 + 2026-09-21 上调）
 	QueueDepth           int           // 单函数排队深度上限（默认 32）
 	QueueHeadTimeout     time.Duration // 队首超时（默认 10s）
 	BootTimeout          time.Duration // 启动健康探针上限（默认 60s）
@@ -33,7 +33,7 @@ type PoolConfig struct {
 	LeaseTTL             time.Duration // dispatch 租约（默认 10min）
 	IdleTTLDefault       time.Duration // idle_ttl 缺省值（300s，策略零值时）
 	MaxRequestsDefault   int           // max_requests 缺省值（1000）
-	MaxInstancesDefault  int           // max_instances 缺省值（2）
+	MaxInstancesDefault  int           // max_instances 缺省值（4）
 	// TimeoutBudget 是实例累计超时熔断阈值（v3 §1.4；默认 5）：超时释放路径
 	// 累加 timeouts 计数，达阈值杀实例重建（堵住「超时不杀」打开的僵尸负载
 	// 通道——毒化实例慢性塞满事件循环而 health 仍响应、永不回收）。
@@ -63,8 +63,11 @@ func DefaultPoolConfig() PoolConfig {
 		LeaseTTL:             leaseTTL,
 		IdleTTLDefault:       300 * time.Second,
 		MaxRequestsDefault:   1000,
-		MaxInstancesDefault:  2,
-		TimeoutBudget:        defaultTimeoutBudget,
+		// 4（2026-09-21 上调，原 2）：单函数默认扩容上限——配合常驻总量 16，
+		// 4 个活跃函数可各占 4 实例；I/O 型函数（外部 API 调用）默认吞吐
+		// 直接翻倍。仍低于常驻总量，单函数无法独占节点。
+		MaxInstancesDefault: 4,
+		TimeoutBudget:       defaultTimeoutBudget,
 	}
 }
 
@@ -357,7 +360,7 @@ func newPoolManager(daemon Daemon, registry Registry, runner runnerClient, cfg P
 		cfg.MaxRequestsDefault = 1000
 	}
 	if cfg.MaxInstancesDefault <= 0 {
-		cfg.MaxInstancesDefault = 2
+		cfg.MaxInstancesDefault = 4
 	}
 	if cfg.TimeoutBudget <= 0 {
 		cfg.TimeoutBudget = defaultTimeoutBudget

@@ -46,7 +46,7 @@
 | `functions.execution.api_base_url` | — | 函数执行回调基址 |
 | `functions.dispatcher.url` | — | **必填**（server/worker 启动校验），dispatcher 服务地址，如 `http://dispatcher:9070` |
 | `functions.dispatcher.shared_token` | — | 与 dispatcher 的共享令牌 |
-| `functions.dispatcher.max_resident_instances` | 8 | resident 实例池上限 |
+| `functions.dispatcher.max_resident_instances` | 16 | resident 实例池上限（内存敞口 = 实例数 × spec 内存） |
 | `functions.dispatcher.queue_depth` | 32 | 分发队列深度 |
 | `functions.dispatcher.queue_head_timeout` | 10s | 队头等待超时 |
 | `functions.dispatcher.boot_timeout` | 60s | 实例启动超时 |
@@ -54,8 +54,8 @@
 | `functions.dispatcher.callback_container` | — | 回调容器配置 |
 | `functions.dispatcher.timeout_budget` | 5 | 超时预算 |
 | `functions.trigger.http_ip_per_minute` | 3000 | HTTP 触发器每 IP 限频 |
-| `functions.client_invoke.per_user_concurrency` | 2 | client 面每用户并发 |
-| `functions.client_invoke.queue_head_timeout` | 5s | client 面队头超时（同步调用方不得无界等待） |
+| `functions.client_invoke.per_user_concurrency` | 8 | client 面每用户并发 |
+| `functions.client_invoke.queue_head_timeout` | 10s | client 面队头超时（同步调用方不得无界等待） |
 
 ---
 

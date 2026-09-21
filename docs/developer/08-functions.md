@@ -24,7 +24,7 @@ HTTP multipart FunctionsHandler（POST .../deployments/code，≤50MiB）──�
 | invoke 上行 `data` | ≤32KB（JSON object；`data+env ≤32KB`）；触发器封套通道放宽至 ≤1MB | §4 |
 | 响应大小 | response / stdout / stderr 各 **≤64KB 截断**（`maxOutputBytes`，`truncated` 标记）。dispatcher 内部 1MiB 是读封套的缓冲上限，不是对调用方的承诺 | §4、§11 |
 | 执行超时 | 每函数可配 **[1,300]s，缺省 15s**；**同步调用上限 30s**（超出走异步） | §2、§4、§14 |
-| `concurrency` 语义 | **单实例并发上限（1..16，默认 1）**，不是全局串行：单实例一次跑 `concurrency` 个请求；池可在无空闲实例时冷启动扩到 `max_instances` 多实例并行。真正的全局闸门是 dispatcher 池上限（`max_instances` + 有界排队 429）与每用户并发 2 | §4.3、§4.3.1、§14 |
+| `concurrency` 语义 | **单实例并发上限（1..16，默认 1）**，不是全局串行：单实例一次跑 `concurrency` 个请求；池可在无空闲实例时冷启动扩到 `max_instances` 多实例并行。真正的全局闸门是 dispatcher 池上限（`max_instances` + 有界排队 429）与每用户并发 8 | §4.3、§4.3.1、§14 |
 | 部署包 | zip ≤50MiB；解压 ≤1000 条 / 单条 ≤100MiB / 总量 ≤200MiB（git 源物化包条目放宽至 ≤5000，§3.4） | §3、§3.4 |
 
 ## 2. 写方法与鉴权
@@ -377,7 +377,7 @@ CGI 形态（每请求一容器）为设计缺陷，常驻 runner 是唯一执�
 
 错误映射：排队超限 429 → ResourceExhausted、执行超时 504 → DeadlineExceeded、缺参 400、镜像缺失 412 → FailedPrecondition（§4.5）。`TW_EXECUTION_TOKEN` 经分发 header 传递——**mint → 注入 → defer revoke 链路不变，常驻的是容器不是凭证**。
 
-**池策略**（平台默认 + per-function 列覆盖，projectschema 迁移 000014）：`min_instances`（默认 0 = 纯 scale-from-zero；≥1 保温）、`max_instances`（默认 2）、`idle_ttl_seconds`（默认 300）、`max_requests_per_instance`（默认 1000，Lambda 同款防泄漏回收）+ 平台级常驻总量上限（每 daemon 默认 8，`functions.dispatcher.max_resident_instances`）。实现语义（`dispatcher/pool.go`，Redis 注册表 `torchwood:fninst:{project}:{function}`）：
+**池策略**（平台默认 + per-function 列覆盖，projectschema 迁移 000014）：`min_instances`（默认 0 = 纯 scale-from-zero；≥1 保温）、`max_instances`（默认 4，2026-09-21 上调原 2）、`idle_ttl_seconds`（默认 300）、`max_requests_per_instance`（默认 1000，Lambda 同款防泄漏回收）+ 平台级常驻总量上限（每 daemon 默认 16——2026-09-21 上调原 8；内存敞口全 shared-1x ≈4GiB / 全 shared-2x ≈8GiB，`functions.dispatcher.max_resident_instances`）。实现语义（`dispatcher/pool.go`，Redis 注册表 `torchwood:fninst:{project}:{function}`）：
 
 - **spawn 收敛**：同函数并发 spawn 经 `torchwood:fnspawn:*` SETNX 锁收敛为一次，其余请求等注册表（防 daemon 重启后全量冷启动风暴）；冷启动成本由触发 spawn 的请求支付但不独占实例。
 - **有界排队**：池满时排队（深度上限 `queue_depth` 默认 32 + 队首超时 `queue_head_timeout` 默认 10s）→ 超限 429 ResourceExhausted，同步调用方不无界等在 30s ctx 上。
@@ -390,12 +390,14 @@ CGI 形态（每请求一容器）为设计缺陷，常驻 runner 是唯一执�
 
 设计见 `docs/design/functions-v3.md` §1。v2 的"1 并发/实例串行"是吞吐天花板；v3 不推翻 v2 底座，打开单实例并发复用——**concurrency=1 时与 v2 行为逐步等价**。
 
-- **并发模型与可重入契约（红线）**：单 Node 事件循环内多请求交错（非多进程 / worker_threads）——**函数作者必须保证 `main` 可重入：模块级可变全局状态在并发下有竞态**，与 Lambda / Cloud Run 同款契约。平台责任 = 默认 `concurrency=1`（不 opt-in 即无暴露，fail-closed）+ 文档明示 + max_requests / 崩溃重建兜底。迁移 000017 落 `functions.concurrency`（默认 1，CHECK 1..16——上限 16 = 8 实例 × 16 = 128 并发对单机拓扑够用）。池语义变化仅认领条件一处：`ClaimIdle` 从"实例空闲"变为 `inflight < concurrency`（释放路径 Lua 原子化防并发交错丢更新）；背压顺序不变（认领 → trySpawn → 有界排队 → 超限 429）。
+- **并发模型与可重入契约（红线）**：单 Node 事件循环内多请求交错（非多进程 / worker_threads）——**函数作者必须保证 `main` 可重入：模块级可变全局状态在并发下有竞态**，与 Lambda / Cloud Run 同款契约。平台责任 = 默认 `concurrency=1`（不 opt-in 即无暴露，fail-closed）+ 文档明示 + max_requests / 崩溃重建兜底。迁移 000017 落 `functions.concurrency`（默认 1，CHECK 1..16——上限 16 = 16 实例 × 16 = 256 并发对单机拓扑够用）。池语义变化仅认领条件一处：`ClaimIdle` 从"实例空闲"变为 `inflight < concurrency`（释放路径 Lua 原子化防并发交错丢更新）；背压顺序不变（认领 → trySpawn → 有界排队 → 超限 429）。
 - **`main(data, ctx)` 第二参数**：runner 以 `AsyncLocalStorage` 圈住每次调用，`ctx = { executionToken, apiBaseUrl, executionId }`（v5 起追加调用身份三件，见 §4.3.3）。**含 await 的 main 必须读 `ctx.executionToken`**：`process.env.TW_EXECUTION_TOKEN` 仍设置（同步 main 与模块顶层读取兼容），但 async 函数在 await 恢复后 env 可能已被并发请求覆盖（凭证串号——A 以 B 的身份干活）；ctx 是并发下唯一安全通道。执行 ID 经分发 header `x-tw-execution-id` 透传进 `ctx.executionId`（日志关联）。
 - **per-request 日志分桶**：console 捕获按请求环缓冲——执行记录的 `stdout` / `stderr` 语义从"实例级混流尾部"变为"**本请求** console 输出尾部"（审计口径更准，排障改善）。
 - **超时语义变更（有意变更）**：超时 / 调用方取消只失败该请求、**不再杀实例**——并发下一个慢请求不得误杀同实例健康在途请求（Cloud Run 同款）；传输层错误（连接拒绝 / reset）仍杀实例（容器崩溃判定）。配套**超时熔断**堵住"超时不杀"打开的僵尸负载通道：实例累计超时达阈值（默认 5，可配 `functions.dispatcher.timeout_budget`）→ 杀实例重建 + 熔断指标。诚实声明（Lambda 同款）：超时后用户 main 可能仍在事件循环里跑至实例回收，inflight 按请求生命周期释放、不追踪用户代码生命周期。
 - **降级保护（fail-safe 不 fail-closed）**：函数 `concurrency > 1` 而执行所用 deployment 的 `template_version < 3` 时**静默按并发 1 执行** + 降级计数指标——存量函数不因新列拒绝执行；重新 `CreateDeployment` 获 v3 模板后自然生效。
 - **生效时机**：concurrency 在 spawn 时固化进实例记录——**调大后存量实例按旧值服务至 idle 回收 / 部署更替**，不热生效。
+
+**高并发调优（Agent 突发 / 429 排查）**：调用链要过三道闸，实际并发 = 三者取小后的动态结果——①每用户并发闸门（`client_invoke.per_user_concurrency` 默认 8 + 队首超时 10s）→ ②单函数池（`max_instances` 默认 4 实例 × `concurrency` 默认 1）→ ③节点常驻总量（`max_resident_instances` 默认 16）。I/O 型函数（外呼 API、毫秒到秒级等待）调优次序：函数设 `concurrency = 8`（**前提：`main` 可重入，见上红线**；重部署拿 v3+ 模板）→ 不足再提 `max_instances` → 多函数混部挤压时提平台 `max_resident_instances`（内存敞口 = 实例数 × spec 内存：全 shared-1x ≈4GiB、全 shared-2x ≈8GiB）。CPU 型函数调 `concurrency` 无收益（单 Node 事件循环），扩 `max_instances` 才是真扩容。排队 429 的形状诊断：闸门超时（客户端侧 ~10s 后 ResourceExhausted）= 调 ①或限流客户端；池排队 429（`queue_depth` 32 满或队首 10s 超时）= 调 ②③。
 
 ### 4.3.2 Web 标准 fetch 入口（runner v4）
 
@@ -541,7 +543,7 @@ go test ./dispatcher -run TestIntegration_Dispatcher -count=1
 |---|---|
 | `functions.dispatcher.url` | **必填**（缺失时 server/worker 启动失败），dispatcher 服务地址 |
 | `functions.dispatcher.shared_token` | 内网可选认证（`x-tw-dispatcher-token`） |
-| `functions.dispatcher.max_resident_instances` | 每 daemon 常驻总量上限，默认 8 |
+| `functions.dispatcher.max_resident_instances` | 每 daemon 常驻总量上限，默认 16（内存敞口见 §4.3 池策略） |
 | `functions.dispatcher.queue_depth` / `queue_head_timeout` | 有界排队深度 32 / 队首超时 10s |
 | `functions.dispatcher.boot_timeout` | 实例启动超时 60s（验证 spawn 的探针预算同源） |
 | `functions.dispatcher.build_timeout` | 构建整体超时（构建 ctx 与请求 ctx 解耦后的独立预算），默认 `5m`——Go 冷构建含基础镜像拉取，全新环境首个 Go 部署必要时调大（§3.1） |
@@ -554,8 +556,8 @@ go test ./dispatcher -run TestIntegration_Dispatcher -count=1
 | `functions.docker.registry` | 小写，默认 `torchwood-funcs` |
 | `functions.execution.api_base_url` | 函数容器可达的 Server API 地址，注入 `TW_API_BASE_URL`；空 = 不注入 |
 | `functions.trigger.http_ip_per_minute` | HTTP 触发器每 IP 限频，默认 3000 |
-| `functions.client_invoke.per_user_concurrency` | 每用户并发闸门，默认 2 |
-| `functions.client_invoke.queue_head_timeout` | 并发闸门排队队首超时，默认 5s |
+| `functions.client_invoke.per_user_concurrency` | 每用户并发闸门，默认 8 |
+| `functions.client_invoke.queue_head_timeout` | 并发闸门排队队首超时，默认 10s |
 | `functions.packer.url` | packer 内网 HTTP 基址（server 侧消费），如 `http://packer:9071`；**空 = git 部署源未启用**（zip 源不受影响，§3.4/§3.5） |
 | `functions.packer.shared_token` | 内网可选认证（`x-tw-packer-token`），空 = 不校验（仅限可信内网） |
 | `functions.packer.fetch_timeout` | 单次 fetch+物化整体超时，默认 `120s`（仅 packer 进程消费） |
@@ -697,7 +699,7 @@ go test ./dispatcher -run TestIntegration_Dispatcher -count=1
 
 ### 14.4 每用户并发闸门
 
-- dispatcher 池上限 / 有界排队之外的第三道门：每用户并发上限（默认 2，`functions.client_invoke.per_user_concurrency`），进程内 keyed 信号量（channel），排队队首超时（默认 5s）→ ResourceExhausted。
+- dispatcher 池上限 / 有界排队之外的第三道门：每用户并发上限（默认 8——2026-09-21 上调原 2，`functions.client_invoke.per_user_concurrency`），进程内 keyed 信号量（channel），排队队首超时（默认 10s——与 dispatcher 池队首口径一致）→ ResourceExhausted。
 - **诚实声明：per-process 语义**——多实例部署下为"近似全局"（全局上限 = 上限 × 实例数）。跨进程精确闸门需要 Redis 分布式信号量，但其排队 + 队首超时语义在热路径上不划算，本期取舍为进程内实现 + 文档明示。
 
 ### 14.5 egress 策略与部署要求（不可信函数默认 deny）
