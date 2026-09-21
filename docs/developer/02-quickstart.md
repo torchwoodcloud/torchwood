@@ -11,35 +11,37 @@
 | 依赖 | 版本 | 用途 |
 |------|------|------|
 | Go | 1.26.5 | `go.mod` / `mise.toml` 钉版 |
-| Node.js + pnpm | 24 + pnpm 11.20 | 构建 Console 前端（mise 管理） |
+| Node.js + pnpm | 24.19.0 + pnpm 11.20.0 | 构建 Console 前端（mise 管理；pnpm 版本与 `console/package.json` 的 `packageManager` 一致） |
 | Docker + Compose | 近期版本 | 运行 PostgreSQL / Redis / MinIO |
-| mise | 2026.9+ | 工具链与任务编排，安装：`curl https://mise.run \| sh` |
+| mise | 近期版本 | 工具链与任务编排，安装：`curl https://mise.run \| sh` |
 
 代码生成与质量工具（`buf@1.65.0`、`protoc@31.1`、`protoc-gen-go@1.36.11`、`golangci-lint@2.12.2` 等）不必手动逐个安装，`mise install` 按 `mise.toml` 钉版一次装齐。
+
+Windows 下 mise 任务统一经 `sh` 执行（`mise.toml` 的 `[task_config].shell`），需要 Git Bash 的 `sh` 在 PATH 中。
 
 ---
 
 ## 2. 本地基础设施
 
-本地依赖由 `docker/local/docker-compose.yml` 提供，端口可通过 `.env` 覆盖：
+本地依赖由 `docker/local/docker-compose.yml` 提供，端口与凭据可通过 `.env` 覆盖：
 
 | 服务 | 镜像 | 默认端口 | 容器名 |
 |------|------|----------|--------|
-| PostgreSQL | `percona/percona-distribution-postgresql:18`（自带 pgvector 0.8.3 及常用扩展） | 5432 | `torchwood-postgres` |
+| PostgreSQL | `percona/percona-distribution-postgresql:18`（自带 pgvector 0.8.3 及常用扩展；initdb 固定 `--locale=C --encoding=UTF8`） | 5432 | `torchwood-postgres` |
 | Redis | `redis:7-alpine` | 6379 | `torchwood-redis` |
-| MinIO（SILO 分支） | `pgsty/silo` | 9000 / 9001 | `torchwood-minio` |
+| MinIO（SILO 分支） | `pgsty/silo:RELEASE.2026-09-03T13-18-01Z`（钉 release tag） | 9000 / 9001 | `torchwood-minio` |
 
-可覆盖的环境键：`POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB`、`POSTGRES_PORT`、`REDIS_PORT`、`MINIO_API_PORT`、`MINIO_CONSOLE_PORT` 等。
+可覆盖的环境键：`POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB`、`POSTGRES_PORT`、`REDIS_PORT`、`MINIO_API_PORT`、`MINIO_CONSOLE_PORT`、`MINIO_ROOT_USER`、`MINIO_ROOT_PASSWORD`。
 
-应用侧连接统一走 `TORCHWOOD_` 前缀环境变量（映射规则见 `03-configuration.md`）。注意数据库有**双账号契约**：`docker/local` 的 `POSTGRES_USER` 是 initdb 引导账号（superuser），只用于 bootstrap 和迁移；**应用运行态 DSN 必须使用非 superuser 的 authenticator 角色**（完整契约见 `13-operations.md`）。完成 §3 的步骤 2.5 一次性引导后，以下 `.env` 配置即可工作：
+应用侧连接统一走 `TORCHWOOD_` 前缀环境变量（映射规则见 `03-configuration.md`）。注意数据库有**双账号契约**：`docker/local` 的 `POSTGRES_USER` 是 initdb 引导账号（superuser），只用于 bootstrap 和迁移；**应用运行态 DSN 必须使用非 superuser 的 authenticator 角色**（完整契约见 `13-operations.md` §4.5）。完成 §3 的步骤 2.5 一次性引导后，以下 `.env` 配置即可工作：
 
 ```env
 # 运行态：非 superuser authenticator（生产换强口令并走密管）
 TORCHWOOD_DATA_DATABASE_SOURCE=postgres://tw_authenticator:dev-only-auth-pass@127.0.0.1:5432/torchwood?sslmode=disable
 TORCHWOOD_DATA_REDIS_PASSWORD=
-# JWT 密钥须 ≥32 字符，含弱子串（change-me/minioadmin/password 等）拒绝启动
+# JWT 密钥须 ≥32 字符，命中弱子串黑名单（change-me/changeme/minioadmin/secret/password/torchwood）拒绝启动
 TORCHWOOD_SECURITY_JWT_SECRET=dev-only-0123456789abcdef-0123456789abcdef
-# 首个管理员引导令牌；未配置时注册被拒
+# 首个管理员引导令牌；未配置时注册被拒（适用同一强度规则）
 TORCHWOOD_SECURITY_SETUP_TOKEN=dev-setup-0123456789abcdef0123456789abcdef
 TORCHWOOD_STORAGE_S3_ENDPOINT=http://127.0.0.1:9000
 TORCHWOOD_STORAGE_S3_ACCESS_KEY_ID=minioadmin
@@ -66,16 +68,16 @@ cp .env.example .env
 
 ```bash
 mise run docker:up     # docker compose up -d（docker/local/）
-docker ps          # 三个容器均为 healthy
+docker ps              # 三个容器均为 healthy（compose 自带 healthcheck）
 ```
 
 ### 步骤 2 — 数据库迁移
 
 ```bash
-mise run db:migrate    # go run migrate -path ./db/migrations -database <DSN> up
+mise run db:migrate    # go run -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate -path ./db/migrations -database <DSN> up
 ```
 
-迁移 DSN 优先级：`MIGRATE_DSN` → `TORCHWOOD_DATA_DATABASE_SOURCE` → `POSTGRES_*` 拼接。**迁移必须用 owner 引导账号**（`torchwood/torchwood`）。如果 `.env` 里的运行态 DSN 已换成 authenticator（如上方示例），迁移时用 `MIGRATE_DSN` 一次性覆盖：
+迁移 DSN 优先级：`MIGRATE_DSN` → `TORCHWOOD_DATA_DATABASE_SOURCE` → `POSTGRES_USER/PASSWORD/HOST/PORT/DB` 拼接（HOST 缺省 127.0.0.1）。**迁移必须用 owner 引导账号**（`torchwood/torchwood`）。如果 `.env` 里的运行态 DSN 已换成 authenticator（如上方示例），迁移时用 `MIGRATE_DSN` 一次性覆盖：
 
 ```bash
 MIGRATE_DSN="postgres://torchwood:torchwood@127.0.0.1:5432/torchwood?sslmode=disable" mise run db:migrate
@@ -108,12 +110,12 @@ SQL
 两点注意：
 
 - **`tw_secrets` 必须保持零授权**。迁移 000004 已 REVOKE authenticator 对该表的全部权限——运行态 DSN 对密钥表零权限是防 `app.roles` GUC 提权的硬约束，切勿显式 GRANT（上方排除清单已将其排除）。
-- 后续迁移新增 public 表后需要补授权，生产环境建议配置 default privileges 一劳永逸。验证 `rolsuper=false` 的方法与完整双账号契约见 `13-operations.md`。
+- 后续迁移新增 public 表后需要补授权，生产环境建议配置 default privileges 一劳永逸。验证 `rolsuper=false` 的方法与完整双账号契约见 `13-operations.md` §4.5。
 
 ### 步骤 3 — 安装工具与依赖
 
 ```bash
-mise install     # go / node / pnpm / buf / protoc / protoc-gen-go / golangci-lint
+mise install               # go / node / pnpm / buf / protoc / protoc-gen-go / golangci-lint
 mise run console:install   # pnpm install（console/）
 ```
 
@@ -135,7 +137,7 @@ mise run generate:all      # generate:proto → generate:config → wire:all
 
 ```bash
 mise run build             # console:build → go build 五个二进制（server / worker / dispatcher / packer / torchwood）到 ./bin/
-./bin/server           # Windows 下为 ./bin/server.exe
+./bin/server               # Windows 下为 ./bin/server.exe
 # 开发态直跑：
 mise run dev:server        # go run ./cmd/server
 mise run dev:worker        # go run ./cmd/worker（独立进程）
@@ -145,7 +147,7 @@ mise run dev:worker        # go run ./cmd/worker（独立进程）
 
 ### 步骤 6 — 首次引导（bootstrap）
 
-全新数据库上打开 `http://127.0.0.1:9080/console/`，登录页会自动切换为「初始化设置」表单（实现见 `internal/app/console/setup.go`）。前提是已配置 `TORCHWOOD_SECURITY_SETUP_TOKEN`，否则注册直接返回 `FailedPrecondition`。
+全新数据库上打开 `http://127.0.0.1:9080/console/`，前端探测到 `admins` 表为空时登录页自动切换为「初始化设置」表单（use-case 实现 `internal/app/console/setup.go`，前端 `console/src/routes/Login.tsx`）。前提是已配置 `TORCHWOOD_SECURITY_SETUP_TOKEN`，否则注册直接返回 `FailedPrecondition`。
 
 引导行为：
 
@@ -168,7 +170,7 @@ mise run dev:worker        # go run ./cmd/worker（独立进程）
 | Metrics | `http://127.0.0.1:9040/metrics` |
 | 健康检查 | `http://127.0.0.1:9080/healthz/liveness`、`/healthz/readiness` |
 
-`mise run console:dev` 的 Vite 开发代理指向同源 `/v1`。
+`mise run console:dev` 的 Vite 开发代理把 `/v1` 转发到 `http://localhost:9080`，保证 dev 下 API 与页面同源、HttpOnly 会话 cookie 正常工作。
 
 ---
 
@@ -179,18 +181,19 @@ mise run dev:worker        # go run ./cmd/worker（独立进程）
 | `mise tasks` | 列出全部任务 |
 | `mise install` | 按 `[tools]` 安装 go / node / pnpm / buf / protoc / protoc-gen-go / golangci-lint |
 | `mise run docker:up` / `docker:down` / `docker:purge` | 启动 / 停止 / 删卷重置（`docker compose down -v`） |
-| `mise run db:migrate` | 执行 `db/migrations` 迁移 |
+| `mise run db:migrate` | 执行 `db/migrations` 迁移（DSN 优先级见步骤 2） |
 | `mise run generate:proto` / `generate:config` / `wire:all` / `generate:all` | proto / 配置 / Wire 代码生成 |
 | `mise run gen:authz-matrix` | 从策略注册表重新生成 `docs/developer/authz-matrix.md` |
 | `mise run lint:proto` | `buf lint` + `buf breaking --against '.git#branch=origin/main'` |
 | `mise run console:install` / `console:build` / `console:dev` | 前端依赖 / 构建 / 开发服务器 |
+| `mise run sdk:install` / `sdk:build` / `sdk:demo` | TS SDK：npm install / tsc 构建 / 构建 demo 并启动（:5174） |
 | `mise run dev:server` / `dev:worker` | 直跑 server / worker |
-| `mise run build` | console:build + 五个二进制 |
+| `mise run build` | console:build + 五个二进制到 `./bin/` |
 | `mise run test` | lint:go + lint:golangci + test:sdk-go + test:sdk-ts + `go test -race -v ./... -cover` |
 | `mise run lint` | lint:go + lint:golangci + lint:sdk-go + lint:console |
-| `mise run docker:build` | 构建发布镜像 |
+| `mise run docker:build` | 构建本地镜像 `torchwood:1.0.0-<git>-<ts>` |
 
-`mise run test` 自动从 `.env` 加载 `TORCHWOOD_TEST_*`；`lint:golangci` 是全量门禁（无棘轮豁免）。
+`mise run test` 自动从 `.env` 加载 `TORCHWOOD_TEST_*`（`mise.toml` 的 `[env] _.file = ".env"` 对全部任务生效）；`lint:golangci` 是全量门禁（无棘轮豁免）。
 
 ---
 
@@ -209,26 +212,30 @@ mise run dev:worker        # go run ./cmd/worker（独立进程）
 
 ## 7. CLI 上手
 
-CLI 二进制为 `bin/torchwood`（入口 `cmd/torchwood`，实现随仓库根 `cli/` 包）。它经 gRPC 直连 Server API（`sdk/go/server.InvokeJSON` 动态分发），新增 RPC 无需在 CLI 登记；`cli/import_guard_test.go` 兜底禁止 CLI 直接 import 生成代码。
+CLI 二进制为 `bin/torchwood`（Windows 下 `bin/torchwood.exe`；入口 `cmd/torchwood`，实现随仓库根 `cli/` 包）。它经 gRPC 直连 Server API（`sdk/go/server.InvokeJSON` 动态分发），新增 RPC 无需在 CLI 登记；`cli/import_guard_test.go` 兜底禁止 CLI 直接 import 生成代码。
+
+**旗标位置规则（硬约束）**：CLI 基于 Go 标准库 `flag` 语义解析——解析在第一个位置参数处停止，因此**全部旗标（全局与动词自有）必须写在位置参数之前**；全局旗标在子命令路径之后即可。写错位置会报 `expects N positional argument(s), got M`。
 
 ```bash
 ./bin/torchwood health get
 ./bin/torchwood uuid
 ./bin/torchwood users list --api-key <secret>
-./bin/torchwood databases documents create app notes --data '{"title":"hi"}' --document-id doc1
-./bin/torchwood leaderboards boards create daily_wins --period-kind daily --policy best    # 幂等建榜（leaderboards.admin）
-./bin/torchwood leaderboards submit daily_wins user_42 --value 100                         # 代任意 subject 提交（leaderboards.write）
+./bin/torchwood databases documents create --data '{"title":"hi"}' --document-id doc1 app notes
+./bin/torchwood leaderboards boards create --period-kind daily --policy best daily_wins    # 幂等建榜（leaderboards.admin）
+./bin/torchwood leaderboards submit --value 100 daily_wins user_42                         # 代任意 subject 提交（leaderboards.write）
 ./bin/torchwood leaderboards top daily_wins
 ./bin/torchwood analytics overview --from 2026-09-01 --to 2026-09-14                       # 日期按 UTC 零点归一
 ./bin/torchwood analytics ingest --file events.json                                        # 或 --file - 走 stdin（analytics.write）
-./bin/torchwood assets grant user_42 gems --quantity 100 --idempotency-key comp-2026-0914  # 运营补偿（assets.write，进审计）
+./bin/torchwood assets grant --quantity 100 --idempotency-key comp-2026-0914 user_42 gems  # 运营补偿（assets.write，进审计）
 ./bin/torchwood payments refund --help                                                     # 订单查询 / 退款 / 人工履约
-TORCHWOOD_GIT_TOKEN=ghp_xxx ./bin/torchwood functions deployments create-from-git greet --url https://github.com/acme/functions.git --ref main --dir functions/greet   # git 源部署（token 走环境变量，见 08-functions.md §3.4）
+TORCHWOOD_GIT_TOKEN=ghp_xxx ./bin/torchwood functions deployments create-from-git --url https://github.com/acme/functions.git --ref main --dir functions/greet greet   # git 源部署（token 走环境变量，见 08-functions.md §3.4）
 ./bin/torchwood runbook up --dir runbooks                                                  # 版本化资源迁移，见 19-runbook.md
-./bin/torchwood rpc /torchwood.server.v1.UsersService/ListUsers --data '{"pageSize":10}' --api-key <secret>
+./bin/torchwood rpc --data '{"pageSize":10}' --api-key <secret> /torchwood.server.v1.UsersService/ListUsers
 ```
 
-全局旗标在子命令路径之后、位置参数之前给出：`--endpoint`、`--api-key`、`--timeout`、`--output`、`--tls`（系统根证书校验，用于反向代理终结 TLS 的场景，代理需以 h2c 转发后端）、`--profile`。对应环境变量 `TORCHWOOD_CLI_*`。
+全局旗标：`--endpoint`（缺省 `127.0.0.1:9060`）、`--api-key`、`--timeout`（缺省 30s）、`--output`（MVP 仅 json）、`--tls`（系统根证书校验，用于反向代理终结 TLS 的场景，代理需以 h2c 转发后端）、`--profile`。对应环境变量 `TORCHWOOD_CLI_*`。脚本可依赖退出码契约：0 成功、1 参数/非 RPC 错误、2=40x、3=5xx、4=429（`cli/root.go` 的 `RPCExitCode`）。
+
+CLI 不自动加载 cwd 的 `.env`（防不可信仓库目录里的恶意 `.env` 重定向 endpoint 窃取 API Key）；需要时自行 export 或 `set -a; source .env; set +a`。
 
 ### 7.1 配置文件与多项目 profile
 
@@ -249,7 +256,7 @@ TORCHWOOD_GIT_TOKEN=ghp_xxx ./bin/torchwood functions deployments create-from-gi
 
 取值优先级（每个字段独立判定）：**显式 flag > `TORCHWOOD_CLI_*` 环境变量 > 配置 profile 值 > 内建默认**。profile 选择优先级：**`--profile` flag > `TORCHWOOD_CLI_PROFILE` > 配置的 `default` 键**。
 
-配置文件做严格解析：未知键、悬空 default 指向、非法字段值都会报错而不是静默忽略，避免拼错键名后连错环境。文件以 0600 权限落盘；所有 config 命令的输出不回显密钥本体（打码为 `****` + 末 4 位）。
+配置文件做严格解析：未知键、悬空 default 指向、非法字段值都会报错而不是静默忽略，避免拼错键名后连错环境。文件以 0600 权限落盘；所有 config 命令的输出不回显密钥本体（打码为 `****` + 末 4 位；密钥不足 12 字符时只显示 `****`）。
 
 ---
 

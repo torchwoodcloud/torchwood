@@ -20,13 +20,15 @@
 
 | 层 | 模块 | 职责 |
 |---|---|---|
-| 领域 | `internal/domain/databases/` | Document / Collection / Attribute / Index / Permission / Principal 模型；权限判定（`AllowsDocumentAccess` / `CollectionAllows` 等）；`DocumentDB` 三端口（Catalog / SchemaApplier / Documents，`repository.go`） |
+| 领域 | `internal/domain/databases/` | Document / Collection / Attribute / Index / Permission / Principal 模型；权限判定（`AllowsDocumentAccess` / `CollectionAllows` 等）；文档角色词表（`docrole.go`，唯一构造 / 解析源）；`DocumentDB` 四端口（Catalog / SchemaApplier / Documents / ChangeFeed，`repository.go`） |
 | 查询 | `pkg/query/` + `pkg/query/proto/` | 单 typed AST（客户端语法糖解析器 + 程序化构造器 + `ToWireJSON`；proto↔AST 编解码）。`shared.v1.Query` 是服务端唯一消费形态，DSL 串仅作 SDK / CLI 客户端糖 |
 | 适配器 | `internal/infra/documentdb/` | 全局 catalog 寻址、collection DDL、文档 CRUD（OCC / Upsert / Bulk / advisory lock）、查询编译与执行、权限 SQL 下推、SQLSTATE 翻译、catalog JSONB 编解码 |
 | 应用 | `internal/app/documents/` + `internal/app/server\|client` 的 Databases 用例 | Client/Server 共用核；用例守卫（sentinel 拒绝 / 标识校验 / 系统集合拦截 / disabled）、空 ACE 种子、grant 展开与校验、错误映射 |
 | 数据面 | `internal/infra/projectschema/` + `pkg/ident/` | 项目 schema 生命周期（Apply / 迁移 / 孤儿对账 / 缓存失效桥接）；两段式寻址与标识规则 |
+| 规模观测 | `internal/infra/documentdb/scale_metrics.go` | schema-per-project 布局的量化预警：三平面物理表计数（catalog / 一段式静态面 / 两段式业务面）与 pg_dump 时长指标骨架，启动钩子采集（runbook 见 `13-operations.md` §5.1） |
 | 迁移 | `db/migrations/`（public 控制面）+ `internal/infra/projectschema/migrations/`（项目数据面模板） | catalog / outbox 控制面演进；新项目一次性建面 + 存量 `EnsureAll` 自愈。legacy 每项目四表已退役（projectschema 000001 no-op + 000011 DROP 存量） |
-| 事件 | `internal/infra/events/` → `internal/infra/realtime/` | 写路径同事务落 `document_events_outbox`（全局 seq + `pg_notify` 唤醒）→ worker XADD Redis Stream `torchwood:events` → 每实例一消费组 XREADGROUP → hub 按快照 ACL 过滤扇出（`VisibleTo`），出站帧剥 ACL；补偿走 `:changes` / WS `last_seq` 重放 |
+| 导入导出 | `internal/infra/documentdb/export.go` / `import.go` + `cli/admin_export_import.go` | 项目级文档面导出 / 恢复（`torchwood admin export/import`）：catalog 快照 manifest + 每集合全行 NDJSON + `snapshot_seq`——读取包在单一 REPEATABLE READ 快照事务内，`snapshot_seq` 与 `:changes?since_seq=` 续接恰好闭合（导出后变更无重无漏） |
+| 事件 | `internal/infra/events/` → `internal/infra/realtime/` | 写路径同事务落 `document_events_outbox`（全局 seq + `pg_notify` 唤醒）→ worker XADD Redis Stream `torchwood:events` → 每实例一消费组 XREADGROUP → hub 按快照 ACL 过滤扇出（`VisibleTo`），出站帧剥 ACL；补偿走 `:changes` / WS `last_seq` 重放。经济 / 系统行为事件共用同一 outbox / Stream（显式 `channel` 列），另有函数事件触发器独立消费组 |
 | 分页 | `pkg/crud/pagination.go` + documentdb keyset token | HMAC 签名 offset token 仅供静态表 / 控制面列表；文档面 **keyset-only**（`ka:/kb:` token，见不变量 12） |
 | 幂等 | `internal/domain/databases/idempotency.go` + bunrepo + app 核层 | `request_id` 写幂等（public.`idempotency_keys`）：只缓存成功响应、24h 重放、`KEY_CONFLICT` / `IN_PROGRESS` 域码 |
 | 传输 | `internal/api/servergrpc\|clientgrpc/databases.go` + 对应 proto | 请求校验、authz 注解、AST 参数绑定（`BindListQuery`）、OpenAPI 契约 |
@@ -37,44 +39,44 @@ Storage 对象本体（`files` 行只是元数据，对象在 S3/MinIO）、Func
 
 ### 关键不变量（变更评审锚点）
 
-1. **租户隔离**：所有文档行访问强制 `d._tenant = ?`（`_tenant = projects.internal_id`，进程内缓存 + 删除失效桥接）；`_tenant` 列对 `tw_app` 经列级 GRANT 锁死不可写。
+1. **租户隔离**：所有文档行访问强制 `d._tenant = ?`（`_tenant = projects.internal_id`，进程内缓存带 30s 回库核验 + 项目删除失效桥接）；`_tenant` 列对 `tw_app` 列级授权锁死不可写。
 2. **DDL 只走两段式**：`businessSchema` 显式拒绝 sentinel `_` 与一段式；`DROP SCHEMA` 永不指向 `tw_<project>`。
-3. **同事务原子性**：文档数据行（含 `_acl`）、`_acl` 变更（唯一通道 `tw_set_document_acl` 函数）、outbox 事件三者同事务提交，任一失败整体回滚。
+3. **同事务原子性**：文档数据行、`_acl`、outbox 事件三者同事务提交，任一失败整体回滚。`_acl` 写入按行生命周期分两条治理通道：create / upsert 插入支随 INSERT 携带（新行无旧行、无可见性复检语义，授予治理在 app 层）；既有行替换唯一通道 `tw_set_document_acl` 函数（同事务；函数内强制 p_tenant = 验签 tenant + 目标行 `tw_visible` 可见性）。
 4. **OCC**：用户集合强制 `_version`，Update / Delete 必填且须匹配；列缺失 / 类型冲突 fail-closed（不落 PG 42703）。
-5. **注入防御**：标识符 `safeNameRe` + `quoteIdent` 双重转义；查询值全程参数绑定；LIKE 走 `escapeLikePattern` + `ESCAPE`。
+5. **注入防御与数据键 fail-closed**：标识符 `safeNameRe` + `quoteIdent` 双重转义；查询值全程参数绑定；LIKE 走 `escapeLikePattern` + `ESCAPE`；写入面非法数据键（`_` 前缀 / 标识符语法 / 超 63 字节）显式 InvalidArgument 拒绝，不静默丢弃。
 6. **判定单源**：业务集合的权限判定执行点 = RLS policy（`tw_can` / `tw_visible` SQL 函数，public 迁移 000004；SQL golden 矩阵 `rls_policy_test.go` 锁语义，禁止 Go 侧等价实现）。sentinel 系统集合保留应用层判定（`AllowsDocumentAccess`）。policy 的 catalog 取值一律 `(SELECT ...)` InitPlan 化（EXPLAIN 门禁常驻），集合级权限变更零 DDL 实时生效。
 7. **事件语义**：at-least-once；**同文档事件按 seq 全序；集合内为分配序（跨文档不保证与提交序一致）；seq 有空洞（空洞 = 回滚事务，不丢事件）**。客户端按 `event_id` 幂等去重、以 `seq` 作续传游标（`last_seq` / `:changes?since_seq=`）；出站帧永不含 ACL 快照。Redis Stream 只承担传输——正确性与重放窗口在 outbox 表（published 24h 清理 ≫ 1h 重放承诺）。
-8. **默认私有**：`DefaultCollectionPermissions` 不含 `read:any`；空 ACE 文档按种子规则私有化（owner / 创建者角色 / `__private__`）。
-9. **标识长度**：`project.id` / `database.id` ≤28（schema 名 ≤60 字节）；**collectionID ≤40，`^[a-z_][a-z0-9_]*$` 小写**（集合 ID 同时是物理表名，小写使 psql / pg_dump 等运维路径免引号直用）；属性 key ≤63；索引 ID ≤40。**物理表名 = collectionID**（2026-09-06 勘误，随机物理名 `c_<base32>` 退役）：DDL / 行查询 / 索引名（`idx_<coll>_<id>`）走逻辑名，运维直接可读；63 字节截断由组合校验把守（app 入口 `validateIndexNameLen` + infra 二道防线，各自合法但组合超限即 InvalidArgument）；`catalog_collections.physical_name` 列保留为 collectionID 冗余投影；sentinel 系统集合物理名 = 逻辑名。
+8. **默认私有**：`DefaultCollectionPermissions` 不含 `read:any`；空 ACE 文档按种子规则私有化（key 主体 `key:<自身id>` / owner `user:<id>` / 创建者角色 / `__private__`）。
+9. **标识长度**：`project.id` / `database.id` ≤28（schema 名 ≤60 字节）；**collectionID ≤40，`^[a-z_][a-z0-9_]*$` 小写**（集合 ID 同时是物理表名，小写使 psql / pg_dump 等运维路径免引号直用）；属性 key ≤63；索引 ID ≤40。**物理表名 = collectionID**：DDL / 行查询 / 索引名（`idx_<coll>_<id>`）走逻辑名，运维直接可读；63 字节截断由组合校验把守（app 入口 `validateIndexNameLen` + infra 二道防线，各自合法但组合超限即 InvalidArgument）；`catalog_collections.physical_name` 列保留为 collectionID 冗余投影；sentinel 系统集合物理名 = 逻辑名。跨项目 / 跨库同名集合合法——凡按 `physical_name` 反查 catalog 的 SQL（RLS policy 子查询、`tw_set_document_acl` 白名单）必须按 (project, database) 三元组收窄。
 10. **查询单栈**：wire 只收 `query`（typed AST `shared.v1.Query`）；`queries` DSL 字符串字段已 reserved，服务端文档查询栈零字符串解析。算子全集 `eq ne lt lte gt gte in between notBetween isNull isNotNull contains notContains startsWith notStartsWith endsWith notEndsWith search notSearch containsAny containsAll` + `and/or`（嵌套深度 ≤8；无通用 NOT，取反由 not* 变体承担——索引友好；containsAny / containsAll 仅 array=true 属性可用）；`select` 投影。DSL 串是 SDK / CLI 客户端糖，解析为 AST 后发送。跨 filter 绑定参数累计 ≤2000（封死 PG 65535 语句参数上限）。
 11. **写幂等**：携带 `request_id` 的写请求键作用域 `(project_id, actor_id, request_id)`；只缓存成功响应（失败释放、重试重新执行）；同 key 异体 → `IDEMPOTENCY.KEY_CONFLICT`；并发同 key 短轮询 ≤2s 后仍 in-flight → `IDEMPOTENCY.IN_PROGRESS`；重放返回原响应 + `x-torchwood-replayed: true` 响应头；done TTL 24h、in_flight 兜底 TTL 5min、惰性清理。
 12. **keyset-only**：`ListDocuments` 只发 / 只认 `ka:/kb:` token；`offset()` 算子与非 keyset token 一律 InvalidArgument。ORDER BY = 全部排序键 + `_id` tiebreaker（方向随首键）；keyset 谓词按方向行比较或逐键 OR 展开（多键游标完整支持；token 只编码 docID，服务端查行取全部键值）。
 13. **聚合一律在可见行集上执行**：`:aggregate` 的可见性由 SELECT policy（securityQuals）承载且过滤先于 GROUP BY——不可见行不进聚合、group 键不泄露；聚合目标必须是声明的数值属性（integer / float）。
-14. **连接模型与角色分层**：单一变色龙 authenticator（DSN 用户，成员含 `tw_owner` / `tw_app` / `tw_system` 三角色）+ 每请求一事务（含读，autocommit 退役）。事务首条 `SET LOCAL ROLE` + `set_config('app.roles', …, true)`（漏注入 = policy 恒 false，fail-closed；`SET LOCAL` 事务结束自动失效）。SystemPrincipal / PlatformAdmin → `tw_system`（BYPASSRLS），DDL → `tw_owner`，其余 → `tw_app`；业务文档表 `ENABLE + FORCE ROW LEVEL SECURITY`（owner 亦受 policy，仅 BYPASSRLS 旁路）。**roles_sig 验签**：tw_app 注入同时携带 `app.roles_sig = HMAC-SHA256(密钥, roles||'|'||exp)`（60s 窗口；密钥 = `HMAC-SHA256(jwt.secret, "tw-roles-guc-v1")` 进程派生，落 `tw_secrets`；双钥轮换：current / previous 槽位 + `tw_sig_match` 任一钥命中——换钥窗口内旧 sig 不降级）。`tw_roles()` 为 SECURITY DEFINER 验签函数——`app.roles` GUC 可被任何持 SQL 会话者 set_config 伪造，验签通道封死（无 sig / 错 sig / 过期 → 零角色 fail-closed）。已知豁免面：DSN 用户为 superuser 时绕过 policy（生产应配非 superuser 应用账号，runbook 见 `13-operations.md`）。
-15. **可写即可读**：SELECT policy = `tw_visible`（read ∨ update ∨ delete 命中）；不可见行对 Get / List / Aggregate 一律"不存在"（防枚举，NotFound 取代 403）；写路径 0 行探测区分 NotFound（不可见）/ PERMISSION_DENIED（可见不可写）/ VERSION_MISMATCH。`_acl` 写入走 `tw_set_document_acl`（同事务函数调用，唯一通道；INSERT / UPDATE 列授权双向排除 `_acl`）；upsert 拆预查分支 + 普通 INSERT/UPDATE（ON CONFLICT 推测插入要求拟插入行过 SELECT policy，结构性冲突）。
+14. **连接模型与角色分层**：单一变色龙 authenticator（DSN 用户，成员含 `tw_owner` / `tw_app` / `tw_system` 三角色）+ 每请求一事务（含读，autocommit 退役）。事务首条 `SET LOCAL ROLE` + `set_config('app.roles', …, true)`（漏注入 = policy 恒 false，fail-closed；`SET LOCAL` 事务结束自动失效）。SystemPrincipal / PlatformAdmin → `tw_system`（BYPASSRLS），DDL → `tw_owner`，其余 → `tw_app`；业务文档表 `ENABLE + FORCE ROW LEVEL SECURITY`（owner 亦受 policy，仅 BYPASSRLS 旁路）。**roles_sig 验签**：tw_app 注入同时携带 `app.tenant` 与 `app.roles_sig = HMAC-SHA256(密钥, tenant|roles|exp)`（180s 窗口 = 3×pgdriver ReadTimeout，覆盖 execute-tx 长事务与 DB 时钟偏差；密钥 = `HMAC-SHA256(jwt.secret, "tw-roles-guc-v1")` 进程派生，落 `tw_secrets`；双钥轮换：current / previous 槽位 + `tw_sig_match` 任一钥命中——换钥窗口内旧 sig 不降级）。`tw_roles()` / `tw_tenant()` 为 SECURITY DEFINER 验签函数——`app.roles` / `app.tenant` GUC 可被任何持 SQL 会话者 set_config 伪造，验签通道封死（无 sig / 错 sig / 过期 → 零角色 / NULL tenant fail-closed；`tw_set_document_acl` 强制 p_tenant = 验签 tenant，跨租户伪造在签名层死锁）。已知豁免面：DSN 用户为 superuser 时绕过 policy（生产应配非 superuser 应用账号，runbook 见 `13-operations.md`）。
+15. **可写即可读**：SELECT policy = `tw_visible`（read ∨ update ∨ delete 命中）；不可见行对 Get / List / Aggregate 一律"不存在"（防枚举，NotFound 取代 403）；写路径 0 行探测区分 NotFound（不可见）/ PERMISSION_DENIED（可见不可写）/ VERSION_MISMATCH。`_acl` 直改旁路从 UPDATE 列授权封死（见 §7.3）；upsert 拆预查分支 + 普通 INSERT/UPDATE（ON CONFLICT 推测插入要求拟插入行过 SELECT policy，结构性冲突）。
 
 ## 1. 三类库
 
 | 层 | Schema 形态 | 技术 | 关键表 |
 |---|---|---|---|
-| `public` 控制面 + 事件脊柱 | 固定 `public` | bun + golang-migrate（`db/migrations/`） | `projects` / `admins` / `admin_projects` / `api_keys` / `audit_logs` / `provider_resource_index` / `document_events_outbox`(+`_dead`) + **全局 catalog 两表 `catalog_databases` / `catalog_collections`**（迁移 000003） |
+| `public` 控制面 + 事件脊柱 | 固定 `public` | bun + golang-migrate（`db/migrations/`） | `projects` / `admins` / `admin_projects` / `api_keys` / `audit_logs` / `project_oauth_providers` / `provider_resource_index` / `idempotency_keys` / `document_events_outbox`(+`_dead`) + **全局 catalog 两表 `catalog_databases` / `catalog_collections`**（迁移 000003） |
 | 项目数据面 `tw_<project>` | 一段式 | bun + `internal/infra/projectschema/` | 静态表 `users` / `sessions` / `identities` / `groups` / `memberships` / `buckets` / `files` + 账本 / Functions / OAuth 目录（文档目录已全局化迁出） |
 | 业务文档面 `tw_<project>_<database>` | 两段式 | 原生 SQL（`documentdb`） | 每个 `database.id` 一个 schema，只放用户 collection 物理表（**表名 = collectionID**，小写）；每表带内嵌 `_acl` + GIN 索引 + RLS policy |
 
 补充：
 
-- `app` 是 CreateProject 缺省创建的首个业务库（普通库，可删可重建；2026-09 前缺省名为 `default`，改名不影响存量库）。
-- 系统静态表不再是文档集合：`internal/infra/projectschema/migrator.go` 在 `CreateProject` 同事务 `CREATE SCHEMA` + `Apply`，进程启动 `EnsureAll` 自愈。
-- **catalog 全局化**：catalog 是 cluster 内全局的两张 public 表——`catalog_databases` 简单行 + `catalog_collections` 把 attrs / indexes / permissions 以 JSONB 列合一（含 default / size / array 全量属性契约、`physical_name`、`schema_version`、`ddl_seq` 乐观锁）。GetCollection 热路径从四表时代的 3 查询收敛为 1；每项目四表模型与模板已退役。
+- `app` 是 CreateProject 缺省创建的首个业务库（普通库，可删可重建；显式透传 `FirstDatabaseID` 路径不变）。
+- 系统静态表不再是文档集合：`internal/infra/projectschema/migrator.go` 在 `CreateProject` 同事务 `CREATE SCHEMA` + `Apply`（迁移模板建 `sys_*` staging 表后由 cut 迁移 rename 为最终名），进程启动 `EnsureAll` 自愈。
+- **catalog 全局化**：catalog 是 cluster 内全局的两张 public 表——`catalog_databases` 简单行 + `catalog_collections` 把 attrs / indexes / permissions 以 JSONB 列合一（含 default / size / array 全量属性契约、`physical_name`、`schema_version`、`ddl_seq` 乐观锁）。GetCollection 热路径单查询读回全量契约；每项目四表模型与模板已退役。
 
 ## 2. 标识与 Schema 规则
 
-`pkg/ident/ident.go`：`^[a-z][a-z0-9]{0,27}$`、`MaxSchemaResourceIDLen=28`。入口 `ValidateSchemaResourceID`；对外再走 `RejectExternalDatabaseID` 显式拒绝 sentinel。
+`pkg/ident/ident.go`：`^[a-z][a-z0-9]{0,27}$`、`MaxSchemaResourceIDLen=28`。入口 `ValidateSchemaResourceID`；对外（app 用例层入口）再走 `internal/app/shared.RejectExternalDatabaseID` 显式拒绝 sentinel。
 
-- `ProjectSchemaName(p)` → `tw_<p>`，匹配一段式正则；`SchemaName(p,db)` → `tw_<p>_<db>`，匹配两段式正则；两者不相交。
+- `ProjectSchemaName(p)` → `tw_<p>`，匹配一段式正则；`SchemaName(p,db)` → `tw_<p>_<db>`，匹配两段式正则；两者不相交（`project.id` 不含 `_`，前缀后第一道 `_` 即分割点，`ParseSchemaName` 反解无歧义）。
 - `IsTwoSegmentSchema(name)` 断言 DDL 目标必须两段式。
 - `ident.ProjectDataPlaneID = "_"` 仅内部寻址：`documentSchema` 在 `databaseID=="_"` 时映射到 `ProjectSchemaName`；对外非法。
-- `_tenant` 取 `projects.internal_id`（`postgres.go:resolveInternalID` + `sync.Map` 缓存），所有行查询强制 `d._tenant=?`。
+- `_tenant` 取 `projects.internal_id`（`postgres.go:resolveInternalID` + `sync.Map` 缓存，命中后每 30s 回库核验一次，漂移即 WARN 并切换新值），所有行查询强制 `d._tenant=?`；建表路径强制取实时值（`resolveInternalIDFresh`，防陈旧租户号烤进 `_tenant` 列默认值）。
 - 字段 / 表名均 `quoteIdent` 转义（`"` → `""`），并经 `safeNameRe=^[a-zA-Z_][a-zA-Z0-9_]*$` 白名单。
 
 ## 3. 两段式 DDL（businessSchema）
@@ -83,22 +85,24 @@ Storage 对象本体（`files` 行只是元数据，对象在 S3/MinIO）、Func
 
 ```go
 schema, err := ident.SchemaName(projectID, databaseID) // 非法直接 InvalidArgument
-if !ident.IsTwoSegmentSchema(schema) { return status.Error(codes.InvalidArgument, "...") }
-conn.ExecContext(ctx, fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS %s`, quoteIdent(schema)))
+if databaseID == ident.ProjectDataPlaneID { /* sentinel 显式拒绝 */ }
+if !ident.IsTwoSegmentSchema(schema) { return status.Error(codes.Internal, "refusing to DDL a non two-segment schema") }
+// ensureSchema：pg_namespace 存在性检查后 CREATE SCHEMA；真正新建时顺带
+// GRANT USAGE 给 tw_app / tw_system（已存在即跳过）
 ```
 
-- `CreateDatabase` = `CREATE SCHEMA IF NOT EXISTS`；`DeleteDatabase` = `DROP SCHEMA ... CASCADE`（绝不 DROP 一段式 `tw_<project>`）。
-- catalog 无 `database_id='_'` 行；`ListDatabases` 过滤 sentinel。
+- `CreateDatabase` = schema 创建 + `catalog_databases` 行写入同一事务（任一失败整体回滚）；`DeleteDatabase` = `DROP SCHEMA ... CASCADE` + catalog 行清理同事务（绝不 DROP 一段式 `tw_<project>`）。
+- catalog 无 `database_id='_'` 行（CreateDatabase 入口拒绝 sentinel，无需 List 时过滤）。
 - 进程内 `projectschema.Apply` 带 `sync.Map` 就绪缓存（事务内不写缓存）。
 
 ## 4. 静态表 vs 动态表
 
-**静态表**（`tw_<project>`，`internal/infra/bun/model/`）：`users` / `sessions` / `identities` / `groups` / `memberships` / `buckets` / `files`，bun 模型，无 `_id` / `_perms` / `_version`，经 Account / Groups / Storage 专用 RPC 读写。`SystemCollectionIDs` 仍在 `internal/domain/databases/system_collections.go`，仅用于 DocumentDB 跳过 `_version` / 写保护与测试重建。`users.DocumentData()` 投影**不含 `password_hash`**（密码校验走 `usersRepo`）。
+**静态表**（`tw_<project>`，`internal/infra/bun/model/`）：`users` / `sessions` / `identities` / `groups` / `memberships` / `buckets` / `files`，bun 模型，无 `_id` / `_acl` / `_version`，经 Account / Groups / Storage 专用 RPC 读写。`SystemCollectionIDs` 仍在 `internal/domain/databases/system_collections.go`，仅用于 DocumentDB 跳过 `_version` / 写保护与测试重建。`users.DocumentData()` 投影**不含 `password_hash`**（密码校验走 `usersRepo`）。
 
 **动态表**（`tw_<project>_<db>.<collectionID>`，每集合一张真实表）：
 
 - **物理表名 = collectionID**；运维可读，psql / pg_dump 免引号直用。sentinel 系统集合同形（指向静态表）。
-- `catalog_collections.physical_name` 保留为冗余投影。DDL 与行查询经 `resolvePhysicalTable` 单条 catalog 点查——现值即存在性判定（行缺失 → NotFound，物理表与 catalog 行同生共死；sentinel 直通零查询；进程内缓存保留，点查实测占业务查询往返约 26%）。
+- `catalog_collections.physical_name` 保留为冗余投影。DDL 与行查询经 `resolvePhysicalTable` 单条 catalog 点查——现值即存在性判定（行缺失 → NotFound，物理表与 catalog 行同生共死；sentinel 直通零查询）；进程内存在性缓存让热路径命中后零额外往返，失效面 = catalog_collections 全部删除路径（DeleteCollection / DeleteDatabase / import 清位），CreateCollection 写穿覆盖；跨实例陈旧语义 fail-loud（表已删 → PG 42P01 显式报错，无静默错写）。
 - **物理寻址字段不出现在任何 API 响应**；realtime 频道保持逻辑 collectionID。
 - 跨项目 / 跨库同名集合合法（表名语义局限于 schema 内）。所有按 `physical_name` 反查 catalog 的 SQL（RLS policy 子查询、`tw_set_document_acl` 白名单）**必须按 (project, database) 收窄**。
 
@@ -118,7 +122,7 @@ CREATE TABLE tw_shop_app.posts (
 CREATE INDEX idx_posts_tenant_created ON tw_shop_app.posts (_tenant, _created_at, _id);
 CREATE INDEX idx_posts_acl ON tw_shop_app.posts USING gin (_acl);
 -- 用户集合另建四条 RLS policy + ENABLE/FORCE ROW LEVEL SECURITY + 列级 GRANT
---（tw_app 排除 _tenant/_acl 写），见 §7（rls_policy.go）。
+--（tw_app 的 INSERT 排除 _tenant；UPDATE 排除 _tenant/_acl），见 §7（rls_policy.go）。
 ```
 
 目录位于 public 全局两表（attrs / indexes / permissions 为 JSONB 列，含 `physical_name` / `ddl_seq`）。`DeleteCollection` DROP 物理表即权限随行消亡（`_acl` 内嵌，无跨表清理）。
@@ -139,7 +143,7 @@ CIC 不能在事务块内运行，是两阶段状态机的结构性原因。事�
 
 | 操作 | SQL 行为 |
 |---|---|
-| `CreateAttribute` | `ALTER TABLE ADD COLUMN IF NOT EXISTS` + attrs JSONB 追加（含 default）+ ddl_seq CAS；`required→NOT NULL`、`default→DEFAULT` |
+| `CreateAttribute` | `ALTER TABLE ADD COLUMN IF NOT EXISTS` + attrs JSONB 追加（含 default）+ ddl_seq CAS；`required→NOT NULL`、`default→DEFAULT`；加列后重刷列级 GRANT（新列立即获得 INSERT/UPDATE 授权） |
 | `DeleteAttribute` | **删列两段的段一**：attrs 条目置 `deprecated`（幂等；migrating 状态拒绝）。读投影屏蔽（Get / List / KNN 剥离）、查询白名单拒绝、写入拒收（create/update/upsert/bulk/execute-tx 的 data / increment / array_updates 三通道；bypass 主体豁免）。物理列与数据保留，`RestoreAttribute` 可回滚 |
 | `RestoreAttribute` | 段一回滚：deprecated → active；migrating → 中止迁移（DROP 新列、任务置 failed）并恢复 active |
 | `RetireAttribute` | **段二（不可逆）**：deprecated 属性 `ALTER TABLE DROP COLUMN CASCADE`（物理索引随消亡）+ 同事务清理引用该列的 catalog 索引条目 + attrs 条目移除（同 key 可重建）。swap 后迁移残留旧列的退役同入口 |
@@ -161,11 +165,11 @@ dry-run 全部只报告。骨架对齐 grants_reconcile（ORDER BY 全键、单�
 
 **类型映射**（`pgTypeFor`）：`string/email/url → VARCHAR(n)/TEXT`、`integer → BIGINT`、`float → DOUBLE PRECISION`、`boolean → BOOLEAN`、`datetime → TIMESTAMPTZ`、`json → JSONB`、`vector → VECTOR(dims)`。
 
-**数组属性**：`array=true` 落地 PG 原生数组列（`pgArrayTypeFor` 单源 DDL 与参数 cast）——`string→TEXT[]`、`integer→BIGINT[]`、`float→DOUBLE PRECISION[]`、`boolean→BOOLEAN[]`、`datetime→TIMESTAMPTZ[]`。元素类型仅限该标量子集（email / url / json 拒绝）；数组列不带 DEFAULT（缺省 NULL）。数组列的 key 索引自动选 `GIN (col array_ops)`（`&&` / `@>` 可走索引）且仅支持单列；unique / fulltext 对数组列拒绝（PG 数组无唯一约束语义）。
+**数组属性**：`array=true` 落地 PG 原生数组列（`pgArrayTypeFor` 单源 DDL 与参数 cast）——`string→TEXT[]`、`integer→BIGINT[]`、`float→DOUBLE PRECISION[]`、`boolean→BOOLEAN[]`、`datetime→TIMESTAMPTZ[]`。元素类型仅限该标量子集（email / url / json 拒绝）；数组列不带 DEFAULT（缺省 NULL）。数组列的 key 索引自动选 `GIN (col array_ops)`（`&&` / `@>` 可走索引）且仅支持单列；unique / fulltext 对数组列拒绝（PG 数组无唯一约束语义）。数组值编码为 PG 数组字面量时按"先双写 `\`、再以 `\"` 转义引号"的固定顺序转义（PG 数组字面量带引号元素内 `\` 是转义符，顺序颠倒或 CSV 式 `""` 双写都会数据失真），读回走 `to_jsonb` 服务端解码无需对称处理。
 
-**vector 属性**：`type=vector` + `dims`（必填，2..2000 = pgvector HNSW 可索引上限；非 vector 类型设置 dims 拒绝），落地 pgvector 原生 `VECTOR(dims)` 列（扩展由迁移 000005 启用；基座镜像 `percona/percona-distribution-postgresql:18` 内置 pgvector 0.8.3）。`default_value` 与 `array=true` 对 vector 拒绝。
+**vector 属性**：`type=vector` + `dims`（必填，2..2000 = pgvector HNSW 可索引上限；非 vector 类型设置 dims 拒绝），落地 pgvector 原生 `VECTOR(dims)` 列（扩展由迁移 000005 启用；基座镜像 `percona/percona-distribution-postgresql:18` 预装 pgvector）。`default_value` 与 `array=true` 对 vector 拒绝。
 
-- 写入值 = JSON 浮点数组（编码为 pgvector 字面量 + `?::vector` 绑定，维度绑定前校验）；读回契约 = JSON 数组（`to_jsonb` 原生输出）。
+- 写入值 = JSON 浮点数组（编码为 pgvector 字面量 + `?::vector` 绑定，维度绑定前校验）；读回契约 = JSON 数组（`to_jsonb` 原生输出，投影逐列覆盖 `::text::jsonb`）。
 - **维度变更 = 新列 + 数据重灌**（换模型即换列名，不走 schema 演进状态机）。
 - **hnsw 索引**：`CreateIndex type=hnsw`（单列；`distance_metric∈{COSINE, L2, INNER_PRODUCT}` 缺省 COSINE，归一大写落 catalog；orders 拒绝），DDL `USING hnsw (col vector_cosine_ops|vector_l2_ops|vector_ip_ops)`；同列可建多 metric 索引。vector 列 × key/unique/fulltext、非 vector 列 × hnsw、数组列 × hnsw 全部拒绝。
 
@@ -228,19 +232,26 @@ dry-run 全部只报告。骨架对齐 grants_reconcile（ORDER BY 全键、单�
 
 ## 7. 权限模型（`_acl` 内嵌 + RLS 判定执行点）
 
-ACE 条目形如 `type:role`，`type∈{read, create, update, delete}`（`write` 展开为三写）。角色词表：`any`（合成，仅 read 可授予）/ `users` / `user:{id}` / `group:{id}` / `keys` / `key:{id}` / `admin` / `guests` / `__system__`。`ExpandPermissionRoles` 无条件注入 `any`；`ExpandPermissionTemplates` 展开 `user:` / `group:` 模板。
+ACE 条目形如 `type:role`，`type∈{read, create, update, delete}`（`write` 展开为三写）。角色词表唯一构造与解析源是 `internal/domain/databases/docrole.go`（生产代码禁止裸串拼接文档角色，测试守门）：
 
-**存储**：文档 ACE 内嵌 `_acl TEXT[]`（元素 `"type:role"`；空数组回退集合级权限），`_perms` 表退役。集合级权限与 `documentSecurity` 存 catalog，policy 经 InitPlan 子查询**实时读取**——集合级权限变更零 DDL 即时生效。**读回免费**：`to_jsonb(d.*)` 载荷已含 `_acl`，解析为 `Document.Permissions`（List / Get 零额外查询）。
+- **裸词表**：`any`（合成，仅 read 可授予）/ `users`（已认证端用户）/ `guests` / `keys`（API key scope 面）；
+- **命名空间角色**：`user:<id>`（可带 `/verified` 复合后缀）、`group:<gid>`（可带 `/<role>` 职务后缀——组域裸角色只有经复合才进入文档角色集，与 console RBAC 撞名被 ParseDocRole 拒绝）、`key:<id>`、`member:<mid>`、`label:<label>`；
+- **sentinel**：`__private__`（纯私有占位 ACE）/ `__system__`（内部旁路投影）；
+- **模板占位符**：`user:{id}` / `group:{id}`（授予持久化前经 `ExpandPermissionTemplates` 展开为调用者自身首个匹配角色，无法借模板指名他人）。
 
-**per-key 私有（B14）**：API key 主体的角色集为 `keys` + `key:<自身id>`——`keys` 承载 scope / API 面（集合默认权限、特权授予判定），`key:<id>` 承载数据隔离身份。空 ACE 种子对 API key 主体绑 `read/update/delete:key:<自身id>`（与 user 主体 owner ACE 同构）——**默认私有**：keyA 建的文档 keyB 不可见（Get = NotFound 防枚举），跨 key 协作需显式授予 `key:<id>` ACE。存量共享语义兼容：catalog 与文档中既有 `keys` ACE 保留有效（不做数据迁移），但默认种子不再产生 `keys` ACE；集合默认权限里的 `keys` 四连不受影响。
+裸 `admin` 不在词表（console admin 主体必为 PlatformAdmin 走 BYPASSRLS，该 ACE 是死语义）。`ExpandPermissionRoles` 无条件注入 `any`；已认证端用户注入 `users`。
+
+**存储**：文档 ACE 内嵌 `_acl TEXT[]`（元素 `"type:role"`；空数组回退集合级权限）。集合级权限与 `documentSecurity` 存 catalog，policy 经 InitPlan 子查询**实时读取**——集合级权限变更零 DDL 即时生效。**读回免费**：`to_jsonb(d.*)` 载荷已含 `_acl`，解析为 `Document.Permissions`（List / Get 零额外查询）。
+
+**per-key 私有**：API key 主体的角色集为 `keys` + `key:<自身id>`——`keys` 承载 scope / API 面（集合默认权限、特权授予判定），`key:<id>` 承载数据隔离身份。空 ACE 种子对 API key 主体绑 `read/update/delete:key:<自身id>`（与 user 主体 owner ACE 同构）——**默认私有**：keyA 建的文档 keyB 不可见（Get = NotFound 防枚举），跨 key 协作需显式授予 `key:<id>` ACE。集合默认权限里的 `keys` 四连不受影响。
 
 ### 7.1 判定执行点 = RLS policy
 
 业务集合建表即生成四条 policy + `ENABLE/FORCE ROW LEVEL SECURITY`（`rls_policy.go`；DDL touch 由 reconcile 自愈）：
 
-- **函数单源**（public 迁移 000004）：`tw_can(acl, roles, typ, coll_allows)`（= `AllowsDocumentAccess` 用户集合分支：write 展开 + 空回退 + 零角色 fail-closed）；`tw_coll_allows(perms, roles, typ)`（集合级 JSONB 判定）；`tw_visible`（可写即可读：read ∨ update ∨ delete 命中；docSec=false 纯集合级；空 `_acl` 快速路径）；`tw_roles()`（**SECURITY DEFINER 验签函数**：仅 tw_app 身份、`app.roles_sig` 未过期时解包 `app.roles` GUC 为 text[]；sig 缺失 / 格式错 / 过期 / 验签失败 / 密钥缺失 → 空数组 = 零角色 fail-closed。密钥 = `HMAC-SHA256(security.jwt.secret, "tw-roles-guc-v1")`，Go 进程派生 + 启动钩子落 `tw_secrets`（表不授予任何角色）。**双钥轮换**：`tw_secrets` current / previous 槽位，`tw_sig_match` 任一钥命中即通过，换钥时旧 current 降级 previous 而非删除——滚动重启换钥窗口内旧 sig 验签通过，窗口外（exp 过期）依旧拒绝）。SQL golden 矩阵锁语义（`rls_policy_test.go`），禁止 Go 侧等价实现。
-- **四条 policy**：SELECT USING = 空 `_acl` 快速路径 ∨ `tw_visible`；INSERT WITH CHECK = 集合级 create；UPDATE USING = CASE docsec → `tw_can(update)` ELSE 集合级，WITH CHECK = 恒真（自锁放行——`_acl` 实际经函数通道写，见 7.3）；DELETE USING 同构。
-- **连接模型**：文档面入口（读写同构，autocommit 退役）经 `withDocumentTx` 包进带身份事务——首条 `SET LOCAL ROLE`（`tw_app`；SystemPrincipal / PlatformAdmin → `tw_system` BYPASSRLS；DDL → `tw_owner`）+ `set_config('app.roles', …, true)` +（tw_app）`set_config('app.roles_sig', …, true)`，多语句合并单往返。漏注入 = 零角色 = policy 恒 false（fail-closed）。中段身份切换（尾随读回）退出前恢复外层身份。
+- **函数单源**（public 迁移 000004）：`tw_can(acl, roles, typ, coll_allows)`（= `AllowsDocumentAccess` 用户集合分支：write 展开 + 空回退 + 零角色 fail-closed）；`tw_coll_allows(perms, roles, typ)`（集合级 JSONB 判定）；`tw_visible`（可写即可读：read ∨ update ∨ delete 命中；docSec=false 纯集合级；空 `_acl` 快速路径）；`tw_roles()` / `tw_tenant()`（**SECURITY DEFINER 验签函数**：仅 tw_app 身份、`app.roles_sig` 未过期时解包 `app.roles` GUC 为 text[]、`app.tenant` GUC 为 bigint；sig 缺失 / 格式错 / 过期 / 验签失败 / 密钥缺失 → 空数组 / NULL = 零角色 fail-closed。密钥 = `HMAC-SHA256(security.jwt.secret, "tw-roles-guc-v1")`，Go 进程启动期派生（`bootkit.InitRolesSigSigning`）；落 `tw_secrets` 由部署期 owner 一次性作业 `torchwood admin sync-roles-sig` 完成（表不授予任何角色，运行 DSN 零权限）。**双钥轮换**：`tw_secrets` current / previous 槽位，`tw_sig_match` 任一钥命中即通过，换钥时旧 current 降级 previous 而非删除——滚动重启换钥窗口内旧 sig 验签通过，窗口外（exp 过期）依旧拒绝）。sig 消息覆盖 `tenant|roles|exp` 三元组——跨租户 / 跨项目伪造在验签层死锁。SQL golden 矩阵锁语义（`rls_policy_test.go`），禁止 Go 侧等价实现。
+- **四条 policy**：SELECT USING = 空 `_acl` 快速路径 ∨ `tw_visible`；INSERT WITH CHECK = 集合级 create；UPDATE USING = CASE docsec → `tw_can(update)` ELSE 集合级，WITH CHECK = 恒真（`_acl` 实际不经主语句 UPDATE 写，见 7.3）；DELETE USING 同构。
+- **连接模型**：文档面入口（读写同构，autocommit 退役）经 `withDocumentTx` 包进带身份事务——事务开启前解析项目 internal_id 填入身份（sig 消息覆盖 tenant），首条 `SET LOCAL ROLE`（`tw_app`；SystemPrincipal / PlatformAdmin → `tw_system` BYPASSRLS；DDL → `tw_owner`）+ `set_config('app.roles', …, true)` +（tw_app 且密钥已初始化）`set_config('app.roles_sig', …)` / `set_config('app.tenant', …, true)`，多语句合并单往返。漏注入 = 零角色 = policy 恒 false（fail-closed）。中段身份切换（尾随读回）退出前恢复外层身份。
 - **应用层判定退役面**：业务集合的 `checkDocumentPermission` / `listPermissionFilter` / 批量预取校验全部退役——policy 隐式过滤即判定。**sentinel 系统集合保留应用层判定**（`AllowsDocumentAccess` + `_acl` 谓词过滤——静态平面独立授权）。`ensureCollectionAccessible`（disabled 拦截）与授予治理（`ValidateGrantablePermissions`）保留在用例 / 入口层。
 
 ### 7.2 各操作的检查点
@@ -254,17 +265,17 @@ ACE 条目形如 `type:role`，`type∈{read, create, update, delete}`（`write`
 | `ListDocuments` / `CountDocuments` / `Aggregate` | SELECT policy 隐式过滤（聚合过滤先于 GROUP BY，securityQuals 机制保证） |
 | `UpsertDocument` | 预查（经 SELECT policy）分支：纯插入 → INSERT WITH CHECK；命中 → UPDATE USING（upsert 需同时持有 create 与 update，语义有意收紧） |
 
-### 7.3 `_acl` 写入路径（唯一函数通道）
+### 7.3 `_acl` 写入路径（插入携带 + 替换函数通道）
 
-PG 18 实证：UPDATE / ON CONFLICT 修改 SELECT policy 引用的列（`_acl`）会触发 SELECT policy 对**新行**的复检——`WITH CHECK(true)` 无法单独保自锁。因此 `_acl` 变更通道唯一化为 **`tw_set_document_acl(p_schema, p_table, p_tenant, p_doc, p_acl)`**（迁移 000004，SECURITY DEFINER owner=`tw_system` BYPASSRLS 绕开新行复检）：
+PG 实证：UPDATE / ON CONFLICT 修改 SELECT policy 引用的列（`_acl`）会触发 SELECT policy 对**新行**的复检——`WITH CHECK(true)` 无法单独保自锁。因此 `_acl` 写入按行生命周期分两条治理通道：
 
-- create / upsert 插入支的 INSERT 不携带 `_acl`（行内 DEFAULT `'{}'` 兜底，非空权限集同事务函数补设）；
-- update / upsert 更新支 / bulk 的替换改调函数（同事务、当前 tw_app 身份，EXECUTE 仅授 tw_app）；
-- `p_table` 经 catalog physical_name 白名单校验（防注入）。
+- **插入通道**：create / upsert 插入支的 INSERT 直接携带 `_acl`（新行无旧行，SELECT policy 新行复检不适用；`_acl` 在 tw_app 的 INSERT 列授权内）。内容治理在 app 层授予校验（信任等价于"自己创建的内容"）；
+- **替换通道**：既有行的 `_acl` 替换唯一走 **`tw_set_document_acl(p_schema, p_table, p_tenant, p_doc, p_acl)`**（迁移 000004，SECURITY DEFINER owner=`tw_system` BYPASSRLS 绕开新行复检；EXECUTE 仅授 `tw_app`）。update / upsert 更新支 / bulk / execute-tx update op 的替换全部经函数通道（同事务、当前 tw_app 身份）。函数内三道校验：`p_table` 经 catalog physical_name 白名单（按 `p_schema` 反解 (project, database) 三元组收窄，防注入防同名 21000）；`p_tenant` 必须等于验签 tenant（跨租户 / 跨项目在签名层死锁，不满足 RETURN 0）；目标行 `tw_visible` 可见性（堵"改他人 ACL 提权"，不可见 / 行缺失 RETURN 0）。
+- tw_system 身份（SystemPrincipal / PlatformAdmin 的 `_acl` 替换）经表级 ALL 直写（tw_system 无函数 EXECUTE，BYPASSRLS 语义等价、无新增提权面）。
 
 同理 ON CONFLICT 推测插入要求拟插入行过 SELECT policy——upsert 拆预查分支 + 普通 INSERT/UPDATE（advisory lock 保证同冲突键串行；与并发普通 Create 撞唯一键改报 DuplicateKey，可重试）。
 
-**列级 GRANT**：`tw_app` SELECT 全列 + INSERT/UPDATE 数据列与除 `_tenant`/`_acl` 外系统列（`_tenant` 锁死不可写；`_acl` **双向锁死**——应用身份直改的旁路从列权限封死）；`tw_system` 表级 ALL。`_version` 不锁列（CAS 守卫 `WHERE _version=?` 已足）。
+**列级 GRANT**：`tw_app` SELECT 全列 + INSERT 数据列与除 `_tenant` 外系统列（含 `_acl`——插入通道）+ UPDATE 数据列与除 `_tenant`/`_acl` 外系统列（`_tenant` 锁死不可写；`_acl` 直改旁路从 UPDATE 列权限封死）；`tw_system` 表级 ALL。`_version` 不锁列（CAS 守卫 `WHERE _version=?` 已足）。
 
 ### 7.4 授予治理与可见范围归属
 
@@ -274,7 +285,7 @@ PG 18 实证：UPDATE / ON CONFLICT 修改 SELECT policy 引用的列（`_acl`�
 
 - **定向共享给特定用户 → 拒绝**。用户 A 不持有 `user:B`，无法给自己的文档挂 `read:user:B`；`group:` / `label:` 同理，只有自身也持有（属于该组）才能授——**组内共享是组语义本身，不是越权**。模板 `user:` / `group:` 只展开为调用者自身首个匹配角色，无法借模板指名他人。
 - **广播公开 → 合法**。`read:any`（读类合成角色授予放行）= 凡走数据面判定的主体均可见；`read:users` = 所有登录端用户可见（API key 主体不含 `users` 角色）。写类对 `any` 一律拒绝。**默认收口**：Client 创建不带 permissions 时包装层盖 owner ACE（`read/update/delete:user:<自身>`）；key 主体种子见 per-key 私有——不显式公开就只有自己可见。
-- **写到他人名下 → 不可能**。`_created_by` / `_updated_by` 由服务端从 Principal 戳入（端用户存裸 user id、API key 存 `key:<id>`，请求不可传）；`_tenant` 列锁死；改他人文档需目标行 `tw_can(update/delete)`；`_acl` 替换唯一通道 `tw_set_document_acl` 复核目标行 `tw_visible`（堵"改他人 ACL 提权"）。
+- **写到他人名下 → 不可能**。`_created_by` / `_updated_by` 由服务端从 Principal 戳入（端用户存裸 user id、API key 存 `key:<id>`，请求不可传）；`_tenant` 列锁死；改他人文档需目标行 `tw_can(update/delete)`；`_acl` 替换唯一通道 `tw_set_document_acl` 复核目标行 `tw_visible` + 验签 tenant（堵"改他人 ACL 提权"与跨项目伪造）。
 
 **两条应用侧边界**：
 
@@ -286,13 +297,13 @@ PG 18 实证：UPDATE / ON CONFLICT 修改 SELECT policy 引用的列（`_acl`�
 用户集合 `_version BIGINT NOT NULL DEFAULT 1`：
 
 - Create / Upsert / Bulk 盲写但 `_version+1`（Bulk `SkipVersion=true` 为 LWW 语义）；Update / Delete 必填且等于当前值（行锁下比较），成功 +1。
-- 错误码：`version_required`（缺省）/ `version_mismatch` / `version_column_conflict`（FailedPrecondition）；`version_invalid`（显式 ≤0，InvalidArgument——与缺省态不同码）；`version_column_unavailable`（InvalidArgument）。
+- 错误码：`version_required`（缺省）/ `version_mismatch` / `version_column_conflict`（FailedPrecondition）；`version_invalid`（显式 ≤0，InvalidArgument——与缺省态不同码）；`version_column_unavailable`（InvalidArgument）。OCC 冲突错误体携带探测读到的当前 `_version`（`VersionConflictError.CurrentVersion` → ErrorInfo metadata `current_version`，调用方零额外读回即可合并重试）。
 - `_version` 可作过滤 / 排序 / 投影；系统表无此列。
 - Upsert 的 `conflictColumns` 必须无序命中集合一个 unique 索引（非 Bypass 主体前置校验，否则 InvalidArgument；Bypass 主体靠 PG 42P10 兜底）。
 
 ### 8.1 事务内核 execute-tx
 
-`DatabasesService/ExecuteTransactions`（Server 面）：单事务内顺序执行异构 op 批（`postgres_transactions.go`，Bulk 的泛化）。op 模型 `{type(create/update/upsert/delete), collection_id, document_id, data, permissions, increment, array_updates, expected_version, conflict_columns}`（array_updates 仅 update 消费，语义与单文档 API 同源），上限 1000。
+`DatabasesService/ExecuteTransactions`（Server 面）：单事务内顺序执行异构 op 批（`postgres_transactions.go`，Bulk 的泛化）。op 模型 `{type(create/update/upsert/delete), collection_id, document_id, data, permissions, increment, array_updates, expected_version, conflict_columns}`（array_updates 仅 update 消费，语义与单文档 API 同源），上限 1000（`databases.MaxTransactionOps`，与 Bulk 上限同值同源）。
 
 - **锁纪律**：按 (collection, documentID) 排序预取 `pg_advisory_xact_lock` 防批间死锁；op 按请求序执行（事件序 = op 序）；各 op 复用单文档事务体（权限 / OCC / conflictColumns 校验同源）。
 - **模式**：`ATOMIC`（默认）任一失败整批回滚（错误带 op index 域码定位）；`PARTIAL` 逐 op SAVEPOINT 容错、已成功不回滚、返回 per-op 结果（含失败域码）。
@@ -318,7 +329,7 @@ PG 18 实证：UPDATE / ON CONFLICT 修改 SELECT policy 引用的列（`_acl`�
 
 ### 8.4 写幂等 request_id
 
-七个写入口（Server 面 Create / Update / Upsert / Delete / BulkUpdate / BulkDelete / ExecuteTransactions + Client 面 Create / Update / Upsert / Delete；HTTP 面等价 `Idempotency-Key` 头，proto 字段优先）在 `internal/app/documents` 核层包裹：
+七类写操作（Create / Update / Upsert / Delete / BulkUpdate / BulkDelete / ExecuteTransactions——Server 与 Client 面共用同一 app 核；HTTP 面等价 `Idempotency-Key` 头，proto 字段优先）在 `internal/app/documents` 核层包裹：
 
 - **键作用域** `(project_id, actor_id, request_id)`；`actor_id` 复用归因链（`Principal.StableActorID`：端用户 / console admin 存裸 id、API key 主体 `key:<id>`、内部 System `system`）；不同 actor 同 key 不冲突。
 - **指纹** = method + 请求关键字段规范序列化 sha256（批 ID / conflict_columns 排序规范化——集合语义，重试乱序不判冲突）；同 key 不同指纹 → `IDEMPOTENCY.KEY_CONFLICT`（InvalidArgument，重试无意义）。
@@ -329,12 +340,12 @@ PG 18 实证：UPDATE / ON CONFLICT 修改 SELECT policy 引用的列（`_acl`�
 
 写路径同事务 `INSERT document_events_outbox`（`event_id` PK = 幂等去重键）；唤醒信号由 AFTER INSERT 行级触发器发 `pg_notify('tw_outbox','')`（空载荷纯信号，随 commit 投递、回滚即丢弃；零额外客户端语句；同事务多次相同 NOTIFY 被 PG 自动合并——execute-tx 100 op 批只投递一次唤醒）。
 
-- **seq**：`BIGINT GENERATED ALWAYS AS IDENTITY` + UNIQUE。顺序承诺：**单文档全序**（行锁保证 seq 随提交序）；**集合内分配序**（跨文档不保证与提交序一致）；**seq 空洞 = 回滚事务消耗 identity，不丢事件**。seq 仅作续传游标与去重辅助，不承诺跨集合因果。
-- **投递**：worker `LISTEN tw_outbox`（专属连接自带重连；commit→唤醒平均 7ms / 最大 21ms）+ 5s 兜底轮询，SKIP LOCKED 批拉 256（按 seq 排序）→ XADD `torchwood:events`（载荷 = 完整信封 JSON 含 acl + seq）→ **每 server 实例一个消费组**（组名 = `hostname:pid`）XREADGROUP → hub 扇出 → 批量 XACK。组从 `$` 起步（新实例不回放历史——断线窗口由客户端 last_seq 重放补齐）；PEL 挂起条目 idle>15min 由 XAUTOCLAIM 重投（重复经 hub 去重窗口 5min + 客户端幂等吸收）。worker 清理周期 `XTRIM MAXLEN ~100000`（Stream 只是投递通道，重放窗口在 outbox 表——published 行 24h 清理覆盖 1h 承诺）。
+- **seq**：`BIGINT GENERATED ALWAYS AS IDENTITY` + UNIQUE。顺序承诺：**单文档全序**（行锁保证 seq 随提交序）；**集合内分配序**（跨文档不保证与提交序一致）；**seq 空洞 = 回滚事务消耗 identity，不丢事件**。seq 仅作续传游标与去重辅助，不承诺跨集合因果。表另带显式 `channel` 列（经济 / 系统行为事件落扇出频道，文档事件 NULL）与 `(project_id, topic, seq)` 复合索引（迁移 000012，把 `:changes` / WS 重放扫描收窄到项目内）。
+- **投递**：worker `LISTEN tw_outbox`（专属连接自带重连）+ 5s 兜底轮询，SKIP LOCKED 批拉 256（按 seq 排序；XADD 失败指数退避重试，超限迁死信表 `document_events_outbox_dead`；领取后 2min 未 published 的行整进程挂死兜底重投）→ XADD `torchwood:events`（载荷 = 完整信封 JSON 含 acl + seq）→ **每 server 实例一个消费组**（组名 = `hostname:pid`）XREADGROUP → hub 扇出 → 批量 XACK → `published_at` 攒批回写（200ms / 32 条）。组从 `$` 起步（新实例不回放历史——断线窗口由客户端 last_seq 重放补齐）；PEL 挂起条目 idle>15min 由 XAUTOCLAIM 重投（重复经 hub 去重窗口 5min + 客户端幂等吸收）；闲置孤儿组（实例崩溃残留）由周期清理销毁。worker 清理周期 `XTRIM MAXLEN ~100000`（Stream 只是投递通道，重放窗口在 outbox 表——published 行 24h 清理覆盖 1h 承诺）。函数事件触发器以独立消费组 `functions-triggers` 消费同一 Stream，停机补投经 outbox 表按 seq 区间扫描。
 - **信封**：载荷上限 1MiB（对齐文档写入上限；超限仅防御性截断 + `truncated=true`）；`transaction_id` 非空表示来自 execute-tx 原子批（批内事件顺序 = op 序）；`seq` 随帧下发。
-- **`:changes` 补偿 API**（Server / Client 两面，scope `databases.read`）：`GET .../collections/{coll}/changes?since_seq=&limit=`（limit 缺省 / 上限 500）返回该集合 `seq > since_seq` 的**已提交**事件，seq 升序、按请求者可见性过滤（与 hub 扇出同语义）；`has_more=true` 以末条 seq 续传。delete 事件天然 tombstone（无 data，带 document_id + version）。`since_seq` 早于最老可用事件 → `EVENTS.RESUME_EXPIRED`（指引全量重拉后重新续传）；`since_seq=0` = 从最老可用事件起。
+- **`:changes` 补偿 API**（Server / Client 两面，scope `databases.read`）：`GET .../collections/{coll}/changes?since_seq=&limit=`（limit 缺省 / 上限 500）返回该集合 `seq > since_seq` 的**已提交**事件，seq 升序、按请求者可见性过滤（与 hub 扇出同语义）；`has_more=true` 以续传游标（优先服务端发放的扫描位置 `next_since_seq`，越过已判不可见的块）续传。delete 事件天然 tombstone（无 data，带 document_id + version）。`since_seq` 早于最老可用事件 → `EVENTS.RESUME_EXPIRED`（指引全量重拉后重新续传）；`since_seq=0` = 从最老可用事件起。
 - **跨项目事件隔离**：topic / 频道名 `databases.<db>.collections.<coll>` 是**全局命名空间**（不含 project 维度），跨项目同名集合共享同一 topic。隔离由消费两端强制 project 过滤保证：`:changes` 按 `outbox.project_id` 等值过滤；Hub 扇出按**连接归属项目**等值过滤（`RealtimeConn.ProjectID` 来自 WS 握手 `hello.project_id`——门控已校验其与凭证一致，即信任锚；不等直接跳过，不做 ACL 评估；空归属 fail-closed）。platform admin 同样受此约束——要看他项目事件须以该项目开连接。若未来引入跨项目同名集合的合法共享场景，须重新评审本决策。
-- **WS `last_seq` 重放**：subscribe 帧可选 `last_seq` → 门控订阅（补发 outbox 窗口内事件，单次上限 500，超出则 `subscribed` 帧带 `has_more=true` 指引 `:changes` 续传）——补发帧先于实时帧、无漏帧窗口；窗口外同样 `EVENTS.RESUME_EXPIRED` error 帧（订阅失败、连接保持）。仅 databases 频道支持。
+- **WS `last_seq` 重放**：subscribe 帧可选 `last_seq` → 门控订阅（补发 outbox 窗口内事件，单次上限 500，超出则 `subscribed` 帧带 `has_more=true` 指引 `:changes` 续传）——补发帧先于实时帧、无漏帧窗口；窗口外同样 `EVENTS.RESUME_EXPIRED` error 帧（订阅失败、连接保持）。仅 databases 频道支持（realtime 频道第二族 `accounts.<userId>` 为经济事件显式频道，按频道本身鉴权，不支持 last_seq 重放）。
 - **慢消费者水位断开**：每连接 send buffer 1024 帧；满水位 → close reason `resync:<last_seq>` 主动断开（客户端重连带 last_seq 即天然重同步）。SDK 端：按频道跟踪 payload seq、重连带 `last_seq`、resync close 零退避立即重连、`EVENTS.RESUME_EXPIRED` 默认清游标（可注入回调）。
 
 ## 9. 事务与分页一致性
@@ -350,7 +361,7 @@ PG 18 实证：UPDATE / ON CONFLICT 修改 SELECT policy 引用的列（`_acl`�
 
 **NULL 排序键的已知限制**：行比较谓词对 NULL 求值为 NULL（行被排除）——cursor 行的排序键含 NULL → InvalidArgument（消息明示先 isNull/isNotNull 过滤再分页）；数据行含 NULL 键在续页中被跳过。不做 NULLS LAST 谓词改写（正确性代价不成比例）。
 
-`pkg/crud` 提供 `ParseListParams` / `BuildPaginationInfo`；offset token（base64 JSON，TTL 24h）仅供静态表 / 控制面列表使用，文档面不再接受。
+`pkg/crud` 提供 `ParseListParams` / `BuildPaginationInfo`；offset token（base64 JSON，HMAC 签名可选启用，TTL 24h）仅供静态表 / 控制面列表使用，文档面不再接受。
 
 ## 10. 系统列与写入过滤
 
@@ -359,9 +370,9 @@ PG 18 实证：UPDATE / ON CONFLICT 修改 SELECT policy 引用的列（`_acl`�
 | `_id` | 文档主键，`idgen.UUID()` 默认，`^[a-zA-Z0-9_.:-]{1,64}$` |
 | `_created_at` / `_updated_at` | 自动维护（`NOW()`） |
 | `_created_by` / `_updated_by` | 归因主体：端用户 / admin 存裸 id；API key 主体存 `key:<keyID>`；其余留空。归因身份与空 ACE 种子同一命名空间——文档属主可直接从 `_created_by` 读出协作授予目标 |
-| `_acl` | 内嵌文档 ACE（TEXT[]，元素 `"type:role"`；空数组回退集合级）。变更通道唯一化为 `tw_set_document_acl`；对 `tw_app` 的 INSERT / UPDATE 列级授权**双向排除** |
+| `_acl` | 内嵌文档 ACE（TEXT[]，元素 `"type:role"`；空数组回退集合级）。插入通道随 INSERT 携带；既有行替换唯一通道 `tw_set_document_acl`；对 `tw_app` 的 UPDATE 列级授权排除 |
 | `_tenant` | 租户标签；**对 `tw_app` 列级锁死不可写**（SELECT 可读——查询谓词需要） |
-| 用户输入 `_` 前缀字段 | `buildInsertParts` / `buildUpdateParts` 直接过滤，防伪造系统列 |
+| 用户输入 `_` 前缀字段 | **fail-closed 显式拒绝**：app 层 `ValidateDocumentPayload` / `ValidateIncrement` 前置早拒，infra `validateDataKey` 二道防线——非法键（`_` 前缀 / 不匹配 `safeNameRe` / 超 63 字节）一律 InvalidArgument，不静默丢弃（静默丢字段使客户端误以为写入成功） |
 | `documentSecurity` / `disabled` | 目录层控制：`disabled=true` 时非 Bypass 主体一律 PermissionDenied |
 
 写保护：`isWriteProtectedSystemCollection` 仅对 sentinel 库（`databaseID=="_"`）的 `users/sessions/identities` 生效，业务库同名集合不受影响。
@@ -412,22 +423,26 @@ docDB.UpdateDocument(ctx, pid, "app", "posts", databases.DocumentUpdate{
 
 | 子系统 | 测试文件 | 锁定内容 |
 |--------|----------|----------|
-| catalog / 物理表名 | `postgres_catalog_global_test.go`、`postgres_physical_name_test.go`、`migrations_cycle_test.go` | codec 往返、GetCollection 单查询、physical_name = collection_id 投影、迁移 up/down 对称 |
+| catalog / 物理表名 | `postgres_catalog_global_test.go`、`postgres_physical_name_test.go`、`physical_name_cache_test.go`、`internal_id_cache_test.go`、`catalog_resolve_bench_test.go`、`migrations_cycle_test.go` | codec 往返、GetCollection 单查询、physical_name = collection_id 投影、缓存失效面、迁移 up/down 对称 |
 | `_acl` 内嵌 + 权限 | `permissions_test.go`、`outbox_test.go` | 空回退 / write 展开 / 租户隔离 / keys 收窄、List 权限回填零额外查询 |
-| 角色分层 + GUC | `exec_identity_test.go`、`internal/infra/clients/roles_sig_test.go` | 注入正确性与事务外零残留、fail-closed、每请求一事务开销计时 |
+| 角色分层 + GUC | `exec_identity_test.go`、`internal/infra/clients/roles_sig_test.go`、`roles_sig_dualkey_test.go`、`roles_sig_keyplane_test.go` | 注入正确性与事务外零残留、fail-closed、双钥轮换窗口、tenant 绑定 / 可见性门 / 注入面 |
 | RLS 判定 | `rls_policy_test.go` | SQL golden 三层矩阵 + 行为级可见性矩阵 + EXPLAIN InitPlan 门禁 + 10 万行基准 |
-| 事件链 | `outbox_seq_test.go`、realtime `subscriber_test.go` / `stream_test.go` / `hub_replay_test.go`、`postgres_changes_test.go`、api 层 `handler_replay_test.go`、`changes_test.go` | seq 单调与回滚空洞、双组消费 + ACL 过滤、重放门控顺序、resync 水位 |
+| 事件链 | `outbox_seq_test.go`、realtime `subscriber_test.go` / `stream_test.go` / `hub_replay_test.go` / `hub_isolation_test.go`、`postgres_changes_test.go`、`postgres_changes_isolation_test.go`、api 层 realtime `handler_replay_test.go`、servergrpc `changes_test.go` | seq 单调与回滚空洞、双组消费 + ACL 过滤 + 项目隔离、重放门控顺序、resync 水位 |
 | 查询 | `pkg/query/query_test.go`、`pkg/query/proto/proto_test.go`、`postgres_query_compile_test.go` | DSL 糖、每算子编解码往返、每算子 SQL 形态、多键游标不丢不重 |
-| 多页 KNN | `vector_search_test.go` | 三 metric 确定性拼接 == 单页大 k 全序、tie 组整组顺延、稀疏可见性召回、kvc 游标往返 |
+| 多页 KNN | `vector_search_test.go`、`vector_ef_search_test.go`、`hnsw_index_test.go` | 三 metric 确定性拼接 == 单页大 k 全序、tie 组整组顺延、稀疏可见性召回、kvc 游标往返、ef_search 缺省零注入 |
 | DSL 文法 parity | `pkg/query/testdata/dsl_ast_golden.json` | 根模块解析器与 `sdk/go/query.FromDSL` 的共同仲裁语料（52 条）；改语料须在 commit message 给出理由，禁止单方删条目 |
 | 在线 DDL + 对账 | `postgres_online_ddl_test.go`、`schema_reconcile_test.go` | 持锁注入并发读写不阻塞、building 残留重入、三类漂移 dry-run→repair→幂等 |
 | schema 演进 | `schema_evolution_test.go` | deprecated 两段删列、copy 迁移往返与 swap、迁移窗口写拒收 |
-| 数组列 + roles_sig | `array_columns_test.go`、`postgres_transactions_test.go` | 五元素类型 DDL、算子语义矩阵、execute-tx 数组更新、验签三态 fail-closed |
+| 数组列 | `array_columns_test.go`、`array_escaping_test.go`、`postgres_transactions_test.go` | 五元素类型 DDL、算子语义矩阵、字面量转义保真、execute-tx 数组更新 |
+| 数据键 fail-closed | `internal/app/documents/data_key_test.go`、`data_key_guard_test.go`、`data_plane_schema_test.go` | 非法键显式拒绝（app 前置 + infra 二道防线）、`_` 前缀保留 |
+| 导入导出 | `export_import_test.go` | NDJSON 往返保真、snapshot_seq 与 `:changes` 续接闭合 |
 
-参考：`internal/domain/databases/`（端口与 Principal）、`internal/infra/documentdb/postgres*.go`、`pkg/query/proto/proto.go`（typed AST）、`db/migrations/` + `internal/infra/projectschema/`、`AGENTS.md` §数据库约定。
+参考：`internal/domain/databases/`（端口、Principal 与角色词表）、`internal/infra/documentdb/postgres*.go`、`pkg/query/proto/proto.go`（typed AST）、`db/migrations/` + `internal/infra/projectschema/`、`AGENTS.md` §数据库约定。
 
 ## 相关文档
 
 - `16-document-modeling.md` — 应用侧建模指南（引用模式、删除卫生、查询陷阱）
 - `05-authentication.md` — 认证期 Principal 与角色注入的上游
-- `13-operations.md` — 双账号契约与 superuser 豁免面 runbook
+- `13-operations.md` — 双账号契约、superuser 豁免面 runbook 与规模预警
+
+
