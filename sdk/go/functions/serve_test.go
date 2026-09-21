@@ -299,13 +299,35 @@ func TestListenSigtermDrainEndToEnd(t *testing.T) {
 
 	sig <- syscall.SIGTERM
 
-	// 停止接新：新分发请求 503。
-	resp, body := doJSON(t, http.MethodPost, base+"/", nil, `{}`)
-	if resp.StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("post-sigterm status = %d, want 503", resp.StatusCode)
-	}
-	if msg := decodeEnvelope(t, body)["error"]; msg != "instance draining" {
-		t.Fatalf("error = %v, want instance draining", msg)
+	// 停止接新：SIGTERM 后新请求不再成功。到达 handler 的吃 503（drain
+	// 拒新），listener 已关的吃 refused/reset（LB 摘实例信号）——同一语义
+	// 在 Shutdown 竞速窗口两侧的表现，端到端只断言"不再 200"；503 形状由
+	// 平台无关的 TestDrainStateRejectsNewRequests 覆盖。
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		req, rerr := http.NewRequest(http.MethodPost, base+"/", strings.NewReader(`{}`))
+		if rerr != nil {
+			t.Fatal(rerr)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			break // listener 已关：refused/reset 即停接新
+		}
+		raw, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusServiceUnavailable {
+			if msg := decodeEnvelope(t, string(raw))["error"]; msg != "instance draining" {
+				t.Fatalf("error = %v, want instance draining", msg)
+			}
+			break
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("post-sigterm status = %d, want 503 or refused", resp.StatusCode)
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("post-sigterm requests still served 200 within 2s")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	// 在途请求被等完成后正常收场。
