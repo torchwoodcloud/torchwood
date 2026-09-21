@@ -30,17 +30,19 @@ describe("PlansListPage", () => {
   afterEach(() => cleanup());
 
   it("展示计划金额为最小单位", async () => {
-    vi.mocked(listPlans).mockResolvedValue([
-      {
-        id: "p1",
-        code: "pro",
-        name: "Pro",
-        amount: "999",
-        currency: "USD",
-        interval: "month",
-        status: "active",
-      },
-    ]);
+    vi.mocked(listPlans).mockResolvedValue({
+      rows: [
+        {
+          id: "p1",
+          code: "pro",
+          name: "Pro",
+          amount: "999",
+          currency: "USD",
+          interval: "month",
+          status: "active",
+        },
+      ],
+    });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>

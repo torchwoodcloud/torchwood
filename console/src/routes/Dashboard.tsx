@@ -74,11 +74,13 @@ export function Dashboard() {
     enabled: !!selectedProjectId,
   });
 
-  const { data: databases = [] } = useQuery({
-    queryKey: ["databases", selectedProjectId],
-    queryFn: listDatabases,
+  // keyset 分页下拿不到总数；统计卡取上限一页（100）计数，超出封顶。
+  const { data: dbPage } = useQuery({
+    queryKey: ["databases", selectedProjectId, 100],
+    queryFn: () => listDatabases({ pageSize: 100 }),
     enabled: !!selectedProjectId,
   });
+  const databases = dbPage?.rows ?? [];
 
   const enabledKeys = apiKeys.filter((k) => k.enabled).length;
   const publicBuckets = buckets.filter((b) => b.public).length;

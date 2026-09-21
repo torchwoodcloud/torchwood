@@ -13,6 +13,7 @@ import {
 } from "@/api/payments";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
+import { useServerPaging } from "@/hooks/useServerPaging";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,11 +37,14 @@ const orderColumns = (tz: string): ColumnDef<PaymentOrder>[] => [
 export function OrdersListPage() {
   const { projectId } = useAuth();
   const tz = useUserTimezone();
-  const { data: orders = [], isLoading } = useQuery({
-    queryKey: ["payments-orders", projectId],
-    queryFn: listOrders,
+  const paging = useServerPaging();
+  const { data, isLoading } = useQuery({
+    queryKey: ["payments-orders", projectId, paging.pageSize, paging.pageToken],
+    queryFn: () => listOrders({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
     enabled: !!projectId,
+    placeholderData: (prev) => prev,
   });
+  const orders = data?.rows ?? [];
   const getSearchText = useCallback(
     (o: PaymentOrder) => `${o.id} ${o.user_id ?? ""} ${o.status} ${o.purpose_kind}`,
     []
@@ -50,11 +54,20 @@ export function OrdersListPage() {
     <ResourceListPage
       title="订单"
       description="项目支付订单（金额为最小货币单位）"
-      searchPlaceholder="搜索订单 ID / 用户 / 状态..."
+      searchPlaceholder="当前页内搜索订单 ID / 用户 / 状态..."
       isLoading={isLoading}
       items={orders}
       columns={orderColumns(tz)}
       getSearchText={getSearchText}
+      serverPaging={{
+        page: paging.page,
+        pageSize: paging.pageSize,
+        hasPrev: paging.hasPrev,
+        hasNext: !!data?.nextPageToken,
+        onPrev: paging.goPrev,
+        onNext: () => paging.goNext(data?.nextPageToken),
+        onPageSizeChange: paging.setPageSize,
+      }}
       detailPath={(o) => `/console/orders/${o.id}`}
       emptyTitle="暂无订单"
       emptyDescription="终端用户建单后将出现在此"

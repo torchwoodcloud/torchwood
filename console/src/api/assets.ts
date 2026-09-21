@@ -1,5 +1,6 @@
 import { api } from "./client";
 import type { ApiRequestConfig } from "./client";
+import { pageQuery, type ListMeta, type ListParams, type Page } from "./pagination";
 
 export interface AssetDef {
   id: string;
@@ -41,9 +42,13 @@ export interface AssetLedgerEntry {
   created_at?: string;
 }
 
-export async function listAssetDefs(): Promise<AssetDef[]> {
-  const res = await api.get<{ defs: AssetDef[] }>("/server/assets/defs");
-  return res.data.defs ?? [];
+// 服务端 assets 列表默认 page_size=25、空页才停发 next_page_token；
+// 对接服务端分页（契约说明见 pagination.ts），pageSize 必传。
+export async function listAssetDefs(params: ListParams): Promise<Page<AssetDef>> {
+  const res = await api.get<{ defs: AssetDef[] } & ListMeta>("/server/assets/defs", {
+    params: pageQuery(params),
+  });
+  return { rows: res.data.defs ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function getAssetDef(defId: string): Promise<AssetDef> {
@@ -78,12 +83,24 @@ export async function deleteAssetDef(defId: string, config?: ApiRequestConfig): 
   await api.delete(`/server/assets/defs/${defId}`, config);
 }
 
-export async function listUserAssets(ownerId: string): Promise<AssetHolding[]> {
-  const res = await api.get<{ holdings: AssetHolding[] }>(`/server/assets/users/${ownerId}`);
-  return res.data.holdings ?? [];
+export async function listUserAssets(
+  ownerId: string,
+  params: ListParams
+): Promise<Page<AssetHolding>> {
+  const res = await api.get<{ holdings: AssetHolding[] } & ListMeta>(
+    `/server/assets/users/${ownerId}`,
+    { params: pageQuery(params) }
+  );
+  return { rows: res.data.holdings ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
-export async function listUserLedger(ownerId: string): Promise<AssetLedgerEntry[]> {
-  const res = await api.get<{ entries: AssetLedgerEntry[] }>(`/server/assets/users/${ownerId}/ledger`);
-  return res.data.entries ?? [];
+export async function listUserLedger(
+  ownerId: string,
+  params: ListParams
+): Promise<Page<AssetLedgerEntry>> {
+  const res = await api.get<{ entries: AssetLedgerEntry[] } & ListMeta>(
+    `/server/assets/users/${ownerId}/ledger`,
+    { params: pageQuery(params) }
+  );
+  return { rows: res.data.entries ?? [], nextPageToken: res.data.meta?.next_page_token };
 }

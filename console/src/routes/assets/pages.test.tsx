@@ -39,17 +39,19 @@ describe("AssetDefsListPage", () => {
   afterEach(() => cleanup());
 
   it("列出定义且无 Grant/Consume/Transfer 写入口", async () => {
-    vi.mocked(listAssetDefs).mockResolvedValue([
-      {
-        id: "d1",
-        code: "gold",
-        name: "金币",
-        class: "currency",
-        decimals: 0,
-        status: "active",
-        created_at: "2026-08-20T00:00:00Z",
-      },
-    ]);
+    vi.mocked(listAssetDefs).mockResolvedValue({
+      rows: [
+        {
+          id: "d1",
+          code: "gold",
+          name: "金币",
+          class: "currency",
+          decimals: 0,
+          status: "active",
+          created_at: "2026-08-20T00:00:00Z",
+        },
+      ],
+    });
     wrap(<AssetDefsListPage />);
     expect(await screen.findByText("gold")).toBeTruthy();
     expect(screen.queryByText(/Grant/i)).toBeNull();
@@ -75,10 +77,12 @@ describe("UserAssetsPage", () => {
   });
 
   it("URL owner 参数直达查询（用户详情页跳入）", async () => {
-    vi.mocked(listUserAssets).mockResolvedValue([
-      { id: "h1", def_id: "d1", def_code: "gold", class: "currency", quantity: "100" },
-    ]);
-    vi.mocked(listUserLedger).mockResolvedValue([]);
+    vi.mocked(listUserAssets).mockResolvedValue({
+      rows: [
+        { id: "h1", def_id: "d1", def_code: "gold", class: "currency", quantity: "100" },
+      ],
+    });
+    vi.mocked(listUserLedger).mockResolvedValue({ rows: [] });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
@@ -88,8 +92,8 @@ describe("UserAssetsPage", () => {
       </QueryClientProvider>
     );
     expect(await screen.findByText(/gold/)).toBeTruthy();
-    expect(listUserAssets).toHaveBeenCalledWith("u1");
-    expect(listUserLedger).toHaveBeenCalledWith("u1");
+    expect(listUserAssets).toHaveBeenCalledWith("u1", { pageSize: 20, pageToken: "" });
+    expect(listUserLedger).toHaveBeenCalledWith("u1", { pageSize: 20, pageToken: "" });
     expect((screen.getByLabelText("用户 ID") as HTMLInputElement).value).toBe("u1");
   });
 });

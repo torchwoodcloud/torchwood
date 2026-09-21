@@ -108,6 +108,11 @@ description = "console 构建（tsc + vite -> console/dist）"
 dir = "console"
 run = "pnpm run build"
 
+[tasks."console:test"]
+description = "console 单测（vitest：组件测试 + api 分页守卫）"
+dir = "console"
+run = ["pnpm install --frozen-lockfile", "pnpm test"]
+
 [tasks."console:dev"]
 description = "console 开发服务器（vite）"
 dir = "console"
@@ -174,8 +179,8 @@ dir = "sdk/typescript"
 run = ["npm ci", "npm run test"]
 
 [tasks.test]
-description = "全量门禁：lint + sdk 测试 + go test -race（.env 已自动加载）"
-depends = ["lint:go", "lint:golangci", "test:sdk-go", "test:sdk-ts"]
+description = "全量门禁：lint + sdk/console 测试 + go test -race（.env 已自动加载）"
+depends = ["lint:go", "lint:golangci", "test:sdk-go", "test:sdk-ts", "console:test"]
 run = "go test -race -v ./... -cover"
 
 [tasks."lint:go"]

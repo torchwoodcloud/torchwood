@@ -16,7 +16,9 @@ import {
 } from "@/api/assets";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
+import { useServerPaging } from "@/hooks/useServerPaging";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
+import { ListPaginationKeyset } from "@/components/list/ListToolbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,12 +64,24 @@ export function AssetDefsListPage() {
   const queryClient = useQueryClient();
   const tz = useUserTimezone();
   const writeable = canWrite(role);
+  const paging = useServerPaging();
 
-  const { data: defs = [], isLoading } = useQuery({
-    queryKey: ["asset-defs", projectId],
-    queryFn: listAssetDefs,
+  const { data, isLoading } = useQuery({
+    queryKey: ["asset-defs", projectId, paging.pageSize, paging.pageToken],
+    queryFn: () => listAssetDefs({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
     enabled: !!projectId,
+    placeholderData: (prev) => prev,
   });
+  const defs = data?.rows ?? [];
+  const paging_ = {
+    page: paging.page,
+    pageSize: paging.pageSize,
+    hasPrev: paging.hasPrev,
+    hasNext: !!data?.nextPageToken,
+    onPrev: paging.goPrev,
+    onNext: () => paging.goNext(data?.nextPageToken),
+    onPageSizeChange: paging.setPageSize,
+  };
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteAssetDef(id),
@@ -83,11 +97,12 @@ export function AssetDefsListPage() {
     <ResourceListPage
       title="资产定义"
       description="管理代币 / 物品 / 权益目录。终端用户无写入口。"
-      searchPlaceholder="搜索 code / 名称 / 类别..."
+      searchPlaceholder="当前页内搜索 code / 名称 / 类别..."
       isLoading={isLoading}
       items={defs}
       columns={defColumns(tz)}
       getSearchText={getSearchText}
+      serverPaging={paging_}
       detailPath={(d) => `/console/assets/defs/${d.id}`}
       toolbarActions={
         <div className="flex gap-2">
@@ -246,16 +261,24 @@ export function UserAssetsPage() {
     setOwnerId(queryOwner);
   }, [queryOwner]);
 
+  const holdingsPaging = useServerPaging();
   const holdings = useQuery({
-    queryKey: ["user-assets", projectId, queryOwner],
-    queryFn: () => listUserAssets(queryOwner),
+    queryKey: ["user-assets", projectId, queryOwner, holdingsPaging.pageSize, holdingsPaging.pageToken],
+    queryFn: () =>
+      listUserAssets(queryOwner, { pageSize: holdingsPaging.pageSize, pageToken: holdingsPaging.pageToken }),
     enabled: !!projectId && !!queryOwner,
+    placeholderData: (prev) => prev,
   });
+  const holdingsRows = holdings.data?.rows ?? [];
+  const ledgerPaging = useServerPaging();
   const ledger = useQuery({
-    queryKey: ["user-ledger", projectId, queryOwner],
-    queryFn: () => listUserLedger(queryOwner),
+    queryKey: ["user-ledger", projectId, queryOwner, ledgerPaging.pageSize, ledgerPaging.pageToken],
+    queryFn: () =>
+      listUserLedger(queryOwner, { pageSize: ledgerPaging.pageSize, pageToken: ledgerPaging.pageToken }),
     enabled: !!projectId && !!queryOwner,
+    placeholderData: (prev) => prev,
   });
+  const ledgerRows = ledger.data?.rows ?? [];
 
   const submit = () => {
     const v = ownerId.trim();
@@ -304,16 +327,28 @@ export function UserAssetsPage() {
             <CardContent>
               {holdings.isLoading ? (
                 <p className="text-sm text-muted-foreground">加载中…</p>
-              ) : (holdings.data ?? []).length === 0 ? (
+              ) : holdingsRows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">无持有</p>
               ) : (
-                <ul className="space-y-2 text-sm">
-                  {(holdings.data ?? []).map((h) => (
-                    <li key={h.id} className="font-mono">
-                      {h.def_code} {h.class} qty={formatInt64(h.quantity)}
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <ul className="space-y-2 text-sm">
+                    {holdingsRows.map((h) => (
+                      <li key={h.id} className="font-mono">
+                        {h.def_code} {h.class} qty={formatInt64(h.quantity)}
+                      </li>
+                    ))}
+                  </ul>
+                  <ListPaginationKeyset
+                    page={holdingsPaging.page}
+                    pageSize={holdingsPaging.pageSize}
+                    rowCount={holdingsRows.length}
+                    hasPrev={holdingsPaging.hasPrev}
+                    hasNext={!!holdings.data?.nextPageToken}
+                    onPrev={holdingsPaging.goPrev}
+                    onNext={() => holdingsPaging.goNext(holdings.data?.nextPageToken)}
+                    onPageSizeChange={holdingsPaging.setPageSize}
+                  />
+                </>
               )}
             </CardContent>
           </Card>
@@ -324,16 +359,28 @@ export function UserAssetsPage() {
             <CardContent>
               {ledger.isLoading ? (
                 <p className="text-sm text-muted-foreground">加载中…</p>
-              ) : (ledger.data ?? []).length === 0 ? (
+              ) : ledgerRows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">无流水</p>
               ) : (
-                <ul className="space-y-2 text-sm">
-                  {(ledger.data ?? []).map((e) => (
-                    <li key={e.id} className="font-mono">
-                      {e.kind} {e.def_code ?? e.def_id} Δ{formatInt64(e.delta)} after={formatInt64(e.quantity_after)}
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <ul className="space-y-2 text-sm">
+                    {ledgerRows.map((e) => (
+                      <li key={e.id} className="font-mono">
+                        {e.kind} {e.def_code ?? e.def_id} Δ{formatInt64(e.delta)} after={formatInt64(e.quantity_after)}
+                      </li>
+                    ))}
+                  </ul>
+                  <ListPaginationKeyset
+                    page={ledgerPaging.page}
+                    pageSize={ledgerPaging.pageSize}
+                    rowCount={ledgerRows.length}
+                    hasPrev={ledgerPaging.hasPrev}
+                    hasNext={!!ledger.data?.nextPageToken}
+                    onPrev={ledgerPaging.goPrev}
+                    onNext={() => ledgerPaging.goNext(ledger.data?.nextPageToken)}
+                    onPageSizeChange={ledgerPaging.setPageSize}
+                  />
+                </>
               )}
             </CardContent>
           </Card>

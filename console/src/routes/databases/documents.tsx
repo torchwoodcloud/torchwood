@@ -39,6 +39,7 @@ import {
   useAdminRole,
   canWrite,
 } from "@/hooks/useAdminRole";
+import { useServerPaging } from "@/hooks/useServerPaging";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
@@ -108,10 +109,14 @@ function DocumentListSection({
   const [bulkUpdateIds, setBulkUpdateIds] = useState<string[]>([]);
   const clearRef = useRef<(() => void) | null>(null);
   const tz = useUserTimezone();
-  const { data: documents = [], isLoading } = useQuery({
-    queryKey: ["documents", dbId, collId],
-    queryFn: () => listDocuments(dbId, collId),
+  const paging = useServerPaging();
+  const { data, isLoading } = useQuery({
+    queryKey: ["documents", dbId, collId, paging.pageSize, paging.pageToken],
+    queryFn: () =>
+      listDocuments(dbId, collId, { pageSize: paging.pageSize, pageToken: paging.pageToken }),
+    placeholderData: (prev) => prev,
   });
+  const documents = data?.rows ?? [];
 
   const remove = useMutation({
     mutationFn: (doc: Document) => {
@@ -194,11 +199,20 @@ function DocumentListSection({
     <>
       <ResourceListPage
         cardTitle="文档"
-        searchPlaceholder="搜索 Document ID 或字段内容..."
+        searchPlaceholder="当前页内搜索 Document ID 或字段内容..."
         isLoading={isLoading}
         items={documents}
         columns={columns}
         getSearchText={getSearchText}
+        serverPaging={{
+          page: paging.page,
+          pageSize: paging.pageSize,
+          hasPrev: paging.hasPrev,
+          hasNext: !!data?.nextPageToken,
+          onPrev: paging.goPrev,
+          onNext: () => paging.goNext(data?.nextPageToken),
+          onPageSizeChange: paging.setPageSize,
+        }}
         toolbarActions={
         readonly ? undefined : (
           <Button asChild size="sm">

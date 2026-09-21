@@ -2,11 +2,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingTable } from "@/components/LoadingTable";
-import { ListToolbar, SelectionBar, ListPagination } from "@/components/list/ListToolbar";
+import {
+  ListToolbar,
+  SelectionBar,
+  ListPagination,
+  ListPaginationKeyset,
+} from "@/components/list/ListToolbar";
 import { DataTable, type ColumnDef } from "@/components/list/DataTable";
 import { useListParams, filterByQuery, paginate } from "@/hooks/useListParams";
 import { useRowSelection } from "@/hooks/useRowSelection";
 import { useMemo, useEffect } from "react";
+
+// 服务端 keyset 分页的受控接入口：传入时 items 视为「当前页已取回的行」，
+// 翻页/换页大小交给服务端（游标经 useServerPaging 管理），不再客户端切片。
+export interface ServerPaging {
+  page: number;
+  pageSize: number;
+  hasPrev: boolean;
+  hasNext: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+  onPageSizeChange: (n: number) => void;
+}
 
 interface ResourceListPageProps<T extends { id: string }> {
   title?: string;
@@ -27,6 +44,7 @@ interface ResourceListPageProps<T extends { id: string }> {
   emptyTitle?: string;
   emptyDescription?: string;
   emptyAction?: React.ReactNode;
+  serverPaging?: ServerPaging;
 }
 
 export function ResourceListPage<T extends { id: string }>({
@@ -48,6 +66,7 @@ export function ResourceListPage<T extends { id: string }>({
   emptyTitle = "暂无数据",
   emptyDescription,
   emptyAction,
+  serverPaging,
 }: ResourceListPageProps<T>) {
   const { params, setParams } = useListParams();
 
@@ -56,12 +75,22 @@ export function ResourceListPage<T extends { id: string }>({
     [items, params.q, getSearchText]
   );
 
-  const { items: pageItems, total, totalPages, page } = useMemo(
-    () => paginate(filtered, params.page, params.pageSize),
-    [filtered, params.page, params.pageSize]
+  // 服务端分页：items 就是当前页，客户端只做页内搜索，不再切片。
+  const pageItems = serverPaging ? filtered : undefined;
+  const clientPage = useMemo(
+    () =>
+      serverPaging
+        ? null
+        : paginate(filtered, params.page, params.pageSize),
+    [serverPaging, filtered, params.page, params.pageSize]
   );
 
-  const selection = useRowSelection(pageItems);
+  const shownItems = serverPaging ? pageItems! : clientPage!.items;
+  const shownTotal = serverPaging ? filtered.length : clientPage!.total;
+  const shownPage = serverPaging ? serverPaging.page : clientPage!.page;
+  const shownTotalPages = serverPaging ? 0 : clientPage!.totalPages;
+
+  const selection = useRowSelection(shownItems);
 
   useEffect(() => {
     selection.clear();
@@ -91,15 +120,30 @@ export function ResourceListPage<T extends { id: string }>({
         <CardContent className="pt-6">
           {isLoading ? (
             <LoadingTable columns={columns.length + 2} />
-          ) : pageItems.length === 0 ? (
-            <EmptyState
-              title={emptyTitle}
-              description={emptyDescription}
-            />
+          ) : shownItems.length === 0 ? (
+            <>
+              <EmptyState
+                title={emptyTitle}
+                description={emptyDescription}
+              />
+              {/* 空页仍渲染分页栏：末页后的空页请求（token 停发）下只能靠「上一页」退出。 */}
+              {serverPaging && (
+                <ListPaginationKeyset
+                  page={serverPaging.page}
+                  pageSize={serverPaging.pageSize}
+                  rowCount={0}
+                  hasPrev={serverPaging.hasPrev}
+                  hasNext={serverPaging.hasNext}
+                  onPrev={serverPaging.onPrev}
+                  onNext={serverPaging.onNext}
+                  onPageSizeChange={serverPaging.onPageSizeChange}
+                />
+              )}
+            </>
           ) : (
             <>
               <DataTable
-                items={pageItems}
+                items={shownItems}
                 columns={columns}
                 allSelected={selection.allSelected}
                 someSelected={selection.someSelected}
@@ -111,13 +155,26 @@ export function ResourceListPage<T extends { id: string }>({
                 editPath={editPath}
                 rowActions={rowActions}
               />
-              <ListPagination
-                page={page}
-                totalPages={totalPages}
-                total={total}
-                pageSize={params.pageSize}
-                onPageChange={(p) => setParams({ page: p }, { resetPage: false })}
-              />
+              {serverPaging ? (
+                <ListPaginationKeyset
+                  page={serverPaging.page}
+                  pageSize={serverPaging.pageSize}
+                  rowCount={filtered.length}
+                  hasPrev={serverPaging.hasPrev}
+                  hasNext={serverPaging.hasNext}
+                  onPrev={serverPaging.onPrev}
+                  onNext={serverPaging.onNext}
+                  onPageSizeChange={serverPaging.onPageSizeChange}
+                />
+              ) : (
+                <ListPagination
+                  page={shownPage}
+                  totalPages={shownTotalPages}
+                  total={shownTotal}
+                  pageSize={params.pageSize}
+                  onPageChange={(p) => setParams({ page: p }, { resetPage: false })}
+                />
+              )}
             </>
           )}
           {!isLoading && items.length === 0 && emptyAction && (

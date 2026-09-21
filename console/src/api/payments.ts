@@ -1,5 +1,6 @@
 import { api } from "./client";
 import type { ApiRequestConfig } from "./client";
+import { pageQuery, type ListMeta, type ListParams, type Page } from "./pagination";
 
 export interface PaymentOrder {
   id: string;
@@ -19,9 +20,13 @@ export interface PaymentOrder {
   expires_at?: string;
 }
 
-export async function listOrders(): Promise<PaymentOrder[]> {
-  const res = await api.get<{ orders: PaymentOrder[] }>("/server/payments/orders");
-  return res.data.orders ?? [];
+// 服务端订单列表默认 page_size=25、空页才停发 next_page_token；
+// 对接服务端分页（契约说明见 pagination.ts），pageSize 必传。
+export async function listOrders(params: ListParams): Promise<Page<PaymentOrder>> {
+  const res = await api.get<{ orders: PaymentOrder[] } & ListMeta>("/server/payments/orders", {
+    params: pageQuery(params),
+  });
+  return { rows: res.data.orders ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function getOrder(orderId: string): Promise<PaymentOrder> {

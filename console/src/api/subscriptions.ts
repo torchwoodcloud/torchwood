@@ -1,5 +1,6 @@
 import { api } from "./client";
 import type { ApiRequestConfig } from "./client";
+import { pageQuery, type ListMeta, type ListParams, type Page } from "./pagination";
 
 export interface SubscriptionPlan {
   id: string;
@@ -32,9 +33,14 @@ export interface Subscription {
   created_at?: string;
 }
 
-export async function listPlans(): Promise<SubscriptionPlan[]> {
-  const res = await api.get<{ plans: SubscriptionPlan[] }>("/server/subscriptions/plans");
-  return res.data.plans ?? [];
+// 服务端 plans/subscriptions 列表默认 page_size=25、空页才停发
+// next_page_token；对接服务端分页（契约说明见 pagination.ts），pageSize 必传。
+export async function listPlans(params: ListParams): Promise<Page<SubscriptionPlan>> {
+  const res = await api.get<{ plans: SubscriptionPlan[] } & ListMeta>(
+    "/server/subscriptions/plans",
+    { params: pageQuery(params) }
+  );
+  return { rows: res.data.plans ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function getPlan(planId: string): Promise<SubscriptionPlan> {
@@ -71,9 +77,12 @@ export async function deletePlan(planId: string, config?: ApiRequestConfig): Pro
   await api.delete(`/server/subscriptions/plans/${planId}`, config);
 }
 
-export async function listSubscriptions(): Promise<Subscription[]> {
-  const res = await api.get<{ subscriptions: Subscription[] }>("/server/subscriptions");
-  return res.data.subscriptions ?? [];
+export async function listSubscriptions(params: ListParams): Promise<Page<Subscription>> {
+  const res = await api.get<{ subscriptions: Subscription[] } & ListMeta>(
+    "/server/subscriptions",
+    { params: pageQuery(params) }
+  );
+  return { rows: res.data.subscriptions ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function getSubscription(subscriptionId: string): Promise<Subscription> {

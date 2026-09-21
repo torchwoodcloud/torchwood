@@ -29,6 +29,7 @@ import {
   useAdminRole,
   isPlatformAdmin,
 } from "@/hooks/useAdminRole";
+import { useServerPaging } from "@/hooks/useServerPaging";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
@@ -71,11 +72,14 @@ export function DatabasesListPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const platformAdmin = isPlatformAdmin(role);
 
-  const { data: databases = [], isLoading } = useQuery({
-    queryKey: ["databases", projectId],
-    queryFn: listDatabases,
+  const paging = useServerPaging();
+  const { data, isLoading } = useQuery({
+    queryKey: ["databases", projectId, paging.pageSize, paging.pageToken],
+    queryFn: () => listDatabases({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
     enabled: !!projectId,
+    placeholderData: (prev) => prev,
   });
+  const databases = data?.rows ?? [];
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteDatabase(id),
@@ -117,6 +121,15 @@ export function DatabasesListPage() {
       items={databases}
       columns={dbColumns(tz)}
       getSearchText={getSearchText}
+      serverPaging={{
+        page: paging.page,
+        pageSize: paging.pageSize,
+        hasPrev: paging.hasPrev,
+        hasNext: !!data?.nextPageToken,
+        onPrev: paging.goPrev,
+        onNext: () => paging.goNext(data?.nextPageToken),
+        onPageSizeChange: paging.setPageSize,
+      }}
       detailPath={(d) => `/console/databases/${d.id}`}
       toolbarActions={
         platformAdmin ? (
@@ -221,11 +234,15 @@ export function DatabaseDetailPage() {
     enabled: !!dbId,
   });
 
-  const { data: collections = [], isLoading: collLoading } = useQuery({
-    queryKey: ["collections", dbId],
-    queryFn: () => listCollections(dbId!),
+  const collPaging = useServerPaging();
+  const { data: collPage, isLoading: collLoading } = useQuery({
+    queryKey: ["collections", dbId, collPaging.pageSize, collPaging.pageToken],
+    queryFn: () =>
+      listCollections(dbId!, { pageSize: collPaging.pageSize, pageToken: collPaging.pageToken }),
     enabled: !!dbId,
+    placeholderData: (prev) => prev,
   });
+  const collections = collPage?.rows ?? [];
 
   const removeDb = useMutation({
     mutationFn: (id: string) => deleteDatabase(id),
@@ -331,11 +348,20 @@ export function DatabaseDetailPage() {
       <ResourceListPage
         title=""
         cardTitle="Collections"
-        searchPlaceholder="搜索 Collection..."
+        searchPlaceholder="当前页内搜索 Collection..."
         isLoading={collLoading}
         items={collections}
         columns={collColumns}
         getSearchText={getCollSearchText}
+        serverPaging={{
+          page: collPaging.page,
+          pageSize: collPaging.pageSize,
+          hasPrev: collPaging.hasPrev,
+          hasNext: !!collPage?.nextPageToken,
+          onPrev: collPaging.goPrev,
+          onNext: () => collPaging.goNext(collPage?.nextPageToken),
+          onPageSizeChange: collPaging.setPageSize,
+        }}
         isRowSelectable={(c) => !c.is_system}
         detailPath={(c) => `/console/databases/${dbId}/collections/${c.id}`}
         toolbarActions={

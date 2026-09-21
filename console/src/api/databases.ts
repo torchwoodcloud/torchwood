@@ -1,5 +1,6 @@
 import { api } from "./client";
 import type { ApiRequestConfig } from "./client";
+import { pageQuery, type ListMeta, type ListParams, type Page } from "./pagination";
 
 export interface Database {
   id: string;
@@ -77,9 +78,13 @@ function normalizeCollection(collection: Collection): Collection {
   };
 }
 
-export async function listDatabases(): Promise<Database[]> {
-  const res = await api.get<{ databases: Database[] }>("/server/databases");
-  return res.data.databases ?? [];
+// 服务端列表默认 page_size=50、上限 100，空页才停发 next_page_token；
+// 对接服务端分页（契约说明见 pagination.ts），pageSize 必传。
+export async function listDatabases(params: ListParams): Promise<Page<Database>> {
+  const res = await api.get<{ databases: Database[] } & ListMeta>("/server/databases", {
+    params: pageQuery(params),
+  });
+  return { rows: res.data.databases ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function getDatabase(id: string): Promise<Database> {
@@ -99,11 +104,16 @@ export async function deleteDatabase(id: string, config?: ApiRequestConfig): Pro
   await api.delete(`/server/databases/${id}`, config);
 }
 
-export async function listCollections(databaseId: string): Promise<Collection[]> {
-  const res = await api.get<{ collections: Collection[] }>(
-    `/server/databases/${databaseId}/collections`
+export async function listCollections(
+  databaseId: string,
+  params: ListParams
+): Promise<Page<Collection>> {
+  const res = await api.get<{ collections: Collection[] } & ListMeta>(
+    `/server/databases/${databaseId}/collections`,
+    { params: pageQuery(params) }
   );
-  return (res.data.collections ?? []).map(normalizeCollection);
+  const rows = (res.data.collections ?? []).map(normalizeCollection);
+  return { rows, nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function getCollection(
@@ -219,12 +229,17 @@ export async function deleteIndex(
 
 export async function listDocuments(
   databaseId: string,
-  collectionId: string
-): Promise<Document[]> {
-  const res = await api.get<{ documents: Document[] }>(
-    `/server/databases/${databaseId}/collections/${collectionId}/documents`
+  collectionId: string,
+  params: ListParams
+): Promise<Page<Document>> {
+  // 服务端 documents 默认 page_size=50（2026-09-21 assets 同类事故），
+  // 对接服务端分页，pageSize 必传。
+  const res = await api.get<{ documents: Document[] } & ListMeta>(
+    `/server/databases/${databaseId}/collections/${collectionId}/documents`,
+    { params: pageQuery(params) }
   );
-  return (res.data.documents ?? []).map(normalizeDocument);
+  const rows = (res.data.documents ?? []).map(normalizeDocument);
+  return { rows, nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function getDocument(

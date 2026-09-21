@@ -1,5 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { Search, X } from "lucide-react";
 
 interface ListToolbarProps {
@@ -110,6 +118,64 @@ export function ListPagination({
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
         >
+          下一页
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+interface ListPaginationKeysetProps {
+  page: number;
+  pageSize: number;
+  rowCount: number;
+  hasPrev: boolean;
+  hasNext: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+  onPageSizeChange: (n: number) => void;
+}
+
+// 服务端 keyset 分页的分页栏：游标语义下 total 未知、不能跳页，
+// 只有上一页/下一页与页大小切换（样式对齐 audit-logs）。
+export function ListPaginationKeyset({
+  page,
+  pageSize,
+  rowCount,
+  hasPrev,
+  hasNext,
+  onPrev,
+  onNext,
+  onPageSizeChange,
+}: ListPaginationKeysetProps) {
+  const start = rowCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end = (page - 1) * pageSize + rowCount;
+
+  return (
+    <div className="flex items-center justify-between pt-4">
+      <p className="text-sm text-muted-foreground">
+        显示 {start}–{end}
+      </p>
+      <div className="flex items-center gap-2">
+        <Select
+          value={String(pageSize)}
+          onValueChange={(v) => onPageSizeChange(Number(v))}
+        >
+          <SelectTrigger className="w-24">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PAGE_SIZE_OPTIONS.map((n) => (
+              <SelectItem key={n} value={String(n)}>
+                {n} 条
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button variant="outline" size="sm" disabled={!hasPrev} onClick={onPrev}>
+          上一页
+        </Button>
+        <Button variant="outline" size="sm" disabled={!hasNext} onClick={onNext}>
           下一页
         </Button>
       </div>

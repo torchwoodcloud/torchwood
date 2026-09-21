@@ -19,6 +19,7 @@ import {
 } from "@/api/subscriptions";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite, isPlatformAdmin } from "@/hooks/useAdminRole";
+import { useServerPaging } from "@/hooks/useServerPaging";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,11 +62,14 @@ export function PlansListPage() {
   const queryClient = useQueryClient();
   const writeable = canWrite(role);
 
-  const { data: plans = [], isLoading } = useQuery({
-    queryKey: ["sub-plans", projectId],
-    queryFn: listPlans,
+  const paging = useServerPaging();
+  const { data, isLoading } = useQuery({
+    queryKey: ["sub-plans", projectId, paging.pageSize, paging.pageToken],
+    queryFn: () => listPlans({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
     enabled: !!projectId,
+    placeholderData: (prev) => prev,
   });
+  const plans = data?.rows ?? [];
   const remove = useMutation({
     mutationFn: (id: string) => deletePlan(id),
     onSuccess: () => {
@@ -79,11 +83,20 @@ export function PlansListPage() {
     <ResourceListPage
       title="订阅计划"
       description="平台托管 / 渠道托管共用计划"
-      searchPlaceholder="搜索 code / 名称..."
+      searchPlaceholder="当前页内搜索 code / 名称..."
       isLoading={isLoading}
       items={plans}
       columns={planColumns}
       getSearchText={getSearchText}
+      serverPaging={{
+        page: paging.page,
+        pageSize: paging.pageSize,
+        hasPrev: paging.hasPrev,
+        hasNext: !!data?.nextPageToken,
+        onPrev: paging.goPrev,
+        onNext: () => paging.goNext(data?.nextPageToken),
+        onPageSizeChange: paging.setPageSize,
+      }}
       detailPath={(p) => `/console/subscriptions/plans/${p.id}`}
       toolbarActions={
         <div className="flex gap-2">
@@ -235,11 +248,14 @@ const subColumns: ColumnDef<Subscription>[] = [
 
 export function SubscriptionsListPage() {
   const { projectId } = useAuth();
-  const { data: items = [], isLoading } = useQuery({
-    queryKey: ["subscriptions", projectId],
-    queryFn: listSubscriptions,
+  const paging = useServerPaging();
+  const { data, isLoading } = useQuery({
+    queryKey: ["subscriptions", projectId, paging.pageSize, paging.pageToken],
+    queryFn: () => listSubscriptions({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
     enabled: !!projectId,
+    placeholderData: (prev) => prev,
   });
+  const items = data?.rows ?? [];
   const getSearchText = useCallback(
     (s: Subscription) => `${s.id} ${s.user_id ?? ""} ${s.plan_code ?? ""} ${s.status}`,
     []
@@ -249,11 +265,20 @@ export function SubscriptionsListPage() {
     <ResourceListPage
       title="订阅"
       description="用户订阅合同（不是资产）"
-      searchPlaceholder="搜索用户 / 计划 / 状态..."
+      searchPlaceholder="当前页内搜索用户 / 计划 / 状态..."
       isLoading={isLoading}
       items={items}
       columns={subColumns}
       getSearchText={getSearchText}
+      serverPaging={{
+        page: paging.page,
+        pageSize: paging.pageSize,
+        hasPrev: paging.hasPrev,
+        hasNext: !!data?.nextPageToken,
+        onPrev: paging.goPrev,
+        onNext: () => paging.goNext(data?.nextPageToken),
+        onPageSizeChange: paging.setPageSize,
+      }}
       detailPath={(s) => `/console/subscriptions/${s.id}`}
       toolbarActions={
         <Button variant="outline" asChild>

@@ -37,18 +37,20 @@ describe("OrdersListPage", () => {
   afterEach(() => cleanup());
 
   it("展示订单金额为最小单位整数", async () => {
-    vi.mocked(listOrders).mockResolvedValue([
-      {
-        id: "ord-1",
-        user_id: "u1",
-        provider: "stripe",
-        amount: "1999",
-        currency: "USD",
-        purpose_kind: "topup",
-        status: "paid",
-        created_at: "2026-08-20T00:00:00Z",
-      },
-    ]);
+    vi.mocked(listOrders).mockResolvedValue({
+      rows: [
+        {
+          id: "ord-1",
+          user_id: "u1",
+          provider: "stripe",
+          amount: "1999",
+          currency: "USD",
+          purpose_kind: "topup",
+          status: "paid",
+          created_at: "2026-08-20T00:00:00Z",
+        },
+      ],
+    });
     renderList();
     expect(await screen.findByText("1999 USD")).toBeTruthy();
     expect(screen.getByText("ord-1")).toBeTruthy();
