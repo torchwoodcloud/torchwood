@@ -82,18 +82,12 @@ func (m *mockExecutor) RemoveImage(_ context.Context, _, _ string) error {
 	return nil
 }
 
-// buildCount / importCount 是并发安全读取面：镜像缺失重建的计数由后台
+// buildCount 是并发安全读取面：镜像缺失重建的 builds 计数由后台
 // goroutine 写入，断言（require.Eventually 轮询）必须经此读取。
 func (m *mockExecutor) buildCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.builds
-}
-
-func (m *mockExecutor) importCount() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.imports
 }
 
 func newMockExecutor(result *domainfunctions.ExecutionResult, err error) *mockExecutor {
