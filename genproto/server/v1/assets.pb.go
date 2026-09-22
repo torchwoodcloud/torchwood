@@ -1593,11 +1593,16 @@ func (x *ListUserAssetsResponse) GetMeta() *v1.ListResponseMeta {
 }
 
 type ListUserLedgerRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OwnerId       string                 `protobuf:"bytes,1,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`
-	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	DefCode       string                 `protobuf:"bytes,4,opt,name=def_code,json=defCode,proto3" json:"def_code,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	OwnerId   string                 `protobuf:"bytes,1,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`
+	PageSize  int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// 按 def code 精确过滤（空 = 全部资产）。
+	DefCode string `protobuf:"bytes,4,opt,name=def_code,json=defCode,proto3" json:"def_code,omitempty"`
+	// 时间排序方向：false（缺省）= 最新在前（desc，与既有行为一致）；
+	// true = 最早在前（asc）。keyset 游标含方向校验，跨方向复用 token 即
+	// InvalidArgument。
+	Ascending     bool `protobuf:"varint,5,opt,name=ascending,proto3" json:"ascending,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1658,6 +1663,13 @@ func (x *ListUserLedgerRequest) GetDefCode() string {
 		return x.DefCode
 	}
 	return ""
+}
+
+func (x *ListUserLedgerRequest) GetAscending() bool {
+	if x != nil {
+		return x.Ascending
+	}
+	return false
 }
 
 type ListUserLedgerResponse struct {
@@ -2004,13 +2016,14 @@ const file_server_v1_assets_proto_rawDesc = "" +
 	"page_token\x18\x03 \x01(\tR\tpageToken\"\x92\x01\n" +
 	"\x16ListUserAssetsResponse\x12=\n" +
 	"\bholdings\x18\x01 \x03(\v2!.torchwood.server.v1.AssetHoldingR\bholdings\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\x91\x01\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\xaf\x01\n" +
 	"\x15ListUserLedgerRequest\x12!\n" +
 	"\bowner_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aownerId\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\x03 \x01(\tR\tpageToken\x12\x19\n" +
-	"\bdef_code\x18\x04 \x01(\tR\adefCode\"\x94\x01\n" +
+	"\bdef_code\x18\x04 \x01(\tR\adefCode\x12\x1c\n" +
+	"\tascending\x18\x05 \x01(\bR\tascending\"\x94\x01\n" +
 	"\x16ListUserLedgerResponse\x12?\n" +
 	"\aentries\x18\x01 \x03(\v2%.torchwood.server.v1.AssetLedgerEntryR\aentries\x129\n" +
 	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\x8c\x01\n" +

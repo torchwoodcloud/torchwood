@@ -115,7 +115,7 @@ func (a *Assets) ListDefs(ctx context.Context, includeArchived bool, limit int, 
 	if err != nil {
 		return nil, err
 	}
-	limit, before = normalizeList(limit, before)
+	limit, before = normalizeList(limit, before, false)
 	return a.defs.List(ctx, projectID, includeArchived, limit, before)
 }
 

@@ -488,9 +488,11 @@ func newAssetsHoldingsCmd(g *GlobalFlags) *verb {
 func newAssetsLedgerCmd(g *GlobalFlags) *verb {
 	var pageSize int
 	var pageToken, defCode string
-	return newVerb(g, "ledger", "list an owner's ledger entries (audit trail)", "assets ledger [--def-code <c>] [--page-size <n>] [--page-token <t>] <owner-id>",
+	var ascending bool
+	return newVerb(g, "ledger", "list an owner's ledger entries (audit trail)", "assets ledger [--def-code <c>] [--ascending] [--page-size <n>] [--page-token <t>] <owner-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&defCode, "def-code", "", "filter by asset code")
+			fs.BoolVar(&ascending, "ascending", false, "sort by time ascending (oldest first); default is descending (newest first)")
 			fs.IntVar(&pageSize, "page-size", 0, "page size (server default when omitted)")
 			fs.StringVar(&pageToken, "page-token", "", "next page token from the previous response")
 		},
@@ -502,6 +504,9 @@ func newAssetsLedgerCmd(g *GlobalFlags) *verb {
 			req["ownerId"] = args[0]
 			if defCode != "" {
 				req["defCode"] = defCode
+			}
+			if ascending {
+				req["ascending"] = true
 			}
 			return call(g, env, methodAssetsUserLedger, req)
 		})

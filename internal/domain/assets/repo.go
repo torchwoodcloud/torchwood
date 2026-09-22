@@ -46,7 +46,10 @@ type LedgerRepo interface {
 	InsertIfAbsent(ctx context.Context, e *LedgerEntry) (existing *LedgerEntry, inserted bool, err error)
 	GetByIdempotencyKey(ctx context.Context, projectID, key string) (*LedgerEntry, error)
 	ListByRef(ctx context.Context, projectID, refType, refID string) ([]LedgerEntry, error)
-	ListByOwner(ctx context.Context, projectID string, ownerType OwnerType, ownerID string, defID string, limit int, before time.Time) ([]LedgerEntry, error)
+	// ListByOwner 按 owner 读流水，created_at keyset 分页：ascending=false
+	// 倒序（最新在前，before = 早于游标），true 正序（最早在前，before =
+	// 晚于游标）。defID 非空时按定义过滤。
+	ListByOwner(ctx context.Context, projectID string, ownerType OwnerType, ownerID string, defID string, ascending bool, limit int, before time.Time) ([]LedgerEntry, error)
 	// ListAllInProject 对账用：按 created_at, id 升序重放。
 	ListAllInProject(ctx context.Context, projectID string) ([]LedgerEntry, error)
 }

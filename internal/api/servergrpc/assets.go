@@ -2,7 +2,10 @@ package servergrpc
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"strings"
 	"time"
 
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
@@ -295,11 +298,13 @@ func (s *AssetsService) ListUserAssets(ctx context.Context, req *serverv1.ListUs
 
 func (s *AssetsService) ListUserLedger(ctx context.Context, req *serverv1.ListUserLedgerRequest) (*serverv1.ListUserLedgerResponse, error) {
 	// owner_id required 同上，由 buf.validate 注解承担。
-	before, err := decodeServerOrderCursor(req.GetPageToken())
+	// 游标带方向前缀：跨排序方向复用 token 直接 InvalidArgument。
+	ascending := req.GetAscending()
+	before, err := decodeLedgerCursor(ascending, req.GetPageToken())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid page token")
 	}
-	rows, err := s.assets.ListUserLedger(ctx, req.GetOwnerId(), req.GetDefCode(), int(req.GetPageSize()), before)
+	rows, err := s.assets.ListUserLedger(ctx, req.GetOwnerId(), req.GetDefCode(), ascending, int(req.GetPageSize()), before)
 	if err != nil {
 		return nil, err
 	}
@@ -309,9 +314,38 @@ func (s *AssetsService) ListUserLedger(ctx context.Context, req *serverv1.ListUs
 	}
 	meta := &sharedv1.ListResponseMeta{PageSize: req.GetPageSize()}
 	if len(rows) > 0 {
-		meta.NextPageToken = encodeServerOrderCursor(rows[len(rows)-1].Entry.CreatedAt)
+		meta.NextPageToken = encodeLedgerCursor(ascending, rows[len(rows)-1].Entry.CreatedAt)
 	}
 	return &serverv1.ListUserLedgerResponse{Entries: out, Meta: meta}, nil
+}
+
+// 流水 keyset 游标带排序方向前缀（"a:" 正序 / "d:" 倒序）：方向决定游标
+// 语义（「晚于」vs「早于」），跨方向复用 token 会静默错乱，故在解码期拒绝。
+func encodeLedgerCursor(ascending bool, t time.Time) string {
+	prefix := "d:"
+	if ascending {
+		prefix = "a:"
+	}
+	return base64.RawURLEncoding.EncodeToString([]byte(prefix + t.UTC().Format(time.RFC3339Nano)))
+}
+
+func decodeLedgerCursor(ascending bool, token string) (time.Time, error) {
+	if token == "" {
+		return time.Time{}, nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return time.Time{}, err
+	}
+	want := "d:"
+	if ascending {
+		want = "a:"
+	}
+	s := string(raw)
+	if !strings.HasPrefix(s, want) {
+		return time.Time{}, errors.New("ledger cursor direction mismatch")
+	}
+	return time.Parse(time.RFC3339Nano, strings.TrimPrefix(s, want))
 }
 
 func (s *AssetsService) ListDefAssets(ctx context.Context, req *serverv1.ListDefAssetsRequest) (*serverv1.ListDefAssetsResponse, error) {

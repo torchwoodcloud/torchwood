@@ -78,7 +78,7 @@ func (s *AssetsService) ListMyAssetLedger(ctx context.Context, req *clientv1.Lis
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid page token")
 	}
-	rows, err := s.assets.ListMyLedger(ctx, req.GetDefCode(), int(req.GetPageSize()), before)
+	rows, err := s.assets.ListMyLedger(ctx, req.GetDefCode(), false, int(req.GetPageSize()), before)
 	if err != nil {
 		return nil, err
 	}

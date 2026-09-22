@@ -351,7 +351,12 @@ message ListUserLedgerRequest {
   string owner_id = 1 [(buf.validate.field).required = true];
   int32 page_size = 2;
   string page_token = 3;
+  // 按 def code 精确过滤（空 = 全部资产）。
   string def_code = 4;
+  // 时间排序方向：false（缺省）= 最新在前（desc，与既有行为一致）；
+  // true = 最早在前（asc）。keyset 游标含方向校验，跨方向复用 token 即
+  // InvalidArgument。
+  bool ascending = 5;
 }
 
 message ListUserLedgerResponse {

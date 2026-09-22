@@ -60,7 +60,7 @@ func (a *Assets) ListDefAssets(ctx context.Context, defID, ownerID string, limit
 	if def == nil {
 		return nil, status.Error(codes.NotFound, "asset def not found")
 	}
-	limit, before = normalizeList(limit, before)
+	limit, before = normalizeList(limit, before, false)
 	rows, err := a.holdings.ListByDef(ctx, projectID, domainassets.OwnerTypeUser, ownerID, defID, limit, before)
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (a *Assets) ListDefAssets(ctx context.Context, defID, ownerID string, limit
 }
 
 func (a *Assets) listOwnerAssets(ctx context.Context, projectID, ownerID string, limit int, before time.Time) ([]HoldingView, error) {
-	limit, before = normalizeList(limit, before)
+	limit, before = normalizeList(limit, before, false)
 	rows, err := a.holdings.ListByOwner(ctx, projectID, domainassets.OwnerTypeUser, ownerID, limit, before)
 	if err != nil {
 		return nil, err
@@ -103,17 +103,17 @@ func (a *Assets) listOwnerAssets(ctx context.Context, projectID, ownerID string,
 	return out, nil
 }
 
-// ListMyLedger 返回本人流水。
-func (a *Assets) ListMyLedger(ctx context.Context, defCode string, limit int, before time.Time) ([]LedgerView, error) {
+// ListMyLedger 返回本人流水（ascending=true 时间正序，缺省倒序）。
+func (a *Assets) ListMyLedger(ctx context.Context, defCode string, ascending bool, limit int, before time.Time) ([]LedgerView, error) {
 	projectID, userID, err := endUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return a.listOwnerLedger(ctx, projectID, userID, defCode, limit, before)
+	return a.listOwnerLedger(ctx, projectID, userID, defCode, ascending, limit, before)
 }
 
 // ListUserLedger 返回指定用户流水（Server / Console 只读查询）。
-func (a *Assets) ListUserLedger(ctx context.Context, ownerID, defCode string, limit int, before time.Time) ([]LedgerView, error) {
+func (a *Assets) ListUserLedger(ctx context.Context, ownerID, defCode string, ascending bool, limit int, before time.Time) ([]LedgerView, error) {
 	projectID, err := projectScope(ctx)
 	if err != nil {
 		return nil, err
@@ -121,11 +121,11 @@ func (a *Assets) ListUserLedger(ctx context.Context, ownerID, defCode string, li
 	if ownerID == "" {
 		return nil, status.Error(codes.InvalidArgument, "owner_id is required")
 	}
-	return a.listOwnerLedger(ctx, projectID, ownerID, defCode, limit, before)
+	return a.listOwnerLedger(ctx, projectID, ownerID, defCode, ascending, limit, before)
 }
 
-func (a *Assets) listOwnerLedger(ctx context.Context, projectID, ownerID, defCode string, limit int, before time.Time) ([]LedgerView, error) {
-	limit, before = normalizeList(limit, before)
+func (a *Assets) listOwnerLedger(ctx context.Context, projectID, ownerID, defCode string, ascending bool, limit int, before time.Time) ([]LedgerView, error) {
+	limit, before = normalizeList(limit, before, ascending)
 	var defID string
 	if defCode != "" {
 		code, err := validateCode(defCode)
@@ -141,7 +141,7 @@ func (a *Assets) listOwnerLedger(ctx context.Context, projectID, ownerID, defCod
 		}
 		defID = def.ID
 	}
-	rows, err := a.ledger.ListByOwner(ctx, projectID, domainassets.OwnerTypeUser, ownerID, defID, limit, before)
+	rows, err := a.ledger.ListByOwner(ctx, projectID, domainassets.OwnerTypeUser, ownerID, defID, ascending, limit, before)
 	if err != nil {
 		return nil, err
 	}

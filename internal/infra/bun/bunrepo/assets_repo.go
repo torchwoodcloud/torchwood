@@ -412,23 +412,29 @@ func (r *assetLedgerRepo) ListByRef(ctx context.Context, projectID, refType, ref
 	return mapLedgersToDomain(rows), nil
 }
 
-func (r *assetLedgerRepo) ListByOwner(ctx context.Context, projectID string, ownerType assets.OwnerType, ownerID, defID string, limit int, before time.Time) ([]assets.LedgerEntry, error) {
+func (r *assetLedgerRepo) ListByOwner(ctx context.Context, projectID string, ownerType assets.OwnerType, ownerID, defID string, ascending bool, limit int, before time.Time) ([]assets.LedgerEntry, error) {
 	ctx2, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	conn, sch, expr, err := Scoped(ctx2, r.db, projectID, "asset_ledger_entries", "ale")
 	if err != nil {
 		return nil, err
 	}
+	// keyset 方向：倒序（缺省）游标为「早于 before」，正序为「晚于 before」。
+	// 操作符为二选一白名单，非用户输入。
+	cursorOp, order := "<", "DESC"
+	if ascending {
+		cursorOp, order = ">", "ASC"
+	}
 	var rows []model.AssetLedgerEntry
 	q := conn.NewSelect().Model(&rows).ModelTableExpr(expr, sch).
 		Where("ale.project_id = ?", projectID).
 		Where("ale.owner_type = ?", string(ownerType)).
 		Where("ale.owner_id = ?", ownerID).
-		Where("ale.created_at < ?", before)
+		Where("ale.created_at "+cursorOp+" ?", before)
 	if defID != "" {
 		q = q.Where("ale.def_id = ?", defID)
 	}
-	err = q.Order("ale.created_at DESC").Limit(limit).Scan(ctx2)
+	err = q.Order("ale.created_at " + order).Limit(limit).Scan(ctx2)
 	if err != nil {
 		return nil, err
 	}

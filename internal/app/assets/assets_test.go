@@ -337,10 +337,14 @@ func (s *memStore) ListByRef(_ context.Context, projectID, refType, refID string
 	return out, nil
 }
 
-func (s *memStore) ListLedgerByOwner(_ context.Context, projectID string, ownerType domainassets.OwnerType, ownerID, defID string, limit int, before time.Time) ([]domainassets.LedgerEntry, error) {
+func (s *memStore) ListLedgerByOwner(_ context.Context, projectID string, ownerType domainassets.OwnerType, ownerID, defID string, ascending bool, limit int, before time.Time) ([]domainassets.LedgerEntry, error) {
 	var out []domainassets.LedgerEntry
 	for _, e := range s.ledger {
-		if e.ProjectID != projectID || e.OwnerType != ownerType || e.OwnerID != ownerID || !e.CreatedAt.Before(before) {
+		inScope := e.CreatedAt.Before(before)
+		if ascending {
+			inScope = e.CreatedAt.After(before)
+		}
+		if e.ProjectID != projectID || e.OwnerType != ownerType || e.OwnerID != ownerID || !inScope {
 			continue
 		}
 		if defID != "" && e.DefID != defID {
@@ -348,7 +352,12 @@ func (s *memStore) ListLedgerByOwner(_ context.Context, projectID string, ownerT
 		}
 		out = append(out, *cloneEntry(e))
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	sort.Slice(out, func(i, j int) bool {
+		if ascending {
+			return out[i].CreatedAt.Before(out[j].CreatedAt)
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
 	if len(out) > limit {
 		out = out[:limit]
 	}
@@ -419,8 +428,8 @@ func (r memLedger) GetByIdempotencyKey(ctx context.Context, p, k string) (*domai
 func (r memLedger) ListByRef(ctx context.Context, p, rt, rid string) ([]domainassets.LedgerEntry, error) {
 	return r.s.ListByRef(ctx, p, rt, rid)
 }
-func (r memLedger) ListByOwner(ctx context.Context, p string, ot domainassets.OwnerType, oid, def string, limit int, before time.Time) ([]domainassets.LedgerEntry, error) {
-	return r.s.ListLedgerByOwner(ctx, p, ot, oid, def, limit, before)
+func (r memLedger) ListByOwner(ctx context.Context, p string, ot domainassets.OwnerType, oid, def string, ascending bool, limit int, before time.Time) ([]domainassets.LedgerEntry, error) {
+	return r.s.ListLedgerByOwner(ctx, p, ot, oid, def, ascending, limit, before)
 }
 func (r memLedger) ListAllInProject(ctx context.Context, p string) ([]domainassets.LedgerEntry, error) {
 	return r.s.ListAllLedger(ctx, p)
@@ -928,5 +937,53 @@ func TestListDefAssets_FiltersByDefAndOwner(t *testing.T) {
 	require.Empty(t, rows, "过期持有懒过滤")
 
 	_, err = env.assets.ListDefAssets(adminCtx("p1"), "missing", "", 0, time.Time{})
+	require.Equal(t, codes.NotFound, status.Code(err))
+}
+
+// 流水读路径的排序方向与 def 过滤：缺省倒序（最新在前），ascending 正序，
+// defCode 命中后只返回该定义条目。
+func TestListUserLedger_OrderDirectionAndDefFilter(t *testing.T) {
+	env := setupAssets(t)
+	gold := env.createDef(t, domainassets.ClassCurrency, "gold")
+	silver := env.createDef(t, domainassets.ClassCurrency, "silver")
+
+	seed := []struct {
+		defID string
+		at    time.Time
+	}{
+		{gold.ID, env.now.Add(-3 * time.Hour)},
+		{silver.ID, env.now.Add(-2 * time.Hour)},
+		{gold.ID, env.now.Add(-1 * time.Hour)},
+	}
+	for i, s := range seed {
+		env.store.ledger = append(env.store.ledger, &domainassets.LedgerEntry{
+			ProjectID: "p1", OwnerType: domainassets.OwnerTypeUser, OwnerID: "u1",
+			DefID: s.defID, Kind: domainassets.KindGrant, Delta: 1, QuantityAfter: int64(i + 1),
+			IdempotencyKey: fmt.Sprintf("seed-%d", i), CreatedAt: s.at,
+		})
+	}
+
+	desc, err := env.assets.ListUserLedger(adminCtx("p1"), "u1", "", false, 0, time.Time{})
+	require.NoError(t, err)
+	require.Len(t, desc, 3)
+	require.True(t, desc[0].Entry.CreatedAt.After(desc[1].Entry.CreatedAt), "倒序：最新在前")
+	require.True(t, desc[1].Entry.CreatedAt.After(desc[2].Entry.CreatedAt))
+
+	asc, err := env.assets.ListUserLedger(adminCtx("p1"), "u1", "", true, 0, time.Time{})
+	require.NoError(t, err)
+	require.Len(t, asc, 3)
+	require.True(t, asc[0].Entry.CreatedAt.Before(asc[1].Entry.CreatedAt), "正序：最早在前")
+	require.True(t, asc[1].Entry.CreatedAt.Before(asc[2].Entry.CreatedAt))
+	require.Equal(t, desc[2].Entry.ID, asc[0].Entry.ID, "同一批条目，方向相反")
+
+	filtered, err := env.assets.ListUserLedger(adminCtx("p1"), "u1", "gold", false, 0, time.Time{})
+	require.NoError(t, err)
+	require.Len(t, filtered, 2)
+	for _, r := range filtered {
+		require.Equal(t, gold.ID, r.Entry.DefID)
+		require.Equal(t, "gold", r.DefCode)
+	}
+
+	_, err = env.assets.ListUserLedger(adminCtx("p1"), "u1", "missing", false, 0, time.Time{})
 	require.Equal(t, codes.NotFound, status.Code(err))
 }

@@ -105,7 +105,10 @@ func (a *Assets) ts() time.Time {
 
 func newID() string { return idgen.ULID().String() }
 
-func normalizeList(limit int, before time.Time) (int, time.Time) {
+// normalizeList 归一化分页参数：limit 缺省/越界收敛；before 零值按排序方向
+// 取开区间哨兵——desc（缺省）取未来时刻（一切条目皆「早于」），asc 取 epoch
+//（一切条目皆「晚于」）。
+func normalizeList(limit int, before time.Time, ascending bool) (int, time.Time) {
 	if limit <= 0 {
 		limit = defaultListLimit
 	}
@@ -113,7 +116,11 @@ func normalizeList(limit int, before time.Time) (int, time.Time) {
 		limit = maxListLimit
 	}
 	if before.IsZero() {
-		before = time.Now().UTC().Add(time.Hour)
+		if ascending {
+			before = time.Unix(0, 0).UTC()
+		} else {
+			before = time.Now().UTC().Add(time.Hour)
+		}
 	}
 	return limit, before
 }
