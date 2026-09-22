@@ -48,6 +48,9 @@ func (r *retryRepo) GetDeployment(context.Context, string, string, string) (*dom
 func (r *retryRepo) ListDeployments(context.Context, string, string) ([]domainfunctions.Deployment, error) {
 	return nil, nil
 }
+func (r *retryRepo) ListDeploymentsPaged(context.Context, string, string, int, int) ([]domainfunctions.Deployment, int, error) {
+	return nil, 0, nil
+}
 func (r *retryRepo) UpdateDeployment(context.Context, *domainfunctions.Deployment) error { return nil }
 
 func (r *retryRepo) ActivateDeployment(context.Context, *domainfunctions.Deployment) error {
@@ -72,8 +75,8 @@ func (r *retryRepo) GetExecution(context.Context, string, string, string) (*doma
 	cp := *r.rec
 	return &cp, nil
 }
-func (r *retryRepo) ListExecutions(context.Context, string, string, int) ([]domainfunctions.ExecutionRecord, error) {
-	return nil, nil
+func (r *retryRepo) ListExecutions(context.Context, string, string, int, int, domainfunctions.ExecutionListFilter) ([]domainfunctions.ExecutionRecord, int, error) {
+	return nil, 0, nil
 }
 func (r *retryRepo) UpdateExecution(_ context.Context, e *domainfunctions.ExecutionRecord) error {
 	r.mu.Lock()
