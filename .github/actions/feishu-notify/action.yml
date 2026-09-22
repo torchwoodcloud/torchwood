@@ -1,0 +1,86 @@
+# 飞书自定义机器人通知（GitHub Actions 共享 composite action）。
+#
+# 用法：在需要通知的 workflow 里追加一个终态 job（本地 action 需先检出仓库）：
+#   notify:
+#     needs: [...]
+#     if: ${{ !cancelled() }}
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+#       - uses: ./.github/actions/feishu-notify
+#         with:
+#           status: ${{ contains(needs.*.result, 'failure') && 'failure' || 'success' }}
+#         env:
+#           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+#
+# 约定：
+# - composite action 内部读不到 secrets 上下文，webhook 必须由调用方以 env
+#   注入；仓库公开，URL 一律不落盘（Actions 日志自动 mask）。
+# - 通知属 best-effort：webhook 不可达/返回异常只出 ::warning:: 注解，
+#   不把原本绿跑的 run 染红。
+# - 机器人当前未开启加签；若后续开启签名校验，需在此补 sign 参数计算。
+
+name: feishu-notify
+description: 发送 GitHub Actions 运行结果到飞书群机器人（webhook 由调用方 env 注入）
+
+inputs:
+  status:
+    description: '运行终态：success / failure'
+    required: true
+  detail:
+    description: '附加明细行，例如各 job 的 needs.*.result'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Send Feishu message
+      shell: bash
+      env:
+        FEISHU_STATUS: ${{ inputs.status }}
+        FEISHU_DETAIL: ${{ inputs.detail }}
+        # push 事件取首行提交标题；PR 事件取 PR 标题；均缺省时兜底 git log
+        HEAD_COMMIT_MSG: ${{ github.event.head_commit.message }}
+        PR_TITLE: ${{ github.event.pull_request.title }}
+      run: |
+        set -euo pipefail
+
+        if [ -z "${FEISHU_WEBHOOK_URL:-}" ]; then
+          echo "::warning::FEISHU_WEBHOOK_URL 未配置（fork PR 拿不到 secrets 属预期），跳过飞书通知"
+          exit 0
+        fi
+
+        case "$FEISHU_STATUS" in
+          success) icon="✅"; verdict="成功" ;;
+          failure) icon="🚨"; verdict="失败" ;;
+          *) echo "::error::status 只接受 success/failure，实际：$FEISHU_STATUS"; exit 1 ;;
+        esac
+
+        msg="${HEAD_COMMIT_MSG:-}"
+        if [ -z "$msg" ] && [ -n "${PR_TITLE:-}" ]; then msg="$PR_TITLE"; fi
+        if [ -z "$msg" ]; then msg=$(git log -1 --pretty=%s 2>/dev/null || true); fi
+        msg=${msg%%$'\n'*}
+
+        lines=(
+          "$icon [GitHub] [Torchwood] $GITHUB_WORKFLOW 运行$verdict"
+          "仓库：$GITHUB_REPOSITORY（$GITHUB_REF_TYPE $GITHUB_REF_NAME）"
+          "提交：${GITHUB_SHA::7}${msg:+ $msg}"
+          "触发：$GITHUB_EVENT_NAME by $GITHUB_ACTOR"
+        )
+        if [ -n "$FEISHU_DETAIL" ]; then lines+=("详情：$FEISHU_DETAIL"); fi
+        lines+=("链接：$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID")
+        printf -v text '%s\n' "${lines[@]}"
+        text=${text%$'\n'}
+
+        payload=$(jq -cn --arg text "$text" '{msg_type: "text", content: {text: $text}}')
+        resp=$(curl -sS -X POST "$FEISHU_WEBHOOK_URL" \
+          -H 'Content-Type: application/json' --data "$payload" \
+          --connect-timeout 10 --max-time 20 2>&1) || resp="(curl 失败) $resp"
+        echo "feishu response: $resp"
+
+        # 新版返回 {code:0,...}，旧版 {StatusCode:0,...}；非 JSON 一律视为异常
+        code=$(jq -r '.code // .StatusCode // 1' <<<"$resp" 2>/dev/null || echo 1)
+        if [ "$code" != "0" ]; then
+          echo "::warning::飞书 webhook 返回异常（code=$code）：$resp"
+        fi

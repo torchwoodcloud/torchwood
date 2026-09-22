@@ -170,3 +170,20 @@ jobs:
             exit 1
           fi
           echo "deploy accepted (HTTP $code): $body"
+
+  # 飞书通知（共用 .github/actions/feishu-notify）：成功与失败都推送——
+  # 部署链路的终态需要知晓；tag push 时 deploy 跳过、不计为失败。
+  # webhook 经 secret FEISHU_WEBHOOK_URL 注入，仓库公开不落盘。
+  notify:
+    name: Feishu notify
+    needs: [build-push, contract-images, deploy]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/feishu-notify
+        with:
+          status: ${{ contains(needs.*.result, 'failure') && 'failure' || 'success' }}
+          detail: build-push=${{ needs.build-push.result }} contract-images=${{ needs.contract-images.result }} deploy=${{ needs.deploy.result }}
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}

@@ -123,3 +123,18 @@ jobs:
           go mod tidy
           go build ./...
           echo "downstream install OK: $SDK_TAG"
+
+  # 飞书通知（共用 .github/actions/feishu-notify）：手动发布的终态成败都推送。
+  notify:
+    name: Feishu notify
+    needs: [release]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/feishu-notify
+        with:
+          status: ${{ contains(needs.*.result, 'failure') && 'failure' || 'success' }}
+          detail: release=${{ needs.release.result }}
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}

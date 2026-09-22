@@ -208,3 +208,20 @@ jobs:
 
       - name: Build (tsc + vite)
         run: pnpm build
+
+  # 飞书通知（共用 .github/actions/feishu-notify）：CI 只在失败时推送——
+  # 成功是常态噪音，main 的成功随后由 Image 流水线的成功通知覆盖；
+  # fork PR 拿不到 secrets，action 内部自动跳过。
+  notify:
+    name: Feishu notify
+    needs: [backend, frontend]
+    if: ${{ !cancelled() && failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/feishu-notify
+        with:
+          status: failure
+          detail: backend=${{ needs.backend.result }} frontend=${{ needs.frontend.result }}
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
