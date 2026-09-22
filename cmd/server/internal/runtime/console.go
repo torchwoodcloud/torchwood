@@ -9,7 +9,10 @@ import (
 )
 
 // NewConsoleHandler serves the embedded Admin Console SPA.
-// P3-10：index.html no-cache、assets/* immutable、资源 404 不回退 index.html。
+// P3-10：index.html no-cache、assets/* immutable、真静态资源缺失不回退
+// index.html（404，防止 chunk 请求拿到 HTML 触发 MIME 错误）。前端路由
+// 一律回退——包括恰好以 assets/ 开头的 /console/assets/users 等（Vite 的
+// chunk 目录与这组前端路由共享路径前缀，不能按前缀判定）。
 func NewConsoleHandler() (http.Handler, error) {
 	dist, err := fs.Sub(console.Dist, "dist")
 	if err != nil {
@@ -25,14 +28,19 @@ func NewConsoleHandler() (http.Handler, error) {
 		setConsoleSecurityHeaders(w)
 		path := strings.TrimPrefix(r.URL.Path, "/console")
 		path = strings.TrimPrefix(path, "/")
-		// 资源 404 不回退 index.html：带扩展名或 assets/* 的缺失直接 404
+		// 文件（最后一段带扩展名）缺失 → 404；目录与无扩展名路径 → SPA
+		// fallback 回 index.html。
 		if path != "" {
-			if _, err := dist.Open(path); err != nil {
+			entry, statErr := fs.Stat(dist, path)
+			if statErr != nil {
 				if isConsoleAssetPath(path) {
 					http.NotFound(w, r)
 					return
 				}
-				// SPA fallback: 仅对无扩展名的前端路由回退 index.html
+				path = ""
+			} else if entry.IsDir() {
+				// /console/assets 恰好命中 chunk 目录名：目录不是页面，
+				// 同样回退 index.html（避免 FileServer 渲染目录列表）。
 				path = ""
 			}
 		}
@@ -60,11 +68,10 @@ func consoleNotBuiltHandler() http.Handler {
 	})
 }
 
-// isConsoleAssetPath 判定是否为静态资源路径：assets/* 或带文件扩展名的请求，缺失时应 404 而非回退 index.html。
+// isConsoleAssetPath 判定是否为文件资源：最后一段路径带扩展名
+// （favicon.ico、manifest.json、assets/index-xxx.js），缺失时应 404
+// 而非回退 index.html。无扩展名的路径视作 SPA 前端路由。
 func isConsoleAssetPath(path string) bool {
-	if len(path) >= 7 && path[:7] == "assets/" {
-		return true
-	}
 	// 带点号的路径视作文件资源（如 favicon.ico、manifest.json）
 	if idx := lastDotIndex(path); idx >= 0 {
 		// 确保后缀在最后一段路径中（不跨目录）
