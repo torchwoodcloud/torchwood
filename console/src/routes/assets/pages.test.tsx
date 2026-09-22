@@ -90,6 +90,9 @@ describe("UserAssetsPage", () => {
       ],
     });
     vi.mocked(listUserLedger).mockResolvedValue({ rows: [] });
+    vi.mocked(listAssetDefs).mockResolvedValue({
+      rows: [{ id: "d1", code: "gold", name: "金币", class: "currency", decimals: 0 }],
+    });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
@@ -99,12 +102,53 @@ describe("UserAssetsPage", () => {
       </QueryClientProvider>
     );
     expect(await screen.findByText("gold")).toBeTruthy();
+    expect(await screen.findByText("金币")).toBeTruthy();
     expect(screen.getByText("100")).toBeTruthy();
     expect(screen.getByText("查询项目：")).toBeTruthy();
     expect(screen.getByText("proj-1")).toBeTruthy();
     expect(listUserAssets).toHaveBeenCalledWith("u1", { pageSize: 20, pageToken: "" });
     expect(listUserLedger).toHaveBeenCalledWith("u1", { pageSize: 20, pageToken: "" });
     expect((screen.getByLabelText("用户 ID") as HTMLInputElement).value).toBe("u1");
+  });
+
+  it("持有支持当前页内按 code/名称搜索", async () => {
+    vi.mocked(listUserAssets).mockResolvedValue({
+      rows: [
+        { id: "h1", def_id: "d1", def_code: "gold", class: "currency", quantity: "100" },
+        { id: "h2", def_id: "d2", def_code: "cdx_pixiu", class: "stack", quantity: "1" },
+      ],
+    });
+    vi.mocked(listUserLedger).mockResolvedValue({ rows: [] });
+    vi.mocked(listAssetDefs).mockResolvedValue({
+      rows: [
+        { id: "d1", code: "gold", name: "金币", class: "currency", decimals: 0 },
+        { id: "d2", code: "cdx_pixiu", name: "貔貅", class: "stack", decimals: 0 },
+      ],
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/console/assets/users?owner=u1"]}>
+          <UserAssetsPage />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    expect(await screen.findByText("金币")).toBeTruthy();
+    expect(screen.getByText("貔貅")).toBeTruthy();
+
+    // 按 code 片段搜索：只留 cdx_pixiu 行
+    fireEvent.change(screen.getByPlaceholderText(/当前页内搜索/), { target: { value: "cdx" } });
+    expect(screen.getByText("貔貅")).toBeTruthy();
+    expect(screen.queryByText("金币")).toBeNull();
+    expect(screen.queryByText("当前页无匹配项")).toBeNull();
+
+    // 按中文名称搜索：只留 gold 行；无匹配显示占位提示
+    fireEvent.change(screen.getByPlaceholderText(/当前页内搜索/), { target: { value: "金币" } });
+    expect(screen.getByText("金币")).toBeTruthy();
+    expect(screen.queryByText("貔貅")).toBeNull();
+    fireEvent.change(screen.getByPlaceholderText(/当前页内搜索/), { target: { value: "nope" } });
+    expect(screen.getByText("当前页无匹配项")).toBeTruthy();
+    expect(screen.queryByText("金币")).toBeNull();
   });
 
   it("流水以表格呈现：时间 / 类型 / 资产 / 变动 / 变动后余额", async () => {
@@ -131,6 +175,9 @@ describe("UserAssetsPage", () => {
         },
       ],
     });
+    vi.mocked(listAssetDefs).mockResolvedValue({
+      rows: [{ id: "d1", code: "jade", name: "玉", class: "currency", decimals: 0 }],
+    });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
@@ -146,7 +193,8 @@ describe("UserAssetsPage", () => {
     fireEvent.click(ledgerTab);
     expect(await screen.findByText("发放")).toBeTruthy();
     expect(screen.getByText("消耗")).toBeTruthy();
-    expect(screen.getByText("+6")).toBeTruthy();
+    expect(screen.getAllByText("玉").length).toBe(2);
+    expect(screen.getAllByText("+6").length).toBe(1);
     expect(screen.getByText("-2")).toBeTruthy();
     expect(screen.getByText("19")).toBeTruthy();
     expect(screen.getByText("变动后余额")).toBeTruthy();

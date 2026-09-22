@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Search, X } from "lucide-react";
 import {
   createAssetDef,
   deleteAssetDef,
@@ -18,6 +18,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
 import { useServerPaging } from "@/hooks/useServerPaging";
+import { filterByQuery } from "@/hooks/useListParams";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { ListPaginationKeyset } from "@/components/list/ListToolbar";
 import { Badge } from "@/components/ui/badge";
@@ -436,6 +437,32 @@ export function UserAssetsPage() {
     enabled: !!projectId && !!queryOwner,
     staleTime: 60_000,
   });
+  // def code/id → 名称映射：持有/流水行只带 code（id 兜底），名称从这里投影。
+  const { defNameByCode, defNameById } = useMemo(() => {
+    const byCode = new Map<string, string>();
+    const byId = new Map<string, string>();
+    for (const d of defOptions.data?.rows ?? []) {
+      byCode.set(d.code, d.name);
+      byId.set(d.id, d.name);
+    }
+    return { defNameByCode: byCode, defNameById: byId };
+  }, [defOptions.data]);
+  const defNameOf = (defCode: string | undefined, defId: string) =>
+    (defCode && defNameByCode.get(defCode)) || defNameById.get(defId) || "—";
+
+  // 持有按 code/名称/类别页内搜索：持有是服务端 keyset 分页，与列表页
+  // ResourceListPage 同语义——客户端只过滤当前页，不做切片分页。
+  const [holdingSearch, setHoldingSearch] = useState("");
+  const filteredHoldings = useMemo(
+    () =>
+      filterByQuery(holdingsRows, holdingSearch, (h) => {
+        const name = defNameOf(h.def_code, h.def_id);
+        return `${h.def_code} ${name === "—" ? "" : name} ${h.class ?? ""}`;
+      }),
+    // defNameOf 闭包随映射更新；filterByQuery 纯函数。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [holdingsRows, holdingSearch, defNameByCode, defNameById]
+  );
 
   const submit = () => {
     const v = ownerId.trim();
@@ -500,10 +527,29 @@ export function UserAssetsPage() {
                     <p className="text-sm text-muted-foreground">无持有</p>
                   ) : (
                     <>
+                      <div className="relative mb-3 max-w-sm">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          value={holdingSearch}
+                          onChange={(e) => setHoldingSearch(e.target.value)}
+                          placeholder="当前页内搜索 code / 名称 / 类别..."
+                          className="pl-9 pr-9"
+                        />
+                        {holdingSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setHoldingSearch("")}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
                       <Table>
                         <TableHeader>
                           <TableRow>
                             <TableHead>资产 Code</TableHead>
+                            <TableHead>名称</TableHead>
                             <TableHead>类别</TableHead>
                             <TableHead>数量</TableHead>
                             <TableHead>等级</TableHead>
@@ -511,9 +557,10 @@ export function UserAssetsPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {holdingsRows.map((h) => (
+                          {filteredHoldings.map((h) => (
                             <TableRow key={h.id}>
                               <TableCell className="font-mono text-xs">{h.def_code || h.def_id}</TableCell>
+                              <TableCell>{defNameOf(h.def_code, h.def_id)}</TableCell>
                               <TableCell>{h.class || "—"}</TableCell>
                               <TableCell className="font-mono text-xs">{formatInt64(h.quantity)}</TableCell>
                               <TableCell>{h.level ?? "—"}</TableCell>
@@ -522,10 +569,13 @@ export function UserAssetsPage() {
                           ))}
                         </TableBody>
                       </Table>
+                      {filteredHoldings.length === 0 ? (
+                        <p className="mt-3 text-sm text-muted-foreground">当前页无匹配项</p>
+                      ) : null}
                       <ListPaginationKeyset
                         page={holdingsPaging.page}
                         pageSize={holdingsPaging.pageSize}
-                        rowCount={holdingsRows.length}
+                        rowCount={filteredHoldings.length}
                         hasPrev={holdingsPaging.hasPrev}
                         hasNext={!!holdings.data?.nextPageToken}
                         onPrev={holdingsPaging.goPrev}
@@ -580,6 +630,7 @@ export function UserAssetsPage() {
                             <TableHead>时间</TableHead>
                             <TableHead>类型</TableHead>
                             <TableHead>资产 Code</TableHead>
+                            <TableHead>名称</TableHead>
                             <TableHead className="text-right">变动</TableHead>
                             <TableHead className="text-right">变动后余额</TableHead>
                           </TableRow>
@@ -594,6 +645,7 @@ export function UserAssetsPage() {
                                 </Badge>
                               </TableCell>
                               <TableCell className="font-mono text-xs">{e.def_code || e.def_id}</TableCell>
+                              <TableCell>{defNameOf(e.def_code, e.def_id)}</TableCell>
                               <TableCell className="text-right font-mono text-xs">
                                 {e.delta.startsWith("-") || e.delta === "0" ? "" : "+"}
                                 {formatInt64(e.delta)}
