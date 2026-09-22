@@ -63,7 +63,7 @@ runs:
         msg=${msg%%$'\n'*}
 
         lines=(
-          "$icon [GitHub] [Torchwood] $GITHUB_WORKFLOW 运行$verdict"
+          "$icon [GitHub] [${GITHUB_REPOSITORY##*/}] $GITHUB_WORKFLOW 运行$verdict"
           "仓库：$GITHUB_REPOSITORY（$GITHUB_REF_TYPE $GITHUB_REF_NAME）"
           "提交：${GITHUB_SHA::7}${msg:+ $msg}"
           "触发：$GITHUB_EVENT_NAME by $GITHUB_ACTOR"
