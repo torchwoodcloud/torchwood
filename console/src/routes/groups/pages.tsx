@@ -23,6 +23,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
+import { useServerPaging } from "@/hooks/useServerPaging";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,11 +87,14 @@ export function GroupsListPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const writeable = canWrite(role);
 
-  const { data: groups = [], isLoading } = useQuery({
-    queryKey: ["groups", projectId],
-    queryFn: listGroups,
+  const paging = useServerPaging();
+  const { data, isLoading } = useQuery({
+    queryKey: ["groups", projectId, paging.pageSize, paging.pageToken],
+    queryFn: () => listGroups({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
     enabled: !!projectId,
+    placeholderData: (prev) => prev,
   });
+  const groups = data?.rows ?? [];
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteGroup(id),
@@ -127,11 +131,20 @@ export function GroupsListPage() {
     <ResourceListPage
       title="Groups"
       description="管理项目用户组与成员邀请"
-      searchPlaceholder="搜索用户组名称或 ID..."
+      searchPlaceholder="当前页内搜索用户组名称或 ID..."
       isLoading={isLoading}
       items={groups}
       columns={groupColumns(tz)}
       getSearchText={getSearchText}
+      serverPaging={{
+        page: paging.page,
+        pageSize: paging.pageSize,
+        hasPrev: paging.hasPrev,
+        hasNext: !!data?.nextPageToken,
+        onPrev: paging.goPrev,
+        onNext: () => paging.goNext(data?.nextPageToken),
+        onPageSizeChange: paging.setPageSize,
+      }}
       detailPath={(t) => `/console/groups/${t.id}`}
       toolbarActions={
         writeable ? (
@@ -327,11 +340,18 @@ export function GroupDetailPage() {
     enabled: !!groupId,
   });
 
-  const { data: memberships = [], isLoading: membershipsLoading } = useQuery({
-    queryKey: ["memberships", groupId],
-    queryFn: () => listMemberships(groupId!),
+  const membershipsPaging = useServerPaging();
+  const { data: membershipsData, isLoading: membershipsLoading } = useQuery({
+    queryKey: ["memberships", groupId, membershipsPaging.pageSize, membershipsPaging.pageToken],
+    queryFn: () =>
+      listMemberships(groupId!, {
+        pageSize: membershipsPaging.pageSize,
+        pageToken: membershipsPaging.pageToken,
+      }),
     enabled: !!groupId,
+    placeholderData: (prev) => prev,
   });
+  const memberships = membershipsData?.rows ?? [];
 
   const invalidateGroup = () => {
     queryClient.invalidateQueries({ queryKey: ["groups", groupId] });
@@ -580,11 +600,20 @@ export function GroupDetailPage() {
       <ResourceListPage
         title=""
         cardTitle="成员列表"
-        searchPlaceholder="搜索成员邮箱、名称或 ID..."
+        searchPlaceholder="当前页内搜索成员邮箱、名称或 ID..."
         isLoading={membershipsLoading}
         items={memberships}
         columns={membershipColumns}
         getSearchText={getMembershipSearchText}
+        serverPaging={{
+          page: membershipsPaging.page,
+          pageSize: membershipsPaging.pageSize,
+          hasPrev: membershipsPaging.hasPrev,
+          hasNext: !!membershipsData?.nextPageToken,
+          onPrev: membershipsPaging.goPrev,
+          onNext: () => membershipsPaging.goNext(membershipsData?.nextPageToken),
+          onPageSizeChange: membershipsPaging.setPageSize,
+        }}
         selectionActions={
           writeable
             ? (selected, clear) => (

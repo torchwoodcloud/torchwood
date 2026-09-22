@@ -22,9 +22,26 @@ export interface PaymentOrder {
 
 // 服务端订单列表默认 page_size=25、空页才停发 next_page_token；
 // 对接服务端分页（契约说明见 pagination.ts），pageSize 必传。
-export async function listOrders(params: ListParams): Promise<Page<PaymentOrder>> {
+// 结构化过滤（ListOrdersRequest）：user_id/status 精确 + created_at 闭区间
+//（时间一律 RFC3339；status = created|paying|paid|failed|closed|refunding|refunded）。
+export interface ListOrdersFilter {
+  userId?: string;
+  status?: string;
+  createdAfter?: string;
+  createdBefore?: string;
+}
+
+export async function listOrders(
+  params: ListParams & ListOrdersFilter
+): Promise<Page<PaymentOrder>> {
   const res = await api.get<{ orders: PaymentOrder[] } & ListMeta>("/server/payments/orders", {
-    params: pageQuery(params),
+    params: {
+      ...pageQuery(params),
+      user_id: params.userId || undefined,
+      status: params.status || undefined,
+      created_after: params.createdAfter || undefined,
+      created_before: params.createdBefore || undefined,
+    },
   });
   return { rows: res.data.orders ?? [], nextPageToken: res.data.meta?.next_page_token };
 }

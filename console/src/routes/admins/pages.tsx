@@ -37,6 +37,7 @@ import {
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { RowDeleteButton } from "@/components/resource/shared";
 import type { ColumnDef } from "@/components/list/DataTable";
+import { useServerPaging } from "@/hooks/useServerPaging";
 
 const columns = (tz: string): ColumnDef<Admin>[] => [
   { key: "email", header: "邮箱", cell: (a) => a.email },
@@ -56,10 +57,13 @@ export function AdminsListPage() {
   const queryClient = useQueryClient();
   const tz = useUserTimezone();
 
-  const { data: admins = [], isLoading } = useQuery({
-    queryKey: ["console-admins"],
-    queryFn: listAdmins,
+  const paging = useServerPaging();
+  const { data, isLoading } = useQuery({
+    queryKey: ["console-admins", paging.pageSize, paging.pageToken],
+    queryFn: () => listAdmins({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
+    placeholderData: (prev) => prev,
   });
+  const admins = data?.rows ?? [];
 
   const { data: me } = useQuery({
     queryKey: ["console-admin-me"],
@@ -80,11 +84,21 @@ export function AdminsListPage() {
     <ResourceListPage
       title="系统管理员"
       description="管理可登录 Console 的管理员账户（仅 owner 可增删改）"
-      searchPlaceholder="搜索邮箱..."
+      searchPlaceholder="当前页内搜索邮箱..."
       isLoading={isLoading}
       items={admins}
       columns={columns(tz)}
       getSearchText={(a) => `${a.email} ${a.role}`}
+      serverPaging={{
+        page: paging.page,
+        pageSize: paging.pageSize,
+        hasPrev: paging.hasPrev,
+        hasNext: !!data?.nextPageToken,
+        onPrev: paging.goPrev,
+        onNext: () => paging.goNext(data?.nextPageToken),
+        onPageSizeChange: paging.setPageSize,
+      }}
+
       toolbarActions={
         isOwner ? (
           <CreateAdminDialog onCreated={() => queryClient.invalidateQueries({ queryKey: ["console-admins"] })} />

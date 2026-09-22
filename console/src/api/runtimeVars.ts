@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { pageQuery, type ListMeta, type ListParams, type Page } from "./pagination";
 
 // RuntimeVars Console 数据层（docs/design/runtime-vars.md §2.7）。接口形状对齐
 // proto/server/v1/runtime_vars.proto（集合/变量/版本三组 13 方法）；Console 不
@@ -130,9 +131,16 @@ function normalizeEntries(
 
 // ---- 集合 ----
 
-export async function listVarSets(): Promise<VarSet[]> {
-  const res = await api.get<{ var_sets?: VarSet[] }>("/server/runtime-var-sets");
-  return (res.data.var_sets ?? []).map(normalizeVarSet);
+// 服务端集合列表（in-memory crud，默认 page_size=50）；对接服务端分页。
+// 变量/版本子列表仍为有意的全量拉取（设计决定 D13/D11），不在此列。
+export async function listVarSets(params: ListParams): Promise<Page<VarSet>> {
+  const res = await api.get<{ var_sets?: VarSet[] } & ListMeta>("/server/runtime-var-sets", {
+    params: pageQuery(params),
+  });
+  return {
+    rows: (res.data.var_sets ?? []).map(normalizeVarSet),
+    nextPageToken: res.data.meta?.next_page_token,
+  };
 }
 
 export async function getVarSet(varSetId: string): Promise<VarSet> {

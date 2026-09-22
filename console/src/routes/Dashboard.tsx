@@ -54,25 +54,28 @@ export function Dashboard() {
     staleTime: 60_000,
   });
 
-  const { data: projects = [], isLoading: projectsLoading } = useQuery({
+  const { data, isLoading: projectsLoading } = useQuery({
     queryKey: ["projects"],
-    queryFn: listProjects,
+    queryFn: () => listProjects({ pageSize: 100 }),
   });
+  const projects = data?.rows ?? [];
 
   const selectedProjectId = projectId || "";
   const activeProject = projects.find((p) => p.id === selectedProjectId);
 
-  const { data: apiKeys = [] } = useQuery({
+  const { data: apiKeyPage } = useQuery({
     queryKey: ["api-keys", selectedProjectId],
-    queryFn: listAPIKeys,
+    queryFn: () => listAPIKeys({ pageSize: 100 }),
     enabled: !!selectedProjectId,
   });
+  const apiKeys = apiKeyPage?.rows ?? [];
 
-  const { data: buckets = [] } = useQuery({
+  const { data: bucketPage } = useQuery({
     queryKey: ["buckets", selectedProjectId],
-    queryFn: listBuckets,
+    queryFn: () => listBuckets({ pageSize: 100 }),
     enabled: !!selectedProjectId,
   });
+  const buckets = bucketPage?.rows ?? [];
 
   // keyset 分页下拿不到总数；统计卡取上限一页（100）计数，超出封顶。
   const { data: dbPage } = useQuery({

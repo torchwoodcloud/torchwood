@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -17,8 +17,9 @@ import {
 } from "@/api/users";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite, isPlatformAdmin } from "@/hooks/useAdminRole";
+import { useServerPaging } from "@/hooks/useServerPaging";
 import { useUserTimezone } from "@/hooks/useTimezone";
-import { formatDateTime } from "@/lib/datetime";
+import { formatDateTime, fromDateTimeLocalValue } from "@/lib/datetime";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -71,6 +72,10 @@ const columns = (tz: string): ColumnDef<User>[] => [
   },
 ];
 
+// DSL 字符串值消毒：剥离引号/反斜杠/括号，防止用户输入破坏 equal(...) 语法
+//（非法输入只会查不到，不会注入——ParseUserList 白名单编译列名）。
+const sanitizeDSLValue = (v: string) => v.replace(/[\\ "']/g, "").trim();
+
 export function UsersListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
@@ -80,11 +85,57 @@ export function UsersListPage() {
   const writeable = canWrite(role);
   const platformAdmin = isPlatformAdmin(role);
 
-  const { data: users = [], isLoading } = useQuery({
-    queryKey: ["users", projectId],
-    queryFn: listUsers,
+  const paging = useServerPaging();
+  // 服务端过滤（ParseUserList 白名单 DSL）：ID 精确 + 状态 + 创建时间范围。
+  // 输入（受控）与已应用过滤分离，ID 按「查询」提交；任何过滤变化 reset 回第一页。
+  const [idInput, setIdInput] = useState("");
+  const [idFilter, setIdFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [createdAfter, setCreatedAfter] = useState("");
+  const [createdBefore, setCreatedBefore] = useState("");
+
+  const queries = useMemo(() => {
+    const q: string[] = [];
+    const id = sanitizeDSLValue(idFilter);
+    if (id) q.push(`equal("id","${id}")`);
+    if (statusFilter) q.push(`equal("status","${statusFilter}")`);
+    const after = fromDateTimeLocalValue(createdAfter, tz);
+    if (after) q.push(`greaterThan("created_at","${after}")`);
+    const before = fromDateTimeLocalValue(createdBefore, tz);
+    if (before) q.push(`lessThan("created_at","${before}")`);
+    return q;
+  }, [idFilter, statusFilter, createdAfter, createdBefore, tz]);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["users", projectId, queries, paging.pageSize, paging.pageToken],
+    queryFn: () =>
+      listUsers({ pageSize: paging.pageSize, pageToken: paging.pageToken, queries }),
     enabled: !!projectId,
+    placeholderData: (prev) => prev,
   });
+  const users = data?.rows ?? [];
+
+  const applyFilters = (next: {
+    id?: string;
+    status?: string;
+    after?: string;
+    before?: string;
+  }) => {
+    if (next.id !== undefined) setIdFilter(next.id);
+    if (next.status !== undefined) setStatusFilter(next.status);
+    if (next.after !== undefined) setCreatedAfter(next.after);
+    if (next.before !== undefined) setCreatedBefore(next.before);
+    paging.reset();
+  };
+  const clearFilters = () => {
+    setIdInput("");
+    setIdFilter("");
+    setStatusFilter("");
+    setCreatedAfter("");
+    setCreatedBefore("");
+    paging.reset();
+  };
+  const filtersDirty = !!(idFilter || statusFilter || createdAfter || createdBefore);
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteUser(id),
@@ -124,11 +175,91 @@ export function UsersListPage() {
     <ResourceListPage
       title="Users"
       description="当前项目的注册用户"
-      searchPlaceholder="搜索邮箱、名称或 ID..."
+      searchPlaceholder="当前页内搜索邮箱、名称或 ID..."
       isLoading={isLoading}
       items={users}
       columns={columns(tz)}
       getSearchText={getSearchText}
+      serverPaging={{
+        page: paging.page,
+        pageSize: paging.pageSize,
+        hasPrev: paging.hasPrev,
+        hasNext: !!data?.nextPageToken,
+        onPrev: paging.goPrev,
+        onNext: () => paging.goNext(data?.nextPageToken),
+        onPageSizeChange: paging.setPageSize,
+      }}
+      filters={
+        <form
+          className="flex flex-wrap items-end gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            applyFilters({ id: sanitizeDSLValue(idInput) });
+          }}
+        >
+          <div className="space-y-1">
+            <Label htmlFor="users-filter-id" className="text-xs text-muted-foreground">
+              用户 ID
+            </Label>
+            <Input
+              id="users-filter-id"
+              value={idInput}
+              onChange={(e) => setIdInput(e.target.value)}
+              placeholder="按 UserID 精确过滤"
+              className="h-8 w-[280px] font-mono text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">状态</Label>
+            <Select
+              value={statusFilter || "all"}
+              onValueChange={(v) => applyFilters({ status: v === "all" ? "" : v })}
+            >
+              <SelectTrigger className="h-8 w-[120px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部</SelectItem>
+                <SelectItem value="active">active</SelectItem>
+                <SelectItem value="inactive">inactive</SelectItem>
+                <SelectItem value="blocked">blocked</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="users-filter-after" className="text-xs text-muted-foreground">
+              创建时间从
+            </Label>
+            <Input
+              id="users-filter-after"
+              type="datetime-local"
+              value={createdAfter}
+              onChange={(e) => applyFilters({ after: e.target.value })}
+              className="h-8 w-[210px]"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="users-filter-before" className="text-xs text-muted-foreground">
+              到
+            </Label>
+            <Input
+              id="users-filter-before"
+              type="datetime-local"
+              value={createdBefore}
+              onChange={(e) => applyFilters({ before: e.target.value })}
+              className="h-8 w-[210px]"
+            />
+          </div>
+          <Button type="submit" variant="outline" size="sm">
+            查询
+          </Button>
+          {filtersDirty && (
+            <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
+              清除
+            </Button>
+          )}
+        </form>
+      }
       detailPath={(u) => `/console/users/${u.id}`}
       editPath={writeable ? (u) => `/console/users/${u.id}/edit` : undefined}
       toolbarActions={

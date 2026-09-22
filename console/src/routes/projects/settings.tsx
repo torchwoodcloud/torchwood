@@ -25,9 +25,11 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useProjectScopeSync } from "@/hooks/useProjectScopeSync";
+import { useServerPaging } from "@/hooks/useServerPaging";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { PageHeader } from "@/components/PageHeader";
+import { ListPaginationKeyset } from "@/components/list/ListToolbar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -466,11 +468,15 @@ function InviteCodesSection({
 }) {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const paging = useServerPaging();
 
-  const { data: codes = [], isLoading } = useQuery({
-    queryKey: ["invite-codes", projectId],
-    queryFn: () => listInviteCodes(projectId),
+  const { data, isLoading } = useQuery({
+    queryKey: ["invite-codes", projectId, paging.pageSize, paging.pageToken],
+    queryFn: () =>
+      listInviteCodes(projectId, { pageSize: paging.pageSize, pageToken: paging.pageToken }),
+    placeholderData: (prev) => prev,
   });
+  const codes = data?.rows ?? [];
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteInviteCode(projectId, id),
@@ -505,6 +511,18 @@ function InviteCodesSection({
           codes.map((c) => <InviteCodeRow key={c.id} code={c} onRevoke={() => remove.mutate(c.id)} canRevoke={editable} />)
         )}
       </div>
+      {!isLoading && (codes.length > 0 || paging.hasPrev) && (
+        <ListPaginationKeyset
+          page={paging.page}
+          pageSize={paging.pageSize}
+          rowCount={codes.length}
+          hasPrev={paging.hasPrev}
+          hasNext={!!data?.nextPageToken}
+          onPrev={paging.goPrev}
+          onNext={() => paging.goNext(data?.nextPageToken)}
+          onPageSizeChange={paging.setPageSize}
+        />
+      )}
       <InviteCodeCreateDialog projectId={projectId} open={createOpen} onOpenChange={setCreateOpen} />
     </Card>
   );
@@ -692,11 +710,15 @@ function OAuthProvidersPanel() {
   const [scopesText, setScopesText] = useState("openid, email, profile");
   const platformAdmin = isPlatformAdmin(role);
 
-  const { data: providers = [], isLoading } = useQuery({
-    queryKey: ["oauth-providers", projectId],
-    queryFn: listOAuthProviders,
+  const oauthPaging = useServerPaging();
+  const { data: providersData, isLoading } = useQuery({
+    queryKey: ["oauth-providers", projectId, oauthPaging.pageSize, oauthPaging.pageToken],
+    queryFn: () =>
+      listOAuthProviders({ pageSize: oauthPaging.pageSize, pageToken: oauthPaging.pageToken }),
     enabled: !!projectId,
+    placeholderData: (prev) => prev,
   });
+  const providers = providersData?.rows ?? [];
 
   const save = useMutation({
     mutationFn: upsertOAuthProvider,
@@ -854,6 +876,18 @@ function OAuthProvidersPanel() {
               deleting={remove.isPending}
             />
           ))
+        )}
+        {!isLoading && (providers.length > 0 || oauthPaging.hasPrev) && (
+          <ListPaginationKeyset
+            page={oauthPaging.page}
+            pageSize={oauthPaging.pageSize}
+            rowCount={providers.length}
+            hasPrev={oauthPaging.hasPrev}
+            hasNext={!!providersData?.nextPageToken}
+            onPrev={oauthPaging.goPrev}
+            onNext={() => oauthPaging.goNext(providersData?.nextPageToken)}
+            onPageSizeChange={oauthPaging.setPageSize}
+          />
         )}
       </div>
     </div>

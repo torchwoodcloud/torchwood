@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { pageQuery, type ListParams, type Page } from "./pagination";
 
 export interface LeaderboardBoard {
   id: string;
@@ -121,15 +122,28 @@ export async function listBoardPeriods(boardId: string): Promise<string[]> {
   return res.data.periods ?? [];
 }
 
+// Top 列表对接服务端分页（契约说明见 pagination.ts）：服务端按 board 声明
+// 排序返回窗口排名（rank/position 按 total 全量计算，翻页不改变名次），
+// offset 型 page_token；响应额外携带 period 与 total（此处 total 是该期真实
+// 总条数，可直接展示）。
 export async function listBoardTop(
   boardId: string,
-  params?: { period?: string; page_size?: number; page_token?: string }
-): Promise<{ period: string; total: number; entries: LeaderboardTopEntry[]; next_page_token?: string }> {
-  const res = await api.get(
-    `/console/leaderboards/boards/${encodeURIComponent(boardId)}/top`,
-    { params }
-  );
-  return res.data;
+  params: ListParams & { period?: string }
+): Promise<Page<LeaderboardTopEntry> & { period: string; total: number }> {
+  const res = await api.get<{
+    period: string;
+    total: number;
+    entries: LeaderboardTopEntry[];
+    next_page_token?: string;
+  }>(`/console/leaderboards/boards/${encodeURIComponent(boardId)}/top`, {
+    params: { ...pageQuery(params), period: params.period || undefined },
+  });
+  return {
+    rows: res.data.entries ?? [],
+    nextPageToken: res.data.next_page_token,
+    period: res.data.period,
+    total: res.data.total,
+  };
 }
 
 export async function getBoardEntry(

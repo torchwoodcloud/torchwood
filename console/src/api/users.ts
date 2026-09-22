@@ -1,5 +1,12 @@
 import { api } from "./client";
 import type { ApiRequestConfig } from "./client";
+import {
+  pageQuery,
+  serializeGatewayParams,
+  type ListMeta,
+  type ListParams,
+  type Page,
+} from "./pagination";
 
 export interface User {
   id: string;
@@ -33,12 +40,28 @@ export interface TokenBundle {
 
 export interface ListUsersResponse {
   users: User[];
-  meta?: { total_count?: number; page_size?: number };
+  meta?: ListMeta["meta"] & { total_count?: number };
 }
 
-export async function listUsers(): Promise<User[]> {
-  const res = await api.get<ListUsersResponse>("/server/users");
-  return res.data.users ?? [];
+// 服务端列表默认 page_size=50、max 100（created_at DESC）：请求不带 page_size
+// 时只返回第一页（2026-09-22 users 56 条已实际踩坑）。对接服务端分页（契约
+// 说明见 pagination.ts），pageSize 必传。queries 为服务端白名单 DSL
+// （ParseUserList：id/email/name/status/phone/created_at/updated_at，算子
+// equal/greaterThan/lessThan），常用过滤：
+//   equal("id","<uuid>") / equal("status","active")
+//   greaterThan("created_at","<RFC3339>") / lessThan("created_at","<RFC3339>")
+export interface ListUsersParams extends ListParams {
+  queries?: string[];
+}
+
+export async function listUsers(params: ListUsersParams): Promise<Page<User>> {
+  const res = await api.get<ListUsersResponse>("/server/users", {
+    params: { ...pageQuery(params), queries: params.queries },
+    // queries 是 repeated 字段：axios 默认序列化成 queries[]=，gateway 不识别，
+    // 必须用网关兼容序列化（见 serializeGatewayParams）。
+    paramsSerializer: { serialize: serializeGatewayParams },
+  });
+  return { rows: res.data.users ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function getUser(id: string): Promise<User> {

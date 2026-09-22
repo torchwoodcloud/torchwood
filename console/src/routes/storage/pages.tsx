@@ -30,6 +30,7 @@ import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
+import { useServerPaging } from "@/hooks/useServerPaging";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -112,11 +113,14 @@ export function StorageListPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const writeable = canWrite(role);
 
-  const { data: buckets = [], isLoading } = useQuery({
-    queryKey: ["buckets", projectId],
-    queryFn: listBuckets,
+  const paging = useServerPaging();
+  const { data, isLoading } = useQuery({
+    queryKey: ["buckets", projectId, paging.pageSize, paging.pageToken],
+    queryFn: () => listBuckets({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
     enabled: !!projectId,
+    placeholderData: (prev) => prev,
   });
+  const buckets = data?.rows ?? [];
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteBucket(id),
@@ -153,11 +157,20 @@ export function StorageListPage() {
     <ResourceListPage
       title="Storage"
       description="管理存储 Bucket"
-      searchPlaceholder="搜索 Bucket 名称或 ID..."
+      searchPlaceholder="当前页内搜索 Bucket 名称或 ID..."
       isLoading={isLoading}
       items={buckets}
       columns={bucketColumns(tz)}
       getSearchText={getSearchText}
+      serverPaging={{
+        page: paging.page,
+        pageSize: paging.pageSize,
+        hasPrev: paging.hasPrev,
+        hasNext: !!data?.nextPageToken,
+        onPrev: paging.goPrev,
+        onNext: () => paging.goNext(data?.nextPageToken),
+        onPageSizeChange: paging.setPageSize,
+      }}
       detailPath={(b) => `/console/storage/${b.id}`}
       toolbarActions={
         writeable ? (
@@ -262,11 +275,15 @@ export function BucketDetailPage() {
     enabled: !!projectId,
   });
 
-  const { data: files = [], isLoading: filesLoading } = useQuery({
-    queryKey: ["files", bucketId],
-    queryFn: () => listFiles(bucketId!),
+  const filesPaging = useServerPaging();
+  const { data: filesData, isLoading: filesLoading } = useQuery({
+    queryKey: ["files", bucketId, filesPaging.pageSize, filesPaging.pageToken],
+    queryFn: () =>
+      listFiles(bucketId!, { pageSize: filesPaging.pageSize, pageToken: filesPaging.pageToken }),
     enabled: !!bucketId,
+    placeholderData: (prev) => prev,
   });
+  const files = filesData?.rows ?? [];
 
   const updateBucketMutation = useMutation({
     mutationFn: (input: { name?: string; public?: boolean }) =>
@@ -413,11 +430,20 @@ export function BucketDetailPage() {
       <ResourceListPage
         title=""
         cardTitle="文件列表"
-        searchPlaceholder="搜索文件名..."
+        searchPlaceholder="当前页内搜索文件名..."
         isLoading={filesLoading}
         items={files}
         columns={fileColumns}
         getSearchText={getFileSearchText}
+        serverPaging={{
+          page: filesPaging.page,
+          pageSize: filesPaging.pageSize,
+          hasPrev: filesPaging.hasPrev,
+          hasNext: !!filesData?.nextPageToken,
+          onPrev: filesPaging.goPrev,
+          onNext: () => filesPaging.goNext(filesData?.nextPageToken),
+          onPageSizeChange: filesPaging.setPageSize,
+        }}
         detailPath={(f) => `/console/storage/${bucketId}/files/${f.id}`}
         toolbarActions={
           writeable ? (

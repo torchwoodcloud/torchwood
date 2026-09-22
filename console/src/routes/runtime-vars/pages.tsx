@@ -40,6 +40,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingTable } from "@/components/LoadingTable";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
+import { useServerPaging } from "@/hooks/useServerPaging";
 import type { ColumnDef } from "@/components/list/DataTable";
 import {
   DetailPageWrapper,
@@ -272,11 +273,14 @@ export function VarSetsListPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const platformAdmin = isPlatformAdmin(role);
 
-  const { data: sets = [], isLoading } = useQuery({
-    queryKey: ["runtime-var-sets", projectId],
-    queryFn: listVarSets,
+  const paging = useServerPaging();
+  const { data, isLoading } = useQuery({
+    queryKey: ["runtime-var-sets", projectId, paging.pageSize, paging.pageToken],
+    queryFn: () => listVarSets({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
     enabled: !!projectId,
+    placeholderData: (prev) => prev,
   });
+  const sets = data?.rows ?? [];
 
   const columns: ColumnDef<VarSet>[] = [
     {
@@ -318,7 +322,7 @@ export function VarSetsListPage() {
       <ResourceListPage
         title="Runtime Vars"
         description="管理项目级运行时配置：类型化变量集合、可见性与版本回滚"
-        searchPlaceholder="搜索集合 ID 或描述..."
+        searchPlaceholder="当前页内搜索集合 ID 或描述..."
         isLoading={isLoading}
         items={sets}
         columns={columns}

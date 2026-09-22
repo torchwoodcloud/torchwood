@@ -1,5 +1,6 @@
 import { api } from "./client";
 import type { ApiRequestConfig } from "./client";
+import { pageQuery, type ListMeta, type ListParams, type Page } from "./pagination";
 
 export interface Bucket {
   id: string;
@@ -35,9 +36,16 @@ function normalizeBucket(bucket: Bucket): Bucket {
   };
 }
 
-export async function listBuckets(): Promise<Bucket[]> {
-  const res = await api.get<{ buckets: Bucket[] }>("/server/storage/buckets");
-  return (res.data.buckets ?? []).map(normalizeBucket);
+// 桶列表（SQL 分页，服务端 clamp 默认 25 / max 100）；对接服务端分页
+//（契约说明见 pagination.ts），pageSize 必传。
+export async function listBuckets(params: ListParams): Promise<Page<Bucket>> {
+  const res = await api.get<{ buckets: Bucket[] } & ListMeta>("/server/storage/buckets", {
+    params: pageQuery(params),
+  });
+  return {
+    rows: (res.data.buckets ?? []).map(normalizeBucket),
+    nextPageToken: res.data.meta?.next_page_token,
+  };
 }
 
 export async function getBucket(id: string): Promise<Bucket> {
@@ -65,11 +73,13 @@ export async function updateBucket(
   return normalizeBucket(res.data);
 }
 
-export async function listFiles(bucketId: string): Promise<FileItem[]> {
-  const res = await api.get<{ files: FileItem[] }>(
-    `/server/storage/buckets/${bucketId}/files`
+// 文件列表（SQL 分页，服务端 clamp 默认 25 / max 100）。
+export async function listFiles(bucketId: string, params: ListParams): Promise<Page<FileItem>> {
+  const res = await api.get<{ files: FileItem[] } & ListMeta>(
+    `/server/storage/buckets/${bucketId}/files`,
+    { params: pageQuery(params) }
   );
-  return res.data.files ?? [];
+  return { rows: res.data.files ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function getFile(bucketId: string, fileId: string): Promise<FileItem> {

@@ -35,6 +35,24 @@ export function pageQuery(params: ListParams) {
   };
 }
 
+// grpc-gateway 的 repeated query 字段要求 key=a&key=b 形式；axios 默认把数组
+// 序列化成 key[]=a&key[]=b（实测 1.x），gateway 不识别 → 过滤参数静默失效。
+// 携带数组参数的列表封装必须经 paramsSerializer 使用本函数。
+export function serializeGatewayParams(params: Record<string, unknown>): string {
+  const sp = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item !== undefined && item !== null && item !== "") sp.append(key, String(item));
+      }
+    } else {
+      sp.append(key, String(value));
+    }
+  }
+  return sp.toString();
+}
+
 // UI 可选页大小；上限 100 = 服务端各列表端点的 clamp 上限（assets/billing
 // maxListLimit、documents maxQueryLimit）。
 export const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;

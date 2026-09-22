@@ -1,5 +1,6 @@
 import { api } from "./client";
 import type { ApiRequestConfig } from "./client";
+import { pageQuery, type ListMeta, type ListParams, type Page } from "./pagination";
 
 export interface APIKey {
   id: string;
@@ -13,12 +14,26 @@ export interface APIKey {
 
 export interface ListAPIKeysResponse {
   api_keys: APIKey[];
-  meta?: { total_count?: number };
+  meta?: ListMeta["meta"] & { total_count?: number };
 }
 
-export async function listAPIKeys(): Promise<APIKey[]> {
-  const res = await api.get<ListAPIKeysResponse>("/server/api-keys");
-  return res.data.api_keys ?? [];
+// 服务端 key 列表（ListAPIKeysRequest）：SQL 分页（clamp 默认 50 / max 100）+
+// enabled 精确过滤（proto3 optional：未传 = 全部）。对接服务端分页
+//（契约说明见 pagination.ts），pageSize 必传。
+export interface ListAPIKeysFilter {
+  enabled?: boolean;
+}
+
+export async function listAPIKeys(
+  params: ListParams & ListAPIKeysFilter
+): Promise<Page<APIKey>> {
+  const res = await api.get<ListAPIKeysResponse>("/server/api-keys", {
+    params: {
+      ...pageQuery(params),
+      enabled: params.enabled,
+    },
+  });
+  return { rows: res.data.api_keys ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function getAPIKey(id: string): Promise<APIKey> {

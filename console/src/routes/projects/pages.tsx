@@ -17,6 +17,7 @@ import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { ColumnDef } from "@/components/list/DataTable";
+import { useServerPaging } from "@/hooks/useServerPaging";
 import {
   FormPageWrapper,
   FormField,
@@ -58,10 +59,13 @@ export function ProjectsListPage() {
   const tz = useUserTimezone();
   const platformAdmin = isPlatformAdmin(role);
 
-  const { data: projects = [], isLoading } = useQuery({
-    queryKey: ["projects"],
-    queryFn: listProjects,
+  const paging = useServerPaging();
+  const { data, isLoading } = useQuery({
+    queryKey: ["projects", paging.pageSize, paging.pageToken],
+    queryFn: () => listProjects({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
+    placeholderData: (prev) => prev,
   });
+  const projects = data?.rows ?? [];
 
   const getSearchText = useCallback(
     (p: Project) => `${p.id} ${p.name} ${p.description ?? ""} ${p.status}`,
@@ -72,11 +76,20 @@ export function ProjectsListPage() {
     <ResourceListPage
       title="Projects"
       description="管理 Torchwood 项目"
-      searchPlaceholder="搜索项目名称或 ID..."
+      searchPlaceholder="当前页内搜索项目名称或 ID..."
       isLoading={isLoading}
       items={projects}
       columns={columns(tz)}
       getSearchText={getSearchText}
+      serverPaging={{
+        page: paging.page,
+        pageSize: paging.pageSize,
+        hasPrev: paging.hasPrev,
+        hasNext: !!data?.nextPageToken,
+        onPrev: paging.goPrev,
+        onNext: () => paging.goNext(data?.nextPageToken),
+        onPageSizeChange: paging.setPageSize,
+      }}
       detailPath={(p) => `/console/projects/${p.id}`}
       toolbarActions={
         platformAdmin ? (

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listProjects } from "@/api/projects";
 import { useAuth } from "@/hooks/useAuth";
@@ -7,10 +7,13 @@ import { useAuth } from "@/hooks/useAuth";
 export function ProjectBootstrap() {
   const { projectId, selectProject } = useAuth();
 
-  const { data: projects = [] } = useQuery({
+  // 引导用途取一大页即可（项目量级 = 管理员可管理的项目数，上限内取全）。
+  const { data } = useQuery({
     queryKey: ["projects"],
-    queryFn: listProjects,
+    queryFn: () => listProjects({ pageSize: 100 }),
   });
+  // rows 需要稳定引用：作为 useEffect 依赖参与项目选择同步。
+  const projects = useMemo(() => data?.rows ?? [], [data]);
 
   useEffect(() => {
     if (projects.length === 0) return;

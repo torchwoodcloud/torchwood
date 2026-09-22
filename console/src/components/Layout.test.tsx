@@ -41,7 +41,7 @@ describe("Layout 侧栏收起", () => {
       email: "ops@example.com",
       role: "owner",
     });
-    vi.mocked(listProjects).mockResolvedValue([]);
+    vi.mocked(listProjects).mockResolvedValue({ rows: [], nextPageToken: undefined });
   });
   afterEach(() => {
     cleanup();

@@ -1,8 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUserTimezone } from "@/hooks/useTimezone";
-import { formatDateTime } from "@/lib/datetime";
+import { formatDateTime, fromDateTimeLocalValue } from "@/lib/datetime";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import {
@@ -23,6 +23,7 @@ import { useServerPaging } from "@/hooks/useServerPaging";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -246,16 +247,65 @@ const subColumns: ColumnDef<Subscription>[] = [
   },
 ];
 
+// 订阅状态选项与 subscriptions.proto 状态机一致（含终态）。
+const SUB_STATUS_OPTIONS = ["trialing", "active", "past_due", "canceled", "expired"] as const;
+
 export function SubscriptionsListPage() {
   const { projectId } = useAuth();
+  const tz = useUserTimezone();
   const paging = useServerPaging();
+  // 服务端过滤（ListSubscriptionsRequest 结构化字段）：UserID 精确 + 状态 +
+  // 创建时间范围；任何过滤变化 reset 回第一页。
+  const [userIdInput, setUserIdInput] = useState("");
+  const [userIdFilter, setUserIdFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [createdAfter, setCreatedAfter] = useState("");
+  const [createdBefore, setCreatedBefore] = useState("");
+
+  const filters = useMemo(
+    () => ({
+      userId: userIdFilter.trim() || undefined,
+      status: statusFilter || undefined,
+      createdAfter: fromDateTimeLocalValue(createdAfter, tz) || undefined,
+      createdBefore: fromDateTimeLocalValue(createdBefore, tz) || undefined,
+    }),
+    [userIdFilter, statusFilter, createdAfter, createdBefore, tz]
+  );
+  const filtersDirty = !!(
+    userIdFilter ||
+    statusFilter ||
+    createdAfter ||
+    createdBefore
+  );
+
   const { data, isLoading } = useQuery({
-    queryKey: ["subscriptions", projectId, paging.pageSize, paging.pageToken],
-    queryFn: () => listSubscriptions({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
+    queryKey: [
+      "subscriptions",
+      projectId,
+      filters,
+      paging.pageSize,
+      paging.pageToken,
+    ],
+    queryFn: () =>
+      listSubscriptions({ pageSize: paging.pageSize, pageToken: paging.pageToken, ...filters }),
     enabled: !!projectId,
     placeholderData: (prev) => prev,
   });
   const items = data?.rows ?? [];
+
+  const applyUserId = () => {
+    setUserIdFilter(userIdInput);
+    paging.reset();
+  };
+  const clearFilters = () => {
+    setUserIdInput("");
+    setUserIdFilter("");
+    setStatusFilter("");
+    setCreatedAfter("");
+    setCreatedBefore("");
+    paging.reset();
+  };
+
   const getSearchText = useCallback(
     (s: Subscription) => `${s.id} ${s.user_id ?? ""} ${s.plan_code ?? ""} ${s.status}`,
     []
@@ -279,6 +329,88 @@ export function SubscriptionsListPage() {
         onNext: () => paging.goNext(data?.nextPageToken),
         onPageSizeChange: paging.setPageSize,
       }}
+      filters={
+        <form
+          className="flex flex-wrap items-end gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            applyUserId();
+          }}
+        >
+          <div className="space-y-1">
+            <Label htmlFor="subs-filter-user" className="text-xs text-muted-foreground">
+              用户 ID
+            </Label>
+            <Input
+              id="subs-filter-user"
+              value={userIdInput}
+              onChange={(e) => setUserIdInput(e.target.value)}
+              placeholder="按 UserID 精确过滤"
+              className="h-8 w-[280px] font-mono text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">状态</Label>
+            <Select
+              value={statusFilter || "all"}
+              onValueChange={(v) => {
+                setStatusFilter(v === "all" ? "" : v);
+                paging.reset();
+              }}
+            >
+              <SelectTrigger className="h-8 w-[130px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部</SelectItem>
+                {SUB_STATUS_OPTIONS.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="subs-filter-after" className="text-xs text-muted-foreground">
+              创建时间从
+            </Label>
+            <Input
+              id="subs-filter-after"
+              type="datetime-local"
+              value={createdAfter}
+              onChange={(e) => {
+                setCreatedAfter(e.target.value);
+                paging.reset();
+              }}
+              className="h-8 w-[210px]"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="subs-filter-before" className="text-xs text-muted-foreground">
+              到
+            </Label>
+            <Input
+              id="subs-filter-before"
+              type="datetime-local"
+              value={createdBefore}
+              onChange={(e) => {
+                setCreatedBefore(e.target.value);
+                paging.reset();
+              }}
+              className="h-8 w-[210px]"
+            />
+          </div>
+          <Button type="submit" variant="outline" size="sm">
+            查询
+          </Button>
+          {filtersDirty && (
+            <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
+              清除
+            </Button>
+          )}
+        </form>
+      }
       detailPath={(s) => `/console/subscriptions/${s.id}`}
       toolbarActions={
         <Button variant="outline" asChild>

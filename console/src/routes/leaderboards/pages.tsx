@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -47,6 +47,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
+import { ListPaginationKeyset } from "@/components/list/ListToolbar";
+import { useServerPaging } from "@/hooks/useServerPaging";
 import { RowDeleteButton } from "@/components/resource/shared";
 import type { ColumnDef } from "@/components/list/DataTable";
 import { useUserTimezone } from "@/hooks/useTimezone";
@@ -442,11 +444,30 @@ export function BoardDetailPage() {
   });
   const [period, setPeriod] = useState<string>("");
   const activePeriod = period || periods[0] || "";
+  const topPaging = useServerPaging();
+  // 期/board 切换即重置回第一页（top 的游标按期隔离）。
+  useEffect(() => {
+    topPaging.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardId, activePeriod]);
   const { data: top, isLoading: topLoading } = useQuery({
-    queryKey: ["leaderboards-top", boardId, activePeriod],
-    queryFn: () => listBoardTop(boardId!, { period: activePeriod || undefined, page_size: 100 }),
+    queryKey: [
+      "leaderboards-top",
+      boardId,
+      activePeriod,
+      topPaging.pageSize,
+      topPaging.pageToken,
+    ],
+    queryFn: () =>
+      listBoardTop(boardId!, {
+        period: activePeriod || undefined,
+        pageSize: topPaging.pageSize,
+        pageToken: topPaging.pageToken,
+      }),
     enabled: !!boardId,
+    placeholderData: (prev) => prev,
   });
+  const topEntries = top?.rows ?? [];
 
   const [lookupSubject, setLookupSubject] = useState("");
   const [lookupResult, setLookupResult] = useState<LeaderboardScoreSnapshot | null>(null);
@@ -517,10 +538,10 @@ export function BoardDetailPage() {
           <tbody>
             {topLoading ? (
               <tr><td className="p-2 text-muted-foreground" colSpan={7}>加载中…</td></tr>
-            ) : (top?.entries ?? []).length === 0 ? (
+            ) : topEntries.length === 0 ? (
               <tr><td className="p-2 text-muted-foreground" colSpan={7}>该期暂无条目</td></tr>
             ) : (
-              (top?.entries ?? []).map((e) => (
+              topEntries.map((e) => (
                 <tr key={e.subject_id} className="border-b last:border-0">
                   <td className="p-2 font-medium">{e.rank}</td>
                   <td className="p-2 text-muted-foreground">{e.position}</td>
@@ -541,6 +562,16 @@ export function BoardDetailPage() {
             )}
           </tbody>
         </table>
+        <ListPaginationKeyset
+          page={topPaging.page}
+          pageSize={topPaging.pageSize}
+          rowCount={topEntries.length}
+          hasPrev={topPaging.hasPrev}
+          hasNext={!!top?.nextPageToken}
+          onPrev={topPaging.goPrev}
+          onNext={() => topPaging.goNext(top?.nextPageToken)}
+          onPageSizeChange={topPaging.setPageSize}
+        />
       </div>
 
       <div className="rounded-md border p-4">

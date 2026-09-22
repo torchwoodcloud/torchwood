@@ -77,10 +77,29 @@ export async function deletePlan(planId: string, config?: ApiRequestConfig): Pro
   await api.delete(`/server/subscriptions/plans/${planId}`, config);
 }
 
-export async function listSubscriptions(params: ListParams): Promise<Page<Subscription>> {
+// 结构化过滤（ListSubscriptionsRequest）：user_id/status 精确 + created_at
+// 闭区间（时间一律 RFC3339；status = trialing|active|past_due|canceled|expired）。
+export interface ListSubscriptionsFilter {
+  userId?: string;
+  status?: string;
+  createdAfter?: string;
+  createdBefore?: string;
+}
+
+export async function listSubscriptions(
+  params: ListParams & ListSubscriptionsFilter
+): Promise<Page<Subscription>> {
   const res = await api.get<{ subscriptions: Subscription[] } & ListMeta>(
     "/server/subscriptions",
-    { params: pageQuery(params) }
+    {
+      params: {
+        ...pageQuery(params),
+        user_id: params.userId || undefined,
+        status: params.status || undefined,
+        created_after: params.createdAfter || undefined,
+        created_before: params.createdBefore || undefined,
+      },
+    }
   );
   return { rows: res.data.subscriptions ?? [], nextPageToken: res.data.meta?.next_page_token };
 }

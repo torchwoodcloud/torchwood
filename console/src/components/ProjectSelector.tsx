@@ -10,10 +10,11 @@ import { cn } from "@/lib/utils";
 export function ProjectSelector({ collapsed = false }: { collapsed?: boolean }) {
   const { projectId, selectProject } = useAuth();
 
-  const { data: projects = [], isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["projects"],
-    queryFn: listProjects,
+    queryFn: () => listProjects({ pageSize: 100 }),
   });
+  const projects = data?.rows ?? [];
 
   const selectedProjectId = projectId || "";
   const activeProject = projects.find((p) => p.id === selectedProjectId);

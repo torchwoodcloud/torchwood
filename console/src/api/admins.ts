@@ -1,4 +1,5 @@
 import { api, type ApiRequestConfig } from "./client";
+import { pageQuery, type ListMeta, type ListParams, type Page } from "./pagination";
 
 export interface Admin {
   id: string;
@@ -37,9 +38,13 @@ export async function updateCurrentAdmin(
   return res.data;
 }
 
-export async function listAdmins(): Promise<Admin[]> {
-  const res = await api.get<ListAdminsResponse>("/console/admins");
-  return res.data.admins ?? [];
+// 服务端 admins 列表（in-memory crud，默认 page_size=50）；对接服务端分页
+//（契约说明见 pagination.ts），pageSize 必传。
+export async function listAdmins(params: ListParams): Promise<Page<Admin>> {
+  const res = await api.get<ListAdminsResponse & ListMeta>("/console/admins", {
+    params: pageQuery(params),
+  });
+  return { rows: res.data.admins ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function createAdmin(input: {

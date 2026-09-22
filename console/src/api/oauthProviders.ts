@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { pageQuery, type ListMeta, type ListParams, type Page } from "./pagination";
 
 export interface OAuthProvider {
   provider: string;
@@ -22,9 +23,12 @@ export const OAUTH_PROVIDER_OPTIONS = [
   { id: "wechat_miniprogram", label: "微信 · 小程序", defaultScopes: [] },
 ] as const;
 
-export async function listOAuthProviders(): Promise<OAuthProvider[]> {
-  const res = await api.get<ListOAuthProvidersResponse>("/server/oauth-providers");
-  return res.data.oauth_providers ?? [];
+// 服务端 providers 列表（in-memory crud，默认 page_size=50）；对接服务端分页。
+export async function listOAuthProviders(params: ListParams): Promise<Page<OAuthProvider>> {
+  const res = await api.get<ListOAuthProvidersResponse & ListMeta>("/server/oauth-providers", {
+    params: pageQuery(params),
+  });
+  return { rows: res.data.oauth_providers ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function upsertOAuthProvider(input: {

@@ -11,37 +11,28 @@ import { describe, expect, it } from "vitest";
 const PAGINATION_MARKERS = /pageQuery\(|page_size|page_token|next_page_token/;
 
 // 未接分页机制的登记处：每项注明理由；确认端点有分页后应迁出此表。
+// （2026-09-22 P0-P2 迁移后仅剩静态资源/有意的全量/免分页子资源。）
 const ALLOWLIST: Record<string, string[]> = {
-  "admins.ts": ["listAdmins"],
-  "apiKeys.ts": ["listAPIKeys"],
-  // functions 各列表（运行时/规格/变量/执行/部署）：服务端分页契约未逐一确认。
+  // functions 各列表（运行时/规格 = 进程内静态注册表；变量读回显 = PUT 写操作；
+  // 触发器 = 单函数人手配置的量级）。
   "functions.ts": [
     "listRuntimes",
     "listSpecifications",
-    "listFunctions",
-    "listDeployments",
     "getVariables",
-    "listExecutions",
     // setVariables 是 PUT 写操作的读回显（数量 = 提交数），非列表查询。
     "setVariables",
     // 单函数的触发器配置子资源，量级由人手配决定。
     "listFunctionTriggers",
   ],
-  "groups.ts": ["listGroups", "listMemberships"],
-  // board/period 是元数据小列表；top 列表查询已走 page_size/page_token。
-  "leaderboards.ts": [
-    "listBoards",
-    "listBoardPeriods",
-    // settlements 已有显式 limit 参数，取多少由调用方决定，拉全会改变语义。
-    "listSettlements",
-  ],
-  "oauthProviders.ts": ["listOAuthProviders"],
-  "projects.ts": ["listProjects", "listInviteCodes"],
-  "runtimeVars.ts": ["listVarSets", "listVars", "listVersions"],
-  "storage.ts": ["listBuckets", "listFiles"],
-  "users.ts": ["listUsers", "listUserSessions"],
+  // board/period 是元数据小列表（boards 每项目上限 100）；top 列表查询已走
+  // page_size/page_token；settlements 已有显式 limit 参数，取多少由调用方决定。
+  "leaderboards.ts": ["listBoards", "listBoardPeriods", "listSettlements"],
   // scope catalog 是静态资源枚举，非数据列表。
   "wellknown.ts": ["fetchApiKeyScopeCatalog"],
+  // 变量/版本子列表为有意的全量拉取（设计决定 D13/D11）；var-sets 已迁。
+  "runtimeVars.ts": ["listVars", "listVersions"],
+  // 单用户会话子资源：服务端 ListUserSessions 尚无分页契约（P1 挂账）。
+  "users.ts": ["listUserSessions"],
 };
 
 interface ListFn {

@@ -17,6 +17,14 @@ import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
+import { useServerPaging } from "@/hooks/useServerPaging";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -76,11 +84,18 @@ export function ApiKeysListPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const platformAdmin = isPlatformAdmin(role);
 
-  const { data: keys = [], isLoading } = useQuery({
-    queryKey: ["api-keys", projectId],
-    queryFn: listAPIKeys,
+  const paging = useServerPaging();
+  // 服务端过滤：enabled（proto3 optional——"all" = 不过滤）；变化 reset 回第一页。
+  const [enabledFilter, setEnabledFilter] = useState("all");
+  const enabled = enabledFilter === "all" ? undefined : enabledFilter === "enabled";
+  const { data, isLoading } = useQuery({
+    queryKey: ["api-keys", projectId, enabledFilter, paging.pageSize, paging.pageToken],
+    queryFn: () =>
+      listAPIKeys({ pageSize: paging.pageSize, pageToken: paging.pageToken, enabled }),
     enabled: !!projectId,
+    placeholderData: (prev) => prev,
   });
+  const keys = data?.rows ?? [];
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteAPIKey(id),
@@ -120,11 +135,40 @@ export function ApiKeysListPage() {
     <ResourceListPage
       title="API Keys"
       description="管理当前项目的服务端 API Key"
-      searchPlaceholder="搜索名称或 ID..."
+      searchPlaceholder="当前页内搜索名称或 ID..."
       isLoading={isLoading}
       items={keys}
       columns={columns(tz)}
       getSearchText={getSearchText}
+      serverPaging={{
+        page: paging.page,
+        pageSize: paging.pageSize,
+        hasPrev: paging.hasPrev,
+        hasNext: !!data?.nextPageToken,
+        onPrev: paging.goPrev,
+        onNext: () => paging.goNext(data?.nextPageToken),
+        onPageSizeChange: paging.setPageSize,
+      }}
+      filters={
+        <div className="flex items-center gap-2">
+          <Select
+            value={enabledFilter}
+            onValueChange={(v) => {
+              setEnabledFilter(v);
+              paging.reset();
+            }}
+          >
+            <SelectTrigger className="h-8 w-[120px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部状态</SelectItem>
+              <SelectItem value="enabled">启用</SelectItem>
+              <SelectItem value="disabled">禁用</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      }
       detailPath={(k) => `/console/api-keys/${k.id}`}
       toolbarActions={
         platformAdmin ? (

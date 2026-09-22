@@ -1,5 +1,6 @@
 import { api } from "./client";
 import type { ApiRequestConfig } from "./client";
+import { pageQuery, type ListMeta, type ListParams, type Page } from "./pagination";
 
 export interface FunctionItem {
   id: string;
@@ -110,9 +111,13 @@ export async function listSpecifications(): Promise<SpecificationInfo[]> {
   return res.data.specifications ?? [];
 }
 
-export async function listFunctions(): Promise<FunctionItem[]> {
-  const res = await api.get<{ functions: FunctionItem[] }>("/server/functions");
-  return res.data.functions ?? [];
+// 服务端函数列表默认 page_size=50（in-memory crud，created_at DESC）；对接
+// 服务端分页（契约说明见 pagination.ts），pageSize 必传。
+export async function listFunctions(params: ListParams): Promise<Page<FunctionItem>> {
+  const res = await api.get<{ functions: FunctionItem[] } & ListMeta>("/server/functions", {
+    params: pageQuery(params),
+  });
+  return { rows: res.data.functions ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function getFunction(id: string): Promise<FunctionItem> {
@@ -165,11 +170,17 @@ export async function deleteFunction(id: string, config?: ApiRequestConfig): Pro
   await api.delete(`/server/functions/${id}`, config);
 }
 
-export async function listDeployments(functionId: string): Promise<Deployment[]> {
-  const res = await api.get<{ deployments: Deployment[] }>(
-    `/server/functions/${functionId}/deployments`
+// 部署列表（ListDeploymentsRequest）：created_at DESC，offset 型分页
+//（服务端 clamp 默认 50 / max 100）；此前无分页字段、全量返回。
+export async function listDeployments(
+  functionId: string,
+  params: ListParams
+): Promise<Page<Deployment>> {
+  const res = await api.get<{ deployments: Deployment[] } & ListMeta>(
+    `/server/functions/${functionId}/deployments`,
+    { params: pageQuery(params) }
   );
-  return res.data.deployments ?? [];
+  return { rows: res.data.deployments ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function uploadDeployment(
@@ -278,11 +289,31 @@ export async function createExecution(
   return res.data;
 }
 
-export async function listExecutions(functionId: string): Promise<Execution[]> {
-  const res = await api.get<{ executions: Execution[] }>(
-    `/server/functions/${functionId}/executions`
+// 执行记录列表（ListExecutionsRequest）：分页 + status 精确 + created_at 闭
+// 区间过滤（排障面）；status ∈ queued|building|running|completed|failed，
+// 时间一律 RFC3339。
+export interface ListExecutionsFilter {
+  status?: string;
+  createdAfter?: string;
+  createdBefore?: string;
+}
+
+export async function listExecutions(
+  functionId: string,
+  params: ListParams & ListExecutionsFilter
+): Promise<Page<Execution>> {
+  const res = await api.get<{ executions: Execution[] } & ListMeta>(
+    `/server/functions/${functionId}/executions`,
+    {
+      params: {
+        ...pageQuery(params),
+        status: params.status || undefined,
+        created_after: params.createdAfter || undefined,
+        created_before: params.createdBefore || undefined,
+      },
+    }
   );
-  return res.data.executions ?? [];
+  return { rows: res.data.executions ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function getExecution(

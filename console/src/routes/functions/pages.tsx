@@ -29,6 +29,8 @@ import {
   type Variable,
 } from "@/api/functions";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
+import { ListPaginationKeyset } from "@/components/list/ListToolbar";
+import { useServerPaging } from "@/hooks/useServerPaging";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -160,11 +162,14 @@ export function FunctionsListPage() {
   const [enabled, setEnabled] = useState(true);
   const writeable = canWrite(role);
 
-  const { data: functions = [], isLoading } = useQuery({
-    queryKey: ["functions", projectId],
-    queryFn: listFunctions,
+  const paging = useServerPaging();
+  const { data, isLoading } = useQuery({
+    queryKey: ["functions", projectId, paging.pageSize, paging.pageToken],
+    queryFn: () => listFunctions({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
     enabled: !!projectId,
+    placeholderData: (prev) => prev,
   });
+  const functions = data?.rows ?? [];
 
   const { data: runtimes = [] } = useQuery({
     queryKey: ["functions-runtimes"],
@@ -237,11 +242,20 @@ export function FunctionsListPage() {
       <ResourceListPage
         title="Functions"
         description="管理云函数：代码部署、环境变量与执行"
-        searchPlaceholder="搜索函数名称或 ID..."
+        searchPlaceholder="当前页内搜索函数名称或 ID..."
         isLoading={isLoading}
         items={functions}
         columns={columns}
         getSearchText={getSearchText}
+        serverPaging={{
+          page: paging.page,
+          pageSize: paging.pageSize,
+          hasPrev: paging.hasPrev,
+          hasNext: !!data?.nextPageToken,
+          onPrev: paging.goPrev,
+          onNext: () => paging.goNext(data?.nextPageToken),
+          onPageSizeChange: paging.setPageSize,
+        }}
         detailPath={(f) => `/console/functions/${f.id}`}
         toolbarActions={
           writeable ? (
@@ -550,18 +564,42 @@ export function FunctionDetailPage() {
     queryFn: listSpecifications,
   });
 
-  const { data: deployments = [], isLoading: deploymentsLoading } = useQuery({
-    queryKey: ["deployments", functionId],
-    queryFn: () => listDeployments(functionId!),
+  // 部署/执行子列表对接服务端分页；执行列表带 status 精确过滤（排障面），
+  // 过滤变化 reset 回第一页。
+  const deploymentsPaging = useServerPaging();
+  const { data: deploymentsData, isLoading: deploymentsLoading } = useQuery({
+    queryKey: ["deployments", functionId, deploymentsPaging.pageSize, deploymentsPaging.pageToken],
+    queryFn: () =>
+      listDeployments(functionId!, {
+        pageSize: deploymentsPaging.pageSize,
+        pageToken: deploymentsPaging.pageToken,
+      }),
     enabled: !!functionId,
+    placeholderData: (prev) => prev,
   });
+  const deployments = deploymentsData?.rows ?? [];
 
-  const { data: executions = [], isLoading: executionsLoading } = useQuery({
-    queryKey: ["executions", functionId],
-    queryFn: () => listExecutions(functionId!),
+  const [execStatusFilter, setExecStatusFilter] = useState("");
+  const executionsPaging = useServerPaging();
+  const { data: executionsData, isLoading: executionsLoading } = useQuery({
+    queryKey: [
+      "executions",
+      functionId,
+      execStatusFilter,
+      executionsPaging.pageSize,
+      executionsPaging.pageToken,
+    ],
+    queryFn: () =>
+      listExecutions(functionId!, {
+        pageSize: executionsPaging.pageSize,
+        pageToken: executionsPaging.pageToken,
+        status: execStatusFilter || undefined,
+      }),
     enabled: !!functionId,
+    placeholderData: (prev) => prev,
     refetchInterval: 3000,
   });
+  const executions = executionsData?.rows ?? [];
 
   const { data: storedVariables } = useQuery({
     queryKey: ["variables", functionId],
@@ -1180,6 +1218,18 @@ export function FunctionDetailPage() {
               ))}
             </div>
           )}
+          {!deploymentsLoading && (deployments.length > 0 || deploymentsPaging.hasPrev) && (
+            <ListPaginationKeyset
+              page={deploymentsPaging.page}
+              pageSize={deploymentsPaging.pageSize}
+              rowCount={deployments.length}
+              hasPrev={deploymentsPaging.hasPrev}
+              hasNext={!!deploymentsData?.nextPageToken}
+              onPrev={deploymentsPaging.goPrev}
+              onNext={() => deploymentsPaging.goNext(deploymentsData?.nextPageToken)}
+              onPageSizeChange={deploymentsPaging.setPageSize}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -1210,6 +1260,27 @@ export function FunctionDetailPage() {
               {run.isPending ? "执行中..." : asyncExec ? "异步执行" : "同步执行"}
             </Button>
           </div>
+          <div className="flex items-center gap-2">
+            <Select
+              value={execStatusFilter || "all"}
+              onValueChange={(v) => {
+                setExecStatusFilter(v === "all" ? "" : v);
+                executionsPaging.reset();
+              }}
+            >
+              <SelectTrigger className="h-8 w-[150px]">
+                <SelectValue placeholder="按状态过滤" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部状态</SelectItem>
+                <SelectItem value="queued">queued</SelectItem>
+                <SelectItem value="building">building</SelectItem>
+                <SelectItem value="running">running</SelectItem>
+                <SelectItem value="completed">completed</SelectItem>
+                <SelectItem value="failed">failed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           {executionsLoading ? (
             <p className="text-sm text-muted-foreground">加载中...</p>
           ) : executions.length === 0 ? (
@@ -1235,6 +1306,16 @@ export function FunctionDetailPage() {
               ))}
             </div>
           )}
+          <ListPaginationKeyset
+            page={executionsPaging.page}
+            pageSize={executionsPaging.pageSize}
+            rowCount={executions.length}
+            hasPrev={executionsPaging.hasPrev}
+            hasNext={!!executionsData?.nextPageToken}
+            onPrev={executionsPaging.goPrev}
+            onNext={() => executionsPaging.goNext(executionsData?.nextPageToken)}
+            onPageSizeChange={executionsPaging.setPageSize}
+          />
         </CardContent>
       </Card>
 

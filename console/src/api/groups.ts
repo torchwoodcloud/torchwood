@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { pageQuery, type ListMeta, type ListParams, type Page } from "./pagination";
 import type { ApiRequestConfig } from "./client";
 
 export interface Group {
@@ -24,9 +25,13 @@ export interface Membership {
   updated_at: string;
 }
 
-export async function listGroups(): Promise<Group[]> {
-  const res = await api.get<{ groups: Group[] }>("/server/groups");
-  return res.data.groups ?? [];
+// 服务端组列表（in-memory paginateDocuments，服务端 clamp 默认 25 / max 100，
+// created_at DESC）；对接服务端分页，pageSize 必传。
+export async function listGroups(params: ListParams): Promise<Page<Group>> {
+  const res = await api.get<{ groups: Group[] } & ListMeta>("/server/groups", {
+    params: pageQuery(params),
+  });
+  return { rows: res.data.groups ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function getGroup(id: string): Promise<Group> {
@@ -58,11 +63,16 @@ export async function updateGroupPrefs(
   return res.data.prefs ?? {};
 }
 
-export async function listMemberships(groupId: string): Promise<Membership[]> {
-  const res = await api.get<{ memberships: Membership[] }>(
-    `/server/groups/${groupId}/memberships`
+// 成员列表（同 ListGroups 的服务端分页口径）。
+export async function listMemberships(
+  groupId: string,
+  params: ListParams
+): Promise<Page<Membership>> {
+  const res = await api.get<{ memberships: Membership[] } & ListMeta>(
+    `/server/groups/${groupId}/memberships`,
+    { params: pageQuery(params) }
   );
-  return res.data.memberships ?? [];
+  return { rows: res.data.memberships ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
 export async function createMembership(
