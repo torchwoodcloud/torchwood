@@ -108,11 +108,17 @@ export async function listDefHolders(
 
 export async function listUserLedger(
   ownerId: string,
-  params: ListParams
+  params: ListParams & { defCode?: string; ascending?: boolean }
 ): Promise<Page<AssetLedgerEntry>> {
   const res = await api.get<{ entries: AssetLedgerEntry[] } & ListMeta>(
     `/server/assets/users/${ownerId}/ledger`,
-    { params: pageQuery(params) }
+    {
+      params: {
+        ...pageQuery(params),
+        def_code: params.defCode || undefined,
+        ascending: params.ascending || undefined,
+      },
+    }
   );
   return { rows: res.data.entries ?? [], nextPageToken: res.data.meta?.next_page_token };
 }

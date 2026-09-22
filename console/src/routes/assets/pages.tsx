@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus } from "lucide-react";
 import {
   createAssetDef,
   deleteAssetDef,
@@ -33,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ColumnDef } from "@/components/list/DataTable";
 import {
   DeleteButton,
@@ -359,8 +360,31 @@ export function AssetDefDetailPage() {
   );
 }
 
+// 流水动词的中文标签；未知动词回退原值（服务端新增枚举时不至于显示空白）。
+const LEDGER_KIND_LABELS: Record<string, string> = {
+  grant: "发放",
+  consume: "消耗",
+  transfer_out: "转出",
+  transfer_in: "转入",
+  mutate: "变更",
+  expire: "失效",
+};
+
+// placeholderData 只在同项目同用户间复用：切换项目 / 用户后不再用旧数据占位，
+// 避免「流水还是上一项目的、持有已是新项目的空结果」这类错位显示。
+function sameScopePlaceholder<T>(
+  prev: T | undefined,
+  prevKey: readonly unknown[] | undefined,
+  projectId: string | null,
+  owner: string,
+): T | undefined {
+  if (!prev || !prevKey) return undefined;
+  return prevKey[1] === projectId && prevKey[2] === owner ? prev : undefined;
+}
+
 export function UserAssetsPage() {
   const { projectId } = useAuth();
+  const tz = useUserTimezone();
   const [searchParams, setSearchParams] = useSearchParams();
   // 查询目标以 URL owner 参数为事实源：支持 /console/assets/users?owner=<id> 直达（用户详情页入口跳入）。
   const queryOwner = searchParams.get("owner")?.trim() ?? "";
@@ -376,18 +400,42 @@ export function UserAssetsPage() {
     queryFn: () =>
       listUserAssets(queryOwner, { pageSize: holdingsPaging.pageSize, pageToken: holdingsPaging.pageToken }),
     enabled: !!projectId && !!queryOwner,
-    placeholderData: (prev) => prev,
+    placeholderData: (prev, prevQuery) => sameScopePlaceholder(prev, prevQuery?.queryKey, projectId, queryOwner),
   });
   const holdingsRows = holdings.data?.rows ?? [];
+  // 流水过滤与排序：defCode 空 = 全部资产；ascending 缺省最新在前。
+  // 变更过滤/排序都 reset 分页（keyset 游标绑定参数组合）。
+  const [ledgerDefCode, setLedgerDefCode] = useState("");
+  const [ledgerAscending, setLedgerAscending] = useState(false);
   const ledgerPaging = useServerPaging();
   const ledger = useQuery({
-    queryKey: ["user-ledger", projectId, queryOwner, ledgerPaging.pageSize, ledgerPaging.pageToken],
+    queryKey: [
+      "user-ledger",
+      projectId,
+      queryOwner,
+      ledgerDefCode,
+      ledgerAscending,
+      ledgerPaging.pageSize,
+      ledgerPaging.pageToken,
+    ],
     queryFn: () =>
-      listUserLedger(queryOwner, { pageSize: ledgerPaging.pageSize, pageToken: ledgerPaging.pageToken }),
+      listUserLedger(queryOwner, {
+        pageSize: ledgerPaging.pageSize,
+        pageToken: ledgerPaging.pageToken,
+        defCode: ledgerDefCode || undefined,
+        ascending: ledgerAscending || undefined,
+      }),
     enabled: !!projectId && !!queryOwner,
-    placeholderData: (prev) => prev,
+    placeholderData: (prev, prevQuery) => sameScopePlaceholder(prev, prevQuery?.queryKey, projectId, queryOwner),
   });
   const ledgerRows = ledger.data?.rows ?? [];
+  // 资产类型下拉选项：项目全部定义（首屏一次拉取，页大小取服务端上限）。
+  const defOptions = useQuery({
+    queryKey: ["asset-defs-all", projectId],
+    queryFn: () => listAssetDefs({ pageSize: 100 }),
+    enabled: !!projectId && !!queryOwner,
+    staleTime: 60_000,
+  });
 
   const submit = () => {
     const v = ownerId.trim();
@@ -429,68 +477,146 @@ export function UserAssetsPage() {
 
       {queryOwner ? (
         <>
+          {/* 项目作用域提示：查询经 X-Torchwood-Project 头路由到全局 selector
+              选中的项目；用户 ID 是项目内标识，项目不对时这里会显示「无持有」
+              而不是目标项目的数据——把作用域显性化便于发现。 */}
+          <p className="text-sm text-muted-foreground">
+            查询项目：<span className="font-mono text-foreground">{projectId ?? "—"}</span>
+          </p>
           <Card>
-            <CardHeader>
-              <CardTitle>持有（只读，无 Grant / Consume / Transfer）</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {holdings.isLoading ? (
-                <p className="text-sm text-muted-foreground">加载中…</p>
-              ) : holdingsRows.length === 0 ? (
-                <p className="text-sm text-muted-foreground">无持有</p>
-              ) : (
-                <>
-                  <ul className="space-y-2 text-sm">
-                    {holdingsRows.map((h) => (
-                      <li key={h.id} className="font-mono">
-                        {h.def_code} {h.class} qty={formatInt64(h.quantity)}
-                      </li>
-                    ))}
-                  </ul>
-                  <ListPaginationKeyset
-                    page={holdingsPaging.page}
-                    pageSize={holdingsPaging.pageSize}
-                    rowCount={holdingsRows.length}
-                    hasPrev={holdingsPaging.hasPrev}
-                    hasNext={!!holdings.data?.nextPageToken}
-                    onPrev={holdingsPaging.goPrev}
-                    onNext={() => holdingsPaging.goNext(holdings.data?.nextPageToken)}
-                    onPageSizeChange={holdingsPaging.setPageSize}
-                  />
-                </>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>流水</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {ledger.isLoading ? (
-                <p className="text-sm text-muted-foreground">加载中…</p>
-              ) : ledgerRows.length === 0 ? (
-                <p className="text-sm text-muted-foreground">无流水</p>
-              ) : (
-                <>
-                  <ul className="space-y-2 text-sm">
-                    {ledgerRows.map((e) => (
-                      <li key={e.id} className="font-mono">
-                        {e.kind} {e.def_code ?? e.def_id} Δ{formatInt64(e.delta)} after={formatInt64(e.quantity_after)}
-                      </li>
-                    ))}
-                  </ul>
-                  <ListPaginationKeyset
-                    page={ledgerPaging.page}
-                    pageSize={ledgerPaging.pageSize}
-                    rowCount={ledgerRows.length}
-                    hasPrev={ledgerPaging.hasPrev}
-                    hasNext={!!ledger.data?.nextPageToken}
-                    onPrev={ledgerPaging.goPrev}
-                    onNext={() => ledgerPaging.goNext(ledger.data?.nextPageToken)}
-                    onPageSizeChange={ledgerPaging.setPageSize}
-                  />
-                </>
-              )}
+            <CardContent className="pt-6">
+              <Tabs defaultValue="holdings">
+                <TabsList>
+                  <TabsTrigger value="holdings">持有</TabsTrigger>
+                  <TabsTrigger value="ledger">流水</TabsTrigger>
+                </TabsList>
+                <TabsContent value="holdings">
+                  <p className="mb-3 text-sm text-muted-foreground">
+                    只读视图，无 Grant / Consume / Transfer 操作入口。
+                  </p>
+                  {holdings.isLoading ? (
+                    <p className="text-sm text-muted-foreground">加载中…</p>
+                  ) : holdingsRows.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">无持有</p>
+                  ) : (
+                    <>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>资产 Code</TableHead>
+                            <TableHead>类别</TableHead>
+                            <TableHead>数量</TableHead>
+                            <TableHead>等级</TableHead>
+                            <TableHead>到期时间</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {holdingsRows.map((h) => (
+                            <TableRow key={h.id}>
+                              <TableCell className="font-mono text-xs">{h.def_code || h.def_id}</TableCell>
+                              <TableCell>{h.class || "—"}</TableCell>
+                              <TableCell className="font-mono text-xs">{formatInt64(h.quantity)}</TableCell>
+                              <TableCell>{h.level ?? "—"}</TableCell>
+                              <TableCell>{h.expires_at ? formatDateTime(h.expires_at, tz) : "—"}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      <ListPaginationKeyset
+                        page={holdingsPaging.page}
+                        pageSize={holdingsPaging.pageSize}
+                        rowCount={holdingsRows.length}
+                        hasPrev={holdingsPaging.hasPrev}
+                        hasNext={!!holdings.data?.nextPageToken}
+                        onPrev={holdingsPaging.goPrev}
+                        onNext={() => holdingsPaging.goNext(holdings.data?.nextPageToken)}
+                        onPageSizeChange={holdingsPaging.setPageSize}
+                      />
+                    </>
+                  )}
+                </TabsContent>
+                <TabsContent value="ledger">
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <Select
+                      value={ledgerDefCode || "all"}
+                      onValueChange={(v) => {
+                        setLedgerDefCode(v === "all" ? "" : v);
+                        ledgerPaging.reset();
+                      }}
+                    >
+                      <SelectTrigger className="h-8 w-[180px]">
+                        <SelectValue placeholder="全部资产" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">全部资产</SelectItem>
+                        {(defOptions.data?.rows ?? []).map((d) => (
+                          <SelectItem key={d.id} value={d.code}>
+                            {d.code}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setLedgerAscending(!ledgerAscending);
+                        ledgerPaging.reset();
+                      }}
+                    >
+                      {ledgerAscending ? <ArrowUp className="h-3.5 w-3.5 mr-1" /> : <ArrowDown className="h-3.5 w-3.5 mr-1" />}
+                      {ledgerAscending ? "最早在前" : "最新在前"}
+                    </Button>
+                  </div>
+                  {ledger.isLoading ? (
+                    <p className="text-sm text-muted-foreground">加载中…</p>
+                  ) : ledgerRows.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">无流水</p>
+                  ) : (
+                    <>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>时间</TableHead>
+                            <TableHead>类型</TableHead>
+                            <TableHead>资产 Code</TableHead>
+                            <TableHead className="text-right">变动</TableHead>
+                            <TableHead className="text-right">变动后余额</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {ledgerRows.map((e) => (
+                            <TableRow key={e.id}>
+                              <TableCell className="whitespace-nowrap">{e.created_at ? formatDateTime(e.created_at, tz) : "—"}</TableCell>
+                              <TableCell>
+                                <Badge variant={e.kind === "grant" || e.kind === "transfer_in" ? "default" : "secondary"}>
+                                  {LEDGER_KIND_LABELS[e.kind] ?? e.kind}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="font-mono text-xs">{e.def_code || e.def_id}</TableCell>
+                              <TableCell className="text-right font-mono text-xs">
+                                {e.delta.startsWith("-") || e.delta === "0" ? "" : "+"}
+                                {formatInt64(e.delta)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-xs">{formatInt64(e.quantity_after)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      <ListPaginationKeyset
+                        page={ledgerPaging.page}
+                        pageSize={ledgerPaging.pageSize}
+                        rowCount={ledgerRows.length}
+                        hasPrev={ledgerPaging.hasPrev}
+                        hasNext={!!ledger.data?.nextPageToken}
+                        onPrev={ledgerPaging.goPrev}
+                        onNext={() => ledgerPaging.goNext(ledger.data?.nextPageToken)}
+                        onPageSizeChange={ledgerPaging.setPageSize}
+                      />
+                    </>
+                  )}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </>
