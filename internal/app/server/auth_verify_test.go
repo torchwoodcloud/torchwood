@@ -210,8 +210,8 @@ func (r *verifyAPIKeyRepo) GetAPIKeyBySecretHash(_ context.Context, hash string)
 	}
 	return nil, nil
 }
-func (r *verifyAPIKeyRepo) ListAPIKeys(context.Context, string) ([]projects.APIKey, error) {
-	return nil, nil
+func (r *verifyAPIKeyRepo) ListAPIKeys(context.Context, string, int, int, projects.APIKeyListFilter) ([]projects.APIKey, int, error) {
+	return nil, 0, nil
 }
 func (r *verifyAPIKeyRepo) UpdateAPIKey(context.Context, string, string, map[string]any) error {
 	return nil

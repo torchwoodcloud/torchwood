@@ -157,7 +157,7 @@ func (s *ProjectsService) CreateInviteCode(ctx context.Context, req *serverv1.Cr
 }
 
 func (s *ProjectsService) ListInviteCodes(ctx context.Context, req *serverv1.ListInviteCodesRequest) (*serverv1.ListInviteCodesResponse, error) {
-	codes, err := s.invites.List(ctx, req.GetProjectId())
+	codes, next, err := s.invites.List(ctx, req.GetProjectId(), int(req.GetPageSize()), req.GetPageToken())
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +167,7 @@ func (s *ProjectsService) ListInviteCodes(ctx context.Context, req *serverv1.Lis
 	}
 	return &serverv1.ListInviteCodesResponse{
 		InviteCodes: out,
-		Meta:        &sharedv1.ListResponseMeta{PageSize: int32(len(out))},
+		Meta:        &sharedv1.ListResponseMeta{PageSize: int32(len(out)), NextPageToken: next},
 	}, nil
 }
 

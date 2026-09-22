@@ -96,8 +96,8 @@ func (r *stubAPIKeyRepo) GetAPIKey(context.Context, string, string) (*projects.A
 func (r *stubAPIKeyRepo) GetAPIKeyBySecretHash(_ context.Context, hash string) (*projects.APIKey, error) {
 	return r.keys[hash], nil
 }
-func (r *stubAPIKeyRepo) ListAPIKeys(context.Context, string) ([]projects.APIKey, error) {
-	return nil, nil
+func (r *stubAPIKeyRepo) ListAPIKeys(context.Context, string, int, int, projects.APIKeyListFilter) ([]projects.APIKey, int, error) {
+	return nil, 0, nil
 }
 func (r *stubAPIKeyRepo) UpdateAPIKey(context.Context, string, string, map[string]any) error {
 	return nil

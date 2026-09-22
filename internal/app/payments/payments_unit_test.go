@@ -210,7 +210,7 @@ func (r memOrders) Update(_ context.Context, order *domainpayments.Order, expect
 func (r memOrders) ListByUser(context.Context, string, string, int, time.Time) ([]domainpayments.Order, error) {
 	return nil, nil
 }
-func (r memOrders) ListByProject(context.Context, string, int, time.Time) ([]domainpayments.Order, error) {
+func (r memOrders) ListByProject(context.Context, string, int, time.Time, domainpayments.OrderListFilter) ([]domainpayments.Order, error) {
 	return nil, nil
 }
 func (r memOrders) CloseExpiredInProject(context.Context, string, time.Time, int) (int64, error) {

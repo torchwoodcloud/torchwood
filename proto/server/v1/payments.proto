@@ -71,7 +71,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 service PaymentsService {
   option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
 
-  rpc ListOrders(shared.v1.ListRequest) returns (ListOrdersResponse) {
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse) {
     option (google.api.http) = { get: "/v1/server/payments/orders" };
     option (torchwood.shared.v1.method_auth) = {
       api_key_scope: { resource: SCOPE_RESOURCE_PAYMENTS, op: SCOPE_OP_READ }
@@ -161,6 +161,19 @@ message Fulfillment {
   google.protobuf.Struct detail = 6;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
+}
+
+// ListOrdersRequest 结构化过滤（audit-logs 先例）：exact 匹配 + 时间闭区间；
+// 分页固定 created_at DESC keyset 游标（page_token 由服务端签发）。
+message ListOrdersRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = { gte: 0, lte: 1000 }];
+  string page_token = 2 [(buf.validate.field).string.max_len = 4096];
+  // 下单用户 ID 精确匹配。
+  string user_id = 3 [(buf.validate.field).string.max_len = 128];
+  // 订单状态精确匹配：created | paying | paid | failed | closed | refunding | refunded。
+  string status = 4 [(buf.validate.field).string.max_len = 16];
+  google.protobuf.Timestamp created_after = 5;
+  google.protobuf.Timestamp created_before = 6;
 }
 
 message ListOrdersResponse {

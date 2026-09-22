@@ -16,7 +16,6 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/utilities"
-	"github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/grpclog"
@@ -67,7 +66,7 @@ var filter_APIKeysService_ListAPIKeys_0 = &utilities.DoubleArray{Encoding: map[s
 
 func request_APIKeysService_ListAPIKeys_0(ctx context.Context, marshaler runtime.Marshaler, client APIKeysServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var (
-		protoReq sharedv1.ListRequest
+		protoReq ListAPIKeysRequest
 		metadata runtime.ServerMetadata
 	)
 	if req.Body != nil {
@@ -85,7 +84,7 @@ func request_APIKeysService_ListAPIKeys_0(ctx context.Context, marshaler runtime
 
 func local_request_APIKeysService_ListAPIKeys_0(ctx context.Context, marshaler runtime.Marshaler, server APIKeysServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var (
-		protoReq sharedv1.ListRequest
+		protoReq ListAPIKeysRequest
 		metadata runtime.ServerMetadata
 	)
 	if err := req.ParseForm(); err != nil {

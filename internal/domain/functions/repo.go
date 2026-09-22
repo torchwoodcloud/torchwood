@@ -63,6 +63,14 @@ const MinConcurrencyTemplateVersion int32 = 3
 // 第二次预占 INSERT 撞 partial 唯一索引——调用方应回读既有行原样返回。
 var ErrExecutionIdempotencyConflict = errors.New("execution idempotency conflict")
 
+// ExecutionListFilter 是执行记录列表的结构化过滤（exact 匹配 + created_at
+// 闭区间；零值字段 = 不过滤）。Status 取值 = 下方 ExecutionStatus* 常量。
+type ExecutionListFilter struct {
+	Status        string
+	CreatedAfter  time.Time
+	CreatedBefore time.Time
+}
+
 // FunctionRepo 持久化函数/部署/变量/执行记录（bun 静态表适配）。
 type FunctionRepo interface {
 	CreateFunction(ctx context.Context, fn *Function) error
@@ -73,7 +81,11 @@ type FunctionRepo interface {
 
 	CreateDeployment(ctx context.Context, d *Deployment) error
 	GetDeployment(ctx context.Context, projectID, functionID, deploymentID string) (*Deployment, error)
+	// ListDeployments 全量列出（内部选部署逻辑：按 created_at DESC 取首个 ready）。
 	ListDeployments(ctx context.Context, projectID, functionID string) ([]Deployment, error)
+	// ListDeploymentsPaged 管理面分页列出（created_at DESC，offset 型分页，
+	// 返回总数供 next_page_token 计算）。
+	ListDeploymentsPaged(ctx context.Context, projectID, functionID string, limit, offset int) ([]Deployment, int, error)
 	UpdateDeployment(ctx context.Context, d *Deployment) error
 	// ActivateDeployment 在一个事务内把部署置 ready 并维护
 	// functions.latest_ready_deployment_id（热路径清账，P0.5）。
@@ -85,7 +97,9 @@ type FunctionRepo interface {
 
 	CreateExecution(ctx context.Context, e *ExecutionRecord) error
 	GetExecution(ctx context.Context, projectID, functionID, executionID string) (*ExecutionRecord, error)
-	ListExecutions(ctx context.Context, projectID, functionID string, limit int) ([]ExecutionRecord, error)
+	// ListExecutions 管理面分页列出（created_at DESC + ExecutionListFilter
+	// 结构化过滤，offset 型分页，返回总数）。
+	ListExecutions(ctx context.Context, projectID, functionID string, limit, offset int, f ExecutionListFilter) ([]ExecutionRecord, int, error)
 	UpdateExecution(ctx context.Context, e *ExecutionRecord) error
 	// TransitionExecutionStatus 条件更新执行状态（CAS）：仅当当前状态等于 from
 	// 时置为 to 并刷新 updated_at，返回是否生效。用于 worker 领取闸门

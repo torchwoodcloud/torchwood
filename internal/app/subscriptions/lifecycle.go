@@ -114,14 +114,32 @@ func (s *Subscriptions) GetSubscription(ctx context.Context, subscriptionID stri
 	return sub, plan, nil
 }
 
-// ListProjectSubscriptions 项目订阅列表（Server 面）。
-func (s *Subscriptions) ListProjectSubscriptions(ctx context.Context, limit int, before time.Time) ([]domainsubs.Subscription, error) {
+// ListProjectSubscriptions 项目订阅列表（Server 面，created_at 倒序游标分页 +
+// 结构化过滤）。
+func (s *Subscriptions) ListProjectSubscriptions(ctx context.Context, limit int, before time.Time, f domainsubs.SubscriptionListFilter) ([]domainsubs.Subscription, error) {
+	if f.Status != "" && !isValidSubscriptionListStatus(f.Status) {
+		return nil, status.Errorf(codes.InvalidArgument, "unknown subscription status %q", f.Status)
+	}
 	projectID, err := projectScope(ctx)
 	if err != nil {
 		return nil, err
 	}
 	limit, before = normalizeList(limit, before)
-	return s.subs.ListByProject(ctx, projectID, limit, before)
+	return s.subs.ListByProject(ctx, projectID, limit, before, f)
+}
+
+// isValidSubscriptionListStatus 限定订阅列表 status 过滤的取值（与状态机一致，
+// 含终态：列表按状态排查时需能命中 canceled / expired 行）。
+func isValidSubscriptionListStatus(s domainsubs.Status) bool {
+	switch s {
+	case domainsubs.StatusTrialing,
+		domainsubs.StatusActive,
+		domainsubs.StatusPastDue,
+		domainsubs.StatusCanceled,
+		domainsubs.StatusExpired:
+		return true
+	}
+	return false
 }
 
 // ForceCancel 立即取消（Server 面）。

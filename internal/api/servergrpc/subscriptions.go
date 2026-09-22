@@ -126,12 +126,22 @@ func (s *SubscriptionsService) DeletePlan(ctx context.Context, req *serverv1.Del
 	return &sharedv1.Empty{}, nil
 }
 
-func (s *SubscriptionsService) ListSubscriptions(ctx context.Context, req *sharedv1.ListRequest) (*serverv1.ListSubscriptionsResponse, error) {
+func (s *SubscriptionsService) ListSubscriptions(ctx context.Context, req *serverv1.ListSubscriptionsRequest) (*serverv1.ListSubscriptionsResponse, error) {
 	before, err := decodeServerOrderCursor(req.GetPageToken())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid page token")
 	}
-	rows, err := s.subs.ListProjectSubscriptions(ctx, int(req.GetPageSize()), before)
+	f := domainsubs.SubscriptionListFilter{
+		UserID: req.GetUserId(),
+		Status: domainsubs.Status(req.GetStatus()),
+	}
+	if ts := req.GetCreatedAfter(); ts != nil {
+		f.CreatedAfter = ts.AsTime()
+	}
+	if ts := req.GetCreatedBefore(); ts != nil {
+		f.CreatedBefore = ts.AsTime()
+	}
+	rows, err := s.subs.ListProjectSubscriptions(ctx, int(req.GetPageSize()), before, f)
 	if err != nil {
 		return nil, err
 	}

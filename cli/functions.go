@@ -211,12 +211,19 @@ func newFunctionsDeploymentsCreateCmd(g *GlobalFlags) *verb {
 }
 
 func newFunctionsDeploymentsListCmd(g *GlobalFlags) *verb {
-	return newVerb(g, "list", "list function deployments", "functions deployments list <function-id>", nil,
+	var pageSize, pageToken = 0, ""
+	return newVerb(g, "list", "list function deployments", "functions deployments list [--page-size <n>] [--page-token <t>] <function-id>",
+		func(fs *flag.FlagSet) {
+			fs.IntVar(&pageSize, "page-size", 0, "page size (server default when omitted)")
+			fs.StringVar(&pageToken, "page-token", "", "next page token from the previous response")
+		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
 				return err
 			}
-			return call(g, env, methodFunctionsListDeployments, map[string]any{"functionId": args[0]})
+			req := listJSON(pageSize, pageToken)
+			req["functionId"] = args[0]
+			return call(g, env, methodFunctionsListDeployments, req)
 		})
 }
 
@@ -276,15 +283,27 @@ func newFunctionsVariablesSetCmd(g *GlobalFlags) *verb {
 
 // newFunctionsExecutionsCmd: functions executions create/list/get。
 func newFunctionsExecutionsCmd(g *GlobalFlags) *group {
+	var execStatus, execPageToken = "", ""
+	var execPageSize = 0
 	return newGroup(g, "executions", "function execution management", func(sub *commands.App) {
 		sub.Register(
 			newFunctionsExecutionsCreateCmd(g),
-			newVerb(g, "list", "list execution records (latest 100)", "functions executions list <function-id>", nil,
+			newVerb(g, "list", "list execution records", "functions executions list [--status <s>] [--page-size <n>] [--page-token <t>] <function-id>",
+				func(fs *flag.FlagSet) {
+					fs.StringVar(&execStatus, "status", "", "filter by execution status (queued|building|running|completed|failed)")
+					fs.IntVar(&execPageSize, "page-size", 0, "page size (server default when omitted)")
+					fs.StringVar(&execPageToken, "page-token", "", "next page token from the previous response")
+				},
 				func(v *verb, env *commands.Environment, args []string) error {
 					if err := exactArgs(v, args, 1); err != nil {
 						return err
 					}
-					return call(g, env, methodFunctionsListExecutions, map[string]any{"functionId": args[0]})
+					req := listJSON(execPageSize, execPageToken)
+					if execStatus != "" {
+						req["status"] = execStatus
+					}
+					req["functionId"] = args[0]
+					return call(g, env, methodFunctionsListExecutions, req)
 				}),
 			newVerb(g, "get", "get an execution record by ID", "functions executions get <function-id> <execution-id>", nil,
 				func(v *verb, env *commands.Environment, args []string) error {

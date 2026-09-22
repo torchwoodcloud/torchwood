@@ -286,14 +286,32 @@ func (p *Payments) GetOrder(ctx context.Context, orderID string) (*domainpayment
 	return order, nil
 }
 
-// ListOrders 返回项目订单列表（Server 面，created_at 倒序游标分页）。
-func (p *Payments) ListOrders(ctx context.Context, limit int, before time.Time) ([]domainpayments.Order, error) {
+// ListOrders 返回项目订单列表（Server 面，created_at 倒序游标分页 + 结构化过滤）。
+func (p *Payments) ListOrders(ctx context.Context, limit int, before time.Time, f domainpayments.OrderListFilter) ([]domainpayments.Order, error) {
+	if f.Status != "" && !isValidOrderListStatus(f.Status) {
+		return nil, status.Errorf(codes.InvalidArgument, "unknown order status %q", f.Status)
+	}
 	projectID, err := p.projectScope(ctx)
 	if err != nil {
 		return nil, err
 	}
 	limit, before = normalizeList(limit, before)
-	return p.orders.ListByProject(ctx, projectID, limit, before)
+	return p.orders.ListByProject(ctx, projectID, limit, before, f)
+}
+
+// isValidOrderListStatus 限定订单列表 status 过滤的取值（与订单状态机一致）。
+func isValidOrderListStatus(s domainpayments.OrderStatus) bool {
+	switch s {
+	case domainpayments.OrderStatusCreated,
+		domainpayments.OrderStatusPaying,
+		domainpayments.OrderStatusPaid,
+		domainpayments.OrderStatusFailed,
+		domainpayments.OrderStatusClosed,
+		domainpayments.OrderStatusRefunding,
+		domainpayments.OrderStatusRefunded:
+		return true
+	}
+	return false
 }
 
 // CloseExpiredOrders 把超时未付（created/paying 超 expires_at）订单翻

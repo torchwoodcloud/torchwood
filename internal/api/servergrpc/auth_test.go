@@ -53,8 +53,8 @@ func (r *stubVerifyAPIKeyRepo) GetAPIKey(context.Context, string, string) (*proj
 func (r *stubVerifyAPIKeyRepo) GetAPIKeyBySecretHash(context.Context, string) (*projects.APIKey, error) {
 	return nil, nil
 }
-func (r *stubVerifyAPIKeyRepo) ListAPIKeys(context.Context, string) ([]projects.APIKey, error) {
-	return nil, nil
+func (r *stubVerifyAPIKeyRepo) ListAPIKeys(context.Context, string, int, int, projects.APIKeyListFilter) ([]projects.APIKey, int, error) {
+	return nil, 0, nil
 }
 func (r *stubVerifyAPIKeyRepo) UpdateAPIKey(context.Context, string, string, map[string]any) error {
 	return nil

@@ -34,7 +34,8 @@ func (s *SubscriptionsService) DeletePlan(ctx context.Context, planID string) er
 	return err
 }
 
-func (s *SubscriptionsService) ListSubscriptions(ctx context.Context, req *sharedv1.ListRequest) (*serverv1.ListSubscriptionsResponse, error) {
+// ListSubscriptions 列出项目订阅（支持 user_id/status/时间范围结构化过滤）。
+func (s *SubscriptionsService) ListSubscriptions(ctx context.Context, req *serverv1.ListSubscriptionsRequest) (*serverv1.ListSubscriptionsResponse, error) {
 	return s.api.ListSubscriptions(ctx, req)
 }
 

@@ -225,7 +225,7 @@ var filter_SubscriptionsService_ListSubscriptions_0 = &utilities.DoubleArray{Enc
 
 func request_SubscriptionsService_ListSubscriptions_0(ctx context.Context, marshaler runtime.Marshaler, client SubscriptionsServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var (
-		protoReq sharedv1.ListRequest
+		protoReq ListSubscriptionsRequest
 		metadata runtime.ServerMetadata
 	)
 	if req.Body != nil {
@@ -243,7 +243,7 @@ func request_SubscriptionsService_ListSubscriptions_0(ctx context.Context, marsh
 
 func local_request_SubscriptionsService_ListSubscriptions_0(ctx context.Context, marshaler runtime.Marshaler, server SubscriptionsServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var (
-		protoReq sharedv1.ListRequest
+		protoReq ListSubscriptionsRequest
 		metadata runtime.ServerMetadata
 	)
 	if err := req.ParseForm(); err != nil {

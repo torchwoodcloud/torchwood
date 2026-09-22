@@ -60,8 +60,8 @@ func (f *fakeAPIKeyRepository) GetAPIKey(ctx context.Context, projectID, id stri
 func (f *fakeAPIKeyRepository) GetAPIKeyBySecretHash(ctx context.Context, hash string) (*projects.APIKey, error) {
 	return nil, nil
 }
-func (f *fakeAPIKeyRepository) ListAPIKeys(ctx context.Context, projectID string) ([]projects.APIKey, error) {
-	return nil, nil
+func (f *fakeAPIKeyRepository) ListAPIKeys(ctx context.Context, projectID string, limit, offset int, filter projects.APIKeyListFilter) ([]projects.APIKey, int, error) {
+	return nil, 0, nil
 }
 func (f *fakeAPIKeyRepository) UpdateAPIKey(ctx context.Context, projectID, id string, cols map[string]any) error {
 	return nil

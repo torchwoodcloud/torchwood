@@ -210,7 +210,7 @@ func (r memSubs) ListNonTerminalByUserPlan(_ context.Context, projectID, userID,
 func (r memSubs) ListByUser(context.Context, string, string, int, time.Time) ([]domainsubs.Subscription, error) {
 	return nil, nil
 }
-func (r memSubs) ListByProject(context.Context, string, int, time.Time) ([]domainsubs.Subscription, error) {
+func (r memSubs) ListByProject(context.Context, string, int, time.Time, domainsubs.SubscriptionListFilter) ([]domainsubs.Subscription, error) {
 	return nil, nil
 }
 func (r memSubs) Update(_ context.Context, sub *domainsubs.Subscription, expect domainsubs.Status) error {
@@ -725,7 +725,7 @@ func (s *memPayStore) Update(_ context.Context, order *domainpayments.Order, exp
 func (s *memPayStore) ListByUser(context.Context, string, string, int, time.Time) ([]domainpayments.Order, error) {
 	return nil, nil
 }
-func (s *memPayStore) ListByProject(context.Context, string, int, time.Time) ([]domainpayments.Order, error) {
+func (s *memPayStore) ListByProject(context.Context, string, int, time.Time, domainpayments.OrderListFilter) ([]domainpayments.Order, error) {
 	return nil, nil
 }
 func (s *memPayStore) CloseExpiredInProject(context.Context, string, time.Time, int) (int64, error) {

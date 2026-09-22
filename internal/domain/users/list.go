@@ -13,6 +13,7 @@ var (
 
 // 系统表 List 只编译这些列；未知属性 → ErrInvalidListQuery（适配器映射 InvalidArgument）。
 var listAttributes = map[string]struct{}{
+	"id":         {},
 	"email":      {},
 	"name":       {},
 	"status":     {},

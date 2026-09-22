@@ -14,6 +14,7 @@ import (
 
 	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
+	"github.com/torchwoodcloud/torchwood/pkg/crud"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -393,11 +394,33 @@ func (f *Functions) verifyBuildEnabled() bool {
 	return d == nil || d.VerifyBuild == nil || d.GetVerifyBuild()
 }
 
-func (f *Functions) ListDeployments(ctx context.Context, projectID, functionID string) ([]domainfunctions.Deployment, error) {
+// ListDeployments 返回函数部署列表（created_at DESC，offset 型分页；pageToken
+// 为服务端签发的 opaque token，返回 next_page_token，空串 = 没有更多页）。
+func (f *Functions) ListDeployments(ctx context.Context, projectID, functionID string, pageSize int, pageToken string) ([]domainfunctions.Deployment, string, error) {
 	if _, err := f.repo.GetFunction(ctx, projectID, functionID); err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return f.repo.ListDeployments(ctx, projectID, functionID)
+	offset := 0
+	if pageToken != "" {
+		off, err := crud.DecodePageToken(pageToken)
+		if err != nil {
+			return nil, "", status.Error(codes.InvalidArgument, "invalid page token")
+		}
+		offset = off
+	}
+	rows, total, err := f.repo.ListDeploymentsPaged(ctx, projectID, functionID, pageSize, offset)
+	if err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if len(rows) > 0 && offset+len(rows) < total {
+		tok, err := crud.EncodePageToken(offset + len(rows))
+		if err != nil {
+			return nil, "", err
+		}
+		next = tok
+	}
+	return rows, next, nil
 }
 
 func (f *Functions) GetDeployment(ctx context.Context, projectID, functionID, deploymentID string) (*domainfunctions.Deployment, error) {

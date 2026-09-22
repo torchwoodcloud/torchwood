@@ -33,7 +33,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type APIKeysServiceClient interface {
 	CreateAPIKey(ctx context.Context, in *CreateAPIKeyRequest, opts ...grpc.CallOption) (*APIKeyWithSecret, error)
-	ListAPIKeys(ctx context.Context, in *v1.ListRequest, opts ...grpc.CallOption) (*ListAPIKeysResponse, error)
+	ListAPIKeys(ctx context.Context, in *ListAPIKeysRequest, opts ...grpc.CallOption) (*ListAPIKeysResponse, error)
 	GetAPIKey(ctx context.Context, in *GetAPIKeyRequest, opts ...grpc.CallOption) (*APIKey, error)
 	// 更新 key 治理字段（T-02）：可改 name/scopes/enabled/expire_at；
 	// secret 无原地轮换——平滑轮换 = 新建 key + 双 key 并存过渡 + 旧 key
@@ -71,7 +71,7 @@ func (c *aPIKeysServiceClient) CreateAPIKey(ctx context.Context, in *CreateAPIKe
 	return out, nil
 }
 
-func (c *aPIKeysServiceClient) ListAPIKeys(ctx context.Context, in *v1.ListRequest, opts ...grpc.CallOption) (*ListAPIKeysResponse, error) {
+func (c *aPIKeysServiceClient) ListAPIKeys(ctx context.Context, in *ListAPIKeysRequest, opts ...grpc.CallOption) (*ListAPIKeysResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListAPIKeysResponse)
 	err := c.cc.Invoke(ctx, APIKeysService_ListAPIKeys_FullMethodName, in, out, cOpts...)
@@ -126,7 +126,7 @@ func (c *aPIKeysServiceClient) WhoAmI(ctx context.Context, in *WhoAmIRequest, op
 // for forward compatibility.
 type APIKeysServiceServer interface {
 	CreateAPIKey(context.Context, *CreateAPIKeyRequest) (*APIKeyWithSecret, error)
-	ListAPIKeys(context.Context, *v1.ListRequest) (*ListAPIKeysResponse, error)
+	ListAPIKeys(context.Context, *ListAPIKeysRequest) (*ListAPIKeysResponse, error)
 	GetAPIKey(context.Context, *GetAPIKeyRequest) (*APIKey, error)
 	// 更新 key 治理字段（T-02）：可改 name/scopes/enabled/expire_at；
 	// secret 无原地轮换——平滑轮换 = 新建 key + 双 key 并存过渡 + 旧 key
@@ -157,7 +157,7 @@ type UnimplementedAPIKeysServiceServer struct{}
 func (UnimplementedAPIKeysServiceServer) CreateAPIKey(context.Context, *CreateAPIKeyRequest) (*APIKeyWithSecret, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateAPIKey not implemented")
 }
-func (UnimplementedAPIKeysServiceServer) ListAPIKeys(context.Context, *v1.ListRequest) (*ListAPIKeysResponse, error) {
+func (UnimplementedAPIKeysServiceServer) ListAPIKeys(context.Context, *ListAPIKeysRequest) (*ListAPIKeysResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListAPIKeys not implemented")
 }
 func (UnimplementedAPIKeysServiceServer) GetAPIKey(context.Context, *GetAPIKeyRequest) (*APIKey, error) {
@@ -212,7 +212,7 @@ func _APIKeysService_CreateAPIKey_Handler(srv interface{}, ctx context.Context, 
 }
 
 func _APIKeysService_ListAPIKeys_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(v1.ListRequest)
+	in := new(ListAPIKeysRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -224,7 +224,7 @@ func _APIKeysService_ListAPIKeys_Handler(srv interface{}, ctx context.Context, d
 		FullMethod: APIKeysService_ListAPIKeys_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(APIKeysServiceServer).ListAPIKeys(ctx, req.(*v1.ListRequest))
+		return srv.(APIKeysServiceServer).ListAPIKeys(ctx, req.(*ListAPIKeysRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

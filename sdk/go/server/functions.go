@@ -54,8 +54,8 @@ func (s *FunctionsService) CreateDeployment(ctx context.Context, req *serverv1.C
 	return s.api.CreateDeployment(ctx, req)
 }
 
-// ListDeployments 列出函数部署。
-func (s *FunctionsService) ListDeployments(ctx context.Context, req *serverv1.GetFunctionRequest) (*serverv1.ListDeploymentsResponse, error) {
+// ListDeployments 分页列出函数部署（page_size/page_token 见 ListDeploymentsRequest）。
+func (s *FunctionsService) ListDeployments(ctx context.Context, req *serverv1.ListDeploymentsRequest) (*serverv1.ListDeploymentsResponse, error) {
 	return s.api.ListDeployments(ctx, req)
 }
 
@@ -112,8 +112,8 @@ func (s *FunctionsService) CreateExecution(ctx context.Context, req *serverv1.Cr
 	return s.api.CreateExecution(ctx, req)
 }
 
-// ListExecutions 列出执行记录。
-func (s *FunctionsService) ListExecutions(ctx context.Context, req *serverv1.GetFunctionRequest) (*serverv1.ListExecutionsResponse, error) {
+// ListExecutions 分页列出执行记录（支持 status/created_at 过滤，见 ListExecutionsRequest）。
+func (s *FunctionsService) ListExecutions(ctx context.Context, req *serverv1.ListExecutionsRequest) (*serverv1.ListExecutionsResponse, error) {
 	return s.api.ListExecutions(ctx, req)
 }
 

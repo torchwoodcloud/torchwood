@@ -4,7 +4,6 @@ import (
 	"context"
 
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
-	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 )
 
 // PaymentsService 封装 Server API 的支付管理（读 + 退款/人工履约）。
@@ -13,8 +12,8 @@ type PaymentsService struct {
 	api serverv1.PaymentsServiceClient
 }
 
-// ListOrders 列出项目订单。
-func (s *PaymentsService) ListOrders(ctx context.Context, req *sharedv1.ListRequest) (*serverv1.ListOrdersResponse, error) {
+// ListOrders 列出项目订单（支持 user_id/status/时间范围结构化过滤）。
+func (s *PaymentsService) ListOrders(ctx context.Context, req *serverv1.ListOrdersRequest) (*serverv1.ListOrdersResponse, error) {
 	return s.api.ListOrders(ctx, req)
 }
 

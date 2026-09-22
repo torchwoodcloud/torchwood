@@ -31,8 +31,8 @@ func (r *whoamiStubRepo) GetAPIKey(context.Context, string, string) (*projects.A
 func (r *whoamiStubRepo) GetAPIKeyBySecretHash(context.Context, string) (*projects.APIKey, error) {
 	return nil, nil
 }
-func (r *whoamiStubRepo) ListAPIKeys(context.Context, string) ([]projects.APIKey, error) {
-	return nil, nil
+func (r *whoamiStubRepo) ListAPIKeys(context.Context, string, int, int, projects.APIKeyListFilter) ([]projects.APIKey, int, error) {
+	return nil, 0, nil
 }
 func (r *whoamiStubRepo) UpdateAPIKey(context.Context, string, string, map[string]any) error {
 	return nil

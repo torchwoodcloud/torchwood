@@ -9,7 +9,6 @@ import (
 	appserver "github.com/torchwoodcloud/torchwood/internal/app/server"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
-	"github.com/torchwoodcloud/torchwood/pkg/crud"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -57,52 +56,28 @@ func (s *APIKeysService) CreateAPIKey(ctx context.Context, req *serverv1.CreateA
 	}, nil
 }
 
-func (s *APIKeysService) ListAPIKeys(ctx context.Context, req *sharedv1.ListRequest) (*serverv1.ListAPIKeysResponse, error) {
-	params, err := crud.ParseListParams(req.GetPageSize(), req.GetPageToken(), "", "")
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
+func (s *APIKeysService) ListAPIKeys(ctx context.Context, req *serverv1.ListAPIKeysRequest) (*serverv1.ListAPIKeysResponse, error) {
 	projectID := s.projectID(ctx)
 	if projectID == "" {
 		return nil, status.Error(codes.Unauthenticated, "missing project context")
 	}
-	keys, err := s.apiKeys.List(ctx, projectID)
+	f := projects.APIKeyListFilter{}
+	if req.Enabled != nil {
+		f.Enabled = req.Enabled
+	}
+	keys, next, err := s.apiKeys.List(ctx, projectID, int(req.GetPageSize()), req.GetPageToken(), f)
 	if err != nil {
 		return nil, err
 	}
-	start := params.Offset
-	if start > len(keys) {
-		start = len(keys)
-	}
-	end := start + int(params.PageSize)
-	if end > len(keys) {
-		end = len(keys)
-	}
-	page := keys[start:end]
-	hasMore := end < len(keys)
-	info := crud.BuildPaginationInfo(params, len(keys), hasMore)
-	var nextToken, prevToken string
-	if info.HasNext {
-		if nextToken, err = crud.EncodePageToken(info.NextOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-	if info.HasPrevious {
-		if prevToken, err = crud.EncodePageToken(info.PreviousOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-	out := make([]*serverv1.APIKey, len(page))
-	for i := range page {
-		out[i] = mapAPIKey(&page[i])
+	out := make([]*serverv1.APIKey, len(keys))
+	for i := range keys {
+		out[i] = mapAPIKey(&keys[i])
 	}
 	return &serverv1.ListAPIKeysResponse{
 		ApiKeys: out,
 		Meta: &sharedv1.ListResponseMeta{
-			PageSize:      info.PageSize,
-			TotalCount:    int32(info.TotalCount),
-			NextPageToken: nextToken,
-			PrevPageToken: prevToken,
+			PageSize:      req.GetPageSize(),
+			NextPageToken: next,
 		},
 	}, nil
 }

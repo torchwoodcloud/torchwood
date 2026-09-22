@@ -290,16 +290,19 @@ func (s *FunctionsService) CreateDeployment(ctx context.Context, req *serverv1.C
 	return mapDeployment(dep), nil
 }
 
-func (s *FunctionsService) ListDeployments(ctx context.Context, req *serverv1.GetFunctionRequest) (*serverv1.ListDeploymentsResponse, error) {
+func (s *FunctionsService) ListDeployments(ctx context.Context, req *serverv1.ListDeploymentsRequest) (*serverv1.ListDeploymentsResponse, error) {
 	projectID, err := s.projectID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	deps, err := s.functions.ListDeployments(ctx, projectID, req.GetFunctionId())
+	deps, next, err := s.functions.ListDeployments(ctx, projectID, req.GetFunctionId(), int(req.GetPageSize()), req.GetPageToken())
 	if err != nil {
 		return nil, err
 	}
-	resp := &serverv1.ListDeploymentsResponse{Deployments: make([]*serverv1.Deployment, len(deps))}
+	resp := &serverv1.ListDeploymentsResponse{
+		Deployments: make([]*serverv1.Deployment, len(deps)),
+		Meta:        &sharedv1.ListResponseMeta{PageSize: req.GetPageSize(), NextPageToken: next},
+	}
 	for i := range deps {
 		resp.Deployments[i] = mapDeployment(&deps[i])
 	}
@@ -394,16 +397,26 @@ func (s *FunctionsService) CreateExecution(ctx context.Context, req *serverv1.Cr
 	return mapExecution(rec), nil
 }
 
-func (s *FunctionsService) ListExecutions(ctx context.Context, req *serverv1.GetFunctionRequest) (*serverv1.ListExecutionsResponse, error) {
+func (s *FunctionsService) ListExecutions(ctx context.Context, req *serverv1.ListExecutionsRequest) (*serverv1.ListExecutionsResponse, error) {
 	projectID, err := s.projectID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	recs, err := s.functions.ListExecutions(ctx, projectID, req.GetFunctionId())
+	flt := domainfunctions.ExecutionListFilter{Status: req.GetStatus()}
+	if ts := req.GetCreatedAfter(); ts != nil {
+		flt.CreatedAfter = ts.AsTime()
+	}
+	if ts := req.GetCreatedBefore(); ts != nil {
+		flt.CreatedBefore = ts.AsTime()
+	}
+	recs, next, err := s.functions.ListExecutions(ctx, projectID, req.GetFunctionId(), int(req.GetPageSize()), req.GetPageToken(), flt)
 	if err != nil {
 		return nil, err
 	}
-	resp := &serverv1.ListExecutionsResponse{Executions: make([]*serverv1.Execution, len(recs))}
+	resp := &serverv1.ListExecutionsResponse{
+		Executions: make([]*serverv1.Execution, len(recs)),
+		Meta:       &sharedv1.ListResponseMeta{PageSize: req.GetPageSize(), NextPageToken: next},
+	}
 	for i := range recs {
 		resp.Executions[i] = mapExecution(&recs[i])
 	}

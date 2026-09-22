@@ -104,7 +104,7 @@ service SubscriptionsService {
     };
   }
 
-  rpc ListSubscriptions(shared.v1.ListRequest) returns (ListSubscriptionsResponse) {
+  rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse) {
     option (google.api.http) = { get: "/v1/server/subscriptions" };
     option (torchwood.shared.v1.method_auth) = {
       api_key_scope: { resource: SCOPE_RESOURCE_SUBSCRIPTIONS, op: SCOPE_OP_READ }
@@ -229,6 +229,19 @@ message DeletePlanRequest {
 message ListPlansResponse {
   repeated SubscriptionPlan plans = 1;
   shared.v1.ListResponseMeta meta = 2;
+}
+
+// ListSubscriptionsRequest 结构化过滤（audit-logs 先例）：exact 匹配 + 时间闭
+// 区间；分页固定 created_at DESC keyset 游标（page_token 由服务端签发）。
+message ListSubscriptionsRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = { gte: 0, lte: 1000 }];
+  string page_token = 2 [(buf.validate.field).string.max_len = 4096];
+  // 订阅用户 ID 精确匹配。
+  string user_id = 3 [(buf.validate.field).string.max_len = 128];
+  // 订阅状态精确匹配：trialing | active | past_due | canceled | expired。
+  string status = 4 [(buf.validate.field).string.max_len = 16];
+  google.protobuf.Timestamp created_after = 5;
+  google.protobuf.Timestamp created_before = 6;
 }
 
 message ListSubscriptionsResponse {

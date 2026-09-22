@@ -185,7 +185,7 @@ func (r *paymentOrderRepo) ListByUser(ctx context.Context, projectID, userID str
 	return mapOrdersToDomain(rows), nil
 }
 
-func (r *paymentOrderRepo) ListByProject(ctx context.Context, projectID string, limit int, before time.Time) ([]payments.Order, error) {
+func (r *paymentOrderRepo) ListByProject(ctx context.Context, projectID string, limit int, before time.Time, f payments.OrderListFilter) ([]payments.Order, error) {
 	ctx2, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	conn, sch, expr, err := Scoped(ctx2, r.db, projectID, "payment_orders", "po")
@@ -193,10 +193,22 @@ func (r *paymentOrderRepo) ListByProject(ctx context.Context, projectID string, 
 		return nil, err
 	}
 	var rows []model.PaymentOrder
-	err = conn.NewSelect().Model(&rows).ModelTableExpr(expr, sch).
+	sel := conn.NewSelect().Model(&rows).ModelTableExpr(expr, sch).
 		Where("po.project_id = ?", projectID).
-		Where("po.created_at < ?", before).
-		Order("po.created_at DESC").
+		Where("po.created_at < ?", before)
+	if f.UserID != "" {
+		sel = sel.Where("po.user_id = ?", f.UserID)
+	}
+	if f.Status != "" {
+		sel = sel.Where("po.status = ?", string(f.Status))
+	}
+	if !f.CreatedAfter.IsZero() {
+		sel = sel.Where("po.created_at >= ?", f.CreatedAfter)
+	}
+	if !f.CreatedBefore.IsZero() {
+		sel = sel.Where("po.created_at <= ?", f.CreatedBefore)
+	}
+	err = sel.Order("po.created_at DESC").
 		Limit(limit).
 		Scan(ctx2)
 	if err != nil {

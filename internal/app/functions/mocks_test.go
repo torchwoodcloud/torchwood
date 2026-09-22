@@ -2,6 +2,7 @@ package functions
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -174,7 +175,7 @@ func (r *mockRepo) GetExecution(_ context.Context, projectID, functionID, execut
 	return e, nil
 }
 
-func (r *mockRepo) ListExecutions(_ context.Context, projectID, functionID string, limit int) ([]domainfunctions.ExecutionRecord, error) {
+func (r *mockRepo) ListExecutions(_ context.Context, projectID, functionID string, limit, offset int, _ domainfunctions.ExecutionListFilter) ([]domainfunctions.ExecutionRecord, int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var out []domainfunctions.ExecutionRecord
@@ -183,10 +184,38 @@ func (r *mockRepo) ListExecutions(_ context.Context, projectID, functionID strin
 			out = append(out, *e)
 		}
 	}
-	if len(out) > limit {
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	total := len(out)
+	if offset > 0 {
+		if offset > total {
+			offset = total
+		}
+		out = out[offset:]
+	}
+	if limit > 0 && len(out) > limit {
 		out = out[:limit]
 	}
-	return out, nil
+	return out, total, nil
+}
+
+// ListDeploymentsPaged 返回分页部署（mock：全量过滤后按 created_at DESC 切片）。
+func (r *mockRepo) ListDeploymentsPaged(_ context.Context, projectID, functionID string, limit, offset int) ([]domainfunctions.Deployment, int, error) {
+	deps, err := r.ListDeployments(context.Background(), projectID, functionID)
+	if err != nil {
+		return nil, 0, err
+	}
+	sort.Slice(deps, func(i, j int) bool { return deps[i].CreatedAt.After(deps[j].CreatedAt) })
+	total := len(deps)
+	if offset > 0 {
+		if offset > total {
+			offset = total
+		}
+		deps = deps[offset:]
+	}
+	if limit > 0 && len(deps) > limit {
+		deps = deps[:limit]
+	}
+	return deps, total, nil
 }
 
 func (r *mockRepo) UpdateExecution(_ context.Context, e *domainfunctions.ExecutionRecord) error {

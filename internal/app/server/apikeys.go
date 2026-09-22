@@ -12,6 +12,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/crud"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -120,8 +121,30 @@ func (a *APIKeys) CreateInternal(ctx context.Context, cmd CreateAPIKeyCommand) (
 	return key, secret, nil
 }
 
-func (a *APIKeys) List(ctx context.Context, projectID string) ([]projects.APIKey, error) {
-	return a.repo.ListAPIKeys(ctx, projectID)
+// List API key 列表（created_at DESC，offset 型分页 + enabled 过滤；返回
+// next_page_token，空串 = 没有更多页）。
+func (a *APIKeys) List(ctx context.Context, projectID string, pageSize int, pageToken string, f projects.APIKeyListFilter) ([]projects.APIKey, string, error) {
+	offset := 0
+	if pageToken != "" {
+		off, err := crud.DecodePageToken(pageToken)
+		if err != nil {
+			return nil, "", status.Error(codes.InvalidArgument, "invalid page token")
+		}
+		offset = off
+	}
+	keys, total, err := a.repo.ListAPIKeys(ctx, projectID, pageSize, offset, f)
+	if err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if len(keys) > 0 && offset+len(keys) < total {
+		tok, err := crud.EncodePageToken(offset + len(keys))
+		if err != nil {
+			return nil, "", err
+		}
+		next = tok
+	}
+	return keys, next, nil
 }
 
 func (a *APIKeys) Get(ctx context.Context, projectID, id string) (*projects.APIKey, error) {

@@ -55,7 +55,9 @@ type APIKeyRepository interface {
 	CreateAPIKey(ctx context.Context, key *APIKey) error
 	GetAPIKey(ctx context.Context, projectID, id string) (*APIKey, error)
 	GetAPIKeyBySecretHash(ctx context.Context, hash string) (*APIKey, error)
-	ListAPIKeys(ctx context.Context, projectID string) ([]APIKey, error)
+	// ListAPIKeys 管理面分页列出（created_at DESC + APIKeyListFilter 过滤，
+	// offset 型分页，返回总数供 next_page_token 计算）。
+	ListAPIKeys(ctx context.Context, projectID string, limit, offset int, f APIKeyListFilter) ([]APIKey, int, error)
 	// UpdateAPIKey 只 SET cols 白名单列（name/scopes/enabled/expire_at/
 	// updated_at），禁止整行覆盖；secret_hash 不可经此通道修改（轮换 =
 	// 新建 + 旧 key 设 expire_at，无原地换 secret）。
@@ -66,8 +68,9 @@ type APIKeyRepository interface {
 type InviteCodeRepository interface {
 	// CreateInviteCode 新建邀请码（明文 code 由 use-case 生成传入）。
 	CreateInviteCode(ctx context.Context, code *InviteCode) error
-	// ListInviteCodes 按项目倒序列出（created_at DESC，limit ≤ 100）。
-	ListInviteCodes(ctx context.Context, projectID string, limit int) ([]InviteCode, error)
+	// ListInviteCodes 按项目倒序列出（created_at DESC，limit ≤ 100；返回总数
+	// 供 offset 型 next_page_token 计算）。
+	ListInviteCodes(ctx context.Context, projectID string, limit, offset int) ([]InviteCode, int, error)
 	// GetInviteCode 单查（不存在返回 nil, nil）。
 	GetInviteCode(ctx context.Context, projectID, id string) (*InviteCode, error)
 	// RevokeInviteCode 软吊销：revoked_at 置位；不存在返回 false。

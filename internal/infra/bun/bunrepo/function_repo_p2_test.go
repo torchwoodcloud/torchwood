@@ -75,7 +75,7 @@ func TestFunctionRepository_RetentionTiering(t *testing.T) {
 	// 路径一：server 面条数式（keep 2）——只裁 server 旧行（4 条），
 	// client/http 行不受影响。
 	require.NoError(t, repo.PruneOldExecutionsInProject(ctx, projectID, fn.ID, 2))
-	recs, err := repo.ListExecutions(ctx, projectID, fn.ID, 100)
+	recs, _, err := repo.ListExecutions(ctx, projectID, fn.ID, 100, 0, domainfunctions.ExecutionListFilter{})
 	require.NoError(t, err)
 	ids := idsOf(recs)
 	require.Len(t, recs, 5, "6 server（keep 2）+ 2 client + 1 http = 5")
@@ -87,7 +87,7 @@ func TestFunctionRepository_RetentionTiering(t *testing.T) {
 	// 路径二：trigger 面时间窗（48h）——删 cli_old / http_old，
 	// server 行与窗口内 client 行不受影响。
 	require.NoError(t, repo.PruneTriggerExecutionsInProject(ctx, projectID, fn.ID, now.Add(-48*time.Hour)))
-	recs, err = repo.ListExecutions(ctx, projectID, fn.ID, 100)
+	recs, _, err = repo.ListExecutions(ctx, projectID, fn.ID, 100, 0, domainfunctions.ExecutionListFilter{})
 	require.NoError(t, err)
 	ids = idsOf(recs)
 	for _, id := range []string{"srv_new", "srv_old_e", "cli_new"} {

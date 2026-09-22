@@ -62,13 +62,13 @@ type FunctionsServiceClient interface {
 	UpdateFunction(ctx context.Context, in *UpdateFunctionRequest, opts ...grpc.CallOption) (*Function, error)
 	DeleteFunction(ctx context.Context, in *GetFunctionRequest, opts ...grpc.CallOption) (*v1.Empty, error)
 	CreateDeployment(ctx context.Context, in *CreateDeploymentRequest, opts ...grpc.CallOption) (*Deployment, error)
-	ListDeployments(ctx context.Context, in *GetFunctionRequest, opts ...grpc.CallOption) (*ListDeploymentsResponse, error)
+	ListDeployments(ctx context.Context, in *ListDeploymentsRequest, opts ...grpc.CallOption) (*ListDeploymentsResponse, error)
 	GetDeployment(ctx context.Context, in *GetDeploymentRequest, opts ...grpc.CallOption) (*Deployment, error)
 	DeleteDeployment(ctx context.Context, in *GetDeploymentRequest, opts ...grpc.CallOption) (*v1.Empty, error)
 	SetVariables(ctx context.Context, in *SetVariablesRequest, opts ...grpc.CallOption) (*Variables, error)
 	GetVariables(ctx context.Context, in *GetFunctionRequest, opts ...grpc.CallOption) (*Variables, error)
 	CreateExecution(ctx context.Context, in *CreateExecutionRequest, opts ...grpc.CallOption) (*Execution, error)
-	ListExecutions(ctx context.Context, in *GetFunctionRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error)
+	ListExecutions(ctx context.Context, in *ListExecutionsRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error)
 	GetExecution(ctx context.Context, in *GetExecutionRequest, opts ...grpc.CallOption) (*Execution, error)
 	// SetFunctionScopes 全量替换函数 declared_scopes（P0 执行身份）。独立 RPC
 	// 而非并入 UpdateFunctionRequest：repeated 字段无法表达「未设置=不修改」
@@ -175,7 +175,7 @@ func (c *functionsServiceClient) CreateDeployment(ctx context.Context, in *Creat
 	return out, nil
 }
 
-func (c *functionsServiceClient) ListDeployments(ctx context.Context, in *GetFunctionRequest, opts ...grpc.CallOption) (*ListDeploymentsResponse, error) {
+func (c *functionsServiceClient) ListDeployments(ctx context.Context, in *ListDeploymentsRequest, opts ...grpc.CallOption) (*ListDeploymentsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListDeploymentsResponse)
 	err := c.cc.Invoke(ctx, FunctionsService_ListDeployments_FullMethodName, in, out, cOpts...)
@@ -235,7 +235,7 @@ func (c *functionsServiceClient) CreateExecution(ctx context.Context, in *Create
 	return out, nil
 }
 
-func (c *functionsServiceClient) ListExecutions(ctx context.Context, in *GetFunctionRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error) {
+func (c *functionsServiceClient) ListExecutions(ctx context.Context, in *ListExecutionsRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListExecutionsResponse)
 	err := c.cc.Invoke(ctx, FunctionsService_ListExecutions_FullMethodName, in, out, cOpts...)
@@ -324,13 +324,13 @@ type FunctionsServiceServer interface {
 	UpdateFunction(context.Context, *UpdateFunctionRequest) (*Function, error)
 	DeleteFunction(context.Context, *GetFunctionRequest) (*v1.Empty, error)
 	CreateDeployment(context.Context, *CreateDeploymentRequest) (*Deployment, error)
-	ListDeployments(context.Context, *GetFunctionRequest) (*ListDeploymentsResponse, error)
+	ListDeployments(context.Context, *ListDeploymentsRequest) (*ListDeploymentsResponse, error)
 	GetDeployment(context.Context, *GetDeploymentRequest) (*Deployment, error)
 	DeleteDeployment(context.Context, *GetDeploymentRequest) (*v1.Empty, error)
 	SetVariables(context.Context, *SetVariablesRequest) (*Variables, error)
 	GetVariables(context.Context, *GetFunctionRequest) (*Variables, error)
 	CreateExecution(context.Context, *CreateExecutionRequest) (*Execution, error)
-	ListExecutions(context.Context, *GetFunctionRequest) (*ListExecutionsResponse, error)
+	ListExecutions(context.Context, *ListExecutionsRequest) (*ListExecutionsResponse, error)
 	GetExecution(context.Context, *GetExecutionRequest) (*Execution, error)
 	// SetFunctionScopes 全量替换函数 declared_scopes（P0 执行身份）。独立 RPC
 	// 而非并入 UpdateFunctionRequest：repeated 字段无法表达「未设置=不修改」
@@ -381,7 +381,7 @@ func (UnimplementedFunctionsServiceServer) DeleteFunction(context.Context, *GetF
 func (UnimplementedFunctionsServiceServer) CreateDeployment(context.Context, *CreateDeploymentRequest) (*Deployment, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateDeployment not implemented")
 }
-func (UnimplementedFunctionsServiceServer) ListDeployments(context.Context, *GetFunctionRequest) (*ListDeploymentsResponse, error) {
+func (UnimplementedFunctionsServiceServer) ListDeployments(context.Context, *ListDeploymentsRequest) (*ListDeploymentsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListDeployments not implemented")
 }
 func (UnimplementedFunctionsServiceServer) GetDeployment(context.Context, *GetDeploymentRequest) (*Deployment, error) {
@@ -399,7 +399,7 @@ func (UnimplementedFunctionsServiceServer) GetVariables(context.Context, *GetFun
 func (UnimplementedFunctionsServiceServer) CreateExecution(context.Context, *CreateExecutionRequest) (*Execution, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateExecution not implemented")
 }
-func (UnimplementedFunctionsServiceServer) ListExecutions(context.Context, *GetFunctionRequest) (*ListExecutionsResponse, error) {
+func (UnimplementedFunctionsServiceServer) ListExecutions(context.Context, *ListExecutionsRequest) (*ListExecutionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListExecutions not implemented")
 }
 func (UnimplementedFunctionsServiceServer) GetExecution(context.Context, *GetExecutionRequest) (*Execution, error) {
@@ -586,7 +586,7 @@ func _FunctionsService_CreateDeployment_Handler(srv interface{}, ctx context.Con
 }
 
 func _FunctionsService_ListDeployments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetFunctionRequest)
+	in := new(ListDeploymentsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -598,7 +598,7 @@ func _FunctionsService_ListDeployments_Handler(srv interface{}, ctx context.Cont
 		FullMethod: FunctionsService_ListDeployments_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FunctionsServiceServer).ListDeployments(ctx, req.(*GetFunctionRequest))
+		return srv.(FunctionsServiceServer).ListDeployments(ctx, req.(*ListDeploymentsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -694,7 +694,7 @@ func _FunctionsService_CreateExecution_Handler(srv interface{}, ctx context.Cont
 }
 
 func _FunctionsService_ListExecutions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetFunctionRequest)
+	in := new(ListExecutionsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -706,7 +706,7 @@ func _FunctionsService_ListExecutions_Handler(srv interface{}, ctx context.Conte
 		FullMethod: FunctionsService_ListExecutions_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FunctionsServiceServer).ListExecutions(ctx, req.(*GetFunctionRequest))
+		return srv.(FunctionsServiceServer).ListExecutions(ctx, req.(*ListExecutionsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

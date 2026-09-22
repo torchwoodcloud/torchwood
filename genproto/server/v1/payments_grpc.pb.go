@@ -8,7 +8,6 @@ package serverv1
 
 import (
 	context "context"
-	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -34,7 +33,7 @@ const (
 // 兜底。写方法 scope payments.write（apiKeyScopeRules）并登记
 // adminRoleMethodRules（owner/admin）；操作自动进审计日志（PR0 拦截器）。
 type PaymentsServiceClient interface {
-	ListOrders(ctx context.Context, in *v1.ListRequest, opts ...grpc.CallOption) (*ListOrdersResponse, error)
+	ListOrders(ctx context.Context, in *ListOrdersRequest, opts ...grpc.CallOption) (*ListOrdersResponse, error)
 	GetOrder(ctx context.Context, in *GetOrderRequest, opts ...grpc.CallOption) (*PaymentOrder, error)
 	Refund(ctx context.Context, in *RefundRequest, opts ...grpc.CallOption) (*PaymentOrder, error)
 	ManualFulfill(ctx context.Context, in *ManualFulfillRequest, opts ...grpc.CallOption) (*ManualFulfillResponse, error)
@@ -48,7 +47,7 @@ func NewPaymentsServiceClient(cc grpc.ClientConnInterface) PaymentsServiceClient
 	return &paymentsServiceClient{cc}
 }
 
-func (c *paymentsServiceClient) ListOrders(ctx context.Context, in *v1.ListRequest, opts ...grpc.CallOption) (*ListOrdersResponse, error) {
+func (c *paymentsServiceClient) ListOrders(ctx context.Context, in *ListOrdersRequest, opts ...grpc.CallOption) (*ListOrdersResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListOrdersResponse)
 	err := c.cc.Invoke(ctx, PaymentsService_ListOrders_FullMethodName, in, out, cOpts...)
@@ -96,7 +95,7 @@ func (c *paymentsServiceClient) ManualFulfill(ctx context.Context, in *ManualFul
 // 兜底。写方法 scope payments.write（apiKeyScopeRules）并登记
 // adminRoleMethodRules（owner/admin）；操作自动进审计日志（PR0 拦截器）。
 type PaymentsServiceServer interface {
-	ListOrders(context.Context, *v1.ListRequest) (*ListOrdersResponse, error)
+	ListOrders(context.Context, *ListOrdersRequest) (*ListOrdersResponse, error)
 	GetOrder(context.Context, *GetOrderRequest) (*PaymentOrder, error)
 	Refund(context.Context, *RefundRequest) (*PaymentOrder, error)
 	ManualFulfill(context.Context, *ManualFulfillRequest) (*ManualFulfillResponse, error)
@@ -110,7 +109,7 @@ type PaymentsServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedPaymentsServiceServer struct{}
 
-func (UnimplementedPaymentsServiceServer) ListOrders(context.Context, *v1.ListRequest) (*ListOrdersResponse, error) {
+func (UnimplementedPaymentsServiceServer) ListOrders(context.Context, *ListOrdersRequest) (*ListOrdersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListOrders not implemented")
 }
 func (UnimplementedPaymentsServiceServer) GetOrder(context.Context, *GetOrderRequest) (*PaymentOrder, error) {
@@ -144,7 +143,7 @@ func RegisterPaymentsServiceServer(s grpc.ServiceRegistrar, srv PaymentsServiceS
 }
 
 func _PaymentsService_ListOrders_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(v1.ListRequest)
+	in := new(ListOrdersRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -156,7 +155,7 @@ func _PaymentsService_ListOrders_Handler(srv interface{}, ctx context.Context, d
 		FullMethod: PaymentsService_ListOrders_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PaymentsServiceServer).ListOrders(ctx, req.(*v1.ListRequest))
+		return srv.(PaymentsServiceServer).ListOrders(ctx, req.(*ListOrdersRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

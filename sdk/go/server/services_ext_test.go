@@ -122,7 +122,7 @@ func (f *fakeExt) CreateDeployment(_ context.Context, req *serverv1.CreateDeploy
 	return &serverv1.Deployment{FunctionId: req.FunctionId, Size: int64(len(req.GetCode()))}, nil
 }
 
-func (f *fakeExt) ListDeployments(_ context.Context, req *serverv1.GetFunctionRequest) (*serverv1.ListDeploymentsResponse, error) {
+func (f *fakeExt) ListDeployments(_ context.Context, req *serverv1.ListDeploymentsRequest) (*serverv1.ListDeploymentsResponse, error) {
 	return &serverv1.ListDeploymentsResponse{Deployments: []*serverv1.Deployment{{FunctionId: req.FunctionId}}}, nil
 }
 
@@ -146,7 +146,7 @@ func (f *fakeExt) CreateExecution(_ context.Context, req *serverv1.CreateExecuti
 	return &serverv1.Execution{Id: "ex-1", FunctionId: req.FunctionId}, nil
 }
 
-func (f *fakeExt) ListExecutions(_ context.Context, req *serverv1.GetFunctionRequest) (*serverv1.ListExecutionsResponse, error) {
+func (f *fakeExt) ListExecutions(_ context.Context, req *serverv1.ListExecutionsRequest) (*serverv1.ListExecutionsResponse, error) {
 	return &serverv1.ListExecutionsResponse{Executions: []*serverv1.Execution{{Id: "ex-1", FunctionId: req.FunctionId}}}, nil
 }
 

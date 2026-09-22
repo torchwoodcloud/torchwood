@@ -19,7 +19,7 @@ type fakeEconomy struct {
 	serverv1.UnimplementedBillingServiceServer
 }
 
-func (f *fakeEconomy) ListOrders(_ context.Context, _ *sharedv1.ListRequest) (*serverv1.ListOrdersResponse, error) {
+func (f *fakeEconomy) ListOrders(_ context.Context, _ *serverv1.ListOrdersRequest) (*serverv1.ListOrdersResponse, error) {
 	return &serverv1.ListOrdersResponse{Orders: []*serverv1.PaymentOrder{{Id: "o1", Amount: 1999, UserId: "u1"}}}, nil
 }
 
@@ -110,7 +110,7 @@ func (f *fakeEconomy) DeletePlan(_ context.Context, _ *serverv1.DeletePlanReques
 	return &sharedv1.Empty{}, nil
 }
 
-func (f *fakeEconomy) ListSubscriptions(_ context.Context, _ *sharedv1.ListRequest) (*serverv1.ListSubscriptionsResponse, error) {
+func (f *fakeEconomy) ListSubscriptions(_ context.Context, _ *serverv1.ListSubscriptionsRequest) (*serverv1.ListSubscriptionsResponse, error) {
 	return &serverv1.ListSubscriptionsResponse{Subscriptions: []*serverv1.Subscription{{Id: "s1"}}}, nil
 }
 
@@ -164,7 +164,7 @@ func TestServerPayments(t *testing.T) {
 	c := newEconomyClient(t)
 	ctx := context.Background()
 
-	list, err := c.Payments.ListOrders(ctx, &sharedv1.ListRequest{PageSize: 20})
+	list, err := c.Payments.ListOrders(ctx, &serverv1.ListOrdersRequest{PageSize: 20})
 	require.NoError(t, err)
 	require.Equal(t, int64(1999), list.Orders[0].Amount)
 
@@ -250,7 +250,7 @@ func TestServerSubscriptions(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, c.Subscriptions.DeletePlan(ctx, "p1"))
 
-	subs, err := c.Subscriptions.ListSubscriptions(ctx, &sharedv1.ListRequest{})
+	subs, err := c.Subscriptions.ListSubscriptions(ctx, &serverv1.ListSubscriptionsRequest{})
 	require.NoError(t, err)
 	require.Len(t, subs.Subscriptions, 1)
 

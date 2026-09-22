@@ -11,6 +11,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/model"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
+	"github.com/uptrace/bun"
 )
 
 type apiKeyRepo struct {
@@ -51,17 +52,34 @@ func (r *apiKeyRepo) GetAPIKeyBySecretHash(ctx context.Context, hash string) (*p
 	return mapAPIKeyToDomain(m), nil
 }
 
-func (r *apiKeyRepo) ListAPIKeys(ctx context.Context, projectID string) ([]projects.APIKey, error) {
-	var ms []model.APIKey
-	err := r.db.NewSelect().Model(&ms).Where("project_id = ?", projectID).Order("created_at DESC").Scan(ctx)
+func (r *apiKeyRepo) ListAPIKeys(ctx context.Context, projectID string, limit, offset int, f projects.APIKeyListFilter) ([]projects.APIKey, int, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	cond := func(q *bun.SelectQuery) *bun.SelectQuery {
+		q = q.Where("project_id = ?", projectID)
+		if f.Enabled != nil {
+			q = q.Where("enabled = ?", *f.Enabled)
+		}
+		return q
+	}
+	total, err := cond(r.db.NewSelect().Model((*model.APIKey)(nil))).Count(ctx)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	var ms []model.APIKey
+	err = cond(r.db.NewSelect().Model(&ms)).Order("created_at DESC").Limit(limit).Offset(offset).Scan(ctx)
+	if err != nil {
+		return nil, 0, err
 	}
 	out := make([]projects.APIKey, len(ms))
 	for i := range ms {
 		out[i] = *mapAPIKeyToDomain(&ms[i])
 	}
-	return out, nil
+	return out, total, nil
 }
 
 // apiKeyUpdateCols 是 UpdateAPIKey 的列白名单（T-02）：仅治理字段，

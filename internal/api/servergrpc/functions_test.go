@@ -63,8 +63,12 @@ func (r *stubRepo) CreateExecution(context.Context, *domainfunctions.ExecutionRe
 func (r *stubRepo) GetExecution(context.Context, string, string, string) (*domainfunctions.ExecutionRecord, error) {
 	return nil, nil
 }
-func (r *stubRepo) ListExecutions(context.Context, string, string, int) ([]domainfunctions.ExecutionRecord, error) {
-	return nil, nil
+func (r *stubRepo) ListExecutions(context.Context, string, string, int, int, domainfunctions.ExecutionListFilter) ([]domainfunctions.ExecutionRecord, int, error) {
+	return nil, 0, nil
+}
+
+func (r *stubRepo) ListDeploymentsPaged(context.Context, string, string, int, int) ([]domainfunctions.Deployment, int, error) {
+	return nil, 0, nil
 }
 func (r *stubRepo) UpdateExecution(context.Context, *domainfunctions.ExecutionRecord) error {
 	return nil

@@ -47,8 +47,8 @@ func (r *functionsAPIKeyRepo) GetAPIKey(context.Context, string, string) (*proje
 func (r *functionsAPIKeyRepo) GetAPIKeyBySecretHash(_ context.Context, hash string) (*projects.APIKey, error) {
 	return r.keys[hash], nil
 }
-func (r *functionsAPIKeyRepo) ListAPIKeys(context.Context, string) ([]projects.APIKey, error) {
-	return nil, nil
+func (r *functionsAPIKeyRepo) ListAPIKeys(context.Context, string, int, int, projects.APIKeyListFilter) ([]projects.APIKey, int, error) {
+	return nil, 0, nil
 }
 func (r *functionsAPIKeyRepo) UpdateAPIKey(context.Context, string, string, map[string]any) error {
 	return nil
@@ -460,8 +460,12 @@ func (r *functionsTestRepo) CreateExecution(context.Context, *domainfunctions.Ex
 func (r *functionsTestRepo) GetExecution(context.Context, string, string, string) (*domainfunctions.ExecutionRecord, error) {
 	return nil, nil
 }
-func (r *functionsTestRepo) ListExecutions(context.Context, string, string, int) ([]domainfunctions.ExecutionRecord, error) {
-	return nil, nil
+func (r *functionsTestRepo) ListExecutions(context.Context, string, string, int, int, domainfunctions.ExecutionListFilter) ([]domainfunctions.ExecutionRecord, int, error) {
+	return nil, 0, nil
+}
+
+func (r *functionsTestRepo) ListDeploymentsPaged(context.Context, string, string, int, int) ([]domainfunctions.Deployment, int, error) {
+	return nil, 0, nil
 }
 func (r *functionsTestRepo) UpdateExecution(context.Context, *domainfunctions.ExecutionRecord) error {
 	return nil

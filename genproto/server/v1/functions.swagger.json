@@ -211,6 +211,19 @@
             "in": "path",
             "required": true,
             "type": "string"
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "page_token",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "tags": [
@@ -347,6 +360,40 @@
             "in": "path",
             "required": true,
             "type": "string"
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "page_token",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "description": "执行状态精确匹配：queued | building | running | completed | failed。",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "created_after",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
+          },
+          {
+            "name": "created_before",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "format": "date-time"
           }
         ],
         "tags": [
@@ -1329,9 +1376,11 @@
             "type": "object",
             "$ref": "#/definitions/v1Deployment"
           }
+        },
+        "meta": {
+          "$ref": "#/definitions/v1ListResponseMeta"
         }
-      },
-      "title": "MVP 不分页。"
+      }
     },
     "v1ListExecutionsResponse": {
       "type": "object",
@@ -1342,9 +1391,11 @@
             "type": "object",
             "$ref": "#/definitions/v1Execution"
           }
+        },
+        "meta": {
+          "$ref": "#/definitions/v1ListResponseMeta"
         }
-      },
-      "title": "MVP 不分页（返回最近 100 条）。"
+      }
     },
     "v1ListFunctionTriggersResponse": {
       "type": "object",

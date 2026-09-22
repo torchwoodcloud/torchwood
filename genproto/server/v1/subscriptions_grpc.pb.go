@@ -44,7 +44,7 @@ type SubscriptionsServiceClient interface {
 	GetPlan(ctx context.Context, in *GetPlanRequest, opts ...grpc.CallOption) (*SubscriptionPlan, error)
 	UpdatePlan(ctx context.Context, in *UpdatePlanRequest, opts ...grpc.CallOption) (*SubscriptionPlan, error)
 	DeletePlan(ctx context.Context, in *DeletePlanRequest, opts ...grpc.CallOption) (*v1.Empty, error)
-	ListSubscriptions(ctx context.Context, in *v1.ListRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
+	ListSubscriptions(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
 	GetSubscription(ctx context.Context, in *GetSubscriptionRequest, opts ...grpc.CallOption) (*Subscription, error)
 	CancelSubscription(ctx context.Context, in *CancelSubscriptionRequest, opts ...grpc.CallOption) (*Subscription, error)
 	ExpireSubscription(ctx context.Context, in *ExpireSubscriptionRequest, opts ...grpc.CallOption) (*Subscription, error)
@@ -108,7 +108,7 @@ func (c *subscriptionsServiceClient) DeletePlan(ctx context.Context, in *DeleteP
 	return out, nil
 }
 
-func (c *subscriptionsServiceClient) ListSubscriptions(ctx context.Context, in *v1.ListRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error) {
+func (c *subscriptionsServiceClient) ListSubscriptions(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListSubscriptionsResponse)
 	err := c.cc.Invoke(ctx, SubscriptionsService_ListSubscriptions_FullMethodName, in, out, cOpts...)
@@ -161,7 +161,7 @@ type SubscriptionsServiceServer interface {
 	GetPlan(context.Context, *GetPlanRequest) (*SubscriptionPlan, error)
 	UpdatePlan(context.Context, *UpdatePlanRequest) (*SubscriptionPlan, error)
 	DeletePlan(context.Context, *DeletePlanRequest) (*v1.Empty, error)
-	ListSubscriptions(context.Context, *v1.ListRequest) (*ListSubscriptionsResponse, error)
+	ListSubscriptions(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error)
 	GetSubscription(context.Context, *GetSubscriptionRequest) (*Subscription, error)
 	CancelSubscription(context.Context, *CancelSubscriptionRequest) (*Subscription, error)
 	ExpireSubscription(context.Context, *ExpireSubscriptionRequest) (*Subscription, error)
@@ -190,7 +190,7 @@ func (UnimplementedSubscriptionsServiceServer) UpdatePlan(context.Context, *Upda
 func (UnimplementedSubscriptionsServiceServer) DeletePlan(context.Context, *DeletePlanRequest) (*v1.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeletePlan not implemented")
 }
-func (UnimplementedSubscriptionsServiceServer) ListSubscriptions(context.Context, *v1.ListRequest) (*ListSubscriptionsResponse, error) {
+func (UnimplementedSubscriptionsServiceServer) ListSubscriptions(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListSubscriptions not implemented")
 }
 func (UnimplementedSubscriptionsServiceServer) GetSubscription(context.Context, *GetSubscriptionRequest) (*Subscription, error) {
@@ -314,7 +314,7 @@ func _SubscriptionsService_DeletePlan_Handler(srv interface{}, ctx context.Conte
 }
 
 func _SubscriptionsService_ListSubscriptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(v1.ListRequest)
+	in := new(ListSubscriptionsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -326,7 +326,7 @@ func _SubscriptionsService_ListSubscriptions_Handler(srv interface{}, ctx contex
 		FullMethod: SubscriptionsService_ListSubscriptions_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SubscriptionsServiceServer).ListSubscriptions(ctx, req.(*v1.ListRequest))
+		return srv.(SubscriptionsServiceServer).ListSubscriptions(ctx, req.(*ListSubscriptionsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

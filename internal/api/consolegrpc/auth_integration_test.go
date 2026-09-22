@@ -129,7 +129,7 @@ func TestBootstrap_SignUpEndToEnd(t *testing.T) {
 	sysDB, err := fixture.docDB.GetDatabase(ctx, "shop", databases.SystemDatabaseID)
 	require.NoError(t, err)
 	require.Nil(t, sysDB, "cut 后 catalog 无 database_id='_'")
-	keys, err := fixture.apiKeyRepo.ListAPIKeys(ctx, "shop")
+	keys, _, err := fixture.apiKeyRepo.ListAPIKeys(ctx, "shop", 50, 0, projects.APIKeyListFilter{})
 	require.NoError(t, err)
 	require.Empty(t, keys)
 

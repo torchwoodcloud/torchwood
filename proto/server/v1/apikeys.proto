@@ -4,6 +4,7 @@ package torchwood.server.v1;
 
 option go_package = "github.com/torchwoodcloud/torchwood/genproto/server/v1;serverv1";
 
+import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
@@ -80,7 +81,7 @@ service APIKeysService {
     };
   }
 
-  rpc ListAPIKeys(shared.v1.ListRequest) returns (ListAPIKeysResponse) {
+  rpc ListAPIKeys(ListAPIKeysRequest) returns (ListAPIKeysResponse) {
     option (google.api.http) = { get: "/v1/server/api-keys" };
     option (torchwood.shared.v1.method_auth) = {
       access: ACCESS_PERMISSION
@@ -157,6 +158,15 @@ message UpdateAPIKeyRequest {
 
 message GetAPIKeyRequest {
   string id = 1;
+}
+
+// ListAPIKeysRequest 结构化过滤（audit-logs 先例）：enabled 未设置 = 全部；
+// 分页在 SQL 侧 limit/offset（page_token 由服务端签发）。
+message ListAPIKeysRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = { gte: 0, lte: 1000 }];
+  string page_token = 2 [(buf.validate.field).string.max_len = 4096];
+  // 启用状态精确过滤（proto3 optional：未设置 = 不过滤）。
+  optional bool enabled = 3;
 }
 
 message ListAPIKeysResponse {

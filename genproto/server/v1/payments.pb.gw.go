@@ -16,7 +16,6 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/utilities"
-	"github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/grpclog"
@@ -40,7 +39,7 @@ var filter_PaymentsService_ListOrders_0 = &utilities.DoubleArray{Encoding: map[s
 
 func request_PaymentsService_ListOrders_0(ctx context.Context, marshaler runtime.Marshaler, client PaymentsServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var (
-		protoReq sharedv1.ListRequest
+		protoReq ListOrdersRequest
 		metadata runtime.ServerMetadata
 	)
 	if req.Body != nil {
@@ -58,7 +57,7 @@ func request_PaymentsService_ListOrders_0(ctx context.Context, marshaler runtime
 
 func local_request_PaymentsService_ListOrders_0(ctx context.Context, marshaler runtime.Marshaler, server PaymentsServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var (
-		protoReq sharedv1.ListRequest
+		protoReq ListOrdersRequest
 		metadata runtime.ServerMetadata
 	)
 	if err := req.ParseForm(); err != nil {

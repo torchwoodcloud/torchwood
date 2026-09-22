@@ -12,6 +12,7 @@ func TestParseUserList_AllowsWhitelist(t *testing.T) {
 	t.Parallel()
 
 	q, err := ParseUserList([]string{
+		query.BuildEqual("id", "012d6490-4833-40f6-af29-dffed917e404"),
 		query.BuildEqual("email", "a@b.c"),
 		`greaterThan("created_at","2020-01-01T00:00:00Z")`,
 		`orderDesc("updated_at")`,

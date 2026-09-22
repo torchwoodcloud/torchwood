@@ -164,6 +164,42 @@ func (r *functionRepo) ListDeployments(ctx context.Context, projectID, functionI
 	return out, nil
 }
 
+func (r *functionRepo) ListDeploymentsPaged(ctx context.Context, projectID, functionID string, limit, offset int) ([]domainfunctions.Deployment, int, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	conn, sch, expr, err := r.scoped(ctx, projectID, "function_deployments", "fd")
+	if err != nil {
+		return nil, 0, err
+	}
+	countQ := conn.NewSelect().Model((*model.FunctionDeployment)(nil)).ModelTableExpr(expr, sch).
+		Where("fd.project_id = ?", projectID).
+		Where("fd.function_id = ?", functionID)
+	total, err := countQ.Count(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	var ms []model.FunctionDeployment
+	err = conn.NewSelect().Model(&ms).ModelTableExpr(expr, sch).
+		Where("fd.project_id = ?", projectID).
+		Where("fd.function_id = ?", functionID).
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Scan(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	out := make([]domainfunctions.Deployment, len(ms))
+	for i := range ms {
+		out[i] = *mapDeploymentToDomain(&ms[i])
+	}
+	return out, total, nil
+}
+
 func (r *functionRepo) UpdateDeployment(ctx context.Context, d *domainfunctions.Deployment) error {
 	conn, sch, expr, err := r.scoped(ctx, d.ProjectID, "function_deployments", "fd")
 	if err != nil {
@@ -392,27 +428,48 @@ func (r *functionRepo) GetExecution(ctx context.Context, projectID, functionID, 
 	return mapExecutionToDomain(m), nil
 }
 
-func (r *functionRepo) ListExecutions(ctx context.Context, projectID, functionID string, limit int) ([]domainfunctions.ExecutionRecord, error) {
+func (r *functionRepo) ListExecutions(ctx context.Context, projectID, functionID string, limit, offset int, f domainfunctions.ExecutionListFilter) ([]domainfunctions.ExecutionRecord, int, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
 	conn, sch, expr, err := r.scoped(ctx, projectID, "function_executions", "fe")
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	cond := func(q *bun.SelectQuery) *bun.SelectQuery {
+		q = q.Where("fe.project_id = ?", projectID).Where("fe.function_id = ?", functionID)
+		if f.Status != "" {
+			q = q.Where("fe.status = ?", f.Status)
+		}
+		if !f.CreatedAfter.IsZero() {
+			q = q.Where("fe.created_at >= ?", f.CreatedAfter)
+		}
+		if !f.CreatedBefore.IsZero() {
+			q = q.Where("fe.created_at <= ?", f.CreatedBefore)
+		}
+		return q
+	}
+	total, err := cond(conn.NewSelect().Model((*model.FunctionExecution)(nil)).ModelTableExpr(expr, sch)).Count(ctx)
+	if err != nil {
+		return nil, 0, err
 	}
 	var ms []model.FunctionExecution
-	q := conn.NewSelect().Model(&ms).ModelTableExpr(expr, sch).
-		Where("fe.project_id = ?", projectID).
-		Where("fe.function_id = ?", functionID).
-		Order("created_at DESC")
-	if limit > 0 {
-		q = q.Limit(limit)
-	}
-	if err := q.Scan(ctx); err != nil {
-		return nil, err
+	err = cond(conn.NewSelect().Model(&ms).ModelTableExpr(expr, sch)).
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Scan(ctx)
+	if err != nil {
+		return nil, 0, err
 	}
 	out := make([]domainfunctions.ExecutionRecord, len(ms))
 	for i := range ms {
 		out[i] = *mapExecutionToDomain(&ms[i])
 	}
-	return out, nil
+	return out, total, nil
 }
 
 func (r *functionRepo) UpdateExecution(ctx context.Context, e *domainfunctions.ExecutionRecord) error {

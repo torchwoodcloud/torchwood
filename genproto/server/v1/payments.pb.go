@@ -504,6 +504,94 @@ func (x *Fulfillment) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// ListOrdersRequest 结构化过滤（audit-logs 先例）：exact 匹配 + 时间闭区间；
+// 分页固定 created_at DESC keyset 游标（page_token 由服务端签发）。
+type ListOrdersRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	PageSize  int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// 下单用户 ID 精确匹配。
+	UserId string `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// 订单状态精确匹配：created | paying | paid | failed | closed | refunding | refunded。
+	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	CreatedAfter  *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_after,json=createdAfter,proto3" json:"created_after,omitempty"`
+	CreatedBefore *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_before,json=createdBefore,proto3" json:"created_before,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListOrdersRequest) Reset() {
+	*x = ListOrdersRequest{}
+	mi := &file_server_v1_payments_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListOrdersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListOrdersRequest) ProtoMessage() {}
+
+func (x *ListOrdersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_payments_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListOrdersRequest.ProtoReflect.Descriptor instead.
+func (*ListOrdersRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_payments_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListOrdersRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListOrdersRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+func (x *ListOrdersRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ListOrdersRequest) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *ListOrdersRequest) GetCreatedAfter() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAfter
+	}
+	return nil
+}
+
+func (x *ListOrdersRequest) GetCreatedBefore() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedBefore
+	}
+	return nil
+}
+
 type ListOrdersResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Orders        []*PaymentOrder        `protobuf:"bytes,1,rep,name=orders,proto3" json:"orders,omitempty"`
@@ -514,7 +602,7 @@ type ListOrdersResponse struct {
 
 func (x *ListOrdersResponse) Reset() {
 	*x = ListOrdersResponse{}
-	mi := &file_server_v1_payments_proto_msgTypes[6]
+	mi := &file_server_v1_payments_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -526,7 +614,7 @@ func (x *ListOrdersResponse) String() string {
 func (*ListOrdersResponse) ProtoMessage() {}
 
 func (x *ListOrdersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_payments_proto_msgTypes[6]
+	mi := &file_server_v1_payments_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -539,7 +627,7 @@ func (x *ListOrdersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOrdersResponse.ProtoReflect.Descriptor instead.
 func (*ListOrdersResponse) Descriptor() ([]byte, []int) {
-	return file_server_v1_payments_proto_rawDescGZIP(), []int{6}
+	return file_server_v1_payments_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListOrdersResponse) GetOrders() []*PaymentOrder {
@@ -604,13 +692,22 @@ const file_server_v1_payments_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x8a\x01\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xad\x02\n" +
+	"\x11ListOrdersRequest\x12'\n" +
+	"\tpage_size\x18\x01 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12'\n" +
+	"\n" +
+	"page_token\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80 R\tpageToken\x12!\n" +
+	"\auser_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x01R\x06userId\x12\x1f\n" +
+	"\x06status\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x18\x10R\x06status\x12?\n" +
+	"\rcreated_after\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\fcreatedAfter\x12A\n" +
+	"\x0ecreated_before\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\rcreatedBefore\"\x8a\x01\n" +
 	"\x12ListOrdersResponse\x129\n" +
 	"\x06orders\x18\x01 \x03(\v2!.torchwood.server.v1.PaymentOrderR\x06orders\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xfa\x04\n" +
-	"\x0fPaymentsService\x12\x85\x01\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\x80\x05\n" +
+	"\x0fPaymentsService\x12\x8b\x01\n" +
 	"\n" +
-	"ListOrders\x12 .torchwood.shared.v1.ListRequest\x1a'.torchwood.server.v1.ListOrdersResponse\",\x8a\xb2\x19\x06\"\x04\b\b\x10\x01\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/server/payments/orders\x12\x8c\x01\n" +
+	"ListOrders\x12&.torchwood.server.v1.ListOrdersRequest\x1a'.torchwood.server.v1.ListOrdersResponse\",\x8a\xb2\x19\x06\"\x04\b\b\x10\x01\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/server/payments/orders\x12\x8c\x01\n" +
 	"\bGetOrder\x12$.torchwood.server.v1.GetOrderRequest\x1a!.torchwood.server.v1.PaymentOrder\"7\x8a\xb2\x19\x06\"\x04\b\b\x10\x01\x82\xd3\xe4\x93\x02'\x12%/v1/server/payments/orders/{order_id}\x12\x96\x01\n" +
 	"\x06Refund\x12\".torchwood.server.v1.RefundRequest\x1a!.torchwood.server.v1.PaymentOrder\"E\x8a\xb2\x19\n" +
 	"\x1a\x02\x03\x04\"\x04\b\b\x10\x02\x82\xd3\xe4\x93\x021:\x01*\",/v1/server/payments/orders/{order_id}:refund\x12\xae\x01\n" +
@@ -642,7 +739,7 @@ func file_server_v1_payments_proto_rawDescGZIP() []byte {
 	return file_server_v1_payments_proto_rawDescData
 }
 
-var file_server_v1_payments_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_server_v1_payments_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_server_v1_payments_proto_goTypes = []any{
 	(*PaymentOrder)(nil),          // 0: torchwood.server.v1.PaymentOrder
 	(*GetOrderRequest)(nil),       // 1: torchwood.server.v1.GetOrderRequest
@@ -650,37 +747,39 @@ var file_server_v1_payments_proto_goTypes = []any{
 	(*ManualFulfillRequest)(nil),  // 3: torchwood.server.v1.ManualFulfillRequest
 	(*ManualFulfillResponse)(nil), // 4: torchwood.server.v1.ManualFulfillResponse
 	(*Fulfillment)(nil),           // 5: torchwood.server.v1.Fulfillment
-	(*ListOrdersResponse)(nil),    // 6: torchwood.server.v1.ListOrdersResponse
-	(*structpb.Struct)(nil),       // 7: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
-	(*v1.ListResponseMeta)(nil),   // 9: torchwood.shared.v1.ListResponseMeta
-	(*v1.ListRequest)(nil),        // 10: torchwood.shared.v1.ListRequest
+	(*ListOrdersRequest)(nil),     // 6: torchwood.server.v1.ListOrdersRequest
+	(*ListOrdersResponse)(nil),    // 7: torchwood.server.v1.ListOrdersResponse
+	(*structpb.Struct)(nil),       // 8: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
+	(*v1.ListResponseMeta)(nil),   // 10: torchwood.shared.v1.ListResponseMeta
 }
 var file_server_v1_payments_proto_depIdxs = []int32{
-	7,  // 0: torchwood.server.v1.PaymentOrder.purpose:type_name -> google.protobuf.Struct
-	8,  // 1: torchwood.server.v1.PaymentOrder.created_at:type_name -> google.protobuf.Timestamp
-	8,  // 2: torchwood.server.v1.PaymentOrder.paid_at:type_name -> google.protobuf.Timestamp
-	8,  // 3: torchwood.server.v1.PaymentOrder.expires_at:type_name -> google.protobuf.Timestamp
+	8,  // 0: torchwood.server.v1.PaymentOrder.purpose:type_name -> google.protobuf.Struct
+	9,  // 1: torchwood.server.v1.PaymentOrder.created_at:type_name -> google.protobuf.Timestamp
+	9,  // 2: torchwood.server.v1.PaymentOrder.paid_at:type_name -> google.protobuf.Timestamp
+	9,  // 3: torchwood.server.v1.PaymentOrder.expires_at:type_name -> google.protobuf.Timestamp
 	0,  // 4: torchwood.server.v1.ManualFulfillResponse.order:type_name -> torchwood.server.v1.PaymentOrder
 	5,  // 5: torchwood.server.v1.ManualFulfillResponse.fulfillment:type_name -> torchwood.server.v1.Fulfillment
-	7,  // 6: torchwood.server.v1.Fulfillment.detail:type_name -> google.protobuf.Struct
-	8,  // 7: torchwood.server.v1.Fulfillment.created_at:type_name -> google.protobuf.Timestamp
-	8,  // 8: torchwood.server.v1.Fulfillment.updated_at:type_name -> google.protobuf.Timestamp
-	0,  // 9: torchwood.server.v1.ListOrdersResponse.orders:type_name -> torchwood.server.v1.PaymentOrder
-	9,  // 10: torchwood.server.v1.ListOrdersResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
-	10, // 11: torchwood.server.v1.PaymentsService.ListOrders:input_type -> torchwood.shared.v1.ListRequest
-	1,  // 12: torchwood.server.v1.PaymentsService.GetOrder:input_type -> torchwood.server.v1.GetOrderRequest
-	2,  // 13: torchwood.server.v1.PaymentsService.Refund:input_type -> torchwood.server.v1.RefundRequest
-	3,  // 14: torchwood.server.v1.PaymentsService.ManualFulfill:input_type -> torchwood.server.v1.ManualFulfillRequest
-	6,  // 15: torchwood.server.v1.PaymentsService.ListOrders:output_type -> torchwood.server.v1.ListOrdersResponse
-	0,  // 16: torchwood.server.v1.PaymentsService.GetOrder:output_type -> torchwood.server.v1.PaymentOrder
-	0,  // 17: torchwood.server.v1.PaymentsService.Refund:output_type -> torchwood.server.v1.PaymentOrder
-	4,  // 18: torchwood.server.v1.PaymentsService.ManualFulfill:output_type -> torchwood.server.v1.ManualFulfillResponse
-	15, // [15:19] is the sub-list for method output_type
-	11, // [11:15] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	8,  // 6: torchwood.server.v1.Fulfillment.detail:type_name -> google.protobuf.Struct
+	9,  // 7: torchwood.server.v1.Fulfillment.created_at:type_name -> google.protobuf.Timestamp
+	9,  // 8: torchwood.server.v1.Fulfillment.updated_at:type_name -> google.protobuf.Timestamp
+	9,  // 9: torchwood.server.v1.ListOrdersRequest.created_after:type_name -> google.protobuf.Timestamp
+	9,  // 10: torchwood.server.v1.ListOrdersRequest.created_before:type_name -> google.protobuf.Timestamp
+	0,  // 11: torchwood.server.v1.ListOrdersResponse.orders:type_name -> torchwood.server.v1.PaymentOrder
+	10, // 12: torchwood.server.v1.ListOrdersResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	6,  // 13: torchwood.server.v1.PaymentsService.ListOrders:input_type -> torchwood.server.v1.ListOrdersRequest
+	1,  // 14: torchwood.server.v1.PaymentsService.GetOrder:input_type -> torchwood.server.v1.GetOrderRequest
+	2,  // 15: torchwood.server.v1.PaymentsService.Refund:input_type -> torchwood.server.v1.RefundRequest
+	3,  // 16: torchwood.server.v1.PaymentsService.ManualFulfill:input_type -> torchwood.server.v1.ManualFulfillRequest
+	7,  // 17: torchwood.server.v1.PaymentsService.ListOrders:output_type -> torchwood.server.v1.ListOrdersResponse
+	0,  // 18: torchwood.server.v1.PaymentsService.GetOrder:output_type -> torchwood.server.v1.PaymentOrder
+	0,  // 19: torchwood.server.v1.PaymentsService.Refund:output_type -> torchwood.server.v1.PaymentOrder
+	4,  // 20: torchwood.server.v1.PaymentsService.ManualFulfill:output_type -> torchwood.server.v1.ManualFulfillResponse
+	17, // [17:21] is the sub-list for method output_type
+	13, // [13:17] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_server_v1_payments_proto_init() }
@@ -695,7 +794,7 @@ func file_server_v1_payments_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_server_v1_payments_proto_rawDesc), len(file_server_v1_payments_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

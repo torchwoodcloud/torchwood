@@ -34,14 +34,22 @@ func withAuditResource(ctx context.Context, resourceID string) context.Context {
 	return contexts.WithAuditResource(ctx, resourceID)
 }
 
-func (s *PaymentsService) ListOrders(ctx context.Context, req *sharedv1.ListRequest) (*serverv1.ListOrdersResponse, error) {
+func (s *PaymentsService) ListOrders(ctx context.Context, req *serverv1.ListOrdersRequest) (*serverv1.ListOrdersResponse, error) {
 	before, err := decodeServerOrderCursor(req.GetPageToken())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid page token")
 	}
-	// filter / queries / order_by 一期不开放（固定 created_at DESC），PR6
-	// Console 需要筛选时再接入。
-	orders, err := s.payments.ListOrders(ctx, int(req.GetPageSize()), before)
+	f := domainpayments.OrderListFilter{
+		UserID: req.GetUserId(),
+		Status: domainpayments.OrderStatus(req.GetStatus()),
+	}
+	if ts := req.GetCreatedAfter(); ts != nil {
+		f.CreatedAfter = ts.AsTime()
+	}
+	if ts := req.GetCreatedBefore(); ts != nil {
+		f.CreatedBefore = ts.AsTime()
+	}
+	orders, err := s.payments.ListOrders(ctx, int(req.GetPageSize()), before, f)
 	if err != nil {
 		return nil, err
 	}

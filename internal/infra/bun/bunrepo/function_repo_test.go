@@ -160,7 +160,7 @@ func TestFunctionRepository_PruneOldExecutions(t *testing.T) {
 		}))
 	}
 	require.NoError(t, repo.PruneOldExecutionsInProject(ctx, projectID, fn.ID, 3))
-	recs, err := repo.ListExecutions(ctx, projectID, fn.ID, 100)
+	recs, _, err := repo.ListExecutions(ctx, projectID, fn.ID, 100, 0, domainfunctions.ExecutionListFilter{})
 	require.NoError(t, err)
 	require.Len(t, recs, 3, "仅保留最近 3 条")
 }

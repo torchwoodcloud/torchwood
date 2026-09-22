@@ -35,27 +35,34 @@ func (r *inviteCodeRepo) CreateInviteCode(ctx context.Context, c *projects.Invit
 	return err
 }
 
-func (r *inviteCodeRepo) ListInviteCodes(ctx context.Context, projectID string, limit int) ([]projects.InviteCode, error) {
+func (r *inviteCodeRepo) ListInviteCodes(ctx context.Context, projectID string, limit, offset int) ([]projects.InviteCode, int, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 	if limit > 100 {
 		limit = 100
 	}
+	total, err := r.db.NewSelect().Model((*model.InviteCode)(nil)).
+		Where("project_id = ?", projectID).
+		Count(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
 	var ms []model.InviteCode
-	err := r.db.NewSelect().Model(&ms).
+	err = r.db.NewSelect().Model(&ms).
 		Where("project_id = ?", projectID).
 		Order("created_at DESC").
 		Limit(limit).
+		Offset(offset).
 		Scan(ctx)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	out := make([]projects.InviteCode, len(ms))
 	for i := range ms {
 		out[i] = mapInviteCodeToDomain(&ms[i])
 	}
-	return out, nil
+	return out, total, nil
 }
 
 func (r *inviteCodeRepo) GetInviteCode(ctx context.Context, projectID, id string) (*projects.InviteCode, error) {

@@ -19,6 +19,15 @@ type PlanRepo interface {
 
 // SubscriptionRepo 持久化 subscriptions。写路径必须在调用方 uow.Run 内
 // （与资产 Grant/Mutate / outbox 同一工作单元，总则 10）；实现可从 ctx 读取连接。
+// SubscriptionListFilter 是项目订阅列表的结构化过滤（exact 匹配 + created_at
+// 闭区间；零值字段 = 不过滤）。
+type SubscriptionListFilter struct {
+	UserID        string
+	Status        Status
+	CreatedAfter  time.Time
+	CreatedBefore time.Time
+}
+
 type SubscriptionRepo interface {
 	// Insert 落库；(project_id, idempotency_key) 冲突时返回已存在行与 false。
 	Insert(ctx context.Context, sub *Subscription) (existing *Subscription, inserted bool, err error)
@@ -33,7 +42,8 @@ type SubscriptionRepo interface {
 	// ListNonTerminalByUserPlan 列出 (user, plan) 下非终态行（订阅互斥检查）。
 	ListNonTerminalByUserPlan(ctx context.Context, projectID, userID, planID string) ([]Subscription, error)
 	ListByUser(ctx context.Context, projectID, userID string, limit int, before time.Time) ([]Subscription, error)
-	ListByProject(ctx context.Context, projectID string, limit int, before time.Time) ([]Subscription, error)
+	// ListByProject 返回项目订阅（created_at DESC 分页 + 结构化过滤，Server/Console 面）。
+	ListByProject(ctx context.Context, projectID string, limit int, before time.Time, f SubscriptionListFilter) ([]Subscription, error)
 	Update(ctx context.Context, sub *Subscription, expectStatus Status) error
 	// ListDueForBillingInProject 扫描 platform 模式待处理行（FOR UPDATE SKIP LOCKED）：
 	// 周期到期、past_due 宽限、cancel_at_period_end。

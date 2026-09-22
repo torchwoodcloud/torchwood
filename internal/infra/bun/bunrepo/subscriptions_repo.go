@@ -308,7 +308,7 @@ func (r *subscriptionRepo) ListByUser(ctx context.Context, projectID, userID str
 	return mapSubsToDomain(rows)
 }
 
-func (r *subscriptionRepo) ListByProject(ctx context.Context, projectID string, limit int, before time.Time) ([]subscriptions.Subscription, error) {
+func (r *subscriptionRepo) ListByProject(ctx context.Context, projectID string, limit int, before time.Time, f subscriptions.SubscriptionListFilter) ([]subscriptions.Subscription, error) {
 	ctx2, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	conn, sch, expr, err := Scoped(ctx2, r.db, projectID, "subscriptions", "ss")
@@ -316,10 +316,22 @@ func (r *subscriptionRepo) ListByProject(ctx context.Context, projectID string, 
 		return nil, err
 	}
 	var rows []model.Subscription
-	err = conn.NewSelect().Model(&rows).ModelTableExpr(expr, sch).
+	sel := conn.NewSelect().Model(&rows).ModelTableExpr(expr, sch).
 		Where("ss.project_id = ?", projectID).
-		Where("ss.created_at < ?", before).
-		Order("ss.created_at DESC").
+		Where("ss.created_at < ?", before)
+	if f.UserID != "" {
+		sel = sel.Where("ss.user_id = ?", f.UserID)
+	}
+	if f.Status != "" {
+		sel = sel.Where("ss.status = ?", string(f.Status))
+	}
+	if !f.CreatedAfter.IsZero() {
+		sel = sel.Where("ss.created_at >= ?", f.CreatedAfter)
+	}
+	if !f.CreatedBefore.IsZero() {
+		sel = sel.Where("ss.created_at <= ?", f.CreatedBefore)
+	}
+	err = sel.Order("ss.created_at DESC").
 		Limit(limit).
 		Scan(ctx2)
 	if err != nil {

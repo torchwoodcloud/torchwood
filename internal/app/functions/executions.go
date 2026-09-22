@@ -13,6 +13,7 @@ import (
 	domainbilling "github.com/torchwoodcloud/torchwood/internal/domain/billing"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
+	"github.com/torchwoodcloud/torchwood/pkg/crud"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -608,11 +609,51 @@ func (f *Functions) RecoverOrphanExecutions(ctx context.Context, staleAfter time
 	return recovered, nil
 }
 
-func (f *Functions) ListExecutions(ctx context.Context, projectID, functionID string) ([]domainfunctions.ExecutionRecord, error) {
-	if _, err := f.repo.GetFunction(ctx, projectID, functionID); err != nil {
-		return nil, err
+// ListExecutions 返回执行记录列表（排障面：created_at DESC，offset 型分页 +
+// status/created_at 结构化过滤；返回 next_page_token，空串 = 没有更多页）。
+// pruneKeepRecent 只约束保留策略（PruneOldExecutionsInProject），不再充当
+// 列表上限。
+func (f *Functions) ListExecutions(ctx context.Context, projectID, functionID string, pageSize int, pageToken string, flt domainfunctions.ExecutionListFilter) ([]domainfunctions.ExecutionRecord, string, error) {
+	if flt.Status != "" && !isValidExecutionListStatus(flt.Status) {
+		return nil, "", status.Errorf(codes.InvalidArgument, "unknown execution status %q", flt.Status)
 	}
-	return f.repo.ListExecutions(ctx, projectID, functionID, pruneKeepRecent)
+	if _, err := f.repo.GetFunction(ctx, projectID, functionID); err != nil {
+		return nil, "", err
+	}
+	offset := 0
+	if pageToken != "" {
+		off, err := crud.DecodePageToken(pageToken)
+		if err != nil {
+			return nil, "", status.Error(codes.InvalidArgument, "invalid page token")
+		}
+		offset = off
+	}
+	rows, total, err := f.repo.ListExecutions(ctx, projectID, functionID, pageSize, offset, flt)
+	if err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if len(rows) > 0 && offset+len(rows) < total {
+		tok, err := crud.EncodePageToken(offset + len(rows))
+		if err != nil {
+			return nil, "", err
+		}
+		next = tok
+	}
+	return rows, next, nil
+}
+
+// isValidExecutionListStatus 限定执行列表 status 过滤取值（与状态机一致）。
+func isValidExecutionListStatus(s string) bool {
+	switch s {
+	case domainfunctions.ExecutionStatusQueued,
+		domainfunctions.ExecutionStatusBuilding,
+		domainfunctions.ExecutionStatusRunning,
+		domainfunctions.ExecutionStatusCompleted,
+		domainfunctions.ExecutionStatusFailed:
+		return true
+	}
+	return false
 }
 
 // buildExecution 组装 executor 入参。池策略（P0.5）从函数记录透传——

@@ -46,6 +46,11 @@ type APIKey struct {
 	UpdatedAt  time.Time
 }
 
+// APIKeyListFilter 是 API key 列表的结构化过滤；Enabled nil = 不过滤。
+type APIKeyListFilter struct {
+	Enabled *bool
+}
+
 type Admin struct {
 	ID           string
 	Email        string

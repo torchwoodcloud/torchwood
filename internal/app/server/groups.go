@@ -605,6 +605,11 @@ func paginateDocuments(docs []databases.Document, pageSize int32, pageToken stri
 	if limit <= 0 {
 		limit = 25
 	}
+	// 上限保护：调用方传超大 page_size 时钳到 100（上游是全量捞取的内存切片，
+	// 无界 limit 等于放大全表扫描的响应体积）。
+	if limit > 100 {
+		limit = 100
+	}
 	if offset > len(docs) {
 		offset = len(docs)
 	}

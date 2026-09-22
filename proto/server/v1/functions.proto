@@ -125,7 +125,7 @@ service FunctionsService {
       api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_WRITE }
     };
   }
-  rpc ListDeployments(GetFunctionRequest) returns (ListDeploymentsResponse) {
+  rpc ListDeployments(ListDeploymentsRequest) returns (ListDeploymentsResponse) {
     option (google.api.http) = { get: "/v1/server/functions/{function_id}/deployments" };
     option (torchwood.shared.v1.method_auth) = {
       api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_READ }
@@ -166,7 +166,7 @@ service FunctionsService {
       api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_WRITE }
     };
   }
-  rpc ListExecutions(GetFunctionRequest) returns (ListExecutionsResponse) {
+  rpc ListExecutions(ListExecutionsRequest) returns (ListExecutionsResponse) {
     option (google.api.http) = { get: "/v1/server/functions/{function_id}/executions" };
     option (torchwood.shared.v1.method_auth) = {
       api_key_scope: { resource: SCOPE_RESOURCE_FUNCTIONS, op: SCOPE_OP_READ }
@@ -619,12 +619,32 @@ message ListFunctionsResponse {
   shared.v1.ListResponseMeta meta = 2;
 }
 
-// MVP 不分页。
-message ListDeploymentsResponse {
-  repeated Deployment deployments = 1;
+// ListDeploymentsRequest 分页拉取部署（created_at DESC，offset 型 page_token
+// 由服务端签发）。
+message ListDeploymentsRequest {
+  string function_id = 1 [(buf.validate.field).required = true];
+  int32 page_size = 2 [(buf.validate.field).int32 = { gte: 0, lte: 1000 }];
+  string page_token = 3 [(buf.validate.field).string.max_len = 4096];
 }
 
-// MVP 不分页（返回最近 100 条）。
+// ListExecutionsRequest 分页拉取执行记录（排障面：status 精确 + created_at
+// 闭区间过滤，结构化字段沿 audit-logs 先例）。
+message ListExecutionsRequest {
+  string function_id = 1 [(buf.validate.field).required = true];
+  int32 page_size = 2 [(buf.validate.field).int32 = { gte: 0, lte: 1000 }];
+  string page_token = 3 [(buf.validate.field).string.max_len = 4096];
+  // 执行状态精确匹配：queued | building | running | completed | failed。
+  string status = 4 [(buf.validate.field).string.max_len = 16];
+  google.protobuf.Timestamp created_after = 5;
+  google.protobuf.Timestamp created_before = 6;
+}
+
+message ListDeploymentsResponse {
+  repeated Deployment deployments = 1;
+  shared.v1.ListResponseMeta meta = 2;
+}
+
 message ListExecutionsResponse {
   repeated Execution executions = 1;
+  shared.v1.ListResponseMeta meta = 2;
 }

@@ -9,6 +9,7 @@ import (
 	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/crud"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -69,14 +70,36 @@ func (s *InviteCodes) Create(ctx context.Context, cmd CreateInviteCodeCommand) (
 	return code, nil
 }
 
-func (s *InviteCodes) List(ctx context.Context, projectID string) ([]projects.InviteCode, error) {
+// List 邀请码列表（offset 型分页，pageToken 为服务端签发的 opaque token）。
+// 返回 next_page_token（空串 = 没有更多页）。
+func (s *InviteCodes) List(ctx context.Context, projectID string, pageSize int, pageToken string) ([]projects.InviteCode, string, error) {
 	if err := appshared.RequirePlatformPrincipal(ctx); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if projectID == "" {
-		return nil, status.Error(codes.InvalidArgument, "project_id is required")
+		return nil, "", status.Error(codes.InvalidArgument, "project_id is required")
 	}
-	return s.repo.ListInviteCodes(ctx, projectID, 100)
+	offset := 0
+	if pageToken != "" {
+		off, err := crud.DecodePageToken(pageToken)
+		if err != nil {
+			return nil, "", status.Error(codes.InvalidArgument, "invalid page token")
+		}
+		offset = off
+	}
+	codes, total, err := s.repo.ListInviteCodes(ctx, projectID, pageSize, offset)
+	if err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if len(codes) > 0 && offset+len(codes) < total {
+		tok, err := crud.EncodePageToken(offset + len(codes))
+		if err != nil {
+			return nil, "", err
+		}
+		next = tok
+	}
+	return codes, next, nil
 }
 
 func (s *InviteCodes) Delete(ctx context.Context, projectID, id string) error {

@@ -2434,17 +2434,166 @@ func (x *ListFunctionsResponse) GetMeta() *v1.ListResponseMeta {
 	return nil
 }
 
-// MVP 不分页。
+// ListDeploymentsRequest 分页拉取部署（created_at DESC，offset 型 page_token
+// 由服务端签发）。
+type ListDeploymentsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FunctionId    string                 `protobuf:"bytes,1,opt,name=function_id,json=functionId,proto3" json:"function_id,omitempty"`
+	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDeploymentsRequest) Reset() {
+	*x = ListDeploymentsRequest{}
+	mi := &file_server_v1_functions_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDeploymentsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDeploymentsRequest) ProtoMessage() {}
+
+func (x *ListDeploymentsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_functions_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDeploymentsRequest.ProtoReflect.Descriptor instead.
+func (*ListDeploymentsRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ListDeploymentsRequest) GetFunctionId() string {
+	if x != nil {
+		return x.FunctionId
+	}
+	return ""
+}
+
+func (x *ListDeploymentsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListDeploymentsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+// ListExecutionsRequest 分页拉取执行记录（排障面：status 精确 + created_at
+// 闭区间过滤，结构化字段沿 audit-logs 先例）。
+type ListExecutionsRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	FunctionId string                 `protobuf:"bytes,1,opt,name=function_id,json=functionId,proto3" json:"function_id,omitempty"`
+	PageSize   int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken  string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// 执行状态精确匹配：queued | building | running | completed | failed。
+	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	CreatedAfter  *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_after,json=createdAfter,proto3" json:"created_after,omitempty"`
+	CreatedBefore *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_before,json=createdBefore,proto3" json:"created_before,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListExecutionsRequest) Reset() {
+	*x = ListExecutionsRequest{}
+	mi := &file_server_v1_functions_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListExecutionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListExecutionsRequest) ProtoMessage() {}
+
+func (x *ListExecutionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_functions_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListExecutionsRequest.ProtoReflect.Descriptor instead.
+func (*ListExecutionsRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ListExecutionsRequest) GetFunctionId() string {
+	if x != nil {
+		return x.FunctionId
+	}
+	return ""
+}
+
+func (x *ListExecutionsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListExecutionsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+func (x *ListExecutionsRequest) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *ListExecutionsRequest) GetCreatedAfter() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAfter
+	}
+	return nil
+}
+
+func (x *ListExecutionsRequest) GetCreatedBefore() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedBefore
+	}
+	return nil
+}
+
 type ListDeploymentsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Deployments   []*Deployment          `protobuf:"bytes,1,rep,name=deployments,proto3" json:"deployments,omitempty"`
+	Meta          *v1.ListResponseMeta   `protobuf:"bytes,2,opt,name=meta,proto3" json:"meta,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListDeploymentsResponse) Reset() {
 	*x = ListDeploymentsResponse{}
-	mi := &file_server_v1_functions_proto_msgTypes[29]
+	mi := &file_server_v1_functions_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2456,7 +2605,7 @@ func (x *ListDeploymentsResponse) String() string {
 func (*ListDeploymentsResponse) ProtoMessage() {}
 
 func (x *ListDeploymentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[29]
+	mi := &file_server_v1_functions_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2469,7 +2618,7 @@ func (x *ListDeploymentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeploymentsResponse.ProtoReflect.Descriptor instead.
 func (*ListDeploymentsResponse) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{29}
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ListDeploymentsResponse) GetDeployments() []*Deployment {
@@ -2479,17 +2628,24 @@ func (x *ListDeploymentsResponse) GetDeployments() []*Deployment {
 	return nil
 }
 
-// MVP 不分页（返回最近 100 条）。
+func (x *ListDeploymentsResponse) GetMeta() *v1.ListResponseMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
 type ListExecutionsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Executions    []*Execution           `protobuf:"bytes,1,rep,name=executions,proto3" json:"executions,omitempty"`
+	Meta          *v1.ListResponseMeta   `protobuf:"bytes,2,opt,name=meta,proto3" json:"meta,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListExecutionsResponse) Reset() {
 	*x = ListExecutionsResponse{}
-	mi := &file_server_v1_functions_proto_msgTypes[30]
+	mi := &file_server_v1_functions_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2501,7 +2657,7 @@ func (x *ListExecutionsResponse) String() string {
 func (*ListExecutionsResponse) ProtoMessage() {}
 
 func (x *ListExecutionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[30]
+	mi := &file_server_v1_functions_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2514,12 +2670,19 @@ func (x *ListExecutionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListExecutionsResponse.ProtoReflect.Descriptor instead.
 func (*ListExecutionsResponse) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{30}
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ListExecutionsResponse) GetExecutions() []*Execution {
 	if x != nil {
 		return x.Executions
+	}
+	return nil
+}
+
+func (x *ListExecutionsResponse) GetMeta() *v1.ListResponseMeta {
+	if x != nil {
+		return x.Meta
 	}
 	return nil
 }
@@ -2789,13 +2952,32 @@ const file_server_v1_functions_proto_rawDesc = "" +
 	"\x0especifications\x18\x01 \x03(\v2&.torchwood.server.v1.SpecificationInfoR\x0especifications\"\x8f\x01\n" +
 	"\x15ListFunctionsResponse\x12;\n" +
 	"\tfunctions\x18\x01 \x03(\v2\x1d.torchwood.server.v1.FunctionR\tfunctions\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\\\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\x93\x01\n" +
+	"\x16ListDeploymentsRequest\x12'\n" +
+	"\vfunction_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\n" +
+	"functionId\x12'\n" +
+	"\tpage_size\x18\x02 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12'\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80 R\tpageToken\"\xb7\x02\n" +
+	"\x15ListExecutionsRequest\x12'\n" +
+	"\vfunction_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\n" +
+	"functionId\x12'\n" +
+	"\tpage_size\x18\x02 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12'\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80 R\tpageToken\x12\x1f\n" +
+	"\x06status\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x18\x10R\x06status\x12?\n" +
+	"\rcreated_after\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\fcreatedAfter\x12A\n" +
+	"\x0ecreated_before\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\rcreatedBefore\"\x97\x01\n" +
 	"\x17ListDeploymentsResponse\x12A\n" +
-	"\vdeployments\x18\x01 \x03(\v2\x1f.torchwood.server.v1.DeploymentR\vdeployments\"X\n" +
+	"\vdeployments\x18\x01 \x03(\v2\x1f.torchwood.server.v1.DeploymentR\vdeployments\x129\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\x93\x01\n" +
 	"\x16ListExecutionsResponse\x12>\n" +
 	"\n" +
 	"executions\x18\x01 \x03(\v2\x1e.torchwood.server.v1.ExecutionR\n" +
-	"executions2\xaf\x1b\n" +
+	"executions\x129\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xb6\x1b\n" +
 	"\x10FunctionsService\x12\x86\x01\n" +
 	"\fListRuntimes\x12\x1a.torchwood.shared.v1.Empty\x1a).torchwood.server.v1.ListRuntimesResponse\"/\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/server/functions:runtimes\x12\x98\x01\n" +
 	"\x12ListSpecifications\x12\x1a.torchwood.shared.v1.Empty\x1a/.torchwood.server.v1.ListSpecificationsResponse\"5\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x02%\x12#/v1/server/functions:specifications\x12\x8a\x01\n" +
@@ -2808,8 +2990,8 @@ const file_server_v1_functions_proto_rawDesc = "" +
 	"\x0eDeleteFunction\x12'.torchwood.server.v1.GetFunctionRequest\x1a\x1a.torchwood.shared.v1.Empty\"8\x8a\xb2\x19\n" +
 	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x02$*\"/v1/server/functions/{function_id}\x12\xaa\x01\n" +
 	"\x10CreateDeployment\x12,.torchwood.server.v1.CreateDeploymentRequest\x1a\x1f.torchwood.server.v1.Deployment\"G\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x023:\x01*\"./v1/server/functions/{function_id}/deployments\x12\xaa\x01\n" +
-	"\x0fListDeployments\x12'.torchwood.server.v1.GetFunctionRequest\x1a,.torchwood.server.v1.ListDeploymentsResponse\"@\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x020\x12./v1/server/functions/{function_id}/deployments\x12\xad\x01\n" +
+	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x023:\x01*\"./v1/server/functions/{function_id}/deployments\x12\xae\x01\n" +
+	"\x0fListDeployments\x12+.torchwood.server.v1.ListDeploymentsRequest\x1a,.torchwood.server.v1.ListDeploymentsResponse\"@\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x020\x12./v1/server/functions/{function_id}/deployments\x12\xad\x01\n" +
 	"\rGetDeployment\x12).torchwood.server.v1.GetDeploymentRequest\x1a\x1f.torchwood.server.v1.Deployment\"P\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x02@\x12>/v1/server/functions/{function_id}/deployments/{deployment_id}\x12\xaf\x01\n" +
 	"\x10DeleteDeployment\x12).torchwood.server.v1.GetDeploymentRequest\x1a\x1a.torchwood.shared.v1.Empty\"T\x8a\xb2\x19\n" +
 	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x02@*>/v1/server/functions/{function_id}/deployments/{deployment_id}\x12\x9f\x01\n" +
@@ -2817,8 +2999,8 @@ const file_server_v1_functions_proto_rawDesc = "" +
 	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x021:\x01*\x1a,/v1/server/functions/{function_id}/variables\x12\x97\x01\n" +
 	"\fGetVariables\x12'.torchwood.server.v1.GetFunctionRequest\x1a\x1e.torchwood.server.v1.Variables\">\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x02.\x12,/v1/server/functions/{function_id}/variables\x12\xa6\x01\n" +
 	"\x0fCreateExecution\x12+.torchwood.server.v1.CreateExecutionRequest\x1a\x1e.torchwood.server.v1.Execution\"F\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x022:\x01*\"-/v1/server/functions/{function_id}/executions\x12\xa7\x01\n" +
-	"\x0eListExecutions\x12'.torchwood.server.v1.GetFunctionRequest\x1a+.torchwood.server.v1.ListExecutionsResponse\"?\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x02/\x12-/v1/server/functions/{function_id}/executions\x12\xa8\x01\n" +
+	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x022:\x01*\"-/v1/server/functions/{function_id}/executions\x12\xaa\x01\n" +
+	"\x0eListExecutions\x12*.torchwood.server.v1.ListExecutionsRequest\x1a+.torchwood.server.v1.ListExecutionsResponse\"?\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x02/\x12-/v1/server/functions/{function_id}/executions\x12\xa8\x01\n" +
 	"\fGetExecution\x12(.torchwood.server.v1.GetExecutionRequest\x1a\x1e.torchwood.server.v1.Execution\"N\x8a\xb2\x19\x06\"\x04\b\a\x10\x01\x82\xd3\xe4\x93\x02>\x12</v1/server/functions/{function_id}/executions/{execution_id}\x12\xa5\x01\n" +
 	"\x11SetFunctionScopes\x12-.torchwood.server.v1.SetFunctionScopesRequest\x1a\x1d.torchwood.server.v1.Function\"B\x8a\xb2\x19\n" +
 	"\x1a\x02\x03\x04\"\x04\b\a\x10\x02\x82\xd3\xe4\x93\x02.:\x01*\x1a)/v1/server/functions/{function_id}/scopes\x12\xb6\x01\n" +
@@ -2855,7 +3037,7 @@ func file_server_v1_functions_proto_rawDescGZIP() []byte {
 	return file_server_v1_functions_proto_rawDescData
 }
 
-var file_server_v1_functions_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_server_v1_functions_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_server_v1_functions_proto_goTypes = []any{
 	(*Function)(nil),                          // 0: torchwood.server.v1.Function
 	(*RuntimeInfo)(nil),                       // 1: torchwood.server.v1.RuntimeInfo
@@ -2886,85 +3068,91 @@ var file_server_v1_functions_proto_goTypes = []any{
 	(*ListRuntimesResponse)(nil),              // 26: torchwood.server.v1.ListRuntimesResponse
 	(*ListSpecificationsResponse)(nil),        // 27: torchwood.server.v1.ListSpecificationsResponse
 	(*ListFunctionsResponse)(nil),             // 28: torchwood.server.v1.ListFunctionsResponse
-	(*ListDeploymentsResponse)(nil),           // 29: torchwood.server.v1.ListDeploymentsResponse
-	(*ListExecutionsResponse)(nil),            // 30: torchwood.server.v1.ListExecutionsResponse
-	(*timestamppb.Timestamp)(nil),             // 31: google.protobuf.Timestamp
-	(*v1.ListResponseMeta)(nil),               // 32: torchwood.shared.v1.ListResponseMeta
-	(*v1.Empty)(nil),                          // 33: torchwood.shared.v1.Empty
-	(*v1.ListRequest)(nil),                    // 34: torchwood.shared.v1.ListRequest
+	(*ListDeploymentsRequest)(nil),            // 29: torchwood.server.v1.ListDeploymentsRequest
+	(*ListExecutionsRequest)(nil),             // 30: torchwood.server.v1.ListExecutionsRequest
+	(*ListDeploymentsResponse)(nil),           // 31: torchwood.server.v1.ListDeploymentsResponse
+	(*ListExecutionsResponse)(nil),            // 32: torchwood.server.v1.ListExecutionsResponse
+	(*timestamppb.Timestamp)(nil),             // 33: google.protobuf.Timestamp
+	(*v1.ListResponseMeta)(nil),               // 34: torchwood.shared.v1.ListResponseMeta
+	(*v1.Empty)(nil),                          // 35: torchwood.shared.v1.Empty
+	(*v1.ListRequest)(nil),                    // 36: torchwood.shared.v1.ListRequest
 }
 var file_server_v1_functions_proto_depIdxs = []int32{
-	31, // 0: torchwood.server.v1.Function.created_at:type_name -> google.protobuf.Timestamp
-	31, // 1: torchwood.server.v1.Function.updated_at:type_name -> google.protobuf.Timestamp
-	31, // 2: torchwood.server.v1.RuntimeInfo.eol_at:type_name -> google.protobuf.Timestamp
-	31, // 3: torchwood.server.v1.Deployment.created_at:type_name -> google.protobuf.Timestamp
-	31, // 4: torchwood.server.v1.Deployment.updated_at:type_name -> google.protobuf.Timestamp
+	33, // 0: torchwood.server.v1.Function.created_at:type_name -> google.protobuf.Timestamp
+	33, // 1: torchwood.server.v1.Function.updated_at:type_name -> google.protobuf.Timestamp
+	33, // 2: torchwood.server.v1.RuntimeInfo.eol_at:type_name -> google.protobuf.Timestamp
+	33, // 3: torchwood.server.v1.Deployment.created_at:type_name -> google.protobuf.Timestamp
+	33, // 4: torchwood.server.v1.Deployment.updated_at:type_name -> google.protobuf.Timestamp
 	5,  // 5: torchwood.server.v1.Variables.variables:type_name -> torchwood.server.v1.Variable
-	31, // 6: torchwood.server.v1.Execution.created_at:type_name -> google.protobuf.Timestamp
-	31, // 7: torchwood.server.v1.Execution.updated_at:type_name -> google.protobuf.Timestamp
+	33, // 6: torchwood.server.v1.Execution.created_at:type_name -> google.protobuf.Timestamp
+	33, // 7: torchwood.server.v1.Execution.updated_at:type_name -> google.protobuf.Timestamp
 	11, // 8: torchwood.server.v1.CreateDeploymentRequest.git:type_name -> torchwood.server.v1.GitSource
 	12, // 9: torchwood.server.v1.CreateDeploymentRequest.image:type_name -> torchwood.server.v1.ImageSource
 	5,  // 10: torchwood.server.v1.SetVariablesRequest.variables:type_name -> torchwood.server.v1.Variable
 	19, // 11: torchwood.server.v1.CreateFunctionTriggerRequest.http:type_name -> torchwood.server.v1.HttpTriggerConfig
 	20, // 12: torchwood.server.v1.CreateFunctionTriggerRequest.cron:type_name -> torchwood.server.v1.CronTriggerConfig
 	21, // 13: torchwood.server.v1.CreateFunctionTriggerRequest.event:type_name -> torchwood.server.v1.EventTriggerConfig
-	31, // 14: torchwood.server.v1.FunctionTrigger.next_run_at:type_name -> google.protobuf.Timestamp
-	31, // 15: torchwood.server.v1.FunctionTrigger.created_at:type_name -> google.protobuf.Timestamp
-	31, // 16: torchwood.server.v1.FunctionTrigger.updated_at:type_name -> google.protobuf.Timestamp
+	33, // 14: torchwood.server.v1.FunctionTrigger.next_run_at:type_name -> google.protobuf.Timestamp
+	33, // 15: torchwood.server.v1.FunctionTrigger.created_at:type_name -> google.protobuf.Timestamp
+	33, // 16: torchwood.server.v1.FunctionTrigger.updated_at:type_name -> google.protobuf.Timestamp
 	22, // 17: torchwood.server.v1.ListFunctionTriggersResponse.triggers:type_name -> torchwood.server.v1.FunctionTrigger
 	1,  // 18: torchwood.server.v1.ListRuntimesResponse.runtimes:type_name -> torchwood.server.v1.RuntimeInfo
 	2,  // 19: torchwood.server.v1.ListSpecificationsResponse.specifications:type_name -> torchwood.server.v1.SpecificationInfo
 	0,  // 20: torchwood.server.v1.ListFunctionsResponse.functions:type_name -> torchwood.server.v1.Function
-	32, // 21: torchwood.server.v1.ListFunctionsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
-	3,  // 22: torchwood.server.v1.ListDeploymentsResponse.deployments:type_name -> torchwood.server.v1.Deployment
-	6,  // 23: torchwood.server.v1.ListExecutionsResponse.executions:type_name -> torchwood.server.v1.Execution
-	33, // 24: torchwood.server.v1.FunctionsService.ListRuntimes:input_type -> torchwood.shared.v1.Empty
-	33, // 25: torchwood.server.v1.FunctionsService.ListSpecifications:input_type -> torchwood.shared.v1.Empty
-	7,  // 26: torchwood.server.v1.FunctionsService.CreateFunction:input_type -> torchwood.server.v1.CreateFunctionRequest
-	34, // 27: torchwood.server.v1.FunctionsService.ListFunctions:input_type -> torchwood.shared.v1.ListRequest
-	9,  // 28: torchwood.server.v1.FunctionsService.GetFunction:input_type -> torchwood.server.v1.GetFunctionRequest
-	8,  // 29: torchwood.server.v1.FunctionsService.UpdateFunction:input_type -> torchwood.server.v1.UpdateFunctionRequest
-	9,  // 30: torchwood.server.v1.FunctionsService.DeleteFunction:input_type -> torchwood.server.v1.GetFunctionRequest
-	10, // 31: torchwood.server.v1.FunctionsService.CreateDeployment:input_type -> torchwood.server.v1.CreateDeploymentRequest
-	9,  // 32: torchwood.server.v1.FunctionsService.ListDeployments:input_type -> torchwood.server.v1.GetFunctionRequest
-	13, // 33: torchwood.server.v1.FunctionsService.GetDeployment:input_type -> torchwood.server.v1.GetDeploymentRequest
-	13, // 34: torchwood.server.v1.FunctionsService.DeleteDeployment:input_type -> torchwood.server.v1.GetDeploymentRequest
-	16, // 35: torchwood.server.v1.FunctionsService.SetVariables:input_type -> torchwood.server.v1.SetVariablesRequest
-	9,  // 36: torchwood.server.v1.FunctionsService.GetVariables:input_type -> torchwood.server.v1.GetFunctionRequest
-	14, // 37: torchwood.server.v1.FunctionsService.CreateExecution:input_type -> torchwood.server.v1.CreateExecutionRequest
-	9,  // 38: torchwood.server.v1.FunctionsService.ListExecutions:input_type -> torchwood.server.v1.GetFunctionRequest
-	15, // 39: torchwood.server.v1.FunctionsService.GetExecution:input_type -> torchwood.server.v1.GetExecutionRequest
-	17, // 40: torchwood.server.v1.FunctionsService.SetFunctionScopes:input_type -> torchwood.server.v1.SetFunctionScopesRequest
-	18, // 41: torchwood.server.v1.FunctionsService.CreateFunctionTrigger:input_type -> torchwood.server.v1.CreateFunctionTriggerRequest
-	9,  // 42: torchwood.server.v1.FunctionsService.ListFunctionTriggers:input_type -> torchwood.server.v1.GetFunctionRequest
-	24, // 43: torchwood.server.v1.FunctionsService.DeleteFunctionTrigger:input_type -> torchwood.server.v1.DeleteFunctionTriggerRequest
-	25, // 44: torchwood.server.v1.FunctionsService.RotateFunctionTriggerToken:input_type -> torchwood.server.v1.RotateFunctionTriggerTokenRequest
-	26, // 45: torchwood.server.v1.FunctionsService.ListRuntimes:output_type -> torchwood.server.v1.ListRuntimesResponse
-	27, // 46: torchwood.server.v1.FunctionsService.ListSpecifications:output_type -> torchwood.server.v1.ListSpecificationsResponse
-	0,  // 47: torchwood.server.v1.FunctionsService.CreateFunction:output_type -> torchwood.server.v1.Function
-	28, // 48: torchwood.server.v1.FunctionsService.ListFunctions:output_type -> torchwood.server.v1.ListFunctionsResponse
-	0,  // 49: torchwood.server.v1.FunctionsService.GetFunction:output_type -> torchwood.server.v1.Function
-	0,  // 50: torchwood.server.v1.FunctionsService.UpdateFunction:output_type -> torchwood.server.v1.Function
-	33, // 51: torchwood.server.v1.FunctionsService.DeleteFunction:output_type -> torchwood.shared.v1.Empty
-	3,  // 52: torchwood.server.v1.FunctionsService.CreateDeployment:output_type -> torchwood.server.v1.Deployment
-	29, // 53: torchwood.server.v1.FunctionsService.ListDeployments:output_type -> torchwood.server.v1.ListDeploymentsResponse
-	3,  // 54: torchwood.server.v1.FunctionsService.GetDeployment:output_type -> torchwood.server.v1.Deployment
-	33, // 55: torchwood.server.v1.FunctionsService.DeleteDeployment:output_type -> torchwood.shared.v1.Empty
-	4,  // 56: torchwood.server.v1.FunctionsService.SetVariables:output_type -> torchwood.server.v1.Variables
-	4,  // 57: torchwood.server.v1.FunctionsService.GetVariables:output_type -> torchwood.server.v1.Variables
-	6,  // 58: torchwood.server.v1.FunctionsService.CreateExecution:output_type -> torchwood.server.v1.Execution
-	30, // 59: torchwood.server.v1.FunctionsService.ListExecutions:output_type -> torchwood.server.v1.ListExecutionsResponse
-	6,  // 60: torchwood.server.v1.FunctionsService.GetExecution:output_type -> torchwood.server.v1.Execution
-	0,  // 61: torchwood.server.v1.FunctionsService.SetFunctionScopes:output_type -> torchwood.server.v1.Function
-	22, // 62: torchwood.server.v1.FunctionsService.CreateFunctionTrigger:output_type -> torchwood.server.v1.FunctionTrigger
-	23, // 63: torchwood.server.v1.FunctionsService.ListFunctionTriggers:output_type -> torchwood.server.v1.ListFunctionTriggersResponse
-	33, // 64: torchwood.server.v1.FunctionsService.DeleteFunctionTrigger:output_type -> torchwood.shared.v1.Empty
-	22, // 65: torchwood.server.v1.FunctionsService.RotateFunctionTriggerToken:output_type -> torchwood.server.v1.FunctionTrigger
-	45, // [45:66] is the sub-list for method output_type
-	24, // [24:45] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	34, // 21: torchwood.server.v1.ListFunctionsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	33, // 22: torchwood.server.v1.ListExecutionsRequest.created_after:type_name -> google.protobuf.Timestamp
+	33, // 23: torchwood.server.v1.ListExecutionsRequest.created_before:type_name -> google.protobuf.Timestamp
+	3,  // 24: torchwood.server.v1.ListDeploymentsResponse.deployments:type_name -> torchwood.server.v1.Deployment
+	34, // 25: torchwood.server.v1.ListDeploymentsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	6,  // 26: torchwood.server.v1.ListExecutionsResponse.executions:type_name -> torchwood.server.v1.Execution
+	34, // 27: torchwood.server.v1.ListExecutionsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	35, // 28: torchwood.server.v1.FunctionsService.ListRuntimes:input_type -> torchwood.shared.v1.Empty
+	35, // 29: torchwood.server.v1.FunctionsService.ListSpecifications:input_type -> torchwood.shared.v1.Empty
+	7,  // 30: torchwood.server.v1.FunctionsService.CreateFunction:input_type -> torchwood.server.v1.CreateFunctionRequest
+	36, // 31: torchwood.server.v1.FunctionsService.ListFunctions:input_type -> torchwood.shared.v1.ListRequest
+	9,  // 32: torchwood.server.v1.FunctionsService.GetFunction:input_type -> torchwood.server.v1.GetFunctionRequest
+	8,  // 33: torchwood.server.v1.FunctionsService.UpdateFunction:input_type -> torchwood.server.v1.UpdateFunctionRequest
+	9,  // 34: torchwood.server.v1.FunctionsService.DeleteFunction:input_type -> torchwood.server.v1.GetFunctionRequest
+	10, // 35: torchwood.server.v1.FunctionsService.CreateDeployment:input_type -> torchwood.server.v1.CreateDeploymentRequest
+	29, // 36: torchwood.server.v1.FunctionsService.ListDeployments:input_type -> torchwood.server.v1.ListDeploymentsRequest
+	13, // 37: torchwood.server.v1.FunctionsService.GetDeployment:input_type -> torchwood.server.v1.GetDeploymentRequest
+	13, // 38: torchwood.server.v1.FunctionsService.DeleteDeployment:input_type -> torchwood.server.v1.GetDeploymentRequest
+	16, // 39: torchwood.server.v1.FunctionsService.SetVariables:input_type -> torchwood.server.v1.SetVariablesRequest
+	9,  // 40: torchwood.server.v1.FunctionsService.GetVariables:input_type -> torchwood.server.v1.GetFunctionRequest
+	14, // 41: torchwood.server.v1.FunctionsService.CreateExecution:input_type -> torchwood.server.v1.CreateExecutionRequest
+	30, // 42: torchwood.server.v1.FunctionsService.ListExecutions:input_type -> torchwood.server.v1.ListExecutionsRequest
+	15, // 43: torchwood.server.v1.FunctionsService.GetExecution:input_type -> torchwood.server.v1.GetExecutionRequest
+	17, // 44: torchwood.server.v1.FunctionsService.SetFunctionScopes:input_type -> torchwood.server.v1.SetFunctionScopesRequest
+	18, // 45: torchwood.server.v1.FunctionsService.CreateFunctionTrigger:input_type -> torchwood.server.v1.CreateFunctionTriggerRequest
+	9,  // 46: torchwood.server.v1.FunctionsService.ListFunctionTriggers:input_type -> torchwood.server.v1.GetFunctionRequest
+	24, // 47: torchwood.server.v1.FunctionsService.DeleteFunctionTrigger:input_type -> torchwood.server.v1.DeleteFunctionTriggerRequest
+	25, // 48: torchwood.server.v1.FunctionsService.RotateFunctionTriggerToken:input_type -> torchwood.server.v1.RotateFunctionTriggerTokenRequest
+	26, // 49: torchwood.server.v1.FunctionsService.ListRuntimes:output_type -> torchwood.server.v1.ListRuntimesResponse
+	27, // 50: torchwood.server.v1.FunctionsService.ListSpecifications:output_type -> torchwood.server.v1.ListSpecificationsResponse
+	0,  // 51: torchwood.server.v1.FunctionsService.CreateFunction:output_type -> torchwood.server.v1.Function
+	28, // 52: torchwood.server.v1.FunctionsService.ListFunctions:output_type -> torchwood.server.v1.ListFunctionsResponse
+	0,  // 53: torchwood.server.v1.FunctionsService.GetFunction:output_type -> torchwood.server.v1.Function
+	0,  // 54: torchwood.server.v1.FunctionsService.UpdateFunction:output_type -> torchwood.server.v1.Function
+	35, // 55: torchwood.server.v1.FunctionsService.DeleteFunction:output_type -> torchwood.shared.v1.Empty
+	3,  // 56: torchwood.server.v1.FunctionsService.CreateDeployment:output_type -> torchwood.server.v1.Deployment
+	31, // 57: torchwood.server.v1.FunctionsService.ListDeployments:output_type -> torchwood.server.v1.ListDeploymentsResponse
+	3,  // 58: torchwood.server.v1.FunctionsService.GetDeployment:output_type -> torchwood.server.v1.Deployment
+	35, // 59: torchwood.server.v1.FunctionsService.DeleteDeployment:output_type -> torchwood.shared.v1.Empty
+	4,  // 60: torchwood.server.v1.FunctionsService.SetVariables:output_type -> torchwood.server.v1.Variables
+	4,  // 61: torchwood.server.v1.FunctionsService.GetVariables:output_type -> torchwood.server.v1.Variables
+	6,  // 62: torchwood.server.v1.FunctionsService.CreateExecution:output_type -> torchwood.server.v1.Execution
+	32, // 63: torchwood.server.v1.FunctionsService.ListExecutions:output_type -> torchwood.server.v1.ListExecutionsResponse
+	6,  // 64: torchwood.server.v1.FunctionsService.GetExecution:output_type -> torchwood.server.v1.Execution
+	0,  // 65: torchwood.server.v1.FunctionsService.SetFunctionScopes:output_type -> torchwood.server.v1.Function
+	22, // 66: torchwood.server.v1.FunctionsService.CreateFunctionTrigger:output_type -> torchwood.server.v1.FunctionTrigger
+	23, // 67: torchwood.server.v1.FunctionsService.ListFunctionTriggers:output_type -> torchwood.server.v1.ListFunctionTriggersResponse
+	35, // 68: torchwood.server.v1.FunctionsService.DeleteFunctionTrigger:output_type -> torchwood.shared.v1.Empty
+	22, // 69: torchwood.server.v1.FunctionsService.RotateFunctionTriggerToken:output_type -> torchwood.server.v1.FunctionTrigger
+	49, // [49:70] is the sub-list for method output_type
+	28, // [28:49] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_server_v1_functions_proto_init() }
@@ -2988,7 +3176,7 @@ func file_server_v1_functions_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_server_v1_functions_proto_rawDesc), len(file_server_v1_functions_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   31,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
