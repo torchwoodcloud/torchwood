@@ -183,7 +183,7 @@ func TestPolicyGoldenBaseline(t *testing.T) {
 		if err != nil {
 			t.Fatalf("marshal golden: %v", err)
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 			t.Fatalf("mkdir testdata: %v", err)
 		}
 		if err := os.WriteFile(path, data, 0o644); err != nil {
