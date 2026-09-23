@@ -58,10 +58,14 @@ func NewConsoleHandler() (http.Handler, error) {
 
 // consoleNotBuiltHandler 在 console/dist 未构建时返回提示页（保留原入库
 // 占位 index.html 的 UX，R4 #13；占位文件已改为不入库的 .gitkeep）。
+// 提示页与 SPA fallback 同为 no-cache：构建后同一 URL 会换成真实产物，
+// 未构建提示页不得被中间层缓存（也让 dist 未构建的 CI 上
+// TestConsoleHandler_SPARoutesUnderAssetsPrefix 的缓存断言双态成立）。
 func consoleNotBuiltHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		setConsoleSecurityHeaders(w)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Torchwood Console</title></head>` +
 			`<body><p>Console is not built — run <code>mise run console:build</code> and then <code>mise run build</code>.</p></body></html>`))
