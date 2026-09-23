@@ -151,8 +151,8 @@ github.com/lynx-go/grpcapi v0.1.0 h1:VCxei/uj0CC3X5NL5sqZ25xZ/1qwXZzMZ6vKrQV0g4g
 github.com/lynx-go/grpcapi v0.1.0/go.mod h1:u52KP8XmJbwPPSC/OAzfmeYAiuGoh/an1FA74w6Wdbw=
 github.com/lynx-go/grpcapi/genproto v0.1.0 h1:d3VgPLXIJLMFPzWNoPnk2aUskHoZsvHfXgfx1U/qob4=
 github.com/lynx-go/grpcapi/genproto v0.1.0/go.mod h1:KCxDet6GpsDFsZmMfxT26fzxeRu1dmRzPFTqKrJUkSI=
-github.com/lynx-go/lynx v1.11.0 h1:VAa7LOZDs1EE3iSy6aBtnbMh0jtgocXJo3LUMk27L6k=
-github.com/lynx-go/lynx v1.11.0/go.mod h1:K/zBXaFyTrxo+TTT+5DTI++Drh3Vu7dWA8gn04BVVUU=
+github.com/lynx-go/lynx v1.13.0 h1:gkMIMMYR7rasXoiSU0A2OjEGJMEQNQRB/yt930uOD5I=
+github.com/lynx-go/lynx v1.13.0/go.mod h1:ZO6EYKnt8Lrv/X0uW4c6uxO6t8EjogdxMTxZZsiOQoA=
 github.com/lynx-go/lynx/contrib/zap v1.7.0 h1:z51IoCVZv8JRhRI3VNiXQWUJqwaq3Br6+UiXtHxOL1o=
 github.com/lynx-go/lynx/contrib/zap v1.7.0/go.mod h1:HbegCV1m5rdEqQjLzlVn191TJNIH3YF1LgAnEHZQflk=
 github.com/minio/crc64nvme v1.1.1 h1:8dwx/Pz49suywbO+auHCBpCtlW1OfpcLN7wYgVR6wAI=
