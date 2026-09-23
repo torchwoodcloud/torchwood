@@ -184,7 +184,7 @@ depends = ["lint:go", "lint:golangci", "test:codegen", "test:sdk-go", "test:sdk-
 run = "go test -race -v ./... -cover"
 
 [tasks."test:codegen"]
-description = "codegen 漂移检查：generate:all 重跑后零 diff（与 CI 同款断言；本地跑好再推的闭环）"
+description = "codegen 漂移检查：generate:all 重跑后零 diff（唯一门禁点在本地 mise run test；CI 不重复——冷环境重生成会产生本地不复现的 diff）"
 depends = ["generate:all"]
 run = '''
 git diff --exit-code -- genproto internal/pkg/config cmd go.mod go.sum || {

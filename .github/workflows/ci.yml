@@ -155,11 +155,6 @@ jobs:
         working-directory: sdk/go
         run: go test -race ./...
 
-      # 与本地 mise run test:codegen 同款：generate:all 重跑零漂移。
-      # （本地跑好再推的闭环——本地 mise run test 已含此检查。）
-      - name: Codegen drift check
-        run: mise run test:codegen
-
       - name: TS SDK test
         working-directory: sdk/typescript
         run: npm ci && npm run test
@@ -167,8 +162,11 @@ jobs:
       - name: SDK demo build
         run: mise run sdk:demo-build
 
+      # codegen 漂移检查只在本地门禁（mise run test 已含 test:codegen）：
+      # CI 冷环境重跑 generate:all 会受 tidy/网络影响产生本地不复现的 diff
+      # （2026-09-23 go.sum 10 行打回即此因），不再重复（CI 简化裁决）。
       # 全量构建验证（console + Go embed + 五二进制）由 Image workflow 的
-      # docker 多阶段构建覆盖，此处不重复（2026-09-23 CI 简化裁决）。
+      # docker 多阶段构建覆盖，此处不重复。
 
   frontend:
     name: Frontend (lint + build)
