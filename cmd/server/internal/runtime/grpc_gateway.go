@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/lynx-go/grpcapi/gateway"
 	"github.com/lynx-go/lynx"
 	lynxhttp "github.com/lynx-go/lynx/server/http"
 	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
@@ -19,12 +20,23 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/health"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 type GRPCGatewayServer struct {
 	*lynxhttp.Server
 }
+
+// authIncomingHeaderMatcher / authOutgoingHeaderMatcher：入/出站 header
+// matcher 机制换库（grpcapi 阶段 1，gateway.IncomingMatcher/OutgoingMatcher），
+// 项目专属头经参数注入，包级变量保留供矩阵测试与装配共用：
+//   - 入站 authorization 恒拒绝（放行即双写 401），基础放行集
+//     cookie/x-api-key/x-request-id/idempotency-key + 项目头 x-torchwood-project；
+//   - 出站 set-cookie 与幂等重放标记 x-torchwood-replayed 直透为响应头，
+//     其余 key 保持 Grpc-Metadata- 前缀默认行为。
+var (
+	authIncomingHeaderMatcher = gateway.IncomingMatcher("x-torchwood-project")
+	authOutgoingHeaderMatcher = gateway.OutgoingMatcher("x-torchwood-replayed")
+)
 
 func NewGRPCGatewayServer(
 	app lynx.App,
@@ -42,70 +54,74 @@ func NewGRPCGatewayServer(
 	timeout := parseDuration(httpCfg.GetTimeout(), 60*time.Second)
 
 	grpcAddr := cfg.GetServer().GetGrpc().GetAddr()
-	grpcEndpoint := grpcEndpointFromAddr(grpcAddr)
 
 	mux := runtime.NewServeMux(
 		runtime.WithErrorHandler(HTTPErrorHandler),
 		runtime.WithIncomingHeaderMatcher(authIncomingHeaderMatcher),
 		runtime.WithOutgoingHeaderMatcher(authOutgoingHeaderMatcher),
-		runtime.WithMarshalerOption("*", NewCustomMarshaler()),
-		runtime.WithMarshalerOption("*/*", NewCustomMarshaler()),
-		runtime.WithMarshalerOption("application/json", NewCustomMarshaler()),
+		runtime.WithMarshalerOption("*", gateway.NewMarshaler()),
+		runtime.WithMarshalerOption("*/*", gateway.NewMarshaler()),
+		runtime.WithMarshalerOption("application/json", gateway.NewMarshaler()),
 	)
 
-	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
-	ctx := app.Context()
+	// 拨号换库（grpcapi 阶段 1）：gateway.Dial = 端点归一（gateway.LocalEndpoint，
+	// 同原 grpcEndpointFromAddr）+ insecure 凭证 + 惰性 grpc.NewClient；整条
+	// gateway 共享一条连接（原先每个 Register*HandlerFromEndpoint 各自惰性
+	// 建连）。转发收包上限补齐为 8MiB（与服务端 MaxRecvMsgSize 对齐；原实现
+	// 未显式设置，>4MiB 的响应会在 gateway 侧被拒）。
+	conn, err := gateway.Dial(app.Context(), grpcAddr, gateway.DialConfig{})
+	if err != nil {
+		return nil, err
+	}
 
-	register := []func(context.Context, *runtime.ServeMux, string, []grpc.DialOption) error{
-		clientv1.RegisterAccountServiceHandlerFromEndpoint,
-		clientv1.RegisterDatabasesServiceHandlerFromEndpoint,
-		clientv1.RegisterGroupsServiceHandlerFromEndpoint,
-		serverv1.RegisterHealthServiceHandlerFromEndpoint,
-		serverv1.RegisterProjectsServiceHandlerFromEndpoint,
-		serverv1.RegisterStorageServiceHandlerFromEndpoint,
-		serverv1.RegisterUsersServiceHandlerFromEndpoint,
+	register := []gateway.RegisterFunc{
+		registerClient(clientv1.NewAccountServiceClient, clientv1.RegisterAccountServiceHandlerClient),
+		registerClient(clientv1.NewDatabasesServiceClient, clientv1.RegisterDatabasesServiceHandlerClient),
+		registerClient(clientv1.NewGroupsServiceClient, clientv1.RegisterGroupsServiceHandlerClient),
+		registerClient(serverv1.NewHealthServiceClient, serverv1.RegisterHealthServiceHandlerClient),
+		registerClient(serverv1.NewProjectsServiceClient, serverv1.RegisterProjectsServiceHandlerClient),
+		registerClient(serverv1.NewStorageServiceClient, serverv1.RegisterStorageServiceHandlerClient),
+		registerClient(serverv1.NewUsersServiceClient, serverv1.RegisterUsersServiceHandlerClient),
 		// 对外 token 校验面（POST /v1/server/auth/tokens:verify，供桥接
 		// 服务/Agent 经 HTTP 消费）。
-		serverv1.RegisterAuthServiceHandlerFromEndpoint,
-		serverv1.RegisterAPIKeysServiceHandlerFromEndpoint,
-		serverv1.RegisterOAuthProvidersServiceHandlerFromEndpoint,
-		serverv1.RegisterGroupsServiceHandlerFromEndpoint,
-		serverv1.RegisterDatabasesServiceHandlerFromEndpoint,
-		serverv1.RegisterFunctionsServiceHandlerFromEndpoint,
-		serverv1.RegisterPaymentsServiceHandlerFromEndpoint,
-		serverv1.RegisterBillingServiceHandlerFromEndpoint,
-		clientv1.RegisterPaymentsServiceHandlerFromEndpoint,
-		serverv1.RegisterAssetsServiceHandlerFromEndpoint,
-		serverv1.RegisterSubscriptionsServiceHandlerFromEndpoint,
-		clientv1.RegisterAssetsServiceHandlerFromEndpoint,
-		clientv1.RegisterSubscriptionsServiceHandlerFromEndpoint,
-		clientv1.RegisterFunctionsServiceHandlerFromEndpoint,
-		consolev1.RegisterConsoleAuthServiceHandlerFromEndpoint,
-		consolev1.RegisterAdminsServiceHandlerFromEndpoint,
+		registerClient(serverv1.NewAuthServiceClient, serverv1.RegisterAuthServiceHandlerClient),
+		registerClient(serverv1.NewAPIKeysServiceClient, serverv1.RegisterAPIKeysServiceHandlerClient),
+		registerClient(serverv1.NewOAuthProvidersServiceClient, serverv1.RegisterOAuthProvidersServiceHandlerClient),
+		registerClient(serverv1.NewGroupsServiceClient, serverv1.RegisterGroupsServiceHandlerClient),
+		registerClient(serverv1.NewDatabasesServiceClient, serverv1.RegisterDatabasesServiceHandlerClient),
+		registerClient(serverv1.NewFunctionsServiceClient, serverv1.RegisterFunctionsServiceHandlerClient),
+		registerClient(serverv1.NewPaymentsServiceClient, serverv1.RegisterPaymentsServiceHandlerClient),
+		registerClient(serverv1.NewBillingServiceClient, serverv1.RegisterBillingServiceHandlerClient),
+		registerClient(clientv1.NewPaymentsServiceClient, clientv1.RegisterPaymentsServiceHandlerClient),
+		registerClient(serverv1.NewAssetsServiceClient, serverv1.RegisterAssetsServiceHandlerClient),
+		registerClient(serverv1.NewSubscriptionsServiceClient, serverv1.RegisterSubscriptionsServiceHandlerClient),
+		registerClient(clientv1.NewAssetsServiceClient, clientv1.RegisterAssetsServiceHandlerClient),
+		registerClient(clientv1.NewSubscriptionsServiceClient, clientv1.RegisterSubscriptionsServiceHandlerClient),
+		registerClient(clientv1.NewFunctionsServiceClient, clientv1.RegisterFunctionsServiceHandlerClient),
+		registerClient(consolev1.NewConsoleAuthServiceClient, consolev1.RegisterConsoleAuthServiceHandlerClient),
+		registerClient(consolev1.NewAdminsServiceClient, consolev1.RegisterAdminsServiceHandlerClient),
 		// 审计日志查询面（outbox 走 gRPC-only 未登记；Console 前端经
 		// /v1/server/audit-logs 消费，必须挂 gateway）。
-		serverv1.RegisterAuditLogsServiceHandlerFromEndpoint,
-		clientv1.RegisterLeaderboardsServiceHandlerFromEndpoint,
-		serverv1.RegisterLeaderboardsServiceHandlerFromEndpoint,
-		consolev1.RegisterLeaderboardsServiceHandlerFromEndpoint,
+		registerClient(serverv1.NewAuditLogsServiceClient, serverv1.RegisterAuditLogsServiceHandlerClient),
+		registerClient(clientv1.NewLeaderboardsServiceClient, clientv1.RegisterLeaderboardsServiceHandlerClient),
+		registerClient(serverv1.NewLeaderboardsServiceClient, serverv1.RegisterLeaderboardsServiceHandlerClient),
+		registerClient(consolev1.NewLeaderboardsServiceClient, consolev1.RegisterLeaderboardsServiceHandlerClient),
 		// Analytics 摄入双面（PR2）：POST /v1/analytics/events（端侧会话）
 		// 与 POST /v1/server/analytics/events（API Key/admin）。
-		clientv1.RegisterAnalyticsServiceHandlerFromEndpoint,
-		serverv1.RegisterAnalyticsServiceHandlerFromEndpoint,
+		registerClient(clientv1.NewAnalyticsServiceClient, clientv1.RegisterAnalyticsServiceHandlerClient),
+		registerClient(serverv1.NewAnalyticsServiceClient, serverv1.RegisterAnalyticsServiceHandlerClient),
 		// Runbook 迁移状态面（阶段 A）：/v1/server/runbooks/{runbook}/steps
 		//（CLI 经 gRPC InvokeJSON，gateway 供 Agent/OpenAPI 面）。
-		serverv1.RegisterRunbookServiceHandlerFromEndpoint,
+		registerClient(serverv1.NewRunbookServiceClient, serverv1.RegisterRunbookServiceHandlerClient),
 		// RuntimeVars server 面（阶段 2 服务面）：/v1/server/runtime-var-sets
 		// CRUD + vars + versions（Console/CLI/Agent 经 gateway 消费）。
-		serverv1.RegisterRuntimeVarsServiceHandlerFromEndpoint,
+		registerClient(serverv1.NewRuntimeVarsServiceClient, serverv1.RegisterRuntimeVarsServiceHandlerClient),
 		// RuntimeVars client 面（阶段 3 匿名拉取端点）：GET /v1/runtime-vars/
 		// {var_set_id}——客户端 SDK 轮询入口，必须挂 gateway。
-		clientv1.RegisterRuntimeVarsServiceHandlerFromEndpoint,
+		registerClient(clientv1.NewRuntimeVarsServiceClient, clientv1.RegisterRuntimeVarsServiceHandlerClient),
 	}
-	for _, fn := range register {
-		if err := fn(ctx, mux, grpcEndpoint, opts); err != nil {
-			return nil, err
-		}
+	if err := gateway.Register(app.Context(), mux, conn, register...); err != nil {
+		return nil, err
 	}
 
 	// Custom HTTP handlers for file upload/download and OAuth callbacks.
@@ -176,20 +192,16 @@ func NewGRPCGatewayServer(
 	)}, nil
 }
 
-// grpcEndpointFromAddr 从 server.grpc.addr 推导 gateway 转发目标：
-// 保留原主机（默认回环），仅补充缺失的端口默认值。
-func grpcEndpointFromAddr(addr string) string {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil || port == "" {
-		if addr != "" && !strings.HasPrefix(addr, ":") {
-			return addr
-		}
-		return "127.0.0.1:9060"
+// registerClient 以闭包适配 genproto 生成的 New*Client + Register*HandlerClient
+// 对为 gateway.RegisterFunc（与原 Register*HandlerFromEndpoint 注册同源，
+// 仅建连方式由"每注册一连接"收敛为共享连接）。
+func registerClient[T any](
+	newClient func(grpc.ClientConnInterface) T,
+	register func(context.Context, *runtime.ServeMux, T) error,
+) gateway.RegisterFunc {
+	return func(ctx context.Context, mux *runtime.ServeMux, conn grpc.ClientConnInterface) error {
+		return register(ctx, mux, newClient(conn))
 	}
-	if host == "" {
-		host = "127.0.0.1"
-	}
-	return net.JoinHostPort(host, port)
 }
 
 //nolint:unused
@@ -199,34 +211,4 @@ func portFromAddr(addr string) string {
 		return "8088"
 	}
 	return port
-}
-
-func authIncomingHeaderMatcher(key string) (string, bool) {
-	switch strings.ToLower(key) {
-	case "authorization":
-		// grpc-gateway annotateContext 对 Authorization 头有内置向后兼容透传
-		// （无前缀 metadata "authorization"）；matcher 再放行会导致同值被
-		// append 两次，服务端 ParseAuthnRequest 判定 ErrMultipleCredentials，
-		// 所有 Bearer 认证请求都会 401。
-		return "", false
-	case "cookie", "x-api-key", "x-torchwood-project", "x-request-id", "idempotency-key":
-		return strings.ToLower(key), true
-	default:
-		return runtime.DefaultHeaderMatcher(key)
-	}
-}
-
-// authOutgoingHeaderMatcher 把 console auth handler 下发的 set-cookie metadata
-// 透传为 Set-Cookie 响应头（用于 HttpOnly 会话 cookie）；幂等重放标记
-// x-torchwood-replayed 同样直透为响应头。grpc-gateway v2.27.1 的默认
-// defaultOutgoingHeaderMatcher 会给所有 metadata key 加 "Grpc-Metadata-"
-// 前缀，不自定义 matcher 则 cookie 永远到不了浏览器；其余 key 保持默认行为不变。
-func authOutgoingHeaderMatcher(key string) (string, bool) {
-	switch strings.ToLower(key) {
-	case "set-cookie":
-		return "Set-Cookie", true
-	case "x-torchwood-replayed":
-		return "X-Torchwood-Replayed", true
-	}
-	return runtime.MetadataHeaderPrefix + key, true
 }

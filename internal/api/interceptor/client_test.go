@@ -5,6 +5,7 @@ import (
 	"net"
 	"testing"
 
+	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
 	"github.com/stretchr/testify/require"
 	"github.com/torchwoodcloud/torchwood/internal/api/interceptor"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
@@ -13,10 +14,17 @@ import (
 	"google.golang.org/grpc/peer"
 )
 
-func runClientInfo(t *testing.T, ic *interceptor.ClientInfoInterceptor, ctx context.Context) contexts.ClientInfo {
+// clientInfo 拦截器行为矩阵（grpcapi 阶段 1 换库后）：实现本体在
+// grpcapi/interceptor，本文件经 torchwood 包符号 + contexts 门面读取，
+// 锁定换库后与 ctx 槽（contextx.ClientInfo）的端到端对接。
+//
+// 行为差异声明（相对旧本地实现，有意改进）：peer 命中可信网段时 XFF
+// 解析为"自右向左逐跳回溯，第一个不可信地址即客户端"（客户端伪造注入
+// 的前缀跳被截断）；旧实现直取首跳，会把客户端自行携带的伪造跳当作来源。
+func runClientInfo(t *testing.T, ic *grpcapiinterceptor.ClientInfoInterceptor, ctx context.Context) contexts.ClientInfo {
 	t.Helper()
 	var captured contexts.ClientInfo
-	_, err := ic.UnaryMiddleware(ctx, nil, &grpc.UnaryServerInfo{}, func(ctx context.Context, req any) (any, error) {
+	_, err := ic.Unary()(ctx, nil, &grpc.UnaryServerInfo{}, func(ctx context.Context, req any) (any, error) {
 		captured = contexts.ClientInfoFrom(ctx)
 		return nil, nil
 	})
@@ -32,7 +40,7 @@ func incomingWithPeer(md metadata.MD, addr string) context.Context {
 func TestClientInfoInterceptor_NoPeerFallsBackToHeaders(t *testing.T) {
 	t.Parallel()
 
-	ic := interceptor.NewClientInfoInterceptor(nil)
+	ic := grpcapiinterceptor.NewClientInfo(grpcapiinterceptor.ClientInfoConfig{})
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
 		"x-forwarded-for", "203.0.113.1, 10.0.0.1",
 		"grpcgateway-user-agent", "TestAgent/2.0",
@@ -46,9 +54,9 @@ func TestClientInfoInterceptor_NoPeerFallsBackToHeaders(t *testing.T) {
 func TestClientInfoInterceptor_UntrustedPeerIgnoresXFF(t *testing.T) {
 	t.Parallel()
 
-	trusted, err := interceptor.ParseTrustedProxies([]string{"10.0.0.0/8"})
-	require.NoError(t, err)
-	ic := interceptor.NewClientInfoInterceptor(trusted)
+	ic := grpcapiinterceptor.NewClientInfo(grpcapiinterceptor.ClientInfoConfig{
+		TrustedProxies: []string{"10.0.0.0/8"},
+	})
 
 	ctx := incomingWithPeer(metadata.Pairs(
 		"x-forwarded-for", "203.0.113.99",
@@ -59,16 +67,37 @@ func TestClientInfoInterceptor_UntrustedPeerIgnoresXFF(t *testing.T) {
 	require.Equal(t, "192.0.2.10", captured.IP)
 }
 
-func TestClientInfoInterceptor_TrustedPeerUsesXFFFirstHop(t *testing.T) {
+// 行为变化点（原 TrustedPeerUsesXFFFirstHop）：peer 可信时不再直取首跳，
+// 而是自右向左回溯——仅边缘代理（127.0.0.1）可信时，XFF 最右跳
+// "10.0.0.1" 是它所见地址且不在可信集内，即被认定为客户端；旧实现会
+// 直取首跳 "203.0.113.1"（含客户端可伪造跳）。
+func TestClientInfoInterceptor_TrustedPeerBacktracksToRightmostUntrusted(t *testing.T) {
 	t.Parallel()
 
-	trusted, err := interceptor.ParseTrustedProxies([]string{"127.0.0.1/32"})
-	require.NoError(t, err)
-	ic := interceptor.NewClientInfoInterceptor(trusted)
+	ic := grpcapiinterceptor.NewClientInfo(grpcapiinterceptor.ClientInfoConfig{
+		TrustedProxies: []string{"127.0.0.1/32"},
+	})
 
 	ctx := incomingWithPeer(metadata.Pairs(
 		"x-forwarded-for", "203.0.113.1, 10.0.0.1",
 	), "127.0.0.1")
+
+	captured := runClientInfo(t, ic, ctx)
+	require.Equal(t, "10.0.0.1", captured.IP)
+}
+
+// 伪造跳截断：客户端自带的 "6.6.6.6" 前缀跳不得成为来源——逐跳回溯从
+// 可信链末端（10.0.0.1 → 203.0.113.1）向左，停在第一个不可信地址。
+func TestClientInfoInterceptor_TrustedPeerTruncatesSpoofedPrefixHops(t *testing.T) {
+	t.Parallel()
+
+	ic := grpcapiinterceptor.NewClientInfo(grpcapiinterceptor.ClientInfoConfig{
+		TrustedProxies: []string{"10.0.0.0/8", "192.0.2.0/24"},
+	})
+
+	ctx := incomingWithPeer(metadata.Pairs(
+		"x-forwarded-for", "6.6.6.6, 203.0.113.1, 10.0.0.1",
+	), "192.0.2.5")
 
 	captured := runClientInfo(t, ic, ctx)
 	require.Equal(t, "203.0.113.1", captured.IP)
@@ -77,9 +106,9 @@ func TestClientInfoInterceptor_TrustedPeerUsesXFFFirstHop(t *testing.T) {
 func TestClientInfoInterceptor_TrustedPeerWithoutXFFFallsBackToRealIP(t *testing.T) {
 	t.Parallel()
 
-	trusted, err := interceptor.ParseTrustedProxies([]string{"127.0.0.0/8"})
-	require.NoError(t, err)
-	ic := interceptor.NewClientInfoInterceptor(trusted)
+	ic := grpcapiinterceptor.NewClientInfo(grpcapiinterceptor.ClientInfoConfig{
+		TrustedProxies: []string{"127.0.0.0/8"},
+	})
 
 	ctx := incomingWithPeer(metadata.Pairs(
 		"x-real-ip", "198.51.100.7",
@@ -92,7 +121,7 @@ func TestClientInfoInterceptor_TrustedPeerWithoutXFFFallsBackToRealIP(t *testing
 func TestClientInfoInterceptor_EmptyTrustedListNeverTrusts(t *testing.T) {
 	t.Parallel()
 
-	ic := interceptor.NewClientInfoInterceptor(nil)
+	ic := grpcapiinterceptor.NewClientInfo(grpcapiinterceptor.ClientInfoConfig{})
 	ctx := incomingWithPeer(metadata.Pairs(
 		"x-forwarded-for", "203.0.113.99",
 	), "127.0.0.1")

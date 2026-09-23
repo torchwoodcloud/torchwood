@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
 	"github.com/stretchr/testify/require"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	"github.com/torchwoodcloud/torchwood/internal/api/interceptor"
@@ -118,13 +119,13 @@ func TestAuthService_VerifyToken_APIKeyScopeGate(t *testing.T) {
 
 // TestAuthService_VerifyToken_ShapeValidation：protovalidate 形状校验——
 // 空 token → InvalidArgument（required）；未定义枚举值 → InvalidArgument。
+// （校验拦截器实现换库 grpcapi/interceptor，调用面为库的 Unary()。）
 func TestAuthService_VerifyToken_ShapeValidation(t *testing.T) {
 	t.Parallel()
-	v, err := interceptor.NewValidateInterceptor()
-	require.NoError(t, err)
+	v := grpcapiinterceptor.NewValidate()
 	info := &grpc.UnaryServerInfo{FullMethod: verifyTokenMethod}
 
-	_, err = v.UnaryValidateMiddleware(context.Background(),
+	_, err := v.Unary()(context.Background(),
 		&serverv1.VerifyTokenRequest{Token: ""}, info,
 		func(context.Context, any) (any, error) {
 			t.Fatal("handler must not be reached on violation")
@@ -133,7 +134,7 @@ func TestAuthService_VerifyToken_ShapeValidation(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.Equal(t, "token: value is required", status.Convert(err).Message())
 
-	_, err = v.UnaryValidateMiddleware(context.Background(),
+	_, err = v.Unary()(context.Background(),
 		&serverv1.VerifyTokenRequest{Token: "t", Type: serverv1.VerifyCredentialType(99)}, info,
 		func(context.Context, any) (any, error) {
 			t.Fatal("handler must not be reached on violation")
@@ -142,7 +143,7 @@ func TestAuthService_VerifyToken_ShapeValidation(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err), "未定义枚举值必须被拒绝（defined_only 默认开启）")
 
 	// 合法请求透传。
-	res, err := v.UnaryValidateMiddleware(context.Background(),
+	res, err := v.Unary()(context.Background(),
 		&serverv1.VerifyTokenRequest{Token: "t", Type: serverv1.VerifyCredentialType_VERIFY_CREDENTIAL_TYPE_AUTO}, info,
 		func(context.Context, any) (any, error) { return &serverv1.VerifyTokenResponse{}, nil })
 	require.NoError(t, err)

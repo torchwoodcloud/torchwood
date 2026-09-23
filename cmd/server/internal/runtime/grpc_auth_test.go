@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lynx-go/grpcapi/authz"
+	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"google.golang.org/grpc"
@@ -62,12 +63,16 @@ func testPolicySet(policies ...domainauth.MethodPolicy) *domainauth.PolicySet {
 }
 
 func TestAssertRegisteredMethodsHaveAuthz(t *testing.T) {
+	// 启动断言换库（grpcapi 阶段 1）：AssertAllRegisteredHavePolicy 与原
+	// 本地实现同构（遍历 GetServiceInfo 全部方法含流式；health/reflection
+	// 整体豁免；缺失方法聚合报错按字典序列出），报错前缀文案由
+	// "missing authz annotation" 收敛为库版 "missing authz policy"。
 	t.Parallel()
 
 	t.Run("all methods covered", func(t *testing.T) {
 		t.Parallel()
 		srv := newServerWithServices("torchwood.test.v1.PublicService", "torchwood.test.v1.KeyService", "torchwood.test.v1.PermService")
-		err := assertRegisteredMethodsHaveAuthz(srv, testPolicySet(
+		err := grpcapiinterceptor.AssertAllRegisteredHavePolicy(srv, testPolicySet(
 			domainauth.MethodPolicy{Method: "/torchwood.test.v1.PublicService/DoThing", Service: "/torchwood.test.v1.PublicService", Access: domainauth.AccessPublic},
 			domainauth.MethodPolicy{Method: "/torchwood.test.v1.KeyService/DoThing", Service: "/torchwood.test.v1.KeyService", Access: domainauth.AccessServer, Scope: &domainauth.ScopeRule{Resource: string(domainauth.ScopeUsers), Op: domainauth.ScopeRead}},
 			domainauth.MethodPolicy{Method: "/torchwood.test.v1.PermService/DoThing", Service: "/torchwood.test.v1.PermService", Access: domainauth.AccessPermission, Permissions: []string{"users"}},
@@ -78,7 +83,7 @@ func TestAssertRegisteredMethodsHaveAuthz(t *testing.T) {
 	t.Run("unannotated method fails closed", func(t *testing.T) {
 		t.Parallel()
 		srv := newServerWithServices("torchwood.test.v1.UnannotatedService")
-		err := assertRegisteredMethodsHaveAuthz(srv, testPolicySet())
+		err := grpcapiinterceptor.AssertAllRegisteredHavePolicy(srv, testPolicySet())
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "/torchwood.test.v1.UnannotatedService/DoThing")
 	})
@@ -86,6 +91,6 @@ func TestAssertRegisteredMethodsHaveAuthz(t *testing.T) {
 	t.Run("framework services are exempt", func(t *testing.T) {
 		t.Parallel()
 		srv := newServerWithServices("grpc.health.v1.Health", "grpc.reflection.v1.ServerReflection", "grpc.reflection.v1alpha.ServerReflection")
-		require.NoError(t, assertRegisteredMethodsHaveAuthz(srv, testPolicySet()))
+		require.NoError(t, grpcapiinterceptor.AssertAllRegisteredHavePolicy(srv, testPolicySet()))
 	})
 }

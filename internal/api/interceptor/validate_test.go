@@ -4,23 +4,23 @@ import (
 	"context"
 	"testing"
 
-	validatepb "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	"buf.build/go/protovalidate"
+	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
 	"github.com/stretchr/testify/require"
 	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func newValidateInterceptorForTest(t *testing.T) *ValidateInterceptor {
+// validate 拦截器行为矩阵（grpcapi 阶段 1 换库后）：实现本体在
+// grpcapi/interceptor（同一 protovalidate 求值与错误格式化），本文件锁定
+// torchwood 注解面消息契约不变（error.message 文案 = CLI 退出码 2 契约的
+// 上游）。
+func newValidateInterceptorForTest(t *testing.T) *grpcapiinterceptor.ValidateInterceptor {
 	t.Helper()
-	v, err := NewValidateInterceptor()
-	require.NoError(t, err)
-	return v
+	return grpcapiinterceptor.NewValidate()
 }
 
 // TestValidateInterceptorRejectsShapeViolations：buf.validate required 注解
@@ -31,7 +31,7 @@ func TestValidateInterceptorRejectsShapeViolations(t *testing.T) {
 	v := newValidateInterceptorForTest(t)
 	info := &grpc.UnaryServerInfo{FullMethod: "/torchwood.client.v1.AccountService/DeleteSession"}
 
-	_, err := v.UnaryValidateMiddleware(context.Background(),
+	_, err := v.Unary()(context.Background(),
 		&clientv1.DeleteSessionRequest{SessionId: ""}, info,
 		func(ctx context.Context, req any) (any, error) {
 			t.Fatal("handler must not be reached on violation")
@@ -41,7 +41,7 @@ func TestValidateInterceptorRejectsShapeViolations(t *testing.T) {
 	// 精确契约：字段路径 + protovalidate required 默认文案（value is required）。
 	require.Equal(t, "session_id: value is required", status.Convert(err).Message())
 
-	_, err = v.UnaryValidateMiddleware(context.Background(),
+	_, err = v.Unary()(context.Background(),
 		&clientv1.UpdatePrefsRequest{}, info,
 		func(ctx context.Context, req any) (any, error) {
 			t.Fatal("handler must not be reached on violation")
@@ -86,7 +86,7 @@ func TestValidateInterceptorRejectsShapeRules(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := v.UnaryValidateMiddleware(context.Background(), tc.req,
+			_, err := v.Unary()(context.Background(), tc.req,
 				&grpc.UnaryServerInfo{FullMethod: tc.method},
 				func(ctx context.Context, req any) (any, error) {
 					t.Fatal("handler must not be reached on violation")
@@ -107,7 +107,7 @@ func TestValidateInterceptorPassesValidRequests(t *testing.T) {
 	prefs, err := structpb.NewStruct(map[string]any{"theme": "dark"})
 	require.NoError(t, err)
 	called := false
-	_, err = v.UnaryValidateMiddleware(context.Background(),
+	_, err = v.Unary()(context.Background(),
 		&clientv1.UpdatePrefsRequest{Prefs: prefs}, info,
 		func(ctx context.Context, req any) (any, error) {
 			called = true
@@ -124,7 +124,7 @@ func TestValidateInterceptorExemptsFrameworkServices(t *testing.T) {
 	v := newValidateInterceptorForTest(t)
 	info := &grpc.UnaryServerInfo{FullMethod: "/grpc.health.v1.Health/Check"}
 	called := false
-	_, err := v.UnaryValidateMiddleware(context.Background(),
+	_, err := v.Unary()(context.Background(),
 		&clientv1.DeleteSessionRequest{SessionId: ""}, info,
 		func(ctx context.Context, req any) (any, error) {
 			called = true
@@ -141,7 +141,7 @@ func TestValidateInterceptorIgnoresNonProtoMessages(t *testing.T) {
 	v := newValidateInterceptorForTest(t)
 	info := &grpc.UnaryServerInfo{FullMethod: "/torchwood.client.v1.AccountService/DeleteSession"}
 	called := false
-	_, err := v.UnaryValidateMiddleware(context.Background(),
+	_, err := v.Unary()(context.Background(),
 		"not-a-proto-message", info,
 		func(ctx context.Context, req any) (any, error) {
 			called = true
@@ -151,21 +151,15 @@ func TestValidateInterceptorIgnoresNonProtoMessages(t *testing.T) {
 	require.True(t, called)
 }
 
-// TestValidateExemptPrefixes：白名单与 rateLimit/usage 维持同一口径。
-func TestValidateExemptPrefixes(t *testing.T) {
+// TestFrameworkExempt：白名单与 rateLimit/usage 维持同一口径（实现换库后
+// 经库导出的 FrameworkExempt 断言）。
+func TestFrameworkExempt(t *testing.T) {
 	t.Parallel()
-	require.False(t, validateExempt("/torchwood.client.v1.AccountService/DeleteSession"))
-	require.True(t, validateExempt("/grpc.health.v1.Health/Check"))
-	require.True(t, validateExempt("/grpc.reflection.v1.ServerReflection/ServerReflectionInfo"))
+	require.False(t, grpcapiinterceptor.FrameworkExempt("/torchwood.client.v1.AccountService/DeleteSession"))
+	require.True(t, grpcapiinterceptor.FrameworkExempt("/grpc.health.v1.Health/Check"))
+	require.True(t, grpcapiinterceptor.FrameworkExempt("/grpc.reflection.v1.ServerReflection/ServerReflectionInfo"))
 }
 
-// TestFormatViolations：多条违规以 "; " 连接为单行（error.message 不引入
-// 多行文本）。
-func TestFormatViolations(t *testing.T) {
-	t.Parallel()
-	joined := formatViolations([]*protovalidate.Violation{
-		{Proto: (&validatepb.Violation_builder{Message: proto.String("value is required")}).Build()},
-		{Proto: (&validatepb.Violation_builder{Message: proto.String("must be a valid id")}).Build()},
-	})
-	require.Equal(t, "value is required; must be a valid id", joined)
-}
+// 多条违规以 "; " 连接为单行（原 TestFormatViolations 直测私有格式化函数，
+// 该函数已随实现上收进库，库侧 TestValidateRejectsInvalidRequest 覆盖同一
+// 拼接行为）；本文件的 message 精确断言继续锁定 torchwood 链路对外文案。

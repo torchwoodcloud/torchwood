@@ -13,6 +13,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// newValidateInterceptorForTest 由 validate_test.go 提供（库构造器薄封装）。
+
 // TestValidateInterceptorAccountProfile：name/avatar 写入门禁求值（客户端
 // PATCH /v1/account 与 server UpdateUser 同口径）——name ≤64 码点（len 族按
 // Unicode 码点计，CJK 一字一点）且整串无控制字符；avatar 非空必须 https 且
@@ -22,9 +24,8 @@ func TestValidateInterceptorAccountProfile(t *testing.T) {
 	v := newValidateInterceptorForTest(t)
 	clientMethod := &grpc.UnaryServerInfo{FullMethod: "/torchwood.client.v1.AccountService/UpdateAccount"}
 	serverMethod := &grpc.UnaryServerInfo{FullMethod: "/torchwood.server.v1.UsersService/UpdateUser"}
-
 	call := func(method *grpc.UnaryServerInfo, req any) error {
-		_, err := v.UnaryValidateMiddleware(context.Background(), req, method,
+		_, err := v.Unary()(context.Background(), req, method,
 			func(ctx context.Context, req any) (any, error) { return nil, nil })
 		return err
 	}

@@ -3,7 +3,6 @@ package runtime
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,6 +13,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // TestObservability_MetricsEndpoint covers manual checklist §10.1.
@@ -73,7 +73,10 @@ func TestObservability_StructuredHTTPError(t *testing.T) {
 	require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
 	var resp sharedv1.ErrorResponse
-	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+	// 错误体序列化随 gateway 换库统一为 protojson（与成功响应同一 marshaler；
+	// 原实现错误体走 encoding/json、error_code 为数字枚举），解码相应改用
+	// protojson——以下字段值断言全部不变。
+	require.NoError(t, protojson.Unmarshal(rec.Body.Bytes(), &resp))
 	require.NotNil(t, resp.GetError())
 	require.Equal(t, "InvalidArgument", resp.GetError().GetCode())
 	require.Equal(t, "malformed request body", resp.GetError().GetMessage())

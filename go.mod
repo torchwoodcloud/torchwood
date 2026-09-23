@@ -3,8 +3,6 @@ module github.com/torchwoodcloud/torchwood
 go 1.26.5
 
 require (
-	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
-	buf.build/go/protovalidate v1.4.0
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/coder/websocket v1.8.14
 	github.com/containerd/errdefs v1.0.0
@@ -20,6 +18,8 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
 	github.com/lynx-go/commands v0.3.0
+	github.com/lynx-go/grpcapi v0.0.0-00010101000000-000000000000
+	github.com/lynx-go/grpcapi/genproto v0.0.0-00010101000000-000000000000
 	github.com/lynx-go/lynx v1.11.0
 	github.com/lynx-go/lynx/contrib/zap v1.7.0
 	github.com/minio/minio-go/v7 v7.2.0
@@ -48,6 +48,8 @@ require (
 )
 
 require (
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2 // indirect
+	buf.build/go/protovalidate v1.4.0 // indirect
 	cel.dev/cel-go v0.32.0 // indirect
 	cel.dev/expr v0.25.3 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
@@ -85,8 +87,6 @@ require (
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/lynx-go/grpcapi v0.0.0-00010101000000-000000000000 // indirect
-	github.com/lynx-go/grpcapi/genproto v0.0.0-00010101000000-000000000000 // indirect
 	github.com/minio/crc64nvme v1.1.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect

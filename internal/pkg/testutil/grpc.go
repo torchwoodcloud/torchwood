@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lynx-go/grpcapi/authz"
+	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
 	"github.com/torchwoodcloud/torchwood/internal/api/interceptor"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
@@ -146,8 +147,10 @@ func (e *InterceptorEnv) InvokeUnaryHandler(ctx context.Context, method string, 
 	authHandler := func(ctx context.Context, req any) (any, error) {
 		return e.Auth.UnaryAuthMiddleware(ctx, req, info, rateLimitHandler)
 	}
-	clientInfo := interceptor.NewClientInfoInterceptor(nil)
-	_, err := clientInfo.UnaryMiddleware(ctx, nil, info, authHandler)
+	// clientInfo 换库（grpcapi 阶段 1）：测试环境无可信代理（空配置 =
+	// 不采信转发头），与生产装配同一实现。
+	clientInfo := grpcapiinterceptor.NewClientInfo(grpcapiinterceptor.ClientInfoConfig{})
+	_, err := clientInfo.Unary()(ctx, nil, info, authHandler)
 	return err
 }
 

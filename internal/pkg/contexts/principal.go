@@ -3,6 +3,7 @@ package contexts
 import (
 	"context"
 
+	"github.com/lynx-go/grpcapi/contextx"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 )
 
@@ -26,18 +27,13 @@ func ProjectID(ctx context.Context) (string, bool) {
 	return s, ok && s != ""
 }
 
-// auditResourceHolder 是审计资源的可变持有者：audit 拦截器在请求 ctx 中预置
-// 空持有者，handler 内的 WithAuditResource 通过 ctx 链查找并原地写入，使上游
-// 中间件在 handler 返回后仍能读到（context 值不可变，跨函数边界共享需可变槽）。
-type auditResourceHolder struct{ resource string }
-
-// WithAuditResource attaches the resource id being acted upon (e.g. the
-// project id targeted by a delete) so the audit interceptor can record it.
-// 当 ctx 链中已有审计资源持有者（audit 拦截器预置）时原地写入，否则按
-// 不可变方式派生新 context（无拦截器链路的直调场景）。
+// WithAuditResource 预置审计资源可变槽（grpcapi 阶段 1 门面化）：存储机制
+// 委托 grpcapi/contextx.AuditTrail（与库生态共享同一 ctx 槽），公开签名与
+// 语义保持不变——ctx 链中已有审计槽（audit 拦截器预置）时原地写入并返回
+// 原 ctx，否则按不可变方式派生新 context（无拦截器链路的直调场景）。
 func WithAuditResource(ctx context.Context, resourceID string) context.Context {
-	if h, ok := ctx.Value(ContextKeyAuditResource).(*auditResourceHolder); ok {
-		h.resource = resourceID
+	if t := contextx.AuditTrailFrom(ctx); t != nil {
+		contextx.SetAuditResource(ctx, resourceID)
 		return ctx
 	}
 	return context.WithValue(ctx, ContextKeyAuditResource, resourceID)
@@ -46,21 +42,24 @@ func WithAuditResource(ctx context.Context, resourceID string) context.Context {
 // WithAuditResourceHolder pre-populates the mutable audit resource holder.
 // 仅由 audit 拦截器调用；普通代码应使用 WithAuditResource。
 func WithAuditResourceHolder(ctx context.Context) context.Context {
-	return context.WithValue(ctx, ContextKeyAuditResource, &auditResourceHolder{})
+	return contextx.WithAuditTrail(ctx, contextx.NewAuditTrail())
 }
 
 // AuditResource returns the audit resource id stored in ctx, if any.
 func AuditResource(ctx context.Context) string {
-	if h, ok := ctx.Value(ContextKeyAuditResource).(*auditResourceHolder); ok {
-		return h.resource
+	if t := contextx.AuditTrailFrom(ctx); t != nil {
+		return t.Resource()
 	}
 	v, _ := ctx.Value(ContextKeyAuditResource).(string)
 	return v
 }
 
-// auditMetadataHolder 是审计扩展元数据的可变持有者（与 auditResourceHolder
-// 同构）：audit 拦截器预置，app 用例/handler 在执行中回填结构化键
-// （如 changes before/after diff），拦截器在 handler 返回后合并进审计行。
+// auditMetadataHolder 是审计扩展元数据的可变持有者（本地桥接层，grpcapi
+// 阶段 1 门面化）：库版 contextx.AuditTrail 的元数据为 map[string]string 且
+// setter 无返回值（无槽 no-op），与 torchwood 的 map[string]any 取值 +
+// 无槽时不可变派生回退语义有出入（audit_diff 等用例回填结构化 map、直调
+// 场景依赖派生语义），故元数据槽保留本地实现——不改库（DESIGN §6 裁决 6
+// 的桥接授权）。
 type auditMetadataHolder struct{ metadata map[string]any }
 
 func (h *auditMetadataHolder) set(key string, value any) {
