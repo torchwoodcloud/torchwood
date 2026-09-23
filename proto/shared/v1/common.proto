@@ -4,6 +4,19 @@ package torchwood.shared.v1;
 
 option go_package = "github.com/torchwoodcloud/torchwood/genproto/shared/v1;sharedv1";
 
+import "buf/validate/validate.proto";
+
+// SortOrder 是时间列排序方向（Console 列表页「按创建时间正/倒序」）。
+// 固定排序键 = 各端点的时间列（通常 created_at），不是 AIP-160 任意列
+// order_by（W-K 终结裁决维持：filter/order_by 不复活）。UNSPECIFIED =
+// 各端点历史默认（created_at DESC，最新在前）。keyset 游标与方向耦合，
+// 换向必须从第一页重新开始，携带异向游标即 InvalidArgument。
+enum SortOrder {
+  SORT_ORDER_UNSPECIFIED = 0;
+  SORT_ORDER_ASC = 1;
+  SORT_ORDER_DESC = 2;
+}
+
 message ListRequest {
   int32 page_size = 1;
   string page_token = 2;
@@ -19,6 +32,9 @@ message ListRequest {
   // 携带即 InvalidArgument（显式拒绝，不静默忽略）；其余使用本消息的面以
   // 各自 handler 的显式行为为准。
   repeated string queries = 5;
+  // 时间列排序方向；支持面以各 handler 的显式行为为准（Console 列表页
+  // 按 created_at 正/倒序），UNSPECIFIED = 历史默认 DESC。
+  SortOrder sort_order = 6 [(buf.validate.field).enum.defined_only = true];
 }
 
 message ListResponseMeta {

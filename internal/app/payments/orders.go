@@ -266,7 +266,7 @@ func (p *Payments) ListMyOrders(ctx context.Context, limit int, before time.Time
 	if err != nil {
 		return nil, err
 	}
-	limit, before = normalizeList(limit, before)
+	limit, before = normalizeList(limit, before, false)
 	return p.orders.ListByUser(ctx, projectID, userID, limit, before)
 }
 
@@ -286,7 +286,8 @@ func (p *Payments) GetOrder(ctx context.Context, orderID string) (*domainpayment
 	return order, nil
 }
 
-// ListOrders 返回项目订单列表（Server 面，created_at 倒序游标分页 + 结构化过滤）。
+// ListOrders 返回项目订单列表（Server 面，created_at 游标分页 + 结构化过滤；
+// f.Ascending=false 倒序 = 历史默认）。
 func (p *Payments) ListOrders(ctx context.Context, limit int, before time.Time, f domainpayments.OrderListFilter) ([]domainpayments.Order, error) {
 	if f.Status != "" && !isValidOrderListStatus(f.Status) {
 		return nil, status.Errorf(codes.InvalidArgument, "unknown order status %q", f.Status)
@@ -295,7 +296,7 @@ func (p *Payments) ListOrders(ctx context.Context, limit int, before time.Time, 
 	if err != nil {
 		return nil, err
 	}
-	limit, before = normalizeList(limit, before)
+	limit, before = normalizeList(limit, before, f.Ascending)
 	return p.orders.ListByProject(ctx, projectID, limit, before, f)
 }
 
@@ -463,8 +464,9 @@ func (p *Payments) projectScope(ctx context.Context) (string, error) {
 	return principal.ProjectID, nil
 }
 
-// normalizeList 归一化分页参数。
-func normalizeList(limit int, before time.Time) (int, time.Time) {
+// normalizeList 归一化分页参数；首页游标哨兵随方向取端点值
+// （DESC = 晚于一切行，ASC = 早于一切行）。
+func normalizeList(limit int, before time.Time, ascending bool) (int, time.Time) {
 	if limit <= 0 {
 		limit = defaultListLimit
 	}
@@ -472,7 +474,11 @@ func normalizeList(limit int, before time.Time) (int, time.Time) {
 		limit = maxListLimit
 	}
 	if before.IsZero() {
-		before = time.Now().Add(time.Hour)
+		if ascending {
+			before = time.Unix(0, 0).UTC()
+		} else {
+			before = time.Now().Add(time.Hour)
+		}
 	}
 	return limit, before
 }

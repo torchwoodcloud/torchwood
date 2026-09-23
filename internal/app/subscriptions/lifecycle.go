@@ -114,8 +114,8 @@ func (s *Subscriptions) GetSubscription(ctx context.Context, subscriptionID stri
 	return sub, plan, nil
 }
 
-// ListProjectSubscriptions 项目订阅列表（Server 面，created_at 倒序游标分页 +
-// 结构化过滤）。
+// ListProjectSubscriptions 项目订阅列表（Server 面，created_at 游标分页 +
+// 结构化过滤；f.Ascending=false 倒序 = 历史默认）。
 func (s *Subscriptions) ListProjectSubscriptions(ctx context.Context, limit int, before time.Time, f domainsubs.SubscriptionListFilter) ([]domainsubs.Subscription, error) {
 	if f.Status != "" && !isValidSubscriptionListStatus(f.Status) {
 		return nil, status.Errorf(codes.InvalidArgument, "unknown subscription status %q", f.Status)
@@ -124,7 +124,7 @@ func (s *Subscriptions) ListProjectSubscriptions(ctx context.Context, limit int,
 	if err != nil {
 		return nil, err
 	}
-	limit, before = normalizeList(limit, before)
+	limit, before = normalizeList(limit, before, f.Ascending)
 	return s.subs.ListByProject(ctx, projectID, limit, before, f)
 }
 

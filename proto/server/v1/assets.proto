@@ -370,6 +370,8 @@ message ListDefAssetsRequest {
   string owner_id = 2;
   int32 page_size = 3;
   string page_token = 4;
+  // 时间列（created_at）排序方向；UNSPECIFIED = DESC（最新在前）。
+  shared.v1.SortOrder sort_order = 5 [(buf.validate.field).enum.defined_only = true];
 }
 
 message ListDefAssetsResponse {

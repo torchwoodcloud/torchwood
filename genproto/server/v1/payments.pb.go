@@ -505,7 +505,8 @@ func (x *Fulfillment) GetUpdatedAt() *timestamppb.Timestamp {
 }
 
 // ListOrdersRequest 结构化过滤（audit-logs 先例）：exact 匹配 + 时间闭区间；
-// 分页固定 created_at DESC keyset 游标（page_token 由服务端签发）。
+// 分页按 created_at keyset 游标（page_token 由服务端签发），sort_order 控制方向
+// （UNSPECIFIED = DESC；换向必须从第一页重来，异向游标即 InvalidArgument）。
 type ListOrdersRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	PageSize  int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
@@ -516,6 +517,8 @@ type ListOrdersRequest struct {
 	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
 	CreatedAfter  *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_after,json=createdAfter,proto3" json:"created_after,omitempty"`
 	CreatedBefore *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_before,json=createdBefore,proto3" json:"created_before,omitempty"`
+	// 时间列（created_at）排序方向；UNSPECIFIED = DESC（最新在前）。
+	SortOrder     v1.SortOrder `protobuf:"varint,7,opt,name=sort_order,json=sortOrder,proto3,enum=torchwood.shared.v1.SortOrder" json:"sort_order,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -590,6 +593,13 @@ func (x *ListOrdersRequest) GetCreatedBefore() *timestamppb.Timestamp {
 		return x.CreatedBefore
 	}
 	return nil
+}
+
+func (x *ListOrdersRequest) GetSortOrder() v1.SortOrder {
+	if x != nil {
+		return x.SortOrder
+	}
+	return v1.SortOrder(0)
 }
 
 type ListOrdersResponse struct {
@@ -692,7 +702,7 @@ const file_server_v1_payments_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xad\x02\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xf6\x02\n" +
 	"\x11ListOrdersRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12'\n" +
@@ -701,7 +711,9 @@ const file_server_v1_payments_proto_rawDesc = "" +
 	"\auser_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x01R\x06userId\x12\x1f\n" +
 	"\x06status\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x18\x10R\x06status\x12?\n" +
 	"\rcreated_after\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\fcreatedAfter\x12A\n" +
-	"\x0ecreated_before\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\rcreatedBefore\"\x8a\x01\n" +
+	"\x0ecreated_before\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\rcreatedBefore\x12G\n" +
+	"\n" +
+	"sort_order\x18\a \x01(\x0e2\x1e.torchwood.shared.v1.SortOrderB\b\xbaH\x05\x82\x01\x02\x10\x01R\tsortOrder\"\x8a\x01\n" +
 	"\x12ListOrdersResponse\x129\n" +
 	"\x06orders\x18\x01 \x03(\v2!.torchwood.server.v1.PaymentOrderR\x06orders\x129\n" +
 	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\x80\x05\n" +
@@ -751,7 +763,8 @@ var file_server_v1_payments_proto_goTypes = []any{
 	(*ListOrdersResponse)(nil),    // 7: torchwood.server.v1.ListOrdersResponse
 	(*structpb.Struct)(nil),       // 8: google.protobuf.Struct
 	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
-	(*v1.ListResponseMeta)(nil),   // 10: torchwood.shared.v1.ListResponseMeta
+	(v1.SortOrder)(0),             // 10: torchwood.shared.v1.SortOrder
+	(*v1.ListResponseMeta)(nil),   // 11: torchwood.shared.v1.ListResponseMeta
 }
 var file_server_v1_payments_proto_depIdxs = []int32{
 	8,  // 0: torchwood.server.v1.PaymentOrder.purpose:type_name -> google.protobuf.Struct
@@ -765,21 +778,22 @@ var file_server_v1_payments_proto_depIdxs = []int32{
 	9,  // 8: torchwood.server.v1.Fulfillment.updated_at:type_name -> google.protobuf.Timestamp
 	9,  // 9: torchwood.server.v1.ListOrdersRequest.created_after:type_name -> google.protobuf.Timestamp
 	9,  // 10: torchwood.server.v1.ListOrdersRequest.created_before:type_name -> google.protobuf.Timestamp
-	0,  // 11: torchwood.server.v1.ListOrdersResponse.orders:type_name -> torchwood.server.v1.PaymentOrder
-	10, // 12: torchwood.server.v1.ListOrdersResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
-	6,  // 13: torchwood.server.v1.PaymentsService.ListOrders:input_type -> torchwood.server.v1.ListOrdersRequest
-	1,  // 14: torchwood.server.v1.PaymentsService.GetOrder:input_type -> torchwood.server.v1.GetOrderRequest
-	2,  // 15: torchwood.server.v1.PaymentsService.Refund:input_type -> torchwood.server.v1.RefundRequest
-	3,  // 16: torchwood.server.v1.PaymentsService.ManualFulfill:input_type -> torchwood.server.v1.ManualFulfillRequest
-	7,  // 17: torchwood.server.v1.PaymentsService.ListOrders:output_type -> torchwood.server.v1.ListOrdersResponse
-	0,  // 18: torchwood.server.v1.PaymentsService.GetOrder:output_type -> torchwood.server.v1.PaymentOrder
-	0,  // 19: torchwood.server.v1.PaymentsService.Refund:output_type -> torchwood.server.v1.PaymentOrder
-	4,  // 20: torchwood.server.v1.PaymentsService.ManualFulfill:output_type -> torchwood.server.v1.ManualFulfillResponse
-	17, // [17:21] is the sub-list for method output_type
-	13, // [13:17] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	10, // 11: torchwood.server.v1.ListOrdersRequest.sort_order:type_name -> torchwood.shared.v1.SortOrder
+	0,  // 12: torchwood.server.v1.ListOrdersResponse.orders:type_name -> torchwood.server.v1.PaymentOrder
+	11, // 13: torchwood.server.v1.ListOrdersResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	6,  // 14: torchwood.server.v1.PaymentsService.ListOrders:input_type -> torchwood.server.v1.ListOrdersRequest
+	1,  // 15: torchwood.server.v1.PaymentsService.GetOrder:input_type -> torchwood.server.v1.GetOrderRequest
+	2,  // 16: torchwood.server.v1.PaymentsService.Refund:input_type -> torchwood.server.v1.RefundRequest
+	3,  // 17: torchwood.server.v1.PaymentsService.ManualFulfill:input_type -> torchwood.server.v1.ManualFulfillRequest
+	7,  // 18: torchwood.server.v1.PaymentsService.ListOrders:output_type -> torchwood.server.v1.ListOrdersResponse
+	0,  // 19: torchwood.server.v1.PaymentsService.GetOrder:output_type -> torchwood.server.v1.PaymentOrder
+	0,  // 20: torchwood.server.v1.PaymentsService.Refund:output_type -> torchwood.server.v1.PaymentOrder
+	4,  // 21: torchwood.server.v1.PaymentsService.ManualFulfill:output_type -> torchwood.server.v1.ManualFulfillResponse
+	18, // [18:22] is the sub-list for method output_type
+	14, // [14:18] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_server_v1_payments_proto_init() }

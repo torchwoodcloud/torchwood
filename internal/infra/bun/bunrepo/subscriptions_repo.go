@@ -78,7 +78,7 @@ func (r *subscriptionPlanRepo) selectPlan(ctx context.Context, projectID, pred s
 	return mapPlanToDomain(m)
 }
 
-func (r *subscriptionPlanRepo) List(ctx context.Context, projectID string, includeArchived bool, limit int, before time.Time) ([]subscriptions.Plan, error) {
+func (r *subscriptionPlanRepo) List(ctx context.Context, projectID string, includeArchived bool, limit int, before time.Time, ascending bool) ([]subscriptions.Plan, error) {
 	ctx2, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	conn, sch, expr, err := Scoped(ctx2, r.db, projectID, "subscription_plans", "sp")
@@ -87,12 +87,21 @@ func (r *subscriptionPlanRepo) List(ctx context.Context, projectID string, inclu
 	}
 	var rows []model.SubscriptionPlan
 	q := conn.NewSelect().Model(&rows).ModelTableExpr(expr, sch).
-		Where("sp.project_id = ?", projectID).
-		Where("sp.created_at < ?", before)
+		Where("sp.project_id = ?", projectID)
+	if ascending {
+		q = q.Where("sp.created_at > ?", before)
+	} else {
+		q = q.Where("sp.created_at < ?", before)
+	}
 	if !includeArchived {
 		q = q.Where("sp.status = ?", string(subscriptions.PlanStatusActive))
 	}
-	if err := q.Order("sp.created_at DESC").Limit(limit).Scan(ctx2); err != nil {
+	if ascending {
+		q = q.Order("sp.created_at ASC")
+	} else {
+		q = q.Order("sp.created_at DESC")
+	}
+	if err := q.Limit(limit).Scan(ctx2); err != nil {
 		return nil, err
 	}
 	out := make([]subscriptions.Plan, 0, len(rows))
@@ -317,8 +326,13 @@ func (r *subscriptionRepo) ListByProject(ctx context.Context, projectID string, 
 	}
 	var rows []model.Subscription
 	sel := conn.NewSelect().Model(&rows).ModelTableExpr(expr, sch).
-		Where("ss.project_id = ?", projectID).
-		Where("ss.created_at < ?", before)
+		Where("ss.project_id = ?", projectID)
+	// 游标谓词随方向取 < / >（Ascending=false 倒序 = 历史默认）。
+	if f.Ascending {
+		sel = sel.Where("ss.created_at > ?", before)
+	} else {
+		sel = sel.Where("ss.created_at < ?", before)
+	}
 	if f.UserID != "" {
 		sel = sel.Where("ss.user_id = ?", f.UserID)
 	}
@@ -331,9 +345,12 @@ func (r *subscriptionRepo) ListByProject(ctx context.Context, projectID string, 
 	if !f.CreatedBefore.IsZero() {
 		sel = sel.Where("ss.created_at <= ?", f.CreatedBefore)
 	}
-	err = sel.Order("ss.created_at DESC").
-		Limit(limit).
-		Scan(ctx2)
+	if f.Ascending {
+		sel = sel.Order("ss.created_at ASC")
+	} else {
+		sel = sel.Order("ss.created_at DESC")
+	}
+	err = sel.Limit(limit).Scan(ctx2)
 	if err != nil {
 		return nil, err
 	}

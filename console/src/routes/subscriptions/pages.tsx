@@ -33,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ColumnDef } from "@/components/list/DataTable";
+import type { SortOrder } from "@/api/pagination";
 import {
   DeleteButton,
   DetailGrid,
@@ -45,7 +46,7 @@ import {
 } from "@/components/resource/shared";
 import { formatInt64, isInt64Input } from "@/lib/utils";
 
-const planColumns: ColumnDef<SubscriptionPlan>[] = [
+const planColumns = (tz: string): ColumnDef<SubscriptionPlan>[] => [
   { key: "code", header: "Code", className: "font-mono text-xs", cell: (p) => p.code },
   { key: "name", header: "名称", cell: (p) => p.name },
   { key: "amount", header: "金额", cell: (p) => `${formatInt64(p.amount)} ${p.currency}` },
@@ -55,18 +56,26 @@ const planColumns: ColumnDef<SubscriptionPlan>[] = [
     header: "状态",
     cell: (p) => <Badge variant={p.status === "archived" ? "secondary" : "default"}>{p.status ?? "active"}</Badge>,
   },
+  { key: "created", header: "创建时间", sortable: true, cell: (p) => formatDateTime(p.created_at, tz) },
 ];
 
 export function PlansListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
+  const tz = useUserTimezone();
   const queryClient = useQueryClient();
   const writeable = canWrite(role);
 
   const paging = useServerPaging();
+  // 服务端时间排序：换向必须回第一页（keyset 游标与方向耦合）。
+  const [sortOrder, setSortOrder] = useState<SortOrder>("DESC");
+  const toggleSort = () => {
+    setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
+    paging.reset();
+  };
   const { data, isLoading } = useQuery({
-    queryKey: ["sub-plans", projectId, paging.pageSize, paging.pageToken],
-    queryFn: () => listPlans({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
+    queryKey: ["sub-plans", projectId, paging.pageSize, paging.pageToken, sortOrder],
+    queryFn: () => listPlans({ pageSize: paging.pageSize, pageToken: paging.pageToken, sortOrder }),
     enabled: !!projectId,
     placeholderData: (prev) => prev,
   });
@@ -87,7 +96,7 @@ export function PlansListPage() {
       searchPlaceholder="当前页内搜索 code / 名称..."
       isLoading={isLoading}
       items={plans}
-      columns={planColumns}
+      columns={planColumns(tz)}
       getSearchText={getSearchText}
       serverPaging={{
         page: paging.page,
@@ -98,6 +107,7 @@ export function PlansListPage() {
         onNext: () => paging.goNext(data?.nextPageToken),
         onPageSizeChange: paging.setPageSize,
       }}
+      serverSort={{ order: sortOrder, onToggle: toggleSort }}
       detailPath={(p) => `/console/subscriptions/plans/${p.id}`}
       toolbarActions={
         <div className="flex gap-2">
@@ -235,7 +245,7 @@ export function PlanDetailPage() {
   );
 }
 
-const subColumns: ColumnDef<Subscription>[] = [
+const subColumns = (tz: string): ColumnDef<Subscription>[] => [
   { key: "id", header: "ID", className: "font-mono text-xs max-w-[140px] truncate", cell: (s) => s.id },
   { key: "user", header: "用户", className: "font-mono text-xs", cell: (s) => s.user_id ?? "—" },
   { key: "plan", header: "计划", cell: (s) => s.plan_code ?? s.plan_id ?? "—" },
@@ -245,6 +255,7 @@ const subColumns: ColumnDef<Subscription>[] = [
     header: "状态",
     cell: (s) => <Badge variant={s.status === "active" ? "default" : "secondary"}>{s.status}</Badge>,
   },
+  { key: "created", header: "创建时间", sortable: true, cell: (s) => formatDateTime(s.created_at, tz) },
 ];
 
 // 订阅状态选项与 subscriptions.proto 状态机一致（含终态）。
@@ -278,16 +289,24 @@ export function SubscriptionsListPage() {
     createdBefore
   );
 
+  // 服务端时间排序：换向必须回第一页（keyset 游标与方向耦合）。
+  const [sortOrder, setSortOrder] = useState<SortOrder>("DESC");
+  const toggleSort = () => {
+    setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
+    paging.reset();
+  };
+
   const { data, isLoading } = useQuery({
     queryKey: [
       "subscriptions",
       projectId,
       filters,
+      sortOrder,
       paging.pageSize,
       paging.pageToken,
     ],
     queryFn: () =>
-      listSubscriptions({ pageSize: paging.pageSize, pageToken: paging.pageToken, ...filters }),
+      listSubscriptions({ pageSize: paging.pageSize, pageToken: paging.pageToken, sortOrder, ...filters }),
     enabled: !!projectId,
     placeholderData: (prev) => prev,
   });
@@ -318,7 +337,7 @@ export function SubscriptionsListPage() {
       searchPlaceholder="当前页内搜索用户 / 计划 / 状态..."
       isLoading={isLoading}
       items={items}
-      columns={subColumns}
+      columns={subColumns(tz)}
       getSearchText={getSearchText}
       serverPaging={{
         page: paging.page,
@@ -329,6 +348,7 @@ export function SubscriptionsListPage() {
         onNext: () => paging.goNext(data?.nextPageToken),
         onPageSizeChange: paging.setPageSize,
       }}
+      serverSort={{ order: sortOrder, onToggle: toggleSort }}
       filters={
         <form
           className="flex flex-wrap items-end gap-3"

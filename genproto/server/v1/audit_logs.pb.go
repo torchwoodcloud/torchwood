@@ -50,7 +50,9 @@ type ListAuditLogsRequest struct {
 	// 并入平台级行（project_id IS NULL，如项目建删）；仅平台 admin 可用。
 	IncludePlatform bool `protobuf:"varint,10,opt,name=include_platform,json=includePlatform,proto3" json:"include_platform,omitempty"`
 	// 跨项目全量视图（含平台级行），忽略项目上下文；仅平台 admin 可用。
-	AllProjects   bool `protobuf:"varint,11,opt,name=all_projects,json=allProjects,proto3" json:"all_projects,omitempty"`
+	AllProjects bool `protobuf:"varint,11,opt,name=all_projects,json=allProjects,proto3" json:"all_projects,omitempty"`
+	// 时间列（created_at）排序方向；UNSPECIFIED = DESC（最新在前）。
+	SortOrder     v1.SortOrder `protobuf:"varint,12,opt,name=sort_order,json=sortOrder,proto3,enum=torchwood.shared.v1.SortOrder" json:"sort_order,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -160,6 +162,13 @@ func (x *ListAuditLogsRequest) GetAllProjects() bool {
 		return x.AllProjects
 	}
 	return false
+}
+
+func (x *ListAuditLogsRequest) GetSortOrder() v1.SortOrder {
+	if x != nil {
+		return x.SortOrder
+	}
+	return v1.SortOrder(0)
 }
 
 // AuditLog 是一行审计记录。metadata 是结构化变更内容（非自由文本）：
@@ -346,7 +355,7 @@ var File_server_v1_audit_logs_proto protoreflect.FileDescriptor
 
 const file_server_v1_audit_logs_proto_rawDesc = "" +
 	"\n" +
-	"\x1aserver/v1/audit_logs.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xf5\x03\n" +
+	"\x1aserver/v1/audit_logs.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xbe\x04\n" +
 	"\x14ListAuditLogsRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12'\n" +
@@ -363,7 +372,9 @@ const file_server_v1_audit_logs_proto_rawDesc = "" +
 	"\x0ecreated_before\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\rcreatedBefore\x12)\n" +
 	"\x10include_platform\x18\n" +
 	" \x01(\bR\x0fincludePlatform\x12!\n" +
-	"\fall_projects\x18\v \x01(\bR\vallProjects\"\xe3\x02\n" +
+	"\fall_projects\x18\v \x01(\bR\vallProjects\x12G\n" +
+	"\n" +
+	"sort_order\x18\f \x01(\x0e2\x1e.torchwood.shared.v1.SortOrderB\b\xbaH\x05\x82\x01\x02\x10\x01R\tsortOrder\"\xe3\x02\n" +
 	"\bAuditLog\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -421,23 +432,25 @@ var file_server_v1_audit_logs_proto_goTypes = []any{
 	(*AuditLog)(nil),              // 1: torchwood.server.v1.AuditLog
 	(*ListAuditLogsResponse)(nil), // 2: torchwood.server.v1.ListAuditLogsResponse
 	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),       // 4: google.protobuf.Struct
-	(*v1.ListResponseMeta)(nil),   // 5: torchwood.shared.v1.ListResponseMeta
+	(v1.SortOrder)(0),             // 4: torchwood.shared.v1.SortOrder
+	(*structpb.Struct)(nil),       // 5: google.protobuf.Struct
+	(*v1.ListResponseMeta)(nil),   // 6: torchwood.shared.v1.ListResponseMeta
 }
 var file_server_v1_audit_logs_proto_depIdxs = []int32{
 	3, // 0: torchwood.server.v1.ListAuditLogsRequest.created_after:type_name -> google.protobuf.Timestamp
 	3, // 1: torchwood.server.v1.ListAuditLogsRequest.created_before:type_name -> google.protobuf.Timestamp
-	4, // 2: torchwood.server.v1.AuditLog.metadata:type_name -> google.protobuf.Struct
-	3, // 3: torchwood.server.v1.AuditLog.created_at:type_name -> google.protobuf.Timestamp
-	1, // 4: torchwood.server.v1.ListAuditLogsResponse.audit_logs:type_name -> torchwood.server.v1.AuditLog
-	5, // 5: torchwood.server.v1.ListAuditLogsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
-	0, // 6: torchwood.server.v1.AuditLogsService.ListAuditLogs:input_type -> torchwood.server.v1.ListAuditLogsRequest
-	2, // 7: torchwood.server.v1.AuditLogsService.ListAuditLogs:output_type -> torchwood.server.v1.ListAuditLogsResponse
-	7, // [7:8] is the sub-list for method output_type
-	6, // [6:7] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	4, // 2: torchwood.server.v1.ListAuditLogsRequest.sort_order:type_name -> torchwood.shared.v1.SortOrder
+	5, // 3: torchwood.server.v1.AuditLog.metadata:type_name -> google.protobuf.Struct
+	3, // 4: torchwood.server.v1.AuditLog.created_at:type_name -> google.protobuf.Timestamp
+	1, // 5: torchwood.server.v1.ListAuditLogsResponse.audit_logs:type_name -> torchwood.server.v1.AuditLog
+	6, // 6: torchwood.server.v1.ListAuditLogsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	0, // 7: torchwood.server.v1.AuditLogsService.ListAuditLogs:input_type -> torchwood.server.v1.ListAuditLogsRequest
+	2, // 8: torchwood.server.v1.AuditLogsService.ListAuditLogs:output_type -> torchwood.server.v1.ListAuditLogsResponse
+	8, // [8:9] is the sub-list for method output_type
+	7, // [7:8] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_server_v1_audit_logs_proto_init() }

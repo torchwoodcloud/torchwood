@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import {
   listAuditLogs,
   type AuditLog,
@@ -149,6 +150,12 @@ export function AuditLogsListPage() {
   const [createdBefore, setCreatedBefore] = useState("");
   const [scope, setScope] = useState<ScopeMode>("project");
   const [pageSize, setPageSize] = useState(50);
+  // 服务端时间排序：换向必须回第一页（offset token 不编码方向）。
+  const [sortOrder, setSortOrder] = useState<"ASC" | "DESC">("DESC");
+  const toggleSort = () => {
+    setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
+    resetPage();
+  };
 
   // 服务端分页：token 栈（栈底 = 第一页的空 token）。
   const [tokenStack, setTokenStack] = useState<string[]>([""]);
@@ -171,8 +178,9 @@ export function AuditLogsListPage() {
       created_before: createdBefore ? fromDateTimeLocalValue(createdBefore, tz) || undefined : undefined,
       include_platform: scope === "include_platform" || scope === "all_projects" || undefined,
       all_projects: scope === "all_projects" || undefined,
+      sort_order: sortOrder,
     }),
-    [pageSize, pageToken, action, status, actorId, resourceId, createdAfter, createdBefore, scope, tz]
+    [pageSize, pageToken, action, status, actorId, resourceId, createdAfter, createdBefore, scope, tz, sortOrder]
   );
 
   const { data, isLoading } = useQuery({
@@ -320,7 +328,21 @@ export function AuditLogsListPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>时间</TableHead>
+                    <TableHead>
+                      <button
+                        type="button"
+                        onClick={toggleSort}
+                        className="inline-flex items-center gap-1 hover:text-foreground"
+                        title={sortOrder === "ASC" ? "按时间正序，点击切换倒序" : "按时间倒序，点击切换正序"}
+                      >
+                        时间
+                        {sortOrder === "ASC" ? (
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        ) : (
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </TableHead>
                     <TableHead>变更</TableHead>
                     <TableHead>状态</TableHead>
                     <TableHead>通道</TableHead>

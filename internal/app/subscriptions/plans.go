@@ -104,14 +104,14 @@ func (s *Subscriptions) GetPlan(ctx context.Context, planID string) (*domainsubs
 	return plan, nil
 }
 
-// ListPlans 列出项目计划（Server 面含归档）。
-func (s *Subscriptions) ListPlans(ctx context.Context, includeArchived bool, limit int, before time.Time) ([]domainsubs.Plan, error) {
+// ListPlans 列出项目计划（Server 面含归档；ascending=false 倒序 = 历史默认）。
+func (s *Subscriptions) ListPlans(ctx context.Context, includeArchived bool, limit int, before time.Time, ascending bool) ([]domainsubs.Plan, error) {
 	projectID, err := projectScope(ctx)
 	if err != nil {
 		return nil, err
 	}
-	limit, before = normalizeList(limit, before)
-	return s.plans.List(ctx, projectID, includeArchived, limit, before)
+	limit, before = normalizeList(limit, before, ascending)
+	return s.plans.List(ctx, projectID, includeArchived, limit, before, ascending)
 }
 
 // ListClientPlans 列出活跃计划（Client 面）。
@@ -120,8 +120,8 @@ func (s *Subscriptions) ListClientPlans(ctx context.Context, limit int, before t
 	if err != nil {
 		return nil, err
 	}
-	limit, before = normalizeList(limit, before)
-	return s.plans.List(ctx, projectID, false, limit, before)
+	limit, before = normalizeList(limit, before, false)
+	return s.plans.List(ctx, projectID, false, limit, before, false)
 }
 
 // UpdatePlan 更新计划（未设置=不修改）。

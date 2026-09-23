@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ColumnDef } from "@/components/list/DataTable";
+import type { SortOrder } from "@/api/pagination";
 import { DetailGrid, DetailPageWrapper, DetailSkeleton, NotFound } from "@/components/resource/shared";
 import { formatInt64 } from "@/lib/utils";
 
@@ -40,7 +41,7 @@ const orderColumns = (tz: string): ColumnDef<PaymentOrder>[] => [
     header: "状态",
     cell: (o) => <Badge variant={o.status === "paid" ? "default" : "secondary"}>{o.status}</Badge>,
   },
-  { key: "created", header: "创建时间", cell: (o) => formatDateTime(o.created_at, tz) },
+  { key: "created", header: "创建时间", sortable: true, cell: (o) => formatDateTime(o.created_at, tz) },
 ];
 
 // 订单状态选项与 payments.proto 状态机一致。
@@ -82,16 +83,24 @@ export function OrdersListPage() {
     createdBefore
   );
 
+  // 服务端时间排序：换向必须回第一页（keyset 游标与方向耦合）。
+  const [sortOrder, setSortOrder] = useState<SortOrder>("DESC");
+  const toggleSort = () => {
+    setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
+    paging.reset();
+  };
+
   const { data, isLoading } = useQuery({
     queryKey: [
       "payments-orders",
       projectId,
       filters,
+      sortOrder,
       paging.pageSize,
       paging.pageToken,
     ],
     queryFn: () =>
-      listOrders({ pageSize: paging.pageSize, pageToken: paging.pageToken, ...filters }),
+      listOrders({ pageSize: paging.pageSize, pageToken: paging.pageToken, sortOrder, ...filters }),
     enabled: !!projectId,
     placeholderData: (prev) => prev,
   });
@@ -133,6 +142,7 @@ export function OrdersListPage() {
         onNext: () => paging.goNext(data?.nextPageToken),
         onPageSizeChange: paging.setPageSize,
       }}
+      serverSort={{ order: sortOrder, onToggle: toggleSort }}
       filters={
         <form
           className="flex flex-wrap items-end gap-3"

@@ -27,6 +27,8 @@ export interface ListAuditLogsParams {
   created_before?: string;
   include_platform?: boolean;
   all_projects?: boolean;
+  // 时间列（created_at）排序方向；缺省 = 服务端默认 DESC。
+  sort_order?: "ASC" | "DESC";
 }
 
 export interface ListAuditLogsResponse {

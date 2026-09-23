@@ -104,6 +104,8 @@ message ListAuditLogsRequest {
   bool include_platform = 10;
   // 跨项目全量视图（含平台级行），忽略项目上下文；仅平台 admin 可用。
   bool all_projects = 11;
+  // 时间列（created_at）排序方向；UNSPECIFIED = DESC（最新在前）。
+  shared.v1.SortOrder sort_order = 12 [(buf.validate.field).enum.defined_only = true];
 }
 
 // AuditLog 是一行审计记录。metadata 是结构化变更内容（非自由文本）：

@@ -944,7 +944,8 @@ func (x *ListPlansResponse) GetMeta() *v1.ListResponseMeta {
 }
 
 // ListSubscriptionsRequest 结构化过滤（audit-logs 先例）：exact 匹配 + 时间闭
-// 区间；分页固定 created_at DESC keyset 游标（page_token 由服务端签发）。
+// 区间；分页按 created_at keyset 游标（page_token 由服务端签发），sort_order
+// 控制方向（UNSPECIFIED = DESC；换向必须从第一页重来，异向游标即 InvalidArgument）。
 type ListSubscriptionsRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	PageSize  int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
@@ -955,6 +956,8 @@ type ListSubscriptionsRequest struct {
 	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
 	CreatedAfter  *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_after,json=createdAfter,proto3" json:"created_after,omitempty"`
 	CreatedBefore *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_before,json=createdBefore,proto3" json:"created_before,omitempty"`
+	// 时间列（created_at）排序方向；UNSPECIFIED = DESC（最新在前）。
+	SortOrder     v1.SortOrder `protobuf:"varint,7,opt,name=sort_order,json=sortOrder,proto3,enum=torchwood.shared.v1.SortOrder" json:"sort_order,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1029,6 +1032,13 @@ func (x *ListSubscriptionsRequest) GetCreatedBefore() *timestamppb.Timestamp {
 		return x.CreatedBefore
 	}
 	return nil
+}
+
+func (x *ListSubscriptionsRequest) GetSortOrder() v1.SortOrder {
+	if x != nil {
+		return x.SortOrder
+	}
+	return v1.SortOrder(0)
 }
 
 type ListSubscriptionsResponse struct {
@@ -1340,7 +1350,7 @@ const file_server_v1_subscriptions_proto_rawDesc = "" +
 	"\aplan_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06planId\"\x8b\x01\n" +
 	"\x11ListPlansResponse\x12;\n" +
 	"\x05plans\x18\x01 \x03(\v2%.torchwood.server.v1.SubscriptionPlanR\x05plans\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\xb4\x02\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\xfd\x02\n" +
 	"\x18ListSubscriptionsRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12'\n" +
@@ -1349,7 +1359,9 @@ const file_server_v1_subscriptions_proto_rawDesc = "" +
 	"\auser_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x01R\x06userId\x12\x1f\n" +
 	"\x06status\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x18\x10R\x06status\x12?\n" +
 	"\rcreated_after\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\fcreatedAfter\x12A\n" +
-	"\x0ecreated_before\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\rcreatedBefore\"\x9f\x01\n" +
+	"\x0ecreated_before\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\rcreatedBefore\x12G\n" +
+	"\n" +
+	"sort_order\x18\a \x01(\x0e2\x1e.torchwood.shared.v1.SortOrderB\b\xbaH\x05\x82\x01\x02\x10\x01R\tsortOrder\"\x9f\x01\n" +
 	"\x19ListSubscriptionsResponse\x12G\n" +
 	"\rsubscriptions\x18\x01 \x03(\v2!.torchwood.server.v1.SubscriptionR\rsubscriptions\x129\n" +
 	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"I\n" +
@@ -1431,8 +1443,9 @@ var file_server_v1_subscriptions_proto_goTypes = []any{
 	(*ExpireSubscriptionRequest)(nil), // 15: torchwood.server.v1.ExpireSubscriptionRequest
 	(*timestamppb.Timestamp)(nil),     // 16: google.protobuf.Timestamp
 	(*v1.ListResponseMeta)(nil),       // 17: torchwood.shared.v1.ListResponseMeta
-	(*v1.ListRequest)(nil),            // 18: torchwood.shared.v1.ListRequest
-	(*v1.Empty)(nil),                  // 19: torchwood.shared.v1.Empty
+	(v1.SortOrder)(0),                 // 18: torchwood.shared.v1.SortOrder
+	(*v1.ListRequest)(nil),            // 19: torchwood.shared.v1.ListRequest
+	(*v1.Empty)(nil),                  // 20: torchwood.shared.v1.Empty
 }
 var file_server_v1_subscriptions_proto_depIdxs = []int32{
 	0,  // 0: torchwood.server.v1.Benefits.grants:type_name -> torchwood.server.v1.BenefitGrant
@@ -1455,31 +1468,32 @@ var file_server_v1_subscriptions_proto_depIdxs = []int32{
 	17, // 17: torchwood.server.v1.ListPlansResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
 	16, // 18: torchwood.server.v1.ListSubscriptionsRequest.created_after:type_name -> google.protobuf.Timestamp
 	16, // 19: torchwood.server.v1.ListSubscriptionsRequest.created_before:type_name -> google.protobuf.Timestamp
-	5,  // 20: torchwood.server.v1.ListSubscriptionsResponse.subscriptions:type_name -> torchwood.server.v1.Subscription
-	17, // 21: torchwood.server.v1.ListSubscriptionsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
-	6,  // 22: torchwood.server.v1.SubscriptionsService.CreatePlan:input_type -> torchwood.server.v1.CreatePlanRequest
-	18, // 23: torchwood.server.v1.SubscriptionsService.ListPlans:input_type -> torchwood.shared.v1.ListRequest
-	7,  // 24: torchwood.server.v1.SubscriptionsService.GetPlan:input_type -> torchwood.server.v1.GetPlanRequest
-	8,  // 25: torchwood.server.v1.SubscriptionsService.UpdatePlan:input_type -> torchwood.server.v1.UpdatePlanRequest
-	9,  // 26: torchwood.server.v1.SubscriptionsService.DeletePlan:input_type -> torchwood.server.v1.DeletePlanRequest
-	11, // 27: torchwood.server.v1.SubscriptionsService.ListSubscriptions:input_type -> torchwood.server.v1.ListSubscriptionsRequest
-	13, // 28: torchwood.server.v1.SubscriptionsService.GetSubscription:input_type -> torchwood.server.v1.GetSubscriptionRequest
-	14, // 29: torchwood.server.v1.SubscriptionsService.CancelSubscription:input_type -> torchwood.server.v1.CancelSubscriptionRequest
-	15, // 30: torchwood.server.v1.SubscriptionsService.ExpireSubscription:input_type -> torchwood.server.v1.ExpireSubscriptionRequest
-	4,  // 31: torchwood.server.v1.SubscriptionsService.CreatePlan:output_type -> torchwood.server.v1.SubscriptionPlan
-	10, // 32: torchwood.server.v1.SubscriptionsService.ListPlans:output_type -> torchwood.server.v1.ListPlansResponse
-	4,  // 33: torchwood.server.v1.SubscriptionsService.GetPlan:output_type -> torchwood.server.v1.SubscriptionPlan
-	4,  // 34: torchwood.server.v1.SubscriptionsService.UpdatePlan:output_type -> torchwood.server.v1.SubscriptionPlan
-	19, // 35: torchwood.server.v1.SubscriptionsService.DeletePlan:output_type -> torchwood.shared.v1.Empty
-	12, // 36: torchwood.server.v1.SubscriptionsService.ListSubscriptions:output_type -> torchwood.server.v1.ListSubscriptionsResponse
-	5,  // 37: torchwood.server.v1.SubscriptionsService.GetSubscription:output_type -> torchwood.server.v1.Subscription
-	5,  // 38: torchwood.server.v1.SubscriptionsService.CancelSubscription:output_type -> torchwood.server.v1.Subscription
-	5,  // 39: torchwood.server.v1.SubscriptionsService.ExpireSubscription:output_type -> torchwood.server.v1.Subscription
-	31, // [31:40] is the sub-list for method output_type
-	22, // [22:31] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	18, // 20: torchwood.server.v1.ListSubscriptionsRequest.sort_order:type_name -> torchwood.shared.v1.SortOrder
+	5,  // 21: torchwood.server.v1.ListSubscriptionsResponse.subscriptions:type_name -> torchwood.server.v1.Subscription
+	17, // 22: torchwood.server.v1.ListSubscriptionsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	6,  // 23: torchwood.server.v1.SubscriptionsService.CreatePlan:input_type -> torchwood.server.v1.CreatePlanRequest
+	19, // 24: torchwood.server.v1.SubscriptionsService.ListPlans:input_type -> torchwood.shared.v1.ListRequest
+	7,  // 25: torchwood.server.v1.SubscriptionsService.GetPlan:input_type -> torchwood.server.v1.GetPlanRequest
+	8,  // 26: torchwood.server.v1.SubscriptionsService.UpdatePlan:input_type -> torchwood.server.v1.UpdatePlanRequest
+	9,  // 27: torchwood.server.v1.SubscriptionsService.DeletePlan:input_type -> torchwood.server.v1.DeletePlanRequest
+	11, // 28: torchwood.server.v1.SubscriptionsService.ListSubscriptions:input_type -> torchwood.server.v1.ListSubscriptionsRequest
+	13, // 29: torchwood.server.v1.SubscriptionsService.GetSubscription:input_type -> torchwood.server.v1.GetSubscriptionRequest
+	14, // 30: torchwood.server.v1.SubscriptionsService.CancelSubscription:input_type -> torchwood.server.v1.CancelSubscriptionRequest
+	15, // 31: torchwood.server.v1.SubscriptionsService.ExpireSubscription:input_type -> torchwood.server.v1.ExpireSubscriptionRequest
+	4,  // 32: torchwood.server.v1.SubscriptionsService.CreatePlan:output_type -> torchwood.server.v1.SubscriptionPlan
+	10, // 33: torchwood.server.v1.SubscriptionsService.ListPlans:output_type -> torchwood.server.v1.ListPlansResponse
+	4,  // 34: torchwood.server.v1.SubscriptionsService.GetPlan:output_type -> torchwood.server.v1.SubscriptionPlan
+	4,  // 35: torchwood.server.v1.SubscriptionsService.UpdatePlan:output_type -> torchwood.server.v1.SubscriptionPlan
+	20, // 36: torchwood.server.v1.SubscriptionsService.DeletePlan:output_type -> torchwood.shared.v1.Empty
+	12, // 37: torchwood.server.v1.SubscriptionsService.ListSubscriptions:output_type -> torchwood.server.v1.ListSubscriptionsResponse
+	5,  // 38: torchwood.server.v1.SubscriptionsService.GetSubscription:output_type -> torchwood.server.v1.Subscription
+	5,  // 39: torchwood.server.v1.SubscriptionsService.CancelSubscription:output_type -> torchwood.server.v1.Subscription
+	5,  // 40: torchwood.server.v1.SubscriptionsService.ExpireSubscription:output_type -> torchwood.server.v1.Subscription
+	32, // [32:41] is the sub-list for method output_type
+	23, // [23:32] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_server_v1_subscriptions_proto_init() }

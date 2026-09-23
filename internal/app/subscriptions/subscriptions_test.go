@@ -137,7 +137,7 @@ func (s *memStore) GetByCode(_ context.Context, projectID, code string) (*domain
 func (s *memStore) GetByCodeForShare(ctx context.Context, projectID, code string) (*domainsubs.Plan, error) {
 	return s.GetByCode(ctx, projectID, code)
 }
-func (s *memStore) List(context.Context, string, bool, int, time.Time) ([]domainsubs.Plan, error) {
+func (s *memStore) List(context.Context, string, bool, int, time.Time, bool) ([]domainsubs.Plan, error) {
 	return nil, nil
 }
 func (s *memStore) Update(_ context.Context, plan *domainsubs.Plan) error {

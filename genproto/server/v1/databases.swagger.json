@@ -57,6 +57,19 @@
               "type": "string"
             },
             "collectionFormat": "multi"
+          },
+          {
+            "name": "sort_order",
+            "description": "时间列排序方向；支持面以各 handler 的显式行为为准（Console 列表页\n按 created_at 正/倒序），UNSPECIFIED = 历史默认 DESC。",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "SORT_ORDER_UNSPECIFIED",
+              "SORT_ORDER_ASC",
+              "SORT_ORDER_DESC"
+            ],
+            "default": "SORT_ORDER_UNSPECIFIED"
           }
         ],
         "tags": [
@@ -3194,6 +3207,16 @@
         }
       },
       "title": "Query is the single wire form of document list/count/aggregate filters\n(C7: the server consumes no query strings; the string DSL survives only\nas client-side sugar in SDKs/tools). page_token is the authoritative pager\n(K-20); page_size is the page bound.\nvector_search（会话 #10；B2 多页）：KNN 一次一个；与 filter 可组合（AND），\n与 orders 互斥（排序由距离承载）。page_token 合法 = 续页：服务端发放\nkvc: 距离游标（(dist,_id) keyset 语义，跨页不重不漏），同请求参数 +\ntoken 翻页；page_size 即 k。非法组合（orders、异族 token）服务端显式拒绝。"
+    },
+    "v1SortOrder": {
+      "type": "string",
+      "enum": [
+        "SORT_ORDER_UNSPECIFIED",
+        "SORT_ORDER_ASC",
+        "SORT_ORDER_DESC"
+      ],
+      "default": "SORT_ORDER_UNSPECIFIED",
+      "title": "SortOrder 是时间列排序方向（Console 列表页「按创建时间正/倒序」）。\n固定排序键 = 各端点的时间列（通常 created_at），不是 AIP-160 任意列\norder_by（W-K 终结裁决维持：filter/order_by 不复活）。UNSPECIFIED =\n各端点历史默认（created_at DESC，最新在前）。keyset 游标与方向耦合，\n换向必须从第一页重新开始，携带异向游标即 InvalidArgument。"
     },
     "v1TransactionMode": {
       "type": "string",

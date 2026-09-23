@@ -194,8 +194,13 @@ func (r *paymentOrderRepo) ListByProject(ctx context.Context, projectID string, 
 	}
 	var rows []model.PaymentOrder
 	sel := conn.NewSelect().Model(&rows).ModelTableExpr(expr, sch).
-		Where("po.project_id = ?", projectID).
-		Where("po.created_at < ?", before)
+		Where("po.project_id = ?", projectID)
+	// 游标谓词随方向取 < / >（ascending=false 倒序 = 历史默认）。
+	if f.Ascending {
+		sel = sel.Where("po.created_at > ?", before)
+	} else {
+		sel = sel.Where("po.created_at < ?", before)
+	}
 	if f.UserID != "" {
 		sel = sel.Where("po.user_id = ?", f.UserID)
 	}
@@ -208,9 +213,12 @@ func (r *paymentOrderRepo) ListByProject(ctx context.Context, projectID string, 
 	if !f.CreatedBefore.IsZero() {
 		sel = sel.Where("po.created_at <= ?", f.CreatedBefore)
 	}
-	err = sel.Order("po.created_at DESC").
-		Limit(limit).
-		Scan(ctx2)
+	if f.Ascending {
+		sel = sel.Order("po.created_at ASC")
+	} else {
+		sel = sel.Order("po.created_at DESC")
+	}
+	err = sel.Limit(limit).Scan(ctx2)
 	if err != nil {
 		return nil, err
 	}

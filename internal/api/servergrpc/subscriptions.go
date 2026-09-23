@@ -46,11 +46,12 @@ func (s *SubscriptionsService) CreatePlan(ctx context.Context, req *serverv1.Cre
 }
 
 func (s *SubscriptionsService) ListPlans(ctx context.Context, req *sharedv1.ListRequest) (*serverv1.ListPlansResponse, error) {
-	before, err := decodeServerOrderCursor(req.GetPageToken())
+	ascending := req.GetSortOrder() == sharedv1.SortOrder_SORT_ORDER_ASC
+	before, err := decodeServerOrderPage(req.GetPageToken(), ascending)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid page token")
+		return nil, invalidServerOrderCursor(err)
 	}
-	plans, err := s.subs.ListPlans(ctx, true, int(req.GetPageSize()), before)
+	plans, err := s.subs.ListPlans(ctx, true, int(req.GetPageSize()), before, ascending)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +61,7 @@ func (s *SubscriptionsService) ListPlans(ctx context.Context, req *sharedv1.List
 	}
 	meta := &sharedv1.ListResponseMeta{PageSize: req.GetPageSize()}
 	if len(plans) > 0 {
-		meta.NextPageToken = encodeServerOrderCursor(plans[len(plans)-1].CreatedAt)
+		meta.NextPageToken = encodeServerOrderCursor(plans[len(plans)-1].CreatedAt, ascending)
 	}
 	return &serverv1.ListPlansResponse{Plans: out, Meta: meta}, nil
 }
@@ -127,13 +128,15 @@ func (s *SubscriptionsService) DeletePlan(ctx context.Context, req *serverv1.Del
 }
 
 func (s *SubscriptionsService) ListSubscriptions(ctx context.Context, req *serverv1.ListSubscriptionsRequest) (*serverv1.ListSubscriptionsResponse, error) {
-	before, err := decodeServerOrderCursor(req.GetPageToken())
+	ascending := req.GetSortOrder() == sharedv1.SortOrder_SORT_ORDER_ASC
+	before, err := decodeServerOrderPage(req.GetPageToken(), ascending)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid page token")
+		return nil, invalidServerOrderCursor(err)
 	}
 	f := domainsubs.SubscriptionListFilter{
-		UserID: req.GetUserId(),
-		Status: domainsubs.Status(req.GetStatus()),
+		UserID:    req.GetUserId(),
+		Status:    domainsubs.Status(req.GetStatus()),
+		Ascending: ascending,
 	}
 	if ts := req.GetCreatedAfter(); ts != nil {
 		f.CreatedAfter = ts.AsTime()
@@ -151,7 +154,7 @@ func (s *SubscriptionsService) ListSubscriptions(ctx context.Context, req *serve
 	}
 	meta := &sharedv1.ListResponseMeta{PageSize: req.GetPageSize()}
 	if len(rows) > 0 {
-		meta.NextPageToken = encodeServerOrderCursor(rows[len(rows)-1].CreatedAt)
+		meta.NextPageToken = encodeServerOrderCursor(rows[len(rows)-1].CreatedAt, ascending)
 	}
 	return &serverv1.ListSubscriptionsResponse{Subscriptions: out, Meta: meta}, nil
 }

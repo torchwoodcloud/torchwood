@@ -32,8 +32,8 @@ type Repository interface {
 	Insert(ctx context.Context, entry *Entry) error
 	// ListByActor 返回某项目下指定 actor 的日志（created_at DESC，limit ≤ 100）。
 	ListByActor(ctx context.Context, projectID, actorID string, limit int) ([]Entry, error)
-	// List 按结构化过滤分页查询审计日志（created_at DESC），返回当页行与
-	// 过滤条件下的总数（供 offset 分页 meta 用）。
+	// List 按结构化过滤分页查询审计日志（created_at 分页，Ascending=false
+	// 倒序 = 历史默认），返回当页行与过滤条件下的总数（供 offset 分页 meta 用）。
 	List(ctx context.Context, filter ListFilter) ([]Entry, int, error)
 }
 
@@ -53,4 +53,7 @@ type ListFilter struct {
 	CreatedBefore   *time.Time
 	Offset          int
 	PageSize        int
+	// Ascending 时间列排序方向（false = DESC，历史默认；offset 分页下换向
+	// 由调用方从第一页重来，token 内不编码方向）。
+	Ascending bool
 }

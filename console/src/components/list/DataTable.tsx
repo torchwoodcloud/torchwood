@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Eye, Pencil } from "lucide-react";
+import { ArrowDown, ArrowUp, Eye, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -10,12 +10,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { SortOrder } from "@/api/pagination";
 
 export interface ColumnDef<T> {
   key: string;
   header: string;
   cell: (item: T) => React.ReactNode;
   className?: string;
+  // sortable 标记该列按时间服务端排序（点击表头切换 ASC/DESC）；
+  // 排序 UI 仅在父级给出 sortOrder + onSortToggle 时渲染。
+  sortable?: boolean;
 }
 
 interface DataTableProps<T extends { id: string }> {
@@ -31,6 +35,8 @@ interface DataTableProps<T extends { id: string }> {
   detailPath?: (item: T) => string;
   editPath?: (item: T) => string;
   rowActions?: (item: T) => React.ReactNode;
+  sortOrder?: SortOrder;
+  onSortToggle?: () => void;
 }
 
 export function DataTable<T extends { id: string }>({
@@ -46,6 +52,8 @@ export function DataTable<T extends { id: string }>({
   detailPath,
   editPath,
   rowActions,
+  sortOrder,
+  onSortToggle,
 }: DataTableProps<T>) {
   const hasActions = !!(detailPath || editPath || rowActions);
 
@@ -86,7 +94,23 @@ export function DataTable<T extends { id: string }>({
           )}
           {columns.map((col) => (
             <TableHead key={col.key} className={col.className}>
-              {col.header}
+              {col.sortable && sortOrder && onSortToggle ? (
+                <button
+                  type="button"
+                  onClick={onSortToggle}
+                  className="inline-flex items-center gap-1 hover:text-foreground"
+                  title={sortOrder === "ASC" ? "按时间正序，点击切换倒序" : "按时间倒序，点击切换正序"}
+                >
+                  {col.header}
+                  {sortOrder === "ASC" ? (
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              ) : (
+                col.header
+              )}
             </TableHead>
           ))}
           {hasActions && <TableHead className="w-32 text-right">操作</TableHead>}

@@ -7,6 +7,7 @@
 package sharedv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -21,6 +22,60 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// SortOrder 是时间列排序方向（Console 列表页「按创建时间正/倒序」）。
+// 固定排序键 = 各端点的时间列（通常 created_at），不是 AIP-160 任意列
+// order_by（W-K 终结裁决维持：filter/order_by 不复活）。UNSPECIFIED =
+// 各端点历史默认（created_at DESC，最新在前）。keyset 游标与方向耦合，
+// 换向必须从第一页重新开始，携带异向游标即 InvalidArgument。
+type SortOrder int32
+
+const (
+	SortOrder_SORT_ORDER_UNSPECIFIED SortOrder = 0
+	SortOrder_SORT_ORDER_ASC         SortOrder = 1
+	SortOrder_SORT_ORDER_DESC        SortOrder = 2
+)
+
+// Enum value maps for SortOrder.
+var (
+	SortOrder_name = map[int32]string{
+		0: "SORT_ORDER_UNSPECIFIED",
+		1: "SORT_ORDER_ASC",
+		2: "SORT_ORDER_DESC",
+	}
+	SortOrder_value = map[string]int32{
+		"SORT_ORDER_UNSPECIFIED": 0,
+		"SORT_ORDER_ASC":         1,
+		"SORT_ORDER_DESC":        2,
+	}
+)
+
+func (x SortOrder) Enum() *SortOrder {
+	p := new(SortOrder)
+	*p = x
+	return p
+}
+
+func (x SortOrder) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SortOrder) Descriptor() protoreflect.EnumDescriptor {
+	return file_shared_v1_common_proto_enumTypes[0].Descriptor()
+}
+
+func (SortOrder) Type() protoreflect.EnumType {
+	return &file_shared_v1_common_proto_enumTypes[0]
+}
+
+func (x SortOrder) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SortOrder.Descriptor instead.
+func (SortOrder) EnumDescriptor() ([]byte, []int) {
+	return file_shared_v1_common_proto_rawDescGZIP(), []int{0}
+}
+
 type ListRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	PageSize  int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
@@ -31,7 +86,10 @@ type ListRequest struct {
 	// storage buckets/files 与 groups（ListGroups/ListMemberships）不支持——
 	// 携带即 InvalidArgument（显式拒绝，不静默忽略）；其余使用本消息的面以
 	// 各自 handler 的显式行为为准。
-	Queries       []string `protobuf:"bytes,5,rep,name=queries,proto3" json:"queries,omitempty"`
+	Queries []string `protobuf:"bytes,5,rep,name=queries,proto3" json:"queries,omitempty"`
+	// 时间列排序方向；支持面以各 handler 的显式行为为准（Console 列表页
+	// 按 created_at 正/倒序），UNSPECIFIED = 历史默认 DESC。
+	SortOrder     SortOrder `protobuf:"varint,6,opt,name=sort_order,json=sortOrder,proto3,enum=torchwood.shared.v1.SortOrder" json:"sort_order,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -85,6 +143,13 @@ func (x *ListRequest) GetQueries() []string {
 		return x.Queries
 	}
 	return nil
+}
+
+func (x *ListRequest) GetSortOrder() SortOrder {
+	if x != nil {
+		return x.SortOrder
+	}
+	return SortOrder_SORT_ORDER_UNSPECIFIED
 }
 
 type ListResponseMeta struct {
@@ -196,19 +261,25 @@ var File_shared_v1_common_proto protoreflect.FileDescriptor
 
 const file_shared_v1_common_proto_rawDesc = "" +
 	"\n" +
-	"\x16shared/v1/common.proto\x12\x13torchwood.shared.v1\"\x81\x01\n" +
+	"\x16shared/v1/common.proto\x12\x13torchwood.shared.v1\x1a\x1bbuf/validate/validate.proto\"\xca\x01\n" +
 	"\vListRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\x02 \x01(\tR\tpageToken\x12\x18\n" +
-	"\aqueries\x18\x05 \x03(\tR\aqueriesJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\x06filterR\border_by\"\xa0\x01\n" +
+	"\aqueries\x18\x05 \x03(\tR\aqueries\x12G\n" +
+	"\n" +
+	"sort_order\x18\x06 \x01(\x0e2\x1e.torchwood.shared.v1.SortOrderB\b\xbaH\x05\x82\x01\x02\x10\x01R\tsortOrderJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\x06filterR\border_by\"\xa0\x01\n" +
 	"\x10ListResponseMeta\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12&\n" +
 	"\x0fprev_page_token\x18\x03 \x01(\tR\rprevPageToken\x12\x1f\n" +
 	"\vtotal_count\x18\x04 \x01(\x05R\n" +
 	"totalCount\"\a\n" +
-	"\x05EmptyBAZ?github.com/torchwoodcloud/torchwood/genproto/shared/v1;sharedv1b\x06proto3"
+	"\x05Empty*P\n" +
+	"\tSortOrder\x12\x1a\n" +
+	"\x16SORT_ORDER_UNSPECIFIED\x10\x00\x12\x12\n" +
+	"\x0eSORT_ORDER_ASC\x10\x01\x12\x13\n" +
+	"\x0fSORT_ORDER_DESC\x10\x02BAZ?github.com/torchwoodcloud/torchwood/genproto/shared/v1;sharedv1b\x06proto3"
 
 var (
 	file_shared_v1_common_proto_rawDescOnce sync.Once
@@ -222,18 +293,21 @@ func file_shared_v1_common_proto_rawDescGZIP() []byte {
 	return file_shared_v1_common_proto_rawDescData
 }
 
+var file_shared_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_shared_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_shared_v1_common_proto_goTypes = []any{
-	(*ListRequest)(nil),      // 0: torchwood.shared.v1.ListRequest
-	(*ListResponseMeta)(nil), // 1: torchwood.shared.v1.ListResponseMeta
-	(*Empty)(nil),            // 2: torchwood.shared.v1.Empty
+	(SortOrder)(0),           // 0: torchwood.shared.v1.SortOrder
+	(*ListRequest)(nil),      // 1: torchwood.shared.v1.ListRequest
+	(*ListResponseMeta)(nil), // 2: torchwood.shared.v1.ListResponseMeta
+	(*Empty)(nil),            // 3: torchwood.shared.v1.Empty
 }
 var file_shared_v1_common_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0, // 0: torchwood.shared.v1.ListRequest.sort_order:type_name -> torchwood.shared.v1.SortOrder
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_shared_v1_common_proto_init() }
@@ -246,13 +320,14 @@ func file_shared_v1_common_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_shared_v1_common_proto_rawDesc), len(file_shared_v1_common_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_shared_v1_common_proto_goTypes,
 		DependencyIndexes: file_shared_v1_common_proto_depIdxs,
+		EnumInfos:         file_shared_v1_common_proto_enumTypes,
 		MessageInfos:      file_shared_v1_common_proto_msgTypes,
 	}.Build()
 	File_shared_v1_common_proto = out.File

@@ -6,12 +6,14 @@ import (
 )
 
 // OrderListFilter 是项目订单列表的结构化过滤（exact 匹配 + created_at 闭区间；
-// 零值字段 = 不过滤）。
+// 零值字段 = 不过滤）。Ascending 是时间列排序方向（false = DESC，历史默认），
+// 游标谓词随方向取 < / >。
 type OrderListFilter struct {
 	UserID        string
 	Status        OrderStatus
 	CreatedAfter  time.Time
 	CreatedBefore time.Time
+	Ascending     bool
 }
 
 // OrderRepo 持久化 payment_orders。写路径加入调用方的 uow.Run
@@ -31,7 +33,7 @@ type OrderRepo interface {
 	Update(ctx context.Context, order *Order, expectStatus OrderStatus) error
 	// ListByUser 返回本人订单（created_at DESC 分页）。
 	ListByUser(ctx context.Context, projectID, userID string, limit int, before time.Time) ([]Order, error)
-	// ListByProject 返回项目订单（created_at DESC 分页 + 结构化过滤，Server/Console 面）。
+	// ListByProject 返回项目订单（created_at 分页 + 结构化过滤与方向，Server/Console 面）。
 	ListByProject(ctx context.Context, projectID string, limit int, before time.Time, f OrderListFilter) ([]Order, error)
 	// CloseExpiredInProject 把指定项目 created/paying 且超时的订单翻 closed。
 	CloseExpiredInProject(ctx context.Context, projectID string, now time.Time, limit int) (int64, error)

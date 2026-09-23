@@ -109,14 +109,15 @@ func (a *Assets) GetDef(ctx context.Context, defID string) (*domainassets.Def, e
 	return def, nil
 }
 
-// ListDefs 列出项目定义（Server 面含归档；Client 面仅 active）。
-func (a *Assets) ListDefs(ctx context.Context, includeArchived bool, limit int, before time.Time) ([]domainassets.Def, error) {
+// ListDefs 列出项目定义（Server 面含归档；Client 面仅 active；
+// ascending=false 倒序 = 历史默认）。
+func (a *Assets) ListDefs(ctx context.Context, includeArchived bool, limit int, before time.Time, ascending bool) ([]domainassets.Def, error) {
 	projectID, err := projectScope(ctx)
 	if err != nil {
 		return nil, err
 	}
-	limit, before = normalizeList(limit, before, false)
-	return a.defs.List(ctx, projectID, includeArchived, limit, before)
+	limit, before = normalizeList(limit, before, ascending)
+	return a.defs.List(ctx, projectID, includeArchived, limit, before, ascending)
 }
 
 // UpdateDef 更新定义（class/code 不可变；矩阵再校验）。

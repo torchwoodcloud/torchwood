@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"time"
 
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
@@ -35,13 +36,16 @@ func withAuditResource(ctx context.Context, resourceID string) context.Context {
 }
 
 func (s *PaymentsService) ListOrders(ctx context.Context, req *serverv1.ListOrdersRequest) (*serverv1.ListOrdersResponse, error) {
-	before, err := decodeServerOrderCursor(req.GetPageToken())
+	// 时间列（created_at）方向化排序：UNSPECIFIED = DESC（历史默认）。
+	ascending := req.GetSortOrder() == sharedv1.SortOrder_SORT_ORDER_ASC
+	before, err := decodeServerOrderPage(req.GetPageToken(), ascending)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid page token")
+		return nil, invalidServerOrderCursor(err)
 	}
 	f := domainpayments.OrderListFilter{
-		UserID: req.GetUserId(),
-		Status: domainpayments.OrderStatus(req.GetStatus()),
+		UserID:    req.GetUserId(),
+		Status:    domainpayments.OrderStatus(req.GetStatus()),
+		Ascending: ascending,
 	}
 	if ts := req.GetCreatedAfter(); ts != nil {
 		f.CreatedAfter = ts.AsTime()
@@ -63,7 +67,7 @@ func (s *PaymentsService) ListOrders(ctx context.Context, req *serverv1.ListOrde
 	}
 	meta := &sharedv1.ListResponseMeta{PageSize: req.GetPageSize()}
 	if len(orders) > 0 {
-		meta.NextPageToken = encodeServerOrderCursor(orders[len(orders)-1].CreatedAt)
+		meta.NextPageToken = encodeServerOrderCursor(orders[len(orders)-1].CreatedAt, ascending)
 	}
 	return &serverv1.ListOrdersResponse{Orders: out, Meta: meta}, nil
 }
@@ -108,20 +112,58 @@ func (s *PaymentsService) ManualFulfill(ctx context.Context, req *serverv1.Manua
 }
 
 // encodeServerOrderCursor / decodeServerOrderCursor：不透明游标 =
-// base64(RFC3339Nano) 的 created_at（列表固定 created_at DESC）。
-func encodeServerOrderCursor(t time.Time) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(t.UTC().Format(time.RFC3339Nano)))
+// base64(方向前缀 + RFC3339Nano) 的 created_at（列表固定按时间列排序）。
+// 方向前缀 "a:"=ASC / "d:"=DESC（与 ledger 游标同格式）；无前缀的旧格式 =
+// DESC（存量 token 兼容：旧客户端不带 sort_order，语义即 DESC）。
+// 注：与 ListUserLedger 的 encodeLedgerCursor/decodeLedgerCursor 行为一致，
+// 后续可合并为单一实现。
+func encodeServerOrderCursor(t time.Time, ascending bool) string {
+	prefix := "d:"
+	if ascending {
+		prefix = "a:"
+	}
+	return base64.RawURLEncoding.EncodeToString([]byte(prefix + t.UTC().Format(time.RFC3339Nano)))
 }
 
-func decodeServerOrderCursor(token string) (time.Time, error) {
+func decodeServerOrderCursor(token string) (time.Time, bool, error) {
 	if token == "" {
-		return time.Time{}, nil
+		return time.Time{}, false, nil
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(token)
 	if err != nil {
+		return time.Time{}, false, err
+	}
+	if len(raw) > 1 && (raw[0] == 'a' || raw[0] == 'd') && raw[1] == ':' {
+		t, err := time.Parse(time.RFC3339Nano, string(raw[2:]))
+		return t, raw[0] == 'a', err
+	}
+	// 旧格式：无方向前缀 = DESC。
+	t, err := time.Parse(time.RFC3339Nano, string(raw))
+	return t, false, err
+}
+
+// errServerOrderMismatch 标记游标方向与请求排序方向不一致（换向必须从第一页
+// 重新开始；携带异向游标 = 客户端 bug 或过期缓存，fail-fast 而非静默错位）。
+var errServerOrderMismatch = errors.New("page token sort order mismatch")
+
+// decodeServerOrderPage 解析一页的游标并校验方向一致性。
+func decodeServerOrderPage(token string, ascending bool) (time.Time, error) {
+	t, cursorAsc, err := decodeServerOrderCursor(token)
+	if err != nil {
 		return time.Time{}, err
 	}
-	return time.Parse(time.RFC3339Nano, string(raw))
+	// 空 token（第一页）方向由请求决定，不参与校验。
+	if token != "" && cursorAsc != ascending {
+		return time.Time{}, errServerOrderMismatch
+	}
+	return t, nil
+}
+
+func invalidServerOrderCursor(err error) error {
+	if errors.Is(err, errServerOrderMismatch) {
+		return status.Error(codes.InvalidArgument, "page token belongs to another sort order; restart from the first page")
+	}
+	return status.Error(codes.InvalidArgument, "invalid page token")
 }
 
 func mapServerPaymentOrder(order *domainpayments.Order) (*serverv1.PaymentOrder, error) {

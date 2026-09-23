@@ -40,6 +40,9 @@ func (s *AuditLogsService) ListAuditLogs(ctx context.Context, req *serverv1.List
 		AllProjects:     req.GetAllProjects(),
 		Offset:          params.Offset,
 		PageSize:        int(params.PageSize),
+		// 时间列（created_at）方向化排序；UNSPECIFIED = DESC（历史默认）。
+		// offset token 不编码方向，换向由调用方从第一页重来。
+		Ascending: req.GetSortOrder() == sharedv1.SortOrder_SORT_ORDER_ASC,
 	}
 	if ts := req.GetCreatedAfter(); ts != nil {
 		t := ts.AsTime()

@@ -155,10 +155,16 @@ func (s *memStore) GetByCodeForShare(ctx context.Context, projectID, code string
 func (s *memStore) GetByIDForShare(ctx context.Context, projectID, defID string) (*domainassets.Def, error) {
 	return s.GetByID(ctx, projectID, defID)
 }
-func (s *memStore) List(_ context.Context, projectID string, includeArchived bool, limit int, before time.Time) ([]domainassets.Def, error) {
+func (s *memStore) List(_ context.Context, projectID string, includeArchived bool, limit int, before time.Time, ascending bool) ([]domainassets.Def, error) {
 	var out []domainassets.Def
 	for _, d := range s.defs {
-		if d.ProjectID != projectID || !d.CreatedAt.Before(before) {
+		if d.ProjectID != projectID {
+			continue
+		}
+		if ascending && !d.CreatedAt.After(before) {
+			continue
+		}
+		if !ascending && !d.CreatedAt.Before(before) {
 			continue
 		}
 		if !includeArchived && d.Status != domainassets.DefStatusActive {
@@ -166,7 +172,12 @@ func (s *memStore) List(_ context.Context, projectID string, includeArchived boo
 		}
 		out = append(out, *d)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	sort.Slice(out, func(i, j int) bool {
+		if ascending {
+			return out[i].CreatedAt.Before(out[j].CreatedAt)
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
 	if len(out) > limit {
 		out = out[:limit]
 	}
@@ -240,10 +251,16 @@ func (s *memStore) ListByOwner(_ context.Context, projectID string, ownerType do
 	return out, nil
 }
 
-func (s *memStore) ListByDef(_ context.Context, projectID string, ownerType domainassets.OwnerType, ownerID, defID string, limit int, before time.Time) ([]domainassets.Holding, error) {
+func (s *memStore) ListByDef(_ context.Context, projectID string, ownerType domainassets.OwnerType, ownerID, defID string, limit int, before time.Time, ascending bool) ([]domainassets.Holding, error) {
 	var out []domainassets.Holding
 	for _, h := range s.holdings {
-		if h.ProjectID != projectID || h.OwnerType != ownerType || h.DefID != defID || !h.CreatedAt.Before(before) {
+		if h.ProjectID != projectID || h.OwnerType != ownerType || h.DefID != defID {
+			continue
+		}
+		if ascending && !h.CreatedAt.After(before) {
+			continue
+		}
+		if !ascending && !h.CreatedAt.Before(before) {
 			continue
 		}
 		if ownerID != "" && h.OwnerID != ownerID {
@@ -251,7 +268,12 @@ func (s *memStore) ListByDef(_ context.Context, projectID string, ownerType doma
 		}
 		out = append(out, *cloneHolding(h))
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	sort.Slice(out, func(i, j int) bool {
+		if ascending {
+			return out[i].CreatedAt.Before(out[j].CreatedAt)
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
 	if len(out) > limit {
 		out = out[:limit]
 	}
@@ -403,8 +425,8 @@ func (r memHoldings) ListForUpdate(ctx context.Context, p string, ot domainasset
 func (r memHoldings) ListByOwner(ctx context.Context, p string, ot domainassets.OwnerType, oid string, limit int, before time.Time) ([]domainassets.Holding, error) {
 	return r.s.ListByOwner(ctx, p, ot, oid, limit, before)
 }
-func (r memHoldings) ListByDef(ctx context.Context, p string, ot domainassets.OwnerType, oid, def string, limit int, before time.Time) ([]domainassets.Holding, error) {
-	return r.s.ListByDef(ctx, p, ot, oid, def, limit, before)
+func (r memHoldings) ListByDef(ctx context.Context, p string, ot domainassets.OwnerType, oid, def string, limit int, before time.Time, ascending bool) ([]domainassets.Holding, error) {
+	return r.s.ListByDef(ctx, p, ot, oid, def, limit, before, ascending)
 }
 func (r memHoldings) Update(ctx context.Context, h *domainassets.Holding, v int64) error {
 	return r.s.UpdateHolding(ctx, h, v)
@@ -907,7 +929,7 @@ func TestListDefAssets_FiltersByDefAndOwner(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	rows, err := env.assets.ListDefAssets(adminCtx("p1"), gold.ID, "", 0, time.Time{})
+	rows, err := env.assets.ListDefAssets(adminCtx("p1"), gold.ID, "", 0, time.Time{}, false)
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 	for _, r := range rows {
@@ -915,13 +937,13 @@ func TestListDefAssets_FiltersByDefAndOwner(t *testing.T) {
 		require.Equal(t, domainassets.ClassCurrency, r.Class)
 	}
 
-	rows, err = env.assets.ListDefAssets(adminCtx("p1"), gold.ID, "u1", 0, time.Time{})
+	rows, err = env.assets.ListDefAssets(adminCtx("p1"), gold.ID, "u1", 0, time.Time{}, false)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, "u1", rows[0].Holding.OwnerID)
 	require.Equal(t, int64(10), rows[0].Holding.Quantity)
 
-	rows, err = env.assets.ListDefAssets(adminCtx("p1"), silver.ID, "", 0, time.Time{})
+	rows, err = env.assets.ListDefAssets(adminCtx("p1"), silver.ID, "", 0, time.Time{}, false)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, "u1", rows[0].Holding.OwnerID)
@@ -932,11 +954,11 @@ func TestListDefAssets_FiltersByDefAndOwner(t *testing.T) {
 		OwnerID: "u1", DefCode: "ticket", Quantity: 1, ExpiresAt: &past, IdempotencyKey: "g4",
 	})
 	require.NoError(t, err)
-	rows, err = env.assets.ListDefAssets(adminCtx("p1"), ticket.ID, "", 0, time.Time{})
+	rows, err = env.assets.ListDefAssets(adminCtx("p1"), ticket.ID, "", 0, time.Time{}, false)
 	require.NoError(t, err)
 	require.Empty(t, rows, "过期持有懒过滤")
 
-	_, err = env.assets.ListDefAssets(adminCtx("p1"), "missing", "", 0, time.Time{})
+	_, err = env.assets.ListDefAssets(adminCtx("p1"), "missing", "", 0, time.Time{}, false)
 	require.Equal(t, codes.NotFound, status.Code(err))
 }
 

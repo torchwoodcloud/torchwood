@@ -77,7 +77,7 @@ func (r *assetDefRepo) selectDef(ctx context.Context, projectID, pred string, ar
 	return mapDefToDomain(m), nil
 }
 
-func (r *assetDefRepo) List(ctx context.Context, projectID string, includeArchived bool, limit int, before time.Time) ([]assets.Def, error) {
+func (r *assetDefRepo) List(ctx context.Context, projectID string, includeArchived bool, limit int, before time.Time, ascending bool) ([]assets.Def, error) {
 	ctx2, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	conn, sch, expr, err := Scoped(ctx2, r.db, projectID, "asset_defs", "ad")
@@ -86,12 +86,21 @@ func (r *assetDefRepo) List(ctx context.Context, projectID string, includeArchiv
 	}
 	var rows []model.AssetDef
 	q := conn.NewSelect().Model(&rows).ModelTableExpr(expr, sch).
-		Where("ad.project_id = ?", projectID).
-		Where("ad.created_at < ?", before)
+		Where("ad.project_id = ?", projectID)
+	if ascending {
+		q = q.Where("ad.created_at > ?", before)
+	} else {
+		q = q.Where("ad.created_at < ?", before)
+	}
 	if !includeArchived {
 		q = q.Where("ad.status = ?", string(assets.DefStatusActive))
 	}
-	err = q.Order("ad.created_at DESC").Limit(limit).Scan(ctx2)
+	if ascending {
+		q = q.Order("ad.created_at ASC")
+	} else {
+		q = q.Order("ad.created_at DESC")
+	}
+	err = q.Limit(limit).Scan(ctx2)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +226,7 @@ func (r *assetHoldingRepo) ListByOwner(ctx context.Context, projectID string, ow
 	return mapHoldingsToDomain(rows), nil
 }
 
-func (r *assetHoldingRepo) ListByDef(ctx context.Context, projectID string, ownerType assets.OwnerType, ownerID, defID string, limit int, before time.Time) ([]assets.Holding, error) {
+func (r *assetHoldingRepo) ListByDef(ctx context.Context, projectID string, ownerType assets.OwnerType, ownerID, defID string, limit int, before time.Time, ascending bool) ([]assets.Holding, error) {
 	ctx2, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	conn, sch, expr, err := Scoped(ctx2, r.db, projectID, "asset_holdings", "ah")
@@ -228,12 +237,21 @@ func (r *assetHoldingRepo) ListByDef(ctx context.Context, projectID string, owne
 	q := conn.NewSelect().Model(&rows).ModelTableExpr(expr, sch).
 		Where("ah.project_id = ?", projectID).
 		Where("ah.owner_type = ?", string(ownerType)).
-		Where("ah.def_id = ?", defID).
-		Where("ah.created_at < ?", before)
+		Where("ah.def_id = ?", defID)
+	if ascending {
+		q = q.Where("ah.created_at > ?", before)
+	} else {
+		q = q.Where("ah.created_at < ?", before)
+	}
 	if ownerID != "" {
 		q = q.Where("ah.owner_id = ?", ownerID)
 	}
-	err = q.Order("ah.created_at DESC").Limit(limit).Scan(ctx2)
+	if ascending {
+		q = q.Order("ah.created_at ASC")
+	} else {
+		q = q.Order("ah.created_at DESC")
+	}
+	err = q.Limit(limit).Scan(ctx2)
 	if err != nil {
 		return nil, err
 	}

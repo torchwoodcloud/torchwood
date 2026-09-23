@@ -36,6 +36,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ColumnDef } from "@/components/list/DataTable";
+import type { SortOrder } from "@/api/pagination";
 import {
   DeleteButton,
   DetailGrid,
@@ -59,7 +60,7 @@ const defColumns = (tz: string): ColumnDef<AssetDef>[] => [
     header: "状态",
     cell: (d) => <Badge variant={d.status === "archived" ? "secondary" : "default"}>{d.status ?? "active"}</Badge>,
   },
-  { key: "created", header: "创建时间", cell: (d) => formatDateTime(d.created_at, tz) },
+  { key: "created", header: "创建时间", sortable: true, cell: (d) => formatDateTime(d.created_at, tz) },
 ];
 
 export function AssetDefsListPage() {
@@ -69,10 +70,16 @@ export function AssetDefsListPage() {
   const tz = useUserTimezone();
   const writeable = canWrite(role);
   const paging = useServerPaging();
+  // 服务端时间排序：换向必须回第一页（keyset 游标与方向耦合）。
+  const [sortOrder, setSortOrder] = useState<SortOrder>("DESC");
+  const toggleSort = () => {
+    setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
+    paging.reset();
+  };
 
   const { data, isLoading } = useQuery({
-    queryKey: ["asset-defs", projectId, paging.pageSize, paging.pageToken],
-    queryFn: () => listAssetDefs({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
+    queryKey: ["asset-defs", projectId, paging.pageSize, paging.pageToken, sortOrder],
+    queryFn: () => listAssetDefs({ pageSize: paging.pageSize, pageToken: paging.pageToken, sortOrder }),
     enabled: !!projectId,
     placeholderData: (prev) => prev,
   });
@@ -107,6 +114,7 @@ export function AssetDefsListPage() {
       columns={defColumns(tz)}
       getSearchText={getSearchText}
       serverPaging={paging_}
+      serverSort={{ order: sortOrder, onToggle: toggleSort }}
       detailPath={(d) => `/console/assets/defs/${d.id}`}
       toolbarActions={
         <div className="flex gap-2">

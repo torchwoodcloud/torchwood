@@ -377,7 +377,7 @@ func TestIntegration_SettlementRealAssetsGrant(t *testing.T) {
 	if !found {
 		t.Fatalf("gold holdings = %+v, want 42", holdings)
 	}
-	ledger, err := assets.ListUserLedger(admin, "u1", "", 10, time.Now().Add(time.Hour))
+	ledger, err := assets.ListUserLedger(admin, "u1", "", false, 10, time.Now().Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}

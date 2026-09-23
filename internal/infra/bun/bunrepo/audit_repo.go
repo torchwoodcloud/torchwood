@@ -89,7 +89,8 @@ func (r *auditRepo) ListByActor(ctx context.Context, projectID, actorID string, 
 	return out, nil
 }
 
-// List 按结构化过滤分页查询（created_at DESC）。项目谓词三种形态：
+// List 按结构化过滤分页查询（created_at 分页，Ascending=false 倒序 = 历史默认）。
+// 项目谓词三种形态：
 // AllProjects（无谓词，含平台行）/ ProjectID（单项目）/ ProjectID+
 // IncludePlatform（项目行 ∪ 平台行，OR 谓词走不了单边索引，量级可控）。
 func (r *auditRepo) List(ctx context.Context, filter audit.ListFilter) ([]audit.Entry, int, error) {
@@ -107,11 +108,13 @@ func (r *auditRepo) List(ctx context.Context, filter audit.ListFilter) ([]audit.
 		pageSize = auditListMaxLimit * 10
 	}
 	var rows []model.AuditLog
-	query := applyAuditListFilter(r.db.NewSelect().Model(&rows), filter).
-		Order("al.created_at DESC").
-		Limit(pageSize).
-		Offset(filter.Offset)
-	if err := query.Scan(ctx); err != nil {
+	query := applyAuditListFilter(r.db.NewSelect().Model(&rows), filter)
+	if filter.Ascending {
+		query = query.Order("al.created_at ASC")
+	} else {
+		query = query.Order("al.created_at DESC")
+	}
+	if err := query.Limit(pageSize).Offset(filter.Offset).Scan(ctx); err != nil {
 		return nil, 0, err
 	}
 	out := make([]audit.Entry, 0, len(rows))

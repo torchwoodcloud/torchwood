@@ -22,16 +22,23 @@ export interface Page<T> {
 }
 
 // 列表封装的分页入参：pageSize 必填（显式选择，杜绝无意识落在服务端默认页）。
+// sortOrder：时间列（created_at）排序方向，缺省 = 服务端历史默认 DESC；
+// 换向必须从第一页重新开始（keyset 游标与方向耦合，异向游标服务端拒绝）。
+export type SortOrder = "ASC" | "DESC";
+
 export interface ListParams {
   pageSize: number;
   pageToken?: string;
+  sortOrder?: SortOrder;
 }
 
-// axios params 形参（gateway UseProtoNames，query 用 snake_case）。
+// axios params 形参（gateway UseProtoNames，query 用 snake_case；
+// sort_order 传 proto 枚举名，grpc-gateway 按枚举名解析）。
 export function pageQuery(params: ListParams) {
   return {
     page_size: params.pageSize,
     page_token: params.pageToken || undefined,
+    sort_order: params.sortOrder || undefined,
   };
 }
 

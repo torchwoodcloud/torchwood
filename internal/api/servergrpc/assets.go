@@ -57,11 +57,12 @@ func (s *AssetsService) CreateAssetDef(ctx context.Context, req *serverv1.Create
 }
 
 func (s *AssetsService) ListAssetDefs(ctx context.Context, req *sharedv1.ListRequest) (*serverv1.ListAssetDefsResponse, error) {
-	before, err := decodeServerOrderCursor(req.GetPageToken())
+	ascending := req.GetSortOrder() == sharedv1.SortOrder_SORT_ORDER_ASC
+	before, err := decodeServerOrderPage(req.GetPageToken(), ascending)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid page token")
+		return nil, invalidServerOrderCursor(err)
 	}
-	defs, err := s.assets.ListDefs(ctx, true, int(req.GetPageSize()), before)
+	defs, err := s.assets.ListDefs(ctx, true, int(req.GetPageSize()), before, ascending)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +76,7 @@ func (s *AssetsService) ListAssetDefs(ctx context.Context, req *sharedv1.ListReq
 	}
 	meta := &sharedv1.ListResponseMeta{PageSize: req.GetPageSize()}
 	if len(defs) > 0 {
-		meta.NextPageToken = encodeServerOrderCursor(defs[len(defs)-1].CreatedAt)
+		meta.NextPageToken = encodeServerOrderCursor(defs[len(defs)-1].CreatedAt, ascending)
 	}
 	return &serverv1.ListAssetDefsResponse{Defs: out, Meta: meta}, nil
 }
@@ -273,9 +274,10 @@ func (s *AssetsService) Expire(ctx context.Context, req *serverv1.ExpireRequest)
 
 func (s *AssetsService) ListUserAssets(ctx context.Context, req *serverv1.ListUserAssetsRequest) (*serverv1.ListUserAssetsResponse, error) {
 	// owner_id required 同上，由 buf.validate 注解承担。
-	before, err := decodeServerOrderCursor(req.GetPageToken())
+	// 固定 DESC（未开放 sort_order；Console 用户资产页为非表格列表）。
+	before, err := decodeServerOrderPage(req.GetPageToken(), false)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid page token")
+		return nil, invalidServerOrderCursor(err)
 	}
 	rows, err := s.assets.ListUserAssets(ctx, req.GetOwnerId(), int(req.GetPageSize()), before)
 	if err != nil {
@@ -291,7 +293,7 @@ func (s *AssetsService) ListUserAssets(ctx context.Context, req *serverv1.ListUs
 	}
 	meta := &sharedv1.ListResponseMeta{PageSize: req.GetPageSize()}
 	if len(rows) > 0 {
-		meta.NextPageToken = encodeServerOrderCursor(rows[len(rows)-1].Holding.CreatedAt)
+		meta.NextPageToken = encodeServerOrderCursor(rows[len(rows)-1].Holding.CreatedAt, false)
 	}
 	return &serverv1.ListUserAssetsResponse{Holdings: out, Meta: meta}, nil
 }
@@ -350,11 +352,12 @@ func decodeLedgerCursor(ascending bool, token string) (time.Time, error) {
 
 func (s *AssetsService) ListDefAssets(ctx context.Context, req *serverv1.ListDefAssetsRequest) (*serverv1.ListDefAssetsResponse, error) {
 	// def_id required 由 buf.validate 注解承担。
-	before, err := decodeServerOrderCursor(req.GetPageToken())
+	ascending := req.GetSortOrder() == sharedv1.SortOrder_SORT_ORDER_ASC
+	before, err := decodeServerOrderPage(req.GetPageToken(), ascending)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid page token")
+		return nil, invalidServerOrderCursor(err)
 	}
-	rows, err := s.assets.ListDefAssets(ctx, req.GetDefId(), req.GetOwnerId(), int(req.GetPageSize()), before)
+	rows, err := s.assets.ListDefAssets(ctx, req.GetDefId(), req.GetOwnerId(), int(req.GetPageSize()), before, ascending)
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +371,7 @@ func (s *AssetsService) ListDefAssets(ctx context.Context, req *serverv1.ListDef
 	}
 	meta := &sharedv1.ListResponseMeta{PageSize: req.GetPageSize()}
 	if len(rows) > 0 {
-		meta.NextPageToken = encodeServerOrderCursor(rows[len(rows)-1].Holding.CreatedAt)
+		meta.NextPageToken = encodeServerOrderCursor(rows[len(rows)-1].Holding.CreatedAt, ascending)
 	}
 	return &serverv1.ListDefAssetsResponse{Holdings: out, Meta: meta}, nil
 }

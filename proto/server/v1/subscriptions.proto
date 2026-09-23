@@ -232,7 +232,8 @@ message ListPlansResponse {
 }
 
 // ListSubscriptionsRequest 结构化过滤（audit-logs 先例）：exact 匹配 + 时间闭
-// 区间；分页固定 created_at DESC keyset 游标（page_token 由服务端签发）。
+// 区间；分页按 created_at keyset 游标（page_token 由服务端签发），sort_order
+// 控制方向（UNSPECIFIED = DESC；换向必须从第一页重来，异向游标即 InvalidArgument）。
 message ListSubscriptionsRequest {
   int32 page_size = 1 [(buf.validate.field).int32 = { gte: 0, lte: 1000 }];
   string page_token = 2 [(buf.validate.field).string.max_len = 4096];
@@ -242,6 +243,8 @@ message ListSubscriptionsRequest {
   string status = 4 [(buf.validate.field).string.max_len = 16];
   google.protobuf.Timestamp created_after = 5;
   google.protobuf.Timestamp created_before = 6;
+  // 时间列（created_at）排序方向；UNSPECIFIED = DESC（最新在前）。
+  shared.v1.SortOrder sort_order = 7 [(buf.validate.field).enum.defined_only = true];
 }
 
 message ListSubscriptionsResponse {

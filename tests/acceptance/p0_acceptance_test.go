@@ -486,7 +486,7 @@ func TestP0_Section10_ClientInvokeExecutionIdentity(t *testing.T) {
 
 	// ② 账本 operator = function + invoking user 双维（平台背书的调用者
 	// 身份，非 TW_DATA 客户端自报）。
-	entries, err := bunrepo.NewAssetLedgerRepository(db).ListByOwner(ctx, projectID, domainassets.OwnerTypeUser, user.ID, "", 10, time.Now().Add(time.Hour))
+	entries, err := bunrepo.NewAssetLedgerRepository(db).ListByOwner(ctx, projectID, domainassets.OwnerTypeUser, user.ID, "", false, 10, time.Now().Add(time.Hour))
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	var operator struct {

@@ -44,8 +44,8 @@ func (a *Assets) ListUserAssets(ctx context.Context, ownerID string, limit int, 
 }
 
 // ListDefAssets 返回定义维度的用户持有（Server / Console 只读查询）；
-// ownerID 非空时过滤单业主。
-func (a *Assets) ListDefAssets(ctx context.Context, defID, ownerID string, limit int, before time.Time) ([]HoldingView, error) {
+// ownerID 非空时过滤单业主；ascending=false 倒序 = 历史默认。
+func (a *Assets) ListDefAssets(ctx context.Context, defID, ownerID string, limit int, before time.Time, ascending bool) ([]HoldingView, error) {
 	projectID, err := projectScope(ctx)
 	if err != nil {
 		return nil, err
@@ -60,8 +60,8 @@ func (a *Assets) ListDefAssets(ctx context.Context, defID, ownerID string, limit
 	if def == nil {
 		return nil, status.Error(codes.NotFound, "asset def not found")
 	}
-	limit, before = normalizeList(limit, before, false)
-	rows, err := a.holdings.ListByDef(ctx, projectID, domainassets.OwnerTypeUser, ownerID, defID, limit, before)
+	limit, before = normalizeList(limit, before, ascending)
+	rows, err := a.holdings.ListByDef(ctx, projectID, domainassets.OwnerTypeUser, ownerID, defID, limit, before, ascending)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (a *Assets) ListClientDefs(ctx context.Context, limit int, before time.Time
 	if err != nil {
 		return nil, err
 	}
-	return a.ListDefs(ctx, false, limit, before)
+	return a.ListDefs(ctx, false, limit, before, false)
 }
 
 func (a *Assets) defsByIDs(ctx context.Context, projectID string, ids []string) (map[string]*domainassets.Def, error) {

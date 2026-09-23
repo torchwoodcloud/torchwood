@@ -34,6 +34,8 @@ type AuditLogsQuery struct {
 	AllProjects     bool
 	Offset          int
 	PageSize        int
+	// Ascending 时间列（created_at）排序方向；false = DESC（历史默认）。
+	Ascending bool
 }
 
 // List 返回当页审计行与过滤条件下总数。
@@ -63,6 +65,7 @@ func (a *AuditLogs) List(ctx context.Context, query AuditLogsQuery) ([]audit.Ent
 		AllProjects:     query.AllProjects,
 		Offset:          query.Offset,
 		PageSize:        query.PageSize,
+		Ascending:       query.Ascending,
 	}
 	if !query.AllProjects {
 		if p.ProjectID == "" {

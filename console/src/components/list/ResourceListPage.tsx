@@ -11,6 +11,7 @@ import {
 import { DataTable, type ColumnDef } from "@/components/list/DataTable";
 import { useListParams, filterByQuery, paginate } from "@/hooks/useListParams";
 import { useRowSelection } from "@/hooks/useRowSelection";
+import type { SortOrder } from "@/api/pagination";
 import { useMemo, useEffect } from "react";
 
 // 服务端 keyset 分页的受控接入口：传入时 items 视为「当前页已取回的行」，
@@ -23,6 +24,13 @@ export interface ServerPaging {
   onPrev: () => void;
   onNext: () => void;
   onPageSizeChange: (n: number) => void;
+}
+
+// 服务端时间排序的受控接入口：传入时标记了 sortable 的列渲染排序表头；
+// 换向必须同时回第一页（keyset 游标与方向耦合），由 onToggle 实现方负责。
+export interface ServerSort {
+  order: SortOrder;
+  onToggle: () => void;
 }
 
 interface ResourceListPageProps<T extends { id: string }> {
@@ -45,6 +53,7 @@ interface ResourceListPageProps<T extends { id: string }> {
   emptyDescription?: string;
   emptyAction?: React.ReactNode;
   serverPaging?: ServerPaging;
+  serverSort?: ServerSort;
 }
 
 export function ResourceListPage<T extends { id: string }>({
@@ -67,6 +76,7 @@ export function ResourceListPage<T extends { id: string }>({
   emptyDescription,
   emptyAction,
   serverPaging,
+  serverSort,
 }: ResourceListPageProps<T>) {
   const { params, setParams } = useListParams();
 
@@ -154,6 +164,8 @@ export function ResourceListPage<T extends { id: string }>({
                 detailPath={detailPath}
                 editPath={editPath}
                 rowActions={rowActions}
+                sortOrder={serverSort?.order}
+                onSortToggle={serverSort?.onToggle}
               />
               {serverPaging ? (
                 <ListPaginationKeyset

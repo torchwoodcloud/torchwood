@@ -114,6 +114,19 @@
               "type": "string"
             },
             "collectionFormat": "multi"
+          },
+          {
+            "name": "sort_order",
+            "description": "时间列排序方向；支持面以各 handler 的显式行为为准（Console 列表页\n按 created_at 正/倒序），UNSPECIFIED = 历史默认 DESC。",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "SORT_ORDER_UNSPECIFIED",
+              "SORT_ORDER_ASC",
+              "SORT_ORDER_DESC"
+            ],
+            "default": "SORT_ORDER_UNSPECIFIED"
           }
         ],
         "tags": [
@@ -309,6 +322,16 @@
           "$ref": "#/definitions/v1ListResponseMeta"
         }
       }
+    },
+    "v1SortOrder": {
+      "type": "string",
+      "enum": [
+        "SORT_ORDER_UNSPECIFIED",
+        "SORT_ORDER_ASC",
+        "SORT_ORDER_DESC"
+      ],
+      "default": "SORT_ORDER_UNSPECIFIED",
+      "title": "SortOrder 是时间列排序方向（Console 列表页「按创建时间正/倒序」）。\n固定排序键 = 各端点的时间列（通常 created_at），不是 AIP-160 任意列\norder_by（W-K 终结裁决维持：filter/order_by 不复活）。UNSPECIFIED =\n各端点历史默认（created_at DESC，最新在前）。keyset 游标与方向耦合，\n换向必须从第一页重新开始，携带异向游标即 InvalidArgument。"
     },
     "v1Usage": {
       "type": "object",

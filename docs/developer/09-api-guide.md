@@ -219,7 +219,9 @@ func (s *ProjectsService) CreateProject(ctx context.Context, req *serverv1.Creat
 
 ### 7.1 列表分页（shared.v1.ListRequest + pkg/crud）
 
-`shared.v1.ListRequest` 只携带 `page_size / page_token / queries`（`filter` / `order_by` 字段号已 reserved——未实现的静默 no-op 一律消灭）；响应 `ListResponseMeta{page_size, next_page_token, prev_page_token, total_count}`（AIP-132/158/160），其中 `total_count ≤0` 表示总数未知（keyset 分页下 0 与空集合不可区分，需以 `next_page_token` 是否为空判定是否还有更多）。
+`shared.v1.ListRequest` 携带 `page_size / page_token / queries / sort_order`（`filter` / `order_by` 字段号已 reserved——未实现的静默 no-op 一律消灭；`sort_order` 是 2026-09 新增的时间列方向枚举，见下）；响应 `ListResponseMeta{page_size, next_page_token, prev_page_token, total_count}`（AIP-132/158/160），其中 `total_count ≤0` 表示总数未知（keyset 分页下 0 与空集合不可区分，需以 `next_page_token` 是否为空判定是否还有更多）。
+
+**时间列方向排序（`SortOrder`，2026-09）**：Console 列表页「按创建时间正/倒序」走 `sort_order`（`UNSPECIFIED`=历史默认 DESC / `ASC` / `DESC`）——固定排序键 = 各端点时间列（通常 `created_at`），**不是** AIP-160 任意列 `order_by`（W-K 终结裁决维持）。消费面以各 handler 显式行为为准：payments 订单 / subscriptions 订阅（各自有请求消息，方向与 `OrderListFilter`/`SubscriptionListFilter.Ascending` 合流）/ subscriptions 计划 / assets 定义与定义维度持有（时间 keyset：游标编码方向前缀 `a:`/`d:`，携带异向游标即 InvalidArgument，换向必须从第一页重来；ListUserLedger 的 `ascending` bool 为既有通道，行为一致）与 audit-logs（offset token，token 不编码方向，换向由调用方回第一页）。自有请求消息（`ListOrdersRequest`/`ListSubscriptionsRequest`/`ListAuditLogsRequest`/`ListDefAssetsRequest`）各自带同语义 `sort_order` 字段。
 
 `pkg/crud`：
 
