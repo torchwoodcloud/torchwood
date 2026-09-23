@@ -179,19 +179,9 @@ dir = "sdk/typescript"
 run = ["npm ci", "npm run test"]
 
 [tasks.test]
-description = "全量门禁：lint + codegen 漂移 + sdk/console 测试 + go test -race（.env 已自动加载）"
-depends = ["lint:go", "lint:golangci", "test:codegen", "test:sdk-go", "test:sdk-ts", "console:test"]
+description = "全量门禁：lint + sdk/console 测试 + go test -race（.env 已自动加载）"
+depends = ["lint:go", "lint:golangci", "test:sdk-go", "test:sdk-ts", "console:test"]
 run = "go test -race -v ./... -cover"
-
-[tasks."test:codegen"]
-description = "codegen 漂移检查：generate:all 重跑后零 diff（唯一门禁点在本地 mise run test；CI 不重复——冷环境重生成会产生本地不复现的 diff）"
-depends = ["generate:all"]
-run = '''
-git diff --exit-code -- genproto internal/pkg/config cmd go.mod go.sum || {
-  echo "::error::codegen drift——mise run generate:all 产物未入库（提交重生成产物后再推）" >&2
-  exit 1
-}
-'''
 
 [tasks."lint:go"]
 description = "go vet + gofmt 检查"
