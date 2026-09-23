@@ -186,14 +186,14 @@ func TestPolicyGoldenBaseline(t *testing.T) {
 		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 			t.Fatalf("mkdir testdata: %v", err)
 		}
-		if err := os.WriteFile(path, data, 0o644); err != nil {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
 			t.Fatalf("write golden: %v", err)
 		}
 		t.Logf("golden baseline rewritten: %s (%d methods)", path, g.MethodCount)
 		return
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // 测试内固定的 testdata 相对路径，无外部输入
 	if err != nil {
 		t.Fatalf("read golden (首次生成请跑 go test ./cmd/server/internal/runtime -run TestPolicyGoldenBaseline -update): %v", err)
 	}

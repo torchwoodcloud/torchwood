@@ -11,7 +11,10 @@ require (
 	google.golang.org/protobuf v1.36.12
 )
 
-require buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2 // indirect
+require (
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2 // indirect
+	github.com/lynx-go/grpcapi/genproto v0.1.0 // indirect
+)
 
 require (
 	github.com/coder/websocket v1.8.14
