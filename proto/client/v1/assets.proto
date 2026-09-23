@@ -8,7 +8,7 @@ import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=authenticated：swagger 顶层声明 Bearer security
@@ -67,7 +67,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // AssetsService 是终端用户资产面（v3 设计 §2.7 / §6）：只读三个方法。
 // 终端用户没有任何直接写资产的 API（红线 D6）。
 service AssetsService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_END_USER };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_END_USER };
 
   rpc ListAssetDefs(ListAssetDefsRequest) returns (ListAssetDefsResponse) {
     option (google.api.http) = { get: "/v1/assets/defs" };

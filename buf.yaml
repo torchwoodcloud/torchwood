@@ -5,7 +5,20 @@ deps:
   - buf.build/bufbuild/protovalidate
   - buf.build/grpc-ecosystem/grpc-gateway
 modules:
+  # 主模块排除 third_party：vendored grpcapi 扩展由下方独立模块持有，
+  # 双注册会产生 symbol already defined 冲突。
   - path: proto
+    excludes:
+      - proto/third_party
+  # vendored grpcapi 扩展（阶段 1 过渡：BSR 发布后切 deps 并删除本目录）。
+  # 拷贝自 D:\Codes\qiulin\grpcapi proto/grpcapi/v1/authz.proto，漂移防线 =
+  # cmd/server/internal/runtime 的 vendored_proto_sync_test（本机双仓在位时
+  # 字节级比对）。lint/breaking 全豁免：治理主权在 grpcapi 仓库。
+  - path: proto/third_party
+    lint:
+      use: []
+    breaking:
+      use: []
 lint:
   use:
     - STANDARD

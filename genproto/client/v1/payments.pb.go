@@ -9,6 +9,7 @@ package clientv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -593,7 +594,7 @@ var File_client_v1_payments_proto protoreflect.FileDescriptor
 
 const file_client_v1_payments_proto_rawDesc = "" +
 	"\n" +
-	"\x18client/v1/payments.proto\x12\x13torchwood.client.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xd1\x03\n" +
+	"\x18client/v1/payments.proto\x12\x13torchwood.client.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xd1\x03\n" +
 	"\fPaymentOrder\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bprovider\x18\x02 \x01(\tR\bprovider\x12\x16\n" +
@@ -648,7 +649,7 @@ const file_client_v1_payments_proto_rawDesc = "" +
 	"\n" +
 	"GetMyOrder\x12&.torchwood.client.v1.GetMyOrderRequest\x1a!.torchwood.client.v1.PaymentOrder\"&\x82\xd3\xe4\x93\x02 \x12\x1e/v1/payments/orders/{order_id}\x12\x80\x01\n" +
 	"\fListMyOrders\x12(.torchwood.client.v1.ListMyOrdersRequest\x1a).torchwood.client.v1.ListMyOrdersResponse\"\x1b\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/payments/orders\x12\x92\x01\n" +
-	"\rVerifyReceipt\x12).torchwood.client.v1.VerifyReceiptRequest\x1a*.torchwood.client.v1.VerifyReceiptResponse\"*\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/v1/payments/ios/verify-receipt\x1a\x06\x92\xb2\x19\x02\b\x02B\x95\x04\x92A\xd0\x03RR\n" +
+	"\rVerifyReceipt\x12).torchwood.client.v1.VerifyReceiptRequest\x1a*.torchwood.client.v1.VerifyReceiptResponse\"*\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/v1/payments/ios/verify-receipt\x1a\x06\xf2\xc4\x19\x02\b\x02B\x95\x04\x92A\xd0\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xc9\x02\n" +

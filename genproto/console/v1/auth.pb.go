@@ -8,6 +8,7 @@ package consolev1
 
 import (
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -451,7 +452,7 @@ var File_console_v1_auth_proto protoreflect.FileDescriptor
 
 const file_console_v1_auth_proto_rawDesc = "" +
 	"\n" +
-	"\x15console/v1/auth.proto\x12\x14torchwood.console.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17console/v1/admins.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"A\n" +
+	"\x15console/v1/auth.proto\x12\x14torchwood.console.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17console/v1/admins.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"A\n" +
 	"\rSignInRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\"\x93\x01\n" +
@@ -486,7 +487,7 @@ const file_console_v1_auth_proto_rawDesc = "" +
 	"\fRefreshToken\x12).torchwood.console.v1.RefreshTokenRequest\x1a$.torchwood.console.v1.SignInResponse\"#\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/console/auth/refresh\x12q\n" +
 	"\aSignOut\x12$.torchwood.console.v1.SignOutRequest\x1a\x1a.torchwood.shared.v1.Empty\"$\x82\xd3\xe4\x93\x02\x1e:\x01*\"\x19/v1/console/auth/sign-out\x12\x92\x01\n" +
 	"\x0eGetSetupStatus\x12+.torchwood.console.v1.GetSetupStatusRequest\x1a,.torchwood.console.v1.GetSetupStatusResponse\"%\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/console/auth/setup-status\x12x\n" +
-	"\x06SignUp\x12#.torchwood.console.v1.SignUpRequest\x1a$.torchwood.console.v1.SignUpResponse\"#\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/console/auth/sign-up\x1a\x06\x92\xb2\x19\x02\b\x01B\xf2\x03\x92A\xab\x03RR\n" +
+	"\x06SignUp\x12#.torchwood.console.v1.SignUpRequest\x1a$.torchwood.console.v1.SignUpResponse\"#\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/console/auth/sign-up\x1a\x06\xf2\xc4\x19\x02\b\x01B\xf2\x03\x92A\xab\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

@@ -8,13 +8,13 @@ import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 import "shared/v1/common.proto";
 import "shared/v1/document.proto";
 import "shared/v1/query.proto";
 
 // 服务默认 access=authenticated：swagger 顶层声明 Bearer security；
-// ACCESS_PUBLIC 方法逐方法声明 security: [] + x-torchwood-access: "public"
+// ACCESS_LEVEL_PUBLIC 方法逐方法声明 security: [] + x-torchwood-access: "public"
 // （详见 docs/developer/09-api-guide.md §1.4 的 OpenAPI 建模约定）。
 option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   security_definitions: {
@@ -68,7 +68,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service DatabasesService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_END_USER };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_END_USER };
 
   // 自定义方法说明：documents:count 为自定义方法段（REST 自定义动词），不再占用
   // document_id 命名空间；document_id 可自由取任意合法值。
@@ -84,7 +84,7 @@ service DatabasesService {
         body: "query"
       }
     };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -96,7 +96,7 @@ service DatabasesService {
 
   rpc GetDocument(GetDocumentRequest) returns (shared.v1.Document) {
     option (google.api.http) = { get: "/v1/databases/{database_id}/collections/{collection_id}/documents/{document_id}" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -126,7 +126,7 @@ service DatabasesService {
         body: "*"
       }
     };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {

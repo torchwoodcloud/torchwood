@@ -43,7 +43,7 @@ type APIKeysServiceClient interface {
 	DeleteAPIKey(ctx context.Context, in *GetAPIKeyRequest, opts ...grpc.CallOption) (*v1.Empty, error)
 	// WhoAmI 返回调用凭证（X-API-Key）自身对应的 key 行（whoami）。
 	//
-	// 认证形态为"自证凭证型"（ACCESS_PUBLIC + 不要求任何 scope）：出示 key
+	// 认证形态为"自证凭证型"（ACCESS_LEVEL_PUBLIC + 不要求任何 scope）：出示 key
 	// 明文本身就是查询授权——任何有效 key 可查自己，零信息泄露、零自铸面；
 	// 不要求 scope 意味着零 scope key 也可用。无效/禁用/过期/删除 → 401
 	// （每请求读库校验，与请求侧认证同路径）；匿名/非 API key 凭证（admin
@@ -136,7 +136,7 @@ type APIKeysServiceServer interface {
 	DeleteAPIKey(context.Context, *GetAPIKeyRequest) (*v1.Empty, error)
 	// WhoAmI 返回调用凭证（X-API-Key）自身对应的 key 行（whoami）。
 	//
-	// 认证形态为"自证凭证型"（ACCESS_PUBLIC + 不要求任何 scope）：出示 key
+	// 认证形态为"自证凭证型"（ACCESS_LEVEL_PUBLIC + 不要求任何 scope）：出示 key
 	// 明文本身就是查询授权——任何有效 key 可查自己，零信息泄露、零自铸面；
 	// 不要求 scope 意味着零 scope key 也可用。无效/禁用/过期/删除 → 401
 	// （每请求读库校验，与请求侧认证同路径）；匿名/非 API key 凭证（admin

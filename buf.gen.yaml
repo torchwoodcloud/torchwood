@@ -1,4 +1,12 @@
 version: v2
+# 输入显式排除 proto/third_party：vendored grpcapi 扩展的 Go 生成代码来自
+# grpcapi 仓库的 genproto 子 module（go.mod replace 引入，单点生成），此处
+# 生成会产生第二份副本并触发 FileDescriptor 重复注册。
+inputs:
+  - directory: .
+    exclude_paths:
+      # 文件级排除（buf 不允许 exclude 模块目录本身）
+      - proto/third_party/grpcapi/v1/authz.proto
 plugins:
   - remote: buf.build/protocolbuffers/go:v1.36.10
     out: genproto

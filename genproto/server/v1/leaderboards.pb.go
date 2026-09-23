@@ -9,6 +9,7 @@ package serverv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -973,7 +974,7 @@ var File_server_v1_leaderboards_proto protoreflect.FileDescriptor
 
 const file_server_v1_leaderboards_proto_rawDesc = "" +
 	"\n" +
-	"\x1cserver/v1/leaderboards.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x1bshared/v1/leaderboard.proto\"\xf5\x01\n" +
+	"\x1cserver/v1/leaderboards.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x1bshared/v1/leaderboard.proto\"\xf5\x01\n" +
 	"\x1dSubmitLeaderboardScoreRequest\x12!\n" +
 	"\bboard_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aboardId\x12%\n" +
 	"\n" +
@@ -1074,21 +1075,28 @@ const file_server_v1_leaderboards_proto_rawDesc = "" +
 	"\x05limit\x18\x02 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\x05limit\"?\n" +
 	"#ListLeaderboardBoardPeriodsResponse\x12\x18\n" +
-	"\aperiods\x18\x01 \x03(\tR\aperiods2\x9c\x0f\n" +
-	"\x13LeaderboardsService\x12\xbf\x01\n" +
-	"\x16SubmitLeaderboardScore\x122.torchwood.server.v1.SubmitLeaderboardScoreRequest\x1a-.torchwood.shared.v1.LeaderboardScoreSnapshot\"B\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\x0e\x10\x02\x82\xd3\xe4\x93\x02.:\x01*\")/v1/server/leaderboards/{board_id}:submit\x12\xc0\x01\n" +
-	"\x13GetLeaderboardEntry\x12/.torchwood.server.v1.GetLeaderboardEntryRequest\x1a-.torchwood.shared.v1.LeaderboardScoreSnapshot\"I\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x029\x127/v1/server/leaderboards/{board_id}/entries/{subject_id}\x12\xaf\x01\n" +
-	"\x12ListLeaderboardTop\x12..torchwood.server.v1.ListLeaderboardTopRequest\x1a/.torchwood.shared.v1.ListLeaderboardTopResponse\"8\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x02(\x12&/v1/server/leaderboards/{board_id}/top\x12\xd2\x01\n" +
-	"\x18GetLeaderboardSettlement\x124.torchwood.server.v1.GetLeaderboardSettlementRequest\x1a5.torchwood.server.v1.GetLeaderboardSettlementResponse\"I\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x029\x127/v1/server/leaderboards/{board_id}/settlements/{period}\x12\xcf\x01\n" +
-	"\x1aListLeaderboardSettlements\x126.torchwood.server.v1.ListLeaderboardSettlementsRequest\x1a7.torchwood.server.v1.ListLeaderboardSettlementsResponse\"@\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x020\x12./v1/server/leaderboards/{board_id}/settlements\x12\xac\x01\n" +
-	"\x16CreateLeaderboardBoard\x122.torchwood.server.v1.CreateLeaderboardBoardRequest\x1a%.torchwood.shared.v1.LeaderboardBoard\"7\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\x0e\x10\x03\x82\xd3\xe4\x93\x02#:\x01*\"\x1e/v1/server/leaderboards/boards\x12\xaa\x01\n" +
-	"\x13GetLeaderboardBoard\x12/.torchwood.server.v1.GetLeaderboardBoardRequest\x1a%.torchwood.shared.v1.LeaderboardBoard\";\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x02+\x12)/v1/server/leaderboards/boards/{board_id}\x12\xb0\x01\n" +
-	"\x15ListLeaderboardBoards\x121.torchwood.server.v1.ListLeaderboardBoardsRequest\x1a2.torchwood.server.v1.ListLeaderboardBoardsResponse\"0\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/leaderboards/boards\x12\xd5\x01\n" +
-	"\x1bListLeaderboardBoardPeriods\x127.torchwood.server.v1.ListLeaderboardBoardPeriodsRequest\x1a8.torchwood.server.v1.ListLeaderboardBoardPeriodsResponse\"C\x8a\xb2\x19\x06\"\x04\b\x0e\x10\x01\x82\xd3\xe4\x93\x023\x121/v1/server/leaderboards/boards/{board_id}/periods\x12\xb7\x01\n" +
-	"\x16UpdateLeaderboardBoard\x122.torchwood.server.v1.UpdateLeaderboardBoardRequest\x1a%.torchwood.shared.v1.LeaderboardBoard\"B\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\x0e\x10\x03\x82\xd3\xe4\x93\x02.:\x01*2)/v1/server/leaderboards/boards/{board_id}\x1a\x06\x92\xb2\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
+	"\aperiods\x18\x01 \x03(\tR\aperiods2\xb2\x10\n" +
+	"\x13LeaderboardsService\x12\xd5\x01\n" +
+	"\x16SubmitLeaderboardScore\x122.torchwood.server.v1.SubmitLeaderboardScoreRequest\x1a-.torchwood.shared.v1.LeaderboardScoreSnapshot\"X\xea\xc4\x19 \x1a\x05admin\x1a\x05owner\"\x10\n" +
+	"\fleaderboards\x10\x02\x82\xd3\xe4\x93\x02.:\x01*\")/v1/server/leaderboards/{board_id}:submit\x12\xcc\x01\n" +
+	"\x13GetLeaderboardEntry\x12/.torchwood.server.v1.GetLeaderboardEntryRequest\x1a-.torchwood.shared.v1.LeaderboardScoreSnapshot\"U\xea\xc4\x19\x12\"\x10\n" +
+	"\fleaderboards\x10\x01\x82\xd3\xe4\x93\x029\x127/v1/server/leaderboards/{board_id}/entries/{subject_id}\x12\xbb\x01\n" +
+	"\x12ListLeaderboardTop\x12..torchwood.server.v1.ListLeaderboardTopRequest\x1a/.torchwood.shared.v1.ListLeaderboardTopResponse\"D\xea\xc4\x19\x12\"\x10\n" +
+	"\fleaderboards\x10\x01\x82\xd3\xe4\x93\x02(\x12&/v1/server/leaderboards/{board_id}/top\x12\xde\x01\n" +
+	"\x18GetLeaderboardSettlement\x124.torchwood.server.v1.GetLeaderboardSettlementRequest\x1a5.torchwood.server.v1.GetLeaderboardSettlementResponse\"U\xea\xc4\x19\x12\"\x10\n" +
+	"\fleaderboards\x10\x01\x82\xd3\xe4\x93\x029\x127/v1/server/leaderboards/{board_id}/settlements/{period}\x12\xdb\x01\n" +
+	"\x1aListLeaderboardSettlements\x126.torchwood.server.v1.ListLeaderboardSettlementsRequest\x1a7.torchwood.server.v1.ListLeaderboardSettlementsResponse\"L\xea\xc4\x19\x12\"\x10\n" +
+	"\fleaderboards\x10\x01\x82\xd3\xe4\x93\x020\x12./v1/server/leaderboards/{board_id}/settlements\x12\xc2\x01\n" +
+	"\x16CreateLeaderboardBoard\x122.torchwood.server.v1.CreateLeaderboardBoardRequest\x1a%.torchwood.shared.v1.LeaderboardBoard\"M\xea\xc4\x19 \x1a\x05admin\x1a\x05owner\"\x10\n" +
+	"\fleaderboards\x10\x03\x82\xd3\xe4\x93\x02#:\x01*\"\x1e/v1/server/leaderboards/boards\x12\xb6\x01\n" +
+	"\x13GetLeaderboardBoard\x12/.torchwood.server.v1.GetLeaderboardBoardRequest\x1a%.torchwood.shared.v1.LeaderboardBoard\"G\xea\xc4\x19\x12\"\x10\n" +
+	"\fleaderboards\x10\x01\x82\xd3\xe4\x93\x02+\x12)/v1/server/leaderboards/boards/{board_id}\x12\xbc\x01\n" +
+	"\x15ListLeaderboardBoards\x121.torchwood.server.v1.ListLeaderboardBoardsRequest\x1a2.torchwood.server.v1.ListLeaderboardBoardsResponse\"<\xea\xc4\x19\x12\"\x10\n" +
+	"\fleaderboards\x10\x01\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/leaderboards/boards\x12\xe1\x01\n" +
+	"\x1bListLeaderboardBoardPeriods\x127.torchwood.server.v1.ListLeaderboardBoardPeriodsRequest\x1a8.torchwood.server.v1.ListLeaderboardBoardPeriodsResponse\"O\xea\xc4\x19\x12\"\x10\n" +
+	"\fleaderboards\x10\x01\x82\xd3\xe4\x93\x023\x121/v1/server/leaderboards/boards/{board_id}/periods\x12\xcd\x01\n" +
+	"\x16UpdateLeaderboardBoard\x122.torchwood.server.v1.UpdateLeaderboardBoardRequest\x1a%.torchwood.shared.v1.LeaderboardBoard\"X\xea\xc4\x19 \x1a\x05admin\x1a\x05owner\"\x10\n" +
+	"\fleaderboards\x10\x03\x82\xd3\xe4\x93\x02.:\x01*2)/v1/server/leaderboards/boards/{board_id}\x1a\x06\xf2\xc4\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

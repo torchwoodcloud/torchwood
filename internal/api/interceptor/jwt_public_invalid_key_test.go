@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lynx-go/grpcapi/authz"
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
@@ -21,10 +22,10 @@ const testPublicMethod = "/torchwood.client.v1.DatabasesService/ListDocuments"
 
 func newPublicInterceptor(t *testing.T, limiter domainauth.RateLimiter, limit int) *AuthInterceptor {
 	t.Helper()
-	set, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{{
+	set, err := authz.NewPolicySet([]domainauth.MethodPolicy{{
 		Method: testPublicMethod, Service: serviceOf(testPublicMethod),
 		Access: domainauth.AccessPublic,
-	}})
+	}}...)
 	require.NoError(t, err)
 	ic, err := NewAuthInterceptor(failingAPIKeyValidator{}, set)
 	require.NoError(t, err)

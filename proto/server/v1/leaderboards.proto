@@ -7,7 +7,7 @@ option go_package = "github.com/torchwoodcloud/torchwood/genproto/server/v1;serv
 import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 import "shared/v1/leaderboard.proto";
 
 // 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
@@ -67,25 +67,25 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // 代任意 subject 提交 + 快照/榜读。提交窗口 = {当前期, 上一期}，封榜后对
 // 所有人（含本面）拒收——封榜即终局。
 service LeaderboardsService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   rpc SubmitLeaderboardScore(SubmitLeaderboardScoreRequest) returns (shared.v1.LeaderboardScoreSnapshot) {
     option (google.api.http) = { post: "/v1/server/leaderboards/{board_id}:submit", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "leaderboards", op: SCOPE_OP_WRITE }
     };
   }
   rpc GetLeaderboardEntry(GetLeaderboardEntryRequest) returns (shared.v1.LeaderboardScoreSnapshot) {
     option (google.api.http) = { get: "/v1/server/leaderboards/{board_id}/entries/{subject_id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "leaderboards", op: SCOPE_OP_READ }
     };
   }
   rpc ListLeaderboardTop(ListLeaderboardTopRequest) returns (shared.v1.ListLeaderboardTopResponse) {
     option (google.api.http) = { get: "/v1/server/leaderboards/{board_id}/top" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "leaderboards", op: SCOPE_OP_READ }
     };
   }
 
@@ -93,14 +93,14 @@ service LeaderboardsService {
   // 引用视图；写操作只有 worker 与 console）——
   rpc GetLeaderboardSettlement(GetLeaderboardSettlementRequest) returns (GetLeaderboardSettlementResponse) {
     option (google.api.http) = { get: "/v1/server/leaderboards/{board_id}/settlements/{period}" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "leaderboards", op: SCOPE_OP_READ }
     };
   }
   rpc ListLeaderboardSettlements(ListLeaderboardSettlementsRequest) returns (ListLeaderboardSettlementsResponse) {
     option (google.api.http) = { get: "/v1/server/leaderboards/{board_id}/settlements" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "leaderboards", op: SCOPE_OP_READ }
     };
   }
 
@@ -113,34 +113,34 @@ service LeaderboardsService {
   // 不等 → ALREADY_EXISTS（附字段 diff）。
   rpc CreateLeaderboardBoard(CreateLeaderboardBoardRequest) returns (shared.v1.LeaderboardBoard) {
     option (google.api.http) = { post: "/v1/server/leaderboards/boards", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_ADMIN }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "leaderboards", op: SCOPE_OP_ADMIN }
     };
   }
   rpc GetLeaderboardBoard(GetLeaderboardBoardRequest) returns (shared.v1.LeaderboardBoard) {
     option (google.api.http) = { get: "/v1/server/leaderboards/boards/{board_id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "leaderboards", op: SCOPE_OP_READ }
     };
   }
   rpc ListLeaderboardBoards(ListLeaderboardBoardsRequest) returns (ListLeaderboardBoardsResponse) {
     option (google.api.http) = { get: "/v1/server/leaderboards/boards" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "leaderboards", op: SCOPE_OP_READ }
     };
   }
   rpc ListLeaderboardBoardPeriods(ListLeaderboardBoardPeriodsRequest) returns (ListLeaderboardBoardPeriodsResponse) {
     option (google.api.http) = { get: "/v1/server/leaderboards/boards/{board_id}/periods" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "leaderboards", op: SCOPE_OP_READ }
     };
   }
   rpc UpdateLeaderboardBoard(UpdateLeaderboardBoardRequest) returns (shared.v1.LeaderboardBoard) {
     option (google.api.http) = { patch: "/v1/server/leaderboards/boards/{board_id}", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_LEADERBOARDS, op: SCOPE_OP_ADMIN }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "leaderboards", op: SCOPE_OP_ADMIN }
     };
   }
 }

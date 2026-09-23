@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -14,8 +15,9 @@ import (
 )
 
 // 阶段 0 golden 基线（grpcapi 迁移设计 DESIGN.md §7，仓库 D:\Codes\qiulin\grpcapi）。
+// 阶段 1 已切换：本测试现锁定 buildMethodPolicies（grpcapi.authz.Build +
+// END_USER 归一 + AssertSemantic）的输出，与切换前实现字节级等价。
 //
-// 本测试把 BuildMethodPolicies 的全量输出 + AssertSemantic 通过事实序列化为
 // 稳定 JSON 落盘，作为阶段 1 切换 grpcapi.authz.Build 的等价性证明基准与
 // 回滚判据。投影刻意选择两套实现共有的语义面：
 //   - admin_roles 以 domain string 形态记录（词表基准 = 现网持久化形态）；
@@ -95,9 +97,9 @@ func buildGolden(t *testing.T) goldenFile {
 	t.Helper()
 
 	files := authzFileDescriptors()
-	set, err := BuildMethodPolicies(files...)
+	set, err := buildMethodPolicies()
 	if err != nil {
-		t.Fatalf("BuildMethodPolicies: %v", err)
+		t.Fatalf("buildMethodPolicies: %v", err)
 	}
 	// 锁语义断言恒过（阶段 1 后项目钩子形态的 AssertSemantic 仍须过同栏）。
 	if err := domainauth.AssertSemantic(set); err != nil {
@@ -126,7 +128,7 @@ func buildGolden(t *testing.T) goldenFile {
 			Access:              accessName(p.Access),
 			Permissions:         p.Permissions,
 			RequestFields:       nil,
-			RequestHasProjectID: p.RequestHasProjectID,
+			RequestHasProjectID: slices.Contains(p.RequestFields, "project_id"),
 			IsStreaming:         p.IsStreaming,
 		}
 		if len(p.Permissions) > 0 {

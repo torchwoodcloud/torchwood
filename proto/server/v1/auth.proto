@@ -8,7 +8,7 @@ import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
 import "buf/validate/validate.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 
 // 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
 // docs/developer/09-api-guide.md §1.4 的 OpenAPI 建模约定；本服务全部方法继承，无需逐方法覆盖）。
@@ -68,7 +68,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // 建立连接前判定 Torchwood 签发凭证的有效性。判定语义与请求侧认证完全
 // 一致（复用同一校验器），不引入第二套校验逻辑。
 service AuthService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   // VerifyToken 校验 Torchwood 凭证原文并返回主体信息。
   //
@@ -86,8 +86,8 @@ service AuthService {
   rpc VerifyToken(VerifyTokenRequest) returns (VerifyTokenResponse) {
     option (google.api.http) = { post: "/v1/server/auth/tokens:verify", body: "*" };
     // 读面（TierReadOnly）：复用 users.read scope，不新增 scope 资源。
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_USERS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "users", op: SCOPE_OP_READ }
     };
   }
 }

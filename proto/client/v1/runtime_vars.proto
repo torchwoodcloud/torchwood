@@ -7,10 +7,10 @@ option go_package = "github.com/torchwoodcloud/torchwood/genproto/client/v1;clie
 import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 
 // 服务默认 access=authenticated：swagger 顶层声明 Bearer security；
-// ACCESS_PUBLIC 方法逐方法声明 security: [] + x-torchwood-access: "public"
+// ACCESS_LEVEL_PUBLIC 方法逐方法声明 security: [] + x-torchwood-access: "public"
 // （详见 docs/developer/09-api-guide.md §1.4 的 OpenAPI 建模约定）。
 option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   security_definitions: {
@@ -64,11 +64,11 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 // RuntimeVarsService 是 client 面运行时变量拉取端点（docs/design/runtime-vars.md
-// §2.3）：方法级 ACCESS_PUBLIC（public 集匿名可读），集合级可见性（private 拒绝
+// §2.3）：方法级 ACCESS_LEVEL_PUBLIC（public 集匿名可读），集合级可见性（private 拒绝
 // 匿名）在数据访问层过滤（§2.4）。唯一方法 GetRuntimeVars——按集合全量快照，
 // 无单 key 读/分页/跨集合聚合/集合目录（D4/D14）。
 service RuntimeVarsService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_END_USER };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_END_USER };
 
   // GetRuntimeVars 拉取集合的全量快照。project_id 是匿名唯一可靠寻址
   // （resolveProjectID 链第一级）；etag 透传上次响应值，命中则 unchanged=true
@@ -76,7 +76,7 @@ service RuntimeVarsService {
   // TTL ≥ 60s；收到 404 保留 last-known-good 缓存（D15）。
   rpc GetRuntimeVars(GetRuntimeVarsRequest) returns (GetRuntimeVarsResponse) {
     option (google.api.http) = { get: "/v1/runtime-vars/{var_set_id}" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {

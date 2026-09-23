@@ -2,8 +2,8 @@
 
 > **本文件由策略注册表生成（`mise run gen:authz-matrix`），勿手改。**
 >
-> - 声明源：`proto/shared/v1/authz.proto` 的 `method_auth`/`service_auth` 注解 →
->   `cmd/server/internal/runtime.BuildMethodPolicies`（启动期经 `ProvideMethodPolicies` 注入执行点）。
+> - 声明源：`grpcapi/v1/authz.proto`（vendored 于 `proto/third_party/`，本体在 lynx-go/grpcapi 仓库）的 `method_auth`/`service_auth` 注解 →
+>   `cmd/server/internal/runtime.buildMethodPolicies`（`grpcapi.authz.Build` + torchwood 断言；启动期经 `ProvideMethodPolicies` 注入执行点）。
 > - 策略变更后重新生成：`mise run gen:authz-matrix`；漂移由
 >   `cmd/server/internal/runtime/authz_matrix_doc_test.go` 字节级锁定（重渲染 ≠ 磁盘即红）。
 > - 执行器消费同一策略的行为一致性证明见 `cmd/server/internal/runtime/authz_matrix_test.go`

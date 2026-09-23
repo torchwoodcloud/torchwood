@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -58,9 +59,9 @@ func TestAuthService_VerifyToken_Policy(t *testing.T) {
 	require.Equal(t, domainauth.AccessServer, p.Access)
 	require.Empty(t, p.AdminRoles, "读面：admin 角色不限")
 	require.NotNil(t, p.Scope)
-	require.Equal(t, domainauth.ScopeUsers, p.Scope.Resource)
+	require.Equal(t, string(domainauth.ScopeUsers), p.Scope.Resource)
 	require.Equal(t, domainauth.ScopeRead, p.Scope.Op)
-	require.False(t, p.RequestHasProjectID, "server 面请求体不得携带 project_id")
+	require.False(t, slices.Contains(p.RequestFields, "project_id"), "server 面请求体不得携带 project_id")
 }
 
 // TestAuthService_VerifyToken_APIKeyScopeGate：真实策略注册表 + 认证拦截器，

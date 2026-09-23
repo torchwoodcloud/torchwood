@@ -122,8 +122,8 @@ func buildWellKnownPayload(policies *auth.PolicySet) []byte {
 
 	verbs := make([]wellKnownVerb, 0, len(wellKnownVerbs))
 	for _, v := range wellKnownVerbs {
-		if rule := policies.HasAPIKeyScope(databasesServiceFullName + v.RPC); rule != nil {
-			v.Scope = string(rule.Resource) + "." + string(rule.Op)
+		if rule := policies.ScopeRule(databasesServiceFullName + v.RPC); rule != nil {
+			v.Scope = rule.Resource + "." + string(rule.Op)
 		}
 		verbs = append(verbs, v)
 	}

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lynx-go/grpcapi/authz"
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
@@ -62,11 +63,11 @@ const testAPIKeyMethod = "/torchwood.server.v1.UsersService/CreateUser"
 
 func newAPIKeyThrottleInterceptor(t *testing.T, limiter domainauth.RateLimiter, limit int) *AuthInterceptor {
 	t.Helper()
-	set, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{{
+	set, err := authz.NewPolicySet([]domainauth.MethodPolicy{{
 		Method: testAPIKeyMethod, Service: serviceOf(testAPIKeyMethod),
 		Access: domainauth.AccessServer,
-		Scope:  &domainauth.ScopeRule{Resource: domainauth.ScopeUsers, Op: domainauth.ScopeWrite},
-	}})
+		Scope:  &domainauth.ScopeRule{Resource: string(domainauth.ScopeUsers), Op: domainauth.ScopeWrite},
+	}}...)
 	require.NoError(t, err)
 	ic, err := NewAuthInterceptor(failingAPIKeyValidator{}, set)
 	require.NoError(t, err)

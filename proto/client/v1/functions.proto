@@ -7,7 +7,7 @@ option go_package = "github.com/torchwoodcloud/torchwood/genproto/client/v1;clie
 import "google/api/annotations.proto";
 import "buf/validate/validate.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 
 // 服务默认 access=end_user：swagger 顶层声明 Bearer security
 // （详见 docs/developer/09-api-guide.md §1.4 的 OpenAPI 建模约定；本服务全部方法继承）。
@@ -68,7 +68,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // CreateExecution 的放开——带独立策略门的新入口；执行身份与审计语义
 // 与触发器路径一致（执行记录 invoking_user_id 即审计载体）。
 service FunctionsService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_END_USER };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_END_USER };
 
   // InvokeFunction 同步调用一个 client_callable 函数。
   //

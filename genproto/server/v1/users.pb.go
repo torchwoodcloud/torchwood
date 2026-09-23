@@ -9,6 +9,7 @@ package serverv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -785,7 +786,7 @@ var File_server_v1_users_proto protoreflect.FileDescriptor
 
 const file_server_v1_users_proto_rawDesc = "" +
 	"\n" +
-	"\x15server/v1/users.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\" \n" +
+	"\x15server/v1/users.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\" \n" +
 	"\x0eGetUserRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\xd1\x01\n" +
 	"\x11CreateUserRequest\x12\x14\n" +
@@ -853,20 +854,29 @@ const file_server_v1_users_proto_rawDesc = "" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
 	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken\x129\n" +
 	"\n" +
-	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt2\xfa\t\n" +
-	"\fUsersService\x12{\n" +
+	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt2\x8f\v\n" +
+	"\fUsersService\x12\x91\x01\n" +
 	"\n" +
-	"CreateUser\x12&.torchwood.server.v1.CreateUserRequest\x1a\x19.torchwood.server.v1.User\"*\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x02\x10\x02\x82\xd3\xe4\x93\x02\x15:\x01*\"\x10/v1/server/users\x12y\n" +
-	"\tListUsers\x12 .torchwood.shared.v1.ListRequest\x1a&.torchwood.server.v1.ListUsersResponse\"\"\x8a\xb2\x19\x06\"\x04\b\x02\x10\x01\x82\xd3\xe4\x93\x02\x12\x12\x10/v1/server/users\x12r\n" +
-	"\aGetUser\x12#.torchwood.server.v1.GetUserRequest\x1a\x19.torchwood.server.v1.User\"'\x8a\xb2\x19\x06\"\x04\b\x02\x10\x01\x82\xd3\xe4\x93\x02\x17\x12\x15/v1/server/users/{id}\x12\x80\x01\n" +
+	"CreateUser\x12&.torchwood.server.v1.CreateUserRequest\x1a\x19.torchwood.server.v1.User\"@\xea\xc4\x19!\x1a\x06member\x1a\x05admin\x1a\x05owner\"\t\n" +
+	"\x05users\x10\x02\x82\xd3\xe4\x93\x02\x15:\x01*\"\x10/v1/server/users\x12~\n" +
+	"\tListUsers\x12 .torchwood.shared.v1.ListRequest\x1a&.torchwood.server.v1.ListUsersResponse\"'\xea\xc4\x19\v\"\t\n" +
+	"\x05users\x10\x01\x82\xd3\xe4\x93\x02\x12\x12\x10/v1/server/users\x12w\n" +
+	"\aGetUser\x12#.torchwood.server.v1.GetUserRequest\x1a\x19.torchwood.server.v1.User\",\xea\xc4\x19\v\"\t\n" +
+	"\x05users\x10\x01\x82\xd3\xe4\x93\x02\x17\x12\x15/v1/server/users/{id}\x12\x96\x01\n" +
 	"\n" +
-	"UpdateUser\x12&.torchwood.server.v1.UpdateUserRequest\x1a\x19.torchwood.server.v1.User\"/\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x02\x10\x02\x82\xd3\xe4\x93\x02\x1a:\x01*2\x15/v1/server/users/{id}\x12\x99\x01\n" +
-	"\x12UpdateUserPassword\x12..torchwood.server.v1.UpdateUserPasswordRequest\x1a\x19.torchwood.server.v1.User\"8\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x02\x10\x02\x82\xd3\xe4\x93\x02#:\x01*2\x1e/v1/server/users/{id}/password\x12{\n" +
+	"UpdateUser\x12&.torchwood.server.v1.UpdateUserRequest\x1a\x19.torchwood.server.v1.User\"E\xea\xc4\x19!\x1a\x06member\x1a\x05admin\x1a\x05owner\"\t\n" +
+	"\x05users\x10\x02\x82\xd3\xe4\x93\x02\x1a:\x01*2\x15/v1/server/users/{id}\x12\xaf\x01\n" +
+	"\x12UpdateUserPassword\x12..torchwood.server.v1.UpdateUserPasswordRequest\x1a\x19.torchwood.server.v1.User\"N\xea\xc4\x19!\x1a\x06member\x1a\x05admin\x1a\x05owner\"\t\n" +
+	"\x05users\x10\x02\x82\xd3\xe4\x93\x02#:\x01*2\x1e/v1/server/users/{id}/password\x12\x91\x01\n" +
 	"\n" +
-	"DeleteUser\x12#.torchwood.server.v1.GetUserRequest\x1a\x1a.torchwood.shared.v1.Empty\",\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x02\x10\x02\x82\xd3\xe4\x93\x02\x17*\x15/v1/server/users/{id}\x12\x98\x01\n" +
-	"\x10ListUserSessions\x12#.torchwood.server.v1.GetUserRequest\x1a-.torchwood.server.v1.ListUserSessionsResponse\"0\x8a\xb2\x19\x06\"\x04\b\x02\x10\x01\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/users/{id}/sessions\x12\xa2\x01\n" +
-	"\x11DeleteUserSession\x12-.torchwood.server.v1.DeleteUserSessionRequest\x1a\x1a.torchwood.shared.v1.Empty\"B\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x02\x10\x02\x82\xd3\xe4\x93\x02-*+/v1/server/users/{id}/sessions/{session_id}\x12\x99\x01\n" +
-	"\x0fCreateUserToken\x12#.torchwood.server.v1.GetUserRequest\x1a,.torchwood.server.v1.CreateUserTokenResponse\"3\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x02\x10\x02\x82\xd3\xe4\x93\x02\x1e\"\x1c/v1/server/users/{id}/tokens\x1a\x06\x92\xb2\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
+	"DeleteUser\x12#.torchwood.server.v1.GetUserRequest\x1a\x1a.torchwood.shared.v1.Empty\"B\xea\xc4\x19!\x1a\x06member\x1a\x05admin\x1a\x05owner\"\t\n" +
+	"\x05users\x10\x02\x82\xd3\xe4\x93\x02\x17*\x15/v1/server/users/{id}\x12\x9d\x01\n" +
+	"\x10ListUserSessions\x12#.torchwood.server.v1.GetUserRequest\x1a-.torchwood.server.v1.ListUserSessionsResponse\"5\xea\xc4\x19\v\"\t\n" +
+	"\x05users\x10\x01\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/users/{id}/sessions\x12\xb8\x01\n" +
+	"\x11DeleteUserSession\x12-.torchwood.server.v1.DeleteUserSessionRequest\x1a\x1a.torchwood.shared.v1.Empty\"X\xea\xc4\x19!\x1a\x06member\x1a\x05admin\x1a\x05owner\"\t\n" +
+	"\x05users\x10\x02\x82\xd3\xe4\x93\x02-*+/v1/server/users/{id}/sessions/{session_id}\x12\xaf\x01\n" +
+	"\x0fCreateUserToken\x12#.torchwood.server.v1.GetUserRequest\x1a,.torchwood.server.v1.CreateUserTokenResponse\"I\xea\xc4\x19!\x1a\x06member\x1a\x05admin\x1a\x05owner\"\t\n" +
+	"\x05users\x10\x02\x82\xd3\xe4\x93\x02\x1e\"\x1c/v1/server/users/{id}/tokens\x1a\x06\xf2\xc4\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

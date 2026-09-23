@@ -3,6 +3,7 @@ package runtime
 import (
 	"testing"
 
+	"github.com/lynx-go/grpcapi/authz"
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
@@ -62,7 +63,7 @@ func TestAssertSemantic_RealProtoRegistry(t *testing.T) {
 // （退役资源串的匹配面断言）。
 func setAllowsAnyMethod(set *domainauth.PolicySet, scope string) bool {
 	for _, p := range set.Methods() {
-		if set.AllowsAPIKey(p.Method, []string{scope}) {
+		if domainauth.AllowsAPIKeyTargets(set, p.Method, []string{scope}, domainauth.ScopeTargets{}) {
 			return true
 		}
 	}
@@ -79,8 +80,8 @@ func TestAssertSemantic_DetectsViolations(t *testing.T) {
 			Method:     "/torchwood.server.v1.TestService/DoThing",
 			Service:    "/torchwood.server.v1.TestService",
 			Access:     domainauth.AccessServer,
-			AdminRoles: []domainauth.AdminRole{domainauth.AdminRoleMember, domainauth.AdminRoleAdmin, domainauth.AdminRoleOwner},
-			Scope:      &domainauth.ScopeRule{Resource: domainauth.ScopeUsers, Op: domainauth.ScopeWrite},
+			AdminRoles: []string{string(domainauth.AdminRoleMember), string(domainauth.AdminRoleAdmin), string(domainauth.AdminRoleOwner)},
+			Scope:      &domainauth.ScopeRule{Resource: string(domainauth.ScopeUsers), Op: domainauth.ScopeWrite},
 		}
 		if mutate != nil {
 			mutate(&p)
@@ -88,23 +89,23 @@ func TestAssertSemantic_DetectsViolations(t *testing.T) {
 		return []domainauth.MethodPolicy{p}
 	}
 
-	_, err := domainauth.NewPolicySet(base(nil))
+	_, err := authz.NewPolicySet(base(nil)...)
 	require.NoError(t, err)
 	require.NoError(t, domainauth.AssertPolicy(base(nil)[0]), "合法业务写档应通过（单方法断言）")
 
 	for name, mutate := range map[string]func(*domainauth.MethodPolicy){
 		"SERVER 缺 scope": func(p *domainauth.MethodPolicy) { p.Scope = nil },
 		"write+空角色（无档位）": func(p *domainauth.MethodPolicy) { p.AdminRoles = nil },
-		"角色含 viewer":     func(p *domainauth.MethodPolicy) { p.AdminRoles = []domainauth.AdminRole{domainauth.AdminRoleViewer} },
+		"角色含 viewer":     func(p *domainauth.MethodPolicy) { p.AdminRoles = []string{string(domainauth.AdminRoleViewer)} },
 		"PERMISSION+member": func(p *domainauth.MethodPolicy) {
 			p.Access = domainauth.AccessPermission
 			p.Permissions = []string{"member"}
 		},
 		"项目寻址违例": func(p *domainauth.MethodPolicy) {
-			p.RequestHasProjectID = true
+			p.RequestFields = []string{"project_id"}
 		},
 	} {
-		_, err := domainauth.NewPolicySet(base(mutate))
+		_, err := authz.NewPolicySet(base(mutate)...)
 		require.NoError(t, err)
 		require.Error(t, domainauth.AssertPolicy(base(mutate)[0]), "违例 [%s] 必须被语义断言拒绝", name)
 	}

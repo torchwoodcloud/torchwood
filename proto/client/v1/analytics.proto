@@ -9,12 +9,12 @@ import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 
 // AnalyticsService 是端侧事件摄入面（docs/design/analytics.md §4.2）：
 // 只有写入、没有查询（行为数据是项目方资产）；user_id/session_id 归因一律
 // 取自 principal（含匿名会话），请求体不可指定——client 面请求不携带
-// user_id 字段（红线，D3）。门禁 = 至少匿名会话（ACCESS_END_USER）。
+// user_id 字段（红线，D3）。门禁 = 至少匿名会话（ACCESS_LEVEL_END_USER）。
 option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   security_definitions: {
     security: {
@@ -67,7 +67,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service AnalyticsService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_END_USER };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_END_USER };
 
   // IngestEvents 批量摄入端侧事件（部分接收语义：坏事件计入 skipped、好事件
   // 照收；at-least-once，D14——不做去重）。归因（user_id）与 source='client'

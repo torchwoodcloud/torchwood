@@ -8,7 +8,7 @@ import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
@@ -69,13 +69,13 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // 引擎在 CLI 侧，动作幂等 + 失败重跑（D7 无跨 RPC 事务，无 dirty 标记）。
 // 状态是控制面表（迁移 000009），按项目隔离（项目上下文来自凭证）。
 service RunbookService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   // GetRunbookState 返回指定 runbook 的已应用 step 升序全集（空 = 未应用）。
   rpc GetRunbookState(GetRunbookStateRequest) returns (GetRunbookStateResponse) {
     option (google.api.http) = { get: "/v1/server/runbooks/{runbook}/steps" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_RUNBOOKS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "runbooks", op: SCOPE_OP_READ }
     };
   }
 
@@ -84,9 +84,9 @@ service RunbookService {
   // （并发双跑输家重拉状态收敛）。checksum = sha256(归一化后文件字节)（D9）。
   rpc RecordRunbookStep(RecordRunbookStepRequest) returns (RecordRunbookStepResponse) {
     option (google.api.http) = { post: "/v1/server/runbooks/{runbook}/steps", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_RUNBOOKS, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "runbooks", op: SCOPE_OP_WRITE }
     };
   }
 
@@ -95,9 +95,9 @@ service RunbookService {
   // 任何资源动作——资源回退由调用方先完成再摘记录。
   rpc DeleteRunbookStep(DeleteRunbookStepRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/runbooks/{runbook}/steps/{version}" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_RUNBOOKS, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "runbooks", op: SCOPE_OP_WRITE }
     };
   }
 }

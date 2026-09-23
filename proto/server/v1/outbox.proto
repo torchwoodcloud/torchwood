@@ -8,7 +8,7 @@ import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 import "shared/v1/common.proto";
 
 // OutboxService 管理死信（W-J）。仅平台运维可读/重放，scope outbox:read/write。
@@ -64,21 +64,21 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service OutboxService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   rpc ListDeadLetters(ListDeadLettersRequest) returns (ListDeadLettersResponse) {
     option (google.api.http) = { get: "/v1/server/outbox/dead-letters" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_OUTBOX, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "outbox", op: SCOPE_OP_READ }
     };
   }
 
   rpc ReplayDeadLetter(ReplayDeadLetterRequest) returns (ReplayDeadLetterResponse) {
     option (google.api.http) = { post: "/v1/server/outbox/dead-letters/{event_id}:replay", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_OUTBOX, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "outbox", op: SCOPE_OP_WRITE }
     };
   }
 }

@@ -204,13 +204,13 @@ func TestAuthInterceptor_RejectsViewerOrMemberAdminOnWriteMethods(t *testing.T) 
 		"/torchwood.server.v1.FunctionsService/SetVariables",
 		"/torchwood.server.v1.OAuthProvidersService/UpsertOAuthProvider",
 	}
-	runCase := func(method string, role string, permissionWired bool, roles []domainauth.AdminRole) {
-		var serverRoles map[string][]domainauth.AdminRole
+	runCase := func(method string, role string, permissionWired bool, roles []string) {
+		var serverRoles map[string][]string
 		var permissionMethods map[string][]string
 		if permissionWired {
 			permissionMethods = map[string][]string{method: {"owner", "admin"}}
 		} else {
-			serverRoles = map[string][]domainauth.AdminRole{method: roles}
+			serverRoles = map[string][]string{method: roles}
 		}
 		ic, err := newTestInterceptorRoles(stubValidator{principal: &shared.Principal{
 			ActorKind:      shared.ActorKindAdmin,
@@ -229,10 +229,10 @@ func TestAuthInterceptor_RejectsViewerOrMemberAdminOnWriteMethods(t *testing.T) 
 	}
 
 	for _, method := range roleGatedWrites {
-		runCase(method, "viewer", false, []domainauth.AdminRole{domainauth.AdminRoleMember, domainauth.AdminRoleAdmin, domainauth.AdminRoleOwner})
+		runCase(method, "viewer", false, []string{string(domainauth.AdminRoleMember), string(domainauth.AdminRoleAdmin), string(domainauth.AdminRoleOwner)})
 	}
 	for _, method := range delegatedOnly {
-		runCase(method, "member", false, []domainauth.AdminRole{domainauth.AdminRoleAdmin, domainauth.AdminRoleOwner})
+		runCase(method, "member", false, []string{string(domainauth.AdminRoleAdmin), string(domainauth.AdminRoleOwner)})
 	}
 	for _, method := range []string{
 		"/torchwood.server.v1.ProjectsService/CreateProject",

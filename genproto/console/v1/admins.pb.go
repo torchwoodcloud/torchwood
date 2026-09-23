@@ -9,6 +9,7 @@ package consolev1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -490,7 +491,7 @@ var File_console_v1_admins_proto protoreflect.FileDescriptor
 
 const file_console_v1_admins_proto_rawDesc = "" +
 	"\n" +
-	"\x17console/v1/admins.proto\x12\x14torchwood.console.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\x18\n" +
+	"\x17console/v1/admins.proto\x12\x14torchwood.console.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\x18\n" +
 	"\x16GetCurrentAdminRequest\"\xc3\x01\n" +
 	"\x19UpdateCurrentAdminRequest\x12K\n" +
 	"\btimezone\x18\x01 \x01(\tB*\xbaH'r%\x18@2!^([A-Za-z]+(/[A-Za-z0-9_+-]+)*)?$H\x00R\btimezone\x88\x01\x01\x12)\n" +
@@ -525,13 +526,13 @@ const file_console_v1_admins_proto_rawDesc = "" +
 	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1a\n" +
 	"\btimezone\x18\x06 \x01(\tR\btimezone2\xdb\x06\n" +
 	"\rAdminsService\x12\x8a\x01\n" +
-	"\x0fGetCurrentAdmin\x12,.torchwood.console.v1.GetCurrentAdminRequest\x1a\x1b.torchwood.console.v1.Admin\",\x8a\xb2\x19\v\b\x04\x12\aconsole\x82\xd3\xe4\x93\x02\x17\x12\x15/v1/console/admins/me\x12\x8f\x01\n" +
+	"\x0fGetCurrentAdmin\x12,.torchwood.console.v1.GetCurrentAdminRequest\x1a\x1b.torchwood.console.v1.Admin\",\xea\xc4\x19\v\b\x04\x12\aconsole\x82\xd3\xe4\x93\x02\x17\x12\x15/v1/console/admins/me\x12\x8f\x01\n" +
 	"\n" +
-	"ListAdmins\x12'.torchwood.console.v1.ListAdminsRequest\x1a(.torchwood.console.v1.ListAdminsResponse\".\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x14\x12\x12/v1/console/admins\x12\x80\x01\n" +
-	"\vCreateAdmin\x12(.torchwood.console.v1.CreateAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"*\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x17:\x01*\"\x12/v1/console/admins\x12\x85\x01\n" +
-	"\vUpdateAdmin\x12(.torchwood.console.v1.UpdateAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"/\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x1c:\x01*2\x17/v1/console/admins/{id}\x12\x93\x01\n" +
-	"\x12UpdateCurrentAdmin\x12/.torchwood.console.v1.UpdateCurrentAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"/\x8a\xb2\x19\v\b\x04\x12\aconsole\x82\xd3\xe4\x93\x02\x1a:\x01*2\x15/v1/console/admins/me\x12\x81\x01\n" +
-	"\vDeleteAdmin\x12(.torchwood.console.v1.DeleteAdminRequest\x1a\x1a.torchwood.shared.v1.Empty\",\x8a\xb2\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x19*\x17/v1/console/admins/{id}\x1a\x06\x92\xb2\x19\x02\b\x04B\x84\x04\x92A\xbd\x03RR\n" +
+	"ListAdmins\x12'.torchwood.console.v1.ListAdminsRequest\x1a(.torchwood.console.v1.ListAdminsResponse\".\xea\xc4\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x14\x12\x12/v1/console/admins\x12\x80\x01\n" +
+	"\vCreateAdmin\x12(.torchwood.console.v1.CreateAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"*\xea\xc4\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x17:\x01*\"\x12/v1/console/admins\x12\x85\x01\n" +
+	"\vUpdateAdmin\x12(.torchwood.console.v1.UpdateAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"/\xea\xc4\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x1c:\x01*2\x17/v1/console/admins/{id}\x12\x93\x01\n" +
+	"\x12UpdateCurrentAdmin\x12/.torchwood.console.v1.UpdateCurrentAdminRequest\x1a\x1b.torchwood.console.v1.Admin\"/\xea\xc4\x19\v\b\x04\x12\aconsole\x82\xd3\xe4\x93\x02\x1a:\x01*2\x15/v1/console/admins/me\x12\x81\x01\n" +
+	"\vDeleteAdmin\x12(.torchwood.console.v1.DeleteAdminRequest\x1a\x1a.torchwood.shared.v1.Empty\",\xea\xc4\x19\t\b\x04\x12\x05owner\x82\xd3\xe4\x93\x02\x19*\x17/v1/console/admins/{id}\x1a\x06\xf2\xc4\x19\x02\b\x04B\x84\x04\x92A\xbd\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

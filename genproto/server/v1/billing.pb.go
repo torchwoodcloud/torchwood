@@ -8,6 +8,7 @@ package serverv1
 
 import (
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -573,7 +574,7 @@ var File_server_v1_billing_proto protoreflect.FileDescriptor
 
 const file_server_v1_billing_proto_rawDesc = "" +
 	"\n" +
-	"\x17server/v1/billing.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xa3\x01\n" +
+	"\x17server/v1/billing.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xa3\x01\n" +
 	"\x0fGetUsageRequest\x12\x16\n" +
 	"\x06metric\x18\x01 \x01(\tR\x06metric\x12=\n" +
 	"\fperiod_start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
@@ -623,11 +624,14 @@ const file_server_v1_billing_proto_rawDesc = "" +
 	"\n" +
 	"statements\x18\x01 \x03(\v2%.torchwood.server.v1.BillingStatementR\n" +
 	"statements\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xb6\x03\n" +
-	"\x0eBillingService\x12x\n" +
-	"\bGetUsage\x12$.torchwood.server.v1.GetUsageRequest\x1a\x1a.torchwood.server.v1.Usage\"*\x8a\xb2\x19\x06\"\x04\b\v\x10\x01\x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/server/billing/usage\x12\x8e\x01\n" +
-	"\vListRollups\x12'.torchwood.server.v1.ListRollupsRequest\x1a(.torchwood.server.v1.ListRollupsResponse\",\x8a\xb2\x19\x06\"\x04\b\v\x10\x01\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/server/billing/rollups\x12\x90\x01\n" +
-	"\x0eListStatements\x12 .torchwood.shared.v1.ListRequest\x1a+.torchwood.server.v1.ListStatementsResponse\"/\x8a\xb2\x19\x06\"\x04\b\v\x10\x01\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/server/billing/statements\x1a\x06\x92\xb2\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xcb\x03\n" +
+	"\x0eBillingService\x12\x7f\n" +
+	"\bGetUsage\x12$.torchwood.server.v1.GetUsageRequest\x1a\x1a.torchwood.server.v1.Usage\"1\xea\xc4\x19\r\"\v\n" +
+	"\abilling\x10\x01\x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/server/billing/usage\x12\x95\x01\n" +
+	"\vListRollups\x12'.torchwood.server.v1.ListRollupsRequest\x1a(.torchwood.server.v1.ListRollupsResponse\"3\xea\xc4\x19\r\"\v\n" +
+	"\abilling\x10\x01\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/server/billing/rollups\x12\x97\x01\n" +
+	"\x0eListStatements\x12 .torchwood.shared.v1.ListRequest\x1a+.torchwood.server.v1.ListStatementsResponse\"6\xea\xc4\x19\r\"\v\n" +
+	"\abilling\x10\x01\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/server/billing/statements\x1a\x06\xf2\xc4\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

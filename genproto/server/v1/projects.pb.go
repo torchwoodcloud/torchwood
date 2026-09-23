@@ -9,6 +9,7 @@ package serverv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -754,7 +755,7 @@ var File_server_v1_projects_proto protoreflect.FileDescriptor
 
 const file_server_v1_projects_proto_rawDesc = "" +
 	"\n" +
-	"\x18server/v1/projects.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xcd\x01\n" +
+	"\x18server/v1/projects.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xcd\x01\n" +
 	"\x14UpdateProjectRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12%\n" +
@@ -822,30 +823,33 @@ const file_server_v1_projects_proto_rawDesc = "" +
 	"\x17DeleteInviteCodeRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id2\xa0\r\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id2\xca\r\n" +
 	"\x0fProjectsService\x12\xb3\x01\n" +
 	"\rCreateProject\x12).torchwood.server.v1.CreateProjectRequest\x1a\x1c.torchwood.server.v1.Project\"Y\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x18:\x01*\"\x13/v1/server/projects\x12\x82\x01\n" +
-	"\fListProjects\x12 .torchwood.shared.v1.ListRequest\x1a).torchwood.server.v1.ListProjectsResponse\"%\x8a\xb2\x19\x06\"\x04\b\x05\x10\x01\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/server/projects\x12~\n" +
+	"permission\xea\xc4\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x18:\x01*\"\x13/v1/server/projects\x12\x8a\x01\n" +
+	"\fListProjects\x12 .torchwood.shared.v1.ListRequest\x1a).torchwood.server.v1.ListProjectsResponse\"-\xea\xc4\x19\x0e\"\f\n" +
+	"\bprojects\x10\x01\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/server/projects\x12\x86\x01\n" +
 	"\n" +
-	"GetProject\x12&.torchwood.server.v1.GetProjectRequest\x1a\x1c.torchwood.server.v1.Project\"*\x8a\xb2\x19\x06\"\x04\b\x05\x10\x01\x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/server/projects/{id}\x12\x8c\x01\n" +
-	"\rUpdateProject\x12).torchwood.server.v1.UpdateProjectRequest\x1a\x1c.torchwood.server.v1.Project\"2\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\x05\x10\x02\x82\xd3\xe4\x93\x02\x1d:\x01*2\x18/v1/server/projects/{id}\x12\xb0\x01\n" +
+	"GetProject\x12&.torchwood.server.v1.GetProjectRequest\x1a\x1c.torchwood.server.v1.Project\"2\xea\xc4\x19\x0e\"\f\n" +
+	"\bprojects\x10\x01\x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/server/projects/{id}\x12\xa5\x01\n" +
+	"\rUpdateProject\x12).torchwood.server.v1.UpdateProjectRequest\x1a\x1c.torchwood.server.v1.Project\"K\xea\xc4\x19$\x1a\x06member\x1a\x05admin\x1a\x05owner\"\f\n" +
+	"\bprojects\x10\x02\x82\xd3\xe4\x93\x02\x1d:\x01*2\x18/v1/server/projects/{id}\x12\xb0\x01\n" +
 	"\rDeleteProject\x12&.torchwood.server.v1.GetProjectRequest\x1a\x1a.torchwood.shared.v1.Empty\"[\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x1a*\x18/v1/server/projects/{id}\x12\xd6\x01\n" +
+	"permission\xea\xc4\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x1a*\x18/v1/server/projects/{id}\x12\xd6\x01\n" +
 	"\x10CreateInviteCode\x12,.torchwood.server.v1.CreateInviteCodeRequest\x1a\x1f.torchwood.server.v1.InviteCode\"s\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x022:\x01*\"-/v1/server/projects/{project_id}/invite-codes\x12\xde\x01\n" +
+	"permission\xea\xc4\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x022:\x01*\"-/v1/server/projects/{project_id}/invite-codes\x12\xde\x01\n" +
 	"\x0fListInviteCodes\x12+.torchwood.server.v1.ListInviteCodesRequest\x1a,.torchwood.server.v1.ListInviteCodesResponse\"p\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02/\x12-/v1/server/projects/{project_id}/invite-codes\x12\xd3\x01\n" +
+	"permission\xea\xc4\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02/\x12-/v1/server/projects/{project_id}/invite-codes\x12\xd3\x01\n" +
 	"\x10DeleteInviteCode\x12,.torchwood.server.v1.DeleteInviteCodeRequest\x1a\x1a.torchwood.shared.v1.Empty\"u\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x024*2/v1/server/projects/{project_id}/invite-codes/{id}\x12\xf7\x01\n" +
+	"permission\xea\xc4\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x024*2/v1/server/projects/{project_id}/invite-codes/{id}\x12\xf7\x01\n" +
 	"\x1cUpdateOAuthRedirectAllowlist\x128.torchwood.server.v1.UpdateOAuthRedirectAllowlistRequest\x1a\x1c.torchwood.server.v1.Project\"\x7f\x92A$j\"\n" +
 	"\x12x-torchwood-access\x12\f\x1a\n" +
-	"permission\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02>:\x01*\x1a9/v1/server/projects/{project_id}/oauth-redirect-allowlist\x1a\x06\x92\xb2\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
+	"permission\xea\xc4\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02>:\x01*\x1a9/v1/server/projects/{project_id}/oauth-redirect-allowlist\x1a\x06\xf2\xc4\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

@@ -8,7 +8,7 @@ import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "buf/validate/validate.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=permission（console admin 角色）：swagger 顶层声明
@@ -69,28 +69,28 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // 权限模型：owner/admin 角色可查看列表；创建、修改、删除仅 owner 可执行。
 // 方法与 client/server API 不同，这里直接使用 console admin role 作为权限串。
 service AdminsService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_PERMISSION };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_PERMISSION };
 
   rpc GetCurrentAdmin(GetCurrentAdminRequest) returns (Admin) {
     option (google.api.http) = { get: "/v1/console/admins/me" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["console"]
     };
   }
 
   rpc ListAdmins(ListAdminsRequest) returns (ListAdminsResponse) {
     option (google.api.http) = { get: "/v1/console/admins" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
   }
 
   rpc CreateAdmin(CreateAdminRequest) returns (Admin) {
     option (google.api.http) = { post: "/v1/console/admins", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner"]
     };
   }
@@ -102,8 +102,8 @@ service AdminsService {
   // found，回归测试见 cmd/server/internal/runtime/gateway_route_order_test.go）。
   rpc UpdateAdmin(UpdateAdminRequest) returns (Admin) {
     option (google.api.http) = { patch: "/v1/console/admins/{id}", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner"]
     };
   }
@@ -115,16 +115,16 @@ service AdminsService {
   // gateway LIFO 匹配下后声明者胜（见上方路由顺序约束注释）。
   rpc UpdateCurrentAdmin(UpdateCurrentAdminRequest) returns (Admin) {
     option (google.api.http) = { patch: "/v1/console/admins/me", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["console"]
     };
   }
 
   rpc DeleteAdmin(DeleteAdminRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/console/admins/{id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner"]
     };
   }

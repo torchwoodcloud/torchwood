@@ -8,6 +8,7 @@ package clientv1
 
 import (
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -637,7 +638,7 @@ var File_client_v1_groups_proto protoreflect.FileDescriptor
 
 const file_client_v1_groups_proto_rawDesc = "" +
 	"\n" +
-	"\x16client/v1/groups.proto\x12\x13torchwood.client.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"(\n" +
+	"\x16client/v1/groups.proto\x12\x13torchwood.client.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"(\n" +
 	"\x12CreateGroupRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"!\n" +
 	"\x0fGetGroupRequest\x12\x0e\n" +
@@ -697,7 +698,7 @@ const file_client_v1_groups_proto_rawDesc = "" +
 	"\x10CreateMembership\x12,.torchwood.client.v1.CreateMembershipRequest\x1a\x1f.torchwood.client.v1.Membership\",\x82\xd3\xe4\x93\x02&:\x01*\"!/v1/groups/{group_id}/memberships\x12\x97\x01\n" +
 	"\x0fListMemberships\x12+.torchwood.client.v1.ListMembershipsRequest\x1a,.torchwood.client.v1.ListMembershipsResponse\")\x82\xd3\xe4\x93\x02#\x12!/v1/groups/{group_id}/memberships\x12\xb2\x01\n" +
 	"\x16UpdateMembershipStatus\x122.torchwood.client.v1.UpdateMembershipStatusRequest\x1a\x1f.torchwood.client.v1.Membership\"C\x82\xd3\xe4\x93\x02=:\x01*28/v1/groups/{group_id}/memberships/{membership_id}/status\x12\x94\x01\n" +
-	"\x10DeleteMembership\x12).torchwood.client.v1.GetMembershipRequest\x1a\x1a.torchwood.shared.v1.Empty\"9\x82\xd3\xe4\x93\x023*1/v1/groups/{group_id}/memberships/{membership_id}\x1a\x06\x92\xb2\x19\x02\b\x02B\x95\x04\x92A\xd0\x03RR\n" +
+	"\x10DeleteMembership\x12).torchwood.client.v1.GetMembershipRequest\x1a\x1a.torchwood.shared.v1.Empty\"9\x82\xd3\xe4\x93\x023*1/v1/groups/{group_id}/memberships/{membership_id}\x1a\x06\xf2\xc4\x19\x02\b\x02B\x95\x04\x92A\xd0\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xc9\x02\n" +

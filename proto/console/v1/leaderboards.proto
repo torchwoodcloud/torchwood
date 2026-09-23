@@ -7,7 +7,7 @@ option go_package = "github.com/torchwoodcloud/torchwood/genproto/console/v1;con
 import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 import "shared/v1/common.proto";
 import "shared/v1/leaderboard.proto";
 
@@ -68,68 +68,68 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // LeaderboardsService 是排行榜 console 面：board 配置 CRUD、期 top、按
 // subject 查条目、删条目（作弊处理——只有未封榜期可删，封榜即终局）。
 service LeaderboardsService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_PERMISSION };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_PERMISSION };
 
   rpc CreateLeaderboardBoard(CreateLeaderboardBoardRequest) returns (shared.v1.LeaderboardBoard) {
     option (google.api.http) = { post: "/v1/console/leaderboards/boards", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner"]
     };
   }
   rpc ListLeaderboardBoards(ListLeaderboardBoardsRequest) returns (ListLeaderboardBoardsResponse) {
     option (google.api.http) = { get: "/v1/console/leaderboards/boards" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
   }
   rpc GetLeaderboardBoard(GetLeaderboardBoardRequest) returns (shared.v1.LeaderboardBoard) {
     option (google.api.http) = { get: "/v1/console/leaderboards/boards/{board_id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
   }
   rpc UpdateLeaderboardBoard(UpdateLeaderboardBoardRequest) returns (shared.v1.LeaderboardBoard) {
     option (google.api.http) = { patch: "/v1/console/leaderboards/boards/{board_id}", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner"]
     };
   }
   rpc DeleteLeaderboardBoard(DeleteLeaderboardBoardRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/console/leaderboards/boards/{board_id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner"]
     };
   }
   rpc ListLeaderboardBoardPeriods(ListLeaderboardBoardPeriodsRequest) returns (ListLeaderboardBoardPeriodsResponse) {
     option (google.api.http) = { get: "/v1/console/leaderboards/boards/{board_id}/periods" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
   }
   rpc ListLeaderboardTop(ListLeaderboardTopRequest) returns (shared.v1.ListLeaderboardTopResponse) {
     option (google.api.http) = { get: "/v1/console/leaderboards/boards/{board_id}/top" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
   }
   rpc GetLeaderboardEntry(GetLeaderboardEntryRequest) returns (shared.v1.LeaderboardScoreSnapshot) {
     option (google.api.http) = { get: "/v1/console/leaderboards/boards/{board_id}/entries/{subject_id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
   }
   rpc DeleteLeaderboardEntry(DeleteLeaderboardEntryRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/console/leaderboards/boards/{board_id}/entries/{subject_id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner"]
     };
   }
@@ -137,29 +137,29 @@ service LeaderboardsService {
   // —— Phase 2：结榜发奖（settled 拒绝 void/rerun；作弊处理窗口 = 宽限期）——
   rpc GetLeaderboardSettlement(GetLeaderboardSettlementRequest) returns (GetLeaderboardSettlementResponse) {
     option (google.api.http) = { get: "/v1/console/leaderboards/boards/{board_id}/settlements/{period}" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
   }
   rpc ListLeaderboardSettlements(ListLeaderboardSettlementsRequest) returns (ListLeaderboardSettlementsResponse) {
     option (google.api.http) = { get: "/v1/console/leaderboards/boards/{board_id}/settlements" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
   }
   rpc VoidLeaderboardSettlement(VoidLeaderboardSettlementRequest) returns (LeaderboardSettlementAck) {
     option (google.api.http) = { post: "/v1/console/leaderboards/boards/{board_id}/settlements/{period}:void" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner"]
     };
   }
   rpc RerunLeaderboardSettlement(RerunLeaderboardSettlementRequest) returns (LeaderboardSettlementAck) {
     option (google.api.http) = { post: "/v1/console/leaderboards/boards/{board_id}/settlements/{period}:rerun" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner"]
     };
   }

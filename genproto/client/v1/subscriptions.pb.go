@@ -9,6 +9,7 @@ package clientv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -777,7 +778,7 @@ var File_client_v1_subscriptions_proto protoreflect.FileDescriptor
 
 const file_client_v1_subscriptions_proto_rawDesc = "" +
 	"\n" +
-	"\x1dclient/v1/subscriptions.proto\x12\x13torchwood.client.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"|\n" +
+	"\x1dclient/v1/subscriptions.proto\x12\x13torchwood.client.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"|\n" +
 	"\fBenefitGrant\x12\x1d\n" +
 	"\n" +
 	"asset_code\x18\x01 \x01(\tR\tassetCode\x12\x1a\n" +
@@ -849,7 +850,7 @@ const file_client_v1_subscriptions_proto_rawDesc = "" +
 	"\tListPlans\x12%.torchwood.client.v1.ListPlansRequest\x1a&.torchwood.client.v1.ListPlansResponse\"\x1f\x82\xd3\xe4\x93\x02\x19\x12\x17/v1/subscriptions/plans\x12x\n" +
 	"\tSubscribe\x12%.torchwood.client.v1.SubscribeRequest\x1a&.torchwood.client.v1.SubscribeResponse\"\x1c\x82\xd3\xe4\x93\x02\x16:\x01*\"\x11/v1/subscriptions\x12\x83\x01\n" +
 	"\x11GetMySubscription\x12-.torchwood.client.v1.GetMySubscriptionRequest\x1a!.torchwood.client.v1.Subscription\"\x1c\x82\xd3\xe4\x93\x02\x16\x12\x14/v1/subscriptions/me\x12\x86\x01\n" +
-	"\x06Cancel\x12\".torchwood.client.v1.CancelRequest\x1a!.torchwood.client.v1.Subscription\"5\x82\xd3\xe4\x93\x02/:\x01*\"*/v1/subscriptions/{subscription_id}:cancel\x1a\x06\x92\xb2\x19\x02\b\x02B\x95\x04\x92A\xd0\x03RR\n" +
+	"\x06Cancel\x12\".torchwood.client.v1.CancelRequest\x1a!.torchwood.client.v1.Subscription\"5\x82\xd3\xe4\x93\x02/:\x01*\"*/v1/subscriptions/{subscription_id}:cancel\x1a\x06\xf2\xc4\x19\x02\b\x02B\x95\x04\x92A\xd0\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xc9\x02\n" +

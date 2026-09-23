@@ -203,7 +203,7 @@ func (h *FunctionsHandler) authorize(r *http.Request) (*shared.Principal, error)
 		return nil, status.Error(codes.PermissionDenied, "end-user credentials cannot upload deployments")
 	}
 	if principal.ActorKind == shared.ActorKindAdmin &&
-		!principal.HasAnyRole(domainauth.RoleStrings(h.policies.AllowedAdminRoles(FunctionsServiceCreateDeployment))) {
+		!principal.HasAnyRole(h.policies.AllowedAdminRoles(FunctionsServiceCreateDeployment)) {
 		return nil, status.Error(codes.PermissionDenied, "admin role not permitted for deployment upload")
 	}
 	return principal, nil

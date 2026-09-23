@@ -18,18 +18,18 @@ import (
 )
 
 // 授权矩阵测试（机制重设计 Phase B）：数据源 = 真实 proto 的 PolicySet
-// （BuildMethodPolicies(authzFileDescriptors()...)），对全部方法按 access
+// （buildMethodPolicies()），对全部方法按 access
 // 级别裁剪凭证档，过真实 AuthInterceptor（stub validator 注入主体，无 DB
 // 依赖），断言实际放行/拒绝与独立推导函数 expectedDecision 全量一致——
 // 证明"执行器与期望一致消费同一策略"。评审裁决的语义锚点单列
 // （TestAuthzMatrix_SemanticAnchors），防止锚点被静默改宽。
 
 // matrixPolicySet 构造真实 proto 策略注册表（与 ProvideMethodPolicies 同源，
-// 但不经 AssertSemantic——语义断言另由 grpc_authz_test.go 承担，本文件专注
+// 含 AssertSemantic——语义断言另由 grpc_authz_test.go 独立覆盖，本文件专注
 // 执行行为与推导的一致性）。
 func matrixPolicySet(t *testing.T) *domainauth.PolicySet {
 	t.Helper()
-	set, err := BuildMethodPolicies(authzFileDescriptors()...)
+	set, err := buildMethodPolicies()
 	require.NoError(t, err)
 	return set
 }
@@ -205,7 +205,7 @@ func expectedDecision(p domainauth.MethodPolicy, cred matrixCredential) matrixDe
 		}
 	}
 	if cred.kind == matrixCredAdmin && len(p.AdminRoles) > 0 &&
-		!matrixHasAny(cred.roles, domainauth.RoleStrings(p.AdminRoles)) {
+		!matrixHasAny(cred.roles, p.AdminRoles) {
 		return matrixPermissionDenied
 	}
 	if len(p.Permissions) > 0 {
@@ -329,7 +329,7 @@ func matrixPermissionMiss(p domainauth.MethodPolicy) matrixCredential {
 func matrixMismatchScope(p domainauth.MethodPolicy, vocab *domainauth.ScopeVocabulary) string {
 	if p.Scope != nil {
 		for _, res := range vocab.Resources() {
-			if res == p.Scope.Resource {
+			if string(res) == p.Scope.Resource {
 				continue
 			}
 			for _, op := range []domainauth.ScopeOp{domainauth.ScopeRead, domainauth.ScopeWrite} {
@@ -473,8 +473,8 @@ func TestAuthzMatrix_SemanticAnchors(t *testing.T) {
 		method := "/torchwood.server.v1.UsersService/" + name
 		p := anchor(method)
 		require.Equal(t, domainauth.AccessServer, p.Access, "%s", method)
-		require.Equal(t, &domainauth.ScopeRule{Resource: domainauth.ScopeUsers, Op: domainauth.ScopeWrite}, p.Scope, "%s", method)
-		require.ElementsMatch(t, []domainauth.AdminRole{domainauth.AdminRoleMember, domainauth.AdminRoleAdmin, domainauth.AdminRoleOwner}, p.AdminRoles, "%s", method)
+		require.Equal(t, &domainauth.ScopeRule{Resource: string(domainauth.ScopeUsers), Op: domainauth.ScopeWrite}, p.Scope, "%s", method)
+		require.ElementsMatch(t, []string{string(domainauth.AdminRoleMember), string(domainauth.AdminRoleAdmin), string(domainauth.AdminRoleOwner)}, p.AdminRoles, "%s", method)
 	}
 
 	// 平台专属面（PERMISSION，无 key 通道）：项目建删 + API key 管理。
@@ -505,7 +505,7 @@ func TestAuthzMatrix_SemanticAnchors(t *testing.T) {
 	tier, err := domainauth.ClassifyTier(p)
 	require.NoError(t, err)
 	require.Equal(t, domainauth.TierBusinessWrite, tier, "UpdateProject")
-	require.Equal(t, &domainauth.ScopeRule{Resource: domainauth.ScopeProjects, Op: domainauth.ScopeWrite}, p.Scope, "UpdateProject")
+	require.Equal(t, &domainauth.ScopeRule{Resource: string(domainauth.ScopeProjects), Op: domainauth.ScopeWrite}, p.Scope, "UpdateProject")
 
 	// databases DDL 12 方法 = delegated_platform 档。
 	for _, name := range []string{

@@ -7,7 +7,7 @@ option go_package = "github.com/torchwoodcloud/torchwood/genproto/server/v1;serv
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
@@ -64,12 +64,12 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service OAuthProvidersService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   rpc ListOAuthProviders(shared.v1.ListRequest) returns (ListOAuthProvidersResponse) {
     option (google.api.http) = { get: "/v1/server/oauth-providers" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_OAUTH_PROVIDERS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "oauthproviders", op: SCOPE_OP_READ }
     };
   }
 
@@ -78,17 +78,17 @@ service OAuthProvidersService {
       put: "/v1/server/oauth-providers/{provider}"
       body: "*"
     };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_OAUTH_PROVIDERS, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "oauthproviders", op: SCOPE_OP_WRITE }
     };
   }
 
   rpc DeleteOAuthProvider(DeleteOAuthProviderRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/oauth-providers/{provider}" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_OAUTH_PROVIDERS, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "oauthproviders", op: SCOPE_OP_WRITE }
     };
   }
 }

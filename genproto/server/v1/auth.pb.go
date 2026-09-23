@@ -9,7 +9,7 @@ package serverv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	_ "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -331,7 +331,7 @@ var File_server_v1_auth_proto protoreflect.FileDescriptor
 
 const file_server_v1_auth_proto_rawDesc = "" +
 	"\n" +
-	"\x14server/v1/auth.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x1bbuf/validate/validate.proto\x1a\x15shared/v1/authz.proto\"{\n" +
+	"\x14server/v1/auth.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x1bbuf/validate/validate.proto\x1a\x16grpcapi/v1/authz.proto\"{\n" +
 	"\x12VerifyTokenRequest\x12\x1c\n" +
 	"\x05token\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05token\x12G\n" +
 	"\x04type\x18\x02 \x01(\x0e2).torchwood.server.v1.VerifyCredentialTypeB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04type\"\xfb\x02\n" +
@@ -360,9 +360,10 @@ const file_server_v1_auth_proto_rawDesc = "" +
 	"\"VERIFY_CREDENTIAL_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bVERIFY_CREDENTIAL_TYPE_AUTO\x10\x01\x12 \n" +
 	"\x1cVERIFY_CREDENTIAL_TYPE_TOKEN\x10\x02\x12\"\n" +
-	"\x1eVERIFY_CREDENTIAL_TYPE_API_KEY\x10\x032\xac\x01\n" +
-	"\vAuthService\x12\x94\x01\n" +
-	"\vVerifyToken\x12'.torchwood.server.v1.VerifyTokenRequest\x1a(.torchwood.server.v1.VerifyTokenResponse\"2\x8a\xb2\x19\x06\"\x04\b\x02\x10\x01\x82\xd3\xe4\x93\x02\":\x01*\"\x1d/v1/server/auth/tokens:verify\x1a\x06\x92\xb2\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
+	"\x1eVERIFY_CREDENTIAL_TYPE_API_KEY\x10\x032\xb1\x01\n" +
+	"\vAuthService\x12\x99\x01\n" +
+	"\vVerifyToken\x12'.torchwood.server.v1.VerifyTokenRequest\x1a(.torchwood.server.v1.VerifyTokenResponse\"7\xea\xc4\x19\v\"\t\n" +
+	"\x05users\x10\x01\x82\xd3\xe4\x93\x02\":\x01*\"\x1d/v1/server/auth/tokens:verify\x1a\x06\xf2\xc4\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

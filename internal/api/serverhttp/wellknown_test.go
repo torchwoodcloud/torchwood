@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/lynx-go/grpcapi/authz"
+	grpcapiv1 "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	"github.com/stretchr/testify/require"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
@@ -31,10 +33,10 @@ func wellKnownTestPolicies() *auth.PolicySet {
 		}
 		pols = append(pols, auth.MethodPolicy{
 			Method: databasesServiceFullName + v.RPC, Service: databasesServiceFullName,
-			Access: auth.AccessServer, Scope: &auth.ScopeRule{Resource: auth.ScopeDatabases, Op: op},
+			Access: auth.AccessServer, Scope: &auth.ScopeRule{Resource: string(auth.ScopeDatabases), Op: op},
 		})
 	}
-	set, err := auth.NewPolicySet(pols)
+	set, err := authz.NewPolicySet(pols...)
 	if err != nil {
 		panic(err)
 	}
@@ -178,11 +180,12 @@ func TestWellKnownResourcesSync(t *testing.T) {
 		// scope 与 proto 注解（单一事实源）逐动词锁定——注解漂移即红。
 		md := serviceDesc.Methods().ByName(protoreflect.Name(v.RPC))
 		require.NotNil(t, md, "动词 %s 不在 proto 服务里", v.RPC)
-		ma, _ := proto.GetExtension(md.Options(), sharedv1.E_MethodAuth).(*sharedv1.MethodAuth)
+		ma, _ := proto.GetExtension(md.Options(), grpcapiv1.E_MethodAuth).(*grpcapiv1.MethodAuth)
 		require.NotNil(t, ma, "动词 %s 缺 method_auth 注解", v.RPC)
 		sc := ma.GetApiKeyScope()
 		require.NotNil(t, sc, "动词 %s 缺 api_key_scope", v.RPC)
-		want := strings.ToLower(strings.TrimPrefix(sc.GetResource().String(), "SCOPE_RESOURCE_")) +
+		// grpcapi.v1 起 resource 为 string、op 仍为枚举（String() 带前缀）。
+		want := sc.GetResource() +
 			"." + strings.ToLower(strings.TrimPrefix(sc.GetOp().String(), "SCOPE_OP_"))
 		require.Equal(t, want, v.Scope, "动词 %s scope 与 proto 注解不一致", v.RPC)
 	}

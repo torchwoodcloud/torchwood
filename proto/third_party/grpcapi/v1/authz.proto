@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+// Package grpcapi.v1 定义 authz 策略注解扩展：proto 是策略唯一声明源，
+// 运行时由 github.com/lynx-go/grpcapi/authz.Build 收集为 PolicySet 并做
+// fail-closed 断言（缺注解、词表外的资源、语义违例均启动失败）。
+//
+// 字段号 52301/52302 刻意避开 torchwood 历史号段（52001/52002）：
+// 扩展字段号在 wire 层没有 package 命名空间，同号不同型的两套扩展
+// 并存于一个二进制时 GetExtension 会静默跳过，注解丢失无任何报错。
+package grpcapi.v1;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/lynx-go/grpcapi/genproto/grpcapi/v1;grpcapiv1";
+
+// AccessLevel 是凭证族维度的访问档位（值域稳定，由库持有）。
+enum AccessLevel {
+  // 未声明。收集器视缺失注解/缺省值为启动错误（fail-closed）。
+  ACCESS_LEVEL_UNSPECIFIED = 0;
+  // 无凭证可调用；携带无效凭证时的处理由项目 auth 拦截器决定。
+  ACCESS_LEVEL_PUBLIC = 1;
+  // 终端用户凭证（JWT/session）。
+  ACCESS_LEVEL_END_USER = 2;
+  // 服务面：admin 会话与 scoped API key（api_key_scope 把关）。
+  ACCESS_LEVEL_SERVER = 3;
+  // 角色权限面（permissions 把关；API key 凭证一律拒绝）。
+  ACCESS_LEVEL_PERMISSION = 4;
+  // 保留：v1 禁用，收集器对使用该档位的方法启动报错。
+  ACCESS_LEVEL_SYSTEM = 5;
+}
+
+// ScopeOp 是 API key scope 的权限方向（值域稳定，由库持有）。
+enum ScopeOp {
+  SCOPE_OP_UNSPECIFIED = 0;
+  SCOPE_OP_READ = 1;
+  SCOPE_OP_WRITE = 2;
+  SCOPE_OP_ADMIN = 3;
+}
+
+// APIKeyScope 声明 SERVER 面方法对 API key 凭证开放的 scope 门。
+// resource 的词表主权在项目：值为项目注册的 Vocabulary 中的字符串
+// （建议以项目 domain 持久化形态为基准），收集期做 fail-closed 校验。
+message APIKeyScope {
+  string resource = 1;
+  ScopeOp op = 2;
+}
+
+// MethodAuth 是方法级 authz 策略；缺省回落 service_auth.default_access。
+message MethodAuth {
+  AccessLevel access = 1;
+  // PERMISSION 面的角色权限门（值域主权在项目）。
+  repeated string permissions = 2;
+  // SERVER 面的 admin 会话角色门（值域主权在项目）。
+  repeated string admin_roles = 3;
+  // SERVER 面的 API key scope 门；缺省 = 该方法不对 key 开放。
+  APIKeyScope api_key_scope = 4;
+}
+
+// ServiceAuth 是服务级缺省档位。
+message ServiceAuth {
+  AccessLevel default_access = 1;
+}
+
+extend google.protobuf.MethodOptions {
+  MethodAuth method_auth = 52301;
+}
+
+extend google.protobuf.ServiceOptions {
+  ServiceAuth service_auth = 52302;
+}

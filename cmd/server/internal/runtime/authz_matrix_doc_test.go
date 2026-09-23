@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lynx-go/grpcapi/authz"
 	"github.com/stretchr/testify/require"
-	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
 
 // TestAuthzMatrixDoc_NoDrift CI 锁：重新渲染的授权矩阵文档必须与磁盘上的
@@ -15,7 +15,7 @@ import (
 func TestAuthzMatrixDoc_NoDrift(t *testing.T) {
 	t.Parallel()
 
-	set, err := BuildMethodPolicies(authzFileDescriptors()...)
+	set, err := buildMethodPolicies()
 	require.NoError(t, err)
 
 	rendered, err := RenderAuthzMatrix(set)
@@ -36,7 +36,7 @@ func TestAuthzMatrixDoc_RenderRejectsEmpty(t *testing.T) {
 	_, err := RenderAuthzMatrix(nil)
 	require.Error(t, err)
 
-	empty, err := domainauth.NewPolicySet(nil)
+	empty, err := authz.NewPolicySet()
 	require.NoError(t, err)
 	_, err = RenderAuthzMatrix(empty)
 	require.Error(t, err)

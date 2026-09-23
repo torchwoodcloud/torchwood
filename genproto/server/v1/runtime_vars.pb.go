@@ -9,6 +9,7 @@ package serverv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -1506,7 +1507,7 @@ var File_server_v1_runtime_vars_proto protoreflect.FileDescriptor
 
 const file_server_v1_runtime_vars_proto_rawDesc = "" +
 	"\n" +
-	"\x1cserver/v1/runtime_vars.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xc8\x01\n" +
+	"\x1cserver/v1/runtime_vars.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xc8\x01\n" +
 	"\x13CreateVarSetRequest\x12>\n" +
 	"\n" +
 	"var_set_id\x18\x01 \x01(\tB \xbaH\x1d\xc8\x01\x01r\x18\x10\x01\x18(2\x12^[a-z_][a-z0-9_]*$R\bvarSetId\x12E\n" +
@@ -1644,28 +1645,34 @@ const file_server_v1_runtime_vars_proto_rawDesc = "" +
 	"!RUNTIME_VAR_VERSION_ACTION_CREATE\x10\x01\x12%\n" +
 	"!RUNTIME_VAR_VERSION_ACTION_UPDATE\x10\x02\x12%\n" +
 	"!RUNTIME_VAR_VERSION_ACTION_DELETE\x10\x03\x12'\n" +
-	"#RUNTIME_VAR_VERSION_ACTION_ROLLBACK\x10\x042\xad\x11\n" +
-	"\x12RuntimeVarsService\x12\x8b\x01\n" +
-	"\fCreateVarSet\x12(.torchwood.server.v1.CreateVarSetRequest\x1a\x1b.torchwood.server.v1.VarSet\"4\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\x11\x10\x02\x82\xd3\xe4\x93\x02 :\x01*\"\x1b/v1/server/runtime-var-sets\x12\x88\x01\n" +
-	"\vListVarSets\x12 .torchwood.shared.v1.ListRequest\x1a(.torchwood.server.v1.ListVarSetsResponse\"-\x8a\xb2\x19\x06\"\x04\b\x11\x10\x01\x82\xd3\xe4\x93\x02\x1d\x12\x1b/v1/server/runtime-var-sets\x12\x8b\x01\n" +
-	"\tGetVarSet\x12%.torchwood.server.v1.GetVarSetRequest\x1a\x1b.torchwood.server.v1.VarSet\":\x8a\xb2\x19\x06\"\x04\b\x11\x10\x01\x82\xd3\xe4\x93\x02*\x12(/v1/server/runtime-var-sets/{var_set_id}\x12\x98\x01\n" +
-	"\fUpdateVarSet\x12(.torchwood.server.v1.UpdateVarSetRequest\x1a\x1b.torchwood.server.v1.VarSet\"A\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\x11\x10\x02\x82\xd3\xe4\x93\x02-:\x01*2(/v1/server/runtime-var-sets/{var_set_id}\x12\x94\x01\n" +
-	"\fDeleteVarSet\x12(.torchwood.server.v1.DeleteVarSetRequest\x1a\x1a.torchwood.shared.v1.Empty\">\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\x11\x10\x02\x82\xd3\xe4\x93\x02**(/v1/server/runtime-var-sets/{var_set_id}\x12\xa9\x01\n" +
-	"\x10CreateRuntimeVar\x12,.torchwood.server.v1.CreateRuntimeVarRequest\x1a\x1f.torchwood.server.v1.RuntimeVar\"F\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\x11\x10\x02\x82\xd3\xe4\x93\x022:\x01*\"-/v1/server/runtime-var-sets/{var_set_id}/vars\x12\xad\x01\n" +
-	"\x0fListRuntimeVars\x12+.torchwood.server.v1.ListRuntimeVarsRequest\x1a,.torchwood.server.v1.ListRuntimeVarsResponse\"?\x8a\xb2\x19\x06\"\x04\b\x11\x10\x01\x82\xd3\xe4\x93\x02/\x12-/v1/server/runtime-var-sets/{var_set_id}/vars\x12\xa2\x01\n" +
-	"\rGetRuntimeVar\x12).torchwood.server.v1.GetRuntimeVarRequest\x1a\x1f.torchwood.server.v1.RuntimeVar\"E\x8a\xb2\x19\x06\"\x04\b\x11\x10\x01\x82\xd3\xe4\x93\x025\x123/v1/server/runtime-var-sets/{var_set_id}/vars/{key}\x12\xaf\x01\n" +
-	"\x10UpdateRuntimeVar\x12,.torchwood.server.v1.UpdateRuntimeVarRequest\x1a\x1f.torchwood.server.v1.RuntimeVar\"L\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\x11\x10\x02\x82\xd3\xe4\x93\x028:\x01*23/v1/server/runtime-var-sets/{var_set_id}/vars/{key}\x12\xa7\x01\n" +
-	"\x10DeleteRuntimeVar\x12,.torchwood.server.v1.DeleteRuntimeVarRequest\x1a\x1a.torchwood.shared.v1.Empty\"I\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\x11\x10\x02\x82\xd3\xe4\x93\x025*3/v1/server/runtime-var-sets/{var_set_id}/vars/{key}\x12\xc6\x01\n" +
-	"\x16ListRuntimeVarVersions\x122.torchwood.server.v1.ListRuntimeVarVersionsRequest\x1a3.torchwood.server.v1.ListRuntimeVarVersionsResponse\"C\x8a\xb2\x19\x06\"\x04\b\x11\x10\x01\x82\xd3\xe4\x93\x023\x121/v1/server/runtime-var-sets/{var_set_id}/versions\x12\xcb\x01\n" +
-	"\x14GetRuntimeVarVersion\x120.torchwood.server.v1.GetRuntimeVarVersionRequest\x1a1.torchwood.server.v1.GetRuntimeVarVersionResponse\"N\x8a\xb2\x19\x06\"\x04\b\x11\x10\x01\x82\xd3\xe4\x93\x02>\x12</v1/server/runtime-var-sets/{var_set_id}/versions/{revision}\x12\xc1\x01\n" +
-	"\x12RollbackRuntimeVar\x12..torchwood.server.v1.RollbackRuntimeVarRequest\x1a&.torchwood.server.v1.RuntimeVarVersion\"S\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\x11\x10\x02\x82\xd3\xe4\x93\x02?:\x01*\":/v1/server/runtime-var-sets/{var_set_id}/versions:rollback\x1a\x06\x92\xb2\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
+	"#RUNTIME_VAR_VERSION_ACTION_ROLLBACK\x10\x042\x8f\x13\n" +
+	"\x12RuntimeVarsService\x12\xa1\x01\n" +
+	"\fCreateVarSet\x12(.torchwood.server.v1.CreateVarSetRequest\x1a\x1b.torchwood.server.v1.VarSet\"J\xea\xc4\x19 \x1a\x05admin\x1a\x05owner\"\x10\n" +
+	"\fruntime_vars\x10\x02\x82\xd3\xe4\x93\x02 :\x01*\"\x1b/v1/server/runtime-var-sets\x12\x94\x01\n" +
+	"\vListVarSets\x12 .torchwood.shared.v1.ListRequest\x1a(.torchwood.server.v1.ListVarSetsResponse\"9\xea\xc4\x19\x12\"\x10\n" +
+	"\fruntime_vars\x10\x01\x82\xd3\xe4\x93\x02\x1d\x12\x1b/v1/server/runtime-var-sets\x12\x97\x01\n" +
+	"\tGetVarSet\x12%.torchwood.server.v1.GetVarSetRequest\x1a\x1b.torchwood.server.v1.VarSet\"F\xea\xc4\x19\x12\"\x10\n" +
+	"\fruntime_vars\x10\x01\x82\xd3\xe4\x93\x02*\x12(/v1/server/runtime-var-sets/{var_set_id}\x12\xae\x01\n" +
+	"\fUpdateVarSet\x12(.torchwood.server.v1.UpdateVarSetRequest\x1a\x1b.torchwood.server.v1.VarSet\"W\xea\xc4\x19 \x1a\x05admin\x1a\x05owner\"\x10\n" +
+	"\fruntime_vars\x10\x02\x82\xd3\xe4\x93\x02-:\x01*2(/v1/server/runtime-var-sets/{var_set_id}\x12\xaa\x01\n" +
+	"\fDeleteVarSet\x12(.torchwood.server.v1.DeleteVarSetRequest\x1a\x1a.torchwood.shared.v1.Empty\"T\xea\xc4\x19 \x1a\x05admin\x1a\x05owner\"\x10\n" +
+	"\fruntime_vars\x10\x02\x82\xd3\xe4\x93\x02**(/v1/server/runtime-var-sets/{var_set_id}\x12\xbf\x01\n" +
+	"\x10CreateRuntimeVar\x12,.torchwood.server.v1.CreateRuntimeVarRequest\x1a\x1f.torchwood.server.v1.RuntimeVar\"\\\xea\xc4\x19 \x1a\x05admin\x1a\x05owner\"\x10\n" +
+	"\fruntime_vars\x10\x02\x82\xd3\xe4\x93\x022:\x01*\"-/v1/server/runtime-var-sets/{var_set_id}/vars\x12\xb9\x01\n" +
+	"\x0fListRuntimeVars\x12+.torchwood.server.v1.ListRuntimeVarsRequest\x1a,.torchwood.server.v1.ListRuntimeVarsResponse\"K\xea\xc4\x19\x12\"\x10\n" +
+	"\fruntime_vars\x10\x01\x82\xd3\xe4\x93\x02/\x12-/v1/server/runtime-var-sets/{var_set_id}/vars\x12\xae\x01\n" +
+	"\rGetRuntimeVar\x12).torchwood.server.v1.GetRuntimeVarRequest\x1a\x1f.torchwood.server.v1.RuntimeVar\"Q\xea\xc4\x19\x12\"\x10\n" +
+	"\fruntime_vars\x10\x01\x82\xd3\xe4\x93\x025\x123/v1/server/runtime-var-sets/{var_set_id}/vars/{key}\x12\xc5\x01\n" +
+	"\x10UpdateRuntimeVar\x12,.torchwood.server.v1.UpdateRuntimeVarRequest\x1a\x1f.torchwood.server.v1.RuntimeVar\"b\xea\xc4\x19 \x1a\x05admin\x1a\x05owner\"\x10\n" +
+	"\fruntime_vars\x10\x02\x82\xd3\xe4\x93\x028:\x01*23/v1/server/runtime-var-sets/{var_set_id}/vars/{key}\x12\xbd\x01\n" +
+	"\x10DeleteRuntimeVar\x12,.torchwood.server.v1.DeleteRuntimeVarRequest\x1a\x1a.torchwood.shared.v1.Empty\"_\xea\xc4\x19 \x1a\x05admin\x1a\x05owner\"\x10\n" +
+	"\fruntime_vars\x10\x02\x82\xd3\xe4\x93\x025*3/v1/server/runtime-var-sets/{var_set_id}/vars/{key}\x12\xd2\x01\n" +
+	"\x16ListRuntimeVarVersions\x122.torchwood.server.v1.ListRuntimeVarVersionsRequest\x1a3.torchwood.server.v1.ListRuntimeVarVersionsResponse\"O\xea\xc4\x19\x12\"\x10\n" +
+	"\fruntime_vars\x10\x01\x82\xd3\xe4\x93\x023\x121/v1/server/runtime-var-sets/{var_set_id}/versions\x12\xd7\x01\n" +
+	"\x14GetRuntimeVarVersion\x120.torchwood.server.v1.GetRuntimeVarVersionRequest\x1a1.torchwood.server.v1.GetRuntimeVarVersionResponse\"Z\xea\xc4\x19\x12\"\x10\n" +
+	"\fruntime_vars\x10\x01\x82\xd3\xe4\x93\x02>\x12</v1/server/runtime-var-sets/{var_set_id}/versions/{revision}\x12\xd7\x01\n" +
+	"\x12RollbackRuntimeVar\x12..torchwood.server.v1.RollbackRuntimeVarRequest\x1a&.torchwood.server.v1.RuntimeVarVersion\"i\xea\xc4\x19 \x1a\x05admin\x1a\x05owner\"\x10\n" +
+	"\fruntime_vars\x10\x02\x82\xd3\xe4\x93\x02?:\x01*\":/v1/server/runtime-var-sets/{var_set_id}/versions:rollback\x1a\x06\xf2\xc4\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

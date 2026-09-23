@@ -50,7 +50,7 @@ func (a *httpAuth) authorize(r *http.Request, apiKeyScope func(*http.Request) st
 		return nil, err
 	}
 	if principal.CredentialType == shared.CredentialTypeAPIKey || principal.CredentialType == shared.CredentialTypeExecution {
-		if !a.policies.AllowsAPIKeyTargets(apiKeyScope(r), principal.Permissions, targets) {
+		if !domainauth.AllowsAPIKeyTargets(a.policies, apiKeyScope(r), principal.Permissions, targets) {
 			return nil, status.Error(codes.PermissionDenied, "api key missing required scope")
 		}
 	}

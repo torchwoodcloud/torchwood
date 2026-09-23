@@ -9,7 +9,7 @@ import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 import "shared/v1/common.proto";
 import "shared/v1/document.proto";
 import "shared/v1/query.proto";
@@ -68,81 +68,81 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service DatabasesService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   rpc CreateDatabase(CreateDatabaseRequest) returns (Database) {
     option (google.api.http) = { post: "/v1/server/databases", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
   rpc ListDatabases(shared.v1.ListRequest) returns (ListDatabasesResponse) {
     option (google.api.http) = { get: "/v1/server/databases" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "databases", op: SCOPE_OP_READ }
     };
   }
 
   rpc GetDatabase(GetDatabaseRequest) returns (Database) {
     option (google.api.http) = { get: "/v1/server/databases/{id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "databases", op: SCOPE_OP_READ }
     };
   }
 
   rpc DeleteDatabase(GetDatabaseRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/databases/{id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
   rpc CreateCollection(CreateCollectionRequest) returns (Collection) {
     option (google.api.http) = { post: "/v1/server/databases/{database_id}/collections", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
   rpc ListCollections(ListCollectionsRequest) returns (ListCollectionsResponse) {
     option (google.api.http) = { get: "/v1/server/databases/{database_id}/collections" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "databases", op: SCOPE_OP_READ }
     };
   }
 
   rpc GetCollection(GetCollectionRequest) returns (Collection) {
     option (google.api.http) = { get: "/v1/server/databases/{database_id}/collections/{collection_id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "databases", op: SCOPE_OP_READ }
     };
   }
 
   rpc DeleteCollection(GetCollectionRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/databases/{database_id}/collections/{collection_id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
   rpc UpdateCollection(UpdateCollectionRequest) returns (Collection) {
     option (google.api.http) = { patch: "/v1/server/databases/{database_id}/collections/{collection_id}", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
   rpc CreateAttribute(CreateAttributeRequest) returns (Attribute) {
     option (google.api.http) = { post: "/v1/server/databases/{database_id}/collections/{collection_id}/attributes", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
@@ -150,9 +150,9 @@ service DatabasesService {
   // deprecated——读屏蔽写拒收，可经 RestoreAttribute 回滚。
   rpc DeleteAttribute(DeleteAttributeRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/databases/{database_id}/collections/{collection_id}/attributes/{key}" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
@@ -160,9 +160,9 @@ service DatabasesService {
   // 迁移（删除新列）并恢复 active。
   rpc RestoreAttribute(RestoreAttributeRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { post: "/v1/server/databases/{database_id}/collections/{collection_id}/attributes/{key}:restore", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
@@ -170,9 +170,9 @@ service DatabasesService {
   // 或 copy 迁移 swap 后的旧列残留物理删除。
   rpc RetireAttribute(RetireAttributeRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { post: "/v1/server/databases/{database_id}/collections/{collection_id}/attributes/{key}:retire", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
@@ -182,25 +182,25 @@ service DatabasesService {
   // optional）即时 ALTER。响应为迁移任务读回（物理列名不出 API 契约）。
   rpc MigrateAttribute(MigrateAttributeRequest) returns (AttributeMigration) {
     option (google.api.http) = { post: "/v1/server/databases/{database_id}/collections/{collection_id}/attributes/{key}:migrate", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
   rpc CreateIndex(CreateIndexRequest) returns (Index) {
     option (google.api.http) = { post: "/v1/server/databases/{database_id}/collections/{collection_id}/indexes", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
   rpc DeleteIndex(DeleteIndexRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/databases/{database_id}/collections/{collection_id}/indexes/{index_id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
@@ -209,9 +209,9 @@ service DatabasesService {
     // 自定义方法说明：documents:count / documents:bulkUpdate /
     // documents:bulkDelete 为自定义方法段（REST 自定义动词），不再占用
     // document_id 命名空间；document_id 可自由取任意合法值。
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_MEMBER, ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["member", "admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
@@ -223,39 +223,39 @@ service DatabasesService {
         body: "query"
       }
     };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "databases", op: SCOPE_OP_READ }
     };
   }
 
   rpc GetDocument(GetDocumentRequest) returns (shared.v1.Document) {
     option (google.api.http) = { get: "/v1/server/databases/{database_id}/collections/{collection_id}/documents/{document_id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "databases", op: SCOPE_OP_READ }
     };
   }
 
   rpc UpdateDocument(UpdateDocumentRequest) returns (shared.v1.Document) {
     option (google.api.http) = { patch: "/v1/server/databases/{database_id}/collections/{collection_id}/documents/{document_id}", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_MEMBER, ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["member", "admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
   rpc UpsertDocument(UpsertDocumentRequest) returns (shared.v1.Document) {
     option (google.api.http) = { put: "/v1/server/databases/{database_id}/collections/{collection_id}/documents/{document_id}", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_MEMBER, ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["member", "admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
   rpc DeleteDocument(DeleteDocumentRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/databases/{database_id}/collections/{collection_id}/documents/{document_id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_MEMBER, ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["member", "admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
@@ -267,8 +267,8 @@ service DatabasesService {
         body: "*"
       }
     };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "databases", op: SCOPE_OP_READ }
     };
   }
 
@@ -279,24 +279,24 @@ service DatabasesService {
   // 排序/分页算子无意义（整集聚合）。
   rpc AggregateDocuments(AggregateDocumentsRequest) returns (AggregateDocumentsResponse) {
     option (google.api.http) = { post: "/v1/server/databases/{database_id}/collections/{collection_id}/documents:aggregate", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "databases", op: SCOPE_OP_READ }
     };
   }
 
   rpc BulkUpdateDocuments(BulkUpdateDocumentsRequest) returns (BulkDocumentsResponse) {
     option (google.api.http) = { patch: "/v1/server/databases/{database_id}/collections/{collection_id}/documents:bulkUpdate", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_MEMBER, ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["member", "admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
   rpc BulkDeleteDocuments(BulkDeleteDocumentsRequest) returns (BulkDocumentsResponse) {
     option (google.api.http) = { post: "/v1/server/databases/{database_id}/collections/{collection_id}/documents:bulkDelete", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_MEMBER, ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["member", "admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
@@ -306,9 +306,9 @@ service DatabasesService {
   // 已成功不回滚，返回 per-op 结果。
   rpc ExecuteTransactions(ExecuteTransactionsRequest) returns (ExecuteTransactionsResponse) {
     option (google.api.http) = { post: "/v1/server/databases/{database_id}/documents:execute-tx", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_MEMBER, ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["member", "admin", "owner"]
+      api_key_scope: { resource: "databases", op: SCOPE_OP_WRITE }
     };
   }
 
@@ -320,8 +320,8 @@ service DatabasesService {
   //（published 行 24h 清理 >> 承诺窗）。
   rpc ListChanges(ListChangesRequest) returns (ListChangesResponse) {
     option (google.api.http) = { get: "/v1/server/databases/{database_id}/collections/{collection_id}/changes" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "databases", op: SCOPE_OP_READ }
     };
   }
 
@@ -334,8 +334,8 @@ service DatabasesService {
   // jsonschema）。
   rpc ExportCollectionSchema(ExportCollectionSchemaRequest) returns (ExportCollectionSchemaResponse) {
     option (google.api.http) = { get: "/v1/server/databases/{database_id}/collections/{collection_id}:exportSchema" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_DATABASES, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "databases", op: SCOPE_OP_READ }
     };
   }
 }

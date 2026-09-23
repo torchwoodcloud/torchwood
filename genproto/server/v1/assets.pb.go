@@ -9,6 +9,7 @@ package serverv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -1858,7 +1859,7 @@ var File_server_v1_assets_proto protoreflect.FileDescriptor
 
 const file_server_v1_assets_proto_rawDesc = "" +
 	"\n" +
-	"\x16server/v1/assets.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xaa\x04\n" +
+	"\x16server/v1/assets.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xaa\x04\n" +
 	"\bAssetDef\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -2046,28 +2047,50 @@ const file_server_v1_assets_proto_rawDesc = "" +
 	"sort_order\x18\x05 \x01(\x0e2\x1e.torchwood.shared.v1.SortOrderB\b\xbaH\x05\x82\x01\x02\x10\x01R\tsortOrder\"\x91\x01\n" +
 	"\x15ListDefAssetsResponse\x12=\n" +
 	"\bholdings\x18\x01 \x03(\v2!.torchwood.server.v1.AssetHoldingR\bholdings\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\x98\x10\n" +
-	"\rAssetsService\x12\x8d\x01\n" +
-	"\x0eCreateAssetDef\x12*.torchwood.server.v1.CreateAssetDefRequest\x1a\x1d.torchwood.server.v1.AssetDef\"0\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\t\x10\x02\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/v1/server/assets/defs\x12\x87\x01\n" +
-	"\rListAssetDefs\x12 .torchwood.shared.v1.ListRequest\x1a*.torchwood.server.v1.ListAssetDefsResponse\"(\x8a\xb2\x19\x06\"\x04\b\t\x10\x01\x82\xd3\xe4\x93\x02\x18\x12\x16/v1/server/assets/defs\x12\x88\x01\n" +
-	"\vGetAssetDef\x12'.torchwood.server.v1.GetAssetDefRequest\x1a\x1d.torchwood.server.v1.AssetDef\"1\x8a\xb2\x19\x06\"\x04\b\t\x10\x01\x82\xd3\xe4\x93\x02!\x12\x1f/v1/server/assets/defs/{def_id}\x12\x96\x01\n" +
-	"\x0eUpdateAssetDef\x12*.torchwood.server.v1.UpdateAssetDefRequest\x1a\x1d.torchwood.server.v1.AssetDef\"9\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\t\x10\x02\x82\xd3\xe4\x93\x02$:\x01*2\x1f/v1/server/assets/defs/{def_id}\x12\x90\x01\n" +
-	"\x0eDeleteAssetDef\x12*.torchwood.server.v1.DeleteAssetDefRequest\x1a\x1a.torchwood.shared.v1.Empty\"6\x8a\xb2\x19\v\x1a\x03\x02\x03\x04\"\x04\b\t\x10\x02\x82\xd3\xe4\x93\x02!*\x1f/v1/server/assets/defs/{def_id}\x12\x82\x01\n" +
-	"\x05Grant\x12!.torchwood.server.v1.GrantRequest\x1a$.torchwood.server.v1.AssetOpResponse\"0\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\t\x10\x02\x82\xd3\xe4\x93\x02\x1c:\x01*\"\x17/v1/server/assets:grant\x12\x88\x01\n" +
-	"\aConsume\x12#.torchwood.server.v1.ConsumeRequest\x1a$.torchwood.server.v1.AssetOpResponse\"2\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\t\x10\x02\x82\xd3\xe4\x93\x02\x1e:\x01*\"\x19/v1/server/assets:consume\x12\x8b\x01\n" +
-	"\bTransfer\x12$.torchwood.server.v1.TransferRequest\x1a$.torchwood.server.v1.AssetOpResponse\"3\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\t\x10\x02\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/v1/server/assets:transfer\x12\x85\x01\n" +
-	"\x06Mutate\x12\".torchwood.server.v1.MutateRequest\x1a$.torchwood.server.v1.AssetOpResponse\"1\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\t\x10\x02\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/server/assets:mutate\x12\x85\x01\n" +
-	"\x06Expire\x12\".torchwood.server.v1.ExpireRequest\x1a$.torchwood.server.v1.AssetOpResponse\"1\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\t\x10\x02\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/server/assets:expire\x12\x90\x01\n" +
-	"\tReconcile\x12%.torchwood.server.v1.ReconcileRequest\x1a&.torchwood.server.v1.ReconcileResponse\"4\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\t\x10\x02\x82\xd3\xe4\x93\x02 :\x01*\"\x1b/v1/server/assets:reconcile\x12\x9f\x01\n" +
-	"\x0eListUserAssets\x12*.torchwood.server.v1.ListUserAssetsRequest\x1a+.torchwood.server.v1.ListUserAssetsResponse\"4\x8a\xb2\x19\x06\"\x04\b\t\x10\x01\x82\xd3\xe4\x93\x02$\x12\"/v1/server/assets/users/{owner_id}\x12\xa6\x01\n" +
-	"\x0eListUserLedger\x12*.torchwood.server.v1.ListUserLedgerRequest\x1a+.torchwood.server.v1.ListUserLedgerResponse\";\x8a\xb2\x19\x06\"\x04\b\t\x10\x01\x82\xd3\xe4\x93\x02+\x12)/v1/server/assets/users/{owner_id}/ledger\x12\xa1\x01\n" +
-	"\rListDefAssets\x12).torchwood.server.v1.ListDefAssetsRequest\x1a*.torchwood.server.v1.ListDefAssetsResponse\"9\x8a\xb2\x19\x06\"\x04\b\t\x10\x01\x82\xd3\xe4\x93\x02)\x12'/v1/server/assets/defs/{def_id}/holders\x1a\x06\x92\xb2\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xdb\x11\n" +
+	"\rAssetsService\x12\xa4\x01\n" +
+	"\x0eCreateAssetDef\x12*.torchwood.server.v1.CreateAssetDefRequest\x1a\x1d.torchwood.server.v1.AssetDef\"G\xea\xc4\x19\"\x1a\x06member\x1a\x05admin\x1a\x05owner\"\n" +
+	"\n" +
+	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/v1/server/assets/defs\x12\x8d\x01\n" +
+	"\rListAssetDefs\x12 .torchwood.shared.v1.ListRequest\x1a*.torchwood.server.v1.ListAssetDefsResponse\".\xea\xc4\x19\f\"\n" +
+	"\n" +
+	"\x06assets\x10\x01\x82\xd3\xe4\x93\x02\x18\x12\x16/v1/server/assets/defs\x12\x8e\x01\n" +
+	"\vGetAssetDef\x12'.torchwood.server.v1.GetAssetDefRequest\x1a\x1d.torchwood.server.v1.AssetDef\"7\xea\xc4\x19\f\"\n" +
+	"\n" +
+	"\x06assets\x10\x01\x82\xd3\xe4\x93\x02!\x12\x1f/v1/server/assets/defs/{def_id}\x12\xad\x01\n" +
+	"\x0eUpdateAssetDef\x12*.torchwood.server.v1.UpdateAssetDefRequest\x1a\x1d.torchwood.server.v1.AssetDef\"P\xea\xc4\x19\"\x1a\x06member\x1a\x05admin\x1a\x05owner\"\n" +
+	"\n" +
+	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02$:\x01*2\x1f/v1/server/assets/defs/{def_id}\x12\xa7\x01\n" +
+	"\x0eDeleteAssetDef\x12*.torchwood.server.v1.DeleteAssetDefRequest\x1a\x1a.torchwood.shared.v1.Empty\"M\xea\xc4\x19\"\x1a\x06member\x1a\x05admin\x1a\x05owner\"\n" +
+	"\n" +
+	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02!*\x1f/v1/server/assets/defs/{def_id}\x12\x92\x01\n" +
+	"\x05Grant\x12!.torchwood.server.v1.GrantRequest\x1a$.torchwood.server.v1.AssetOpResponse\"@\xea\xc4\x19\x1a\x1a\x05admin\x1a\x05owner\"\n" +
+	"\n" +
+	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02\x1c:\x01*\"\x17/v1/server/assets:grant\x12\x98\x01\n" +
+	"\aConsume\x12#.torchwood.server.v1.ConsumeRequest\x1a$.torchwood.server.v1.AssetOpResponse\"B\xea\xc4\x19\x1a\x1a\x05admin\x1a\x05owner\"\n" +
+	"\n" +
+	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02\x1e:\x01*\"\x19/v1/server/assets:consume\x12\x9b\x01\n" +
+	"\bTransfer\x12$.torchwood.server.v1.TransferRequest\x1a$.torchwood.server.v1.AssetOpResponse\"C\xea\xc4\x19\x1a\x1a\x05admin\x1a\x05owner\"\n" +
+	"\n" +
+	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/v1/server/assets:transfer\x12\x95\x01\n" +
+	"\x06Mutate\x12\".torchwood.server.v1.MutateRequest\x1a$.torchwood.server.v1.AssetOpResponse\"A\xea\xc4\x19\x1a\x1a\x05admin\x1a\x05owner\"\n" +
+	"\n" +
+	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/server/assets:mutate\x12\x95\x01\n" +
+	"\x06Expire\x12\".torchwood.server.v1.ExpireRequest\x1a$.torchwood.server.v1.AssetOpResponse\"A\xea\xc4\x19\x1a\x1a\x05admin\x1a\x05owner\"\n" +
+	"\n" +
+	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/server/assets:expire\x12\xa0\x01\n" +
+	"\tReconcile\x12%.torchwood.server.v1.ReconcileRequest\x1a&.torchwood.server.v1.ReconcileResponse\"D\xea\xc4\x19\x1a\x1a\x05admin\x1a\x05owner\"\n" +
+	"\n" +
+	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02 :\x01*\"\x1b/v1/server/assets:reconcile\x12\xa5\x01\n" +
+	"\x0eListUserAssets\x12*.torchwood.server.v1.ListUserAssetsRequest\x1a+.torchwood.server.v1.ListUserAssetsResponse\":\xea\xc4\x19\f\"\n" +
+	"\n" +
+	"\x06assets\x10\x01\x82\xd3\xe4\x93\x02$\x12\"/v1/server/assets/users/{owner_id}\x12\xac\x01\n" +
+	"\x0eListUserLedger\x12*.torchwood.server.v1.ListUserLedgerRequest\x1a+.torchwood.server.v1.ListUserLedgerResponse\"A\xea\xc4\x19\f\"\n" +
+	"\n" +
+	"\x06assets\x10\x01\x82\xd3\xe4\x93\x02+\x12)/v1/server/assets/users/{owner_id}/ledger\x12\xa7\x01\n" +
+	"\rListDefAssets\x12).torchwood.server.v1.ListDefAssetsRequest\x1a*.torchwood.server.v1.ListDefAssetsResponse\"?\xea\xc4\x19\f\"\n" +
+	"\n" +
+	"\x06assets\x10\x01\x82\xd3\xe4\x93\x02)\x12'/v1/server/assets/defs/{def_id}/holders\x1a\x06\xf2\xc4\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

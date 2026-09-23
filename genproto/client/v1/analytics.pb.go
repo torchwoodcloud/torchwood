@@ -9,7 +9,7 @@ package clientv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	_ "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -210,7 +210,7 @@ var File_client_v1_analytics_proto protoreflect.FileDescriptor
 
 const file_client_v1_analytics_proto_rawDesc = "" +
 	"\n" +
-	"\x19client/v1/analytics.proto\x12\x13torchwood.client.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\"\xe2\x02\n" +
+	"\x19client/v1/analytics.proto\x12\x13torchwood.client.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\"\xe2\x02\n" +
 	"\x0eAnalyticsEvent\x12=\n" +
 	"\x04name\x18\x01 \x01(\tB)\xbaH&r$\x10\x01\x18@2\x1e^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$R\x04name\x12@\n" +
 	"\voccurred_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\n" +
@@ -230,7 +230,7 @@ const file_client_v1_analytics_proto_rawDesc = "" +
 	"\baccepted\x18\x01 \x01(\x05R\baccepted\x12\x18\n" +
 	"\askipped\x18\x02 \x01(\x05R\askipped2\xa1\x01\n" +
 	"\x10AnalyticsService\x12\x84\x01\n" +
-	"\fIngestEvents\x12(.torchwood.client.v1.IngestEventsRequest\x1a).torchwood.client.v1.IngestEventsResponse\"\x1f\x82\xd3\xe4\x93\x02\x19:\x01*\"\x14/v1/analytics/events\x1a\x06\x92\xb2\x19\x02\b\x02B\x95\x04\x92A\xd0\x03RR\n" +
+	"\fIngestEvents\x12(.torchwood.client.v1.IngestEventsRequest\x1a).torchwood.client.v1.IngestEventsResponse\"\x1f\x82\xd3\xe4\x93\x02\x19:\x01*\"\x14/v1/analytics/events\x1a\x06\xf2\xc4\x19\x02\b\x02B\x95\x04\x92A\xd0\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xc9\x02\n" +

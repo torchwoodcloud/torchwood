@@ -7,7 +7,7 @@ option go_package = "github.com/torchwoodcloud/torchwood/genproto/client/v1;clie
 import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 import "shared/v1/leaderboard.proto";
 
 // 服务默认 access=authenticated：swagger 顶层声明 Bearer security
@@ -67,7 +67,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // 派生——client 面不存在"代他人提交"这回事（结构性保证，非运行时校验）；
 // board 未开 client_submit 时 PERMISSION_DENIED。
 service LeaderboardsService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_END_USER };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_END_USER };
 
   rpc SubmitLeaderboardScore(SubmitLeaderboardScoreRequest) returns (shared.v1.LeaderboardScoreSnapshot) {
     option (google.api.http) = { post: "/v1/leaderboards/{board_id}:submit", body: "*" };

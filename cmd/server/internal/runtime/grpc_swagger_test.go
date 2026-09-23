@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	grpcapiv1 "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	"github.com/stretchr/testify/require"
-	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/protobuf/proto"
@@ -24,17 +24,17 @@ func businessFileDescriptors() []protoreflect.FileDescriptor {
 	return authzFileDescriptors()
 }
 
-func accessLevelString(l sharedv1.AccessLevel) (string, bool) {
+func accessLevelString(l grpcapiv1.AccessLevel) (string, bool) {
 	switch l {
-	case sharedv1.AccessLevel_ACCESS_PUBLIC:
+	case grpcapiv1.AccessLevel_ACCESS_LEVEL_PUBLIC:
 		return "public", true
-	case sharedv1.AccessLevel_ACCESS_END_USER:
+	case grpcapiv1.AccessLevel_ACCESS_LEVEL_END_USER:
 		return "end_user", true
-	case sharedv1.AccessLevel_ACCESS_SERVER:
+	case grpcapiv1.AccessLevel_ACCESS_LEVEL_SERVER:
 		return "server", true
-	case sharedv1.AccessLevel_ACCESS_PERMISSION:
+	case grpcapiv1.AccessLevel_ACCESS_LEVEL_PERMISSION:
 		return "permission", true
-	case sharedv1.AccessLevel_ACCESS_SYSTEM:
+	case grpcapiv1.AccessLevel_ACCESS_LEVEL_SYSTEM:
 		return "system", true
 	}
 	return "", false
@@ -84,7 +84,7 @@ const errorResponseRef = "#/definitions/v1ErrorResponse"
 // 前提：仓库根执行过 mise run generate:proto（genproto 已入库，本测试直接可用）。
 func TestSwaggerAccessExtensionMatchesCollectMethodsByAccess(t *testing.T) {
 	descs := businessFileDescriptors()
-	policies, err := BuildMethodPolicies(descs...)
+	policies, err := buildMethodPolicies()
 	require.NoError(t, err)
 
 	// 按收集器解析语义（方法级 method_auth 优先，否则服务级默认）推导每个

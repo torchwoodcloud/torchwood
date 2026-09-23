@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/lynx-go/grpcapi/authz"
 	"github.com/stretchr/testify/require"
-	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"google.golang.org/grpc"
 )
@@ -13,7 +13,7 @@ import (
 func TestBuildMethodPolicies_EndUserRequiresUsersRole(t *testing.T) {
 	t.Parallel()
 
-	set, err := BuildMethodPolicies(clientv1.File_client_v1_groups_proto)
+	set, err := buildMethodPolicies()
 	require.NoError(t, err)
 
 	p, ok := set.Get("/torchwood.client.v1.GroupsService/CreateGroup")
@@ -25,7 +25,7 @@ func TestBuildMethodPolicies_EndUserRequiresUsersRole(t *testing.T) {
 func TestBuildMethodPolicies_AccountPublicMethods(t *testing.T) {
 	t.Parallel()
 
-	set, err := BuildMethodPolicies(clientv1.File_client_v1_account_proto)
+	set, err := buildMethodPolicies()
 	require.NoError(t, err)
 
 	p, ok := set.Get("/torchwood.client.v1.AccountService/SignIn")
@@ -54,7 +54,7 @@ func newServerWithServices(serviceNames ...string) *grpc.Server {
 }
 
 func testPolicySet(policies ...domainauth.MethodPolicy) *domainauth.PolicySet {
-	set, err := domainauth.NewPolicySet(policies)
+	set, err := authz.NewPolicySet(policies...)
 	if err != nil {
 		panic(err)
 	}
@@ -69,7 +69,7 @@ func TestAssertRegisteredMethodsHaveAuthz(t *testing.T) {
 		srv := newServerWithServices("torchwood.test.v1.PublicService", "torchwood.test.v1.KeyService", "torchwood.test.v1.PermService")
 		err := assertRegisteredMethodsHaveAuthz(srv, testPolicySet(
 			domainauth.MethodPolicy{Method: "/torchwood.test.v1.PublicService/DoThing", Service: "/torchwood.test.v1.PublicService", Access: domainauth.AccessPublic},
-			domainauth.MethodPolicy{Method: "/torchwood.test.v1.KeyService/DoThing", Service: "/torchwood.test.v1.KeyService", Access: domainauth.AccessServer, Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeUsers, Op: domainauth.ScopeRead}},
+			domainauth.MethodPolicy{Method: "/torchwood.test.v1.KeyService/DoThing", Service: "/torchwood.test.v1.KeyService", Access: domainauth.AccessServer, Scope: &domainauth.ScopeRule{Resource: string(domainauth.ScopeUsers), Op: domainauth.ScopeRead}},
 			domainauth.MethodPolicy{Method: "/torchwood.test.v1.PermService/DoThing", Service: "/torchwood.test.v1.PermService", Access: domainauth.AccessPermission, Permissions: []string{"users"}},
 		))
 		require.NoError(t, err)

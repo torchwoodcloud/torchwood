@@ -261,7 +261,7 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 		if principal.CredentialType == shared.CredentialTypeAPIKey || principal.CredentialType == shared.CredentialTypeExecution {
 			// 平台专属面不声明 api_key_scope（AssertSemantic 保证），scope
 			// 匹配 fail-closed：未声明即拒绝（通配符不豁免）。
-			rule := i.policies.HasAPIKeyScope(info.FullMethod)
+			rule := i.policies.ScopeRule(info.FullMethod)
 			if rule == nil {
 				i.logAuthFailure(ctx, info.FullMethod, "apikey_scope_missing", credentialType, principal)
 				return nil, status.Error(codes.PermissionDenied, "api key missing required scope")
@@ -270,7 +270,7 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 			//（database_id/bucket_id；CreateDatabase/GetBucket 等以 id 寻址），
 			// `databases:blog` 只放行寻址 blog 的请求，全集型方法（List 等
 			// 无目标）对实例限定 scope 一律 403。
-			if !i.policies.AllowsAPIKeyTargets(info.FullMethod, principal.Permissions, apiKeyScopeTargets(rule, req)) {
+			if !domainauth.AllowsAPIKeyTargets(i.policies, info.FullMethod, principal.Permissions, apiKeyScopeTargets(rule, req)) {
 				i.logAuthFailure(ctx, info.FullMethod, "apikey_scope_missing", credentialType, principal)
 				return nil, status.Error(codes.PermissionDenied, "api key missing required scope")
 			}
@@ -279,8 +279,10 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 
 	// Allow admin console sessions to target a specific project via header.
 	if principal.ActorKind == shared.ActorKindAdmin {
-		// 角色门（SERVER 面的 admin_roles；nil = 不限角色）。
-		if roles := policy.AdminRoles; len(roles) > 0 && !principal.HasAnyRole(adminRoleStrings(roles)) {
+		// 角色门（SERVER 面的 admin_roles；nil = 不限角色）。AdminRoles 为
+		// []string（阶段 1 grpcapi 切换；字符串形态即 principal.Roles 角色串，
+		// 由 policy.go 词表锁定一致）。
+		if roles := policy.AdminRoles; len(roles) > 0 && !principal.HasAnyRole(roles) {
 			i.logAuthFailure(ctx, info.FullMethod, "admin_role_denied", credentialType, principal)
 			return nil, status.Error(codes.PermissionDenied, "missing required admin role")
 		}
@@ -317,16 +319,6 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 	return handler(ctx, req)
 }
 
-// adminRoleStrings 将 enum 角色转为主体角色串（AdminRole 的字符串形态即
-// principal.Roles 中的角色串，两者由 policy.go 词表锁定一致）。
-func adminRoleStrings(roles []domainauth.AdminRole) []string {
-	out := make([]string, 0, len(roles))
-	for _, r := range roles {
-		out = append(out, string(r))
-	}
-	return out
-}
-
 // scopeTargetGetter 是 genproto 请求消息的实例寻址 getter（生成代码恒有）。
 type scopeTargetGetter interface{ GetId() string }
 
@@ -342,7 +334,7 @@ func apiKeyScopeTargets(rule *domainauth.ScopeRule, req any) domainauth.ScopeTar
 		return targets
 	}
 	switch rule.Resource {
-	case domainauth.ScopeDatabases:
+	case string(domainauth.ScopeDatabases):
 		if g, ok := req.(interface{ GetDatabaseId() string }); ok {
 			targets.DatabaseID = g.GetDatabaseId()
 			return targets
@@ -350,7 +342,7 @@ func apiKeyScopeTargets(rule *domainauth.ScopeRule, req any) domainauth.ScopeTar
 		if g, ok := req.(scopeTargetGetter); ok {
 			targets.DatabaseID = g.GetId()
 		}
-	case domainauth.ScopeStorage:
+	case string(domainauth.ScopeStorage):
 		if g, ok := req.(interface{ GetBucketId() string }); ok {
 			targets.BucketID = g.GetBucketId()
 			return targets

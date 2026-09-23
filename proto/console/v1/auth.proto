@@ -8,7 +8,7 @@ import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
 import "console/v1/admins.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=public：swagger 顶层不声明全局 security（匿名可达），
@@ -59,7 +59,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service ConsoleAuthService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_PUBLIC };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_PUBLIC };
 
   rpc SignIn(SignInRequest) returns (SignInResponse) {
     option (google.api.http) = { post: "/v1/console/auth/sign-in", body: "*" };

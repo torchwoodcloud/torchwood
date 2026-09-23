@@ -3,6 +3,7 @@ package testutil
 import (
 	"context"
 
+	"github.com/lynx-go/grpcapi/authz"
 	"github.com/torchwoodcloud/torchwood/internal/api/interceptor"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
@@ -77,36 +78,36 @@ func newInterceptorEnv(db *clients.Database, cfg *config.AppConfig, docDB databa
 	)
 	// 小策略注册表（与生产 BuildMethodPolicies 同构的 PolicySet 注入；
 	// 全量策略语义由 runtime AssertSemantic + 矩阵测试把关）。
-	policies, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{
+	policies, err := authz.NewPolicySet([]domainauth.MethodPolicy{
 		{Method: MethodHealthCheck, Service: "/torchwood.server.v1.HealthService", Access: domainauth.AccessPublic},
 		{Method: MethodListUsers, Service: "/torchwood.server.v1.UsersService", Access: domainauth.AccessServer,
-			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeUsers, Op: domainauth.ScopeRead}},
+			Scope: &domainauth.ScopeRule{Resource: string(domainauth.ScopeUsers), Op: domainauth.ScopeRead}},
 		{Method: MethodAccountMe, Service: "/torchwood.client.v1.AccountService", Access: domainauth.AccessEndUser, Permissions: []string{"users"}},
 		{Method: MethodAccountSignOut, Service: "/torchwood.client.v1.AccountService", Access: domainauth.AccessEndUser, Permissions: []string{"users"}},
 		// P2 客户端调用面（service_auth default_access END_USER，无 method_auth
 		// → permissions 归一 ["users"]）与执行身份 assets:write scope 门。
 		{Method: MethodInvokeFunction, Service: "/torchwood.client.v1.FunctionsService", Access: domainauth.AccessEndUser, Permissions: []string{"users"}},
 		{Method: MethodAssetsGrant, Service: "/torchwood.server.v1.AssetsService", Access: domainauth.AccessServer,
-			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAssets, Op: domainauth.ScopeWrite}},
+			Scope: &domainauth.ScopeRule{Resource: string(domainauth.ScopeAssets), Op: domainauth.ScopeWrite}},
 		// Analytics 摄入双面（PR2）。
 		{Method: MethodAnalyticsClientIngest, Service: "/torchwood.client.v1.AnalyticsService", Access: domainauth.AccessEndUser, Permissions: []string{"users"}},
 		{Method: MethodAnalyticsServerIngest, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
-			AdminRoles: []domainauth.AdminRole{domainauth.AdminRoleMember, domainauth.AdminRoleAdmin, domainauth.AdminRoleOwner},
-			Scope:      &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeWrite}},
+			AdminRoles: []string{string(domainauth.AdminRoleMember), string(domainauth.AdminRoleAdmin), string(domainauth.AdminRoleOwner)},
+			Scope:      &domainauth.ScopeRule{Resource: string(domainauth.ScopeAnalytics), Op: domainauth.ScopeWrite}},
 		// Analytics 查询面六 RPC（PR3）：admin 会话全角色 + analytics:read。
 		{Method: MethodAnalyticsGetOverview, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
-			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
+			Scope: &domainauth.ScopeRule{Resource: string(domainauth.ScopeAnalytics), Op: domainauth.ScopeRead}},
 		{Method: MethodAnalyticsListDefinitions, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
-			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
+			Scope: &domainauth.ScopeRule{Resource: string(domainauth.ScopeAnalytics), Op: domainauth.ScopeRead}},
 		{Method: MethodAnalyticsQueryTimeseries, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
-			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
+			Scope: &domainauth.ScopeRule{Resource: string(domainauth.ScopeAnalytics), Op: domainauth.ScopeRead}},
 		{Method: MethodAnalyticsQueryBreakdown, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
-			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
+			Scope: &domainauth.ScopeRule{Resource: string(domainauth.ScopeAnalytics), Op: domainauth.ScopeRead}},
 		{Method: MethodAnalyticsQueryRetention, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
-			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
+			Scope: &domainauth.ScopeRule{Resource: string(domainauth.ScopeAnalytics), Op: domainauth.ScopeRead}},
 		{Method: MethodAnalyticsListUserEvents, Service: "/torchwood.server.v1.AnalyticsService", Access: domainauth.AccessServer,
-			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeAnalytics, Op: domainauth.ScopeRead}},
-	})
+			Scope: &domainauth.ScopeRule{Resource: string(domainauth.ScopeAnalytics), Op: domainauth.ScopeRead}},
+	}...)
 	if err != nil {
 		return nil, err
 	}

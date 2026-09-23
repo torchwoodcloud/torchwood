@@ -8,7 +8,7 @@ import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
@@ -72,27 +72,27 @@ service APIKeysService {
   // （key 不再可被授予 apikeys.read/write）。
   // 唯一例外是 WhoAmI（自证凭证型 PUBLIC，逐方法覆盖）：它不管理 key、只
   // 描述调用凭证自身，"知道 key 明文"即是查询授权，无自铸面。
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_PERMISSION };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_PERMISSION };
   rpc CreateAPIKey(CreateAPIKeyRequest) returns (APIKeyWithSecret) {
     option (google.api.http) = { post: "/v1/server/api-keys", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
   }
 
   rpc ListAPIKeys(ListAPIKeysRequest) returns (ListAPIKeysResponse) {
     option (google.api.http) = { get: "/v1/server/api-keys" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
   }
 
   rpc GetAPIKey(GetAPIKeyRequest) returns (APIKey) {
     option (google.api.http) = { get: "/v1/server/api-keys/{id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
   }
@@ -103,23 +103,23 @@ service APIKeysService {
   // 立即生效（每请求鉴权读库校验）。
   rpc UpdateAPIKey(UpdateAPIKeyRequest) returns (APIKey) {
     option (google.api.http) = { patch: "/v1/server/api-keys/{id}", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
   }
 
   rpc DeleteAPIKey(GetAPIKeyRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/api-keys/{id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
   }
 
   // WhoAmI 返回调用凭证（X-API-Key）自身对应的 key 行（whoami）。
   //
-  // 认证形态为"自证凭证型"（ACCESS_PUBLIC + 不要求任何 scope）：出示 key
+  // 认证形态为"自证凭证型"（ACCESS_LEVEL_PUBLIC + 不要求任何 scope）：出示 key
   // 明文本身就是查询授权——任何有效 key 可查自己，零信息泄露、零自铸面；
   // 不要求 scope 意味着零 scope key 也可用。无效/禁用/过期/删除 → 401
   // （每请求读库校验，与请求侧认证同路径）；匿名/非 API key 凭证（admin
@@ -128,7 +128,7 @@ service APIKeysService {
   // （相对时间，规避客户端时钟偏斜）。
   rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse) {
     option (google.api.http) = { get: "/v1/server/api-keys/whoami" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {

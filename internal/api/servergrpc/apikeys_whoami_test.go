@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lynx-go/grpcapi/authz"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -44,11 +45,11 @@ func newTestAPIKeysService(key *projects.APIKey) *APIKeysService {
 }
 
 func whoamiVocabulary() *domainauth.ScopeVocabulary {
-	set, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{{
+	set, err := authz.NewPolicySet([]domainauth.MethodPolicy{{
 		Method: "/t/users.read", Service: "/t",
 		Access: domainauth.AccessServer,
-		Scope:  &domainauth.ScopeRule{Resource: domainauth.ScopeUsers, Op: domainauth.ScopeRead},
-	}})
+		Scope:  &domainauth.ScopeRule{Resource: string(domainauth.ScopeUsers), Op: domainauth.ScopeRead},
+	}}...)
 	if err != nil {
 		panic(err)
 	}

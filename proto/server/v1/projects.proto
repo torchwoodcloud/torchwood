@@ -8,7 +8,7 @@ import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
@@ -65,12 +65,12 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service ProjectsService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   rpc CreateProject(CreateProjectRequest) returns (Project) {
     option (google.api.http) = { post: "/v1/server/projects", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
@@ -83,30 +83,30 @@ service ProjectsService {
 
   rpc ListProjects(shared.v1.ListRequest) returns (ListProjectsResponse) {
     option (google.api.http) = { get: "/v1/server/projects" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_PROJECTS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "projects", op: SCOPE_OP_READ }
     };
   }
 
   rpc GetProject(GetProjectRequest) returns (Project) {
     option (google.api.http) = { get: "/v1/server/projects/{id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_PROJECTS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "projects", op: SCOPE_OP_READ }
     };
   }
 
   rpc UpdateProject(UpdateProjectRequest) returns (Project) {
     option (google.api.http) = { patch: "/v1/server/projects/{id}", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_MEMBER, ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_PROJECTS, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["member", "admin", "owner"]
+      api_key_scope: { resource: "projects", op: SCOPE_OP_WRITE }
     };
   }
 
   rpc DeleteProject(GetProjectRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/projects/{id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
@@ -127,8 +127,8 @@ service ProjectsService {
   // 只反映本声明，不反映 app 层收窄。
   rpc CreateInviteCode(CreateInviteCodeRequest) returns (InviteCode) {
     option (google.api.http) = { post: "/v1/server/projects/{project_id}/invite-codes", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
@@ -141,8 +141,8 @@ service ProjectsService {
 
   rpc ListInviteCodes(ListInviteCodesRequest) returns (ListInviteCodesResponse) {
     option (google.api.http) = { get: "/v1/server/projects/{project_id}/invite-codes" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
@@ -156,8 +156,8 @@ service ProjectsService {
   // 吊销邀请码（软删：revoked_at 置位，消费路径立即拒绝）。
   rpc DeleteInviteCode(DeleteInviteCodeRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/projects/{project_id}/invite-codes/{id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
@@ -177,8 +177,8 @@ service ProjectsService {
       put: "/v1/server/projects/{project_id}/oauth-redirect-allowlist"
       body: "*"
     };
-    option (torchwood.shared.v1.method_auth) = {
-      access: ACCESS_PERMISSION
+    option (grpcapi.v1.method_auth) = {
+      access: ACCESS_LEVEL_PERMISSION
       permissions: ["owner", "admin"]
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {

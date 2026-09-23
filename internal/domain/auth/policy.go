@@ -4,28 +4,57 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/lynx-go/grpcapi/authz"
 )
 
-// 本文件是授权策略注册表的 domain 纯类型层（机制重设计 M2）：
-// 策略唯一声明在 proto（authz.proto method_auth/service_auth），由
-// cmd/server/internal/runtime 的收集器（BuildMethodPolicies）从 descriptor 构造
-// PolicySet 注入各执行点。domain 不依赖 genproto（AGENTS.md 分层约定），
-// 因此这里只定义类型、档位分类与语义断言——全部是输入 PolicySet 的纯函数。
+// 本文件是授权策略注册表的 domain 层（阶段 1 起类型本体移驻
+// github.com/lynx-go/grpcapi/authz，此处保留 torchwood 词表、档位分类与
+// 语义断言——值域因项目而异的部分按设计留在项目侧）：
+// 策略唯一声明在 proto（grpcapi.v1 method_auth/service_auth），由
+// cmd/server/internal/runtime 的收集入口（buildMethodPolicies）从 descriptor
+// 构造 authz.PolicySet 注入各执行点。domain 不依赖 genproto（AGENTS.md
+// 分层约定）；authz 包零 grpc/lynx 依赖，可安全被 domain 引用。
 
-// AccessLevel 是方法的凭证族门禁（与 proto shared.v1.AccessLevel 一一对应）。
-type AccessLevel int
+// —— 类型别名（grpcapi.authz 本体）——
+
+type (
+	// PolicySet 是全量方法策略注册表（由 runtime 收集器构造，注入执行点）。
+	PolicySet = authz.PolicySet
+	// MethodPolicy 是单个方法的完整授权策略（proto 声明的运行时投影）。
+	// AdminRoles 为 []string（词表主权在项目，见下方 AdminRole 词表）；
+	// RequestFields 为输入消息排序全字段投影（project_id 寻址不变量消费）。
+	MethodPolicy = authz.MethodPolicy
+	// AccessLevel 是方法的凭证族门禁（与 proto grpcapi.v1.AccessLevel 一一对应）。
+	AccessLevel = authz.AccessLevel
+	// ScopeRule 是 SERVER 面方法对 API key 凭证开放的 scope 门。
+	ScopeRule = authz.ScopeRule
+	// ScopeOp 是 scope 的权限方向。
+	ScopeOp = authz.ScopeOp
+)
 
 const (
-	AccessLevelUnspecified AccessLevel = 0
-	AccessPublic           AccessLevel = 1 // 匿名可调（自证凭证型）
-	AccessEndUser          AccessLevel = 2 // 端用户会话/JWT 专属（Client 面）
-	AccessServer           AccessLevel = 3 // admin 会话（admin_roles）或 API key（scope）
-	AccessPermission       AccessLevel = 4 // admin 会话专属（permissions），key 一律拒绝
-	AccessSystem           AccessLevel = 5 // 内部系统调用（预留）
+	AccessLevelUnspecified AccessLevel = authz.AccessUnspecified
+	// AccessPublic 匿名可调（自证凭证型）。
+	AccessPublic AccessLevel = authz.AccessPublic
+	// AccessEndUser 端用户会话/JWT 专属（Client 面）。
+	AccessEndUser AccessLevel = authz.AccessEndUser
+	// AccessServer admin 会话（admin_roles）或 API key（scope）。
+	AccessServer AccessLevel = authz.AccessServer
+	// AccessPermission admin 会话专属（permissions），key 一律拒绝。
+	AccessPermission AccessLevel = authz.AccessPermission
+	// AccessSystem 内部系统调用（预留）。
+	AccessSystem AccessLevel = authz.AccessSystem
 )
 
-// AdminRole 是 console admin 的 RBAC 角色（平台级角色体系，与 proto
-// shared.v1.AdminRole enum 一一对应；角色串即 principal.Roles 中的形态）。
+const (
+	ScopeRead  ScopeOp = authz.ScopeRead
+	ScopeWrite ScopeOp = authz.ScopeWrite
+	ScopeAdmin ScopeOp = authz.ScopeAdmin
+)
+
+// AdminRole 是 console admin 的 RBAC 角色（平台级角色体系；角色串即
+// principal.Roles 中的形态——proto 注解侧为 string，值域由本词表锁定）。
 type AdminRole string
 
 const (
@@ -46,8 +75,8 @@ const RoleEndUserTag = "users"
 // AllAdminRoles 是 AdminRole 全集（词表主权：档位断言与测试引用）。
 var AllAdminRoles = []AdminRole{AdminRoleViewer, AdminRoleMember, AdminRoleAdmin, AdminRoleOwner}
 
-// ScopeResource 是 API key scope 的资源词表（与 proto shared.v1.ScopeResource
-// 一一对应；economy 已更名 assets，apikeys 资源已退役）。
+// ScopeResource 是 API key scope 的资源词表（收集期 Vocabulary 注册与
+// 死 scope 断言的对照面；proto 注解侧为 string，值域由本词表锁定）。
 type ScopeResource string
 
 const (
@@ -70,7 +99,7 @@ const (
 	ScopeRuntimeVars    ScopeResource = "runtime_vars"
 )
 
-// AllScopeResources 是资源词表全集（死 scope 断言的对照面）。
+// AllScopeResources 是资源词表全集（收集期 Vocabulary 与死 scope 断言的对照面）。
 var AllScopeResources = []ScopeResource{
 	ScopeDatabases, ScopeUsers, ScopeGroups, ScopeStorage, ScopeProjects,
 	ScopeOAuthProviders, ScopeFunctions, ScopePayments, ScopeAssets,
@@ -78,101 +107,21 @@ var AllScopeResources = []ScopeResource{
 	ScopeLeaderboards, ScopeAnalytics, ScopeRunbooks, ScopeRuntimeVars,
 }
 
-// ScopeOp 是 scope 的权限方向。admin 是配置面方向（与 proto shared.v1
-// ScopeOp 的裁决注释同源）：按资源 opt-in，供"热路径凭证与控制面凭证需
-// 最小特权分离"的资源（首个：leaderboards board 管控）声明；Functions
-// 执行 principal 的 declaredScopeOps 刻意不收录——函数身份永不可持 admin。
-type ScopeOp string
-
-const (
-	ScopeRead  ScopeOp = "read"
-	ScopeWrite ScopeOp = "write"
-	ScopeAdmin ScopeOp = "admin"
-)
-
-// ScopeRule 是 SERVER 面方法对 API key 凭证开放的 scope 门。
-type ScopeRule struct {
-	Resource ScopeResource
-	Op       ScopeOp
-}
-
-// MethodPolicy 是单个方法的完整授权策略（proto 声明的运行时投影）。
-type MethodPolicy struct {
-	Method      string      // full method，如 "/torchwood.server.v1.UsersService/CreateUser"
-	Service     string      // full service，如 "/torchwood.server.v1.UsersService"
-	Access      AccessLevel // 凭证族
-	Permissions []string    // PERMISSION 面角色门（小写角色名 / console 标签 / users）
-	AdminRoles  []AdminRole // SERVER 面 admin 会话角色门；空 = 不限角色（viewer 可调，仅读方法）
-	Scope       *ScopeRule  // SERVER 面 API key 门；nil = 不对 key 开放
-	// RequestHasProjectID 为 true 表示请求消息含 project_id 字段。项目寻址
-	// 不变量：server 面请求体不得携带项目寻址（项目上下文一律来自凭证），
-	// 存量违例必须登记在 ProjectIDAllowlist（迁移白名单，按序清空）。
-	RequestHasProjectID bool
-	IsStreaming         bool // fail-closed：当前无 stream RPC，出现即断言失败
-}
-
-// PolicySet 是全量方法策略注册表（由 runtime 收集器构造，注入执行点）。
-type PolicySet struct {
-	methods map[string]MethodPolicy
-}
-
-// NewPolicySet 构造注册表（重复方法名返回错误）。
-func NewPolicySet(policies []MethodPolicy) (*PolicySet, error) {
-	m := make(map[string]MethodPolicy, len(policies))
-	for _, p := range policies {
-		if _, dup := m[p.Method]; dup {
-			return nil, fmt.Errorf("duplicate method policy %s", p.Method)
-		}
-		m[p.Method] = p
+// ScopeVocabularyResources 是收集期注册给 grpcapi.authz.Build 的词表
+// （string 形态；资源在词表内为不可关闭的内置断言）。
+func ScopeVocabularyResources() []string {
+	out := make([]string, 0, len(AllScopeResources))
+	for _, r := range AllScopeResources {
+		out = append(out, string(r))
 	}
-	return &PolicySet{methods: m}, nil
-}
-
-// Get 返回单方法策略。
-func (s *PolicySet) Get(fullMethod string) (MethodPolicy, bool) {
-	if s == nil {
-		return MethodPolicy{}, false
-	}
-	p, ok := s.methods[fullMethod]
-	return p, ok
-}
-
-// Methods 返回全部策略（按方法名排序，供矩阵测试与文档生成遍历）。
-func (s *PolicySet) Methods() []MethodPolicy {
-	out := make([]MethodPolicy, 0, len(s.methods))
-	for _, p := range s.methods {
-		out = append(out, p)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Method < out[j].Method })
 	return out
 }
 
 // AllowedAdminRoles 返回 SERVER 面方法允许的 admin 角色集（非 SERVER 面
 // 或未声明返回 nil；nil 语义 = 不限角色，viewer 可调）。供 serverhttp/
 // realtime 等镜像消费点派生，禁止手写角色集。
-func (s *PolicySet) AllowedAdminRoles(fullMethod string) []AdminRole {
-	p, ok := s.Get(fullMethod)
-	if !ok || p.Access != AccessServer {
-		return nil
-	}
-	return p.AdminRoles
-}
-
-// HasAPIKeyScope 返回方法对 API key 开放的 scope 规则（未开放返回 nil）。
-func (s *PolicySet) HasAPIKeyScope(fullMethod string) *ScopeRule {
-	p, ok := s.Get(fullMethod)
-	if !ok || p.Access != AccessServer {
-		return nil
-	}
-	return p.Scope
-}
-
-// AllowsAPIKey 判定给定 scope 集合是否放行该方法（B2 匹配语义；T-02 起为
-// AllowsAPIKeyTargets 零目标的退化形态——无实例寻址时资源限定 scope 恒不
-// 匹配，裸资源/.op/通配符行为不变）。未声明 scope 的方法（非 SERVER 面或
-// 平台专属）一律拒绝——fail-closed，与通配符无关。
-func (s *PolicySet) AllowsAPIKey(fullMethod string, scopes []string) bool {
-	return s.AllowsAPIKeyTargets(fullMethod, scopes, ScopeTargets{})
+func AllowedAdminRoles(s *PolicySet, fullMethod string) []string {
+	return s.AllowedAdminRoles(fullMethod)
 }
 
 // ScopeVocabulary 是从 PolicySet 派生的合法 scope 词表（创建校验与
@@ -193,16 +142,17 @@ func VocabularyFromPolicies(set *PolicySet) *ScopeVocabulary {
 		if p.Scope == nil {
 			continue
 		}
-		if _, ok := seen[p.Scope.Resource]; !ok {
-			seen[p.Scope.Resource] = struct{}{}
-			v.resources = append(v.resources, p.Scope.Resource)
+		res := ScopeResource(p.Scope.Resource)
+		if _, ok := seen[res]; !ok {
+			seen[res] = struct{}{}
+			v.resources = append(v.resources, res)
 		}
-		if v.ops[p.Scope.Resource] == nil {
-			v.ops[p.Scope.Resource] = map[ScopeOp]struct{}{}
+		if v.ops[res] == nil {
+			v.ops[res] = map[ScopeOp]struct{}{}
 		}
-		v.ops[p.Scope.Resource][p.Scope.Op] = struct{}{}
-		v.valid[string(p.Scope.Resource)] = struct{}{}
-		v.valid[string(p.Scope.Resource)+"."+string(p.Scope.Op)] = struct{}{}
+		v.ops[res][p.Scope.Op] = struct{}{}
+		v.valid[p.Scope.Resource] = struct{}{}
+		v.valid[p.Scope.Resource+"."+string(p.Scope.Op)] = struct{}{}
 	}
 	sort.Slice(v.resources, func(i, j int) bool { return v.resources[i] < v.resources[j] })
 	return v
@@ -259,7 +209,7 @@ func (v *ScopeVocabulary) HasOp(r ScopeResource, op ScopeOp) bool {
 }
 
 // Tier 是 SERVER/PERMISSION 面方法的档位（从声明派生，非独立声明维度——
-// 机制裁决：档位是 classify 纯函数的输出，不进 proto，避免第二策略源）。
+// 机制裁决：档位是 Classify 纯函数的输出，不进 proto，避免第二策略源）。
 type Tier string
 
 const (
@@ -275,20 +225,9 @@ const (
 	TierPlatformOnly Tier = "platform_only"
 )
 
-// RoleStrings 将 AdminRole 集合转为主体角色串集合（AdminRole 的字符串
-// 形态即 principal.Roles 中的角色串，两者由本包词表锁定一致）。供
-// HasAnyRole 消费点把策略角色门转为主体角色匹配。
-func RoleStrings(roles []AdminRole) []string {
-	out := make([]string, 0, len(roles))
-	for _, r := range roles {
-		out = append(out, string(r))
-	}
-	return out
-}
-
 // roleSet 规范化角色集合比较（顺序无关）。
-func roleSet(roles []AdminRole) map[AdminRole]struct{} {
-	m := make(map[AdminRole]struct{}, len(roles))
+func roleSet(roles []string) map[string]struct{} {
+	m := make(map[string]struct{}, len(roles))
 	for _, r := range roles {
 		m[r] = struct{}{}
 	}
@@ -305,8 +244,8 @@ func ClassifyTier(p MethodPolicy) (Tier, error) {
 			return "", fmt.Errorf("method %s: SERVER access requires api_key_scope", p.Method)
 		}
 		roles := roleSet(p.AdminRoles)
-		platformOnly := len(roles) == 2 && hasRole(roles, AdminRoleAdmin) && hasRole(roles, AdminRoleOwner)
-		business := len(roles) == 3 && hasRole(roles, AdminRoleMember) && hasRole(roles, AdminRoleAdmin) && hasRole(roles, AdminRoleOwner)
+		platformOnly := len(roles) == 2 && hasRole(roles, string(AdminRoleAdmin)) && hasRole(roles, string(AdminRoleOwner))
+		business := len(roles) == 3 && hasRole(roles, string(AdminRoleMember)) && hasRole(roles, string(AdminRoleAdmin)) && hasRole(roles, string(AdminRoleOwner))
 		unrestricted := len(roles) == 0
 		switch {
 		case platformOnly:
@@ -333,7 +272,7 @@ func ClassifyTier(p MethodPolicy) (Tier, error) {
 	}
 }
 
-func hasRole(set map[AdminRole]struct{}, role AdminRole) bool {
+func hasRole(set map[string]struct{}, role string) bool {
 	_, ok := set[role]
 	return ok
 }
@@ -351,6 +290,17 @@ var ProjectIDAllowlist = map[string]struct{}{
 	"/torchwood.server.v1.SubscriptionsService/ExpireSubscription": {},
 	"/torchwood.server.v1.AssetsService/ListUserAssets":            {},
 	"/torchwood.server.v1.AssetsService/ListUserLedger":            {},
+}
+
+// requestHasProjectID 从排序字段投影判断 project_id 寻址（grpcapi
+// MethodPolicy.RequestFields 的消费面）。
+func requestHasProjectID(p MethodPolicy) bool {
+	for _, f := range p.RequestFields {
+		if f == "project_id" {
+			return true
+		}
+	}
+	return false
 }
 
 // AssertPolicy 是单方法语义断言（完备性/档位/值域/项目寻址；不含死 scope
@@ -389,7 +339,7 @@ func AssertPolicy(p MethodPolicy) error {
 	default:
 		errs = append(errs, fmt.Sprintf("%s: access is not declared", p.Method))
 	}
-	if p.RequestHasProjectID && isServerFace(p.Service) && !isProjectsService(p.Service) {
+	if requestHasProjectID(p) && isServerFace(p.Service) && !isProjectsService(p.Service) {
 		if _, ok := ProjectIDAllowlist[p.Method]; !ok {
 			errs = append(errs, fmt.Sprintf("%s: server-face request body must not carry project_id (project context comes from credentials; for legacy migration register in ProjectIDAllowlist)", p.Method))
 		}
@@ -416,7 +366,7 @@ func AssertPolicy(p MethodPolicy) error {
 // streaming 禁用。返回的 error 聚合全部违例。
 func AssertSemantic(set *PolicySet) error {
 	var errs []string
-	referenced := map[ScopeResource]struct{}{}
+	referenced := map[string]struct{}{}
 
 	for _, p := range set.Methods() {
 		if err := AssertPolicy(p); err != nil {
@@ -432,7 +382,7 @@ func AssertSemantic(set *PolicySet) error {
 
 	// 死 scope 检测：词表内每个资源必须被至少一个方法引用。
 	for _, r := range AllScopeResources {
-		if _, ok := referenced[r]; !ok {
+		if _, ok := referenced[string(r)]; !ok {
 			errs = append(errs, fmt.Sprintf("dead scope: resource %q is not referenced by any method (leftover from vocabulary evolution)", r))
 		}
 	}
@@ -523,7 +473,7 @@ func assertConsoleValueDomain(p MethodPolicy) error {
 func validScope(rule ScopeRule) (ScopeRule, error) {
 	validRes := false
 	for _, r := range AllScopeResources {
-		if rule.Resource == r {
+		if rule.Resource == string(r) {
 			validRes = true
 			break
 		}

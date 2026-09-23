@@ -9,6 +9,7 @@ package serverv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -595,7 +596,7 @@ var File_server_v1_apikeys_proto protoreflect.FileDescriptor
 
 const file_server_v1_apikeys_proto_rawDesc = "" +
 	"\n" +
-	"\x17server/v1/apikeys.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\x8d\x01\n" +
+	"\x17server/v1/apikeys.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\x8d\x01\n" +
 	"\x13CreateAPIKeyRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06scopes\x18\x02 \x03(\tR\x06scopes\x12<\n" +
@@ -648,13 +649,13 @@ const file_server_v1_apikeys_proto_rawDesc = "" +
 	"\x06scopes\x18\x04 \x03(\tR\x06scopes\x12&\n" +
 	"\x0fmax_age_seconds\x18\x05 \x01(\x03R\rmaxAgeSeconds2\x88\a\n" +
 	"\x0eAPIKeysService\x12\x93\x01\n" +
-	"\fCreateAPIKey\x12(.torchwood.server.v1.CreateAPIKeyRequest\x1a%.torchwood.server.v1.APIKeyWithSecret\"2\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x18:\x01*\"\x13/v1/server/api-keys\x12\x91\x01\n" +
-	"\vListAPIKeys\x12'.torchwood.server.v1.ListAPIKeysRequest\x1a(.torchwood.server.v1.ListAPIKeysResponse\"/\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/server/api-keys\x12\x85\x01\n" +
-	"\tGetAPIKey\x12%.torchwood.server.v1.GetAPIKeyRequest\x1a\x1b.torchwood.server.v1.APIKey\"4\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/server/api-keys/{id}\x12\x8e\x01\n" +
-	"\fUpdateAPIKey\x12(.torchwood.server.v1.UpdateAPIKeyRequest\x1a\x1b.torchwood.server.v1.APIKey\"7\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x1d:\x01*2\x18/v1/server/api-keys/{id}\x12\x87\x01\n" +
-	"\fDeleteAPIKey\x12%.torchwood.server.v1.GetAPIKeyRequest\x1a\x1a.torchwood.shared.v1.Empty\"4\x8a\xb2\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x1a*\x18/v1/server/api-keys/{id}\x12\xa0\x01\n" +
+	"\fCreateAPIKey\x12(.torchwood.server.v1.CreateAPIKeyRequest\x1a%.torchwood.server.v1.APIKeyWithSecret\"2\xea\xc4\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x18:\x01*\"\x13/v1/server/api-keys\x12\x91\x01\n" +
+	"\vListAPIKeys\x12'.torchwood.server.v1.ListAPIKeysRequest\x1a(.torchwood.server.v1.ListAPIKeysResponse\"/\xea\xc4\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/server/api-keys\x12\x85\x01\n" +
+	"\tGetAPIKey\x12%.torchwood.server.v1.GetAPIKeyRequest\x1a\x1b.torchwood.server.v1.APIKey\"4\xea\xc4\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/server/api-keys/{id}\x12\x8e\x01\n" +
+	"\fUpdateAPIKey\x12(.torchwood.server.v1.UpdateAPIKeyRequest\x1a\x1b.torchwood.server.v1.APIKey\"7\xea\xc4\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x1d:\x01*2\x18/v1/server/api-keys/{id}\x12\x87\x01\n" +
+	"\fDeleteAPIKey\x12%.torchwood.server.v1.GetAPIKeyRequest\x1a\x1a.torchwood.shared.v1.Empty\"4\xea\xc4\x19\x10\b\x04\x12\x05owner\x12\x05admin\x82\xd3\xe4\x93\x02\x1a*\x18/v1/server/api-keys/{id}\x12\xa0\x01\n" +
 	"\x06WhoAmI\x12\".torchwood.server.v1.WhoAmIRequest\x1a#.torchwood.server.v1.WhoAmIResponse\"M\x92A\"b\x00j\x1e\n" +
-	"\x12x-torchwood-access\x12\b\x1a\x06public\x8a\xb2\x19\x02\b\x01\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/server/api-keys/whoami\x1a\x06\x92\xb2\x19\x02\b\x04B\x82\x04\x92A\xbd\x03RR\n" +
+	"\x12x-torchwood-access\x12\b\x1a\x06public\xea\xc4\x19\x02\b\x01\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/server/api-keys/whoami\x1a\x06\xf2\xc4\x19\x02\b\x04B\x82\x04\x92A\xbd\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

@@ -851,7 +851,7 @@ func (h *FileHandler) authorize(r *http.Request, bucketID string) (*shared.Princ
 	}
 	if p.ActorKind == shared.ActorKindAdmin && !isRead {
 		// 角色门从 PolicySet 派生（镜像收编 M3：与拦截器 admin_roles 同源）。
-		if !p.HasAnyRole(domainauth.RoleStrings(h.policies.AllowedAdminRoles(domainauth.StorageServiceCreateFile))) {
+		if !p.HasAnyRole(h.policies.AllowedAdminRoles(domainauth.StorageServiceCreateFile)) {
 			return nil, status.Error(codes.PermissionDenied, "admin role not permitted for storage write")
 		}
 	}

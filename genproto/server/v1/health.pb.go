@@ -8,7 +8,7 @@ package serverv1
 
 import (
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	_ "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -272,7 +272,7 @@ var File_server_v1_health_proto protoreflect.FileDescriptor
 
 const file_server_v1_health_proto_rawDesc = "" +
 	"\n" +
-	"\x16server/v1/health.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\"\x14\n" +
+	"\x16server/v1/health.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\"\x14\n" +
 	"\x12HealthCheckRequest\"x\n" +
 	"\x13HealthCheckResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12I\n" +
@@ -290,7 +290,7 @@ const file_server_v1_health_proto_rawDesc = "" +
 	"\x05Check\x12'.torchwood.server.v1.HealthCheckRequest\x1a(.torchwood.server.v1.HealthCheckResponse\"'\x82\xd3\xe4\x93\x02!Z\x13\x12\x11/v1/server/health\x12\n" +
 	"/v1/health\x12\x80\x01\n" +
 	"\n" +
-	"GetVersion\x12&.torchwood.server.v1.GetVersionRequest\x1a'.torchwood.server.v1.GetVersionResponse\"!\x82\xd3\xe4\x93\x02\x1b\x12\x19/v1/server/health/version\x1a\x06\x92\xb2\x19\x02\b\x01B\xf0\x03\x92A\xab\x03RR\n" +
+	"GetVersion\x12&.torchwood.server.v1.GetVersionRequest\x1a'.torchwood.server.v1.GetVersionResponse\"!\x82\xd3\xe4\x93\x02\x1b\x12\x19/v1/server/health/version\x1a\x06\xf2\xc4\x19\x02\b\x01B\xf0\x03\x92A\xab\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

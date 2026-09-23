@@ -9,6 +9,7 @@ package serverv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -355,7 +356,7 @@ var File_server_v1_audit_logs_proto protoreflect.FileDescriptor
 
 const file_server_v1_audit_logs_proto_rawDesc = "" +
 	"\n" +
-	"\x1aserver/v1/audit_logs.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x15shared/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xbe\x04\n" +
+	"\x1aserver/v1/audit_logs.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xbe\x04\n" +
 	"\x14ListAuditLogsRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12'\n" +
@@ -396,10 +397,11 @@ const file_server_v1_audit_logs_proto_rawDesc = "" +
 	"\x15ListAuditLogsResponse\x12<\n" +
 	"\n" +
 	"audit_logs\x18\x01 \x03(\v2\x1d.torchwood.server.v1.AuditLogR\tauditLogs\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xb0\x01\n" +
-	"\x10AuditLogsService\x12\x93\x01\n" +
-	"\rListAuditLogs\x12).torchwood.server.v1.ListAuditLogsRequest\x1a*.torchwood.server.v1.ListAuditLogsResponse\"+\x8a\xb2\x19\n" +
-	"\x1a\x02\x03\x04\"\x04\b\r\x10\x01\x82\xd3\xe4\x93\x02\x17\x12\x15/v1/server/audit-logs\x1a\x06\x92\xb2\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xc4\x01\n" +
+	"\x10AuditLogsService\x12\xa7\x01\n" +
+	"\rListAuditLogs\x12).torchwood.server.v1.ListAuditLogsRequest\x1a*.torchwood.server.v1.ListAuditLogsResponse\"?\xea\xc4\x19\x1e\x1a\x05admin\x1a\x05owner\"\x0e\n" +
+	"\n" +
+	"audit_logs\x10\x01\x82\xd3\xe4\x93\x02\x17\x12\x15/v1/server/audit-logs\x1a\x06\xf2\xc4\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

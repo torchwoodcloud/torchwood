@@ -85,6 +85,8 @@ require (
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
+	github.com/lynx-go/grpcapi v0.0.0-00010101000000-000000000000 // indirect
+	github.com/lynx-go/grpcapi/genproto v0.0.0-00010101000000-000000000000 // indirect
 	github.com/minio/crc64nvme v1.1.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
@@ -144,3 +146,10 @@ require (
 replace github.com/torchwoodcloud/torchwood/genproto => ./genproto
 
 replace github.com/torchwoodcloud/torchwood/sdk/go => ./sdk/go
+
+// grpcapi 本地开发 replace（阶段 1 过渡）：发布时序 = grpcapi 先发版
+// （主 module 与 genproto 子 module 双 tag），本仓 remove 此处 replace 改引
+// 真实版本。Dokploy git 构建在此前不兼容本地路径——见 grpcapi DESIGN.md §8。
+replace github.com/lynx-go/grpcapi => ../grpcapi
+
+replace github.com/lynx-go/grpcapi/genproto => ../grpcapi/genproto

@@ -9,7 +9,7 @@ import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 import "shared/v1/common.proto";
 
 // AnalyticsService 是事件分析的管理/查询面（docs/design/analytics.md §4.1）：
@@ -70,61 +70,61 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service AnalyticsService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   // IngestEvents 服务端权威事件摄入（支付完成、订阅续费、函数侧业务事件），
   // 可信代报 user_id；source='server' 由服务端落定。审计豁免显式登记
   // （D13：非读动词默认落审计，静默清单见 internal/api/interceptor/audit.go）。
   rpc IngestEvents(IngestServerEventsRequest) returns (IngestEventsResponse) {
     option (google.api.http) = { post: "/v1/server/analytics/events", body: "*" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_MEMBER, ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_ANALYTICS, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["member", "admin", "owner"]
+      api_key_scope: { resource: "analytics", op: SCOPE_OP_WRITE }
     };
   }
   // GetOverview 窗口 KPI（事件总量/UV/新增用户/人均事件）+ Top 事件 + 今日
   // 实时数（raw 直读）。
   rpc GetOverview(GetAnalyticsOverviewRequest) returns (AnalyticsOverview) {
     option (google.api.http) = { get: "/v1/server/analytics/overview" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_ANALYTICS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "analytics", op: SCOPE_OP_READ }
     };
   }
   // ListEventDefinitions 事件字典（自由上报 + 事后发现，D12；Console 发现入口）。
   rpc ListEventDefinitions(ListEventDefinitionsRequest) returns (ListEventDefinitionsResponse) {
     option (google.api.http) = { get: "/v1/server/analytics/event-definitions" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_ANALYTICS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "analytics", op: SCOPE_OP_READ }
     };
   }
   // QueryTimeseries 事件趋势（DAY → analytics_daily；HOUR → raw 分区裁剪）。
   rpc QueryTimeseries(QueryTimeseriesRequest) returns (QueryTimeseriesResponse) {
     option (google.api.http) = { get: "/v1/server/analytics/timeseries" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_ANALYTICS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "analytics", op: SCOPE_OP_READ }
     };
   }
   // QueryBreakdown 维度拆解（raw 直查 GROUP BY props->>$key + Top-N + __other__
   // 归并，D9；窗口护栏 ≤30 天，prop_key 白名单校验后参数化）。
   rpc QueryBreakdown(QueryBreakdownRequest) returns (QueryBreakdownResponse) {
     option (google.api.http) = { get: "/v1/server/analytics/breakdown" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_ANALYTICS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "analytics", op: SCOPE_OP_READ }
     };
   }
   // QueryRetention 留存矩阵（D11 轻量：first_seen ⋈ user_days 自连接，cohort
   // 窗 ≤92 天 × D0–D14，日粒度 UTC 切日）。
   rpc QueryRetention(QueryRetentionRequest) returns (QueryRetentionResponse) {
     option (google.api.http) = { get: "/v1/server/analytics/retention" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_ANALYTICS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "analytics", op: SCOPE_OP_READ }
     };
   }
   // ListUserEvents 用户行为轨迹下钻（raw keyset 分页，窗 ≤92 天）。
   rpc ListUserEvents(ListUserEventsRequest) returns (ListUserEventsResponse) {
     option (google.api.http) = { get: "/v1/server/analytics/users/{user_id}/events" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_ANALYTICS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "analytics", op: SCOPE_OP_READ }
     };
   }
 }

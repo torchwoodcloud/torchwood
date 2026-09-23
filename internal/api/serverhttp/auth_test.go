@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/lynx-go/grpcapi/authz"
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
@@ -162,16 +163,16 @@ func TestFunctionsHandler_MultipleCredentialsRejected(t *testing.T) {
 
 // testPolicies 构造最小策略注册表（真实策略由 runtime.PolicySet 注入）。
 func testPolicies() *domainauth.PolicySet {
-	set, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{
+	set, err := authz.NewPolicySet([]domainauth.MethodPolicy{
 		{Method: domainauth.StorageServiceCreateFile, Service: "/torchwood.server.v1.StorageService", Access: domainauth.AccessServer,
-			AdminRoles: []domainauth.AdminRole{domainauth.AdminRoleMember, domainauth.AdminRoleAdmin, domainauth.AdminRoleOwner},
-			Scope:      &domainauth.ScopeRule{Resource: domainauth.ScopeStorage, Op: domainauth.ScopeWrite}},
+			AdminRoles: []string{string(domainauth.AdminRoleMember), string(domainauth.AdminRoleAdmin), string(domainauth.AdminRoleOwner)},
+			Scope:      &domainauth.ScopeRule{Resource: string(domainauth.ScopeStorage), Op: domainauth.ScopeWrite}},
 		{Method: domainauth.StorageServiceGetFile, Service: "/torchwood.server.v1.StorageService", Access: domainauth.AccessServer,
-			Scope: &domainauth.ScopeRule{Resource: domainauth.ScopeStorage, Op: domainauth.ScopeRead}},
+			Scope: &domainauth.ScopeRule{Resource: string(domainauth.ScopeStorage), Op: domainauth.ScopeRead}},
 		{Method: FunctionsServiceCreateDeployment, Service: "/torchwood.server.v1.FunctionsService", Access: domainauth.AccessServer,
-			AdminRoles: []domainauth.AdminRole{domainauth.AdminRoleAdmin, domainauth.AdminRoleOwner},
-			Scope:      &domainauth.ScopeRule{Resource: domainauth.ScopeFunctions, Op: domainauth.ScopeWrite}},
-	})
+			AdminRoles: []string{string(domainauth.AdminRoleAdmin), string(domainauth.AdminRoleOwner)},
+			Scope:      &domainauth.ScopeRule{Resource: string(domainauth.ScopeFunctions), Op: domainauth.ScopeWrite}},
+	}...)
 	if err != nil {
 		panic(err)
 	}

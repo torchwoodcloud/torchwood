@@ -8,7 +8,7 @@ import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
@@ -71,7 +71,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // runtime_vars:write（D6 两档，不设 admin 第三档——无热路径凭证分离诉求）。
 // 项目上下文来自凭证（请求体不携带 project_id）。
 service RuntimeVarsService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_SERVER };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   // ---- 集合 ----
 
@@ -80,23 +80,23 @@ service RuntimeVarsService {
       post: "/v1/server/runtime-var-sets"
       body: "*"
     };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "runtime_vars", op: SCOPE_OP_WRITE }
     };
   }
 
   rpc ListVarSets(shared.v1.ListRequest) returns (ListVarSetsResponse) {
     option (google.api.http) = { get: "/v1/server/runtime-var-sets" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "runtime_vars", op: SCOPE_OP_READ }
     };
   }
 
   rpc GetVarSet(GetVarSetRequest) returns (VarSet) {
     option (google.api.http) = { get: "/v1/server/runtime-var-sets/{var_set_id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "runtime_vars", op: SCOPE_OP_READ }
     };
   }
 
@@ -107,9 +107,9 @@ service RuntimeVarsService {
       patch: "/v1/server/runtime-var-sets/{var_set_id}"
       body: "*"
     };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "runtime_vars", op: SCOPE_OP_WRITE }
     };
   }
 
@@ -117,9 +117,9 @@ service RuntimeVarsService {
   // （全部历史不可恢复，Console 二次确认警示）。
   rpc DeleteVarSet(DeleteVarSetRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/runtime-var-sets/{var_set_id}" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "runtime_vars", op: SCOPE_OP_WRITE }
     };
   }
 
@@ -130,23 +130,23 @@ service RuntimeVarsService {
       post: "/v1/server/runtime-var-sets/{var_set_id}/vars"
       body: "*"
     };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "runtime_vars", op: SCOPE_OP_WRITE }
     };
   }
 
   rpc ListRuntimeVars(ListRuntimeVarsRequest) returns (ListRuntimeVarsResponse) {
     option (google.api.http) = { get: "/v1/server/runtime-var-sets/{var_set_id}/vars" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "runtime_vars", op: SCOPE_OP_READ }
     };
   }
 
   rpc GetRuntimeVar(GetRuntimeVarRequest) returns (RuntimeVar) {
     option (google.api.http) = { get: "/v1/server/runtime-var-sets/{var_set_id}/vars/{key}" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "runtime_vars", op: SCOPE_OP_READ }
     };
   }
 
@@ -157,17 +157,17 @@ service RuntimeVarsService {
       patch: "/v1/server/runtime-var-sets/{var_set_id}/vars/{key}"
       body: "*"
     };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "runtime_vars", op: SCOPE_OP_WRITE }
     };
   }
 
   rpc DeleteRuntimeVar(DeleteRuntimeVarRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/runtime-var-sets/{var_set_id}/vars/{key}" };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "runtime_vars", op: SCOPE_OP_WRITE }
     };
   }
 
@@ -177,15 +177,15 @@ service RuntimeVarsService {
   // 全文走 GetRuntimeVarVersion。版本保留最近 50 版/集合（D11）。
   rpc ListRuntimeVarVersions(ListRuntimeVarVersionsRequest) returns (ListRuntimeVarVersionsResponse) {
     option (google.api.http) = { get: "/v1/server/runtime-var-sets/{var_set_id}/versions" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "runtime_vars", op: SCOPE_OP_READ }
     };
   }
 
   rpc GetRuntimeVarVersion(GetRuntimeVarVersionRequest) returns (GetRuntimeVarVersionResponse) {
     option (google.api.http) = { get: "/v1/server/runtime-var-sets/{var_set_id}/versions/{revision}" };
-    option (torchwood.shared.v1.method_auth) = {
-      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_READ }
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "runtime_vars", op: SCOPE_OP_READ }
     };
   }
 
@@ -197,9 +197,9 @@ service RuntimeVarsService {
       post: "/v1/server/runtime-var-sets/{var_set_id}/versions:rollback"
       body: "*"
     };
-    option (torchwood.shared.v1.method_auth) = {
-      admin_roles: [ADMIN_ROLE_ADMIN, ADMIN_ROLE_OWNER]
-      api_key_scope: { resource: SCOPE_RESOURCE_RUNTIME_VARS, op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "runtime_vars", op: SCOPE_OP_WRITE }
     };
   }
 }

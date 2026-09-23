@@ -27,7 +27,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // RuntimeVarsService 是 client 面运行时变量拉取端点（docs/design/runtime-vars.md
-// §2.3）：方法级 ACCESS_PUBLIC（public 集匿名可读），集合级可见性（private 拒绝
+// §2.3）：方法级 ACCESS_LEVEL_PUBLIC（public 集匿名可读），集合级可见性（private 拒绝
 // 匿名）在数据访问层过滤（§2.4）。唯一方法 GetRuntimeVars——按集合全量快照，
 // 无单 key 读/分页/跨集合聚合/集合目录（D4/D14）。
 type RuntimeVarsServiceClient interface {
@@ -61,7 +61,7 @@ func (c *runtimeVarsServiceClient) GetRuntimeVars(ctx context.Context, in *GetRu
 // for forward compatibility.
 //
 // RuntimeVarsService 是 client 面运行时变量拉取端点（docs/design/runtime-vars.md
-// §2.3）：方法级 ACCESS_PUBLIC（public 集匿名可读），集合级可见性（private 拒绝
+// §2.3）：方法级 ACCESS_LEVEL_PUBLIC（public 集匿名可读），集合级可见性（private 拒绝
 // 匿名）在数据访问层过滤（§2.4）。唯一方法 GetRuntimeVars——按集合全量快照，
 // 无单 key 读/分页/跨集合聚合/集合目录（D4/D14）。
 type RuntimeVarsServiceServer interface {

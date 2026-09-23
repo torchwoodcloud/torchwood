@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
+	grpcapiv1 "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	"github.com/lynx-go/lynx"
 	lynxgrpc "github.com/lynx-go/lynx/server/grpc"
 	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	consolev1 "github.com/torchwoodcloud/torchwood/genproto/console/v1"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
-	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	"github.com/torchwoodcloud/torchwood/internal/api/clientgrpc"
 	"github.com/torchwoodcloud/torchwood/internal/api/consolegrpc"
 	"github.com/torchwoodcloud/torchwood/internal/api/interceptor"
@@ -270,20 +270,20 @@ func authzFileDescriptors() []protoreflect.FileDescriptor {
 	}
 }
 
-func resolveServiceDefaultAccess(service protoreflect.ServiceDescriptor) sharedv1.AccessLevel {
+func resolveServiceDefaultAccess(service protoreflect.ServiceDescriptor) grpcapiv1.AccessLevel {
 	options, ok := service.Options().(*descriptorpb.ServiceOptions)
-	if !ok || options == nil || !proto.HasExtension(options, sharedv1.E_ServiceAuth) {
-		return sharedv1.AccessLevel_ACCESS_LEVEL_UNSPECIFIED
+	if !ok || options == nil || !proto.HasExtension(options, grpcapiv1.E_ServiceAuth) {
+		return grpcapiv1.AccessLevel_ACCESS_LEVEL_UNSPECIFIED
 	}
-	ext := proto.GetExtension(options, sharedv1.E_ServiceAuth)
-	policy, ok := ext.(*sharedv1.ServiceAuth)
+	ext := proto.GetExtension(options, grpcapiv1.E_ServiceAuth)
+	policy, ok := ext.(*grpcapiv1.ServiceAuth)
 	if !ok {
-		return sharedv1.AccessLevel_ACCESS_LEVEL_UNSPECIFIED
+		return grpcapiv1.AccessLevel_ACCESS_LEVEL_UNSPECIFIED
 	}
 	return policy.GetDefaultAccess()
 }
 
-// resolveMethodAccess 已由 BuildMethodPolicies/buildMethodPolicy 取代
+// resolveMethodAccess 已由 buildMethodPolicies（grpcapi.authz.Build）取代
 // （策略解析单一实现）；保留 resolveServiceDefaultAccess 供 swagger 一致性
 // 测试推导服务默认 access。
 

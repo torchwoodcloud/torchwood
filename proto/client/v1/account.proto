@@ -9,11 +9,11 @@ import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "shared/v1/authz.proto";
+import "grpcapi/v1/authz.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=authenticated：swagger 顶层声明 Bearer security；
-// ACCESS_PUBLIC 方法逐方法声明 security: [] + x-torchwood-access: "public"
+// ACCESS_LEVEL_PUBLIC 方法逐方法声明 security: [] + x-torchwood-access: "public"
 // （详见 docs/developer/09-api-guide.md §1.4 的 OpenAPI 建模约定）。
 option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   security_definitions: {
@@ -67,11 +67,11 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service AccountService {
-  option (torchwood.shared.v1.service_auth) = { default_access: ACCESS_END_USER };
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_END_USER };
 
   rpc SignUp(SignUpRequest) returns (SignUpResponse) {
     option (google.api.http) = { post: "/v1/account/sign-up", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -83,7 +83,7 @@ service AccountService {
 
   rpc SignIn(SignInRequest) returns (SignInResponse) {
     option (google.api.http) = { post: "/v1/account/sign-in", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -95,7 +95,7 @@ service AccountService {
 
   rpc SignOut(SignOutRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { post: "/v1/account/sign-out", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -106,7 +106,7 @@ service AccountService {
 
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse) {
     option (google.api.http) = { post: "/v1/account/refresh", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -118,7 +118,7 @@ service AccountService {
 
   rpc Me(MeRequest) returns (Account) {
     option (google.api.http) = { get: "/v1/account/me" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -129,7 +129,7 @@ service AccountService {
 
   rpc UpdateAccount(UpdateAccountRequest) returns (Account) {
     option (google.api.http) = { patch: "/v1/account", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -144,7 +144,7 @@ service AccountService {
   // 行保留为孤儿数据（显式决策，不做级联删除）。
   rpc DeleteAccount(DeleteAccountRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/account" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -155,11 +155,11 @@ service AccountService {
 
   // 确认邮箱变更：消费邮件中的一次性 secret，验证通过后 email 才切换
   //（staging：验证前 email 保持旧值，旧邮箱仍可登录/找回）。
-  // ACCESS_PUBLIC：邮件链接点开即完成（与 recovery 同一安全模型——256-bit
+  // ACCESS_LEVEL_PUBLIC：邮件链接点开即完成（与 recovery 同一安全模型——256-bit
   // 随机 secret + 24h TTL + GETDEL 一次性消费），点链接无需登录态。
   rpc ConfirmEmailChange(ConfirmEmailChangeRequest) returns (Account) {
     option (google.api.http) = { put: "/v1/account/email-change", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -171,7 +171,7 @@ service AccountService {
 
   rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse) {
     option (google.api.http) = { get: "/v1/account/sessions" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -182,7 +182,7 @@ service AccountService {
 
   rpc DeleteSession(DeleteSessionRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/account/sessions/{session_id}" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -195,7 +195,7 @@ service AccountService {
     // REST 绑定：DELETE 不带 body（避免依赖 allow_delete_body），
     // keep_current 经 query 传递：DELETE /v1/account/sessions?keep_current=true。
     option (google.api.http) = { delete: "/v1/account/sessions" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -206,7 +206,7 @@ service AccountService {
 
   rpc GetPrefs(GetPrefsRequest) returns (GetPrefsResponse) {
     option (google.api.http) = { get: "/v1/account/prefs" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -217,7 +217,7 @@ service AccountService {
 
   rpc UpdatePrefs(UpdatePrefsRequest) returns (GetPrefsResponse) {
     option (google.api.http) = { put: "/v1/account/prefs", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -228,7 +228,7 @@ service AccountService {
 
   rpc CreateEmailOTP(CreateEmailOTPRequest) returns (ChallengeResponse) {
     option (google.api.http) = { post: "/v1/account/sessions/email-otp", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -240,7 +240,7 @@ service AccountService {
 
   rpc CreateEmailOTPSession(CreateEmailOTPSessionRequest) returns (SignInResponse) {
     option (google.api.http) = { post: "/v1/account/sessions/email-otp/verify", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -252,7 +252,7 @@ service AccountService {
 
   rpc CreateOAuth2Session(CreateOAuth2SessionRequest) returns (CreateOAuth2SessionResponse) {
     option (google.api.http) = { get: "/v1/account/sessions/oauth2/{provider}" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -264,7 +264,7 @@ service AccountService {
 
   rpc CreateOAuth2TokenSession(CreateOAuth2TokenSessionRequest) returns (SignInResponse) {
     option (google.api.http) = { post: "/v1/account/sessions/oauth2/{provider}/token", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -276,7 +276,7 @@ service AccountService {
 
   rpc CreatePhoneOTP(CreatePhoneOTPRequest) returns (ChallengeResponse) {
     option (google.api.http) = { post: "/v1/account/sessions/phone-otp", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -288,7 +288,7 @@ service AccountService {
 
   rpc CreatePhoneOTPSession(CreatePhoneOTPSessionRequest) returns (SignInResponse) {
     option (google.api.http) = { post: "/v1/account/sessions/phone-otp/verify", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -300,7 +300,7 @@ service AccountService {
 
   rpc CreateWeChatMiniProgramSession(CreateWeChatMiniProgramSessionRequest) returns (SignInResponse) {
     option (google.api.http) = { post: "/v1/account/sessions/wechat/miniprogram", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -312,7 +312,7 @@ service AccountService {
 
   rpc CreateAnonymousSession(CreateAnonymousSessionRequest) returns (SignInResponse) {
     option (google.api.http) = { post: "/v1/account/sessions/anonymous", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -324,7 +324,7 @@ service AccountService {
 
   rpc CreateOAuth2LinkSession(CreateOAuth2LinkSessionRequest) returns (CreateOAuth2SessionResponse) {
     option (google.api.http) = { get: "/v1/account/sessions/oauth2/{provider}/link" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -335,7 +335,7 @@ service AccountService {
 
   rpc CreateOAuth2LinkTokenSession(CreateOAuth2LinkTokenSessionRequest) returns (Account) {
     option (google.api.http) = { post: "/v1/account/sessions/oauth2/{provider}/link/token", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -346,7 +346,7 @@ service AccountService {
 
   rpc CreateVerification(CreateVerificationRequest) returns (CreateVerificationResponse) {
     option (google.api.http) = { post: "/v1/account/verification", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -357,7 +357,7 @@ service AccountService {
 
   rpc UpdateVerification(UpdateVerificationRequest) returns (Account) {
     option (google.api.http) = { put: "/v1/account/verification", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -369,7 +369,7 @@ service AccountService {
 
   rpc CreateRecovery(CreateRecoveryRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { post: "/v1/account/recovery", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -381,7 +381,7 @@ service AccountService {
 
   rpc UpdateRecovery(UpdateRecoveryRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { put: "/v1/account/recovery", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -394,7 +394,7 @@ service AccountService {
   // MFA
   rpc ListFactors(ListFactorsRequest) returns (ListFactorsResponse) {
     option (google.api.http) = { get: "/v1/account/mfa" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -405,7 +405,7 @@ service AccountService {
 
   rpc CreateTOTPFactor(CreateTOTPFactorRequest) returns (TOTPFactor) {
     option (google.api.http) = { post: "/v1/account/mfa/totp", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -416,7 +416,7 @@ service AccountService {
 
   rpc VerifyTOTPFactor(VerifyTOTPFactorRequest) returns (Factor) {
     option (google.api.http) = { put: "/v1/account/mfa/totp", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -427,7 +427,7 @@ service AccountService {
 
   rpc DeleteFactor(DeleteFactorRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/account/mfa/{factor_id}" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -438,7 +438,7 @@ service AccountService {
 
   rpc CreateMFASession(CreateMFASessionRequest) returns (SignInResponse) {
     option (google.api.http) = { post: "/v1/account/mfa/challenge", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -451,7 +451,7 @@ service AccountService {
   // 一次性 JWT
   rpc CreateJWT(CreateJWTRequest) returns (CreateJWTResponse) {
     option (google.api.http) = { post: "/v1/account/jwt", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"
@@ -463,7 +463,7 @@ service AccountService {
   // Magic URL
   rpc CreateMagicURLSession(CreateMagicURLSessionRequest) returns (ChallengeResponse) {
     option (google.api.http) = { post: "/v1/account/sessions/magic-url", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -475,7 +475,7 @@ service AccountService {
 
   rpc UpdateMagicURLSession(UpdateMagicURLSessionRequest) returns (SignInResponse) {
     option (google.api.http) = { put: "/v1/account/sessions/magic-url", body: "*" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_PUBLIC };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_PUBLIC };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       security: {}
       extensions: {
@@ -488,7 +488,7 @@ service AccountService {
   // 账号日志
   rpc ListLogs(ListLogsRequest) returns (ListLogsResponse) {
     option (google.api.http) = { get: "/v1/account/logs" };
-    option (torchwood.shared.v1.method_auth) = { access: ACCESS_END_USER };
+    option (grpcapi.v1.method_auth) = { access: ACCESS_LEVEL_END_USER };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
         key: "x-torchwood-access"

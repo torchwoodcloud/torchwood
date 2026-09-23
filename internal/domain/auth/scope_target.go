@@ -148,8 +148,9 @@ func ParseScopeToken(s string) (scopeToken, bool) {
 //     （targets 零值）或寻址其他实例一律不放行。
 //
 // 未声明 scope 的方法（rule==nil）依旧一律拒绝。
-func (s *PolicySet) AllowsAPIKeyTargets(fullMethod string, scopes []string, targets ScopeTargets) bool {
-	rule := s.HasAPIKeyScope(fullMethod)
+// 阶段 1 起为包级函数（类型本体移驻 grpcapi.authz，外部类型无法挂方法）。
+func AllowsAPIKeyTargets(s *PolicySet, fullMethod string, scopes []string, targets ScopeTargets) bool {
+	rule := s.ScopeRule(fullMethod)
 	if rule == nil {
 		return false
 	}
@@ -161,13 +162,13 @@ func (s *PolicySet) AllowsAPIKeyTargets(fullMethod string, scopes []string, targ
 		if !ok {
 			continue
 		}
-		if tok.Resource != rule.Resource {
+		if string(tok.Resource) != rule.Resource {
 			continue
 		}
 		if tok.Op != "" && tok.Op != rule.Op {
 			continue
 		}
-		if tok.TargetID != "" && !targets.match(rule.Resource, tok.TargetID) {
+		if tok.TargetID != "" && !targets.match(ScopeResource(rule.Resource), tok.TargetID) {
 			continue
 		}
 		return true
