@@ -33,6 +33,7 @@
 | `server.http.public_url` | — | 对外基址；构造 OAuth 回调 URI，并以 `https://` 前缀决定 cookie `Secure` |
 | `server.http.cors.*` | 不启用 | 仅当配置了 `cors` 段才挂 CORS 中间件 |
 | `server.metrics.addr` | `127.0.0.1:9040` | `/metrics` 无鉴权，缺省只听回环 |
+| `server.debug.addr` | `127.0.0.1:6060` | lynx debug 诊断服务（pprof 全端点 + `/healthz` + `/version`），仅 server 进程装配；pprof 暴露内存快照与源码路径，勿映射出容器 |
 
 `server.http.cors` 字段：`allow_origins`（精确匹配或 `*`）、`allow_methods`、`allow_headers`、`expose_headers`（落在真实响应上，浏览器才可读）、`allow_credentials`（为 true 时 `*` origin 被剔除并告警；仅随匹配 origin 输出）、`max_age`（秒，>0 才输出）。反射 origin 时必设 `Vary: Origin`；预检统一 204。
 

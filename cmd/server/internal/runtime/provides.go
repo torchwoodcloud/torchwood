@@ -14,6 +14,7 @@ var ProviderSet = wire.NewSet(
 	NewGRPCServer,
 	NewGRPCGatewayServer,
 	NewMetricsServer,
+	NewDebugServer,
 	NewConsoleHandler,
 	ProvideMethodPolicies,
 	ProvideScopeVocabulary,

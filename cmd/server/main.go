@@ -18,6 +18,30 @@ import (
 
 var version, commit, date string
 
+// setupApp 是生产 main 与 lynxtest L2 装配测试（main_test.go）共用的组装
+// 函数：SetLogger → Wire 组装 → cleanup 挂 OnPostStop → 钩子/服务注册。
+// 测试与生产唯一的环境差异全部经配置注入（lynxtest WithConfigMap），
+// 组装代码不写测试分支。
+func setupApp(app lynx.App) error {
+	app.SetLogger(lynxzap.MustNewLogger(app))
+	app.Logger().Info("runtime environment",
+		"env", string(config.CurrentRuntimeEnv()),
+		"drain_timeout", config.CurrentDrainTimeout().String())
+
+	bootstrap, cleanup, err := wireBootstrap(app)
+	if err != nil {
+		return err
+	}
+	// cleanup（关闭 DB/Redis 等底层资源）挂 OnPostStop（lynx v1.10.0）：
+	// 所有服务 Stop、总线关停之后、Run 返回前逆序执行，自带
+	// CleanupTimeout 预算（默认 10s），覆盖 Run 全部退出路径。此前它
+	// 不能进 OnPreStop（先于服务 Stop，会掐断排水/关停期间在途请求的
+	// 连接池），只能等 RunE 返回后由 main 手写超时兜底样板。
+	app.OnPostStop(cleanup)
+	bootstrap.Apply(app)
+	return nil
+}
+
 func main() {
 	_ = godotenv.Load()
 
@@ -26,25 +50,7 @@ func main() {
 	// 默认 30s（LB 摘流）。显式 TORCHWOOD_SERVER_DRAIN_TIMEOUT 可覆盖。
 	drainTimeout := config.CurrentDrainTimeout()
 
-	runner := lynx.NewRunner(func(app lynx.App) error {
-		app.SetLogger(lynxzap.MustNewLogger(app))
-		app.Logger().Info("runtime environment",
-			"env", string(config.CurrentRuntimeEnv()),
-			"drain_timeout", drainTimeout.String())
-
-		bootstrap, cleanup, err := wireBootstrap(app)
-		if err != nil {
-			return err
-		}
-		// cleanup（关闭 DB/Redis 等底层资源）挂 OnPostStop（lynx v1.10.0）：
-		// 所有服务 Stop、总线关停之后、Run 返回前逆序执行，自带
-		// CleanupTimeout 预算（默认 10s），覆盖 Run 全部退出路径。此前它
-		// 不能进 OnPreStop（先于服务 Stop，会掐断排水/关停期间在途请求的
-		// 连接池），只能等 RunE 返回后由 main 手写超时兜底样板。
-		app.OnPostStop(cleanup)
-		bootstrap.Apply(app)
-		return nil
-	},
+	runner := lynx.NewRunner(setupApp,
 		lynx.WithName("Torchwood"),
 		lynx.WithVersion(version),
 		lynx.WithBindFlagsFunc(func(f *pflag.FlagSet) {

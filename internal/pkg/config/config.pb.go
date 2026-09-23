@@ -130,10 +130,13 @@ func (x *AppConfig) GetAnalytics() *Analytics {
 }
 
 type Server struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Grpc          *GRPC                  `protobuf:"bytes,1,opt,name=grpc,proto3" json:"grpc,omitempty"`
-	Http          *Http                  `protobuf:"bytes,2,opt,name=http,proto3" json:"http,omitempty"`
-	Metrics       *Http                  `protobuf:"bytes,3,opt,name=metrics,proto3" json:"metrics,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Grpc    *GRPC                  `protobuf:"bytes,1,opt,name=grpc,proto3" json:"grpc,omitempty"`
+	Http    *Http                  `protobuf:"bytes,2,opt,name=http,proto3" json:"http,omitempty"`
+	Metrics *Http                  `protobuf:"bytes,3,opt,name=metrics,proto3" json:"metrics,omitempty"`
+	// debug 运维诊断服务（lynx/debug：pprof + /healthz + /version）。仅 server
+	// 进程装配；缺省 127.0.0.1:6060 仅监听回环，pprof 不暴露到容器外。
+	Debug         *Http `protobuf:"bytes,4,opt,name=debug,proto3" json:"debug,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -185,6 +188,13 @@ func (x *Server) GetHttp() *Http {
 func (x *Server) GetMetrics() *Http {
 	if x != nil {
 		return x.Metrics
+	}
+	return nil
+}
+
+func (x *Server) GetDebug() *Http {
+	if x != nil {
+		return x.Debug
 	}
 	return nil
 }
@@ -3147,11 +3157,12 @@ const file_config_proto_rawDesc = "" +
 	"\x05idgen\x18\b \x01(\v2\x1b.torchwood.api.config.IdGenR\x05idgen\x12:\n" +
 	"\bpayments\x18\t \x01(\v2\x1e.torchwood.api.config.PaymentsR\bpayments\x12=\n" +
 	"\tanalytics\x18\n" +
-	" \x01(\v2\x1f.torchwood.api.config.AnalyticsR\tanalytics\"\x9e\x01\n" +
+	" \x01(\v2\x1f.torchwood.api.config.AnalyticsR\tanalytics\"\xd0\x01\n" +
 	"\x06Server\x12.\n" +
 	"\x04grpc\x18\x01 \x01(\v2\x1a.torchwood.api.config.GRPCR\x04grpc\x12.\n" +
 	"\x04http\x18\x02 \x01(\v2\x1a.torchwood.api.config.HttpR\x04http\x124\n" +
-	"\ametrics\x18\x03 \x01(\v2\x1a.torchwood.api.config.HttpR\ametrics\"4\n" +
+	"\ametrics\x18\x03 \x01(\v2\x1a.torchwood.api.config.HttpR\ametrics\x120\n" +
+	"\x05debug\x18\x04 \x01(\v2\x1a.torchwood.api.config.HttpR\x05debug\"4\n" +
 	"\x04GRPC\x12\x12\n" +
 	"\x04addr\x18\x01 \x01(\tR\x04addr\x12\x18\n" +
 	"\atimeout\x18\x02 \x01(\tR\atimeout\"\xed\x02\n" +
@@ -3455,49 +3466,50 @@ var file_config_proto_depIdxs = []int32{
 	2,  // 9: torchwood.api.config.Server.grpc:type_name -> torchwood.api.config.GRPC
 	3,  // 10: torchwood.api.config.Server.http:type_name -> torchwood.api.config.Http
 	3,  // 11: torchwood.api.config.Server.metrics:type_name -> torchwood.api.config.Http
-	16, // 12: torchwood.api.config.Http.cors:type_name -> torchwood.api.config.Http.Cors
-	17, // 13: torchwood.api.config.Security.jwt:type_name -> torchwood.api.config.Security.Jwt
-	18, // 14: torchwood.api.config.Security.api_key:type_name -> torchwood.api.config.Security.ApiKey
-	19, // 15: torchwood.api.config.Security.sessions:type_name -> torchwood.api.config.Security.Sessions
-	20, // 16: torchwood.api.config.Security.rate_limit:type_name -> torchwood.api.config.Security.RateLimit
-	21, // 17: torchwood.api.config.Security.login_throttle:type_name -> torchwood.api.config.Security.LoginThrottle
-	23, // 18: torchwood.api.config.Database.pool:type_name -> torchwood.api.config.Database.Pool
-	5,  // 19: torchwood.api.config.Data.database:type_name -> torchwood.api.config.Database
-	6,  // 20: torchwood.api.config.Data.redis:type_name -> torchwood.api.config.Redis
-	24, // 21: torchwood.api.config.Storage.s3:type_name -> torchwood.api.config.Storage.S3
-	25, // 22: torchwood.api.config.Storage.local:type_name -> torchwood.api.config.Storage.Local
-	26, // 23: torchwood.api.config.Functions.docker:type_name -> torchwood.api.config.Functions.Docker
-	27, // 24: torchwood.api.config.Functions.execution:type_name -> torchwood.api.config.Functions.Execution
-	28, // 25: torchwood.api.config.Functions.dispatcher:type_name -> torchwood.api.config.Functions.Dispatcher
-	29, // 26: torchwood.api.config.Functions.trigger:type_name -> torchwood.api.config.Functions.Trigger
-	30, // 27: torchwood.api.config.Functions.client_invoke:type_name -> torchwood.api.config.Functions.ClientInvoke
-	31, // 28: torchwood.api.config.Functions.packer:type_name -> torchwood.api.config.Functions.Packer
-	32, // 29: torchwood.api.config.Functions.image:type_name -> torchwood.api.config.Functions.Image
-	33, // 30: torchwood.api.config.Functions.storage:type_name -> torchwood.api.config.Functions.Storage
-	34, // 31: torchwood.api.config.Messaging.smtp:type_name -> torchwood.api.config.Messaging.SMTP
-	11, // 32: torchwood.api.config.Messaging.sms:type_name -> torchwood.api.config.SMS
-	12, // 33: torchwood.api.config.SMS.twilio:type_name -> torchwood.api.config.Twilio
-	35, // 34: torchwood.api.config.IdGen.random:type_name -> torchwood.api.config.IdGen.Random
-	36, // 35: torchwood.api.config.IdGen.snowflake:type_name -> torchwood.api.config.IdGen.Snowflake
-	37, // 36: torchwood.api.config.IdGen.sequence:type_name -> torchwood.api.config.IdGen.Sequence
-	38, // 37: torchwood.api.config.IdGen.resources:type_name -> torchwood.api.config.IdGen.Resources
-	39, // 38: torchwood.api.config.Payments.stripe:type_name -> torchwood.api.config.Payments.Stripe
-	40, // 39: torchwood.api.config.Payments.wechat:type_name -> torchwood.api.config.Payments.WeChat
-	41, // 40: torchwood.api.config.Payments.alipay:type_name -> torchwood.api.config.Payments.Alipay
-	42, // 41: torchwood.api.config.Payments.ios_iap:type_name -> torchwood.api.config.Payments.IosIap
-	22, // 42: torchwood.api.config.Security.RateLimit.ip:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	22, // 43: torchwood.api.config.Security.RateLimit.user:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	22, // 44: torchwood.api.config.Security.RateLimit.api_key:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	22, // 45: torchwood.api.config.Security.RateLimit.functions_execution:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	22, // 46: torchwood.api.config.Security.LoginThrottle.email:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	22, // 47: torchwood.api.config.Security.LoginThrottle.ip:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	22, // 48: torchwood.api.config.Security.LoginThrottle.signup_ip:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	22, // 49: torchwood.api.config.Security.LoginThrottle.api_key_auth:type_name -> torchwood.api.config.Security.RateLimit.Dimension
-	50, // [50:50] is the sub-list for method output_type
-	50, // [50:50] is the sub-list for method input_type
-	50, // [50:50] is the sub-list for extension type_name
-	50, // [50:50] is the sub-list for extension extendee
-	0,  // [0:50] is the sub-list for field type_name
+	3,  // 12: torchwood.api.config.Server.debug:type_name -> torchwood.api.config.Http
+	16, // 13: torchwood.api.config.Http.cors:type_name -> torchwood.api.config.Http.Cors
+	17, // 14: torchwood.api.config.Security.jwt:type_name -> torchwood.api.config.Security.Jwt
+	18, // 15: torchwood.api.config.Security.api_key:type_name -> torchwood.api.config.Security.ApiKey
+	19, // 16: torchwood.api.config.Security.sessions:type_name -> torchwood.api.config.Security.Sessions
+	20, // 17: torchwood.api.config.Security.rate_limit:type_name -> torchwood.api.config.Security.RateLimit
+	21, // 18: torchwood.api.config.Security.login_throttle:type_name -> torchwood.api.config.Security.LoginThrottle
+	23, // 19: torchwood.api.config.Database.pool:type_name -> torchwood.api.config.Database.Pool
+	5,  // 20: torchwood.api.config.Data.database:type_name -> torchwood.api.config.Database
+	6,  // 21: torchwood.api.config.Data.redis:type_name -> torchwood.api.config.Redis
+	24, // 22: torchwood.api.config.Storage.s3:type_name -> torchwood.api.config.Storage.S3
+	25, // 23: torchwood.api.config.Storage.local:type_name -> torchwood.api.config.Storage.Local
+	26, // 24: torchwood.api.config.Functions.docker:type_name -> torchwood.api.config.Functions.Docker
+	27, // 25: torchwood.api.config.Functions.execution:type_name -> torchwood.api.config.Functions.Execution
+	28, // 26: torchwood.api.config.Functions.dispatcher:type_name -> torchwood.api.config.Functions.Dispatcher
+	29, // 27: torchwood.api.config.Functions.trigger:type_name -> torchwood.api.config.Functions.Trigger
+	30, // 28: torchwood.api.config.Functions.client_invoke:type_name -> torchwood.api.config.Functions.ClientInvoke
+	31, // 29: torchwood.api.config.Functions.packer:type_name -> torchwood.api.config.Functions.Packer
+	32, // 30: torchwood.api.config.Functions.image:type_name -> torchwood.api.config.Functions.Image
+	33, // 31: torchwood.api.config.Functions.storage:type_name -> torchwood.api.config.Functions.Storage
+	34, // 32: torchwood.api.config.Messaging.smtp:type_name -> torchwood.api.config.Messaging.SMTP
+	11, // 33: torchwood.api.config.Messaging.sms:type_name -> torchwood.api.config.SMS
+	12, // 34: torchwood.api.config.SMS.twilio:type_name -> torchwood.api.config.Twilio
+	35, // 35: torchwood.api.config.IdGen.random:type_name -> torchwood.api.config.IdGen.Random
+	36, // 36: torchwood.api.config.IdGen.snowflake:type_name -> torchwood.api.config.IdGen.Snowflake
+	37, // 37: torchwood.api.config.IdGen.sequence:type_name -> torchwood.api.config.IdGen.Sequence
+	38, // 38: torchwood.api.config.IdGen.resources:type_name -> torchwood.api.config.IdGen.Resources
+	39, // 39: torchwood.api.config.Payments.stripe:type_name -> torchwood.api.config.Payments.Stripe
+	40, // 40: torchwood.api.config.Payments.wechat:type_name -> torchwood.api.config.Payments.WeChat
+	41, // 41: torchwood.api.config.Payments.alipay:type_name -> torchwood.api.config.Payments.Alipay
+	42, // 42: torchwood.api.config.Payments.ios_iap:type_name -> torchwood.api.config.Payments.IosIap
+	22, // 43: torchwood.api.config.Security.RateLimit.ip:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	22, // 44: torchwood.api.config.Security.RateLimit.user:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	22, // 45: torchwood.api.config.Security.RateLimit.api_key:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	22, // 46: torchwood.api.config.Security.RateLimit.functions_execution:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	22, // 47: torchwood.api.config.Security.LoginThrottle.email:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	22, // 48: torchwood.api.config.Security.LoginThrottle.ip:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	22, // 49: torchwood.api.config.Security.LoginThrottle.signup_ip:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	22, // 50: torchwood.api.config.Security.LoginThrottle.api_key_auth:type_name -> torchwood.api.config.Security.RateLimit.Dimension
+	51, // [51:51] is the sub-list for method output_type
+	51, // [51:51] is the sub-list for method input_type
+	51, // [51:51] is the sub-list for extension type_name
+	51, // [51:51] is the sub-list for extension extendee
+	0,  // [0:51] is the sub-list for field type_name
 }
 
 func init() { file_config_proto_init() }

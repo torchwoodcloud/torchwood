@@ -282,7 +282,8 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	v4 := NewComponents(grpcServer, grpcGatewayServer, realtimeSubscriberService, metricsServer)
+	debugService := runtime.NewDebugServer(appConfig, buildInfo)
+	v4 := NewComponents(grpcServer, grpcGatewayServer, realtimeSubscriberService, metricsServer, debugService)
 	v5 := bootkit.NewComponentBuilders()
 	bootstrap := boot.New(preStartHooks, drainHooks, preStopHooks, postStopHooks, v4, v5)
 	return bootstrap, func() {

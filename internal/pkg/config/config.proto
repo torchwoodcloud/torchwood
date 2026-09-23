@@ -20,6 +20,9 @@ message Server {
   GRPC grpc = 1;
   Http http = 2;
   Http metrics = 3;
+  // debug 运维诊断服务（lynx/debug：pprof + /healthz + /version）。仅 server
+  // 进程装配；缺省 127.0.0.1:6060 仅监听回环，pprof 不暴露到容器外。
+  Http debug = 4;
 }
 
 message GRPC {

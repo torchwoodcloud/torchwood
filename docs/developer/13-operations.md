@@ -10,7 +10,7 @@
 
 | 进程 | 入口 | 职责 | 启动期校验 |
 |------|------|------|-----------|
-| **server** | `cmd/server` | Lynx Runner，监听三组端口：gRPC `127.0.0.1:9060`、HTTP `:9080`（grpc-gateway `/v1/*` + 自定义 serverhttp（Storage 上传下载、OAuth / Functions / Payments 回调、函数触发器公开路由）+ `/v1/realtime` WebSocket + Admin Console SPA `/console/` + landing 页）、metrics `127.0.0.1:9040`。装配在 `cmd/server/internal/runtime/`，服务注册顺序 grpc → gateway → realtime-subscriber → metrics | `security.jwt.secret` 必填；authz 策略语义断言失败即启动失败；`functions.dispatcher.url` 必填 |
+| **server** | `cmd/server` | Lynx Runner，监听四组端口：gRPC `127.0.0.1:9060`、HTTP `:9080`（grpc-gateway `/v1/*` + 自定义 serverhttp（Storage 上传下载、OAuth / Functions / Payments 回调、函数触发器公开路由）+ `/v1/realtime` WebSocket + Admin Console SPA `/console/` + landing 页）、metrics `127.0.0.1:9040`、debug `127.0.0.1:6060`（pprof + version）。装配在 `cmd/server/internal/runtime/`，服务注册顺序 grpc → gateway → realtime-subscriber → metrics → debug | `security.jwt.secret` 必填；authz 策略语义断言失败即启动失败；`functions.dispatcher.url` 必填 |
 | **worker** | `cmd/worker` | 后台作业常驻进程，12 个 lynx 服务组件（完整清单与节奏见 §1.2）：Functions 执行队列消费（内含孤儿恢复、执行记录清理、cron 调度、事件触发器消费）、outbox 事件分发、chunk 清理、Stream 修剪、支付关单、资产过期、订阅计费、用量聚合、leaderboards 结榜与清理、analytics rollup 与维护。与 server 共享 `app/domain/infra`，Wire 装配独立、无 `api` 层 | `data.database.source` 必填；`functions.dispatcher.url` 必填；主密钥强度校验与 server 同口径 |
 | **dispatcher** | `cmd/dispatcher` | Functions 执行常驻进程（仓库根 `dispatcher/`），**唯一 docker.sock 持有方**：Build / Execute / RemoveImage 全部 daemon 操作经它分发，resident 实例池 + 租约认领，多节点模型（node_id + Redis registry + 执行路由）。`:9070` 单 HTTP API 面（`POST /v1/dispatch/*`；`GET /healthz`、`GET /metrics` 豁免共享密钥）。零 Postgres 依赖（仅 Redis + docker.sock） | `routing_mode` 值合法性；`registry` 模式要求 `registry_push=true` 且 `node_url` 非空（§7.2） |
 | **packer** | `cmd/packer` | git 部署源打包常驻进程（仓库根 `packer/`）：专职承载不可信 git 输入的重资源操作（浅克隆 + worktree 核算 + 子目录物化为 zip 回传 server），把 `url@ref[:directory]` 归一为与 zip 源同构的代码包；server / worker 零 git 流量。无 Redis / DB / docker 依赖。`:9071` 单 HTTP API 面（`POST /v1/pack/git` + `/healthz`） | `functions.packer.url` 为空 = git 部署源未启用（app 层报明确错误，zip 源不受影响） |
@@ -32,6 +32,7 @@ mise run dev:worker   # go run ./cmd/worker
 | `:9080` | HTTP（gateway + serverhttp + `/console/` + landing） | `server.http.addr` |
 | `127.0.0.1:9060` | gRPC（回环，gateway 同机转发；Dokploy compose 中改为 `:9060` 监听全部网卡、经 Traefik TLS h2c 对外，宿主回环端口仅作 SSH 隧道兜底） | `server.grpc.addr` |
 | `127.0.0.1:9040` | Prometheus `/metrics`（无鉴权，仅回环；生产走反代 + 网络策略） | `server.metrics.addr` |
+| `127.0.0.1:6060` | lynx debug 诊断面（pprof 全端点 + `/healthz` + `/version`；仅容器内网命名空间可达，SSH 转发 / docker exec 诊断用，勿映射宿主端口） | `server.debug.addr` |
 | `:9070` | dispatcher HTTP（分发 API + healthz + metrics） | `functions.dispatcher.addr` |
 | `:9071` | packer HTTP（打包 API + healthz，与 dispatcher 缺省端口错开） | `functions.packer.addr` |
 
@@ -295,6 +296,7 @@ torchwood admin sync-roles-sig \
 | `/healthz/liveness` | 常驻 200 |
 | `/healthz/readiness` | 全健康 200 / 任一失败 503（compose healthcheck 消费） |
 | `grpc.health.v1.Health` | gRPC 侧轮询快照 |
+| debug `GET :6060/healthz`、`GET :6060/version` | 进程存活 + 构建信息（Go/OS/Arch + ldflags 注入的 version/commit/date；`server.debug.addr`） |
 | dispatcher `GET :9070/healthz`、packer `GET :9071/healthz` | 各常驻进程存活面（豁免共享密钥，compose healthcheck 消费） |
 
 **Metrics**：server 独立 HTTP（`server.metrics.addr`，默认 `127.0.0.1:9040`），`GET /metrics`。除 runtime 采集器外还有自定义业务指标：realtime Hub / Stream、documentdb 列授权 reconcile 与 schema 漂移对账、projectschema 迁移耗时、规模预警三指标（§5.1）。dispatcher 有独立 `/metrics`（池 / 实例 / 节点 / 容量指标）。

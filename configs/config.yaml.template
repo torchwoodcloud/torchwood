@@ -18,6 +18,10 @@ server:
   metrics:
     # 默认仅回环监听（metrics 无鉴权）；生产走反向代理 + 网络策略
     addr: "127.0.0.1:9040"
+  debug:
+    # lynx debug 运维诊断服务（pprof + /healthz + /version）；缺省回环
+    # 127.0.0.1:6060，容器内 docker exec / SSH 转发访问，勿映射到宿主端口
+    # addr: "127.0.0.1:6060"
 
 security:
   jwt:

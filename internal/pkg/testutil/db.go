@@ -224,6 +224,16 @@ func sharedAdmin() *bun.DB {
 // SetupTestDB creates a fresh test database, runs migrations, and returns a bun DB client.
 func SetupTestDB(t *testing.T) *clients.Database {
 	t.Helper()
+	_, db := SetupTestDBDSN(t)
+	return db
+}
+
+// SetupTestDBDSN 在 SetupTestDB 语义（隔离库 + 迁移 + roles_sig 同步 + 自动
+// 清理）之上同时返回测试库 DSN：整机组装测试（cmd/server main_test.go）
+// 需要把 data.database.source 指向隔离库，让被测应用以生产装配路径自建
+// 连接池，而不是复用测试侧句柄。
+func SetupTestDBDSN(t *testing.T) (string, *clients.Database) {
+	t.Helper()
 	adminDSN := AdminDSN()
 	baseDSN := TestDSN()
 	if adminDSN == "" {
@@ -290,7 +300,7 @@ func SetupTestDB(t *testing.T) *clients.Database {
 	if err := clients.SyncRolesSigKey(ctx, db); err != nil {
 		t.Fatalf("sync roles sig key: %v", err)
 	}
-	return db
+	return testDSN, db
 }
 
 // TestRolesSigMaster 是集成测试的 roles 签名主密钥（与生产同强度口径）。
