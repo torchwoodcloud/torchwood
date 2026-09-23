@@ -1,0 +1,4590 @@
+{
+  "method_count": 263,
+  "scope_vocabulary": [
+    {
+      "resource": "analytics",
+      "ops": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "resource": "assets",
+      "ops": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "resource": "audit_logs",
+      "ops": [
+        "read"
+      ]
+    },
+    {
+      "resource": "billing",
+      "ops": [
+        "read"
+      ]
+    },
+    {
+      "resource": "databases",
+      "ops": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "resource": "functions",
+      "ops": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "resource": "groups",
+      "ops": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "resource": "leaderboards",
+      "ops": [
+        "read",
+        "write",
+        "admin"
+      ]
+    },
+    {
+      "resource": "oauthproviders",
+      "ops": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "resource": "outbox",
+      "ops": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "resource": "payments",
+      "ops": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "resource": "projects",
+      "ops": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "resource": "runbooks",
+      "ops": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "resource": "runtime_vars",
+      "ops": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "resource": "storage",
+      "ops": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "resource": "subscriptions",
+      "ops": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "resource": "users",
+      "ops": [
+        "read",
+        "write"
+      ]
+    }
+  ],
+  "methods": [
+    {
+      "method": "/torchwood.client.v1.AccountService/ConfirmEmailChange",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "project_id",
+        "secret",
+        "user_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/CreateAnonymousSession",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "project_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/CreateEmailOTP",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "email",
+        "project_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/CreateEmailOTPSession",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "challenge_id",
+        "email",
+        "otp",
+        "project_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/CreateJWT",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/CreateMFASession",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "challenge_token",
+        "code",
+        "factor_id",
+        "project_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/CreateMagicURLSession",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "email",
+        "project_id",
+        "url"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/CreateOAuth2LinkSession",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "failure",
+        "project_id",
+        "provider",
+        "success"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/CreateOAuth2LinkTokenSession",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "code",
+        "project_id",
+        "provider",
+        "state"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/CreateOAuth2Session",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "failure",
+        "project_id",
+        "provider",
+        "success"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/CreateOAuth2TokenSession",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "code",
+        "failure",
+        "project_id",
+        "provider",
+        "state",
+        "success"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/CreatePhoneOTP",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "phone",
+        "project_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/CreatePhoneOTPSession",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "challenge_id",
+        "otp",
+        "phone",
+        "project_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/CreateRecovery",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "email",
+        "project_id",
+        "url"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/CreateTOTPFactor",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/CreateVerification",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "project_id",
+        "url"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/CreateWeChatMiniProgramSession",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "code",
+        "project_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/DeleteAccount",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/DeleteFactor",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "code",
+        "factor_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/DeleteSession",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "session_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/DeleteSessions",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "keep_current"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/GetPrefs",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/ListFactors",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/ListLogs",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "limit",
+        "page_size",
+        "page_token"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/ListSessions",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/Me",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "project_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/RefreshToken",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "project_id",
+        "refresh_token"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/SignIn",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "email",
+        "password",
+        "project_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/SignOut",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "project_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/SignUp",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "email",
+        "invite_code",
+        "name",
+        "password",
+        "project_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/UpdateAccount",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "avatar",
+        "email",
+        "name",
+        "old_password",
+        "password",
+        "url"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/UpdateMagicURLSession",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "project_id",
+        "secret",
+        "user_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/UpdatePrefs",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "prefs"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/UpdateRecovery",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "password",
+        "project_id",
+        "secret",
+        "user_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/UpdateVerification",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "public",
+      "request_fields": [
+        "project_id",
+        "secret",
+        "user_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AccountService/VerifyTOTPFactor",
+      "service": "/torchwood.client.v1.AccountService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "code",
+        "factor_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AnalyticsService/IngestEvents",
+      "service": "/torchwood.client.v1.AnalyticsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "events"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AssetsService/ListAssetDefs",
+      "service": "/torchwood.client.v1.AssetsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "page_size",
+        "page_token"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AssetsService/ListMyAssetLedger",
+      "service": "/torchwood.client.v1.AssetsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "def_code",
+        "page_size",
+        "page_token"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.AssetsService/ListMyAssets",
+      "service": "/torchwood.client.v1.AssetsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "page_size",
+        "page_token"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.DatabasesService/CountDocuments",
+      "service": "/torchwood.client.v1.DatabasesService",
+      "access": "public",
+      "request_fields": [
+        "collection_id",
+        "database_id",
+        "project_id",
+        "query"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.DatabasesService/CreateDocument",
+      "service": "/torchwood.client.v1.DatabasesService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "collection_id",
+        "data",
+        "database_id",
+        "document_id",
+        "permissions",
+        "request_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.DatabasesService/DeleteDocument",
+      "service": "/torchwood.client.v1.DatabasesService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "collection_id",
+        "database_id",
+        "document_id",
+        "request_id",
+        "version"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.DatabasesService/GetDocument",
+      "service": "/torchwood.client.v1.DatabasesService",
+      "access": "public",
+      "request_fields": [
+        "collection_id",
+        "database_id",
+        "document_id",
+        "project_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.DatabasesService/ListChanges",
+      "service": "/torchwood.client.v1.DatabasesService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "collection_id",
+        "database_id",
+        "limit",
+        "project_id",
+        "since_seq"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.DatabasesService/ListDocuments",
+      "service": "/torchwood.client.v1.DatabasesService",
+      "access": "public",
+      "request_fields": [
+        "collection_id",
+        "database_id",
+        "page_size",
+        "page_token",
+        "project_id",
+        "query"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.DatabasesService/UpdateDocument",
+      "service": "/torchwood.client.v1.DatabasesService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "array_updates",
+        "collection_id",
+        "data",
+        "database_id",
+        "document_id",
+        "increment",
+        "permissions",
+        "request_id",
+        "version"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.DatabasesService/UpsertDocument",
+      "service": "/torchwood.client.v1.DatabasesService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "collection_id",
+        "conflict_columns",
+        "data",
+        "database_id",
+        "document_id",
+        "permissions",
+        "request_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.FunctionsService/InvokeFunction",
+      "service": "/torchwood.client.v1.FunctionsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "data",
+        "deployment_id",
+        "function_id",
+        "idempotency_key"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.GroupsService/CreateGroup",
+      "service": "/torchwood.client.v1.GroupsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "name"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.GroupsService/CreateMembership",
+      "service": "/torchwood.client.v1.GroupsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "email",
+        "group_id",
+        "name",
+        "roles"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.GroupsService/DeleteGroup",
+      "service": "/torchwood.client.v1.GroupsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.GroupsService/DeleteMembership",
+      "service": "/torchwood.client.v1.GroupsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "group_id",
+        "membership_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.GroupsService/GetGroup",
+      "service": "/torchwood.client.v1.GroupsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.GroupsService/ListGroups",
+      "service": "/torchwood.client.v1.GroupsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "queries",
+        "sort_order"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.GroupsService/ListMemberships",
+      "service": "/torchwood.client.v1.GroupsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "group_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.GroupsService/UpdateMembershipStatus",
+      "service": "/torchwood.client.v1.GroupsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "group_id",
+        "membership_id",
+        "status"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.LeaderboardsService/GetMyLeaderboardEntry",
+      "service": "/torchwood.client.v1.LeaderboardsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "board_id",
+        "period"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.LeaderboardsService/ListLeaderboardTop",
+      "service": "/torchwood.client.v1.LeaderboardsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "board_id",
+        "page_size",
+        "page_token",
+        "period"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.LeaderboardsService/SubmitLeaderboardScore",
+      "service": "/torchwood.client.v1.LeaderboardsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "board_id",
+        "period",
+        "request_id",
+        "tiebreak_value",
+        "value"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.PaymentsService/CreateOrder",
+      "service": "/torchwood.client.v1.PaymentsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "amount",
+        "cancel_url",
+        "currency",
+        "idempotency_key",
+        "provider",
+        "purpose",
+        "purpose_kind",
+        "success_url"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.PaymentsService/GetMyOrder",
+      "service": "/torchwood.client.v1.PaymentsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "order_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.PaymentsService/ListMyOrders",
+      "service": "/torchwood.client.v1.PaymentsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "page_size",
+        "page_token"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.PaymentsService/VerifyReceipt",
+      "service": "/torchwood.client.v1.PaymentsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "order_id",
+        "receipt"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.RuntimeVarsService/GetRuntimeVars",
+      "service": "/torchwood.client.v1.RuntimeVarsService",
+      "access": "public",
+      "request_fields": [
+        "etag",
+        "project_id",
+        "var_set_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.SubscriptionsService/Cancel",
+      "service": "/torchwood.client.v1.SubscriptionsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "subscription_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.SubscriptionsService/GetMySubscription",
+      "service": "/torchwood.client.v1.SubscriptionsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "plan_code"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.SubscriptionsService/ListPlans",
+      "service": "/torchwood.client.v1.SubscriptionsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "page_size",
+        "page_token"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.client.v1.SubscriptionsService/Subscribe",
+      "service": "/torchwood.client.v1.SubscriptionsService",
+      "access": "end_user",
+      "permissions": [
+        "users"
+      ],
+      "request_fields": [
+        "billing_asset_code",
+        "idempotency_key",
+        "mode",
+        "plan_code"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.AdminsService/CreateAdmin",
+      "service": "/torchwood.console.v1.AdminsService",
+      "access": "permission",
+      "permissions": [
+        "owner"
+      ],
+      "request_fields": [
+        "email",
+        "password",
+        "role"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.AdminsService/DeleteAdmin",
+      "service": "/torchwood.console.v1.AdminsService",
+      "access": "permission",
+      "permissions": [
+        "owner"
+      ],
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.AdminsService/GetCurrentAdmin",
+      "service": "/torchwood.console.v1.AdminsService",
+      "access": "permission",
+      "permissions": [
+        "console"
+      ],
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.AdminsService/ListAdmins",
+      "service": "/torchwood.console.v1.AdminsService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "page_size",
+        "page_token"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.AdminsService/UpdateAdmin",
+      "service": "/torchwood.console.v1.AdminsService",
+      "access": "permission",
+      "permissions": [
+        "owner"
+      ],
+      "request_fields": [
+        "id",
+        "password",
+        "role"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.AdminsService/UpdateCurrentAdmin",
+      "service": "/torchwood.console.v1.AdminsService",
+      "access": "permission",
+      "permissions": [
+        "console"
+      ],
+      "request_fields": [
+        "current_password",
+        "new_password",
+        "timezone"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.ConsoleAuthService/GetSetupStatus",
+      "service": "/torchwood.console.v1.ConsoleAuthService",
+      "access": "public",
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.ConsoleAuthService/RefreshToken",
+      "service": "/torchwood.console.v1.ConsoleAuthService",
+      "access": "public",
+      "request_fields": [
+        "refresh_token"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.ConsoleAuthService/SignIn",
+      "service": "/torchwood.console.v1.ConsoleAuthService",
+      "access": "public",
+      "request_fields": [
+        "email",
+        "password"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.ConsoleAuthService/SignOut",
+      "service": "/torchwood.console.v1.ConsoleAuthService",
+      "access": "public",
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.ConsoleAuthService/SignUp",
+      "service": "/torchwood.console.v1.ConsoleAuthService",
+      "access": "public",
+      "request_fields": [
+        "database_id",
+        "email",
+        "password",
+        "project_id",
+        "setup_token"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.LeaderboardsService/CreateLeaderboardBoard",
+      "service": "/torchwood.console.v1.LeaderboardsService",
+      "access": "permission",
+      "permissions": [
+        "owner"
+      ],
+      "request_fields": [
+        "client_submit",
+        "id",
+        "per_subject_submit_limit",
+        "period_kind",
+        "period_tz",
+        "policy",
+        "retention_periods",
+        "rewards",
+        "sort",
+        "subject_kind",
+        "tie_break",
+        "tiebreak_order",
+        "value_max",
+        "value_min"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.LeaderboardsService/DeleteLeaderboardBoard",
+      "service": "/torchwood.console.v1.LeaderboardsService",
+      "access": "permission",
+      "permissions": [
+        "owner"
+      ],
+      "request_fields": [
+        "board_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.LeaderboardsService/DeleteLeaderboardEntry",
+      "service": "/torchwood.console.v1.LeaderboardsService",
+      "access": "permission",
+      "permissions": [
+        "owner"
+      ],
+      "request_fields": [
+        "board_id",
+        "period",
+        "subject_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.LeaderboardsService/GetLeaderboardBoard",
+      "service": "/torchwood.console.v1.LeaderboardsService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "board_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.LeaderboardsService/GetLeaderboardEntry",
+      "service": "/torchwood.console.v1.LeaderboardsService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "board_id",
+        "period",
+        "subject_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.LeaderboardsService/GetLeaderboardSettlement",
+      "service": "/torchwood.console.v1.LeaderboardsService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "board_id",
+        "period"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.LeaderboardsService/ListLeaderboardBoardPeriods",
+      "service": "/torchwood.console.v1.LeaderboardsService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "board_id",
+        "limit"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.LeaderboardsService/ListLeaderboardBoards",
+      "service": "/torchwood.console.v1.LeaderboardsService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.LeaderboardsService/ListLeaderboardSettlements",
+      "service": "/torchwood.console.v1.LeaderboardsService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "board_id",
+        "limit"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.LeaderboardsService/ListLeaderboardTop",
+      "service": "/torchwood.console.v1.LeaderboardsService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "board_id",
+        "page_size",
+        "page_token",
+        "period"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.LeaderboardsService/RerunLeaderboardSettlement",
+      "service": "/torchwood.console.v1.LeaderboardsService",
+      "access": "permission",
+      "permissions": [
+        "owner"
+      ],
+      "request_fields": [
+        "board_id",
+        "period"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.LeaderboardsService/UpdateLeaderboardBoard",
+      "service": "/torchwood.console.v1.LeaderboardsService",
+      "access": "permission",
+      "permissions": [
+        "owner"
+      ],
+      "request_fields": [
+        "board_id",
+        "clear_rewards",
+        "clear_tiebreak",
+        "clear_value_bounds",
+        "client_submit",
+        "per_subject_submit_limit",
+        "period_kind",
+        "period_tz",
+        "policy",
+        "retention_periods",
+        "rewards",
+        "sort",
+        "subject_kind",
+        "tie_break",
+        "tiebreak_order",
+        "value_max",
+        "value_min"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.console.v1.LeaderboardsService/VoidLeaderboardSettlement",
+      "service": "/torchwood.console.v1.LeaderboardsService",
+      "access": "permission",
+      "permissions": [
+        "owner"
+      ],
+      "request_fields": [
+        "board_id",
+        "period"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.APIKeysService/CreateAPIKey",
+      "service": "/torchwood.server.v1.APIKeysService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "expire_at",
+        "name",
+        "scopes"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.APIKeysService/DeleteAPIKey",
+      "service": "/torchwood.server.v1.APIKeysService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.APIKeysService/GetAPIKey",
+      "service": "/torchwood.server.v1.APIKeysService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.APIKeysService/ListAPIKeys",
+      "service": "/torchwood.server.v1.APIKeysService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "enabled",
+        "page_size",
+        "page_token"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.APIKeysService/UpdateAPIKey",
+      "service": "/torchwood.server.v1.APIKeysService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "enabled",
+        "expire_at",
+        "id",
+        "name",
+        "scopes"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.APIKeysService/WhoAmI",
+      "service": "/torchwood.server.v1.APIKeysService",
+      "access": "public",
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AnalyticsService/GetOverview",
+      "service": "/torchwood.server.v1.AnalyticsService",
+      "access": "server",
+      "scope": {
+        "resource": "analytics",
+        "op": "read"
+      },
+      "request_fields": [
+        "period_end",
+        "period_start"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AnalyticsService/IngestEvents",
+      "service": "/torchwood.server.v1.AnalyticsService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "analytics",
+        "op": "write"
+      },
+      "request_fields": [
+        "events"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AnalyticsService/ListEventDefinitions",
+      "service": "/torchwood.server.v1.AnalyticsService",
+      "access": "server",
+      "scope": {
+        "resource": "analytics",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AnalyticsService/ListUserEvents",
+      "service": "/torchwood.server.v1.AnalyticsService",
+      "access": "server",
+      "scope": {
+        "resource": "analytics",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "period_end",
+        "period_start",
+        "user_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AnalyticsService/QueryBreakdown",
+      "service": "/torchwood.server.v1.AnalyticsService",
+      "access": "server",
+      "scope": {
+        "resource": "analytics",
+        "op": "read"
+      },
+      "request_fields": [
+        "name",
+        "period_end",
+        "period_start",
+        "prop_key",
+        "top_n"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AnalyticsService/QueryRetention",
+      "service": "/torchwood.server.v1.AnalyticsService",
+      "access": "server",
+      "scope": {
+        "resource": "analytics",
+        "op": "read"
+      },
+      "request_fields": [
+        "cohort_end",
+        "cohort_start"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AnalyticsService/QueryTimeseries",
+      "service": "/torchwood.server.v1.AnalyticsService",
+      "access": "server",
+      "scope": {
+        "resource": "analytics",
+        "op": "read"
+      },
+      "request_fields": [
+        "granularity",
+        "names",
+        "period_end",
+        "period_start"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AssetsService/Consume",
+      "service": "/torchwood.server.v1.AssetsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "assets",
+        "op": "write"
+      },
+      "request_fields": [
+        "def_code",
+        "idempotency_key",
+        "owner_id",
+        "quantity",
+        "ref_id",
+        "ref_type"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AssetsService/CreateAssetDef",
+      "service": "/torchwood.server.v1.AssetsService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "assets",
+        "op": "write"
+      },
+      "request_fields": [
+        "class",
+        "code",
+        "decimals",
+        "expires_in",
+        "max_quantity",
+        "metadata",
+        "name",
+        "tradable",
+        "unique_per_owner",
+        "upgradeable"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AssetsService/DeleteAssetDef",
+      "service": "/torchwood.server.v1.AssetsService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "assets",
+        "op": "write"
+      },
+      "request_fields": [
+        "def_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AssetsService/Expire",
+      "service": "/torchwood.server.v1.AssetsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "assets",
+        "op": "write"
+      },
+      "request_fields": [
+        "holding_id",
+        "idempotency_key"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AssetsService/GetAssetDef",
+      "service": "/torchwood.server.v1.AssetsService",
+      "access": "server",
+      "scope": {
+        "resource": "assets",
+        "op": "read"
+      },
+      "request_fields": [
+        "def_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AssetsService/Grant",
+      "service": "/torchwood.server.v1.AssetsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "assets",
+        "op": "write"
+      },
+      "request_fields": [
+        "def_code",
+        "expires_at",
+        "idempotency_key",
+        "level",
+        "metadata",
+        "owner_id",
+        "quantity",
+        "ref_id",
+        "ref_type"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AssetsService/ListAssetDefs",
+      "service": "/torchwood.server.v1.AssetsService",
+      "access": "server",
+      "scope": {
+        "resource": "assets",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "queries",
+        "sort_order"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AssetsService/ListDefAssets",
+      "service": "/torchwood.server.v1.AssetsService",
+      "access": "server",
+      "scope": {
+        "resource": "assets",
+        "op": "read"
+      },
+      "request_fields": [
+        "def_id",
+        "owner_id",
+        "page_size",
+        "page_token",
+        "sort_order"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AssetsService/ListUserAssets",
+      "service": "/torchwood.server.v1.AssetsService",
+      "access": "server",
+      "scope": {
+        "resource": "assets",
+        "op": "read"
+      },
+      "request_fields": [
+        "owner_id",
+        "page_size",
+        "page_token"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AssetsService/ListUserLedger",
+      "service": "/torchwood.server.v1.AssetsService",
+      "access": "server",
+      "scope": {
+        "resource": "assets",
+        "op": "read"
+      },
+      "request_fields": [
+        "ascending",
+        "def_code",
+        "owner_id",
+        "page_size",
+        "page_token"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AssetsService/Mutate",
+      "service": "/torchwood.server.v1.AssetsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "assets",
+        "op": "write"
+      },
+      "request_fields": [
+        "expires_at",
+        "holding_id",
+        "idempotency_key",
+        "level",
+        "metadata",
+        "ref_id",
+        "ref_type"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AssetsService/Reconcile",
+      "service": "/torchwood.server.v1.AssetsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "assets",
+        "op": "write"
+      },
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AssetsService/Transfer",
+      "service": "/torchwood.server.v1.AssetsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "assets",
+        "op": "write"
+      },
+      "request_fields": [
+        "def_code",
+        "from_owner_id",
+        "idempotency_key",
+        "quantity",
+        "ref_id",
+        "ref_type",
+        "to_owner_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AssetsService/UpdateAssetDef",
+      "service": "/torchwood.server.v1.AssetsService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "assets",
+        "op": "write"
+      },
+      "request_fields": [
+        "decimals",
+        "def_id",
+        "expires_in",
+        "max_quantity",
+        "metadata",
+        "name",
+        "status",
+        "tradable",
+        "unique_per_owner",
+        "upgradeable"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AuditLogsService/ListAuditLogs",
+      "service": "/torchwood.server.v1.AuditLogsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "audit_logs",
+        "op": "read"
+      },
+      "request_fields": [
+        "action",
+        "actor_id",
+        "actor_kind",
+        "all_projects",
+        "created_after",
+        "created_before",
+        "include_platform",
+        "page_size",
+        "page_token",
+        "resource_id",
+        "sort_order",
+        "status"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.AuthService/VerifyToken",
+      "service": "/torchwood.server.v1.AuthService",
+      "access": "server",
+      "scope": {
+        "resource": "users",
+        "op": "read"
+      },
+      "request_fields": [
+        "token",
+        "type"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.BillingService/GetUsage",
+      "service": "/torchwood.server.v1.BillingService",
+      "access": "server",
+      "scope": {
+        "resource": "billing",
+        "op": "read"
+      },
+      "request_fields": [
+        "metric",
+        "period_end",
+        "period_start"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.BillingService/ListRollups",
+      "service": "/torchwood.server.v1.BillingService",
+      "access": "server",
+      "scope": {
+        "resource": "billing",
+        "op": "read"
+      },
+      "request_fields": [
+        "metric",
+        "page_size",
+        "page_token",
+        "period_end",
+        "period_start"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.BillingService/ListStatements",
+      "service": "/torchwood.server.v1.BillingService",
+      "access": "server",
+      "scope": {
+        "resource": "billing",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "queries",
+        "sort_order"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/AggregateDocuments",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "scope": {
+        "resource": "databases",
+        "op": "read"
+      },
+      "request_fields": [
+        "aggregations",
+        "collection_id",
+        "database_id",
+        "group_by",
+        "query"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/BulkDeleteDocuments",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "collection_id",
+        "database_id",
+        "document_ids",
+        "request_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/BulkUpdateDocuments",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "collection_id",
+        "data",
+        "database_id",
+        "document_ids",
+        "permissions",
+        "request_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/CountDocuments",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "scope": {
+        "resource": "databases",
+        "op": "read"
+      },
+      "request_fields": [
+        "collection_id",
+        "database_id",
+        "query"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/CreateAttribute",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "array",
+        "collection_id",
+        "database_id",
+        "default_value",
+        "dims",
+        "key",
+        "required",
+        "size",
+        "type"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/CreateCollection",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "database_id",
+        "document_security",
+        "id",
+        "name",
+        "permissions"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/CreateDatabase",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "id",
+        "name"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/CreateDocument",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "collection_id",
+        "data",
+        "database_id",
+        "document_id",
+        "permissions",
+        "request_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/CreateIndex",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "attributes",
+        "collection_id",
+        "database_id",
+        "distance_metric",
+        "id",
+        "orders",
+        "type"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/DeleteAttribute",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "collection_id",
+        "database_id",
+        "key"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/DeleteCollection",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "collection_id",
+        "database_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/DeleteDatabase",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/DeleteDocument",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "collection_id",
+        "database_id",
+        "document_id",
+        "request_id",
+        "version"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/DeleteIndex",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "collection_id",
+        "database_id",
+        "index_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/ExecuteTransactions",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "database_id",
+        "mode",
+        "ops",
+        "request_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/ExportCollectionSchema",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "scope": {
+        "resource": "databases",
+        "op": "read"
+      },
+      "request_fields": [
+        "as",
+        "collection_id",
+        "database_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/GetCollection",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "scope": {
+        "resource": "databases",
+        "op": "read"
+      },
+      "request_fields": [
+        "collection_id",
+        "database_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/GetDatabase",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "scope": {
+        "resource": "databases",
+        "op": "read"
+      },
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/GetDocument",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "scope": {
+        "resource": "databases",
+        "op": "read"
+      },
+      "request_fields": [
+        "collection_id",
+        "database_id",
+        "document_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/ListChanges",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "scope": {
+        "resource": "databases",
+        "op": "read"
+      },
+      "request_fields": [
+        "collection_id",
+        "database_id",
+        "limit",
+        "since_seq"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/ListCollections",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "scope": {
+        "resource": "databases",
+        "op": "read"
+      },
+      "request_fields": [
+        "database_id",
+        "page_size",
+        "page_token",
+        "queries"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/ListDatabases",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "scope": {
+        "resource": "databases",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "queries",
+        "sort_order"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/ListDocuments",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "scope": {
+        "resource": "databases",
+        "op": "read"
+      },
+      "request_fields": [
+        "collection_id",
+        "database_id",
+        "page_size",
+        "page_token",
+        "query"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/MigrateAttribute",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "array",
+        "collection_id",
+        "database_id",
+        "default_value",
+        "dims",
+        "key",
+        "required",
+        "size",
+        "type"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/RestoreAttribute",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "collection_id",
+        "database_id",
+        "key"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/RetireAttribute",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "collection_id",
+        "database_id",
+        "key"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/UpdateCollection",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "collection_id",
+        "database_id",
+        "disabled",
+        "document_security",
+        "name",
+        "permissions"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/UpdateDocument",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "array_updates",
+        "collection_id",
+        "data",
+        "database_id",
+        "document_id",
+        "increment",
+        "permissions",
+        "request_id",
+        "version"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.DatabasesService/UpsertDocument",
+      "service": "/torchwood.server.v1.DatabasesService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "databases",
+        "op": "write"
+      },
+      "request_fields": [
+        "collection_id",
+        "conflict_columns",
+        "data",
+        "database_id",
+        "document_id",
+        "permissions",
+        "request_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/CreateDeployment",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "code",
+        "function_id",
+        "git",
+        "image"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/CreateExecution",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "async",
+        "data",
+        "deployment_id",
+        "function_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/CreateFunction",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "client_anonymous_allowed",
+        "client_callable",
+        "client_limit_window",
+        "client_per_user_limit",
+        "declared_scopes",
+        "enabled",
+        "entrypoint",
+        "id",
+        "name",
+        "runtime",
+        "spec",
+        "timeout_seconds"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/CreateFunctionTrigger",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "cron",
+        "event",
+        "function_id",
+        "http",
+        "type"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/DeleteDeployment",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "deployment_id",
+        "function_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/DeleteFunction",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "function_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/DeleteFunctionTrigger",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "function_id",
+        "trigger_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/GetDeployment",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "scope": {
+        "resource": "functions",
+        "op": "read"
+      },
+      "request_fields": [
+        "deployment_id",
+        "function_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/GetExecution",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "scope": {
+        "resource": "functions",
+        "op": "read"
+      },
+      "request_fields": [
+        "execution_id",
+        "function_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/GetFunction",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "scope": {
+        "resource": "functions",
+        "op": "read"
+      },
+      "request_fields": [
+        "function_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/GetVariables",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "scope": {
+        "resource": "functions",
+        "op": "read"
+      },
+      "request_fields": [
+        "function_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/ListDeployments",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "scope": {
+        "resource": "functions",
+        "op": "read"
+      },
+      "request_fields": [
+        "function_id",
+        "page_size",
+        "page_token"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/ListExecutions",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "scope": {
+        "resource": "functions",
+        "op": "read"
+      },
+      "request_fields": [
+        "created_after",
+        "created_before",
+        "function_id",
+        "page_size",
+        "page_token",
+        "status"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/ListFunctionTriggers",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "scope": {
+        "resource": "functions",
+        "op": "read"
+      },
+      "request_fields": [
+        "function_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/ListFunctions",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "scope": {
+        "resource": "functions",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "queries",
+        "sort_order"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/ListRuntimes",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "scope": {
+        "resource": "functions",
+        "op": "read"
+      },
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/ListSpecifications",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "scope": {
+        "resource": "functions",
+        "op": "read"
+      },
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/RotateFunctionTriggerToken",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "function_id",
+        "trigger_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/SetFunctionScopes",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "declared_scopes",
+        "function_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/SetVariables",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "function_id",
+        "variables"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/UpdateFunction",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "client_anonymous_allowed",
+        "client_callable",
+        "client_limit_window",
+        "client_per_user_limit",
+        "concurrency",
+        "enabled",
+        "entrypoint",
+        "function_id",
+        "idle_ttl_seconds",
+        "max_instances",
+        "max_requests_per_instance",
+        "min_instances",
+        "name",
+        "runtime",
+        "spec",
+        "timeout_seconds"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.GroupsService/CreateGroup",
+      "service": "/torchwood.server.v1.GroupsService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "groups",
+        "op": "write"
+      },
+      "request_fields": [
+        "name",
+        "permissions"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.GroupsService/CreateMembership",
+      "service": "/torchwood.server.v1.GroupsService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "groups",
+        "op": "write"
+      },
+      "request_fields": [
+        "email",
+        "group_id",
+        "name",
+        "roles",
+        "status",
+        "user_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.GroupsService/DeleteGroup",
+      "service": "/torchwood.server.v1.GroupsService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "groups",
+        "op": "write"
+      },
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.GroupsService/DeleteMembership",
+      "service": "/torchwood.server.v1.GroupsService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "groups",
+        "op": "write"
+      },
+      "request_fields": [
+        "group_id",
+        "membership_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.GroupsService/GetGroup",
+      "service": "/torchwood.server.v1.GroupsService",
+      "access": "server",
+      "scope": {
+        "resource": "groups",
+        "op": "read"
+      },
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.GroupsService/GetGroupPrefs",
+      "service": "/torchwood.server.v1.GroupsService",
+      "access": "server",
+      "scope": {
+        "resource": "groups",
+        "op": "read"
+      },
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.GroupsService/GetMembership",
+      "service": "/torchwood.server.v1.GroupsService",
+      "access": "server",
+      "scope": {
+        "resource": "groups",
+        "op": "read"
+      },
+      "request_fields": [
+        "group_id",
+        "membership_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.GroupsService/ListGroups",
+      "service": "/torchwood.server.v1.GroupsService",
+      "access": "server",
+      "scope": {
+        "resource": "groups",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "queries",
+        "sort_order"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.GroupsService/ListMemberships",
+      "service": "/torchwood.server.v1.GroupsService",
+      "access": "server",
+      "scope": {
+        "resource": "groups",
+        "op": "read"
+      },
+      "request_fields": [
+        "group_id",
+        "page_size",
+        "page_token",
+        "queries"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.GroupsService/UpdateGroupPrefs",
+      "service": "/torchwood.server.v1.GroupsService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "groups",
+        "op": "write"
+      },
+      "request_fields": [
+        "id",
+        "prefs"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.GroupsService/UpdateMembership",
+      "service": "/torchwood.server.v1.GroupsService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "groups",
+        "op": "write"
+      },
+      "request_fields": [
+        "group_id",
+        "membership_id",
+        "roles"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.GroupsService/UpdateMembershipStatus",
+      "service": "/torchwood.server.v1.GroupsService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "groups",
+        "op": "write"
+      },
+      "request_fields": [
+        "group_id",
+        "membership_id",
+        "status"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.HealthService/Check",
+      "service": "/torchwood.server.v1.HealthService",
+      "access": "public",
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.HealthService/GetVersion",
+      "service": "/torchwood.server.v1.HealthService",
+      "access": "public",
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.LeaderboardsService/CreateLeaderboardBoard",
+      "service": "/torchwood.server.v1.LeaderboardsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "leaderboards",
+        "op": "admin"
+      },
+      "request_fields": [
+        "client_submit",
+        "id",
+        "per_subject_submit_limit",
+        "period_kind",
+        "period_tz",
+        "policy",
+        "retention_periods",
+        "sort",
+        "subject_kind",
+        "tie_break",
+        "tiebreak_order",
+        "value_max",
+        "value_min"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.LeaderboardsService/GetLeaderboardBoard",
+      "service": "/torchwood.server.v1.LeaderboardsService",
+      "access": "server",
+      "scope": {
+        "resource": "leaderboards",
+        "op": "read"
+      },
+      "request_fields": [
+        "board_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.LeaderboardsService/GetLeaderboardEntry",
+      "service": "/torchwood.server.v1.LeaderboardsService",
+      "access": "server",
+      "scope": {
+        "resource": "leaderboards",
+        "op": "read"
+      },
+      "request_fields": [
+        "board_id",
+        "period",
+        "subject_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.LeaderboardsService/GetLeaderboardSettlement",
+      "service": "/torchwood.server.v1.LeaderboardsService",
+      "access": "server",
+      "scope": {
+        "resource": "leaderboards",
+        "op": "read"
+      },
+      "request_fields": [
+        "board_id",
+        "period"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.LeaderboardsService/ListLeaderboardBoardPeriods",
+      "service": "/torchwood.server.v1.LeaderboardsService",
+      "access": "server",
+      "scope": {
+        "resource": "leaderboards",
+        "op": "read"
+      },
+      "request_fields": [
+        "board_id",
+        "limit"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.LeaderboardsService/ListLeaderboardBoards",
+      "service": "/torchwood.server.v1.LeaderboardsService",
+      "access": "server",
+      "scope": {
+        "resource": "leaderboards",
+        "op": "read"
+      },
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.LeaderboardsService/ListLeaderboardSettlements",
+      "service": "/torchwood.server.v1.LeaderboardsService",
+      "access": "server",
+      "scope": {
+        "resource": "leaderboards",
+        "op": "read"
+      },
+      "request_fields": [
+        "board_id",
+        "limit"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.LeaderboardsService/ListLeaderboardTop",
+      "service": "/torchwood.server.v1.LeaderboardsService",
+      "access": "server",
+      "scope": {
+        "resource": "leaderboards",
+        "op": "read"
+      },
+      "request_fields": [
+        "board_id",
+        "page_size",
+        "page_token",
+        "period"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.LeaderboardsService/SubmitLeaderboardScore",
+      "service": "/torchwood.server.v1.LeaderboardsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "leaderboards",
+        "op": "write"
+      },
+      "request_fields": [
+        "board_id",
+        "period",
+        "request_id",
+        "subject_id",
+        "tiebreak_value",
+        "value"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.LeaderboardsService/UpdateLeaderboardBoard",
+      "service": "/torchwood.server.v1.LeaderboardsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "leaderboards",
+        "op": "admin"
+      },
+      "request_fields": [
+        "board_id",
+        "clear_tiebreak",
+        "clear_value_bounds",
+        "client_submit",
+        "per_subject_submit_limit",
+        "period_kind",
+        "period_tz",
+        "policy",
+        "retention_periods",
+        "sort",
+        "subject_kind",
+        "tie_break",
+        "tiebreak_order",
+        "value_max",
+        "value_min"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.OAuthProvidersService/DeleteOAuthProvider",
+      "service": "/torchwood.server.v1.OAuthProvidersService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "oauthproviders",
+        "op": "write"
+      },
+      "request_fields": [
+        "provider"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.OAuthProvidersService/ListOAuthProviders",
+      "service": "/torchwood.server.v1.OAuthProvidersService",
+      "access": "server",
+      "scope": {
+        "resource": "oauthproviders",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "queries",
+        "sort_order"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.OAuthProvidersService/UpsertOAuthProvider",
+      "service": "/torchwood.server.v1.OAuthProvidersService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "oauthproviders",
+        "op": "write"
+      },
+      "request_fields": [
+        "client_id",
+        "client_secret",
+        "enabled",
+        "provider",
+        "scopes"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.OutboxService/ListDeadLetters",
+      "service": "/torchwood.server.v1.OutboxService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "outbox",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.OutboxService/ReplayDeadLetter",
+      "service": "/torchwood.server.v1.OutboxService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "outbox",
+        "op": "write"
+      },
+      "request_fields": [
+        "event_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.PaymentsService/GetOrder",
+      "service": "/torchwood.server.v1.PaymentsService",
+      "access": "server",
+      "scope": {
+        "resource": "payments",
+        "op": "read"
+      },
+      "request_fields": [
+        "order_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.PaymentsService/ListOrders",
+      "service": "/torchwood.server.v1.PaymentsService",
+      "access": "server",
+      "scope": {
+        "resource": "payments",
+        "op": "read"
+      },
+      "request_fields": [
+        "created_after",
+        "created_before",
+        "page_size",
+        "page_token",
+        "sort_order",
+        "status",
+        "user_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.PaymentsService/ManualFulfill",
+      "service": "/torchwood.server.v1.PaymentsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "payments",
+        "op": "write"
+      },
+      "request_fields": [
+        "order_id",
+        "reason"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.PaymentsService/Refund",
+      "service": "/torchwood.server.v1.PaymentsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "payments",
+        "op": "write"
+      },
+      "request_fields": [
+        "amount",
+        "order_id",
+        "reason"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.ProjectsService/CreateInviteCode",
+      "service": "/torchwood.server.v1.ProjectsService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "expire_at",
+        "max_uses",
+        "project_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.ProjectsService/CreateProject",
+      "service": "/torchwood.server.v1.ProjectsService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "description",
+        "id",
+        "name"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.ProjectsService/DeleteInviteCode",
+      "service": "/torchwood.server.v1.ProjectsService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "id",
+        "project_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.ProjectsService/DeleteProject",
+      "service": "/torchwood.server.v1.ProjectsService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.ProjectsService/GetProject",
+      "service": "/torchwood.server.v1.ProjectsService",
+      "access": "server",
+      "scope": {
+        "resource": "projects",
+        "op": "read"
+      },
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.ProjectsService/ListInviteCodes",
+      "service": "/torchwood.server.v1.ProjectsService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "project_id"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.ProjectsService/ListProjects",
+      "service": "/torchwood.server.v1.ProjectsService",
+      "access": "server",
+      "scope": {
+        "resource": "projects",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "queries",
+        "sort_order"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.ProjectsService/UpdateOAuthRedirectAllowlist",
+      "service": "/torchwood.server.v1.ProjectsService",
+      "access": "permission",
+      "permissions": [
+        "owner",
+        "admin"
+      ],
+      "request_fields": [
+        "project_id",
+        "urls"
+      ],
+      "request_has_project_id": true,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.ProjectsService/UpdateProject",
+      "service": "/torchwood.server.v1.ProjectsService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "projects",
+        "op": "write"
+      },
+      "request_fields": [
+        "description",
+        "id",
+        "name",
+        "registration_policy"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.RunbookService/DeleteRunbookStep",
+      "service": "/torchwood.server.v1.RunbookService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "runbooks",
+        "op": "write"
+      },
+      "request_fields": [
+        "runbook",
+        "version"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.RunbookService/GetRunbookState",
+      "service": "/torchwood.server.v1.RunbookService",
+      "access": "server",
+      "scope": {
+        "resource": "runbooks",
+        "op": "read"
+      },
+      "request_fields": [
+        "runbook"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.RunbookService/RecordRunbookStep",
+      "service": "/torchwood.server.v1.RunbookService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "runbooks",
+        "op": "write"
+      },
+      "request_fields": [
+        "checksum",
+        "expect_prev_version",
+        "name",
+        "runbook",
+        "version"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.RuntimeVarsService/CreateRuntimeVar",
+      "service": "/torchwood.server.v1.RuntimeVarsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "runtime_vars",
+        "op": "write"
+      },
+      "request_fields": [
+        "description",
+        "key",
+        "value",
+        "var_set_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.RuntimeVarsService/CreateVarSet",
+      "service": "/torchwood.server.v1.RuntimeVarsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "runtime_vars",
+        "op": "write"
+      },
+      "request_fields": [
+        "description",
+        "var_set_id",
+        "visibility"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.RuntimeVarsService/DeleteRuntimeVar",
+      "service": "/torchwood.server.v1.RuntimeVarsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "runtime_vars",
+        "op": "write"
+      },
+      "request_fields": [
+        "key",
+        "var_set_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.RuntimeVarsService/DeleteVarSet",
+      "service": "/torchwood.server.v1.RuntimeVarsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "runtime_vars",
+        "op": "write"
+      },
+      "request_fields": [
+        "var_set_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.RuntimeVarsService/GetRuntimeVar",
+      "service": "/torchwood.server.v1.RuntimeVarsService",
+      "access": "server",
+      "scope": {
+        "resource": "runtime_vars",
+        "op": "read"
+      },
+      "request_fields": [
+        "key",
+        "var_set_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.RuntimeVarsService/GetRuntimeVarVersion",
+      "service": "/torchwood.server.v1.RuntimeVarsService",
+      "access": "server",
+      "scope": {
+        "resource": "runtime_vars",
+        "op": "read"
+      },
+      "request_fields": [
+        "revision",
+        "var_set_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.RuntimeVarsService/GetVarSet",
+      "service": "/torchwood.server.v1.RuntimeVarsService",
+      "access": "server",
+      "scope": {
+        "resource": "runtime_vars",
+        "op": "read"
+      },
+      "request_fields": [
+        "var_set_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.RuntimeVarsService/ListRuntimeVarVersions",
+      "service": "/torchwood.server.v1.RuntimeVarsService",
+      "access": "server",
+      "scope": {
+        "resource": "runtime_vars",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "var_set_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.RuntimeVarsService/ListRuntimeVars",
+      "service": "/torchwood.server.v1.RuntimeVarsService",
+      "access": "server",
+      "scope": {
+        "resource": "runtime_vars",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "var_set_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.RuntimeVarsService/ListVarSets",
+      "service": "/torchwood.server.v1.RuntimeVarsService",
+      "access": "server",
+      "scope": {
+        "resource": "runtime_vars",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "queries",
+        "sort_order"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.RuntimeVarsService/RollbackRuntimeVar",
+      "service": "/torchwood.server.v1.RuntimeVarsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "runtime_vars",
+        "op": "write"
+      },
+      "request_fields": [
+        "target_revision",
+        "var_set_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.RuntimeVarsService/UpdateRuntimeVar",
+      "service": "/torchwood.server.v1.RuntimeVarsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "runtime_vars",
+        "op": "write"
+      },
+      "request_fields": [
+        "description",
+        "key",
+        "value",
+        "var_set_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.RuntimeVarsService/UpdateVarSet",
+      "service": "/torchwood.server.v1.RuntimeVarsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "runtime_vars",
+        "op": "write"
+      },
+      "request_fields": [
+        "description",
+        "var_set_id",
+        "visibility"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.StorageService/CreateBucket",
+      "service": "/torchwood.server.v1.StorageService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "storage",
+        "op": "write"
+      },
+      "request_fields": [
+        "name",
+        "permissions",
+        "public"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.StorageService/CreateFile",
+      "service": "/torchwood.server.v1.StorageService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "storage",
+        "op": "write"
+      },
+      "request_fields": [
+        "bucket_id",
+        "data",
+        "metadata",
+        "mime_type",
+        "name"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.StorageService/CreateFileToken",
+      "service": "/torchwood.server.v1.StorageService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "storage",
+        "op": "write"
+      },
+      "request_fields": [
+        "bucket_id",
+        "expires_in",
+        "file_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.StorageService/DeleteBucket",
+      "service": "/torchwood.server.v1.StorageService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "storage",
+        "op": "write"
+      },
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.StorageService/DeleteFile",
+      "service": "/torchwood.server.v1.StorageService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "storage",
+        "op": "write"
+      },
+      "request_fields": [
+        "bucket_id",
+        "file_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.StorageService/GetBucket",
+      "service": "/torchwood.server.v1.StorageService",
+      "access": "server",
+      "scope": {
+        "resource": "storage",
+        "op": "read"
+      },
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.StorageService/GetFile",
+      "service": "/torchwood.server.v1.StorageService",
+      "access": "server",
+      "scope": {
+        "resource": "storage",
+        "op": "read"
+      },
+      "request_fields": [
+        "bucket_id",
+        "file_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.StorageService/GetStorageUsage",
+      "service": "/torchwood.server.v1.StorageService",
+      "access": "server",
+      "scope": {
+        "resource": "storage",
+        "op": "read"
+      },
+      "request_fields": [],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.StorageService/ListBuckets",
+      "service": "/torchwood.server.v1.StorageService",
+      "access": "server",
+      "scope": {
+        "resource": "storage",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "queries",
+        "sort_order"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.StorageService/ListFiles",
+      "service": "/torchwood.server.v1.StorageService",
+      "access": "server",
+      "scope": {
+        "resource": "storage",
+        "op": "read"
+      },
+      "request_fields": [
+        "bucket_id",
+        "page_size",
+        "page_token",
+        "queries"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.StorageService/UpdateBucket",
+      "service": "/torchwood.server.v1.StorageService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "storage",
+        "op": "write"
+      },
+      "request_fields": [
+        "id",
+        "name",
+        "public"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.StorageService/UpdateFile",
+      "service": "/torchwood.server.v1.StorageService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "storage",
+        "op": "write"
+      },
+      "request_fields": [
+        "bucket_id",
+        "file_id",
+        "metadata",
+        "mime_type",
+        "name"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.SubscriptionsService/CancelSubscription",
+      "service": "/torchwood.server.v1.SubscriptionsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "subscriptions",
+        "op": "write"
+      },
+      "request_fields": [
+        "reason",
+        "subscription_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.SubscriptionsService/CreatePlan",
+      "service": "/torchwood.server.v1.SubscriptionsService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "subscriptions",
+        "op": "write"
+      },
+      "request_fields": [
+        "amount",
+        "benefits",
+        "code",
+        "currency",
+        "grace_days",
+        "interval",
+        "interval_days",
+        "name",
+        "provider_overrides",
+        "trial_days"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.SubscriptionsService/DeletePlan",
+      "service": "/torchwood.server.v1.SubscriptionsService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "subscriptions",
+        "op": "write"
+      },
+      "request_fields": [
+        "plan_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.SubscriptionsService/ExpireSubscription",
+      "service": "/torchwood.server.v1.SubscriptionsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "subscriptions",
+        "op": "write"
+      },
+      "request_fields": [
+        "reason",
+        "subscription_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.SubscriptionsService/GetPlan",
+      "service": "/torchwood.server.v1.SubscriptionsService",
+      "access": "server",
+      "scope": {
+        "resource": "subscriptions",
+        "op": "read"
+      },
+      "request_fields": [
+        "plan_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.SubscriptionsService/GetSubscription",
+      "service": "/torchwood.server.v1.SubscriptionsService",
+      "access": "server",
+      "scope": {
+        "resource": "subscriptions",
+        "op": "read"
+      },
+      "request_fields": [
+        "subscription_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.SubscriptionsService/ListPlans",
+      "service": "/torchwood.server.v1.SubscriptionsService",
+      "access": "server",
+      "scope": {
+        "resource": "subscriptions",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "queries",
+        "sort_order"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.SubscriptionsService/ListSubscriptions",
+      "service": "/torchwood.server.v1.SubscriptionsService",
+      "access": "server",
+      "scope": {
+        "resource": "subscriptions",
+        "op": "read"
+      },
+      "request_fields": [
+        "created_after",
+        "created_before",
+        "page_size",
+        "page_token",
+        "sort_order",
+        "status",
+        "user_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.SubscriptionsService/UpdatePlan",
+      "service": "/torchwood.server.v1.SubscriptionsService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "subscriptions",
+        "op": "write"
+      },
+      "request_fields": [
+        "amount",
+        "benefits",
+        "currency",
+        "grace_days",
+        "interval",
+        "interval_days",
+        "name",
+        "plan_id",
+        "provider_overrides",
+        "status",
+        "trial_days"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.UsersService/CreateUser",
+      "service": "/torchwood.server.v1.UsersService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "users",
+        "op": "write"
+      },
+      "request_fields": [
+        "email",
+        "labels",
+        "name",
+        "password",
+        "prefs",
+        "status"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.UsersService/CreateUserToken",
+      "service": "/torchwood.server.v1.UsersService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "users",
+        "op": "write"
+      },
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.UsersService/DeleteUser",
+      "service": "/torchwood.server.v1.UsersService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "users",
+        "op": "write"
+      },
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.UsersService/DeleteUserSession",
+      "service": "/torchwood.server.v1.UsersService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "users",
+        "op": "write"
+      },
+      "request_fields": [
+        "id",
+        "session_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.UsersService/GetUser",
+      "service": "/torchwood.server.v1.UsersService",
+      "access": "server",
+      "scope": {
+        "resource": "users",
+        "op": "read"
+      },
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.UsersService/ListUserSessions",
+      "service": "/torchwood.server.v1.UsersService",
+      "access": "server",
+      "scope": {
+        "resource": "users",
+        "op": "read"
+      },
+      "request_fields": [
+        "id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.UsersService/ListUsers",
+      "service": "/torchwood.server.v1.UsersService",
+      "access": "server",
+      "scope": {
+        "resource": "users",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "queries",
+        "sort_order"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.UsersService/UpdateUser",
+      "service": "/torchwood.server.v1.UsersService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "users",
+        "op": "write"
+      },
+      "request_fields": [
+        "avatar",
+        "email",
+        "email_verified",
+        "id",
+        "labels",
+        "name",
+        "prefs",
+        "status"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.UsersService/UpdateUserPassword",
+      "service": "/torchwood.server.v1.UsersService",
+      "access": "server",
+      "admin_roles": [
+        "member",
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "users",
+        "op": "write"
+      },
+      "request_fields": [
+        "id",
+        "password"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    }
+  ]
+}
