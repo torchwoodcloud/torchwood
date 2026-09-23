@@ -18,8 +18,8 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
 	github.com/lynx-go/commands v0.3.0
-	github.com/lynx-go/grpcapi v0.0.0-00010101000000-000000000000
-	github.com/lynx-go/grpcapi/genproto v0.0.0-00010101000000-000000000000
+	github.com/lynx-go/grpcapi v0.1.0
+	github.com/lynx-go/grpcapi/genproto v0.1.0
 	github.com/lynx-go/lynx v1.11.0
 	github.com/lynx-go/lynx/contrib/zap v1.7.0
 	github.com/minio/minio-go/v7 v7.2.0
@@ -146,10 +146,3 @@ require (
 replace github.com/torchwoodcloud/torchwood/genproto => ./genproto
 
 replace github.com/torchwoodcloud/torchwood/sdk/go => ./sdk/go
-
-// grpcapi 本地开发 replace（阶段 1 过渡）：发布时序 = grpcapi 先发版
-// （主 module 与 genproto 子 module 双 tag），本仓 remove 此处 replace 改引
-// 真实版本。Dokploy git 构建在此前不兼容本地路径——见 grpcapi DESIGN.md §8。
-replace github.com/lynx-go/grpcapi => ../grpcapi
-
-replace github.com/lynx-go/grpcapi/genproto => ../grpcapi/genproto
