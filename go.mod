@@ -20,8 +20,8 @@ require (
 	github.com/lynx-go/commands v0.3.0
 	github.com/lynx-go/grpcapi v0.1.0
 	github.com/lynx-go/grpcapi/genproto v0.1.0
-	github.com/lynx-go/lynx v1.13.0
-	github.com/lynx-go/lynx/contrib/zap v1.7.0
+	github.com/lynx-go/lynx v1.17.0
+	github.com/lynx-go/lynx/contrib/zap v1.17.0
 	github.com/minio/minio-go/v7 v7.2.0
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/opencontainers/image-spec v1.1.1
@@ -94,7 +94,6 @@ require (
 	github.com/moby/term v0.5.2 // indirect
 	github.com/morikuni/aec v1.1.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/oklog/run v1.2.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect

@@ -27,8 +27,6 @@ func main() {
 	}
 
 	runner := lynx.NewRunner(func(app lynx.App) error {
-		app.SetLogger(lynxzap.MustNewLogger(app))
-
 		bootstrap, cleanup, err := wireBootstrap(app)
 		if err != nil {
 			return err
@@ -43,9 +41,12 @@ func main() {
 	},
 		lynx.WithName("Torchwood Worker"),
 		lynx.WithVersion(buildVersion),
+		lynx.WithLoggerProvider(lynxzap.NewLogger),
 		lynx.WithBindFlagsFunc(func(f *pflag.FlagSet) {
 			f.String("config-dir", "./configs", "config file path")
-			f.String("log-level", "info", "log level")
+			// 默认值为空（lynx v1.16.0 级别键契约，同 cmd/server）：非空默认
+			// 会遮蔽配置文件的 logging.level；未传时回退配置文件，缺省 info。
+			f.String("log-level", "", "log level, default info")
 		}),
 		lynx.WithBindConfigFunc(config.NewBindConfigFunc()),
 		// Worker 无需排水窗口（无 LB 摘流，仅消费队列与定时任务），仅需有界关停。

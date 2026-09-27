@@ -38,8 +38,9 @@ func NewBindConfigFunc(extraPaths ...string) lynx.BindConfigFunc {
 }
 
 // UnmarshalConfig 把 lynx.Config 解码到 AppConfig。AppConfig 为 proto 生成
-// 结构体（json tag、snake_case 键），WithEnvForAllKeys 的 tag 回退链支持
-// json，且保证仅在环境变量中设置的键也参与解码。
+// 结构体（json tag、snake_case 键）；lynx v1.17 起 Unmarshal 默认走结构体
+// 驱动的逐叶取值（tag 回退链 mapstructure → json → 小写字段名），且仅在
+// 环境变量中设置的键也参与解码，无需额外选项。
 func UnmarshalConfig(c lynx.Config, out *AppConfig) error {
-	return c.Unmarshal(out, lynx.WithEnvForAllKeys())
+	return c.Unmarshal(out)
 }

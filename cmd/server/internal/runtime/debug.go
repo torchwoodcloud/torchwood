@@ -7,9 +7,9 @@ import (
 )
 
 // NewDebugServer 装配 lynx/debug 运维诊断服务（pprof 全端点 + /healthz +
-// /version + /loglevel）。仅 server 进程装配；/loglevel 对定制 zap logger
-// 返回 409（lynx SetLogLevel 不代理用户 logger），可用面是 pprof 与
-// /version。
+// /version + /loglevel）。仅 server 进程装配；logger 走 WithLoggerProvider
+// 定制后（lynx v1.16.0）/loglevel 返回 501（框架不再代理用户 logger 的
+// 级别），可用面是 pprof 与 /version。
 //
 // 地址沿用 metrics 的回环缺省（127.0.0.1:6060）：pprof 暴露内存快照与
 // 源码路径，生产只在容器内网命名空间可达（docker exec / SSH 转发诊断），

@@ -19,11 +19,11 @@ import (
 var version, commit, date string
 
 // setupApp 是生产 main 与 lynxtest L2 装配测试（main_test.go）共用的组装
-// 函数：SetLogger → Wire 组装 → cleanup 挂 OnPostStop → 钩子/服务注册。
+// 函数：Wire 组装 → cleanup 挂 OnPostStop → 钩子/服务注册。logger 由
+// WithLoggerProvider 在构造期注入（lynx v1.16.0，SetLogger 已移除）。
 // 测试与生产唯一的环境差异全部经配置注入（lynxtest WithConfigMap），
 // 组装代码不写测试分支。
 func setupApp(app lynx.App) error {
-	app.SetLogger(lynxzap.MustNewLogger(app))
 	app.Logger().Info("runtime environment",
 		"env", string(config.CurrentRuntimeEnv()),
 		"drain_timeout", config.CurrentDrainTimeout().String())
@@ -53,9 +53,14 @@ func main() {
 	runner := lynx.NewRunner(setupApp,
 		lynx.WithName("Torchwood"),
 		lynx.WithVersion(version),
+		lynx.WithLoggerProvider(lynxzap.NewLogger),
 		lynx.WithBindFlagsFunc(func(f *pflag.FlagSet) {
 			f.String("config-dir", "./configs", "config file path")
-			f.String("log-level", "info", "log level")
+			// 默认值必须为空（lynx v1.16.0 级别键契约）：非空默认会在每次
+			// 启动被翻译进规范键 logging.level（viper Set 最高优先级），
+			// 配置文件里的 logging.level 永远失效；未传旗标时回退配置文件，
+			// 缺省仍为 info（contrib/zap NewLogger 的兜底）。
+			f.String("log-level", "", "log level, default info")
 		}),
 		lynx.WithBindConfigFunc(config.NewBindConfigFunc()),
 		lynx.WithDrainTimeout(drainTimeout),
