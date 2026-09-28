@@ -126,8 +126,8 @@ func (d *DispatcherExecutor) do(ctx context.Context, path string, in any, out an
 }
 
 // dispatchBuildResponse 是 builds 端点出参（Error 非空 = 构建失败；
-// NodeID 是执行构建的 dispatcher 节点 ID，四期 4a-1 M5 构建亲和——调用方
-// 落 deployment.build_node）。
+// NodeID 已退役（IMPL-T2-3 多节点细胞模型删除）：dispatcher 恒回空串，
+// 字段保留仅为 wire 兼容）。
 type dispatchBuildResponse struct {
 	Error  string `json:"error,omitempty"`
 	NodeID string `json:"node_id,omitempty"`
@@ -150,13 +150,13 @@ type dispatchExecuteResponse struct {
 }
 
 // Build 将 zip 代码包经 dispatcher 构建为镜像（runner 模板在 dispatcher
-// 侧应用；构建期不执行用户代码的不变量由模板层保持）。载荷按 BuildSpec
-// 全量组装（一期定稿，设计 §0/D14）：project_id/runtime/function_timeout_
-// seconds/env/egress_untrusted/verify 齐备——drain 精确化、D7 runtime 对账
-// 与阶段 3 验证 spawn 的通道自本端点贯通；zip base64 内联通道不变。
-// 返回执行构建的 dispatcher 节点 ID（四期 4a-1，设计 §4 M5 构建亲和：
-// BuildResponse.node_id 透传，调用方落 deployment.build_node）；构建失败
-// 返回空串。
+// 侧应用；构建本体经 fleetly build-from-upload；构建期不执行用户代码的
+// 不变量由模板层保持）。载荷按 BuildSpec 全量组装（一期定稿，设计
+// §0/D14）：project_id/runtime/function_timeout_seconds/env/
+// egress_untrusted/verify 齐备——drain 精确化、D7 runtime 对账与验证 spawn
+// 的通道自本端点贯通；zip base64 内联通道不变。
+// 返回值为 dispatcher 的 build_node 通道（IMPL-T2-3 后恒空，保留 wire 形状）；
+// 构建失败返回空串。
 func (d *DispatcherExecutor) Build(ctx context.Context, spec functions.BuildSpec) (string, error) {
 	zip, err := os.ReadFile(spec.ZipPath)
 	if err != nil {

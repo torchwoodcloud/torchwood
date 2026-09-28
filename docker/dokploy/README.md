@@ -190,12 +190,16 @@ torchwood health get --endpoint <gRPC域名>:443 --tls   # gRPC 经 Traefik TLS�
   无持久化时容器重启 = 全部已登录会话下次刷新即失效（重新登录即恢复，非故障）。
   换 Redis 实例同理（`docs/developer/13-operations.md` §6.1）。
 - **Functions（可选）**：worker 常驻消费函数执行队列；执行/构建统一经 dispatcher
-  （唯一 docker.sock 持有方，⚠ 等同宿主 root 权限），以 `user: root` 运行
-  （镜像缺省 torchwood 用户读不了宿主 `root:docker` 的 sock）；server/worker/packer
-  不挂 sock 不受影响。不用 Functions 可删除 worker/dispatcher/packer 服务。
-- **函数镜像持久化模型**：构建产物镜像只存在宿主 docker（local 路由模式不分发），
-  zip 代码包在 MinIO 持久桶留副本。宿主镜像被清理（`docker prune -a` / 磁盘压力 /
-  Dokploy 清理选项）后：有桶副本的部署在下次执行时自动识别 412 并后台重建
+  ——IMPL-T2-3 后 dispatcher 是 fleetly Tasks/build API 客户端（零 docker.sock、
+  零 docker client）：函数实例 = fleetly Tasks（swarm service 承载）、构建 =
+  fleetly build-from-upload，需配置 `functions.fleetly.endpoint` 与机具令牌
+  （scope tasks,build，经 Environment 注入）。server/worker/packer 不受影响。
+  不用 Functions 可删除 worker/dispatcher/packer 服务。**本栈的完整 fleetly
+  部署形态由 T2-4 割接票产出（docker/fleetly/）。**
+- **函数镜像持久化模型（fleetly 底座）**：构建产物由 fleetly 平台持有（registry
+  模式推平台 zot；本地模式装载平台宿主 docker），dispatcher 只登记
+  「逻辑镜像名 → 平台产物引用」映射（Redis `torchwood:fnimg:*`）。映射缺失/
+  平台解析失败时：有桶副本的部署在下次执行时自动识别 412 并后台重建
   （`functions.dispatcher.rebuild_on_missing_image`，默认开）；持久层上线前的存量
   部署桶内无副本，无法自愈，须 redeploy。备份时 `mc mirror` 连同
   `torchwood-functions` 桶一起备份。

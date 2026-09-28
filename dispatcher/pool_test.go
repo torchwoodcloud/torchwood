@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containerd/errdefs"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/require"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
@@ -26,7 +25,7 @@ type fakeDaemon struct {
 	running       map[string]bool   // containerID -> running
 	stopped       []string
 	removed       []string
-	inspects      []string // InspectInstance 收到的 containerID 次序（reaper 收窄断言面）
+	inspects      []string // InspectInstance 收到的 containerID 次序（reaper 断言面）
 	builtImages   []string
 	removedImages []string
 	nextIP        int
@@ -38,8 +37,8 @@ type fakeDaemon struct {
 	// lastSpawn 记录最近一次 SpawnInstance 收到的完整入参（验证 spawn 的
 	// env/Spec/MaxRequests 注入断言用）。
 	lastSpawn SpawnOptions
-	// logs 是 containerID -> 容器日志（fake InstanceLogsTail 返回值；验证
-	// spawn 失败路径的日志尾拼接断言用）。
+	// logs 是 containerID -> 任务台账失败现场（fake InstanceLogsTail 返回值；
+	// 验证 spawn 失败路径的现场拼接断言用）。
 	logs map[string]string
 	// lastBuild 记录最近一次 BuildImage 收到的完整入参（构建链载荷断言用）。
 	lastBuild BuildImageOptions
@@ -51,15 +50,6 @@ type fakeDaemon struct {
 	imports      []string
 	importDigest string
 	importErr    error
-	// ——EnsureImage（四期 4b M1 registry 模式冷启动）——
-	// ensures 记录 EnsureImage 收到的镜像引用次序（池门控断言面：local
-	// 模式不得发生调用）。localImages 模拟本节点镜像表（命中 = 零 pull）；
-	// pulls 记录触发的 pull 次序；ensureErr/pullErr 为可编程错误。
-	ensures     []string
-	localImages map[string]bool
-	pulls       []string
-	ensureErr   error
-	pullErr     error
 	// spawnErr 非空 = SpawnInstance 可编程失败（镜像缺失 fail-fast 语义的
 	// 池传播断言面）。
 	spawnErr error
@@ -72,30 +62,7 @@ func newFakeDaemon() *fakeDaemon {
 		nextIP:       1,
 		networkFlags: map[string]bool{},
 		logs:         map[string]string{},
-		localImages:  map[string]bool{},
 	}
-}
-
-// EnsureImage 模拟真实 ensureImage 编排（四期 4b M1）：本地命中零 pull；
-// miss 记 pull（可编程失败）。ensureErr = inspect 前置失败（daemon 不可达
-// 形态）。
-func (d *fakeDaemon) EnsureImage(_ context.Context, imageRef string) error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.ensures = append(d.ensures, imageRef)
-	if d.ensureErr != nil {
-		return d.ensureErr
-	}
-	if d.localImages[imageRef] {
-		return nil
-	}
-	if d.pullErr != nil {
-		return d.pullErr
-	}
-	d.pulls = append(d.pulls, imageRef)
-	// pull 成功落本地表（幂等命中语义与真实 inspect 同构）。
-	d.localImages[imageRef] = true
-	return nil
 }
 
 func (d *fakeDaemon) EnsureProjectNetwork(_ context.Context, projectID string, untrusted bool) (string, error) {
@@ -103,9 +70,9 @@ func (d *fakeDaemon) EnsureProjectNetwork(_ context.Context, projectID string, u
 	d.networkFlags[projectID] = untrusted
 	d.mu.Unlock()
 	if untrusted {
-		return "tw-func-" + projectID + "-int", nil
+		return "fleetly-taskgroup-q" + projectID, nil
 	}
-	return "tw-func-" + projectID, nil
+	return "fleetly-taskgroup-p" + projectID, nil
 }
 
 func (d *fakeDaemon) SpawnInstance(_ context.Context, opts SpawnOptions) (Instance, error) {
@@ -130,7 +97,7 @@ func (d *fakeDaemon) InspectInstance(_ context.Context, containerID string) (boo
 	defer d.mu.Unlock()
 	d.inspects = append(d.inspects, containerID)
 	if _, ok := d.spawned[containerID]; !ok {
-		return false, "", fmt.Errorf("no such container: %w", errdefs.ErrNotFound)
+		return false, "", fmt.Errorf("no such task: %s", containerID)
 	}
 	return d.running[containerID], d.spawned[containerID], nil
 }
@@ -194,25 +161,14 @@ type fakeRegistry struct {
 	mu    sync.Mutex
 	pools map[string]map[string]*InstanceRecord
 	locks map[string]bool
-	// nodes 是节点注册表（四期 4a-1 M2：SaveNode/GetNode/DeleteNode/
-	// ListNodes 的内存实现；nodeID -> 记录）。nodeErr 非空时 ListNodes
-	// 返回该错误（reaper 死节点收敛的 fail-safe 断言面）。
-	nodes   map[string]NodeRecord
-	nodeErr error
-	// ——节点容量键（四期 4c M4）——
-	// caps 是容量键内存表（nodeID -> 最近一次 SaveNodeCapacity 写入的常驻
-	// 数；全局拒绝/刷新点断言面）。capWrites 记写次数；capSumCalls 记求和
-	// 次数（全局上限未配置时必须零调用——热路径零额外 Redis 往返断言面）；
-	// capErr 非空时 SumNodeCapacity 返回该错误（fail-open 断言面）。
-	caps        map[string]int
-	capWrites   int
-	capSumCalls int
-	capErr      error
+	// images 是「逻辑镜像名 → 平台产物引用」映射（torchwood:fnimg:* 的内存
+	// 等价；IMPL-T2-3 构建/导入链断言面）。
+	images map[string]string
 }
 
 func newFakeRegistry() *fakeRegistry {
 	return &fakeRegistry{pools: map[string]map[string]*InstanceRecord{}, locks: map[string]bool{},
-		nodes: map[string]NodeRecord{}, caps: map[string]int{}}
+		images: map[string]string{}}
 }
 
 func regKey(ref FunctionRef) string { return ref.ProjectID + ":" + ref.FunctionID }
@@ -227,17 +183,13 @@ func (r *fakeRegistry) List(_ context.Context, ref FunctionRef) ([]InstanceRecor
 	return out, nil
 }
 
-func (r *fakeRegistry) ClaimIdle(_ context.Context, ref FunctionRef, deploymentID string, selfNodeID string, leaseUntil time.Time) (*InstanceRecord, error) {
+func (r *fakeRegistry) ClaimIdle(_ context.Context, ref FunctionRef, deploymentID string, leaseUntil time.Time) (*InstanceRecord, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, rec := range r.pools[regKey(ref)] {
 		// inflight 语义（v3 §1.1）：可服务 = inflight < concurrency 且非
-		// draining 且部署匹配且节点归属 selfNodeID；concurrency 零值按 1 兜底
-		//（与 Lua 同款）；node 为空的旧记录放行（P2 S13 升级窗口共存语义）。
+		// draining 且部署匹配；concurrency 零值按 1 兜底（与 Lua 同款）。
 		if rec.Draining || rec.DeploymentID != deploymentID {
-			continue
-		}
-		if rec.Node != "" && rec.Node != selfNodeID {
 			continue
 		}
 		concurrency := rec.Concurrency
@@ -347,37 +299,26 @@ func (r *fakeRegistry) AcquireSpawnLock(_ context.Context, ref FunctionRef, _ ti
 	}, nil
 }
 
-// SaveNodeCapacity 容量键内存写（四期 4c M4）：覆写 nodeID 的常驻数并计次。
-func (r *fakeRegistry) SaveNodeCapacity(_ context.Context, nodeID string, resident int, _ time.Duration) error {
+// ——逻辑镜像名 → 平台产物引用映射（IMPL-T2-3；redisRegistry 同款语义）——
+
+func (r *fakeRegistry) SaveImageRef(_ context.Context, logicalName, ref string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.capWrites++
-	r.caps[nodeID] = resident
+	r.images[logicalName] = ref
 	return nil
 }
 
-// SumNodeCapacity 容量键求和（四期 4c M4）：capErr 模拟 Redis 不可用；
-// seedCapacity 是测试预置他节点容量键的入口（真实 SET 通道经 SaveNodeCapacity）。
-func (r *fakeRegistry) SumNodeCapacity(_ context.Context) (int, error) {
+func (r *fakeRegistry) LoadImageRef(_ context.Context, logicalName string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.capSumCalls++
-	if r.capErr != nil {
-		return 0, r.capErr
-	}
-	total := 0
-	for _, v := range r.caps {
-		if v > 0 {
-			total += v
-		}
-	}
-	return total, nil
+	return r.images[logicalName], nil
 }
 
-func (r *fakeRegistry) seedCapacity(nodeID string, resident int) {
+func (r *fakeRegistry) DeleteImageRef(_ context.Context, logicalName string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.caps[nodeID] = resident
+	delete(r.images, logicalName)
+	return nil
 }
 
 type fakeRunner struct {
@@ -972,73 +913,6 @@ func recordIDs(t *testing.T, reg *fakeRegistry, ref FunctionRef) map[string]bool
 	return ids
 }
 
-// TestKillInstance_SkipsForeignRecord 记录归属校验（P2 S13）：killInstance
-// 对显式他节点记录整体跳过——不杀容器也不删记录（跨节点竞态/nodeID 漂移下
-// 误删会让对端容器失去 reaper 保护而泄漏、容量计数漂移）；记录留给对端
-// reaper 收敛。死节点收敛（Reaper M8 ②）不经 killInstance，不受此约束。
-func TestKillInstance_SkipsForeignRecord(t *testing.T) {
-	d := newFakeDaemon()
-	reg := newFakeRegistry()
-	runner := &fakeRunner{}
-	runner.healthy = true
-	pool := newTestPool(d, reg, runner, nil)
-	pool.SetNodeID("node-a")
-	ctx := context.Background()
-	ref := FunctionRef{ProjectID: "p1", FunctionID: "fn1"}
-	seedForeignRecord(t, reg, ref, "foreign-1", "node-b")
-
-	pool.killInstance(ctx, ref, &InstanceRecord{InstanceID: "foreign-1", ContainerID: "foreign-1", Node: "node-b"})
-
-	require.True(t, recordIDs(t, reg, ref)["foreign-1"], "他节点记录不得被删除")
-	require.Empty(t, d.stopped, "他节点容器不得由本节点杀")
-	require.Empty(t, d.removed)
-
-	// 本节点记录照旧强杀清账。
-	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "self-1", ContainerID: "self-1", IP: "10.0.0.1",
-		DeploymentID: "dep1", Node: "node-a", SpawnedAtMS: time.Now().UnixMilli(),
-		IdleSinceMS: time.Now().UnixMilli(), LeaseUntilMS: time.Now().Add(time.Minute).UnixMilli()}))
-	pool.killInstance(ctx, ref, &InstanceRecord{InstanceID: "self-1", ContainerID: "self-1", Node: "node-a"})
-	require.False(t, recordIDs(t, reg, ref)["self-1"], "本节点记录照旧删除")
-	require.Contains(t, d.stopped, "self-1")
-}
-
-// TestDrainForDeployment_ForeignRecordsLeftToOwnerReaper drain 他节点语义
-// （P2 S13）：Draining 标记照置（全局停接新请求，跨节点共享状态），但
-// killInstance 跳过他节点记录——本节点宽限 goroutine 不代杀，记录由对端
-// reaper 按 draining 语义收敛；本节点记录的宽限强杀照旧。
-func TestDrainForDeployment_ForeignRecordsLeftToOwnerReaper(t *testing.T) {
-	d := newFakeDaemon()
-	reg := newFakeRegistry()
-	runner := &fakeRunner{}
-	runner.healthy = true
-	pool := newTestPool(d, reg, runner, nil)
-	pool.SetNodeID("node-a")
-	ctx := context.Background()
-
-	now := time.Now()
-	ref := FunctionRef{ProjectID: "p1", FunctionID: "fn1"}
-	lease := now.Add(time.Minute).UnixMilli()
-	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "foreign-idle", ContainerID: "foreign-idle", IP: "10.7.0.1",
-		DeploymentID: "dep-old", Node: "node-b", SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.UnixMilli(), LeaseUntilMS: lease}))
-	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "self-busy", ContainerID: "self-busy", IP: "10.7.0.2",
-		DeploymentID: "dep-old", Node: "node-a", Inflight: 1, SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.UnixMilli(), LeaseUntilMS: lease}))
-
-	pool.DrainForDeployment(ctx, "p1", "fn1", "dep-new", 20*time.Millisecond)
-
-	// 他节点 idle 记录：标记已置、但不删（对端收敛）；本节点 busy 记录宽限到点强杀。
-	records, err := reg.List(ctx, ref)
-	require.NoError(t, err)
-	byID := map[string]InstanceRecord{}
-	for _, r := range records {
-		byID[r.InstanceID] = r
-	}
-	require.True(t, byID["foreign-idle"].Draining, "他节点记录的 draining 标记必须照置（全局停接新请求）")
-	time.Sleep(60 * time.Millisecond)
-	ids := recordIDs(t, reg, ref)
-	require.True(t, ids["foreign-idle"], "他节点记录不代杀，留给对端 reaper")
-	require.False(t, ids["self-busy"], "本节点 busy 记录宽限到点强杀照旧")
-}
-
 // TestPoolReaper_DrainingKillAnchor 项 3（P2 S13）判杀锚修正：busy draining
 // 实例（在途长请求）的 idle_since 停留在上次释放时刻——宽限内不得被 30s
 // 兜底判杀误杀，busy 态收敛只按判活规则（租约过期超 stuckBusyGrace，请求方
@@ -1050,7 +924,6 @@ func TestPoolReaper_DrainingKillAnchor(t *testing.T) {
 	runner := &fakeRunner{}
 	runner.healthy = true
 	pool := newTestPool(d, reg, runner, nil)
-	pool.SetNodeID("node-a")
 	ctx := context.Background()
 	ref := FunctionRef{ProjectID: "p1", FunctionID: "fn1"}
 	now := time.Now()
@@ -1059,7 +932,7 @@ func TestPoolReaper_DrainingKillAnchor(t *testing.T) {
 
 	// ① busy draining + 陈旧 idle_since + 租约有效：宽限内必须保留。
 	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "drain-busy", ContainerID: "drain-busy", IP: "10.7.0.1",
-		DeploymentID: "dep-old", Node: "node-a", Draining: true, Inflight: 1,
+		DeploymentID: "dep-old", Draining: true, Inflight: 1,
 		SpawnedAtMS: now.UnixMilli(), IdleSinceMS: staleIdle, LeaseUntilMS: lease}))
 	d.spawned["drain-busy"], d.running["drain-busy"] = "10.7.0.1", true
 	pool.Reaper(ctx)
@@ -1075,7 +948,7 @@ func TestPoolReaper_DrainingKillAnchor(t *testing.T) {
 
 	// ③ idle draining + 陈旧 idle_since：30s 未自退出兜底强杀（原语义保留）。
 	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "drain-idle", ContainerID: "drain-idle", IP: "10.7.0.2",
-		DeploymentID: "dep-old", Node: "node-a", Draining: true, Inflight: 0,
+		DeploymentID: "dep-old", Draining: true, Inflight: 0,
 		SpawnedAtMS: now.UnixMilli(), IdleSinceMS: staleIdle, LeaseUntilMS: lease}))
 	d.spawned["drain-idle"], d.running["drain-idle"] = "10.7.0.2", true
 	pool.Reaper(ctx)
@@ -1083,47 +956,11 @@ func TestPoolReaper_DrainingKillAnchor(t *testing.T) {
 
 	// ④ idle draining + 新鲜 idle_since：不动。
 	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "drain-fresh", ContainerID: "drain-fresh", IP: "10.7.0.3",
-		DeploymentID: "dep-old", Node: "node-a", Draining: true, Inflight: 0,
+		DeploymentID: "dep-old", Draining: true, Inflight: 0,
 		SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.Add(-5 * time.Second).UnixMilli(), LeaseUntilMS: lease}))
 	d.spawned["drain-fresh"], d.running["drain-fresh"] = "10.7.0.3", true
 	pool.Reaper(ctx)
 	require.True(t, recordIDs(t, reg, ref)["drain-fresh"], "新鲜 idle_since 的 draining 实例保留")
-}
-
-// TestPoolDispatch_ClaimNeverTakesForeignRecord 池级认领收窄（P2 S13）：
-// dispatch 认领传入本节点 ID，混池（他节点记录 + 旧记录）下只认领归属
-// 匹配的记录——他节点记录的 inflight 保持不动（不产生必然不可达的请求）。
-func TestPoolDispatch_ClaimNeverTakesForeignRecord(t *testing.T) {
-	d := newFakeDaemon()
-	reg := newFakeRegistry()
-	runner := &fakeRunner{}
-	runner.healthy = true
-	pool := newTestPool(d, reg, runner, nil)
-	pool.SetNodeID("node-a")
-	ctx := context.Background()
-
-	now := time.Now()
-	ref := FunctionRef{ProjectID: "p1", FunctionID: "fn1"}
-	lease := now.Add(time.Minute).UnixMilli()
-	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "foreign-1", ContainerID: "foreign-1", IP: "10.7.0.9",
-		DeploymentID: "dep1", Node: "node-b", SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.UnixMilli(), LeaseUntilMS: lease}))
-	require.NoError(t, reg.Save(ctx, ref, InstanceRecord{InstanceID: "legacy-1", ContainerID: "legacy-1", IP: "10.0.0.5",
-		DeploymentID: "dep1", SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.UnixMilli(), LeaseUntilMS: lease}))
-	d.spawned["legacy-1"], d.spawned["foreign-1"] = "10.0.0.5", "10.7.0.9"
-	d.running["legacy-1"], d.running["foreign-1"] = true, true
-
-	resp, err := pool.Dispatch(ctx, dispatchReq())
-	require.NoError(t, err)
-	require.Equal(t, "ok", resp.Status)
-
-	records, _ := reg.List(ctx, ref)
-	for _, r := range records {
-		if r.InstanceID == "foreign-1" {
-			require.Zero(t, r.Inflight, "他节点记录不得被本地认领")
-		}
-	}
-	require.Contains(t, runner.invokedData, `"a":1`, "请求在本节点可服务实例上执行")
-	require.Zero(t, d.spawnCount, "既有可服务实例存在时不得冷启动")
 }
 
 // TestApplyDefaults 池策略零值取平台默认（调用方零值时 dispatcher 侧兜底）。
@@ -1165,8 +1002,9 @@ func markIdleOld(t *testing.T, reg *fakeRegistry, idle time.Duration, minInstanc
 }
 
 // TestPoolDispatch_EgressNetworkSelection（P2 egress 分类）：untrusted 请求
-// 走 internal 变体网络（tw-func-<project>-int），trusted 请求走常规网络；
-// dispatcher 对两类网络都按需 join（fake 断言标志与选网）。
+// 走 internal 变体任务网络（fleetly-taskgroup-q<project>），trusted 请求走
+// 常规网络（fleetly-taskgroup-p<project>）；dispatcher 对两类网络都按需
+// ensure（fake 断言标志与选网）。
 func TestPoolDispatch_EgressNetworkSelection(t *testing.T) {
 	d := newFakeDaemon()
 	reg := newFakeRegistry()
@@ -1182,7 +1020,7 @@ func TestPoolDispatch_EgressNetworkSelection(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "ok", resp.Status)
 	require.True(t, d.networkFlags["p1"])
-	require.Equal(t, "tw-func-p1-int", d.lastNetwork)
+	require.Equal(t, "fleetly-taskgroup-qp1", d.lastNetwork)
 
 	// 可信函数（server key 触发）：常规网络。
 	trusted := dispatchReq()
@@ -1191,7 +1029,7 @@ func TestPoolDispatch_EgressNetworkSelection(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "ok", resp.Status)
 	require.False(t, d.networkFlags["p1"])
-	require.Equal(t, "tw-func-p1", d.lastNetwork)
+	require.Equal(t, "fleetly-taskgroup-pp1", d.lastNetwork)
 }
 
 // TestRegistryClaimRelease_ConcurrencyCap 并发 claim/release 计数收敛
@@ -1232,7 +1070,7 @@ func TestRegistryClaimRelease_ConcurrencyCap(t *testing.T) {
 				go func() {
 					defer wg.Done()
 					<-start
-					rec, err := reg.ClaimIdle(ctx, ref, "dep-1", "", time.Now().Add(leaseTTL))
+					rec, err := reg.ClaimIdle(ctx, ref, "dep-1", time.Now().Add(leaseTTL))
 					require.NoError(t, err)
 					if rec != nil {
 						mu.Lock()

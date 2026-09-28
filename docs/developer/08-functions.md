@@ -2,6 +2,8 @@
 
 面向后端开发者：Functions 子系统的执行模型（常驻 runner + dispatcher 分发）、构建流程、鉴权、触发器（HTTP / cron / 事件）、客户端调用面与异步 worker。所有函数执行统一经 dispatcher 分发。
 
+> **IMPL-T2-3 迁移注（2026-09-28）**：执行底座已从 docker.sock 直操切换为 fleetly 平台——函数实例 = fleetly Tasks（swarm service 承载，稳定 DNS 名 + 平台强制加固）、构建 = fleetly build-from-upload（`functions.fleetly` 端点 + 机具令牌）；dispatcher 零 docker client，多节点细胞模型（节点心跳/容量键/跨节点转发/BuildNode 亲和）整体退役（多节点编排归 swarm）。本文以下章节中涉及 docker.sock / `tw-func-<project>` 网络 / `routing_mode` / `build_node` 的表述为迁移前形态，按「历史形态」阅读；执行面契约（池语义/runner 协议/触发器/异步 worker）不变。完整 fleetly 部署形态见 T2-4 割接票。
+
 > 源码锚点：`internal/domain/functions/`、`internal/infra/functions/`（分发客户端）、`dispatcher/`、`packer/`（git 打包服务）、`internal/app/functions/`、`pkg/semaphore/`、`worker/`。
 > 阅读顺序建议：`06-databases.md`（三层与 outbox）→ 本章 → `09-api-guide.md`（新增 RPC）。
 
@@ -491,24 +493,23 @@ go test ./dispatcher -run TestIntegration_Dispatcher -count=1
 |---|---|
 | `functions.dispatcher.url` | **必填**（缺失时 server/worker 启动失败），dispatcher 服务地址 |
 | `functions.dispatcher.shared_token` | 内网可选认证（`x-tw-dispatcher-token`；节点间转发同用此 token） |
-| `functions.dispatcher.max_resident_instances` | 每 daemon 常驻总量上限，默认 16（内存敞口见 §4.3 池策略） |
-| `functions.dispatcher.max_resident_instances_global` | 全集群常驻总量上限，默认 0 = 不设（多机容量共享，§15.3） |
+| `functions.dispatcher.max_resident_instances` | 每 dispatcher 常驻总量上限，默认 16（内存敞口见 §4.3 池策略） |
+| `functions.dispatcher.max_resident_instances_global`（已删除） | ~~全集群常驻总量上限~~（IMPL-T2-3：多节点容量共享退役；proto reserved） |
 | `functions.dispatcher.queue_depth` / `queue_head_timeout` | 有界排队深度 32 / 队首超时 10s |
-| `functions.dispatcher.boot_timeout` | 实例启动超时 60s（验证 spawn 的探针预算同源） |
+| `functions.dispatcher.boot_timeout` | 平台任务收敛 + 实例启动超时 60s（验证 spawn 的探针预算同源） |
 | `functions.dispatcher.build_timeout` | 构建整体超时（构建 ctx 与请求 ctx 解耦后的独立预算），默认 `5m`——Go 冷构建含基础镜像拉取，全新环境首个 Go 部署必要时调大（§3.1） |
 | `functions.dispatcher.verify_build` | 构建后验证 spawn 开关（optional bool：未设置 = 默认开启，显式 false 关闭；§3.3） |
 | `functions.dispatcher.timeout_budget` | 超时熔断阈值，默认 5 |
 | `functions.dispatcher.addr` | dispatcher HTTP 监听地址，默认 `:9070` |
-| `functions.dispatcher.callback_container` | dokploy 场景随函数网络 attach 的 server 容器名 |
-| `functions.dispatcher.node_id` | 本 dispatcher 节点 ID，空 = hostname 兜底（§15.2） |
-| `functions.dispatcher.node_url` | 本节点对等互达 URL，空 = `http://127.0.0.1:<addr 端口>` 推导；**多机必须显式配置**；registry 模式启动期强制非空 |
-| `functions.dispatcher.routing_mode` | 执行路由模式：`local`（缺省）/ `registry`（镜像全局化）；其他值启动期拒绝（§15.1） |
-| `functions.dispatcher.registry_push` | 构建成功后 push 镜像到 `functions.docker.registry`，默认 false；registry 模式必须显式 true（启动期校验） |
+| `functions.dispatcher.callback_container`（已删除） | ~~dokploy 场景随函数网络 attach 的 server 容器名~~（IMPL-T2-3：由 `functions.fleetly.network_members` 成员挂靠取代） |
+| `functions.dispatcher.node_id` / `node_url`（已删除） | ~~多机节点身份与对等互达地址~~（IMPL-T2-3：多节点编排归 swarm；proto reserved） |
+| `functions.dispatcher.routing_mode` / `registry_push`（已删除） | ~~执行路由模式与镜像 push 开关~~（IMPL-T2-3：平台按 digest 逐节点拉取，无本仓镜像分发；proto reserved） |
 | `functions.dispatcher.rebuild_on_missing_image` | 镜像缺失自动重建开关（optional bool：未设置 = 默认开启，显式 false 关闭；§4.5） |
-| `functions.docker.host` | 默认 `unix:///var/run/docker.sock`，仅 dispatcher 进程消费 |
-| `functions.docker.network` | 默认留空 = per-project 网络（不存在时自动创建 bridge）；显式配置为 opt-in 全局网络 |
-| `functions.docker.registry` | 小写，默认 `torchwood-funcs` |
-| `functions.execution.api_base_url` | 函数容器可达的 Server API 地址，注入 `TW_API_BASE_URL`；空 = 不注入 |
+| `functions.fleetly.endpoint` / `token` / `app` / `network_members` | **IMPL-T2-3 现行面**：fleetly 控制面端点/机具令牌（tasks,build）/成员挂靠 app 与服务；配置参考以 `03-configuration.md` §1.5 为准 |
+| `functions.docker.host`（已删除） | ~~默认 `unix:///var/run/docker.sock`~~（IMPL-T2-3：零 docker client；proto reserved，残留键被容忍忽略） |
+| `functions.docker.network`（已删除） | ~~默认留空 = per-project 网络~~（IMPL-T2-3：网络经 fleetly scope 引用；proto reserved） |
+| `functions.docker.registry` | 小写，默认 `torchwood-funcs`；**IMPL-T2-3 后为平台镜像逻辑命名前缀（映射键）** |
+| `functions.execution.api_base_url` | 函数可达的 Server API 地址，注入 `TW_API_BASE_URL`；fleetly 拓扑下 = 成员挂靠别名 `http://<app>-<service>:<端口>`；空 = 不注入 |
 | `functions.storage.bucket` | 部署代码包专用物理桶名（空 = 缺省 `torchwood-functions`；§4.5） |
 | `functions.trigger.http_ip_per_minute` | HTTP 触发器每 IP 限频，默认 3000 |
 | `functions.client_invoke.per_user_concurrency` | 每用户并发闸门，默认 8 |

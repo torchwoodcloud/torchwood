@@ -31,6 +31,11 @@ run = "protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto"
 description = "buf lint + buf generate（genproto/**）"
 run = ["buf lint", "buf generate"]
 
+[tasks."generate:fleetly-proto"]
+description = "vendored fleetly proto -> genproto/fleetly/**（third_party/fleetly）"
+dir = "third_party/fleetly"
+run = "buf generate"
+
 [tasks."lint:proto"]
 description = "buf lint + 对 origin/main 的 breaking 检查"
 run = ["buf lint", "buf breaking --against '.git#branch=origin/main'"]

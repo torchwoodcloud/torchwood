@@ -13,7 +13,7 @@ import (
 //go:generate wire
 
 // ProviderSet 只装配 dispatcher 所需端口（Redis + 池管理服务）：
-// 零 Postgres、零 docker.sock 之外特权（docker.sock 由 daemon 层持有）。
+// 零 Postgres、零执行底座特权（函数实例/构建经 fleetly Tasks/build API）。
 var ProviderSet = wire.NewSet(
 	boot.New,
 	bootkit.NewLogger,
@@ -29,10 +29,9 @@ var ProviderSet = wire.NewSet(
 )
 
 // NewAppConfig 解析并校验 AppConfig（与 server/worker 同一安全校验口径）。
-// 路由模式校验（四期 4b）与 server/worker 对齐——dispatcher 是
-// routing_mode/registry_push 的直接消费方，字符串笔误在此 fail-fast，
-// 不得静默降级 local。url 校验（ValidateFunctionsDispatchConfig）不适用
-// ——dispatcher 自身是通路终点，不消费该键。
+// fleetly 控制面配置（endpoint/机具令牌）在此 fail-fast——dispatcher 是
+// 任务与构建 API 的唯一消费方，缺失即拒绝启动；url 校验
+// （ValidateFunctionsDispatchConfig）不适用——dispatcher 自身是通路终点。
 func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 	var c config.AppConfig
 	if err := config.UnmarshalConfig(app.Config(), &c); err != nil {
@@ -41,7 +40,7 @@ func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 	if err := bootkit.ValidateAppConfig(app.Logger(), &c); err != nil {
 		return nil, err
 	}
-	if err := bootkit.ValidateFunctionsRoutingConfig(&c); err != nil {
+	if err := bootkit.ValidateFunctionsFleetlyConfig(&c); err != nil {
 		return nil, err
 	}
 	return &c, nil

@@ -79,16 +79,24 @@ storage:
     secret_access_key: ""           # env TORCHWOOD_STORAGE_S3_SECRET_ACCESS_KEY
 
 functions:
+  # 执行底座 = fleetly 平台（IMPL-T2-3）：函数实例 = fleetly Tasks、构建 =
+  # fleetly build-from-upload；本仓零 docker client。fleetly 端点/机具令牌
+  # 由 compose 环境变量注入（token 不进本文件）。
   docker:
-    host: "unix:///var/run/docker.sock"
-    # 默认 per-project 隔离网络 tw-func-<project_id>；勿配全局网络（跨租户横向风险）
-    network: ""
+    # host/network 键已删除：dispatcher 不再消费 docker 宿主配置。
+    # 平台镜像命名前缀（逻辑寻址键；见 functions.fleetly）。
     registry: "torchwood-funcs"
+  fleetly:
+    # env: TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT / _TOKEN / _APP / _NETWORK_MEMBERS
+    endpoint: ""
+    token: ""
+    app: ""
+    network_members: []
   dispatcher:
-    # 镜像缺失自动重建（执行链自愈）：宿主镜像被清理（prune -a / 磁盘压力）
-    # 导致 ready 状态与 docker 镜像存量漂移时，执行命中即异步触发重建——
-    # zip/git 源从持久桶（下方 functions.storage）拉回复核重建，git 源桶
-    # miss 回退 packer 重物化。关闭后仅剩 412 报错引导人工 redeploy。
+    # 镜像缺失自动重建（执行链自愈）：构建产物引用映射缺失/被清理或
+    # fleetly 侧镜像解析失败时，执行命中即异步触发重建——zip/git 源从持久
+    # 桶（下方 functions.storage）拉回复核重建，git 源桶 miss 回退 packer
+    # 重物化。关闭后仅剩 412 报错引导人工 redeploy。
     rebuild_on_missing_image: true
   storage:
     # 部署代码包持久桶：镜像重建的源。桶为平台内部资源（不进用户 bucket

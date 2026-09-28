@@ -68,7 +68,6 @@ jobs:
       TORCHWOOD_TEST_REDIS_ADDR: localhost:6379
       TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE: postgres://torchwood:torchwood@localhost:5432/postgres?sslmode=disable
       TORCHWOOD_TEST_MINIO_ENDPOINT: http://localhost:9000
-      TORCHWOOD_RUN_DOCKER_TESTS: "1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -103,9 +102,6 @@ jobs:
       - name: Buf breaking (proto field drift)
         run: buf breaking --against '.git#branch=origin/main'
 
-      - name: Pre-pull function runtime base images
-        run: docker pull node:18-alpine
-
       - name: Format check (gofmt) + go vet
         run: mise run lint:go
 
@@ -138,18 +134,9 @@ jobs:
             exit 1
           }
 
-      # J6-5：functions docker e2e 防假绿——daemon 不可达时该组测试静默 skip
-      # 且整体显示 ok。取舍：用 -run 前缀重跑该组并断言无 --- SKIP，而非解析
-      # 主测试步骤的 go test -json 输出（避免改动主步骤输出管道）。
-      - name: Assert functions docker e2e executed
-        run: |
-          set -euo pipefail
-          out=$(go test -v -count=1 -run 'TestDockerExecutor_' ./internal/infra/functions)
-          echo "$out"
-          if grep -q '^--- SKIP' <<<"$out"; then
-            echo "::error::functions docker e2e skipped; check docker daemon and TORCHWOOD_RUN_DOCKER_TESTS"
-            exit 1
-          fi
+      # J6-5 的 functions docker e2e 防假绿步骤已随 IMPL-T2-3 删除：dispatcher
+      # 不再有 docker 集成测试（执行底座 = fleetly Tasks/build API；docker
+      # client 由 dispatcher/import_guard_test.go 的两层守卫结构性封死）。
 
       - name: SDK Go tests (independent module)
         working-directory: sdk/go

@@ -1,0 +1,28 @@
+# fleetly API 契约的 vendored 副本（唯一真源 = fleetly 仓 proto/fleetly/...；
+# 见本目录 README.md 的来源与同步纪律）。独立 buf module：与 torchwood 自身
+# 的 proto 模块隔离，避免生成物互相干扰（包名 serverv1/sharedv1 与
+# torchwood genproto 同名——同模块生成会让 grpc-gateway 的 import 别名与
+# openapiv2 的 definition 命名漂移）。
+version: v2
+
+deps:
+  - buf.build/googleapis/googleapis
+  - buf.build/bufbuild/protovalidate
+  - buf.build/grpc-ecosystem/grpc-gateway
+
+modules:
+  - path: proto
+
+lint:
+  use:
+    - STANDARD
+  except:
+    - PACKAGE_DIRECTORY_MATCH
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+    - ENUM_VALUE_PREFIX
+
+breaking:
+  use:
+    - FILE

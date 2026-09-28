@@ -90,37 +90,36 @@
 
 ### 1.5 functions
 
-函数执行统一经 dispatcher 分发（docker.sock 唯一持有方是 dispatcher 进程）。
+函数执行统一经 dispatcher 分发。IMPL-T2-3 起执行底座 = fleetly 平台：函数实例 = fleetly Tasks（swarm service 承载，稳定 DNS 名 + 平台强制加固：CapDrop ALL/只读 rootfs/非 root/pids）、构建 = fleetly build-from-upload；dispatcher 不再持有 docker.sock（本仓零 docker client），多节点编排归 swarm。
 
-**`functions.execution`**：`api_base_url` 是函数容器回访 Server API 的基址（经 `TW_API_BASE_URL` 注入执行环境）。空 = 不注入（函数需自行解析；自托管部署应显式配置，且 server/worker 两进程同值）。
+**`functions.execution`**：`api_base_url` 是函数回访 Server API 的基址（经 `TW_API_BASE_URL` 注入执行环境）。fleetly 拓扑下 = 任务网络成员挂靠后的 DNS 别名（`http://<app>-server:<端口>`，见 `functions.fleetly.network_members`）。空 = 不注入（函数需自行解析；自托管部署应显式配置，且 server/worker 两进程同值）。
 
-**`functions.docker`**（仅 dispatcher 进程消费）：
+**`functions.docker`**：`host`/`network` 键已删除（proto reserved，存量 yaml 残留键被容忍忽略）；仅 `registry`（默认 `torchwood-funcs`）保留为**平台镜像命名前缀（逻辑寻址键）**——server 与 dispatcher 同源派生函数部署镜像逻辑名 `func-<function>-<deployment>`，dispatcher 以此名为键登记 fleetly 构建产物引用。
+
+**`functions.fleetly`**（仅 dispatcher 进程消费；fleetly 控制面唯一通路）：
 
 | 键 | 默认 | 说明 |
 |----|------|------|
-| `host` | 模板 `unix:///var/run/docker.sock` | docker daemon 地址 |
-| `network` | 空 = per-project `tw-func-<project_id>` | 显式全局网络是 opt-in（跨租户互通风险）；不可信函数固定挂 internal 变体 `tw-func-<project_id>-int` |
-| `registry` | `torchwood-funcs` | 函数镜像命名前缀；`routing_mode="registry"` 时升格为真实 registry |
+| `endpoint` | 无（**必填**） | fleetlyd gRPC 端点（栈内可达地址，如 `fleetlyd:8421`）；缺失拒绝启动 |
+| `token` | 无（**必填**） | 机具令牌（scope `tasks,build`）；**经环境变量注入，不落配置文件/镜像** |
+| `app` | 空 | 本栈在 fleetly 中的 app 名（任务网络成员挂靠的归属 app）；`network_members` 非空时必填 |
+| `network_members` | 空 = 不声明挂靠 | 挂靠到任务网络的服务名列表（本 app 内；生产含 dispatcher 与 server）；fleetly 把成员服务双挂到任务网络，DNS 别名 = `<app>-<service>` |
 
 **`functions.dispatcher`**：`url` 指向 dispatcher 内网 HTTP 端点，server/worker **必填**（启动期校验）；`shared_token` 为内网可选认证（空 = 不校验）。其余字段仅 dispatcher 进程消费：
 
 | 键 | 默认 | 说明 |
 |----|------|------|
-| `max_resident_instances` | 16 | 每节点常驻实例总量上限（内存敞口 = 实例数 × spec 内存） |
+| `max_resident_instances` | 16 | 每 dispatcher 常驻实例总量上限（本地容量门；平台侧另有每令牌任务配额 fail-closed） |
 | `queue_depth` | 32 | 单函数排队深度上限，超限立即 ResourceExhausted |
 | `queue_head_timeout` | 10s | 等待空闲实例的队首超时 |
-| `boot_timeout` | 60s | 实例启动健康探针等待上限 |
+| `boot_timeout` | 60s | 平台任务收敛 + 实例启动健康探针等待上限 |
 | `addr` | `:9070` | dispatcher HTTP 监听地址（仅内网） |
-| `callback_container` | 空 = 不 attach | join 项目网络时一并 attach 的 server 容器名；函数经容器名 DNS 回访平台，attach 失败仅告警 |
 | `timeout_budget` | 5 | 实例累计超时熔断阈值（达到即杀实例重建） |
 | `build_timeout` | 5m | 部署构建整体超时（构建 ctx 与客户端断开解耦，由该值封顶；验证 spawn 预算嵌套其内） |
 | `verify_build` | 默认开启 | 部署后验证 spawn（build 成功后起池外实例轮询 `/_tw/health`）；optional presence：未配置 = 开启，显式 `false` = 关闭 |
-| `rebuild_on_missing_image` | 默认开启 | 执行命中「部署镜像在本节点缺失」时异步触发该部署重建（zip 源自愈；git 源桶 miss 回退 packer 重物化） |
-| `node_id` | 空 = os.Hostname | 多机节点注册表与构建亲和的节点标识 |
-| `node_url` | 空 = `http://127.0.0.1:<addr 端口>` | 本节点对等互达地址；多机部署必须显式配置 |
-| `routing_mode` | `local` | `local` = 镜像不分发，冷启动转发构建节点；`registry` = 镜像全局化（push registry、任意节点 miss 后 pull）。其他值启动期拒绝 |
-| `registry_push` | false | 构建成功后 push 镜像；`routing_mode="registry"` 时必须显式 true（启动期校验），local 模式忽略 |
-| `max_resident_instances_global` | 0 = 不设 | 全集群常驻总量上限（Redis 容量键 SCAN 求和；Redis 不可用 fail-open 退化为仅本节点上限） |
+| `rebuild_on_missing_image` | 默认开启 | 执行命中「部署镜像不可得」（构建产物引用映射缺失/被清理，或 fleetly 侧镜像解析失败）时异步触发该部署重建（zip 源自愈；git 源桶 miss 回退 packer 重物化） |
+
+`callback_container` / `node_id` / `node_url` / `routing_mode` / `registry_push` / `max_resident_instances_global` 键已删除（proto reserved）：回访容器由 `functions.fleetly.network_members` 成员挂靠取代；多节点细胞模型（节点心跳/容量键/跨节点转发）整体退役。
 
 函数池策略（per-function，不在本配置内）的缺省值：`max_instances` 4、`idle_ttl` 300s、`max_requests_per_instance` 1000。
 
@@ -203,7 +202,8 @@ storage.s3.access_key_id  →  TORCHWOOD_STORAGE_S3_ACCESS_KEY_ID
 | `data.database.source` | `TORCHWOOD_DATA_DATABASE_SOURCE` |
 | `data.redis.*` | `TORCHWOOD_DATA_REDIS_ADDR` / `_PASSWORD` / `_DB` |
 | `storage.s3.*` | `TORCHWOOD_STORAGE_S3_ENDPOINT` / `_BUCKET` / `_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` 等 |
-| `functions.dispatcher.*` | `TORCHWOOD_FUNCTIONS_DISPATCHER_*`（如 `_URL`、`_SHARED_TOKEN`、`_ROUTING_MODE`） |
+| `functions.dispatcher.*` | `TORCHWOOD_FUNCTIONS_DISPATCHER_*`（如 `_URL`、`_SHARED_TOKEN`） |
+| `functions.fleetly.*` | `TORCHWOOD_FUNCTIONS_FLEETLY_*`（如 `_ENDPOINT`、`_TOKEN`、`_APP`、`_NETWORK_MEMBERS`） |
 | `functions.execution.api_base_url` | `TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL` |
 | `functions.trigger.http_ip_per_minute` | `TORCHWOOD_FUNCTIONS_TRIGGER_HTTP_IP_PER_MINUTE` |
 | `functions.client_invoke.*` | `TORCHWOOD_FUNCTIONS_CLIENT_INVOKE_*` |
@@ -260,9 +260,9 @@ lynx.NewRunner(
 
 | 进程 | 校验 |
 |------|------|
-| server | `ValidateAppConfig`（jwt.secret 必填 + encryption_key/setup_token 条件强度校验）+ `ValidateFunctionsDispatchConfig`（`functions.dispatcher.url` 必填 + 路由模式校验） |
+| server | `ValidateAppConfig`（jwt.secret 必填 + encryption_key/setup_token 条件强度校验）+ `ValidateFunctionsDispatchConfig`（`functions.dispatcher.url` 必填） |
 | worker | 同 server 全部校验 + `data.database.source` 显式必填校验 |
-| dispatcher | `ValidateAppConfig` + `ValidateFunctionsRoutingConfig`（自身是通路终点，不消费 `url`） |
+| dispatcher | `ValidateAppConfig` + `ValidateFunctionsFleetlyConfig`（`functions.fleetly.endpoint`/`token` 必填；声明挂靠成员时 `app` 必填；自身是通路终点，不消费 `url`） |
 | packer | 仅 `ValidateAppConfig` |
 
 ---
@@ -298,7 +298,7 @@ security:
 - `security.api_key.header`：认证拦截器固定读取 `x-api-key` 头（gRPC metadata 大小写不敏感）。
 - `storage.provider` / `storage.local.path`：对象存储装配固定为 MinIO/S3 适配器，无本地盘实现分支。
 
-存量 YAML 中的已退役键（如 `functions.executor`、历史 `telemetry` 节）会被解码层静默容忍——proto 反序列化不拒绝未知字段，对应访问器已随 schema 删除。
+存量 YAML 中的已退役键（如 `functions.executor`、`functions.docker.host`/`network`、`functions.dispatcher.node_id`/`node_url`/`routing_mode`/`registry_push`/`callback_container`/`max_resident_instances_global`、历史 `telemetry` 节）会被解码层静默容忍——proto 反序列化不拒绝未知字段，对应访问器已随 schema 删除（reserved 字段号与名称）。
 
 ---
 

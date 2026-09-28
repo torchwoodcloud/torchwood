@@ -19,8 +19,11 @@ type TriggerEnvelope struct {
 
 // Execution describes a single function invocation.
 type Execution struct {
-	FunctionID   string
-	DeploymentID string // 构建产物镜像标识（{registry}/func-{functionID}-{deploymentID}）
+	FunctionID string
+	// DeploymentID 是部署行 ID：dispatcher 以其派生逻辑镜像名
+	// （{registry}/func-{functionID}-{deploymentID}）经映射解析平台产物引用
+	// （IMPL-T2-3；逻辑名是 server/dispatcher 的同源寻址键）。
+	DeploymentID string
 	ProjectID    string // 所属项目：决定执行容器网络（tw-func-<project.id>，Round4 J5-4）
 	Runtime      string // 运行时 ID（运行时表见 runtime.go；构建链取 deployment 行内快照）
 	SourcePath   string // path or archive location of function source
@@ -43,10 +46,8 @@ type Execution struct {
 	// header x-tw-execution-id 透传给 runner（ctx.executionId / 日志关联）；
 	// 空则不发 header。
 	ExecutionID string
-	// BuildNode 是该 deployment 首个构建落成的 dispatcher 节点 ID（四期
-	// 4a-1，设计 §4 M3/M5：deployment.build_node 随执行规格透传）。本阶段
-	// 只透传落类型——dispatcher 侧不消费（local 路由按 build_node 固定路由
-	// 目标节点是 4a-2），空串 = 无亲和（存量行/镜像导入路径）。
+	// BuildNode 已退役（IMPL-T2-3 多节点细胞模型删除）：dispatcher 不再消费
+	// 该字段（无跨节点路由）；保留字段仅为存量 build_node 列的载荷兼容。
 	BuildNode string
 	// ——调用身份投影（runner v5，mlbridge fn-rpc 设计 §2.5 第 1 项）——
 	// 把执行记录的调用身份随执行规格贯通到 runner ctx（source /

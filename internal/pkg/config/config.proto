@@ -152,20 +152,28 @@ message Storage {
 
 message Functions {
   message Docker {
-    string host = 1;
-    string network = 2;
+    // host（字段 1）与 network（字段 2）已删除：dispatcher 的 docker.sock
+    // 交互面整体退役（IMPL-T2-3）——函数实例 = fleetly Tasks（swarm service
+    // 承载，网络经 scope 引用）、构建 = fleetly build-from-upload；本仓不再
+    // 持有任何 docker client。
+    reserved 1, 2;
+    reserved "host", "network";
+    // 平台镜像命名前缀（逻辑命名空间，非 docker 宿主配置）：server 与
+    // dispatcher 共同派生函数部署镜像的逻辑名（func-<function>-<deployment>），
+    // dispatcher 以此名为键登记 fleetly 构建产物引用（见 functions.fleetly）。
     string registry = 3;
   }
-  // Execution 是执行身份（P0）相关配置：函数容器经 bridge NAT 回访
-  // Server API 只能走外部端点（server 不在 tw-func-<project> 网络上），
-  // 平台经 TW_API_BASE_URL env 注入可达地址；空 = 不注入该变量（函数
-  // 需自行解析，自托管部署文档要求显式配置）。
+  // Execution 是执行身份（P0）相关配置：函数容器回访 Server API 的可达
+  // 地址（fleetly 世界 = 任务网络成员挂靠后的 DNS 别名
+  // http://<app>-<service>:<port>，见 functions.fleetly.network_members），
+  // 平台经 TW_API_BASE_URL env 注入；空 = 不注入该变量（函数需自行解析，
+  // 自托管部署文档要求显式配置）。
   message Execution {
     string api_base_url = 1;
   }
-  // Dispatcher 是分发通路配置（owner 拍板方案③：独立 dispatcher
-  // 进程专职持有 docker.sock、join 项目网络、承接 Build/Execute/RemoveImage
-  // 全部 daemon 操作；server/worker 零 daemon 依赖）。
+  // Dispatcher 是分发通路配置：独立 dispatcher 进程承接
+  // Build/Execute/RemoveImage 全部执行面操作（函数实例 = fleetly Tasks、
+  // 构建 = fleetly build-from-upload；server/worker 零执行底座依赖）。
   message Dispatcher {
     // dispatcher 的内网 HTTP 基址（server/worker 侧消费），如
     // http://dispatcher:9070。必填（组合根启动期校验）。
@@ -187,15 +195,11 @@ message Functions {
     string boot_timeout = 6;
     // dispatcher HTTP 监听地址（仅内网；默认 ":9070"）。
     string addr = 7;
-    // 函数网络内需可达的 server 容器名（如 compose 的 container_name）。
-    // 非空时，dispatcher 在 join 项目网络（含 internal 变体）的同时把该
-    // 容器一并 attach——函数经容器名 DNS 回访平台 API
-    // （functions.execution.api_base_url = http://<该名字>:<端口>）。
-    // 不可信函数在 internal 网络（无 NAT 出口），这是其回访平台的唯一通路；
-    // 容器名 DNS 在 user-defined 网络（含 internal）上由内置 DNS 解析。
-    // attach 失败不阻断执行（函数可能无需回访），但会记警告——部署时应
-    // 在首次执行前修正。空 = 不 attach（api_base_url 须另行保证可达）。
-    string callback_container = 8;
+    // callback_container（字段 8）已删除：函数回访平台 API 的通路改由
+    // functions.fleetly.network_members 的任务网络成员挂靠承担（fleetly
+    // 平台把成员服务双挂到任务网络，DNS 别名 = <app>-<service>）。
+    reserved 8;
+    reserved "callback_container";
     // 实例累计超时熔断阈值（functions v3 §1.4：超时不杀实例后，实例累计
     // 超时达到该阈值即杀实例重建，防僵尸负载慢性塞满事件循环；默认 5）。
     uint32 timeout_budget = 9;
@@ -208,50 +212,25 @@ message Functions {
     // Go 强制、node 同开）。optional presence 语义：未配置 = 默认开启，
     // 显式 false = 关闭（先例：security.rate_limit.enabled）。
     optional bool verify_build = 11;
-    // 本 dispatcher 进程的节点 ID（四期 4a-1 多机细胞模型，设计
-    // functions-runtimes-and-sources.md §4 M2/M5）：节点注册表
-    // （torchwood:fnnodes:*）与构建亲和（function_deployments.build_node）
-    // 的节点标识。空 = os.Hostname 兜底。
-    string node_id = 12;
-    // 本节点对等互达的 dispatcher URL（M3 执行路由的寻址基准，4a-2 消费），
-    // 如 http://dispatcher-1:9070。空 = "http://127.0.0.1:" + addr 端口推导
-    // （仅单机部署成立）。**多机部署必须显式配置**：跨节点回连地址无法从
-    // 监听地址推导（127.0.0.1 对其他节点不可达）。routing_mode="registry"
-    // 时必填（启动期校验——对等必须能反连本节点，推导地址跨节点不可达）。
-    string node_url = 13;
-    // 执行路由模式（四期 4b M7，设计 §4 三档模型的两档可实现形态）：
-    //   - "local"（缺省，向后兼容）：镜像不分发——函数镜像只存在于其构建
-    //     节点，冷启动转发 BuildNode（4a-2 语义）；
-    //   - "registry"：M1 镜像全局化——构建成功后 push
-    //     functions.docker.registry，任意节点冷启动本地 miss 则 pull 后本地
-    //     spawn（跨节点冷启动自愈解锁；实例亲和转发语义不变）。
-    // 其他值启动期 ValidateFunctionsDispatchConfig 拒绝。设计中的
-    // "replicated" 实验档不在实现范围（设计 §4 M7 降档裁决）。
-    string routing_mode = 14;
-    // 构建成功（含验证 spawn 通过）后把镜像 push 到
-    // functions.docker.registry（M1；此时该前缀从命名前缀升格为真实
-    // registry）。routing_mode="registry" 时必须显式 true（启动期校验——
-    // 镜像全局化是该模式的硬前提）；local 模式忽略该值（镜像不分发，
-    // 配 true 也不 push）。默认 false。
-    bool registry_push = 15;
-    // 全集群常驻实例总量上限（四期 4c M4 容量共享，设计 §4）：多节点部署下
-    // max_resident_instances 只是每节点各管各的（进程内计数互不知），集群
-    // 总量由 Redis 容量键 torchwood:fncap:resident:<node_id>（SET+TTL，值 =
-    // 该节点当前常驻数）SCAN 求和约束，trySpawn 在本节点上限之后检查。
-    // 0 = 不设全局上限（缺省；单机部署无需配置）。Redis 不可用时全局检查
-    // fail-open 退化为仅本节点上限（容量门是可用性门不是安全门，限频告警；
-    // 与 M8 死节点收敛的 fail-safe 语义方向相反，不得混淆）。
-    uint32 max_resident_instances_global = 16;
-    // 镜像缺失自动重建（执行链自愈）：执行分发命中「部署镜像在本节点缺失」
-    // （宿主镜像被清理/环境迁移导致 Postgres ready 状态与宿主 docker 镜像
-    // 存量漂移）时，server/worker 凭 FailedPrecondition + 稳定标记识别并
-    // 异步触发该部署重建——zip/git 源以盘上 zip 重建；盘缺失时优先从
-    // functions.storage 专用桶拉回复核（zip 源自愈主通路），git 源桶 miss
-    // 再按行内源快照 URL+钉死 SHA+目录经 packer 重新物化并复核
-    // ContextSHA256；image 源为幂等 ImportImage；桶未启用（存量部署/
-    // zipStore 未注入）且 zip 源盘缺失时退回声明边界（执行错误文案含
-    // rebuild required 引导 redeploy）。optional presence 语义：未配置 =
-    // 默认开启，显式 false = 关闭。先例：verify_build。
+    // node_id / node_url / routing_mode / registry_push /
+    // max_resident_instances_global（字段 12-16）已删除：多节点细胞模型
+    // （节点心跳/容量键/跨节点转发/BuildNode 亲和）整体退役（IMPL-T2-3）——
+    // 多节点编排归 swarm，函数实例 = fleetly Tasks（平台按镜像 digest 在
+    // 任意节点拉取运行，无镜像分发与转发语义）。
+    reserved 12, 13, 14, 15, 16;
+    reserved "node_id", "node_url", "routing_mode", "registry_push",
+        "max_resident_instances_global";
+    // 镜像缺失自动重建（执行链自愈）：执行分发命中「部署镜像不可得」
+    // （dispatcher 的构建产物引用映射缺失/被清理，或 fleetly 侧镜像解析
+    // 失败）时，server/worker 凭 FailedPrecondition + 稳定标记识别并异步
+    // 触发该部署重建——zip/git 源以盘上 zip 重建（fleetly build-from-upload
+    // 重新构建并刷新引用映射）；盘缺失时优先从 functions.storage 专用桶
+    // 拉回复核（zip 源自愈主通路），git 源桶 miss 再按行内源快照 URL+钉死
+    // SHA+目录经 packer 重新物化并复核 ContextSHA256；image 源为幂等
+    // ImportImage；桶未启用（存量部署/zipStore 未注入）且 zip 源盘缺失时
+    // 退回声明边界（执行错误文案含 rebuild required 引导 redeploy）。
+    // optional presence 语义：未配置 = 默认开启，显式 false = 关闭。
+    // 先例：verify_build。
     optional bool rebuild_on_missing_image = 17;
   }
   // executor（字段号 1）已删除：v1 docker 执行器（每请求一容器、进程内
@@ -261,6 +240,28 @@ message Functions {
   Docker docker = 2;
   Execution execution = 3;
   Dispatcher dispatcher = 4;
+  // Fleetly 是 fleetly 平台控制面消费配置（IMPL-T2-3：dispatcher 的
+  // docker.sock 交互面整体退役——函数实例 = fleetly Tasks（swarm service
+  // 承载）、构建 = fleetly build-from-upload API）。仅 dispatcher 进程消费；
+  // 令牌由部署注入（禁止入库/进日志/进镜像）。
+  message Fleetly {
+    // fleetlyd gRPC 端点（host:port；栈内可达地址，如 fleetlyd:8421）。
+    // 必填（dispatcher 启动期校验——缺失即拒绝启动，不留到首次构建/执行）。
+    string endpoint = 1;
+    // 机具令牌（scope: tasks,build；部署经环境变量注入
+    // TORCHWOOD_FUNCTIONS_FLEETLY_TOKEN，不落配置文件/镜像）。
+    string token = 2;
+    // 本 torchwood 栈在 fleetly 中的 app 名：任务网络成员挂靠的归属 app
+    // （EnsureTaskNetwork.members 的 app 位）。
+    string app = 3;
+    // 挂靠到任务网络的服务名列表（本 app 内；fleetly 把成员服务双挂到任务
+    // 网络，DNS 别名 = <app>-<service>）。生产应含 dispatcher 与 server：
+    // 前者是分发可达面，后者是函数回访平台 API 的通路
+    // （functions.execution.api_base_url = http://<app>-<service>:<port>）。
+    // 空 = 不声明挂靠（任务网络仅平台内部可达，分发必失败——显式空即接受）。
+    repeated string network_members = 4;
+  }
+  Fleetly fleetly = 11;
   // Trigger 是触发器模块平台级配置（P1 触发器模块）。
   message Trigger {
     // HTTP 触发器 per-IP 固定窗口限频（次/分钟；默认 3000）。独立更高默认：
@@ -318,8 +319,8 @@ message Functions {
   Packer packer = 9;
   // Image 是 BYO 镜像源（三期阶段三，docs/design/functions-runtimes-and-sources.md
   // §3）的 registry 准入配置：host 名称级校验在 dispatcher 侧
-  // ImportImage 实施（pull 由宿主 docker daemon 执行，IP 拨号点 guard 不可
-  // 实施于 daemon——故采用名称级校验 + 白名单 + 信任级论证：部署者 =
+  // ImportImage 实施（镜像拉取由 fleetly 平台在各节点执行，dispatcher
+  // 只做名称级准入 + 契约验证——名称级校验 + 白名单 + 信任级论证：部署者 =
   // functions.write 特权主体；公网域名解析到内网的残余面诚实声明、随
   // egress 原语后置）。仅 dispatcher 进程消费。
   message Image {

@@ -74,7 +74,7 @@ func TestRedisRegistry_ClaimReleaseRoundTrip(t *testing.T) {
 	})
 
 	// ① claim 返回记录必须可反序列化且 inflight=1。
-	rec, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
+	rec, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
 	require.NoError(t, err)
 	require.NotNil(t, rec)
 	require.Equal(t, "inst-1", rec.InstanceID)
@@ -105,7 +105,7 @@ func TestRedisRegistry_ClaimReleaseRoundTrip(t *testing.T) {
 	require.Equal(t, now.UnixMilli(), out.IdleSinceMS)
 	require.Equal(t, leaseUntil.UnixMilli(), out.LeaseUntilMS, "release 必须续租")
 
-	rec2, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
+	rec2, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
 	require.NoError(t, err)
 	require.NotNil(t, rec2, "release 后二次 claim 必须成功")
 	require.Equal(t, "inst-1", rec2.InstanceID)
@@ -150,7 +150,7 @@ func TestRedisRegistry_InflightConcurrency(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			rec, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
+			rec, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
 			require.NoError(t, err)
 			if rec != nil {
 				successes.Add(1)
@@ -173,7 +173,7 @@ func TestRedisRegistry_InflightConcurrency(t *testing.T) {
 	require.Zero(t, records[0].Inflight, "4 claim + 4 release 后 inflight 必须归零")
 	require.Equal(t, int64(4), records[0].Requests)
 
-	rec, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
+	rec, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
 	require.NoError(t, err)
 	require.NotNil(t, rec, "计数收敛后必须可再次认领（无永久「满载」漂移）")
 }
@@ -215,7 +215,7 @@ func TestRedisRegistry_ClaimIdleMutex(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			rec, err := reg.ClaimIdle(ctx, ref, "dep-1", "", time.Now().Add(leaseTTL))
+			rec, err := reg.ClaimIdle(ctx, ref, "dep-1", time.Now().Add(leaseTTL))
 			require.NoError(t, err)
 			if rec != nil {
 				successes.Add(1)
@@ -266,7 +266,7 @@ func TestRedisRegistry_LegacyRecordCompat(t *testing.T) {
 	require.NotZero(t, records[0].SpawnedAtMS, "RFC3339 spawned_at 必须解析为毫秒")
 	require.NotZero(t, records[0].IdleSinceMS, "RFC3339 idle_since 必须解析为毫秒")
 
-	rec, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
+	rec, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
 	require.NoError(t, err)
 	require.NotNil(t, rec, "旧记录可被认领（Lua inflight/busy 兜底）")
 	require.Equal(t, "inst-legacy", rec.InstanceID)
@@ -311,7 +311,7 @@ func TestRedisRegistry_ReleaseTimeoutFuse(t *testing.T) {
 		LeaseUntilMS: now.Add(leaseTTL).UnixMilli(),
 	})
 
-	_, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
+	_, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
 	require.NoError(t, err)
 	_, err = reg.Release(ctx, ref, "inst-1", now, now.Add(leaseTTL), false)
 	require.NoError(t, err)
@@ -320,7 +320,7 @@ func TestRedisRegistry_ReleaseTimeoutFuse(t *testing.T) {
 
 	// 超时释放路径 ×3：timeouts 累加到 3。
 	for i := 0; i < 3; i++ {
-		_, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
+		_, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
 		require.NoError(t, err)
 		out, err := reg.Release(ctx, ref, "inst-1", now, now.Add(leaseTTL), true)
 		require.NoError(t, err)
@@ -356,92 +356,22 @@ func TestRedisRegistry_ReleaseMaxRequestsDrains(t *testing.T) {
 	})
 
 	// 第 1 次：requests=1 < 2，不 draining。
-	_, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
+	_, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
 	require.NoError(t, err)
 	out, err := reg.Release(ctx, ref, "inst-1", now, now.Add(leaseTTL), false)
 	require.NoError(t, err)
 	require.False(t, out.Draining)
 
 	// 第 2 次：requests=2 >= max_requests → draining（实例不再可认领）。
-	_, err = reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
+	_, err = reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
 	require.NoError(t, err)
 	out, err = reg.Release(ctx, ref, "inst-1", now, now.Add(leaseTTL), false)
 	require.NoError(t, err)
 	require.True(t, out.Draining, "达记录固化 max_requests 后必须判 draining")
 
-	rec, err := reg.ClaimIdle(ctx, ref, "dep-1", "", now.Add(leaseTTL))
+	rec, err := reg.ClaimIdle(ctx, ref, "dep-1", now.Add(leaseTTL))
 	require.NoError(t, err)
 	require.Nil(t, rec, "draining 实例不得被认领")
-}
-
-// TestRedisRegistry_ClaimIdleNodeScoping 双节点记录互相不认领（P2 S13，
-// miniredis 真 Lua 求值）：ClaimIdle 按 selfNodeID 收窄——显式他节点记录
-// 不认领（其容器 IP 仅在其节点 docker 网络内可达，跨节点认领必败）；
-// node 为空的旧记录放行（升级窗口共存语义，与 ownedBySelf 同口径）。
-func TestRedisRegistry_ClaimIdleNodeScoping(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-	rdb := newRegistryTestRedis(t)
-	reg := NewRedisRegistry(rdb)
-	ctx := context.Background()
-	now := time.Now()
-	lease := now.Add(leaseTTL)
-
-	seed := func(ref FunctionRef, id, node string) {
-		t.Helper()
-		require.NoError(t, rdb.Del(ctx, registryKey(ref)).Err())
-		seedInstance(t, rdb, ref, InstanceRecord{
-			InstanceID:   id,
-			ContainerID:  id,
-			IP:           "10.0.0.1",
-			DeploymentID: "dep-1",
-			Node:         node,
-			SpawnedAtMS:  now.UnixMilli(),
-			IdleSinceMS:  now.UnixMilli(),
-			LeaseUntilMS: lease.UnixMilli(),
-		})
-	}
-
-	// ① 他节点记录：node-a 认领必败、node-b 认领成功。
-	refB := FunctionRef{ProjectID: "redis-it", FunctionID: "fn-node-b"}
-	seed(refB, "inst-b", "node-b")
-	rec, err := reg.ClaimIdle(ctx, refB, "dep-1", "node-a", lease)
-	require.NoError(t, err)
-	require.Nil(t, rec, "node-a 不得认领 node-b 的记录")
-	rec, err = reg.ClaimIdle(ctx, refB, "dep-1", "node-b", lease)
-	require.NoError(t, err)
-	require.NotNil(t, rec, "归属节点本人可认领")
-	require.Equal(t, "inst-b", rec.InstanceID)
-
-	// ② 旧记录（node 为空）：任意节点放行（升级窗口共存）。
-	refL := FunctionRef{ProjectID: "redis-it", FunctionID: "fn-node-legacy"}
-	seed(refL, "inst-legacy", "")
-	rec, err = reg.ClaimIdle(ctx, refL, "dep-1", "node-a", lease)
-	require.NoError(t, err)
-	require.NotNil(t, rec, "node 为空的旧记录必须放行")
-	require.Equal(t, "inst-legacy", rec.InstanceID)
-
-	// ③ 混合池：归属匹配的记录可认领，他节点记录被跳过（不互相挡道）。
-	refM := FunctionRef{ProjectID: "redis-it", FunctionID: "fn-node-mixed"}
-	require.NoError(t, rdb.Del(ctx, registryKey(refM)).Err())
-	seedInstance(t, rdb, refM, InstanceRecord{
-		InstanceID: "mix-b", ContainerID: "mix-b", IP: "10.0.0.2", DeploymentID: "dep-1",
-		Node: "node-b", SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.UnixMilli(), LeaseUntilMS: lease.UnixMilli(),
-	})
-	seedInstance(t, rdb, refM, InstanceRecord{
-		InstanceID: "mix-a", ContainerID: "mix-a", IP: "10.0.0.3", DeploymentID: "dep-1",
-		Node: "node-a", SpawnedAtMS: now.UnixMilli(), IdleSinceMS: now.UnixMilli(), LeaseUntilMS: lease.UnixMilli(),
-	})
-	rec, err = reg.ClaimIdle(ctx, refM, "dep-1", "node-a", lease)
-	require.NoError(t, err)
-	require.NotNil(t, rec)
-	require.Equal(t, "mix-a", rec.InstanceID, "混合池只认领归属本节点的记录")
-
-	// ④ 无主节点 ID（node-c）：池内全是 node-a/node-b 记录 → nil。
-	rec, err = reg.ClaimIdle(ctx, refM, "dep-1", "node-c", lease)
-	require.NoError(t, err)
-	require.Nil(t, rec, "无关节点 ID 不得认领任何显式归属记录")
 }
 
 // TestRedisRegistry_AcquireSpawnLock 真 Redis 上的 spawn 锁语义：互斥获取 +
@@ -475,48 +405,42 @@ func TestRedisRegistry_AcquireSpawnLock(t *testing.T) {
 	release4()
 }
 
-// TestRedisRegistry_NodeCapacityKeys 真 Redis 上的节点容量键往返（四期 4c
-// M4）：SET+TTL 键形态、SCAN 求和、损坏值/过期键按 0 计（不毒化求和）。
-func TestRedisRegistry_NodeCapacityKeys(t *testing.T) {
+// TestRedisRegistry_ImageRefMapping 真 Redis 上的镜像引用映射往返
+// （IMPL-T2-3）：SET/GET/DEL 语义、不存在返回空串（未命中不报错）、键前缀
+// 与无 TTL 形态（持久映射，显式 RemoveImage 回收）。
+func TestRedisRegistry_ImageRefMapping(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
 	rdb := newRegistryTestRedis(t)
 	reg := NewRedisRegistry(rdb)
 	ctx := context.Background()
-	require.NoError(t, rdb.Del(ctx,
-		nodeCapacityKeyPrefix+"cap-a", nodeCapacityKeyPrefix+"cap-b", nodeCapacityKeyPrefix+"cap-bad").Err())
+	logical := "torchwood-funcs/func-fn1-dep1"
+	ref := "registry.example.com/apps/func-fn1-dep1@sha256:abc123"
+	require.NoError(t, rdb.Del(ctx, imageRefKey(logical)).Err())
 
-	require.NoError(t, reg.SaveNodeCapacity(ctx, "cap-a", 3, capacityKeyTTL))
-	require.NoError(t, reg.SaveNodeCapacity(ctx, "cap-b", 2, capacityKeyTTL))
-
-	// 键形态与 TTL：torchwood:fncap:resident:<node_id>，值为十进制常驻数。
-	raw, err := rdb.Get(ctx, nodeCapacityKeyPrefix+"cap-a").Result()
+	// 未命中：空串 + nil 错误（调用方按未命中处理）。
+	got, err := reg.LoadImageRef(ctx, logical)
 	require.NoError(t, err)
-	require.Equal(t, "3", raw)
-	ttl, err := rdb.TTL(ctx, nodeCapacityKeyPrefix+"cap-a").Result()
+	require.Empty(t, got)
+
+	require.NoError(t, reg.SaveImageRef(ctx, logical, ref))
+	raw, err := rdb.Get(ctx, imageRefKeyPrefix+logical).Result()
 	require.NoError(t, err)
-	require.Greater(t, ttl, time.Duration(0), "容量键必须带 TTL")
-	require.LessOrEqual(t, ttl, capacityKeyTTL)
-
-	// 幂等覆写（SET 实际值语义）：同键重写覆盖旧值。
-	require.NoError(t, reg.SaveNodeCapacity(ctx, "cap-a", 4, capacityKeyTTL))
-
-	total, err := reg.SumNodeCapacity(ctx)
+	require.Equal(t, ref, raw)
+	ttl, err := rdb.TTL(ctx, imageRefKeyPrefix+logical).Result()
 	require.NoError(t, err)
-	require.Equal(t, 6, total, "全局总量 = 各节点键之和（4+2）")
+	require.Equal(t, time.Duration(-1), ttl, "映射无 TTL（持久；RemoveImage 显式回收）")
 
-	// 损坏值按 0 计（不毒化求和）。
-	require.NoError(t, rdb.Set(ctx, nodeCapacityKeyPrefix+"cap-bad", "not-a-number", capacityKeyTTL).Err())
-	total, err = reg.SumNodeCapacity(ctx)
+	// 幂等覆写 + 读回。
+	require.NoError(t, reg.SaveImageRef(ctx, logical, ref+"-v2"))
+	got, err = reg.LoadImageRef(ctx, logical)
 	require.NoError(t, err)
-	require.Equal(t, 6, total)
+	require.Equal(t, ref+"-v2", got)
 
-	// 键过期（节点死亡）= 自然退出求和。
-	require.NoError(t, rdb.Del(ctx, nodeCapacityKeyPrefix+"cap-b").Err())
-	total, err = reg.SumNodeCapacity(ctx)
+	require.NoError(t, reg.DeleteImageRef(ctx, logical))
+	got, err = reg.LoadImageRef(ctx, logical)
 	require.NoError(t, err)
-	require.Equal(t, 4, total)
-
-	require.NoError(t, rdb.Del(ctx, nodeCapacityKeyPrefix+"cap-a", nodeCapacityKeyPrefix+"cap-bad").Err())
+	require.Empty(t, got)
+	require.NoError(t, reg.DeleteImageRef(ctx, logical), "删除幂等")
 }

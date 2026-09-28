@@ -1,0 +1,251 @@
+syntax = "proto3";
+
+package fleetly.server.v1;
+
+option go_package = "github.com/fleetlyrun/fleetly/genproto/fleetly/server/v1;serverv1";
+
+import "buf/validate/validate.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+// 文件级 swagger 声明：default 错误响应引用 shared 的 ErrorResponse 信封
+//（与 buf.gen.yaml 的 disable_default_errors=true 配合）。与 system.proto
+// 同款惯例，逐文件声明。
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  responses: {
+    key: "default"
+    value: {
+      description: "An unexpected error response."
+      schema: { json_schema: { ref: ".fleetly.shared.v1.ErrorResponse" } }
+    }
+  }
+};
+
+// TasksService 是程序化动态工作负载面（T 线 DT-5 / IMPL-T2-1）：swarm
+// service 承载的任务（torchwood 函数实例类），平台管 API/网络/配额/审计/
+// 回收，池语义（租约/保温/熔断）留给调用方。
+//
+// 结构性禁令（DT-5，2026-09-14 attach 残留事故的事故类）：
+//   - **本服务的任何请求消息都不存在网络 attach 入参**——任务只能「按名
+//     加入既有网」（TaskScope 是网络引用，不是网络成员操作）；
+//   - per-task 动态 attach 在类型层不可表示（机制验收条款，见任务票⑤）。
+//
+// 安全默认（服务端强制、不进用户表达面，与 compose 拒 cap_drop 同立场）：
+// CapDrop ALL / 只读 rootfs / 非 root user / pids 限额 / restart-condition
+// none 全部由平台固定下发——本 proto 没有对应字段，调用方无从关闭。
+//
+// 镜像引用经平台 registry 解析腿（IMPL-T1-2/DT-2：tag → digest 解析 +
+// 平台凭证 + airgap 本机回落）在 CreateTask 内钉定为不可变 digest 形态。
+//
+// scope（internal/api/scope.go 登记处）：本服务整体 `tasks` 独立 scope
+//（read/deploy 不蕴含，admin 蕴含——Web 终端 terminal scope 同族先例）；
+// 机具令牌为典型持有者，跨令牌隔离在 handler 内（owner_token_id 门）。
+service TasksService {
+  // EnsureTaskNetwork 幂等确保 task-group 网络在位（长活，不随任务回收）。
+  // internal=true 是 DT-7 的不可信函数隔离面（overlay internal：无出网、
+  // 无外部 DNS，跨节点数据面正常——T2-0① 实证）。members 是控制面服务
+  // 的一次性挂靠面（每网一次、摊销在网络创建时刻；挂靠经发布管线重部署
+  // 生效，不是 per-task attach）。
+  rpc EnsureTaskNetwork(EnsureTaskNetworkRequest) returns (EnsureTaskNetworkResponse) {
+    option (google.api.http) = {
+      post: "/v1/tasks/networks"
+      body: "*"
+    };
+  }
+  // CreateTask 受理任务（owner = 调用令牌；TTL/资源配额 fail-closed 校验；
+  // 状态收敛由引擎 duty 承载——本 RPC 返回 queued 形态）。
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse) {
+    option (google.api.http) = {
+      post: "/v1/tasks"
+      body: "*"
+    };
+  }
+  // GetTask 取单个任务视图（env 只在本面回显；他令牌的任务 404）。
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse) {
+    option (google.api.http) = { get: "/v1/tasks/{id}" };
+  }
+  // ListTasks 列本令牌的任务（缺省只出非终态；include_terminal=true 出台账）。
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse) {
+    option (google.api.http) = { get: "/v1/tasks" };
+  }
+  // StopTask 停止任务（幂等：停止中/已停止成功返回；底座服务由引擎移除）。
+  rpc StopTask(StopTaskRequest) returns (StopTaskResponse) {
+    option (google.api.http) = {
+      post: "/v1/tasks/{id}/stop"
+      body: "*"
+    };
+  }
+  // DeleteTask 删除任务（停止 + 移除底座服务 + 台账行删除；幂等不做：不存在
+  // 404——与域名资源删除同口径）。
+  rpc DeleteTask(DeleteTaskRequest) returns (DeleteTaskResponse) {
+    option (google.api.http) = { delete: "/v1/tasks/{id}" };
+  }
+}
+
+// TaskScope 是任务的隔离作用域引用（三作用域模型，OT-1）：
+//   - app：ref 指向应用 → 加入该 app 的专属网（fleetly-<team>-<prj>-<app>-net）；
+//   - project：ref 指向项目（ID 或 team/prj 限定形）→ 加入项目网；
+//   - task-group：ref 是任务组 slug（[a-z0-9]{2,32}，不含 '-'——与三段
+//     app 网名结构不相交）→ 加入 fleetly-taskgroup-<ref>（长活，须先经
+//     EnsureTaskNetwork 创建）。
+//
+// internal 变体只对 task-group 支持（不可信函数隔离面）；app/project 网
+// internal=true 一律 fail-closed 拒绝（不可静默降级为可出网形态）。
+message TaskScope {
+  // app | project | task-group。
+  string kind = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 16
+  }];
+  // 作用域引用（语义随 kind；见消息注释）。
+  string ref = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 253
+  }];
+  // 不可信变体（仅 task-group；overlay internal——无出网，DT-7）。
+  bool internal = 3;
+}
+
+// ── 网络面 ─────────────────────────────────────────────────────────────────
+
+// TaskNetworkMember 是控制面服务的一次性挂靠声明（网络创建时刻摊销：
+// 挂靠使该 app 服务在新 revision 双挂该网络，别名 = <app>-<service>）。
+message TaskNetworkMember {
+  string app = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 253
+  }];
+  string service = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 63
+  }];
+}
+
+message EnsureTaskNetworkRequest {
+  // 任务组 slug（小写字母数字，2-32 位，不含 '-'）。
+  string ref = 1 [
+    (buf.validate.field).string.min_len = 2,
+    (buf.validate.field).string.max_len = 32
+  ];
+  // internal 变体（不可信函数隔离面；缺省 false = 普通 overlay）。
+  bool internal = 2;
+  // 控制面服务挂靠集（可选；每网一次性语义——重复请求幂等，members 变更
+  // 会为新成员入队重部署）。
+  repeated TaskNetworkMember members = 3 [(buf.validate.field).repeated.max_items = 16];
+}
+
+message TaskNetworkMemberStatus {
+  string app = 1;
+  string service = 2;
+  // attached（已挂靠）/ rolling（重部署入队生效中）/ pending（无成功部署史，
+  // 下次发布生效）。
+  string status = 3;
+  // rolling 时的重部署 ID。
+  string deployment_id = 4;
+}
+
+message EnsureTaskNetworkResponse {
+  // 网络名（fleetly-taskgroup-<ref>）。
+  string name = 1;
+  bool internal = 2;
+  repeated TaskNetworkMemberStatus members = 3;
+}
+
+// ── 任务面 ─────────────────────────────────────────────────────────────────
+
+message CreateTaskRequest {
+  // 人读名（可选；进 label 与视图，不参与寻址——寻址键恒为任务 ID）。
+  string name = 1 [(buf.validate.field).string.max_len = 200];
+  // 镜像引用（digest 钉定或 tag；tag 经平台 registry 解析腿钉定）。
+  string image = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 512
+  }];
+  // 覆盖镜像 ENTRYPOINT（可选）。
+  repeated string command = 3;
+  // 覆盖镜像 CMD（可选）。
+  repeated string args = 4;
+  // 注入环境变量（KEY=VALUE 语义；值明文只存活于任务行与底座 spec）。
+  map<string, string> env = 5;
+  // 隔离作用域（必填）。
+  TaskScope scope = 6;
+  // TTL 秒数（可选；缺省平台默认 600s，下限 60s、上限 86400s；到期由
+  // janitor 回收 + task.expired 事件）。
+  int64 ttl_seconds = 7;
+  // CPU 请求（毫核；缺省 1000，上限 4000）。
+  int64 cpu_millis = 8;
+  // 内存请求（字节；缺省 268435456 = 256MiB，上限 4294967296 = 4GiB）。
+  int64 memory_bytes = 9;
+}
+
+message CreateTaskResponse {
+  TaskView task = 1;
+}
+
+// TaskView 是任务台账行的投影（env 只在 GetTask 回显——列表面零 env）。
+message TaskView {
+  string id = 1;
+  string name = 2;
+  // 钉定后的镜像引用（digest 形态）。
+  string image = 3;
+  repeated string command = 4;
+  repeated string args = 5;
+  // 环境变量（仅 GetTask 填充；ListTasks 恒空）。
+  map<string, string> env = 6;
+  // queued | running | stopping | stopped | failed | deleting。
+  string status = 7;
+  TaskScope scope = 8;
+  // 生效 TTL（秒）。
+  int64 ttl_seconds = 9;
+  int64 cpu_millis = 10;
+  int64 memory_bytes = 11;
+  // 底座 Swarm 服务名（fleetly-task-<id>）。
+  string service = 12;
+  // 稳定 DNS 名（作用域网络内的解析目标 = service 名）。
+  string dns_name = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp started_at = 15;
+  google.protobuf.Timestamp expires_at = 16;
+  google.protobuf.Timestamp stopped_at = 17;
+  // 失败原因（failed 时非空）。
+  string error = 18;
+  // 停止原因（stopped 时非空）：owner（调用方停止）| expired（TTL 到期回收）
+  // | exited（容器任务自然完成——restart-condition none）。
+  string stop_reason = 19;
+}
+
+message GetTaskRequest {
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message GetTaskResponse {
+  TaskView task = 1;
+}
+
+message ListTasksRequest {
+  // 是否包含终态（stopped/failed）台账行；缺省 false = 只出在途。
+  bool include_terminal = 1;
+  // 返回上限（缺省 100，上限 500）。
+  int32 limit = 2 [(buf.validate.field).int32.lte = 500];
+}
+
+message ListTasksResponse {
+  repeated TaskView tasks = 1;
+}
+
+message StopTaskRequest {
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message StopTaskResponse {
+  TaskView task = 1;
+}
+
+message DeleteTaskRequest {
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message DeleteTaskResponse {
+  string id = 1;
+}

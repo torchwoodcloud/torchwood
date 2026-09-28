@@ -153,27 +153,13 @@ func (s *dispatchServer) handleBuild(w http.ResponseWriter, r *http.Request) {
 		s.pool.DrainForDeployment(r.Context(), req.ProjectID, req.FunctionID, req.DeploymentID,
 			time.Duration(req.FunctionTimeoutSeconds)*time.Second)
 	}
-	// 构建亲和（四期 4a-1 M5）：响应携带本节点 ID，server 侧落
-	// function_deployments.build_node（local 路由模式 4a-2 固定路由该节点）。
-	writeJSON(w, http.StatusOK, BuildResponse{NodeID: s.pool.NodeID()})
+	writeJSON(w, http.StatusOK, BuildResponse{})
 }
 
 func (s *dispatchServer) handleExecute(w http.ResponseWriter, r *http.Request) {
 	var req ExecuteRequest
 	if err := decodeJSON(r, &req, maxBuildBodyBytes); err != nil {
 		writeError(w, err)
-		return
-	}
-	// 节点转发防环（四期 4a-2 M3）：带 X-Tw-Forwarded-For-Node 的请求来自
-	// 他节点转发——强制本地池路径（DispatchForwarded），不得再转发。转发
-	// 发起方已按实例亲和/BuildNode 语义选定本节点为镜像所在节点。
-	if from := r.Header.Get(forwardedForNodeHeader); from != "" {
-		resp, err := s.pool.DispatchForwarded(r.Context(), req, from)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, resp)
 		return
 	}
 	// DrainForDeployment 的 project 语义由执行/构建请求一并携带（BuildRequest

@@ -2,6 +2,8 @@
 
 面向运维 / 部署负责人：运行形态（五进程）、外部依赖、构建发布、生产配置要点（双账号契约、roles-sig 部署时序、Functions 运行面默认值）、健康检查、规模预警线、备份与升级、运维操作 runbook、多机部署。
 
+> **IMPL-T2-3 迁移注（2026-09-28）**：dispatcher 的执行底座已切换为 fleetly 平台（函数实例 = fleetly Tasks、构建 = fleetly build-from-upload；零 docker.sock、零 docker client），多节点细胞模型（node_id/node_url/routing_mode/容量键/跨节点转发）整体退役（多节点编排归 swarm）。本文中 dispatcher 的 docker.sock 持有方表述、`functions.docker.host` 配置与 §7 多机章节为迁移前形态，按「历史形态」阅读；fleetly 部署形态（端点/机具令牌/网络成员/域名）以 T2-4 割接为准。
+
 > 事实源：`cmd/server/main.go`、`cmd/worker/provides.go`、`cmd/dispatcher`、`cmd/packer`、`mise.toml`、`configs/config.yaml.template`、`internal/pkg/config/config.proto`、`internal/infra/health/checks.go`、`docker/local/docker-compose.yml`、`docker/dokploy/`（README / docker-compose.yml / bootstrap-roles.sql）、`.github/workflows/image.yml`。
 
 ## 1. 运行形态：五进程

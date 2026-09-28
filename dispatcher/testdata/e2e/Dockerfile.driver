@@ -1,0 +1,9 @@
+# e2e driver/runner 镜像（本地 dind 内构建；alpine 基底静态 Go 二进制）。
+# 同一镜像两种角色：
+#   - 编排器任务（tasks run --command/--arg 覆盖）→ TestE2EFleetlyTaskLifecycle
+#   - 函数实例（ENTRYPOINT 缺省）→ TestE2ERunnerServer（runner 契约双）
+# 平台加固（非 root/只读 rootfs/CapDrop ALL）下运行：二进制静态、零写盘。
+FROM alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+
+COPY e2e.test /opt/e2e/e2e.test
+ENTRYPOINT ["/opt/e2e/e2e.test", "-test.run=TestE2ERunnerServer", "-test.v"]

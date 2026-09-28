@@ -2,14 +2,14 @@
 // 方案③：独立 dispatcher 进程，docs/design/
 // functions-execution-identity-and-triggers.md §6「分发通路」）。
 //
-// 职责：专职持有 docker.sock（compose 挂载），按需 join per-project 函数
-// 网络（自身容器 NetworkConnect），承接 Build/Execute/RemoveImage 全部
-// daemon 操作——server/worker 零 daemon 依赖，host-root 等价凭证收敛到
-// 非 API 面进程。池管理（常驻实例注册表/冷启动收敛/有界排队/idle 回收/
-// 幽灵对账）见 pool.go。
+// 职责（IMPL-T2-3 后的形态）：承接 Build/Execute/RemoveImage 全部执行面
+// 操作——函数实例 = fleetly Tasks（swarm service 承载，稳定 DNS 名）、构建 =
+// fleetly build-from-upload（docker.sock 交互面整体退役，本进程零 docker
+// client；多节点编排归 swarm）。池管理（常驻实例注册表/冷启动收敛/有界
+// 排队/idle 回收/幽灵对账）见 pool.go。
 //
-// 无状态进程、初期单副本；注册表在 Redis（torchwood:fninst:*），需要 HA
-// 时双副本 + Redis 仲裁（设计 §6）。
+// 进程无状态（实例/映射在 Redis：torchwood:fninst:* / torchwood:fnimg:*），
+// 单副本；需要 HA 时按实例注册表仲裁形态另行设计（当前无第二副本语义）。
 package dispatcher
 
 import (
@@ -112,10 +112,8 @@ type BuildRequest struct {
 // BuildResponse 是 builds 出参；Error 非空 = 构建失败（含日志尾部）。
 type BuildResponse struct {
 	Error string `json:"error,omitempty"`
-	// NodeID 是执行构建的 dispatcher 节点 ID（四期 4a-1，设计 §4 M5 构建
-	// 亲和）：server 侧落 function_deployments.build_node——local 路由模式
-	// 下执行/补构建固定路由该节点（4a-2 消费）。构建失败不填（failed 行无
-	// 亲和语义）。
+	// NodeID 已退役（IMPL-T2-3 多节点细胞模型删除）：恒空，字段保留仅为
+	// server 侧 dispatcher 客户端解析兼容（不破坏既有 wire 形态）。
 	NodeID string `json:"node_id,omitempty"`
 }
 
@@ -174,14 +172,12 @@ type ExecuteRequest struct {
 	RawBody      []byte `json:"raw_body,omitempty"`
 	RawBodyIsB64 bool   `json:"raw_body_is_b64,omitempty"`
 	// EgressUntrusted 是 egress 分类结果（P2 安全切片，设计 Security #6）：
-	// true = 不可信函数容器挂 internal 变体网络（tw-func-<project>-int，
-	// docker internal: true——出网全 deny）；false = 常规网络。分类在 app 层
-	// 完成（函数属性），dispatcher 只消费。
+	// true = 不可信函数实例挂 internal 变体任务网络（fleetly task-group
+	// internal——出网全 deny）；false = 常规任务网络。分类在 app 层完成
+	//（函数属性），dispatcher 只消费。
 	EgressUntrusted bool `json:"egress_untrusted,omitempty"`
-	// BuildNode 是该 deployment 首个构建落成的 dispatcher 节点 ID（四期
-	// 4a-1，设计 §4 M3/M5：随 deployment.build_node 透传）。**本阶段只透传
-	// 落类型，不参与路由**——local 路由模式按 build_node 固定路由目标节点
-	// 是 4a-2 的工作；当前所有执行仍由本节点消化（与单机行为一致）。
+	// BuildNode 已退役（IMPL-T2-3 多节点细胞模型删除）：不再参与路由/寻址，
+	// 字段保留仅为 server 侧载荷兼容（存量 build_node 列随请求携带，无害）。
 	BuildNode string `json:"build_node,omitempty"`
 }
 

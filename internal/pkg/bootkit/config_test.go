@@ -55,41 +55,57 @@ func TestValidateJWTSecret_WeakSubstringNeverPasses(t *testing.T) {
 	}
 }
 
-// TestValidateFunctionsRoutingConfig 执行路由模式校验（四期 4b M7）表驱动：
-// local（缺省/显式）通过；registry 全要素通过；非法值 / registry 缺
-// registry_push / 缺 node_url 拒绝启动（fail-fast 优于静默降级）。
-func TestValidateFunctionsRoutingConfig(t *testing.T) {
+// TestValidateFunctionsDispatchConfig 分发通路校验（IMPL-T2-3 后仅 url 必填
+// ——路由模式/多节点键已随细胞模型退役）：缺 url 拒绝；有 url 通过。
+func TestValidateFunctionsDispatchConfig(t *testing.T) {
+	t.Parallel()
+
+	t.Run("url 缺失拒绝", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.AppConfig{Functions: &config.Functions{
+			Dispatcher: &config.Functions_Dispatcher{},
+		}}
+		require.ErrorContains(t, ValidateFunctionsDispatchConfig(cfg), "functions.dispatcher.url is required")
+	})
+
+	t.Run("url 就位通过", func(t *testing.T) {
+		t.Parallel()
+		cfg := &config.AppConfig{Functions: &config.Functions{
+			Dispatcher: &config.Functions_Dispatcher{Url: "http://dispatcher:9070"},
+		}}
+		require.NoError(t, ValidateFunctionsDispatchConfig(cfg))
+	})
+}
+
+// TestValidateFunctionsFleetlyConfig fleetly 控制面配置校验（IMPL-T2-3）：
+// endpoint/令牌必填；network_members 非空时 app 必填；完整配置通过。
+func TestValidateFunctionsFleetlyConfig(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name         string
-		routingMode  string
-		registryPush bool
-		nodeURL      string
-		wantErr      string // 空串表示期望通过
+		name    string
+		fleetly *config.Functions_Fleetly
+		wantErr string
 	}{
-		{name: "local 缺省通过（向后兼容）", routingMode: ""},
-		{name: "local 显式通过", routingMode: "local"},
-		{name: "registry 全要素通过", routingMode: "registry", registryPush: true, nodeURL: "http://dispatcher-1:9070"},
-		{name: "非法值拒绝（replicated 实验档不在实现范围）", routingMode: "replicated", registryPush: true, nodeURL: "http://d:9070", wantErr: `routing_mode "replicated" is invalid`},
-		{name: "非法值拒绝（任意串）", routingMode: "registory", wantErr: `routing_mode "registory" is invalid`},
-		{name: "registry 缺 registry_push 拒绝", routingMode: "registry", registryPush: false, nodeURL: "http://d:9070", wantErr: "registry_push must be true"},
-		{name: "registry 缺 node_url 拒绝", routingMode: "registry", registryPush: true, nodeURL: "", wantErr: "node_url is required"},
-		{name: "registry node_url 空白拒绝", routingMode: "registry", registryPush: true, nodeURL: "   ", wantErr: "node_url is required"},
+		{name: "缺 endpoint 拒绝", fleetly: &config.Functions_Fleetly{Token: "tok"}, wantErr: "functions.fleetly.endpoint is required"},
+		{name: "缺令牌拒绝", fleetly: &config.Functions_Fleetly{Endpoint: "fleetlyd:8421"}, wantErr: "functions.fleetly.token is required"},
+		{
+			name:    "有成员无 app 拒绝",
+			fleetly: &config.Functions_Fleetly{Endpoint: "fleetlyd:8421", Token: "tok", NetworkMembers: []string{"dispatcher"}},
+			wantErr: "functions.fleetly.app is required",
+		},
+		{name: "仅 endpoint+令牌通过（不声明挂靠）", fleetly: &config.Functions_Fleetly{Endpoint: "fleetlyd:8421", Token: "tok"}},
+		{
+			name:    "完整配置通过",
+			fleetly: &config.Functions_Fleetly{Endpoint: "fleetlyd:8421", Token: "tok", App: "torchwood", NetworkMembers: []string{"dispatcher", "server"}},
+		},
 	}
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := &config.AppConfig{Functions: &config.Functions{
-				Dispatcher: &config.Functions_Dispatcher{
-					Url:          "http://dispatcher:9070",
-					RoutingMode:  tc.routingMode,
-					RegistryPush: tc.registryPush,
-					NodeUrl:      tc.nodeURL,
-				},
-			}}
-			err := ValidateFunctionsRoutingConfig(cfg)
+			cfg := &config.AppConfig{Functions: &config.Functions{Fleetly: tc.fleetly}}
+			err := ValidateFunctionsFleetlyConfig(cfg)
 			if tc.wantErr == "" {
 				require.NoError(t, err)
 				return
@@ -97,38 +113,6 @@ func TestValidateFunctionsRoutingConfig(t *testing.T) {
 			require.ErrorContains(t, err, tc.wantErr)
 		})
 	}
-}
-
-// TestValidateFunctionsDispatchConfig_Composition 组合口径：url 必填保持在
-// 前；路由模式校验并入后非法 routing_mode 同样经 DispatchConfig 入口拒绝
-// （server/worker 组合根单一调用面）。
-func TestValidateFunctionsDispatchConfig_Composition(t *testing.T) {
-	t.Parallel()
-
-	t.Run("url 缺失仍最先拒绝", func(t *testing.T) {
-		t.Parallel()
-		cfg := &config.AppConfig{Functions: &config.Functions{
-			Dispatcher: &config.Functions_Dispatcher{RoutingMode: "bogus"},
-		}}
-		err := ValidateFunctionsDispatchConfig(cfg)
-		require.ErrorContains(t, err, "functions.dispatcher.url is required")
-	})
-
-	t.Run("非法 routing_mode 经组合入口拒绝", func(t *testing.T) {
-		t.Parallel()
-		cfg := &config.AppConfig{Functions: &config.Functions{
-			Dispatcher: &config.Functions_Dispatcher{Url: "http://dispatcher:9070", RoutingMode: "bogus"},
-		}}
-		require.ErrorContains(t, ValidateFunctionsDispatchConfig(cfg), "is invalid")
-	})
-
-	t.Run("local 缺省仅 url 必填即通过", func(t *testing.T) {
-		t.Parallel()
-		cfg := &config.AppConfig{Functions: &config.Functions{
-			Dispatcher: &config.Functions_Dispatcher{Url: "http://dispatcher:9070"},
-		}}
-		require.NoError(t, ValidateFunctionsDispatchConfig(cfg))
-	})
 }
 
 // M5 C8：setup_token 非空时套用主密钥强度下界（≥32 字节 + 弱子串拒绝）；

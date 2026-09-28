@@ -57,6 +57,11 @@ functions:
   executor: docker
   docker:
     host: unix:///var/run/docker.sock
+  fleetly:
+    endpoint: fleetlyd.internal:8421
+    token: tok-from-yaml
+    app: torchwood
+    network_members: [dispatcher, server]
 telemetry:
   enabled: true
   otlp_endpoint: http://otel:4317
@@ -131,9 +136,14 @@ func TestUnmarshalConfig(t *testing.T) {
 	require.False(t, out.GetStorage().GetS3().GetUseSsl())
 	require.Equal(t, "./data", out.GetStorage().GetLocal().GetPath())
 
-	// executor 键已随 v1 docker 执行器删除（config.proto reserved）；testYAML
-	// 特意保留该残留键，钉住「proto 反序列化容忍未知字段、不报错」的兼容行为。
-	require.Equal(t, "unix:///var/run/docker.sock", out.GetFunctions().GetDocker().GetHost())
+	// executor 键已随 v1 docker 执行器删除、docker.host/network 已随
+	// IMPL-T2-3（dispatcher 改 fleetly Tasks/build 客户端）删除
+	//（config.proto reserved）；testYAML 特意保留这些残留键，钉住「proto
+	// 反序列化容忍未知字段、不报错」的兼容行为。
+	require.Equal(t, "fleetlyd.internal:8421", out.GetFunctions().GetFleetly().GetEndpoint())
+	require.Equal(t, "tok-from-yaml", out.GetFunctions().GetFleetly().GetToken())
+	require.Equal(t, "torchwood", out.GetFunctions().GetFleetly().GetApp())
+	require.Equal(t, []string{"dispatcher", "server"}, out.GetFunctions().GetFleetly().GetNetworkMembers())
 
 	// telemetry 节是死配置退役（config.proto 已删 Telemetry message）后的同类
 	// 残留键：存量部署 yaml 携带它仍须无损反序列化（容忍未知字段，同 executor）；

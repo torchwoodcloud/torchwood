@@ -120,27 +120,43 @@ storage:
     path: "./data/files"
 
 functions:
-  # 函数执行统一经 dispatcher 分发（常驻 runner 容器池；v1 docker
-  # 执行器已移除）：server/worker 零 daemon 依赖，docker.sock 只挂给
-  # dispatcher（functions.docker.host 供其消费）。
+  # 函数执行统一经 dispatcher 分发（常驻 runner 实例池；v1 docker 执行器已
+  # 移除）。IMPL-T2-3 起执行底座 = fleetly 平台：函数实例 = fleetly Tasks
+  # （swarm service 承载，稳定 DNS 名 + 平台强制加固）、构建 = fleetly
+  # build-from-upload；dispatcher 不再持有 docker.sock（本仓零 docker
+  # client），多节点编排归 swarm。
   docker:
-    # docker.sock 地址（仅 dispatcher 进程消费）。
-    host: "unix:///var/run/docker.sock"
-    # 函数执行容器网络。默认（留空/删除本键）为 per-project 隔离网络
-    # tw-func-<project_id>：项目间函数容器互不可达（Round4 J5-4）。
-    # 显式配置全局网络为 opt-in：所有项目的函数容器同网互通、可互相解析
-    # IP，存在跨租户横向访问风险！仅在单租户/完全可信环境使用。
-    network: ""                       # env: TORCHWOOD_FUNCTIONS_DOCKER_NETWORK
-    registry: "torchwood-funcs"       # 必须小写（docker build -t 校验）
+    # host/network 键已删除（proto reserved）：dispatcher 不再消费任何
+    # docker 宿主配置。存量 yaml 残留键会被容忍忽略（proto 未知字段）。
+    # 平台镜像命名前缀（逻辑寻址键，非 docker 构建目标）：server 与
+    # dispatcher 同源派生函数部署镜像逻辑名（func-<function>-<deployment>），
+    # dispatcher 以此名为键登记 fleetly 构建产物引用。
+    registry: "torchwood-funcs"       # 必须小写
+  fleetly:
+    # fleetly 控制面（仅 dispatcher 进程消费）：函数任务与构建 API 的唯一
+    # 通路。**endpoint 与 token 必填**——缺失时 dispatcher 拒绝启动。
+    # env: TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT
+    endpoint: ""                      # 如 fleetlyd:8421（栈内可达地址）
+    # 机具令牌（scope: tasks,build）：**经环境变量注入，不落配置文件**。
+    # env: TORCHWOOD_FUNCTIONS_FLEETLY_TOKEN
+    token: ""
+    # 本 torchwood 栈在 fleetly 中的 app 名（任务网络成员挂靠的归属 app）。
+    # env: TORCHWOOD_FUNCTIONS_FLEETLY_APP
+    app: ""
+    # 挂靠到任务网络的服务名列表（本 app 内）：fleetly 把成员服务双挂到
+    # 任务网络（DNS 别名 = <app>-<service>）。生产应含 dispatcher 与 server
+    # ——前者是分发可达面，后者是函数回访平台 API 的通路
+    # （execution.api_base_url = http://<app>-<service>:<端口>）。
+    # env: TORCHWOOD_FUNCTIONS_FLEETLY_NETWORK_MEMBERS（逗号分隔）
+    network_members: []
   execution:
-    # P0 执行身份（TW_API_BASE_URL 注入）：函数容器回访 Server API 的可达
-    # 地址。**dokploy compose 已接好**：dispatcher 按 callback_container 把
-    # server 容器 attach 进 tw-func-<project>[-int]，此处填容器名地址即可——
-    #   api_base_url: "http://torchwood-server:9080"
-    # 手动部署的两个一致性要求：①该地址必须是函数网络内可达的 server 地址
-    # （不可信函数挂 internal 隔离网络 tw-func-<project>-int，出网全 deny、
-    # 无 NAT 出口，外部域名/IP 均不可达——需自行把 server attach 进函数
-    # 网络）；②server/worker 两进程配置同值（都经 buildExecution 注入）。
+    # P0 执行身份（TW_API_BASE_URL 注入）：函数回访 Server API 的可达地址。
+    # fleetly 拓扑下 = 任务网络成员挂靠后的 DNS 别名
+    # （fleetly.network_members 把 server 挂进任务网络）：
+    #   api_base_url: "http://<app>-server:9080"
+    # 一致性要求：①该地址必须是任务网络内可达的 server 地址（不可信函数挂
+    # internal 任务网络，出网全 deny——依赖 server 的成员挂靠）；②server/
+    # worker 两进程配置同值（都经 buildExecution 注入）。
     # 留空 = 不注入 TW_API_BASE_URL（函数无法回访平台 API）。
     api_base_url: ""                  # env: TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL
   dispatcher:
@@ -154,8 +170,8 @@ functions:
     # 可信内网）。env: TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN
     shared_token: ""
     # ——以下仅 dispatcher 进程消费——
-    # 每 daemon 常驻实例总量上限（防单项目耗尽宿主内存；Q11 拍板 8，
-    # 2026-09-21 上调缺省 16。内存敞口 = 实例数 × spec 内存：全 shared-1x
+    # 每 dispatcher 常驻实例总量上限（本地容量门；平台侧另有每令牌任务
+    # 配额 fail-closed。内存敞口 = 实例数 × spec 内存：全 shared-1x
     # ≈4GiB、全 shared-2x ≈8GiB，按宿主余量调整）。
     # env: TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES
     max_resident_instances: 16
@@ -165,18 +181,18 @@ functions:
     # 队首超时：等待空闲实例的最长时间（超限 ResourceExhausted）。
     # env: TORCHWOOD_FUNCTIONS_DISPATCHER_QUEUE_HEAD_TIMEOUT
     queue_head_timeout: "10s"
-    # 实例启动健康探针等待上限（runner 加载用户模块超时则回收并报错）。
+    # 实例启动健康探针等待上限（平台任务收敛 + runner 加载用户模块超时
+    # 则回收并报错）。
     # env: TORCHWOOD_FUNCTIONS_DISPATCHER_BOOT_TIMEOUT
     boot_timeout: "60s"
     # dispatcher HTTP 监听地址（仅内网）。
     # env: TORCHWOOD_FUNCTIONS_DISPATCHER_ADDR
     addr: ":9070"
-    # 回访容器：join 项目网络（含 internal 变体）时把该容器名的容器一并
-    # attach，使函数经容器名 DNS 回访平台 API（配合 execution.api_base_url
-    # = http://<该名字>:<端口>）。须与 server 的 container_name 严格一致
-    # （dokploy compose 已配 torchwood-server）。attach 失败仅告警不阻断。
-    # env: TORCHWOOD_FUNCTIONS_DISPATCHER_CALLBACK_CONTAINER
-    callback_container: ""
+    # callback_container / node_id / node_url / routing_mode / registry_push /
+    # max_resident_instances_global 键已删除（proto reserved）：回访容器由
+    # fleetly.network_members 成员挂靠取代；多节点细胞模型（节点心跳/容量
+    # 键/跨节点转发）整体退役——多节点编排归 swarm。存量 yaml 残留键会被
+    # 容忍忽略（proto 未知字段）。
     # 实例累计超时熔断阈值（functions v3 §1.4：超时不杀实例后，实例累计
     # 超时达到该阈值即杀实例重建，防僵尸负载；默认 5）。
     # env: TORCHWOOD_FUNCTIONS_DISPATCHER_TIMEOUT_BUDGET
@@ -191,16 +207,11 @@ functions:
     # Go 强制、node 同开）。未配置 = 默认开启；显式 false = 关闭。
     # env: TORCHWOOD_FUNCTIONS_DISPATCHER_VERIFY_BUILD
     verify_build: true
-    # 全集群常驻实例总量上限（多机部署，四期 M4 容量共享）：全局总量 =
-    # 各节点 Redis 容量键（torchwood:fncap:resident:<node_id>）之和，在本
-    # 节点上限（max_resident_instances）之后检查；Redis 不可用时 fail-open
-    # 退化为仅本节点上限。0 = 不设全局上限（缺省；单机部署无需配置）。
-    # env: TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES_GLOBAL
-    max_resident_instances_global: 0
-    # 镜像缺失自动重建（执行链自愈）：执行命中「部署镜像在本节点缺失」
-    # （宿主镜像被 prune -a 等清理/环境迁移）时，server 侧异步触发该部署
-    # 重建——git 源 zip 缺失经 packer 按行内源快照重新物化并复核 checksum；
-    # zip 源原始字节不在平台存储内，无法自动重建（错误文案引导 redeploy）。
+    # 镜像缺失自动重建（执行链自愈）：执行命中「部署镜像不可得」（构建
+    # 产物引用映射缺失/被清理，或 fleetly 侧镜像解析失败）时，server 侧
+    # 异步触发该部署重建——git 源 zip 缺失经 packer 按行内源快照重新物化
+    # 并复核 checksum；zip 源原始字节不在平台存储内，无法自动重建（错误
+    # 文案引导 redeploy）。
     # 未配置 = 默认开启；显式 false = 关闭。
     # env: TORCHWOOD_FUNCTIONS_DISPATCHER_REBUILD_ON_MISSING_IMAGE
     rebuild_on_missing_image: true

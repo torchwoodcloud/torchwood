@@ -38,17 +38,6 @@ type PoolConfig struct {
 	// 累加 timeouts 计数，达阈值杀实例重建（堵住「超时不杀」打开的僵尸负载
 	// 通道——毒化实例慢性塞满事件循环而 health 仍响应、永不回收）。
 	TimeoutBudget int
-	// RoutingMode 是执行路由模式（四期 4b M7；config
-	// functions.dispatcher.routing_mode，"" 缺省 = local）：local = 镜像
-	// 不分发（冷启动转发 BuildNode）；registry = M1 镜像全局化（冷启动
-	// 本地 spawn + spawn 前 EnsureImage 按需 pull，不转发）。
-	RoutingMode string
-	// MaxResidentInstancesGlobal 是全集群常驻总量上限（四期 4c M4 容量共享；
-	// config functions.dispatcher.max_resident_instances_global）：多节点下
-	// MaxResidentInstances 只是每节点各管各的，全局配额经 Redis 容量键
-	// （torchwood:fncap:resident:<node_id>）求和约束，trySpawn 在本节点上限
-	// 之后检查。0 = 不设全局上限（缺省；单机部署无意义）。
-	MaxResidentInstancesGlobal int
 }
 
 // DefaultPoolConfig 返回平台默认池参数（设计 §6 池策略 + Q11 拍板）。
@@ -97,10 +86,6 @@ func PoolConfigFromConfig(cfg *config.AppConfig) PoolConfig {
 	if d.GetTimeoutBudget() > 0 {
 		pc.TimeoutBudget = int(d.GetTimeoutBudget())
 	}
-	if d.GetMaxResidentInstancesGlobal() > 0 {
-		pc.MaxResidentInstancesGlobal = int(d.GetMaxResidentInstancesGlobal())
-	}
-	pc.RoutingMode = config.NormalizedFunctionsRoutingMode(d.GetRoutingMode())
 	return pc
 }
 
@@ -296,23 +281,14 @@ func (h *httpRunner) Invoke(ctx context.Context, ip string, req ExecuteRequest, 
 // PoolManager 是常驻实例池管理器（设计 §6）：冷启动 = 池 0→1 扩容的单一
 // 路径；spawn 收敛 / 有界排队 / idle 回收 / drain / 幽灵对账 / 判活均在此。
 //
-// docker 交互抽象为 Daemon/Registry/runnerClient 接口（fake 表驱动测试）。
+// 执行底座抽象为 Daemon/Registry/runnerClient 接口（fake 表驱动测试）；
+// 实例 = fleetly 任务（IMPL-T2-3，daemon.go），注册表在 Redis
+// （torchwood:fninst:*）。
 type PoolManager struct {
 	daemon   Daemon
 	registry Registry
 	runner   runnerClient
 	cfg      PoolConfig
-	// nodeID 是本进程的 dispatcher 节点 ID（四期 4a-1 M2/M8；service 装配
-	// 处经 SetNodeID 注入，测试可直接置字段）：spawnInstance 固化进实例
-	// 记录，reaper 据此收窄对账范围（他节点的实例归他节点的 reaper）。
-	// 空串 = 未装配节点身份（单测缺省形态）——reaper 把 node 为空的记录
-	// 视为本节点（旧记录兼容），但显式他节点记录仍被收窄。
-	nodeID string
-	// forwarder 是节点转发客户端（四期 4a-2 M3 路由层；service 装配处经
-	// SetForwarder 注入）：实例亲和 / BuildNode 冷启动的跨节点手段。
-	// nil = 转发能力未装配——路由需要转发时以 FailedPrecondition 明确
-	// 失败，绝不静默回落本地 spawn（local 模式下本节点无镜像）。
-	forwarder nodeForwarder
 
 	// clock/sleep 可注入（表驱动测试）；生产用 time.Now/timer。
 	clock func() time.Time
@@ -329,13 +305,6 @@ type PoolManager struct {
 	// 完全吞掉（EACCES 秒退事故的排障放大器）。lastSpawnWarnAt 供告警限频。
 	lastSpawnErr    map[string]error
 	lastSpawnWarnAt map[string]time.Time
-	// lastCapWarnAt 是容量通道（Redis 容量键，M4）故障告警的限频时间戳。
-	lastCapWarnAt time.Time
-	// deadNodePending 是 reaper 死节点二次确认状态（P2 S13）：上一轮心跳
-	// 快照中已缺失、待本轮再确认的他节点 ID（进程内存即够——reaper 串行
-	// 周期状态，进程重启后重新走两轮，代价只是收敛晚一轮）。单轮快照缺失
-	// 不删：配合 90s 心跳 TTL 进一步压低瞬时 Redis/网络抖动误判窗口。
-	deadNodePending map[string]bool
 }
 
 // NewPoolManager 构造池管理器（生产装配）。
@@ -377,7 +346,6 @@ func newPoolManager(daemon Daemon, registry Registry, runner runnerClient, cfg P
 		counted:         map[string]bool{},
 		lastSpawnErr:    map[string]error{},
 		lastSpawnWarnAt: map[string]time.Time{},
-		deadNodePending: map[string]bool{},
 	}
 }
 
@@ -386,26 +354,6 @@ func normalDur(v, def time.Duration) time.Duration {
 		return def
 	}
 	return v
-}
-
-// SetNodeID 注入本进程节点身份（service 装配处调用；须在任何 spawn 之前）。
-func (p *PoolManager) SetNodeID(nodeID string) { p.nodeID = nodeID }
-
-// NodeID 返回本进程节点 ID（service 装配处解析；未注入为空串——观测与
-// BuildResponse.node_id 填充用）。
-func (p *PoolManager) NodeID() string { return p.nodeID }
-
-// SetForwarder 注入节点转发客户端（service 装配处调用；须在任何 Dispatch
-// 之前——装配时序与 SetNodeID 同拍）。
-func (p *PoolManager) SetForwarder(f nodeForwarder) { p.forwarder = f }
-
-// ownedBySelf 报告实例记录是否归属本节点对账（M8 ①收窄判定）：
-//   - rec.Node == 本节点 → 本节点；
-//   - rec.Node 为空 = 本特性之前的旧记录（单机时代存量），按本节点处理
-//     （自然老化，无升级 runbook；否则存量健康实例会被死节点收敛蒸发）；
-//   - 显式他节点 ID → 他节点（本节点 reaper 跳过 Inspect 与一切清理）。
-func (p *PoolManager) ownedBySelf(rec InstanceRecord) bool {
-	return rec.Node == "" || rec.Node == p.nodeID
 }
 
 func defaultSleep(ctx context.Context, d time.Duration) bool {
@@ -481,23 +429,13 @@ func (p *PoolManager) applyDefaults(policy PoolPolicy) PoolPolicy {
 	}
 }
 
-// Dispatch 分发一次执行（热路径）：先过路由层（四期 4a-2 M3 实例亲和 +
-// M7 local 冷启动语义，route），未在路由层跨节点收场则按单机池路径处理
-// ——认领空闲实例 → runner HTTP；无空闲则冷启动（池 0→1 扩容，spawn 收敛）
-// 或有界排队；超限 ResourceExhausted。
+// Dispatch 分发一次执行（热路径）：认领空闲实例 → runner HTTP；无空闲则
+// 冷启动（池 0→1 扩容，spawn 收敛）或有界排队；超限 ResourceExhausted。
 func (p *PoolManager) Dispatch(ctx context.Context, req ExecuteRequest) (*ExecuteResponse, error) {
-	return p.dispatch(ctx, req, "")
+	return p.dispatch(ctx, req)
 }
 
-// DispatchForwarded 处理他节点转发来的执行请求（四期 4a-2 M3 防环铁律）：
-// fromNode 是转发方节点 ID（观测用）。请求强制走本地池路径，不再路由
-// 转发——转发发起方已按实例亲和/BuildNode 语义选定本节点为镜像所在节点
-// （local 模式），二次转发只会指向没有镜像的第三方节点且可能成环。
-func (p *PoolManager) DispatchForwarded(ctx context.Context, req ExecuteRequest, fromNode string) (*ExecuteResponse, error) {
-	return p.dispatch(ctx, req, fromNode)
-}
-
-func (p *PoolManager) dispatch(ctx context.Context, req ExecuteRequest, fromNode string) (*ExecuteResponse, error) {
+func (p *PoolManager) dispatch(ctx context.Context, req ExecuteRequest) (*ExecuteResponse, error) {
 	if req.ProjectID == "" || req.FunctionID == "" || req.DeploymentID == "" || req.Image == "" {
 		return nil, status.Error(codes.InvalidArgument, "project/function/deployment/image are required")
 	}
@@ -506,18 +444,6 @@ func (p *PoolManager) dispatch(ctx context.Context, req ExecuteRequest, fromNode
 	if req.TriggerEnvelope != nil {
 		if _, err := triggerEnvelopeHeader(req.TriggerEnvelope); err != nil {
 			return nil, err
-		}
-	}
-	// ——路由层（M3/M7 local 模式）：转发来的请求强制本地（防环），直连
-	// 请求先求落点——
-	if fromNode != "" {
-		slog.Debug("dispatcher: forwarded execution forced local",
-			"project", req.ProjectID, "function", req.FunctionID,
-			"self", p.nodeID, "from_node", fromNode)
-	} else {
-		resp, handled, err := p.route(ctx, req)
-		if err != nil || handled {
-			return resp, err
 		}
 	}
 	ref := FunctionRef{ProjectID: req.ProjectID, FunctionID: req.FunctionID}
@@ -554,10 +480,9 @@ func (p *PoolManager) dispatch(ctx context.Context, req ExecuteRequest, fromNode
 
 	started := p.clock()
 	for {
-		// 本节点 ID 随认领下发（P2 S13 节点收窄）：只认领 rec.node 归属本
-		// 节点（或旧记录空 node）的实例——他节点实例的容器 IP 仅在其节点
-		// docker 网络内可达，本地认领必然不可达（实例亲和转发由 route 负责）。
-		rec, err := p.registry.ClaimIdle(ctx, ref, req.DeploymentID, p.nodeID, p.clock().Add(p.cfg.LeaseTTL))
+		// 认领可服务实例（inflight < concurrency 且非 draining 且部署匹配；
+		// 原子 Lua 语义见 registry.go）。
+		rec, err := p.registry.ClaimIdle(ctx, ref, req.DeploymentID, p.clock().Add(p.cfg.LeaseTTL))
 		if err != nil {
 			return nil, err
 		}
@@ -600,9 +525,9 @@ func (p *PoolManager) dispatch(ctx context.Context, req ExecuteRequest, fromNode
 
 // trySpawn 尝试冷启动一个新实例（池 0→1 扩容）：同函数并发 spawn 用 Redis
 // SETNX 锁收敛为一次（其余请求等注册表，防 daemon 重启后全量冷启动风暴）；
-// 常驻总量受两层上限约束（独立于全局 run 信号量，Q11）：本节点 daemon 级
-// 上限（现状）→ 全集群总量上限（四期 4c M4，Redis 容量键求和；Redis 不可用
-// fail-open，见 capacity.go）。
+// 常驻总量受本节点上限约束（独立于全局 run 信号量，Q11）。平台侧配额
+// （每令牌并发/CPU/内存）由 fleetly CreateTask fail-closed 强制，触顶以
+// ResourceExhausted 上抛（daemon.go 错误映射）。
 func (p *PoolManager) trySpawn(ctx context.Context, req ExecuteRequest, policy PoolPolicy) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -633,17 +558,6 @@ func (p *PoolManager) trySpawn(ctx context.Context, req ExecuteRequest, policy P
 	p.residentTotal++ // 先占额：spawn 失败路径负责回退
 	p.mu.Unlock()
 
-	// 全局容量门（四期 4c M4）：本节点上限让路后查 Redis 全局总量（各节点
-	// 容量键之和）；满 → 回退本节点预留、交给排队路径（与本地池满同款）。
-	// Redis 不可用 fail-open（capacity.go 文件头裁决），不回退。
-	if !p.tryReserveGlobal(ctx) {
-		p.mu.Lock()
-		p.booting[key]--
-		p.residentTotal--
-		p.mu.Unlock()
-		return nil
-	}
-
 	rec, err := p.spawnInstance(ctx, req, policy)
 	if err != nil {
 		p.mu.Lock()
@@ -671,8 +585,6 @@ func (p *PoolManager) trySpawn(ctx context.Context, req ExecuteRequest, policy P
 	p.mu.Lock()
 	p.booting[key]--
 	p.mu.Unlock()
-	// spawn 成功：本节点常驻 +1 落定，刷新容量键（M4；best-effort）。
-	p.refreshCapacity()
 	return nil
 }
 
@@ -681,18 +593,6 @@ func (p *PoolManager) trySpawn(ctx context.Context, req ExecuteRequest, policy P
 func (p *PoolManager) spawnInstance(ctx context.Context, req ExecuteRequest, policy PoolPolicy) (*InstanceRecord, error) {
 	bootStart := p.clock()
 	ColdStartsTotal.WithLabelValues(req.ProjectID, req.FunctionID).Inc()
-
-	// M1 registry 模式冷启动（四期 4b）：镜像全局化后任意节点都能拉到构建
-	// 产物——spawn 前确保部署镜像本节点可用（本地命中零网络；miss 则
-	// pull）。失败以明确错误收场（含 pull 摘要）：spawn 失败进队首超时
-	// 消息（trySpawn 的吞错路径记录现场），不静默。local 模式跳过一切
-	// pull 逻辑（镜像只在其构建节点，本节点 miss 属异常，spawn 自然失败
-	// 并留现场）。调用点在 spawn 锁内，并发 pull 天然由锁收敛。
-	if p.cfg.RoutingMode == config.FunctionsRoutingModeRegistry {
-		if err := p.daemon.EnsureImage(ctx, req.Image); err != nil {
-			return nil, err
-		}
-	}
 
 	network, err := p.daemon.EnsureProjectNetwork(ctx, req.ProjectID, req.EgressUntrusted)
 	if err != nil {
@@ -752,10 +652,7 @@ func (p *PoolManager) spawnInstance(ctx context.Context, req ExecuteRequest, pol
 		ContainerID:  inst.ContainerID,
 		IP:           inst.IP,
 		DeploymentID: req.DeploymentID,
-		// 节点归属固化（四期 4a-1 M3/M8）：实例终生属于 spawn 它的节点，
-		// reaper 对账范围据此收窄（他节点的实例归他节点的 reaper）。
-		Node:     p.nodeID,
-		Inflight: 0,
+		Inflight:     0,
 		// 并发上限 spawn 时固化（v3 §1.1「生效时机」）：实例终生按 spawn 时
 		// 策略服务，函数调大后存量实例按旧值服务至 idle 回收/部署更替。
 		Concurrency:    policy.Concurrency,
@@ -846,28 +743,16 @@ func (p *PoolManager) executeOn(ctx context.Context, req ExecuteRequest, rec Ins
 	}, nil
 }
 
-// killInstance 强杀实例并彻底清账（ContainerStop SIGKILL，复用 v1 原语；
-// 幂等：容器已消失不报错）。
-//
-// 记录归属校验（P2 S13）：显式他节点记录整体跳过（不杀容器也不删记录，
-// 留给对端 reaper 收敛）——跨节点竞态/nodeID 漂移（容器重建 hostname 变化）
-// 下无条件删记录会误删他节点活实例的账：对端容器因此失去 reaper 保护而
-// 泄漏，容量计数随之漂移。死节点收敛（Reaper M8 ②）不经本方法——那是
-// 「只删记录、不碰 daemon」的独立路径，天然不受此约束。
+// killInstance 强杀实例并彻底清账（fleetly Stop+Delete 任务；幂等：任务已
+// 消失不报错）。
 func (p *PoolManager) killInstance(ctx context.Context, ref FunctionRef, rec *InstanceRecord) {
-	if !p.ownedBySelf(*rec) {
-		slog.Warn("dispatcher: skip killing instance owned by another node (left to its reaper)",
-			"project", ref.ProjectID, "function", ref.FunctionID,
-			"self", p.nodeID, "owner", rec.Node, "instance", rec.InstanceID)
-		return
-	}
 	p.terminate(ctx, rec.ContainerID)
 	_ = p.registry.Delete(ctx, ref, rec.InstanceID)
 }
 
-// terminate 停止并删除容器 + 回退常驻计数（幂等）。
+// terminate 停止并删除任务 + 回退常驻计数（幂等）。
 func (p *PoolManager) terminate(ctx context.Context, containerID string) {
-	tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), dockerCleanupTimeout)
+	tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), fleetlyCleanupTimeout)
 	defer cancel()
 	_ = p.daemon.StopInstance(tctx, containerID, 0)
 	_ = p.daemon.RemoveInstance(tctx, containerID)
@@ -877,8 +762,6 @@ func (p *PoolManager) terminate(ctx context.Context, containerID string) {
 		p.residentTotal--
 	}
 	p.mu.Unlock()
-	// 常驻 -1 落定：刷新容量键（M4；best-effort，幂等调用无变化时零成本刷新 TTL）。
-	p.refreshCapacity()
 }
 
 // DrainForDeployment 在部署更新后排空旧 deployment 池（上限 ≤ 函数超时，
@@ -917,53 +800,12 @@ func (p *PoolManager) DrainForDeployment(ctx context.Context, projectID, functio
 }
 
 // Reaper 单轮对账：idle 回收 / 幽灵清理 / stuck-busy 强杀 / 水位与存活计量。
-// 由 Service 周期调度（ReaperInterval）。入口处顺带刷新本节点容量键保 TTL
-// （四期 4c M4，见 capacity.go）。
+// 由 Service 周期调度（ReaperInterval）。
 //
-// 多机收窄（四期 4a-1，设计 §4 M8——M2/M3 同片硬前提，否则多节点共享
-// fninst 后互相残杀）：①只对 rec.Node 归属本节点（ownedBySelf）的记录做
-// InspectInstance 与一切清理——本机 daemon Inspect 他节点容器必然
-// NotFound，误入幽灵清理会把健康实例从池中蒸发；②死节点收敛——每轮先
-// ListNodes 取心跳快照，显式他节点记录若其心跳键已消失（≥defaultNodeTTL
-// 无心跳 = 节点已死，容器随机器消失），由本节点批量删除记录（只删记录、
-// 不碰 daemon——与幽灵清理严格区分）。快照读取失败时跳过收敛（fail-safe
-// 不得因 Redis 抖动批量误删活节点记录）。P2 S13 起删除前须二次确认：
-// 连续两轮快照均缺失（deadNodePending 跨轮登记）才动手——心跳 TTL 已放宽
-// 到 90s，再加一轮 reaper 间隔余量，进一步压低瞬时抖动误判窗口。
+// 单进程形态（IMPL-T2-3：多节点细胞模型退役，编排归 swarm）：全部实例记录
+// 都归本进程对账——实例 = 本进程创建的 fleetly 任务（fleetly 任务台账是
+// 平台侧真值，幽灵清理即 GetTask 报不存在/非 running）。
 func (p *PoolManager) Reaper(ctx context.Context) {
-	// 容量键 TTL 保鲜（四期 4c M4）：每轮无条件刷新本节点容量键（best-effort
-	// ——有回收的轮次 terminate/revokeCounted 已各刷一次，这里兜住「无变化
-	// 轮次」：无流量实例不因键过期从全局求和中漏计）。放在快照读取之前，
-	// ListFunctions 失败早退也不影响保鲜。
-	p.refreshCapacity()
-
-	// M8 ②：节点心跳快照（每轮一次；nil = 快照不可用，本轮跳过死节点收敛）。
-	var liveNodes map[string]bool
-	// confirmedDead 是「上一轮已见缺失、本轮再确认」的死节点集合（二次确认
-	// 的本轮读取面）；missingNodes 收集本轮新见缺失（并入 deadNodePending，
-	// 下轮确认）。快照不可用时不登记不确认（fail-safe 同口径）。
-	confirmedDead := map[string]bool{}
-	missingNodes := map[string]bool{}
-	if nodes, err := p.registry.ListNodes(ctx); err == nil {
-		liveNodes = make(map[string]bool, len(nodes))
-		for _, n := range nodes {
-			liveNodes[n.NodeID] = true
-		}
-		p.mu.Lock()
-		if p.deadNodePending == nil {
-			p.deadNodePending = map[string]bool{}
-		}
-		for nodeID := range liveNodes {
-			delete(p.deadNodePending, nodeID) // 节点复活：清账
-		}
-		for nodeID := range p.deadNodePending {
-			if !liveNodes[nodeID] {
-				confirmedDead[nodeID] = true
-				delete(p.deadNodePending, nodeID) // 确认即出队（下轮仍缺失重新入队）
-			}
-		}
-		p.mu.Unlock()
-	}
 	refs, err := p.registry.ListFunctions(ctx)
 	if err != nil {
 		return
@@ -982,24 +824,11 @@ func (p *PoolManager) Reaper(ctx context.Context) {
 		var uptimeMS float64
 		for i := range records {
 			rec := records[i]
-			if !p.ownedBySelf(rec) {
-				// M8 ①：他节点的实例归他节点的 reaper——跳过 InspectInstance
-				// 与一切清理。仅当其心跳已消失（死节点收敛）时删记录，且须
-				// 二次确认（连续两轮快照缺失，P2 S13）。
-				if liveNodes != nil && !liveNodes[rec.Node] {
-					missingNodes[rec.Node] = true
-					if confirmedDead[rec.Node] {
-						DeadNodeReclaimedTotal.WithLabelValues(ref.ProjectID, ref.FunctionID).Inc()
-						_ = p.registry.Delete(ctx, ref, rec.InstanceID)
-					}
-				}
-				continue
-			}
 			inflightTotal += rec.Inflight
 			running, _, err := p.daemon.InspectInstance(ctx, rec.ContainerID)
 			if err != nil || !running {
 				// 幽灵/已退出实例（runner 达 max_requests 自退出也在此收敛）：
-				// docker inspect 与注册表 diff 清理。
+				// 任务台账与注册表 diff 清理。
 				_ = p.registry.Delete(ctx, ref, rec.InstanceID)
 				p.revokeCounted(rec.ContainerID)
 				continue
@@ -1072,14 +901,6 @@ func (p *PoolManager) Reaper(ctx context.Context) {
 		// 与 PoolReady 同路）。
 		InstanceInflight.WithLabelValues(ref.ProjectID, ref.FunctionID).Set(float64(inflightTotal))
 	}
-	// 本轮新见缺失的他节点入队（下轮再缺失即确认，二次确认语义）。
-	if len(missingNodes) > 0 {
-		p.mu.Lock()
-		for nodeID := range missingNodes {
-			p.deadNodePending[nodeID] = true
-		}
-		p.mu.Unlock()
-	}
 }
 
 // ResidentTotal 返回当前进程内常驻实例数（观测/测试用）。
@@ -1097,8 +918,6 @@ func (p *PoolManager) revokeCounted(containerID string) {
 		p.residentTotal--
 	}
 	p.mu.Unlock()
-	// 常驻 -1 落定：刷新容量键（M4；best-effort）。
-	p.refreshCapacity()
 }
 
 func isTimeoutErr(err error) bool {

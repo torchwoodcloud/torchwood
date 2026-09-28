@@ -78,22 +78,6 @@ var (
 		Name: "torchwood_functions_instance_timeout_fuse_total",
 		Help: "Instances killed by the per-instance timeout fuse (cumulative timeouts reached the budget).",
 	}, []string{"project", "function"})
-
-	// DeadNodeReclaimedTotal 是死节点残留实例记录的收敛删除计数（四期 4a-1，
-	// M8 ②）：节点心跳键消失后，其孤儿实例记录由存活节点批量清除（只删
-	// 记录不碰 daemon）。频发 = 节点频繁失联（网络分区/机器抖动）信号。
-	DeadNodeReclaimedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "torchwood_functions_dead_node_records_reclaimed_total",
-		Help: "Instance records reclaimed because their owning dispatcher node lost its heartbeat.",
-	}, []string{"project", "function"})
-
-	// DispatchForwardedTotal 是执行跨节点转发计数（四期 4a-2，M3 路由层）：
-	// 按目标节点与结果（ok/error）计。频发 error = 目标节点失联（进程死/
-	// node_url 误配）——local 模式下该函数在转发失败节点上不可用的信号。
-	DispatchForwardedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "torchwood_functions_dispatch_forwarded_total",
-		Help: "Executions forwarded to a peer dispatcher node (instance affinity / build-node cold start).",
-	}, []string{"project", "function", "target", "result"})
 )
 
 func init() {
@@ -110,7 +94,5 @@ func init() {
 		DispatchQueueTimeouts,
 		InstanceInflight,
 		TimeoutFuseTotal,
-		DeadNodeReclaimedTotal,
-		DispatchForwardedTotal,
 	)
 }

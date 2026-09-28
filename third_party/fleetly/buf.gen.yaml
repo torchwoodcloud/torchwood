@@ -1,0 +1,17 @@
+# vendored fleetly proto 的生成配置：只生成消息与 gRPC 客户端（dispatcher
+# 是纯客户端消费方；不生成 gateway/swagger——REST 面不属于本仓消费面）。
+# 生成物落 torchwood genproto 模块的 fleetly/ 子树。
+#
+# 复跑（Git Bash）：cd third_party/fleetly && buf generate
+# 或仓库根：mise run generate:fleetly-proto
+version: v2
+plugins:
+  - remote: buf.build/protocolbuffers/go:v1.36.10
+    out: ../../genproto
+    opt:
+      - paths=source_relative
+
+  - remote: buf.build/grpc/go:v1.6.0
+    out: ../../genproto
+    opt:
+      - paths=source_relative

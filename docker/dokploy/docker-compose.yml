@@ -4,29 +4,26 @@
 #       + migrate（golang-migrate 一次性）
 #       + db-grants（tw_authenticator 授权补齐，一次性，依赖迁移 000004）
 #       + roles-sig（torchwood admin sync-roles-sig，一次性，B15 部署时序）
-#       + server（gRPC/gateway/Console/healthz，:9080，container_name
-#         torchwood-server——函数网络 DNS 回访锚点）+ worker（Functions 消费者）
-#       + dispatcher（执行器 v2：唯一 docker.sock 持有方，join
-#         tw-func-<project>[-int] 网络并同步 attach server，承接全部分发）
+#       + server（gRPC/gateway/Console/healthz，:9080）+ worker（Functions 消费者）
+#       + dispatcher（执行器 v2：fleetly Tasks/build API 客户端，零 docker.sock
+#         ——函数实例 = fleetly Tasks、构建 = fleetly build-from-upload）
+#
+# ⚠ IMPL-T2-3 迁移中（T2-4 割接会整体改写本栈）：dispatcher 需要
+#   functions.fleetly.endpoint/token 与 fleetly 侧 app/网络成员配置；
+#   本文件已按新契约更新（下方 dispatcher 服务与 config.yaml），但完整
+#   fleetly 部署形态（域名/网络/托管库）以 T2-4 的 docker/fleetly/ 为准。
+#
+# 必填环境变量（Dokploy「Environment」或 compose 同目录 .env）见 README.md。
+# 路径约定：本文件内的相对路径均相对本文件所在目录（compose 规范）。
 #
 # 部署时序契约（docs/developer/13-operations.md §4.5/§6.1）由 depends_on 链保证：
 #   迁移 → 三角色授权 → roles_sig 密钥落库 → server/worker 启动。
 # 全部一次性作业幂等，镜像变更触发重建时自动重跑。
 #
-# 必填环境变量（Dokploy「Environment」或 compose 同目录 .env）见 README.md。
-# 路径约定：本文件内的相对路径均相对本文件所在目录（compose 规范）。
-#
-# ——多机部署（细胞模型，四期；docs/developer/13-operations.md §7）——
-# 本文件是「每节点一份」的单节点模板：多机时按节点复制部署（每节点独立
-# dokploy/compose 实例、各自 docker 网络隔离），仅 postgres/redis/minio +
-# migrate/db-grants/roles-sig 作业链只保留在「主节点」一份，其余节点删掉这
-# 五个服务、把 app-env 里三个依赖地址指回主节点（Postgres DSN / Redis /
-# MinIO endpoint）。dispatcher 各节点必须配置不同的 node_id 与对等互达的
-# node_url；server/worker 每节点一份（worker 与 server 同节点：补构建读本
-# 节点 zip，M5 拓扑裁决）。container_name torchwood-server 多机不冲突——
-# 各节点的 compose 实例网络互不相通，函数网络 DNS 各自解析本节点 server。
-# 详细选型（routing_mode 的 local vs registry）与节点故障语义见
-# docs/developer/13-operations.md §7 与 docs/developer/08-functions.md §15。
+# ——多机部署（细胞模型，四期）已随 IMPL-T2-3 退役：多节点编排归 swarm ——
+# dispatcher 不再有 node_id/node_url/routing_mode；函数实例经 fleetly Tasks
+# 在集群任意节点调度（镜像 digest 由平台分发），本文件只保留单栈形态。
+# 历史多机指引（docs/developer/13-operations.md §7）保留为演进记录。
 
 name: torchwood
 
@@ -193,11 +190,9 @@ services:
 
   server:
     <<: *app-image
-    # 容器名钉死：函数网络（tw-func-<project>[-int]，dispatcher 动态 attach）
-    # 上的 DNS 以容器名解析——functions.execution.api_base_url 即指向它。
-    # 多机部署（四期 M6）不冲突：每节点是独立 compose 实例、docker 网络
-    # 互不相通，该名字在各节点各自解析本节点的 server（每节点一份 server
-    # ——函数回调只达本节点，细胞不变量「函数容器只与本机通信」）。
+    # 容器名钉死：栈内服务互访（dispatcher→server HTTP 面）与 dokploy 反代
+    # 锚点。IMPL-T2-3 后函数回访走 fleetly 任务网络成员挂靠（DNS 别名 =
+    # <fleetly app>-server；见 functions.fleetly.network_members）。
     container_name: torchwood-server
     # gRPC(:9060，明文 h2c) + grpc-gateway HTTP + Console SPA + Storage serverhttp
     # + healthz。对外两条域名路由直接以 Traefik label 声明在本文件（不用 Dokploy
@@ -246,10 +241,10 @@ services:
       # 服务同值。
       TORCHWOOD_FUNCTIONS_PACKER_URL: http://packer:9071
       TORCHWOOD_FUNCTIONS_PACKER_SHARED_TOKEN: ${TORCHWOOD_FUNCTIONS_PACKER_SHARED_TOKEN:?请在 Dokploy Environment 设置 openssl rand -hex 32}
-      # 函数回访平台 API 的地址（注入执行容器 TW_API_BASE_URL）。必须是
-      # 函数网络内可达地址：dispatcher 按 callback_container 把本容器
-      # attach 进 tw-func-<project>[-int]，容器名 DNS 直接解析（internal
-      # 网络无 NAT 出口，公网地址对不可信函数不可达）。
+      # 函数回访平台 API 的地址（注入执行容器 TW_API_BASE_URL）。IMPL-T2-3
+      # 后 = fleetly 任务网络成员挂靠后的 DNS 别名（fleetly.network_members
+      # 把 server 挂进任务网络；internal 任务网络无 NAT 出口，公网地址对
+      # 不可信函数不可达）。<fleetly app> 与 T2-4 割接的 app 名一致。
       TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL: http://torchwood-server:9080
     volumes:
       - ./config.yaml:/app/configs/config.yaml:ro
@@ -273,10 +268,8 @@ services:
   worker:
     <<: *app-image
     # Functions 异步执行消费者；不启用 Functions 时可整段删除（纯空闲队列消费者）。
-    # M5 worker 拓扑裁决（四期 4d）：worker 与 server 同节点部署——补构建
-    # 固定读本节点盘上的部署 zip（构建亲和节点的本地快照，不跨节点迁移），
-    # worker 集中部署会让按 build_node 路由补构建落空。多机时每节点
-    # server + worker 成对部署，各只服务本节点 zip。
+    # IMPL-T2-3 后无「构建亲和节点」概念（多节点细胞模型退役）：补构建读
+    # 本节点盘上的部署 zip（单栈拓扑，worker 与 server 同栈部署）。
     entrypoint: ["/usr/local/bin/worker"]
     environment:
       <<: *app-env
@@ -300,53 +293,30 @@ services:
 
   dispatcher:
     <<: *app-image
-    # 镜像缺省 USER torchwood（非 root），读不了宿主 root:docker(660) 的
-    # docker.sock（connect: permission denied，函数构建必失败）。显式以 root
-    # 运行；group_add+宿主 docker GID 方案否——GID 跨机器不移植。sock 等同
-    # 宿主 root 权限，与下方「⚠ 仅在可信环境启用」注释同一前提。
-    user: root
-    # 函数分发进程（唯一 docker.sock 持有方）：承接 Build/Execute/RemoveImage
-    # 全部 daemon 操作、join tw-func-<project> 网络（自 attach）后按容器 IP
-    # 直分 runner。server/worker 零 daemon 依赖，host-root 等价凭证收敛到
-    # 非 API 面进程。
-    # ⚠ docker.sock 等同宿主 root 权限，仅在可信环境启用。
+    # 函数分发进程（IMPL-T2-3 后零 docker.sock 依赖）：承接 Build/Execute/
+    # RemoveImage 全部执行面操作——函数实例 = fleetly Tasks（swarm service
+    # 承载）、构建 = fleetly build-from-upload。server/worker 零执行底座
+    # 依赖。
     entrypoint: ["/usr/local/bin/dispatcher"]
     environment:
       <<: *app-env
       TORCHWOOD_FUNCTIONS_DISPATCHER_ADDR: ":9070"
       TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN: ${TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN:?请在 Dokploy Environment 设置 openssl rand -hex 32}
-      # 每 daemon 常驻实例总量上限（2026-09-21 上调缺省 16，原 Q11 拍板 8；
-      # 内存敞口 = 实例数 × spec 内存：全 shared-1x ≈4GiB、全 shared-2x ≈8GiB）
+      # 每 dispatcher 常驻实例总量上限（2026-09-21 上调缺省 16，原 Q11 拍板 8；
+      # 内存敞口 = 实例数 × spec 内存：全 shared-1x ≈4GiB、全 shared-2x ≈8GiB）。
       TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES: ${TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES:-16}
-      # 全集群常驻总量上限（四期 M4 容量共享）：各节点 Redis 容量键求和后
-      # 检查，在本节点上限之后生效；Redis 不可用 fail-open 退化为仅本节点
-      # 上限。0 = 不设全局上限（缺省）。多机建议按集群内存画像设置。
-      TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES_GLOBAL: ${TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES_GLOBAL:-0}
-      # ——多机节点身份（四期 M2/M3；单机可全部留缺省）——
-      # node_id：本节点标识（缺省 hostname；多机必须显式且全集群唯一）。
-      TORCHWOOD_FUNCTIONS_DISPATCHER_NODE_ID: ${TORCHWOOD_FUNCTIONS_DISPATCHER_NODE_ID:-}
-      # node_url：本节点对等互达地址（缺省 http://127.0.0.1:9070，仅单机
-      # 成立；多机必须显式配置——他节点经它反连本节点，registry 模式必填）。
-      TORCHWOOD_FUNCTIONS_DISPATCHER_NODE_URL: ${TORCHWOOD_FUNCTIONS_DISPATCHER_NODE_URL:-}
-      # 执行路由模式（四期 M7）：local（缺省，镜像不分发，冷启动转发构建
-      # 节点）| registry（M1 镜像全局化，需 registry_push=true + 下方
-      # functions.docker.registry 指向真实 registry）。选型见
-      # docs/developer/13-operations.md §7.1。
-      TORCHWOOD_FUNCTIONS_DISPATCHER_ROUTING_MODE: ${TORCHWOOD_FUNCTIONS_DISPATCHER_ROUTING_MODE:-local}
-      # registry 模式下构建成功后 push（local 模式忽略该值）。
-      TORCHWOOD_FUNCTIONS_DISPATCHER_REGISTRY_PUSH: ${TORCHWOOD_FUNCTIONS_DISPATCHER_REGISTRY_PUSH:-false}
-      # 镜像命名前缀 / 真实 registry 地址（config functions.docker.registry；
-      # local 模式仅作镜像命名空间，registry 模式须指向全部节点可 pull 的
-      # 真实 registry，如 registry.example.com/torchwood-funcs）。
+      # 平台镜像命名前缀（逻辑寻址键；server 同值）。
       TORCHWOOD_FUNCTIONS_DOCKER_REGISTRY: ${TORCHWOOD_FUNCTIONS_DOCKER_REGISTRY:-torchwood-funcs}
-      # join 项目网络时把 server 容器一并 attach：函数经容器名 DNS 回访
-      # 平台 API（internal 网络无 NAT 出口，这是不可信函数回访的唯一通路）。
-      # 与 server 的 container_name 严格一致；attach 失败仅告警不阻断执行。
-      TORCHWOOD_FUNCTIONS_DISPATCHER_CALLBACK_CONTAINER: torchwood-server
+      # ——fleetly 控制面（IMPL-T2-3）——
+      # fleetlyd gRPC 端点（栈内可达地址；**必填**，缺失 dispatcher 拒绝启动）。
+      TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT: ${TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT:?请在 Dokploy Environment 设置 fleetlyd 端点（如 fleetlyd:8421）}
+      # 机具令牌（scope: tasks,build；**部署注入，勿写配置文件/镜像**）。
+      TORCHWOOD_FUNCTIONS_FLEETLY_TOKEN: ${TORCHWOOD_FUNCTIONS_FLEETLY_TOKEN:?请在 Dokploy Environment 设置机具令牌（scope tasks,build）}
+      # 本栈在 fleetly 中的 app 名 + 挂靠任务网络的服务（dispatcher/server）。
+      TORCHWOOD_FUNCTIONS_FLEETLY_APP: ${TORCHWOOD_FUNCTIONS_FLEETLY_APP:?请在 Dokploy Environment 设置本栈的 fleetly app 名}
+      TORCHWOOD_FUNCTIONS_FLEETLY_NETWORK_MEMBERS: ${TORCHWOOD_FUNCTIONS_FLEETLY_NETWORK_MEMBERS:-dispatcher,server}
     volumes:
       - ./config.yaml:/app/configs/config.yaml:ro
-      # 唯一挂载点：dispatcher 专职持有 docker.sock（user: root 才可读）
-      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9070/healthz"]
       interval: 15s

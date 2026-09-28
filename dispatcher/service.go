@@ -13,22 +13,15 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
-// Service 是 dispatcher 的 lynx 服务装配：HTTP API + reaper 周期
-// 对账（独立二进制 cmd/dispatcher；不进 server/worker wire）。
-// 四期 4a-1 起兼节点注册面（M2）：启动即自注册 + 周期心跳
-// （torchwood:fnnodes:<node_id>，TTL 心跳刷新），reaper 的多机收窄（M8）
-// 依赖该心跳面判定节点存活。
+// Service 是 dispatcher 的 lynx 服务装配：HTTP API + reaper 周期对账
+// （独立二进制 cmd/dispatcher；不进 server/worker wire）。执行底座 =
+// fleetly Tasks/build API（IMPL-T2-3：docker.sock 交互面整体退役，多节点
+// 细胞模型删除——多节点编排归 swarm）。
 type Service struct {
 	cfg    *config.AppConfig
 	logger *slog.Logger
 	pool   *PoolManager
 	http   *http.Server
-	// registry 是实例+节点注册表（节点心跳经同一端口写入）。
-	registry Registry
-	// nodeID/nodeURL 是本进程节点身份（ResolveNodeIdentity 解析：config
-	// node_id/node_url，缺省 hostname / addr 端口推导）。
-	nodeID  string
-	nodeURL string
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
@@ -40,29 +33,18 @@ func NewService(cfg *config.AppConfig, rdb *redis.Client, logger *slog.Logger) *
 	if logger == nil {
 		logger = slog.Default()
 	}
-	daemon := NewDockerDaemon(cfg)
 	registry := NewRedisRegistry(rdb)
+	daemon := NewFleetlyDaemon(cfg, registry)
 	pool := NewPoolManager(daemon, registry, PoolConfigFromConfig(cfg))
-	nodeID, nodeURL := ResolveNodeIdentity(cfg)
-	// 节点身份注入（M2/M3/M8）：spawn 固化进实例记录 + BuildResponse.node_id
-	// + reaper 对账收窄判定基准。
-	pool.SetNodeID(nodeID)
-	// 节点转发客户端（四期 4a-2 M3 路由层）：实例亲和/BuildNode 冷启动的
-	// 跨节点手段；节点身份与共享 token 同源注入（节点间鉴权与
-	// server→dispatcher 同一面）。
-	pool.SetForwarder(newNodeForwarder(nodeID, cfg.GetFunctions().GetDispatcher().GetSharedToken()))
 	addr := cfg.GetFunctions().GetDispatcher().GetAddr()
 	if addr == "" {
 		addr = ":9070"
 	}
 	srv := newDispatchServer(pool, daemon, cfg.GetFunctions().GetDispatcher().GetSharedToken())
 	s := &Service{
-		cfg:      cfg,
-		logger:   logger,
-		pool:     pool,
-		registry: registry,
-		nodeID:   nodeID,
-		nodeURL:  nodeURL,
+		cfg:    cfg,
+		logger: logger,
+		pool:   pool,
 		http: &http.Server{
 			Addr: addr,
 			// 内网 API：显式拒绝慢速攻击面（读头超时）。
@@ -106,47 +88,18 @@ func (s *Service) Start(ctx context.Context) error {
 			case <-runCtx.Done():
 				return
 			case <-ticker.C:
-				reapCtx, reapCancel := context.WithTimeout(context.WithoutCancel(runCtx), dockerCleanupTimeout)
+				reapCtx, reapCancel := context.WithTimeout(context.WithoutCancel(runCtx), fleetlyCleanupTimeout)
 				s.pool.Reaper(reapCtx)
 				reapCancel()
 			}
 		}
 	})
-	// 节点自注册 + 心跳（M2）：启动即注册一次（不等首个 tick），此后每
-	// nodeHeartbeatInterval 续期一次（TTL defaultNodeTTL）。正常关停不注销
-	// ——TTL 自然过期即失联，M8 死节点收敛据此接管记录清理。
-	s.wg.Go(func() {
-		s.beatNode()
-		ticker := time.NewTicker(nodeHeartbeatInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-runCtx.Done():
-				return
-			case <-ticker.C:
-				s.beatNode()
-			}
-		}
-	})
 	s.logger.Info("dispatcher started", "addr", s.http.Addr,
-		"node", s.nodeID, "node_url", s.nodeURL,
-		"max_resident_instances", s.pool.cfg.MaxResidentInstances,
-		"max_resident_instances_global", s.pool.cfg.MaxResidentInstancesGlobal)
+		"fleetly_endpoint", s.cfg.GetFunctions().GetFleetly().GetEndpoint(),
+		"max_resident_instances", s.pool.cfg.MaxResidentInstances)
 
 	<-ctx.Done()
 	return nil
-}
-
-// beatNode 写一次节点心跳（独立短超时，不占用 reaper 预算）。心跳失败不
-// 致命：TTL 内的下一 tick 重试；连续失败由 TTL 过期呈现失联（M8 死节点
-// 收敛的判定以键存在性为准，观测面按日志告警）。
-func (s *Service) beatNode() {
-	ctx, cancel := context.WithTimeout(context.Background(), nodeHBTimeout)
-	defer cancel()
-	rec := NodeRecord{NodeID: s.nodeID, URL: s.nodeURL, HbUnixMS: time.Now().UnixMilli()}
-	if err := s.registry.SaveNode(ctx, rec, defaultNodeTTL); err != nil {
-		s.logger.Warn("dispatcher node heartbeat failed", "node", s.nodeID, "error", err)
-	}
 }
 
 // Stop 优雅关停：先停 reaper，再排空在途 HTTP（drain 语义与全局一致）。
@@ -158,7 +111,7 @@ func (s *Service) Stop(ctx context.Context) error {
 	if cancel != nil {
 		cancel()
 	}
-	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, dockerCleanupTimeout)
+	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, fleetlyCleanupTimeout)
 	defer shutdownCancel()
 	if err := s.http.Shutdown(shutdownCtx); err != nil {
 		s.logger.Warn("dispatcher http shutdown", "error", err)

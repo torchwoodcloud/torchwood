@@ -55,12 +55,6 @@ type InstanceRecord struct {
 	MinInstances   int `json:"min_instances"`
 	IdleTTLSeconds int `json:"idle_ttl_seconds"`
 	MaxRequests    int `json:"max_requests"`
-	// Node 是 spawn 落成的 dispatcher 节点 ID（四期 4a-1，设计 §4 M3/M8）：
-	// spawn 时固化本进程节点身份，多机共享 fninst 下 reaper 据此收窄对账
-	// 范围（他节点实例归他节点的 reaper，M8 ①）。空串 = 本特性之前的旧
-	// 记录（单机时代存量）——按本节点处理（自然老化，无升级 runbook；
-	// 若按「空 ≠ self」处理，存量健康实例会被死节点收敛批量蒸发）。
-	Node string `json:"node,omitempty"`
 }
 
 // UnmarshalJSON 双读兼容旧版记录（v3 §1.3「兼容陷阱」）：
@@ -107,21 +101,17 @@ type FunctionRef struct {
 	FunctionID string
 }
 
-// Registry 是常驻实例注册表端口（Redis 实现；fake 测试用内存实现）。
-// 组合 NodeRegistry（节点注册表 M2，类型与实现在 nodes.go）——PoolManager/
-// service 经同一端口访问实例与节点两面。
+// Registry 是常驻实例注册表端口（Redis 实现；fake 测试用内存实现）：
+// 实例面（本文件）+ 「逻辑镜像名 → 平台产物引用」映射面（IMPL-T2-3，
+// imageRefStore 同文件实现）。多节点细胞模型（节点注册表/容量键）已随
+// IMPL-T2-3 退役——多节点编排归 swarm。
 type Registry interface {
-	NodeRegistry
 	// List 返回函数池内全部实例记录。
 	List(ctx context.Context, ref FunctionRef) ([]InstanceRecord, error)
 	// ClaimIdle 原子认领一个可服务（inflight < concurrency 且 draining=false
-	// 且部署匹配且节点归属 selfNodeID）实例并 inflight+1 + 续租；无可用实例
-	// 返回 (nil, nil)。（v3 §1.1 背压顺序①；concurrency=1 时与 v2 busy 互斥
-	// 语义逐步等价。）节点收窄（P2 S13）：rec.node 显式他节点 → 不认领——
-	// 实例容器 IP 只在其节点的 docker 网络内可达，跨节点认领的请求必然
-	// 不可达；rec.node 为空（本特性之前的旧记录，单机时代存量）放行——升级
-	// 窗口共存语义，与 ownedBySelf 同口径。
-	ClaimIdle(ctx context.Context, ref FunctionRef, deploymentID string, selfNodeID string, leaseUntil time.Time) (*InstanceRecord, error)
+	// 且部署匹配）实例并 inflight+1 + 续租；无可用实例返回 (nil, nil)。
+	//（v3 §1.1 背压顺序①；concurrency=1 时与 v2 busy 互斥语义逐步等价。）
+	ClaimIdle(ctx context.Context, ref FunctionRef, deploymentID string, leaseUntil time.Time) (*InstanceRecord, error)
 	// Save 写回/创建实例记录。
 	Save(ctx context.Context, ref FunctionRef, rec InstanceRecord) error
 	// Release 原子释放一次在途请求（v3 §1.3 释放脚本——Go 读改写释放与
@@ -141,6 +131,7 @@ type Registry interface {
 	// AcquireSpawnLock 同函数并发 spawn 收敛锁（SETNX + TTL）：acquired=false
 	// 表示已有并发 spawn 在途；release 幂等（锁持有者才删）。
 	AcquireSpawnLock(ctx context.Context, ref FunctionRef, ttl time.Duration) (acquired bool, release func(), err error)
+	imageRefStore
 }
 
 // redisRegistry 是 Registry 的 Redis 实现：
@@ -167,12 +158,11 @@ func spawnLockKey(ref FunctionRef) string {
 
 // claimIdleLua 在 Redis 侧原子完成「找可服务实例 → inflight+1 → 续租」
 // （v3 §1.3 认领脚本）：可服务 = inflight < concurrency 且未 draining 且
-// 部署匹配且节点归属本节点。旧记录兼容（v3 §1.3）：inflight 缺省由 busy
-// 推导、concurrency 缺省 1、node 缺省/空串按旧记录放行（P2 S13 节点收窄的
-// 升级窗口共存语义）。记录时间字段已全部数值毫秒化，Lua cjson 往返不改写
-// 任何形态（v3 §1.3「时间字段毫秒化（排雷）」）。脚本失败即无实例返回。
+// 部署匹配。旧记录兼容（v3 §1.3）：inflight 缺省由 busy 推导、concurrency
+// 缺省 1。记录时间字段已全部数值毫秒化，Lua cjson 往返不改写任何形态
+// （v3 §1.3「时间字段毫秒化（排雷）」）。
 //
-// ARGV：①deployment_id ②lease_until_ms ③self_node_id。
+// ARGV：①deployment_id ②lease_until_ms。
 var claimIdleLua = redis.NewScript(`
 local vals = redis.call('HVALS', KEYS[1])
 for i = 1, #vals do
@@ -182,8 +172,7 @@ for i = 1, #vals do
     if inf == nil then inf = (rec.busy == true) and 1 or 0 end
     local c = rec.concurrency
     if c == nil or c <= 0 then c = 1 end
-    local foreign = type(rec.node) == 'string' and rec.node ~= '' and rec.node ~= ARGV[3]
-    if not foreign and rec.draining == false and rec.deployment_id == ARGV[1] and inf < c then
+    if rec.draining == false and rec.deployment_id == ARGV[1] and inf < c then
       rec.inflight = inf + 1
       rec.lease_until_ms = tonumber(ARGV[2])
       redis.call('HSET', KEYS[1], rec.instance_id, cjson.encode(rec))
@@ -243,9 +232,9 @@ func (r *redisRegistry) List(ctx context.Context, ref FunctionRef) ([]InstanceRe
 	return out, nil
 }
 
-func (r *redisRegistry) ClaimIdle(ctx context.Context, ref FunctionRef, deploymentID string, selfNodeID string, leaseUntil time.Time) (*InstanceRecord, error) {
+func (r *redisRegistry) ClaimIdle(ctx context.Context, ref FunctionRef, deploymentID string, leaseUntil time.Time) (*InstanceRecord, error) {
 	raw, err := claimIdleLua.Run(ctx, r.rdb, []string{registryKey(ref)},
-		deploymentID, leaseUntil.UnixMilli(), selfNodeID).Text()
+		deploymentID, leaseUntil.UnixMilli()).Text()
 	if errors.Is(err, redis.Nil) {
 		return nil, nil
 	}
@@ -374,4 +363,39 @@ func encodeRecord(rec InstanceRecord) (string, error) {
 		return "", fmt.Errorf("encode instance record: %w", err)
 	}
 	return string(b), nil
+}
+
+// ——逻辑镜像名 → 平台产物引用映射（IMPL-T2-3）——
+//
+// fleetly build-from-upload 的产物引用（registry 模式
+// <host>/apps/<name>@sha256:<manifest>；本地模式 fleetly-local/<name>:<tag>）
+// 不可从 torchwood 的逻辑镜像名推导（平台 tag 含 build id），dispatcher 在
+// 构建/导入成功时落本映射，spawn 时按逻辑名解析（daemon.go resolveImageRef）。
+// 无 TTL：条目由 RemoveImage（部署删除/失败清理）显式回收；Redis 持久化
+// 由部署形态保证（与实例注册表同源依赖）。映射丢失 = spawn 报镜像缺失 →
+// server 侧重建链路重新构建并刷新（自愈闭环，见 daemon.go 文件头）。
+const imageRefKeyPrefix = "torchwood:fnimg:"
+
+func imageRefKey(logicalName string) string { return imageRefKeyPrefix + logicalName }
+
+// SaveImageRef 写入/覆盖映射（幂等）。
+func (r *redisRegistry) SaveImageRef(ctx context.Context, logicalName, ref string) error {
+	return r.rdb.Set(ctx, imageRefKey(logicalName), ref, 0).Err()
+}
+
+// LoadImageRef 读取映射（不存在返回 ("", nil)——调用方按未命中处理）。
+func (r *redisRegistry) LoadImageRef(ctx context.Context, logicalName string) (string, error) {
+	raw, err := r.rdb.Get(ctx, imageRefKey(logicalName)).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("load image reference: %w", err)
+	}
+	return raw, nil
+}
+
+// DeleteImageRef 删除映射（幂等）。
+func (r *redisRegistry) DeleteImageRef(ctx context.Context, logicalName string) error {
+	return r.rdb.Del(ctx, imageRefKey(logicalName)).Err()
 }

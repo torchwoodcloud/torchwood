@@ -103,7 +103,7 @@ goroutine 1 [running]:`
 			name:        "log-collection-failure-degrades-gracefully",
 			fails:       -1,
 			logsBroken:  true,
-			wantErr:     "<container logs unavailable: daemon unreachable>",
+			wantErr:     "<task status unavailable: daemon unreachable>",
 			wantTailHas: "",
 		},
 	}
@@ -153,8 +153,8 @@ func TestSpawnVerifyInstance_EgressNetworkSelection(t *testing.T) {
 		untrusted   bool
 		wantNetwork string
 	}{
-		{"trusted-regular-network", false, "tw-func-p1"},
-		{"untrusted-internal-network", true, "tw-func-p1-int"},
+		{"trusted-regular-network", false, "fleetly-taskgroup-pp1"},
+		{"untrusted-internal-network", true, "fleetly-taskgroup-qp1"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -196,24 +196,24 @@ func TestSpawnVerifyInstance_EnvAssembly(t *testing.T) {
 	require.Equal(t, "p1", d.lastSpawn.ProjectID)
 }
 
-// TestNewDockerDaemon_VerifyBudgetFromConfig boot 预算来源接线：daemon 从
+// TestNewFleetlyDaemon_VerifyBudgetFromConfig boot 预算来源接线：daemon 从
 // config 解析本进程 boot_timeout（= 池 PoolConfig.BootTimeout 同一 config
 // 键同一解析规则）与 MaxRequests 缺省（1000），不引入构造参数。
-func TestNewDockerDaemon_VerifyBudgetFromConfig(t *testing.T) {
-	d := NewDockerDaemon(&config.AppConfig{Functions: &config.Functions{
+func TestNewFleetlyDaemon_VerifyBudgetFromConfig(t *testing.T) {
+	d := NewFleetlyDaemon(&config.AppConfig{Functions: &config.Functions{
 		Docker:     &config.Functions_Docker{},
 		Dispatcher: &config.Functions_Dispatcher{BootTimeout: "3s"},
-	}})
-	dd, ok := d.(*dockerDaemon)
+	}}, newFakeImageRefStore())
+	dd, ok := d.(*fleetlyDaemon)
 	require.True(t, ok)
 	require.Equal(t, 3*time.Second, dd.bootTimeout)
 	require.Equal(t, 1000, dd.maxRequestsDefault)
 
 	// 未配置 boot_timeout = 平台默认 60s（与池缺省一致）。
-	d2 := NewDockerDaemon(&config.AppConfig{Functions: &config.Functions{
+	d2 := NewFleetlyDaemon(&config.AppConfig{Functions: &config.Functions{
 		Docker: &config.Functions_Docker{},
-	}})
-	dd2, ok := d2.(*dockerDaemon)
+	}}, newFakeImageRefStore())
+	dd2, ok := d2.(*fleetlyDaemon)
 	require.True(t, ok)
 	require.Equal(t, defaultBootTimeout, dd2.bootTimeout)
 }

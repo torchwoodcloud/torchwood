@@ -1,177 +1,237 @@
 package dispatcher
 
 import (
+	"archive/tar"
 	"context"
-	"encoding/base64"
-	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/containerd/errdefs"
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/client"
 	"github.com/stretchr/testify/require"
+	serverv1 "github.com/torchwoodcloud/torchwood/genproto/fleetly/server/v1"
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/fleetly/shared/v1"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// 本文件覆盖 Daemon.ImportImage 的 docker 编排（三期阶段三，设计 §3）：
-// fake imageClient 驱动 inspect→pull→tag→remove 调用序列与失败路径的确定性
-// 验证（host 校验 / ExpectedDigest 本地命中零 pull / 本地引用直导 / digest
-// 一致性 / 原始引用删除 / 凭证 RegistryAuth 形态 / 强制契约验证 spawn 失败
-// 含日志尾），不依赖真实 daemon。HTTP 面参数传递断言在 server_import_test.go
-//（fake daemon 同步层）。
+// fakeTaskClient 是 fleetlyTaskClient 的可编程 fake（确定性驱动任务/构建/
+// 错误映射路径，不依赖真实平台）。语义：
+//   - CreateTask 按 createErr/createFail 上抛，否则落 tasks 表（默认 queued；
+//     autoRunning=true 时直接 running）；
+//   - GetTask 读 tasks 表；不存在的任务返回 NotFound（任务生命周期断言面）；
+//   - StopTask/DeleteTask 记流水并删表（幂等面）；
+//   - BuildFromUpload 记录 name/dockerfile/上下文 tar 字节，返回 buildResp。
+type fakeTaskClient struct {
+	mu sync.Mutex
 
-// digest64 构造恒定 64 hex 字符的 sha256 digest 形态字符串（测试可读性：
-// digest64("cd") = "sha256:cdcd..." 共 64 字符）。
-func digest64(seed string) string {
-	s := strings.ToLower(seed)
-	for len(s) < 64 {
-		s += s
-	}
-	return "sha256:" + s[:64]
+	createErr    error
+	autoRunning  bool
+	createStatus string // 非空 = CreateTask 初始状态（默认 queued/autoRunning）
+	failReason   string // GetTask 状态为 failed 时填充 Error（确定性失败原因断言）
+	pinnedImage  string // 非空 = CreateTask 的钉定镜像（模拟平台解析结果）
+	createReqs   []*serverv1.CreateTaskRequest
+	createResp   *serverv1.CreateTaskResponse
+	tasks        map[string]*serverv1.TaskView
+	getErr       error
+	ensureErr    error
+	ensureReqs   []*serverv1.EnsureTaskNetworkRequest
+	ensureResp   *serverv1.EnsureTaskNetworkResponse
+	stopReqs     []string
+	stopErr      error
+	deleteReqs   []string
+	deleteErr    error
+	buildErr     error
+	buildResp    *serverv1.BuildFromUploadResponse
+	buildName    string
+	buildDocker  string
+	buildTar     []byte
+	buildCalls   int
+	nextTaskID   int
+	statusSeq    map[string][]string // taskID -> 依次返回的状态（耗尽后取末位）
 }
 
-// streamBody 是 pull 响应流的静态 body。
-func streamBody(s string) io.ReadCloser { return io.NopCloser(strings.NewReader(s)) }
-
-// fakeImageClient 是 imageClient 的可编程 fake：记录调用流水（"pull <ref>"
-// / "push <ref>" / "inspect <name>" / "tag <src>-><target>" / "remove <name>"），
-// 按 key 弹出预置错误（耗尽后默认成功），images 表模拟本地镜像（pull 成功按
-// pullAdds 落表，模拟远端内容进本地）。
-type fakeImageClient struct {
-	mu    sync.Mutex
-	calls []string
-	errs  map[string][]error
-	// images 是本地镜像表（name → inspect 结果）；预置 = 本地已有镜像。
-	images map[string]image.InspectResponse
-	// pullAdds 是 pull(ref) 成功后落入本地表的 inspect 结果（模拟远端 pull）。
-	pullAdds map[string]image.InspectResponse
-	// pullStreams 按 ref 弹出自定义响应体（缺省空流 = pull 成功无错误）。
-	pullStreams map[string]string
-	// lastPullRef/lastPullAuth 断言 RegistryAuth 构造。
-	lastPullRef  string
-	lastPullAuth string
-	// lastPushRef/lastPushAuth 断言 push 引用与凭证形态（四期 4b M1：
-	// RegistryAuth 留空 = daemon 侧已登录凭证）。
-	lastPushRef  string
-	lastPushAuth string
-}
-
-func newFakeImageClient() *fakeImageClient {
-	return &fakeImageClient{
-		errs:        map[string][]error{},
-		images:      map[string]image.InspectResponse{},
-		pullAdds:    map[string]image.InspectResponse{},
-		pullStreams: map[string]string{},
+func newFakeTaskClient() *fakeTaskClient {
+	return &fakeTaskClient{
+		tasks:       map[string]*serverv1.TaskView{},
+		statusSeq:   map[string][]string{},
+		autoRunning: true,
 	}
 }
 
-func (f *fakeImageClient) pop(kind, key string) error {
+func (f *fakeTaskClient) EnsureTaskNetwork(_ context.Context, req *serverv1.EnsureTaskNetworkRequest) (*serverv1.EnsureTaskNetworkResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	k := kind + "/" + key
-	seq := f.errs[k]
-	if len(seq) == 0 {
-		return nil
+	f.ensureReqs = append(f.ensureReqs, req)
+	if f.ensureErr != nil {
+		return nil, f.ensureErr
 	}
-	err := seq[0]
-	f.errs[k] = seq[1:]
-	return err
+	if f.ensureResp != nil {
+		return f.ensureResp, nil
+	}
+	name := "fleetly-taskgroup-" + req.GetRef()
+	return &serverv1.EnsureTaskNetworkResponse{Name: name, Internal: req.GetInternal()}, nil
 }
 
-func (f *fakeImageClient) record(call string) {
+func (f *fakeTaskClient) CreateTask(_ context.Context, req *serverv1.CreateTaskRequest) (*serverv1.CreateTaskResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.calls = append(f.calls, call)
+	f.createReqs = append(f.createReqs, req)
+	if f.createErr != nil {
+		return nil, f.createErr
+	}
+	if f.createResp != nil {
+		return f.createResp, nil
+	}
+	f.nextTaskID++
+	id := fmt.Sprintf("task-%d", f.nextTaskID)
+	task := &serverv1.TaskView{
+		Id:          id,
+		Name:        req.GetName(),
+		Image:       req.GetImage(),
+		Env:         req.GetEnv(),
+		Scope:       req.GetScope(),
+		TtlSeconds:  req.GetTtlSeconds(),
+		CpuMillis:   req.GetCpuMillis(),
+		MemoryBytes: req.GetMemoryBytes(),
+		Service:     "fleetly-task-" + id,
+		DnsName:     "fleetly-task-" + id,
+		Status:      "queued",
+		CreatedAt:   timestamppb.Now(),
+	}
+	if f.autoRunning {
+		task.Status = "running"
+		task.StartedAt = timestamppb.Now()
+	}
+	if f.createStatus != "" {
+		task.Status = f.createStatus
+	}
+	if f.pinnedImage != "" {
+		task.Image = f.pinnedImage
+	}
+	f.tasks[id] = task
+	return &serverv1.CreateTaskResponse{Task: cloneTask(task)}, nil
 }
 
-func (f *fakeImageClient) ImagePull(_ context.Context, ref string, opts image.PullOptions) (io.ReadCloser, error) {
-	f.mu.Lock()
-	f.lastPullRef = ref
-	f.lastPullAuth = opts.RegistryAuth
-	f.mu.Unlock()
-	f.record("pull " + ref)
-	if err := f.pop("pull", ref); err != nil {
-		return nil, err
-	}
-	f.mu.Lock()
-	if add, ok := f.pullAdds[ref]; ok {
-		f.images[ref] = add
-	}
-	body := f.pullStreams[ref]
-	f.mu.Unlock()
-	return streamBody(body), nil
-}
-
-// ImagePush 记录 push 调用（四期 4b M1 pushBuiltImage 的确定性驱动面）：
-// 流内错误按 "push/<ref>" 键弹出（与 BuildKit error 流同形的 JSON）。
-func (f *fakeImageClient) ImagePush(_ context.Context, ref string, opts image.PushOptions) (io.ReadCloser, error) {
-	f.mu.Lock()
-	f.lastPushRef = ref
-	f.lastPushAuth = opts.RegistryAuth
-	f.mu.Unlock()
-	f.record("push " + ref)
-	if err := f.pop("push", ref); err != nil {
-		return nil, err
-	}
-	body := ""
-	f.mu.Lock()
-	if s, ok := f.pullStreams["push/"+ref]; ok {
-		body = s
-	}
-	f.mu.Unlock()
-	return streamBody(body), nil
-}
-
-func (f *fakeImageClient) ImageInspect(_ context.Context, imageID string, _ ...client.ImageInspectOption) (image.InspectResponse, error) {
-	f.record("inspect " + imageID)
-	if err := f.pop("inspect", imageID); err != nil {
-		return image.InspectResponse{}, err
-	}
+func (f *fakeTaskClient) GetTask(_ context.Context, req *serverv1.GetTaskRequest) (*serverv1.GetTaskResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	ins, ok := f.images[imageID]
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
+	task, ok := f.tasks[req.GetId()]
 	if !ok {
-		return image.InspectResponse{}, errdefs.ErrNotFound
+		return nil, status.Errorf(codes.NotFound, "task not found: %s", req.GetId())
 	}
-	return ins, nil
+	if seq := f.statusSeq[req.GetId()]; len(seq) > 0 {
+		task.Status = seq[0]
+		if len(seq) > 1 {
+			f.statusSeq[req.GetId()] = seq[1:]
+		}
+	}
+	if task.Status == "failed" && f.failReason != "" {
+		task.Error = f.failReason
+	}
+	return &serverv1.GetTaskResponse{Task: cloneTask(task)}, nil
 }
 
-func (f *fakeImageClient) ImageTag(_ context.Context, source, target string) error {
-	f.record("tag " + source + "->" + target)
-	if err := f.pop("tag", source+"->"+target); err != nil {
-		return err
-	}
+func (f *fakeTaskClient) StopTask(_ context.Context, req *serverv1.StopTaskRequest) (*serverv1.StopTaskResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.images[target] = f.images[source]
-	return nil
+	f.stopReqs = append(f.stopReqs, req.GetId())
+	if f.stopErr != nil {
+		return nil, f.stopErr
+	}
+	task, ok := f.tasks[req.GetId()]
+	if !ok {
+		return nil, status.Errorf(codes.NotFound, "task not found: %s", req.GetId())
+	}
+	task.Status = "stopping"
+	return &serverv1.StopTaskResponse{Task: cloneTask(task)}, nil
 }
 
-func (f *fakeImageClient) ImageRemove(_ context.Context, imageID string, _ image.RemoveOptions) ([]image.DeleteResponse, error) {
-	f.record("remove " + imageID)
-	if err := f.pop("remove", imageID); err != nil {
+func (f *fakeTaskClient) DeleteTask(_ context.Context, req *serverv1.DeleteTaskRequest) (*serverv1.DeleteTaskResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.deleteReqs = append(f.deleteReqs, req.GetId())
+	if f.deleteErr != nil {
+		return nil, f.deleteErr
+	}
+	if _, ok := f.tasks[req.GetId()]; !ok {
+		return nil, status.Errorf(codes.NotFound, "task not found: %s", req.GetId())
+	}
+	delete(f.tasks, req.GetId())
+	return &serverv1.DeleteTaskResponse{Id: req.GetId()}, nil
+}
+
+func (f *fakeTaskClient) BuildFromUpload(_ context.Context, name, dockerfile string, contextTar io.Reader) (*serverv1.BuildFromUploadResponse, error) {
+	f.mu.Lock()
+	f.buildCalls++
+	f.buildName = name
+	f.buildDocker = dockerfile
+	f.mu.Unlock()
+	raw, err := io.ReadAll(contextTar)
+	if err != nil {
 		return nil, err
 	}
 	f.mu.Lock()
-	defer f.mu.Unlock()
-	delete(f.images, imageID)
-	return nil, nil
+	f.buildTar = raw
+	f.mu.Unlock()
+	if f.buildErr != nil {
+		return nil, f.buildErr
+	}
+	if f.buildResp != nil {
+		return f.buildResp, nil
+	}
+	return &serverv1.BuildFromUploadResponse{Build: &serverv1.BuildView{
+		Id:          "build-1",
+		Status:      "succeeded",
+		ImageRef:    "registry.example.com/apps/" + name + "@sha256:deadbeef",
+		ImageDigest: "sha256:deadbeef",
+	}}, nil
 }
 
-// importTestDaemon 组装 importImage 的测试夹具：fakeDaemon（verify spawn 的
-// Daemon 面）+ fakeImageClient（镜像原语面）+ 空 registry 配置（缺省
-// torchwood-funcs）。
-func importTestDaemon() (*fakeDaemon, *fakeImageClient, *config.AppConfig) {
-	cfg := &config.AppConfig{Functions: &config.Functions{
-		Docker: &config.Functions_Docker{},
+func cloneTask(task *serverv1.TaskView) *serverv1.TaskView {
+	return proto.Clone(task).(*serverv1.TaskView)
+}
+
+// taskDetailErr 构造带 fleetly 错误信封 detail 的 gRPC status（与 fleetly
+// apperr 的传输形态同构——错误码提取路径断言面）。
+func taskDetailErr(code, message string) error {
+	st := status.New(codes.Internal, message)
+	withDetail, err := st.WithDetails(&sharedv1.ErrorResponse{Code: code, Message: message})
+	if err != nil {
+		return st.Err()
+	}
+	return withDetail.Err()
+}
+
+// importTestConfig 组装 ImportImage/BuildImage 链的最小配置（registry 命名
+// 前缀 + 空 image 白名单 + fleetly 端点已装配由注入 fake 承担）。
+func importTestConfig() *config.AppConfig {
+	return &config.AppConfig{Functions: &config.Functions{
+		Docker:     &config.Functions_Docker{},
+		Dispatcher: &config.Functions_Dispatcher{BootTimeout: "2s"},
+		Fleetly:    &config.Functions_Fleetly{Endpoint: "fake:1", Token: "tok", App: "torchwood", NetworkMembers: []string{"dispatcher", "server"}},
 	}}
-	return newFakeDaemon(), newFakeImageClient(), cfg
+}
+
+// newImportTestDaemon 组装 ImportImage 测试夹具：fake fleetly 客户端 +
+// 内存映射表 + 毫秒级探针轮询。
+func newImportTestDaemon(t *testing.T) (*fleetlyDaemon, *fakeTaskClient, *fakeImageRefStore) {
+	t.Helper()
+	cli := newFakeTaskClient()
+	refs := newFakeImageRefStore()
+	d := newFleetlyDaemon(importTestConfig(), refs, cli, nil)
+	d.pollInterval = time.Millisecond
+	d.probe = &fakeHealth{} // 默认探针就绪；失败路径用例按需覆盖
+	return d, cli, refs
 }
 
 func importOpts() ImportImageOptions {
@@ -184,93 +244,41 @@ func importOpts() ImportImageOptions {
 	}
 }
 
-// importProbe 覆盖 newHTTPRunner 的探针注入点：fake health 立即就绪（验证
-// spawn 失败用例单独换 fails<0 的 probe）。
-func importProbe(fails int) *fakeHealth { return &fakeHealth{fails: fails} }
+// TestImportImage_ResolvesPinsAndRecordsMapping 首次导入主链路：host 校验 →
+// 验证任务（fleetly CreateTask 解析/拉取/钉定）→ digest 一致性 → 契约验证
+// spawn 通过 → 登记逻辑名映射 → 返回钉死 digest；验证任务被 Stop+Delete。
+func TestImportImage_ResolvesPinsAndRecordsMapping(t *testing.T) {
+	d, cli, refs := newImportTestDaemon(t)
+	cli.pinnedImage = "ghcr.io/acme/greet@sha256:abc123"
 
-// importTarget 是空 registry 配置下的平台镜像名（与 ImageName 同式）。
-const importTarget = "torchwood-funcs/func-fn1-dep1"
-
-// TestImportImage_HappyPathSequence 首次导入主链路（引用本地不存在）：inspect
-// 引用（本地直导判定，NotFound）→ pull（匿名 RegistryAuth）→ inspect 引用 →
-// digest = RepoDigests[0] 的 @sha256 部分 → tag 进平台命名 → 删原始引用标签
-// → 强制契约验证 spawn（验证镜像 = 平台镜像名）→ 返回 digest。
-func TestImportImage_HappyPathSequence(t *testing.T) {
-	d, imgs, cfg := importTestDaemon()
-	digest := digest64("cd")
-	imgs.pullAdds["ghcr.io/acme/greet:v1"] = image.InspectResponse{
-		ID:          "sha256:imgid",
-		RepoDigests: []string{"ghcr.io/acme/greet@" + digest},
-	}
-
-	got, err := importImage(context.Background(), d, imgs, importProbe(0), cfg, importOpts(), 50*time.Millisecond, 1000)
+	digest, err := d.ImportImage(context.Background(), importOpts())
 	require.NoError(t, err)
-	require.Equal(t, digest, got, "digest = RepoDigests[0] 的 @sha256 部分")
+	require.Equal(t, "sha256:abc123", digest)
 
-	require.Equal(t, []string{
-		"inspect ghcr.io/acme/greet:v1",
-		"pull ghcr.io/acme/greet:v1",
-		"inspect ghcr.io/acme/greet:v1",
-		"tag ghcr.io/acme/greet:v1->" + importTarget,
-		"remove ghcr.io/acme/greet:v1",
-	}, imgs.calls, "调用序列必须为 inspect→pull→inspect→tag→remove")
+	// 验证任务载荷：镜像 = 用户引用、scope = 项目 task-group、env 携带函数
+	// variables（TW_DATA/TW_EXECUTION_TOKEN 不注入）。
+	require.Len(t, cli.createReqs, 1)
+	req := cli.createReqs[0]
+	require.Equal(t, "ghcr.io/acme/greet:v1", req.GetImage())
+	require.Equal(t, "task-group", req.GetScope().GetKind())
+	require.Equal(t, "pp1", req.GetScope().GetRef())
+	require.False(t, req.GetScope().GetInternal())
+	require.Equal(t, "hi", req.GetEnv()["GREETING"])
+	require.NotContains(t, req.GetEnv(), "TW_DATA")
+	require.Equal(t, int64(taskTTLSeconds), req.GetTtlSeconds())
 
-	// 凭证空 = 匿名 pull（RegistryAuth 空串）。
-	require.Equal(t, "", imgs.lastPullAuth)
-
-	// 强制契约验证 spawn：验证镜像 = 平台镜像名，池外实例用完即删。
-	require.Equal(t, importTarget, d.lastSpawn.Image)
-	require.Contains(t, d.lastSpawn.Env, "GREETING=hi", "验证 spawn 携带函数 variables")
-	require.Equal(t, []string{"cid-1"}, d.stopped)
-	require.Equal(t, []string{"cid-1"}, d.removed)
-}
-
-// TestImportImage_LocalReferenceSkipsPull 本地引用直导（本地构建/本地 tag
-// 场景，任务口径「reference 就是本地 tag」）：引用本地已存在 → 跳过 pull
-// （零网络操作），digest 取本地内容，照常 retag/删原始引用/契约验证。
-func TestImportImage_LocalReferenceSkipsPull(t *testing.T) {
-	d, imgs, cfg := importTestDaemon()
-	digest := digest64("cd")
-	imgs.images["ghcr.io/acme/greet:v1"] = image.InspectResponse{
-		ID:          "sha256:imgid",
-		RepoDigests: []string{"ghcr.io/acme/greet@" + digest},
-	}
-
-	got, err := importImage(context.Background(), d, imgs, importProbe(0), cfg, importOpts(), 50*time.Millisecond, 1000)
+	// 映射登记：逻辑名 → 平台钉定引用。
+	got, err := refs.LoadImageRef(context.Background(), "torchwood-funcs/func-fn1-dep1")
 	require.NoError(t, err)
-	require.Equal(t, digest, got)
-	require.Equal(t, []string{
-		"inspect ghcr.io/acme/greet:v1",
-		"tag ghcr.io/acme/greet:v1->" + importTarget,
-		"remove ghcr.io/acme/greet:v1",
-	}, imgs.calls, "本地直导跳过 pull")
-	require.Equal(t, "", imgs.lastPullRef, "本地直导不得发起 pull")
-}
+	require.Equal(t, "ghcr.io/acme/greet@sha256:abc123", got)
 
-// TestImportImage_RegistryAuthShape 凭证构造断言：username/token → base64
-// JSON {"username","password","serveraddress":""}（docker RegistryAuth 惯例
-// 形态）。
-func TestImportImage_RegistryAuthShape(t *testing.T) {
-	d, imgs, cfg := importTestDaemon()
-	imgs.pullAdds["ghcr.io/acme/greet:v1"] = image.InspectResponse{
-		RepoDigests: []string{"ghcr.io/acme/greet@" + digest64("cd")},
-	}
-	opts := importOpts()
-	opts.RegistryUsername = "user"
-	opts.RegistryToken = "tok"
-
-	_, err := importImage(context.Background(), d, imgs, importProbe(0), cfg, opts, 50*time.Millisecond, 1000)
-	require.NoError(t, err)
-
-	raw, err := base64.StdEncoding.DecodeString(imgs.lastPullAuth)
-	require.NoError(t, err, "RegistryAuth 必须是 base64")
-	var auth map[string]string
-	require.NoError(t, json.Unmarshal(raw, &auth))
-	require.Equal(t, map[string]string{"username": "user", "password": "tok", "serveraddress": ""}, auth)
+	// 验证任务回收（Stop+Delete）。
+	require.Equal(t, []string{"task-1"}, cli.stopReqs)
+	require.Equal(t, []string{"task-1"}, cli.deleteReqs)
 }
 
 // TestImportImage_HostValidationShortCircuits host 校验失败：InvalidArgument
-// 且零 docker 调用（校验在任何 docker 操作之前，本地直导路径同样受约束）。
+// 且零平台调用（校验在任何平台操作之前）。
 func TestImportImage_HostValidationShortCircuits(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -281,224 +289,142 @@ func TestImportImage_HostValidationShortCircuits(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			d, imgs, cfg := importTestDaemon()
+			d, cli, _ := newImportTestDaemon(t)
 			opts := importOpts()
 			opts.Reference = tc.reference
 
-			_, err := importImage(context.Background(), d, imgs, importProbe(0), cfg, opts, 50*time.Millisecond, 1000)
+			_, err := d.ImportImage(context.Background(), opts)
 			require.Error(t, err)
 			require.Equal(t, codes.InvalidArgument, status.Code(err))
-			require.Empty(t, imgs.calls, "host 校验失败不得发起任何 docker 调用")
-			require.Zero(t, d.spawnCount, "host 校验失败不得 spawn 验证实例")
+			require.Empty(t, cli.ensureReqs, "host 校验失败不得触达平台")
+			require.Empty(t, cli.createReqs)
 		})
 	}
 }
 
-// TestImportImage_ExpectedDigestLocalHitSkipsPull 幂等补拉（worker 补构建 /
-// ready 复检）严格命中：ExpectedDigest 在本地平台镜像 RepoDigests 命中 →
-// 仅 inspect 平台镜像、零 pull、零 retag（平台镜像已在）、直接契约验证并
-// 返回预期 digest。
-func TestImportImage_ExpectedDigestLocalHitSkipsPull(t *testing.T) {
-	d, imgs, cfg := importTestDaemon()
-	digest := digest64("cd")
-	imgs.images[importTarget] = image.InspectResponse{
-		ID:          "sha256:imgid",
-		RepoDigests: []string{"ghcr.io/acme/greet@" + digest},
-	}
+// TestImportImage_ExpectedDigestMappingHitSkipsPlatform 幂等快速路径：映射
+// 已持有一致 digest → 零平台往返（无 ensure/无 create），直接确认。
+func TestImportImage_ExpectedDigestMappingHitSkipsPlatform(t *testing.T) {
+	d, cli, refs := newImportTestDaemon(t)
+	require.NoError(t, refs.SaveImageRef(context.Background(),
+		"torchwood-funcs/func-fn1-dep1", "ghcr.io/acme/greet@sha256:abc123"))
 	opts := importOpts()
-	opts.ExpectedDigest = digest
+	opts.ExpectedDigest = "sha256:abc123"
 
-	got, err := importImage(context.Background(), d, imgs, importProbe(0), cfg, opts, 50*time.Millisecond, 1000)
+	digest, err := d.ImportImage(context.Background(), opts)
 	require.NoError(t, err)
-	require.Equal(t, digest, got)
-	require.Equal(t, []string{"inspect " + importTarget}, imgs.calls, "本地命中零 pull 零 retag")
-	require.Equal(t, importTarget, d.lastSpawn.Image, "本地命中路径同样强制契约验证")
+	require.Equal(t, "sha256:abc123", digest)
+	require.Empty(t, cli.ensureReqs, "映射命中不得触达平台")
+	require.Empty(t, cli.createReqs)
 }
 
-// TestImportImage_ExpectedDigestLocalHitByID 本地构建/本地 tag 场景（镜像无
-// RepoDigests）：Image ID 命中预期 digest 同视为本地命中（Image ID 是该
-// 场景唯一内容寻址钉死值）。
-func TestImportImage_ExpectedDigestLocalHitByID(t *testing.T) {
-	d, imgs, cfg := importTestDaemon()
-	imgs.images[importTarget] = image.InspectResponse{ID: digest64("id")}
+// TestImportImage_ExpectedDigestTagDriftRejected 可证漂移：平台解析结果与
+// 预期 digest 不一致 → InvalidArgument（防 tag 漂移），验证任务仍被回收。
+func TestImportImage_ExpectedDigestTagDriftRejected(t *testing.T) {
+	d, cli, _ := newImportTestDaemon(t)
+	cli.pinnedImage = "ghcr.io/acme/greet@sha256:other"
 	opts := importOpts()
-	opts.ExpectedDigest = digest64("id")
+	opts.ExpectedDigest = "sha256:expected"
 
-	got, err := importImage(context.Background(), d, imgs, importProbe(0), cfg, opts, 50*time.Millisecond, 1000)
-	require.NoError(t, err)
-	require.Equal(t, digest64("id"), got)
-	require.Equal(t, []string{"inspect " + importTarget}, imgs.calls)
-}
-
-// TestImportImage_ExpectedDigestSteadyStateHit 幂等稳态（首次导入自身留下的
-// 状态）：原始引用删除时 registry manifest digest 关联随之摘除（RepoDigests
-// 空）且 Image ID ≠ manifest digest——本地内容不可证伪；平台命名 tag 存在
-// 即视为命中（零 pull 承诺），不依赖可达 registry。
-func TestImportImage_ExpectedDigestSteadyStateHit(t *testing.T) {
-	d, imgs, cfg := importTestDaemon()
-	imgs.images[importTarget] = image.InspectResponse{ID: digest64("config-digest")}
-	opts := importOpts()
-	opts.ExpectedDigest = digest64("manifest-digest")
-
-	got, err := importImage(context.Background(), d, imgs, importProbe(0), cfg, opts, 50*time.Millisecond, 1000)
-	require.NoError(t, err)
-	require.Equal(t, digest64("manifest-digest"), got)
-	require.Equal(t, []string{"inspect " + importTarget}, imgs.calls, "稳态命中零 pull")
-}
-
-// TestImportImage_ExpectedDigestProvableDriftRepulls 可证漂移：本地平台镜像
-// RepoDigests 非空且全不命中预期 digest → 不视为命中 → 重拉对账，重拉结果
-// 与预期不一致 → InvalidArgument（防 tag 漂移），不 retag 不验证。
-func TestImportImage_ExpectedDigestProvableDriftRepulls(t *testing.T) {
-	d, imgs, cfg := importTestDaemon()
-	imgs.images[importTarget] = image.InspectResponse{
-		ID:          "sha256:other-config",
-		RepoDigests: []string{"ghcr.io/acme/greet@" + digest64("stale")},
-	}
-	imgs.pullAdds["ghcr.io/acme/greet:v1"] = image.InspectResponse{
-		RepoDigests: []string{"ghcr.io/acme/greet@" + digest64("other")},
-	}
-	opts := importOpts()
-	opts.ExpectedDigest = digest64("expected")
-
-	_, err := importImage(context.Background(), d, imgs, importProbe(0), cfg, opts, 50*time.Millisecond, 1000)
+	_, err := d.ImportImage(context.Background(), opts)
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.Contains(t, errorMessage(err), "tag drift")
-	require.Equal(t, []string{
-		"inspect " + importTarget,
-		"inspect ghcr.io/acme/greet:v1",
-		"pull ghcr.io/acme/greet:v1",
-		"inspect ghcr.io/acme/greet:v1",
-	}, imgs.calls, "可证漂移重拉对账，digest 不一致即拒绝")
-	require.Zero(t, d.spawnCount, "digest 不一致不得进入契约验证")
+	require.Contains(t, status.Convert(err).Message(), "tag drift")
+	require.Equal(t, []string{"task-1"}, cli.deleteReqs, "漂移拒绝路径验证任务仍须回收")
 }
 
-// TestImportImage_ReferenceDigestTagDrift 引用自带 @sha256 与实际拉到内容
-// 不一致：InvalidArgument（设计 §3 digest 钉死防 tag 漂移），不 retag。
-func TestImportImage_ReferenceDigestTagDrift(t *testing.T) {
-	d, imgs, cfg := importTestDaemon()
-	imgs.pullAdds["ghcr.io/acme/greet@sha256:aaa"] = image.InspectResponse{
-		RepoDigests: []string{"ghcr.io/acme/greet@" + digest64("zzz")},
-	}
-	opts := importOpts()
-	opts.Reference = "ghcr.io/acme/greet@sha256:aaa"
+// TestImportImage_NoDigestResolvedRejected 平台解析结果无 manifest digest
+// （纯 tag/本地引用）：显式拒绝——source_ref 契约是 digest 钉定值。
+func TestImportImage_NoDigestResolvedRejected(t *testing.T) {
+	d, cli, _ := newImportTestDaemon(t)
+	cli.pinnedImage = "fleetly-local/greet:tag-only"
 
-	_, err := importImage(context.Background(), d, imgs, importProbe(0), cfg, opts, 50*time.Millisecond, 1000)
+	_, err := d.ImportImage(context.Background(), importOpts())
 	require.Error(t, err)
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.Contains(t, errorMessage(err), "digest")
-	require.NotContains(t, strings.Join(imgs.calls, ";"), "tag ", "digest 不一致不得 retag")
+	require.Contains(t, status.Convert(err).Message(), "manifest digest")
 }
 
-// TestImportImage_ReferenceDigestMatchPinned 引用自带 @sha256 命中
-// RepoDigests（多仓库镜像顺序不稳定场景）：钉死值取引用 digest。
-func TestImportImage_ReferenceDigestMatchPinned(t *testing.T) {
-	d, imgs, cfg := importTestDaemon()
-	refDigest := digest64("cd")
-	imgs.pullAdds["ghcr.io/acme/greet@"+refDigest] = image.InspectResponse{
-		RepoDigests: []string{
-			"mirror.example.com/acme/greet@" + digest64("other"),
-			"ghcr.io/acme/greet@" + refDigest,
-		},
-	}
-	opts := importOpts()
-	opts.Reference = "ghcr.io/acme/greet@" + refDigest
+// TestImportImage_VerifyFailureCarriesTaskStatus 契约验证失败（镜像未实现
+// runner 契约）：错误含任务台账失败现场（status/error），验证任务无论成败
+// 被回收。
+func TestImportImage_VerifyFailureCarriesTaskStatus(t *testing.T) {
+	d, cli, _ := newImportTestDaemon(t)
+	cli.pinnedImage = "ghcr.io/acme/greet@sha256:abc123"
+	// 探针恒失败 + 短验证窗口：确定性走失败路径（不依赖真实网络）。
+	d.bootTimeout = 20 * time.Millisecond
+	d.probe = &fakeHealth{fails: -1}
 
-	got, err := importImage(context.Background(), d, imgs, importProbe(0), cfg, opts, 50*time.Millisecond, 1000)
-	require.NoError(t, err)
-	require.Equal(t, refDigest, got)
-}
-
-// TestImportImage_PullStreamError pull 流内错误（registry 认证失败/引用不
-// 存在）：InvalidArgument 且错误消息透传（第一现场），不 retag。
-func TestImportImage_PullStreamError(t *testing.T) {
-	d, imgs, cfg := importTestDaemon()
-	imgs.pullStreams["ghcr.io/acme/greet:v1"] = `{"errorDetail":{"message":"pull access denied"},"error":"pull access denied for acme/greet"}`
-
-	_, err := importImage(context.Background(), d, imgs, importProbe(0), cfg, importOpts(), 50*time.Millisecond, 1000)
-	require.Error(t, err)
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.Contains(t, errorMessage(err), "pull access denied")
-	require.Equal(t, []string{
-		"inspect ghcr.io/acme/greet:v1",
-		"pull ghcr.io/acme/greet:v1",
-	}, imgs.calls)
-}
-
-// TestImportImage_VerifyFailureCarriesLogTail 契约验证失败（BYO 镜像未实现
-// runner 契约）：错误含容器日志尾部（第一现场），验证实例无论成败被回收。
-func TestImportImage_VerifyFailureCarriesLogTail(t *testing.T) {
-	d, imgs, cfg := importTestDaemon()
-	imgs.pullAdds["ghcr.io/acme/greet:v1"] = image.InspectResponse{
-		RepoDigests: []string{"ghcr.io/acme/greet@" + digest64("cd")},
-	}
-	d.logs["cid-1"] = "exec /tw-app: no such file or directory"
-
-	_, err := importImage(context.Background(), d, imgs, importProbe(-1), cfg, importOpts(), 50*time.Millisecond, 1000)
+	_, err := d.ImportImage(context.Background(), importOpts())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "verification failed")
-	require.Contains(t, err.Error(), "no such file or directory", "错误必须携带容器日志尾部")
-	require.Equal(t, []string{"cid-1"}, d.stopped)
-	require.Equal(t, []string{"cid-1"}, d.removed)
+	require.Contains(t, err.Error(), "task task-1 status=running", "错误必须携带任务台账失败现场")
+	require.Equal(t, []string{"task-1"}, cli.stopReqs)
+	require.Equal(t, []string{"task-1"}, cli.deleteReqs)
 }
 
-// TestImportImage_ReferenceEqualsTargetSkipsRemove 本地 tag 直导场景
-// （reference 就是平台镜像名）：tag 幂等无害，删除跳过（防自删）。
-func TestImportImage_ReferenceEqualsTargetSkipsRemove(t *testing.T) {
-	d, imgs, cfg := importTestDaemon()
-	imgs.pullAdds[importTarget] = image.InspectResponse{
-		RepoDigests: []string{"docker.io/library/greet@" + digest64("cd")},
-	}
-	opts := importOpts()
-	opts.Reference = importTarget
+// TestImportImage_PlatformErrorPropagates 平台解析失败（如镜像不可得）：
+// 错误经 mapFleetlyError 分类（E_IMAGE_PULL_FAILED → FailedPrecondition +
+// ImageMissingMarker），不落映射。
+func TestImportImage_PlatformErrorPropagates(t *testing.T) {
+	d, cli, refs := newImportTestDaemon(t)
+	cli.createErr = taskDetailErr("E_IMAGE_PULL_FAILED", "task image ghcr.io/acme/greet:v1 is not available")
 
-	got, err := importImage(context.Background(), d, imgs, importProbe(0), cfg, opts, 50*time.Millisecond, 1000)
-	require.NoError(t, err)
-	require.Equal(t, digest64("cd"), got)
-	require.Equal(t, []string{
-		"inspect " + importTarget,
-		"pull " + importTarget,
-		"inspect " + importTarget,
-		"tag " + importTarget + "->" + importTarget,
-	}, imgs.calls, "reference == target 时跳过删除")
+	_, err := d.ImportImage(context.Background(), importOpts())
+	require.Error(t, err)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.Contains(t, err.Error(), "deployment image missing")
+	got, lerr := refs.LoadImageRef(context.Background(), "torchwood-funcs/func-fn1-dep1")
+	require.NoError(t, lerr)
+	require.Empty(t, got, "导入失败不得落映射")
 }
 
-// TestImportImage_EgressNetworkSelection untrusted 函数的验证实例挂 internal
-// 变体网络（与执行同路，A1 同款约束贯通导入链）。
-func TestImportImage_EgressNetworkSelection(t *testing.T) {
-	d, imgs, cfg := importTestDaemon()
-	imgs.pullAdds["ghcr.io/acme/greet:v1"] = image.InspectResponse{
-		RepoDigests: []string{"ghcr.io/acme/greet@" + digest64("cd")},
-	}
+// TestImportImage_UntrustedUsesInternalScope untrusted 函数的验证任务挂
+// internal 变体 task-group 网（A1 同路约束贯通导入链）。
+func TestImportImage_UntrustedUsesInternalScope(t *testing.T) {
+	d, cli, _ := newImportTestDaemon(t)
+	cli.pinnedImage = "ghcr.io/acme/greet@sha256:abc123"
 	opts := importOpts()
 	opts.EgressUntrusted = true
 
-	_, err := importImage(context.Background(), d, imgs, importProbe(0), cfg, opts, 50*time.Millisecond, 1000)
+	_, err := d.ImportImage(context.Background(), opts)
 	require.NoError(t, err)
-	require.Equal(t, true, d.networkFlags["p1"])
-	require.Equal(t, "tw-func-p1-int", d.lastNetwork)
-	require.Equal(t, "tw-func-p1-int", d.lastSpawn.Network)
+	require.Len(t, cli.ensureReqs, 1)
+	require.True(t, cli.ensureReqs[0].GetInternal())
+	require.Equal(t, "qp1", cli.ensureReqs[0].GetRef())
+	require.True(t, cli.createReqs[0].GetScope().GetInternal())
 }
 
-// TestImportImage_ReferenceInspectErrorPropagates 引用 inspect 非 NotFound
-// 错误原样上抛（daemon 故障 fail-fast，不静默转 pull）。
-func TestImportImage_ReferenceInspectErrorPropagates(t *testing.T) {
-	d, imgs, cfg := importTestDaemon()
-	imgs.errs["inspect/ghcr.io/acme/greet:v1"] = []error{context.DeadlineExceeded}
-
-	_, err := importImage(context.Background(), d, imgs, importProbe(0), cfg, importOpts(), 50*time.Millisecond, 1000)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
+// TestImportImage_StreamingBuildNotInvolved 校验 ImportImage 不触构建面
+// （镜像源免构建路径的边界）。
+func TestImportImage_StreamingBuildNotInvolved(t *testing.T) {
+	d, cli, _ := newImportTestDaemon(t)
+	cli.pinnedImage = "ghcr.io/acme/greet@sha256:abc123"
+	_, err := d.ImportImage(context.Background(), importOpts())
+	require.NoError(t, err)
+	require.Zero(t, cli.buildCalls, "导入路径不得触达 build API")
 }
 
-// TestImportImage_LocalInspectErrorPropagates ExpectedDigest 本地 inspect 非
-// NotFound 错误原样上抛（fail-fast：daemon 不可达时后续操作也必败）。
-func TestImportImage_LocalInspectErrorPropagates(t *testing.T) {
-	d, imgs, cfg := importTestDaemon()
-	imgs.errs["inspect/"+importTarget] = []error{context.DeadlineExceeded}
-	opts := importOpts()
-	opts.ExpectedDigest = digest64("cd")
+// ——tar 条目读取断言助手（BuildImage 上下文流断言用）——
 
-	_, err := importImage(context.Background(), d, imgs, importProbe(0), cfg, opts, 50*time.Millisecond, 1000)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
+// readTarEntries 读取 tar 流的条目名集合与文件内容。
+func readTarEntries(t *testing.T, raw []byte) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	tr := tar.NewReader(strings.NewReader(string(raw)))
+	for {
+		hdr, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		if hdr.Typeflag == tar.TypeDir {
+			out[hdr.Name] = "<dir>"
+			continue
+		}
+		b, err := io.ReadAll(tr)
+		require.NoError(t, err)
+		out[hdr.Name] = string(b)
+	}
+	return out
 }

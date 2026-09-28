@@ -35,45 +35,29 @@ func ValidateAppConfig(logger *slog.Logger, c *config.AppConfig) error {
 
 // ValidateFunctionsDispatchConfig 校验函数分发通路配置：v1 docker 执行器已
 // 移除，函数执行统一经 dispatcher 分发，functions.dispatcher.url
-// 必填（启动期 fail-fast，不留到首次执行）；执行路由模式校验见
-// ValidateFunctionsRoutingConfig（四期 4b 起并入本函数，server/worker 与
-// dispatcher 进程同一口径）。仅 server/worker 组合根调用本函数
-// ——dispatcher 进程自身是通路终点，不消费 url 键，只调用路由模式校验。
+// 必填（启动期 fail-fast，不留到首次执行）。仅 server/worker 组合根调用本
+// 函数——dispatcher 进程自身是通路终点，不消费 url 键。
 func ValidateFunctionsDispatchConfig(c *config.AppConfig) error {
 	if c.GetFunctions().GetDispatcher().GetUrl() == "" {
 		return fmt.Errorf("functions.dispatcher.url is required (function execution requires the dispatcher service; env TORCHWOOD_FUNCTIONS_DISPATCHER_URL)")
 	}
-	return ValidateFunctionsRoutingConfig(c)
+	return nil
 }
 
-// ValidateFunctionsRoutingConfig 校验执行路由模式配置（四期 4b，M7；设计
-// docs/design/functions-runtimes-and-sources.md §4）：
-//   - routing_mode 仅 "local"（缺省）/ "registry" 两值，其他值拒绝启动
-//     （字符串笔误静默降级 local = 镜像全局化从未发生而路由语义看似成立，
-//     排障面远劣于 fail-fast）；
-//   - registry 模式必须 registry_push=true（镜像全局化是 registry 路由的
-//     硬前提——push 未开则他节点永远拉不到镜像，冷启动必败）；
-//   - registry 模式必须 node_url 非空（对等必须能反连本节点；端口推导的
-//     "http://127.0.0.1:<port>" 跨节点不可达，registry 模式下不再有
-//     「转发 BuildNode」兜底，反连地址错 = 全部冷启动失败）。
-//
-// server/worker（经 ValidateFunctionsDispatchConfig）与 dispatcher 进程
-// （cmd/dispatcher NewAppConfig 直调）共用同一 fail-closed 口径。
-func ValidateFunctionsRoutingConfig(c *config.AppConfig) error {
-	d := c.GetFunctions().GetDispatcher()
-	switch mode := d.GetRoutingMode(); mode {
-	case "", config.FunctionsRoutingModeLocal, config.FunctionsRoutingModeRegistry:
-	default:
-		return fmt.Errorf("functions.dispatcher.routing_mode %q is invalid: must be \"local\" or \"registry\" (env TORCHWOOD_FUNCTIONS_DISPATCHER_ROUTING_MODE)", mode)
+// ValidateFunctionsFleetlyConfig 校验 dispatcher 进程的 fleetly 控制面配置
+// （IMPL-T2-3）：endpoint 与机具令牌必填（缺失即拒绝启动——否则构建/执行在
+// 首次调用才以模糊错误暴露）；network_members 非空时 app 必填（挂靠声明的
+// 归属 app 不可省）。仅 dispatcher 组合根调用。
+func ValidateFunctionsFleetlyConfig(c *config.AppConfig) error {
+	f := c.GetFunctions().GetFleetly()
+	if strings.TrimSpace(f.GetEndpoint()) == "" {
+		return fmt.Errorf("functions.fleetly.endpoint is required (the dispatcher runs function tasks and builds on the fleetly platform; env TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT)")
 	}
-	if d.GetRoutingMode() != config.FunctionsRoutingModeRegistry {
-		return nil
+	if strings.TrimSpace(f.GetToken()) == "" {
+		return fmt.Errorf("functions.fleetly.token is required (machine token with the tasks,build scopes; inject it via env TORCHWOOD_FUNCTIONS_FLEETLY_TOKEN, never commit it to a config file)")
 	}
-	if !d.GetRegistryPush() {
-		return fmt.Errorf("functions.dispatcher.registry_push must be true when routing_mode is \"registry\": registry routing requires image globalization (builds must push to functions.docker.registry; env TORCHWOOD_FUNCTIONS_DISPATCHER_REGISTRY_PUSH)")
-	}
-	if strings.TrimSpace(d.GetNodeUrl()) == "" {
-		return fmt.Errorf("functions.dispatcher.node_url is required when routing_mode is \"registry\": peer nodes must be able to reach this node (env TORCHWOOD_FUNCTIONS_DISPATCHER_NODE_URL)")
+	if len(f.GetNetworkMembers()) > 0 && strings.TrimSpace(f.GetApp()) == "" {
+		return fmt.Errorf("functions.fleetly.app is required when functions.fleetly.network_members is set (task-network members belong to this fleetly app; env TORCHWOOD_FUNCTIONS_FLEETLY_APP)")
 	}
 	return nil
 }

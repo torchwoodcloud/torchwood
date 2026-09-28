@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package fleetly.shared.v1;
+
+option go_package = "github.com/fleetlyrun/fleetly/genproto/fleetly/shared/v1;sharedv1";
+
+// ErrorResponse 是 fleetly 对外错误信封的唯一契约定义（发布专项 §2.7、
+// 架构 D21）：gateway HTTPErrorHandler（阶段 3 落地）将 gRPC 错误统一渲染
+// 为本结构，snake_case JSON 输出；code 与 T0.2 错误码注册表（唯一真源，
+// 只增不复用）对齐。
+message ErrorResponse {
+  // 稳定错误码字符串（如 "E_COMPOSE_INVALID"），注册表校验只增。
+  string code = 1;
+  // 人读错误信息（面向运维/集成方，不承诺文案稳定）。
+  string message = 2;
+  // 失败所处管线阶段（如 resolve / build / deploy / serve；勿与部署子状态
+  // phase 混用——该字段 2026-09-20 命名审查由 phase 更名 stage）。
+  string stage = 3;
+  // 关联的部署 ID（无关联时为空）。
+  string deployment_id = 4;
+  // 可执行的修复建议（面向用户展示）。
+  string suggestion = 5;
+  // 结构化附加上下文（machine-readable 键值对）。
+  map<string, string> context = 6;
+  // 相关文档 URL（错误码文档锚点）。
+  string docs = 7;
+}
