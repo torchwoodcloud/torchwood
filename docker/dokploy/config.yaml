@@ -1,6 +1,7 @@
 # Torchwood 运行时配置基线（docker/dokploy 栈）
-# fleetly 形态副本见 docker/fleetly/config.yaml（IMPL-T2-4：上传为平台 Config 资源）；
-# 内容变更两处同改（dokploy 退役后 fleetly 副本为唯一真源）。
+# fleetly 形态副本见 docker/fleetly/config.yaml（IMPL-T2-4：上传为平台 Config 资源）。
+# 两文件 functions 段分叉（IMPL-T2-5：本文件 driver: docker + docker 底座键，
+# fleetly 副本钉 driver: fleetly），其余键位变更两处同改。
 # 由 compose bind-mount 到 /app/configs/config.yaml；环境变量 TORCHWOOD_* 覆盖优先，
 # 密钥类（jwt secret / setup token / DB DSN / S3 凭据）一律由 compose 环境变量注入，不落此文件。
 # 完整键位说明见 configs/config.yaml.template 与 docs/developer/13-operations.md §4。
@@ -81,14 +82,24 @@ storage:
     secret_access_key: ""           # env TORCHWOOD_STORAGE_S3_SECRET_ACCESS_KEY
 
 functions:
-  # 执行底座 = fleetly 平台（IMPL-T2-3）：函数实例 = fleetly Tasks、构建 =
-  # fleetly build-from-upload；本仓零 docker client。fleetly 端点/机具令牌
-  # 由 compose 环境变量注入（token 不进本文件）。
+  # 执行底座 = docker 直接执行（IMPL-T2-5 双执行底座，本栈形态）：函数实例 =
+  # 常驻容器（per-project bridge 网络）、构建 = 本地 docker build；dispatcher
+  # 持 docker.sock（compose 挂载）。fleetly 平台形态见 docker/fleetly/。
+  # driver 必填：未设置/未知值 dispatcher 拒绝启动。
+  driver: docker
   docker:
-    # host/network 键已删除：dispatcher 不再消费 docker 宿主配置。
-    # 平台镜像命名前缀（逻辑寻址键；见 functions.fleetly）。
+    # docker daemon 地址（compose 挂载 sock；host 键缺省回落同值）。
+    host: "unix:///var/run/docker.sock"
+    # 默认 per-project 隔离网络 tw-func-<project_id>；勿配全局网络（跨租户横向风险）。
+    network: ""
+    # 回访容器名（与 server 的 container_name 一致）：dispatcher join 项目网络
+    # 时把 server 容器一并 attach，函数经容器名 DNS 回访平台 API。
+    callback_container: "torchwood-server"
+    # 镜像命名前缀（driver=docker 下即本地构建 tag；server 同值）。
     registry: "torchwood-funcs"
   fleetly:
+    # fleetly 平台形态的控制面配置——本栈（driver: docker）不消费；fleetly
+    # 形态（docker/fleetly/，driver: fleetly）下必填。
     # env: TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT / _TOKEN / _APP / _NETWORK_MEMBERS
     endpoint: ""
     token: ""

@@ -672,7 +672,13 @@ func (x *Storage) GetLocal() *Storage_Local {
 }
 
 type Functions struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Driver 选择 dispatcher 的执行底座（IMPL-T2-5 双执行底座）：封闭值集
+	// "docker" | "fleetly"（string 而非 enum：config 绑定是结构体驱动逐叶
+	// 解码，enum 的 int32 承载解不了 YAML 字符串；先例 storage.provider）。
+	// 仅 dispatcher 进程消费；未设置/未知值启动期 fail-closed（列出两选项与
+	// 各自配置键）。env: TORCHWOOD_FUNCTIONS_DRIVER
+	Driver        string                  `protobuf:"bytes,12,opt,name=driver,proto3" json:"driver,omitempty"`
 	Docker        *Functions_Docker       `protobuf:"bytes,2,opt,name=docker,proto3" json:"docker,omitempty"`
 	Execution     *Functions_Execution    `protobuf:"bytes,3,opt,name=execution,proto3" json:"execution,omitempty"`
 	Dispatcher    *Functions_Dispatcher   `protobuf:"bytes,4,opt,name=dispatcher,proto3" json:"dispatcher,omitempty"`
@@ -714,6 +720,13 @@ func (x *Functions) ProtoReflect() protoreflect.Message {
 // Deprecated: Use Functions.ProtoReflect.Descriptor instead.
 func (*Functions) Descriptor() ([]byte, []int) {
 	return file_config_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *Functions) GetDriver() string {
+	if x != nil {
+		return x.Driver
+	}
+	return ""
 }
 
 func (x *Functions) GetDocker() *Functions_Docker {
@@ -1794,53 +1807,6 @@ func (x *Storage_Local) GetPath() string {
 	return ""
 }
 
-type Functions_Docker struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// 平台镜像命名前缀（逻辑命名空间，非 docker 宿主配置）：server 与
-	// dispatcher 共同派生函数部署镜像的逻辑名（func-<function>-<deployment>），
-	// dispatcher 以此名为键登记 fleetly 构建产物引用（见 functions.fleetly）。
-	Registry      string `protobuf:"bytes,3,opt,name=registry,proto3" json:"registry,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Functions_Docker) Reset() {
-	*x = Functions_Docker{}
-	mi := &file_config_proto_msgTypes[26]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Functions_Docker) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Functions_Docker) ProtoMessage() {}
-
-func (x *Functions_Docker) ProtoReflect() protoreflect.Message {
-	mi := &file_config_proto_msgTypes[26]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Functions_Docker.ProtoReflect.Descriptor instead.
-func (*Functions_Docker) Descriptor() ([]byte, []int) {
-	return file_config_proto_rawDescGZIP(), []int{9, 0}
-}
-
-func (x *Functions_Docker) GetRegistry() string {
-	if x != nil {
-		return x.Registry
-	}
-	return ""
-}
-
 // Execution 是执行身份（P0）相关配置：函数容器回访 Server API 的可达
 // 地址（fleetly 世界 = 任务网络成员挂靠后的 DNS 别名
 // http://<app>-<service>:<port>，见 functions.fleetly.network_members），
@@ -1855,7 +1821,7 @@ type Functions_Execution struct {
 
 func (x *Functions_Execution) Reset() {
 	*x = Functions_Execution{}
-	mi := &file_config_proto_msgTypes[27]
+	mi := &file_config_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1867,7 +1833,7 @@ func (x *Functions_Execution) String() string {
 func (*Functions_Execution) ProtoMessage() {}
 
 func (x *Functions_Execution) ProtoReflect() protoreflect.Message {
-	mi := &file_config_proto_msgTypes[27]
+	mi := &file_config_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1880,7 +1846,7 @@ func (x *Functions_Execution) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Functions_Execution.ProtoReflect.Descriptor instead.
 func (*Functions_Execution) Descriptor() ([]byte, []int) {
-	return file_config_proto_rawDescGZIP(), []int{9, 1}
+	return file_config_proto_rawDescGZIP(), []int{9, 0}
 }
 
 func (x *Functions_Execution) GetApiBaseUrl() string {
@@ -1945,7 +1911,7 @@ type Functions_Dispatcher struct {
 
 func (x *Functions_Dispatcher) Reset() {
 	*x = Functions_Dispatcher{}
-	mi := &file_config_proto_msgTypes[28]
+	mi := &file_config_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1957,7 +1923,7 @@ func (x *Functions_Dispatcher) String() string {
 func (*Functions_Dispatcher) ProtoMessage() {}
 
 func (x *Functions_Dispatcher) ProtoReflect() protoreflect.Message {
-	mi := &file_config_proto_msgTypes[28]
+	mi := &file_config_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1970,7 +1936,7 @@ func (x *Functions_Dispatcher) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Functions_Dispatcher.ProtoReflect.Descriptor instead.
 func (*Functions_Dispatcher) Descriptor() ([]byte, []int) {
-	return file_config_proto_rawDescGZIP(), []int{9, 2}
+	return file_config_proto_rawDescGZIP(), []int{9, 1}
 }
 
 func (x *Functions_Dispatcher) GetUrl() string {
@@ -2048,6 +2014,94 @@ func (x *Functions_Dispatcher) GetRebuildOnMissingImage() bool {
 		return *x.RebuildOnMissingImage
 	}
 	return false
+}
+
+// Docker 是 docker 直接执行底座配置（IMPL-T2-5：driver="docker" 时
+// dispatcher 进程消费——per-project bridge 网络 + docker.sock 直操作；
+// server/worker 零消费）。
+type Functions_Docker struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// docker daemon 地址（docker client host 语法）。空 = 缺省
+	// unix:///var/run/docker.sock（容器形态经 sock 挂载可达）。
+	// env: TORCHWOOD_FUNCTIONS_DOCKER_HOST
+	Host string `protobuf:"bytes,4,opt,name=host,proto3" json:"host,omitempty"`
+	// 全局共享函数执行网络覆盖（opt-in）：空（默认）= per-project 隔离
+	// 网络 tw-func-<project.id>（internal 变体 + "-int" 后缀）；显式配置
+	// = 跨项目函数容器同网互通（横向访问风险，自担）。
+	// env: TORCHWOOD_FUNCTIONS_DOCKER_NETWORK
+	Network string `protobuf:"bytes,5,opt,name=network,proto3" json:"network,omitempty"`
+	// 回访容器名：dispatcher join 项目网络时把该容器一并 attach，函数经
+	// 容器名 DNS 回访平台 API（functions.execution.api_base_url 指向该
+	// 名；internal 网络无 NAT 出口，这是不可信函数回访的唯一通路）。
+	// 与 server 的 container_name 严格一致；attach 失败仅告警不阻断执行。
+	// 空 = 不 attach（函数无法经容器名回访平台）。仅 docker 底座消费。
+	// env: TORCHWOOD_FUNCTIONS_DOCKER_CALLBACK_CONTAINER
+	CallbackContainer string `protobuf:"bytes,6,opt,name=callback_container,json=callbackContainer,proto3" json:"callback_container,omitempty"`
+	// 平台镜像命名前缀（逻辑命名空间，非 docker 宿主配置）：server 与
+	// dispatcher 共同派生函数部署镜像的逻辑名（func-<function>-<deployment>）。
+	// driver="docker" 时即本地构建 tag；driver="fleetly" 时 dispatcher
+	// 以此名为键登记 fleetly 构建产物引用（见 functions.fleetly）。
+	Registry      string `protobuf:"bytes,3,opt,name=registry,proto3" json:"registry,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Functions_Docker) Reset() {
+	*x = Functions_Docker{}
+	mi := &file_config_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Functions_Docker) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Functions_Docker) ProtoMessage() {}
+
+func (x *Functions_Docker) ProtoReflect() protoreflect.Message {
+	mi := &file_config_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Functions_Docker.ProtoReflect.Descriptor instead.
+func (*Functions_Docker) Descriptor() ([]byte, []int) {
+	return file_config_proto_rawDescGZIP(), []int{9, 2}
+}
+
+func (x *Functions_Docker) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *Functions_Docker) GetNetwork() string {
+	if x != nil {
+		return x.Network
+	}
+	return ""
+}
+
+func (x *Functions_Docker) GetCallbackContainer() string {
+	if x != nil {
+		return x.CallbackContainer
+	}
+	return ""
+}
+
+func (x *Functions_Docker) GetRegistry() string {
+	if x != nil {
+		return x.Registry
+	}
+	return ""
 }
 
 // Fleetly 是 fleetly 平台控制面消费配置（IMPL-T2-3：dispatcher 的
@@ -3242,8 +3296,9 @@ const file_config_proto_rawDesc = "" +
 	"\x11secret_access_key\x18\x05 \x01(\tR\x0fsecretAccessKey\x12\x17\n" +
 	"\ause_ssl\x18\x06 \x01(\bR\x06useSsl\x1a\x1b\n" +
 	"\x05Local\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\"\x8e\x10\n" +
-	"\tFunctions\x12>\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\"\xf5\x10\n" +
+	"\tFunctions\x12\x16\n" +
+	"\x06driver\x18\f \x01(\tR\x06driver\x12>\n" +
 	"\x06docker\x18\x02 \x01(\v2&.torchwood.api.config.Functions.DockerR\x06docker\x12G\n" +
 	"\texecution\x18\x03 \x01(\v2).torchwood.api.config.Functions.ExecutionR\texecution\x12J\n" +
 	"\n" +
@@ -3255,9 +3310,7 @@ const file_config_proto_rawDesc = "" +
 	"\x06packer\x18\t \x01(\v2&.torchwood.api.config.Functions.PackerR\x06packer\x12;\n" +
 	"\x05image\x18\b \x01(\v2%.torchwood.api.config.Functions.ImageR\x05image\x12A\n" +
 	"\astorage\x18\n" +
-	" \x01(\v2'.torchwood.api.config.Functions.StorageR\astorage\x1a?\n" +
-	"\x06Docker\x12\x1a\n" +
-	"\bregistry\x18\x03 \x01(\tR\bregistryJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03R\x04hostR\anetwork\x1a-\n" +
+	" \x01(\v2'.torchwood.api.config.Functions.StorageR\astorage\x1a-\n" +
 	"\tExecution\x12 \n" +
 	"\fapi_base_url\x18\x01 \x01(\tR\n" +
 	"apiBaseUrl\x1a\xe4\x04\n" +
@@ -3277,7 +3330,12 @@ const file_config_proto_rawDesc = "" +
 	"\fverify_build\x18\v \x01(\bH\x00R\vverifyBuild\x88\x01\x01\x12<\n" +
 	"\x18rebuild_on_missing_image\x18\x11 \x01(\bH\x01R\x15rebuildOnMissingImage\x88\x01\x01B\x0f\n" +
 	"\r_verify_buildB\x1b\n" +
-	"\x19_rebuild_on_missing_imageJ\x04\b\b\x10\tJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\x12callback_containerR\anode_idR\bnode_urlR\frouting_modeR\rregistry_pushR\x1dmax_resident_instances_global\x1av\n" +
+	"\x19_rebuild_on_missing_imageJ\x04\b\b\x10\tJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\x12callback_containerR\anode_idR\bnode_urlR\frouting_modeR\rregistry_pushR\x1dmax_resident_instances_global\x1a\x8d\x01\n" +
+	"\x06Docker\x12\x12\n" +
+	"\x04host\x18\x04 \x01(\tR\x04host\x12\x18\n" +
+	"\anetwork\x18\x05 \x01(\tR\anetwork\x12-\n" +
+	"\x12callback_container\x18\x06 \x01(\tR\x11callbackContainer\x12\x1a\n" +
+	"\bregistry\x18\x03 \x01(\tR\bregistryJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03\x1av\n" +
 	"\aFleetly\x12\x1a\n" +
 	"\bendpoint\x18\x01 \x01(\tR\bendpoint\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\x12\x10\n" +
@@ -3427,9 +3485,9 @@ var file_config_proto_goTypes = []any{
 	(*Database_Pool)(nil),                // 23: torchwood.api.config.Database.Pool
 	(*Storage_S3)(nil),                   // 24: torchwood.api.config.Storage.S3
 	(*Storage_Local)(nil),                // 25: torchwood.api.config.Storage.Local
-	(*Functions_Docker)(nil),             // 26: torchwood.api.config.Functions.Docker
-	(*Functions_Execution)(nil),          // 27: torchwood.api.config.Functions.Execution
-	(*Functions_Dispatcher)(nil),         // 28: torchwood.api.config.Functions.Dispatcher
+	(*Functions_Execution)(nil),          // 26: torchwood.api.config.Functions.Execution
+	(*Functions_Dispatcher)(nil),         // 27: torchwood.api.config.Functions.Dispatcher
+	(*Functions_Docker)(nil),             // 28: torchwood.api.config.Functions.Docker
 	(*Functions_Fleetly)(nil),            // 29: torchwood.api.config.Functions.Fleetly
 	(*Functions_Trigger)(nil),            // 30: torchwood.api.config.Functions.Trigger
 	(*Functions_ClientInvoke)(nil),       // 31: torchwood.api.config.Functions.ClientInvoke
@@ -3471,9 +3529,9 @@ var file_config_proto_depIdxs = []int32{
 	6,  // 21: torchwood.api.config.Data.redis:type_name -> torchwood.api.config.Redis
 	24, // 22: torchwood.api.config.Storage.s3:type_name -> torchwood.api.config.Storage.S3
 	25, // 23: torchwood.api.config.Storage.local:type_name -> torchwood.api.config.Storage.Local
-	26, // 24: torchwood.api.config.Functions.docker:type_name -> torchwood.api.config.Functions.Docker
-	27, // 25: torchwood.api.config.Functions.execution:type_name -> torchwood.api.config.Functions.Execution
-	28, // 26: torchwood.api.config.Functions.dispatcher:type_name -> torchwood.api.config.Functions.Dispatcher
+	28, // 24: torchwood.api.config.Functions.docker:type_name -> torchwood.api.config.Functions.Docker
+	26, // 25: torchwood.api.config.Functions.execution:type_name -> torchwood.api.config.Functions.Execution
+	27, // 26: torchwood.api.config.Functions.dispatcher:type_name -> torchwood.api.config.Functions.Dispatcher
 	29, // 27: torchwood.api.config.Functions.fleetly:type_name -> torchwood.api.config.Functions.Fleetly
 	30, // 28: torchwood.api.config.Functions.trigger:type_name -> torchwood.api.config.Functions.Trigger
 	31, // 29: torchwood.api.config.Functions.client_invoke:type_name -> torchwood.api.config.Functions.ClientInvoke
@@ -3512,7 +3570,7 @@ func file_config_proto_init() {
 		return
 	}
 	file_config_proto_msgTypes[20].OneofWrappers = []any{}
-	file_config_proto_msgTypes[28].OneofWrappers = []any{}
+	file_config_proto_msgTypes[27].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

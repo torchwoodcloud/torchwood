@@ -1,11 +1,11 @@
 # Torchwood 运行时配置基线（docker/fleetly 栈，IMPL-T2-4）
 #
-# 本文件是 docker/dokploy/config.yaml 的 fleetly 形态副本：由平台 Config 资源
+# 本文件源自 docker/dokploy/config.yaml 的 fleetly 形态副本：由平台 Config 资源
 # 提供（external 值经 configs API 上传），compose 挂载到 server/worker/dispatcher
 # 的 /app/configs/config.yaml；环境变量 TORCHWOOD_* 覆盖优先（平台 env 层），
 # 密钥类（jwt secret / setup token / DB DSN / S3 凭据）一律由平台 env 注入，
-# 不落此文件。**与 docker/dokploy/config.yaml 保持同内容**：键位变更两处同改
-# （dokploy 栈退役后本文件为唯一真源）。
+# 不落此文件。**functions 段与 dokploy 侧分叉（IMPL-T2-5）：本文件钉
+# driver: fleetly，dokploy 侧为 driver: docker**；其余键位变更两处同改。
 # 完整键位说明见 configs/config.yaml.template 与 docs/developer/13-operations.md §4。
 
 server:
@@ -84,12 +84,14 @@ storage:
     secret_access_key: ""           # env TORCHWOOD_STORAGE_S3_SECRET_ACCESS_KEY
 
 functions:
-  # 执行底座 = fleetly 平台（IMPL-T2-3）：函数实例 = fleetly Tasks、构建 =
-  # fleetly build-from-upload；本仓零 docker client。fleetly 端点/机具令牌
-  # 由 compose 环境变量注入（token 不进本文件）。
+  # 执行底座 = fleetly 平台（IMPL-T2-3；IMPL-T2-5 起 driver 显式钉定）：
+  # 函数实例 = fleetly Tasks、构建 = fleetly build-from-upload。fleetly
+  # 端点/机具令牌由平台 env 注入（token 不进本文件）。
+  driver: fleetly
   docker:
-    # host/network 键已删除：dispatcher 不再消费 docker 宿主配置。
-    # 平台镜像命名前缀（逻辑寻址键；见 functions.fleetly）。
+    # docker 直接执行底座键——本形态（driver: fleetly）不消费；dokploy 形态
+    # （docker/dokploy/，driver: docker）使用（host/network/callback_container）。
+    # 平台镜像命名前缀（逻辑寻址键；dispatcher 以此名为键登记构建产物引用）。
     registry: "torchwood-funcs"
   fleetly:
     # env: TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT / _TOKEN / _APP / _NETWORK_MEMBERS

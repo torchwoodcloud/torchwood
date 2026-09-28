@@ -47,7 +47,8 @@ func ValidateFunctionsDispatchConfig(c *config.AppConfig) error {
 // ValidateFunctionsFleetlyConfig 校验 dispatcher 进程的 fleetly 控制面配置
 // （IMPL-T2-3）：endpoint 与机具令牌必填（缺失即拒绝启动——否则构建/执行在
 // 首次调用才以模糊错误暴露）；network_members 非空时 app 必填（挂靠声明的
-// 归属 app 不可省）。仅 dispatcher 组合根调用。
+// 归属 app 不可省）。IMPL-T2-5 起由 ValidateFunctionsDriverConfig 在
+// driver=fleetly 分支调用。
 func ValidateFunctionsFleetlyConfig(c *config.AppConfig) error {
 	f := c.GetFunctions().GetFleetly()
 	if strings.TrimSpace(f.GetEndpoint()) == "" {
@@ -60,6 +61,33 @@ func ValidateFunctionsFleetlyConfig(c *config.AppConfig) error {
 		return fmt.Errorf("functions.fleetly.app is required when functions.fleetly.network_members is set (task-network members belong to this fleetly app; env TORCHWOOD_FUNCTIONS_FLEETLY_APP)")
 	}
 	return nil
+}
+
+// ValidateFunctionsDriverConfig 校验函数执行底座驱动选择并按驱动分发细节
+// 校验（IMPL-T2-5 双执行底座）：
+//   - functions.driver 未设置/未知值 fail-closed（启动期拒绝，错误文案列出
+//     两选项与各自配置键——不留到首次构建/执行才暴露）；
+//   - driver=fleetly → ValidateFunctionsFleetlyConfig（endpoint/机具令牌
+//     必填，IMPL-T2-3 口径不变）；
+//   - driver=docker → docker 底座段无必填键（host 可空，dockerdriver 侧
+//     回落缺省 unix:///var/run/docker.sock；docker.sock 可达性与 fleetly
+//     端点拨号同策略——首次调用暴露）。
+//
+// 仅 dispatcher 组合根调用（server/worker 零执行底座消费）。
+func ValidateFunctionsDriverConfig(c *config.AppConfig) error {
+	driver := strings.TrimSpace(c.GetFunctions().GetDriver())
+	switch driver {
+	case config.FunctionsDriverFleetly:
+		return ValidateFunctionsFleetlyConfig(c)
+	case config.FunctionsDriverDocker:
+		return nil
+	case "":
+		return fmt.Errorf("functions.driver is required: set it to %q for the fleetly platform (requires functions.fleetly.endpoint and functions.fleetly.token; env TORCHWOOD_FUNCTIONS_DRIVER=fleetly) or %q for direct docker execution (requires docker.sock access; env TORCHWOOD_FUNCTIONS_DRIVER=docker)",
+			config.FunctionsDriverFleetly, config.FunctionsDriverDocker)
+	default:
+		return fmt.Errorf("functions.driver %q is unknown: supported values are %q (fleetly platform; requires functions.fleetly.endpoint and functions.fleetly.token) and %q (direct docker execution; requires docker.sock access)",
+			driver, config.FunctionsDriverFleetly, config.FunctionsDriverDocker)
+	}
 }
 
 // WeakSecretTokens 是已知弱默认值/常见占位密钥的子串黑名单。

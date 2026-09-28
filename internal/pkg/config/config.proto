@@ -151,18 +151,6 @@ message Storage {
 }
 
 message Functions {
-  message Docker {
-    // host（字段 1）与 network（字段 2）已删除：dispatcher 的 docker.sock
-    // 交互面整体退役（IMPL-T2-3）——函数实例 = fleetly Tasks（swarm service
-    // 承载，网络经 scope 引用）、构建 = fleetly build-from-upload；本仓不再
-    // 持有任何 docker client。
-    reserved 1, 2;
-    reserved "host", "network";
-    // 平台镜像命名前缀（逻辑命名空间，非 docker 宿主配置）：server 与
-    // dispatcher 共同派生函数部署镜像的逻辑名（func-<function>-<deployment>），
-    // dispatcher 以此名为键登记 fleetly 构建产物引用（见 functions.fleetly）。
-    string registry = 3;
-  }
   // Execution 是执行身份（P0）相关配置：函数容器回访 Server API 的可达
   // 地址（fleetly 世界 = 任务网络成员挂靠后的 DNS 别名
   // http://<app>-<service>:<port>，见 functions.fleetly.network_members），
@@ -237,6 +225,43 @@ message Functions {
   // docker.sock）已移除，函数执行统一经 dispatcher 分发。
   reserved 1;
   reserved "executor";
+  // Driver 选择 dispatcher 的执行底座（IMPL-T2-5 双执行底座）：封闭值集
+  // "docker" | "fleetly"（string 而非 enum：config 绑定是结构体驱动逐叶
+  // 解码，enum 的 int32 承载解不了 YAML 字符串；先例 storage.provider）。
+  // 仅 dispatcher 进程消费；未设置/未知值启动期 fail-closed（列出两选项与
+  // 各自配置键）。env: TORCHWOOD_FUNCTIONS_DRIVER
+  string driver = 12;
+  // Docker 是 docker 直接执行底座配置（IMPL-T2-5：driver="docker" 时
+  // dispatcher 进程消费——per-project bridge 网络 + docker.sock 直操作；
+  // server/worker 零消费）。
+  message Docker {
+    // host（字段 1）与 network（字段 2）的**字段号**在 IMPL-T2-3 删除时
+    // reserved，永不复用；IMPL-T2-5 以新字段号（4/5）复归同名键（语义
+    // 不变：daemon 地址 / 全局网络覆盖——旧客户端缓存键与本号段无关，
+    // 名称解禁与号段封存并存，号段封存是硬边界）。
+    reserved 1, 2;
+    // docker daemon 地址（docker client host 语法）。空 = 缺省
+    // unix:///var/run/docker.sock（容器形态经 sock 挂载可达）。
+    // env: TORCHWOOD_FUNCTIONS_DOCKER_HOST
+    string host = 4;
+    // 全局共享函数执行网络覆盖（opt-in）：空（默认）= per-project 隔离
+    // 网络 tw-func-<project.id>（internal 变体 + "-int" 后缀）；显式配置
+    // = 跨项目函数容器同网互通（横向访问风险，自担）。
+    // env: TORCHWOOD_FUNCTIONS_DOCKER_NETWORK
+    string network = 5;
+    // 回访容器名：dispatcher join 项目网络时把该容器一并 attach，函数经
+    // 容器名 DNS 回访平台 API（functions.execution.api_base_url 指向该
+    // 名；internal 网络无 NAT 出口，这是不可信函数回访的唯一通路）。
+    // 与 server 的 container_name 严格一致；attach 失败仅告警不阻断执行。
+    // 空 = 不 attach（函数无法经容器名回访平台）。仅 docker 底座消费。
+    // env: TORCHWOOD_FUNCTIONS_DOCKER_CALLBACK_CONTAINER
+    string callback_container = 6;
+    // 平台镜像命名前缀（逻辑命名空间，非 docker 宿主配置）：server 与
+    // dispatcher 共同派生函数部署镜像的逻辑名（func-<function>-<deployment>）。
+    // driver="docker" 时即本地构建 tag；driver="fleetly" 时 dispatcher
+    // 以此名为键登记 fleetly 构建产物引用（见 functions.fleetly）。
+    string registry = 3;
+  }
   Docker docker = 2;
   Execution execution = 3;
   Dispatcher dispatcher = 4;

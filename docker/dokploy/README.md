@@ -190,19 +190,22 @@ torchwood health get --endpoint <gRPC域名>:443 --tls   # gRPC 经 Traefik TLS�
   无持久化时容器重启 = 全部已登录会话下次刷新即失效（重新登录即恢复，非故障）。
   换 Redis 实例同理（`docs/developer/13-operations.md` §6.1）。
 - **Functions（可选）**：worker 常驻消费函数执行队列；执行/构建统一经 dispatcher
-  ——IMPL-T2-3 后 dispatcher 是 fleetly Tasks/build API 客户端（零 docker.sock、
-  零 docker client）：函数实例 = fleetly Tasks（swarm service 承载）、构建 =
-  fleetly build-from-upload，需配置 `functions.fleetly.endpoint` 与机具令牌
-  （scope tasks,build，经 Environment 注入）。server/worker/packer 不受影响。
-  不用 Functions 可删除 worker/dispatcher/packer 服务。**本栈的完整 fleetly
-  部署形态由 T2-4 割接票产出（docker/fleetly/）。**
-- **函数镜像持久化模型（fleetly 底座）**：构建产物由 fleetly 平台持有（registry
-  模式推平台 zot；本地模式装载平台宿主 docker），dispatcher 只登记
-  「逻辑镜像名 → 平台产物引用」映射（Redis `torchwood:fnimg:*`）。映射缺失/
-  平台解析失败时：有桶副本的部署在下次执行时自动识别 412 并后台重建
-  （`functions.dispatcher.rebuild_on_missing_image`，默认开）；持久层上线前的存量
+  ——**本栈为 docker 直接执行形态**（`TORCHWOOD_FUNCTIONS_DRIVER=docker`，
+  IMPL-T2-5 双执行底座）：dispatcher 持 docker.sock（compose 挂载 + `user: root`，
+  ⚠ sock 等同宿主 root 权限，仅在可信环境启用），函数实例 = 常驻容器
+  （per-project bridge 网络 `tw-func-<project>`，dispatcher 自 attach + 按
+  `functions.docker.callback_container` 把 server 容器 attach 进网络供函数
+  回访）、构建 = 本地 docker build，镜像逻辑名即本地 tag。fleetly 平台执行
+  形态（函数实例 = fleetly Tasks、构建 = fleetly build-from-upload）见
+  `../fleetly/`。不用 Functions 可删除 worker/dispatcher/packer 服务。
+- **函数镜像持久化模型（docker 底座）**：构建产物 = 部署机本地 docker 镜像
+  （tag = 镜像逻辑名）。宿主镜像被清理（`docker system prune -a` / 磁盘压力）
+  导致 ready 状态与镜像存量漂移时：有桶副本的部署在下次执行时自动识别 412
+  并后台重建（`functions.dispatcher.rebuild_on_missing_image`，默认开，
+  zip/git 源从 `torchwood-functions` 桶拉回复核重建）；持久层上线前的存量
   部署桶内无副本，无法自愈，须 redeploy。备份时 `mc mirror` 连同
-  `torchwood-functions` 桶一起备份。
+  `torchwood-functions` 桶一起备份（fleetly 底座的产物映射模型见
+  `../fleetly/` README）。
 
 ## 9. 日常运维
 
@@ -247,13 +250,14 @@ docker run --rm ghcr.io/torchwoodcloud/torchwood:latest \
 | `config.yaml` | 运行时配置基线，bind-mount 到 `/app/configs/config.yaml`（env 覆盖优先） |
 | `initdb/01-authenticator.sh` | 首次 initdb 创建 `tw_authenticator`（仅空卷执行一次） |
 | `bootstrap-roles.sql` | 迁移后补齐 authenticator 授权面（ops 文档 §4.5 ②③④④'） |
-| `../fleetly/` | **fleetly 部署形态（割接目标；见 §12）**：compose/README/cutover-runbook |
+| `../fleetly/` | **fleetly 平台部署形态（与本栈并存；见 §12）**：compose/README/cutover-runbook |
 
-## 12. fleetly 部署（割接目标形态，IMPL-T2-4）
+## 12. fleetly 部署（平台执行形态，IMPL-T2-4/T2-5）
 
-本栈的 fleetly 部署形态见 [`../fleetly/`](../fleetly/)（`docker-compose.yml` +
-`README.md` + `cutover-runbook.md`）。割接完成前本 Dokploy 栈**并行保留**（回滚 =
-本栈未拆；runbook §8）。与该形态的关键差异（完整清单见 fleetly 侧 README §1/§7）：
+本栈（docker 直接执行形态，IMPL-T2-5 恢复自包含 docker.sock）与 fleetly
+平台执行形态**并存**，按部署选择；fleetly 形态见
+[`../fleetly/`](../fleetly/)（`docker-compose.yml` + `README.md` +
+`cutover-runbook.md`）。与该形态的关键差异（完整清单见 fleetly 侧 README §1/§7）：
 
 - **postgres 移出栈**：落 fleetly 托管实例（`percona-postgresql-18` 模板，含
   pgvector 0.8.6），数据经 `pg_dump`/`pg_restore --clean --no-owner` 搬运；运行态

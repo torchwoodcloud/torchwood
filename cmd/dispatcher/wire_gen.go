@@ -14,6 +14,10 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/pkg/bootkit"
 )
 
+import (
+	_ "github.com/torchwoodcloud/torchwood/dispatcher/dockerdriver"
+)
+
 // Injectors from wire.go:
 
 func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
@@ -30,7 +34,11 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 		return nil, nil, err
 	}
 	logger := bootkit.NewLogger(app)
-	service := dispatcher.NewService(appConfig, client, logger)
+	service, err := dispatcher.NewService(appConfig, client, logger)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
 	v := NewComponents(service)
 	v2 := bootkit.NewComponentBuilders()
 	bootstrap := boot.New(preStartHooks, drainHooks, preStopHooks, postStopHooks, v, v2)

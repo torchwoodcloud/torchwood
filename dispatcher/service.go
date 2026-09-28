@@ -14,9 +14,10 @@ import (
 )
 
 // Service 是 dispatcher 的 lynx 服务装配：HTTP API + reaper 周期对账
-// （独立二进制 cmd/dispatcher；不进 server/worker wire）。执行底座 =
-// fleetly Tasks/build API（IMPL-T2-3：docker.sock 交互面整体退役，多节点
-// 细胞模型删除——多节点编排归 swarm）。
+// （独立二进制 cmd/dispatcher；不进 server/worker wire）。执行底座按
+// functions.driver 选择（IMPL-T2-5 双执行底座）：fleetly Tasks/build API
+// 或 docker 直接执行（per-project bridge 网络 + 本地构建）；池语义两形态
+// 共用。
 type Service struct {
 	cfg    *config.AppConfig
 	logger *slog.Logger
@@ -28,13 +29,18 @@ type Service struct {
 	wg     sync.WaitGroup
 }
 
-// NewService 构造 dispatcher 服务（lynx actor）。
-func NewService(cfg *config.AppConfig, rdb *redis.Client, logger *slog.Logger) *Service {
+// NewService 构造 dispatcher 服务（lynx actor）。执行底座按
+// functions.driver 选择（IMPL-T2-5 双执行底座：fleetly 平台 / docker 直接
+// 执行），选择失败（驱动未设/未知/docker 驱动未链接）即拒绝启动。
+func NewService(cfg *config.AppConfig, rdb *redis.Client, logger *slog.Logger) (*Service, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	registry := NewRedisRegistry(rdb)
-	daemon := NewFleetlyDaemon(cfg, registry)
+	daemon, err := newDaemonForConfig(cfg, registry)
+	if err != nil {
+		return nil, err
+	}
 	pool := NewPoolManager(daemon, registry, PoolConfigFromConfig(cfg))
 	addr := cfg.GetFunctions().GetDispatcher().GetAddr()
 	if addr == "" {
@@ -52,7 +58,7 @@ func NewService(cfg *config.AppConfig, rdb *redis.Client, logger *slog.Logger) *
 			Handler:           srv,
 		},
 	}
-	return s
+	return s, nil
 }
 
 // Name 实现 lynx.Service。
@@ -95,6 +101,7 @@ func (s *Service) Start(ctx context.Context) error {
 		}
 	})
 	s.logger.Info("dispatcher started", "addr", s.http.Addr,
+		"driver", s.cfg.GetFunctions().GetDriver(),
 		"fleetly_endpoint", s.cfg.GetFunctions().GetFleetly().GetEndpoint(),
 		"max_resident_instances", s.pool.cfg.MaxResidentInstances)
 

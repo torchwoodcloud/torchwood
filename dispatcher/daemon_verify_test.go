@@ -16,7 +16,7 @@ import (
 // fake daemon + fake health 表驱动——就绪成功/超时失败/日志尾拼接/egress
 // 选网参数/cleanup 总是被调用，不依赖真实 daemon。
 
-// fakeHealth 是 healthProber 的可编程 fake：前 fails 次 Health 返回错误
+// fakeHealth 是 HealthProber 的可编程 fake：前 fails 次 Health 返回错误
 // （fails < 0 = 永远失败），之后成功。
 type fakeHealth struct {
 	mu       sync.Mutex

@@ -60,3 +60,17 @@ while :; do
     sleep 2
 done
 echo 'fleetlyd live (liveness 200)'
+
+echo '=== wait for managed VictoriaLogs backend (loopback publish; search/ingest 依赖) ==='
+i=0
+while :; do
+    if wget -q -T 3 -O /dev/null http://127.0.0.1:9428/health; then break; fi
+    i=$((i + 2))
+    [ "$i" -ge 120 ] && {
+        echo 'victorialogs not answering within 120s; fleetlyd log tail:'
+        grep -i victorialogs /tmp/fleetlyd.log | tail -n 20
+        exit 1
+    }
+    sleep 2
+done
+echo 'victorialogs ready (health 200)'

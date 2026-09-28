@@ -26,10 +26,12 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// 本文件是 dispatcher 的执行底座适配层（IMPL-T2-3）：docker.sock 交互面
-// 整体退役，函数实例 = fleetly Tasks（swarm service 承载，稳定 DNS 名 +
-// restart-condition none）、构建 = fleetly build-from-upload。池语义
-// （租约/保温/熔断/TW_MAX_REQUESTS）在 pool.go 不动，本层只换执行底座。
+// 本文件是 dispatcher 的执行底座适配层中的 fleetly 实现（IMPL-T2-3 引入；
+// IMPL-T2-5 起与 docker 直接执行形态并存，driver 选择见 driver.go，docker
+// 实现在隔离子包 dockerdriver）。fleetly 形态：函数实例 = fleetly Tasks
+// （swarm service 承载，稳定 DNS 名 + restart-condition none）、构建 =
+// fleetly build-from-upload。池语义（租约/保温/熔断/TW_MAX_REQUESTS）在
+// pool.go 不动，本层只换执行底座。
 //
 // 镜像引用寻址（审查裁决，见实施方案 §4 IMPL-T2-3）：
 //   - torchwood server 侧的执行规格只携带**逻辑镜像名**
@@ -43,16 +45,19 @@ import (
 //     ImageMissingMarker 上抛 → server 侧重建链路重新构建并刷新映射
 //     （自愈路径复用既有 rebuild 语义）。
 type Instance struct {
-	// ContainerID 是 fleetly 任务 ID（task id；停止/删除/探活/日志的寻址键）。
+	// ContainerID 是实例句柄（fleetly 形态 = task id；docker 形态 = 容器 ID；
+	// 停止/删除/探活/日志的寻址键）。
 	ContainerID string
-	// IP 是任务在作用域网络内的稳定 DNS 名（fleetly TaskView.dns_name =
-	// fleetly-task-<id>；runner HTTP 分发与健康探针的寻址目标）。字段名沿
-	// 池的既有消费面（pool.go 一行不动），语义已从容器 IP 迁移为 DNS 名。
+	// IP 是实例在作用域网络内的寻址目标（池内 HTTP 分发与健康探针；pool.go
+	// 只消费其「网络内可达」语义）：fleetly 形态 = 稳定 DNS 名
+	// （fleetly-task-<id>）；docker 形态 = bridge 网络容器 IP。
 	IP string
 }
 
-// Daemon 是池管理器对执行底座的抽象（fake 测试用；真实实现 fleetlyDaemon
-// 经 fleetly Tasks/build API 操作实例与构建，零 docker client）。
+// Daemon 是池管理器对执行底座的抽象（fake 测试用）。真实实现两形态
+// （IMPL-T2-5）：fleetlyDaemon（本文件，fleetly Tasks/build API 客户端，
+// 零 docker client）与 dockerdriver 包的 docker 直接执行（本仓唯一
+// docker client 面）；driver 选择见 driver.go。
 type Daemon interface {
 	// EnsureProjectNetwork 确保项目任务网络存在并声明控制面挂靠（fleetly
 	// EnsureTaskNetwork：task-group 网长活，ref = p<projectID> / q<projectID>
@@ -211,7 +216,7 @@ type fleetlyDaemon struct {
 	// sleep 可注入（表驱动测试）；生产用 defaultSleep（pool.go 同款）。
 	sleep func(context.Context, time.Duration) bool
 	// probe 是验证 spawn 的 health 探针（生产 = httpRunner；测试注入 fake）。
-	probe healthProber
+	probe HealthProber
 
 	mu sync.Mutex
 	// scopes 是本次进程内已 ensure 的任务网络投影（网络名 → 作用域）。
@@ -222,8 +227,8 @@ type fleetlyDaemon struct {
 }
 
 // NewFleetlyDaemon 构造真实执行底座实现（fleetly Tasks/build API 客户端）。
-// endpoint 缺失或非法时延迟到首次调用暴露（与既有 dockerDaemon 同策略；
-// 组合根 ValidateFunctionsFleetlyConfig 已做启动期 fail-fast）。
+// endpoint 缺失或非法时延迟到首次调用暴露（与 dockerdriver.New 的 client
+// 段同策略；组合根 ValidateFunctionsDriverConfig 已做启动期 fail-fast）。
 func NewFleetlyDaemon(cfg *config.AppConfig, refs imageRefStore) Daemon {
 	var cli fleetlyTaskClient
 	var cliErr error
@@ -938,9 +943,10 @@ type verifySpawnConfig struct {
 	PollInterval time.Duration
 }
 
-// healthProber 是验证探针的最小抽象（runnerClient 的 Health 面收窄；生产 =
-// httpRunner，单测 = fake 表驱动）。
-type healthProber interface {
+// HealthProber 是验证探针的最小抽象（runnerClient 的 Health 面收窄；生产 =
+// httpRunner，单测 = fake 表驱动）。IMPL-T2-5 导出：dockerdriver 驱动的
+// 验证 spawn 复用同一探针注入缝。
+type HealthProber interface {
 	Health(ctx context.Context, ip string) error
 }
 
@@ -957,7 +963,7 @@ type healthProber interface {
 // 运行期错误（panic/协议未实现）在任务 error 字段；编译错误在构建日志、
 // 不经此路径。无论成败任务以独立 cleanup ctx Stop+Delete（不继承已取消/
 // 临期的构建 ctx，fleetlyCleanupTimeout 同约定）。
-func spawnVerifyInstance(ctx context.Context, d Daemon, probe healthProber, opts BuildImageOptions, vc verifySpawnConfig) error {
+func spawnVerifyInstance(ctx context.Context, d Daemon, probe HealthProber, opts BuildImageOptions, vc verifySpawnConfig) error {
 	// egress 分类与执行一致（对抗审查 A1 最强修复）：untrusted 函数的验证
 	// 实例挂 internal 变体任务网络（与池 spawnInstance 同路）——验证期不得
 	// 给不可信镜像开跳出网窗口。
@@ -1004,7 +1010,7 @@ func spawnVerificationTask(ctx context.Context, d Daemon, opts BuildImageOptions
 
 // awaitVerificationHealthy 轮询验证实例的 /_tw/health 直到就绪（预算 =
 // BootTimeout）；失败时把任务台账失败现场拼进错误。
-func awaitVerificationHealthy(ctx context.Context, d Daemon, probe healthProber, opts BuildImageOptions, vc verifySpawnConfig, inst Instance) error {
+func awaitVerificationHealthy(ctx context.Context, d Daemon, probe HealthProber, opts BuildImageOptions, vc verifySpawnConfig, inst Instance) error {
 	interval := vc.PollInterval
 	if interval <= 0 {
 		interval = verifyPollInterval
@@ -1054,7 +1060,7 @@ func (d *fleetlyDaemon) startVerificationTask(ctx context.Context, opts BuildIma
 
 // awaitVerificationHealthy 的 daemon 方法形态（ImportImage 腿复用；避免
 // 暴露额外包级函数）。
-func (d *fleetlyDaemon) awaitVerificationHealthy(ctx context.Context, probe healthProber, inst Instance, opts BuildImageOptions, vc verifySpawnConfig) error {
+func (d *fleetlyDaemon) awaitVerificationHealthy(ctx context.Context, probe HealthProber, inst Instance, opts BuildImageOptions, vc verifySpawnConfig) error {
 	return awaitVerificationHealthy(ctx, d, probe, opts, vc, inst)
 }
 

@@ -115,6 +115,78 @@ func TestValidateFunctionsFleetlyConfig(t *testing.T) {
 	}
 }
 
+// TestValidateFunctionsDriverConfig 执行底座驱动选择校验（IMPL-T2-5）：
+// 未设/未知值 fail-closed 且点名两选项与配置键；按驱动分发——fleetly 分支
+// 要求 endpoint/令牌，docker 分支无必填键（host 缺省由驱动回落）。
+func TestValidateFunctionsDriverConfig(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		driver  string
+		fleetly *config.Functions_Fleetly
+		wantErr string
+	}{
+		{
+			name:    "未设置拒绝（点名两选项与配置键）",
+			wantErr: "functions.driver is required",
+		},
+		{
+			name:    "未设置拒绝（fleetly 选项）",
+			wantErr: `for the fleetly platform (requires functions.fleetly.endpoint and functions.fleetly.token`,
+		},
+		{
+			name:    "未设置拒绝（docker 选项）",
+			wantErr: `or "docker" for direct docker execution (requires docker.sock access`,
+		},
+		{
+			name:    "未知值拒绝",
+			driver:  "nomad",
+			wantErr: `functions.driver "nomad" is unknown`,
+		},
+		{
+			name:    "未知值拒绝（列出合法值）",
+			driver:  "nomad",
+			wantErr: `supported values are "fleetly"`,
+		},
+		{
+			name:    "fleetly 分支缺 endpoint 拒绝",
+			driver:  "fleetly",
+			fleetly: &config.Functions_Fleetly{Token: "tok"},
+			wantErr: "functions.fleetly.endpoint is required",
+		},
+		{
+			name:    "fleetly 分支完整配置通过",
+			driver:  "fleetly",
+			fleetly: &config.Functions_Fleetly{Endpoint: "fleetlyd:8421", Token: "tok"},
+		},
+		// docker 分支零必填键：host 由驱动回落缺省，fleetly 段无需存在。
+		{name: "docker 分支零必填键通过（无 fleetly 段）", driver: "docker"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fn := &config.Functions{Driver: tc.driver}
+			if tc.driver == config.FunctionsDriverDocker {
+				fn.Docker = &config.Functions_Docker{Host: "unix:///var/run/docker.sock"}
+			}
+			fn.Fleetly = tc.fleetly
+			cfg := &config.AppConfig{Functions: fn}
+			err := ValidateFunctionsDriverConfig(cfg)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+	// 未设 driver 且 fleetly 段为 nil 的纯零值配置同样 fail-closed（最常见
+	// 的存量配置漂移形态：既无 driver 也无 fleetly 段）。
+	err := ValidateFunctionsDriverConfig(&config.AppConfig{Functions: &config.Functions{}})
+	require.ErrorContains(t, err, "functions.driver is required")
+}
+
 // M5 C8：setup_token 非空时套用主密钥强度下界（≥32 字节 + 弱子串拒绝）；
 // 空值（未启用 setup 面）跳过。
 func TestValidateAppConfig_SetupToken(t *testing.T) {

@@ -61,23 +61,44 @@ SERVICE="fleetly-task-$TASK_ID"
 echo "orchestrator task: $TASK_ID (service $SERVICE)"
 
 echo '=== wait for orchestrator terminal state (<=10m) ==='
+# API 台账为真值：引擎在任务容器完成后即移除底座服务（stopping→stopped 落账），
+# docker service ps/logs 不再可依赖——状态经 tasks ls，日志经 tasks logs。
 i=0
 while :; do
-    STATUS=$(docker service ps "$SERVICE" --format '{{.CurrentState}}' 2>/dev/null | head -1)
-    echo "t=$i status=$STATUS"
+    LINE=$($FCLI tasks ls --all --addr "$ADDR" --token "$TOKEN" --limit 20 |
+        grep "^task $TASK_ID " | head -1)
+    STATUS=$(printf '%s' "$LINE" | grep -oE 'status=[a-z]+' | head -1 | cut -d= -f2)
+    echo "t=$i status=${STATUS:-unknown}"
     case "$STATUS" in
-    *Complete* | *Failed* | *Rejected* | *Shutdown*) break ;;
+    stopped | failed) break ;;
     esac
-    i=$((i + 10))
+    i=$((i + 5))
     [ "$i" -ge 600 ] && {
         echo 'orchestrator did not reach terminal state in 10m'
         break
     }
-    sleep 10
+    sleep 5
 done
 
-echo '=== orchestrator logs ==='
-docker service logs "$SERVICE" 2>&1 | tee /tmp/e2e-orchestrator.log
+echo '=== orchestrator logs (platform VictoriaLogs; task-labelled stream) ==='
+# VL 检索在冷启动 dind 上可能短暂 degraded（后端未应答即返回
+# E_LOGS_BACKEND_UNAVAILABLE，检索会自动恢复）——有界重试取日志。
+i=0
+while :; do
+    $FCLI tasks logs --addr "$ADDR" --token "$TOKEN" --limit 200 "$TASK_ID" > /tmp/e2e-orchestrator.log 2>&1
+    if [ -s /tmp/e2e-orchestrator.log ] &&
+        ! grep -q 'E_LOGS_BACKEND_UNAVAILABLE' /tmp/e2e-orchestrator.log; then
+        break
+    fi
+    i=$((i + 5))
+    [ "$i" -ge 180 ] && break
+    sleep 5
+done
+if [ ! -s /tmp/e2e-orchestrator.log ]; then
+    # 平台日志库缺失时的兜底腿（老引擎服务仍在场的形态）。
+    docker service logs "$SERVICE" > /tmp/e2e-orchestrator.log 2>&1 || true
+fi
+cat /tmp/e2e-orchestrator.log
 
 if grep -q 'E2E PASS' /tmp/e2e-orchestrator.log; then
     echo 'E2E-RESULT: PASS'

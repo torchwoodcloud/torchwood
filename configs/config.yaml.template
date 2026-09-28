@@ -121,20 +121,38 @@ storage:
 
 functions:
   # 函数执行统一经 dispatcher 分发（常驻 runner 实例池；v1 docker 执行器已
-  # 移除）。IMPL-T2-3 起执行底座 = fleetly 平台：函数实例 = fleetly Tasks
-  # （swarm service 承载，稳定 DNS 名 + 平台强制加固）、构建 = fleetly
-  # build-from-upload；dispatcher 不再持有 docker.sock（本仓零 docker
-  # client），多节点编排归 swarm。
+  # 移除）。IMPL-T2-5 起执行底座按 driver 二选一（仅 dispatcher 进程消费）：
+  #   - "fleetly"：函数实例 = fleetly Tasks（swarm service 承载，稳定 DNS 名
+  #     + 平台强制加固）、构建 = fleetly build-from-upload；
+  #   - "docker"：函数实例 = 常驻容器（per-project bridge 网络
+  #     tw-func-<project>[-int]，docker.sock 直操作）、构建 = 本地 docker build。
+  # **未设置/未知值时 dispatcher 拒绝启动**（fail-closed）。
+  # env: TORCHWOOD_FUNCTIONS_DRIVER
+  driver: ""                          # "fleetly" | "docker"（必填，二选一）
   docker:
-    # host/network 键已删除（proto reserved）：dispatcher 不再消费任何
-    # docker 宿主配置。存量 yaml 残留键会被容忍忽略（proto 未知字段）。
-    # 平台镜像命名前缀（逻辑寻址键，非 docker 构建目标）：server 与
-    # dispatcher 同源派生函数部署镜像逻辑名（func-<function>-<deployment>），
-    # dispatcher 以此名为键登记 fleetly 构建产物引用。
+    # docker 直接执行底座（driver: "docker" 时 dispatcher 消费；其余进程
+    # 零消费）。
+    # docker daemon 地址（docker client host 语法）：容器形态经 sock 挂载。
+    # env: TORCHWOOD_FUNCTIONS_DOCKER_HOST
+    host: "unix:///var/run/docker.sock"
+    # 全局共享执行网络覆盖（opt-in）：空（默认）= per-project 隔离网络
+    # tw-func-<project_id>（internal 变体 + "-int" 后缀）。**勿配全局网络**
+    # （跨租户函数容器同网互通，横向访问风险自担）。
+    # env: TORCHWOOD_FUNCTIONS_DOCKER_NETWORK
+    network: ""
+    # 回访容器名：dispatcher join 项目网络时把该容器一并 attach，函数经容器
+    # 名 DNS 回访平台 API（execution.api_base_url 指向该名；internal 网络
+    # 无 NAT 出口，这是不可信函数回访的唯一通路）。与 server 的
+    # container_name 严格一致；attach 失败仅告警不阻断执行。
+    # env: TORCHWOOD_FUNCTIONS_DOCKER_CALLBACK_CONTAINER
+    callback_container: ""
+    # 平台镜像命名前缀（镜像逻辑名）：driver="docker" 时即本地构建 tag；
+    # driver="fleetly" 时 dispatcher 以此名为键登记 fleetly 构建产物引用。
     registry: "torchwood-funcs"       # 必须小写
   fleetly:
-    # fleetly 控制面（仅 dispatcher 进程消费）：函数任务与构建 API 的唯一
-    # 通路。**endpoint 与 token 必填**——缺失时 dispatcher 拒绝启动。
+    # fleetly 控制面（driver: "fleetly" 时 dispatcher 进程消费）：函数任务
+    # 与构建 API 的唯一通路。**endpoint 与 token 必填**——缺失时 dispatcher
+    # 拒绝启动。
     # env: TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT
     endpoint: ""                      # 如 fleetlyd:8421（栈内可达地址）
     # 机具令牌（scope: tasks,build）：**经环境变量注入，不落配置文件**。
@@ -154,9 +172,12 @@ functions:
     # fleetly 拓扑下 = 任务网络成员挂靠后的 DNS 别名
     # （fleetly.network_members 把 server 挂进任务网络）：
     #   api_base_url: "http://<app>-server:9080"
-    # 一致性要求：①该地址必须是任务网络内可达的 server 地址（不可信函数挂
-    # internal 任务网络，出网全 deny——依赖 server 的成员挂靠）；②server/
-    # worker 两进程配置同值（都经 buildExecution 注入）。
+    # docker 拓扑下 = 回访容器名的容器内 DNS（dispatcher 把 callback_container
+    # 指向的 server 容器 attach 进项目网络）：
+    #   api_base_url: "http://torchwood-server:9080"
+    # 一致性要求：①该地址必须是函数网络内可达的 server 地址（不可信函数挂
+    # internal 网络，出网全 deny——依赖 server 的挂靠）；②server/worker 两
+    # 进程配置同值（都经 buildExecution 注入）。
     # 留空 = 不注入 TW_API_BASE_URL（函数无法回访平台 API）。
     api_base_url: ""                  # env: TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL
   dispatcher:

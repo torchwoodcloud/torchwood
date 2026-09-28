@@ -113,7 +113,7 @@ curl -s --noproxy '*' -c "$JAR_WIN" -X POST "http://127.0.0.1:$HOST_REST_PORT/v1
     >"$RUN_DIR/register.json" || die 'founder register failed'
 TOKEN=$(curl -s --noproxy '*' -b "$JAR_WIN" -X POST "http://127.0.0.1:$HOST_REST_PORT/v1/tokens" \
     -H 'Content-Type: application/json' \
-    -d '{"machine":true,"note":"t23 e2e machine token","scopes":["tasks","build"]}' |
+    -d '{"machine":true,"note":"t23 e2e machine token","scopes":["tasks","build","read"]}' |
     grep -oE '"token": ?"[^"]*"' | head -1 | cut -d'"' -f4)
 [ -n "$TOKEN" ] || die 'machine token mint failed'
 printf '%s' "$TOKEN" >"$RUN_DIR/token.txt"

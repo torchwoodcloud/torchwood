@@ -136,14 +136,20 @@ func TestUnmarshalConfig(t *testing.T) {
 	require.False(t, out.GetStorage().GetS3().GetUseSsl())
 	require.Equal(t, "./data", out.GetStorage().GetLocal().GetPath())
 
-	// executor 键已随 v1 docker 执行器删除、docker.host/network 已随
-	// IMPL-T2-3（dispatcher 改 fleetly Tasks/build 客户端）删除
-	//（config.proto reserved）；testYAML 特意保留这些残留键，钉住「proto
-	// 反序列化容忍未知字段、不报错」的兼容行为。
+	// executor 键已随 v1 docker 执行器删除（config.proto reserved）；
+	// testYAML 特意保留这个残留键，钉住「proto 反序列化容忍未知字段、不报
+	// 错」的兼容行为。docker.host 已随 IMPL-T2-5 以新字段号复归——残留键
+	// 变回正式键（老配置零改动即可绑定）。
 	require.Equal(t, "fleetlyd.internal:8421", out.GetFunctions().GetFleetly().GetEndpoint())
 	require.Equal(t, "tok-from-yaml", out.GetFunctions().GetFleetly().GetToken())
 	require.Equal(t, "torchwood", out.GetFunctions().GetFleetly().GetApp())
 	require.Equal(t, []string{"dispatcher", "server"}, out.GetFunctions().GetFleetly().GetNetworkMembers())
+	// driver/docker 底座键的 YAML 绑定（IMPL-T2-5 双执行底座）：host 复归后
+	// 老配置的 unix:///var/run/docker.sock 原样绑定。
+	require.Empty(t, out.GetFunctions().GetDriver())
+	require.Equal(t, "unix:///var/run/docker.sock", out.GetFunctions().GetDocker().GetHost())
+	require.Empty(t, out.GetFunctions().GetDocker().GetNetwork())
+	require.Empty(t, out.GetFunctions().GetDocker().GetCallbackContainer())
 
 	// telemetry 节是死配置退役（config.proto 已删 Telemetry message）后的同类
 	// 残留键：存量部署 yaml 携带它仍须无损反序列化（容忍未知字段，同 executor）；
@@ -248,4 +254,44 @@ security:
 	require.True(t, envRL.GetEnabled())
 	require.EqualValues(t, 42, envRL.GetIp().GetLimit())
 	require.Equal(t, "10s", envRL.GetApiKey().GetWindow())
+}
+
+// TestFunctionsDriverBinding：functions.driver 与 docker 底座键的 YAML 解码
+// 与 TORCHWOOD_FUNCTIONS_DRIVER / TORCHWOOD_FUNCTIONS_DOCKER_* 环境变量覆盖
+// （IMPL-T2-5 双执行底座）。
+func TestFunctionsDriverBinding(t *testing.T) {
+	yaml := `
+functions:
+  driver: docker
+  docker:
+    host: "unix:///var/run/docker.sock"
+    network: ""
+    callback_container: "torchwood-server"
+`
+	cfg := newTestConfig(t, yaml)
+	var out AppConfig
+	require.NoError(t, UnmarshalConfig(cfg, &out))
+	require.Equal(t, "docker", out.GetFunctions().GetDriver())
+	require.Equal(t, "unix:///var/run/docker.sock", out.GetFunctions().GetDocker().GetHost())
+	require.Empty(t, out.GetFunctions().GetDocker().GetNetwork())
+	require.Equal(t, "torchwood-server", out.GetFunctions().GetDocker().GetCallbackContainer())
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	require.NoError(t, v.ReadConfig(strings.NewReader(yaml)))
+	f := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	f.String("config-dir", "./testdata", "config file path")
+
+	t.Setenv("TORCHWOOD_FUNCTIONS_DRIVER", "fleetly")
+	t.Setenv("TORCHWOOD_FUNCTIONS_DOCKER_HOST", "tcp://127.0.0.1:2375")
+	t.Setenv("TORCHWOOD_FUNCTIONS_DOCKER_NETWORK", "tw-shared")
+	t.Setenv("TORCHWOOD_FUNCTIONS_DOCKER_CALLBACK_CONTAINER", "tw-server")
+
+	require.NoError(t, ConfigureConfigSource(f, lynx.NewViperConfig(v)))
+	var envOut AppConfig
+	require.NoError(t, UnmarshalConfig(lynx.NewViperConfig(v), &envOut))
+	require.Equal(t, "fleetly", envOut.GetFunctions().GetDriver())
+	require.Equal(t, "tcp://127.0.0.1:2375", envOut.GetFunctions().GetDocker().GetHost())
+	require.Equal(t, "tw-shared", envOut.GetFunctions().GetDocker().GetNetwork())
+	require.Equal(t, "tw-server", envOut.GetFunctions().GetDocker().GetCallbackContainer())
 }

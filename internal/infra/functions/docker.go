@@ -15,6 +15,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/packer"
+	"github.com/torchwoodcloud/torchwood/pkg/ident"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -110,10 +111,52 @@ func SpecResources(spec string) ResourceSpec {
 	return ResourceSpec{Memory: res.memory, NanoCPUs: int64(res.cpu * 1e9)}
 }
 
-// perProjectNetworkPrefix/perProjectInternalNetworkSuffix 与
-// ResolveNetworkName/ResolveInternalNetworkName 已随 IMPL-T2-3 删除：函数
-// 实例 = fleetly Tasks，网络经 scope 引用（task-group 网）由 fleetly 平台
-// 创建与管理，本仓不再解析 docker 网络名。
+// perProjectNetworkPrefix 是默认 per-project 函数执行网络的前缀
+// （Round4 J5-4；IMPL-T2-5 恢复 docker 直接执行底座时复归）：完整网络名为
+// tw-func-<project.id>。project.id 已过 ident 白名单
+// （^[a-z][a-z0-9]{0,27}$），可直接用作网络名后缀。
+const perProjectNetworkPrefix = "tw-func-"
+
+// perProjectInternalNetworkSuffix 是 internal 变体网络的后缀（P2 egress
+// 默认 deny，设计 Security #6）：tw-func-<project.id>-int，docker
+// internal: true——阻断外网出口、网内互通保留（dispatcher/平台回访地址
+// 仍可达）。不可信函数（client_callable 或存在 http/cron 触发器）容器
+// attach 该网络而非常规网络。
+const perProjectInternalNetworkSuffix = "-int"
+
+// ResolveNetworkName 解析函数执行容器网络名（仅 docker 执行底座消费，
+// IMPL-T2-5；fleetly 底座不经此——网络经 task-group scope 引用）：
+//   - 显式配置 functions.docker.network 时使用该全局网络（opt-in；跨项目
+//     函数容器同网互通，存在横向访问风险，见 config.yaml.template 警告）；
+//   - 未配置（默认）时使用 per-project 网络 tw-func-<project.id>，项目间
+//     容器互不可达，实现租户网络隔离。
+//
+// projectID 为空且未配置全局网络时返回错误（fail-closed，不回落共享网络）。
+func ResolveNetworkName(cfg *config.AppConfig, projectID string) (string, error) {
+	if name := cfg.GetFunctions().GetDocker().GetNetwork(); name != "" {
+		return name, nil
+	}
+	if projectID == "" {
+		return "", status.Error(codes.InvalidArgument, "project id is required for function execution")
+	}
+	// 纵深防御：即便上游漏校验，也不让非法字符进入 docker 网络名。
+	if err := ident.ValidateSchemaResourceID(projectID); err != nil {
+		return "", status.Errorf(codes.InvalidArgument, "invalid project id for function execution: %v", err)
+	}
+	return perProjectNetworkPrefix + projectID, nil
+}
+
+// ResolveInternalNetworkName 解析 internal 变体网络名（P2 egress 默认 deny；
+// 仅 docker 执行底座消费）：常规网络名 + "-int" 后缀
+// （tw-func-<project>-int；显式全局网络配置同样加后缀）。
+// projectID 校验与 ResolveNetworkName 同源。
+func ResolveInternalNetworkName(cfg *config.AppConfig, projectID string) (string, error) {
+	base, err := ResolveNetworkName(cfg, projectID)
+	if err != nil {
+		return "", err
+	}
+	return base + perProjectInternalNetworkSuffix, nil
+}
 
 // ImageName 返回函数部署镜像的逻辑名：{registry}/func-{functionID}-{deploymentID}
 // （registry 取 functions.docker.registry，默认 torchwood-funcs）。IMPL-T2-3
