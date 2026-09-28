@@ -1,8 +1,11 @@
-# Torchwood 运行时配置基线（docker/dokploy 栈）
-# fleetly 形态副本见 docker/fleetly/config.yaml（IMPL-T2-4：上传为平台 Config 资源）；
-# 内容变更两处同改（dokploy 退役后 fleetly 副本为唯一真源）。
-# 由 compose bind-mount 到 /app/configs/config.yaml；环境变量 TORCHWOOD_* 覆盖优先，
-# 密钥类（jwt secret / setup token / DB DSN / S3 凭据）一律由 compose 环境变量注入，不落此文件。
+# Torchwood 运行时配置基线（docker/fleetly 栈，IMPL-T2-4）
+#
+# 本文件是 docker/dokploy/config.yaml 的 fleetly 形态副本：由平台 Config 资源
+# 提供（external 值经 configs API 上传），compose 挂载到 server/worker/dispatcher
+# 的 /app/configs/config.yaml；环境变量 TORCHWOOD_* 覆盖优先（平台 env 层），
+# 密钥类（jwt secret / setup token / DB DSN / S3 凭据）一律由平台 env 注入，
+# 不落此文件。**与 docker/dokploy/config.yaml 保持同内容**：键位变更两处同改
+# （dokploy 栈退役后本文件为唯一真源）。
 # 完整键位说明见 configs/config.yaml.template 与 docs/developer/13-operations.md §4。
 
 server:

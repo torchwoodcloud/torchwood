@@ -1,10 +1,14 @@
 -- tw_authenticator 授权补齐（docs/developer/13-operations.md §4.5 ②③④④'）。
--- fleetly 形态副本见 docker/fleetly/bootstrap-roles.sql（IMPL-T2-4：上传为平台 Config、
--- 由 db-bootstrap init job 执行）；内容变更两处同改（dokploy 退役后 fleetly 副本为唯一真源）。
+-- **本文件是 docker/dokploy/bootstrap-roles.sql 的 fleetly 形态副本（IMPL-T2-4）**：
+-- 上传为平台 Config 资源（fleetly configs set torchwood bootstrap-roles.sql
+-- --from-file docker/fleetly/bootstrap-roles.sql），由 db-bootstrap init job 执行
+-- （psql -v dbname=<托管库名> -f）。与 docker/dokploy/ 侧保持同内容：变更两处同改
+-- （dokploy 栈退役后本文件为唯一真源）。托管实例无 initdb 钩子创建 tw_authenticator，
+-- 该步由同目录 bootstrap-runtime.sql（db-bootstrap 作业的同一份 configs 挂载）承接。
 -- 前置：迁移已执行到 000004（tw_owner/tw_app/tw_system 三角色已存在），
---       tw_authenticator 已由 initdb/01-authenticator.sh 创建。
+--       tw_authenticator 已由 bootstrap-runtime.sql 创建。
 -- 幂等性：GRANT 重复执行为 no-op；新表补授由 DO 块逐表 GRANT（重复 GRANT 同权亦为 no-op）。
--- 执行身份：owner/引导账号（compose 的 db-grants 一次性作业）。
+-- 执行身份：owner/引导账号（compose 的 db-bootstrap 一次性作业）。
 
 -- ② 000004 授权面：三角色 membership（每请求 SET LOCAL ROLE 的变色龙源头）
 GRANT tw_owner, tw_app, tw_system TO tw_authenticator;

@@ -1,0 +1,358 @@
+# Torchwood —— fleetly 受控子集栈（IMPL-T2-4 割接目标形态）
+#
+# 与 docker/dokploy/ 现役栈的逐行改写清单/白名单核对表见同目录 README.md §2。
+# 关键差异（一句话版）：
+# - postgres 从栈内删除：改落 fleetly 托管 percona-postgresql-18 实例（DT-8/DT-9），
+#   连接串经服务 label fleetly.databases 物化 + 平台 env 注入（见 README §4）；
+# - redis/minio 留栈内 + named volume（DT-8 残余卷；割接搬运见 cutover-runbook.md §3）；
+# - 三个一次性作业改 fleetly init job（fleetly.job: init）：migrate（迁移）、
+#   db-bootstrap（运行账号 + 授权）、roles-sig（B15 密钥落库）——平台 init job
+#   并行执行且无 depends_on，后两者带「等待上游产物」的有界重试环（见各服务注释）；
+# - config.yaml ×3 服务挂载 → 平台 Config 资源；bootstrap SQL → 平台 Config 资源；
+# - 删 dokploy-network/ports/depends_on/restart/pull_policy/container_name/`${}` 插值：
+#   平台为 app 建专属 overlay（服务别名 = compose 服务名）、宿主管端口退回 T3-1、
+#   编排顺序归发布管线（受控子集显式拒 depends_on）、镜像 tag→digest 由部署期解析；
+# - 域名路由从 Traefik label → 平台域名资源 API（README §3：9080 http + 9060 h2c）。
+#
+# 平台 env（app 级，注入全部服务；值不进仓库/对话/日志）与 Config 上传命令见
+# README §4；所有 `<...>` 占位按实际环境替换。
+#
+# 命令语义提醒：fleetly 受控子集的 `command` = 覆盖镜像 ENTRYPOINT（Swarm
+# ContainerSpec.Command），因此 worker/dispatcher/packer 用二进制绝对路径直接
+# 启动；`sh -c` 里的 `$VAR` 由容器 shell 在运行时展开（平台禁用 compose 插值，
+# `${...}` 不会被平台替换——本文件不使用 `${...}`）。
+
+name: torchwood
+
+# ---------- 平台 Config 资源（external：值经 configs API 上传，不进仓库） ----------
+#
+# 上传/更新命令（README §4；应用随首次部署创建后才可写入）：
+#   fleetly configs set torchwood config.yaml          --from-file docker/fleetly/config.yaml
+#   fleetly configs set torchwood bootstrap-runtime.sql --from-file docker/fleetly/bootstrap-runtime.sql
+#   fleetly configs set torchwood bootstrap-roles.sql   --from-file docker/fleetly/bootstrap-roles.sql
+configs:
+  config.yaml:
+    external: true
+  bootstrap-runtime.sql:
+    external: true
+  bootstrap-roles.sql:
+    external: true
+
+# ---------- 命名卷（平台注册为 fleetly-<app>-<key>-<appid8>） ----------
+volumes:
+  redis_data:
+  minio_data:
+
+services:
+  # ==================== 常驻：redis ====================
+  redis:
+    image: redis:7-alpine
+    # AOF 必开：refresh 轮换记录等存 Redis，无持久化时容器重启 = 已登录会话
+    # 下次刷新即失效（docs/developer/13-operations.md §6.1）；同时承载
+    # dispatcher 的函数镜像引用映射（torchwood:fnimg:*）。
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    # 平台健康门参数缺省 5s/3s/3/10s；此处只声明探针本体。
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+
+  # ==================== 常驻：minio（SILO，S3 对象存储） ====================
+  minio:
+    # SILO（pgsty/silo）：MinIO 社区延续分支，与 MinIO 完全兼容（S3 API /
+    # MINIO_* 变量 / 磁盘格式），换镜像即接管存量卷；钉 release tag 勿用 latest。
+    # 兼用户对象存储（torchwood-storage）与函数部署代码包持久桶
+    # （torchwood-functions，config.yaml functions.storage——镜像缺失自动
+    # 重建的源，Functions 启用时为硬依赖）。
+    image: pgsty/silo:RELEASE.2026-09-03T13-18-01Z
+    # 镜像 ENTRYPOINT 是 docker-entrypoint.sh（会把 minio/server 参数转译给
+    # silo 二进制）；fleetly 的 command 覆盖 ENTRYPOINT，故此处直接调用
+    # /usr/bin/silo（本地实证同形态启动 + :9000 探通，见实施记录）。
+    command: ["silo", "server", "/data", "--console-address", ":9001"]
+    environment:
+      # 平台 env 必填覆盖（fleetly env set torchwood MINIO_ROOT_USER/MINIO_ROOT_PASSWORD）；
+      # 未覆盖时以占位值启动，server 的 S3 认证失败 → readiness 门失败（fail-closed）。
+      MINIO_ROOT_USER: "CHANGE-ME"
+      MINIO_ROOT_PASSWORD: "CHANGE-ME-TORCHWOOD"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      # 镜像自带 bash：TCP 存活探针（与现役 dokploy 同形态）。
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9000'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # ==================== 常驻：server（gRPC/gateway/Console/healthz） ====================
+  server:
+    # 应用镜像：GHCR 预构建（.github/workflows/image.yml），钉 sha tag；
+    # 升级/回滚 = 改 tag 重部署（镜像形态裁决见 README §5）。镜像变更时
+    # migrate 的 -source ref 须同步改为同一 commit（README §5）。
+    image: ghcr.io/torchwoodcloud/torchwood:sha-78ea1a4
+    # 托管库引用：物化 FLEETLY_DB_TORCHWOOD_PG_* env（app 级）并把本服务挂
+    # 到库共享网络（别名 = 实例名 torchwood-pg）。实例须先创建（runbook §0）。
+    labels:
+      fleetly.databases: "torchwood-pg"
+    # 9080（HTTP）+ 9060（gRPC h2c）：域名资源的后端端口由域名行显式携带，
+    # expose 供人读与首部署种子语义（OT-2）。
+    expose:
+      - "9080"
+      - "9060"
+    configs:
+      - source: config.yaml
+        target: /app/configs/config.yaml
+    environment:
+      # —— 与现役 dokploy 同基线的字面量（非敏感）——
+      TORCHWOOD_ENV: "production"
+      TORCHWOOD_SERVER_HTTP_ADDR: ":9080"
+      TORCHWOOD_SERVER_GRPC_ADDR: ":9060"
+      TORCHWOOD_SERVER_METRICS_ADDR: "127.0.0.1:9040"
+      # 对外绝对地址基准（OAuth/支付回调）：平台 env 必填覆盖（占位防忘配；
+      # 覆盖时部署输出 W_ENV_PLATFORM_OVERRIDE 可见）。
+      TORCHWOOD_SERVER_HTTP_PUBLIC_URL: "https://change-me.example.com"
+      # 平台入口（Traefik）与 gateway 回拨在 docker 私网段；与现役同口径。
+      TORCHWOOD_SECURITY_TRUSTED_PROXIES: "127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS: "*"
+      TORCHWOOD_SERVER_HTTP_CORS_ALLOW_HEADERS: ""
+      # 函数执行统一经 dispatcher 分发（app 网短名 = compose 服务名）。
+      TORCHWOOD_FUNCTIONS_DISPATCHER_URL: "http://dispatcher:9070"
+      TORCHWOOD_FUNCTIONS_PACKER_URL: "http://packer:9071"
+      # 函数回访平台 API 的地址：任务网络成员挂靠后按项目网别名
+      # <app>-<service> 回访（IMPL-T2-3；容器名 container_name 已删除）。
+      TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL: "http://torchwood-server:9080"
+      # —— 平台 env 必填（app 级注入；缺失即 fail-closed）——
+      # TORCHWOOD_SECURITY_JWT_SECRET / TORCHWOOD_SECURITY_SETUP_TOKEN
+      # TORCHWOOD_DATA_DATABASE_SOURCE（运行态 tw_authenticator DSN，见 README §4）
+      # TORCHWOOD_STORAGE_S3_ACCESS_KEY_ID / TORCHWOOD_STORAGE_S3_SECRET_ACCESS_KEY
+      # TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN / TORCHWOOD_FUNCTIONS_PACKER_SHARED_TOKEN
+      # TORCHWOOD_SECURITY_ENCRYPTION_KEY（可选）
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9080/healthz/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  # ==================== 常驻：worker（Functions 异步消费者） ====================
+  worker:
+    image: ghcr.io/torchwoodcloud/torchwood:sha-78ea1a4
+    labels:
+      fleetly.databases: "torchwood-pg"
+    # 覆盖镜像 ENTRYPOINT（server）→ 直接启动 worker 二进制。
+    command: ["/usr/local/bin/worker"]
+    configs:
+      - source: config.yaml
+        target: /app/configs/config.yaml
+    environment:
+      # 与现役 dokploy 的 x-app-env 同基线（worker 消费 JWT/DB/Redis/S3 等）。
+      TORCHWOOD_ENV: "production"
+      TORCHWOOD_SERVER_HTTP_ADDR: ":9080"
+      TORCHWOOD_SERVER_GRPC_ADDR: ":9060"
+      TORCHWOOD_SERVER_METRICS_ADDR: "127.0.0.1:9040"
+      TORCHWOOD_SERVER_HTTP_PUBLIC_URL: "https://change-me.example.com"
+      TORCHWOOD_SECURITY_TRUSTED_PROXIES: "127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS: "*"
+      TORCHWOOD_SERVER_HTTP_CORS_ALLOW_HEADERS: ""
+      # 异步执行同样经 dispatcher 分发；回访地址与 server 保持一致。
+      TORCHWOOD_FUNCTIONS_DISPATCHER_URL: "http://dispatcher:9070"
+      TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL: "http://torchwood-server:9080"
+      # 平台 env 必填键同 server（JWT/DB DSN/S3/dispatcher token）。
+    healthcheck:
+      # worker 无 HTTP 监听面（cmd/worker 无 healthz）：进程存活探针，
+      # 深度检查（队列消费/日志）留 runbook §6 验收探针 —— 诚实标注见 README §7。
+      test: ["CMD-SHELL", "pgrep -x worker"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # ==================== 常驻：dispatcher（fleetly Tasks/build 客户端） ====================
+  dispatcher:
+    image: ghcr.io/torchwoodcloud/torchwood:sha-78ea1a4
+    # IMPL-T2-3：零 docker.sock / 零 docker client——函数实例 = fleetly Tasks、
+    # 构建 = fleetly build-from-upload。
+    command: ["/usr/local/bin/dispatcher"]
+    configs:
+      - source: config.yaml
+        target: /app/configs/config.yaml
+    environment:
+      TORCHWOOD_ENV: "production"
+      TORCHWOOD_SERVER_HTTP_ADDR: ":9080"
+      TORCHWOOD_SERVER_GRPC_ADDR: ":9060"
+      TORCHWOOD_SERVER_METRICS_ADDR: "127.0.0.1:9040"
+      TORCHWOOD_SERVER_HTTP_PUBLIC_URL: "https://change-me.example.com"
+      TORCHWOOD_SECURITY_TRUSTED_PROXIES: "127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS: "*"
+      TORCHWOOD_SERVER_HTTP_CORS_ALLOW_HEADERS: ""
+      TORCHWOOD_FUNCTIONS_DISPATCHER_ADDR: ":9070"
+      # 每 dispatcher 常驻实例总量上限（内存敞口 = 实例数 × spec 内存）。
+      TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES: "16"
+      # 平台镜像命名前缀（逻辑寻址键；server 同值，映射见 README §7）。
+      TORCHWOOD_FUNCTIONS_DOCKER_REGISTRY: "torchwood-funcs"
+      # ——fleetly 控制面（IMPL-T2-3；平台 env 注入）——
+      # TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT：fleetlyd gRPC 端点，容器内可达
+      #   （runbook §9 前置：绑定地址/TLS 形态需与明文 gRPC 客户端兼容）；
+      # TORCHWOOD_FUNCTIONS_FLEETLY_TOKEN：机具令牌（scope tasks,build）
+      TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT: ""
+      TORCHWOOD_FUNCTIONS_FLEETLY_TOKEN: ""
+      # 本栈的 fleetly app 名 + 挂靠任务网络的服务（一次声明，平台经发布管线
+      # 重部署挂靠；per-task 动态 attach 禁令的受控回访形态）。
+      TORCHWOOD_FUNCTIONS_FLEETLY_APP: "torchwood"
+      TORCHWOOD_FUNCTIONS_FLEETLY_NETWORK_MEMBERS: "dispatcher,server"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9070/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # ==================== 常驻：packer（git 部署源打包） ====================
+  packer:
+    image: ghcr.io/torchwoodcloud/torchwood:sha-78ea1a4
+    # 无状态、无 docker.sock、无业务依赖；资源尖峰隔离在可牺牲进程。
+    command: ["/usr/local/bin/packer"]
+    environment:
+      TORCHWOOD_ENV: "production"
+      TORCHWOOD_SERVER_HTTP_ADDR: ":9080"
+      TORCHWOOD_SERVER_GRPC_ADDR: ":9060"
+      TORCHWOOD_SERVER_METRICS_ADDR: "127.0.0.1:9040"
+      TORCHWOOD_SERVER_HTTP_PUBLIC_URL: "https://change-me.example.com"
+      TORCHWOOD_SECURITY_TRUSTED_PROXIES: "127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS: "*"
+      TORCHWOOD_SERVER_HTTP_CORS_ALLOW_HEADERS: ""
+      TORCHWOOD_FUNCTIONS_PACKER_ADDR: ":9071"
+      TORCHWOOD_FUNCTIONS_PACKER_FETCH_TIMEOUT: "120s"
+      TORCHWOOD_FUNCTIONS_PACKER_MAX_REPO_BYTES: "209715200"
+      TORCHWOOD_FUNCTIONS_PACKER_MAX_ZIP_BYTES: "52428800"
+      TORCHWOOD_FUNCTIONS_PACKER_CONCURRENCY: "4"
+      # 自托管内网 http forge 场景才开启（默认 https-only + 拨号点拒内网 IP）。
+      TORCHWOOD_FUNCTIONS_PACKER_ALLOW_INSECURE: "false"
+      # 平台 env 必填：TORCHWOOD_FUNCTIONS_PACKER_SHARED_TOKEN（与 server 同值）
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9071/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # ==================== 一次性作业 1：migrate（控制面迁移） ====================
+  #
+  # fleetly init job：发布管线在新代码晋级前以新 spec 跑本作业，失败即发布失败
+  # （DT-4）。迁移源 = 公开仓库 github:// + 钉 commit（与 server 镜像 tag 同一
+  # commit；不依赖 GHCR 镜像内含目录，也不把目录级文件树塞进 Config——OT-3）。
+  # 匿名 GitHub API 有每 IP 60 req/h 限额：runbook §0 有 preflight 检查，
+  # 超限时用 runbook §9 的宿主机 file:// 等价命令兜底。
+  migrate:
+    image: migrate/migrate:v4.18.1
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        if [ -z "${FLEETLY_DB_TORCHWOOD_PG_URL:-}" ]; then
+          echo "FLEETLY_DB_TORCHWOOD_PG_URL is empty: the fleetly.databases label was not resolved (create the managed instance 'torchwood-pg' first)" >&2
+          exit 1
+        fi
+        exec /migrate \
+          -source "github://torchwoodcloud/torchwood/db/migrations#78ea1a4" \
+          -database "${FLEETLY_DB_TORCHWOOD_PG_URL}?sslmode=disable" \
+          up
+    labels:
+      fleetly.job: "init"
+      fleetly.job.timeout: "10m"
+      fleetly.databases: "torchwood-pg"
+    # 一次性作业无长驻监听面；探针仅作工具面在位自检（平台按任务终态判定作业）。
+    healthcheck:
+      test: ["CMD", "/migrate", "-version"]
+
+  # ==================== 一次性作业 2：db-bootstrap（运行账号 + 授权） ====================
+  #
+  # 托管实例没有 postgres 入口 initdb 钩子：tw_authenticator 的创建与
+  # bootstrap-roles.sql 授权由本作业承接（configs 挂载两个 SQL，外部值经
+  # configs API 上传）。平台 init job 并行执行且无 depends_on —— 授权依赖
+  # migrate 产出的三角色（000004），故 grants 段带 5s×48 的有界等待环；
+  # 任一前置失败在预算内显式失败（不静默半成功）。
+  db-bootstrap:
+    # percona 发行版镜像内自带 psql（与实例同发行版/同大版本）——用 psql 客户端面。
+    image: percona/percona-distribution-postgresql:18
+    command:
+      - sh
+      - -c
+      - |
+        set -u
+        db_url="${FLEETLY_DB_TORCHWOOD_PG_URL:-}"
+        if [ -z "$db_url" ]; then
+          echo "FLEETLY_DB_TORCHWOOD_PG_URL is empty: the fleetly.databases label was not resolved (create the managed instance 'torchwood-pg' first)" >&2
+          exit 1
+        fi
+        if [ -z "${TORCHWOOD_AUTH_PASSWORD:-}" ]; then
+          echo "TORCHWOOD_AUTH_PASSWORD is empty: set it with 'fleetly env set torchwood TORCHWOOD_AUTH_PASSWORD <hex>' and redeploy" >&2
+          exit 1
+        fi
+        psql "${db_url}?sslmode=disable" -v ON_ERROR_STOP=1 \
+          -v dbname="${FLEETLY_DB_TORCHWOOD_PG_DATABASE}" \
+          -v auth_password="$TORCHWOOD_AUTH_PASSWORD" \
+          -f /etc/torchwood/bootstrap-runtime.sql
+        n=0
+        until psql "${db_url}?sslmode=disable" -v ON_ERROR_STOP=1 \
+          -v dbname="${FLEETLY_DB_TORCHWOOD_PG_DATABASE}" \
+          -f /etc/torchwood/bootstrap-roles.sql; do
+          n=$((n+1))
+          if [ "$n" -ge 48 ]; then
+            echo "bootstrap-roles: the RBAC roles did not appear within 240s; check the migrate init job (migration 000004)" >&2
+            exit 1
+          fi
+          echo "bootstrap-roles: retry $n (waiting for the migrate init job to create the RBAC roles)" >&2
+          sleep 5
+        done
+        echo "db-bootstrap: runtime account and grants converged"
+    configs:
+      - source: bootstrap-runtime.sql
+        target: /etc/torchwood/bootstrap-runtime.sql
+      - source: bootstrap-roles.sql
+        target: /etc/torchwood/bootstrap-roles.sql
+    labels:
+      fleetly.job: "init"
+      fleetly.job.timeout: "10m"
+      fleetly.databases: "torchwood-pg"
+    healthcheck:
+      test: ["CMD", "psql", "--version"]
+
+  # ==================== 一次性作业 3：roles-sig（B15 密钥落库） ====================
+  #
+  # 迁移（000004）→ 本作业 → server/worker 启动：把 HMAC-SHA256(jwt.secret,
+  # "tw-roles-guc-v1") 落 public.tw_secrets；不跑则文档查询 fail-closed。
+  # 用 owner/引导 DSN（运行态 tw_authenticator 对 tw_secrets 零权限）。
+  # 等待环同 db-bootstrap（迁移未完成时重试，不静默半成功）。
+  roles-sig:
+    image: ghcr.io/torchwoodcloud/torchwood:sha-78ea1a4
+    command:
+      - sh
+      - -c
+      - |
+        set -u
+        db_url="${FLEETLY_DB_TORCHWOOD_PG_URL:-}"
+        if [ -z "$db_url" ]; then
+          echo "FLEETLY_DB_TORCHWOOD_PG_URL is empty: the fleetly.databases label was not resolved (create the managed instance 'torchwood-pg' first)" >&2
+          exit 1
+        fi
+        if [ -z "${TORCHWOOD_SECURITY_JWT_SECRET:-}" ]; then
+          echo "TORCHWOOD_SECURITY_JWT_SECRET is empty: set it with 'fleetly env set torchwood TORCHWOOD_SECURITY_JWT_SECRET <hex>' and redeploy" >&2
+          exit 1
+        fi
+        n=0
+        until /usr/local/bin/torchwood admin sync-roles-sig --dsn "${db_url}?sslmode=disable"; do
+          n=$((n+1))
+          if [ "$n" -ge 48 ]; then
+            echo "sync-roles-sig: failed for 240s (migration 000004 / tw_secrets not reachable); check the migrate init job" >&2
+            exit 1
+          fi
+          echo "sync-roles-sig: retry $n (waiting for the migrate init job)" >&2
+          sleep 5
+        done
+    labels:
+      fleetly.job: "init"
+      fleetly.job.timeout: "10m"
+      fleetly.databases: "torchwood-pg"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/torchwood", "version"]

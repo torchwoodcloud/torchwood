@@ -247,3 +247,33 @@ docker run --rm ghcr.io/torchwoodcloud/torchwood:latest \
 | `config.yaml` | 运行时配置基线，bind-mount 到 `/app/configs/config.yaml`（env 覆盖优先） |
 | `initdb/01-authenticator.sh` | 首次 initdb 创建 `tw_authenticator`（仅空卷执行一次） |
 | `bootstrap-roles.sql` | 迁移后补齐 authenticator 授权面（ops 文档 §4.5 ②③④④'） |
+| `../fleetly/` | **fleetly 部署形态（割接目标；见 §12）**：compose/README/cutover-runbook |
+
+## 12. fleetly 部署（割接目标形态，IMPL-T2-4）
+
+本栈的 fleetly 部署形态见 [`../fleetly/`](../fleetly/)（`docker-compose.yml` +
+`README.md` + `cutover-runbook.md`）。割接完成前本 Dokploy 栈**并行保留**（回滚 =
+本栈未拆；runbook §8）。与该形态的关键差异（完整清单见 fleetly 侧 README §1/§7）：
+
+- **postgres 移出栈**：落 fleetly 托管实例（`percona-postgresql-18` 模板，含
+  pgvector 0.8.6），数据经 `pg_dump`/`pg_restore --clean --no-owner` 搬运；运行态
+  仍是非 superuser `tw_authenticator`（连接串经 `FLEETLY_DB_TORCHWOOD_PG_*` 物化
+  env + 显式 `TORCHWOOD_DATA_DATABASE_SOURCE` 注入）；
+- **一次性作业链改 init job**（`fleetly.job: init`）：`migrate` / `db-bootstrap`
+  （创建 `tw_authenticator` + 授权，替代本目录 initdb + db-grants）/ `roles-sig`；
+  平台 init job 并行且无 `depends_on`，后两者用有界等待环补序；
+- **migrations/bootstrap SQL 载体**：`migrate` 从公开仓库钉 commit 拉取迁移
+  （GHCR 应用镜像**不含** `db/migrations`——本目录的 `-v ../../db/migrations` bind
+  在平台不可用，README §5 有实证与升级纪律）；`bootstrap-runtime.sql` /
+  `bootstrap-roles.sql` 上传为平台 Config 资源；
+- **域名**：Traefik label 不再使用，改平台域名资源 API（9080 http + 9060 h2c）；
+- **config.yaml ×3 服务挂载**改平台 Config 资源；
+- 宿主端口 / `pull_policy` / `restart` / `depends_on` / `container_name` / `${}`
+  插值全部不在受控子集（平台承接面逐行见 fleetly README §2；终端 compose 过
+  `fleetly validate` 零告警）。
+
+运维注记（托管实例编码，fleetly 侧已知边界）：`percona-postgresql-18` 模板未带
+`POSTGRES_INITDB_ARGS`，实例默认 `server_encoding=SQL_ASCII`；fleetly 形态用
+`bootstrap-runtime.sql` 的 `ALTER DATABASE … SET client_encoding='UTF8'` 兜底
+（torchwood 的 bun/pgdriver 客户端强制 UTF8 才可连接）；彻底修复 = 平台模板补
+`--encoding=UTF8`（fleetly 侧建议，见 fleetly README §7 / runbook §9）。
