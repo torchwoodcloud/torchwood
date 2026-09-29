@@ -52,11 +52,11 @@ type Instance struct {
 	IP string
 }
 
-// Daemon 是池管理器对执行底座的抽象（fake 测试用）。真实实现两形态
-// （IMPL-T2-5）：fleetlyDaemon（本文件，fleetly Tasks/build API 客户端，
-// 零 docker client）与 dockerdriver 包的 docker 直接执行（本仓唯一
-// docker client 面）；driver 选择见 driver.go。
-type Daemon interface {
+// InstanceSupervisor 是实例生命周期面——池（pool.go）与部署验证 spawn
+// （verify.go）的消费缝：网络/创建/巡检/停止/删除/失败现场。真实实现两形态
+// （IMPL-T2-5）：fleetlyDaemon（本文件，零 docker client）与 dockerdriver 包
+// 的 docker 直接执行（本仓唯一 docker client 面）；driver 选择见 driver.go。
+type InstanceSupervisor interface {
 	// EnsureProjectNetwork 确保项目任务网络存在并声明控制面挂靠（fleetly
 	// EnsureTaskNetwork：task-group 网长活，ref = p<projectID> / q<projectID>
 	// 两变体，后者 internal——不可信函数出网全 deny，DT-7）。untrusted=true
@@ -70,18 +70,23 @@ type Daemon interface {
 	// InspectInstance 返回任务是否 running（fleetly GetTask；任务不存在返回
 	// 非 nil 错误，池按幽灵记录清理）。
 	InspectInstance(ctx context.Context, containerID string) (running bool, ip string, err error)
-	// StopInstance 停止任务（fleetly StopTask；幂等）。timeout 语义迁移：
-	// swarm 停机宽限由平台固定（stop_grace_period 5s），本参数不再改变
-	// 停止行为（仅保留池调用签名）。
-	StopInstance(ctx context.Context, containerID string, timeout time.Duration) error
+	// StopInstance 停止任务（fleetly StopTask / docker SIGKILL；幂等）。
+	// 无宽限参数：drain 在池的关停路径显式 sleep-then-kill（pool.go），驱动
+	// 侧不承载宽限语义。
+	StopInstance(ctx context.Context, containerID string) error
 	// RemoveInstance 删除任务（fleetly DeleteTask：停止 + 移除底座服务 +
 	// 台账行；幂等，不存在视为成功）。
 	RemoveInstance(ctx context.Context, containerID string) error
 	// InstanceLogsTail 返回任务失败现场（fleetly GetTask 的 status/error/
-	// stop_reason 投影）。诚实边界：任务容器日志归平台 VictoriaLogs 采集，
-	// 机具令牌（tasks,build）无日志读面——本方法不回读容器 stdout/stderr，
-	// 只回平台台账的失败原因（验证 spawn 失败的第一现场）。
+	// stop_reason 投影 / docker stdcopy 日志尾部）。诚实边界：fleetly 任务
+	// 容器日志归平台 VictoriaLogs 采集，机具令牌（tasks,build）无日志读面
+	// ——该形态只回平台台账的失败原因（验证 spawn 失败的第一现场）。
 	InstanceLogsTail(ctx context.Context, containerID string, limit int64) (string, error)
+}
+
+// ImageManager 是镜像构建面——dispatchServer（server.go）的消费缝：构建 /
+// 导入 / 删除映射。
+type ImageManager interface {
 	// BuildImage 以 runner 模板构建镜像（zip 字节内联；构建期不执行用户
 	// 代码的不变量由模板层保持——node runner 仅被 COPY，go 只编译不执行）。
 	// 渲染上下文（.tw-runner.js + Dockerfile → tar）逻辑保留，构建本体经
@@ -97,6 +102,14 @@ type Daemon interface {
 	// RemoveImage 删除构建产物引用映射（幂等）。平台侧产物 GC 归平台；
 	// 本仓只保证后续 spawn 不再解析到该引用（映射缺失 → 重建链路自愈）。
 	RemoveImage(ctx context.Context, functionID, deploymentID string) error
+}
+
+// Daemon 是驱动实现的全集（InstanceSupervisor + ImageManager）：newDaemonForConfig
+// 的返回类型。池与验证 spawn 消费 InstanceSupervisor、dispatchServer 消费
+// ImageManager——消费方各自只见自己需要的缝（接口即测试面）。
+type Daemon interface {
+	InstanceSupervisor
+	ImageManager
 }
 
 // ImportImageOptions 是 ImportImage 的入参（镜像源导入链全量载荷，与
@@ -502,9 +515,9 @@ func (d *fleetlyDaemon) InspectInstance(ctx context.Context, containerID string)
 }
 
 // StopInstance 停止任务（fleetly StopTask；幂等：停止中/已停止成功返回，
-// 不存在视为已停止）。timeout 参数不再改变停机行为（平台 stop_grace 固定
-// 5s——池的 drain 宽限语义在 swarm 底座上由平台常数承载）。
-func (d *fleetlyDaemon) StopInstance(ctx context.Context, containerID string, _ time.Duration) error {
+// 不存在视为已停止）。无宽限参数：平台 stop_grace 固定 5s，池的 drain
+// 宽限语义在 swarm 底座上由平台常数承载。
+func (d *fleetlyDaemon) StopInstance(ctx context.Context, containerID string) error {
 	cli, err := d.client()
 	if err != nil {
 		return err
@@ -832,7 +845,7 @@ func (d *fleetlyDaemon) startVerificationTask(ctx context.Context, opts BuildIma
 	cleanup := func() {
 		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), CleanupTimeout)
 		defer cancel()
-		_ = d.StopInstance(cctx, inst.ContainerID, 0)
+		_ = d.StopInstance(cctx, inst.ContainerID)
 		_ = d.RemoveInstance(cctx, inst.ContainerID)
 	}
 	return inst, cleanup, nil

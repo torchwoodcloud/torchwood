@@ -280,8 +280,8 @@ func TestInspectStopRemoveLifecycle(t *testing.T) {
 	_, _, err = d.InspectInstance(ctx, "missing-1")
 	require.Error(t, err, "任务不存在必须显式错误（池幽灵清理判据）")
 
-	require.NoError(t, d.StopInstance(ctx, "running-1", 0))
-	require.NoError(t, d.StopInstance(ctx, "missing-1", 0), "停止幂等：不存在视为已停止")
+	require.NoError(t, d.StopInstance(ctx, "running-1"))
+	require.NoError(t, d.StopInstance(ctx, "missing-1"), "停止幂等：不存在视为已停止")
 	require.NoError(t, d.RemoveInstance(ctx, "running-1"))
 	require.NoError(t, d.RemoveInstance(ctx, "missing-1"), "删除幂等：不存在视为成功")
 }

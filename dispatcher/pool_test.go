@@ -102,7 +102,7 @@ func (d *fakeDaemon) InspectInstance(_ context.Context, containerID string) (boo
 	return d.running[containerID], d.spawned[containerID], nil
 }
 
-func (d *fakeDaemon) StopInstance(_ context.Context, containerID string, _ time.Duration) error {
+func (d *fakeDaemon) StopInstance(_ context.Context, containerID string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.stopped = append(d.stopped, containerID)

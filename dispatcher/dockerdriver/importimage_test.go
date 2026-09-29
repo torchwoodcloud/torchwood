@@ -196,7 +196,7 @@ func (d *fakeImportDaemon) InspectInstance(_ context.Context, _ string) (bool, s
 	return true, "192.0.2.10", nil
 }
 
-func (d *fakeImportDaemon) StopInstance(_ context.Context, containerID string, _ time.Duration) error {
+func (d *fakeImportDaemon) StopInstance(_ context.Context, containerID string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.stopped = append(d.stopped, containerID)

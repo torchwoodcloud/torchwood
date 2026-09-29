@@ -154,7 +154,7 @@ func TestE2EDockerDriverLifecycle(t *testing.T) {
 	require.Zero(t, pool.ResidentTotal())
 
 	// 6) 显式回收路径：Stop/Remove 幂等（容器已退场，不存在视为成功）。
-	require.NoError(t, daemon.StopInstance(ctx, containerID, 0))
+	require.NoError(t, daemon.StopInstance(ctx, containerID))
 	require.NoError(t, daemon.RemoveInstance(ctx, containerID))
 	require.NoError(t, daemon.RemoveInstance(ctx, containerID), "删除幂等：不存在视为成功")
 	t.Log("E2E PASS: spawn -> health -> dispatch -> TW_MAX_REQUESTS self-retire -> reaper reclaim -> idempotent Stop/Remove")

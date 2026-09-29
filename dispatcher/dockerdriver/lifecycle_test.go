@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
@@ -263,32 +262,22 @@ func TestSpawnInstance_UnhealthyCleansUp(t *testing.T) {
 	}
 }
 
-// TestStopInstance_SignalMapping timeout <= 0 直接 SIGKILL（请求超时/崩溃
-// 回收路径，池全路径实际走法）；timeout > 0 秒化宽限（drain 形态）。
-func TestStopInstance_SignalMapping(t *testing.T) {
+// TestStopInstance_StraightKill 直杀契约：StopInstance 恒 SIGKILL（无宽限
+// 参数——drain 在池关停路径显式 sleep-then-kill，驱动侧不承载宽限语义）。
+func TestStopInstance_StraightKill(t *testing.T) {
 	c := &fakeCreateClient{}
 	l := &fakeLifecycleClient{}
 	d := lifecycleTestDaemon(c, l)
 
-	require.NoError(t, d.StopInstance(context.Background(), "c1", 0))
-	require.Nil(t, l.lastStop.Timeout)
+	require.NoError(t, d.StopInstance(context.Background(), "c1"))
+	require.Nil(t, l.lastStop.Timeout, "无宽限参数形态：Timeout 不设置")
 	require.Equal(t, "SIGKILL", l.lastStop.Signal)
-
-	require.NoError(t, d.StopInstance(context.Background(), "c1", 5*time.Second))
-	require.NotNil(t, l.lastStop.Timeout)
-	require.Equal(t, 5, *l.lastStop.Timeout)
-	require.Empty(t, l.lastStop.Signal)
-
-	// 不足 1s 的宽限按 1s 下限（daemon 侧 0 = 立即杀语义）。
-	require.NoError(t, d.StopInstance(context.Background(), "c1", 100*time.Millisecond))
-	require.NotNil(t, l.lastStop.Timeout)
-	require.Equal(t, 1, *l.lastStop.Timeout)
 
 	// NotFound 幂等吞掉；其他错误包装上抛。
 	l.stopErr = errdefs.ErrNotFound
-	require.NoError(t, d.StopInstance(context.Background(), "c1", 0))
+	require.NoError(t, d.StopInstance(context.Background(), "c1"))
 	l.stopErr = errors.New("daemon unreachable")
-	require.ErrorContains(t, d.StopInstance(context.Background(), "c1", 0), "stop resident instance")
+	require.ErrorContains(t, d.StopInstance(context.Background(), "c1"), "stop resident instance")
 }
 
 // TestRemoveInstance_ForceAndIdempotent 强删恒 Force；NotFound 幂等吞掉。

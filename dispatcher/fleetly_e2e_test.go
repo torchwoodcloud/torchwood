@@ -174,7 +174,7 @@ func TestE2EFleetlyTaskLifecycle(t *testing.T) {
 
 	// 7) 显式回收路径：Stop/Delete 幂等（台账行删除后 GetTask 404——引擎
 	// 下一拍执行删除，轮询等待）。
-	require.NoError(t, daemon.StopInstance(ctx, taskID, 0))
+	require.NoError(t, daemon.StopInstance(ctx, taskID))
 	require.NoError(t, daemon.RemoveInstance(ctx, taskID))
 	waitE2E(t, time.Minute, func() bool {
 		_, gerr := cli.GetTask(ctx, &serverv1.GetTaskRequest{Id: taskID})

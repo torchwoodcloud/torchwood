@@ -334,19 +334,10 @@ func (d *daemon) InspectInstance(ctx context.Context, containerID string) (bool,
 	return running, "", nil
 }
 
-// StopInstance 停止容器。timeout > 0 先 SIGTERM 宽限（drain），到点 daemon
-// 侧转 SIGKILL；timeout <= 0 直接 SIGKILL（请求超时/崩溃回收路径）。
-func (d *daemon) StopInstance(ctx context.Context, containerID string, timeout time.Duration) error {
-	opts := container.StopOptions{}
-	if timeout > 0 {
-		t := int(timeout.Seconds())
-		if t == 0 {
-			t = 1
-		}
-		opts.Timeout = &t
-	} else {
-		opts.Signal = "SIGKILL"
-	}
+// StopInstance 停止容器（SIGKILL 直杀：请求超时/崩溃回收路径；无宽限参数
+// ——drain 在池的关停路径显式 sleep-then-kill，驱动侧不承载宽限语义）。
+func (d *daemon) StopInstance(ctx context.Context, containerID string) error {
+	opts := container.StopOptions{Signal: "SIGKILL"}
 	if err := d.lifecycleCli.ContainerStop(ctx, containerID, opts); err != nil && !errdefs.IsNotFound(err) {
 		return fmt.Errorf("stop resident instance: %w", err)
 	}

@@ -110,7 +110,7 @@ goroutine 1 [running]:`
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			d := newFakeDaemon()
-			var daemon Daemon = d
+			var daemon InstanceSupervisor = d
 			if tc.logsBroken {
 				daemon = &logsErrDaemon{fakeDaemon: d}
 			}

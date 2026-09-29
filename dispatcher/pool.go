@@ -285,7 +285,7 @@ func (h *httpRunner) Invoke(ctx context.Context, ip string, req ExecuteRequest, 
 // 实例 = fleetly 任务（IMPL-T2-3，daemon.go），注册表在 Redis
 // （torchwood:fninst:*）。
 type PoolManager struct {
-	daemon   Daemon
+	daemon   InstanceSupervisor
 	registry Registry
 	runner   runnerClient
 	cfg      PoolConfig
@@ -308,11 +308,11 @@ type PoolManager struct {
 }
 
 // NewPoolManager 构造池管理器（生产装配）。
-func NewPoolManager(daemon Daemon, registry Registry, cfg PoolConfig) *PoolManager {
+func NewPoolManager(daemon InstanceSupervisor, registry Registry, cfg PoolConfig) *PoolManager {
 	return newPoolManager(daemon, registry, newHTTPRunner(), cfg)
 }
 
-func newPoolManager(daemon Daemon, registry Registry, runner runnerClient, cfg PoolConfig) *PoolManager {
+func newPoolManager(daemon InstanceSupervisor, registry Registry, runner runnerClient, cfg PoolConfig) *PoolManager {
 	if cfg.MaxResidentInstances <= 0 {
 		cfg.MaxResidentInstances = defaultMaxResidentInstances
 	}
@@ -748,7 +748,7 @@ func (p *PoolManager) killInstance(ctx context.Context, ref FunctionRef, rec *In
 func (p *PoolManager) terminate(ctx context.Context, containerID string) {
 	tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), CleanupTimeout)
 	defer cancel()
-	_ = p.daemon.StopInstance(tctx, containerID, 0)
+	_ = p.daemon.StopInstance(tctx, containerID)
 	_ = p.daemon.RemoveInstance(tctx, containerID)
 	p.mu.Lock()
 	if p.counted[containerID] {

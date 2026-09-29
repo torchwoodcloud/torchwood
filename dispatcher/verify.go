@@ -48,7 +48,7 @@ func NewHTTPProber() HealthProber { return newHTTPRunner() }
 // 两种驱动的 BuildImage / ImportImage 共用同一编排；probe 是验证探针（生产
 // = NewHTTPProber，测试可注入 fake）；maxRequests 是验证实例 TW_MAX_REQUESTS
 // 注入值。
-func SpawnVerifyInstance(ctx context.Context, d Daemon, probe HealthProber, opts BuildImageOptions, image string, bootTimeout time.Duration, maxRequests int) error {
+func SpawnVerifyInstance(ctx context.Context, d InstanceSupervisor, probe HealthProber, opts BuildImageOptions, image string, bootTimeout time.Duration, maxRequests int) error {
 	return spawnVerifyInstance(ctx, d, probe, opts, verifySpawnConfig{
 		Image:       image,
 		BootTimeout: bootTimeout,
@@ -58,7 +58,7 @@ func SpawnVerifyInstance(ctx context.Context, d Daemon, probe HealthProber, opts
 
 // spawnVerifyInstance 是验证编排的本体（verifySpawnConfig 形态，包内两条腿
 // 复用：BuildImage 直接探活 / ImportImage 先读钉定引用再探活）。
-func spawnVerifyInstance(ctx context.Context, d Daemon, probe HealthProber, opts BuildImageOptions, vc verifySpawnConfig) error {
+func spawnVerifyInstance(ctx context.Context, d InstanceSupervisor, probe HealthProber, opts BuildImageOptions, vc verifySpawnConfig) error {
 	// egress 分类与执行一致（对抗审查 A1 最强修复）：untrusted 函数的验证
 	// 实例挂 internal 变体任务网络（与池 spawnInstance 同路）——验证期不得
 	// 给不可信镜像开跳出网窗口。
@@ -74,7 +74,7 @@ func spawnVerifyInstance(ctx context.Context, d Daemon, probe HealthProber, opts
 	defer func() {
 		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), CleanupTimeout)
 		defer cancel()
-		_ = d.StopInstance(cctx, inst.ContainerID, 0)
+		_ = d.StopInstance(cctx, inst.ContainerID)
 		_ = d.RemoveInstance(cctx, inst.ContainerID)
 	}()
 	return awaitVerificationHealthy(ctx, d, probe, opts, vc, inst)
@@ -84,7 +84,7 @@ func spawnVerifyInstance(ctx context.Context, d Daemon, probe HealthProber, opts
 // （SanitizeRunnerEnv：TW_DATA/TW_EXECUTION_TOKEN 不进容器 env——常驻的是
 // 容器不是凭证；TW_MAX_REQUESTS/TW_DRAIN_TIMEOUT_MS 由驱动侧
 // AppendRunnerControlEnv 统一追加）。
-func spawnVerificationTask(ctx context.Context, d Daemon, opts BuildImageOptions, vc verifySpawnConfig, network string) (Instance, error) {
+func spawnVerificationTask(ctx context.Context, d InstanceSupervisor, opts BuildImageOptions, vc verifySpawnConfig, network string) (Instance, error) {
 	return d.SpawnInstance(ctx, SpawnOptions{
 		ProjectID:   opts.ProjectID,
 		FunctionID:  opts.FunctionID,
@@ -99,7 +99,7 @@ func spawnVerificationTask(ctx context.Context, d Daemon, opts BuildImageOptions
 
 // awaitVerificationHealthy 轮询验证实例的 /_tw/health 直到就绪（预算 =
 // BootTimeout）；失败时把任务台账失败现场拼进错误。
-func awaitVerificationHealthy(ctx context.Context, d Daemon, probe HealthProber, opts BuildImageOptions, vc verifySpawnConfig, inst Instance) error {
+func awaitVerificationHealthy(ctx context.Context, d InstanceSupervisor, probe HealthProber, opts BuildImageOptions, vc verifySpawnConfig, inst Instance) error {
 	interval := vc.PollInterval
 	if interval <= 0 {
 		interval = verifyPollInterval

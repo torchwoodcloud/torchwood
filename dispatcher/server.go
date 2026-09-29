@@ -26,11 +26,11 @@ import (
 // （liveness 静态探针与指标抓取器不带凭据）。其余端点接受调用方 ctx 超时。
 type dispatchServer struct {
 	pool   *PoolManager
-	daemon Daemon
+	daemon ImageManager
 	token  string
 }
 
-func newDispatchServer(pool *PoolManager, daemon Daemon, sharedToken string) *dispatchServer {
+func newDispatchServer(pool *PoolManager, daemon ImageManager, sharedToken string) *dispatchServer {
 	return &dispatchServer{pool: pool, daemon: daemon, token: sharedToken}
 }
 
