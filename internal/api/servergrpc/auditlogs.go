@@ -56,17 +56,9 @@ func (s *AuditLogsService) ListAuditLogs(ctx context.Context, req *serverv1.List
 	if err != nil {
 		return nil, err
 	}
-	info := crud.BuildPaginationInfo(params, total, params.Offset+int(params.PageSize) < total)
-	var nextToken, prevToken string
-	if info.HasNext {
-		if nextToken, err = crud.EncodePageToken(info.NextOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-	if info.HasPrevious {
-		if prevToken, err = crud.EncodePageToken(info.PreviousOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
+	page, err := crud.FinalizeOffsetPage(params, total, len(entries))
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	out := make([]*serverv1.AuditLog, len(entries))
 	for i := range entries {
@@ -74,12 +66,7 @@ func (s *AuditLogsService) ListAuditLogs(ctx context.Context, req *serverv1.List
 	}
 	return &serverv1.ListAuditLogsResponse{
 		AuditLogs: out,
-		Meta: &sharedv1.ListResponseMeta{
-			PageSize:      info.PageSize,
-			TotalCount:    int32(info.TotalCount),
-			NextPageToken: nextToken,
-			PrevPageToken: prevToken,
-		},
+		Meta:      page.Meta(),
 	}, nil
 }
 

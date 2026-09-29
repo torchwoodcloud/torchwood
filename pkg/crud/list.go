@@ -1,20 +1,20 @@
-// Package restapi provides common utilities for implementing RESTful/gRPC APIs
-// following Google AIP standards (https://google.aip.dev)
+// Package crud 提供列表查询的通用分页方言：
+//   - AIP-158 offset 分页（page_size/page_token 双向 token + 终止契约，
+//     本文件）；
+//   - 时间 keyset 游标（timecursor.go，方向化前缀）。
 //
-// This package implements:
-// - AIP-132: List methods (sorting)
-// - AIP-158: Pagination (page_size, page_token, next_page_token)
-// - AIP-160: Filtering
+// AIP-160 过滤与 AIP-132 排序的解析/校验/构造器已退役：动态查询的活面由
+// proto/shared/v1 的 typed AST（pkg/query）承担，全仓列表端点均以空
+// filter/orderBy 消费 ParseListParams（token 绑定通道保留以兼容历史 token）。
 package crud
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"sort"
-	"strconv"
 	"strings"
+
+	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 )
 
 const (
@@ -29,7 +29,7 @@ const (
 )
 
 // ListParams represents the parsed parameters from a List request
-// following Google AIP standards (AIP-132, AIP-158, AIP-160)
+// following Google AIP standards (AIP-132, AIP-158)
 type ListParams struct {
 	// PageSize is the maximum number of results to return
 	PageSize int32
@@ -37,10 +37,10 @@ type ListParams struct {
 	// PageToken is the token for requesting the next page
 	PageToken string
 
-	// Filter is the filter expression (AIP-160)
+	// Filter is the filter expression (token 绑定通道；解析已退役，原样记录)
 	Filter string
 
-	// OrderBy specifies the sort order (AIP-132)
+	// OrderBy specifies the sort order (token 绑定通道；解析已退役，原样记录)
 	OrderBy string
 
 	// Offset is the decoded offset from the page token (internal use)
@@ -48,14 +48,14 @@ type ListParams struct {
 }
 
 // ParseListParams parses and validates list parameters from a List request
-// following AIP-132 and AIP-158 standards.
+// following AIP-158 standards.
 //
 // It enforces:
-// - page_size between 1 and MaxPageSize (default: DefaultPageSize)
-// - Validates page_token format if provided
-// - page_token 签名验证（启用签名后伪造/跨环境 token 被拒）
-// - offset 上限 MaxQueryOffset（防伪造超深分页拖垮数据库）
-// - order_by/filter 与签发该 token 的请求一致（token 内记录 digest）
+//   - page_size between 1 and MaxPageSize (default: DefaultPageSize)
+//   - Validates page_token format if provided
+//   - page_token 签名验证（启用签名后伪造/跨环境 token 被拒）
+//   - offset 上限 MaxQueryOffset（防伪造超深分页拖垮数据库）
+//   - order_by/filter 与签发该 token 的请求一致（token 内记录 digest）
 func ParseListParams(pageSize int32, pageToken, filter, orderBy string) (ListParams, error) {
 	params := ListParams{
 		PageSize:  pageSize,
@@ -102,207 +102,84 @@ func ParseListParams(pageSize int32, pageToken, filter, orderBy string) (ListPar
 	return params, nil
 }
 
-// OffsetLimit returns offset and limit values for database queries
-func (p ListParams) OffsetLimit() (offset int, limit int) {
-	return p.Offset, int(p.PageSize)
+// OffsetPage 是一次 offset 分页查询的收尾面：终止契约与双向 token 的单点
+// 裁决（AIP-158）。
+type OffsetPage struct {
+	// PageSize 是回给响应 meta 的页大小（ParseListParams 归一后的生效值）。
+	PageSize int32
+	// TotalCount 是本查询的总行数（repo count；<0 视为未知，不投影）。
+	TotalCount int
+	// NextToken / PrevToken 是双向游标；空串 = 无该方向页（终止契约：
+	// offset+returned < total 才有下一页——满页即末页不发空页 token）。
+	NextToken string
+	PrevToken string
 }
 
-// String returns a string representation of ListParams (for debugging)
-func (p ListParams) String() string {
-	return fmt.Sprintf(
-		"ListParams{PageSize: %d, PageToken: %q, Filter: %q, OrderBy: %q, Offset: %d}",
-		p.PageSize, p.PageToken, p.Filter, p.OrderBy, p.Offset,
-	)
-}
-
-// ValidatePageTokenIntegrity validates that the page token is consistent
-// with the current request parameters (AIP-158 requirement)
-func ValidatePageTokenIntegrity(
-	params ListParams,
-	originalPageSize int32,
-	originalFilter string,
-	originalOrderBy string,
-) error {
-	// Note: In a real implementation, you would encode additional parameters
-	// in the page token to validate consistency across pages.
-	// For now, this is a placeholder for future enhancement.
-
-	if params.PageToken != "" && originalPageSize > 0 {
-		// Page size should be consistent when using page tokens
-		if params.PageSize != originalPageSize && originalPageSize <= MaxPageSize {
-			return fmt.Errorf("page_size must be consistent across pages when using page_token")
+// FinalizeOffsetPage 对一页结果做分页收尾：裁决终止契约并编码双向 token。
+// returned 是本页实际行数（repo 已按 offset/limit 切片）；total 是总行数，
+// 未知传 -1（此时不发 next token——宁缺勿滥，不发会误导的空页游标）。
+// 编码失败（签名通道故障）以 error 上抛，handler 映射 Internal。
+func FinalizeOffsetPage(params ListParams, total, returned int) (OffsetPage, error) {
+	page := OffsetPage{PageSize: params.PageSize, TotalCount: total}
+	if total >= 0 && params.Offset+returned < total {
+		token, err := EncodePageToken(params.Offset + int(params.PageSize))
+		if err != nil {
+			return OffsetPage{}, err
 		}
+		page.NextToken = token
 	}
-
-	return nil
-}
-
-// ContextWithListParams returns a context with list params attached
-func ContextWithListParams(ctx context.Context, params ListParams) context.Context {
-	return context.WithValue(ctx, listParamsKey{}, params)
-}
-
-// ListParamsFromContext extracts list params from context
-func ListParamsFromContext(ctx context.Context) (ListParams, bool) {
-	params, ok := ctx.Value(listParamsKey{}).(ListParams)
-	return params, ok
-}
-
-type listParamsKey struct{}
-
-// CalculateHasMore determines if there are more results based on
-// current offset, result count, and total count
-func CalculateHasMore(offset int, resultCount int, totalCount int) bool {
-	if totalCount < 0 {
-		// Unknown total count - assume no more if result count < page size
-		return false
+	if params.Offset > 0 {
+		prev := params.Offset - int(params.PageSize)
+		if prev < 0 {
+			prev = 0
+		}
+		token, err := EncodePageToken(prev)
+		if err != nil {
+			return OffsetPage{}, err
+		}
+		page.PrevToken = token
 	}
-	return offset+resultCount < totalCount
+	return page, nil
 }
 
-// CalculateHasMoreWithResult determines if there are more results
-// when total count is unknown but we can check if we got a full page
-func CalculateHasMoreWithResult(resultCount int, pageSize int32) bool {
-	return resultCount >= int(pageSize)
-}
-
-// ValidatePageTokenForRequest validates that a page token is appropriate
-// for the current request context
-func ValidatePageTokenForRequest(
-	ctx context.Context,
-	pageToken string,
-	filter string,
-	orderBy string,
-) error {
-	if pageToken == "" {
-		return nil
+// SliceOffsetPage 在内存全量列表上切页并收尾（repo 未做 LIMIT 的全量形状，
+// 如小表枚举端点）：切片钳制、终止契约与双向 token 一步完成。
+func SliceOffsetPage[T any](items []T, params ListParams) ([]T, OffsetPage, error) {
+	start := params.Offset
+	if start > len(items) {
+		start = len(items)
 	}
-
-	// Decode and validate the token structure
-	data, err := DecodePageTokenFull(pageToken)
+	end := start + int(params.PageSize)
+	if end > len(items) {
+		end = len(items)
+	}
+	page, err := FinalizeOffsetPage(params, len(items), end-start)
 	if err != nil {
-		return err
+		return nil, OffsetPage{}, err
 	}
-	if data != nil {
-		canonicalOrderBy := strings.TrimSpace(strings.ToLower(orderBy))
-		if data.OrderBy != "" && strings.TrimSpace(strings.ToLower(data.OrderBy)) != canonicalOrderBy {
-			return fmt.Errorf("order_by must match the original request when using page_token")
-		}
-		filterDigest := FilterDigest(filter)
-		if data.FilterDigest != "" && data.FilterDigest != filterDigest {
-			return fmt.Errorf("filter must match the original request when using page_token")
-		}
-	}
-
-	// If we have stored params in context, validate consistency
-	if storedParams, ok := ListParamsFromContext(ctx); ok {
-		if filter != storedParams.Filter {
-			return fmt.Errorf("filter must match the original request when using page_token")
-		}
-		if orderBy != storedParams.OrderBy {
-			return fmt.Errorf("order_by must match the original request when using page_token")
-		}
-	}
-
-	return nil
+	return items[start:end], page, nil
 }
 
-// ParseListRequest is a convenience function that parses all list parameters
-// and performs comprehensive validation
-func ParseListRequest(
-	ctx context.Context,
-	pageSize int32,
-	pageToken string,
-	filter string,
-	orderBy string,
-) (context.Context, ListParams, error) {
-	// Validate page token against request if provided
-	if err := ValidatePageTokenForRequest(ctx, pageToken, filter, orderBy); err != nil {
-		return nil, ListParams{}, err
+// Meta 投影为 ListResponseMeta（handler 响应的 meta 字段一步到位）。
+func (p OffsetPage) Meta() *sharedv1.ListResponseMeta {
+	meta := &sharedv1.ListResponseMeta{PageSize: p.PageSize}
+	if p.TotalCount >= 0 {
+		meta.TotalCount = int32(p.TotalCount)
 	}
-
-	// Parse the parameters
-	params, err := ParseListParams(pageSize, pageToken, filter, orderBy)
-	if err != nil {
-		return nil, ListParams{}, err
-	}
-
-	// Store params in context for later use
-	ctx = ContextWithListParams(ctx, params)
-
-	return ctx, params, nil
+	meta.NextPageToken = p.NextToken
+	meta.PrevPageToken = p.PrevToken
+	return meta
 }
 
-// FilterDigest returns a deterministic digest for filter expression compatibility checks.
+// FilterDigest returns a deterministic digest for the filter expression
+// (token 绑定)：归一化原文哈希。历史实现做结构化归一（顺序无关），依赖已
+// 退役的 AIP-160 解析器；存量 token 全部携带空 digest（调用点均传空
+// filter，绑定检查不触发），算法切换无在途兼容面。
 func FilterDigest(filter string) string {
 	normalized := strings.TrimSpace(strings.ToLower(filter))
 	if normalized == "" {
 		return ""
 	}
-	if parsed, err := ParseFilter(normalized); err == nil {
-		chunks := make([]string, 0, len(parsed.Expressions))
-		for _, exp := range parsed.Expressions {
-			chunks = append(chunks, strings.TrimSpace(strings.ToLower(fmt.Sprintf("%s|%s|%v", exp.Field, exp.Operator, exp.Value))))
-		}
-		sort.Strings(chunks)
-		normalized = strings.Join(chunks, "&&")
-	}
 	sum := sha256.Sum256([]byte(normalized))
 	return hex.EncodeToString(sum[:])
-}
-
-// GetPageSizeOrDefault returns the page size or default value
-func GetPageSizeOrDefault(pageSize int32) int32 {
-	if pageSize <= 0 {
-		return DefaultPageSize
-	}
-	if pageSize > MaxPageSize {
-		return MaxPageSize
-	}
-	return pageSize
-}
-
-// NormalizePageSize ensures page size is within valid bounds
-func NormalizePageSize(pageSize int32) int32 {
-	if pageSize <= 0 {
-		return DefaultPageSize
-	}
-	if pageSize > MaxPageSize {
-		return MaxPageSize
-	}
-	return pageSize
-}
-
-// FormatTotalCount formats total count for response (-1 means unknown)
-func FormatTotalCount(totalCount int) *int32 {
-	if totalCount < 0 {
-		return nil
-	}
-	count := int32(totalCount)
-	return &count
-}
-
-// CalculateOffset calculates the offset for a given page index and size
-func CalculateOffset(pageIndex int, pageSize int32) int {
-	return pageIndex * int(pageSize)
-}
-
-// CalculatePageIndex calculates the page index from an offset
-func CalculatePageIndex(offset int, pageSize int32) int {
-	if pageSize <= 0 {
-		return 0
-	}
-	return offset / int(pageSize)
-}
-
-// StringToInt32 safely converts a string to int32
-func StringToInt32(s string, defaultValue int32) int32 {
-	if s == "" {
-		return defaultValue
-	}
-	val, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		return defaultValue
-	}
-	return int32(val)
 }

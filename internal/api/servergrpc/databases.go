@@ -104,27 +104,9 @@ func (s *DatabasesService) ListDatabases(ctx context.Context, req *sharedv1.List
 	if err != nil {
 		return nil, err
 	}
-	start := params.Offset
-	if start > len(dbs) {
-		start = len(dbs)
-	}
-	end := start + int(params.PageSize)
-	if end > len(dbs) {
-		end = len(dbs)
-	}
-	page := dbs[start:end]
-	hasMore := end < len(dbs)
-	info := crud.BuildPaginationInfo(params, len(dbs), hasMore)
-	var nextToken, prevToken string
-	if info.HasNext {
-		if nextToken, err = crud.EncodePageToken(info.NextOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-	if info.HasPrevious {
-		if prevToken, err = crud.EncodePageToken(info.PreviousOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
+	page, info, err := crud.SliceOffsetPage(dbs, params)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	out := make([]*serverv1.Database, len(page))
 	for i := range page {
@@ -132,12 +114,7 @@ func (s *DatabasesService) ListDatabases(ctx context.Context, req *sharedv1.List
 	}
 	return &serverv1.ListDatabasesResponse{
 		Databases: out,
-		Meta: &sharedv1.ListResponseMeta{
-			PageSize:      info.PageSize,
-			TotalCount:    int32(info.TotalCount),
-			NextPageToken: nextToken,
-			PrevPageToken: prevToken,
-		},
+		Meta:      info.Meta(),
 	}, nil
 }
 

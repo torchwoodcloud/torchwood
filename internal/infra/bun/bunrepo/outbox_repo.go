@@ -51,17 +51,11 @@ func (r *outboxRepo) ListDeadLetters(ctx context.Context, projectID string, page
 			CreatedAt: row.CreatedAt,
 		}
 	}
-	hasMore := params.Offset+len(rows) < total
-	info := crud.BuildPaginationInfo(params, total, hasMore)
-	var nextToken string
-	if info.HasNext {
-		token, err := crud.EncodePageToken(info.NextOffset)
-		if err != nil {
-			return nil, 0, "", err
-		}
-		nextToken = token
+	page, err := crud.FinalizeOffsetPage(params, total, len(rows))
+	if err != nil {
+		return nil, 0, "", err
 	}
-	return out, int64(total), nextToken, nil
+	return out, int64(total), page.NextToken, nil
 }
 
 func (r *outboxRepo) ReplayDeadLetter(ctx context.Context, eventID, projectID string) error {

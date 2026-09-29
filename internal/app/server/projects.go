@@ -268,42 +268,46 @@ func (s *Projects) purgeObjectsAsync(projectID string) {
 	}
 }
 
-func (s *Projects) ListProjects(ctx context.Context, pageSize int32, pageToken string) ([]projects.Project, *crud.PaginationInfo, error) {
+func (s *Projects) ListProjects(ctx context.Context, pageSize int32, pageToken string) ([]projects.Project, crud.OffsetPage, error) {
 	principal, ok := contexts.Principal(ctx)
 	if !ok {
-		return nil, nil, status.Error(codes.Unauthenticated, "unauthenticated")
+		return nil, crud.OffsetPage{}, status.Error(codes.Unauthenticated, "unauthenticated")
 	}
 	params, err := crud.ParseListParams(pageSize, pageToken, "", "")
 	if err != nil {
-		return nil, nil, err
+		return nil, crud.OffsetPage{}, err
+	}
+	// 空结果收尾（API key/服务账号无 admin_project 关联等形态）。
+	emptyPage := func() ([]projects.Project, crud.OffsetPage, error) {
+		page, err := crud.FinalizeOffsetPage(params, 0, 0)
+		if err != nil {
+			return nil, crud.OffsetPage{}, err
+		}
+		return []projects.Project{}, page, nil
 	}
 	// 平台 admin 全表；否则返回 admin_projects 里的项目（B1）。
 	if !principal.IsPlatformAdmin {
 		// API key / 服务账号无 admin_project 关联，仍返回空列表。
 		if principal.ActorKind != shared.ActorKindAdmin {
-			info := crud.BuildPaginationInfo(params, 0, false)
-			return []projects.Project{}, &info, nil
+			return emptyPage()
 		}
 		adminID := principal.AdminLookupID()
 		if adminID == "" {
-			info := crud.BuildPaginationInfo(params, 0, false)
-			return []projects.Project{}, &info, nil
+			return emptyPage()
 		}
 		if s.adminProjectRepo == nil {
-			info := crud.BuildPaginationInfo(params, 0, false)
-			return []projects.Project{}, &info, nil
+			return emptyPage()
 		}
 		ids, err := s.adminProjectRepo.ListProjectIDs(ctx, adminID)
 		if err != nil {
-			return nil, nil, status.Errorf(codes.Internal, "list admin projects: %v", err)
+			return nil, crud.OffsetPage{}, status.Errorf(codes.Internal, "list admin projects: %v", err)
 		}
 		if len(ids) == 0 {
-			info := crud.BuildPaginationInfo(params, 0, false)
-			return []projects.Project{}, &info, nil
+			return emptyPage()
 		}
 		all, err := s.projectRepo.ListProjects(ctx)
 		if err != nil {
-			return nil, nil, err
+			return nil, crud.OffsetPage{}, err
 		}
 		idSet := make(map[string]struct{}, len(ids))
 		for _, id := range ids {
@@ -315,35 +319,21 @@ func (s *Projects) ListProjects(ctx context.Context, pageSize int32, pageToken s
 				filtered = append(filtered, p)
 			}
 		}
-		start := params.Offset
-		if start > len(filtered) {
-			start = len(filtered)
+		items, info, err := crud.SliceOffsetPage(filtered, params)
+		if err != nil {
+			return nil, crud.OffsetPage{}, err
 		}
-		end := start + int(params.PageSize)
-		if end > len(filtered) {
-			end = len(filtered)
-		}
-		page := filtered[start:end]
-		hasMore := end < len(filtered)
-		info := crud.BuildPaginationInfo(params, len(filtered), hasMore)
-		return page, &info, nil
+		return items, info, nil
 	}
 	all, err := s.projectRepo.ListProjects(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, crud.OffsetPage{}, err
 	}
-	start := params.Offset
-	if start > len(all) {
-		start = len(all)
+	items, info, err := crud.SliceOffsetPage(all, params)
+	if err != nil {
+		return nil, crud.OffsetPage{}, err
 	}
-	end := start + int(params.PageSize)
-	if end > len(all) {
-		end = len(all)
-	}
-	page := all[start:end]
-	hasMore := end < len(all)
-	info := crud.BuildPaginationInfo(params, len(all), hasMore)
-	return page, &info, nil
+	return items, info, nil
 }
 
 func (s *Projects) GetProject(ctx context.Context, id string) (*projects.Project, error) {

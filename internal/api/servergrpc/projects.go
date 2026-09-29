@@ -8,7 +8,6 @@ import (
 	appserver "github.com/torchwoodcloud/torchwood/internal/app/server"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
-	"github.com/torchwoodcloud/torchwood/pkg/crud"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -41,25 +40,9 @@ func (s *ProjectsService) ListProjects(ctx context.Context, req *sharedv1.ListRe
 	if err != nil {
 		return nil, err
 	}
-	var nextToken, prevToken string
-	if info.HasNext {
-		if nextToken, err = crud.EncodePageToken(info.NextOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-	if info.HasPrevious {
-		if prevToken, err = crud.EncodePageToken(info.PreviousOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
 	resp := &serverv1.ListProjectsResponse{
 		Projects: make([]*serverv1.Project, len(list)),
-		Meta: &sharedv1.ListResponseMeta{
-			PageSize:      info.PageSize,
-			NextPageToken: nextToken,
-			PrevPageToken: prevToken,
-			TotalCount:    int32(info.TotalCount),
-		},
+		Meta:     info.Meta(),
 	}
 	for i, p := range list {
 		resp.Projects[i] = mapProject(&p)

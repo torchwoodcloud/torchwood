@@ -73,27 +73,9 @@ func (s *AdminsService) ListAdmins(ctx context.Context, req *consolev1.ListAdmin
 	if err != nil {
 		return nil, err
 	}
-	start := params.Offset
-	if start > len(admins) {
-		start = len(admins)
-	}
-	end := start + int(params.PageSize)
-	if end > len(admins) {
-		end = len(admins)
-	}
-	page := admins[start:end]
-	hasMore := end < len(admins)
-	info := crud.BuildPaginationInfo(params, len(admins), hasMore)
-	var nextToken, prevToken string
-	if info.HasNext {
-		if nextToken, err = crud.EncodePageToken(info.NextOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-	if info.HasPrevious {
-		if prevToken, err = crud.EncodePageToken(info.PreviousOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
+	page, info, err := crud.SliceOffsetPage(admins, params)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	out := make([]*consolev1.Admin, len(page))
 	for i := range page {
@@ -101,12 +83,7 @@ func (s *AdminsService) ListAdmins(ctx context.Context, req *consolev1.ListAdmin
 	}
 	return &consolev1.ListAdminsResponse{
 		Admins: out,
-		Meta: &sharedv1.ListResponseMeta{
-			PageSize:      info.PageSize,
-			TotalCount:    int32(info.TotalCount),
-			NextPageToken: nextToken,
-			PrevPageToken: prevToken,
-		},
+		Meta:   info.Meta(),
 	}, nil
 }
 

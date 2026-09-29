@@ -36,27 +36,9 @@ func (s *OAuthProvidersService) ListOAuthProviders(ctx context.Context, req *sha
 	if err != nil {
 		return nil, err
 	}
-	start := params.Offset
-	if start > len(items) {
-		start = len(items)
-	}
-	end := start + int(params.PageSize)
-	if end > len(items) {
-		end = len(items)
-	}
-	page := items[start:end]
-	hasMore := end < len(items)
-	info := crud.BuildPaginationInfo(params, len(items), hasMore)
-	var nextToken, prevToken string
-	if info.HasNext {
-		if nextToken, err = crud.EncodePageToken(info.NextOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-	if info.HasPrevious {
-		if prevToken, err = crud.EncodePageToken(info.PreviousOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
+	page, info, err := crud.SliceOffsetPage(items, params)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	out := make([]*serverv1.OAuthProvider, len(page))
 	for i := range page {
@@ -64,12 +46,7 @@ func (s *OAuthProvidersService) ListOAuthProviders(ctx context.Context, req *sha
 	}
 	return &serverv1.ListOAuthProvidersResponse{
 		OauthProviders: out,
-		Meta: &sharedv1.ListResponseMeta{
-			PageSize:      info.PageSize,
-			TotalCount:    int32(info.TotalCount),
-			NextPageToken: nextToken,
-			PrevPageToken: prevToken,
-		},
+		Meta:           info.Meta(),
 	}, nil
 }
 

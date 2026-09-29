@@ -64,27 +64,9 @@ func (s *RuntimeVarsService) ListVarSets(ctx context.Context, req *sharedv1.List
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	start := params.Offset
-	if start > len(views) {
-		start = len(views)
-	}
-	end := start + int(params.PageSize)
-	if end > len(views) {
-		end = len(views)
-	}
-	page := views[start:end]
-	hasMore := end < len(views)
-	info := crud.BuildPaginationInfo(params, len(views), hasMore)
-	var nextToken, prevToken string
-	if info.HasNext {
-		if nextToken, err = crud.EncodePageToken(info.NextOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-	if info.HasPrevious {
-		if prevToken, err = crud.EncodePageToken(info.PreviousOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
+	page, info, err := crud.SliceOffsetPage(views, params)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	out := make([]*serverv1.VarSet, len(page))
 	for i := range page {
@@ -92,12 +74,7 @@ func (s *RuntimeVarsService) ListVarSets(ctx context.Context, req *sharedv1.List
 	}
 	return &serverv1.ListVarSetsResponse{
 		VarSets: out,
-		Meta: &sharedv1.ListResponseMeta{
-			PageSize:      info.PageSize,
-			TotalCount:    int32(info.TotalCount),
-			NextPageToken: nextToken,
-			PrevPageToken: prevToken,
-		},
+		Meta:    info.Meta(),
 	}, nil
 }
 
@@ -190,27 +167,9 @@ func (s *RuntimeVarsService) ListRuntimeVars(ctx context.Context, req *serverv1.
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	start := params.Offset
-	if start > len(vars) {
-		start = len(vars)
-	}
-	end := start + int(params.PageSize)
-	if end > len(vars) {
-		end = len(vars)
-	}
-	page := vars[start:end]
-	hasMore := end < len(vars)
-	info := crud.BuildPaginationInfo(params, len(vars), hasMore)
-	var nextToken, prevToken string
-	if info.HasNext {
-		if nextToken, err = crud.EncodePageToken(info.NextOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-	if info.HasPrevious {
-		if prevToken, err = crud.EncodePageToken(info.PreviousOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
+	page, info, err := crud.SliceOffsetPage(vars, params)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	out := make([]*serverv1.RuntimeVar, len(page))
 	for i := range page {
@@ -218,12 +177,7 @@ func (s *RuntimeVarsService) ListRuntimeVars(ctx context.Context, req *serverv1.
 	}
 	return &serverv1.ListRuntimeVarsResponse{
 		Vars: out,
-		Meta: &sharedv1.ListResponseMeta{
-			PageSize:      info.PageSize,
-			TotalCount:    int32(info.TotalCount),
-			NextPageToken: nextToken,
-			PrevPageToken: prevToken,
-		},
+		Meta: info.Meta(),
 	}, nil
 }
 
@@ -292,27 +246,9 @@ func (s *RuntimeVarsService) ListRuntimeVarVersions(ctx context.Context, req *se
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	start := params.Offset
-	if start > len(versions) {
-		start = len(versions)
-	}
-	end := start + int(params.PageSize)
-	if end > len(versions) {
-		end = len(versions)
-	}
-	page := versions[start:end]
-	hasMore := end < len(versions)
-	info := crud.BuildPaginationInfo(params, len(versions), hasMore)
-	var nextToken, prevToken string
-	if info.HasNext {
-		if nextToken, err = crud.EncodePageToken(info.NextOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-	if info.HasPrevious {
-		if prevToken, err = crud.EncodePageToken(info.PreviousOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
+	page, info, err := crud.SliceOffsetPage(versions, params)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	out := make([]*serverv1.RuntimeVarVersion, len(page))
 	for i := range page {
@@ -320,12 +256,7 @@ func (s *RuntimeVarsService) ListRuntimeVarVersions(ctx context.Context, req *se
 	}
 	return &serverv1.ListRuntimeVarVersionsResponse{
 		Versions: out,
-		Meta: &sharedv1.ListResponseMeta{
-			PageSize:      info.PageSize,
-			TotalCount:    int32(info.TotalCount),
-			NextPageToken: nextToken,
-			PrevPageToken: prevToken,
-		},
+		Meta:     info.Meta(),
 	}, nil
 }
 

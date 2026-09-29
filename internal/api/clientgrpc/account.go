@@ -535,40 +535,17 @@ func (s *AccountService) ListLogs(ctx context.Context, req *clientv1.ListLogsReq
 	if err != nil {
 		return nil, err
 	}
-	// 内存分页：offset + pageSize 切片
-	start := params.Offset
-	if start > len(entries) {
-		start = len(entries)
+	// 内存分页：offset + pageSize 切片（收尾走 crud：终止契约与双向 token 单点）。
+	page, info, err := crud.SliceOffsetPage(entries, params)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
-	end := start + int(params.PageSize)
-	if end > len(entries) {
-		end = len(entries)
-	}
-	page := entries[start:end]
-	hasMore := end < len(entries)
-	info := crud.BuildPaginationInfo(params, 0, hasMore)
-	var nextToken, prevToken string
-	if info.HasNext {
-		if nextToken, err = crud.EncodePageToken(info.NextOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-	if info.HasPrevious {
-		if prevToken, err = crud.EncodePageToken(info.PreviousOffset); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
+	info.TotalCount = -1 // 该端点不外露 total（内存分页上限 100，计数无意义）
 	out := make([]*clientv1.LogEntry, 0, len(page))
 	for i := range page {
 		out = append(out, mapLogEntry(&page[i]))
 	}
-	meta := &sharedv1.ListResponseMeta{
-		PageSize:      info.PageSize,
-		NextPageToken: nextToken,
-		PrevPageToken: prevToken,
-		TotalCount:    0,
-	}
-	return &clientv1.ListLogsResponse{Logs: out, Meta: meta}, nil
+	return &clientv1.ListLogsResponse{Logs: out, Meta: info.Meta()}, nil
 }
 
 func (s *AccountService) parseLogsListParams(pageSize int32, pageToken string) (crud.ListParams, error) {
