@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -23,47 +24,79 @@ const (
 // FleetlyEndpointMode 是 functions.fleetly.endpoint 的传输安全模式（endpoint
 // scheme 显式选择——明文与 TLS 双形态都要支持：既有 fleetly 部署的栈内明文
 // 通路保持兼容（T-3 双底座并存纪律），TLS 化控制面（platform 模式常开）经
-// tls scheme 直连，不再依赖外置明文桥）。
+// grpcs scheme 直连，不再依赖外置明文桥）。scheme 采用 gRPC 社区约定
+// （grpc:// / grpcs://，http(s) redis(rediss) 同款直觉）。
 type FleetlyEndpointMode int
 
 const (
-	// FleetlyEndpointPlain 是明文 h2c 拨号（裸 host:port，既有形态缺省）。
+	// FleetlyEndpointPlain 是明文 h2c 拨号（grpc:// 显式或裸 host:port 缺省）。
 	FleetlyEndpointPlain FleetlyEndpointMode = iota
-	// FleetlyEndpointTLS 是 TLS 拨号（tls:// 前缀）：系统根 CA 校验，
-	// ServerName = 所拨主机名（按主机名拨号时对 LE 等公共证书透明验证）。
+	// FleetlyEndpointTLS 是 TLS 拨号（grpcs://）：系统根 CA 校验，ServerName
+	// 缺省 = 所拨主机名（按主机名拨号时对 LE 等公共证书透明验证；?server_name=
+	// 覆盖）。
 	FleetlyEndpointTLS
-	// FleetlyEndpointTLSInsecure 是 TLS 拨号（tls-insecure:// 前缀）：跳过
+	// FleetlyEndpointTLSInsecure 是 TLS 拨号（grpcs://?insecure=true）：跳过
 	// 服务器证书校验（按 IP 直连等无 SAN 形态；staging/内网口径）。
 	FleetlyEndpointTLSInsecure
 )
 
-// ParseFleetlyEndpoint 解析 functions.fleetly.endpoint 的传输模式与拨号地址：
-// 裸 `host:port` = 明文（既有部署缺省不变）；`tls://host:port` = TLS + 系统
-// CA 校验；`tls-insecure://host:port` = TLS + 跳过校验。唯一真源：bootkit
-// 启动期校验与 dispatcher 客户端构造都消费本函数——未知 scheme 在启动期
-// fail-closed，不留到首次拨号才暴露。空 endpoint 非法（校验层的必填哨兵
-// 之外的双保险）。
-func ParseFleetlyEndpoint(endpoint string) (string, FleetlyEndpointMode, error) {
+// FleetlyEndpoint 是解析产物：拨号地址 + 传输模式 + TLS ServerName 覆盖
+// （空 = 缺省跟随拨号主机名）。
+type FleetlyEndpoint struct {
+	Addr       string
+	Mode       FleetlyEndpointMode
+	ServerName string
+}
+
+// ParseFleetlyEndpoint 解析 functions.fleetly.endpoint（gRPC 社区约定 scheme）：
+//
+//	grpc://host:port            明文（显式形态）
+//	host:port                   明文（既有部署缺省不变）
+//	grpcs://host:port           TLS + 系统 CA 校验
+//	grpcs://host:port?insecure=true          TLS + 跳过校验
+//	grpcs://host:port?server_name=<name>     TLS + ServerName 覆盖（按 IP 直连
+//	                                         时配合证书校验名）
+//
+// 唯一真源：bootkit 启动期校验与 dispatcher 客户端构造都消费本函数——未知
+// scheme 在启动期 fail-closed，不留到首次拨号才暴露。空 endpoint 非法
+// （校验层的必填哨兵之外的双保险）。
+func ParseFleetlyEndpoint(endpoint string) (FleetlyEndpoint, error) {
 	e := strings.TrimSpace(endpoint)
 	if e == "" {
-		return "", FleetlyEndpointPlain, fmt.Errorf("functions.fleetly.endpoint is empty")
+		return FleetlyEndpoint{}, fmt.Errorf("functions.fleetly.endpoint is empty")
 	}
 	switch {
-	case strings.HasPrefix(e, "tls-insecure://"):
-		addr := strings.TrimPrefix(e, "tls-insecure://")
-		if addr == "" {
-			return "", FleetlyEndpointTLSInsecure, fmt.Errorf("functions.fleetly.endpoint %q has no host:port after the tls-insecure:// scheme", endpoint)
+	case strings.HasPrefix(e, "grpcs://"):
+		u, err := url.Parse(e)
+		if err != nil {
+			return FleetlyEndpoint{}, fmt.Errorf("functions.fleetly.endpoint %q is not a valid grpcs URL: %w", endpoint, err)
 		}
-		return addr, FleetlyEndpointTLSInsecure, nil
-	case strings.HasPrefix(e, "tls://"):
-		addr := strings.TrimPrefix(e, "tls://")
-		if addr == "" {
-			return "", FleetlyEndpointTLS, fmt.Errorf("functions.fleetly.endpoint %q has no host:port after the tls:// scheme", endpoint)
+		if u.Host == "" {
+			return FleetlyEndpoint{}, fmt.Errorf("functions.fleetly.endpoint %q has no host:port after the grpcs:// scheme", endpoint)
 		}
-		return addr, FleetlyEndpointTLS, nil
+		out := FleetlyEndpoint{Addr: u.Host, Mode: FleetlyEndpointTLS}
+		q := u.Query()
+		switch q.Get("insecure") {
+		case "":
+		case "true", "1":
+			out.Mode = FleetlyEndpointTLSInsecure
+		default:
+			return FleetlyEndpoint{}, fmt.Errorf("functions.fleetly.endpoint %q has invalid grpcs query parameter insecure=%q (supported: true|1)", endpoint, q.Get("insecure"))
+		}
+		out.ServerName = q.Get("server_name")
+		return out, nil
+	case strings.HasPrefix(e, "grpc://"):
+		u, err := url.Parse(e)
+		if err != nil {
+			return FleetlyEndpoint{}, fmt.Errorf("functions.fleetly.endpoint %q is not a valid grpc URL: %w", endpoint, err)
+		}
+		if u.Host == "" {
+			return FleetlyEndpoint{}, fmt.Errorf("functions.fleetly.endpoint %q has no host:port after the grpc:// scheme", endpoint)
+		}
+		return FleetlyEndpoint{Addr: u.Host, Mode: FleetlyEndpointPlain}, nil
 	case strings.Contains(e, "://"):
-		return "", FleetlyEndpointPlain, fmt.Errorf("functions.fleetly.endpoint %q uses an unknown scheme: supported forms are host:port (plaintext), tls://host:port (TLS, system CA verification) and tls-insecure://host:port (TLS, skip verification)", endpoint)
+		return FleetlyEndpoint{}, fmt.Errorf("functions.fleetly.endpoint %q uses an unknown scheme: supported forms are host:port or grpc://host:port (plaintext) and grpcs://host:port (TLS; ?insecure=true skips verification, ?server_name=<name> overrides SNI)", endpoint)
 	default:
-		return e, FleetlyEndpointPlain, nil
+		return FleetlyEndpoint{Addr: e, Mode: FleetlyEndpointPlain}, nil
 	}
 }

@@ -96,7 +96,7 @@ dokploy 栈未拆）。
 | —— | `TORCHWOOD_DATA_DATABASE_SOURCE` | **平台 env（必填）**：`postgres://tw_authenticator:<口令>@torchwood-pg:5432/torchwood_pg?sslmode=disable`（显式 env set：物化 env 的用户是 owner `fleetly`，运行态必须非 superuser） |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | **平台 env（必填）** + compose 占位 | 同时作为 server/worker 的 S3 凭据（`TORCHWOOD_STORAGE_S3_*`） |
 | `TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN` / `TORCHWOOD_FUNCTIONS_PACKER_SHARED_TOKEN` | **平台 env（必填）** | server/worker（客户端）与 dispatcher/packer（服务端）同值 |
-| `TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT` / `_TOKEN` | **平台 env（必填）** | fleetlyd gRPC 端点（容器内可达）+ 机具令牌（scope tasks,build，§4）。endpoint 传输模式 scheme 显式选择：裸 `host:port` = 明文（既有部署缺省）；`tls://host:port` = TLS + 系统 CA 校验（按主机名拨号时对 LE 等公共证书透明验证）；`tls-insecure://host:port` = TLS 跳过校验（按 IP 直连等无 SAN 形态）——未知 scheme 启动期 fail-closed |
+| `TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT` / `_TOKEN` | **平台 env（必填）** | fleetlyd gRPC 端点（容器内可达）+ 机具令牌（scope tasks,build，§4）。endpoint 传输模式 scheme 显式选择（gRPC 社区约定 grpc/grpcs）：裸 `host:port` 或 `grpc://host:port` = 明文（既有部署缺省）；`grpcs://host:port` = TLS + 系统 CA 校验（ServerName 缺省跟随拨号主机名，对 LE 等公共证书透明验证）；`grpcs://host:port?insecure=true` = TLS 跳过校验（按 IP 直连等无 SAN 形态）；`grpcs://host:port?server_name=<name>` = 覆盖 SNI——未知 scheme 启动期 fail-closed |
 | `TORCHWOOD_FUNCTIONS_FLEETLY_APP` / `_NETWORK_MEMBERS` | compose 字面量 | `torchwood` / `dispatcher,server`（受控回访挂靠声明） |
 | `TORCHWOOD_SECURITY_ENCRYPTION_KEY` | 平台 env（可选） | 未设置回退 jwt.secret（启动告警） |
 | `TORCHWOOD_SERVER_HTTP_CORS_ALLOW_HEADERS` 等非敏感基线 | compose 字面量 | 与现役同值；需要时平台 env 覆盖（`W_ENV_PLATFORM_OVERRIDE` 可见） |
@@ -250,10 +250,12 @@ source driver，匿名 GitHub API 有 **每 IP 60 req/h** 限额；首次全量�
 - **平台 env app 级**：同 §1 差异 4（密钥在全部服务容器内可见）；
 - **迁移源 = 匿名 GitHub API**：60 req/h/IP 限额与兜底路径见 §5 与 runbook §9；
 - **dispatcher → fleetlyd 传输模式双形态**（2026-09-29 起 endpoint scheme 显式
-  选择）：明文（裸 host:port，栈内通路兼容）与 TLS（`tls://` / `tls-insecure://`，
-  直连 TLS 化控制面，无需外置明文桥/明文监听）都要支持——fleetlyd 的 grpc-go
+  选择，gRPC 社区约定 grpc/grpcs）：明文（裸 host:port / `grpc://`，栈内通路
+  兼容）与 TLS（`grpcs://`，`?insecure=true` 跳过校验、`?server_name=` 覆盖
+  SNI，直连 TLS 化控制面，无需外置明文桥/明文监听）都要支持——fleetlyd 的 grpc-go
   TLS 服务端要求 ALPN h2，任何不支持 ALPN 的外置桥（如 socat）都无法中继
-  （2026-09-29 staging 实证）；按 IP 直连 TLS 面用 `tls-insecure://`；
+  （2026-09-29 staging 实证）；平台物化的 `FLEETLY_CONTROL_GRPC_ADDR` 是
+  端点缺席时的零配置回落；
 - **DT-10 必填 env preflight 未实现**：漏配 env 的部署靠应用侧 fail-closed
   （表现是 crash-loop 噪音而非发布期点名拒绝）；
 - **无 80→443 重定向 / 无宿主管端口**：同 §1 差异 1/2。

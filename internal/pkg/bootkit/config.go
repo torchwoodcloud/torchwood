@@ -49,8 +49,8 @@ func ValidateFunctionsDispatchConfig(c *config.AppConfig) error {
 // （IMPL-T2-3）：endpoint 与机具令牌必填（缺失即拒绝启动——否则构建/执行在
 // 首次调用才以模糊错误暴露）；network_members 非空时 app 必填（挂靠声明的
 // 归属 app 不可省）。endpoint 二选一：显式 functions.fleetly.endpoint（形态
-// 经 config.ParseFleetlyEndpoint 校验：裸 host:port 明文 / tls:// /
-// tls-insecure://，未知 scheme 启动期拒绝）或平台物化的
+// 经 config.ParseFleetlyEndpoint 校验：grpc:// 或裸 host:port 明文 / grpcs://
+// TLS（?insecure/?server_name），未知 scheme 启动期拒绝）或平台物化的
 // FLEETLY_CONTROL_GRPC_ADDR（engine ctrlinject 注入任务 spec 的控制面地址，
 // 集群内工作负载零配置回落）。IMPL-T2-5 起由 ValidateFunctionsDriverConfig
 // 在 driver=fleetly 分支调用。
@@ -61,7 +61,7 @@ func ValidateFunctionsFleetlyConfig(c *config.AppConfig) error {
 		return fmt.Errorf("functions.fleetly.endpoint is required (the dispatcher runs function tasks and builds on the fleetly platform; env TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT, or the platform-materialized FLEETLY_CONTROL_GRPC_ADDR for in-cluster workloads)")
 	}
 	if explicit != "" {
-		if _, _, err := config.ParseFleetlyEndpoint(explicit); err != nil {
+		if _, err := config.ParseFleetlyEndpoint(explicit); err != nil {
 			return err
 		}
 	}

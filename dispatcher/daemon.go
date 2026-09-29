@@ -248,8 +248,7 @@ func NewFleetlyDaemon(cfg *config.AppConfig, refs imageRefStore) Daemon {
 		if serverName != "" {
 			mode = config.FleetlyEndpointTLS
 		}
-		addr, _, _ := config.ParseFleetlyEndpoint(os.Getenv(EnvControlGRPCAddr))
-		cli, cliErr = newGRPCFleetlyClientFor(addr, f.GetToken(), mode, serverName)
+		cli, cliErr = newGRPCFleetlyClientFor(os.Getenv(EnvControlGRPCAddr), f.GetToken(), mode, serverName)
 	}
 	return newFleetlyDaemon(cfg, refs, cli, cliErr)
 }
@@ -1178,9 +1177,10 @@ func writeBuildContext(w io.Writer, dir string) error {
 // grpcFleetlyClient 是 fleetlyTaskClient 的真实实现：grpc 连接 + Tasks/
 // Builds 生成客户端 + Bearer 机具令牌（每请求 metadata；令牌不进日志/错误
 // 文本）。传输安全由 endpoint scheme 显式选择（config.ParseFleetlyEndpoint
-// 唯一真源）：裸 host:port = 栈内明文（既有部署兼容，fleetlyd 与本栈同网络）；
-// tls:// = TLS + 系统 CA 校验；tls-insecure:// = TLS + 跳过校验（按 IP 直连
-// 等无 SAN 形态）。
+// 唯一真源，gRPC 社区约定 grpc/grpcs）：裸 host:port 与 grpc:// = 栈内明文
+// （既有部署兼容，fleetlyd 与本栈同网络）；grpcs:// = TLS + 系统 CA 校验
+// （?server_name= 覆盖 SNI；?insecure=true 跳过校验——按 IP 直连等无 SAN
+// 形态）。
 type grpcFleetlyClient struct {
 	conn   *grpc.ClientConn
 	tasks  serverv1.TasksServiceClient
@@ -1188,11 +1188,11 @@ type grpcFleetlyClient struct {
 }
 
 func newGRPCFleetlyClient(endpoint, token string) (*grpcFleetlyClient, error) {
-	addr, mode, err := config.ParseFleetlyEndpoint(endpoint)
+	ep, err := config.ParseFleetlyEndpoint(endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("dial fleetly endpoint %q: %w", endpoint, err)
 	}
-	return newGRPCFleetlyClientFor(addr, token, mode, "")
+	return newGRPCFleetlyClientFor(ep.Addr, token, ep.Mode, ep.ServerName)
 }
 
 // newGRPCFleetlyClientFor 是客户端构造的实现位（addr/mode/serverName 已解
