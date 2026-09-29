@@ -3,6 +3,7 @@ package dispatcher
 import (
 	"archive/tar"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -22,6 +23,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/pkg/ident"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 )
@@ -1153,7 +1155,10 @@ func writeBuildContext(w io.Writer, dir string) error {
 
 // grpcFleetlyClient 是 fleetlyTaskClient 的真实实现：grpc 连接 + Tasks/
 // Builds 生成客户端 + Bearer 机具令牌（每请求 metadata；令牌不进日志/错误
-// 文本）。栈内明文传输（TLS 面挂后续票；fleetlyd 与本栈同网络）。
+// 文本）。传输安全由 endpoint scheme 显式选择（config.ParseFleetlyEndpoint
+// 唯一真源）：裸 host:port = 栈内明文（既有部署兼容，fleetlyd 与本栈同网络）；
+// tls:// = TLS + 系统 CA 校验；tls-insecure:// = TLS + 跳过校验（按 IP 直连
+// 等无 SAN 形态）。
 type grpcFleetlyClient struct {
 	conn   *grpc.ClientConn
 	tasks  serverv1.TasksServiceClient
@@ -1161,9 +1166,25 @@ type grpcFleetlyClient struct {
 }
 
 func newGRPCFleetlyClient(endpoint, token string) (*grpcFleetlyClient, error) {
-	conn, err := grpc.NewClient(endpoint,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithPerRPCCredentials(fleetlyBearerCredentials{token: token}),
+	addr, mode, err := config.ParseFleetlyEndpoint(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("dial fleetly endpoint %q: %w", endpoint, err)
+	}
+	var transport credentials.TransportCredentials
+	switch mode {
+	case config.FleetlyEndpointTLS:
+		transport = credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
+	case config.FleetlyEndpointTLSInsecure:
+		transport = credentials.NewTLS(&tls.Config{
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: true, // 显式选择的跳过校验形态（按 IP 直连等无 SAN 场景）
+		})
+	default:
+		transport = insecure.NewCredentials()
+	}
+	conn, err := grpc.NewClient(addr,
+		grpc.WithTransportCredentials(transport),
+		grpc.WithPerRPCCredentials(fleetlyBearerCredentials{token: token, secure: mode != config.FleetlyEndpointPlain}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("dial fleetly endpoint %q: %w", endpoint, err)
@@ -1179,16 +1200,18 @@ func newGRPCFleetlyClient(endpoint, token string) (*grpcFleetlyClient, error) {
 func (c *grpcFleetlyClient) Close() error { return c.conn.Close() }
 
 // fleetlyBearerCredentials 是机具令牌的 PerRPCCredentials 实现：每请求
-// （一元与流式）自动携带 authorization metadata。
-type fleetlyBearerCredentials struct{ token string }
+// （一元与流式）自动携带 authorization metadata。secure 跟随 endpoint 传输
+// 模式（TLS 拨号 = true，gRPC 传输层据此强制凭据只走安全连接）。
+type fleetlyBearerCredentials struct {
+	token  string
+	secure bool
+}
 
 func (b fleetlyBearerCredentials) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
 	return map[string]string{"authorization": "Bearer " + b.token}, nil
 }
 
-// RequireTransportSecurity 栈内明文拨号 = false（同网络内网通路；TLS 面
-// 挂后续票——届时跟随拨号面置 true）。
-func (b fleetlyBearerCredentials) RequireTransportSecurity() bool { return false }
+func (b fleetlyBearerCredentials) RequireTransportSecurity() bool { return b.secure }
 
 func (c *grpcFleetlyClient) EnsureTaskNetwork(ctx context.Context, req *serverv1.EnsureTaskNetworkRequest) (*serverv1.EnsureTaskNetworkResponse, error) {
 	return c.tasks.EnsureTaskNetwork(ctx, req)
