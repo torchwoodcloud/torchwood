@@ -1,15 +1,12 @@
 package dispatcher
 
 import (
-	"archive/tar"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -18,7 +15,6 @@ import (
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/fleetly/shared/v1"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	infrafunctions "github.com/torchwoodcloud/torchwood/internal/infra/functions"
-	"github.com/torchwoodcloud/torchwood/internal/infra/functions/runner"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/ident"
 	"google.golang.org/grpc"
@@ -596,7 +592,7 @@ func (d *fleetlyDaemon) BuildImage(ctx context.Context, opts BuildImageOptions) 
 	}
 	defer func() { _ = os.RemoveAll(buildDir) }()
 
-	if err := prepareBuildContext(buildDir, opts); err != nil {
+	if err := PrepareBuildContext(buildDir, opts); err != nil {
 		return err
 	}
 
@@ -607,7 +603,7 @@ func (d *fleetlyDaemon) BuildImage(ctx context.Context, opts BuildImageOptions) 
 	// 流式 tar：BuildFromUpload 失败路径必须 Close 读端——唤醒可能仍阻塞在
 	// pipe 写侧的打包 goroutine（gRPC 传输不会读到 EOF）；成功路径由
 	// 流发送完毕自然收尾。
-	tarCtx := tarDir(buildDir)
+	tarCtx := TarDir(buildDir)
 	resp, err := cli.BuildFromUpload(ctx, name, "Dockerfile", tarCtx)
 	_ = tarCtx.Close()
 	if err != nil {
@@ -713,7 +709,7 @@ func (d *fleetlyDaemon) ImportImage(ctx context.Context, opts ImportImageOptions
 	// 1) registry host 名称级校验（设计 §3 安全基线的可实现口径：名称级
 	//    校验 + 白名单 + 信任级论证；失败 InvalidArgument 明示命中规则）。
 	//    先于一切平台操作——幂等快速路径同样受准入口径约束。
-	if err := validateImageRegistryHost(parseImageReferenceHost(opts.Reference),
+	if err := ValidateImageRegistryHost(ParseImageReferenceHost(opts.Reference),
 		d.cfg.GetFunctions().GetImage().GetAllowedRegistries(),
 		d.cfg.GetFunctions().GetImage().GetAllowInsecure()); err != nil {
 		return "", err
@@ -806,15 +802,6 @@ func (d *fleetlyDaemon) taskImageRef(ctx context.Context, taskID string) (string
 	return ref, nil
 }
 
-// digestOfReference 提取引用中的 digest（"repo@sha256:..." → "sha256:..."；
-// 无 digest 返回空串）。
-func digestOfReference(ref string) string {
-	if i := strings.Index(ref, "@"); i >= 0 {
-		return ref[i+1:]
-	}
-	return ""
-}
-
 // RemoveImage 删除构建产物引用映射（幂等）。平台侧产物 GC 归平台（本仓无
 // 镜像删除 API）；映射删除后 spawn 不再解析到该引用，server 重建链路自愈。
 func (d *fleetlyDaemon) RemoveImage(ctx context.Context, functionID, deploymentID string) error {
@@ -825,240 +812,15 @@ func (d *fleetlyDaemon) RemoveImage(ctx context.Context, functionID, deploymentI
 	return d.refs.DeleteImageRef(ctx, logical)
 }
 
-// prepareBuildContext 在 buildDir 准备镜像构建上下文（纯文件编排，单测以
-// 临时 zip 直接驱动）。顺序敏感（runtime 对账先于模板渲染）：
-//
-//  1. 解压 zip 并探测部署源（ExtractZipRelaxed）；
-//  2. runtime 一致性对账（D7'）：探测产出语言族（family），版本轴来自
-//     声明——opts.Runtime 非空且其 family ≠ 探测 family → InvalidArgument
-//     （错误信息含声明 ID 与探测 family）；未知 runtime ID 同样拒绝
-//     （fail-closed）；
-//  3. node 分支写 .tw-runner.js；go 分支零平台注入（五期 5b：用户 zip 根 =
-//     package main + SDK，构建 = go build .，无 bootstrap 生成/入口探测）；
-//     最后渲染 Dockerfile（缺 go.sum 等拒收错误在此冒出）。
-func prepareBuildContext(buildDir string, opts BuildImageOptions) error {
-	tmpZip, err := os.CreateTemp("", "torchwood-dispatch-src-*.zip")
-	if err != nil {
-		return fmt.Errorf("stage zip: %w", err)
-	}
-	defer func() { _ = os.Remove(tmpZip.Name()) }()
-	if _, err := tmpZip.Write(opts.Zip); err != nil {
-		_ = tmpZip.Close()
-		return fmt.Errorf("stage zip: %w", err)
-	}
-	_ = tmpZip.Close()
+// fleetlyDaemon 的 BuildImage/ImportImage 验证腿（见 verify.go 的共享编排
+// 与 buildcontext.go 的共享构建上下文——两形态驱动消费同一实现）。
 
-	// 解压 + 探测：复用 v1 防炸弹/路径穿越预算，条目预算用放宽版（二期
-	// 阶段 3，设计 §2 条目维链条）——BuildImage 无法区分 zip/git 源（同
-	// base64 内联通道），统一放宽到 packer 物化口径（条目 5000；单条
-	// 100MiB / 总量 200MiB 解压预算维持），防 git 源合法 zip 被默认 1000
-	// 条目预算击毙。SourceContents 附带部署源探测结果（family 标记），
-	// 逐字段映射为 runner 包的模板载体（runner 保持叶子资产包，不 import
-	// infra/functions 根包）。
-	contents, err := infrafunctions.ExtractZipRelaxed(tmpZip.Name(), buildDir)
-	if err != nil {
-		return err
-	}
-
-	// runtime 一致性对账（D7'，functions-runtime-selection.md §2）：探测产出
-	// 语言族，版本轴来自声明——声明的 runtime ID 的 family 必须与探测
-	// family 一致，否则构建期 InvalidArgument。opts.Runtime 为空 = 遗留
-	// 调用方（跳过对账）：渲染基准取探测 family 的首个 active 表项（平台
-	// 缺省 runtime），不再隐含历史 node:18 耦合。
-	renderRuntime := opts.Runtime
-	if opts.Runtime != "" {
-		declaredFamily := domainfunctions.FamilyOf(opts.Runtime)
-		if declaredFamily == "" {
-			return status.Errorf(codes.InvalidArgument, "unsupported runtime %q", opts.Runtime)
-		}
-		if declaredFamily != contents.Family {
-			return status.Errorf(codes.InvalidArgument,
-				"runtime mismatch: function declares %q (family %q) but source probes as %q family (redeploy with a runtime whose family matches the source)",
-				opts.Runtime, declaredFamily, contents.Family)
-		}
-	} else {
-		def, ok := domainfunctions.DefaultRuntimeForFamily(contents.Family)
-		if !ok {
-			return status.Errorf(codes.InvalidArgument, "source probes as %q family but no runtime is available for platform builds", contents.Family)
-		}
-		renderRuntime = def.ID
-	}
-
-	// engines.node 校验（functions-runtime-selection.md §5）：Node 生态正规
-	// 声明位与所选 runtime 的 major 相交性——「本地 node 22、线上 node 18」
-	// 类漂移在部署期显式化。与 D11 正交（纯读取 + 比较，零新执行面）。
-	if err := checkNodeEngines(contents.NodeEngines, renderRuntime); err != nil {
-		return err
-	}
-
-	dockerfile, err := runner.DockerfileFor(runner.SourceContents{
-		Runtime:       renderRuntime,
-		NodeDeps:      contents.NodeDeps,
-		HasLockfile:   contents.HasLockfile,
-		GoModulePath:  contents.GoModulePath,
-		GoHasRequires: contents.GoHasRequires,
-		GoHasSum:      contents.GoHasSum,
-		HasVendor:     contents.HasVendor,
-	})
-	if err != nil {
-		return err
-	}
-	// node 分支：runner 脚本随 COPY . . 进镜像（go 分支写入该文件无害——
-	// go 模板不引用它）。构建产物经 COPY 进入镜像后须被镜像内 USER 读取
-	// ——权限必须保持 world-readable（G306 误报：非机密，且收紧曾致容器
-	// 秒退、健康握手永不 ready，CI e2e 实证）。
-	if err := os.WriteFile(filepath.Join(buildDir, runner.RunnerFileName), runner.NodeRunnerJS(), 0o644); err != nil { // #nosec G306 -- 镜像内 USER 须可读
-		return fmt.Errorf("write runner: %w", err)
-	}
-	if err := os.WriteFile(filepath.Join(buildDir, "Dockerfile"), []byte(dockerfile), 0o644); err != nil { // #nosec G306 -- 镜像内 USER 须可读
-		return fmt.Errorf("write dockerfile: %w", err)
-	}
-	return nil
-}
-
-// containerName 生成可读任务名：tw-fn-<project>-<function>-<rand6>。
-// 与镜像逻辑名同族的可读性——fleetly 任务视图一眼对上项目/函数。
-// project/function 上游已过 ID 白名单（project ^[a-z][a-z0-9]{0,27}$、
-// function ^[a-z0-9][a-z0-9_-]{0,63}$），此处防御性小写化 + 非法字符折叠为
-// '-'；随机后缀（6 hex）保证同函数多实例/反复部署唯一。历史遗留大写
-// functionID 同步小写（G6-3 同口径）。
-func containerName(projectID, functionID string) string {
-	sanitize := func(s string) string {
-		s = strings.ToLower(s)
-		return strings.Map(func(r rune) rune {
-			switch {
-			case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
-				return r
-			default:
-				return '-'
-			}
-		}, s)
-	}
-	suffix := newSpawnLockToken()[:6]
-	return fmt.Sprintf("tw-fn-%s-%s-%s", sanitize(projectID), sanitize(functionID), suffix)
-}
-
-// CleanupTimeout 是清理类平台/daemon 操作（stop/delete/remove）的独立超时：
-// 不继承已取消的执行 ctx，也不允许平台挂起时无限阻塞（两种驱动形态同约定，
-// dockerdriver 经 dispatcher.CleanupTimeout 消费同值）。
-const CleanupTimeout = 30 * time.Second
-
-// 验证 spawn 的 health 探针节拍（对齐池启动握手 spawnInstance：单次探针
-// 2s 超时、轮询间隔 100ms；预算本身 = 本进程 boot_timeout，构造时解析）。
-const (
-	verifyProbeTimeout = 2 * time.Second
-	verifyPollInterval = 100 * time.Millisecond
-)
+// ——fleetly 专属：平台 TTL——
 
 // taskTTLSeconds 是常驻任务实例的平台 TTL（秒）：平台上限 24h，作兜底
 // 回收（dispatcher 整体失联时的泄漏面）；正常生命周期由池自持（idle 回收/
 // max_requests 自退/熔断重建），远短于此。
 const taskTTLSeconds = 86400
-
-// verifySpawnConfig 是验证 spawn 的参数包：镜像引用 + 探针预算 + 注入值。
-// PollInterval 零值取 verifyPollInterval（单测注入加速/确定性）。
-type verifySpawnConfig struct {
-	Image        string
-	BootTimeout  time.Duration
-	MaxRequests  int
-	PollInterval time.Duration
-}
-
-// HealthProber 是验证探针的最小抽象（runnerClient 的 Health 面收窄；生产 =
-// httpRunner，单测 = fake 表驱动）。IMPL-T2-5 导出：dockerdriver 驱动的
-// 验证 spawn 复用同一探针注入缝。
-type HealthProber interface {
-	Health(ctx context.Context, ip string) error
-}
-
-// spawnVerifyInstance 执行一次部署后验证 spawn（设计 §1/D10）：spawn 一枚
-// 验证任务 → /_tw/health 轮询（预算 = BootTimeout）→ 就绪即回收。
-//
-// 池外语义（设计 §1）：走 Daemon 原语直连——不进实例注册表、不受
-// MaxResidentInstances 约束、不参与 reaper 对账（BuildImage 无池依赖，天然
-// 满足），用完即删；验证范围 = health 探针，不做 invoke——invoke 需要平台
-// 构造 TW_DATA 并执行用户代码（副作用不可控），违反「部署期不执行用户代码」
-// 不变量（对抗审查 A5 裁决，残余风险由运行期 transport-error 杀实例兜底）。
-//
-// 失败处置：回收任务台账的失败现场（status/error/stop_reason）拼进错误——
-// 运行期错误（panic/协议未实现）在任务 error 字段；编译错误在构建日志、
-// 不经此路径。无论成败任务以独立 cleanup ctx Stop+Delete（不继承已取消/
-// 临期的构建 ctx，CleanupTimeout 同约定）。
-func spawnVerifyInstance(ctx context.Context, d Daemon, probe HealthProber, opts BuildImageOptions, vc verifySpawnConfig) error {
-	// egress 分类与执行一致（对抗审查 A1 最强修复）：untrusted 函数的验证
-	// 实例挂 internal 变体任务网络（与池 spawnInstance 同路）——验证期不得
-	// 给不可信镜像开跳出网窗口。
-	network, err := d.EnsureProjectNetwork(ctx, opts.ProjectID, opts.EgressUntrusted)
-	if err != nil {
-		return fmt.Errorf("verify spawn: ensure network: %w", err)
-	}
-	inst, err := spawnVerificationTask(ctx, d, opts, vc, network)
-	if err != nil {
-		return fmt.Errorf("verify spawn: %w", err)
-	}
-	// 无论成败回收任务（验证实例无在途请求，无需 drain 宽限）。
-	defer func() {
-		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), CleanupTimeout)
-		defer cancel()
-		_ = d.StopInstance(cctx, inst.ContainerID, 0)
-		_ = d.RemoveInstance(cctx, inst.ContainerID)
-	}()
-	return awaitVerificationHealthy(ctx, d, probe, opts, vc, inst)
-}
-
-// spawnVerificationTask 创建验证任务（env 组装与池 spawnInstance 同源：
-// TW_DATA/TW_EXECUTION_TOKEN 不进容器 env——常驻的是容器不是凭证；
-// TW_MAX_REQUESTS/TW_DRAIN_TIMEOUT_MS 由 SpawnInstance 统一追加）。
-func spawnVerificationTask(ctx context.Context, d Daemon, opts BuildImageOptions, vc verifySpawnConfig, network string) (Instance, error) {
-	// env 组装与池 spawnInstance 同源（SanitizeRunnerEnv：TW_DATA/
-	// TW_EXECUTION_TOKEN 不进容器 env——常驻的是容器不是凭证；
-	// TW_MAX_REQUESTS/TW_DRAIN_TIMEOUT_MS 由驱动侧 AppendRunnerControlEnv
-	// 统一追加）。
-	return d.SpawnInstance(ctx, SpawnOptions{
-		ProjectID:   opts.ProjectID,
-		FunctionID:  opts.FunctionID,
-		Image:       vc.Image,
-		Network:     network,
-		Env:         SanitizeRunnerEnv(opts.Env),
-		Spec:        "shared-1x",
-		MaxRequests: vc.MaxRequests,
-		Name:        containerName(opts.ProjectID, opts.FunctionID),
-	})
-}
-
-// awaitVerificationHealthy 轮询验证实例的 /_tw/health 直到就绪（预算 =
-// BootTimeout）；失败时把任务台账失败现场拼进错误。
-func awaitVerificationHealthy(ctx context.Context, d Daemon, probe HealthProber, opts BuildImageOptions, vc verifySpawnConfig, inst Instance) error {
-	interval := vc.PollInterval
-	if interval <= 0 {
-		interval = verifyPollInterval
-	}
-	deadline := time.Now().Add(vc.BootTimeout)
-	for {
-		pctx, pcancel := context.WithTimeout(ctx, verifyProbeTimeout)
-		err := probe.Health(pctx, inst.IP)
-		pcancel()
-		if err == nil {
-			return nil // 验证通过：静默（成功不产生 deployment.error）
-		}
-		if ctx.Err() != nil || !time.Now().Before(deadline) {
-			// 失败处置：台账读取与后续清理同用脱离构建 ctx 的独立 ctx
-			//（预算到点时构建 ctx 可能已取消/临期）。
-			tailCtx, tailCancel := context.WithTimeout(context.WithoutCancel(ctx), CleanupTimeout)
-			tail, tailErr := d.InstanceLogsTail(tailCtx, inst.ContainerID, maxLogTailBytes)
-			tailCancel()
-			if tailErr != nil {
-				tail = fmt.Sprintf("<task status unavailable: %v>", tailErr)
-			}
-			return fmt.Errorf("verification failed: function image did not become healthy within %s (last probe error: %v); task status:\n%s",
-				vc.BootTimeout, err, tail)
-		}
-		if !defaultSleep(ctx, interval) {
-			// sleep 期间 ctx 取消：下一轮探针立即失败并走上面的现场回收路径。
-			continue
-		}
-	}
-}
 
 // 启动验证任务的统一入口（ImportImage 需要先读钉定引用再探活；
 // spawnVerifyInstance 直接探活——两条腿共享同一创建语义）。
@@ -1080,91 +842,6 @@ func (d *fleetlyDaemon) startVerificationTask(ctx context.Context, opts BuildIma
 // 暴露额外包级函数）。
 func (d *fleetlyDaemon) awaitVerificationHealthy(ctx context.Context, probe HealthProber, inst Instance, opts BuildImageOptions, vc verifySpawnConfig) error {
 	return awaitVerificationHealthy(ctx, d, probe, opts, vc, inst)
-}
-
-// tarDir 将目录流式打包为 build context tar（dispatcher 侧独立实现避免
-// 导出面扩散）。
-//
-// 流式化（P2 S13）：原实现把整棵 tar 缓冲进 bytes.Buffer——50MiB zip 场景
-// （解压预算 200MiB）构建峰值内存 ≈ tar 缓冲 + 解压目录 + base64 载荷
-// ≈ 800MB 量级。现改 io.Pipe + goroutine 边 WalkDir 边写，调用方
-// （BuildFromUpload 接受 io.Reader）直接消费读端，峰值内存降为单文件拷贝
-// 缓冲。错误经 pipe 传播（CloseWithError，读侧以读错误收场——遍历目录是
-// 刚由 prepareBuildContext 写出的自有文件，出错概率极低，接受错误文案
-// 不经「tar build context」包装）。调用方在 BuildFromUpload 失败路径须
-// Close 读端，唤醒阻塞中的写侧（防 goroutine 悬挂）。
-//
-// umask 归一化语义（EACCES 秒退事故的坏档修复）原样保留：文件恒 0644、
-// 目录恒 0755、属主归零——见循环内注释。
-func tarDir(dir string) io.ReadCloser {
-	pr, pw := io.Pipe()
-	go func() {
-		pw.CloseWithError(writeBuildContext(pw, dir))
-	}()
-	return pr
-}
-
-// writeBuildContext 是 tarDir 的写侧：遍历 dir 逐条目写入 tar 流（与流式化
-// 前的字节语义一致）。
-func writeBuildContext(w io.Writer, dir string) error {
-	tw := tar.NewWriter(w)
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if path == dir {
-			return nil
-		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
-		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		hdr, err := tar.FileInfoHeader(info, "")
-		if err != nil {
-			return err
-		}
-		hdr.Name = filepath.ToSlash(rel)
-		// 权限坏档修复（EACCES 秒退事故）：镜像内文件 mode 不得依赖 dispatcher
-		// 进程状态。上游 os.WriteFile/OpenFile 声明的 0644 会先被进程 umask 掩蔽
-		// （0644 & ~umask，umask 0077 时落盘 0600），而 FileInfoHeader 忠实保留
-		// 磁盘实际 mode，经 COPY . . 原样进镜像——模板 USER node 读 .tw-runner.js
-		// 即 EACCES、容器秒退（同构建代码先后产出坏/好镜像 = 进程 umask 随栈
-		// redeploy 漂移的状态依赖）。在此单一收口点归一化：文件恒 0644、目录恒
-		// 0755（x 位不可省，子目录用户代码要靠它遍历）、属主归零，镜像权限与
-		// dispatcher 以何用户/何 umask 运行彻底解耦。不用模板 COPY --chmod：
-		// 它对文件与目录只能给同一个 mode，顾此失彼。
-		if d.IsDir() {
-			hdr.Mode = 0o755
-			hdr.Name += "/"
-		} else {
-			hdr.Mode = 0o644
-		}
-		hdr.Uid = 0
-		hdr.Gid = 0
-		if err := tw.WriteHeader(hdr); err != nil {
-			return err
-		}
-		if !d.IsDir() {
-			f, err := os.Open(path) // #nosec G304 -- path 由 WalkDir 从自有构建目录枚举（非用户输入）
-			if err != nil {
-				return err
-			}
-			_, copyErr := io.Copy(tw, f)
-			_ = f.Close()
-			if copyErr != nil {
-				return copyErr
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	return tw.Close()
 }
 
 // ——fleetly gRPC 客户端（Tasks/build 面；唯一平台通路）——

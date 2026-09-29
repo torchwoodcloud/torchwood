@@ -22,12 +22,12 @@ import (
 // "nginx@sha256:..."、"library/nginx"）归属的默认 registry。
 const defaultRegistryHost = "docker.io"
 
-// parseImageReferenceHost 解析镜像引用的 registry host 段（Docker reference
+// ParseImageReferenceHost 解析镜像引用的 registry host 段（Docker reference
 // 语法）：host 只可能出现在首个 "/" 之前，且仅当该段含 "." 或 ":" 或为
 // 字面量 "localhost"（否则首段是仓库路径组件，如 "library/nginx" 仍归属
 // docker.io）；无 "/" 的引用无显式 host → docker.io。返回值统一小写，
 // 含端口（"registry.example.com:5000"）与 IPv6 括号形态（"[::1]:5000"）。
-func parseImageReferenceHost(reference string) string {
+func ParseImageReferenceHost(reference string) string {
 	i := strings.Index(reference, "/")
 	if i < 0 {
 		return defaultRegistryHost
@@ -75,14 +75,23 @@ func isLocalhostHost(host string) bool {
 	return h == "localhost" || strings.HasSuffix(h, ".localhost")
 }
 
-// validateImageRegistryHost 按 config functions.image 的准入规则校验 host，
+// digestOfReference 提取引用中的 digest（"repo@sha256:..." → "sha256:..."；
+// 无 digest 返回空串）。
+func digestOfReference(ref string) string {
+	if i := strings.Index(ref, "@"); i >= 0 {
+		return ref[i+1:]
+	}
+	return ""
+}
+
+// ValidateImageRegistryHost 按 config functions.image 的准入规则校验 host，
 // 失败返回 InvalidArgument 且明示命中规则与放行通道（设计 §3）：
 //  1. 白名单优先放行：allowed_registries 非空且精确/后缀命中 = 运维显式
 //     登记（含内网 registry 直连 IP 的显式白名单场景）；
 //  2. allow_insecure = 全放行（自托管内网 registry 的显式开关）；
 //  3. 拒绝 IP 字面量与 localhost/*.localhost；
 //  4. 白名单非空且未命中 → 拒绝（正向白名单语义）。
-func validateImageRegistryHost(host string, allowedRegistries []string, allowInsecure bool) error {
+func ValidateImageRegistryHost(host string, allowedRegistries []string, allowInsecure bool) error {
 	if hostAllowedByWhitelist(host, allowedRegistries) {
 		return nil
 	}

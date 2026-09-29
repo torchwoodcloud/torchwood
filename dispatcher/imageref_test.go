@@ -37,7 +37,7 @@ func TestParseImageReferenceHost_Table(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.wantHost, parseImageReferenceHost(tc.reference))
+			require.Equal(t, tc.wantHost, ParseImageReferenceHost(tc.reference))
 		})
 	}
 }
@@ -83,7 +83,7 @@ func TestValidateImageRegistryHost_Table(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateImageRegistryHost(tc.host, tc.allowed, tc.insecure)
+			err := ValidateImageRegistryHost(tc.host, tc.allowed, tc.insecure)
 			if tc.wantErrHas == "" {
 				require.NoError(t, err)
 				return
@@ -98,14 +98,14 @@ func TestValidateImageRegistryHost_Table(t *testing.T) {
 // TestValidateImageRegistryHost_WhitespaceEntriesTolerated 白名单空白条目
 // 容忍（配置手误不放大攻击面——空白条目不命中任何 host）。
 func TestValidateImageRegistryHost_WhitespaceEntriesTolerated(t *testing.T) {
-	require.NoError(t, validateImageRegistryHost("ghcr.io", []string{"", "  ", "ghcr.io"}, false))
-	require.Error(t, validateImageRegistryHost("docker.io", []string{"", "  "}, false))
+	require.NoError(t, ValidateImageRegistryHost("ghcr.io", []string{"", "  ", "ghcr.io"}, false))
+	require.Error(t, ValidateImageRegistryHost("docker.io", []string{"", "  "}, false))
 }
 
 // TestValidateImageRegistryHost_ErrorDisclosesHost 校验失败错误必须明示命中
 // 规则与放行通道（设计 §3「校验失败 InvalidArgument 明示命中规则」）。
 func TestValidateImageRegistryHost_ErrorDisclosesHost(t *testing.T) {
-	err := validateImageRegistryHost("192.168.1.5:5000", nil, false)
+	err := ValidateImageRegistryHost("192.168.1.5:5000", nil, false)
 	require.ErrorContains(t, err, "192.168.1.5:5000")
 	require.ErrorContains(t, err, "functions.image.allowed_registries")
 	require.ErrorContains(t, err, "functions.image.allow_insecure")

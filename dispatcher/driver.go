@@ -6,17 +6,16 @@ package dispatcher
 //     docker client 持有面），经 RegisterDockerDriver 注入构造函数，由
 //     组合根（cmd/dispatcher）blank-import 完成链接；
 //   - 驱动选择：newDaemonForConfig 按 functions.driver 构造执行底座
-//     （fail-closed：值未知或 docker 驱动未链接都拒绝启动，不静默回落）；
-//   - 驱动共享面：构建上下文编排 / build context tar 流 / 验证 spawn /
-//     镜像源 host 准入的导出形态——dockerdriver 只消费本文件导出的共享面
-//     与 Daemon 接口，「fleetly 驱动路径零 docker client」的机制断言以该
-//     包边界成立（口径见 import_guard_test.go 与 fleetly 仓实施记录）。
+//     （fail-closed：值未知或 docker 驱动未链接都拒绝启动，不静默回落）。
+//
+// 驱动共享面（构建上下文 / tar 流 / 验证 spawn / 镜像源 host 准入 / 清理
+// 超时 / runner env 组装）分别落在 buildcontext.go / verify.go / imageref.go
+// / runnerenv.go，dockerdriver 只消费这些导出面与 Daemon 接口——「fleetly
+// 驱动路径零 docker client」的机制断言以该包边界成立（口径见
+// import_guard_test.go 与 fleetly 仓实施记录）。
 
 import (
-	"context"
 	"fmt"
-	"io"
-	"time"
 
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
@@ -57,48 +56,4 @@ func newDaemonForConfig(cfg *config.AppConfig, registry Registry) (Daemon, error
 		return nil, fmt.Errorf("functions.driver %q is unknown (supported values: %q, %q; env TORCHWOOD_FUNCTIONS_DRIVER)",
 			driver, config.FunctionsDriverFleetly, config.FunctionsDriverDocker)
 	}
-}
-
-// ——驱动共享面（dockerdriver 只消费本段导出形态；底层实现在 daemon.go /
-// imageref.go，fleetly 驱动同用底层实现，行为零变化）——
-
-// PrepareBuildContext 是 prepareBuildContext 的导出形态：在 buildDir 准备
-// 镜像构建上下文（zip 解压校验 → runtime 对账 → 模板渲染；构建期不执行
-// 用户代码的不变量在此保持）。
-func PrepareBuildContext(buildDir string, opts BuildImageOptions) error {
-	return prepareBuildContext(buildDir, opts)
-}
-
-// TarDir 是 tarDir 的导出形态：将目录流式打包为 build context tar（失败
-// 路径调用方须 Close 读端，唤醒阻塞在 pipe 写侧的打包 goroutine）。
-func TarDir(dir string) io.ReadCloser { return tarDir(dir) }
-
-// NewHTTPProber 返回验证 spawn 的生产探针（/_tw/health HTTP 客户端，与池
-// 的启动握手同款节拍）。
-func NewHTTPProber() HealthProber { return newHTTPRunner() }
-
-// SpawnVerifyInstance 执行一次部署后验证 spawn（池外实例：ensure 网络 →
-// spawn → /_tw/health 轮询（预算 = bootTimeout）→ 就绪或失败现场回收；
-// image 须为执行底座可直接解析的引用）。两形态驱动的 BuildImage /
-// ImportImage 共用同一编排；probe 是验证探针（生产 = NewHTTPProber，测试
-// 可注入 fake）；maxRequests 是验证实例 TW_MAX_REQUESTS 注入值。
-func SpawnVerifyInstance(ctx context.Context, d Daemon, probe HealthProber, opts BuildImageOptions, image string, bootTimeout time.Duration, maxRequests int) error {
-	return spawnVerifyInstance(ctx, d, probe, opts, verifySpawnConfig{
-		Image:       image,
-		BootTimeout: bootTimeout,
-		MaxRequests: maxRequests,
-	})
-}
-
-// ValidateImageRegistryHost 是 validateImageRegistryHost 的导出形态：
-// functions.image 准入规则（白名单优先放行 + allow_insecure 显式放行，
-// 拒绝 IP 字面量与 localhost/*.localhost）。
-func ValidateImageRegistryHost(host string, allowedRegistries []string, allowInsecure bool) error {
-	return validateImageRegistryHost(host, allowedRegistries, allowInsecure)
-}
-
-// ParseImageReferenceHost 是 parseImageReferenceHost 的导出形态：解析镜像
-// 引用的 registry host 段（无显式 host 归属 docker.io；统一小写含端口）。
-func ParseImageReferenceHost(reference string) string {
-	return parseImageReferenceHost(reference)
 }

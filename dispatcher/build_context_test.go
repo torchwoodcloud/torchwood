@@ -14,7 +14,7 @@ import (
 )
 
 // 本文件覆盖构建上下文准备接线（五期 5b：Go 用户契约反转，设计
-// docs/design/functions-runtimes-and-sources.md 顶部立项段）：prepareBuildContext
+// docs/design/functions-runtimes-and-sources.md 顶部立项段）：PrepareBuildContext
 // 的顺序敏感编排——解压探测 → D7 runtime 一致性对账 → Dockerfile 渲染；
 // go 分支零平台注入（zip 根 = 用户 package main，构建 = go build .），
 // node 分支照旧写 .tw-runner.js。
@@ -31,7 +31,7 @@ func TestPrepareBuildContext_RuntimeMismatch(t *testing.T) {
 	// zip 探测为 go（go.mod），声明 runtime 为 node → InvalidArgument
 	// 且错误信息含声明 ID 与探测 family（D7'：探测产出语言族，版本轴来自
 	// 声明，docs/design/functions-runtime-selection.md §2）。
-	err := prepareBuildContext(buildDir, BuildImageOptions{
+	err := PrepareBuildContext(buildDir, BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip:     makeEntryZipFiles(t, map[string]string{"go.mod": goModFixture, "main.go": goMainFixture}),
 		Runtime: "node-18.0",
@@ -47,7 +47,7 @@ func TestPrepareBuildContext_RuntimeMismatch(t *testing.T) {
 	require.True(t, os.IsNotExist(statErr), "runtime 对账失败时不得渲染 Dockerfile")
 
 	// 反向：zip 探测为 node（index.js）、声明 go-1.26 → 同样 InvalidArgument。
-	err = prepareBuildContext(t.TempDir(), BuildImageOptions{
+	err = PrepareBuildContext(t.TempDir(), BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip:     makeEntryZip(t, "index.js", "module.exports.main = () => ({})"),
 		Runtime: "go-1.26",
@@ -57,7 +57,7 @@ func TestPrepareBuildContext_RuntimeMismatch(t *testing.T) {
 	require.Contains(t, status.Convert(err).Message(), "go-1.26")
 
 	// 未知 runtime ID 同样 fail-closed（表外 ID 无法解析 family）。
-	err = prepareBuildContext(t.TempDir(), BuildImageOptions{
+	err = PrepareBuildContext(t.TempDir(), BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip:     makeEntryZip(t, "index.js", "module.exports.main = () => ({})"),
 		Runtime: "node-99.0",
@@ -77,7 +77,7 @@ func TestPrepareBuildContext_VersionAxisFromDeclaration(t *testing.T) {
 		{"node-24.0", "node:24-alpine"},
 	} {
 		buildDir := t.TempDir()
-		err := prepareBuildContext(buildDir, BuildImageOptions{
+		err := PrepareBuildContext(buildDir, BuildImageOptions{
 			FunctionID: "fn1", DeploymentID: "dep1",
 			Zip:     makeEntryZip(t, "index.js", "module.exports.main = () => ({})"),
 			Runtime: tc.runtime,
@@ -94,7 +94,7 @@ func TestPrepareBuildContext_RuntimeEmptySkipsReconcile(t *testing.T) {
 	buildDir := t.TempDir()
 	// Runtime 空 = 遗留调用方（跳过对账）：渲染基准取探测 family 的首个
 	// active 表项（node-24.0，平台缺省）——不再隐含历史 node:18 耦合（D8）。
-	err := prepareBuildContext(buildDir, BuildImageOptions{
+	err := PrepareBuildContext(buildDir, BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip: makeEntryZip(t, "index.js", "module.exports.main = () => ({})"),
 	})
@@ -111,7 +111,7 @@ func TestPrepareBuildContext_RuntimeEmptySkipsReconcile(t *testing.T) {
 // 不做入口探测，Dockerfile 构建目标 = zip 根 main 包（go build .）。
 func TestPrepareBuildContext_GoUserMainContract(t *testing.T) {
 	buildDir := t.TempDir()
-	err := prepareBuildContext(buildDir, BuildImageOptions{
+	err := PrepareBuildContext(buildDir, BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip:     makeEntryZipFiles(t, map[string]string{"go.mod": goModFixture, "main.go": goMainFixture}),
 		Runtime: "go-1.26",
@@ -137,7 +137,7 @@ func TestPrepareBuildContext_GoUserMainContract(t *testing.T) {
 // （真实 daemon 形态对照 TestIntegration_GoNonMainRootBuildRejected）。
 func TestPrepareBuildContext_GoNonMainRootNoPrecheck(t *testing.T) {
 	buildDir := t.TempDir()
-	err := prepareBuildContext(buildDir, BuildImageOptions{
+	err := PrepareBuildContext(buildDir, BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip: makeEntryZipFiles(t, map[string]string{
 			"go.mod":  goModFixture,
@@ -151,7 +151,7 @@ func TestPrepareBuildContext_GoNonMainRootNoPrecheck(t *testing.T) {
 // TestPrepareBuildContext_GoTwmainDirAccepted twmain/ 不再是平台保留目录
 // （五期 5b：生成式 bootstrap 已删）：用户 zip 携带同名目录照常构建上下文。
 func TestPrepareBuildContext_GoTwmainDirAccepted(t *testing.T) {
-	err := prepareBuildContext(t.TempDir(), BuildImageOptions{
+	err := PrepareBuildContext(t.TempDir(), BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip: makeEntryZipFiles(t, map[string]string{
 			"go.mod":      goModFixture,
@@ -166,7 +166,7 @@ func TestPrepareBuildContext_GoTwmainDirAccepted(t *testing.T) {
 // TestPrepareBuildContext_GoMissingSum 纯 stdlib（require 空）无 go.sum 合法；
 // require 非空且无 go.sum → 模板层拒收（探测标记 → DockerfileFor 报错链）。
 func TestPrepareBuildContext_GoMissingSum(t *testing.T) {
-	err := prepareBuildContext(t.TempDir(), BuildImageOptions{
+	err := PrepareBuildContext(t.TempDir(), BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip: makeEntryZipFiles(t, map[string]string{
 			"go.mod":  goModFixture + "\nrequire github.com/some/dep v1.0.0\n",
@@ -182,7 +182,7 @@ func TestPrepareBuildContext_GoMissingSum(t *testing.T) {
 // go.sum 不再拒收，GOFLAGS 走 -mod=vendor 分支。
 func TestPrepareBuildContext_GoVendorBranch(t *testing.T) {
 	buildDir := t.TempDir()
-	err := prepareBuildContext(buildDir, BuildImageOptions{
+	err := PrepareBuildContext(buildDir, BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip: makeEntryZipFiles(t, map[string]string{
 			"go.mod":             goModFixture + "\nrequire github.com/some/dep v1.0.0\n",
@@ -204,7 +204,7 @@ func TestPrepareBuildContext_GoVendorBranch(t *testing.T) {
 // 依赖 + lockfile → 分层模板含 npm ci。
 func TestPrepareBuildContext_NodeDepsLayered(t *testing.T) {
 	buildDir := t.TempDir()
-	err := prepareBuildContext(buildDir, BuildImageOptions{
+	err := PrepareBuildContext(buildDir, BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip: makeEntryZipFiles(t, map[string]string{
 			"index.js":          "module.exports.main = () => ({})",
@@ -238,7 +238,7 @@ func TestPrepareBuildContext_EnginesNodeReconcile(t *testing.T) {
 	}
 
 	// 不相交：engines 要求 <23、声明 node-24.0 → InvalidArgument。
-	err := prepareBuildContext(t.TempDir(), BuildImageOptions{
+	err := PrepareBuildContext(t.TempDir(), BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip:     mkZip("<23"),
 		Runtime: "node-24.0",
@@ -251,7 +251,7 @@ func TestPrepareBuildContext_EnginesNodeReconcile(t *testing.T) {
 
 	// 相交（宽松范围）与未声明：照常构建。
 	for _, engines := range []string{"", ">=18", "^24"} {
-		err := prepareBuildContext(t.TempDir(), BuildImageOptions{
+		err := PrepareBuildContext(t.TempDir(), BuildImageOptions{
 			FunctionID: "fn1", DeploymentID: "dep1",
 			Zip:     mkZip(engines),
 			Runtime: "node-24.0",
@@ -269,7 +269,7 @@ func TestPrepareBuildContext_RelaxedEntryBudget(t *testing.T) {
 	for i := 0; i < 1001; i++ {
 		files[fmt.Sprintf("pkg/dir%d/file%04d.txt", i%37, i)] = "x"
 	}
-	err := prepareBuildContext(t.TempDir(), BuildImageOptions{
+	err := PrepareBuildContext(t.TempDir(), BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip:     makeEntryZipFiles(t, files),
 		Runtime: "node-18.0",
@@ -282,7 +282,7 @@ func TestPrepareBuildContext_RelaxedEntryBudget(t *testing.T) {
 	for i := 0; i < packer.MaxPackEntries; i++ {
 		overLimit[fmt.Sprintf("pkg/dir%d/file%04d.txt", i%37, i)] = "x"
 	}
-	err = prepareBuildContext(t.TempDir(), BuildImageOptions{
+	err = PrepareBuildContext(t.TempDir(), BuildImageOptions{
 		FunctionID: "fn1", DeploymentID: "dep1",
 		Zip:     makeEntryZipFiles(t, overLimit),
 		Runtime: "node-18.0",

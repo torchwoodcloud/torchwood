@@ -14,7 +14,7 @@ import (
 // TestTarDir_NormalizesModesIndependentOfUmask 权限坏档修复（EACCES 秒退事故）：
 // 构建进程 umask 会掩蔽 os.WriteFile/OpenFile 声明的 0644（umask 0077 → 落盘
 // 0600），FileInfoHeader 忠实保留磁盘实际 mode 经 COPY 进镜像——模板 USER node
-// 读 .tw-runner.js 即 EACCES、容器秒退。tarDir 必须在 tar header 单点归一化：
+// 读 .tw-runner.js 即 EACCES、容器秒退。TarDir 必须在 tar header 单点归一化：
 // 文件恒 0644、目录恒 0755、属主归零，镜像权限与 dispatcher 以何用户/何
 // umask 运行解耦。Linux 下置 umask 0077 复现生产掩蔽形态（修复前本测试必红）。
 func TestTarDir_NormalizesModesIndependentOfUmask(t *testing.T) {
@@ -31,7 +31,7 @@ func TestTarDir_NormalizesModesIndependentOfUmask(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib", "util.js"), []byte("util"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM x"), 0o600))
 
-	rd := tarDir(dir)
+	rd := TarDir(dir)
 	defer func() { _ = rd.Close() }()
 	tr := tar.NewReader(rd)
 	sawFile, sawDir := 0, 0
@@ -72,7 +72,7 @@ func TestTarDir_StreamingContentRoundTrip(t *testing.T) {
 		require.NoError(t, os.WriteFile(p, []byte(content), 0o600))
 	}
 
-	rd := tarDir(dir)
+	rd := TarDir(dir)
 	defer func() { _ = rd.Close() }()
 	got := map[string]string{}
 	sawDirs := map[string]bool{}
