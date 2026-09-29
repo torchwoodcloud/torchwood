@@ -120,7 +120,7 @@ func (f *fakeLifecycleClient) ContainerLogs(_ context.Context, _ string, opts co
 func muxFrame(stream byte, payload string) []byte {
 	buf := make([]byte, 8+len(payload))
 	buf[0] = stream
-	binary.BigEndian.PutUint32(buf[4:8], uint32(len(payload)))
+	binary.BigEndian.PutUint32(buf[4:8], uint32(len(payload))) // #nosec G115 -- 测试帧载荷为常量小串
 	copy(buf[8:], payload)
 	return buf
 }
@@ -185,8 +185,8 @@ func TestSpawnInstance_HappyPathAndHardening(t *testing.T) {
 	require.Equal(t, []string{"no-new-privileges"}, []string(hc.SecurityOpt))
 	require.True(t, hc.ReadonlyRootfs)
 	require.Contains(t, hc.Tmpfs, "/tmp")
-	require.NotNil(t, hc.Resources.PidsLimit)
-	require.Equal(t, int64(512), *hc.Resources.PidsLimit)
+	require.NotNil(t, hc.PidsLimit)
+	require.Equal(t, int64(512), *hc.PidsLimit)
 	require.NotNil(t, c.lastCfg.StopTimeout)
 	require.Equal(t, 10, *c.lastCfg.StopTimeout)
 

@@ -179,7 +179,7 @@ func writeBuildContext(w io.Writer, dir string) error {
 			return err
 		}
 		if !d.IsDir() {
-			f, err := os.Open(path) // #nosec G304 -- path 由 WalkDir 从自有构建目录枚举（非用户输入）
+			f, err := os.Open(path) // #nosec G304,G122 -- path 由 WalkDir 从自有构建目录枚举（非用户输入；目录为本包 PrepareBuildContext 刚写出的临时目录，无符号链接注入面）
 			if err != nil {
 				return err
 			}
