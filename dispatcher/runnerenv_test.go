@@ -14,7 +14,7 @@ import (
 // TestSanitizeRunnerEnv_CredentialExclusion 凭证键不进容器 env（常驻的是
 // 容器不是凭证），其余用户变量原样透传。
 func TestSanitizeRunnerEnv_CredentialExclusion(t *testing.T) {
-	env := SanitizeRunnerEnv(map[string]string{
+	env := SanitizeRunnerEnv(map[string]string{ // #nosec G101 -- 测试夹具伪凭证（断言不进容器 env）
 		"GREETING":           "hi",
 		"EMPTY":              "",
 		"TW_DATA":            `{"secret":"must-not-leak"}`,

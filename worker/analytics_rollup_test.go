@@ -137,8 +137,8 @@ func TestAnalyticsRollupWorker_Metrics(t *testing.T) {
 
 	// 轮次级失败（项目列表报错）：计 1。
 	failuresBefore = testutil.ToFloat64(analyticsRollupFailuresTotal)
-	rollupTestWorker(t, &fakeRollupRepo{}, &fakeProjectRepo{listErr: errors.New("db down")}).
-		runOnce(context.Background())
+	w := rollupTestWorker(t, &fakeRollupRepo{}, &fakeProjectRepo{listErr: errors.New("db down")})
+	w.loop.runOnce(context.Background())
 	require.InDelta(t, failuresBefore+1, testutil.ToFloat64(analyticsRollupFailuresTotal), 0.001,
 		"轮次级失败计 1")
 }

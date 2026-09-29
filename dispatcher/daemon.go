@@ -1205,7 +1205,7 @@ func newGRPCFleetlyClientFor(addr, token string, mode config.FleetlyEndpointMode
 	case config.FleetlyEndpointTLSInsecure:
 		transport = credentials.NewTLS(&tls.Config{
 			MinVersion:         tls.VersionTLS12,
-			InsecureSkipVerify: true, // 显式选择的跳过校验形态（按 IP 直连等无 SAN 场景）
+			InsecureSkipVerify: true, // #nosec G402 -- 显式选择的跳过校验形态（按 IP 直连等无 SAN 场景；scheme 层已 fail-closed）
 		})
 	default:
 		transport = insecure.NewCredentials()
