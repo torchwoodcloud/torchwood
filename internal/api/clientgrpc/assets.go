@@ -2,8 +2,6 @@ package clientgrpc
 
 import (
 	"context"
-	"encoding/base64"
-	"time"
 
 	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
@@ -26,7 +24,7 @@ func NewAssetsService(assets *appassets.Assets) *AssetsService {
 }
 
 func (s *AssetsService) ListAssetDefs(ctx context.Context, req *clientv1.ListAssetDefsRequest) (*clientv1.ListAssetDefsResponse, error) {
-	before, err := decodeAssetCursor(req.GetPageToken())
+	before, err := decodeDescTimeCursor(req.GetPageToken())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid page token")
 	}
@@ -44,13 +42,13 @@ func (s *AssetsService) ListAssetDefs(ctx context.Context, req *clientv1.ListAss
 	}
 	meta := &sharedv1.ListResponseMeta{PageSize: req.GetPageSize()}
 	if len(defs) > 0 {
-		meta.NextPageToken = encodeAssetCursor(defs[len(defs)-1].CreatedAt)
+		meta.NextPageToken = encodeDescTimeCursor(defs[len(defs)-1].CreatedAt)
 	}
 	return &clientv1.ListAssetDefsResponse{Defs: out, Meta: meta}, nil
 }
 
 func (s *AssetsService) ListMyAssets(ctx context.Context, req *clientv1.ListMyAssetsRequest) (*clientv1.ListMyAssetsResponse, error) {
-	before, err := decodeAssetCursor(req.GetPageToken())
+	before, err := decodeDescTimeCursor(req.GetPageToken())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid page token")
 	}
@@ -68,13 +66,13 @@ func (s *AssetsService) ListMyAssets(ctx context.Context, req *clientv1.ListMyAs
 	}
 	meta := &sharedv1.ListResponseMeta{PageSize: req.GetPageSize()}
 	if len(rows) > 0 {
-		meta.NextPageToken = encodeAssetCursor(rows[len(rows)-1].Holding.CreatedAt)
+		meta.NextPageToken = encodeDescTimeCursor(rows[len(rows)-1].Holding.CreatedAt)
 	}
 	return &clientv1.ListMyAssetsResponse{Holdings: out, Meta: meta}, nil
 }
 
 func (s *AssetsService) ListMyAssetLedger(ctx context.Context, req *clientv1.ListMyAssetLedgerRequest) (*clientv1.ListMyAssetLedgerResponse, error) {
-	before, err := decodeAssetCursor(req.GetPageToken())
+	before, err := decodeDescTimeCursor(req.GetPageToken())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid page token")
 	}
@@ -88,24 +86,9 @@ func (s *AssetsService) ListMyAssetLedger(ctx context.Context, req *clientv1.Lis
 	}
 	meta := &sharedv1.ListResponseMeta{PageSize: req.GetPageSize()}
 	if len(rows) > 0 {
-		meta.NextPageToken = encodeAssetCursor(rows[len(rows)-1].Entry.CreatedAt)
+		meta.NextPageToken = encodeDescTimeCursor(rows[len(rows)-1].Entry.CreatedAt)
 	}
 	return &clientv1.ListMyAssetLedgerResponse{Entries: out, Meta: meta}, nil
-}
-
-func encodeAssetCursor(t time.Time) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(t.UTC().Format(time.RFC3339Nano)))
-}
-
-func decodeAssetCursor(token string) (time.Time, error) {
-	if token == "" {
-		return time.Time{}, nil
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(token)
-	if err != nil {
-		return time.Time{}, err
-	}
-	return time.Parse(time.RFC3339Nano, string(raw))
 }
 
 func mapClientAssetDef(d *domainassets.Def) (*clientv1.AssetDef, error) {

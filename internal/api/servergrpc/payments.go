@@ -2,7 +2,6 @@ package servergrpc
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"time"
@@ -12,6 +11,7 @@ import (
 	apppayments "github.com/torchwoodcloud/torchwood/internal/app/payments"
 	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
+	"github.com/torchwoodcloud/torchwood/pkg/crud"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -111,56 +111,22 @@ func (s *PaymentsService) ManualFulfill(ctx context.Context, req *serverv1.Manua
 	return &serverv1.ManualFulfillResponse{Order: mappedOrder, Fulfillment: mappedFulfillment}, nil
 }
 
-// encodeServerOrderCursor / decodeServerOrderCursor：不透明游标 =
-// base64(方向前缀 + RFC3339Nano) 的 created_at（列表固定按时间列排序）。
-// 方向前缀 "a:"=ASC / "d:"=DESC（与 ledger 游标同格式）；无前缀的旧格式 =
-// DESC（存量 token 兼容：旧客户端不带 sort_order，语义即 DESC）。
-// 注：与 ListUserLedger 的 encodeLedgerCursor/decodeLedgerCursor 行为一致，
-// 后续可合并为单一实现。
+// encodeServerOrderCursor / decodeServerOrderPage：时间 keyset 游标（列表
+// 固定按时间列排序）统一收口在 crud.TimeCursor——方向前缀、legacy 无前缀
+// 兼容与异向拒绝语义单点实现，此处仅剩 handler 家族的形状适配。
 func encodeServerOrderCursor(t time.Time, ascending bool) string {
-	prefix := "d:"
-	if ascending {
-		prefix = "a:"
-	}
-	return base64.RawURLEncoding.EncodeToString([]byte(prefix + t.UTC().Format(time.RFC3339Nano)))
+	return crud.EncodeTimeCursor(crud.TimeCursor{Ascending: ascending, Time: t})
 }
 
-func decodeServerOrderCursor(token string) (time.Time, bool, error) {
-	if token == "" {
-		return time.Time{}, false, nil
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(token)
-	if err != nil {
-		return time.Time{}, false, err
-	}
-	if len(raw) > 1 && (raw[0] == 'a' || raw[0] == 'd') && raw[1] == ':' {
-		t, err := time.Parse(time.RFC3339Nano, string(raw[2:]))
-		return t, raw[0] == 'a', err
-	}
-	// 旧格式：无方向前缀 = DESC。
-	t, err := time.Parse(time.RFC3339Nano, string(raw))
-	return t, false, err
-}
-
-// errServerOrderMismatch 标记游标方向与请求排序方向不一致（换向必须从第一页
-// 重新开始；携带异向游标 = 客户端 bug 或过期缓存，fail-fast 而非静默错位）。
-var errServerOrderMismatch = errors.New("page token sort order mismatch")
-
-// decodeServerOrderPage 解析一页的游标并校验方向一致性。
 func decodeServerOrderPage(token string, ascending bool) (time.Time, error) {
-	t, cursorAsc, err := decodeServerOrderCursor(token)
-	if err != nil {
-		return time.Time{}, err
-	}
-	// 空 token（第一页）方向由请求决定，不参与校验。
-	if token != "" && cursorAsc != ascending {
-		return time.Time{}, errServerOrderMismatch
-	}
-	return t, nil
+	c, err := crud.DecodeTimeCursorDirection(token, ascending)
+	return c.Time, err
 }
 
+// invalidServerOrderCursor 把游标解码错误映射为 InvalidArgument（异向游标
+// 与非法 token 用不同文案，前者提示从第一页重来）。
 func invalidServerOrderCursor(err error) error {
-	if errors.Is(err, errServerOrderMismatch) {
+	if errors.Is(err, crud.ErrCursorDirection) {
 		return status.Error(codes.InvalidArgument, "page token belongs to another sort order; restart from the first page")
 	}
 	return status.Error(codes.InvalidArgument, "invalid page token")

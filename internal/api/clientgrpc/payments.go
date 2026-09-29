@@ -2,9 +2,7 @@ package clientgrpc
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
-	"time"
 
 	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
@@ -85,7 +83,7 @@ func (s *PaymentsService) VerifyReceipt(ctx context.Context, req *clientv1.Verif
 }
 
 func (s *PaymentsService) ListMyOrders(ctx context.Context, req *clientv1.ListMyOrdersRequest) (*clientv1.ListMyOrdersResponse, error) {
-	before, err := decodeOrderCursor(req.GetPageToken())
+	before, err := decodeDescTimeCursor(req.GetPageToken())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid page token")
 	}
@@ -103,26 +101,9 @@ func (s *PaymentsService) ListMyOrders(ctx context.Context, req *clientv1.ListMy
 	}
 	meta := &sharedv1.ListResponseMeta{PageSize: req.GetPageSize()}
 	if len(orders) > 0 {
-		meta.NextPageToken = encodeOrderCursor(orders[len(orders)-1].CreatedAt)
+		meta.NextPageToken = encodeDescTimeCursor(orders[len(orders)-1].CreatedAt)
 	}
 	return &clientv1.ListMyOrdersResponse{Orders: out, Meta: meta}, nil
-}
-
-// encodeOrderCursor / decodeOrderCursor：不透明游标 = base64(RFC3339Nano)
-// 的 created_at（列表固定 created_at DESC）。
-func encodeOrderCursor(t time.Time) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(t.UTC().Format(time.RFC3339Nano)))
-}
-
-func decodeOrderCursor(token string) (time.Time, error) {
-	if token == "" {
-		return time.Time{}, nil
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(token)
-	if err != nil {
-		return time.Time{}, err
-	}
-	return time.Parse(time.RFC3339Nano, string(raw))
 }
 
 func mapClientPaymentOrder(order *domainpayments.Order) (*clientv1.PaymentOrder, error) {

@@ -2,11 +2,10 @@ package billing
 
 import (
 	"context"
-	"encoding/base64"
-	"strings"
 	"time"
 
 	domainbilling "github.com/torchwoodcloud/torchwood/internal/domain/billing"
+	"github.com/torchwoodcloud/torchwood/pkg/crud"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -103,10 +102,14 @@ func (b *Billing) ListRollups(ctx context.Context, q ListRollupsQuery) ([]domain
 	if q.Metric != "" && !domainbilling.KnownMetric(q.Metric) {
 		return nil, "", status.Errorf(codes.InvalidArgument, "unknown metric %q", q.Metric)
 	}
-	before, beforeID, err := decodeRollupCursor(q.PageToken)
+	// rollup 游标 = 时间 keyset + id 决胜（period_start 可同刻多行），
+	// 固定 period_start DESC；方向闸拒绝异向 token，legacy 无前缀（含无
+	// 决胜段）token 照常兼容。
+	c, err := crud.DecodeTimeCursorDirection(q.PageToken, false)
 	if err != nil {
 		return nil, "", status.Error(codes.InvalidArgument, "invalid page token")
 	}
+	before, beforeID := c.Time, c.Tiebreak
 	limit := normalizeList(q.Limit)
 	from, to := q.PeriodStart, q.PeriodEnd
 	rows, err := b.rollups.List(ctx, projectID, q.Metric, from, to, limit, before, beforeID)
@@ -115,7 +118,8 @@ func (b *Billing) ListRollups(ctx context.Context, q ListRollupsQuery) ([]domain
 	}
 	var next string
 	if len(rows) == limit {
-		next = encodeRollupCursor(rows[len(rows)-1].PeriodStart, rows[len(rows)-1].ID)
+		last := rows[len(rows)-1]
+		next = crud.EncodeTimeCursor(crud.TimeCursor{Time: last.PeriodStart, Tiebreak: last.ID})
 	}
 	return rows, next, nil
 }
@@ -126,10 +130,11 @@ func (b *Billing) ListStatements(ctx context.Context, limit int, pageToken strin
 	if err != nil {
 		return nil, "", err
 	}
-	before, err := decodeTimeCursor(pageToken)
+	c, err := crud.DecodeTimeCursorDirection(pageToken, false)
 	if err != nil {
 		return nil, "", status.Error(codes.InvalidArgument, "invalid page token")
 	}
+	before := c.Time
 	limit = normalizeList(limit)
 	rows, err := b.statements.List(ctx, projectID, limit, before)
 	if err != nil {
@@ -137,49 +142,7 @@ func (b *Billing) ListStatements(ctx context.Context, limit int, pageToken strin
 	}
 	var next string
 	if len(rows) == limit {
-		next = encodeTimeCursor(rows[len(rows)-1].PeriodStart)
+		next = crud.EncodeTimeCursor(crud.TimeCursor{Time: rows[len(rows)-1].PeriodStart})
 	}
 	return rows, next, nil
-}
-
-func encodeTimeCursor(t time.Time) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(t.UTC().Format(time.RFC3339Nano)))
-}
-
-func decodeTimeCursor(token string) (time.Time, error) {
-	if token == "" {
-		return time.Time{}, nil
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(token)
-	if err != nil {
-		return time.Time{}, err
-	}
-	return time.Parse(time.RFC3339Nano, string(raw))
-}
-
-func encodeRollupCursor(t time.Time, id string) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(t.UTC().Format(time.RFC3339Nano) + "\x1f" + id))
-}
-
-func decodeRollupCursor(token string) (time.Time, string, error) {
-	if token == "" {
-		return time.Time{}, "", nil
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(token)
-	if err != nil {
-		return time.Time{}, "", err
-	}
-	s := string(raw)
-	if i := strings.IndexByte(s, '\x1f'); i >= 0 {
-		t, err := time.Parse(time.RFC3339Nano, s[:i])
-		if err != nil {
-			return time.Time{}, "", err
-		}
-		return t, s[i+1:], nil
-	}
-	t, err := time.Parse(time.RFC3339Nano, s)
-	if err != nil {
-		return time.Time{}, "", err
-	}
-	return t, "", nil
 }

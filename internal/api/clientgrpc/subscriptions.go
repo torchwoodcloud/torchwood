@@ -2,8 +2,6 @@ package clientgrpc
 
 import (
 	"context"
-	"encoding/base64"
-	"time"
 
 	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
@@ -26,7 +24,7 @@ func NewSubscriptionsService(subs *appsubs.Subscriptions) *SubscriptionsService 
 }
 
 func (s *SubscriptionsService) ListPlans(ctx context.Context, req *clientv1.ListPlansRequest) (*clientv1.ListPlansResponse, error) {
-	before, err := decodeSubCursor(req.GetPageToken())
+	before, err := decodeDescTimeCursor(req.GetPageToken())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid page token")
 	}
@@ -40,7 +38,7 @@ func (s *SubscriptionsService) ListPlans(ctx context.Context, req *clientv1.List
 	}
 	meta := &sharedv1.ListResponseMeta{PageSize: req.GetPageSize()}
 	if len(plans) > 0 {
-		meta.NextPageToken = encodeSubCursor(plans[len(plans)-1].CreatedAt)
+		meta.NextPageToken = encodeDescTimeCursor(plans[len(plans)-1].CreatedAt)
 	}
 	return &clientv1.ListPlansResponse{Plans: out, Meta: meta}, nil
 }
@@ -88,21 +86,6 @@ func (s *SubscriptionsService) Cancel(ctx context.Context, req *clientv1.CancelR
 		return nil, err
 	}
 	return mapClientSub(sub, plan), nil
-}
-
-func encodeSubCursor(t time.Time) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(t.UTC().Format(time.RFC3339Nano)))
-}
-
-func decodeSubCursor(token string) (time.Time, error) {
-	if token == "" {
-		return time.Time{}, nil
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(token)
-	if err != nil {
-		return time.Time{}, err
-	}
-	return time.Parse(time.RFC3339Nano, string(raw))
 }
 
 func mapClientPlan(p *domainsubs.Plan) *clientv1.SubscriptionPlan {
