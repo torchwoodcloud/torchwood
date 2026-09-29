@@ -59,13 +59,25 @@ type imageClient interface {
 	ImageRemove(ctx context.Context, imageID string, options image.RemoveOptions) ([]image.DeleteResponse, error)
 }
 
-// containerClient 是容器创建操作的收窄视图（生产与 cli 同一对象；独立
+// containerClient 是容器创建操作的收窄视图（真实实现 = *client.Client；独立
 // 字段仅为单测可注入）。覆盖 SpawnInstance 的 create + start + 失败清理
 // remove 原语（镜像缺失类型化上抛的判定面）。
 type containerClient interface {
 	ContainerCreate(ctx context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, platform *ocispec.Platform, containerName string) (container.CreateResponse, error)
 	ContainerStart(ctx context.Context, containerID string, options container.StartOptions) error
 	ContainerRemove(ctx context.Context, containerID string, options container.RemoveOptions) error
+}
+
+// lifecycleClient 是常驻实例生命周期操作的收窄视图（真实实现 =
+// *client.Client；独立字段仅为单测可注入——与 netCli/imgCli/containerCli
+// 同款收窄注入）。覆盖 Inspect/Stop/Remove/LogsTail 四原语：inspect 取 IP、
+// stop 信号映射、remove 幂等、logs stdcopy 解复用（验证 spawn 失败的第一
+// 现场诊断面）。
+type lifecycleClient interface {
+	ContainerInspect(ctx context.Context, containerID string) (container.InspectResponse, error)
+	ContainerStop(ctx context.Context, containerID string, options container.StopOptions) error
+	ContainerRemove(ctx context.Context, containerID string, options container.RemoveOptions) error
+	ContainerLogs(ctx context.Context, containerID string, options container.LogsOptions) (io.ReadCloser, error)
 }
 
 // networkClient 收窄 EnsureProjectNetwork 依赖的 docker 网络操作面（真实
@@ -87,6 +99,9 @@ type daemon struct {
 	netCli       networkClient
 	imgCli       imageClient
 	containerCli containerClient
+	// lifecycleCli 是常驻实例生命周期四原语的收窄视图（生产 = cli；单测
+	// 注入 fake 驱动 IP 提取/信号映射/幂等删/日志解复用的确定性验证）。
+	lifecycleCli lifecycleClient
 	// selfContainerID 非空 = dispatcher 自身运行在容器内（自 attach 需要）。
 	selfContainerID string
 	// probe 是验证 spawn 的 health 探针（生产 = dispatcher.NewHTTPProber；
@@ -124,6 +139,7 @@ func New(cfg *config.AppConfig) (dispatcher.Daemon, error) {
 		netCli:             cli,
 		imgCli:             cli,
 		containerCli:       cli,
+		lifecycleCli:       cli,
 		probe:              dispatcher.NewHTTPProber(),
 		bootTimeout:        pc.BootTimeout,
 		maxRequestsDefault: pc.MaxRequestsDefault,
@@ -303,11 +319,7 @@ func (d *daemon) SpawnInstance(ctx context.Context, opts dispatcher.SpawnOptions
 // InspectInstance 返回运行状态与首个非空地址（bridge 网络 IP——池的 HTTP
 // 分发与健康探针按它寻址；fleetly 形态的对应语义是任务 DNS 名）。
 func (d *daemon) InspectInstance(ctx context.Context, containerID string) (bool, string, error) {
-	cli, err := d.client()
-	if err != nil {
-		return false, "", err
-	}
-	ins, err := cli.ContainerInspect(ctx, containerID)
+	ins, err := d.lifecycleCli.ContainerInspect(ctx, containerID)
 	if err != nil {
 		return false, "", err
 	}
@@ -325,10 +337,6 @@ func (d *daemon) InspectInstance(ctx context.Context, containerID string) (bool,
 // StopInstance 停止容器。timeout > 0 先 SIGTERM 宽限（drain），到点 daemon
 // 侧转 SIGKILL；timeout <= 0 直接 SIGKILL（请求超时/崩溃回收路径）。
 func (d *daemon) StopInstance(ctx context.Context, containerID string, timeout time.Duration) error {
-	cli, err := d.client()
-	if err != nil {
-		return err
-	}
 	opts := container.StopOptions{}
 	if timeout > 0 {
 		t := int(timeout.Seconds())
@@ -339,7 +347,7 @@ func (d *daemon) StopInstance(ctx context.Context, containerID string, timeout t
 	} else {
 		opts.Signal = "SIGKILL"
 	}
-	if err := cli.ContainerStop(ctx, containerID, opts); err != nil && !errdefs.IsNotFound(err) {
+	if err := d.lifecycleCli.ContainerStop(ctx, containerID, opts); err != nil && !errdefs.IsNotFound(err) {
 		return fmt.Errorf("stop resident instance: %w", err)
 	}
 	return nil
@@ -347,11 +355,7 @@ func (d *daemon) StopInstance(ctx context.Context, containerID string, timeout t
 
 // RemoveInstance 强删容器（幂等）。
 func (d *daemon) RemoveInstance(ctx context.Context, containerID string) error {
-	cli, err := d.client()
-	if err != nil {
-		return err
-	}
-	if err := cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); err != nil && !errdefs.IsNotFound(err) {
+	if err := d.lifecycleCli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); err != nil && !errdefs.IsNotFound(err) {
 		return fmt.Errorf("remove resident instance: %w", err)
 	}
 	return nil
@@ -361,11 +365,7 @@ func (d *daemon) RemoveInstance(ctx context.Context, containerID string) error {
 // limit 字节）：验证 spawn 失败的第一现场诊断面。spawn 的容器无 TTY——
 // daemon 返回多路复用流，stdcopy 解复用。容器已退出仍可读。
 func (d *daemon) InstanceLogsTail(ctx context.Context, containerID string, limit int64) (string, error) {
-	cli, err := d.client()
-	if err != nil {
-		return "", err
-	}
-	logs, err := cli.ContainerLogs(ctx, containerID, container.LogsOptions{
+	logs, err := d.lifecycleCli.ContainerLogs(ctx, containerID, container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Tail:       "200",
