@@ -8,6 +8,7 @@ import (
 
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	apishared "github.com/torchwoodcloud/torchwood/internal/api/shared"
 	appserver "github.com/torchwoodcloud/torchwood/internal/app/server"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
@@ -74,7 +75,7 @@ func (s *RuntimeVarsService) ListVarSets(ctx context.Context, req *sharedv1.List
 	}
 	return &serverv1.ListVarSetsResponse{
 		VarSets: out,
-		Meta:    info.Meta(),
+		Meta:    apishared.OffsetPageMeta(info),
 	}, nil
 }
 
@@ -177,7 +178,7 @@ func (s *RuntimeVarsService) ListRuntimeVars(ctx context.Context, req *serverv1.
 	}
 	return &serverv1.ListRuntimeVarsResponse{
 		Vars: out,
-		Meta: info.Meta(),
+		Meta: apishared.OffsetPageMeta(info),
 	}, nil
 }
 
@@ -256,7 +257,7 @@ func (s *RuntimeVarsService) ListRuntimeVarVersions(ctx context.Context, req *se
 	}
 	return &serverv1.ListRuntimeVarVersionsResponse{
 		Versions: out,
-		Meta:     info.Meta(),
+		Meta:     apishared.OffsetPageMeta(info),
 	}, nil
 }
 

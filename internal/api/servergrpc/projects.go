@@ -5,6 +5,7 @@ import (
 
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	apishared "github.com/torchwoodcloud/torchwood/internal/api/shared"
 	appserver "github.com/torchwoodcloud/torchwood/internal/app/server"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
@@ -42,7 +43,7 @@ func (s *ProjectsService) ListProjects(ctx context.Context, req *sharedv1.ListRe
 	}
 	resp := &serverv1.ListProjectsResponse{
 		Projects: make([]*serverv1.Project, len(list)),
-		Meta:     info.Meta(),
+		Meta:     apishared.OffsetPageMeta(info),
 	}
 	for i, p := range list {
 		resp.Projects[i] = mapProject(&p)

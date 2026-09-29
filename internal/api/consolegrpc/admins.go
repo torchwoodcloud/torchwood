@@ -5,6 +5,7 @@ import (
 
 	consolev1 "github.com/torchwoodcloud/torchwood/genproto/console/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	apishared "github.com/torchwoodcloud/torchwood/internal/api/shared"
 	"github.com/torchwoodcloud/torchwood/internal/app/console"
 	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
@@ -83,7 +84,7 @@ func (s *AdminsService) ListAdmins(ctx context.Context, req *consolev1.ListAdmin
 	}
 	return &consolev1.ListAdminsResponse{
 		Admins: out,
-		Meta:   info.Meta(),
+		Meta:   apishared.OffsetPageMeta(info),
 	}, nil
 }
 

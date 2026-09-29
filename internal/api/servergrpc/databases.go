@@ -7,6 +7,7 @@ import (
 
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	apishared "github.com/torchwoodcloud/torchwood/internal/api/shared"
 	"github.com/torchwoodcloud/torchwood/internal/app/documents"
 	appserver "github.com/torchwoodcloud/torchwood/internal/app/server"
 	"github.com/torchwoodcloud/torchwood/internal/app/shared"
@@ -114,7 +115,7 @@ func (s *DatabasesService) ListDatabases(ctx context.Context, req *sharedv1.List
 	}
 	return &serverv1.ListDatabasesResponse{
 		Databases: out,
-		Meta:      info.Meta(),
+		Meta:      apishared.OffsetPageMeta(info),
 	}, nil
 }
 

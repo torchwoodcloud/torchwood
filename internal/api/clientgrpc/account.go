@@ -8,6 +8,7 @@ import (
 
 	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	apishared "github.com/torchwoodcloud/torchwood/internal/api/shared"
 	"github.com/torchwoodcloud/torchwood/internal/app/client"
 	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
@@ -545,7 +546,7 @@ func (s *AccountService) ListLogs(ctx context.Context, req *clientv1.ListLogsReq
 	for i := range page {
 		out = append(out, mapLogEntry(&page[i]))
 	}
-	return &clientv1.ListLogsResponse{Logs: out, Meta: info.Meta()}, nil
+	return &clientv1.ListLogsResponse{Logs: out, Meta: apishared.OffsetPageMeta(info)}, nil
 }
 
 func (s *AccountService) parseLogsListParams(pageSize int32, pageToken string) (crud.ListParams, error) {

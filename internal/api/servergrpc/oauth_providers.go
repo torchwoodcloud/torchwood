@@ -5,6 +5,7 @@ import (
 
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	apishared "github.com/torchwoodcloud/torchwood/internal/api/shared"
 	appserver "github.com/torchwoodcloud/torchwood/internal/app/server"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
@@ -46,7 +47,7 @@ func (s *OAuthProvidersService) ListOAuthProviders(ctx context.Context, req *sha
 	}
 	return &serverv1.ListOAuthProvidersResponse{
 		OauthProviders: out,
-		Meta:           info.Meta(),
+		Meta:           apishared.OffsetPageMeta(info),
 	}, nil
 }
 

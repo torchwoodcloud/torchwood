@@ -13,8 +13,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
-
-	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 )
 
 const (
@@ -158,17 +156,6 @@ func SliceOffsetPage[T any](items []T, params ListParams) ([]T, OffsetPage, erro
 		return nil, OffsetPage{}, err
 	}
 	return items[start:end], page, nil
-}
-
-// Meta 投影为 ListResponseMeta（handler 响应的 meta 字段一步到位）。
-func (p OffsetPage) Meta() *sharedv1.ListResponseMeta {
-	meta := &sharedv1.ListResponseMeta{PageSize: p.PageSize}
-	if p.TotalCount >= 0 {
-		meta.TotalCount = int32(p.TotalCount)
-	}
-	meta.NextPageToken = p.NextToken
-	meta.PrevPageToken = p.PrevToken
-	return meta
 }
 
 // FilterDigest returns a deterministic digest for the filter expression

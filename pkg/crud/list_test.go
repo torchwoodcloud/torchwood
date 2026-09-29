@@ -177,14 +177,4 @@ func TestFinalizeOffsetPage(t *testing.T) {
 	prev, err = DecodePageToken(clamped.PrevToken)
 	require.NoError(t, err)
 	require.Equal(t, 0, prev, "prev offset 钳零")
-
-	// Meta 投影：token 与计数一步到位；空 token 投影为空串。
-	meta := page.Meta()
-	require.Equal(t, int32(50), meta.PageSize)
-	require.Equal(t, int32(200), meta.TotalCount)
-	require.Equal(t, page.NextToken, meta.NextPageToken)
-	require.Equal(t, page.PrevToken, meta.PrevPageToken)
-
-	// total 未知不投影 TotalCount（保持零值而非 -1）。
-	require.Equal(t, int32(0), unknown.Meta().TotalCount)
 }

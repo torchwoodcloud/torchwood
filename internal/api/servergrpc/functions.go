@@ -6,6 +6,7 @@ import (
 
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	apishared "github.com/torchwoodcloud/torchwood/internal/api/shared"
 	appfunctions "github.com/torchwoodcloud/torchwood/internal/app/functions"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
@@ -133,7 +134,7 @@ func (s *FunctionsService) ListFunctions(ctx context.Context, req *sharedv1.List
 	}
 	return &serverv1.ListFunctionsResponse{
 		Functions: out,
-		Meta:      info.Meta(),
+		Meta:      apishared.OffsetPageMeta(info),
 	}, nil
 }
 

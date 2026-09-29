@@ -5,6 +5,7 @@ import (
 
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
+	apishared "github.com/torchwoodcloud/torchwood/internal/api/shared"
 	appserver "github.com/torchwoodcloud/torchwood/internal/app/server"
 	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
 	"github.com/torchwoodcloud/torchwood/pkg/crud"
@@ -66,7 +67,7 @@ func (s *AuditLogsService) ListAuditLogs(ctx context.Context, req *serverv1.List
 	}
 	return &serverv1.ListAuditLogsResponse{
 		AuditLogs: out,
-		Meta:      page.Meta(),
+		Meta:      apishared.OffsetPageMeta(page),
 	}, nil
 }
 
