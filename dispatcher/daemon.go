@@ -473,21 +473,18 @@ func (d *fleetlyDaemon) resolveImageRef(ctx context.Context, image string) (stri
 	return ref, nil
 }
 
-// spawnEnv 组装任务 env：池的 []string 形态 → fleetly map；追加
-// TW_MAX_REQUESTS（runner 自回收阈值）与 TW_DRAIN_TIMEOUT_MS（平台
-// stop_grace 5s 内完成的排水上限，与旧 docker 路径同值 10s 口径对齐——
-// runner 侧据此起排水定时器）。
+// spawnEnv 组装任务 env：池的 []string 形态 → fleetly map；自回收控制键
+// （TW_MAX_REQUESTS/TW_DRAIN_TIMEOUT_MS）由共享构造器 AppendRunnerControlEnv
+// 单点注入（与 docker 直接形态同源）。
 func spawnEnv(opts SpawnOptions) map[string]string {
 	env := make(map[string]string, len(opts.Env)+2)
-	for _, kv := range opts.Env {
+	for _, kv := range AppendRunnerControlEnv(opts.Env, opts.MaxRequests) {
 		key, value, ok := strings.Cut(kv, "=")
 		if !ok || key == "" {
 			continue
 		}
 		env[key] = value
 	}
-	env["TW_MAX_REQUESTS"] = fmt.Sprintf("%d", opts.MaxRequests)
-	env["TW_DRAIN_TIMEOUT_MS"] = fmt.Sprintf("%d", (10 * time.Second).Milliseconds())
 	return env
 }
 
@@ -547,7 +544,7 @@ func (d *fleetlyDaemon) cleanupTask(taskID string) {
 	if err != nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), fleetlyCleanupTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), CleanupTimeout)
 	defer cancel()
 	_, _ = cli.StopTask(ctx, &serverv1.StopTaskRequest{Id: taskID})
 	_, _ = cli.DeleteTask(ctx, &serverv1.DeleteTaskRequest{Id: taskID})
@@ -941,9 +938,10 @@ func containerName(projectID, functionID string) string {
 	return fmt.Sprintf("tw-fn-%s-%s-%s", sanitize(projectID), sanitize(functionID), suffix)
 }
 
-// fleetlyCleanupTimeout 是清理类平台操作（stop/delete）的独立超时：不继承
-// 已取消的执行 ctx，也不允许平台挂起时无限阻塞（与 v1 同约定）。
-const fleetlyCleanupTimeout = 30 * time.Second
+// CleanupTimeout 是清理类平台/daemon 操作（stop/delete/remove）的独立超时：
+// 不继承已取消的执行 ctx，也不允许平台挂起时无限阻塞（两种驱动形态同约定，
+// dockerdriver 经 dispatcher.CleanupTimeout 消费同值）。
+const CleanupTimeout = 30 * time.Second
 
 // 验证 spawn 的 health 探针节拍（对齐池启动握手 spawnInstance：单次探针
 // 2s 超时、轮询间隔 100ms；预算本身 = 本进程 boot_timeout，构造时解析）。
@@ -985,7 +983,7 @@ type HealthProber interface {
 // 失败处置：回收任务台账的失败现场（status/error/stop_reason）拼进错误——
 // 运行期错误（panic/协议未实现）在任务 error 字段；编译错误在构建日志、
 // 不经此路径。无论成败任务以独立 cleanup ctx Stop+Delete（不继承已取消/
-// 临期的构建 ctx，fleetlyCleanupTimeout 同约定）。
+// 临期的构建 ctx，CleanupTimeout 同约定）。
 func spawnVerifyInstance(ctx context.Context, d Daemon, probe HealthProber, opts BuildImageOptions, vc verifySpawnConfig) error {
 	// egress 分类与执行一致（对抗审查 A1 最强修复）：untrusted 函数的验证
 	// 实例挂 internal 变体任务网络（与池 spawnInstance 同路）——验证期不得
@@ -1000,7 +998,7 @@ func spawnVerifyInstance(ctx context.Context, d Daemon, probe HealthProber, opts
 	}
 	// 无论成败回收任务（验证实例无在途请求，无需 drain 宽限）。
 	defer func() {
-		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), fleetlyCleanupTimeout)
+		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), CleanupTimeout)
 		defer cancel()
 		_ = d.StopInstance(cctx, inst.ContainerID, 0)
 		_ = d.RemoveInstance(cctx, inst.ContainerID)
@@ -1012,19 +1010,16 @@ func spawnVerifyInstance(ctx context.Context, d Daemon, probe HealthProber, opts
 // TW_DATA/TW_EXECUTION_TOKEN 不进容器 env——常驻的是容器不是凭证；
 // TW_MAX_REQUESTS/TW_DRAIN_TIMEOUT_MS 由 SpawnInstance 统一追加）。
 func spawnVerificationTask(ctx context.Context, d Daemon, opts BuildImageOptions, vc verifySpawnConfig, network string) (Instance, error) {
-	env := make([]string, 0, len(opts.Env))
-	for k, v := range opts.Env {
-		if k == "TW_DATA" || k == "TW_EXECUTION_TOKEN" {
-			continue
-		}
-		env = append(env, k+"="+v)
-	}
+	// env 组装与池 spawnInstance 同源（SanitizeRunnerEnv：TW_DATA/
+	// TW_EXECUTION_TOKEN 不进容器 env——常驻的是容器不是凭证；
+	// TW_MAX_REQUESTS/TW_DRAIN_TIMEOUT_MS 由驱动侧 AppendRunnerControlEnv
+	// 统一追加）。
 	return d.SpawnInstance(ctx, SpawnOptions{
 		ProjectID:   opts.ProjectID,
 		FunctionID:  opts.FunctionID,
 		Image:       vc.Image,
 		Network:     network,
-		Env:         env,
+		Env:         SanitizeRunnerEnv(opts.Env),
 		Spec:        "shared-1x",
 		MaxRequests: vc.MaxRequests,
 		Name:        containerName(opts.ProjectID, opts.FunctionID),
@@ -1049,7 +1044,7 @@ func awaitVerificationHealthy(ctx context.Context, d Daemon, probe HealthProber,
 		if ctx.Err() != nil || !time.Now().Before(deadline) {
 			// 失败处置：台账读取与后续清理同用脱离构建 ctx 的独立 ctx
 			//（预算到点时构建 ctx 可能已取消/临期）。
-			tailCtx, tailCancel := context.WithTimeout(context.WithoutCancel(ctx), fleetlyCleanupTimeout)
+			tailCtx, tailCancel := context.WithTimeout(context.WithoutCancel(ctx), CleanupTimeout)
 			tail, tailErr := d.InstanceLogsTail(tailCtx, inst.ContainerID, maxLogTailBytes)
 			tailCancel()
 			if tailErr != nil {
@@ -1073,7 +1068,7 @@ func (d *fleetlyDaemon) startVerificationTask(ctx context.Context, opts BuildIma
 		return Instance{}, nil, err
 	}
 	cleanup := func() {
-		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), fleetlyCleanupTimeout)
+		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), CleanupTimeout)
 		defer cancel()
 		_ = d.StopInstance(cctx, inst.ContainerID, 0)
 		_ = d.RemoveInstance(cctx, inst.ContainerID)

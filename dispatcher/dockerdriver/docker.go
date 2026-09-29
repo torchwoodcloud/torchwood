@@ -49,10 +49,6 @@ import (
 // TORCHWOOD_FUNCTIONS_DOCKER_HOST 显式指定）。
 const defaultHost = "unix:///var/run/docker.sock"
 
-// dockerCleanupTimeout 是清理类操作（stop/remove）的独立超时：不继承已
-// 取消的执行 ctx，也不允许 daemon 挂起时无限阻塞（与 fleetly 形态同约定）。
-const dockerCleanupTimeout = 30 * time.Second
-
 // imageClient 收窄镜像导入依赖的 docker 镜像操作面（真实实现 =
 // *client.Client；单测注入 fake 驱动 pull→inspect→tag→remove 序列的
 // 确定性验证，不依赖真实 daemon）。
@@ -252,13 +248,9 @@ func (d *daemon) SpawnInstance(ctx context.Context, opts dispatcher.SpawnOptions
 	}
 	res := infrafunctions.SpecResources(opts.Spec)
 	stopTimeout := 10
-	env := make([]string, 0, len(opts.Env)+2)
-	env = append(env, opts.Env...)
-	env = append(env,
-		fmt.Sprintf("TW_MAX_REQUESTS=%d", opts.MaxRequests),
-		// 排水上限与 fleetly 形态同值 10s（runner 侧据此起排水定时器）。
-		fmt.Sprintf("TW_DRAIN_TIMEOUT_MS=%d", (10*time.Second).Milliseconds()),
-	)
+	// 自回收控制键（TW_MAX_REQUESTS/TW_DRAIN_TIMEOUT_MS）与 fleetly 形态
+	// 同源：共享构造器单点注入（漏注入 = runner 永不自退静默泄漏）。
+	env := dispatcher.AppendRunnerControlEnv(opts.Env, opts.MaxRequests)
 	cfg := &container.Config{
 		Image:       opts.Image,
 		Env:         env,
@@ -289,7 +281,7 @@ func (d *daemon) SpawnInstance(ctx context.Context, opts dispatcher.SpawnOptions
 		return dispatcher.Instance{}, fmt.Errorf("create resident instance %s: %w", opts.Name, err)
 	}
 	cleanup := func() {
-		rmCtx, cancel := context.WithTimeout(context.Background(), dockerCleanupTimeout)
+		rmCtx, cancel := context.WithTimeout(context.Background(), dispatcher.CleanupTimeout)
 		_ = createCli.ContainerRemove(rmCtx, created.ID, container.RemoveOptions{Force: true})
 		cancel()
 	}

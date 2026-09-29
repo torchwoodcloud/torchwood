@@ -94,7 +94,7 @@ func (s *Service) Start(ctx context.Context) error {
 			case <-runCtx.Done():
 				return
 			case <-ticker.C:
-				reapCtx, reapCancel := context.WithTimeout(context.WithoutCancel(runCtx), fleetlyCleanupTimeout)
+				reapCtx, reapCancel := context.WithTimeout(context.WithoutCancel(runCtx), CleanupTimeout)
 				s.pool.Reaper(reapCtx)
 				reapCancel()
 			}
@@ -118,7 +118,7 @@ func (s *Service) Stop(ctx context.Context) error {
 	if cancel != nil {
 		cancel()
 	}
-	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, fleetlyCleanupTimeout)
+	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, CleanupTimeout)
 	defer shutdownCancel()
 	if err := s.http.Shutdown(shutdownCtx); err != nil {
 		s.logger.Warn("dispatcher http shutdown", "error", err)

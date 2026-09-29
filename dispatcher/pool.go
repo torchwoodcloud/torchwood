@@ -600,15 +600,9 @@ func (p *PoolManager) spawnInstance(ctx context.Context, req ExecuteRequest, pol
 	}
 	// egress 分类计数（P2 安全切片；v1 与 v2 的实例创建路径都打点）。
 	infrafunctions.ObserveEgressClass(req.ProjectID, req.EgressUntrusted)
-	env := make([]string, 0, len(req.Env))
-	for k, v := range req.Env {
-		// v2 语义：TW_DATA 由请求体承载、TW_EXECUTION_TOKEN 经分发 header
-		// 传递——都不进容器 env（常驻的是容器不是凭证）。
-		if k == "TW_DATA" || k == "TW_EXECUTION_TOKEN" {
-			continue
-		}
-		env = append(env, k+"="+v)
-	}
+	// env 组装走共享构造器：TW_DATA/TW_EXECUTION_TOKEN 不进容器 env
+	//（常驻的是容器不是凭证）——不变量单点在 SanitizeRunnerEnv。
+	env := SanitizeRunnerEnv(req.Env)
 	inst, err := p.daemon.SpawnInstance(ctx, SpawnOptions{
 		ProjectID:   req.ProjectID,
 		FunctionID:  req.FunctionID,
@@ -752,7 +746,7 @@ func (p *PoolManager) killInstance(ctx context.Context, ref FunctionRef, rec *In
 
 // terminate 停止并删除任务 + 回退常驻计数（幂等）。
 func (p *PoolManager) terminate(ctx context.Context, containerID string) {
-	tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), fleetlyCleanupTimeout)
+	tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), CleanupTimeout)
 	defer cancel()
 	_ = p.daemon.StopInstance(tctx, containerID, 0)
 	_ = p.daemon.RemoveInstance(tctx, containerID)
