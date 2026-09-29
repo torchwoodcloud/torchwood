@@ -160,7 +160,13 @@ services:
     healthcheck:
       # worker 无 HTTP 监听面（cmd/worker 无 healthz）：进程存活探针，
       # 深度检查（队列消费/日志）留 runbook §6 验收探针 —— 诚实标注见 README §7。
-      test: ["CMD-SHELL", "pgrep -x worker"]
+      # 探针用 kill -0 1（PID-1 存活）而非 pgrep -x worker：fleetly 受控子集的
+      # `command` 覆盖镜像 ENTRYPOINT（Swarm ContainerSpec.Command），worker 的
+      # argv[0] 是全路径 /usr/local/bin/worker，pgrep -x 按名匹配恒不中（2026-
+      # 09-29 staging 真机实证：健康门永不过 → 部署 E_HEALTH_TIMEOUT）；kill -0
+      # 是 shell 内建、零外部二进制依赖，对 dokploy（argv[0]=worker）与 fleetly
+      # 两形态语义一致。深度检查同上留验收探针。
+      test: ["CMD-SHELL", "kill -0 1"]
       interval: 15s
       timeout: 5s
       retries: 12

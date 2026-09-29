@@ -73,7 +73,7 @@ dokploy 栈未拆）。
 | 20 | server `depends_on` ×4（postgres/redis/minio/roles-sig） | **删除** | 发布管线编排 + 应用侧重连自愈；一次性作业链见 #12–#14 |
 | 21 | server `TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL: http://torchwood-server:9080` | 保留字面量 | 任务网细名即 `torchwood-server`（app 名 + 服务名；`network_members` 挂靠后生效，runbook §6.4） |
 | 22 | 三应用服务 `pull_policy: always` + `${TORCHWOOD_IMAGE:-…:latest}` | **删 pull_policy；镜像钉 sha tag** | DT-2 部署期 tag→digest 钉定 + Redeploy 重解析 = `always` 等价物；升级 = 改 tag 重部署（§5） |
-| 23 | worker（`entrypoint: worker` + `*app-env` + config bind + depends_on） | `command: ["/usr/local/bin/worker"]` + Config + 基线 env；**新增 `pgrep -x worker` 探针** | 平台 command 覆盖 ENTRYPOINT；镜像无 HTTP 健康面，进程存活探针（零告警要求；诚实标注见 §7） |
+| 23 | worker（`entrypoint: worker` + `*app-env` + config bind + depends_on） | `command: ["/usr/local/bin/worker"]` + Config + 基线 env；**新增 `kill -0 1` 进程存活探针** | 平台 command 覆盖 ENTRYPOINT；镜像无 HTTP 健康面，进程存活探针（零告警要求；诚实标注见 §7）。**不用 `pgrep -x worker`**：fleetly 形态下 argv[0]=全路径 `/usr/local/bin/worker`，pgrep -x 按名匹配恒不中→健康门永不过（2026-09-29 staging 真机实证→E_HEALTH_TIMEOUT 循环）；`kill -0 1` 是 shell 内建、两形态通用 |
 | 24 | dispatcher（docker.sock 挂载/`user: root`/多节点 env — T2-3 已改） | **零 sock、零 docker client**；config bind → Config；T2-3 的 fleetly env 保留（endpoint/token 平台 env 注入，app/members 字面量）；`/healthz` 探针保留；`depends_on: redis healthy` 删除 | IMPL-T2-3 契约；`TORCHWOOD_FUNCTIONS_FLEETLY_*` 见 §4 |
 | 25 | packer（`entrypoint: packer` + `*app-env`） | `command: ["/usr/local/bin/packer"]` + 基线 env（无 config 挂载，现役同） | 平台 command 覆盖 ENTRYPOINT；`/healthz` 探针保留 |
 | 26 | 顶层 `networks: dokploy-network: external` | **删除** | external 网络在拒绝清单（平台建网） |
@@ -244,7 +244,7 @@ source driver，匿名 GitHub API 有 **每 IP 60 req/h** 限额；首次全量�
 - **percona 模板编码**：托管实例 `server_encoding=SQL_ASCII`（模板未带 initdb 编码
   参数），`client_encoding` 兜底后 torchwood 可正常连接（本地实证），但字符函数语义
   按字节计；彻底修复 = 平台模板补 `--encoding=UTF8`（建议，runbook §9）；
-- **worker 健康门 = 进程存活**（`pgrep -x worker`）：镜像无 HTTP 健康面，队列消费
+- **worker 健康门 = 进程存活**（`kill -0 1`，PID-1 存活、两形态通用）：镜像无 HTTP 健康面，队列消费
   深度检查靠 runbook §6 验收探针；
 - **编排自愈窗口**：同 §1 差异 3；`depends_on` 硬拒是平台语义（T2-0④ spike 结论）；
 - **平台 env app 级**：同 §1 差异 4（密钥在全部服务容器内可见）；
