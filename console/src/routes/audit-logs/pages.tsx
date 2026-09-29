@@ -7,6 +7,7 @@ import {
 } from "@/api/auditLogs";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
+import { useServerPaging } from "@/hooks/useServerPaging";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime, fromDateTimeLocalValue } from "@/lib/datetime";
 import { PageHeader } from "@/components/PageHeader";
@@ -141,7 +142,7 @@ export function AuditLogsListPage() {
   const platformAdmin = isPlatformAdmin(role);
   const tz = useUserTimezone();
 
-  // 过滤条件（变更即回到第一页）。
+  // 过滤条件与排序变化经 resetKeys 自动回第一页（机制，非手动 reset）。
   const [action, setAction] = useState("");
   const [status, setStatus] = useState("");
   const [actorId, setActorId] = useState("");
@@ -149,26 +150,21 @@ export function AuditLogsListPage() {
   const [createdAfter, setCreatedAfter] = useState("");
   const [createdBefore, setCreatedBefore] = useState("");
   const [scope, setScope] = useState<ScopeMode>("project");
-  const [pageSize, setPageSize] = useState(50);
   // 服务端时间排序：换向必须回第一页（offset token 不编码方向）。
   const [sortOrder, setSortOrder] = useState<"ASC" | "DESC">("DESC");
-  const toggleSort = () => {
-    setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
-    resetPage();
-  };
+  const toggleSort = () => setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
 
-  // 服务端分页：token 栈（栈底 = 第一页的空 token）。
-  const [tokenStack, setTokenStack] = useState<string[]>([""]);
-  const pageToken = tokenStack[tokenStack.length - 1];
+  // 服务端分页（useServerPaging：token 栈 + resetKeys 机制）。
+  const paging = useServerPaging(50, {
+    resetKeys: [action, status, actorId, resourceId, createdAfter, createdBefore, scope, sortOrder],
+  });
 
   const [selected, setSelected] = useState<AuditLog | null>(null);
 
-  const resetPage = () => setTokenStack([""]);
-
   const params = useMemo(
     () => ({
-      page_size: pageSize,
-      page_token: pageToken || undefined,
+      page_size: paging.pageSize,
+      page_token: paging.pageToken || undefined,
       action: action || undefined,
       status: status || undefined,
       actor_id: actorId || undefined,
@@ -180,7 +176,7 @@ export function AuditLogsListPage() {
       all_projects: scope === "all_projects" || undefined,
       sort_order: sortOrder,
     }),
-    [pageSize, pageToken, action, status, actorId, resourceId, createdAfter, createdBefore, scope, tz, sortOrder]
+    [paging.pageSize, paging.pageToken, action, status, actorId, resourceId, createdAfter, createdBefore, scope, tz, sortOrder]
   );
 
   const { data, isLoading } = useQuery({
@@ -191,15 +187,6 @@ export function AuditLogsListPage() {
 
   const logs = data?.audit_logs ?? [];
   const meta = data?.meta;
-
-  const goNext = () => {
-    if (meta?.next_page_token) {
-      setTokenStack((s) => [...s, meta.next_page_token!]);
-    }
-  };
-  const goPrev = () => {
-    setTokenStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
-  };
 
   return (
     <div className="space-y-6">
@@ -220,7 +207,6 @@ export function AuditLogsListPage() {
                 value={action}
                 onChange={(e) => {
                   setAction(e.target.value);
-                  resetPage();
                 }}
               />
             </div>
@@ -230,7 +216,6 @@ export function AuditLogsListPage() {
                 value={status || "all"}
                 onValueChange={(v) => {
                   setStatus(v === "all" ? "" : v);
-                  resetPage();
                 }}
               >
                 <SelectTrigger>
@@ -251,7 +236,6 @@ export function AuditLogsListPage() {
                 value={actorId}
                 onChange={(e) => {
                   setActorId(e.target.value);
-                  resetPage();
                 }}
               />
             </div>
@@ -262,7 +246,6 @@ export function AuditLogsListPage() {
                 value={resourceId}
                 onChange={(e) => {
                   setResourceId(e.target.value);
-                  resetPage();
                 }}
               />
             </div>
@@ -274,7 +257,6 @@ export function AuditLogsListPage() {
                 value={createdAfter}
                 onChange={(e) => {
                   setCreatedAfter(e.target.value);
-                  resetPage();
                 }}
               />
             </div>
@@ -286,7 +268,6 @@ export function AuditLogsListPage() {
                 value={createdBefore}
                 onChange={(e) => {
                   setCreatedBefore(e.target.value);
-                  resetPage();
                 }}
               />
             </div>
@@ -299,7 +280,6 @@ export function AuditLogsListPage() {
                   value={scope}
                   onValueChange={(v) => {
                     setScope(v as ScopeMode);
-                    resetPage();
                   }}
                 >
                   <SelectTrigger>
@@ -404,14 +384,13 @@ export function AuditLogsListPage() {
               </Table>
               <div className="flex items-center justify-between pt-4">
                 <div className="text-sm text-muted-foreground">
-                  共 {meta?.total_count ?? "—"} 条 · 每页 {meta?.page_size ?? pageSize} 条
+                  共 {meta?.total_count ?? "—"} 条 · 每页 {meta?.page_size ?? paging.pageSize} 条
                 </div>
                 <div className="flex items-center gap-2">
                   <Select
-                    value={String(pageSize)}
+                    value={String(paging.pageSize)}
                     onValueChange={(v) => {
-                      setPageSize(Number(v));
-                      resetPage();
+                      paging.setPageSize(Number(v));
                     }}
                   >
                     <SelectTrigger className="w-24">
@@ -426,8 +405,8 @@ export function AuditLogsListPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={tokenStack.length <= 1}
-                    onClick={goPrev}
+                    disabled={!paging.hasPrev}
+                    onClick={paging.goPrev}
                   >
                     上一页
                   </Button>
@@ -435,7 +414,7 @@ export function AuditLogsListPage() {
                     variant="outline"
                     size="sm"
                     disabled={!meta?.next_page_token}
-                    onClick={goNext}
+                    onClick={() => paging.goNext(meta?.next_page_token)}
                   >
                     下一页
                   </Button>

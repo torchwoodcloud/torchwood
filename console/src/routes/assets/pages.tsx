@@ -69,13 +69,11 @@ export function AssetDefsListPage() {
   const queryClient = useQueryClient();
   const tz = useUserTimezone();
   const writeable = canWrite(role);
-  const paging = useServerPaging();
-  // 服务端时间排序：换向必须回第一页（keyset 游标与方向耦合）。
+  // 服务端时间排序：换向必须回第一页（keyset 游标与方向耦合）——经
+  // resetKeys 机制自动 reset。
   const [sortOrder, setSortOrder] = useState<SortOrder>("DESC");
-  const toggleSort = () => {
-    setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
-    paging.reset();
-  };
+  const toggleSort = () => setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
+  const paging = useServerPaging(20, { resetKeys: [sortOrder] });
 
   const { data, isLoading } = useQuery({
     queryKey: ["asset-defs", projectId, paging.pageSize, paging.pageToken, sortOrder],
@@ -237,10 +235,11 @@ export function AssetDefDetailPage() {
     },
   });
 
-  // 用户持有列表（定义维度）：UserID 过滤 + keyset 分页；过滤条件变化 reset 回第一页。
+  // 用户持有列表（定义维度）：UserID 过滤 + keyset 分页；过滤变化经
+  // resetKeys 自动回第一页。
   const [ownerInput, setOwnerInput] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("");
-  const holdersPaging = useServerPaging();
+  const holdersPaging = useServerPaging(20, { resetKeys: [ownerFilter] });
   const holders = useQuery({
     queryKey: ["def-holders", projectId, id, ownerFilter, holdersPaging.pageSize, holdersPaging.pageToken],
     queryFn: () =>
@@ -256,12 +255,10 @@ export function AssetDefDetailPage() {
 
   const applyOwnerFilter = () => {
     setOwnerFilter(ownerInput.trim());
-    holdersPaging.reset();
   };
   const clearOwnerFilter = () => {
     setOwnerInput("");
     setOwnerFilter("");
-    holdersPaging.reset();
   };
 
   if (isLoading) return <DetailSkeleton />;
@@ -413,10 +410,10 @@ export function UserAssetsPage() {
   });
   const holdingsRows = holdings.data?.rows ?? [];
   // 流水过滤与排序：defCode 空 = 全部资产；ascending 缺省最新在前。
-  // 变更过滤/排序都 reset 分页（keyset 游标绑定参数组合）。
+  // 过滤/排序变化经 resetKeys 自动 reset（keyset 游标绑定参数组合）。
   const [ledgerDefCode, setLedgerDefCode] = useState("");
   const [ledgerAscending, setLedgerAscending] = useState(false);
-  const ledgerPaging = useServerPaging();
+  const ledgerPaging = useServerPaging(20, { resetKeys: [ledgerDefCode, ledgerAscending] });
   const ledger = useQuery({
     queryKey: [
       "user-ledger",
@@ -599,7 +596,6 @@ export function UserAssetsPage() {
                       value={ledgerDefCode || "all"}
                       onValueChange={(v) => {
                         setLedgerDefCode(v === "all" ? "" : v);
-                        ledgerPaging.reset();
                       }}
                     >
                       <SelectTrigger className="h-8 w-[180px]">
@@ -619,7 +615,6 @@ export function UserAssetsPage() {
                       size="sm"
                       onClick={() => {
                         setLedgerAscending(!ledgerAscending);
-                        ledgerPaging.reset();
                       }}
                     >
                       {ledgerAscending ? <ArrowUp className="h-3.5 w-3.5 mr-1" /> : <ArrowDown className="h-3.5 w-3.5 mr-1" />}

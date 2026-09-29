@@ -58,14 +58,21 @@ const ORDER_STATUS_OPTIONS = [
 export function OrdersListPage() {
   const { projectId } = useAuth();
   const tz = useUserTimezone();
-  const paging = useServerPaging();
   // 服务端过滤（ListOrdersRequest 结构化字段）：UserID 精确 + 状态 + 创建时间
-  // 范围；任何过滤变化 reset 回第一页。
+  // 范围；任何过滤/换向变化经 resetKeys 自动回第一页（机制，非手动 reset）。
   const [userIdInput, setUserIdInput] = useState("");
   const [userIdFilter, setUserIdFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [createdAfter, setCreatedAfter] = useState("");
   const [createdBefore, setCreatedBefore] = useState("");
+
+  // 服务端时间排序：换向必须回第一页（keyset 游标与方向耦合）。
+  const [sortOrder, setSortOrder] = useState<SortOrder>("DESC");
+  const toggleSort = () => setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
+
+  const paging = useServerPaging(20, {
+    resetKeys: [userIdFilter, statusFilter, createdAfter, createdBefore, sortOrder],
+  });
 
   const filters = useMemo(
     () => ({
@@ -82,13 +89,6 @@ export function OrdersListPage() {
     createdAfter ||
     createdBefore
   );
-
-  // 服务端时间排序：换向必须回第一页（keyset 游标与方向耦合）。
-  const [sortOrder, setSortOrder] = useState<SortOrder>("DESC");
-  const toggleSort = () => {
-    setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
-    paging.reset();
-  };
 
   const { data, isLoading } = useQuery({
     queryKey: [
@@ -108,7 +108,6 @@ export function OrdersListPage() {
 
   const applyUserId = () => {
     setUserIdFilter(userIdInput);
-    paging.reset();
   };
   const clearFilters = () => {
     setUserIdInput("");
@@ -116,7 +115,6 @@ export function OrdersListPage() {
     setStatusFilter("");
     setCreatedAfter("");
     setCreatedBefore("");
-    paging.reset();
   };
 
   const getSearchText = useCallback(
@@ -169,7 +167,6 @@ export function OrdersListPage() {
               value={statusFilter || "all"}
               onValueChange={(v) => {
                 setStatusFilter(v === "all" ? "" : v);
-                paging.reset();
               }}
             >
               <SelectTrigger className="h-8 w-[130px]">
@@ -195,7 +192,6 @@ export function OrdersListPage() {
               value={createdAfter}
               onChange={(e) => {
                 setCreatedAfter(e.target.value);
-                paging.reset();
               }}
               className="h-8 w-[210px]"
             />
@@ -210,7 +206,6 @@ export function OrdersListPage() {
               value={createdBefore}
               onChange={(e) => {
                 setCreatedBefore(e.target.value);
-                paging.reset();
               }}
               className="h-8 w-[210px]"
             />

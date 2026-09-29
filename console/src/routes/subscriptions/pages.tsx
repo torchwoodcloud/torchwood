@@ -66,13 +66,11 @@ export function PlansListPage() {
   const queryClient = useQueryClient();
   const writeable = canWrite(role);
 
-  const paging = useServerPaging();
-  // 服务端时间排序：换向必须回第一页（keyset 游标与方向耦合）。
+  // 服务端时间排序：换向必须回第一页（keyset 游标与方向耦合）——经
+  // resetKeys 机制自动 reset。
   const [sortOrder, setSortOrder] = useState<SortOrder>("DESC");
-  const toggleSort = () => {
-    setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
-    paging.reset();
-  };
+  const toggleSort = () => setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
+  const paging = useServerPaging(20, { resetKeys: [sortOrder] });
   const { data, isLoading } = useQuery({
     queryKey: ["sub-plans", projectId, paging.pageSize, paging.pageToken, sortOrder],
     queryFn: () => listPlans({ pageSize: paging.pageSize, pageToken: paging.pageToken, sortOrder }),
@@ -264,14 +262,21 @@ const SUB_STATUS_OPTIONS = ["trialing", "active", "past_due", "canceled", "expir
 export function SubscriptionsListPage() {
   const { projectId } = useAuth();
   const tz = useUserTimezone();
-  const paging = useServerPaging();
   // 服务端过滤（ListSubscriptionsRequest 结构化字段）：UserID 精确 + 状态 +
-  // 创建时间范围；任何过滤变化 reset 回第一页。
+  // 创建时间范围；任何过滤/换向变化经 resetKeys 自动回第一页。
   const [userIdInput, setUserIdInput] = useState("");
   const [userIdFilter, setUserIdFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [createdAfter, setCreatedAfter] = useState("");
   const [createdBefore, setCreatedBefore] = useState("");
+
+  // 服务端时间排序：换向必须回第一页（keyset 游标与方向耦合）。
+  const [sortOrder, setSortOrder] = useState<SortOrder>("DESC");
+  const toggleSort = () => setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
+
+  const paging = useServerPaging(20, {
+    resetKeys: [userIdFilter, statusFilter, createdAfter, createdBefore, sortOrder],
+  });
 
   const filters = useMemo(
     () => ({
@@ -288,13 +293,6 @@ export function SubscriptionsListPage() {
     createdAfter ||
     createdBefore
   );
-
-  // 服务端时间排序：换向必须回第一页（keyset 游标与方向耦合）。
-  const [sortOrder, setSortOrder] = useState<SortOrder>("DESC");
-  const toggleSort = () => {
-    setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
-    paging.reset();
-  };
 
   const { data, isLoading } = useQuery({
     queryKey: [
@@ -314,7 +312,6 @@ export function SubscriptionsListPage() {
 
   const applyUserId = () => {
     setUserIdFilter(userIdInput);
-    paging.reset();
   };
   const clearFilters = () => {
     setUserIdInput("");
@@ -322,7 +319,6 @@ export function SubscriptionsListPage() {
     setStatusFilter("");
     setCreatedAfter("");
     setCreatedBefore("");
-    paging.reset();
   };
 
   const getSearchText = useCallback(
@@ -375,7 +371,6 @@ export function SubscriptionsListPage() {
               value={statusFilter || "all"}
               onValueChange={(v) => {
                 setStatusFilter(v === "all" ? "" : v);
-                paging.reset();
               }}
             >
               <SelectTrigger className="h-8 w-[130px]">
@@ -401,7 +396,6 @@ export function SubscriptionsListPage() {
               value={createdAfter}
               onChange={(e) => {
                 setCreatedAfter(e.target.value);
-                paging.reset();
               }}
               className="h-8 w-[210px]"
             />
@@ -416,7 +410,6 @@ export function SubscriptionsListPage() {
               value={createdBefore}
               onChange={(e) => {
                 setCreatedBefore(e.target.value);
-                paging.reset();
               }}
               className="h-8 w-[210px]"
             />
