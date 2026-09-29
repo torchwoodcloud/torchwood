@@ -132,7 +132,7 @@ func TestLeaderboardsSettlerIntegration_RewardedBoardsOnly(t *testing.T) {
 
 	settler := NewLeaderboardsSettler(uc, nil)
 	failuresBefore := testutil.ToFloat64(leaderboardsSettleFailuresTotal)
-	settler.runOnce(ctx)
+	settler.loop.runOnce(ctx)
 
 	require.InDelta(t, failuresBefore, testutil.ToFloat64(leaderboardsSettleFailuresTotal), 0.001,
 		"健康轮次失败计数不动")
@@ -149,7 +149,7 @@ func TestLeaderboardsSettlerIntegration_RewardedBoardsOnly(t *testing.T) {
 	require.Error(t, err, "无奖励榜不产生结算行")
 
 	// 二轮扫描：已结算期不再枚举，backlog 归零，不双发。
-	settler.runOnce(ctx)
+	settler.loop.runOnce(ctx)
 	require.InDelta(t, 0.0, testutil.ToFloat64(leaderboardsSettleBacklogPeriods), 0.001)
 	require.Equal(t, 1, granter.calls, "重扫不双发")
 }
@@ -158,6 +158,7 @@ func TestLeaderboardsSettlerIntegration_RewardedBoardsOnly(t *testing.T) {
 // 动作，扫描周期分钟级无必要——钉在 10 分钟量级。
 func TestLeaderboardsSettleInterval_PeriodGranularity(t *testing.T) {
 	require.Equal(t, 10*time.Minute, leaderboardsSettleInterval)
-	require.Greater(t, leaderboardsSettleInterval, 5*time.Minute,
-		"扫描预算（runOnce 5min）必须短于扫描周期")
+	require.Equal(t, 5*time.Minute, leaderboardsSettleTimeout)
+	require.Greater(t, leaderboardsSettleInterval, leaderboardsSettleTimeout,
+		"扫描预算必须短于扫描周期")
 }

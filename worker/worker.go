@@ -30,6 +30,10 @@ const maxProcessAttempts = 3
 // timeout_seconds + 120s 宽限判定（NULL 回退 1h）。
 const orphanRecoverInterval = time.Minute
 
+// orphanRecoverTimeout 是单轮孤儿恢复的预算上限（有界批量标 failed；
+// WithoutCancel 使停机不腰斩在途轮次）。
+const orphanRecoverTimeout = 30 * time.Second
+
 // orphanStaleFallback 是 timeout_seconds 为 NULL 的存量行的回退口径
 // （v1 兼容；P0.5 起新行均带快照）。
 const orphanStaleFallback = time.Hour
@@ -37,6 +41,10 @@ const orphanStaleFallback = time.Hour
 // pruneInterval 是执行记录保留策略的周期清理间隔（P0.5：同步热路径的
 // Prune 调用移除后，由本 ticker 低频驱动；失败仅记日志）。
 const pruneInterval = 10 * time.Minute
+
+// pruneTimeout 是单轮 Prune 的预算上限（跨全部 active 项目的有界批量删除；
+// WithoutCancel 使停机不腰斩在途轮次）。
+const pruneTimeout = 5 * time.Minute
 
 // cronScanInterval 是 cron 触发器调度循环的扫描周期（P1 触发器模块）：
 // 每分钟 ClaimDueCron（先 CAS 后入队）——misfire 判定宽限 90s 与本周期
@@ -46,6 +54,10 @@ const cronScanInterval = time.Minute
 // cronClaimBudget 是单轮 cron 领取的全局预算（跨项目扣减，镜像
 // recoverOrphanBatch 的轮转游标模式；补跑风暴由异步通道 + run 信号量兜底）。
 const cronClaimBudget = 100
+
+// cronDispatchTimeout 是单轮 cron 领取的预算上限（短于 cronScanInterval；
+// WithoutCancel 使停机不腰斩在途轮次）。
+const cronDispatchTimeout = 50 * time.Second
 
 // ackTimeout 是 Ack 在消费 ctx 之外的独立超时：优雅关停窗口内消费 ctx 已
 // 取消，XACK 仍须完成（否则已执行成功的任务重启后被重复消费），故用
@@ -63,6 +75,11 @@ type Worker struct {
 	// 测试构造 NewWorker 不带事件消费）。
 	events *eventTriggerConsumer
 
+	// 三个内部周期 loop（孤儿恢复/保留清理/cron 调度）走统一骨架。
+	recoverLoop *Periodic
+	pruneLoop   *Periodic
+	cronLoop    *Periodic
+
 	mu     sync.Mutex
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -73,12 +90,16 @@ func NewWorker(functions *appfunctions.Functions, queue domainshared.Queue, logg
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Worker{
+	w := &Worker{
 		functions: functions,
 		queue:     queue,
 		logger:    logger,
 		workers:   workerConcurrency,
 	}
+	w.recoverLoop = NewPeriodic("orphan-recover", orphanRecoverInterval, orphanRecoverTimeout, w.recoverOnce, logger).RunAtStart()
+	w.pruneLoop = NewPeriodic("execution-prune", pruneInterval, pruneTimeout, w.pruneOnce, logger)
+	w.cronLoop = NewPeriodic("cron-dispatch", cronScanInterval, cronDispatchTimeout, w.cronOnce, logger).RunAtStart()
+	return w
 }
 
 // NewWorkerWithEventTriggers 是 Wire 装配入口（v3 切片 D，§4.2）：在
@@ -107,13 +128,13 @@ func (w *Worker) Start(ctx context.Context) error {
 	// queued/building/running 超 staleAfter 判 failed（兜底 Redis 重启丢
 	// 任务、server/worker 崩溃孤儿；含 v1 既有洞：同步快路径崩溃留 queued
 	// 永不入队）。全局预算 recoverOrphanBatch + 轮转游标由 app 层持有。
-	w.wg.Go(func() { w.recoverLoop(runCtx) })
+	w.wg.Go(func() { _ = w.recoverLoop.Start(runCtx) })
 
 	// 保留策略周期清理（P0.5：Prune 移出同步热路径后的低频驱动）。
-	w.wg.Go(func() { w.pruneLoop(runCtx) })
+	w.wg.Go(func() { _ = w.pruneLoop.Start(runCtx) })
 
 	// cron 触发器调度循环（P1）：每分钟领取到期触发并入队异步执行。
-	w.wg.Go(func() { w.cronLoop(runCtx) })
+	w.wg.Go(func() { _ = w.cronLoop.Start(runCtx) })
 
 	// 数据库事件触发器消费循环（v3 切片 D，§4.2/D12）：functions-triggers
 	// 消费组 + 订阅匹配器快照 + 停机补投。关停随 runCtx 取消优雅退出
@@ -135,83 +156,42 @@ func (w *Worker) Start(ctx context.Context) error {
 	return nil
 }
 
-// recoverLoop 周期孤儿恢复（启动即跑一轮；间隔 orphanRecoverInterval）。
-func (w *Worker) recoverLoop(ctx context.Context) {
-	runOnce := func() {
-		recoverCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
-		defer cancel()
-		recovered, err := w.functions.RecoverOrphanExecutions(recoverCtx, orphanStaleFallback)
-		if err != nil {
-			w.logger.Warn("recover orphan executions failed", "error", err)
-			return
-		}
-		if recovered > 0 {
-			w.logger.Info("recovered orphan executions", "count", recovered)
-		}
+// recoverOnce 单轮孤儿恢复（预算 ctx 由骨架派生）。
+func (w *Worker) recoverOnce(ctx context.Context) error {
+	recovered, err := w.functions.RecoverOrphanExecutions(ctx, orphanStaleFallback)
+	if err != nil {
+		return err
 	}
-	runOnce()
-	ticker := time.NewTicker(orphanRecoverInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			runOnce()
-		}
+	if recovered > 0 {
+		w.logger.Info("recovered orphan executions", "count", recovered)
 	}
+	return nil
 }
 
-// pruneLoop 周期执行记录保留策略清理（跨全部 active 项目的函数；低频）。
-func (w *Worker) pruneLoop(ctx context.Context) {
-	ticker := time.NewTicker(pruneInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			pruneCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
-			pruned, err := w.functions.PruneOldExecutions(pruneCtx)
-			cancel()
-			if err != nil {
-				w.logger.Warn("prune old executions failed", "error", err)
-				continue
-			}
-			if pruned > 0 {
-				w.logger.Info("pruned old executions", "functions", pruned)
-			}
-		}
+// pruneOnce 单轮执行记录保留清理（预算 ctx 由骨架派生）。
+func (w *Worker) pruneOnce(ctx context.Context) error {
+	pruned, err := w.functions.PruneOldExecutions(ctx)
+	if err != nil {
+		return err
 	}
+	if pruned > 0 {
+		w.logger.Info("pruned old executions", "functions", pruned)
+	}
+	return nil
 }
 
-// cronLoop 周期 cron 触发器调度（启动即跑一轮——worker 重启后 catch_up_once
-// 在首轮扫描即收敛；间隔 cronScanInterval）。单轮失败仅记日志，下一轮
-// 重试；领取/CAS 语义见 domainfunctions.TriggerRepo.ClaimDueCron。
-func (w *Worker) cronLoop(ctx context.Context) {
-	runOnce := func() {
-		cronCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 50*time.Second)
-		defer cancel()
-		dispatched, err := w.functions.DispatchDueCronTriggers(cronCtx, time.Now(), cronClaimBudget)
-		if err != nil {
-			w.logger.Warn("cron trigger dispatch failed", "error", err)
-			return
-		}
-		if dispatched > 0 {
-			w.logger.Info("dispatched cron trigger executions", "count", dispatched)
-		}
+// cronOnce 单轮 cron 触发器调度（启动即跑一轮——worker 重启后 catch_up_once
+// 在首轮扫描即收敛；单轮失败仅记日志，下一轮重试；领取/CAS 语义见
+// domainfunctions.TriggerRepo.ClaimDueCron；预算 ctx 由骨架派生）。
+func (w *Worker) cronOnce(ctx context.Context) error {
+	dispatched, err := w.functions.DispatchDueCronTriggers(ctx, time.Now(), cronClaimBudget)
+	if err != nil {
+		return err
 	}
-	runOnce()
-	ticker := time.NewTicker(cronScanInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			runOnce()
-		}
+	if dispatched > 0 {
+		w.logger.Info("dispatched cron trigger executions", "count", dispatched)
 	}
+	return nil
 }
 
 // eventLoop 数据库事件触发器消费（v3 切片 D）：阻塞至 ctx 取消，内部

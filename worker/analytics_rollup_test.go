@@ -86,7 +86,7 @@ func TestAnalyticsRollupTimeout_BudgetAndContext(t *testing.T) {
 		projects: []domainprojects.Project{{ID: "p1", Status: "active"}},
 	})
 	before := time.Now()
-	w.runOnce(context.Background())
+	w.loop.runOnce(context.Background())
 
 	require.Equal(t, 2, repo.lastCalls, "单项目一轮重算 [昨日, 今日] 两个日窗")
 	require.NotNil(t, repo.lastCtx)
@@ -104,7 +104,7 @@ func TestAnalyticsRollupTimeout_BudgetAndContext(t *testing.T) {
 	repo2 := &fakeRollupRepo{}
 	rollupTestWorker(t, repo2, &fakeProjectRepo{
 		projects: []domainprojects.Project{{ID: "p1", Status: "active"}},
-	}).runOnce(canceled)
+	}).loop.runOnce(canceled)
 	require.Equal(t, 2, repo2.lastCalls, "parent ctx 已取消不阻断本轮执行")
 	require.NoError(t, repo2.lastCtxErr, "WithoutCancel：parent 取消不传播到在途轮次")
 	dl, ok := repo2.lastCtx.Deadline()
@@ -127,7 +127,7 @@ func TestAnalyticsRollupWorker_Metrics(t *testing.T) {
 			{ID: "p2", Status: "active"},
 			{ID: "p3", Status: "suspended"}, // 非 active 不参与
 		},
-	}).runOnce(context.Background())
+	}).loop.runOnce(context.Background())
 
 	require.InDelta(t, failuresBefore+2, testutil.ToFloat64(analyticsRollupFailuresTotal), 0.001,
 		"每个失败项目计 1 次（同项目后续日 break 不重复计）")

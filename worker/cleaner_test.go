@@ -33,8 +33,8 @@ func TestChunkCleaner_TickerTriggersCleanup(t *testing.T) {
 
 	fake := &fakeCleaner{}
 	c := NewChunkCleaner(fake, slog.New(slog.DiscardHandler))
-	c.initialDelay = 0
-	c.interval = 20 * time.Millisecond
+	c.loop.initialDelay = 0
+	c.loop.interval = 20 * time.Millisecond
 
 	done := make(chan error, 1)
 	go func() { done <- c.Start(ctx) }()
@@ -63,8 +63,8 @@ func TestChunkCleaner_FailureIsLoggedNotFatal(t *testing.T) {
 	fake := &fakeCleaner{}
 	fake.fail.Store(true)
 	c := NewChunkCleaner(fake, slog.New(slog.DiscardHandler))
-	c.initialDelay = 0
-	c.interval = 10 * time.Millisecond
+	c.loop.initialDelay = 0
+	c.loop.interval = 10 * time.Millisecond
 
 	done := make(chan error, 1)
 	go func() { done <- c.Start(ctx) }()

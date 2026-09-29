@@ -44,9 +44,9 @@ func init() {
 // 重跑覆盖不翻倍）。业务逻辑在 app/analytics.Rollup（RunWorkerOnce 模式），
 // 本作业只做周期、日志与指标。
 type AnalyticsRollupWorker struct {
-	rollup   *appanalytics.Rollup
-	logger   *slog.Logger
-	interval time.Duration
+	rollup *appanalytics.Rollup
+	logger *slog.Logger
+	loop   *Periodic
 }
 
 // NewAnalyticsRollupWorker creates the analytics rollup service.
@@ -54,41 +54,27 @@ func NewAnalyticsRollupWorker(rollup *appanalytics.Rollup, logger *slog.Logger) 
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &AnalyticsRollupWorker{rollup: rollup, logger: logger, interval: analyticsRollupInterval}
+	w := &AnalyticsRollupWorker{rollup: rollup, logger: logger}
+	w.loop = NewPeriodic("analytics-rollup", analyticsRollupInterval, analyticsRollupTimeout, w.runOnce, logger).RunAtStart()
+	return w
 }
 
 func (w *AnalyticsRollupWorker) Name() string { return "analytics-rollup" }
 
 func (w *AnalyticsRollupWorker) Init(ctx lynx.AppContext) error { return nil }
 
-// Start 周期 rollup：失败仅记日志（覆盖式重算天然重试安全）；阻塞到 ctx 取消。
-func (w *AnalyticsRollupWorker) Start(ctx context.Context) error {
-	w.runOnce(ctx)
-	ticker := time.NewTicker(w.interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			w.logger.Info("analytics rollup worker stopped")
-			return nil
-		case <-ticker.C:
-			w.runOnce(ctx)
-		}
-	}
-}
+func (w *AnalyticsRollupWorker) Start(ctx context.Context) error { return w.loop.Start(ctx) }
 
 func (w *AnalyticsRollupWorker) Stop(ctx context.Context) error { return nil }
 
-func (w *AnalyticsRollupWorker) runOnce(ctx context.Context) {
-	runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), analyticsRollupTimeout)
-	defer cancel()
+func (w *AnalyticsRollupWorker) runOnce(ctx context.Context) error {
 	started := time.Now()
-	stats, err := w.rollup.RunWorkerOnceStats(runCtx, time.Now())
+	stats, err := w.rollup.RunWorkerOnceStats(ctx, time.Now())
 	analyticsRollupDurationSeconds.Observe(time.Since(started).Seconds())
 	if err != nil {
 		analyticsRollupFailuresTotal.Inc()
-		w.logger.Error("analytics rollup failed", "error", err)
-		return
+		return err
 	}
 	analyticsRollupFailuresTotal.Add(float64(stats.Failures))
+	return nil
 }
