@@ -3,6 +3,7 @@ package bootkit
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
@@ -47,17 +48,22 @@ func ValidateFunctionsDispatchConfig(c *config.AppConfig) error {
 // ValidateFunctionsFleetlyConfig 校验 dispatcher 进程的 fleetly 控制面配置
 // （IMPL-T2-3）：endpoint 与机具令牌必填（缺失即拒绝启动——否则构建/执行在
 // 首次调用才以模糊错误暴露）；network_members 非空时 app 必填（挂靠声明的
-// 归属 app 不可省）。endpoint 形态经 config.ParseFleetlyEndpoint 校验（传输
-// 模式 scheme 显式选择：裸 host:port 明文 / tls:// / tls-insecure://；未知
-// scheme 启动期拒绝）。IMPL-T2-5 起由 ValidateFunctionsDriverConfig 在
-// driver=fleetly 分支调用。
+// 归属 app 不可省）。endpoint 二选一：显式 functions.fleetly.endpoint（形态
+// 经 config.ParseFleetlyEndpoint 校验：裸 host:port 明文 / tls:// /
+// tls-insecure://，未知 scheme 启动期拒绝）或平台物化的
+// FLEETLY_CONTROL_GRPC_ADDR（engine ctrlinject 注入任务 spec 的控制面地址，
+// 集群内工作负载零配置回落）。IMPL-T2-5 起由 ValidateFunctionsDriverConfig
+// 在 driver=fleetly 分支调用。
 func ValidateFunctionsFleetlyConfig(c *config.AppConfig) error {
 	f := c.GetFunctions().GetFleetly()
-	if strings.TrimSpace(f.GetEndpoint()) == "" {
-		return fmt.Errorf("functions.fleetly.endpoint is required (the dispatcher runs function tasks and builds on the fleetly platform; env TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT)")
+	explicit := strings.TrimSpace(f.GetEndpoint())
+	if explicit == "" && strings.TrimSpace(os.Getenv("FLEETLY_CONTROL_GRPC_ADDR")) == "" {
+		return fmt.Errorf("functions.fleetly.endpoint is required (the dispatcher runs function tasks and builds on the fleetly platform; env TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT, or the platform-materialized FLEETLY_CONTROL_GRPC_ADDR for in-cluster workloads)")
 	}
-	if _, _, err := config.ParseFleetlyEndpoint(f.GetEndpoint()); err != nil {
-		return err
+	if explicit != "" {
+		if _, _, err := config.ParseFleetlyEndpoint(explicit); err != nil {
+			return err
+		}
 	}
 	if strings.TrimSpace(f.GetToken()) == "" {
 		return fmt.Errorf("functions.fleetly.token is required (machine token with the tasks,build scopes; inject it via env TORCHWOOD_FUNCTIONS_FLEETLY_TOKEN, never commit it to a config file)")

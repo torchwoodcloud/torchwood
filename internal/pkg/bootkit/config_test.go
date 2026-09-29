@@ -115,6 +115,17 @@ func TestValidateFunctionsFleetlyConfig(t *testing.T) {
 	}
 }
 
+// TestValidateFunctionsFleetlyConfig_PlatformAddrFallback 平台物化地址回落：
+// 显式 endpoint 缺席但 FLEETLY_CONTROL_GRPC_ADDR（engine ctrlinject 注入的
+// 任务 env）在场时合法——零配置集群内回拨通路（Setenv 禁并行，独立子测试）。
+func TestValidateFunctionsFleetlyConfig_PlatformAddrFallback(t *testing.T) {
+	t.Setenv("FLEETLY_CONTROL_GRPC_ADDR", "10.124.0.3:8421")
+	cfg := &config.AppConfig{Functions: &config.Functions{
+		Fleetly: &config.Functions_Fleetly{Token: "tok"},
+	}}
+	require.NoError(t, ValidateFunctionsFleetlyConfig(cfg))
+}
+
 // TestValidateFunctionsDriverConfig 执行底座驱动选择校验（IMPL-T2-5）：
 // 未设/未知值 fail-closed 且点名两选项与配置键；按驱动分发——fleetly 分支
 // 要求 endpoint/令牌，docker 分支无必填键（host 缺省由驱动回落）。

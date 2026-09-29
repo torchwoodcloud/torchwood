@@ -229,17 +229,39 @@ type fleetlyDaemon struct {
 }
 
 // NewFleetlyDaemon 构造真实执行底座实现（fleetly Tasks/build API 客户端）。
-// endpoint 缺失或非法时延迟到首次调用暴露（与 dockerdriver.New 的 client
-// 段同策略；组合根 ValidateFunctionsDriverConfig 已做启动期 fail-fast）。
+// endpoint 解析序：显式 functions.fleetly.endpoint（scheme 选择传输模式，
+// config.ParseFleetlyEndpoint）→ 平台物化的 FLEETLY_CONTROL_GRPC_ADDR
+// （ctrlinject：集群内工作负载零配置回拨控制面；FLEETLY_CONTROL_TLS_NAME
+// 非空 = TLS + ServerName 校验，空 = TLS off 明文）。两者皆缺 → 延迟到首次
+// 调用暴露（与 dockerdriver.New 的 client 段同策略；组合根
+// ValidateFunctionsDriverConfig 已做启动期 fail-fast）。
 func NewFleetlyDaemon(cfg *config.AppConfig, refs imageRefStore) Daemon {
 	var cli fleetlyTaskClient
 	var cliErr error
 	f := cfg.GetFunctions().GetFleetly()
-	if endpoint := strings.TrimSpace(f.GetEndpoint()); endpoint != "" {
+	switch endpoint := strings.TrimSpace(f.GetEndpoint()); {
+	case endpoint != "":
 		cli, cliErr = newGRPCFleetlyClient(endpoint, f.GetToken())
+	case os.Getenv(EnvControlGRPCAddr) != "":
+		mode := config.FleetlyEndpointPlain
+		serverName := strings.TrimSpace(os.Getenv(EnvControlTLSName))
+		if serverName != "" {
+			mode = config.FleetlyEndpointTLS
+		}
+		addr, _, _ := config.ParseFleetlyEndpoint(os.Getenv(EnvControlGRPCAddr))
+		cli, cliErr = newGRPCFleetlyClientFor(addr, f.GetToken(), mode, serverName)
 	}
 	return newFleetlyDaemon(cfg, refs, cli, cliErr)
 }
+
+// EnvControlGRPCAddr / EnvControlTLSName 是 fleetly 平台向任务 spec 物化的
+// 控制面地址 env（engine ctrlinject：advertise:gRPC 端口 + 证书校验名；与
+// exec relay 的 FLEETLY_CONTROL_ADDR 同族命名）。dispatcher 端点未显式配置
+// 时回落到它们——零配置集群内回拨，值随环境自动正确。
+const (
+	EnvControlGRPCAddr = "FLEETLY_CONTROL_GRPC_ADDR"
+	EnvControlTLSName  = "FLEETLY_CONTROL_TLS_NAME"
+)
 
 func newFleetlyDaemon(cfg *config.AppConfig, refs imageRefStore, cli fleetlyTaskClient, cliErr error) *fleetlyDaemon {
 	pc := PoolConfigFromConfig(cfg)
@@ -1170,10 +1192,21 @@ func newGRPCFleetlyClient(endpoint, token string) (*grpcFleetlyClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dial fleetly endpoint %q: %w", endpoint, err)
 	}
+	return newGRPCFleetlyClientFor(addr, token, mode, "")
+}
+
+// newGRPCFleetlyClientFor 是客户端构造的实现位（addr/mode/serverName 已解
+// 析）：显式 endpoint 路径（ParseFleetlyEndpoint 产物，serverName 空 =
+// ServerName 缺省跟随拨号主机名）与平台物化回落路径（mode/serverName 由
+// FLEETLY_CONTROL_* env 派生）共用。
+func newGRPCFleetlyClientFor(addr, token string, mode config.FleetlyEndpointMode, serverName string) (*grpcFleetlyClient, error) {
 	var transport credentials.TransportCredentials
 	switch mode {
 	case config.FleetlyEndpointTLS:
-		transport = credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
+		transport = credentials.NewTLS(&tls.Config{
+			MinVersion: tls.VersionTLS12,
+			ServerName: serverName, // 空 = 缺省跟随拨号主机名；平台回落路径携带证书校验名
+		})
 	case config.FleetlyEndpointTLSInsecure:
 		transport = credentials.NewTLS(&tls.Config{
 			MinVersion:         tls.VersionTLS12,
@@ -1187,7 +1220,7 @@ func newGRPCFleetlyClient(endpoint, token string) (*grpcFleetlyClient, error) {
 		grpc.WithPerRPCCredentials(fleetlyBearerCredentials{token: token, secure: mode != config.FleetlyEndpointPlain}),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("dial fleetly endpoint %q: %w", endpoint, err)
+		return nil, fmt.Errorf("dial fleetly endpoint %q: %w", addr, err)
 	}
 	return &grpcFleetlyClient{
 		conn:   conn,
