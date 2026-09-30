@@ -53,7 +53,7 @@ dokploy 栈未拆）。
 |---|---|---|---|
 | 1 | 顶层 `name: torchwood` | 保留 | app 标识（命名公式 `fleetly-<team>-<prj>-torchwood-<service>`） |
 | 2 | `x-app-env` / `x-app-image` YAML 锚点 | 内联为各服务 `environment` | `x-*` 被 loader 移入 Extensions（平台不可见）；插值禁用后锚点无共享需求 |
-| 3 | postgres 服务（镜像/env/卷/initdb bind/healthcheck） | **整段删除** | 托管实例 `fleetly databases create torchwood-pg --template percona-postgresql-18`（DT-9）；`FLEETLY_DB_TORCHWOOD_PG_*` env 由 label 物化，库网络由 label 牵线 |
+| 3 | postgres 服务（镜像/env/卷/initdb bind/healthcheck） | **整段删除** | 托管实例 `fleetly databases create --template percona-postgresql-18 torchwood-pg`（DT-9）；`FLEETLY_DB_TORCHWOOD_PG_*` env 由 label 物化，库网络由 label 牵线 |
 | 4 | postgres `POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8` | **平台模板无此参数** | percona 镜像 locale=POSIX → 实例 `server_encoding=SQL_ASCII`；`bootstrap-runtime.sql` 以 `ALTER DATABASE … SET client_encoding='UTF8'` 兜底（本地实证）；**建议平台模板补 `--encoding=UTF8`**（runbook §9） |
 | 5 | `initdb/01-authenticator.sh`（创建 tw_authenticator） | **删副本，职责入 Config** | `docker/fleetly/bootstrap-runtime.sql`（幂等 DO 块 + `ALTER ROLE … PASSWORD :'auth_password'`，口令经平台 env 注入） |
 | 6 | `bootstrap-roles.sql` bind | **改 Config 资源** | 平台 `configs:` external + 服务级 `{source,target}`；db-bootstrap 作业 psql 执行 |
@@ -149,9 +149,9 @@ fleetly env set torchwood TORCHWOOD_SERVER_HTTP_CORS_ALLOW_HEADERS \
   "Content-Type,Authorization,X-Api-Key,X-Torchwood-Project,X-Request-Id"
 
 # —— Config 资源（明文可回读；内容变更 = 新对象 + 引用服务滚动）——
-fleetly configs set torchwood config.yaml           --from-file docker/fleetly/config.yaml
-fleetly configs set torchwood bootstrap-runtime.sql --from-file docker/fleetly/bootstrap-runtime.sql
-fleetly configs set torchwood bootstrap-roles.sql   --from-file docker/fleetly/bootstrap-roles.sql
+fleetly configs set --from-file docker/fleetly/config.yaml           torchwood config.yaml
+fleetly configs set --from-file docker/fleetly/bootstrap-runtime.sql torchwood bootstrap-runtime.sql
+fleetly configs set --from-file docker/fleetly/bootstrap-roles.sql   torchwood bootstrap-roles.sql
 fleetly configs ls torchwood
 ```
 
@@ -222,7 +222,7 @@ source driver，匿名 GitHub API 有 **每 IP 60 req/h** 限额；首次全量�
 
 | 步 | 内容 | 关键命令 |
 |---|---|---|
-| 0 | 前置检查 | `fleetly databases create torchwood-pg --template percona-postgresql-18` → 等 ready；镜像/GitHub 配额/旧栈盘点/DNS TTL |
+| 0 | 前置检查 | `fleetly databases create --template percona-postgresql-18 torchwood-pg` → 等 ready；镜像/GitHub 配额/旧栈盘点/DNS TTL |
 | B | 首部署（预期失败：config 前哨；只建 app） | `fleetly deploy docker/fleetly/docker-compose.yml` → `E_CONFIG_NOT_FOUND` |
 | C | 平台 env + Config + 域名 + 机具令牌 | §4 清单 + §3 两条 `domains add` |
 | D | 数据面准备（宿主机，栈内零服务占用） | 手动等价 init：migrate（`file://`）+ `bootstrap-runtime.sql` → `pg_dump`/`pg_restore --clean --if-exists --no-owner` → redis/minio 卷复制或明示重置 |
@@ -267,8 +267,8 @@ source driver，匿名 GitHub API 有 **每 IP 60 req/h** 限额；首次全量�
 | 升级 | 改 `docker-compose.yml` 镜像 tag + migrate `#ref`（同 commit）→ `fleetly deploy docker/fleetly/docker-compose.yml` |
 | 回滚 | `fleetly rollback torchwood`（revision 级；迁移前向不回退）或改回旧 tag 重部署；dokploy 栈未拆 = 终极回滚 |
 | 看状态 | `fleetly apps get torchwood` / `fleetly deployments list torchwood` / `fleetly placement show torchwood`（卷与节点） |
-| 看日志 | `fleetly logs history torchwood --limit 100`（服务归因）；init job 日志同归因（`release.job_*` 事件点名） |
-| 数据库 | `fleetly databases show torchwood-pg` / `backup` / `backups` / `restore --snapshot <id> --confirm torchwood-pg`（E4 生命周期与备份） |
+| 看日志 | `fleetly logs history --limit 100 torchwood`（服务归因）；init job 日志同归因（`release.job_*` 事件点名） |
+| 数据库 | `fleetly databases show torchwood-pg` / `backup` / `backups` / `restore --snapshot <id> --confirm torchwood-pg torchwood-pg`（E4 生命周期与备份；restore 的 `--confirm` 带实例名做两段确认，位置参数实例名仍需尾随） |
 | 密钥轮换 | `TORCHWOOD_AUTH_PASSWORD`：`env set` 新值 → 重部署（db-bootstrap 作业重写数据库侧口令 + DSN 同步换）；`JWT_SECRET`：`env set` → 重部署（roles-sig 自动重落库，双钥窗口旧 sig 不降级） |
 | 函数底座 | dispatcher 常驻；镜像映射在 Redis（`torchwood:fnimg:*`，随 redis 卷持久化）；实例 = fleetly Tasks，`fleetly tasks ls` 可见 |
 | 备份 | postgres 归平台（`fleetly databases backup`）；redis/minio 卷为残余栈内数据（DT-8 backlog：手动/Tasks BGSAVE），搬运步骤见 runbook §3 |

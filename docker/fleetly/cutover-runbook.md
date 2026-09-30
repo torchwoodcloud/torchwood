@@ -3,6 +3,7 @@
 | 状态 | 日期 | 关联 |
 |---|---|---|
 | **待使用者执行窗口**（本环境无 staging 凭据/访问权，真机步骤未执行、未虚构结果；本地等价实证见附录 A） | 2026-09-28 | [README](README.md)（部署形态/改写清单/镜像裁决/env 与 Config 清单）；[Dokploy 形态基准](../dokploy/README.md) |
+| 勘误+竞态注记（CLI 旗标前置纪律勘误 8 处；首发竞态两处入册——2026-09-29 staging 真机实证回填） | 2026-09-30 | fleetly CLI 为 Go flag 包：旗标一律在位置参数前，`cmd <app> --flag x` 形态实际解析失败 |
 
 范围：把现役 Dokploy 栈（postgres + redis + minio + server + worker + dispatcher +
 packer + migrate/db-grants/roles-sig）割接到 `docker/fleetly/` 的 fleetly 部署形态
@@ -35,7 +36,7 @@ fleetly validate docker/fleetly/docker-compose.yml  # 文本形态应与本次�
 # 0.2 托管数据库实例（必须先于部署创建：compose 的 fleetly.databases label 要求实例存在）
 # 实例名 torchwood-pg 是 compose/runbook 的契约名：改名需同步改 compose 的
 # fleetly.databases label 与全部 FLEETLY_DB_TORCHWOOD_PG_* 引用（含本 runbook 命令）
-fleetly databases create torchwood-pg --template percona-postgresql-18
+fleetly databases create --template percona-postgresql-18 torchwood-pg
 fleetly databases show torchwood-pg                  # 轮询到 status=ready
 fleetly databases reveal torchwood-pg                # 记录 owner（fleetly）口令到环境变量
 export OWNER_PW="<上一步 reveal 输出的 password>"
@@ -144,9 +145,9 @@ fleetly tokens create --machine --scopes tasks,build \
 fleetly env set torchwood TORCHWOOD_FUNCTIONS_FLEETLY_TOKEN "<上一步一次性明文>"
 
 # Config 资源（内容源 = 仓库 docker/fleetly/）
-fleetly configs set torchwood config.yaml           --from-file docker/fleetly/config.yaml
-fleetly configs set torchwood bootstrap-runtime.sql --from-file docker/fleetly/bootstrap-runtime.sql
-fleetly configs set torchwood bootstrap-roles.sql   --from-file docker/fleetly/bootstrap-roles.sql
+fleetly configs set --from-file docker/fleetly/config.yaml           torchwood config.yaml
+fleetly configs set --from-file docker/fleetly/bootstrap-runtime.sql torchwood bootstrap-runtime.sql
+fleetly configs set --from-file docker/fleetly/bootstrap-roles.sql   torchwood bootstrap-roles.sql
 fleetly configs ls torchwood
 
 # 域名（两条：9080 http + 9060 h2c；可提前声明，DNS 切换在 §5）
@@ -230,7 +231,7 @@ docker exec "$OLD_REDIS" redis-cli DBSIZE
 docker exec "$OLD_REDIS" redis-cli --scan --pattern 'torchwood:*' | head -n 5
 
 # 3.2.1 预建平台命名的目标卷（平台卷无 label、按命名约定归属；Swarm 按名复用同名卷）
-export APP_ID="$(fleetly apps get torchwood --json | jq -r .id)"   # 无 jq 时从裸输出 "id: <…>" 行读取
+export APP_ID="$(fleetly apps get --json torchwood | jq -r .id)"   # 无 jq 时从裸输出 "id: <…>" 行读取
 echo "$APP_ID"
 test -n "$APP_ID"
 export APP_ID8="$(printf '%s' "$APP_ID" | cut -c1-8)"
@@ -287,15 +288,20 @@ docker run --rm -v "$NEW_MINIO_VOLUME":/data -v "$DOCKER_TMP/minio-data":/src:ro
 ## 4. 正式部署
 
 ```bash
-fleetly deploy docker/fleetly/docker-compose.yml --timeout 20m
+fleetly deploy --timeout 20m docker/fleetly/docker-compose.yml
 # 预期：init job 三条并行执行（migrate=no change；db-bootstrap 幂等重授权；
 #       roles-sig 重落钥）→ 六常驻服务创建 → 健康门通过 → deployment succeeded
 fleetly apps get torchwood               # derived_state=running
-fleetly logs history torchwood --limit 100
+fleetly logs history --limit 100 torchwood
 ```
 
-> 若 init job 失败：`release.job_failed` 事件点名作业与原因；常见两类——(1) GitHub
-> 配额（§9 兜底）；(2) 缺必填平台 env（作业 fail-closed 的 echo 点名键名）。
+> 若 init job 失败：`release.job_failed` 事件点名作业与原因；常见三类——(1) GitHub
+> 配额（§9 兜底）；(2) 缺必填平台 env（作业 fail-closed 的 echo 点名键名）；
+> (3) **首发竞态（已知一次性，无需人工干预数据库）**：init job 与常驻服务并行
+> 启动，首窗 DB 角色/编码尚未就绪时 db-bootstrap/roles-sig 的有界等待环
+> （240s）可能输给竞态 → job 失败。处置 = 等托管库状态收敛（ready）后
+> 重新 `deploy`——init job 全幂等，二次跑秒级通过（2026-09-29 staging 真机
+> 实证：首发失败 → redeploy 即绿，init 4s）。
 
 ## 5. 域名声明与 DNS 切换
 
@@ -326,9 +332,9 @@ fleetly apps get torchwood
 fleetly deployments list torchwood | head -n 5
 docker ps --format '{{.Names}} {{.Status}}' | grep 'fleetly-.*-torchwood'
 # 预期六个常驻服务任务 running/healthy（redis/minio/server/worker/dispatcher/packer）
-fleetly logs history torchwood --service server --limit 50
-fleetly logs history torchwood --service worker --limit 50
-fleetly logs history torchwood --service dispatcher --limit 50
+fleetly logs history --service server --limit 50 torchwood
+fleetly logs history --service worker --limit 50 torchwood
+fleetly logs history --service dispatcher --limit 50 torchwood
 ```
 
 ### 6.2 数据面（postgres；决定性）
@@ -388,6 +394,10 @@ ls -la /tmp/t24-fn.zip
 ./bin/torchwood functions deployments list --endpoint "$TW_ENDPOINT" --tls --api-key "$TW_API_KEY" \
   t24-cutover-probe
 # 轮询到最新 deployment status=ready；失败时看 dispatcher 日志（§6.1）
+# 注：首个函数的首次部署/执行可能撞「挂靠竞态」一次性失败（CLI 见
+#     `Post …/v1/dispatch/builds: EOF`，而 fleetlyd 侧 build 实际 succeeded
+#     ——挂靠滚动把在途请求的 dispatcher 容器换掉了）；挂靠一次完成后
+#     重试即绿，详见 §9。
 
 # 6.4.4 执行（spawn → health 握手 → 分发）
 ./bin/torchwood functions executions create --endpoint "$TW_ENDPOINT" --tls --api-key "$TW_API_KEY" \
@@ -474,6 +484,10 @@ fleetly rollback torchwood        # 新栈已起过版本时的 revision 级回�
 - **任务网成员挂靠的服务滚动**：首次函数操作触发 `EnsureTaskNetwork`
   （members=dispatcher,server）→ 平台重部署 torchwood 挂 `fleetly-taskgroup-*`
   网（别名 `torchwood-server`）；滚动期间函数回访可能短暂失败（自愈合）；
+  **一次性竞态形态（2026-09-29 staging 实证）**：若挂靠滚动发生时
+  dispatcher 恰有在途构建请求，滚动会把该 dispatcher 容器换掉——CLI 侧见
+  `Post …/v1/dispatch/builds: EOF` 而 fleetlyd 侧 build 已 succeeded（结果不丢，
+  只是连接被掐）；挂靠一次完成后重试即绿，无需处置；
 - **mlbridge 切项目内网**（messageloop 侧单 env 改动）：确认 messageloop 与
   torchwood 同项目后：
   `fleetly projects network attach messageloop` / `fleetly projects network attach torchwood`
