@@ -17,9 +17,15 @@ type Invocation struct {
 	ProjectID  string
 	// TargetURL 是函数常驻服务的调用终点（https 强制；开发环境可放行 http）。
 	TargetURL string
-	// TargetSecret 是签名密钥明文（仅内存/请求生命周期；落库侧加密存储，
-	// API 面掩码——见 infra 适配器）。
+	// TargetSecret 是签名密钥明文（v1 签名；仅内存/请求生命周期，落库侧
+	// 加密存储、API 面掩码——见 infra 适配器）。
 	TargetSecret string
+	// TargetPreviousSecret 是轮换窗口内的旧钥明文（v2 签名；空 = 无轮换
+	// 或窗口已过）。双签名让持旧钥的 FDK 过渡期无感。
+	TargetPreviousSecret string
+	// ExecutionToken 是本次调用的 twx_ 执行身份（app 层铸造；随
+	// X-Tw-Execution-Token 头注入，运行在 endpoint 的函数用它回访平台 API）。
+	ExecutionToken string
 	// Method 是 JSON-RPC method（MethodInvoke / MethodCronTick /
 	// MethodEventDocument / MethodHTTPRequest）。
 	Method string
