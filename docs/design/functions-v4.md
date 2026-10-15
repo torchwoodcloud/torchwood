@@ -122,7 +122,9 @@ torchwood 保留的每一块都是 BaaS 本分（路由、身份、记账、投�
 message FunctionTarget {
   // https 强制（生产；开发环境可放行 http，配置开关）
   string url = 1;
-  // 签名密钥的存储引用（密钥本体哈希落库，明文仅创建/轮换时回显一次）
+  // 签名密钥的存储引用（实施勘误 2026-10-15：签名方每次调用需明文计算
+  // HMAC，哈希落库无法签名——密钥本体加密落库 AES-GCM〔平台密钥派生，同
+  // roles_sig 派生先例〕，API 面掩码回显，明文仅创建/轮换时回显一次）
   string secret_ref = 2;
   // 无响应风格字段：响应形状由 §4 调用协议的 method 语义决定（invoke → result
   // 即函数返回值；http.request → result 即 HTTP 响应表示），不需要按函数配置
