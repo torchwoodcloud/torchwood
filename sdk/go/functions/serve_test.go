@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -281,7 +282,16 @@ func TestListenSigtermDrainEndToEnd(t *testing.T) {
 	go func() {
 		_ = serve(resolveContract(slow), serveOpts{exit: func(code int) { exited <- code }, addrCh: addrCh, sig: sig})
 	}()
-	base := "http://" + strings.Replace(<-addrCh, "0.0.0.0", "127.0.0.1", 1)
+	// 通配监听的实际地址是 [::]:PORT（Go 双栈偏好，golang/go#7411）而非
+	// 0.0.0.0:PORT——按端口提取归一到 loopback（旧的 0.0.0.0 字符串替换
+	// 永远落空，[::] 不在标准库代理豁免清单内，携带 http_proxy 的环境下
+	// health 探针会被发进本地代理回 502）。
+	_, port, _ := net.SplitHostPort(<-addrCh)
+	base := "http://127.0.0.1:" + port
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("http_proxy", "")
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("https_proxy", "")
 
 	// 就绪探针。
 	resp, _ := doJSON(t, http.MethodGet, base+healthPath, nil, "")
