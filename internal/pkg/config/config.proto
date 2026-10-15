@@ -371,6 +371,42 @@ message Functions {
     string bucket = 1;
   }
   Storage storage = 10;
+  // Webhooks 是 Webhooks 一等公民子系统平台级配置（functions-v4.md §6，
+  // D5 拍板：15 次/24h 指数退避 + 行内 DLQ + Redeliver API；计量一期仅进
+  // metrics 不进 billing）。全部字段可选，空 = 缺省值。
+  message Webhooks {
+    // 重试梯度（秒序列，逗号分隔 Go duration；失败后按序取用，末值循环）。
+    // 缺省 "10s,1m,5m,30m,2h,8h"（即时首投 → 10s → 1m → 5m → 30m → 2h →
+    // 8h ×…）。空/非法值回落缺省。
+    // env: TORCHWOOD_FUNCTIONS_WEBHOOKS_RETRY_BACKOFF
+    string retry_backoff = 1;
+    // 最大投递尝试次数（含首投；达到即终态 failed = DLQ）。缺省 15。
+    // env: TORCHWOOD_FUNCTIONS_WEBHOOKS_MAX_ATTEMPTS
+    int32 max_attempts = 2;
+    // 重试窗（首投起算的终态封顶，如 "24h"）：下一次尝试时刻越窗即终态
+    // failed。缺省 24h。空/非法值回落缺省。
+    // env: TORCHWOOD_FUNCTIONS_WEBHOOKS_RETRY_WINDOW
+    string retry_window = 3;
+    // 单轮到期扫描的投递并发上限（worker 进程内；缺省 4）。
+    // env: TORCHWOOD_FUNCTIONS_WEBHOOKS_DELIVERY_CONCURRENCY
+    int32 delivery_concurrency = 4;
+    // 单次投递尝试的 HTTP 超时（如 "10s"；缺省 10s）。空/非法值回落缺省。
+    // env: TORCHWOOD_FUNCTIONS_WEBHOOKS_DELIVERY_TIMEOUT
+    string delivery_timeout = 5;
+    // 投递行保留窗（终态行清理口径，如 "168h" = 7 天；缺省 168h）。
+    // 空/非法值回落缺省。
+    // env: TORCHWOOD_FUNCTIONS_WEBHOOKS_RETENTION
+    string retention = 6;
+    // 密钥轮换宽限窗（旧钥保留期，v2 签名窗口；如 "24h"，缺省 24h）。
+    // 空/非法值回落缺省。
+    // env: TORCHWOOD_FUNCTIONS_WEBHOOKS_SECRET_GRACE_PERIOD
+    string secret_grace_period = 7;
+    // per-project webhook 数上限（配额；缺省 32）。0 = 缺省，负值非法
+    // （启动期钳制）。
+    // env: TORCHWOOD_FUNCTIONS_WEBHOOKS_MAX_PER_PROJECT
+    int32 max_per_project = 8;
+  }
+  Webhooks webhooks = 13;
 }
 
 message Messaging {

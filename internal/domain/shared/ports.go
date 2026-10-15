@@ -24,9 +24,16 @@ const (
 	EventsGroupFunctionsTriggers = "functions-triggers"
 	// FunctionsEventLastSeqKey 是函数事件触发的自管消费水位（Redis 键）：
 	// 每批 XACK 后推进（单调不回退）。Stream 条目 ID 是 XADD 自动生成
-	// （不含 seq 语义），停机补投的 gap 判定依赖该水位而非消费组
+	//（不含 seq 语义），停机补投的 gap 判定依赖该水位而非消费组
 	// last-delivered-id（v3 §4.2/D12 对抗审查修正）。
 	FunctionsEventLastSeqKey = "torchwood:fnevent:lastseq"
+	// EventsGroupWebhooks 是 Webhooks 订阅的消费组名（functions-v4.md §6，
+	// D5）：与 functions-triggers 同模式（XREADGROUP、at-least-once、停机
+	// 补投经 outbox 按 seq 区间回放），独立组互不干扰。
+	EventsGroupWebhooks = "webhooks"
+	// WebhooksEventLastSeqKey 是 Webhooks 消费的自管消费水位（Redis 键，
+	// 每批 XACK 后单调推进；停机补投的 gap 判定同 FunctionsEventLastSeqKey）。
+	WebhooksEventLastSeqKey = "torchwood:wh:lastseq"
 )
 
 // Queue 是异步任务队列端口（A7 修复：至少一次）。

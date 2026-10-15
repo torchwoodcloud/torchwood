@@ -1,0 +1,280 @@
+syntax = "proto3";
+
+package torchwood.server.v1;
+
+option go_package = "github.com/torchwoodcloud/torchwood/genproto/server/v1;serverv1";
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "grpcapi/v1/authz.proto";
+import "shared/v1/common.proto";
+
+// 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
+// docs/developer/09-api-guide.md §1.4 的 OpenAPI 建模约定；本服务全部方法继承，无需逐方法覆盖）。
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  security_definitions: {
+    security: {
+      key: "apiKey"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "X-API-Key"
+        description: "The project is bound to the API key row; X-Torchwood-Project is not needed. This header is only for Console admin sessions switching projects."
+      }
+    }
+    security: {
+      key: "Bearer"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Authorization"
+        description: "Format: Bearer <jwt>"
+      }
+    }
+    security: {
+      key: "cookie"
+      value: {
+        type: TYPE_API_KEY
+        in: IN_HEADER
+        name: "Cookie"
+        description: "TORCHWOOD_session_console=<sid> (Console admin session)"
+      }
+    }
+  }
+  security: {
+    security_requirement: {
+      key: "apiKey"
+      value: {}
+    }
+  }
+  extensions: {
+    key: "x-torchwood-access"
+    value: { string_value: "server" }
+  }
+  // 统一 default 错误响应（运行时错误体即 shared.v1.ErrorResponse），
+  // 文件级声明自动填充到本文件全部 operation。
+  responses: {
+    key: "default"
+    value: {
+      description: "An unexpected error response."
+      schema: { json_schema: { ref: ".torchwood.shared.v1.ErrorResponse" } }
+    }
+  }
+};
+
+// WebhooksService 管理 Webhooks 一等公民子系统（functions-v4.md §6，D5）：
+// 订阅 outbox 事件脊柱（文档写事件 + 系统行为事件），按 CloudEvents 1.0
+// structured mode 投递到用户配置的 HTTPS endpoint——事件反应类需求无需在
+// 平台跑代码。投递语义：2xx = 送达；非 2xx 按重试梯度重投（即时 → 10s →
+// 1m → 5m → 30m → 2h → 8h…约 15 次封顶 24h），终态失败行进 DLQ
+//（status=failed，ListDeliveries 可浏览），RedeliverDelivery 手动重投。
+// 计量一期仅进 metrics、不进 billing（D5 拍板）。
+service WebhooksService {
+  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
+
+  // CreateWebhook 创建订阅：url 强制 https；订阅串复用 eventmatch 语法
+  //（函数事件触发器同款，1..64 条 × ≤200B）；签名密钥服务端生成，明文
+  // 仅在本响应出现一次，之后只出指纹（secret_fingerprint）。
+  rpc CreateWebhook(CreateWebhookRequest) returns (Webhook) {
+    option (google.api.http) = { post: "/v1/server/webhooks", body: "*" };
+    // authz 比照 functions.proto：webhooks 属 Functions v4 面，scope 资源
+    // 复用 functions（词表/SDK 契约零扩散；粒度 = functions.read/write）。
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    };
+  }
+  rpc GetWebhook(GetWebhookRequest) returns (Webhook) {
+    option (google.api.http) = { get: "/v1/server/webhooks/{webhook_id}" };
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
+    };
+  }
+  rpc ListWebhooks(shared.v1.ListRequest) returns (ListWebhooksResponse) {
+    option (google.api.http) = { get: "/v1/server/webhooks" };
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
+    };
+  }
+  // UpdateWebhook 部分更新：optional 字段未设置 = 不修改；url/events/status
+  // 可变，id/project/密钥/时间戳不可变（密钥变更走 RotateWebhookSecret）。
+  rpc UpdateWebhook(UpdateWebhookRequest) returns (Webhook) {
+    option (google.api.http) = { patch: "/v1/server/webhooks/{webhook_id}", body: "*" };
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    };
+  }
+  rpc DeleteWebhook(GetWebhookRequest) returns (shared.v1.Empty) {
+    option (google.api.http) = { delete: "/v1/server/webhooks/{webhook_id}" };
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    };
+  }
+  // RotateWebhookSecret 轮换签名密钥：新钥即刻生效（v1 签名），旧钥保留
+  // 一个窗口期（v2 签名，与 functions Invocation.TargetPreviousSecret 双签
+  // 语义同款）——接收方持旧钥的过渡期不断流。新明文仅在本响应出现一次。
+  rpc RotateWebhookSecret(RotateWebhookSecretRequest) returns (WebhookSecret) {
+    option (google.api.http) = { post: "/v1/server/webhooks/{webhook_id}:rotate-secret", body: "*" };
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    };
+  }
+  // ListDeliveries 列出投递行（DLQ 浏览面）：按投递时间倒序分页；status
+  // 过滤 optional（unset = 全部）。
+  rpc ListDeliveries(ListDeliveriesRequest) returns (ListDeliveriesResponse) {
+    option (google.api.http) = { get: "/v1/server/webhooks/{webhook_id}/deliveries" };
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
+    };
+  }
+  rpc GetDelivery(GetDeliveryRequest) returns (WebhookDelivery) {
+    option (google.api.http) = { get: "/v1/server/webhooks/{webhook_id}/deliveries/{delivery_id}" };
+    option (grpcapi.v1.method_auth) = {
+      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
+    };
+  }
+  // RedeliverDelivery 手动重投：终态行（delivered/failed）重置为立即到期
+  //（status=pending、attempts=0、next_attempt_at=now），由 worker 到期扫描
+  // 领取重投；重投历史留在 attempts/last_error 审计面之外（行内计数归零，
+  // 语义 = 全新一轮投递）。
+  rpc RedeliverDelivery(RedeliverDeliveryRequest) returns (WebhookDelivery) {
+    option (google.api.http) = { post: "/v1/server/webhooks/{webhook_id}/deliveries/{delivery_id}:redeliver", body: "*" };
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    };
+  }
+}
+
+// CreateWebhookRequest 创建订阅。
+message CreateWebhookRequest {
+  // 订阅 id：可选（服务端生成 "wh-<uuid>"）；提供时须匹配 ^[a-z0-9][a-z0-9_-]{0,62}$。
+  string id = 1 [(buf.validate.field).string.pattern = "^$|^[a-z0-9][a-z0-9_-]{0,62}$"];
+  // 投递终点，强制 https。
+  string url = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = { min_len: 9, max_len: 2048, pattern: "^https://" }
+  ];
+  // 订阅串列表（复用 eventmatch 语法，函数事件触发器同款：文档写事件
+  // databases.{db}.collections.{col}.documents.{op}；系统行为事件
+  // {domain}.* 等——格式校验在服务端，1..64 条 × ≤200B）。
+  repeated string events = 3 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 64,
+    (buf.validate.field).repeated.items.string.max_len = 200
+  ];
+  // 初始状态，缺省 enabled。
+  string status = 4 [(buf.validate.field).string = { in: ["", "enabled", "paused"] }];
+}
+
+// GetWebhookRequest 按 id 寻址。
+message GetWebhookRequest {
+  string webhook_id = 1 [(buf.validate.field).required = true];
+}
+
+// UpdateWebhookRequest 部分更新：optional 未设置 = 不修改（proto 规范）。
+message UpdateWebhookRequest {
+  string webhook_id = 1 [(buf.validate.field).required = true];
+  optional string url = 2 [
+    (buf.validate.field).string = { min_len: 9, max_len: 2048, pattern: "^https://" }
+  ];
+  // 全量替换订阅串集（与函数事件触发器「列表字段整体替换」同语义）。
+  repeated string events = 3 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 64,
+    (buf.validate.field).repeated.items.string.max_len = 200
+  ];
+  optional string status = 4 [(buf.validate.field).string = { in: ["enabled", "paused"] }];
+}
+
+// RotateWebhookSecretRequest 轮换签名密钥。
+message RotateWebhookSecretRequest {
+  string webhook_id = 1 [(buf.validate.field).required = true];
+}
+
+// ListDeliveriesRequest 投递行列表（keyset 分页走 shared.v1.ListRequest 通道
+// 的 page_size/page_token；status 过滤 optional）。
+message ListDeliveriesRequest {
+  string webhook_id = 1 [(buf.validate.field).required = true];
+  int32 page_size = 2;
+  string page_token = 3;
+  // 过滤投递状态：空 = 全部；enabled 词表外值拒绝。
+  string status = 4 [(buf.validate.field).string = { in: ["", "pending", "delivered", "failed"] }];
+}
+
+// RedeliverDeliveryRequest 手动重投。
+message RedeliverDeliveryRequest {
+  string webhook_id = 1 [(buf.validate.field).required = true];
+  string delivery_id = 2 [(buf.validate.field).required = true];
+}
+
+// GetDeliveryRequest 按 id 寻址投递行。
+message GetDeliveryRequest {
+  string webhook_id = 1 [(buf.validate.field).required = true];
+  string delivery_id = 2 [(buf.validate.field).required = true];
+}
+
+// Webhook 是订阅视图。密钥任何形态不回显：明文仅在创建/轮换响应一次性
+// 返回（secret 字段），管理面只出指纹。
+message Webhook {
+  string id = 1;
+  string project_id = 2;
+  string url = 3;
+  // 订阅串列表（原样回显，eventmatch 语法）。
+  repeated string events = 4;
+  // 状态：enabled | paused。
+  string status = 5;
+  // 签名密钥指纹（"whsec_" + SHA-256 前 8 hex；比对用，非明文）。
+  string secret_fingerprint = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+// WebhookSecret 是创建/轮换响应：明文只出现这一次，调用方立即持久化。
+message WebhookSecret {
+  string webhook_id = 1;
+  // 签名密钥明文（whsec_ 前缀 + 32 字节 base64url）。之后只出指纹。
+  string secret = 2;
+  // 轮换后的指纹（便于与既有记录核对）。
+  string secret_fingerprint = 3;
+}
+
+// WebhookDelivery 是投递行投影（DLQ 浏览/重投管理面）。载荷与签名细节
+// 不在本视图（payload 为内部重投事实源）。
+message WebhookDelivery {
+  string id = 1;
+  string webhook_id = 2;
+  // 事件幂等键（outbox event_id；at-least-once 消费的去重吸收面）。
+  string event_id = 3;
+  // 事件 type（事件目录名 / databases.documents.{op}）。
+  string event_type = 4;
+  // outbox 全局序（事件产生序；0 = 未知）。
+  int64 seq = 5;
+  // 已执行投递尝试次数。
+  int32 attempts = 6;
+  // 下一次尝试时刻（pending 态可读；终态语义 = 上次尝试时刻）。
+  google.protobuf.Timestamp next_attempt_at = 7;
+  // 状态：pending | delivered | failed（failed 即 DLQ）。
+  string status = 8;
+  // 最近一次尝试的响应码（2xx = 送达；0 = 未达 HTTP 层——连不通/超时）。
+  int32 last_response_code = 9;
+  // 最近一次失败的错误摘要（截断留档；成功后清空）。
+  string last_error = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+}
+
+message ListWebhooksResponse {
+  repeated Webhook webhooks = 1;
+  shared.v1.ListResponseMeta meta = 2;
+}
+
+message ListDeliveriesResponse {
+  repeated WebhookDelivery deliveries = 1;
+  shared.v1.ListResponseMeta meta = 2;
+}

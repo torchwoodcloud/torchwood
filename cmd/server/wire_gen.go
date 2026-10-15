@@ -27,6 +27,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/app/server"
 	storage2 "github.com/torchwoodcloud/torchwood/internal/app/storage"
 	"github.com/torchwoodcloud/torchwood/internal/app/subscriptions"
+	webhooks2 "github.com/torchwoodcloud/torchwood/internal/app/webhooks"
 	"github.com/torchwoodcloud/torchwood/internal/infra"
 	"github.com/torchwoodcloud/torchwood/internal/infra/auth"
 	"github.com/torchwoodcloud/torchwood/internal/infra/auth/principalcache"
@@ -43,6 +44,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/queue"
 	"github.com/torchwoodcloud/torchwood/internal/infra/realtime"
 	"github.com/torchwoodcloud/torchwood/internal/infra/storage"
+	"github.com/torchwoodcloud/torchwood/internal/infra/webhooks"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/bootkit"
 )
 
@@ -204,6 +206,12 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	serverDatabases := server.NewDatabases(repository, documentDB, idempotencyStore)
 	servergrpcDatabasesService := servergrpc.NewDatabasesService(serverDatabases)
 	servergrpcFunctionsService := servergrpc.NewFunctionsService(functionsFunctions)
+	webhookRepo := bunrepo.NewWebhookRepository(database)
+	deliveryRepo := bunrepo.NewWebhookDeliveryRepository(database)
+	httpClient := webhooks.NewGuardedDeliveryClient()
+	httpNotifier := webhooks.NewNotifier(httpClient)
+	webhooksService := webhooks2.NewService(webhookRepo, deliveryRepo, httpNotifier, repository, appConfig)
+	servergrpcWebhooksService := servergrpc.NewWebhooksService(webhooksService)
 	servergrpcPaymentsService := servergrpc.NewPaymentsService(paymentsPayments)
 	servergrpcAssetsService := servergrpc.NewAssetsService(assetsAssets)
 	servergrpcSubscriptionsService := servergrpc.NewSubscriptionsService(subscriptionsSubscriptions)
@@ -232,7 +240,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	runtimeVarRepository := bunrepo.NewRuntimeVarRepository(database)
 	serverRuntimeVars := server.NewRuntimeVars(runtimeVarRepository, database)
 	servergrpcRuntimeVarsService := servergrpc.NewRuntimeVarsService(serverRuntimeVars)
-	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, leaderboardsService, analyticsService, runtimeVarsService, healthService, projectsService, storageService, usersService, authService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, consolegrpcAuthService, adminsService, outboxService, auditLogsService, servergrpcLeaderboardsService, consolegrpcLeaderboardsService, servergrpcAnalyticsService, runbookService, servergrpcRuntimeVarsService, v3)
+	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, leaderboardsService, analyticsService, runtimeVarsService, healthService, projectsService, storageService, usersService, authService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcWebhooksService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, consolegrpcAuthService, adminsService, outboxService, auditLogsService, servergrpcLeaderboardsService, consolegrpcLeaderboardsService, servergrpcAnalyticsService, runbookService, servergrpcRuntimeVarsService, v3)
 	if err != nil {
 		cleanup()
 		return nil, nil, err

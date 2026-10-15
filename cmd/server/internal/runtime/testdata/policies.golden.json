@@ -1,5 +1,5 @@
 {
-  "method_count": 263,
+  "method_count": 272,
   "scope_vocabulary": [
     {
       "resource": "analytics",
@@ -4582,6 +4582,166 @@
       "request_fields": [
         "id",
         "password"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.WebhooksService/CreateWebhook",
+      "service": "/torchwood.server.v1.WebhooksService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "events",
+        "id",
+        "status",
+        "url"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.WebhooksService/DeleteWebhook",
+      "service": "/torchwood.server.v1.WebhooksService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "webhook_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.WebhooksService/GetDelivery",
+      "service": "/torchwood.server.v1.WebhooksService",
+      "access": "server",
+      "scope": {
+        "resource": "functions",
+        "op": "read"
+      },
+      "request_fields": [
+        "delivery_id",
+        "webhook_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.WebhooksService/GetWebhook",
+      "service": "/torchwood.server.v1.WebhooksService",
+      "access": "server",
+      "scope": {
+        "resource": "functions",
+        "op": "read"
+      },
+      "request_fields": [
+        "webhook_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.WebhooksService/ListDeliveries",
+      "service": "/torchwood.server.v1.WebhooksService",
+      "access": "server",
+      "scope": {
+        "resource": "functions",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "status",
+        "webhook_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.WebhooksService/ListWebhooks",
+      "service": "/torchwood.server.v1.WebhooksService",
+      "access": "server",
+      "scope": {
+        "resource": "functions",
+        "op": "read"
+      },
+      "request_fields": [
+        "page_size",
+        "page_token",
+        "queries",
+        "sort_order"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.WebhooksService/RedeliverDelivery",
+      "service": "/torchwood.server.v1.WebhooksService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "delivery_id",
+        "webhook_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.WebhooksService/RotateWebhookSecret",
+      "service": "/torchwood.server.v1.WebhooksService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "webhook_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.WebhooksService/UpdateWebhook",
+      "service": "/torchwood.server.v1.WebhooksService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "events",
+        "status",
+        "url",
+        "webhook_id"
       ],
       "request_has_project_id": false,
       "is_streaming": false

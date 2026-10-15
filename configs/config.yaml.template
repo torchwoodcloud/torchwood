@@ -254,6 +254,34 @@ functions:
     # 默认 10s 与 dispatcher 池队首口径一致）。
     # env: TORCHWOOD_FUNCTIONS_CLIENT_INVOKE_QUEUE_HEAD_TIMEOUT
     queue_head_timeout: "10s"
+  webhooks:
+    # Webhooks 一等公民平台级配置（functions-v4.md §6，D5 拍板：15 次/24h
+    # 指数退避 + 行内 DLQ + Redeliver API；计量一期仅进 metrics 不进
+    # billing）。全部字段可选，注释值即缺省。
+    # 重试梯度（失败后按序取用，末值循环；缺省 "10s,1m,5m,30m,2h,8h"）。
+    # env: TORCHWOOD_FUNCTIONS_WEBHOOKS_RETRY_BACKOFF
+    retry_backoff: "10s,1m,5m,30m,2h,8h"
+    # 最大投递尝试次数（含首投；达到即终态 failed = DLQ）。
+    # env: TORCHWOOD_FUNCTIONS_WEBHOOKS_MAX_ATTEMPTS
+    max_attempts: 15
+    # 重试窗（首投起算的终态封顶）。
+    # env: TORCHWOOD_FUNCTIONS_WEBHOOKS_RETRY_WINDOW
+    retry_window: "24h"
+    # 单轮到期扫描的投递并发上限（worker 进程内）。
+    # env: TORCHWOOD_FUNCTIONS_WEBHOOKS_DELIVERY_CONCURRENCY
+    delivery_concurrency: 4
+    # 单次投递尝试的 HTTP 超时。
+    # env: TORCHWOOD_FUNCTIONS_WEBHOOKS_DELIVERY_TIMEOUT
+    delivery_timeout: "10s"
+    # 投递行保留窗（终态行清理口径；7 天）。
+    # env: TORCHWOOD_FUNCTIONS_WEBHOOKS_RETENTION
+    retention: "168h"
+    # 密钥轮换宽限窗（旧钥 v2 签名保留期）。
+    # env: TORCHWOOD_FUNCTIONS_WEBHOOKS_SECRET_GRACE_PERIOD
+    secret_grace_period: "24h"
+    # per-project webhook 数上限。
+    # env: TORCHWOOD_FUNCTIONS_WEBHOOKS_MAX_PER_PROJECT
+    max_per_project: 32
   packer:
     # git 部署源打包服务（packer，二期阶段二）：独立进程把
     # git 仓库 @ref 物化为 zip 交回 server 落既有构建路径（与 dispatcher

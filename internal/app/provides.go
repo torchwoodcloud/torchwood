@@ -14,8 +14,10 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/app/server"
 	"github.com/torchwoodcloud/torchwood/internal/app/storage"
 	"github.com/torchwoodcloud/torchwood/internal/app/subscriptions"
+	"github.com/torchwoodcloud/torchwood/internal/app/webhooks"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
+	domainwebhooks "github.com/torchwoodcloud/torchwood/internal/domain/webhooks"
 )
 
 var ProviderSet = wire.NewSet(
@@ -44,6 +46,10 @@ var ProviderSet = wire.NewSet(
 	// 限频端口与 SourcePacker（packer HTTP 客户端）。
 	functions.NewFunctionsWithSourcePacker,
 	functions.ProvideSemaphores,
+	// Webhooks 一等公民（v4 §6，D5）：CRUD + 投递引擎聚合（server 消费
+	// CRUD/浏览面，worker 另经 DeliveryScheduler 端口消费引擎面）。
+	webhooks.NewService,
+	wire.Bind(new(domainwebhooks.DeliveryScheduler), new(*webhooks.Service)),
 	events.NewOutboxAdmin,
 	payments.NewPayments,
 	assets.NewAssets,

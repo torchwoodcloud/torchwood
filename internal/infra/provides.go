@@ -25,6 +25,7 @@ import (
 	infraqueue "github.com/torchwoodcloud/torchwood/internal/infra/queue"
 	infrarealtime "github.com/torchwoodcloud/torchwood/internal/infra/realtime"
 	infrastorage "github.com/torchwoodcloud/torchwood/internal/infra/storage"
+	infrawebhooks "github.com/torchwoodcloud/torchwood/internal/infra/webhooks"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/uow"
 )
@@ -131,6 +132,9 @@ var ProviderSet = wire.NewSet(
 	infrarealtime.ProviderSet,
 	infrastorage.ProviderSet,
 	infrafunctions.ProviderSet,
+	// Webhooks 投递出口（v4 §6，D5）：守卫 client + HTTPNotifier（复用
+	// infra/functions 的事件轴实现，零第二套 HTTP 适配）。
+	infrawebhooks.ProviderSet,
 	infrapayments.ProviderSet,
 	infrabilling.ProviderSet,
 	infraqueue.ProviderSet,

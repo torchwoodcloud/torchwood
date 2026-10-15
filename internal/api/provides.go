@@ -34,6 +34,8 @@ var ProviderSet = wire.NewSet(
 	servergrpc.NewGroupsService,
 	servergrpc.NewDatabasesService,
 	servergrpc.NewFunctionsService,
+	// Webhooks 一等公民（functions-v4.md §6，D5）：订阅 CRUD + 投递浏览面。
+	servergrpc.NewWebhooksService,
 	servergrpc.NewPaymentsService,
 	servergrpc.NewAssetsService,
 	servergrpc.NewSubscriptionsService,

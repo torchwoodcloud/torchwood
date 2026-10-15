@@ -12,7 +12,7 @@
 >   SERVER admin 会话（admin_roles）或 API key（scope）；PERMISSION admin 会话
 >   专属（permissions），key 一律拒绝；SYSTEM 预留禁用。
 
-方法总数 263：PUBLIC 30 · END_USER 47 · SERVER 156 · PERMISSION 30 · SYSTEM 0。
+方法总数 272：PUBLIC 30 · END_USER 47 · SERVER 165 · PERMISSION 30 · SYSTEM 0。
 
 ## /torchwood.client.v1.AccountService
 
@@ -441,6 +441,20 @@
 | `/torchwood.server.v1.UsersService/ListUsers` | SERVER | 不限角色 | users.read | read_only | |
 | `/torchwood.server.v1.UsersService/UpdateUser` | SERVER | member, admin, owner | users.write | business_write | |
 | `/torchwood.server.v1.UsersService/UpdateUserPassword` | SERVER | member, admin, owner | users.write | business_write | |
+
+## /torchwood.server.v1.WebhooksService
+
+| 方法 | Access | Admin 角色档 | Key Scope | 档位 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `/torchwood.server.v1.WebhooksService/CreateWebhook` | SERVER | admin, owner | functions.write | delegated_platform | |
+| `/torchwood.server.v1.WebhooksService/DeleteWebhook` | SERVER | admin, owner | functions.write | delegated_platform | |
+| `/torchwood.server.v1.WebhooksService/GetDelivery` | SERVER | 不限角色 | functions.read | read_only | |
+| `/torchwood.server.v1.WebhooksService/GetWebhook` | SERVER | 不限角色 | functions.read | read_only | |
+| `/torchwood.server.v1.WebhooksService/ListDeliveries` | SERVER | 不限角色 | functions.read | read_only | |
+| `/torchwood.server.v1.WebhooksService/ListWebhooks` | SERVER | 不限角色 | functions.read | read_only | |
+| `/torchwood.server.v1.WebhooksService/RedeliverDelivery` | SERVER | admin, owner | functions.write | delegated_platform | |
+| `/torchwood.server.v1.WebhooksService/RotateWebhookSecret` | SERVER | admin, owner | functions.write | delegated_platform | |
+| `/torchwood.server.v1.WebhooksService/UpdateWebhook` | SERVER | admin, owner | functions.write | delegated_platform | |
 
 ## 附录：威胁模型已知取舍（静态文本）
 

@@ -1,0 +1,681 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "server/v1/webhooks.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "WebhooksService"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/server/webhooks": {
+      "get": {
+        "operationId": "WebhooksService_ListWebhooks",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListWebhooksResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "page_token",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "queries",
+            "description": "queries 是静态表面遗留的 DSL 串通道，与文档查询栈的单\ntyped AST（shared.v1.Query）相互独立。消费面：users ListUsers 经\nParseUserList 白名单解析（equal/greaterThan/lessThan + 白名单属性）；\nstorage buckets/files 与 groups（ListGroups/ListMemberships）不支持——\n携带即 InvalidArgument（显式拒绝，不静默忽略）；其余使用本消息的面以\n各自 handler 的显式行为为准。",
+            "in": "query",
+            "required": false,
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "collectionFormat": "multi"
+          },
+          {
+            "name": "sort_order",
+            "description": "时间列排序方向；支持面以各 handler 的显式行为为准（Console 列表页\n按 created_at 正/倒序），UNSPECIFIED = 历史默认 DESC。",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "SORT_ORDER_UNSPECIFIED",
+              "SORT_ORDER_ASC",
+              "SORT_ORDER_DESC"
+            ],
+            "default": "SORT_ORDER_UNSPECIFIED"
+          }
+        ],
+        "tags": [
+          "WebhooksService"
+        ]
+      },
+      "post": {
+        "summary": "CreateWebhook 创建订阅：url 强制 https；订阅串复用 eventmatch 语法\n（函数事件触发器同款，1..64 条 × ≤200B）；签名密钥服务端生成，明文\n仅在本响应出现一次，之后只出指纹（secret_fingerprint）。",
+        "operationId": "WebhooksService_CreateWebhook",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Webhook"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateWebhookRequest"
+            }
+          }
+        ],
+        "tags": [
+          "WebhooksService"
+        ]
+      }
+    },
+    "/v1/server/webhooks/{webhook_id}": {
+      "get": {
+        "operationId": "WebhooksService_GetWebhook",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Webhook"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "WebhooksService"
+        ]
+      },
+      "delete": {
+        "operationId": "WebhooksService_DeleteWebhook",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Empty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "WebhooksService"
+        ]
+      },
+      "patch": {
+        "summary": "UpdateWebhook 部分更新：optional 字段未设置 = 不修改；url/events/status\n可变，id/project/密钥/时间戳不可变（密钥变更走 RotateWebhookSecret）。",
+        "operationId": "WebhooksService_UpdateWebhook",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Webhook"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/WebhooksServiceUpdateWebhookBody"
+            }
+          }
+        ],
+        "tags": [
+          "WebhooksService"
+        ]
+      }
+    },
+    "/v1/server/webhooks/{webhook_id}/deliveries": {
+      "get": {
+        "summary": "ListDeliveries 列出投递行（DLQ 浏览面）：按投递时间倒序分页；status\n过滤 optional（unset = 全部）。",
+        "operationId": "WebhooksService_ListDeliveries",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1ListDeliveriesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "page_token",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "description": "过滤投递状态：空 = 全部；enabled 词表外值拒绝。",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "WebhooksService"
+        ]
+      }
+    },
+    "/v1/server/webhooks/{webhook_id}/deliveries/{delivery_id}": {
+      "get": {
+        "operationId": "WebhooksService_GetDelivery",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1WebhookDelivery"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "delivery_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "WebhooksService"
+        ]
+      }
+    },
+    "/v1/server/webhooks/{webhook_id}/deliveries/{delivery_id}:redeliver": {
+      "post": {
+        "summary": "RedeliverDelivery 手动重投：终态行（delivered/failed）重置为立即到期\n（status=pending、attempts=0、next_attempt_at=now），由 worker 到期扫描\n领取重投；重投历史留在 attempts/last_error 审计面之外（行内计数归零，\n语义 = 全新一轮投递）。",
+        "operationId": "WebhooksService_RedeliverDelivery",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1WebhookDelivery"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "delivery_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/WebhooksServiceRedeliverDeliveryBody"
+            }
+          }
+        ],
+        "tags": [
+          "WebhooksService"
+        ]
+      }
+    },
+    "/v1/server/webhooks/{webhook_id}:rotate-secret": {
+      "post": {
+        "summary": "RotateWebhookSecret 轮换签名密钥：新钥即刻生效（v1 签名），旧钥保留\n一个窗口期（v2 签名，与 functions Invocation.TargetPreviousSecret 双签\n语义同款）——接收方持旧钥的过渡期不断流。新明文仅在本响应出现一次。",
+        "operationId": "WebhooksService_RotateWebhookSecret",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1WebhookSecret"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/v1ErrorResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/WebhooksServiceRotateWebhookSecretBody"
+            }
+          }
+        ],
+        "tags": [
+          "WebhooksService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "WebhooksServiceRedeliverDeliveryBody": {
+      "type": "object",
+      "title": "RedeliverDeliveryRequest 手动重投。"
+    },
+    "WebhooksServiceRotateWebhookSecretBody": {
+      "type": "object",
+      "title": "RotateWebhookSecretRequest 轮换签名密钥。"
+    },
+    "WebhooksServiceUpdateWebhookBody": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "全量替换订阅串集（与函数事件触发器「列表字段整体替换」同语义）。"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "title": "UpdateWebhookRequest 部分更新：optional 未设置 = 不修改（proto 规范）。"
+    },
+    "v1CreateWebhookRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "订阅 id：可选（服务端生成 \"wh-\u003cuuid\u003e\"）；提供时须匹配 ^[a-z0-9][a-z0-9_-]{0,62}$。"
+        },
+        "url": {
+          "type": "string",
+          "title": "投递终点，强制 https。"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "订阅串列表（复用 eventmatch 语法，函数事件触发器同款：文档写事件\ndatabases.{db}.collections.{col}.documents.{op}；系统行为事件\n{domain}.* 等——格式校验在服务端，1..64 条 × ≤200B）。"
+        },
+        "status": {
+          "type": "string",
+          "title": "初始状态，缺省 enabled。"
+        }
+      },
+      "title": "CreateWebhookRequest 创建订阅。"
+    },
+    "v1Empty": {
+      "type": "object"
+    },
+    "v1Error": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "error_id": {
+          "type": "string"
+        },
+        "error_code": {
+          "$ref": "#/definitions/v1ErrorCode"
+        }
+      }
+    },
+    "v1ErrorCode": {
+      "type": "string",
+      "enum": [
+        "ERROR_CODE_UNSPECIFIED",
+        "ERROR_CODE_INVALID_REQUEST",
+        "ERROR_CODE_RESOURCE_NOT_FOUND",
+        "ERROR_CODE_INVALID_CREDENTIALS",
+        "ERROR_CODE_PERMISSION_DENIED",
+        "ERROR_CODE_RESOURCE_CONFLICT",
+        "ERROR_CODE_QUOTA_EXCEEDED",
+        "ERROR_CODE_PRECONDITION_FAILED",
+        "ERROR_CODE_CONCURRENT_MODIFICATION",
+        "ERROR_CODE_VALUE_OUT_OF_RANGE",
+        "ERROR_CODE_OPERATION_NOT_ALLOWED",
+        "ERROR_CODE_INTERNAL_ERROR",
+        "ERROR_CODE_SERVICE_UNAVAILABLE",
+        "ERROR_CODE_TIMEOUT"
+      ],
+      "default": "ERROR_CODE_UNSPECIFIED",
+      "title": "ErrorCode 与 gRPC code 的映射（HTTPErrorHandler 单一事实来源，\n见 internal/infra/server/errors.go）：\n  - InvalidArgument → ERROR_CODE_INVALID_REQUEST\n  - FailedPrecondition → ERROR_CODE_PRECONDITION_FAILED\n  - NotFound → ERROR_CODE_RESOURCE_NOT_FOUND\n  - AlreadyExists → ERROR_CODE_RESOURCE_CONFLICT\n  - Aborted → ERROR_CODE_CONCURRENT_MODIFICATION\n  - Unauthenticated → ERROR_CODE_INVALID_CREDENTIALS\n  - PermissionDenied → ERROR_CODE_PERMISSION_DENIED\n  - ResourceExhausted → ERROR_CODE_QUOTA_EXCEEDED\n  - DeadlineExceeded → ERROR_CODE_TIMEOUT\n  - 其余 → ERROR_CODE_INTERNAL_ERROR"
+    },
+    "v1ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "$ref": "#/definitions/v1Error"
+        }
+      }
+    },
+    "v1ListDeliveriesResponse": {
+      "type": "object",
+      "properties": {
+        "deliveries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1WebhookDelivery"
+          }
+        },
+        "meta": {
+          "$ref": "#/definitions/v1ListResponseMeta"
+        }
+      }
+    },
+    "v1ListResponseMeta": {
+      "type": "object",
+      "properties": {
+        "page_size": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "next_page_token": {
+          "type": "string"
+        },
+        "prev_page_token": {
+          "type": "string"
+        },
+        "total_count": {
+          "type": "integer",
+          "format": "int32",
+          "title": "total_count ≤0 = unknown（keyset 分页下 0 与空集合不可区分，调用方应以 next_page_token 是否为空判定是否还有更多；≤0 表示总数未知）。"
+        }
+      }
+    },
+    "v1ListWebhooksResponse": {
+      "type": "object",
+      "properties": {
+        "webhooks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Webhook"
+          }
+        },
+        "meta": {
+          "$ref": "#/definitions/v1ListResponseMeta"
+        }
+      }
+    },
+    "v1SortOrder": {
+      "type": "string",
+      "enum": [
+        "SORT_ORDER_UNSPECIFIED",
+        "SORT_ORDER_ASC",
+        "SORT_ORDER_DESC"
+      ],
+      "default": "SORT_ORDER_UNSPECIFIED",
+      "title": "SortOrder 是时间列排序方向（Console 列表页「按创建时间正/倒序」）。\n固定排序键 = 各端点的时间列（通常 created_at），不是 AIP-160 任意列\norder_by（W-K 终结裁决维持：filter/order_by 不复活）。UNSPECIFIED =\n各端点历史默认（created_at DESC，最新在前）。keyset 游标与方向耦合，\n换向必须从第一页重新开始，携带异向游标即 InvalidArgument。"
+    },
+    "v1Webhook": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "订阅串列表（原样回显，eventmatch 语法）。"
+        },
+        "status": {
+          "type": "string",
+          "title": "状态：enabled | paused。"
+        },
+        "secret_fingerprint": {
+          "type": "string",
+          "title": "签名密钥指纹（\"whsec_\" + SHA-256 前 8 hex；比对用，非明文）。"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "title": "Webhook 是订阅视图。密钥任何形态不回显：明文仅在创建/轮换响应一次性\n返回（secret 字段），管理面只出指纹。"
+    },
+    "v1WebhookDelivery": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "webhook_id": {
+          "type": "string"
+        },
+        "event_id": {
+          "type": "string",
+          "title": "事件幂等键（outbox event_id；at-least-once 消费的去重吸收面）。"
+        },
+        "event_type": {
+          "type": "string",
+          "title": "事件 type（事件目录名 / databases.documents.{op}）。"
+        },
+        "seq": {
+          "type": "string",
+          "format": "int64",
+          "title": "outbox 全局序（事件产生序；0 = 未知）。"
+        },
+        "attempts": {
+          "type": "integer",
+          "format": "int32",
+          "title": "已执行投递尝试次数。"
+        },
+        "next_attempt_at": {
+          "type": "string",
+          "format": "date-time",
+          "title": "下一次尝试时刻（pending 态可读；终态语义 = 上次尝试时刻）。"
+        },
+        "status": {
+          "type": "string",
+          "title": "状态：pending | delivered | failed（failed 即 DLQ）。"
+        },
+        "last_response_code": {
+          "type": "integer",
+          "format": "int32",
+          "title": "最近一次尝试的响应码（2xx = 送达；0 = 未达 HTTP 层——连不通/超时）。"
+        },
+        "last_error": {
+          "type": "string",
+          "title": "最近一次失败的错误摘要（截断留档；成功后清空）。"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "title": "WebhookDelivery 是投递行投影（DLQ 浏览/重投管理面）。载荷与签名细节\n不在本视图（payload 为内部重投事实源）。"
+    },
+    "v1WebhookSecret": {
+      "type": "object",
+      "properties": {
+        "webhook_id": {
+          "type": "string"
+        },
+        "secret": {
+          "type": "string",
+          "title": "签名密钥明文（whsec_ 前缀 + 32 字节 base64url）。之后只出指纹。"
+        },
+        "secret_fingerprint": {
+          "type": "string",
+          "title": "轮换后的指纹（便于与既有记录核对）。"
+        }
+      },
+      "title": "WebhookSecret 是创建/轮换响应：明文只出现这一次，调用方立即持久化。"
+    }
+  },
+  "securityDefinitions": {
+    "Bearer": {
+      "type": "apiKey",
+      "description": "Format: Bearer \u003cjwt\u003e",
+      "name": "Authorization",
+      "in": "header"
+    },
+    "apiKey": {
+      "type": "apiKey",
+      "description": "The project is bound to the API key row; X-Torchwood-Project is not needed. This header is only for Console admin sessions switching projects.",
+      "name": "X-API-Key",
+      "in": "header"
+    },
+    "cookie": {
+      "type": "apiKey",
+      "description": "TORCHWOOD_session_console=\u003csid\u003e (Console admin session)",
+      "name": "Cookie",
+      "in": "header"
+    }
+  },
+  "security": [
+    {
+      "apiKey": []
+    }
+  ],
+  "x-torchwood-access": "server"
+}

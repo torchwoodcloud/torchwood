@@ -9,9 +9,10 @@ import (
 // 入口。OrphanChunkCleaner → *appstorage.Storage 的端口绑定留在总集
 // （wire 要求 Bind 与具体类型 provider 同集求值），见 provides.go。
 var ProviderSet = wire.NewSet(
-	// NewWorkerWithEventTriggers 注入事件触发器消费组（v3 切片 D）；测试
-	// 仍可用 NewWorker（无事件消费）。
-	NewWorkerWithEventTriggers,
+	// NewWorkerWithWebhooks 注入事件触发器消费组（v3 切片 D）+ Webhooks 面
+	//（v4 §6，D5：webhooks 消费组 + 到期投递扫描 + 保留清理）；测试仍可用
+	// NewWorker（无事件消费）/ NewWorkerWithEventTriggers（无 Webhooks）。
+	NewWorkerWithWebhooks,
 	NewChunkCleaner,
 	NewStreamTrimmer,
 	NewOutboxWorkerService,

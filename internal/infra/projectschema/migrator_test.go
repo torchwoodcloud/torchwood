@@ -29,6 +29,8 @@ func TestApply_IdempotentCatalogAndOAuth(t *testing.T) {
 	var version int64
 	require.NoError(t, db.QueryRowContext(ctx,
 		"SELECT MAX(version) FROM "+quoted+".schema_migrations").Scan(&version))
+	// 000027（Webhooks 一等公民，docs/design/functions-v4.md §6/D5）：
+	// webhook_subscriptions + webhook_deliveries（重投调度/DLQ）。
 	// 000026（用户头像一等化）：users.avatar 列（展示头像，客户端 PATCH
 	// /v1/account / 管理 UpdateUser 写入）。
 	// 000025（Functions 运行时指定，docs/design/functions-runtime-selection.md
@@ -50,7 +52,7 @@ func TestApply_IdempotentCatalogAndOAuth(t *testing.T) {
 	// functions.concurrency 池策略列（CHECK 1..16）。000016（P2 客户端调用面）：
 	// functions 策略四列 + function_executions invoking_user_id/
 	// client_idempotency_key（partial 唯一索引 + 限频计数 partial 索引）。
-	require.Equal(t, int64(26), version)
+	require.Equal(t, int64(27), version)
 
 	var dirty bool
 	require.NoError(t, db.QueryRowContext(ctx,
@@ -59,7 +61,7 @@ func TestApply_IdempotentCatalogAndOAuth(t *testing.T) {
 
 	for _, table := range []string{
 		"project_oauth_providers", "functions", "function_deployments", "function_variables", "function_executions",
-		"function_triggers",
+		"function_triggers", "webhook_subscriptions", "webhook_deliveries",
 		"payment_orders", "asset_defs", "subscriptions", "usage_rollups", "billing_statements",
 		"users", "sessions", "identities", "groups", "memberships", "buckets", "files",
 		"analytics_events", "analytics_event_definitions", "analytics_daily",

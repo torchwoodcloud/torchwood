@@ -27,6 +27,9 @@ var ProviderSet = wire.NewSet(
 	bunrepo.NewFunctionRepository,
 	// P1 触发器模块：触发器仓储（function_triggers，迁移 000015）。
 	bunrepo.NewFunctionTriggerRepository,
+	// Webhooks 一等公民（v4 §6，D5）：订阅 + 投递行仓储（迁移 000027）。
+	bunrepo.NewWebhookRepository,
+	bunrepo.NewWebhookDeliveryRepository,
 	bunrepo.NewPaymentOrderRepository,
 	bunrepo.NewPaymentCallbackEventRepository,
 	bunrepo.NewPaymentFulfillmentRepository,

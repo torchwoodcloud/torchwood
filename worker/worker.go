@@ -11,7 +11,9 @@ import (
 	"github.com/lynx-go/lynx"
 	"github.com/redis/go-redis/v9"
 	appfunctions "github.com/torchwoodcloud/torchwood/internal/app/functions"
+	appwebhooks "github.com/torchwoodcloud/torchwood/internal/app/webhooks"
 	domainshared "github.com/torchwoodcloud/torchwood/internal/domain/shared"
+	domainwebhooks "github.com/torchwoodcloud/torchwood/internal/domain/webhooks"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 )
 
@@ -59,6 +61,30 @@ const cronClaimBudget = 100
 // WithoutCancel 使停机不腰斩在途轮次）。
 const cronDispatchTimeout = 50 * time.Second
 
+// ——Webhooks 一等公民（functions-v4.md §6，D5）——
+
+// webhookIndexRefreshInterval 是订阅匹配器快照的刷新周期（与函数事件
+// 触发器同档 15s；创建/启停到生效的传播窗口 = 本值 + 扫描时长）。
+const webhookIndexRefreshInterval = 15 * time.Second
+
+// webhookScanInterval 是到期投递扫描的周期（ClaimDue CAS，每分钟；与
+// cronScanInterval 同档）。
+const webhookScanInterval = time.Minute
+
+// webhookScanBudget 是单轮到期投递领取的全局预算（跨项目扣减，轮转游标
+// 模式；投递风暴由梯度退避 + 本预算双兜底）。
+const webhookScanBudget = 100
+
+// webhookScanTimeout 是单轮到期扫描的预算上限（短于 webhookScanInterval；
+// WithoutCancel 使停机不腰斩在途轮次）。
+const webhookScanTimeout = 50 * time.Second
+
+// webhookPruneInterval 是终态投递行保留清理的周期（低频；失败仅记日志）。
+const webhookPruneInterval = 10 * time.Minute
+
+// webhookPruneTimeout 是单轮清理的预算上限。
+const webhookPruneTimeout = 5 * time.Minute
+
 // ackTimeout 是 Ack 在消费 ctx 之外的独立超时：优雅关停窗口内消费 ctx 已
 // 取消，XACK 仍须完成（否则已执行成功的任务重启后被重复消费），故用
 // context.WithoutCancel 派生（对齐 internal/app/storage unlockCompleteTimeout
@@ -74,11 +100,19 @@ type Worker struct {
 	// events 是数据库事件触发器消费组（v3 切片 D；nil = 未装配——最小
 	// 测试构造 NewWorker 不带事件消费）。
 	events *eventTriggerConsumer
+	// webhookEvents 是 Webhooks 订阅消费组（v4 §6，D5；nil = 未装配）。
+	webhookEvents *webhookEventConsumer
+	// webhookScheduler 是到期投递调度端口（v4 §6，D5；nil = 未装配——
+	// dispatch/prune loop 由此判空）。
+	webhookScheduler domainwebhooks.DeliveryScheduler
 
-	// 三个内部周期 loop（孤儿恢复/保留清理/cron 调度）走统一骨架。
-	recoverLoop *Periodic
-	pruneLoop   *Periodic
-	cronLoop    *Periodic
+	// 内部周期 loop（孤儿恢复/保留清理/cron 调度/webhook 到期扫描与清理）
+	// 走统一骨架。
+	recoverLoop    *Periodic
+	pruneLoop      *Periodic
+	cronLoop       *Periodic
+	webhookLoop    *Periodic
+	webhookPruneLp *Periodic
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
@@ -112,6 +146,23 @@ func NewWorkerWithEventTriggers(functions *appfunctions.Functions, queue domains
 	return w
 }
 
+// NewWorkerWithWebhooks 是 Wire 装配入口（v4 §6，D5）：在
+// NewWorkerWithEventTriggers 之上注入 Webhooks 面——事件消费组（torchwood:
+// events 的 webhooks 组 + 停机补投 + 15s 订阅快照）、到期投递扫描 loop
+// （1min，ClaimDue CAS → HTTPNotifier）、终态投递行保留清理 loop。svc 为
+// nil 时 Webhooks 面整体不装配（测试侧兼容）。
+func NewWorkerWithWebhooks(functions *appfunctions.Functions, queue domainshared.Queue, logger *slog.Logger, rdb *redis.Client, db *clients.Database, svc *appwebhooks.Service) *Worker {
+	w := NewWorkerWithEventTriggers(functions, queue, logger, rdb, db)
+	if svc == nil {
+		return w
+	}
+	w.webhookEvents = newWebhookEventConsumer(svc, rdb, db, logger)
+	w.webhookScheduler = svc
+	w.webhookLoop = NewPeriodic("webhook-dispatch", webhookScanInterval, webhookScanTimeout, w.webhookDispatchOnce, logger).RunAtStart()
+	w.webhookPruneLp = NewPeriodic("webhook-prune", webhookPruneInterval, webhookPruneTimeout, w.webhookPruneOnce, logger)
+	return w
+}
+
 func (w *Worker) Name() string { return "functions-worker" }
 
 func (w *Worker) Init(ctx lynx.AppContext) error {
@@ -136,11 +187,26 @@ func (w *Worker) Start(ctx context.Context) error {
 	// cron 触发器调度循环（P1）：每分钟领取到期触发并入队异步执行。
 	w.wg.Go(func() { _ = w.cronLoop.Start(runCtx) })
 
+	// Webhooks 到期投递扫描（v4 §6，D5）：启动即跑一轮（Redeliver 重置的
+	// 立即到期行与 pending 存量在首轮扫描即收敛）；单轮失败仅记日志。
+	if w.webhookLoop != nil {
+		w.wg.Go(func() { _ = w.webhookLoop.Start(runCtx) })
+	}
+	if w.webhookPruneLp != nil {
+		w.wg.Go(func() { _ = w.webhookPruneLp.Start(runCtx) })
+	}
+
 	// 数据库事件触发器消费循环（v3 切片 D，§4.2/D12）：functions-triggers
 	// 消费组 + 订阅匹配器快照 + 停机补投。关停随 runCtx 取消优雅退出
-	// （XREADGROUP Block 1s 内返回，对齐 consume 的退出延迟）。
+	//（XREADGROUP Block 1s 内返回，对齐 consume 的退出延迟）。
 	if w.events != nil {
 		w.wg.Go(func() { w.eventLoop(runCtx) })
+	}
+
+	// Webhooks 订阅消费循环（v4 §6，D5）：webhooks 消费组 + 订阅快照 +
+	// 停机补投；建行即幂等，实际投递由到期扫描 loop 执行。
+	if w.webhookEvents != nil {
+		w.wg.Go(func() { w.webhookEventLoop(runCtx) })
 	}
 
 	for i := 0; i < w.workers; i++ {
@@ -199,6 +265,46 @@ func (w *Worker) cronOnce(ctx context.Context) error {
 func (w *Worker) eventLoop(ctx context.Context) {
 	if err := w.events.Run(ctx); err != nil && ctx.Err() == nil {
 		w.logger.Error("event trigger consumer stopped with error", "error", err)
+	}
+}
+
+// webhookDispatchOnce 单轮到期投递扫描（v4 §6，D5；DeliveryScheduler 端口
+// 消费——领取/CAS/梯度推进语义见 app/webhooks）。
+func (w *Worker) webhookDispatchOnce(ctx context.Context) error {
+	svc := w.webhookScheduler
+	if svc == nil {
+		return nil
+	}
+	n, err := svc.RunDueDeliveries(ctx, time.Now(), webhookScanBudget)
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		w.logger.Info("webhook deliveries attempted", "count", n)
+	}
+	return nil
+}
+
+// webhookPruneOnce 单轮终态投递行保留清理。
+func (w *Worker) webhookPruneOnce(ctx context.Context) error {
+	svc := w.webhookScheduler
+	if svc == nil {
+		return nil
+	}
+	pruned, err := svc.PruneOldDeliveries(ctx, webhookScanBudget)
+	if err != nil {
+		return err
+	}
+	if pruned > 0 {
+		w.logger.Info("pruned old webhook deliveries", "count", pruned)
+	}
+	return nil
+}
+
+// webhookEventLoop Webhooks 订阅消费（v4 §6，D5）：阻塞至 ctx 取消。
+func (w *Worker) webhookEventLoop(ctx context.Context) {
+	if err := w.webhookEvents.Run(ctx); err != nil && ctx.Err() == nil {
+		w.logger.Error("webhook consumer stopped with error", "error", err)
 	}
 }
 

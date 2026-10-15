@@ -55,6 +55,8 @@ func NewGRPCServer(
 	groups *servergrpc.GroupsService,
 	databases *servergrpc.DatabasesService,
 	functions *servergrpc.FunctionsService,
+	// Webhooks 一等公民（functions-v4.md §6，D5）：订阅 CRUD + 投递浏览。
+	webhooks *servergrpc.WebhooksService,
 	serverPayments *servergrpc.PaymentsService,
 	serverAssets *servergrpc.AssetsService,
 	serverSubscriptions *servergrpc.SubscriptionsService,
@@ -157,6 +159,8 @@ func NewGRPCServer(
 	serverv1.RegisterGroupsServiceServer(grpcSrv, groups)
 	serverv1.RegisterDatabasesServiceServer(grpcSrv, databases)
 	serverv1.RegisterFunctionsServiceServer(grpcSrv, functions)
+	// Webhooks 一等公民（functions-v4.md §6，D5）：9 方法全实现。
+	serverv1.RegisterWebhooksServiceServer(grpcSrv, webhooks)
 	serverv1.RegisterPaymentsServiceServer(grpcSrv, serverPayments)
 	serverv1.RegisterAssetsServiceServer(grpcSrv, serverAssets)
 	serverv1.RegisterSubscriptionsServiceServer(grpcSrv, serverSubscriptions)
@@ -218,6 +222,8 @@ func authzFileDescriptors() []protoreflect.FileDescriptor {
 		serverv1.File_server_v1_groups_proto,
 		serverv1.File_server_v1_databases_proto,
 		serverv1.File_server_v1_functions_proto,
+		// Webhooks 一等公民（functions-v4.md §6，D5）：proto 策略登记。
+		serverv1.File_server_v1_webhooks_proto,
 		serverv1.File_server_v1_payments_proto,
 		serverv1.File_server_v1_assets_proto,
 		serverv1.File_server_v1_subscriptions_proto,

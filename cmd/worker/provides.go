@@ -14,11 +14,13 @@ import (
 	apppayments "github.com/torchwoodcloud/torchwood/internal/app/payments"
 	appstorage "github.com/torchwoodcloud/torchwood/internal/app/storage"
 	"github.com/torchwoodcloud/torchwood/internal/app/subscriptions"
+	appwebhooks "github.com/torchwoodcloud/torchwood/internal/app/webhooks"
 	domainanalytics "github.com/torchwoodcloud/torchwood/internal/domain/analytics"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	domainpayments "github.com/torchwoodcloud/torchwood/internal/domain/payments"
 	domainstorage "github.com/torchwoodcloud/torchwood/internal/domain/storage"
+	domainwebhooks "github.com/torchwoodcloud/torchwood/internal/domain/webhooks"
 	infrabilling "github.com/torchwoodcloud/torchwood/internal/infra/billing"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
@@ -28,6 +30,7 @@ import (
 	infraqueue "github.com/torchwoodcloud/torchwood/internal/infra/queue"
 	"github.com/torchwoodcloud/torchwood/internal/infra/realtime"
 	infrastorage "github.com/torchwoodcloud/torchwood/internal/infra/storage"
+	infrawebhooks "github.com/torchwoodcloud/torchwood/internal/infra/webhooks"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/bootkit"
 	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/uow"
@@ -43,6 +46,10 @@ var ProviderSet = wire.NewSet(
 
 	appfunctions.ProvideSemaphores,
 	appfunctions.NewFunctionsWithUsage,
+	// Webhooks 一等公民（v4 §6，D5）：CRUD + 投递引擎聚合（worker 消费
+	// DeliveryScheduler 端口 + 事件入口；Bind 与具体类型 provider 同集）。
+	appwebhooks.NewService,
+	wire.Bind(new(domainwebhooks.DeliveryScheduler), new(*appwebhooks.Service)),
 	apppayments.NewPayments,
 	assets.NewAssets,
 	leaderboards.NewLeaderboards,
@@ -91,6 +98,9 @@ var ProviderSet = wire.NewSet(
 	bunrepo.NewFunctionRepository,
 	// P1 触发器模块：cron 调度循环经 Functions 聚合领取到期触发器。
 	bunrepo.NewFunctionTriggerRepository,
+	// Webhooks 一等公民（v4 §6，D5）：订阅 + 投递行仓储（迁移 000027）。
+	bunrepo.NewWebhookRepository,
+	bunrepo.NewWebhookDeliveryRepository,
 	bunrepo.NewBucketRepository,
 	bunrepo.NewFileRepository,
 	bunrepo.NewPaymentOrderRepository,
@@ -132,6 +142,8 @@ var ProviderSet = wire.NewSet(
 	infrabilling.ProviderSet,
 	infraqueue.ProviderSet,
 	infrastorage.ProviderSet,
+	// Webhooks 投递出口（v4 §6，D5）：守卫 client + HTTPNotifier。
+	infrawebhooks.ProviderSet,
 	realtime.NewStreamTransport,
 )
 

@@ -17,6 +17,7 @@ import (
 	payments2 "github.com/torchwoodcloud/torchwood/internal/app/payments"
 	storage2 "github.com/torchwoodcloud/torchwood/internal/app/storage"
 	"github.com/torchwoodcloud/torchwood/internal/app/subscriptions"
+	webhooks2 "github.com/torchwoodcloud/torchwood/internal/app/webhooks"
 	"github.com/torchwoodcloud/torchwood/internal/infra/billing"
 	"github.com/torchwoodcloud/torchwood/internal/infra/bun/bunrepo"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
@@ -26,6 +27,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/queue"
 	"github.com/torchwoodcloud/torchwood/internal/infra/realtime"
 	"github.com/torchwoodcloud/torchwood/internal/infra/storage"
+	"github.com/torchwoodcloud/torchwood/internal/infra/webhooks"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/bootkit"
 	"github.com/torchwoodcloud/torchwood/worker"
 )
@@ -71,7 +73,12 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	}
 	zipStore := functions.NewBucketZipStore(appConfig, objectStore)
 	functionsFunctions := functions2.NewFunctionsWithUsage(appConfig, dispatcherExecutor, functionRepo, sharedQueue, redisCounter, repository, semaphores, redisExecutionTokenService, triggerRepo, zipStore)
-	workerWorker := worker.NewWorkerWithEventTriggers(functionsFunctions, sharedQueue, logger, client, database)
+	webhookRepo := bunrepo.NewWebhookRepository(database)
+	deliveryRepo := bunrepo.NewWebhookDeliveryRepository(database)
+	httpClient := webhooks.NewGuardedDeliveryClient()
+	httpNotifier := webhooks.NewNotifier(httpClient)
+	service := webhooks2.NewService(webhookRepo, deliveryRepo, httpNotifier, repository, appConfig)
+	workerWorker := worker.NewWorkerWithWebhooks(functionsFunctions, sharedQueue, logger, client, database, service)
 	uploadSessionStore := storage.NewRedisUploadSessionStore(client)
 	bucketRepository := bunrepo.NewBucketRepository(database)
 	fileRepository := bunrepo.NewFileRepository(database)

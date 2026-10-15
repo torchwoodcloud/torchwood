@@ -90,6 +90,9 @@ func NewGRPCGatewayServer(
 		registerClient(serverv1.NewGroupsServiceClient, serverv1.RegisterGroupsServiceHandlerClient),
 		registerClient(serverv1.NewDatabasesServiceClient, serverv1.RegisterDatabasesServiceHandlerClient),
 		registerClient(serverv1.NewFunctionsServiceClient, serverv1.RegisterFunctionsServiceHandlerClient),
+		// Webhooks 一等公民（functions-v4.md §6，D5）：/v1/server/webhooks
+		// CRUD + deliveries 浏览/重投（Console/CLI/Agent 经 gateway 消费）。
+		registerClient(serverv1.NewWebhooksServiceClient, serverv1.RegisterWebhooksServiceHandlerClient),
 		registerClient(serverv1.NewPaymentsServiceClient, serverv1.RegisterPaymentsServiceHandlerClient),
 		registerClient(serverv1.NewBillingServiceClient, serverv1.RegisterBillingServiceHandlerClient),
 		registerClient(clientv1.NewPaymentsServiceClient, clientv1.RegisterPaymentsServiceHandlerClient),
