@@ -8,17 +8,13 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
-	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	gogit "github.com/go-git/go-git/v5"
@@ -29,6 +25,7 @@ import (
 	gitclient "github.com/go-git/go-git/v5/plumbing/transport/client"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/ssrfguard"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -419,62 +416,19 @@ func gitAuth(srcURL string, req PackRequest) gittransport.AuthMethod {
 	return &githttp.BasicAuth{Username: username, Password: req.Token}
 }
 
-// ——SSRF 防护（拨号点，设计 §2）——
+// ——SSRF 防护（拨号点）——
 
 // installGuardedHTTPTransport 把带 SSRF 防护的 *http.Client 注册为 go-git
 // 的 http/https 传输。不变量：go-git 协议表（client.InstallProtocol）是
 // 进程级全局、缺省安装发生在 NewService 一次——packer 进程的 SSRF 口径
 // 启动即固定（allow_insecure 来自 config、不随请求变化），全局安装与
 // 进程策略天然一致；测试如需切换口径必须串行执行（不 t.Parallel）。
+// 实现抽至 internal/pkg/ssrfguard（Functions v4 设计 §5：出站投递引擎
+// 共享同一防护），本函数仅做 go-git 协议表注册。
 func installGuardedHTTPTransport(allowInsecure bool) {
-	c := newGuardedHTTPClient(allowInsecure)
+	c := ssrfguard.NewClient(ssrfguard.Options{AllowInsecure: allowInsecure})
 	gitclient.InstallProtocol("https", githttp.NewClient(c))
 	gitclient.InstallProtocol("http", githttp.NewClient(c))
-}
-
-// newGuardedHTTPClient 构造拨号点校验的 HTTP 客户端：基于 DefaultTransport
-// 克隆（保留代理/TLS 缺省），仅替换 DialContext 为带 Control 钩子的
-// dialer。不设 DialTLSContext——TLS 握手叠在受控拨号之上，Control 才能拦截。
-// 代理场景下 Control 看到的是代理地址（拨号终点即代理，代理本身必须
-// 可信，与出网代理的既有信任模型一致）。
-func newGuardedHTTPClient(allowInsecure bool) *http.Client {
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	dialer := &net.Dialer{
-		Timeout:   30 * time.Second,
-		KeepAlive: 30 * time.Second,
-		// Control 在 connect 系统调用时拿到将拨号的真实地址（TCP 下
-		// host 已是解析后的 IP 字面量，多 A 记录每连接触发一次）——校验
-		// 实施在拨号点而非请求前预解析，解析与连接之间换 DNS 记录的
-		// rebinding 因此失效（设计 §2）。
-		Control: func(_, address string, _ syscall.RawConn) error {
-			return checkDialAddress(address, allowInsecure)
-		},
-	}
-	tr.DialContext = dialer.DialContext
-	return &http.Client{Transport: tr}
-}
-
-// checkDialAddress 是拨号点 SSRF 校验：默认拒绝 loopback / private /
-// link-local / 未指定地址（169.254.169.254 云元数据端点等），出现主机名
-// 说明走错钩子、fail-closed。allow_insecure（自托管内网 git 服务）时
-// 整体放行——给显式开关而非逼出危险旁路（设计 §2）。
-func checkDialAddress(address string, allowInsecure bool) error {
-	if allowInsecure {
-		return nil
-	}
-	host, _, err := net.SplitHostPort(address)
-	if err != nil {
-		host = address
-	}
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return fmt.Errorf("ssrf guard: non-ip dial address %q", host)
-	}
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
-		return fmt.Errorf("ssrf guard: dial to %q is not allowed (loopback/private/link-local); set functions.packer.allow_insecure for self-hosted git", host)
-	}
-	return nil
 }
 
 // ——worktree 核算与物化（设计 §2「物化」）——
