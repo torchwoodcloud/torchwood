@@ -81,18 +81,14 @@ func (r *functionRepo) UpdateFunction(ctx context.Context, fn *domainfunctions.F
 	}
 	m := mapFunctionToModel(fn)
 	// 列白名单（bun 更新写规范）：id/project_id/created_at 不可变。
-	// runtime 自迁移 000025 起为可变列（UpdateFunction 支持；deployment 行
-	// 的 runtime 快照仍不可变——快照忠实性见
-	// docs/design/functions-runtime-selection.md §3/§4）。
 	// declared_scopes 为 P0 执行身份可变列（SetFunctionScopes 全量替换）；
-	// 池策略五列为 P0.5 可变列（latest_ready_deployment_id 由
-	// ActivateDeployment/DeleteDeployment 事务维护，应用层更新不直写）；
-	// concurrency 为 v3 可变列（迁移 000017，docs/design/functions-v3.md §1.5）；
-	// client 四列为 P2 客户端调用面策略列。
+	// target 列族为 v4 可变列（target_url 经 UpdateFunction；密钥列经
+	// RotateFunctionSecret——组合根共用本全模型写，密钥改动只经 app 层轮换
+	// 用例进入）；client 四列为 P2 客户端调用面策略列。
 	_, err = conn.NewUpdate().Model(m).ModelTableExpr(expr, sch).
-		Column("name", "entrypoint", "runtime", "timeout_seconds", "spec", "enabled", "declared_scopes",
-			"min_instances", "max_instances", "idle_ttl_seconds", "max_requests_per_instance",
-			"concurrency",
+		Column("name", "timeout_seconds", "enabled", "declared_scopes",
+			"target_url", "target_secret_enc", "target_previous_secret_enc",
+			"target_secret_rotated_at", "target_secret_fingerprint",
 			"client_callable", "client_anonymous_allowed", "client_per_user_limit", "client_limit_window",
 			"updated_at").
 		WherePK().
@@ -113,274 +109,38 @@ func (r *functionRepo) DeleteFunction(ctx context.Context, projectID, functionID
 	return err
 }
 
-func (r *functionRepo) CreateDeployment(ctx context.Context, d *domainfunctions.Deployment) error {
-	conn, sch, expr, err := r.scoped(ctx, d.ProjectID, "function_deployments", "fd")
+func (r *functionRepo) CreateInvocation(ctx context.Context, e *domainfunctions.InvocationRecord) error {
+	conn, sch, expr, err := r.scoped(ctx, e.ProjectID, "function_invocations", "fi")
 	if err != nil {
 		return err
 	}
-	m := mapDeploymentToModel(d)
-	_, err = conn.NewInsert().Model(m).ModelTableExpr(expr, sch).Exec(ctx)
-	return err
-}
-
-func (r *functionRepo) GetDeployment(ctx context.Context, projectID, functionID, deploymentID string) (*domainfunctions.Deployment, error) {
-	conn, sch, expr, err := r.scoped(ctx, projectID, "function_deployments", "fd")
-	if err != nil {
-		return nil, err
-	}
-	m := new(model.FunctionDeployment)
-	err = conn.NewSelect().Model(m).ModelTableExpr(expr, sch).
-		Where("fd.project_id = ?", projectID).
-		Where("fd.function_id = ?", functionID).
-		Where("fd.id = ?", deploymentID).
-		Scan(ctx)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return mapDeploymentToDomain(m), nil
-}
-
-func (r *functionRepo) ListDeployments(ctx context.Context, projectID, functionID string) ([]domainfunctions.Deployment, error) {
-	conn, sch, expr, err := r.scoped(ctx, projectID, "function_deployments", "fd")
-	if err != nil {
-		return nil, err
-	}
-	var ms []model.FunctionDeployment
-	err = conn.NewSelect().Model(&ms).ModelTableExpr(expr, sch).
-		Where("fd.project_id = ?", projectID).
-		Where("fd.function_id = ?", functionID).
-		Order("created_at DESC").
-		Scan(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]domainfunctions.Deployment, len(ms))
-	for i := range ms {
-		out[i] = *mapDeploymentToDomain(&ms[i])
-	}
-	return out, nil
-}
-
-func (r *functionRepo) ListDeploymentsPaged(ctx context.Context, projectID, functionID string, limit, offset int) ([]domainfunctions.Deployment, int, error) {
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 100 {
-		limit = 100
-	}
-	conn, sch, expr, err := r.scoped(ctx, projectID, "function_deployments", "fd")
-	if err != nil {
-		return nil, 0, err
-	}
-	countQ := conn.NewSelect().Model((*model.FunctionDeployment)(nil)).ModelTableExpr(expr, sch).
-		Where("fd.project_id = ?", projectID).
-		Where("fd.function_id = ?", functionID)
-	total, err := countQ.Count(ctx)
-	if err != nil {
-		return nil, 0, err
-	}
-	var ms []model.FunctionDeployment
-	err = conn.NewSelect().Model(&ms).ModelTableExpr(expr, sch).
-		Where("fd.project_id = ?", projectID).
-		Where("fd.function_id = ?", functionID).
-		Order("created_at DESC").
-		Limit(limit).
-		Offset(offset).
-		Scan(ctx)
-	if err != nil {
-		return nil, 0, err
-	}
-	out := make([]domainfunctions.Deployment, len(ms))
-	for i := range ms {
-		out[i] = *mapDeploymentToDomain(&ms[i])
-	}
-	return out, total, nil
-}
-
-func (r *functionRepo) UpdateDeployment(ctx context.Context, d *domainfunctions.Deployment) error {
-	conn, sch, expr, err := r.scoped(ctx, d.ProjectID, "function_deployments", "fd")
-	if err != nil {
-		return err
-	}
-	m := mapDeploymentToModel(d)
-	// 列白名单（bun 更新写规范）：id/function_id/project_id/size/created_at
-	// 不可变。不设状态 CAS——语义由既有集成测试锚定（跨项目误写静默 no-op、
-	// ready→failed 合法），生产唯一写方 buildDeployment 串行推进状态。
-	// 部署源快照五列（迁移 000023，source_type/source_url/source_ref/
-	// source_dir/context_sha256）INSERT 期写全、之后不可变：**有意不登记**
-	// 本白名单（对齐 update_guard 护栏约定——不可变列漏登记正是期望行为）。
-	// build_node（迁移 000024，四期 4a-1）是构建后写入的操作列：成功路径经
-	// buildDeployment 落库，必须登记（与 source 快照列的不可变语义相反）。
-	_, err = conn.NewUpdate().Model(m).ModelTableExpr(expr, sch).
-		Column("status", "error", "build_node", "updated_at").
-		WherePK().
-		Where("fd.project_id = ?", d.ProjectID).
-		Where("fd.function_id = ?", d.FunctionID).
-		Exec(ctx)
-	return err
-}
-
-func (r *functionRepo) DeleteDeployment(ctx context.Context, projectID, functionID, deploymentID string) error {
-	conn, sch, expr, err := r.scoped(ctx, projectID, "function_deployments", "fd")
-	if err != nil {
-		return err
-	}
-	// 热路径清账（P0.5）：删除的是 latest_ready 指针指向的部署时，同事务
-	// 清空指针（NULL 回退 selectDeployment 的全量列表逻辑）。
-	err = r.db.RunInTx(ctx, func(txCtx context.Context) error {
-		if _, err := conn.NewDelete().Model((*model.FunctionDeployment)(nil)).
-			ModelTableExpr(expr, sch).
-			Where("project_id = ?", projectID).
-			Where("function_id = ?", functionID).
-			Where("id = ?", deploymentID).
-			Exec(txCtx); err != nil {
-			return err
-		}
-		fconn, fsch, fexpr, err := r.scoped(txCtx, projectID, "functions", "f")
-		if err != nil {
-			return err
-		}
-		_, err = fconn.NewUpdate().Model((*model.Function)(nil)).
-			ModelTableExpr(fexpr, fsch).
-			Set("latest_ready_deployment_id = NULL").
-			Where("f.project_id = ?", projectID).
-			Where("f.id = ?", functionID).
-			Where("f.latest_ready_deployment_id = ?", deploymentID).
-			Exec(txCtx)
-		return err
-	})
-	return err
-}
-
-// ActivateDeployment 在一个事务内把部署置 ready 并维护
-// functions.latest_ready_deployment_id（热路径清账，P0.5：selectDeployment
-// 优先读指针，消灭 ListDeployments 全量拉取）。
-func (r *functionRepo) ActivateDeployment(ctx context.Context, d *domainfunctions.Deployment) error {
-	conn, sch, expr, err := r.scoped(ctx, d.ProjectID, "function_deployments", "fd")
-	if err != nil {
-		return err
-	}
-	return r.db.RunInTx(ctx, func(txCtx context.Context) error {
-		res, err := conn.NewUpdate().Model((*model.FunctionDeployment)(nil)).
-			ModelTableExpr(expr, sch).
-			Set("status = ?", d.Status).
-			Set("error = ?", d.Error).
-			Set("updated_at = ?", time.Now()).
-			Where("fd.project_id = ?", d.ProjectID).
-			Where("fd.function_id = ?", d.FunctionID).
-			Where("fd.id = ?", d.ID).
-			Exec(txCtx)
-		if err != nil {
-			return err
-		}
-		if n, err := res.RowsAffected(); err == nil && n == 0 {
-			// 部署行不存在（已被并发删除）：不 resurrect，也不动指针。
-			return nil
-		}
-		fconn, fsch, fexpr, err := r.scoped(txCtx, d.ProjectID, "functions", "f")
-		if err != nil {
-			return err
-		}
-		_, err = fconn.NewUpdate().Model((*model.Function)(nil)).
-			ModelTableExpr(fexpr, fsch).
-			Set("latest_ready_deployment_id = ?", d.ID).
-			Set("updated_at = ?", time.Now()).
-			Where("f.project_id = ?", d.ProjectID).
-			Where("f.id = ?", d.FunctionID).
-			Exec(txCtx)
-		return err
-	})
-}
-
-func (r *functionRepo) SetVariables(ctx context.Context, projectID, functionID string, vars map[string]string) error {
-	_, sch, expr, err := r.scoped(ctx, projectID, "function_variables", "fv")
-	if err != nil {
-		return err
-	}
-	return r.db.RunInTx(ctx, func(txCtx context.Context) error {
-		conn := r.db.Conn(txCtx)
-		if _, err := conn.NewDelete().Model((*model.FunctionVariable)(nil)).
-			ModelTableExpr(expr, sch).
-			Where("project_id = ?", projectID).
-			Where("function_id = ?", functionID).
-			Exec(txCtx); err != nil {
-			return err
-		}
-		for k, v := range vars {
-			if _, err := conn.NewInsert().Model(&model.FunctionVariable{
-				ID:         "var_" + functionID + "_" + k,
-				FunctionID: functionID,
-				ProjectID:  projectID,
-				Key:        k,
-				Value:      v,
-				// P0 只产 text 变量（secret 的 API 面随后续阶段开放）；
-				// 显式写而非依赖列 DEFAULT，行内容不随迁移默认值漂移。
-				Kind: domainfunctions.VariableKindText,
-			}).ModelTableExpr(expr, sch).Exec(txCtx); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
-// GetVariables 返回 key → value 视图；kind 随模型扫描读出（P0 的掩码与
-// 注入语义不区分 kind——同表明文，见设计 §2），随后续阶段在 domain 层开放。
-func (r *functionRepo) GetVariables(ctx context.Context, projectID, functionID string) (map[string]string, error) {
-	conn, sch, expr, err := r.scoped(ctx, projectID, "function_variables", "fv")
-	if err != nil {
-		return nil, err
-	}
-	var ms []model.FunctionVariable
-	err = conn.NewSelect().Model(&ms).ModelTableExpr(expr, sch).
-		Where("fv.project_id = ?", projectID).
-		Where("fv.function_id = ?", functionID).
-		Scan(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]string, len(ms))
-	for i := range ms {
-		out[ms[i].Key] = ms[i].Value
-	}
-	return out, nil
-}
-
-func (r *functionRepo) CreateExecution(ctx context.Context, e *domainfunctions.ExecutionRecord) error {
-	conn, sch, expr, err := r.scoped(ctx, e.ProjectID, "function_executions", "fe")
-	if err != nil {
-		return err
-	}
-	m := mapExecutionToModel(e)
+	m := mapInvocationToModel(e)
 	if _, err := conn.NewInsert().Model(m).ModelTableExpr(expr, sch).Exec(ctx); err != nil {
 		// P2 幂等（设计 §4）：partial 唯一索引 (project, function, user, key)
 		// 的并发冲突归一为领域哨兵错误——调用方（client invoke）回读既有行
 		// 原样返回。本表其余唯一键只有主键（服务端生成 UUID，不会冲突），
 		// 23505 在此只会来自幂等索引。
 		if isUniqueViolation(err) {
-			return fmt.Errorf("%w: %v", domainfunctions.ErrExecutionIdempotencyConflict, err)
+			return fmt.Errorf("%w: %v", domainfunctions.ErrInvocationIdempotencyConflict, err)
 		}
 		return err
 	}
 	return nil
 }
 
-// GetExecutionByIdempotencyKey 按 (project, function, user, key) 查既有执行
+// GetInvocationByIdempotencyKey 按 (project, function, user, key) 查既有调用
 // （幂等冲突回读原样返回）。
-func (r *functionRepo) GetExecutionByIdempotencyKey(ctx context.Context, projectID, functionID, userID, key string) (*domainfunctions.ExecutionRecord, error) {
-	conn, sch, expr, err := r.scoped(ctx, projectID, "function_executions", "fe")
+func (r *functionRepo) GetInvocationByIdempotencyKey(ctx context.Context, projectID, functionID, userID, key string) (*domainfunctions.InvocationRecord, error) {
+	conn, sch, expr, err := r.scoped(ctx, projectID, "function_invocations", "fi")
 	if err != nil {
 		return nil, err
 	}
-	m := new(model.FunctionExecution)
+	m := new(model.FunctionInvocation)
 	err = conn.NewSelect().Model(m).ModelTableExpr(expr, sch).
-		Where("fe.project_id = ?", projectID).
-		Where("fe.function_id = ?", functionID).
-		Where("fe.invoking_user_id = ?", userID).
-		Where("fe.client_idempotency_key = ?", key).
+		Where("fi.project_id = ?", projectID).
+		Where("fi.function_id = ?", functionID).
+		Where("fi.invoking_user_id = ?", userID).
+		Where("fi.client_idempotency_key = ?", key).
 		Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -388,36 +148,36 @@ func (r *functionRepo) GetExecutionByIdempotencyKey(ctx context.Context, project
 		}
 		return nil, err
 	}
-	return mapExecutionToDomain(m), nil
+	return mapInvocationToDomain(m), nil
 }
 
-// CountClientInvocations 统计窗口起点以来该用户的 client 来源执行数
-// （限频 DB 降级路径；partial 索引 function_executions_client_quota 支撑）。
+// CountClientInvocations 统计窗口起点以来该用户的 client 来源调用数
+// （限频 DB 降级路径；partial 索引 function_invocations_client_quota 支撑）。
 func (r *functionRepo) CountClientInvocations(ctx context.Context, projectID, functionID, userID string, since time.Time) (int, error) {
-	conn, sch, expr, err := r.scoped(ctx, projectID, "function_executions", "fe")
+	conn, sch, expr, err := r.scoped(ctx, projectID, "function_invocations", "fi")
 	if err != nil {
 		return 0, err
 	}
-	n, err := conn.NewSelect().Model((*model.FunctionExecution)(nil)).ModelTableExpr(expr, sch).
-		Where("fe.project_id = ?", projectID).
-		Where("fe.function_id = ?", functionID).
-		Where("fe.invoking_user_id = ?", userID).
-		Where("fe.trigger_source = ?", domainfunctions.TriggerSourceClient).
-		Where("fe.created_at >= ?", since).
+	n, err := conn.NewSelect().Model((*model.FunctionInvocation)(nil)).ModelTableExpr(expr, sch).
+		Where("fi.project_id = ?", projectID).
+		Where("fi.function_id = ?", functionID).
+		Where("fi.invoking_user_id = ?", userID).
+		Where("fi.trigger_source = ?", domainfunctions.TriggerSourceClient).
+		Where("fi.created_at >= ?", since).
 		Count(ctx)
 	return int(n), err
 }
 
-func (r *functionRepo) GetExecution(ctx context.Context, projectID, functionID, executionID string) (*domainfunctions.ExecutionRecord, error) {
-	conn, sch, expr, err := r.scoped(ctx, projectID, "function_executions", "fe")
+func (r *functionRepo) GetInvocation(ctx context.Context, projectID, functionID, invocationID string) (*domainfunctions.InvocationRecord, error) {
+	conn, sch, expr, err := r.scoped(ctx, projectID, "function_invocations", "fi")
 	if err != nil {
 		return nil, err
 	}
-	m := new(model.FunctionExecution)
+	m := new(model.FunctionInvocation)
 	err = conn.NewSelect().Model(m).ModelTableExpr(expr, sch).
-		Where("fe.project_id = ?", projectID).
-		Where("fe.function_id = ?", functionID).
-		Where("fe.id = ?", executionID).
+		Where("fi.project_id = ?", projectID).
+		Where("fi.function_id = ?", functionID).
+		Where("fi.id = ?", invocationID).
 		Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -425,38 +185,38 @@ func (r *functionRepo) GetExecution(ctx context.Context, projectID, functionID, 
 		}
 		return nil, err
 	}
-	return mapExecutionToDomain(m), nil
+	return mapInvocationToDomain(m), nil
 }
 
-func (r *functionRepo) ListExecutions(ctx context.Context, projectID, functionID string, limit, offset int, f domainfunctions.ExecutionListFilter) ([]domainfunctions.ExecutionRecord, int, error) {
+func (r *functionRepo) ListInvocations(ctx context.Context, projectID, functionID string, limit, offset int, f domainfunctions.InvocationListFilter) ([]domainfunctions.InvocationRecord, int, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 	if limit > 100 {
 		limit = 100
 	}
-	conn, sch, expr, err := r.scoped(ctx, projectID, "function_executions", "fe")
+	conn, sch, expr, err := r.scoped(ctx, projectID, "function_invocations", "fi")
 	if err != nil {
 		return nil, 0, err
 	}
 	cond := func(q *bun.SelectQuery) *bun.SelectQuery {
-		q = q.Where("fe.project_id = ?", projectID).Where("fe.function_id = ?", functionID)
+		q = q.Where("fi.project_id = ?", projectID).Where("fi.function_id = ?", functionID)
 		if f.Status != "" {
-			q = q.Where("fe.status = ?", f.Status)
+			q = q.Where("fi.status = ?", f.Status)
 		}
 		if !f.CreatedAfter.IsZero() {
-			q = q.Where("fe.created_at >= ?", f.CreatedAfter)
+			q = q.Where("fi.created_at >= ?", f.CreatedAfter)
 		}
 		if !f.CreatedBefore.IsZero() {
-			q = q.Where("fe.created_at <= ?", f.CreatedBefore)
+			q = q.Where("fi.created_at <= ?", f.CreatedBefore)
 		}
 		return q
 	}
-	total, err := cond(conn.NewSelect().Model((*model.FunctionExecution)(nil)).ModelTableExpr(expr, sch)).Count(ctx)
+	total, err := cond(conn.NewSelect().Model((*model.FunctionInvocation)(nil)).ModelTableExpr(expr, sch)).Count(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
-	var ms []model.FunctionExecution
+	var ms []model.FunctionInvocation
 	err = cond(conn.NewSelect().Model(&ms).ModelTableExpr(expr, sch)).
 		Order("created_at DESC").
 		Limit(limit).
@@ -465,43 +225,43 @@ func (r *functionRepo) ListExecutions(ctx context.Context, projectID, functionID
 	if err != nil {
 		return nil, 0, err
 	}
-	out := make([]domainfunctions.ExecutionRecord, len(ms))
+	out := make([]domainfunctions.InvocationRecord, len(ms))
 	for i := range ms {
-		out[i] = *mapExecutionToDomain(&ms[i])
+		out[i] = *mapInvocationToDomain(&ms[i])
 	}
 	return out, total, nil
 }
 
-func (r *functionRepo) UpdateExecution(ctx context.Context, e *domainfunctions.ExecutionRecord) error {
-	conn, sch, expr, err := r.scoped(ctx, e.ProjectID, "function_executions", "fe")
+func (r *functionRepo) UpdateInvocation(ctx context.Context, e *domainfunctions.InvocationRecord) error {
+	conn, sch, expr, err := r.scoped(ctx, e.ProjectID, "function_invocations", "fi")
 	if err != nil {
 		return err
 	}
-	m := mapExecutionToModel(e)
-	// 列白名单（bun 更新写规范）：id/function_id/project_id/deployment_id/
-	// created_at 不可变。
+	m := mapInvocationToModel(e)
+	// 列白名单（bun 更新写规范）：id/function_id/project_id/created_at 与
+	// INSERT 期写入列（trigger_source/source_ip/invoking_user_id/
+	// client_idempotency_key）不可变——白名单有意不含。
 	_, err = conn.NewUpdate().Model(m).ModelTableExpr(expr, sch).
-		Column("status", "response", "response_truncated", "stdout", "stdout_truncated",
-			"stderr", "stderr_truncated", "status_code", "duration_ms", "error", "updated_at").
+		Column("status", "response", "response_truncated", "status_code", "duration_ms", "error", "updated_at").
 		WherePK().
-		Where("fe.project_id = ?", e.ProjectID).
+		Where("fi.project_id = ?", e.ProjectID).
 		Exec(ctx)
 	return err
 }
 
-func (r *functionRepo) TransitionExecutionStatus(ctx context.Context, projectID, functionID, executionID, from, to string) (bool, error) {
-	conn, sch, expr, err := r.scoped(ctx, projectID, "function_executions", "fe")
+func (r *functionRepo) TransitionInvocationStatus(ctx context.Context, projectID, functionID, invocationID, from, to string) (bool, error) {
+	conn, sch, expr, err := r.scoped(ctx, projectID, "function_invocations", "fi")
 	if err != nil {
 		return false, err
 	}
-	res, err := conn.NewUpdate().Model((*model.FunctionExecution)(nil)).
+	res, err := conn.NewUpdate().Model((*model.FunctionInvocation)(nil)).
 		ModelTableExpr(expr, sch).
 		Set("status = ?", to).
 		Set("updated_at = ?", time.Now()).
-		Where("fe.project_id = ?", projectID).
-		Where("fe.function_id = ?", functionID).
-		Where("fe.id = ?", executionID).
-		Where("fe.status = ?", from).
+		Where("fi.project_id = ?", projectID).
+		Where("fi.function_id = ?", functionID).
+		Where("fi.id = ?", invocationID).
+		Where("fi.status = ?", from).
 		Exec(ctx)
 	if err != nil {
 		return false, err
@@ -510,49 +270,46 @@ func (r *functionRepo) TransitionExecutionStatus(ctx context.Context, projectID,
 	return n > 0, err
 }
 
-func (r *functionRepo) FailExecutionIfActive(ctx context.Context, projectID, functionID, executionID, reason string) error {
-	conn, sch, expr, err := r.scoped(ctx, projectID, "function_executions", "fe")
+func (r *functionRepo) FailInvocationIfActive(ctx context.Context, projectID, functionID, invocationID, reason string) error {
+	conn, sch, expr, err := r.scoped(ctx, projectID, "function_invocations", "fi")
 	if err != nil {
 		return err
 	}
-	_, err = conn.NewUpdate().Model((*model.FunctionExecution)(nil)).
+	_, err = conn.NewUpdate().Model((*model.FunctionInvocation)(nil)).
 		ModelTableExpr(expr, sch).
-		Set("status = ?", domainfunctions.ExecutionStatusFailed).
+		Set("status = ?", domainfunctions.InvocationStatusFailed).
 		Set("error = ?", reason).
 		Set("updated_at = ?", time.Now()).
-		Where("fe.project_id = ?", projectID).
-		Where("fe.function_id = ?", functionID).
-		Where("fe.id = ?", executionID).
-		Where("fe.status IN (?)", bun.List([]string{
-			domainfunctions.ExecutionStatusQueued,
-			domainfunctions.ExecutionStatusBuilding,
-			domainfunctions.ExecutionStatusRunning,
+		Where("fi.project_id = ?", projectID).
+		Where("fi.function_id = ?", functionID).
+		Where("fi.id = ?", invocationID).
+		Where("fi.status IN (?)", bun.List([]string{
+			domainfunctions.InvocationStatusQueued,
+			domainfunctions.InvocationStatusRunning,
 		})).
 		Exec(ctx)
 	return err
 }
 
-func (r *functionRepo) RecoverOrphanExecutionsInProject(ctx context.Context, projectID string, olderThan time.Time, limit int) (int64, error) {
+func (r *functionRepo) RecoverOrphanInvocationsInProject(ctx context.Context, projectID string, olderThan time.Time, limit int) (int64, error) {
 	if limit <= 0 {
 		return 0, nil
 	}
-	if _, _, _, err := r.scoped(ctx, projectID, "function_executions", "fe"); err != nil {
+	if _, _, _, err := r.scoped(ctx, projectID, "function_invocations", "fi"); err != nil {
 		return 0, err
 	}
 	quoted, err := ProjectQuoted(projectID)
 	if err != nil {
 		return 0, err
 	}
-	// P0.5 孤儿恢复：扫描范围纳入 queued（红队指出的 v1 既有洞——同步快路径
-	// 崩溃曾留 queued 永不入队）；staleAfter 按行判定（domainfunctions.
-	// OrphanGraceSeconds 宽限与迁移/app 层同源）：timeout_seconds 非空 =
-	// 该值 + 宽限（两写预占的行内快照），NULL（存量行）回退 olderThan
-	// （worker 传 1h）。
+	// 孤儿恢复：staleAfter 按行判定（domainfunctions.OrphanGraceSeconds 宽限
+	// 与迁移/app 层同源）：timeout_seconds 非空 = 该值 + 宽限（两写预占的
+	// 行内快照），NULL（存量行）回退 olderThan（worker 传 1h）。
 	res, err := r.db.Conn(ctx).ExecContext(ctx, fmt.Sprintf(`
 WITH cte AS (
-  SELECT id FROM %s.function_executions
+  SELECT id FROM %s.function_invocations
   WHERE project_id = ?
-    AND status IN (?, ?, ?)
+    AND status IN (?, ?)
     AND (
       (timeout_seconds IS NOT NULL
         AND updated_at < NOW() - (timeout_seconds + ?) * INTERVAL '1 second')
@@ -563,19 +320,18 @@ WITH cte AS (
   LIMIT ?
   FOR UPDATE SKIP LOCKED
 )
-UPDATE %s.function_executions AS fe
+UPDATE %s.function_invocations AS fi
 SET status = ?, error = ?, updated_at = NOW()
-FROM cte WHERE fe.id = cte.id
+FROM cte WHERE fi.id = cte.id
 `, quoted, quoted),
 		projectID,
-		domainfunctions.ExecutionStatusQueued,
-		domainfunctions.ExecutionStatusBuilding,
-		domainfunctions.ExecutionStatusRunning,
+		domainfunctions.InvocationStatusQueued,
+		domainfunctions.InvocationStatusRunning,
 		domainfunctions.OrphanGraceSeconds,
 		olderThan,
 		limit,
-		domainfunctions.ExecutionStatusFailed,
-		"orphaned execution recovered",
+		domainfunctions.InvocationStatusFailed,
+		"orphaned invocation recovered",
 	)
 	if err != nil {
 		return 0, err
@@ -583,30 +339,30 @@ FROM cte WHERE fe.id = cte.id
 	return res.RowsAffected()
 }
 
-func (r *functionRepo) PruneOldExecutionsInProject(ctx context.Context, projectID, functionID string, keepRecent int) error {
+func (r *functionRepo) PruneOldInvocationsInProject(ctx context.Context, projectID, functionID string, keepRecent int) error {
 	if keepRecent <= 0 {
 		return nil
 	}
-	if _, _, _, err := r.scoped(ctx, projectID, "function_executions", "fe"); err != nil {
+	if _, _, _, err := r.scoped(ctx, projectID, "function_invocations", "fi"); err != nil {
 		return err
 	}
 	quoted, err := ProjectQuoted(projectID)
 	if err != nil {
 		return err
 	}
-	// 只清理终态记录：queued/building/running 可能仍对应在途队列消息，
+	// 只清理终态记录：queued/running 可能仍对应在途队列消息，
 	// 物理删除会导致消息被消费时静默丢弃（rec==nil → Ack）。
 	// 条数式保留只作用于 server 面行（trigger_source = ''，Q7 保留分级）——
 	// client/http/cron 来源行是限频 DB 降级的计数依据，按 48h 时间窗保留
-	// （PruneTriggerExecutionsInProject），条数裁剪会造成少计超发。
+	//（PruneTriggerInvocationsInProject），条数裁剪会造成少计超发。
 	_, err = r.db.Conn(ctx).ExecContext(ctx, fmt.Sprintf(`
-DELETE FROM %s.function_executions
+DELETE FROM %s.function_invocations
 WHERE project_id = ? AND function_id = ?
   AND trigger_source = ''
   AND status IN (?, ?)
   AND id NOT IN (
     SELECT id FROM (
-      SELECT id FROM %s.function_executions
+      SELECT id FROM %s.function_invocations
       WHERE project_id = ? AND function_id = ? AND trigger_source = ''
       ORDER BY created_at DESC
       LIMIT ?
@@ -614,17 +370,17 @@ WHERE project_id = ? AND function_id = ?
   )
 `, quoted, quoted),
 		projectID, functionID,
-		domainfunctions.ExecutionStatusCompleted,
-		domainfunctions.ExecutionStatusFailed,
+		domainfunctions.InvocationStatusCompleted,
+		domainfunctions.InvocationStatusFailed,
 		projectID, functionID, keepRecent)
 	return err
 }
 
-// PruneTriggerExecutionsInProject 清理 client/http/cron 来源超过 olderThan 的
+// PruneTriggerInvocationsInProject 清理 client/http/cron 来源超过 olderThan 的
 // 终态记录（Q7 保留分级，time-based：48h ≥ 2× 最长限频窗口 day，保证限频
 // DB 降级在最长窗口内的计数行不被裁剪）。终态约束与 server 路径同源。
-func (r *functionRepo) PruneTriggerExecutionsInProject(ctx context.Context, projectID, functionID string, olderThan time.Time) error {
-	if _, _, _, err := r.scoped(ctx, projectID, "function_executions", "fe"); err != nil {
+func (r *functionRepo) PruneTriggerInvocationsInProject(ctx context.Context, projectID, functionID string, olderThan time.Time) error {
+	if _, _, _, err := r.scoped(ctx, projectID, "function_invocations", "fi"); err != nil {
 		return err
 	}
 	quoted, err := ProjectQuoted(projectID)
@@ -632,7 +388,7 @@ func (r *functionRepo) PruneTriggerExecutionsInProject(ctx context.Context, proj
 		return err
 	}
 	_, err = r.db.Conn(ctx).ExecContext(ctx, fmt.Sprintf(`
-DELETE FROM %s.function_executions
+DELETE FROM %s.function_invocations
 WHERE project_id = ? AND function_id = ?
   AND status IN (?, ?)
   AND created_at < ?
@@ -643,8 +399,8 @@ WHERE project_id = ? AND function_id = ?
   )
 `, quoted),
 		projectID, functionID,
-		domainfunctions.ExecutionStatusCompleted,
-		domainfunctions.ExecutionStatusFailed,
+		domainfunctions.InvocationStatusCompleted,
+		domainfunctions.InvocationStatusFailed,
 		olderThan,
 		domainfunctions.TriggerSourceClient,
 		domainfunctions.TriggerTypeHTTP+":%",
@@ -659,31 +415,6 @@ func mapFunctionToModel(fn *domainfunctions.Function) *model.Function {
 	if declaredScopes == nil {
 		declaredScopes = []string{}
 	}
-	// 池策略（P0.5）零值归一为平台默认：UPDATE 是显式列白名单全模型写
-	// （bun 更新写规范），struct 零值会被原样写成 0 而违反迁移 000014 的
-	// CHECK 下限（max>=1 / idle>=30 / max_requests>=1）；「零值 = 平台默认」
-	// 与 INSERT 侧 bun default tag 语义一致。下限值与迁移 CHECK 同源。
-	minInstances, maxInstances := fn.MinInstances, fn.MaxInstances
-	idleTTL, maxRequests := fn.IdleTTLSeconds, fn.MaxRequestsPerInstance
-	concurrency := fn.Concurrency
-	if maxInstances < 1 {
-		maxInstances = 2
-	}
-	if idleTTL < 30 {
-		idleTTL = 300
-	}
-	if maxRequests < 1 {
-		maxRequests = 1000
-	}
-	if minInstances > maxInstances {
-		minInstances = maxInstances
-	}
-	// concurrency 零值归一为平台默认 1（迁移 000017 列 DEFAULT 同值；v3
-	// §1.1 fail-closed：不 opt-in 即串行）。上界 16 由 DB CHECK 兜底——超限
-	// 报错而非静默截断（管理面校验随 B 切片 proto API 落地）。
-	if concurrency < 1 {
-		concurrency = 1
-	}
 	// client_limit_window 零值归一为平台默认 'day'（与迁移 000016 列 DEFAULT
 	// 一致；UPDATE 是显式列白名单全模型写，空串会违反 CHECK）。
 	limitWindow := fn.ClientLimitWindow
@@ -694,18 +425,14 @@ func mapFunctionToModel(fn *domainfunctions.Function) *model.Function {
 		ID:                      fn.ID,
 		ProjectID:               fn.ProjectID,
 		Name:                    fn.Name,
-		Runtime:                 fn.Runtime,
-		Entrypoint:              fn.Entrypoint,
 		TimeoutSeconds:          fn.TimeoutSeconds,
-		Spec:                    fn.Spec,
 		Enabled:                 fn.Enabled,
 		DeclaredScopes:          declaredScopes,
-		MinInstances:            minInstances,
-		MaxInstances:            maxInstances,
-		IdleTTLSeconds:          idleTTL,
-		MaxRequestsPerInstance:  maxRequests,
-		Concurrency:             concurrency,
-		LatestReadyDeploymentID: fn.LatestReadyDeploymentID,
+		TargetURL:               fn.TargetURL,
+		TargetSecretEnc:         fn.TargetSecretEnc,
+		TargetPreviousSecretEnc: fn.TargetPreviousSecretEnc,
+		TargetSecretRotatedAt:   fn.TargetSecretRotatedAt,
+		TargetSecretFingerprint: fn.TargetSecretFingerprint,
 		ClientCallable:          fn.ClientCallable,
 		ClientAnonymousAllowed:  fn.ClientAnonymousAllowed,
 		ClientPerUserLimit:      fn.ClientPerUserLimit,
@@ -720,18 +447,14 @@ func mapFunctionToDomain(m *model.Function) *domainfunctions.Function {
 		ID:                      m.ID,
 		ProjectID:               m.ProjectID,
 		Name:                    m.Name,
-		Runtime:                 m.Runtime,
-		Entrypoint:              m.Entrypoint,
 		TimeoutSeconds:          m.TimeoutSeconds,
-		Spec:                    m.Spec,
 		Enabled:                 m.Enabled,
 		DeclaredScopes:          m.DeclaredScopes,
-		MinInstances:            m.MinInstances,
-		MaxInstances:            m.MaxInstances,
-		IdleTTLSeconds:          m.IdleTTLSeconds,
-		MaxRequestsPerInstance:  m.MaxRequestsPerInstance,
-		Concurrency:             m.Concurrency,
-		LatestReadyDeploymentID: m.LatestReadyDeploymentID,
+		TargetURL:               m.TargetURL,
+		TargetSecretEnc:         m.TargetSecretEnc,
+		TargetPreviousSecretEnc: m.TargetPreviousSecretEnc,
+		TargetSecretRotatedAt:   m.TargetSecretRotatedAt,
+		TargetSecretFingerprint: m.TargetSecretFingerprint,
 		ClientCallable:          m.ClientCallable,
 		ClientAnonymousAllowed:  m.ClientAnonymousAllowed,
 		ClientPerUserLimit:      m.ClientPerUserLimit,
@@ -741,79 +464,20 @@ func mapFunctionToDomain(m *model.Function) *domainfunctions.Function {
 	}
 }
 
-func mapDeploymentToModel(d *domainfunctions.Deployment) *model.FunctionDeployment {
-	// source_type 零值归一为 'zip'（迁移 000023 列 DEFAULT 同值）：INSERT 是
-	// 全模型写（bun 更新写规范只约束 UPDATE），空串会违反 CHECK 词表——
-	// 存量/未感知 source 的调用方（zip 通道全部路径）语义即 zip 源。
-	sourceType := d.SourceType
-	if sourceType == "" {
-		sourceType = domainfunctions.DeploymentSourceZip
-	}
-	return &model.FunctionDeployment{
-		ID:              d.ID,
-		FunctionID:      d.FunctionID,
-		ProjectID:       d.ProjectID,
-		Size:            d.Size,
-		Status:          d.Status,
-		Error:           d.Error,
-		TemplateVersion: d.TemplateVersion,
-		// 部署源快照（迁移 000023）：INSERT 期写全、之后不可变——
-		// UpdateDeployment 列白名单有意不含 source 列。
-		SourceType:    sourceType,
-		SourceURL:     d.SourceURL,
-		SourceRef:     d.SourceRef,
-		SourceDir:     d.SourceDir,
-		ContextSHA256: d.ContextSHA256,
-		// runtime 快照（迁移 000025）：同 source 列的不可变语义
-		// （functions-runtime-selection.md §4）。
-		Runtime: d.Runtime,
-		// 构建亲和（迁移 000024，四期 4a-1）：构建后写入的操作列。
-		BuildNode: d.BuildNode,
-		CreatedAt: d.CreatedAt,
-		UpdatedAt: d.UpdatedAt,
-	}
-}
-
-func mapDeploymentToDomain(m *model.FunctionDeployment) *domainfunctions.Deployment {
-	return &domainfunctions.Deployment{
-		ID:              m.ID,
-		FunctionID:      m.FunctionID,
-		ProjectID:       m.ProjectID,
-		Size:            m.Size,
-		Status:          m.Status,
-		Error:           m.Error,
-		TemplateVersion: m.TemplateVersion,
-		SourceType:      m.SourceType,
-		SourceURL:       m.SourceURL,
-		SourceRef:       m.SourceRef,
-		SourceDir:       m.SourceDir,
-		ContextSHA256:   m.ContextSHA256,
-		Runtime:         m.Runtime,
-		BuildNode:       m.BuildNode,
-		CreatedAt:       m.CreatedAt,
-		UpdatedAt:       m.UpdatedAt,
-	}
-}
-
-func mapExecutionToModel(e *domainfunctions.ExecutionRecord) *model.FunctionExecution {
-	return &model.FunctionExecution{
+func mapInvocationToModel(e *domainfunctions.InvocationRecord) *model.FunctionInvocation {
+	return &model.FunctionInvocation{
 		ID:                e.ID,
 		FunctionID:        e.FunctionID,
 		ProjectID:         e.ProjectID,
-		DeploymentID:      e.DeploymentID,
 		Status:            e.Status,
 		Response:          e.Response,
 		ResponseTruncated: e.ResponseTruncated,
-		Stdout:            e.Stdout,
-		StdoutTruncated:   e.StdoutTruncated,
-		Stderr:            e.Stderr,
-		StderrTruncated:   e.StderrTruncated,
 		StatusCode:        e.StatusCode,
 		DurationMS:        e.DurationMS,
 		Error:             e.Error,
 		TimeoutSeconds:    e.TimeoutSeconds,
 		// 触发来源（P1，迁移 000015）与客户端调用面（P2，迁移 000016）：
-		// INSERT 期写入、之后不可变——UpdateExecution 列白名单有意不含
+		// INSERT 期写入、之后不可变——UpdateInvocation 列白名单有意不含
 		// trigger_source/source_ip/invoking_user_id/client_idempotency_key。
 		TriggerSource:        e.TriggerSource,
 		SourceIP:             e.SourceIP,
@@ -824,19 +488,14 @@ func mapExecutionToModel(e *domainfunctions.ExecutionRecord) *model.FunctionExec
 	}
 }
 
-func mapExecutionToDomain(m *model.FunctionExecution) *domainfunctions.ExecutionRecord {
-	return &domainfunctions.ExecutionRecord{
+func mapInvocationToDomain(m *model.FunctionInvocation) *domainfunctions.InvocationRecord {
+	return &domainfunctions.InvocationRecord{
 		ID:                   m.ID,
 		FunctionID:           m.FunctionID,
 		ProjectID:            m.ProjectID,
-		DeploymentID:         m.DeploymentID,
 		Status:               m.Status,
 		Response:             m.Response,
 		ResponseTruncated:    m.ResponseTruncated,
-		Stdout:               m.Stdout,
-		StdoutTruncated:      m.StdoutTruncated,
-		Stderr:               m.Stderr,
-		StderrTruncated:      m.StderrTruncated,
 		StatusCode:           m.StatusCode,
 		DurationMS:           m.DurationMS,
 		Error:                m.Error,

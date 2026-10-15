@@ -54,8 +54,8 @@ func TestTriggerRepository_CRUDAndTokenLookup(t *testing.T) {
 
 	now := time.Now()
 	require.NoError(t, fnRepo.CreateFunction(ctx, &domainfunctions.Function{
-		ID: "fn_trg", ProjectID: projectID, Name: "trg", Runtime: "node-18.0",
-		Entrypoint: "index.main", TimeoutSeconds: 15, Spec: "shared-1x", Enabled: true,
+		ID: "fn_trg", ProjectID: projectID, Name: "trg",
+		TimeoutSeconds: 15, Enabled: true,
 		CreatedAt: now, UpdatedAt: now,
 	}))
 
@@ -114,8 +114,8 @@ func TestTriggerRepository_ClaimDueCron_CASAndMisfire(t *testing.T) {
 
 	now := time.Now()
 	require.NoError(t, fnRepo.CreateFunction(ctx, &domainfunctions.Function{
-		ID: "fn_cron", ProjectID: projectID, Name: "cron", Runtime: "node-18.0",
-		Entrypoint: "index.main", TimeoutSeconds: 15, Spec: "shared-1x", Enabled: true,
+		ID: "fn_cron", ProjectID: projectID, Name: "cron",
+		TimeoutSeconds: 15, Enabled: true,
 		CreatedAt: now, UpdatedAt: now,
 	}))
 
@@ -213,8 +213,8 @@ func TestTriggerRepository_ClaimDueCron_ConcurrentNoDoubleClaim(t *testing.T) {
 
 	now := time.Now()
 	require.NoError(t, fnRepo.CreateFunction(ctx, &domainfunctions.Function{
-		ID: "fn_race", ProjectID: projectID, Name: "race", Runtime: "node-18.0",
-		Entrypoint: "index.main", TimeoutSeconds: 15, Spec: "shared-1x", Enabled: true,
+		ID: "fn_race", ProjectID: projectID, Name: "race",
+		TimeoutSeconds: 15, Enabled: true,
 		CreatedAt: now, UpdatedAt: now,
 	}))
 	newTrigger(t, ctx, trgRepo, projectID, "fn_race", "trg_race", domainfunctions.TriggerTypeCron,

@@ -1,5 +1,5 @@
 {
-  "method_count": 272,
+  "method_count": 265,
   "scope_vocabulary": [
     {
       "resource": "analytics",
@@ -777,7 +777,6 @@
       ],
       "request_fields": [
         "data",
-        "deployment_id",
         "function_id",
         "idempotency_key"
       ],
@@ -2600,48 +2599,6 @@
       "is_streaming": false
     },
     {
-      "method": "/torchwood.server.v1.FunctionsService/CreateDeployment",
-      "service": "/torchwood.server.v1.FunctionsService",
-      "access": "server",
-      "admin_roles": [
-        "admin",
-        "owner"
-      ],
-      "scope": {
-        "resource": "functions",
-        "op": "write"
-      },
-      "request_fields": [
-        "code",
-        "function_id",
-        "git",
-        "image"
-      ],
-      "request_has_project_id": false,
-      "is_streaming": false
-    },
-    {
-      "method": "/torchwood.server.v1.FunctionsService/CreateExecution",
-      "service": "/torchwood.server.v1.FunctionsService",
-      "access": "server",
-      "admin_roles": [
-        "admin",
-        "owner"
-      ],
-      "scope": {
-        "resource": "functions",
-        "op": "write"
-      },
-      "request_fields": [
-        "async",
-        "data",
-        "deployment_id",
-        "function_id"
-      ],
-      "request_has_project_id": false,
-      "is_streaming": false
-    },
-    {
       "method": "/torchwood.server.v1.FunctionsService/CreateFunction",
       "service": "/torchwood.server.v1.FunctionsService",
       "access": "server",
@@ -2660,11 +2617,10 @@
         "client_per_user_limit",
         "declared_scopes",
         "enabled",
-        "entrypoint",
         "id",
         "name",
-        "runtime",
-        "spec",
+        "target_secret",
+        "target_url",
         "timeout_seconds"
       ],
       "request_has_project_id": false,
@@ -2688,25 +2644,6 @@
         "function_id",
         "http",
         "type"
-      ],
-      "request_has_project_id": false,
-      "is_streaming": false
-    },
-    {
-      "method": "/torchwood.server.v1.FunctionsService/DeleteDeployment",
-      "service": "/torchwood.server.v1.FunctionsService",
-      "access": "server",
-      "admin_roles": [
-        "admin",
-        "owner"
-      ],
-      "scope": {
-        "resource": "functions",
-        "op": "write"
-      },
-      "request_fields": [
-        "deployment_id",
-        "function_id"
       ],
       "request_has_project_id": false,
       "is_streaming": false
@@ -2749,36 +2686,6 @@
       "is_streaming": false
     },
     {
-      "method": "/torchwood.server.v1.FunctionsService/GetDeployment",
-      "service": "/torchwood.server.v1.FunctionsService",
-      "access": "server",
-      "scope": {
-        "resource": "functions",
-        "op": "read"
-      },
-      "request_fields": [
-        "deployment_id",
-        "function_id"
-      ],
-      "request_has_project_id": false,
-      "is_streaming": false
-    },
-    {
-      "method": "/torchwood.server.v1.FunctionsService/GetExecution",
-      "service": "/torchwood.server.v1.FunctionsService",
-      "access": "server",
-      "scope": {
-        "resource": "functions",
-        "op": "read"
-      },
-      "request_fields": [
-        "execution_id",
-        "function_id"
-      ],
-      "request_has_project_id": false,
-      "is_streaming": false
-    },
-    {
       "method": "/torchwood.server.v1.FunctionsService/GetFunction",
       "service": "/torchwood.server.v1.FunctionsService",
       "access": "server",
@@ -2793,7 +2700,7 @@
       "is_streaming": false
     },
     {
-      "method": "/torchwood.server.v1.FunctionsService/GetVariables",
+      "method": "/torchwood.server.v1.FunctionsService/GetInvocation",
       "service": "/torchwood.server.v1.FunctionsService",
       "access": "server",
       "scope": {
@@ -2801,42 +2708,28 @@
         "op": "read"
       },
       "request_fields": [
+        "function_id",
+        "invocation_id"
+      ],
+      "request_has_project_id": false,
+      "is_streaming": false
+    },
+    {
+      "method": "/torchwood.server.v1.FunctionsService/InvokeFunction",
+      "service": "/torchwood.server.v1.FunctionsService",
+      "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
+      "scope": {
+        "resource": "functions",
+        "op": "write"
+      },
+      "request_fields": [
+        "async",
+        "data",
         "function_id"
-      ],
-      "request_has_project_id": false,
-      "is_streaming": false
-    },
-    {
-      "method": "/torchwood.server.v1.FunctionsService/ListDeployments",
-      "service": "/torchwood.server.v1.FunctionsService",
-      "access": "server",
-      "scope": {
-        "resource": "functions",
-        "op": "read"
-      },
-      "request_fields": [
-        "function_id",
-        "page_size",
-        "page_token"
-      ],
-      "request_has_project_id": false,
-      "is_streaming": false
-    },
-    {
-      "method": "/torchwood.server.v1.FunctionsService/ListExecutions",
-      "service": "/torchwood.server.v1.FunctionsService",
-      "access": "server",
-      "scope": {
-        "resource": "functions",
-        "op": "read"
-      },
-      "request_fields": [
-        "created_after",
-        "created_before",
-        "function_id",
-        "page_size",
-        "page_token",
-        "status"
       ],
       "request_has_project_id": false,
       "is_streaming": false
@@ -2873,26 +2766,39 @@
       "is_streaming": false
     },
     {
-      "method": "/torchwood.server.v1.FunctionsService/ListRuntimes",
+      "method": "/torchwood.server.v1.FunctionsService/ListInvocations",
       "service": "/torchwood.server.v1.FunctionsService",
       "access": "server",
       "scope": {
         "resource": "functions",
         "op": "read"
       },
-      "request_fields": [],
+      "request_fields": [
+        "created_after",
+        "created_before",
+        "function_id",
+        "page_size",
+        "page_token",
+        "status"
+      ],
       "request_has_project_id": false,
       "is_streaming": false
     },
     {
-      "method": "/torchwood.server.v1.FunctionsService/ListSpecifications",
+      "method": "/torchwood.server.v1.FunctionsService/RotateFunctionSecret",
       "service": "/torchwood.server.v1.FunctionsService",
       "access": "server",
+      "admin_roles": [
+        "admin",
+        "owner"
+      ],
       "scope": {
         "resource": "functions",
-        "op": "read"
+        "op": "write"
       },
-      "request_fields": [],
+      "request_fields": [
+        "function_id"
+      ],
       "request_has_project_id": false,
       "is_streaming": false
     },
@@ -2935,25 +2841,6 @@
       "is_streaming": false
     },
     {
-      "method": "/torchwood.server.v1.FunctionsService/SetVariables",
-      "service": "/torchwood.server.v1.FunctionsService",
-      "access": "server",
-      "admin_roles": [
-        "admin",
-        "owner"
-      ],
-      "scope": {
-        "resource": "functions",
-        "op": "write"
-      },
-      "request_fields": [
-        "function_id",
-        "variables"
-      ],
-      "request_has_project_id": false,
-      "is_streaming": false
-    },
-    {
       "method": "/torchwood.server.v1.FunctionsService/UpdateFunction",
       "service": "/torchwood.server.v1.FunctionsService",
       "access": "server",
@@ -2970,17 +2857,10 @@
         "client_callable",
         "client_limit_window",
         "client_per_user_limit",
-        "concurrency",
         "enabled",
-        "entrypoint",
         "function_id",
-        "idle_ttl_seconds",
-        "max_instances",
-        "max_requests_per_instance",
-        "min_instances",
         "name",
-        "runtime",
-        "spec",
+        "target_url",
         "timeout_seconds"
       ],
       "request_has_project_id": false,

@@ -1,6 +1,9 @@
 package functions
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Invocation 是一次函数调用的完整载荷（v4：Executor.Execute 的继任形态，
 // docs/design/functions-v4.md §2/§4）。
@@ -100,9 +103,32 @@ type Notification struct {
 	ExecutionToken string
 }
 
+// NotificationResult 是事件轴单次投递尝试的结果（v4 §4.2：事件轴无应用层
+// 结果——2xx 即送达；投递行存档响应尾部截断文本作审计替代〔D10 语义损失
+// 入册〕并承载网关往返时长）。
+type NotificationResult struct {
+	// ResponseTail 是消费方响应 body 的尾部截断文本（≤512B；成功 2xx 与
+	// 失败非 2xx 都可能有——审计存档用，D10「响应尾部截断留档」）。
+	ResponseTail string
+	// DurationMS 是网关往返时长（计量口径：function_duration_ms）。
+	DurationMS int64
+}
+
+// EventNotificationMeta 是事件轴调用的 CloudEvent 组装原料（v4 §4.2，D10；
+// worker/触发器调度只传递原料——CloudEvent 在 app 层组装）。
+type EventNotificationMeta struct {
+	// Type 是 CloudEvent type：cron.tick（平台自产时间事件）或事件目录名
+	//（documents.created / auth.users.created …）。
+	Type string
+	// Time 是事件时刻：cron = scheduled_for；事件 = outbox 产生时刻。
+	Time time.Time
+	// Seq 是 outbox 全局序（cron 自产事件无，0）。
+	Seq int64
+}
+
 // Notifier 是事件轴投递端口：err = 送达失败（重试由投递引擎按 D5 梯度
 // 调度）；nil = 消费方已 2xx 确认。实现侧同 Invoker 纪律（守卫出站 +
 // 签名注入）。
 type Notifier interface {
-	Notify(ctx context.Context, n Notification) error
+	Notify(ctx context.Context, n Notification) (NotificationResult, error)
 }

@@ -93,7 +93,13 @@ func TestInvokeJSONBadJSON(t *testing.T) {
 // 163 → 164（2026-09-21，assets.proto 新增 ListDefAssets——定义维度持有
 // 查询（Console 资产详情页），wrapper：AssetsService.ListDefAssets）。
 
-const expectedServerMethodCount = 164
+// 164 → 166（2026-10-15）：Functions v4 破坏波（docs/design/functions-v4.md
+// §2）functions.proto 21 → 14 方法（退役 runtimes/specifications/部署四 RPC/
+// 变量两 RPC；CreateExecution → InvokeFunction / executions → invocations；
+// 新增 RotateFunctionSecret），wrapper 同步收缩/改名；webhooks.proto 九方法
+// 补齐 Client wrapper（WebhooksService，v4-p7 欠账）。
+
+const expectedServerMethodCount = 166
 
 // TestInvokeJSONCompleteness 遍历 protoregistry.GlobalFiles 中 torchwood.server.v1
 // 包的全部方法（排除 APIKeysService），断言每个方法都能被解析并用空 JSON 构造

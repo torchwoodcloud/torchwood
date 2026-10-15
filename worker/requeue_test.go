@@ -11,11 +11,11 @@ import (
 // 其余字段（含 data）往返无损。
 func TestRequeue_IncrementsAttempt(t *testing.T) {
 	next, ok := requeue([]byte(
-		`{"execution_id":"e1","function_id":"fn_1","project_id":"p1","data":"{\"x\":1}","attempt":1}`))
+		`{"invocation_id":"e1","function_id":"fn_1","project_id":"p1","data":"{\"x\":1}","attempt":1}`))
 	require.True(t, ok)
 	var m retryMessage
 	require.NoError(t, json.Unmarshal(next, &m))
-	require.Equal(t, "e1", m.ExecutionID)
+	require.Equal(t, "e1", m.InvocationID)
 	require.Equal(t, "fn_1", m.FunctionID)
 	require.Equal(t, "p1", m.ProjectID)
 	require.Equal(t, `{"x":1}`, m.Data)
@@ -26,12 +26,12 @@ func TestRequeue_IncrementsAttempt(t *testing.T) {
 // 字段）首次重试 attempt=1（兼容）。
 func TestRequeue_OldFormatWithoutAttemptStartsAtOne(t *testing.T) {
 	next, ok := requeue([]byte(
-		`{"execution_id":"e1","function_id":"fn_1","project_id":"p1","data":"{}"}`))
+		`{"invocation_id":"e1","function_id":"fn_1","project_id":"p1","data":"{}"}`))
 	require.True(t, ok)
 	var m retryMessage
 	require.NoError(t, json.Unmarshal(next, &m))
 	require.Equal(t, 1, m.Attempt)
-	require.Equal(t, "e1", m.ExecutionID)
+	require.Equal(t, "e1", m.InvocationID)
 	require.Equal(t, `{}`, m.Data)
 }
 
@@ -39,7 +39,7 @@ func TestRequeue_OldFormatWithoutAttemptStartsAtOne(t *testing.T) {
 // data 字段与全部 ID。
 func TestRequeue_RoundTripPreservesData(t *testing.T) {
 	payload := []byte(
-		`{"execution_id":"e1","function_id":"fn_1","project_id":"p1","data":"{\"nested\":{\"a\":1},\"s\":\"v\"}"}`)
+		`{"invocation_id":"e1","function_id":"fn_1","project_id":"p1","data":"{\"nested\":{\"a\":1},\"s\":\"v\"}"}`)
 	for i := 1; i <= maxProcessAttempts; i++ {
 		next, ok := requeue(payload)
 		require.True(t, ok, "attempt=%d 未超限应可重试", i)
@@ -59,7 +59,7 @@ func TestRequeue_RoundTripPreservesData(t *testing.T) {
 // 返回 ok=false（第 4 次失败才超限，maxProcessAttempts=3 语义）。
 func TestRequeue_ExhaustsAtLimit(t *testing.T) {
 	next, ok := requeue([]byte(
-		`{"execution_id":"e1","function_id":"fn_1","project_id":"p1","data":"{}","attempt":3}`))
+		`{"invocation_id":"e1","function_id":"fn_1","project_id":"p1","data":"{}","attempt":3}`))
 	require.False(t, ok)
 	require.Nil(t, next)
 }

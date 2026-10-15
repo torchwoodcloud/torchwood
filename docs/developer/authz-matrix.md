@@ -12,7 +12,7 @@
 >   SERVER admin 会话（admin_roles）或 API key（scope）；PERMISSION admin 会话
 >   专属（permissions），key 一律拒绝；SYSTEM 预留禁用。
 
-方法总数 272：PUBLIC 30 · END_USER 47 · SERVER 165 · PERMISSION 30 · SYSTEM 0。
+方法总数 265：PUBLIC 30 · END_USER 47 · SERVER 158 · PERMISSION 30 · SYSTEM 0。
 
 ## /torchwood.client.v1.AccountService
 
@@ -272,26 +272,19 @@
 
 | 方法 | Access | Admin 角色档 | Key Scope | 档位 | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| `/torchwood.server.v1.FunctionsService/CreateDeployment` | SERVER | admin, owner | functions.write | delegated_platform | |
-| `/torchwood.server.v1.FunctionsService/CreateExecution` | SERVER | admin, owner | functions.write | delegated_platform | |
 | `/torchwood.server.v1.FunctionsService/CreateFunction` | SERVER | admin, owner | functions.write | delegated_platform | |
 | `/torchwood.server.v1.FunctionsService/CreateFunctionTrigger` | SERVER | admin, owner | functions.write | delegated_platform | |
-| `/torchwood.server.v1.FunctionsService/DeleteDeployment` | SERVER | admin, owner | functions.write | delegated_platform | |
 | `/torchwood.server.v1.FunctionsService/DeleteFunction` | SERVER | admin, owner | functions.write | delegated_platform | |
 | `/torchwood.server.v1.FunctionsService/DeleteFunctionTrigger` | SERVER | admin, owner | functions.write | delegated_platform | |
-| `/torchwood.server.v1.FunctionsService/GetDeployment` | SERVER | 不限角色 | functions.read | read_only | |
-| `/torchwood.server.v1.FunctionsService/GetExecution` | SERVER | 不限角色 | functions.read | read_only | |
 | `/torchwood.server.v1.FunctionsService/GetFunction` | SERVER | 不限角色 | functions.read | read_only | |
-| `/torchwood.server.v1.FunctionsService/GetVariables` | SERVER | 不限角色 | functions.read | read_only | |
-| `/torchwood.server.v1.FunctionsService/ListDeployments` | SERVER | 不限角色 | functions.read | read_only | |
-| `/torchwood.server.v1.FunctionsService/ListExecutions` | SERVER | 不限角色 | functions.read | read_only | |
+| `/torchwood.server.v1.FunctionsService/GetInvocation` | SERVER | 不限角色 | functions.read | read_only | |
+| `/torchwood.server.v1.FunctionsService/InvokeFunction` | SERVER | admin, owner | functions.write | delegated_platform | |
 | `/torchwood.server.v1.FunctionsService/ListFunctionTriggers` | SERVER | 不限角色 | functions.read | read_only | |
 | `/torchwood.server.v1.FunctionsService/ListFunctions` | SERVER | 不限角色 | functions.read | read_only | |
-| `/torchwood.server.v1.FunctionsService/ListRuntimes` | SERVER | 不限角色 | functions.read | read_only | |
-| `/torchwood.server.v1.FunctionsService/ListSpecifications` | SERVER | 不限角色 | functions.read | read_only | |
+| `/torchwood.server.v1.FunctionsService/ListInvocations` | SERVER | 不限角色 | functions.read | read_only | |
+| `/torchwood.server.v1.FunctionsService/RotateFunctionSecret` | SERVER | admin, owner | functions.write | delegated_platform | |
 | `/torchwood.server.v1.FunctionsService/RotateFunctionTriggerToken` | SERVER | admin, owner | functions.write | delegated_platform | |
 | `/torchwood.server.v1.FunctionsService/SetFunctionScopes` | SERVER | admin, owner | functions.write | delegated_platform | |
-| `/torchwood.server.v1.FunctionsService/SetVariables` | SERVER | admin, owner | functions.write | delegated_platform | |
 | `/torchwood.server.v1.FunctionsService/UpdateFunction` | SERVER | admin, owner | functions.write | delegated_platform | |
 
 ## /torchwood.server.v1.GroupsService

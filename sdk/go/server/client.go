@@ -96,8 +96,10 @@ type Client struct {
 	Projects *ProjectsService
 	// Storage 提供存储元数据管理（上传/下载走独立 HTTP handler）。
 	Storage *StorageService
-	// Functions 提供函数管理（运行时/部署/变量/执行）。
+	// Functions 提供函数管理（v4：endpoint target + 调用 + 触发器）。
 	Functions *FunctionsService
+	// Webhooks 提供 Webhooks 一等公民面（订阅 CRUD + 投递行浏览/重投）。
+	Webhooks *WebhooksService
 	// OAuthProviders 提供 OAuth 提供商管理。
 	OAuthProviders *OAuthProvidersService
 	// Payments 提供订单查询、退款与人工履约。
@@ -156,6 +158,7 @@ func New(target string, opts ...Option) (*Client, error) {
 	c.Projects = &ProjectsService{c: c, api: serverv1.NewProjectsServiceClient(gc)}
 	c.Storage = &StorageService{c: c, api: serverv1.NewStorageServiceClient(gc)}
 	c.Functions = &FunctionsService{c: c, api: serverv1.NewFunctionsServiceClient(gc)}
+	c.Webhooks = &WebhooksService{c: c, api: serverv1.NewWebhooksServiceClient(gc)}
 	c.OAuthProviders = &OAuthProvidersService{c: c, api: serverv1.NewOAuthProvidersServiceClient(gc)}
 	c.Payments = &PaymentsService{c: c, api: serverv1.NewPaymentsServiceClient(gc)}
 	c.Assets = &AssetsService{c: c, api: serverv1.NewAssetsServiceClient(gc)}

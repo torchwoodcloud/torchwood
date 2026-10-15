@@ -39,7 +39,7 @@ import (
 // AuthValidator 同模式；*appfunctions.Functions 满足）。
 type TriggerInvoker interface {
 	GetHTTPTriggerByToken(ctx context.Context, projectID, token string) (*domainfunctions.Trigger, error)
-	InvokeTrigger(ctx context.Context, cmd appfunctions.InvokeTriggerCommand) (*domainfunctions.ExecutionRecord, error)
+	InvokeTrigger(ctx context.Context, cmd appfunctions.InvokeTriggerCommand) (*domainfunctions.InvocationRecord, error)
 	MaxTriggerBodyLimit(configured int) int
 }
 
@@ -149,24 +149,23 @@ func (h *FunctionTriggersHandler) invoke(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	data, envelope := buildTriggerEnvelope(r, body)
+	envelope := buildTriggerEnvelope(r, body)
 	cmd := appfunctions.InvokeTriggerCommand{
 		ProjectID:      projectID,
 		FunctionID:     functionID,
-		Data:           data,
 		Source:         trg.TriggerSource(),
 		SourceIP:       ip,
 		BodyLimitBytes: bodyLimit,
-		// v3 §2.3/D10 恒填充：封套元数据 + 原始 body 随执行规格透传（body
-		// 已过上方 413 校验）。runner fetch 风格还原 Request；main 风格重组
-		// TW_DATA 与现状等价（app 不探测 runner 风格）。
+		// v4 §4.1 恒填充（RPC 轴 http.request）：封套元数据 + 原始 body 收编
+		// 为单 body 的 params 通道（body 已过上方 413 校验）。fetch 语义 FDK
+		// 还原 Request；main 风格 FDK 重组 TW_DATA（封套含 body 投影）。
 		TriggerEnvelope: envelope,
 		RawBody:         body,
 	}
 
 	if trg.Config.ResponseMode == domainfunctions.ResponseModeAsyncAck {
 		// async_ack 顺序红线：先 Enqueue 成功、后写 200。InvokeTrigger 在
-		// 入队失败时返回错误（执行记录标 failed），此处一律 5xx 让微信重试。
+		// 入队失败时返回错误（调用记录标 failed），此处一律 5xx 让微信重试。
 		cmd.Async = true
 		if _, err := h.invoker.InvokeTrigger(r.Context(), cmd); err != nil {
 			h.logger.Warn("async trigger enqueue failed",
@@ -179,9 +178,9 @@ func (h *FunctionTriggersHandler) invoke(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	// sync：同步执行（≤30s；ctx 超时 = 30s + 余量，网关 TimeoutHandler 60s
-	// 兜底）。fetch 风格（v3 §2.2/D10）透传完整 HTTP 响应（status/headers/
-	// body 原样）；main 风格照旧 200 + Response 文本。
+	// sync：同步调用（≤30s；ctx 超时 = 30s + 余量，网关 TimeoutHandler 60s
+	// 兜底）。fetch 语义（v4 §4.1 http.request）透传完整 HTTP 响应
+	//（status/headers/body 原样）；main 风格照旧 200 + Response 文本。
 	ctx, cancel := context.WithTimeout(r.Context(), 35*time.Second)
 	defer cancel()
 	rec, err := h.invoker.InvokeTrigger(ctx, cmd)
@@ -189,11 +188,11 @@ func (h *FunctionTriggersHandler) invoke(w http.ResponseWriter, r *http.Request,
 		h.finish(w, r, projectID, functionID, triggerID, invokeTriggerErrorResult(err), invokeTriggerErrorStatus(err), "")
 		return
 	}
-	if rec != nil && rec.Status == domainfunctions.ExecutionStatusCompleted {
-		// fetch 风格信号：rec.StatusCode ≥ 100 = 函数 HTTP status（executor
-		// 链路回传；main 风格恒 0——退出码语义位）。完整透传 status/headers/
-		// body（自定义状态码、二进制、content-type 从此可达）；失败语义不受
-		// 影响（函数 HTTP 4xx/5xx 是合法一等结果，D10）。
+	if rec != nil && rec.Status == domainfunctions.InvocationStatusCompleted {
+		// fetch 语义信号：rec.StatusCode ≥ 100 = 函数 HTTP status（http.request
+		// 的 HTTPResult 透传；invoke 恒 0）。完整透传 status/headers/body
+		//（自定义状态码、二进制、content-type 从此可达）；失败语义不受影响
+		//（函数 HTTP 4xx/5xx 是合法一等结果，D10）。
 		if rec.StatusCode >= 100 {
 			h.finishTransparent(w, r, projectID, functionID, triggerID, rec)
 			return
@@ -208,29 +207,14 @@ func (h *FunctionTriggersHandler) invoke(w http.ResponseWriter, r *http.Request,
 	h.finish(w, r, projectID, functionID, triggerID, appfunctions.InvokeResultError, http.StatusBadGateway, resp)
 }
 
-// buildTriggerEnvelope 构造 TW_DATA 封套 {method, path, raw_query, headers,
-// body, body_base64} 与封套元数据（v3 §2.3：TriggerEnvelope——不含 body，
-// 随执行规格透传给 runner，fetch 风格还原 Request / main 风格重组 TW_DATA）。
-// headers 白名单（统一小写键）：全部 x-*（大小写不敏感）+ content-type +
-// wechatpay-* 前缀——白名单缺了验签头，「验签归函数」的前提就塌了；两形态
-// 共用同一白名单。body 双通道：body 为 best-effort UTF-8 字符串（JSON 序列
-// 化把非法字节替换为 U+FFFD），body_base64 恒在（无损，二进制 webhook 用）。
-func buildTriggerEnvelope(r *http.Request, body []byte) (string, *domainfunctions.TriggerEnvelope) {
+// buildTriggerEnvelope 构造封套元数据（v4 §4.1：TriggerEnvelope——不含
+// body，随 http.request params 透传；fetch 语义 FDK 还原 Request / main
+// 风格 FDK 重组 TW_DATA）。headers 白名单（统一小写键）：全部 x-*（大小写
+// 不敏感）+ content-type + wechatpay-* 前缀——白名单缺了验签头，「验签归
+// 函数」的前提就塌了。
+func buildTriggerEnvelope(r *http.Request, body []byte) *domainfunctions.TriggerEnvelope {
 	headers := whitelistHeaders(r)
-	envelope := map[string]any{
-		"method":      r.Method,
-		"path":        r.URL.Path,
-		"raw_query":   r.URL.RawQuery,
-		"headers":     headers,
-		"body":        string(body),
-		"body_base64": base64.StdEncoding.EncodeToString(body),
-	}
-	payload, err := json.Marshal(envelope)
-	if err != nil {
-		// map[string]any 序列化不会失败；防御分支。
-		payload = []byte(`{}`)
-	}
-	return string(payload), &domainfunctions.TriggerEnvelope{
+	return &domainfunctions.TriggerEnvelope{
 		Method:   r.Method,
 		Path:     r.URL.Path,
 		RawQuery: r.URL.RawQuery,
@@ -322,7 +306,7 @@ var transparentHeaderBlocklist = map[string]bool{
 // 归函数所有（透传是其目的）；指标与访问日志语义与 finish 完全一致。
 // 持久化不感知：headers/body_b64 不落库（OQ7 收口语义，见
 // domainfunctions.ExecutionRecord 注释）。
-func (h *FunctionTriggersHandler) finishTransparent(w http.ResponseWriter, r *http.Request, projectID, functionID, triggerID string, rec *domainfunctions.ExecutionRecord) {
+func (h *FunctionTriggersHandler) finishTransparent(w http.ResponseWriter, r *http.Request, projectID, functionID, triggerID string, rec *domainfunctions.InvocationRecord) {
 	appfunctions.ObserveInvoke(projectID, functionID, domainfunctions.TriggerTypeHTTP, appfunctions.InvokeResultOK)
 	h.logger.Info("function trigger invoke",
 		slog.String("method", r.Method),
@@ -336,7 +320,7 @@ func (h *FunctionTriggersHandler) finishTransparent(w http.ResponseWriter, r *ht
 
 	body, err := base64.StdEncoding.DecodeString(rec.ResponseB64)
 	if err != nil {
-		// ResponseB64 由 runner→dispatcher→executor 链路生成，失败仅防御。
+		// ResponseB64 由 endpoint 的 http.request result 生成，失败仅防御。
 		body = nil
 	}
 	for name, value := range rec.HTTPHeaders {

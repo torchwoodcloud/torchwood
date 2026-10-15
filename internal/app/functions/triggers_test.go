@@ -2,15 +2,11 @@ package functions
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"strings"
-	"sync"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	domainevents "github.com/torchwoodcloud/torchwood/internal/domain/events"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	domainprojects "github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
@@ -18,543 +14,227 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// mockTriggerRepo 是 TriggerRepo 的内存实现（测试用）；CAS 语义按
-// next_run_at 逐行比对，供领取并发/幂等断言。
-type mockTriggerRepo struct {
-	mu        sync.Mutex
-	triggers  map[string]*domainfunctions.Trigger
-	claimErr  error
-	claimLog  []string
-	createErr error
+// ——触发器面单测（P1 触发器模块；v4 cron 领取走事件轴原料 D10）——
+
+// stubTriggerRepo 是 TriggerRepo 桩：记录写入并支持注入领取结果。
+type stubTriggerRepo struct {
+	domainfunctions.TriggerRepo
+	trg        *domainfunctions.Trigger
+	claims     []domainfunctions.CronClaim
+	claimErr   error
+	updated    []*domainfunctions.Trigger
+	created    []*domainfunctions.Trigger
+	claimCount int
 }
 
-func newMockTriggerRepo() *mockTriggerRepo {
-	return &mockTriggerRepo{triggers: map[string]*domainfunctions.Trigger{}}
-}
-
-func (r *mockTriggerRepo) CreateTrigger(_ context.Context, t *domainfunctions.Trigger) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.createErr != nil {
-		return r.createErr
-	}
+func (r *stubTriggerRepo) CreateTrigger(_ context.Context, t *domainfunctions.Trigger) error {
 	cp := *t
-	r.triggers[t.ID] = &cp
+	r.created = append(r.created, &cp)
+	r.trg = &cp
 	return nil
 }
 
-func (r *mockTriggerRepo) GetTrigger(_ context.Context, projectID, functionID, triggerID string) (*domainfunctions.Trigger, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	t := r.triggers[triggerID]
-	if t == nil || t.ProjectID != projectID || t.FunctionID != functionID {
+func (r *stubTriggerRepo) GetTrigger(_ context.Context, projectID, functionID, triggerID string) (*domainfunctions.Trigger, error) {
+	if r.trg == nil || r.trg.ProjectID != projectID || r.trg.FunctionID != functionID || r.trg.ID != triggerID {
 		return nil, nil
 	}
-	cp := *t
+	cp := *r.trg
 	return &cp, nil
 }
 
-func (r *mockTriggerRepo) ListTriggers(_ context.Context, projectID, functionID string) ([]domainfunctions.Trigger, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	var out []domainfunctions.Trigger
-	for _, t := range r.triggers {
-		if t.ProjectID == projectID && t.FunctionID == functionID {
-			out = append(out, *t)
-		}
+func (r *stubTriggerRepo) ListTriggers(context.Context, string, string) ([]domainfunctions.Trigger, error) {
+	if r.trg == nil {
+		return nil, nil
 	}
-	return out, nil
+	return []domainfunctions.Trigger{*r.trg}, nil
 }
 
-func (r *mockTriggerRepo) UpdateTrigger(_ context.Context, t *domainfunctions.Trigger) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, ok := r.triggers[t.ID]; !ok {
-		return nil
-	}
+func (r *stubTriggerRepo) UpdateTrigger(_ context.Context, t *domainfunctions.Trigger) error {
 	cp := *t
-	r.triggers[t.ID] = &cp
+	r.updated = append(r.updated, &cp)
+	r.trg = &cp
 	return nil
 }
 
-func (r *mockTriggerRepo) DeleteTrigger(_ context.Context, projectID, functionID, triggerID string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	t := r.triggers[triggerID]
-	if t != nil && t.ProjectID == projectID && t.FunctionID == functionID {
-		delete(r.triggers, triggerID)
-	}
-	return nil
-}
+func (r *stubTriggerRepo) DeleteTrigger(context.Context, string, string, string) error { return nil }
 
-func (r *mockTriggerRepo) GetTriggerByToken(_ context.Context, projectID, token string) (*domainfunctions.Trigger, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, t := range r.triggers {
-		if t.Token == token && t.ProjectID == projectID {
-			cp := *t
-			return &cp, nil
-		}
+func (r *stubTriggerRepo) GetTriggerByToken(_ context.Context, projectID, token string) (*domainfunctions.Trigger, error) {
+	if r.trg != nil && r.trg.ProjectID == projectID && r.trg.Token == token && r.trg.Enabled && r.trg.Type == domainfunctions.TriggerTypeHTTP {
+		return r.trg, nil
 	}
 	return nil, nil
 }
 
-func (r *mockTriggerRepo) ClaimDueCron(ctx context.Context, projectID string, now time.Time, limit int, next domainfunctions.CronNextFunc) ([]domainfunctions.CronClaim, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (r *stubTriggerRepo) ClaimDueCron(context.Context, string, time.Time, int, domainfunctions.CronNextFunc) ([]domainfunctions.CronClaim, error) {
+	r.claimCount++
 	if r.claimErr != nil {
 		return nil, r.claimErr
 	}
-	var claims []domainfunctions.CronClaim
-	for _, t := range r.triggers {
-		if len(claims)+len(r.claimLog) >= limit {
-			break
-		}
-		if t.ProjectID != projectID || !t.Enabled || t.Type != domainfunctions.TriggerTypeCron {
-			continue
-		}
-		if t.NextRunAt == nil || t.NextRunAt.After(now) {
-			continue
-		}
-		due := *t.NextRunAt
-		plan, err := next(domainfunctions.CronNextInput{Due: due, Now: now, Expr: t.Config.Expr, Misfire: t.Config.Misfire})
-		if err != nil {
-			continue
-		}
-		nt := *t
-		nt.NextRunAt = &plan.Next
-		r.triggers[t.ID] = &nt
-		r.claimLog = append(r.claimLog, t.ID)
-		if !plan.Run {
-			continue
-		}
-		claims = append(claims, domainfunctions.CronClaim{
-			ProjectID: projectID, FunctionID: t.FunctionID, TriggerID: t.ID, ScheduledFor: due,
-		})
-	}
-	return claims, nil
+	return r.claims, nil
 }
 
-func (r *mockTriggerRepo) ListEnabledEventTriggers(_ context.Context, projectID string) ([]domainfunctions.Trigger, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	var out []domainfunctions.Trigger
-	for _, t := range r.triggers {
-		if t.ProjectID == projectID && t.Enabled && t.Type == domainfunctions.TriggerTypeEvent {
-			out = append(out, *t)
-		}
+func (r *stubTriggerRepo) ListEnabledEventTriggers(context.Context, string) ([]domainfunctions.Trigger, error) {
+	return nil, nil
+}
+
+// dirStub 是项目目录桩（cron 领取的项目枚举面）。
+type dirStub struct {
+	domainprojects.Repository
+	ids []string
+}
+
+func (d dirStub) ListProjects(context.Context) ([]domainprojects.Project, error) {
+	out := make([]domainprojects.Project, len(d.ids))
+	for i, id := range d.ids {
+		out[i] = domainprojects.Project{ID: id, Status: "active"}
 	}
 	return out, nil
 }
 
-func newTriggerTestUC(executor *mockExecutor, repo *mockRepo, queue *mockQueue, triggers *mockTriggerRepo, projects domainprojects.Repository) *Functions {
-	uc := NewFunctionsWithUsage(&config.AppConfig{}, executor, repo, queue, nil, projects, Semaphores{}, nil, triggers, nil)
-	return uc
+func newTriggersFunctions(t *testing.T, repo *stubTriggerRepo, queue *fakeQueue) *Functions {
+	t.Helper()
+	return newTriggersFunctionsWithDir(t, repo, queue, dirStub{ids: []string{"p1"}})
 }
 
-func TestCreateFunctionTrigger_HTTPGeneratesTokenAndValidates(t *testing.T) {
-	repo := newMockRepo()
-	seedReadyFunction(repo, "p1", "fn_1", true, 15)
-	triggers := newMockTriggerRepo()
-	uc := newTriggerTestUC(newMockExecutor(nil, nil), repo, newMockQueue(), triggers, nil)
+func newTriggersFunctionsWithDir(t *testing.T, repo *stubTriggerRepo, queue *fakeQueue, dir domainprojects.Repository) *Functions {
+	t.Helper()
+	f := NewFunctions(&config.AppConfig{}, &fakeInvoker{}, &fakeNotifier{}, &fakeRepo{fn: v4TestFunction()}, queue, nil, dir, &fakeTokens{}, repo, nil)
+	f.encKey = testEncKey
+	return f
+}
 
-	trg, err := uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
+func TestCreateFunctionTrigger_HTTP(t *testing.T) {
+	repo := &stubTriggerRepo{}
+	f := newTriggersFunctions(t, repo, &fakeQueue{})
+
+	trg, err := f.CreateFunctionTrigger(serverCtx(), CreateTriggerCommand{
 		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeHTTP,
-		HTTP: domainfunctions.TriggerConfig{ResponseMode: domainfunctions.ResponseModeAsyncAck, AckBody: `{"is_valid":true}`, Handshake: domainfunctions.HandshakeEcho},
-	})
-	require.NoError(t, err)
-	require.NotEmpty(t, trg.Token, "token 服务端生成")
-	require.Len(t, trg.Token, 22, "128bit base64url")
-	require.Equal(t, "http:"+trg.ID, trg.TriggerSource())
-
-	// response_mode 必填。
-	_, err = uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeHTTP,
-		HTTP: domainfunctions.TriggerConfig{},
-	})
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
-
-	// ack_body > 1KB 拒绝（防公开端点带宽放大）。
-	_, err = uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeHTTP,
-		HTTP: domainfunctions.TriggerConfig{
-			ResponseMode: domainfunctions.ResponseModeAsyncAck,
-			AckBody:      strings.Repeat("a", domainfunctions.MaxAckBodyBytes+1),
-		},
-	})
-	require.Equal(t, codes.InvalidArgument, status.Code(err), "ack_body 超限创建被拒")
-
-	// body_limit > 1MB 拒绝。
-	_, err = uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeHTTP,
-		HTTP: domainfunctions.TriggerConfig{
-			ResponseMode:   domainfunctions.ResponseModeSync,
-			BodyLimitBytes: domainfunctions.MaxHTTPBodyLimitBytes + 1,
-		},
-	})
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
-
-	// handshake 词表。
-	_, err = uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeHTTP,
-		HTTP: domainfunctions.TriggerConfig{ResponseMode: domainfunctions.ResponseModeSync, Handshake: "tsign"},
-	})
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
-
-	// 函数不存在 → 404。
-	_, err = uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_missing", Type: domainfunctions.TriggerTypeHTTP,
 		HTTP: domainfunctions.TriggerConfig{ResponseMode: domainfunctions.ResponseModeSync},
 	})
-	require.Equal(t, codes.NotFound, status.Code(err))
+	require.NoError(t, err)
+	require.NotEmpty(t, trg.Token, "http token 服务端生成（128bit，URL 即鉴权）")
+	require.Len(t, repo.created, 1)
+
+	// response_mode 必填。
+	_, err = f.CreateFunctionTrigger(serverCtx(), CreateTriggerCommand{
+		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeHTTP,
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
-func TestCreateFunctionTrigger_CronParsesExprAndSetsNextRun(t *testing.T) {
-	repo := newMockRepo()
-	seedReadyFunction(repo, "p1", "fn_1", true, 15)
-	triggers := newMockTriggerRepo()
-	uc := newTriggerTestUC(newMockExecutor(nil, nil), repo, newMockQueue(), triggers, nil)
+func TestCreateFunctionTrigger_Cron(t *testing.T) {
+	repo := &stubTriggerRepo{}
+	f := newTriggersFunctions(t, repo, &fakeQueue{})
 
-	trg, err := uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
+	trg, err := f.CreateFunctionTrigger(serverCtx(), CreateTriggerCommand{
 		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeCron,
-		Cron: domainfunctions.TriggerConfig{Expr: "0 3 * * *"},
+		Cron: domainfunctions.TriggerConfig{Expr: "*/5 * * * *"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, domainfunctions.MisfireCatchUpOnce, trg.Config.Misfire, "misfire 缺省 catch_up_once")
-	require.NotNil(t, trg.NextRunAt)
-	require.True(t, trg.NextRunAt.After(time.Now().Add(-time.Second)), "next_run_at = now 之后的下一计划时刻")
-	require.Equal(t, time.UTC.String(), trg.NextRunAt.Location().String(), "cron 一期 UTC")
+	require.NotNil(t, trg.NextRunAt, "cron 创建即计算下一计划时刻")
+	require.True(t, trg.NextRunAt.After(time.Now()), "推进不变量：下一计划时刻严格大于 now")
+	require.True(t, trg.NextRunAt.Before(time.Now().Add(6*time.Minute)))
 
-	// 坏表达式拒绝。
-	_, err = uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
+	// 非法表达式拒绝。
+	_, err = f.CreateFunctionTrigger(serverCtx(), CreateTriggerCommand{
 		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeCron,
-		Cron: domainfunctions.TriggerConfig{Expr: "61 * * * *"},
+		Cron: domainfunctions.TriggerConfig{Expr: "not-a-cron"},
 	})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
-// TestCreateFunctionTrigger_EventValidatesSubscriptions v3 切片 D：event
-// 触发器的订阅串校验（非空、逐条格式、错误携带具体条目、去重）。
-func TestCreateFunctionTrigger_EventValidatesSubscriptions(t *testing.T) {
-	repo := newMockRepo()
-	seedReadyFunction(repo, "p1", "fn_1", true, 15)
-	triggers := newMockTriggerRepo()
-	uc := newTriggerTestUC(newMockExecutor(nil, nil), repo, newMockQueue(), triggers, nil)
+func TestCreateFunctionTrigger_Event(t *testing.T) {
+	repo := &stubTriggerRepo{}
+	f := newTriggersFunctions(t, repo, &fakeQueue{})
 
-	// 合法创建：去重保序、no next_run_at。
-	trg, err := uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
+	trg, err := f.CreateFunctionTrigger(serverCtx(), CreateTriggerCommand{
 		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeEvent,
-		Events: []string{
-			"databases.app.collections.notes.documents.create",
-			"databases.app.collections.*.documents.*",
-			"databases.app.collections.notes.documents.create", // 重复 → 去重
-		},
+		Events: []string{"databases.app.collections.notes.documents.create", "auth.users.created"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, domainfunctions.TriggerTypeEvent, trg.Type)
-	require.Equal(t, []string{
-		"databases.app.collections.notes.documents.create",
-		"databases.app.collections.*.documents.*",
-	}, trg.Config.Events, "重复订阅串按序去重")
-	require.Nil(t, trg.NextRunAt, "event 触发器无 next_run_at")
-	require.Equal(t, "event:"+trg.ID, trg.TriggerSource())
+	require.Len(t, trg.Config.Events, 2)
 
-	// 空订阅列表拒绝。
-	_, err = uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
+	// 目录外前缀 fail-closed。
+	_, err = f.CreateFunctionTrigger(serverCtx(), CreateTriggerCommand{
 		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeEvent,
+		Events: []string{"bogus.*"},
 	})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
-
-	// 格式非法 → InvalidArgument 带具体条目。
-	_, err = uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeEvent,
-		Events: []string{"databases.app.collections.notes.documents.create", "databases.*.collections.x.documents.create"},
-	})
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.Contains(t, err.Error(), "databases.*.collections.x.documents.create", "错误文案携带具体条目")
-
-	// database 段通配（一期）拒绝。
-	_, err = uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeEvent,
-		Events: []string{"databases.*.collections.x.documents.create"},
-	})
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
-
-	// type 词表扩展后既有 http/cron 校验不回归（default 分支文案更新）。
-	_, err = uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1", Type: "webhook",
-	})
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
-
-	// List 响应带 events。
-	list, err := uc.ListFunctionTriggers(platformAdminCtx(), "p1", "fn_1")
-	require.NoError(t, err)
-	require.Len(t, list, 1)
-	require.Equal(t, trg.Config.Events, list[0].Config.Events)
-}
-
-// TestCreateFunctionTrigger_SystemEventSubscriptions §4.1 增补：系统事件
-// 订阅串第二形态——目录内合法、目录外/中间通配 fail-closed、双形态可混订。
-func TestCreateFunctionTrigger_SystemEventSubscriptions(t *testing.T) {
-	repo := newMockRepo()
-	seedReadyFunction(repo, "p1", "fn_1", true, 15)
-	triggers := newMockTriggerRepo()
-	uc := newTriggerTestUC(newMockExecutor(nil, nil), repo, newMockQueue(), triggers, nil)
-
-	// 合法：系统形态（域通配 + 精确名）与文档形态混订，去重保序。
-	trg, err := uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeEvent,
-		Events: []string{
-			"auth.users.*",
-			"payments.orders.paid",
-			"databases.app.collections.notes.documents.create",
-			"auth.users.*", // 重复 → 去重
-		},
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{
-		"auth.users.*",
-		"payments.orders.paid",
-		"databases.app.collections.notes.documents.create",
-	}, trg.Config.Events)
-
-	// 未登记域 / 域对前缀空 / 中间段通配：全部 InvalidArgument 带条目。
-	for _, bad := range []string{
-		"typo.users.*",
-		"auth.orders.*",
-		"auth.*.created",
-		"auth.users.creatd",
-	} {
-		_, err := uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
-			ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeEvent,
-			Events: []string{bad},
-		})
-		require.Equal(t, codes.InvalidArgument, status.Code(err), bad)
-		require.Contains(t, err.Error(), bad, "错误文案携带具体条目")
-	}
-}
-
-// TestRefreshEventTriggerIndex 快照扫描：跨项目聚合、非 active/非 event/
-// 禁用触发器排除、任一项目扫描失败返回错误（worker 只在完整快照成功时换入）。
-func TestRefreshEventTriggerIndex(t *testing.T) {
-	repo := newMockRepo()
-	triggers := newMockTriggerRepo()
-	projects := &stubProjectRepo{list: []domainprojects.Project{
-		{ID: "p1", Status: "active"},
-		{ID: "p2", Status: "active"},
-		{ID: "p3", Status: "suspended"}, // 非 active 排除
-	}}
-	uc := newTriggerTestUC(newMockExecutor(nil, nil), repo, newMockQueue(), triggers, projects)
-
-	mk := func(id, project, fn string, enabled bool) *domainfunctions.Trigger {
-		return &domainfunctions.Trigger{
-			ID: id, ProjectID: project, FunctionID: fn, Type: domainfunctions.TriggerTypeEvent,
-			Enabled: enabled,
-			Config:  domainfunctions.TriggerConfig{Events: []string{"databases.app.collections.*.documents.create"}},
-		}
-	}
-	require.NoError(t, triggers.CreateTrigger(context.Background(), mk("trg_1", "p1", "fn_1", true)))
-	require.NoError(t, triggers.CreateTrigger(context.Background(), mk("trg_2", "p2", "fn_2", false))) // 禁用
-	require.NoError(t, triggers.CreateTrigger(context.Background(), mk("trg_3", "p3", "fn_3", true)))  // 非 active 项目
-	require.NoError(t, triggers.CreateTrigger(context.Background(), &domainfunctions.Trigger{          // cron 不入索引
-		ID: "trg_4", ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeCron,
-		Enabled: true, Config: domainfunctions.TriggerConfig{Expr: "* * * * *"},
-	}))
-
-	idx, err := uc.RefreshEventTriggerIndex(context.Background(), 100)
-	require.NoError(t, err)
-	require.Equal(t, 1, idx.Len())
-	require.Len(t, idx.Match("p1", "app", "notes", "create"), 1)
-	require.Empty(t, idx.Match("p3", "app", "notes", "create"), "非 active 项目不入快照")
-
-	// 预算截断。
-	idx, err = uc.RefreshEventTriggerIndex(context.Background(), 0)
-	require.NoError(t, err)
-	require.Equal(t, 1, idx.Len(), "budget=0 = 不限")
-}
-
-// TestInvokeTrigger_EventProjection v3 §4.2：事件路径 InvokeTrigger 记录
-// Source=event:{trigger_id}、data 投影在预算内、async 入队。
-func TestInvokeTrigger_EventProjection(t *testing.T) {
-	repo := newMockRepo()
-	seedReadyFunction(repo, "p1", "fn_1", true, 15)
-	triggers := newMockTriggerRepo()
-	queue := newMockQueue()
-	uc := newTriggerTestUC(newMockExecutor(nil, nil), repo, queue, triggers, nil)
-
-	data, err := domainfunctions.BuildEventInvocationData(&domainevents.Envelope{
-		EventID: "ev_1", Event: domainevents.EventDocumentsCreate, Seq: 7,
-		ProjectID: "p1", DatabaseID: "app", CollectionID: "notes", DocumentID: "doc_1",
-		Version: 3,
-	})
-	require.NoError(t, err)
-
-	rec, err := uc.InvokeTrigger(context.Background(), InvokeTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1", Data: data, Async: true,
-		Source: "event:trg_ev1",
-	})
-	require.NoError(t, err)
-	require.Equal(t, domainfunctions.ExecutionStatusQueued, rec.Status)
-	require.Equal(t, "event:trg_ev1", rec.TriggerSource, "Source=event:{trigger_id} 记审计载体")
-	require.Len(t, queue.enqueued, 1)
 }
 
 func TestRotateFunctionTriggerToken(t *testing.T) {
-	repo := newMockRepo()
-	seedReadyFunction(repo, "p1", "fn_1", true, 15)
-	triggers := newMockTriggerRepo()
-	uc := newTriggerTestUC(newMockExecutor(nil, nil), repo, newMockQueue(), triggers, nil)
+	repo := &stubTriggerRepo{trg: &domainfunctions.Trigger{
+		ID: "trg_1", ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeHTTP,
+		Token: "old", Enabled: true,
+	}}
+	f := newTriggersFunctions(t, repo, &fakeQueue{})
 
-	trg, err := uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeHTTP,
-		HTTP: domainfunctions.TriggerConfig{ResponseMode: domainfunctions.ResponseModeSync},
-	})
+	trg, err := f.RotateFunctionTriggerToken(serverCtx(), "p1", "fn_1", "trg_1")
 	require.NoError(t, err)
-	old := trg.Token
+	require.NotEqual(t, "old", trg.Token, "旧 token 立即失效")
+	require.Len(t, repo.updated, 1)
 
-	rotated, err := uc.RotateFunctionTriggerToken(platformAdminCtx(), "p1", "fn_1", trg.ID)
-	require.NoError(t, err)
-	require.NotEqual(t, old, rotated.Token, "轮换产生新 token")
-	require.NotEmpty(t, old)
-
-	// cron 触发器不支持轮换。
-	cronTrg, err := uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeCron,
-		Cron: domainfunctions.TriggerConfig{Expr: "* * * * *"},
-	})
-	require.NoError(t, err)
-	_, err = uc.RotateFunctionTriggerToken(platformAdminCtx(), "p1", "fn_1", cronTrg.ID)
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
-
-	// 旧 token 不再命中（fail-closed）。
-	got, err := uc.GetHTTPTriggerByToken(context.Background(), "p1", old)
-	require.NoError(t, err)
-	require.Nil(t, got, "旧 token 轮换后立即失效")
-	got, err = uc.GetHTTPTriggerByToken(context.Background(), "p1", rotated.Token)
-	require.NoError(t, err)
-	require.NotNil(t, got)
+	// cron 触发器无 token 可轮换。
+	repo2 := &stubTriggerRepo{trg: &domainfunctions.Trigger{
+		ID: "trg_c", ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeCron, Enabled: true,
+	}}
+	f2 := newTriggersFunctions(t, repo2, &fakeQueue{})
+	_, err = f2.RotateFunctionTriggerToken(serverCtx(), "p1", "fn_1", "trg_c")
+	require.ErrorContains(t, err, "http triggers only")
 }
 
-func TestInvokeTrigger_SyncRecordsSourceAndPassthrough(t *testing.T) {
-	repo := newMockRepo()
-	seedReadyFunction(repo, "p1", "fn_1", true, 15)
-	triggers := newMockTriggerRepo()
-	executor := newMockExecutor(&domainfunctions.ExecutionResult{StatusCode: 0, Response: `{"ok":1}`}, nil)
-	uc := newTriggerTestUC(executor, repo, newMockQueue(), triggers, nil)
+func TestGetHTTPTriggerByToken(t *testing.T) {
+	repo := &stubTriggerRepo{trg: &domainfunctions.Trigger{
+		ID: "trg_1", ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeHTTP,
+		Token: "tok", Enabled: true,
+	}}
+	f := newTriggersFunctions(t, repo, &fakeQueue{})
 
-	trg, err := uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeHTTP,
-		HTTP: domainfunctions.TriggerConfig{ResponseMode: domainfunctions.ResponseModeSync},
-	})
+	// 命中（不要求 principal——token 即鉴权）。
+	trg, err := f.GetHTTPTriggerByToken(context.Background(), "p1", "tok")
 	require.NoError(t, err)
+	require.NotNil(t, trg)
 
-	rec, err := uc.InvokeTrigger(context.Background(), InvokeTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1",
-		Data:   `{"method":"POST"}`,
-		Source: trg.TriggerSource(), SourceIP: "203.0.113.7",
-	})
+	// 禁用/跨项目探测 → nil（不泄露存在性）。
+	repo.trg.Enabled = false
+	trg, err = f.GetHTTPTriggerByToken(context.Background(), "p1", "tok")
 	require.NoError(t, err)
-	require.Equal(t, domainfunctions.ExecutionStatusCompleted, rec.Status)
-	require.Equal(t, "http:"+trg.ID, rec.TriggerSource, "执行记录记 trigger_source（审计载体）")
-	require.Equal(t, "203.0.113.7", rec.SourceIP)
-
-	// 同一封套经异步路径：入队成功（queue fake 注入失败路径见下一个测试）。
-	recAsync, err := uc.InvokeTrigger(context.Background(), InvokeTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1",
-		Data: `{"method":"POST"}`, Async: true, Source: trg.TriggerSource(), SourceIP: "203.0.113.7",
-	})
-	require.NoError(t, err)
-	require.Equal(t, domainfunctions.ExecutionStatusQueued, recAsync.Status)
-	require.Equal(t, trg.TriggerSource(), recAsync.TriggerSource)
+	require.Nil(t, trg)
 }
 
-// TestInvokeTrigger_AsyncAckOrderRedLine 顺序红线（设计 §3 三轮复核）：
-// 入队失败 → InvokeTrigger 返回错误（执行记录标 failed），handler 据此写
-// 5xx——绝不出现「先 200 后入队失败」的事件丢失窗口。
-func TestInvokeTrigger_AsyncAckOrderRedLine(t *testing.T) {
-	repo := newMockRepo()
-	seedReadyFunction(repo, "p1", "fn_1", true, 15)
-	triggers := newMockTriggerRepo()
-	queue := newMockQueue()
-	queue.err = errors.New("redis down")
-	uc := newTriggerTestUC(newMockExecutor(nil, nil), repo, queue, triggers, nil)
+// TestDispatchDueCronTriggers cron 领取 → 事件轴原料入队：data = CronTick
+// 投影、EventAxis{type: cron.tick, time: scheduled_for}。
+func TestDispatchDueCronTriggers(t *testing.T) {
+	repo := &stubTriggerRepo{}
+	q := &fakeQueue{}
+	f := newTriggersFunctions(t, repo, q)
 
-	trg, err := uc.CreateFunctionTrigger(platformAdminCtx(), CreateTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1", Type: domainfunctions.TriggerTypeHTTP,
-		HTTP: domainfunctions.TriggerConfig{ResponseMode: domainfunctions.ResponseModeAsyncAck, AckBody: `{"is_valid":true}`},
-	})
+	scheduled := time.Date(2026, 10, 15, 8, 0, 0, 0, time.UTC)
+	repo.claims = []domainfunctions.CronClaim{{
+		ProjectID: "p1", FunctionID: "fn_1", TriggerID: "trg_c", ScheduledFor: scheduled,
+	}}
+	n, err := f.DispatchDueCronTriggers(context.Background(), time.Now(), 10)
 	require.NoError(t, err)
+	require.Equal(t, 1, n)
 
-	_, err = uc.InvokeTrigger(context.Background(), InvokeTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1",
-		Data: `{"method":"POST"}`, Async: true, Source: trg.TriggerSource(),
-	})
-	require.Error(t, err, "入队失败必须上抛（handler 写 5xx）")
-	require.Len(t, queue.enqueued, 0)
-
-	// 执行记录兜底标 failed（审计不留悬空 queued）。
-	require.Len(t, repo.executions, 1)
-	for _, e := range repo.executions {
-		require.Equal(t, domainfunctions.ExecutionStatusFailed, e.Status, "入队失败的执行记录标 failed")
-		require.Equal(t, trg.TriggerSource(), e.TriggerSource)
-	}
+	require.Len(t, q.payloads, 1)
+	var msg queueMessage
+	require.NoError(t, json.Unmarshal(q.payloads[0], &msg))
+	require.Equal(t, domainfunctions.TriggerTypeCron+":trg_c", msg.Source)
+	require.NotNil(t, msg.EventAxis)
+	require.Equal(t, domainfunctions.CloudEventTypeCronTick, msg.EventAxis.Type)
+	require.Equal(t, scheduled.UTC(), msg.EventAxis.Time.UTC())
+	var tick domainfunctions.CronTick
+	require.NoError(t, json.Unmarshal([]byte(msg.Data), &tick))
+	require.Equal(t, "trg_c", tick.TriggerID)
+	require.Equal(t, scheduled.UTC().Format(time.RFC3339), tick.ScheduledFor)
 }
 
-// TestInvokeTrigger_TriggerBodyLimitRelaxed 触发器封套上限放宽至 body_limit
-// （≤1MB；dispatcher body 通道，v1 env 通道已随执行器移除）。
-func TestInvokeTrigger_TriggerBodyLimitRelaxed(t *testing.T) {
-	repo := newMockRepo()
-	seedReadyFunction(repo, "p1", "fn_1", true, 15)
-	triggers := newMockTriggerRepo()
-	uc := newTriggerTestUC(newMockExecutor(nil, nil), repo, newMockQueue(), triggers, nil)
-
-	// >32KB data 放行（body 通道，触发器上限生效；v1 env 通道 32KB 上限已成历史）。
-	big := fmt.Sprintf(`{"body":%q}`, strings.Repeat("x", 40<<10))
-	_, err := uc.InvokeTrigger(context.Background(), InvokeTriggerCommand{
-		ProjectID: "p1", FunctionID: "fn_1", Data: big, Async: true,
-		Source: "http:trg_x", BodyLimitBytes: 64 << 10,
-	})
-	require.NoError(t, err, "body 通道放宽到触发器上限")
-}
-
-// TestMaxTriggerBodyLimit 锁生效 body 上限语义（dispatcher body 通道）。
+// TestMaxTriggerBodyLimit body 上限钳制：0 → 缺省 64KB；>1MB → 钳到 1MB。
 func TestMaxTriggerBodyLimit(t *testing.T) {
-	uc := NewFunctions(&config.AppConfig{}, nil, nil, nil)
-	require.Equal(t, 64<<10, uc.MaxTriggerBodyLimit(0), "缺省 64KB")
-	require.Equal(t, 1<<20, uc.MaxTriggerBodyLimit(1<<20), "body 通道配置全额生效")
-	require.Equal(t, 1<<20, uc.MaxTriggerBodyLimit(2<<20), "超过 1MB 收到 1MB")
-}
-
-// TestDispatchDueCronTriggers_EnqueueFailureUndoClaim 入队失败回滚领取：
-// next_run_at 回滚到原到期值，下轮扫描 catch_up 语义兜底重领；批内其他
-// 触发器不受阻塞。
-func TestDispatchDueCronTriggers_EnqueueFailureUndoClaim(t *testing.T) {
-	repo := newMockRepo()
-	seedReadyFunction(repo, "p1", "fn_1", true, 15)
-	triggers := newMockTriggerRepo()
-	queue := newMockQueue()
-	queue.err = errors.New("redis down")
-	uc := newTriggerTestUC(newMockExecutor(nil, nil), repo, queue, triggers, &stubProjectRepo{
-		list: []domainprojects.Project{{ID: "p1", Status: "active"}},
-	})
-
-	now := time.Now()
-	due := now.Add(-30 * time.Second)
-	trg := &domainfunctions.Trigger{
-		ID: "trg_c1", ProjectID: "p1", FunctionID: "fn_1",
-		Type:    domainfunctions.TriggerTypeCron,
-		Config:  domainfunctions.TriggerConfig{Expr: "* * * * *", Misfire: domainfunctions.MisfireCatchUpOnce},
-		Enabled: true, NextRunAt: &due,
-		CreatedAt: now, UpdatedAt: now,
-	}
-	require.NoError(t, triggers.CreateTrigger(context.Background(), trg))
-
-	n, err := uc.DispatchDueCronTriggers(context.Background(), now, 100)
-	require.NoError(t, err)
-	require.Equal(t, 0, n, "入队失败不计投递")
-
-	// 领取已回滚：next_run_at 回到原到期值（下轮重领）。
-	got := triggers.triggers["trg_c1"]
-	require.NotNil(t, got.NextRunAt)
-	require.True(t, got.NextRunAt.Equal(due), "入队失败回滚 next_run_at 到原到期值")
+	repo := &stubTriggerRepo{}
+	f := newTriggersFunctions(t, repo, &fakeQueue{})
+	require.Equal(t, domainfunctions.DefaultHTTPBodyLimitBytes, f.MaxTriggerBodyLimit(0))
+	require.Equal(t, domainfunctions.MaxHTTPBodyLimitBytes, f.MaxTriggerBodyLimit(2<<20))
+	require.Equal(t, 1024, f.MaxTriggerBodyLimit(1024))
 }

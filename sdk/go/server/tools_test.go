@@ -25,7 +25,7 @@ func TestToolsCatalogResolvesFullMethods(t *testing.T) {
 		{ToolDeleteDocument, "/torchwood.server.v1.DatabasesService/DeleteDocument"},
 		{ToolListCollections, "/torchwood.server.v1.DatabasesService/ListCollections"},
 		{ToolGetCollection, "/torchwood.server.v1.DatabasesService/GetCollection"},
-		{ToolInvokeFunction, "/torchwood.server.v1.FunctionsService/CreateExecution"},
+		{ToolInvokeFunction, "/torchwood.server.v1.FunctionsService/InvokeFunction"},
 		{ToolListFiles, "/torchwood.server.v1.StorageService/ListFiles"},
 		{ToolGetFile, "/torchwood.server.v1.StorageService/GetFile"},
 		{ToolGrantAsset, "/torchwood.server.v1.AssetsService/Grant"},

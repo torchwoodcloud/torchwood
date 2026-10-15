@@ -16,7 +16,7 @@ import (
 var (
 	executionDurationSeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "torchwood_functions_execution_duration_seconds",
-		Help:    "Function execution duration (executor leg), by trigger source and outcome.",
+		Help:    "Function invocation duration (gateway round trip), by trigger source and outcome.",
 		Buckets: prometheus.ExponentialBuckets(0.005, 2, 16), // 5ms .. ~164s
 	}, []string{"project", "function", "source", "status"})
 
@@ -39,22 +39,13 @@ var (
 		Name: "torchwood_functions_invoke_total",
 		Help: "Function invoke attempts at trigger/client entrypoints, by source and result.",
 	}, []string{"project", "function", "source", "result"})
-
-	// concurrencyDowngradedTotal 是并发降级保护计数（v3 实例内多路复用，
-	// docs/design/functions-v3.md §1.5/Observability）：函数 concurrency > 1
-	// 而执行所用 deployment 的 template_version < 3 时按并发 1 执行——
-	// fail-safe 不 fail-closed，降级发生即计数（重部署获 v3 模板后归零停止）。
-	concurrencyDowngradedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "torchwood_functions_concurrency_downgraded_total",
-		Help: "Executions downgraded to concurrency=1 because the deployment template predates runner v3.",
-	}, []string{"project", "function"})
 )
 
 func init() {
-	prometheus.MustRegister(executionDurationSeconds, executionQueueWaitSeconds, executionsTotal, invokeTotal, concurrencyDowngradedTotal)
+	prometheus.MustRegister(executionDurationSeconds, executionQueueWaitSeconds, executionsTotal, invokeTotal)
 }
 
-// source 词表：server 当前唯一取值（CreateExecution 内部路径）；http/cron
+// source 词表：server 当前唯一取值（Invoke 内部路径）；http/cron
 // 随 P1 触发器打开（trigger_source 列前缀），client 为 P2 客户端调用面
 // （InvokeFunction；trigger_source 列恒等 "client"）。
 const (
@@ -105,12 +96,12 @@ func ObserveInvoke(projectID, functionID, source, result string) {
 	invokeTotal.WithLabelValues(projectID, functionID, source, result).Inc()
 }
 
-// observeExecution 记录一次执行的总时长与终态（best-effort，不影响主链路）。
-func (f *Functions) observeExecution(projectID, functionID, source string, started time.Time, status string) {
+// observeInvocation 记录一次调用的总时长与终态（best-effort，不影响主链路）。
+func (f *Functions) observeInvocation(projectID, functionID, source string, started time.Time, status string) {
 	if projectID == "" || functionID == "" {
 		return
 	}
-	if status != domainfunctions.ExecutionStatusCompleted && status != domainfunctions.ExecutionStatusFailed {
+	if status != domainfunctions.InvocationStatusCompleted && status != domainfunctions.InvocationStatusFailed {
 		return
 	}
 	executionDurationSeconds.WithLabelValues(projectID, functionID, source, status).
@@ -126,23 +117,14 @@ func observeQueueWait(projectID, functionID string, waited time.Duration) {
 	executionQueueWaitSeconds.WithLabelValues(projectID, functionID).Observe(waited.Seconds())
 }
 
-// observeConcurrencyDowngraded 记录一次并发降级（v3 §1.5 降级保护；
-// best-effort，不影响主链路）。
-func observeConcurrencyDowngraded(projectID, functionID string) {
-	if projectID == "" || functionID == "" {
-		return
-	}
-	concurrencyDowngradedTotal.WithLabelValues(projectID, functionID).Inc()
-}
-
-// PruneOldExecutions 是执行记录保留分级的全项目周期入口（P0.5 起 worker
+// PruneOldInvocations 是调用记录保留分级的全项目周期入口（P0.5 起 worker
 // 低频 ticker 驱动；P2 Q7 保留分级拆两条删除路径）：
 //   - server 面来源（trigger_source = ”）：条数式，每函数保留最近
 //     pruneKeepRecent（100）条；
 //   - client/http/cron 来源：时间窗保留 pruneTriggerRetention（48h ≥ 2× 最长
 //     限频窗口 day）——这些行是限频 DB 降级路径的窗口内计数依据，条数式
 //     裁剪会在高量日造成少计超发（设计 §5 交互修正）。
-func (f *Functions) PruneOldExecutions(ctx context.Context) (int, error) {
+func (f *Functions) PruneOldInvocations(ctx context.Context) (int, error) {
 	if f.projects == nil {
 		return 0, nil
 	}
@@ -161,10 +143,10 @@ func (f *Functions) PruneOldExecutions(ctx context.Context) (int, error) {
 			continue
 		}
 		for j := range fns {
-			ok := f.repo.PruneOldExecutionsInProject(ctx, all[i].ID, fns[j].ID, pruneKeepRecent) == nil
+			ok := f.repo.PruneOldInvocationsInProject(ctx, all[i].ID, fns[j].ID, pruneKeepRecent) == nil
 			// 两条删除路径互不误伤（server 条数式 / trigger 时间窗），任一
 			// 失败不影响另一条。
-			okTime := f.repo.PruneTriggerExecutionsInProject(ctx, all[i].ID, fns[j].ID, olderThan) == nil
+			okTime := f.repo.PruneTriggerInvocationsInProject(ctx, all[i].ID, fns[j].ID, olderThan) == nil
 			if ok && okTime {
 				pruned++
 			}

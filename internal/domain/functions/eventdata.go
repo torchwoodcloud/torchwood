@@ -20,6 +20,14 @@ import (
 // 两级分名是「对抗审查修正」明确要求（truncated 撞名）。
 const EventDataBudgetBytes = 32 << 10
 
+// CronTick 是 cron 触发的时间事件 data 投影（v4 §4.2：CloudEvent
+// type=cron.tick 的 data 形状；FDK parseCronTick 同源契约——trigger_id +
+// scheduled_for RFC3339，函数内可读 scheduled_for 做幂等键）。
+type CronTick struct {
+	TriggerID    string `json:"trigger_id"`
+	ScheduledFor string `json:"scheduled_for"`
+}
+
 // EventInvocationData 是投递给函数的 data 投影（JSON object；字段清单与
 // 设计 §4.2 逐字对应，document_id 是函数按 databases:read 回读全量的键）。
 type EventInvocationData struct {

@@ -325,7 +325,7 @@ func (s *Service) deliverOne(ctx context.Context, projectID string, claim *domai
 
 	start := time.Now()
 	code := 0
-	nerr := s.notifier.Notify(ctx, domainfunctions.Notification{
+	nres, nerr := s.notifier.Notify(ctx, domainfunctions.Notification{
 		TargetURL:            w.URL,
 		TargetSecret:         current,
 		TargetPreviousSecret: previous,
@@ -333,6 +333,7 @@ func (s *Service) deliverOne(ctx context.Context, projectID string, claim *domai
 		TimeoutSeconds:       s.timeoutSeconds,
 	})
 	duration := time.Since(start)
+	_ = nres // 响应尾部存档（D10）为函数面 invocation 行服务；webhook 投递行沿用 response_code + last_error 审计面
 	if nerr == nil {
 		code = 200 // 事件轴 2xx = 送达（HTTPNotifier 折叠具体 2xx 细节）
 		if err := s.deliveries.MarkDelivered(ctx, projectID, claim.ID, time.Now(), code); err != nil {

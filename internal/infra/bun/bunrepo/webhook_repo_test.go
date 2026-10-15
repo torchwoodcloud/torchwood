@@ -21,7 +21,7 @@ func seedWebhookRepo(t *testing.T, ctx context.Context, repo domainwebhooks.Webh
 		URL:               "https://example.com/hook",
 		Events:            []string{"databases.app.collections.notes.documents.create"},
 		Status:            status,
-		SecretEnc:         "enc:v1:test",
+		SecretEnc:         "enc:v1:test", // #nosec G101 -- 测试夹具伪密文（非凭证）
 		SecretFingerprint: "whsec_deadbeef",
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),

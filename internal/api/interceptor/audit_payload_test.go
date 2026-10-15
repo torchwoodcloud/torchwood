@@ -155,33 +155,19 @@ func TestAuditRequestSummary_TruncatesHugeStrings(t *testing.T) {
 	require.NotContains(t, summary, "[REDACTED]")
 }
 
-// TestAuditRequestSummary_GitSourceTokenRedacted git 部署源的一次性凭证
-// （二期阶段 3，设计 §2 审计）：GitSource.token 的字段名命中敏感键关键词
-// "token" → 整值打码，审计摘要无 token 原文；非敏感投影（url/ref/directory）
-// 保真（不可变快照锚）。
-func TestAuditRequestSummary_GitSourceTokenRedacted(t *testing.T) {
-	req := &serverv1.CreateDeploymentRequest{
-		FunctionId: "fn-1",
-		Source: &serverv1.CreateDeploymentRequest_Git{Git: &serverv1.GitSource{ // #nosec G101 -- 测试夹具伪凭证（断言审计打码）
-			Url:       "https://git.example.com/acme/widget.git",
-			Ref:       "main",
-			Directory: "functions/greet",
-			Username:  "octocat",
-			Token:     "ghp_one-shot-secret-value",
-		}},
-	}
-	summary := auditRequestSummary("/torchwood.server.v1.FunctionsService/CreateDeployment", req)
-	require.NotEmpty(t, summary, "CreateDeployment 是管理面写动词，应记录请求摘要")
+// TestAuditRequestSummary_TokenFieldRedacted 一次性凭证字段的敏感键打码：
+// 字段名命中敏感键关键词 "token" → 整值打码，审计摘要无 token 原文
+// （载体随 Functions v4 更新为 AuthService.VerifyToken——git 部署源随执行面
+// 外包退役，打码语义不变）。
+func TestAuditRequestSummary_TokenFieldRedacted(t *testing.T) {
+	req := &serverv1.VerifyTokenRequest{Token: "twx_one-shot-secret-value"} // #nosec G101 -- 测试夹具伪凭证（断言审计打码）
+	summary := auditRequestSummary("/torchwood.server.v1.AuthService/VerifyToken", req)
+	require.NotEmpty(t, summary, "VerifyToken 是管理面读动词，应记录请求摘要")
 
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal([]byte(summary), &parsed))
-	git, ok := parsed["git"].(map[string]any)
-	require.True(t, ok, "git oneof 应出现在摘要中")
-	require.Equal(t, "[REDACTED]", git["token"], "git.token 命中敏感键 mask")
-	require.Equal(t, "https://git.example.com/acme/widget.git", git["url"])
-	require.Equal(t, "main", git["ref"])
-	require.Equal(t, "functions/greet", git["directory"])
-	require.NotContains(t, summary, "ghp_one-shot-secret-value", "审计摘要不得出现 token 原文")
+	require.Equal(t, "[REDACTED]", parsed["token"], "token 命中敏感键 mask")
+	require.NotContains(t, summary, "twx_one-shot-secret-value", "审计摘要不得出现 token 原文")
 }
 
 func TestAuditClientChannel(t *testing.T) {

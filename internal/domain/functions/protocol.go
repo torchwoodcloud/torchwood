@@ -79,7 +79,7 @@ const (
 	// 风格；v2 是密钥轮换窗口内的旧钥签名，验签方任一命中即过）。
 	HeaderSignature = "X-Tw-Signature"
 	// HeaderExecutionToken 是 twx_ 执行身份（铸造/校验链路不变）。
-	HeaderExecutionToken = "X-Tw-Execution-Token"
+	HeaderExecutionToken = "X-Tw-Execution-Token" // #nosec G101 -- 头名常量非凭证
 	// HeaderSource / HeaderInvokingUserID / HeaderProjectID 是调用身份投影。
 	HeaderSource         = "X-Tw-Source"
 	HeaderInvokingUserID = "X-Tw-Invoking-User-Id"
@@ -227,6 +227,20 @@ type HTTPResult struct {
 	Status  int               `json:"status"`
 	Headers map[string]string `json:"headers,omitempty"`
 	BodyB64 string            `json:"body_b64,omitempty"`
+}
+
+// TriggerEnvelope 是 HTTP 触发器封套元数据（http.request method 的 params
+// 组成，v4 §4.1）：封套与原始 body 收编为单 body——旧「封套走
+// x-tw-trigger-envelope 分发 header、body 走分发 body」双通道退役。Headers
+// 与 TW_DATA 封套同一白名单（x-* + content-type + wechatpay-*，handler 构建
+// 期剥除非白名单）。fetch 语义 FDK 据此还原 Request（url =
+// http://trigger{path}?{raw_query}）。上限：整体（含 base64 body）随
+// http.request params 落在调用 body 通道（4MB 级，handler 入口 413 判定）。
+type TriggerEnvelope struct {
+	Method   string              `json:"method"`
+	Path     string              `json:"path"`
+	RawQuery string              `json:"raw_query,omitempty"`
+	Headers  map[string][]string `json:"headers,omitempty"`
 }
 
 // HTTPRequestParams 是 http.request method 的 params 形状：TriggerEnvelope

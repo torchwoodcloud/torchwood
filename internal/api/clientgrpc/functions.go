@@ -32,7 +32,6 @@ func (s *FunctionsService) InvokeFunction(ctx context.Context, req *clientv1.Inv
 		ProjectID:      p.ProjectID,
 		FunctionID:     req.GetFunctionId(),
 		Data:           req.GetData(),
-		DeploymentID:   req.GetDeploymentId(),
 		IdempotencyKey: req.GetIdempotencyKey(),
 	})
 	if err != nil {
@@ -43,10 +42,10 @@ func (s *FunctionsService) InvokeFunction(ctx context.Context, req *clientv1.Inv
 
 func mapClientInvokeResponse(res *appfunctions.ClientInvokeResult) *clientv1.InvokeFunctionResponse {
 	rec := res.Record
-	// 终态 failed 语义保持原样返回（HTTP 200 + status=failed）：函数执行
-	// 失败是结果而非传输错误，容器 exit code 对客户端无语义（设计 §4）。
-	// status 透传执行记录状态（completed | failed | running）。failed 时
-	// response 字段承载执行行的 error 摘要（InvokeFunctionResponse 无独立
+	// 终态 failed 语义保持原样返回（HTTP 200 + status=failed）：函数失败是
+	// 结果而非传输错误，函数应用层错误对客户端是合法结果（设计 §4）。
+	// status 透传调用记录状态（completed | failed | running）。failed 时
+	// response 字段承载调用行的 error 摘要（InvokeFunctionResponse 无独立
 	// error 字段；调用方以 status 分流——completed 的 response 是函数返回
 	// JSON，failed 的 response 是失败摘要文本）。
 	response := rec.Response

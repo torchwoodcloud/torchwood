@@ -89,16 +89,8 @@ func (f *fakeExt) GetStorageUsage(_ context.Context, _ *serverv1.GetStorageUsage
 	return &serverv1.StorageUsage{Buckets: 1, Files: 2, TotalSize: 1024}, nil
 }
 
-func (f *fakeExt) ListRuntimes(_ context.Context, _ *sharedv1.Empty) (*serverv1.ListRuntimesResponse, error) {
-	return &serverv1.ListRuntimesResponse{Runtimes: []*serverv1.RuntimeInfo{{Id: "nodejs18"}}}, nil
-}
-
-func (f *fakeExt) ListSpecifications(_ context.Context, _ *sharedv1.Empty) (*serverv1.ListSpecificationsResponse, error) {
-	return &serverv1.ListSpecificationsResponse{Specifications: []*serverv1.SpecificationInfo{{Id: "shared-1x"}}}, nil
-}
-
-func (f *fakeExt) CreateFunction(_ context.Context, req *serverv1.CreateFunctionRequest) (*serverv1.Function, error) {
-	return &serverv1.Function{Id: req.Id, Name: req.Name, Runtime: req.Runtime}, nil
+func (f *fakeExt) CreateFunction(_ context.Context, req *serverv1.CreateFunctionRequest) (*serverv1.CreateFunctionResponse, error) {
+	return &serverv1.CreateFunctionResponse{Function: &serverv1.Function{Id: req.Id, Name: req.Name, Target: &serverv1.FunctionTarget{Url: req.GetTargetUrl()}}, TargetSecret: "twfnsec_x"}, nil
 }
 
 func (f *fakeExt) ListFunctions(_ context.Context, req *sharedv1.ListRequest) (*serverv1.ListFunctionsResponse, error) {
@@ -117,41 +109,20 @@ func (f *fakeExt) DeleteFunction(_ context.Context, req *serverv1.GetFunctionReq
 	return &sharedv1.Empty{}, nil
 }
 
-func (f *fakeExt) CreateDeployment(_ context.Context, req *serverv1.CreateDeploymentRequest) (*serverv1.Deployment, error) {
-	// 部署源 oneof（二期）：fake 只消费 zip 通道。
-	return &serverv1.Deployment{FunctionId: req.FunctionId, Size: int64(len(req.GetCode()))}, nil
+func (f *fakeExt) RotateFunctionSecret(_ context.Context, req *serverv1.RotateFunctionSecretRequest) (*serverv1.FunctionSecret, error) {
+	return &serverv1.FunctionSecret{FunctionId: req.FunctionId, Secret: "twfnsec_y", SecretFingerprint: "twfnsec_deadbeef"}, nil
 }
 
-func (f *fakeExt) ListDeployments(_ context.Context, req *serverv1.ListDeploymentsRequest) (*serverv1.ListDeploymentsResponse, error) {
-	return &serverv1.ListDeploymentsResponse{Deployments: []*serverv1.Deployment{{FunctionId: req.FunctionId}}}, nil
+func (f *fakeExt) InvokeFunction(_ context.Context, req *serverv1.InvokeFunctionRequest) (*serverv1.Invocation, error) {
+	return &serverv1.Invocation{Id: "inv-1", FunctionId: req.FunctionId}, nil
 }
 
-func (f *fakeExt) GetDeployment(_ context.Context, req *serverv1.GetDeploymentRequest) (*serverv1.Deployment, error) {
-	return &serverv1.Deployment{FunctionId: req.FunctionId, Id: req.DeploymentId}, nil
+func (f *fakeExt) ListInvocations(_ context.Context, req *serverv1.ListInvocationsRequest) (*serverv1.ListInvocationsResponse, error) {
+	return &serverv1.ListInvocationsResponse{Invocations: []*serverv1.Invocation{{Id: "inv-1", FunctionId: req.FunctionId}}}, nil
 }
 
-func (f *fakeExt) DeleteDeployment(_ context.Context, req *serverv1.GetDeploymentRequest) (*sharedv1.Empty, error) {
-	return &sharedv1.Empty{}, nil
-}
-
-func (f *fakeExt) SetVariables(_ context.Context, req *serverv1.SetVariablesRequest) (*serverv1.Variables, error) {
-	return &serverv1.Variables{Variables: req.Variables}, nil
-}
-
-func (f *fakeExt) GetVariables(_ context.Context, req *serverv1.GetFunctionRequest) (*serverv1.Variables, error) {
-	return &serverv1.Variables{Variables: []*serverv1.Variable{{Key: "FOO", Value: "bar"}}}, nil
-}
-
-func (f *fakeExt) CreateExecution(_ context.Context, req *serverv1.CreateExecutionRequest) (*serverv1.Execution, error) {
-	return &serverv1.Execution{Id: "ex-1", FunctionId: req.FunctionId}, nil
-}
-
-func (f *fakeExt) ListExecutions(_ context.Context, req *serverv1.ListExecutionsRequest) (*serverv1.ListExecutionsResponse, error) {
-	return &serverv1.ListExecutionsResponse{Executions: []*serverv1.Execution{{Id: "ex-1", FunctionId: req.FunctionId}}}, nil
-}
-
-func (f *fakeExt) GetExecution(_ context.Context, req *serverv1.GetExecutionRequest) (*serverv1.Execution, error) {
-	return &serverv1.Execution{Id: req.ExecutionId, FunctionId: req.FunctionId}, nil
+func (f *fakeExt) GetInvocation(_ context.Context, req *serverv1.GetInvocationRequest) (*serverv1.Invocation, error) {
+	return &serverv1.Invocation{Id: req.InvocationId, FunctionId: req.FunctionId}, nil
 }
 
 func (f *fakeExt) ListOAuthProviders(_ context.Context, req *sharedv1.ListRequest) (*serverv1.ListOAuthProvidersResponse, error) {
@@ -225,13 +196,14 @@ func TestFunctionsCreateFunction(t *testing.T) {
 	ctx := context.Background()
 
 	got, err := c.Functions.CreateFunction(ctx, &serverv1.CreateFunctionRequest{
-		Id:      "fn1",
-		Name:    "hello",
-		Runtime: "nodejs18",
+		Id:        "fn1",
+		Name:      "hello",
+		TargetUrl: "https://fn.example.com",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "fn1", got.Id)
-	require.Equal(t, "nodejs18", got.Runtime)
+	require.Equal(t, "fn1", got.GetFunction().GetId())
+	require.Equal(t, "https://fn.example.com", got.GetFunction().GetTarget().GetUrl())
+	require.Equal(t, "twfnsec_x", got.GetTargetSecret())
 }
 
 func TestOAuthProvidersUpsert(t *testing.T) {

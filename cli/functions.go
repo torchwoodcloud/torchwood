@@ -1,71 +1,49 @@
 package cli
 
 import (
-	"encoding/base64"
 	"flag"
 	"fmt"
-	"os"
 
 	"github.com/lynx-go/commands"
 )
 
 const (
-	methodFunctionsRuntimes         = "/torchwood.server.v1.FunctionsService/ListRuntimes"
-	methodFunctionsSpecifications   = "/torchwood.server.v1.FunctionsService/ListSpecifications"
 	methodFunctionsCreate           = "/torchwood.server.v1.FunctionsService/CreateFunction"
 	methodFunctionsList             = "/torchwood.server.v1.FunctionsService/ListFunctions"
 	methodFunctionsGet              = "/torchwood.server.v1.FunctionsService/GetFunction"
 	methodFunctionsUpdate           = "/torchwood.server.v1.FunctionsService/UpdateFunction"
 	methodFunctionsDelete           = "/torchwood.server.v1.FunctionsService/DeleteFunction"
-	methodFunctionsCreateDeployment = "/torchwood.server.v1.FunctionsService/CreateDeployment"
-	methodFunctionsListDeployments  = "/torchwood.server.v1.FunctionsService/ListDeployments"
-	methodFunctionsGetDeployment    = "/torchwood.server.v1.FunctionsService/GetDeployment"
-	methodFunctionsDeleteDeployment = "/torchwood.server.v1.FunctionsService/DeleteDeployment"
-	methodFunctionsSetVariables     = "/torchwood.server.v1.FunctionsService/SetVariables"
-	methodFunctionsGetVariables     = "/torchwood.server.v1.FunctionsService/GetVariables"
-	methodFunctionsCreateExecution  = "/torchwood.server.v1.FunctionsService/CreateExecution"
-	methodFunctionsListExecutions   = "/torchwood.server.v1.FunctionsService/ListExecutions"
-	methodFunctionsGetExecution     = "/torchwood.server.v1.FunctionsService/GetExecution"
+	methodFunctionsSetScopes        = "/torchwood.server.v1.FunctionsService/SetFunctionScopes"
+	methodFunctionsRotateSecret     = "/torchwood.server.v1.FunctionsService/RotateFunctionSecret"
+	methodFunctionsInvoke           = "/torchwood.server.v1.FunctionsService/InvokeFunction"
+	methodFunctionsListInvocations  = "/torchwood.server.v1.FunctionsService/ListInvocations"
+	methodFunctionsGetInvocation    = "/torchwood.server.v1.FunctionsService/GetInvocation"
+	methodFunctionsCreateTrigger    = "/torchwood.server.v1.FunctionsService/CreateFunctionTrigger"
+	methodFunctionsListTriggers     = "/torchwood.server.v1.FunctionsService/ListFunctionTriggers"
+	methodFunctionsDeleteTrigger    = "/torchwood.server.v1.FunctionsService/DeleteFunctionTrigger"
+	methodFunctionsRotateTriggerTok = "/torchwood.server.v1.FunctionsService/RotateFunctionTriggerToken"
 )
 
-// newFunctionsCmd 覆盖 FunctionsService 全部 16 个方法：
-// runtimes/specifications、functions（create/list/get/update/delete）、
-// deployments（create/list/get/delete）、variables（set/get）、
-// executions（create/list/get）。
-// deployments create 由 CLI 读取 zip 文件并 base64 编码后走 gRPC 纯消息
-// （bytes code，≤1MiB 建议；gRPC 通道上限 8MiB，与服务端 MaxRecvMsgSize
-// 对齐），更大的代码包走 multipart 上传（独立 HTTP handler，CLI 不提供）。
+// newFunctionsCmd 覆盖 FunctionsService 的 v4 方法面（docs/design/
+// functions-v4.md §2）：functions（create/list/get/update/delete）、
+// scopes、rotate-secret、invoke、invocations（list/get）、triggers 四方法。
+// 部署面（deployments/variables/runtimes/specifications）随执行面外包退役
+// ——函数 = endpoint 常驻服务，部署走 fleetly CLI 或用户自有工具链。
 func newFunctionsCmd(g *GlobalFlags) *group {
-	return newGroup(g, "functions", "function management (all FunctionsService methods)", func(sub *commands.App) {
+	return newGroup(g, "functions", "function management (FunctionsService v4: target + invocations)", func(sub *commands.App) {
 		sub.Register(
-			newFunctionsRuntimesCmd(g),
-			newFunctionsSpecificationsCmd(g),
 			newFunctionsListCmd(g),
 			newFunctionsCreateCmd(g),
 			newFunctionsGetCmd(g),
 			newFunctionsUpdateCmd(g),
 			newFunctionsDeleteCmd(g),
-			newFunctionsDeploymentsCmd(g),
-			newFunctionsVariablesCmd(g),
-			newFunctionsExecutionsCmd(g),
-			newFunctionsDevCmd(g),
-			newFunctionsDeployCmd(g),
+			newFunctionsScopesCmd(g),
+			newFunctionsRotateSecretCmd(g),
+			newFunctionsInvokeCmd(g),
+			newFunctionsInvocationsCmd(g),
+			newFunctionsTriggersCmd(g),
 		)
 	})
-}
-
-func newFunctionsRuntimesCmd(g *GlobalFlags) *verb {
-	return newVerb(g, "runtimes", "list supported runtimes", "functions runtimes", nil,
-		func(v *verb, env *commands.Environment, _ []string) error {
-			return call(g, env, methodFunctionsRuntimes, nil)
-		})
-}
-
-func newFunctionsSpecificationsCmd(g *GlobalFlags) *verb {
-	return newVerb(g, "specifications", "list supported resource specifications (spec)", "functions specifications", nil,
-		func(v *verb, env *commands.Environment, _ []string) error {
-			return call(g, env, methodFunctionsSpecifications, nil)
-		})
 }
 
 func newFunctionsListCmd(g *GlobalFlags) *verb {
@@ -82,21 +60,21 @@ func newFunctionsListCmd(g *GlobalFlags) *verb {
 }
 
 func newFunctionsCreateCmd(g *GlobalFlags) *verb {
-	var id, name, runtime, entrypoint string
+	var id, name, targetURL, targetSecret string
 	var timeoutSeconds int
-	var spec string
 	var enabled bool
+	var declaredScopes string
 	var clientCallable bool
 	var clientPerUserLimit int
 	var clientLimitWindow string
-	return newVerb(g, "create", "create a function", "functions create --id <id> --name <name> --runtime <runtime> [--client-callable] [--client-per-user-limit <n>] [--client-limit-window <minute|hour|day>]",
+	return newVerb(g, "create", "create a function (endpoint target + one-time secret)", "functions create --id <id> --name <name> --url <https://endpoint> [--target-secret <secret>] [--scopes a:write,b:read] [--client-callable] [--client-per-user-limit <n>] [--client-limit-window <minute|hour|day>]",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&id, "id", "", "function ID (required)")
 			fs.StringVar(&name, "name", "", "function name (required)")
-			fs.StringVar(&runtime, "runtime", "", "runtime (required, see the runtimes command)")
-			fs.StringVar(&entrypoint, "entrypoint", "", "entrypoint file (defaults to the runtime default)")
+			fs.StringVar(&targetURL, "url", "", "target endpoint URL, https required in production (required)")
+			fs.StringVar(&targetSecret, "target-secret", "", "signing secret (omit = server-generated; echoed once in this response)")
 			fs.IntVar(&timeoutSeconds, "timeout-seconds", 0, "timeout in seconds (1-300, server default when omitted)")
-			fs.StringVar(&spec, "spec", "", "resource specification (defaults to shared-1x, see the specifications command)")
+			fs.StringVar(&declaredScopes, "scopes", "", "comma-separated declared scopes, e.g. assets:write,economy:write")
 			fs.BoolVar(&enabled, "enabled", false, "whether enabled (pass --enabled=true/false explicitly to take effect)")
 			// 客户端调用面策略（P2，设计 §4；optional——显式传入才生效）。
 			fs.BoolVar(&clientCallable, "client-callable", false, "allow client-face invocation (pass --client-callable=true/false explicitly to take effect)")
@@ -104,8 +82,8 @@ func newFunctionsCreateCmd(g *GlobalFlags) *verb {
 			fs.StringVar(&clientLimitWindow, "client-limit-window", "", "quota window granularity: minute | hour | day (day is UTC-based, server default when omitted)")
 		},
 		func(v *verb, env *commands.Environment, _ []string) error {
-			req, err := buildCreateFunctionReq(v, id, name, runtime, entrypoint, timeoutSeconds, spec, enabled,
-				clientCallable, clientPerUserLimit, clientLimitWindow)
+			req, err := buildCreateFunctionReq(v, id, name, targetURL, targetSecret, timeoutSeconds, enabled,
+				clientCallable, clientPerUserLimit, clientLimitWindow, declaredScopes)
 			if err != nil {
 				return err
 			}
@@ -124,30 +102,18 @@ func newFunctionsGetCmd(g *GlobalFlags) *verb {
 }
 
 func newFunctionsUpdateCmd(g *GlobalFlags) *verb {
-	var name, entrypoint, spec, runtime string
+	var name, targetURL string
 	var timeoutSeconds int
 	var enabled bool
-	var minInstances, maxInstances, idleTTLSeconds, maxRequests, concurrency int
 	var clientCallable bool
 	var clientPerUserLimit int
 	var clientLimitWindow string
-	return newVerb(g, "update", "update a function (only explicitly passed fields)", "functions update [--name] [--entrypoint] [--runtime] [--timeout-seconds] [--spec] [--enabled] [--min-instances] [--max-instances] [--idle-ttl-seconds] [--max-requests-per-instance] [--concurrency] [--client-callable] [--client-per-user-limit] [--client-limit-window] <function-id>",
+	return newVerb(g, "update", "update a function (only explicitly passed fields)", "functions update [--name] [--url] [--timeout-seconds] [--enabled] [--client-callable] [--client-per-user-limit] [--client-limit-window] <function-id>",
 		func(fs *flag.FlagSet) {
 			fs.StringVar(&name, "name", "", "function name")
-			fs.StringVar(&entrypoint, "entrypoint", "", "entrypoint file")
-			// 运行时（functions-runtime-selection.md §3；proto3 optional——
-			// 显式传入才生效）：只影响后续新 deployment 的构建；eol runtime
-			// 拒绝（可用项见 functions runtimes 输出的 status/is_default 投影）。
-			fs.StringVar(&runtime, "runtime", "", "runtime id (e.g. node-24.0, node-22.0, go-1.26; affects subsequent deployments)")
+			fs.StringVar(&targetURL, "url", "", "target endpoint URL (secret rotation is a separate command)")
 			fs.IntVar(&timeoutSeconds, "timeout-seconds", 0, "timeout in seconds (1-300)")
-			fs.StringVar(&spec, "spec", "", "resource specification")
 			fs.BoolVar(&enabled, "enabled", false, "whether enabled (pass --enabled=true/false explicitly to take effect)")
-			// 池策略（v3 §5/OQ2；proto3 optional——显式传入才生效）。
-			fs.IntVar(&minInstances, "min-instances", 0, "pool warm-up floor (>= 0; 0 = pure scale-from-zero)")
-			fs.IntVar(&maxInstances, "max-instances", 0, "pool burst ceiling (>= 1)")
-			fs.IntVar(&idleTTLSeconds, "idle-ttl-seconds", 0, "idle reclaim threshold in seconds (>= 30)")
-			fs.IntVar(&maxRequests, "max-requests-per-instance", 0, "requests per instance before drain-replace (>= 1)")
-			fs.IntVar(&concurrency, "concurrency", 0, "per-instance in-flight request cap (1-16; >1 requires reentrant code, v3 templates only)")
 			// 客户端调用面策略（P2，设计 §4；proto3 optional——显式传入才生效）。
 			fs.BoolVar(&clientCallable, "client-callable", false, "allow client-face invocation (pass --client-callable=true/false explicitly to take effect)")
 			fs.IntVar(&clientPerUserLimit, "client-per-user-limit", 0, "per-user invocation quota within the limit window (>=1 when --client-callable=true)")
@@ -157,8 +123,7 @@ func newFunctionsUpdateCmd(g *GlobalFlags) *verb {
 			if err := exactArgs(v, args, 1); err != nil {
 				return err
 			}
-			req, err := buildUpdateFunctionReq(v, args[0], name, entrypoint, runtime, timeoutSeconds, spec, enabled,
-				minInstances, maxInstances, idleTTLSeconds, maxRequests, concurrency,
+			req, err := buildUpdateFunctionReq(v, args[0], name, targetURL, timeoutSeconds, enabled,
 				clientCallable, clientPerUserLimit, clientLimitWindow)
 			if err != nil {
 				return err
@@ -177,271 +142,260 @@ func newFunctionsDeleteCmd(g *GlobalFlags) *verb {
 		})
 }
 
-// newFunctionsDeploymentsCmd: functions deployments
-// create/create-from-git/create-from-image/list/get/delete。
-func newFunctionsDeploymentsCmd(g *GlobalFlags) *group {
-	return newGroup(g, "deployments", "function deployment management (code is a zip archive, or a git repository / container image materialized server-side)", func(sub *commands.App) {
-		sub.Register(
-			newFunctionsDeploymentsCreateCmd(g),
-			newFunctionsDeploymentsCreateFromGitCmd(g),
-			newFunctionsDeploymentsCreateFromImageCmd(g),
-			newFunctionsDeploymentsListCmd(g),
-			newFunctionsDeploymentsGetCmd(g),
-			newFunctionsDeploymentsDeleteCmd(g),
-		)
-	})
-}
-
-func newFunctionsDeploymentsCreateCmd(g *GlobalFlags) *verb {
-	var code string
-	return newVerb(g, "create", "create a deployment by uploading a zip archive (gRPC message channel, 8MiB max)", "functions deployments create --code <zip-file> <function-id>",
+// newFunctionsScopesCmd: functions scopes set（SetFunctionScopes 全量替换）。
+func newFunctionsScopesCmd(g *GlobalFlags) *verb {
+	var scopes string
+	return newVerb(g, "scopes", "replace declared scopes (comma-separated; empty revokes all)", "functions scopes --scopes <a:write,b:read> <function-id>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&code, "code", "", "path to the zip archive (required; gRPC message channel caps at 8MiB, single package ≤1MiB recommended; for larger packages use the multipart upload API, 50MiB max)")
+			fs.StringVar(&scopes, "scopes", "", "comma-separated declared scopes (empty string revokes all platform access)")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
 				return err
 			}
-			req, err := buildCreateDeploymentReq(args[0], code)
-			if err != nil {
-				return err
-			}
-			return call(g, env, methodFunctionsCreateDeployment, req)
+			req := map[string]any{"functionId": args[0], "declaredScopes": splitList(scopes)}
+			return call(g, env, methodFunctionsSetScopes, req)
 		})
 }
 
-func newFunctionsDeploymentsListCmd(g *GlobalFlags) *verb {
-	var pageSize, pageToken = 0, ""
-	return newVerb(g, "list", "list function deployments", "functions deployments list [--page-size <n>] [--page-token <t>] <function-id>",
-		func(fs *flag.FlagSet) {
-			fs.IntVar(&pageSize, "page-size", 0, "page size (server default when omitted)")
-			fs.StringVar(&pageToken, "page-token", "", "next page token from the previous response")
-		},
+// newFunctionsRotateSecretCmd: functions rotate-secret（RotateFunctionSecret，
+// 新明文一次性回显——立即部署到函数侧；旧钥保留一个宽限窗双签）。
+func newFunctionsRotateSecretCmd(g *GlobalFlags) *verb {
+	return newVerb(g, "rotate-secret", "rotate the endpoint target signing secret (new secret echoed once)", "functions rotate-secret <function-id>", nil,
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
 				return err
 			}
-			req := listJSON(pageSize, pageToken)
-			req["functionId"] = args[0]
-			return call(g, env, methodFunctionsListDeployments, req)
+			return call(g, env, methodFunctionsRotateSecret, map[string]any{"functionId": args[0]})
 		})
 }
 
-func newFunctionsDeploymentsGetCmd(g *GlobalFlags) *verb {
-	return newVerb(g, "get", "get a deployment by ID", "functions deployments get <function-id> <deployment-id>", nil,
-		func(v *verb, env *commands.Environment, args []string) error {
-			if err := exactArgs(v, args, 2); err != nil {
-				return err
-			}
-			return call(g, env, methodFunctionsGetDeployment, map[string]any{"functionId": args[0], "deploymentId": args[1]})
-		})
-}
-
-func newFunctionsDeploymentsDeleteCmd(g *GlobalFlags) *verb {
-	return newVerb(g, "delete", "delete a deployment", "functions deployments delete <function-id> <deployment-id>", nil,
-		func(v *verb, env *commands.Environment, args []string) error {
-			if err := exactArgs(v, args, 2); err != nil {
-				return err
-			}
-			return call(g, env, methodFunctionsDeleteDeployment, map[string]any{"functionId": args[0], "deploymentId": args[1]})
-		})
-}
-
-// newFunctionsVariablesCmd: functions variables set/get。
-func newFunctionsVariablesCmd(g *GlobalFlags) *group {
-	return newGroup(g, "variables", "function environment variable management", func(sub *commands.App) {
-		sub.Register(
-			newFunctionsVariablesSetCmd(g),
-			newVerb(g, "get", "get function environment variables", "functions variables get <function-id>", nil,
-				func(v *verb, env *commands.Environment, args []string) error {
-					if err := exactArgs(v, args, 1); err != nil {
-						return err
-					}
-					return call(g, env, methodFunctionsGetVariables, map[string]any{"functionId": args[0]})
-				}),
-		)
-	})
-}
-
-func newFunctionsVariablesSetCmd(g *GlobalFlags) *verb {
-	var vars string
-	return newVerb(g, "set", "replace environment variables (--vars is a JSON object)", "functions variables set --vars '{...}' <function-id>",
-		func(fs *flag.FlagSet) {
-			fs.StringVar(&vars, "vars", "", "environment variables JSON object (required, e.g. '{\"FOO\":\"bar\"}')")
-		},
-		func(v *verb, env *commands.Environment, args []string) error {
-			if err := exactArgs(v, args, 1); err != nil {
-				return err
-			}
-			req, err := buildSetVariablesReq(args[0], vars)
-			if err != nil {
-				return err
-			}
-			return call(g, env, methodFunctionsSetVariables, req)
-		})
-}
-
-// newFunctionsExecutionsCmd: functions executions create/list/get。
-func newFunctionsExecutionsCmd(g *GlobalFlags) *group {
-	var execStatus, execPageToken = "", ""
-	var execPageSize = 0
-	return newGroup(g, "executions", "function execution management", func(sub *commands.App) {
-		sub.Register(
-			newFunctionsExecutionsCreateCmd(g),
-			newVerb(g, "list", "list execution records", "functions executions list [--status <s>] [--page-size <n>] [--page-token <t>] <function-id>",
-				func(fs *flag.FlagSet) {
-					fs.StringVar(&execStatus, "status", "", "filter by execution status (queued|building|running|completed|failed)")
-					fs.IntVar(&execPageSize, "page-size", 0, "page size (server default when omitted)")
-					fs.StringVar(&execPageToken, "page-token", "", "next page token from the previous response")
-				},
-				func(v *verb, env *commands.Environment, args []string) error {
-					if err := exactArgs(v, args, 1); err != nil {
-						return err
-					}
-					req := listJSON(execPageSize, execPageToken)
-					if execStatus != "" {
-						req["status"] = execStatus
-					}
-					req["functionId"] = args[0]
-					return call(g, env, methodFunctionsListExecutions, req)
-				}),
-			newVerb(g, "get", "get an execution record by ID", "functions executions get <function-id> <execution-id>", nil,
-				func(v *verb, env *commands.Environment, args []string) error {
-					if err := exactArgs(v, args, 2); err != nil {
-						return err
-					}
-					return call(g, env, methodFunctionsGetExecution, map[string]any{"functionId": args[0], "executionId": args[1]})
-				}),
-		)
-	})
-}
-
-func newFunctionsExecutionsCreateCmd(g *GlobalFlags) *verb {
-	var input, deploymentID string
+// newFunctionsInvokeCmd: functions invoke（InvokeFunction，同步默认、--async
+// 立即返回 queued invocation）。
+func newFunctionsInvokeCmd(g *GlobalFlags) *verb {
+	var input string
 	var async bool
-	return newVerb(g, "create", "create an execution (latest ready deployment by default)", "functions executions create --input <json> <function-id>",
+	return newVerb(g, "invoke", "invoke a function", "functions invoke --input <json> <function-id>",
 		func(fs *flag.FlagSet) {
-			fs.StringVar(&input, "input", "", "execution input (required, must be a valid JSON string, ≤64KB)")
-			fs.StringVar(&deploymentID, "deployment-id", "", "target deployment (latest ready deployment by default)")
+			fs.StringVar(&input, "input", "", "invocation input (required, must be a valid JSON string, ≤32KB)")
 			fs.BoolVar(&async, "async", false, "run asynchronously (only takes effect when --async=true is passed explicitly)")
 		},
 		func(v *verb, env *commands.Environment, args []string) error {
 			if err := exactArgs(v, args, 1); err != nil {
 				return err
 			}
-			req, err := buildCreateExecutionReq(v, args[0], input, deploymentID, async)
+			req, err := buildInvokeReq(v, args[0], input, async)
 			if err != nil {
 				return err
 			}
-			return call(g, env, methodFunctionsCreateExecution, req)
+			return call(g, env, methodFunctionsInvoke, req)
 		})
 }
 
-// buildCreateFunctionReq 构造 CreateFunctionRequest（id/name/runtime 必填；
+// newFunctionsInvocationsCmd: functions invocations list/get。
+func newFunctionsInvocationsCmd(g *GlobalFlags) *group {
+	var invStatus, invPageToken = "", ""
+	var invPageSize = 0
+	return newGroup(g, "invocations", "function invocation records", func(sub *commands.App) {
+		sub.Register(
+			newVerb(g, "list", "list invocation records", "functions invocations list [--status <s>] [--page-size <n>] [--page-token <t>] <function-id>",
+				func(fs *flag.FlagSet) {
+					fs.StringVar(&invStatus, "status", "", "filter by invocation status (queued|running|completed|failed)")
+					fs.IntVar(&invPageSize, "page-size", 0, "page size (server default when omitted)")
+					fs.StringVar(&invPageToken, "page-token", "", "next page token from the previous response")
+				},
+				func(v *verb, env *commands.Environment, args []string) error {
+					if err := exactArgs(v, args, 1); err != nil {
+						return err
+					}
+					req := listJSON(invPageSize, invPageToken)
+					if invStatus != "" {
+						req["status"] = invStatus
+					}
+					req["functionId"] = args[0]
+					return call(g, env, methodFunctionsListInvocations, req)
+				}),
+			newVerb(g, "get", "get an invocation record by ID", "functions invocations get <function-id> <invocation-id>", nil,
+				func(v *verb, env *commands.Environment, args []string) error {
+					if err := exactArgs(v, args, 2); err != nil {
+						return err
+					}
+					return call(g, env, methodFunctionsGetInvocation, map[string]any{"functionId": args[0], "invocationId": args[1]})
+				}),
+		)
+	})
+}
+
+// newFunctionsTriggersCmd: functions triggers（v4 触发器四方法）。
+func newFunctionsTriggersCmd(g *GlobalFlags) *group {
+	return newGroup(g, "triggers", "function trigger management (http / cron / event)", func(sub *commands.App) {
+		sub.Register(
+			newFunctionsTriggersCreateCmd(g),
+			newFunctionsTriggersListCmd(g),
+			newFunctionsTriggersDeleteCmd(g),
+			newFunctionsTriggersRotateTokenCmd(g),
+		)
+	})
+}
+
+func newFunctionsTriggersCreateCmd(g *GlobalFlags) *verb {
+	var functionID, typ, responseMode, ackBody, handshake, expr, misfire, events string
+	var bodyLimit int
+	return newVerb(g, "create", "create a trigger (type = http | cron | event)", "functions triggers create --function-id <id> --type http --response-mode sync [--ack-body <b>] [--handshake echo] [--body-limit <bytes>]\n  functions triggers create --function-id <id> --type cron --expr \"*/5 * * * *\" [--misfire catch_up_once]\n  functions triggers create --function-id <id> --type event --events databases.db.collections.col.documents.created",
+		func(fs *flag.FlagSet) {
+			fs.StringVar(&functionID, "function-id", "", "function ID (required)")
+			fs.StringVar(&typ, "type", "", "trigger type: http | cron | event (required)")
+			fs.StringVar(&responseMode, "response-mode", "", "http: sync | async_ack (required for http)")
+			fs.StringVar(&ackBody, "ack-body", "", "http async_ack 200 response body (≤1KB)")
+			fs.StringVar(&handshake, "handshake", "", "http GET handshake: echo")
+			fs.IntVar(&bodyLimit, "body-limit", 0, "http request body limit in bytes (65536 default, 1MB max)")
+			fs.StringVar(&expr, "expr", "", "cron: 5-field UTC cron expression (required for cron)")
+			fs.StringVar(&misfire, "misfire", "", "cron misfire policy: skip | catch_up_once (default)")
+			fs.StringVar(&events, "events", "", "event: comma-separated subscription patterns (required for event)")
+		},
+		func(v *verb, env *commands.Environment, _ []string) error {
+			req, err := buildCreateTriggerReq(v, functionID, typ, responseMode, ackBody, handshake, bodyLimit, expr, misfire, events)
+			if err != nil {
+				return err
+			}
+			return call(g, env, methodFunctionsCreateTrigger, req)
+		})
+}
+
+func newFunctionsTriggersListCmd(g *GlobalFlags) *verb {
+	return newVerb(g, "list", "list function triggers", "functions triggers list <function-id>", nil,
+		func(v *verb, env *commands.Environment, args []string) error {
+			if err := exactArgs(v, args, 1); err != nil {
+				return err
+			}
+			return call(g, env, methodFunctionsListTriggers, map[string]any{"functionId": args[0]})
+		})
+}
+
+func newFunctionsTriggersDeleteCmd(g *GlobalFlags) *verb {
+	return newVerb(g, "delete", "delete a trigger", "functions triggers delete <function-id> <trigger-id>", nil,
+		func(v *verb, env *commands.Environment, args []string) error {
+			if err := exactArgs(v, args, 2); err != nil {
+				return err
+			}
+			return call(g, env, methodFunctionsDeleteTrigger, map[string]any{"functionId": args[0], "triggerId": args[1]})
+		})
+}
+
+func newFunctionsTriggersRotateTokenCmd(g *GlobalFlags) *verb {
+	return newVerb(g, "rotate-token", "rotate an http trigger token (old token invalid immediately)", "functions triggers rotate-token <function-id> <trigger-id>", nil,
+		func(v *verb, env *commands.Environment, args []string) error {
+			if err := exactArgs(v, args, 2); err != nil {
+				return err
+			}
+			return call(g, env, methodFunctionsRotateTriggerTok, map[string]any{"functionId": args[0], "triggerId": args[1]})
+		})
+}
+
+// ——请求构造（显式传入才生效的 optional 字段经 setChanged 判定）——
+
+// buildCreateFunctionReq 构造 CreateFunctionRequest（id/name/url 必填；
 // 客户端调用面策略 optional——显式传入才生效）。
-func buildCreateFunctionReq(v *verb, id, name, runtime, entrypoint string, timeoutSeconds int, spec string, enabled bool,
-	clientCallable bool, clientPerUserLimit int, clientLimitWindow string) (map[string]any, error) {
+func buildCreateFunctionReq(v *verb, id, name, targetURL, targetSecret string, timeoutSeconds int, enabled bool,
+	clientCallable bool, clientPerUserLimit int, clientLimitWindow, declaredScopes string) (map[string]any, error) {
 	if id == "" {
 		return nil, fmt.Errorf("--id is required")
 	}
 	if name == "" {
 		return nil, fmt.Errorf("--name is required")
 	}
-	if runtime == "" {
-		return nil, fmt.Errorf("--runtime is required (see the runtimes command)")
+	if targetURL == "" {
+		return nil, fmt.Errorf("--url is required (target endpoint URL)")
 	}
-	req := map[string]any{"id": id, "name": name, "runtime": runtime}
-	if entrypoint != "" {
-		req["entrypoint"] = entrypoint
+	req := map[string]any{"id": id, "name": name, "targetUrl": targetURL}
+	if targetSecret != "" {
+		req["targetSecret"] = targetSecret
 	}
 	setChanged(v, "timeout-seconds", req, "timeoutSeconds", timeoutSeconds)
-	setChanged(v, "spec", req, "spec", spec)
 	setChanged(v, "enabled", req, "enabled", enabled)
 	setChanged(v, "client-callable", req, "clientCallable", clientCallable)
 	setChanged(v, "client-per-user-limit", req, "clientPerUserLimit", clientPerUserLimit)
 	setChanged(v, "client-limit-window", req, "clientLimitWindow", clientLimitWindow)
+	if scopes := splitList(declaredScopes); len(scopes) > 0 {
+		req["declaredScopes"] = scopes
+	}
 	return req, nil
 }
 
-// buildUpdateFunctionReq 构造 UpdateFunctionRequest：仅设置显式传入的字段
-// （含池策略五列——v3 §5/OQ2，与客户端调用面策略三列——P2 设计 §4；
-// min/max/…/concurrency、client-* 显式传入才生效）。
-func buildUpdateFunctionReq(v *verb, functionID string, name, entrypoint, runtime string, timeoutSeconds int, spec string, enabled bool,
-	minInstances, maxInstances, idleTTLSeconds, maxRequests, concurrency int,
+// buildUpdateFunctionReq 构造 UpdateFunctionRequest：仅设置显式传入的字段。
+func buildUpdateFunctionReq(v *verb, functionID, name, targetURL string, timeoutSeconds int, enabled bool,
 	clientCallable bool, clientPerUserLimit int, clientLimitWindow string) (map[string]any, error) {
 	if functionID == "" {
 		return nil, fmt.Errorf("missing function-id")
 	}
 	req := map[string]any{"functionId": functionID}
 	setChanged(v, "name", req, "name", name)
-	setChanged(v, "entrypoint", req, "entrypoint", entrypoint)
-	setChanged(v, "runtime", req, "runtime", runtime)
+	setChanged(v, "url", req, "targetUrl", targetURL)
 	setChanged(v, "timeout-seconds", req, "timeoutSeconds", timeoutSeconds)
-	setChanged(v, "spec", req, "spec", spec)
 	setChanged(v, "enabled", req, "enabled", enabled)
-	setChanged(v, "min-instances", req, "minInstances", minInstances)
-	setChanged(v, "max-instances", req, "maxInstances", maxInstances)
-	setChanged(v, "idle-ttl-seconds", req, "idleTtlSeconds", idleTTLSeconds)
-	setChanged(v, "max-requests-per-instance", req, "maxRequestsPerInstance", maxRequests)
-	setChanged(v, "concurrency", req, "concurrency", concurrency)
 	setChanged(v, "client-callable", req, "clientCallable", clientCallable)
 	setChanged(v, "client-per-user-limit", req, "clientPerUserLimit", clientPerUserLimit)
 	setChanged(v, "client-limit-window", req, "clientLimitWindow", clientLimitWindow)
 	return req, nil
 }
 
-// buildCreateDeploymentReq 读取 zip 文件并构造 CreateDeploymentRequest
-// （code 为 bytes 字段，CLI 负责读文件后 base64 编码，不让用户手写）。
-func buildCreateDeploymentReq(functionID, codePath string) (map[string]any, error) {
-	if functionID == "" {
-		return nil, fmt.Errorf("missing function-id")
-	}
-	if codePath == "" {
-		return nil, fmt.Errorf("--code is required (path to the zip archive)")
-	}
-	code, err := os.ReadFile(codePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read --code: %v", err)
-	}
-	if len(code) == 0 {
-		return nil, fmt.Errorf("--code is an empty file")
-	}
-	if len(code) > 8<<20 {
-		return nil, fmt.Errorf("--code exceeds 8MiB (gRPC message channel limit, aligned with the server MaxRecvMsgSize); for larger packages use the multipart upload API (50MiB max)")
-	}
-	return map[string]any{"functionId": functionID, "code": base64.StdEncoding.EncodeToString(code)}, nil
-}
-
-// buildSetVariablesReq 构造 SetVariablesRequest（--vars 为 JSON 对象）。
-func buildSetVariablesReq(functionID, vars string) (map[string]any, error) {
-	if functionID == "" {
-		return nil, fmt.Errorf("missing function-id")
-	}
-	kv, err := jsonStringMap(vars, "--vars")
-	if err != nil {
-		return nil, err
-	}
-	if len(kv) == 0 {
-		return nil, fmt.Errorf("--vars is required (environment variables JSON object)")
-	}
-	list := make([]map[string]string, 0, len(kv))
-	for k, v := range kv {
-		list = append(list, map[string]string{"key": k, "value": v})
-	}
-	return map[string]any{"functionId": functionID, "variables": list}, nil
-}
-
-// buildCreateExecutionReq 构造 CreateExecutionRequest（--input 必填，与服务端
-// 校验一致）。
-func buildCreateExecutionReq(v *verb, functionID, input, deploymentID string, async bool) (map[string]any, error) {
+// buildInvokeReq 构造 InvokeFunctionRequest（--input 必填，与服务端校验一致）。
+func buildInvokeReq(v *verb, functionID, input string, async bool) (map[string]any, error) {
 	if functionID == "" {
 		return nil, fmt.Errorf("missing function-id")
 	}
 	if input == "" {
-		return nil, fmt.Errorf("--input is required (execution input JSON string)")
+		return nil, fmt.Errorf("--input is required (invocation input JSON string)")
 	}
 	req := map[string]any{"functionId": functionID, "data": input}
-	setChanged(v, "deployment-id", req, "deploymentId", deploymentID)
 	setChanged(v, "async", req, "async", async)
+	return req, nil
+}
+
+// buildCreateTriggerReq 构造 CreateFunctionTriggerRequest（type 分派配置段）。
+func buildCreateTriggerReq(v *verb, functionID, typ, responseMode, ackBody, handshake string, bodyLimit int,
+	expr, misfire, events string) (map[string]any, error) {
+	if functionID == "" {
+		return nil, fmt.Errorf("--function-id is required")
+	}
+	req := map[string]any{"functionId": functionID}
+	switch typ {
+	case "http":
+		if responseMode == "" {
+			return nil, fmt.Errorf("--response-mode is required for http triggers")
+		}
+		http := map[string]any{"responseMode": responseMode}
+		if ackBody != "" {
+			http["ackBody"] = ackBody
+		}
+		if handshake != "" {
+			http["handshake"] = handshake
+		}
+		if bodyLimit > 1<<30 {
+			return nil, fmt.Errorf("--body-limit exceeds maximum of %d", 1<<30)
+		}
+		setChanged(v, "body-limit", http, "bodyLimitBytes", int32(bodyLimit)) // #nosec G115 -- 已钳制 ≤1<<30
+		req["type"] = "http"
+		req["http"] = http
+	case "cron":
+		if expr == "" {
+			return nil, fmt.Errorf("--expr is required for cron triggers")
+		}
+		cron := map[string]any{"expr": expr}
+		if misfire != "" {
+			cron["misfire"] = misfire
+		}
+		req["type"] = "cron"
+		req["cron"] = cron
+	case "event":
+		patterns := splitList(events)
+		if len(patterns) == 0 {
+			return nil, fmt.Errorf("--events is required for event triggers")
+		}
+		req["type"] = "event"
+		req["event"] = map[string]any{"events": patterns}
+	default:
+		return nil, fmt.Errorf("--type must be http, cron, or event")
+	}
 	return req, nil
 }

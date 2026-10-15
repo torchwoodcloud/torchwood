@@ -72,23 +72,11 @@ description = "重生成 cmd/worker/wire_gen.go"
 dir = "cmd/worker"
 run = ["go mod tidy", "go run -mod=mod github.com/google/wire/cmd/wire"]
 
-[tasks."wire:dispatcher"]
-description = "重生成 cmd/dispatcher/wire_gen.go"
-dir = "cmd/dispatcher"
-run = ["go mod tidy", "go run -mod=mod github.com/google/wire/cmd/wire"]
-
-[tasks."wire:packer"]
-description = "重生成 cmd/packer/wire_gen.go"
-dir = "cmd/packer"
-run = ["go mod tidy", "go run -mod=mod github.com/google/wire/cmd/wire"]
-
 [tasks."wire:all"]
-description = "依次重生成全部 wire_gen.go"
+description = "依次重生成全部 wire_gen.go（v4：dispatcher/packer 进程退役）"
 run = [
   { task = "wire:server" },
   { task = "wire:worker" },
-  { task = "wire:dispatcher" },
-  { task = "wire:packer" },
 ]
 
 [tasks."generate:all"]

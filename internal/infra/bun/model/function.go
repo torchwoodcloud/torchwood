@@ -7,30 +7,27 @@ import (
 	"github.com/uptrace/bun"
 )
 
+// Function 是 functions 表行模型（v4 target 模型，docs/design/functions-v4.md
+// §3：执行位置 = endpoint 常驻服务；池策略/运行时/资源规格列随迁移 000028
+// 退役，target 列族承载调用终点与签名密钥）。
 type Function struct {
 	bun.BaseModel `bun:"table:functions,alias:f"`
 
 	ID             string   `bun:"id,pk"`
 	ProjectID      string   `bun:"project_id,notnull"`
 	Name           string   `bun:"name,notnull"`
-	Runtime        string   `bun:"runtime,notnull"`
-	Entrypoint     string   `bun:"entrypoint,notnull,default:'index.main'"`
 	TimeoutSeconds int      `bun:"timeout_seconds,notnull,default:15"`
-	Spec           string   `bun:"spec,notnull,default:'shared-1x'"`
 	Enabled        bool     `bun:"enabled,notnull"`
 	DeclaredScopes []string `bun:"declared_scopes,array,notnull,default:'{}'"`
-	// ——池策略（P0.5 执行器 v2，迁移 000014；CHECK 下限与迁移同源）——
-	MinInstances           int `bun:"min_instances,notnull,default:0"`
-	MaxInstances           int `bun:"max_instances,notnull,default:2"`
-	IdleTTLSeconds         int `bun:"idle_ttl_seconds,notnull,default:300"`
-	MaxRequestsPerInstance int `bun:"max_requests_per_instance,notnull,default:1000"`
-	// Concurrency 是单实例并发上限（v3 实例内多路复用，迁移 000017；CHECK
-	// 1..16 与迁移同源，docs/design/functions-v3.md §1.1/§1.5）。默认 1 =
-	// v2 串行等价，显式 opt-in。
-	Concurrency int `bun:"concurrency,notnull,default:1"`
-	// LatestReadyDeploymentID 是最新 ready 部署的冗余投影（热路径清账）；
-	// 可空，NULL 回退全量列表逻辑。
-	LatestReadyDeploymentID string `bun:"latest_ready_deployment_id,nullzero"`
+	// ——endpoint target（v4 §3，迁移 000028）——TargetSecretEnc 是签名密钥
+	// 的 secretbox 密文（enc:v1: 前缀；明文仅在创建/轮换响应出现一次——
+	// 签名方每次调用需明文计算 HMAC）；TargetPreviousSecretEnc 是轮换宽限
+	// 窗内的旧钥密文；指纹是管理面唯一可见形态。
+	TargetURL               string    `bun:"target_url,notnull,default:''"`
+	TargetSecretEnc         string    `bun:"target_secret_enc,notnull,default:''"`
+	TargetPreviousSecretEnc string    `bun:"target_previous_secret_enc,nullzero"`
+	TargetSecretRotatedAt   time.Time `bun:"target_secret_rotated_at,nullzero"`
+	TargetSecretFingerprint string    `bun:"target_secret_fingerprint,notnull,default:''"`
 	// ——客户端调用面策略（P2，迁移 000016；CHECK 下限与迁移同源）——
 	ClientCallable         bool      `bun:"client_callable,notnull,default:false"`
 	ClientAnonymousAllowed bool      `bun:"client_anonymous_allowed,notnull,default:false"`
@@ -40,68 +37,20 @@ type Function struct {
 	UpdatedAt              time.Time `bun:"updated_at,notnull"`
 }
 
-type FunctionDeployment struct {
-	bun.BaseModel `bun:"table:function_deployments,alias:fd"`
-
-	ID         string `bun:"id,pk"`
-	FunctionID string `bun:"function_id,notnull"`
-	ProjectID  string `bun:"project_id,notnull"`
-	Size       int64  `bun:"size,notnull,default:0"`
-	Status     string `bun:"status,notnull,default:'pending'"`
-	Error      string `bun:"error,notnull,default:''"`
-	// TemplateVersion 是构建所用镜像模板版本（P0.5；0 = v1 模板/未知）。
-	TemplateVersion int32 `bun:"template_version"`
-	// ——部署源快照（二期，迁移 000023；INSERT 期写全、之后不可变——
-	// UpdateDeployment 列白名单有意不含 source 列，对齐 update_guard 的
-	// 不可变列语义）。source_type CHECK 词表 zip|git|image 与迁移同源；
-	// 凭证（GitSource.username/token）任何列不落库（D8）。
-	SourceType    string `bun:"source_type,notnull,default:'zip'"`
-	SourceURL     string `bun:"source_url,notnull,default:''"`
-	SourceRef     string `bun:"source_ref,notnull,default:''"`
-	SourceDir     string `bun:"source_dir,notnull,default:''"`
-	ContextSHA256 string `bun:"context_sha256,notnull,default:''"`
-	// Runtime 是构建所用 runtime ID 快照（迁移 000025；INSERT 期写全、
-	// 之后不可变——UpdateDeployment 列白名单有意不含，快照忠实性见
-	// docs/design/functions-runtime-selection.md §4）。
-	Runtime string `bun:"runtime,notnull,default:''"`
-	// BuildNode 是首个构建落成的 dispatcher 节点 ID（四期 4a-1，迁移 000024；
-	// 构建后写入的操作列——UpdateDeployment 列白名单已登记，与 source 快照
-	// 五列的不可变语义不同）。空串 = 无亲和（存量行回填）。
-	BuildNode string    `bun:"build_node,notnull,default:''"`
-	CreatedAt time.Time `bun:"created_at,notnull"`
-	UpdatedAt time.Time `bun:"updated_at,notnull"`
-}
-
-type FunctionVariable struct {
-	bun.BaseModel `bun:"table:function_variables,alias:fv"`
-
-	ID         string `bun:"id,pk"`
-	FunctionID string `bun:"function_id,notnull"`
-	ProjectID  string `bun:"project_id,notnull"`
-	Key        string `bun:"key,notnull"`
-	Value      string `bun:"value,notnull"`
-	// kind ∈ {text, secret}（迁移 000013 CHECK 约束）；P0 只写 text，secret
-	// 的 API 面与注入解析随后续阶段开放。
-	Kind string `bun:"kind,notnull,default:'text'"`
-}
-
-type FunctionExecution struct {
-	bun.BaseModel `bun:"table:function_executions,alias:fe"`
+// FunctionInvocation 是 function_invocations 表行模型（v4 §2：原
+// FunctionExecution/function_executions 随迁移 000028 改名——torchwood 只
+// 发起调用、不执行）。stdout/stderr 列随 v4 退役（日志归 substrate 侧）。
+type FunctionInvocation struct {
+	bun.BaseModel `bun:"table:function_invocations,alias:fi"`
 
 	ID                string `bun:"id,pk"`
 	FunctionID        string `bun:"function_id,notnull"`
 	ProjectID         string `bun:"project_id,notnull"`
-	DeploymentID      string `bun:"deployment_id,notnull"`
 	Status            string `bun:"status,notnull,default:'queued'"`
 	Response          string `bun:"response,notnull,default:''"`
 	ResponseTruncated bool   `bun:"response_truncated,notnull,default:false"`
-	Stdout            string `bun:"stdout,notnull,default:''"`
-	StdoutTruncated   bool   `bun:"stdout_truncated,notnull,default:false"`
-	Stderr            string `bun:"stderr,notnull,default:''"`
-	StderrTruncated   bool   `bun:"stderr_truncated,notnull,default:false"`
-	// StatusCode 语义随模板演进（列迁移 000003；v1 退出码语义位）：v1 =
-	// 容器退出码（非零 = failed）；v2/v3 dispatcher = ok 恒 0、失败置 1；
-	// v4 fetch 风格（functions-v3.md §2.2）= 函数返回的 HTTP status。
+	// StatusCode 是 http.request 透传的函数 HTTP status（fetch 语义，非零是
+	// 一等结果）；其余 method 恒 0。
 	StatusCode int    `bun:"status_code,notnull,default:0"`
 	DurationMS int64  `bun:"duration_ms,notnull,default:0"`
 	Error      string `bun:"error,notnull,default:''"`
@@ -109,8 +58,8 @@ type FunctionExecution struct {
 	// 孤儿恢复回退 1h）。
 	TimeoutSeconds *int `bun:"timeout_seconds"`
 	// ——触发器来源（P1，迁移 000015；INSERT 期写入、之后不可变）——
-	// TriggerSource 形如 http:{trigger_id} / cron:{trigger_id}；空 = server 面。
-	// 该路由不经 gRPC 拦截器链，执行记录即审计载体（设计 §3）。
+	// TriggerSource 形如 http:{trigger_id} / cron:{trigger_id} / event:{id}；
+	// 空 = server 面。公开触发路由不经 gRPC 拦截器链，调用记录即审计载体。
 	TriggerSource string `bun:"trigger_source,notnull,default:''"`
 	SourceIP      string `bun:"source_ip,notnull,default:''"`
 	// ——客户端调用面（P2，迁移 000016；INSERT 期写入、之后不可变）——

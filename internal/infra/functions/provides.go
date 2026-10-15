@@ -3,13 +3,16 @@ package functions
 import (
 	"github.com/google/wire"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
 var ProviderSet = wire.NewSet(
-	// dispatcher 是唯一执行器（v1 docker 执行器已移除）：经 dispatcher
-	// 分发（docker.sock 收敛到 dispatcher 进程，server/worker 零 daemon 依赖）。
-	NewDispatcherExecutor,
-	wire.Bind(new(domainfunctions.Executor), new(*DispatcherExecutor)),
+	// v4 RPC 轴调用出口（Invoker 端口生产实现）：守卫 client + 签名注入。
+	// 事件轴 Notifier 不在本包装配——webhooks ProviderSet 已提供同一
+	// HTTPNotifier（复用 infra/functions 实现，零第二套 HTTP 适配），
+	// Functions 聚合与 Webhooks Service 共用同一端口绑定。
+	NewInvoker,
+	wire.Bind(new(domainfunctions.Invoker), new(*HTTPInvoker)),
 	// P0 执行身份：Redis 执行 token 服务（server 同步路径经 validator 校验、
 	// worker 异步路径经 Functions 聚合铸造/吊销；实现在本包以保 worker 依赖
 	// 图不触 infra/auth，见 cmd/worker/import_guard_test.go）。
@@ -20,16 +23,12 @@ var ProviderSet = wire.NewSet(
 	// P2 客户端调用面：每用户限频 Redis 固定窗口（端口绑定在 infra
 	// ProviderSet：wire.Bind(domainfunctions.ClientQuotaLimiter)）。
 	NewClientQuotaLimiter,
-	// 二期阶段 3（git 部署源）：packer HTTP 客户端（url 未配置
-	// 仍可装配——PackGit 调用时才报 FailedPrecondition，增量启用）。
-	NewPackerClient,
-	wire.Bind(new(domainfunctions.SourcePacker), new(*PackerClient)),
-	// 部署代码包持久层（zip 持久桶）：ObjectStore 适配器（直接返回接口，
-	// NewMinioObjectStore 先例，不加 wire.Bind）。server/worker 均消费——
-	// 重建链路在两进程的执行错误路径都会触发。
-	NewBucketZipStore,
-	// 在途重建跨进程去重（镜像缺失自动重建缺陷 B；app 端口
-	// appfunctions.RebuildDedup 在组合根 wire.Bind——infra 不反向 import
-	// app）。server/worker 均消费：两进程的执行错误路径都会触发重建。
-	NewRedisRebuildDedup,
 )
+
+// NewInvoker 构造 RPC 轴调用出口（domainfunctions.Invoker 生产实现）：
+// 守卫 client（ssrfguard 拨号点校验）+ functions.invoke.allow_private_targets
+// 平台级私网放行（自托管私网寻址场景，2026-10-15 私网 target 勘误）。
+func NewInvoker(cfg *config.AppConfig) *HTTPInvoker {
+	allow := cfg.GetFunctions().GetInvoke().GetAllowPrivateTargets()
+	return NewHTTPInvoker(NewGuardedInvokerClient(allow))
+}

@@ -44,5 +44,5 @@ func (t *StreamTrimmer) Start(ctx context.Context) error { return t.loop.Start(c
 func (t *StreamTrimmer) Stop(ctx context.Context) error { return nil }
 
 func (t *StreamTrimmer) runOnce(ctx context.Context) error {
-	return t.queue.Trim(ctx, domainshared.QueueFunctionsExecutions, streamTrimMaxLen)
+	return t.queue.Trim(ctx, domainshared.QueueFunctionsInvocations, streamTrimMaxLen)
 }

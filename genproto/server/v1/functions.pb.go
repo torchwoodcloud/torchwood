@@ -27,15 +27,15 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Function 是函数视图。v4 target 模型（§3）：执行位置 = endpoint 常驻服务；
+// 池策略/运行时/资源规格归 substrate（fleetly 副本数 / k8s HPA / 用户自管），
+// 字段号与名称 retired（见 reserved）。
 type Function struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	ProjectId      string                 `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	Name           string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Runtime        string                 `protobuf:"bytes,4,opt,name=runtime,proto3" json:"runtime,omitempty"`
-	Entrypoint     string                 `protobuf:"bytes,5,opt,name=entrypoint,proto3" json:"entrypoint,omitempty"`
 	TimeoutSeconds int32                  `protobuf:"varint,6,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
-	Spec           string                 `protobuf:"bytes,7,opt,name=spec,proto3" json:"spec,omitempty"`
 	Enabled        bool                   `protobuf:"varint,8,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
@@ -54,14 +54,9 @@ type Function struct {
 	ClientPerUserLimit int32 `protobuf:"varint,14,opt,name=client_per_user_limit,json=clientPerUserLimit,proto3" json:"client_per_user_limit,omitempty"`
 	// 限频窗口：minute | hour | day（day 按 UTC 日期）。
 	ClientLimitWindow string `protobuf:"bytes,15,opt,name=client_limit_window,json=clientLimitWindow,proto3" json:"client_limit_window,omitempty"`
-	// ——池策略（只读视图；管理经 UpdateFunctionRequest optional ×5，
-	// docs/design/functions-v3.md §5/OQ2）——
-	MinInstances           int32 `protobuf:"varint,16,opt,name=min_instances,json=minInstances,proto3" json:"min_instances,omitempty"`
-	MaxInstances           int32 `protobuf:"varint,17,opt,name=max_instances,json=maxInstances,proto3" json:"max_instances,omitempty"`
-	IdleTtlSeconds         int32 `protobuf:"varint,18,opt,name=idle_ttl_seconds,json=idleTtlSeconds,proto3" json:"idle_ttl_seconds,omitempty"`
-	MaxRequestsPerInstance int32 `protobuf:"varint,19,opt,name=max_requests_per_instance,json=maxRequestsPerInstance,proto3" json:"max_requests_per_instance,omitempty"`
-	// 单实例并发上限（1..16；>1 要求函数可重入）。
-	Concurrency   int32 `protobuf:"varint,20,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
+	// endpoint target（v4 §3 单一 endpoint kind；proto 留 fleetly kind 扩展位
+	// ——仅当需要原生 warm invoke/指标透出时立项，v4 不实现）。
+	Target        *FunctionTarget `protobuf:"bytes,21,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -117,32 +112,11 @@ func (x *Function) GetName() string {
 	return ""
 }
 
-func (x *Function) GetRuntime() string {
-	if x != nil {
-		return x.Runtime
-	}
-	return ""
-}
-
-func (x *Function) GetEntrypoint() string {
-	if x != nil {
-		return x.Entrypoint
-	}
-	return ""
-}
-
 func (x *Function) GetTimeoutSeconds() int32 {
 	if x != nil {
 		return x.TimeoutSeconds
 	}
 	return 0
-}
-
-func (x *Function) GetSpec() string {
-	if x != nil {
-		return x.Spec
-	}
-	return ""
 }
 
 func (x *Function) GetEnabled() bool {
@@ -201,75 +175,43 @@ func (x *Function) GetClientLimitWindow() string {
 	return ""
 }
 
-func (x *Function) GetMinInstances() int32 {
+func (x *Function) GetTarget() *FunctionTarget {
 	if x != nil {
-		return x.MinInstances
+		return x.Target
 	}
-	return 0
+	return nil
 }
 
-func (x *Function) GetMaxInstances() int32 {
-	if x != nil {
-		return x.MaxInstances
-	}
-	return 0
+// FunctionTarget 是函数的执行终点（v4 §3 单一 endpoint target 模型）。
+// 密钥任何形态不回显：明文仅在创建/轮换响应一次性返回（实施勘误 2026-10-15：
+// 签名方每次调用需明文计算 HMAC——密钥本体 secretbox 加密落库，API 面只出
+// 指纹），管理面只出 secret_fingerprint。
+type FunctionTarget struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 函数常驻服务的调用终点（生产强制 https；开发环境经 app 层放行 http）。
+	Url string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	// 签名密钥指纹（"twfnsec_" + SHA-256 前 8 hex；比对用，非明文）。
+	SecretFingerprint string `protobuf:"bytes,2,opt,name=secret_fingerprint,json=secretFingerprint,proto3" json:"secret_fingerprint,omitempty"`
+	// 最近一次密钥轮换时刻（宽限窗内旧钥 v2 双签）。
+	SecretRotatedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=secret_rotated_at,json=secretRotatedAt,proto3" json:"secret_rotated_at,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
-func (x *Function) GetIdleTtlSeconds() int32 {
-	if x != nil {
-		return x.IdleTtlSeconds
-	}
-	return 0
-}
-
-func (x *Function) GetMaxRequestsPerInstance() int32 {
-	if x != nil {
-		return x.MaxRequestsPerInstance
-	}
-	return 0
-}
-
-func (x *Function) GetConcurrency() int32 {
-	if x != nil {
-		return x.Concurrency
-	}
-	return 0
-}
-
-type RuntimeInfo struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name       string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Entrypoint string                 `protobuf:"bytes,3,opt,name=entrypoint,proto3" json:"entrypoint,omitempty"`
-	// ——运行时指定扩展（docs/design/functions-runtime-selection.md §1/§6）——
-	// 语言族（node | go | image | python）：探测对账轴，客户端可据此做源
-	// 形态提示。
-	Family string `protobuf:"bytes,4,opt,name=family,proto3" json:"family,omitempty"`
-	// 生命周期状态（active | deprecated | eol；deprecated 可用但客户端应
-	// 提示；eol 拒绝新建函数/新部署，存量 ready 部署不受影响）。
-	Status string `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
-	// 新建函数的缺省 runtime（node 家族内有且仅有一个）。
-	IsDefault bool `protobuf:"varint,6,opt,name=is_default,json=isDefault,proto3" json:"is_default,omitempty"`
-	// 上游 EOL 日期（如 Node.js 官方时间表）；active 恒缺省。
-	EolAt         *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=eol_at,json=eolAt,proto3,oneof" json:"eol_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RuntimeInfo) Reset() {
-	*x = RuntimeInfo{}
+func (x *FunctionTarget) Reset() {
+	*x = FunctionTarget{}
 	mi := &file_server_v1_functions_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RuntimeInfo) String() string {
+func (x *FunctionTarget) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RuntimeInfo) ProtoMessage() {}
+func (*FunctionTarget) ProtoMessage() {}
 
-func (x *RuntimeInfo) ProtoReflect() protoreflect.Message {
+func (x *FunctionTarget) ProtoReflect() protoreflect.Message {
 	mi := &file_server_v1_functions_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -281,396 +223,67 @@ func (x *RuntimeInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RuntimeInfo.ProtoReflect.Descriptor instead.
-func (*RuntimeInfo) Descriptor() ([]byte, []int) {
+// Deprecated: Use FunctionTarget.ProtoReflect.Descriptor instead.
+func (*FunctionTarget) Descriptor() ([]byte, []int) {
 	return file_server_v1_functions_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *RuntimeInfo) GetId() string {
+func (x *FunctionTarget) GetUrl() string {
 	if x != nil {
-		return x.Id
+		return x.Url
 	}
 	return ""
 }
 
-func (x *RuntimeInfo) GetName() string {
+func (x *FunctionTarget) GetSecretFingerprint() string {
 	if x != nil {
-		return x.Name
+		return x.SecretFingerprint
 	}
 	return ""
 }
 
-func (x *RuntimeInfo) GetEntrypoint() string {
+func (x *FunctionTarget) GetSecretRotatedAt() *timestamppb.Timestamp {
 	if x != nil {
-		return x.Entrypoint
-	}
-	return ""
-}
-
-func (x *RuntimeInfo) GetFamily() string {
-	if x != nil {
-		return x.Family
-	}
-	return ""
-}
-
-func (x *RuntimeInfo) GetStatus() string {
-	if x != nil {
-		return x.Status
-	}
-	return ""
-}
-
-func (x *RuntimeInfo) GetIsDefault() bool {
-	if x != nil {
-		return x.IsDefault
-	}
-	return false
-}
-
-func (x *RuntimeInfo) GetEolAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.EolAt
+		return x.SecretRotatedAt
 	}
 	return nil
 }
 
-type SpecificationInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Cpu           string                 `protobuf:"bytes,2,opt,name=cpu,proto3" json:"cpu,omitempty"`
-	Memory        string                 `protobuf:"bytes,3,opt,name=memory,proto3" json:"memory,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SpecificationInfo) Reset() {
-	*x = SpecificationInfo{}
-	mi := &file_server_v1_functions_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SpecificationInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SpecificationInfo) ProtoMessage() {}
-
-func (x *SpecificationInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SpecificationInfo.ProtoReflect.Descriptor instead.
-func (*SpecificationInfo) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *SpecificationInfo) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *SpecificationInfo) GetCpu() string {
-	if x != nil {
-		return x.Cpu
-	}
-	return ""
-}
-
-func (x *SpecificationInfo) GetMemory() string {
-	if x != nil {
-		return x.Memory
-	}
-	return ""
-}
-
-type Deployment struct {
+// Invocation 是一次函数调用记录（v4 §2：Execution 改名——torchwood 只发起
+// 调用、不执行）。stdout/stderr 已退役：日志归 substrate 侧（fleetly logs /
+// 用户服务自管），torchwood 只见网关往返结果。
+type Invocation struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	FunctionId string                 `protobuf:"bytes,2,opt,name=function_id,json=functionId,proto3" json:"function_id,omitempty"`
-	Size       int64                  `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
-	Status     string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
-	Error      string                 `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
-	CreatedAt  *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt  *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	// ——部署源只读投影（二期起，docs/design/functions-runtimes-and-sources.md
-	// §0；source 列 INSERT 期写全、之后不可变）——
-	// 部署源类型：zip | git | image（词表与 DB CHECK 同源）。
-	SourceType string `protobuf:"bytes,8,opt,name=source_type,json=sourceType,proto3" json:"source_type,omitempty"`
-	// git 仓库 url / image 原始引用（host/repo[:tag|@sha256:...]）；zip 源恒空。
-	SourceUrl string `protobuf:"bytes,9,opt,name=source_url,json=sourceUrl,proto3" json:"source_url,omitempty"`
-	// git 钉死的 commit SHA / image 钉死的 digest（sha256:...）；zip 源恒空。
-	SourceRef string `protobuf:"bytes,10,opt,name=source_ref,json=sourceRef,proto3" json:"source_ref,omitempty"`
-	// git 构建上下文子目录；zip/image 源恒空。凭证字段不出现在任何响应面。
-	SourceDir string `protobuf:"bytes,11,opt,name=source_dir,json=sourceDir,proto3" json:"source_dir,omitempty"`
-	// 构建所用 runtime ID 快照（docs/design/functions-runtime-selection.md
-	// §4；迁移 000025：INSERT 期写全、之后不可变）——补构建/审计以行内
-	// 快照为准，不随后续 fn.runtime 变更漂移。
-	Runtime       string `protobuf:"bytes,12,opt,name=runtime,proto3" json:"runtime,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Deployment) Reset() {
-	*x = Deployment{}
-	mi := &file_server_v1_functions_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Deployment) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Deployment) ProtoMessage() {}
-
-func (x *Deployment) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Deployment.ProtoReflect.Descriptor instead.
-func (*Deployment) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *Deployment) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *Deployment) GetFunctionId() string {
-	if x != nil {
-		return x.FunctionId
-	}
-	return ""
-}
-
-func (x *Deployment) GetSize() int64 {
-	if x != nil {
-		return x.Size
-	}
-	return 0
-}
-
-func (x *Deployment) GetStatus() string {
-	if x != nil {
-		return x.Status
-	}
-	return ""
-}
-
-func (x *Deployment) GetError() string {
-	if x != nil {
-		return x.Error
-	}
-	return ""
-}
-
-func (x *Deployment) GetCreatedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.CreatedAt
-	}
-	return nil
-}
-
-func (x *Deployment) GetUpdatedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.UpdatedAt
-	}
-	return nil
-}
-
-func (x *Deployment) GetSourceType() string {
-	if x != nil {
-		return x.SourceType
-	}
-	return ""
-}
-
-func (x *Deployment) GetSourceUrl() string {
-	if x != nil {
-		return x.SourceUrl
-	}
-	return ""
-}
-
-func (x *Deployment) GetSourceRef() string {
-	if x != nil {
-		return x.SourceRef
-	}
-	return ""
-}
-
-func (x *Deployment) GetSourceDir() string {
-	if x != nil {
-		return x.SourceDir
-	}
-	return ""
-}
-
-func (x *Deployment) GetRuntime() string {
-	if x != nil {
-		return x.Runtime
-	}
-	return ""
-}
-
-type Variables struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Variables     []*Variable            `protobuf:"bytes,1,rep,name=variables,proto3" json:"variables,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Variables) Reset() {
-	*x = Variables{}
-	mi := &file_server_v1_functions_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Variables) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Variables) ProtoMessage() {}
-
-func (x *Variables) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Variables.ProtoReflect.Descriptor instead.
-func (*Variables) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *Variables) GetVariables() []*Variable {
-	if x != nil {
-		return x.Variables
-	}
-	return nil
-}
-
-type Variable struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// 环境变量值：SetVariables 请求透传明文；GetVariables 与 SetVariables
-	// 响应统一返回掩码（"******"），真实值仅在 SetVariables 请求中可见一次
-	// （对齐 internal/app/functions/variables.go 的 secretMask 约定）。
-	Value         string `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Variable) Reset() {
-	*x = Variable{}
-	mi := &file_server_v1_functions_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Variable) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Variable) ProtoMessage() {}
-
-func (x *Variable) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Variable.ProtoReflect.Descriptor instead.
-func (*Variable) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *Variable) GetKey() string {
-	if x != nil {
-		return x.Key
-	}
-	return ""
-}
-
-func (x *Variable) GetValue() string {
-	if x != nil {
-		return x.Value
-	}
-	return ""
-}
-
-type Execution struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	FunctionId        string                 `protobuf:"bytes,2,opt,name=function_id,json=functionId,proto3" json:"function_id,omitempty"`
-	DeploymentId      string                 `protobuf:"bytes,3,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
+	// queued | running | completed | failed（v4 收敛：building 态随补构建退役）。
 	Status            string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
 	Response          string                 `protobuf:"bytes,5,opt,name=response,proto3" json:"response,omitempty"`
-	Stdout            string                 `protobuf:"bytes,6,opt,name=stdout,proto3" json:"stdout,omitempty"`
-	Stderr            string                 `protobuf:"bytes,7,opt,name=stderr,proto3" json:"stderr,omitempty"`
 	StatusCode        int32                  `protobuf:"varint,8,opt,name=status_code,json=statusCode,proto3" json:"status_code,omitempty"`
 	DurationMs        int64                  `protobuf:"varint,9,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
 	Error             string                 `protobuf:"bytes,10,opt,name=error,proto3" json:"error,omitempty"`
 	ResponseTruncated bool                   `protobuf:"varint,11,opt,name=response_truncated,json=responseTruncated,proto3" json:"response_truncated,omitempty"`
-	StdoutTruncated   bool                   `protobuf:"varint,12,opt,name=stdout_truncated,json=stdoutTruncated,proto3" json:"stdout_truncated,omitempty"`
-	StderrTruncated   bool                   `protobuf:"varint,13,opt,name=stderr_truncated,json=stderrTruncated,proto3" json:"stderr_truncated,omitempty"`
 	CreatedAt         *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt         *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
 
-func (x *Execution) Reset() {
-	*x = Execution{}
-	mi := &file_server_v1_functions_proto_msgTypes[6]
+func (x *Invocation) Reset() {
+	*x = Invocation{}
+	mi := &file_server_v1_functions_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Execution) String() string {
+func (x *Invocation) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Execution) ProtoMessage() {}
+func (*Invocation) ProtoMessage() {}
 
-func (x *Execution) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[6]
+func (x *Invocation) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_functions_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -681,110 +294,75 @@ func (x *Execution) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Execution.ProtoReflect.Descriptor instead.
-func (*Execution) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{6}
+// Deprecated: Use Invocation.ProtoReflect.Descriptor instead.
+func (*Invocation) Descriptor() ([]byte, []int) {
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *Execution) GetId() string {
+func (x *Invocation) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *Execution) GetFunctionId() string {
+func (x *Invocation) GetFunctionId() string {
 	if x != nil {
 		return x.FunctionId
 	}
 	return ""
 }
 
-func (x *Execution) GetDeploymentId() string {
-	if x != nil {
-		return x.DeploymentId
-	}
-	return ""
-}
-
-func (x *Execution) GetStatus() string {
+func (x *Invocation) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
 	return ""
 }
 
-func (x *Execution) GetResponse() string {
+func (x *Invocation) GetResponse() string {
 	if x != nil {
 		return x.Response
 	}
 	return ""
 }
 
-func (x *Execution) GetStdout() string {
-	if x != nil {
-		return x.Stdout
-	}
-	return ""
-}
-
-func (x *Execution) GetStderr() string {
-	if x != nil {
-		return x.Stderr
-	}
-	return ""
-}
-
-func (x *Execution) GetStatusCode() int32 {
+func (x *Invocation) GetStatusCode() int32 {
 	if x != nil {
 		return x.StatusCode
 	}
 	return 0
 }
 
-func (x *Execution) GetDurationMs() int64 {
+func (x *Invocation) GetDurationMs() int64 {
 	if x != nil {
 		return x.DurationMs
 	}
 	return 0
 }
 
-func (x *Execution) GetError() string {
+func (x *Invocation) GetError() string {
 	if x != nil {
 		return x.Error
 	}
 	return ""
 }
 
-func (x *Execution) GetResponseTruncated() bool {
+func (x *Invocation) GetResponseTruncated() bool {
 	if x != nil {
 		return x.ResponseTruncated
 	}
 	return false
 }
 
-func (x *Execution) GetStdoutTruncated() bool {
-	if x != nil {
-		return x.StdoutTruncated
-	}
-	return false
-}
-
-func (x *Execution) GetStderrTruncated() bool {
-	if x != nil {
-		return x.StderrTruncated
-	}
-	return false
-}
-
-func (x *Execution) GetCreatedAt() *timestamppb.Timestamp {
+func (x *Invocation) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
 	return nil
 }
 
-func (x *Execution) GetUpdatedAt() *timestamppb.Timestamp {
+func (x *Invocation) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdatedAt
 	}
@@ -793,16 +371,13 @@ func (x *Execution) GetUpdatedAt() *timestamppb.Timestamp {
 
 type CreateFunctionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// 客户端自选 function_id；functions:runtimes / functions:specifications
-	// 为自定义方法段（REST 自定义动词），不再占用 function_id 命名空间，
+	// 客户端自选 function_id；functions:invoke / functions:rotate-secret
+	// 为自定义方法段（REST 自定义动词），不占用 function_id 命名空间，
 	// 可自由取任意合法值。
-	Id             string  `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name           string  `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Runtime        string  `protobuf:"bytes,3,opt,name=runtime,proto3" json:"runtime,omitempty"`
-	Entrypoint     string  `protobuf:"bytes,4,opt,name=entrypoint,proto3" json:"entrypoint,omitempty"`
-	TimeoutSeconds *int32  `protobuf:"varint,5,opt,name=timeout_seconds,json=timeoutSeconds,proto3,oneof" json:"timeout_seconds,omitempty"`
-	Spec           *string `protobuf:"bytes,6,opt,name=spec,proto3,oneof" json:"spec,omitempty"`
-	Enabled        *bool   `protobuf:"varint,7,opt,name=enabled,proto3,oneof" json:"enabled,omitempty"`
+	Id             string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name           string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	TimeoutSeconds *int32 `protobuf:"varint,5,opt,name=timeout_seconds,json=timeoutSeconds,proto3,oneof" json:"timeout_seconds,omitempty"`
+	Enabled        *bool  `protobuf:"varint,7,opt,name=enabled,proto3,oneof" json:"enabled,omitempty"`
 	// 执行身份声明（P0）：词表校验/去重在服务端（app 层），空集合法。
 	DeclaredScopes []string `protobuf:"bytes,8,rep,name=declared_scopes,json=declaredScopes,proto3" json:"declared_scopes,omitempty"`
 	// ——客户端调用面策略（P2，设计 §4）——
@@ -812,13 +387,19 @@ type CreateFunctionRequest struct {
 	// client_callable=true 时必须 >= 1。
 	ClientPerUserLimit *int32  `protobuf:"varint,11,opt,name=client_per_user_limit,json=clientPerUserLimit,proto3,oneof" json:"client_per_user_limit,omitempty"`
 	ClientLimitWindow  *string `protobuf:"bytes,12,opt,name=client_limit_window,json=clientLimitWindow,proto3,oneof" json:"client_limit_window,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// endpoint target url（v4 §3）：函数常驻服务的调用终点。生产强制 https
+	// （开发环境可放行 http，校验在服务端 app 层按环境裁决）。
+	TargetUrl string `protobuf:"bytes,13,opt,name=target_url,json=targetUrl,proto3" json:"target_url,omitempty"`
+	// 可选自定义签名密钥（twfnsec_ 前缀；空 = 服务端生成）。两种来源都只在
+	// 本请求出现一次，落库前加密。
+	TargetSecret  *string `protobuf:"bytes,14,opt,name=target_secret,json=targetSecret,proto3,oneof" json:"target_secret,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateFunctionRequest) Reset() {
 	*x = CreateFunctionRequest{}
-	mi := &file_server_v1_functions_proto_msgTypes[7]
+	mi := &file_server_v1_functions_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -830,7 +411,7 @@ func (x *CreateFunctionRequest) String() string {
 func (*CreateFunctionRequest) ProtoMessage() {}
 
 func (x *CreateFunctionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[7]
+	mi := &file_server_v1_functions_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -843,7 +424,7 @@ func (x *CreateFunctionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateFunctionRequest.ProtoReflect.Descriptor instead.
 func (*CreateFunctionRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{7}
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CreateFunctionRequest) GetId() string {
@@ -860,32 +441,11 @@ func (x *CreateFunctionRequest) GetName() string {
 	return ""
 }
 
-func (x *CreateFunctionRequest) GetRuntime() string {
-	if x != nil {
-		return x.Runtime
-	}
-	return ""
-}
-
-func (x *CreateFunctionRequest) GetEntrypoint() string {
-	if x != nil {
-		return x.Entrypoint
-	}
-	return ""
-}
-
 func (x *CreateFunctionRequest) GetTimeoutSeconds() int32 {
 	if x != nil && x.TimeoutSeconds != nil {
 		return *x.TimeoutSeconds
 	}
 	return 0
-}
-
-func (x *CreateFunctionRequest) GetSpec() string {
-	if x != nil && x.Spec != nil {
-		return *x.Spec
-	}
-	return ""
 }
 
 func (x *CreateFunctionRequest) GetEnabled() bool {
@@ -930,13 +490,80 @@ func (x *CreateFunctionRequest) GetClientLimitWindow() string {
 	return ""
 }
 
+func (x *CreateFunctionRequest) GetTargetUrl() string {
+	if x != nil {
+		return x.TargetUrl
+	}
+	return ""
+}
+
+func (x *CreateFunctionRequest) GetTargetSecret() string {
+	if x != nil && x.TargetSecret != nil {
+		return *x.TargetSecret
+	}
+	return ""
+}
+
+// CreateFunctionResponse 是创建响应：函数视图 + 一次性 target 签名密钥明文
+// （仅此一次；之后任何面只出指纹）。
+type CreateFunctionResponse struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Function *Function              `protobuf:"bytes,1,opt,name=function,proto3" json:"function,omitempty"`
+	// target 签名密钥明文（服务端生成或透传录入值）。之后只出指纹。
+	TargetSecret  string `protobuf:"bytes,2,opt,name=target_secret,json=targetSecret,proto3" json:"target_secret,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateFunctionResponse) Reset() {
+	*x = CreateFunctionResponse{}
+	mi := &file_server_v1_functions_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateFunctionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateFunctionResponse) ProtoMessage() {}
+
+func (x *CreateFunctionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_functions_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateFunctionResponse.ProtoReflect.Descriptor instead.
+func (*CreateFunctionResponse) Descriptor() ([]byte, []int) {
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *CreateFunctionResponse) GetFunction() *Function {
+	if x != nil {
+		return x.Function
+	}
+	return nil
+}
+
+func (x *CreateFunctionResponse) GetTargetSecret() string {
+	if x != nil {
+		return x.TargetSecret
+	}
+	return ""
+}
+
 type UpdateFunctionRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	FunctionId     string                 `protobuf:"bytes,1,opt,name=function_id,json=functionId,proto3" json:"function_id,omitempty"`
 	Name           *string                `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
-	Entrypoint     *string                `protobuf:"bytes,3,opt,name=entrypoint,proto3,oneof" json:"entrypoint,omitempty"`
 	TimeoutSeconds *int32                 `protobuf:"varint,4,opt,name=timeout_seconds,json=timeoutSeconds,proto3,oneof" json:"timeout_seconds,omitempty"`
-	Spec           *string                `protobuf:"bytes,5,opt,name=spec,proto3,oneof" json:"spec,omitempty"`
 	Enabled        *bool                  `protobuf:"varint,6,opt,name=enabled,proto3,oneof" json:"enabled,omitempty"`
 	// ——客户端调用面策略（P2，设计 §4；未设置 = 不修改）——
 	ClientCallable *bool `protobuf:"varint,7,opt,name=client_callable,json=clientCallable,proto3,oneof" json:"client_callable,omitempty"`
@@ -944,34 +571,16 @@ type UpdateFunctionRequest struct {
 	ClientAnonymousAllowed *bool   `protobuf:"varint,8,opt,name=client_anonymous_allowed,json=clientAnonymousAllowed,proto3,oneof" json:"client_anonymous_allowed,omitempty"`
 	ClientPerUserLimit     *int32  `protobuf:"varint,9,opt,name=client_per_user_limit,json=clientPerUserLimit,proto3,oneof" json:"client_per_user_limit,omitempty"`
 	ClientLimitWindow      *string `protobuf:"bytes,10,opt,name=client_limit_window,json=clientLimitWindow,proto3,oneof" json:"client_limit_window,omitempty"`
-	// ——池策略（P0.5 执行器 v2 + v3 多路复用，docs/design/functions-v3.md
-	// §5/Key Decisions D15/OQ2 收口；未设置 = 不修改）——
-	// 范围注解与 DB CHECK 约束同源（迁移 000014/000017）：
-	// min>=0、max>=1、idle_ttl>=30、max_requests>=1、concurrency 1..16。
-	// min_instances ≤ max_instances 的跨字段校验在 app 用例层。
-	// 保温下限（0 = 纯 scale-from-zero）。
-	MinInstances *int32 `protobuf:"varint,11,opt,name=min_instances,json=minInstances,proto3,oneof" json:"min_instances,omitempty"`
-	// 突发并发上限（超限有界排队）。
-	MaxInstances *int32 `protobuf:"varint,12,opt,name=max_instances,json=maxInstances,proto3,oneof" json:"max_instances,omitempty"`
-	// 空闲回收阈值（秒；实例数 > min 时）。
-	IdleTtlSeconds *int32 `protobuf:"varint,13,opt,name=idle_ttl_seconds,json=idleTtlSeconds,proto3,oneof" json:"idle_ttl_seconds,omitempty"`
-	// 实例请求数到期排空替换（防内存泄漏，Lambda 同款）。
-	MaxRequestsPerInstance *int32 `protobuf:"varint,14,opt,name=max_requests_per_instance,json=maxRequestsPerInstance,proto3,oneof" json:"max_requests_per_instance,omitempty"`
-	// 单实例并发上限（v3 实例内多路复用；默认 1 = v2 串行等价，>1 要求函数
-	// 可重入；CHECK 上限 16）。
-	Concurrency *int32 `protobuf:"varint,15,opt,name=concurrency,proto3,oneof" json:"concurrency,omitempty"`
-	// 运行时 ID（docs/design/functions-runtime-selection.md §3）：未设置 =
-	// 不修改。只影响后续新 deployment 的构建（存量 ready 部署镜像已构建
-	// 完毕不受影响）；eol runtime 拒绝（app 层状态门，错误文案列出可选
-	// runtime）。从 eol 迁出到新版本是合法且期望的操作路径。
-	Runtime       *string `protobuf:"bytes,16,opt,name=runtime,proto3,oneof" json:"runtime,omitempty"`
+	// endpoint target url（v4 §3）：未设置 = 不修改；密钥变更走
+	// RotateFunctionSecret（与 webhooks Update/Rotate 分工一致）。
+	TargetUrl     *string `protobuf:"bytes,17,opt,name=target_url,json=targetUrl,proto3,oneof" json:"target_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateFunctionRequest) Reset() {
 	*x = UpdateFunctionRequest{}
-	mi := &file_server_v1_functions_proto_msgTypes[8]
+	mi := &file_server_v1_functions_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -983,7 +592,7 @@ func (x *UpdateFunctionRequest) String() string {
 func (*UpdateFunctionRequest) ProtoMessage() {}
 
 func (x *UpdateFunctionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[8]
+	mi := &file_server_v1_functions_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -996,7 +605,7 @@ func (x *UpdateFunctionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateFunctionRequest.ProtoReflect.Descriptor instead.
 func (*UpdateFunctionRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{8}
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *UpdateFunctionRequest) GetFunctionId() string {
@@ -1013,25 +622,11 @@ func (x *UpdateFunctionRequest) GetName() string {
 	return ""
 }
 
-func (x *UpdateFunctionRequest) GetEntrypoint() string {
-	if x != nil && x.Entrypoint != nil {
-		return *x.Entrypoint
-	}
-	return ""
-}
-
 func (x *UpdateFunctionRequest) GetTimeoutSeconds() int32 {
 	if x != nil && x.TimeoutSeconds != nil {
 		return *x.TimeoutSeconds
 	}
 	return 0
-}
-
-func (x *UpdateFunctionRequest) GetSpec() string {
-	if x != nil && x.Spec != nil {
-		return *x.Spec
-	}
-	return ""
 }
 
 func (x *UpdateFunctionRequest) GetEnabled() bool {
@@ -1069,44 +664,9 @@ func (x *UpdateFunctionRequest) GetClientLimitWindow() string {
 	return ""
 }
 
-func (x *UpdateFunctionRequest) GetMinInstances() int32 {
-	if x != nil && x.MinInstances != nil {
-		return *x.MinInstances
-	}
-	return 0
-}
-
-func (x *UpdateFunctionRequest) GetMaxInstances() int32 {
-	if x != nil && x.MaxInstances != nil {
-		return *x.MaxInstances
-	}
-	return 0
-}
-
-func (x *UpdateFunctionRequest) GetIdleTtlSeconds() int32 {
-	if x != nil && x.IdleTtlSeconds != nil {
-		return *x.IdleTtlSeconds
-	}
-	return 0
-}
-
-func (x *UpdateFunctionRequest) GetMaxRequestsPerInstance() int32 {
-	if x != nil && x.MaxRequestsPerInstance != nil {
-		return *x.MaxRequestsPerInstance
-	}
-	return 0
-}
-
-func (x *UpdateFunctionRequest) GetConcurrency() int32 {
-	if x != nil && x.Concurrency != nil {
-		return *x.Concurrency
-	}
-	return 0
-}
-
-func (x *UpdateFunctionRequest) GetRuntime() string {
-	if x != nil && x.Runtime != nil {
-		return *x.Runtime
+func (x *UpdateFunctionRequest) GetTargetUrl() string {
+	if x != nil && x.TargetUrl != nil {
+		return *x.TargetUrl
 	}
 	return ""
 }
@@ -1120,7 +680,7 @@ type GetFunctionRequest struct {
 
 func (x *GetFunctionRequest) Reset() {
 	*x = GetFunctionRequest{}
-	mi := &file_server_v1_functions_proto_msgTypes[9]
+	mi := &file_server_v1_functions_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1132,7 +692,7 @@ func (x *GetFunctionRequest) String() string {
 func (*GetFunctionRequest) ProtoMessage() {}
 
 func (x *GetFunctionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[9]
+	mi := &file_server_v1_functions_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1145,7 +705,7 @@ func (x *GetFunctionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFunctionRequest.ProtoReflect.Descriptor instead.
 func (*GetFunctionRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{9}
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetFunctionRequest) GetFunctionId() string {
@@ -1155,41 +715,78 @@ func (x *GetFunctionRequest) GetFunctionId() string {
 	return ""
 }
 
-// 部署源 oneof（二期起，docs/design/functions-runtimes-and-sources.md §0）：
-// code 为 zip 代码包，≤1MiB 走此通道；更大的 zip 包走 multipart 上传
-// （POST /v1/server/functions/{function_id}/deployments/code，仅承载 zip）。
-// git/image 源载荷极小，仅走本 gRPC JSON 通道、不设 multipart 形态：git 由
-// 独立 packer 服务物化为 zip 落既有构建路径；image 为免构建路径
-// （pull + digest 钉死 + retag + 契约验证，runtime 专用 ID `image`，源/运行时
-// 互斥见 §0）。字段号 2 原号移入 oneof，wire 兼容。
-type CreateDeploymentRequest struct {
+// RotateFunctionSecretRequest 轮换 endpoint target 签名密钥。
+type RotateFunctionSecretRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FunctionId    string                 `protobuf:"bytes,1,opt,name=function_id,json=functionId,proto3" json:"function_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RotateFunctionSecretRequest) Reset() {
+	*x = RotateFunctionSecretRequest{}
+	mi := &file_server_v1_functions_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RotateFunctionSecretRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RotateFunctionSecretRequest) ProtoMessage() {}
+
+func (x *RotateFunctionSecretRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_functions_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RotateFunctionSecretRequest.ProtoReflect.Descriptor instead.
+func (*RotateFunctionSecretRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *RotateFunctionSecretRequest) GetFunctionId() string {
+	if x != nil {
+		return x.FunctionId
+	}
+	return ""
+}
+
+// FunctionSecret 是轮换响应：明文只出现这一次，调用方立即部署到函数侧。
+type FunctionSecret struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	FunctionId string                 `protobuf:"bytes,1,opt,name=function_id,json=functionId,proto3" json:"function_id,omitempty"`
-	// Types that are valid to be assigned to Source:
-	//
-	//	*CreateDeploymentRequest_Code
-	//	*CreateDeploymentRequest_Git
-	//	*CreateDeploymentRequest_Image
-	Source        isCreateDeploymentRequest_Source `protobuf_oneof:"source"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// 签名密钥明文（twfnsec_ 前缀 + 32 字节 base64url）。之后只出指纹。
+	Secret string `protobuf:"bytes,2,opt,name=secret,proto3" json:"secret,omitempty"`
+	// 轮换后的指纹（便于与既有记录核对）。
+	SecretFingerprint string `protobuf:"bytes,3,opt,name=secret_fingerprint,json=secretFingerprint,proto3" json:"secret_fingerprint,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
-func (x *CreateDeploymentRequest) Reset() {
-	*x = CreateDeploymentRequest{}
-	mi := &file_server_v1_functions_proto_msgTypes[10]
+func (x *FunctionSecret) Reset() {
+	*x = FunctionSecret{}
+	mi := &file_server_v1_functions_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CreateDeploymentRequest) String() string {
+func (x *FunctionSecret) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CreateDeploymentRequest) ProtoMessage() {}
+func (*FunctionSecret) ProtoMessage() {}
 
-func (x *CreateDeploymentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[10]
+func (x *FunctionSecret) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_functions_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1200,305 +797,58 @@ func (x *CreateDeploymentRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateDeploymentRequest.ProtoReflect.Descriptor instead.
-func (*CreateDeploymentRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{10}
+// Deprecated: Use FunctionSecret.ProtoReflect.Descriptor instead.
+func (*FunctionSecret) Descriptor() ([]byte, []int) {
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *CreateDeploymentRequest) GetFunctionId() string {
+func (x *FunctionSecret) GetFunctionId() string {
 	if x != nil {
 		return x.FunctionId
 	}
 	return ""
 }
 
-func (x *CreateDeploymentRequest) GetSource() isCreateDeploymentRequest_Source {
+func (x *FunctionSecret) GetSecret() string {
 	if x != nil {
-		return x.Source
-	}
-	return nil
-}
-
-func (x *CreateDeploymentRequest) GetCode() []byte {
-	if x != nil {
-		if x, ok := x.Source.(*CreateDeploymentRequest_Code); ok {
-			return x.Code
-		}
-	}
-	return nil
-}
-
-func (x *CreateDeploymentRequest) GetGit() *GitSource {
-	if x != nil {
-		if x, ok := x.Source.(*CreateDeploymentRequest_Git); ok {
-			return x.Git
-		}
-	}
-	return nil
-}
-
-func (x *CreateDeploymentRequest) GetImage() *ImageSource {
-	if x != nil {
-		if x, ok := x.Source.(*CreateDeploymentRequest_Image); ok {
-			return x.Image
-		}
-	}
-	return nil
-}
-
-type isCreateDeploymentRequest_Source interface {
-	isCreateDeploymentRequest_Source()
-}
-
-type CreateDeploymentRequest_Code struct {
-	Code []byte `protobuf:"bytes,2,opt,name=code,proto3,oneof"`
-}
-
-type CreateDeploymentRequest_Git struct {
-	Git *GitSource `protobuf:"bytes,3,opt,name=git,proto3,oneof"`
-}
-
-type CreateDeploymentRequest_Image struct {
-	Image *ImageSource `protobuf:"bytes,4,opt,name=image,proto3,oneof"`
-}
-
-func (*CreateDeploymentRequest_Code) isCreateDeploymentRequest_Source() {}
-
-func (*CreateDeploymentRequest_Git) isCreateDeploymentRequest_Source() {}
-
-func (*CreateDeploymentRequest_Image) isCreateDeploymentRequest_Source() {}
-
-// GitSource 是 git 仓库部署源（packer 归一为 zip，设计 §2）。
-type GitSource struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// 仓库地址。https 为生产形态；file:// 仅 development 环境放行（server
-	// app 层按 TORCHWOOD_ENV 收紧，非 dev 一律 InvalidArgument）。SSRF 防护
-	// （拨号点 IP guard）与 userinfo 拒绝由 packer 服务执行。
-	Url string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
-	// branch/tag/commit；缺省 HEAD（服务端解析并钉死为 commit SHA）。
-	Ref string `protobuf:"bytes,2,opt,name=ref,proto3" json:"ref,omitempty"`
-	// 仓库内子目录 = 构建上下文根；缺省根目录。
-	Directory string `protobuf:"bytes,3,opt,name=directory,proto3" json:"directory,omitempty"`
-	// 可选 Basic 凭证（PAT）。username/token 均一次性凭证：仅本次请求内存、
-	// 不落库不回显（D8），审计载荷由敏感键 mask 兜底。
-	Username      string `protobuf:"bytes,4,opt,name=username,proto3" json:"username,omitempty"`
-	Token         string `protobuf:"bytes,5,opt,name=token,proto3" json:"token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GitSource) Reset() {
-	*x = GitSource{}
-	mi := &file_server_v1_functions_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GitSource) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GitSource) ProtoMessage() {}
-
-func (x *GitSource) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GitSource.ProtoReflect.Descriptor instead.
-func (*GitSource) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *GitSource) GetUrl() string {
-	if x != nil {
-		return x.Url
+		return x.Secret
 	}
 	return ""
 }
 
-func (x *GitSource) GetRef() string {
+func (x *FunctionSecret) GetSecretFingerprint() string {
 	if x != nil {
-		return x.Ref
+		return x.SecretFingerprint
 	}
 	return ""
 }
 
-func (x *GitSource) GetDirectory() string {
-	if x != nil {
-		return x.Directory
-	}
-	return ""
-}
-
-func (x *GitSource) GetUsername() string {
-	if x != nil {
-		return x.Username
-	}
-	return ""
-}
-
-func (x *GitSource) GetToken() string {
-	if x != nil {
-		return x.Token
-	}
-	return ""
-}
-
-// ImageSource 是 BYO 镜像部署源（三期，设计 §3）：免构建路径——平台拉取
-// 引用镜像（tag 构建期钉死为 digest）→ retag 进平台命名 → 强制契约验证
-// （:18080 /_tw/health 探针）。仅 runtime = `image` 的函数接受（源/运行时
-// 互斥，§0/D7）。
-type ImageSource struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// 镜像引用：host/repo[:tag|@sha256:...]。tag 在导入期钉死为 digest（落
-	// Deployment.source_ref，防 tag 漂移）；host 侧 SSRF 防护与 registry
-	// 白名单由 dispatcher 侧执行（阶段 2 接线）。
-	Image string `protobuf:"bytes,1,opt,name=image,proto3" json:"image,omitempty"`
-	// 可选 registry 凭证。username/token 均一次性凭证：仅本次请求内存、转发
-	// dispatcher 拉取用、不落库不回显（D8），审计载荷由敏感键 mask 兜底；
-	// 私有镜像的 worker 补拉因凭证不落库而受限（声明边界，§3）。
-	RegistryUsername string `protobuf:"bytes,2,opt,name=registry_username,json=registryUsername,proto3" json:"registry_username,omitempty"`
-	RegistryToken    string `protobuf:"bytes,3,opt,name=registry_token,json=registryToken,proto3" json:"registry_token,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
-}
-
-func (x *ImageSource) Reset() {
-	*x = ImageSource{}
-	mi := &file_server_v1_functions_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ImageSource) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ImageSource) ProtoMessage() {}
-
-func (x *ImageSource) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ImageSource.ProtoReflect.Descriptor instead.
-func (*ImageSource) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *ImageSource) GetImage() string {
-	if x != nil {
-		return x.Image
-	}
-	return ""
-}
-
-func (x *ImageSource) GetRegistryUsername() string {
-	if x != nil {
-		return x.RegistryUsername
-	}
-	return ""
-}
-
-func (x *ImageSource) GetRegistryToken() string {
-	if x != nil {
-		return x.RegistryToken
-	}
-	return ""
-}
-
-type GetDeploymentRequest struct {
+// InvokeFunctionRequest 调用一个函数（v4 §2：CreateExecutionRequest 改名；
+// deployment_id 已随部署面退役——目标恒为函数当前的 endpoint target）。
+type InvokeFunctionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	FunctionId    string                 `protobuf:"bytes,1,opt,name=function_id,json=functionId,proto3" json:"function_id,omitempty"`
-	DeploymentId  string                 `protobuf:"bytes,2,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetDeploymentRequest) Reset() {
-	*x = GetDeploymentRequest{}
-	mi := &file_server_v1_functions_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetDeploymentRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetDeploymentRequest) ProtoMessage() {}
-
-func (x *GetDeploymentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetDeploymentRequest.ProtoReflect.Descriptor instead.
-func (*GetDeploymentRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *GetDeploymentRequest) GetFunctionId() string {
-	if x != nil {
-		return x.FunctionId
-	}
-	return ""
-}
-
-func (x *GetDeploymentRequest) GetDeploymentId() string {
-	if x != nil {
-		return x.DeploymentId
-	}
-	return ""
-}
-
-type CreateExecutionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	FunctionId    string                 `protobuf:"bytes,1,opt,name=function_id,json=functionId,proto3" json:"function_id,omitempty"`
-	DeploymentId  *string                `protobuf:"bytes,2,opt,name=deployment_id,json=deploymentId,proto3,oneof" json:"deployment_id,omitempty"` // 缺省用最新 ready deployment
 	Data          string                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
 	Async         *bool                  `protobuf:"varint,4,opt,name=async,proto3,oneof" json:"async,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CreateExecutionRequest) Reset() {
-	*x = CreateExecutionRequest{}
-	mi := &file_server_v1_functions_proto_msgTypes[14]
+func (x *InvokeFunctionRequest) Reset() {
+	*x = InvokeFunctionRequest{}
+	mi := &file_server_v1_functions_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CreateExecutionRequest) String() string {
+func (x *InvokeFunctionRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CreateExecutionRequest) ProtoMessage() {}
+func (*InvokeFunctionRequest) ProtoMessage() {}
 
-func (x *CreateExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[14]
+func (x *InvokeFunctionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_functions_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1509,142 +859,30 @@ func (x *CreateExecutionRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CreateExecutionRequest.ProtoReflect.Descriptor instead.
-func (*CreateExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{14}
+// Deprecated: Use InvokeFunctionRequest.ProtoReflect.Descriptor instead.
+func (*InvokeFunctionRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *CreateExecutionRequest) GetFunctionId() string {
+func (x *InvokeFunctionRequest) GetFunctionId() string {
 	if x != nil {
 		return x.FunctionId
 	}
 	return ""
 }
 
-func (x *CreateExecutionRequest) GetDeploymentId() string {
-	if x != nil && x.DeploymentId != nil {
-		return *x.DeploymentId
-	}
-	return ""
-}
-
-func (x *CreateExecutionRequest) GetData() string {
+func (x *InvokeFunctionRequest) GetData() string {
 	if x != nil {
 		return x.Data
 	}
 	return ""
 }
 
-func (x *CreateExecutionRequest) GetAsync() bool {
+func (x *InvokeFunctionRequest) GetAsync() bool {
 	if x != nil && x.Async != nil {
 		return *x.Async
 	}
 	return false
-}
-
-type GetExecutionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	FunctionId    string                 `protobuf:"bytes,1,opt,name=function_id,json=functionId,proto3" json:"function_id,omitempty"`
-	ExecutionId   string                 `protobuf:"bytes,2,opt,name=execution_id,json=executionId,proto3" json:"execution_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetExecutionRequest) Reset() {
-	*x = GetExecutionRequest{}
-	mi := &file_server_v1_functions_proto_msgTypes[15]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetExecutionRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetExecutionRequest) ProtoMessage() {}
-
-func (x *GetExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[15]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetExecutionRequest.ProtoReflect.Descriptor instead.
-func (*GetExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{15}
-}
-
-func (x *GetExecutionRequest) GetFunctionId() string {
-	if x != nil {
-		return x.FunctionId
-	}
-	return ""
-}
-
-func (x *GetExecutionRequest) GetExecutionId() string {
-	if x != nil {
-		return x.ExecutionId
-	}
-	return ""
-}
-
-// SetVariablesRequest 全量替换函数环境变量。
-type SetVariablesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	FunctionId    string                 `protobuf:"bytes,1,opt,name=function_id,json=functionId,proto3" json:"function_id,omitempty"`
-	Variables     []*Variable            `protobuf:"bytes,2,rep,name=variables,proto3" json:"variables,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SetVariablesRequest) Reset() {
-	*x = SetVariablesRequest{}
-	mi := &file_server_v1_functions_proto_msgTypes[16]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SetVariablesRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SetVariablesRequest) ProtoMessage() {}
-
-func (x *SetVariablesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[16]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SetVariablesRequest.ProtoReflect.Descriptor instead.
-func (*SetVariablesRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{16}
-}
-
-func (x *SetVariablesRequest) GetFunctionId() string {
-	if x != nil {
-		return x.FunctionId
-	}
-	return ""
-}
-
-func (x *SetVariablesRequest) GetVariables() []*Variable {
-	if x != nil {
-		return x.Variables
-	}
-	return nil
 }
 
 // SetFunctionScopesRequest 全量替换函数 declared_scopes（P0 执行身份；
@@ -1659,7 +897,7 @@ type SetFunctionScopesRequest struct {
 
 func (x *SetFunctionScopesRequest) Reset() {
 	*x = SetFunctionScopesRequest{}
-	mi := &file_server_v1_functions_proto_msgTypes[17]
+	mi := &file_server_v1_functions_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1671,7 +909,7 @@ func (x *SetFunctionScopesRequest) String() string {
 func (*SetFunctionScopesRequest) ProtoMessage() {}
 
 func (x *SetFunctionScopesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[17]
+	mi := &file_server_v1_functions_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1684,7 +922,7 @@ func (x *SetFunctionScopesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetFunctionScopesRequest.ProtoReflect.Descriptor instead.
 func (*SetFunctionScopesRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{17}
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *SetFunctionScopesRequest) GetFunctionId() string {
@@ -1699,6 +937,59 @@ func (x *SetFunctionScopesRequest) GetDeclaredScopes() []string {
 		return x.DeclaredScopes
 	}
 	return nil
+}
+
+// GetInvocationRequest 按 id 寻址调用记录。
+type GetInvocationRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FunctionId    string                 `protobuf:"bytes,1,opt,name=function_id,json=functionId,proto3" json:"function_id,omitempty"`
+	InvocationId  string                 `protobuf:"bytes,2,opt,name=invocation_id,json=invocationId,proto3" json:"invocation_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetInvocationRequest) Reset() {
+	*x = GetInvocationRequest{}
+	mi := &file_server_v1_functions_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetInvocationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetInvocationRequest) ProtoMessage() {}
+
+func (x *GetInvocationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_functions_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetInvocationRequest.ProtoReflect.Descriptor instead.
+func (*GetInvocationRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *GetInvocationRequest) GetFunctionId() string {
+	if x != nil {
+		return x.FunctionId
+	}
+	return ""
+}
+
+func (x *GetInvocationRequest) GetInvocationId() string {
+	if x != nil {
+		return x.InvocationId
+	}
+	return ""
 }
 
 // CreateFunctionTriggerRequest 创建触发器：type 选择 http / cron / event，
@@ -1720,7 +1011,7 @@ type CreateFunctionTriggerRequest struct {
 
 func (x *CreateFunctionTriggerRequest) Reset() {
 	*x = CreateFunctionTriggerRequest{}
-	mi := &file_server_v1_functions_proto_msgTypes[18]
+	mi := &file_server_v1_functions_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1732,7 +1023,7 @@ func (x *CreateFunctionTriggerRequest) String() string {
 func (*CreateFunctionTriggerRequest) ProtoMessage() {}
 
 func (x *CreateFunctionTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[18]
+	mi := &file_server_v1_functions_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1745,7 +1036,7 @@ func (x *CreateFunctionTriggerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateFunctionTriggerRequest.ProtoReflect.Descriptor instead.
 func (*CreateFunctionTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{18}
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CreateFunctionTriggerRequest) GetFunctionId() string {
@@ -1804,7 +1095,7 @@ type HttpTriggerConfig struct {
 
 func (x *HttpTriggerConfig) Reset() {
 	*x = HttpTriggerConfig{}
-	mi := &file_server_v1_functions_proto_msgTypes[19]
+	mi := &file_server_v1_functions_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1816,7 +1107,7 @@ func (x *HttpTriggerConfig) String() string {
 func (*HttpTriggerConfig) ProtoMessage() {}
 
 func (x *HttpTriggerConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[19]
+	mi := &file_server_v1_functions_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1829,7 +1120,7 @@ func (x *HttpTriggerConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HttpTriggerConfig.ProtoReflect.Descriptor instead.
 func (*HttpTriggerConfig) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{19}
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *HttpTriggerConfig) GetResponseMode() string {
@@ -1874,7 +1165,7 @@ type CronTriggerConfig struct {
 
 func (x *CronTriggerConfig) Reset() {
 	*x = CronTriggerConfig{}
-	mi := &file_server_v1_functions_proto_msgTypes[20]
+	mi := &file_server_v1_functions_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1886,7 +1177,7 @@ func (x *CronTriggerConfig) String() string {
 func (*CronTriggerConfig) ProtoMessage() {}
 
 func (x *CronTriggerConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[20]
+	mi := &file_server_v1_functions_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1899,7 +1190,7 @@ func (x *CronTriggerConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CronTriggerConfig.ProtoReflect.Descriptor instead.
 func (*CronTriggerConfig) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{20}
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CronTriggerConfig) GetExpr() string {
@@ -1941,7 +1232,7 @@ type EventTriggerConfig struct {
 
 func (x *EventTriggerConfig) Reset() {
 	*x = EventTriggerConfig{}
-	mi := &file_server_v1_functions_proto_msgTypes[21]
+	mi := &file_server_v1_functions_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1953,7 +1244,7 @@ func (x *EventTriggerConfig) String() string {
 func (*EventTriggerConfig) ProtoMessage() {}
 
 func (x *EventTriggerConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[21]
+	mi := &file_server_v1_functions_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1966,7 +1257,7 @@ func (x *EventTriggerConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventTriggerConfig.ProtoReflect.Descriptor instead.
 func (*EventTriggerConfig) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{21}
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *EventTriggerConfig) GetEvents() []string {
@@ -2007,7 +1298,7 @@ type FunctionTrigger struct {
 
 func (x *FunctionTrigger) Reset() {
 	*x = FunctionTrigger{}
-	mi := &file_server_v1_functions_proto_msgTypes[22]
+	mi := &file_server_v1_functions_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2019,7 +1310,7 @@ func (x *FunctionTrigger) String() string {
 func (*FunctionTrigger) ProtoMessage() {}
 
 func (x *FunctionTrigger) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[22]
+	mi := &file_server_v1_functions_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2032,7 +1323,7 @@ func (x *FunctionTrigger) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FunctionTrigger.ProtoReflect.Descriptor instead.
 func (*FunctionTrigger) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{22}
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *FunctionTrigger) GetId() string {
@@ -2156,7 +1447,7 @@ type ListFunctionTriggersResponse struct {
 
 func (x *ListFunctionTriggersResponse) Reset() {
 	*x = ListFunctionTriggersResponse{}
-	mi := &file_server_v1_functions_proto_msgTypes[23]
+	mi := &file_server_v1_functions_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2168,7 +1459,7 @@ func (x *ListFunctionTriggersResponse) String() string {
 func (*ListFunctionTriggersResponse) ProtoMessage() {}
 
 func (x *ListFunctionTriggersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[23]
+	mi := &file_server_v1_functions_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2181,7 +1472,7 @@ func (x *ListFunctionTriggersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFunctionTriggersResponse.ProtoReflect.Descriptor instead.
 func (*ListFunctionTriggersResponse) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{23}
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ListFunctionTriggersResponse) GetTriggers() []*FunctionTrigger {
@@ -2201,7 +1492,7 @@ type DeleteFunctionTriggerRequest struct {
 
 func (x *DeleteFunctionTriggerRequest) Reset() {
 	*x = DeleteFunctionTriggerRequest{}
-	mi := &file_server_v1_functions_proto_msgTypes[24]
+	mi := &file_server_v1_functions_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2213,7 +1504,7 @@ func (x *DeleteFunctionTriggerRequest) String() string {
 func (*DeleteFunctionTriggerRequest) ProtoMessage() {}
 
 func (x *DeleteFunctionTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[24]
+	mi := &file_server_v1_functions_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2226,7 +1517,7 @@ func (x *DeleteFunctionTriggerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFunctionTriggerRequest.ProtoReflect.Descriptor instead.
 func (*DeleteFunctionTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{24}
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *DeleteFunctionTriggerRequest) GetFunctionId() string {
@@ -2253,7 +1544,7 @@ type RotateFunctionTriggerTokenRequest struct {
 
 func (x *RotateFunctionTriggerTokenRequest) Reset() {
 	*x = RotateFunctionTriggerTokenRequest{}
-	mi := &file_server_v1_functions_proto_msgTypes[25]
+	mi := &file_server_v1_functions_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2265,7 +1556,7 @@ func (x *RotateFunctionTriggerTokenRequest) String() string {
 func (*RotateFunctionTriggerTokenRequest) ProtoMessage() {}
 
 func (x *RotateFunctionTriggerTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[25]
+	mi := &file_server_v1_functions_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2278,7 +1569,7 @@ func (x *RotateFunctionTriggerTokenRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use RotateFunctionTriggerTokenRequest.ProtoReflect.Descriptor instead.
 func (*RotateFunctionTriggerTokenRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{25}
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *RotateFunctionTriggerTokenRequest) GetFunctionId() string {
@@ -2295,94 +1586,6 @@ func (x *RotateFunctionTriggerTokenRequest) GetTriggerId() string {
 	return ""
 }
 
-type ListRuntimesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Runtimes      []*RuntimeInfo         `protobuf:"bytes,1,rep,name=runtimes,proto3" json:"runtimes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListRuntimesResponse) Reset() {
-	*x = ListRuntimesResponse{}
-	mi := &file_server_v1_functions_proto_msgTypes[26]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListRuntimesResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListRuntimesResponse) ProtoMessage() {}
-
-func (x *ListRuntimesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[26]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListRuntimesResponse.ProtoReflect.Descriptor instead.
-func (*ListRuntimesResponse) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{26}
-}
-
-func (x *ListRuntimesResponse) GetRuntimes() []*RuntimeInfo {
-	if x != nil {
-		return x.Runtimes
-	}
-	return nil
-}
-
-type ListSpecificationsResponse struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Specifications []*SpecificationInfo   `protobuf:"bytes,1,rep,name=specifications,proto3" json:"specifications,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *ListSpecificationsResponse) Reset() {
-	*x = ListSpecificationsResponse{}
-	mi := &file_server_v1_functions_proto_msgTypes[27]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListSpecificationsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListSpecificationsResponse) ProtoMessage() {}
-
-func (x *ListSpecificationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[27]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListSpecificationsResponse.ProtoReflect.Descriptor instead.
-func (*ListSpecificationsResponse) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{27}
-}
-
-func (x *ListSpecificationsResponse) GetSpecifications() []*SpecificationInfo {
-	if x != nil {
-		return x.Specifications
-	}
-	return nil
-}
-
 type ListFunctionsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Functions     []*Function            `protobuf:"bytes,1,rep,name=functions,proto3" json:"functions,omitempty"`
@@ -2393,7 +1596,7 @@ type ListFunctionsResponse struct {
 
 func (x *ListFunctionsResponse) Reset() {
 	*x = ListFunctionsResponse{}
-	mi := &file_server_v1_functions_proto_msgTypes[28]
+	mi := &file_server_v1_functions_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2405,7 +1608,7 @@ func (x *ListFunctionsResponse) String() string {
 func (*ListFunctionsResponse) ProtoMessage() {}
 
 func (x *ListFunctionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[28]
+	mi := &file_server_v1_functions_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2418,7 +1621,7 @@ func (x *ListFunctionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFunctionsResponse.ProtoReflect.Descriptor instead.
 func (*ListFunctionsResponse) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{28}
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListFunctionsResponse) GetFunctions() []*Function {
@@ -2435,76 +1638,14 @@ func (x *ListFunctionsResponse) GetMeta() *v1.ListResponseMeta {
 	return nil
 }
 
-// ListDeploymentsRequest 分页拉取部署（created_at DESC，offset 型 page_token
-// 由服务端签发）。
-type ListDeploymentsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	FunctionId    string                 `protobuf:"bytes,1,opt,name=function_id,json=functionId,proto3" json:"function_id,omitempty"`
-	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListDeploymentsRequest) Reset() {
-	*x = ListDeploymentsRequest{}
-	mi := &file_server_v1_functions_proto_msgTypes[29]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListDeploymentsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListDeploymentsRequest) ProtoMessage() {}
-
-func (x *ListDeploymentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[29]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListDeploymentsRequest.ProtoReflect.Descriptor instead.
-func (*ListDeploymentsRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{29}
-}
-
-func (x *ListDeploymentsRequest) GetFunctionId() string {
-	if x != nil {
-		return x.FunctionId
-	}
-	return ""
-}
-
-func (x *ListDeploymentsRequest) GetPageSize() int32 {
-	if x != nil {
-		return x.PageSize
-	}
-	return 0
-}
-
-func (x *ListDeploymentsRequest) GetPageToken() string {
-	if x != nil {
-		return x.PageToken
-	}
-	return ""
-}
-
-// ListExecutionsRequest 分页拉取执行记录（排障面：status 精确 + created_at
+// ListInvocationsRequest 分页拉取调用记录（排障面：status 精确 + created_at
 // 闭区间过滤，结构化字段沿 audit-logs 先例）。
-type ListExecutionsRequest struct {
+type ListInvocationsRequest struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	FunctionId string                 `protobuf:"bytes,1,opt,name=function_id,json=functionId,proto3" json:"function_id,omitempty"`
 	PageSize   int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	PageToken  string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	// 执行状态精确匹配：queued | building | running | completed | failed。
+	// 调用状态精确匹配：queued | running | completed | failed。
 	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
 	CreatedAfter  *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_after,json=createdAfter,proto3" json:"created_after,omitempty"`
 	CreatedBefore *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_before,json=createdBefore,proto3" json:"created_before,omitempty"`
@@ -2512,21 +1653,21 @@ type ListExecutionsRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListExecutionsRequest) Reset() {
-	*x = ListExecutionsRequest{}
-	mi := &file_server_v1_functions_proto_msgTypes[30]
+func (x *ListInvocationsRequest) Reset() {
+	*x = ListInvocationsRequest{}
+	mi := &file_server_v1_functions_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListExecutionsRequest) String() string {
+func (x *ListInvocationsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListExecutionsRequest) ProtoMessage() {}
+func (*ListInvocationsRequest) ProtoMessage() {}
 
-func (x *ListExecutionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[30]
+func (x *ListInvocationsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_functions_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2537,76 +1678,76 @@ func (x *ListExecutionsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListExecutionsRequest.ProtoReflect.Descriptor instead.
-func (*ListExecutionsRequest) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{30}
+// Deprecated: Use ListInvocationsRequest.ProtoReflect.Descriptor instead.
+func (*ListInvocationsRequest) Descriptor() ([]byte, []int) {
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{21}
 }
 
-func (x *ListExecutionsRequest) GetFunctionId() string {
+func (x *ListInvocationsRequest) GetFunctionId() string {
 	if x != nil {
 		return x.FunctionId
 	}
 	return ""
 }
 
-func (x *ListExecutionsRequest) GetPageSize() int32 {
+func (x *ListInvocationsRequest) GetPageSize() int32 {
 	if x != nil {
 		return x.PageSize
 	}
 	return 0
 }
 
-func (x *ListExecutionsRequest) GetPageToken() string {
+func (x *ListInvocationsRequest) GetPageToken() string {
 	if x != nil {
 		return x.PageToken
 	}
 	return ""
 }
 
-func (x *ListExecutionsRequest) GetStatus() string {
+func (x *ListInvocationsRequest) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
 	return ""
 }
 
-func (x *ListExecutionsRequest) GetCreatedAfter() *timestamppb.Timestamp {
+func (x *ListInvocationsRequest) GetCreatedAfter() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAfter
 	}
 	return nil
 }
 
-func (x *ListExecutionsRequest) GetCreatedBefore() *timestamppb.Timestamp {
+func (x *ListInvocationsRequest) GetCreatedBefore() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedBefore
 	}
 	return nil
 }
 
-type ListDeploymentsResponse struct {
+type ListInvocationsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Deployments   []*Deployment          `protobuf:"bytes,1,rep,name=deployments,proto3" json:"deployments,omitempty"`
+	Invocations   []*Invocation          `protobuf:"bytes,1,rep,name=invocations,proto3" json:"invocations,omitempty"`
 	Meta          *v1.ListResponseMeta   `protobuf:"bytes,2,opt,name=meta,proto3" json:"meta,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListDeploymentsResponse) Reset() {
-	*x = ListDeploymentsResponse{}
-	mi := &file_server_v1_functions_proto_msgTypes[31]
+func (x *ListInvocationsResponse) Reset() {
+	*x = ListInvocationsResponse{}
+	mi := &file_server_v1_functions_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListDeploymentsResponse) String() string {
+func (x *ListInvocationsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListDeploymentsResponse) ProtoMessage() {}
+func (*ListInvocationsResponse) ProtoMessage() {}
 
-func (x *ListDeploymentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[31]
+func (x *ListInvocationsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_functions_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2617,71 +1758,19 @@ func (x *ListDeploymentsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListDeploymentsResponse.ProtoReflect.Descriptor instead.
-func (*ListDeploymentsResponse) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{31}
+// Deprecated: Use ListInvocationsResponse.ProtoReflect.Descriptor instead.
+func (*ListInvocationsResponse) Descriptor() ([]byte, []int) {
+	return file_server_v1_functions_proto_rawDescGZIP(), []int{22}
 }
 
-func (x *ListDeploymentsResponse) GetDeployments() []*Deployment {
+func (x *ListInvocationsResponse) GetInvocations() []*Invocation {
 	if x != nil {
-		return x.Deployments
+		return x.Invocations
 	}
 	return nil
 }
 
-func (x *ListDeploymentsResponse) GetMeta() *v1.ListResponseMeta {
-	if x != nil {
-		return x.Meta
-	}
-	return nil
-}
-
-type ListExecutionsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Executions    []*Execution           `protobuf:"bytes,1,rep,name=executions,proto3" json:"executions,omitempty"`
-	Meta          *v1.ListResponseMeta   `protobuf:"bytes,2,opt,name=meta,proto3" json:"meta,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListExecutionsResponse) Reset() {
-	*x = ListExecutionsResponse{}
-	mi := &file_server_v1_functions_proto_msgTypes[32]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListExecutionsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListExecutionsResponse) ProtoMessage() {}
-
-func (x *ListExecutionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_functions_proto_msgTypes[32]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListExecutionsResponse.ProtoReflect.Descriptor instead.
-func (*ListExecutionsResponse) Descriptor() ([]byte, []int) {
-	return file_server_v1_functions_proto_rawDescGZIP(), []int{32}
-}
-
-func (x *ListExecutionsResponse) GetExecutions() []*Execution {
-	if x != nil {
-		return x.Executions
-	}
-	return nil
-}
-
-func (x *ListExecutionsResponse) GetMeta() *v1.ListResponseMeta {
+func (x *ListInvocationsResponse) GetMeta() *v1.ListResponseMeta {
 	if x != nil {
 		return x.Meta
 	}
@@ -2692,18 +1781,13 @@ var File_server_v1_functions_proto protoreflect.FileDescriptor
 
 const file_server_v1_functions_proto_rawDesc = "" +
 	"\n" +
-	"\x19server/v1/functions.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\x94\x06\n" +
+	"\x19server/v1/functions.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xd5\x05\n" +
 	"\bFunction\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tR\tprojectId\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\x12\x18\n" +
-	"\aruntime\x18\x04 \x01(\tR\aruntime\x12\x1e\n" +
-	"\n" +
-	"entrypoint\x18\x05 \x01(\tR\n" +
-	"entrypoint\x12'\n" +
-	"\x0ftimeout_seconds\x18\x06 \x01(\x05R\x0etimeoutSeconds\x12\x12\n" +
-	"\x04spec\x18\a \x01(\tR\x04spec\x12\x18\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12'\n" +
+	"\x0ftimeout_seconds\x18\x06 \x01(\x05R\x0etimeoutSeconds\x12\x18\n" +
 	"\aenabled\x18\b \x01(\bR\aenabled\x129\n" +
 	"\n" +
 	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
@@ -2714,184 +1798,107 @@ const file_server_v1_functions_proto_rawDesc = "" +
 	"\x0fclient_callable\x18\f \x01(\bR\x0eclientCallable\x128\n" +
 	"\x18client_anonymous_allowed\x18\r \x01(\bR\x16clientAnonymousAllowed\x121\n" +
 	"\x15client_per_user_limit\x18\x0e \x01(\x05R\x12clientPerUserLimit\x12.\n" +
-	"\x13client_limit_window\x18\x0f \x01(\tR\x11clientLimitWindow\x12#\n" +
-	"\rmin_instances\x18\x10 \x01(\x05R\fminInstances\x12#\n" +
-	"\rmax_instances\x18\x11 \x01(\x05R\fmaxInstances\x12(\n" +
-	"\x10idle_ttl_seconds\x18\x12 \x01(\x05R\x0eidleTtlSeconds\x129\n" +
-	"\x19max_requests_per_instance\x18\x13 \x01(\x05R\x16maxRequestsPerInstance\x12 \n" +
-	"\vconcurrency\x18\x14 \x01(\x05R\vconcurrency\"\xe3\x01\n" +
-	"\vRuntimeInfo\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1e\n" +
+	"\x13client_limit_window\x18\x0f \x01(\tR\x11clientLimitWindow\x12;\n" +
+	"\x06target\x18\x15 \x01(\v2#.torchwood.server.v1.FunctionTargetR\x06targetJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\a\x10\bJ\x04\b\x10\x10\x11J\x04\b\x11\x10\x12J\x04\b\x12\x10\x13J\x04\b\x13\x10\x14J\x04\b\x14\x10\x15R\aruntimeR\n" +
+	"entrypointR\x04specR\rmin_instancesR\rmax_instancesR\x10idle_ttl_secondsR\x19max_requests_per_instanceR\vconcurrency\"\x99\x01\n" +
+	"\x0eFunctionTarget\x12\x10\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\x12-\n" +
+	"\x12secret_fingerprint\x18\x02 \x01(\tR\x11secretFingerprint\x12F\n" +
+	"\x11secret_rotated_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0fsecretRotatedAt\"\xcf\x03\n" +
 	"\n" +
-	"entrypoint\x18\x03 \x01(\tR\n" +
-	"entrypoint\x12\x16\n" +
-	"\x06family\x18\x04 \x01(\tR\x06family\x12\x16\n" +
-	"\x06status\x18\x05 \x01(\tR\x06status\x12\x1d\n" +
-	"\n" +
-	"is_default\x18\x06 \x01(\bR\tisDefault\x126\n" +
-	"\x06eol_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampH\x00R\x05eolAt\x88\x01\x01B\t\n" +
-	"\a_eol_at\"M\n" +
-	"\x11SpecificationInfo\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x10\n" +
-	"\x03cpu\x18\x02 \x01(\tR\x03cpu\x12\x16\n" +
-	"\x06memory\x18\x03 \x01(\tR\x06memory\"\x8d\x03\n" +
-	"\n" +
-	"Deployment\x12\x0e\n" +
+	"Invocation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
 	"\vfunction_id\x18\x02 \x01(\tR\n" +
-	"functionId\x12\x12\n" +
-	"\x04size\x18\x03 \x01(\x03R\x04size\x12\x16\n" +
-	"\x06status\x18\x04 \x01(\tR\x06status\x12\x14\n" +
-	"\x05error\x18\x05 \x01(\tR\x05error\x129\n" +
-	"\n" +
-	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
-	"\n" +
-	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1f\n" +
-	"\vsource_type\x18\b \x01(\tR\n" +
-	"sourceType\x12\x1d\n" +
-	"\n" +
-	"source_url\x18\t \x01(\tR\tsourceUrl\x12\x1d\n" +
-	"\n" +
-	"source_ref\x18\n" +
-	" \x01(\tR\tsourceRef\x12\x1d\n" +
-	"\n" +
-	"source_dir\x18\v \x01(\tR\tsourceDir\x12\x18\n" +
-	"\aruntime\x18\f \x01(\tR\aruntime\"H\n" +
-	"\tVariables\x12;\n" +
-	"\tvariables\x18\x01 \x03(\v2\x1d.torchwood.server.v1.VariableR\tvariables\"2\n" +
-	"\bVariable\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\"\x98\x04\n" +
-	"\tExecution\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
-	"\vfunction_id\x18\x02 \x01(\tR\n" +
-	"functionId\x12#\n" +
-	"\rdeployment_id\x18\x03 \x01(\tR\fdeploymentId\x12\x16\n" +
+	"functionId\x12\x16\n" +
 	"\x06status\x18\x04 \x01(\tR\x06status\x12\x1a\n" +
-	"\bresponse\x18\x05 \x01(\tR\bresponse\x12\x16\n" +
-	"\x06stdout\x18\x06 \x01(\tR\x06stdout\x12\x16\n" +
-	"\x06stderr\x18\a \x01(\tR\x06stderr\x12\x1f\n" +
+	"\bresponse\x18\x05 \x01(\tR\bresponse\x12\x1f\n" +
 	"\vstatus_code\x18\b \x01(\x05R\n" +
 	"statusCode\x12\x1f\n" +
 	"\vduration_ms\x18\t \x01(\x03R\n" +
 	"durationMs\x12\x14\n" +
 	"\x05error\x18\n" +
 	" \x01(\tR\x05error\x12-\n" +
-	"\x12response_truncated\x18\v \x01(\bR\x11responseTruncated\x12)\n" +
-	"\x10stdout_truncated\x18\f \x01(\bR\x0fstdoutTruncated\x12)\n" +
-	"\x10stderr_truncated\x18\r \x01(\bR\x0fstderrTruncated\x129\n" +
+	"\x12response_truncated\x18\v \x01(\bR\x11responseTruncated\x129\n" +
 	"\n" +
 	"created_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x8d\x05\n" +
+	"updated_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtJ\x04\b\x03\x10\x04J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eR\rdeployment_idR\x06stdoutR\x06stderrR\x10stdout_truncatedR\x10stderr_truncated\"\xd1\x05\n" +
 	"\x15CreateFunctionRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
-	"\aruntime\x18\x03 \x01(\tR\aruntime\x12\x1e\n" +
-	"\n" +
-	"entrypoint\x18\x04 \x01(\tR\n" +
-	"entrypoint\x12,\n" +
-	"\x0ftimeout_seconds\x18\x05 \x01(\x05H\x00R\x0etimeoutSeconds\x88\x01\x01\x12\x17\n" +
-	"\x04spec\x18\x06 \x01(\tH\x01R\x04spec\x88\x01\x01\x12\x1d\n" +
-	"\aenabled\x18\a \x01(\bH\x02R\aenabled\x88\x01\x01\x12'\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12,\n" +
+	"\x0ftimeout_seconds\x18\x05 \x01(\x05H\x00R\x0etimeoutSeconds\x88\x01\x01\x12\x1d\n" +
+	"\aenabled\x18\a \x01(\bH\x01R\aenabled\x88\x01\x01\x12'\n" +
 	"\x0fdeclared_scopes\x18\b \x03(\tR\x0edeclaredScopes\x12,\n" +
-	"\x0fclient_callable\x18\t \x01(\bH\x03R\x0eclientCallable\x88\x01\x01\x12=\n" +
+	"\x0fclient_callable\x18\t \x01(\bH\x02R\x0eclientCallable\x88\x01\x01\x12=\n" +
 	"\x18client_anonymous_allowed\x18\n" +
-	" \x01(\bH\x04R\x16clientAnonymousAllowed\x88\x01\x01\x12?\n" +
-	"\x15client_per_user_limit\x18\v \x01(\x05B\a\xbaH\x04\x1a\x02(\x00H\x05R\x12clientPerUserLimit\x88\x01\x01\x12M\n" +
-	"\x13client_limit_window\x18\f \x01(\tB\x18\xbaH\x15r\x13R\x06minuteR\x04hourR\x03dayH\x06R\x11clientLimitWindow\x88\x01\x01B\x12\n" +
-	"\x10_timeout_secondsB\a\n" +
-	"\x05_specB\n" +
+	" \x01(\bH\x03R\x16clientAnonymousAllowed\x88\x01\x01\x12?\n" +
+	"\x15client_per_user_limit\x18\v \x01(\x05B\a\xbaH\x04\x1a\x02(\x00H\x04R\x12clientPerUserLimit\x88\x01\x01\x12M\n" +
+	"\x13client_limit_window\x18\f \x01(\tB\x18\xbaH\x15r\x13R\x06minuteR\x04hourR\x03dayH\x05R\x11clientLimitWindow\x88\x01\x01\x12,\n" +
 	"\n" +
-	"\b_enabledB\x12\n" +
-	"\x10_client_callableB\x1b\n" +
-	"\x19_client_anonymous_allowedB\x18\n" +
-	"\x16_client_per_user_limitB\x16\n" +
-	"\x14_client_limit_window\"\xa8\b\n" +
-	"\x15UpdateFunctionRequest\x12\x1f\n" +
-	"\vfunction_id\x18\x01 \x01(\tR\n" +
-	"functionId\x12\x17\n" +
-	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12#\n" +
-	"\n" +
-	"entrypoint\x18\x03 \x01(\tH\x01R\n" +
-	"entrypoint\x88\x01\x01\x12,\n" +
-	"\x0ftimeout_seconds\x18\x04 \x01(\x05H\x02R\x0etimeoutSeconds\x88\x01\x01\x12\x17\n" +
-	"\x04spec\x18\x05 \x01(\tH\x03R\x04spec\x88\x01\x01\x12\x1d\n" +
-	"\aenabled\x18\x06 \x01(\bH\x04R\aenabled\x88\x01\x01\x12,\n" +
-	"\x0fclient_callable\x18\a \x01(\bH\x05R\x0eclientCallable\x88\x01\x01\x12=\n" +
-	"\x18client_anonymous_allowed\x18\b \x01(\bH\x06R\x16clientAnonymousAllowed\x88\x01\x01\x12?\n" +
-	"\x15client_per_user_limit\x18\t \x01(\x05B\a\xbaH\x04\x1a\x02(\x00H\aR\x12clientPerUserLimit\x88\x01\x01\x12M\n" +
-	"\x13client_limit_window\x18\n" +
-	" \x01(\tB\x18\xbaH\x15r\x13R\x06minuteR\x04hourR\x03dayH\bR\x11clientLimitWindow\x88\x01\x01\x121\n" +
-	"\rmin_instances\x18\v \x01(\x05B\a\xbaH\x04\x1a\x02(\x00H\tR\fminInstances\x88\x01\x01\x121\n" +
-	"\rmax_instances\x18\f \x01(\x05B\a\xbaH\x04\x1a\x02(\x01H\n" +
-	"R\fmaxInstances\x88\x01\x01\x126\n" +
-	"\x10idle_ttl_seconds\x18\r \x01(\x05B\a\xbaH\x04\x1a\x02(\x1eH\vR\x0eidleTtlSeconds\x88\x01\x01\x12G\n" +
-	"\x19max_requests_per_instance\x18\x0e \x01(\x05B\a\xbaH\x04\x1a\x02(\x01H\fR\x16maxRequestsPerInstance\x88\x01\x01\x120\n" +
-	"\vconcurrency\x18\x0f \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x10(\x01H\rR\vconcurrency\x88\x01\x01\x12\x1d\n" +
-	"\aruntime\x18\x10 \x01(\tH\x0eR\aruntime\x88\x01\x01B\a\n" +
-	"\x05_nameB\r\n" +
-	"\v_entrypointB\x12\n" +
-	"\x10_timeout_secondsB\a\n" +
-	"\x05_specB\n" +
+	"target_url\x18\r \x01(\tB\r\xbaH\n" +
+	"\xc8\x01\x01r\x05\x10\t\x18\x80\x10R\ttargetUrl\x121\n" +
+	"\rtarget_secret\x18\x0e \x01(\tB\a\xbaH\x04r\x02\x10\x10H\x06R\ftargetSecret\x88\x01\x01B\x12\n" +
+	"\x10_timeout_secondsB\n" +
 	"\n" +
 	"\b_enabledB\x12\n" +
 	"\x10_client_callableB\x1b\n" +
 	"\x19_client_anonymous_allowedB\x18\n" +
 	"\x16_client_per_user_limitB\x16\n" +
 	"\x14_client_limit_windowB\x10\n" +
-	"\x0e_min_instancesB\x10\n" +
-	"\x0e_max_instancesB\x13\n" +
-	"\x11_idle_ttl_secondsB\x1c\n" +
-	"\x1a_max_requests_per_instanceB\x0e\n" +
-	"\f_concurrencyB\n" +
+	"\x0e_target_secretJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x06\x10\aR\aruntimeR\n" +
+	"entrypointR\x04spec\"x\n" +
+	"\x16CreateFunctionResponse\x129\n" +
+	"\bfunction\x18\x01 \x01(\v2\x1d.torchwood.server.v1.FunctionR\bfunction\x12#\n" +
+	"\rtarget_secret\x18\x02 \x01(\tR\ftargetSecret\"\x89\x06\n" +
+	"\x15UpdateFunctionRequest\x12\x1f\n" +
+	"\vfunction_id\x18\x01 \x01(\tR\n" +
+	"functionId\x12\x17\n" +
+	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12,\n" +
+	"\x0ftimeout_seconds\x18\x04 \x01(\x05H\x01R\x0etimeoutSeconds\x88\x01\x01\x12\x1d\n" +
+	"\aenabled\x18\x06 \x01(\bH\x02R\aenabled\x88\x01\x01\x12,\n" +
+	"\x0fclient_callable\x18\a \x01(\bH\x03R\x0eclientCallable\x88\x01\x01\x12=\n" +
+	"\x18client_anonymous_allowed\x18\b \x01(\bH\x04R\x16clientAnonymousAllowed\x88\x01\x01\x12?\n" +
+	"\x15client_per_user_limit\x18\t \x01(\x05B\a\xbaH\x04\x1a\x02(\x00H\x05R\x12clientPerUserLimit\x88\x01\x01\x12M\n" +
+	"\x13client_limit_window\x18\n" +
+	" \x01(\tB\x18\xbaH\x15r\x13R\x06minuteR\x04hourR\x03dayH\x06R\x11clientLimitWindow\x88\x01\x01\x12.\n" +
 	"\n" +
-	"\b_runtime\"5\n" +
+	"target_url\x18\x11 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\t\x18\x80\x10H\aR\ttargetUrl\x88\x01\x01B\a\n" +
+	"\x05_nameB\x12\n" +
+	"\x10_timeout_secondsB\n" +
+	"\n" +
+	"\b_enabledB\x12\n" +
+	"\x10_client_callableB\x1b\n" +
+	"\x19_client_anonymous_allowedB\x18\n" +
+	"\x16_client_per_user_limitB\x16\n" +
+	"\x14_client_limit_windowB\r\n" +
+	"\v_target_urlJ\x04\b\x03\x10\x04J\x04\b\x05\x10\x06J\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\n" +
+	"entrypointR\x04specR\rmin_instancesR\rmax_instancesR\x10idle_ttl_secondsR\x19max_requests_per_instanceR\vconcurrencyR\aruntime\"5\n" +
 	"\x12GetFunctionRequest\x12\x1f\n" +
 	"\vfunction_id\x18\x01 \x01(\tR\n" +
-	"functionId\"\xc8\x01\n" +
-	"\x17CreateDeploymentRequest\x12\x1f\n" +
+	"functionId\"F\n" +
+	"\x1bRotateFunctionSecretRequest\x12'\n" +
+	"\vfunction_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\n" +
+	"functionId\"x\n" +
+	"\x0eFunctionSecret\x12\x1f\n" +
 	"\vfunction_id\x18\x01 \x01(\tR\n" +
-	"functionId\x12\x14\n" +
-	"\x04code\x18\x02 \x01(\fH\x00R\x04code\x122\n" +
-	"\x03git\x18\x03 \x01(\v2\x1e.torchwood.server.v1.GitSourceH\x00R\x03git\x128\n" +
-	"\x05image\x18\x04 \x01(\v2 .torchwood.server.v1.ImageSourceH\x00R\x05imageB\b\n" +
-	"\x06source\"\xc6\x01\n" +
-	"\tGitSource\x12/\n" +
-	"\x03url\x18\x01 \x01(\tB\x1d\xbaH\x1a\xc8\x01\x01r\x15\x18\x80\x102\x10^(https|file)://R\x03url\x12\x1a\n" +
-	"\x03ref\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\x03ref\x12&\n" +
-	"\tdirectory\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\tdirectory\x12$\n" +
-	"\busername\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\busername\x12\x1e\n" +
-	"\x05token\x18\x05 \x01(\tB\b\xbaH\x05r\x03\x18\x80 R\x05token\"\x98\x01\n" +
-	"\vImageSource\x12!\n" +
-	"\x05image\x18\x01 \x01(\tB\v\xbaH\b\xc8\x01\x01r\x03\x18\xf4\x03R\x05image\x125\n" +
-	"\x11registry_username\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\x10registryUsername\x12/\n" +
-	"\x0eregistry_token\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80 R\rregistryToken\"\\\n" +
-	"\x14GetDeploymentRequest\x12\x1f\n" +
+	"functionId\x12\x16\n" +
+	"\x06secret\x18\x02 \x01(\tR\x06secret\x12-\n" +
+	"\x12secret_fingerprint\x18\x03 \x01(\tR\x11secretFingerprint\"\x86\x01\n" +
+	"\x15InvokeFunctionRequest\x12\x1f\n" +
 	"\vfunction_id\x18\x01 \x01(\tR\n" +
-	"functionId\x12#\n" +
-	"\rdeployment_id\x18\x02 \x01(\tR\fdeploymentId\"\xae\x01\n" +
-	"\x16CreateExecutionRequest\x12\x1f\n" +
-	"\vfunction_id\x18\x01 \x01(\tR\n" +
-	"functionId\x12(\n" +
-	"\rdeployment_id\x18\x02 \x01(\tH\x00R\fdeploymentId\x88\x01\x01\x12\x12\n" +
+	"functionId\x12\x12\n" +
 	"\x04data\x18\x03 \x01(\tR\x04data\x12\x19\n" +
-	"\x05async\x18\x04 \x01(\bH\x01R\x05async\x88\x01\x01B\x10\n" +
-	"\x0e_deployment_idB\b\n" +
-	"\x06_async\"Y\n" +
-	"\x13GetExecutionRequest\x12\x1f\n" +
-	"\vfunction_id\x18\x01 \x01(\tR\n" +
-	"functionId\x12!\n" +
-	"\fexecution_id\x18\x02 \x01(\tR\vexecutionId\"s\n" +
-	"\x13SetVariablesRequest\x12\x1f\n" +
-	"\vfunction_id\x18\x01 \x01(\tR\n" +
-	"functionId\x12;\n" +
-	"\tvariables\x18\x02 \x03(\v2\x1d.torchwood.server.v1.VariableR\tvariables\"d\n" +
+	"\x05async\x18\x04 \x01(\bH\x00R\x05async\x88\x01\x01B\b\n" +
+	"\x06_asyncJ\x04\b\x02\x10\x03R\rdeployment_id\"d\n" +
 	"\x18SetFunctionScopesRequest\x12\x1f\n" +
 	"\vfunction_id\x18\x01 \x01(\tR\n" +
 	"functionId\x12'\n" +
-	"\x0fdeclared_scopes\x18\x02 \x03(\tR\x0edeclaredScopes\"\xaf\x02\n" +
+	"\x0fdeclared_scopes\x18\x02 \x03(\tR\x0edeclaredScopes\"\\\n" +
+	"\x14GetInvocationRequest\x12\x1f\n" +
+	"\vfunction_id\x18\x01 \x01(\tR\n" +
+	"functionId\x12#\n" +
+	"\rinvocation_id\x18\x02 \x01(\tR\finvocationId\"\xaf\x02\n" +
 	"\x1cCreateFunctionTriggerRequest\x12'\n" +
 	"\vfunction_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"functionId\x12/\n" +
@@ -2946,22 +1953,11 @@ const file_server_v1_functions_proto_rawDesc = "" +
 	"\vfunction_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"functionId\x12%\n" +
 	"\n" +
-	"trigger_id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\ttriggerId\"T\n" +
-	"\x14ListRuntimesResponse\x12<\n" +
-	"\bruntimes\x18\x01 \x03(\v2 .torchwood.server.v1.RuntimeInfoR\bruntimes\"l\n" +
-	"\x1aListSpecificationsResponse\x12N\n" +
-	"\x0especifications\x18\x01 \x03(\v2&.torchwood.server.v1.SpecificationInfoR\x0especifications\"\x8f\x01\n" +
+	"trigger_id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\ttriggerId\"\x8f\x01\n" +
 	"\x15ListFunctionsResponse\x12;\n" +
 	"\tfunctions\x18\x01 \x03(\v2\x1d.torchwood.server.v1.FunctionR\tfunctions\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\x93\x01\n" +
-	"\x16ListDeploymentsRequest\x12'\n" +
-	"\vfunction_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\n" +
-	"functionId\x12'\n" +
-	"\tpage_size\x18\x02 \x01(\x05B\n" +
-	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12'\n" +
-	"\n" +
-	"page_token\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80 R\tpageToken\"\xb7\x02\n" +
-	"\x15ListExecutionsRequest\x12'\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\xb8\x02\n" +
+	"\x16ListInvocationsRequest\x12'\n" +
 	"\vfunction_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"functionId\x12'\n" +
 	"\tpage_size\x18\x02 \x01(\x05B\n" +
@@ -2971,20 +1967,11 @@ const file_server_v1_functions_proto_rawDesc = "" +
 	"\x06status\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x18\x10R\x06status\x12?\n" +
 	"\rcreated_after\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\fcreatedAfter\x12A\n" +
 	"\x0ecreated_before\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\rcreatedBefore\"\x97\x01\n" +
-	"\x17ListDeploymentsResponse\x12A\n" +
-	"\vdeployments\x18\x01 \x03(\v2\x1f.torchwood.server.v1.DeploymentR\vdeployments\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta\"\x93\x01\n" +
-	"\x16ListExecutionsResponse\x12>\n" +
-	"\n" +
-	"executions\x18\x01 \x03(\v2\x1e.torchwood.server.v1.ExecutionR\n" +
-	"executions\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xe1\x1d\n" +
-	"\x10FunctionsService\x12\x8f\x01\n" +
-	"\fListRuntimes\x12\x1a.torchwood.shared.v1.Empty\x1a).torchwood.server.v1.ListRuntimesResponse\"8\xea\xc4\x19\x0f\"\r\n" +
-	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/server/functions:runtimes\x12\xa1\x01\n" +
-	"\x12ListSpecifications\x12\x1a.torchwood.shared.v1.Empty\x1a/.torchwood.server.v1.ListSpecificationsResponse\">\xea\xc4\x19\x0f\"\r\n" +
-	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x02%\x12#/v1/server/functions:specifications\x12\x9d\x01\n" +
-	"\x0eCreateFunction\x12*.torchwood.server.v1.CreateFunctionRequest\x1a\x1d.torchwood.server.v1.Function\"@\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
+	"\x17ListInvocationsResponse\x12A\n" +
+	"\vinvocations\x18\x01 \x03(\v2\x1f.torchwood.server.v1.InvocationR\vinvocations\x129\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xbb\x14\n" +
+	"\x10FunctionsService\x12\xab\x01\n" +
+	"\x0eCreateFunction\x12*.torchwood.server.v1.CreateFunctionRequest\x1a+.torchwood.server.v1.CreateFunctionResponse\"@\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
 	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02\x19:\x01*\"\x14/v1/server/functions\x12\x8e\x01\n" +
 	"\rListFunctions\x12 .torchwood.shared.v1.ListRequest\x1a*.torchwood.server.v1.ListFunctionsResponse\"/\xea\xc4\x19\x0f\"\r\n" +
 	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x02\x16\x12\x14/v1/server/functions\x12\x94\x01\n" +
@@ -2993,27 +1980,17 @@ const file_server_v1_functions_proto_rawDesc = "" +
 	"\x0eUpdateFunction\x12*.torchwood.server.v1.UpdateFunctionRequest\x1a\x1d.torchwood.server.v1.Function\"N\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
 	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02':\x01*2\"/v1/server/functions/{function_id}\x12\xa2\x01\n" +
 	"\x0eDeleteFunction\x12'.torchwood.server.v1.GetFunctionRequest\x1a\x1a.torchwood.shared.v1.Empty\"K\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02$*\"/v1/server/functions/{function_id}\x12\xbd\x01\n" +
-	"\x10CreateDeployment\x12,.torchwood.server.v1.CreateDeploymentRequest\x1a\x1f.torchwood.server.v1.Deployment\"Z\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x023:\x01*\"./v1/server/functions/{function_id}/deployments\x12\xb7\x01\n" +
-	"\x0fListDeployments\x12+.torchwood.server.v1.ListDeploymentsRequest\x1a,.torchwood.server.v1.ListDeploymentsResponse\"I\xea\xc4\x19\x0f\"\r\n" +
-	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x020\x12./v1/server/functions/{function_id}/deployments\x12\xb6\x01\n" +
-	"\rGetDeployment\x12).torchwood.server.v1.GetDeploymentRequest\x1a\x1f.torchwood.server.v1.Deployment\"Y\xea\xc4\x19\x0f\"\r\n" +
-	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x02@\x12>/v1/server/functions/{function_id}/deployments/{deployment_id}\x12\xc2\x01\n" +
-	"\x10DeleteDeployment\x12).torchwood.server.v1.GetDeploymentRequest\x1a\x1a.torchwood.shared.v1.Empty\"g\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02@*>/v1/server/functions/{function_id}/deployments/{deployment_id}\x12\xb2\x01\n" +
-	"\fSetVariables\x12(.torchwood.server.v1.SetVariablesRequest\x1a\x1e.torchwood.server.v1.Variables\"X\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x021:\x01*\x1a,/v1/server/functions/{function_id}/variables\x12\xa0\x01\n" +
-	"\fGetVariables\x12'.torchwood.server.v1.GetFunctionRequest\x1a\x1e.torchwood.server.v1.Variables\"G\xea\xc4\x19\x0f\"\r\n" +
-	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x02.\x12,/v1/server/functions/{function_id}/variables\x12\xb9\x01\n" +
-	"\x0fCreateExecution\x12+.torchwood.server.v1.CreateExecutionRequest\x1a\x1e.torchwood.server.v1.Execution\"Y\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x022:\x01*\"-/v1/server/functions/{function_id}/executions\x12\xb3\x01\n" +
-	"\x0eListExecutions\x12*.torchwood.server.v1.ListExecutionsRequest\x1a+.torchwood.server.v1.ListExecutionsResponse\"H\xea\xc4\x19\x0f\"\r\n" +
-	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x02/\x12-/v1/server/functions/{function_id}/executions\x12\xb1\x01\n" +
-	"\fGetExecution\x12(.torchwood.server.v1.GetExecutionRequest\x1a\x1e.torchwood.server.v1.Execution\"W\xea\xc4\x19\x0f\"\r\n" +
-	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x02>\x12</v1/server/functions/{function_id}/executions/{execution_id}\x12\xb8\x01\n" +
+	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02$*\"/v1/server/functions/{function_id}\x12\xb4\x01\n" +
+	"\x0eInvokeFunction\x12*.torchwood.server.v1.InvokeFunctionRequest\x1a\x1f.torchwood.server.v1.Invocation\"U\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
+	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02.:\x01*\")/v1/server/functions/{function_id}:invoke\x12\xb7\x01\n" +
+	"\x0fListInvocations\x12+.torchwood.server.v1.ListInvocationsRequest\x1a,.torchwood.server.v1.ListInvocationsResponse\"I\xea\xc4\x19\x0f\"\r\n" +
+	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x020\x12./v1/server/functions/{function_id}/invocations\x12\xb6\x01\n" +
+	"\rGetInvocation\x12).torchwood.server.v1.GetInvocationRequest\x1a\x1f.torchwood.server.v1.Invocation\"Y\xea\xc4\x19\x0f\"\r\n" +
+	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x02@\x12>/v1/server/functions/{function_id}/invocations/{invocation_id}\x12\xb8\x01\n" +
 	"\x11SetFunctionScopes\x12-.torchwood.server.v1.SetFunctionScopesRequest\x1a\x1d.torchwood.server.v1.Function\"U\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02.:\x01*\x1a)/v1/server/functions/{function_id}/scopes\x12\xc9\x01\n" +
+	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02.:\x01*\x1a)/v1/server/functions/{function_id}/scopes\x12\xcb\x01\n" +
+	"\x14RotateFunctionSecret\x120.torchwood.server.v1.RotateFunctionSecretRequest\x1a#.torchwood.server.v1.FunctionSecret\"\\\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
+	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x025:\x01*\"0/v1/server/functions/{function_id}:rotate-secret\x12\xc9\x01\n" +
 	"\x15CreateFunctionTrigger\x121.torchwood.server.v1.CreateFunctionTriggerRequest\x1a$.torchwood.server.v1.FunctionTrigger\"W\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
 	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x020:\x01*\"+/v1/server/functions/{function_id}/triggers\x12\xba\x01\n" +
 	"\x14ListFunctionTriggers\x12'.torchwood.server.v1.GetFunctionRequest\x1a1.torchwood.server.v1.ListFunctionTriggersResponse\"F\xea\xc4\x19\x0f\"\r\n" +
@@ -3048,122 +2025,90 @@ func file_server_v1_functions_proto_rawDescGZIP() []byte {
 	return file_server_v1_functions_proto_rawDescData
 }
 
-var file_server_v1_functions_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_server_v1_functions_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_server_v1_functions_proto_goTypes = []any{
 	(*Function)(nil),                          // 0: torchwood.server.v1.Function
-	(*RuntimeInfo)(nil),                       // 1: torchwood.server.v1.RuntimeInfo
-	(*SpecificationInfo)(nil),                 // 2: torchwood.server.v1.SpecificationInfo
-	(*Deployment)(nil),                        // 3: torchwood.server.v1.Deployment
-	(*Variables)(nil),                         // 4: torchwood.server.v1.Variables
-	(*Variable)(nil),                          // 5: torchwood.server.v1.Variable
-	(*Execution)(nil),                         // 6: torchwood.server.v1.Execution
-	(*CreateFunctionRequest)(nil),             // 7: torchwood.server.v1.CreateFunctionRequest
-	(*UpdateFunctionRequest)(nil),             // 8: torchwood.server.v1.UpdateFunctionRequest
-	(*GetFunctionRequest)(nil),                // 9: torchwood.server.v1.GetFunctionRequest
-	(*CreateDeploymentRequest)(nil),           // 10: torchwood.server.v1.CreateDeploymentRequest
-	(*GitSource)(nil),                         // 11: torchwood.server.v1.GitSource
-	(*ImageSource)(nil),                       // 12: torchwood.server.v1.ImageSource
-	(*GetDeploymentRequest)(nil),              // 13: torchwood.server.v1.GetDeploymentRequest
-	(*CreateExecutionRequest)(nil),            // 14: torchwood.server.v1.CreateExecutionRequest
-	(*GetExecutionRequest)(nil),               // 15: torchwood.server.v1.GetExecutionRequest
-	(*SetVariablesRequest)(nil),               // 16: torchwood.server.v1.SetVariablesRequest
-	(*SetFunctionScopesRequest)(nil),          // 17: torchwood.server.v1.SetFunctionScopesRequest
-	(*CreateFunctionTriggerRequest)(nil),      // 18: torchwood.server.v1.CreateFunctionTriggerRequest
-	(*HttpTriggerConfig)(nil),                 // 19: torchwood.server.v1.HttpTriggerConfig
-	(*CronTriggerConfig)(nil),                 // 20: torchwood.server.v1.CronTriggerConfig
-	(*EventTriggerConfig)(nil),                // 21: torchwood.server.v1.EventTriggerConfig
-	(*FunctionTrigger)(nil),                   // 22: torchwood.server.v1.FunctionTrigger
-	(*ListFunctionTriggersResponse)(nil),      // 23: torchwood.server.v1.ListFunctionTriggersResponse
-	(*DeleteFunctionTriggerRequest)(nil),      // 24: torchwood.server.v1.DeleteFunctionTriggerRequest
-	(*RotateFunctionTriggerTokenRequest)(nil), // 25: torchwood.server.v1.RotateFunctionTriggerTokenRequest
-	(*ListRuntimesResponse)(nil),              // 26: torchwood.server.v1.ListRuntimesResponse
-	(*ListSpecificationsResponse)(nil),        // 27: torchwood.server.v1.ListSpecificationsResponse
-	(*ListFunctionsResponse)(nil),             // 28: torchwood.server.v1.ListFunctionsResponse
-	(*ListDeploymentsRequest)(nil),            // 29: torchwood.server.v1.ListDeploymentsRequest
-	(*ListExecutionsRequest)(nil),             // 30: torchwood.server.v1.ListExecutionsRequest
-	(*ListDeploymentsResponse)(nil),           // 31: torchwood.server.v1.ListDeploymentsResponse
-	(*ListExecutionsResponse)(nil),            // 32: torchwood.server.v1.ListExecutionsResponse
-	(*timestamppb.Timestamp)(nil),             // 33: google.protobuf.Timestamp
-	(*v1.ListResponseMeta)(nil),               // 34: torchwood.shared.v1.ListResponseMeta
-	(*v1.Empty)(nil),                          // 35: torchwood.shared.v1.Empty
-	(*v1.ListRequest)(nil),                    // 36: torchwood.shared.v1.ListRequest
+	(*FunctionTarget)(nil),                    // 1: torchwood.server.v1.FunctionTarget
+	(*Invocation)(nil),                        // 2: torchwood.server.v1.Invocation
+	(*CreateFunctionRequest)(nil),             // 3: torchwood.server.v1.CreateFunctionRequest
+	(*CreateFunctionResponse)(nil),            // 4: torchwood.server.v1.CreateFunctionResponse
+	(*UpdateFunctionRequest)(nil),             // 5: torchwood.server.v1.UpdateFunctionRequest
+	(*GetFunctionRequest)(nil),                // 6: torchwood.server.v1.GetFunctionRequest
+	(*RotateFunctionSecretRequest)(nil),       // 7: torchwood.server.v1.RotateFunctionSecretRequest
+	(*FunctionSecret)(nil),                    // 8: torchwood.server.v1.FunctionSecret
+	(*InvokeFunctionRequest)(nil),             // 9: torchwood.server.v1.InvokeFunctionRequest
+	(*SetFunctionScopesRequest)(nil),          // 10: torchwood.server.v1.SetFunctionScopesRequest
+	(*GetInvocationRequest)(nil),              // 11: torchwood.server.v1.GetInvocationRequest
+	(*CreateFunctionTriggerRequest)(nil),      // 12: torchwood.server.v1.CreateFunctionTriggerRequest
+	(*HttpTriggerConfig)(nil),                 // 13: torchwood.server.v1.HttpTriggerConfig
+	(*CronTriggerConfig)(nil),                 // 14: torchwood.server.v1.CronTriggerConfig
+	(*EventTriggerConfig)(nil),                // 15: torchwood.server.v1.EventTriggerConfig
+	(*FunctionTrigger)(nil),                   // 16: torchwood.server.v1.FunctionTrigger
+	(*ListFunctionTriggersResponse)(nil),      // 17: torchwood.server.v1.ListFunctionTriggersResponse
+	(*DeleteFunctionTriggerRequest)(nil),      // 18: torchwood.server.v1.DeleteFunctionTriggerRequest
+	(*RotateFunctionTriggerTokenRequest)(nil), // 19: torchwood.server.v1.RotateFunctionTriggerTokenRequest
+	(*ListFunctionsResponse)(nil),             // 20: torchwood.server.v1.ListFunctionsResponse
+	(*ListInvocationsRequest)(nil),            // 21: torchwood.server.v1.ListInvocationsRequest
+	(*ListInvocationsResponse)(nil),           // 22: torchwood.server.v1.ListInvocationsResponse
+	(*timestamppb.Timestamp)(nil),             // 23: google.protobuf.Timestamp
+	(*v1.ListResponseMeta)(nil),               // 24: torchwood.shared.v1.ListResponseMeta
+	(*v1.ListRequest)(nil),                    // 25: torchwood.shared.v1.ListRequest
+	(*v1.Empty)(nil),                          // 26: torchwood.shared.v1.Empty
 }
 var file_server_v1_functions_proto_depIdxs = []int32{
-	33, // 0: torchwood.server.v1.Function.created_at:type_name -> google.protobuf.Timestamp
-	33, // 1: torchwood.server.v1.Function.updated_at:type_name -> google.protobuf.Timestamp
-	33, // 2: torchwood.server.v1.RuntimeInfo.eol_at:type_name -> google.protobuf.Timestamp
-	33, // 3: torchwood.server.v1.Deployment.created_at:type_name -> google.protobuf.Timestamp
-	33, // 4: torchwood.server.v1.Deployment.updated_at:type_name -> google.protobuf.Timestamp
-	5,  // 5: torchwood.server.v1.Variables.variables:type_name -> torchwood.server.v1.Variable
-	33, // 6: torchwood.server.v1.Execution.created_at:type_name -> google.protobuf.Timestamp
-	33, // 7: torchwood.server.v1.Execution.updated_at:type_name -> google.protobuf.Timestamp
-	11, // 8: torchwood.server.v1.CreateDeploymentRequest.git:type_name -> torchwood.server.v1.GitSource
-	12, // 9: torchwood.server.v1.CreateDeploymentRequest.image:type_name -> torchwood.server.v1.ImageSource
-	5,  // 10: torchwood.server.v1.SetVariablesRequest.variables:type_name -> torchwood.server.v1.Variable
-	19, // 11: torchwood.server.v1.CreateFunctionTriggerRequest.http:type_name -> torchwood.server.v1.HttpTriggerConfig
-	20, // 12: torchwood.server.v1.CreateFunctionTriggerRequest.cron:type_name -> torchwood.server.v1.CronTriggerConfig
-	21, // 13: torchwood.server.v1.CreateFunctionTriggerRequest.event:type_name -> torchwood.server.v1.EventTriggerConfig
-	33, // 14: torchwood.server.v1.FunctionTrigger.next_run_at:type_name -> google.protobuf.Timestamp
-	33, // 15: torchwood.server.v1.FunctionTrigger.created_at:type_name -> google.protobuf.Timestamp
-	33, // 16: torchwood.server.v1.FunctionTrigger.updated_at:type_name -> google.protobuf.Timestamp
-	22, // 17: torchwood.server.v1.ListFunctionTriggersResponse.triggers:type_name -> torchwood.server.v1.FunctionTrigger
-	1,  // 18: torchwood.server.v1.ListRuntimesResponse.runtimes:type_name -> torchwood.server.v1.RuntimeInfo
-	2,  // 19: torchwood.server.v1.ListSpecificationsResponse.specifications:type_name -> torchwood.server.v1.SpecificationInfo
-	0,  // 20: torchwood.server.v1.ListFunctionsResponse.functions:type_name -> torchwood.server.v1.Function
-	34, // 21: torchwood.server.v1.ListFunctionsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
-	33, // 22: torchwood.server.v1.ListExecutionsRequest.created_after:type_name -> google.protobuf.Timestamp
-	33, // 23: torchwood.server.v1.ListExecutionsRequest.created_before:type_name -> google.protobuf.Timestamp
-	3,  // 24: torchwood.server.v1.ListDeploymentsResponse.deployments:type_name -> torchwood.server.v1.Deployment
-	34, // 25: torchwood.server.v1.ListDeploymentsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
-	6,  // 26: torchwood.server.v1.ListExecutionsResponse.executions:type_name -> torchwood.server.v1.Execution
-	34, // 27: torchwood.server.v1.ListExecutionsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
-	35, // 28: torchwood.server.v1.FunctionsService.ListRuntimes:input_type -> torchwood.shared.v1.Empty
-	35, // 29: torchwood.server.v1.FunctionsService.ListSpecifications:input_type -> torchwood.shared.v1.Empty
-	7,  // 30: torchwood.server.v1.FunctionsService.CreateFunction:input_type -> torchwood.server.v1.CreateFunctionRequest
-	36, // 31: torchwood.server.v1.FunctionsService.ListFunctions:input_type -> torchwood.shared.v1.ListRequest
-	9,  // 32: torchwood.server.v1.FunctionsService.GetFunction:input_type -> torchwood.server.v1.GetFunctionRequest
-	8,  // 33: torchwood.server.v1.FunctionsService.UpdateFunction:input_type -> torchwood.server.v1.UpdateFunctionRequest
-	9,  // 34: torchwood.server.v1.FunctionsService.DeleteFunction:input_type -> torchwood.server.v1.GetFunctionRequest
-	10, // 35: torchwood.server.v1.FunctionsService.CreateDeployment:input_type -> torchwood.server.v1.CreateDeploymentRequest
-	29, // 36: torchwood.server.v1.FunctionsService.ListDeployments:input_type -> torchwood.server.v1.ListDeploymentsRequest
-	13, // 37: torchwood.server.v1.FunctionsService.GetDeployment:input_type -> torchwood.server.v1.GetDeploymentRequest
-	13, // 38: torchwood.server.v1.FunctionsService.DeleteDeployment:input_type -> torchwood.server.v1.GetDeploymentRequest
-	16, // 39: torchwood.server.v1.FunctionsService.SetVariables:input_type -> torchwood.server.v1.SetVariablesRequest
-	9,  // 40: torchwood.server.v1.FunctionsService.GetVariables:input_type -> torchwood.server.v1.GetFunctionRequest
-	14, // 41: torchwood.server.v1.FunctionsService.CreateExecution:input_type -> torchwood.server.v1.CreateExecutionRequest
-	30, // 42: torchwood.server.v1.FunctionsService.ListExecutions:input_type -> torchwood.server.v1.ListExecutionsRequest
-	15, // 43: torchwood.server.v1.FunctionsService.GetExecution:input_type -> torchwood.server.v1.GetExecutionRequest
-	17, // 44: torchwood.server.v1.FunctionsService.SetFunctionScopes:input_type -> torchwood.server.v1.SetFunctionScopesRequest
-	18, // 45: torchwood.server.v1.FunctionsService.CreateFunctionTrigger:input_type -> torchwood.server.v1.CreateFunctionTriggerRequest
-	9,  // 46: torchwood.server.v1.FunctionsService.ListFunctionTriggers:input_type -> torchwood.server.v1.GetFunctionRequest
-	24, // 47: torchwood.server.v1.FunctionsService.DeleteFunctionTrigger:input_type -> torchwood.server.v1.DeleteFunctionTriggerRequest
-	25, // 48: torchwood.server.v1.FunctionsService.RotateFunctionTriggerToken:input_type -> torchwood.server.v1.RotateFunctionTriggerTokenRequest
-	26, // 49: torchwood.server.v1.FunctionsService.ListRuntimes:output_type -> torchwood.server.v1.ListRuntimesResponse
-	27, // 50: torchwood.server.v1.FunctionsService.ListSpecifications:output_type -> torchwood.server.v1.ListSpecificationsResponse
-	0,  // 51: torchwood.server.v1.FunctionsService.CreateFunction:output_type -> torchwood.server.v1.Function
-	28, // 52: torchwood.server.v1.FunctionsService.ListFunctions:output_type -> torchwood.server.v1.ListFunctionsResponse
-	0,  // 53: torchwood.server.v1.FunctionsService.GetFunction:output_type -> torchwood.server.v1.Function
-	0,  // 54: torchwood.server.v1.FunctionsService.UpdateFunction:output_type -> torchwood.server.v1.Function
-	35, // 55: torchwood.server.v1.FunctionsService.DeleteFunction:output_type -> torchwood.shared.v1.Empty
-	3,  // 56: torchwood.server.v1.FunctionsService.CreateDeployment:output_type -> torchwood.server.v1.Deployment
-	31, // 57: torchwood.server.v1.FunctionsService.ListDeployments:output_type -> torchwood.server.v1.ListDeploymentsResponse
-	3,  // 58: torchwood.server.v1.FunctionsService.GetDeployment:output_type -> torchwood.server.v1.Deployment
-	35, // 59: torchwood.server.v1.FunctionsService.DeleteDeployment:output_type -> torchwood.shared.v1.Empty
-	4,  // 60: torchwood.server.v1.FunctionsService.SetVariables:output_type -> torchwood.server.v1.Variables
-	4,  // 61: torchwood.server.v1.FunctionsService.GetVariables:output_type -> torchwood.server.v1.Variables
-	6,  // 62: torchwood.server.v1.FunctionsService.CreateExecution:output_type -> torchwood.server.v1.Execution
-	32, // 63: torchwood.server.v1.FunctionsService.ListExecutions:output_type -> torchwood.server.v1.ListExecutionsResponse
-	6,  // 64: torchwood.server.v1.FunctionsService.GetExecution:output_type -> torchwood.server.v1.Execution
-	0,  // 65: torchwood.server.v1.FunctionsService.SetFunctionScopes:output_type -> torchwood.server.v1.Function
-	22, // 66: torchwood.server.v1.FunctionsService.CreateFunctionTrigger:output_type -> torchwood.server.v1.FunctionTrigger
-	23, // 67: torchwood.server.v1.FunctionsService.ListFunctionTriggers:output_type -> torchwood.server.v1.ListFunctionTriggersResponse
-	35, // 68: torchwood.server.v1.FunctionsService.DeleteFunctionTrigger:output_type -> torchwood.shared.v1.Empty
-	22, // 69: torchwood.server.v1.FunctionsService.RotateFunctionTriggerToken:output_type -> torchwood.server.v1.FunctionTrigger
-	49, // [49:70] is the sub-list for method output_type
-	28, // [28:49] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	23, // 0: torchwood.server.v1.Function.created_at:type_name -> google.protobuf.Timestamp
+	23, // 1: torchwood.server.v1.Function.updated_at:type_name -> google.protobuf.Timestamp
+	1,  // 2: torchwood.server.v1.Function.target:type_name -> torchwood.server.v1.FunctionTarget
+	23, // 3: torchwood.server.v1.FunctionTarget.secret_rotated_at:type_name -> google.protobuf.Timestamp
+	23, // 4: torchwood.server.v1.Invocation.created_at:type_name -> google.protobuf.Timestamp
+	23, // 5: torchwood.server.v1.Invocation.updated_at:type_name -> google.protobuf.Timestamp
+	0,  // 6: torchwood.server.v1.CreateFunctionResponse.function:type_name -> torchwood.server.v1.Function
+	13, // 7: torchwood.server.v1.CreateFunctionTriggerRequest.http:type_name -> torchwood.server.v1.HttpTriggerConfig
+	14, // 8: torchwood.server.v1.CreateFunctionTriggerRequest.cron:type_name -> torchwood.server.v1.CronTriggerConfig
+	15, // 9: torchwood.server.v1.CreateFunctionTriggerRequest.event:type_name -> torchwood.server.v1.EventTriggerConfig
+	23, // 10: torchwood.server.v1.FunctionTrigger.next_run_at:type_name -> google.protobuf.Timestamp
+	23, // 11: torchwood.server.v1.FunctionTrigger.created_at:type_name -> google.protobuf.Timestamp
+	23, // 12: torchwood.server.v1.FunctionTrigger.updated_at:type_name -> google.protobuf.Timestamp
+	16, // 13: torchwood.server.v1.ListFunctionTriggersResponse.triggers:type_name -> torchwood.server.v1.FunctionTrigger
+	0,  // 14: torchwood.server.v1.ListFunctionsResponse.functions:type_name -> torchwood.server.v1.Function
+	24, // 15: torchwood.server.v1.ListFunctionsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	23, // 16: torchwood.server.v1.ListInvocationsRequest.created_after:type_name -> google.protobuf.Timestamp
+	23, // 17: torchwood.server.v1.ListInvocationsRequest.created_before:type_name -> google.protobuf.Timestamp
+	2,  // 18: torchwood.server.v1.ListInvocationsResponse.invocations:type_name -> torchwood.server.v1.Invocation
+	24, // 19: torchwood.server.v1.ListInvocationsResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	3,  // 20: torchwood.server.v1.FunctionsService.CreateFunction:input_type -> torchwood.server.v1.CreateFunctionRequest
+	25, // 21: torchwood.server.v1.FunctionsService.ListFunctions:input_type -> torchwood.shared.v1.ListRequest
+	6,  // 22: torchwood.server.v1.FunctionsService.GetFunction:input_type -> torchwood.server.v1.GetFunctionRequest
+	5,  // 23: torchwood.server.v1.FunctionsService.UpdateFunction:input_type -> torchwood.server.v1.UpdateFunctionRequest
+	6,  // 24: torchwood.server.v1.FunctionsService.DeleteFunction:input_type -> torchwood.server.v1.GetFunctionRequest
+	9,  // 25: torchwood.server.v1.FunctionsService.InvokeFunction:input_type -> torchwood.server.v1.InvokeFunctionRequest
+	21, // 26: torchwood.server.v1.FunctionsService.ListInvocations:input_type -> torchwood.server.v1.ListInvocationsRequest
+	11, // 27: torchwood.server.v1.FunctionsService.GetInvocation:input_type -> torchwood.server.v1.GetInvocationRequest
+	10, // 28: torchwood.server.v1.FunctionsService.SetFunctionScopes:input_type -> torchwood.server.v1.SetFunctionScopesRequest
+	7,  // 29: torchwood.server.v1.FunctionsService.RotateFunctionSecret:input_type -> torchwood.server.v1.RotateFunctionSecretRequest
+	12, // 30: torchwood.server.v1.FunctionsService.CreateFunctionTrigger:input_type -> torchwood.server.v1.CreateFunctionTriggerRequest
+	6,  // 31: torchwood.server.v1.FunctionsService.ListFunctionTriggers:input_type -> torchwood.server.v1.GetFunctionRequest
+	18, // 32: torchwood.server.v1.FunctionsService.DeleteFunctionTrigger:input_type -> torchwood.server.v1.DeleteFunctionTriggerRequest
+	19, // 33: torchwood.server.v1.FunctionsService.RotateFunctionTriggerToken:input_type -> torchwood.server.v1.RotateFunctionTriggerTokenRequest
+	4,  // 34: torchwood.server.v1.FunctionsService.CreateFunction:output_type -> torchwood.server.v1.CreateFunctionResponse
+	20, // 35: torchwood.server.v1.FunctionsService.ListFunctions:output_type -> torchwood.server.v1.ListFunctionsResponse
+	0,  // 36: torchwood.server.v1.FunctionsService.GetFunction:output_type -> torchwood.server.v1.Function
+	0,  // 37: torchwood.server.v1.FunctionsService.UpdateFunction:output_type -> torchwood.server.v1.Function
+	26, // 38: torchwood.server.v1.FunctionsService.DeleteFunction:output_type -> torchwood.shared.v1.Empty
+	2,  // 39: torchwood.server.v1.FunctionsService.InvokeFunction:output_type -> torchwood.server.v1.Invocation
+	22, // 40: torchwood.server.v1.FunctionsService.ListInvocations:output_type -> torchwood.server.v1.ListInvocationsResponse
+	2,  // 41: torchwood.server.v1.FunctionsService.GetInvocation:output_type -> torchwood.server.v1.Invocation
+	0,  // 42: torchwood.server.v1.FunctionsService.SetFunctionScopes:output_type -> torchwood.server.v1.Function
+	8,  // 43: torchwood.server.v1.FunctionsService.RotateFunctionSecret:output_type -> torchwood.server.v1.FunctionSecret
+	16, // 44: torchwood.server.v1.FunctionsService.CreateFunctionTrigger:output_type -> torchwood.server.v1.FunctionTrigger
+	17, // 45: torchwood.server.v1.FunctionsService.ListFunctionTriggers:output_type -> torchwood.server.v1.ListFunctionTriggersResponse
+	26, // 46: torchwood.server.v1.FunctionsService.DeleteFunctionTrigger:output_type -> torchwood.shared.v1.Empty
+	16, // 47: torchwood.server.v1.FunctionsService.RotateFunctionTriggerToken:output_type -> torchwood.server.v1.FunctionTrigger
+	34, // [34:48] is the sub-list for method output_type
+	20, // [20:34] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_server_v1_functions_proto_init() }
@@ -3171,23 +2116,17 @@ func file_server_v1_functions_proto_init() {
 	if File_server_v1_functions_proto != nil {
 		return
 	}
-	file_server_v1_functions_proto_msgTypes[1].OneofWrappers = []any{}
-	file_server_v1_functions_proto_msgTypes[7].OneofWrappers = []any{}
-	file_server_v1_functions_proto_msgTypes[8].OneofWrappers = []any{}
-	file_server_v1_functions_proto_msgTypes[10].OneofWrappers = []any{
-		(*CreateDeploymentRequest_Code)(nil),
-		(*CreateDeploymentRequest_Git)(nil),
-		(*CreateDeploymentRequest_Image)(nil),
-	}
-	file_server_v1_functions_proto_msgTypes[14].OneofWrappers = []any{}
-	file_server_v1_functions_proto_msgTypes[19].OneofWrappers = []any{}
+	file_server_v1_functions_proto_msgTypes[3].OneofWrappers = []any{}
+	file_server_v1_functions_proto_msgTypes[5].OneofWrappers = []any{}
+	file_server_v1_functions_proto_msgTypes[9].OneofWrappers = []any{}
+	file_server_v1_functions_proto_msgTypes[13].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_server_v1_functions_proto_rawDesc), len(file_server_v1_functions_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   33,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

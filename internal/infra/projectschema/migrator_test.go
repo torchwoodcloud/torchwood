@@ -29,30 +29,18 @@ func TestApply_IdempotentCatalogAndOAuth(t *testing.T) {
 	var version int64
 	require.NoError(t, db.QueryRowContext(ctx,
 		"SELECT MAX(version) FROM "+quoted+".schema_migrations").Scan(&version))
+	// 000028（Functions v4 破坏波，docs/design/functions-v4.md §2/§3/§7/§10）：
+	// function_executions → function_invocations 改名 + target 列族；
+	// function_deployments / function_variables 表退役；functions 池五列与
+	// runtime 系列列退役。
 	// 000027（Webhooks 一等公民，docs/design/functions-v4.md §6/D5）：
 	// webhook_subscriptions + webhook_deliveries（重投调度/DLQ）。
-	// 000026（用户头像一等化）：users.avatar 列（展示头像，客户端 PATCH
-	// /v1/account / 管理 UpdateUser 写入）。
-	// 000025（Functions 运行时指定，docs/design/functions-runtime-selection.md
-	// §4）：function_deployments.runtime 快照列（INSERT 期写全、之后不可变）。
-	// 000024（Functions 多机执行面构建亲和，四期 4a-1，
-	// docs/design/functions-runtimes-and-sources.md §4 M5）：
-	// function_deployments.build_node 列。
-	// 000023（Functions 部署源多元化二期阶段 1/4，
-	// docs/design/functions-runtimes-and-sources.md §0/§2）：
-	// function_deployments 源快照五列（source_type/source_url/source_ref/
-	// source_dir/context_sha256）。
+	// 000026（用户头像一等化）：users.avatar 列。
 	// 000022（Analytics PR1 地基，docs/design/analytics.md §5）：事件分析
-	// 六表——analytics_events 月 RANGE 分区（2026-09/2026-10 静态预建 +
-	// DEFAULT 兜底）+ 字典/聚合/活跃集/首见/清洗队列五表。
-	// 000019–000021（Leaderboards）：排行榜样表/结算/奖励。
-	// 000018（v3 切片 D，docs/design/functions-v3.md §4.1/D12）：
-	// function_triggers.type CHECK 扩展 'event'（+ partial 索引）。
-	// 000017（v3 实例内多路复用，docs/design/functions-v3.md §1.5）：
-	// functions.concurrency 池策略列（CHECK 1..16）。000016（P2 客户端调用面）：
-	// functions 策略四列 + function_executions invoking_user_id/
-	// client_idempotency_key（partial 唯一索引 + 限频计数 partial 索引）。
-	require.Equal(t, int64(27), version)
+	// 六表。000019–000021（Leaderboards）。000018（v3 切片 D）：
+	// function_triggers.type CHECK 扩展 'event'。000015–000017（触发器/
+	// 客户端调用面/池策略）。
+	require.Equal(t, int64(28), version)
 
 	var dirty bool
 	require.NoError(t, db.QueryRowContext(ctx,
@@ -60,7 +48,7 @@ func TestApply_IdempotentCatalogAndOAuth(t *testing.T) {
 	require.False(t, dirty)
 
 	for _, table := range []string{
-		"project_oauth_providers", "functions", "function_deployments", "function_variables", "function_executions",
+		"project_oauth_providers", "functions", "function_invocations",
 		"function_triggers", "webhook_subscriptions", "webhook_deliveries",
 		"payment_orders", "asset_defs", "subscriptions", "usage_rollups", "billing_statements",
 		"users", "sessions", "identities", "groups", "memberships", "buckets", "files",

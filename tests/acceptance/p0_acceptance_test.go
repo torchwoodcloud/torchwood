@@ -341,30 +341,30 @@ func newAcceptanceTestAccount(cfg *config.AppConfig, projectRepo projects.Reposi
 
 // ——P2 客户端调用面 × P0 执行身份 端到端验收（分层集成）——
 //
-// 函数容器执行器（docker/dispatcher）在 CI 不可用，用桩 executor 替代容器：
-// 桩在「执行进行中」回调里模拟函数代码行为——以注入的
-// `Bearer $TW_EXECUTION_TOKEN` 经真实拦截器链回访 Server API（assets grant）。
-// 其余每一环都是真实组件：端用户 JWT 真签发真校验、bun 仓储落真库、Redis
-// token 服务/限频器跑 miniredis、账本落真表。
-type acceptanceExecutor struct {
-	onExecute func(execToken string)
-	called    int
+// 函数 endpoint 在验收里用桩 Invoker 替代常驻服务（v4：函数 = endpoint，
+// 真实 HTTP 不在本验收范围）：桩在「调用进行中」回调里模拟函数代码行为
+// ——以注入的 `Bearer $TWX_TOKEN`（X-Tw-Execution-Token 头原值）经真实
+// 拦截器链回访 Server API（assets grant）。其余每一环都是真实组件：端用户
+// JWT 真签发真校验、bun 仓储落真库、Redis token 服务/限频器跑 miniredis、
+// 账本落真表。
+type acceptanceInvoker struct {
+	onInvoke func(execToken string)
+	called   int
 }
 
-func (m *acceptanceExecutor) Build(context.Context, domainfunctions.BuildSpec) (string, error) {
-	return "", nil
-}
-func (m *acceptanceExecutor) Execute(_ context.Context, e domainfunctions.Execution) (*domainfunctions.ExecutionResult, error) {
+func (m *acceptanceInvoker) Invoke(_ context.Context, inv domainfunctions.Invocation) (*domainfunctions.InvocationResult, error) {
 	m.called++
-	if m.onExecute != nil {
-		m.onExecute(e.Env["TW_EXECUTION_TOKEN"])
+	if m.onInvoke != nil {
+		m.onInvoke(inv.ExecutionToken)
 	}
-	return &domainfunctions.ExecutionResult{StatusCode: 0, Response: `{"ok":true}`}, nil
+	return &domainfunctions.InvocationResult{Response: `{"ok":true}`}, nil
 }
-func (m *acceptanceExecutor) ImportImage(context.Context, domainfunctions.ImportImageSpec) (string, error) {
-	return "", nil // image 源不在本文件测试路径
+
+type acceptanceNotifier struct{}
+
+func (acceptanceNotifier) Notify(context.Context, domainfunctions.Notification) (domainfunctions.NotificationResult, error) {
+	return domainfunctions.NotificationResult{}, nil
 }
-func (m *acceptanceExecutor) RemoveImage(context.Context, string, string) error { return nil }
 
 type acceptanceQueue struct{}
 
@@ -414,21 +414,17 @@ func TestP0_Section10_ClientInvokeExecutionIdentity(t *testing.T) {
 	quota := infrafunctions.NewClientQuotaLimiter(rdb)
 
 	// 种 client_callable + per-user 限频（limit=1/day）+ assets:write scope 的
-	// 函数与 ready 部署（真实 DB 行；容器镜像与构建不在本验收范围）。
+	// 函数（真实 DB 行；endpoint 常驻服务不在本验收范围）。
 	fnRepo := bunrepo.NewFunctionRepository(db)
 	now := time.Now()
 	fn := &domainfunctions.Function{
-		ID: "fn_reward", ProjectID: projectID, Name: "reward", Runtime: "node-18.0",
-		Entrypoint: "index.main", TimeoutSeconds: 15, Spec: "shared-1x", Enabled: true,
+		ID: "fn_reward", ProjectID: projectID, Name: "reward",
+		TargetURL: "https://fn.example.com", TimeoutSeconds: 15, Enabled: true,
 		ClientCallable: true, ClientPerUserLimit: 1, ClientLimitWindow: domainfunctions.ClientLimitWindowDay,
 		DeclaredScopes: []string{"assets:write"},
 		CreatedAt:      now, UpdatedAt: now,
 	}
 	require.NoError(t, fnRepo.CreateFunction(ctx, fn))
-	require.NoError(t, fnRepo.CreateDeployment(ctx, &domainfunctions.Deployment{
-		ID: "dep_reward", FunctionID: fn.ID, ProjectID: projectID, Size: 1024,
-		Status: domainfunctions.DeploymentStatusReady, CreatedAt: now, UpdatedAt: now,
-	}))
 
 	// 资产定义（Server principal 安排步骤；真实资产用例 + 真库）。
 	assetsUC := appassets.NewAssets(
@@ -455,9 +451,9 @@ func TestP0_Section10_ClientInvokeExecutionIdentity(t *testing.T) {
 	require.NoError(t, err)
 
 	var execToken string
-	executor := &acceptanceExecutor{onExecute: func(token string) {
+	invoker := &acceptanceInvoker{onInvoke: func(token string) {
 		execToken = token
-		// 函数容器内行为：Authorization: Bearer $TW_EXECUTION_TOKEN →
+		// 函数内行为：Authorization: Bearer $X-TW-EXECUTION-TOKEN →
 		// POST /v1/server/assets:grant。
 		err := env.InvokeUnaryHandler(context.Background(), testutil.MethodAssetsGrant,
 			metadata.Pairs("authorization", "Bearer "+token),
@@ -472,7 +468,7 @@ func TestP0_Section10_ClientInvokeExecutionIdentity(t *testing.T) {
 			})
 		require.NoError(t, err, "函数内以执行身份调 Server API 应成功")
 	}}
-	fnUC := appfunctions.NewFunctionsWithClientQuota(cfg, executor, fnRepo, acceptanceQueue{}, nil, nil, appfunctions.Semaphores{}, tokenSvc, nil, quota)
+	fnUC := appfunctions.NewFunctions(cfg, invoker, acceptanceNotifier{}, fnRepo, acceptanceQueue{}, nil, nil, tokenSvc, nil, quota)
 
 	// ① 终端用户 JWT invoke（真实拦截器链 → END_USER 策略门 → handler）。
 	err = env.InvokeUnaryHandler(ctx, testutil.MethodInvokeFunction, userMD,
@@ -483,7 +479,7 @@ func TestP0_Section10_ClientInvokeExecutionIdentity(t *testing.T) {
 			})
 		})
 	require.NoError(t, err)
-	require.NotEmpty(t, execToken, "执行身份 token 应注入函数容器")
+	require.NotEmpty(t, execToken, "执行身份 token 应随签名请求头注入")
 
 	// ② 账本 operator = function + invoking user 双维（平台背书的调用者
 	// 身份，非 TW_DATA 客户端自报）。
@@ -518,5 +514,5 @@ func TestP0_Section10_ClientInvokeExecutionIdentity(t *testing.T) {
 	}
 	require.NotNil(t, reason)
 	require.Equal(t, "FUNCTIONS.INVOKE_QUOTA_EXCEEDED", reason.Reason)
-	require.Equal(t, 1, executor.called, "超限请求不得触达执行器")
+	require.Equal(t, 1, invoker.called, "超限请求不得触达函数调用")
 }

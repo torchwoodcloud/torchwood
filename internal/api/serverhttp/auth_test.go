@@ -147,20 +147,6 @@ func TestFileHandler_MultipleCredentialsRejected(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-// G4-1 handler 级：FunctionsHandler 上传路径多凭证 → HTTP 401。
-func TestFunctionsHandler_MultipleCredentialsRejected(t *testing.T) {
-	t.Parallel()
-
-	h := newFunctionsHandler(t, newFunctionsValidator(&functionsDocDB{}))
-
-	r := httptest.NewRequest(http.MethodPost, "/v1/server/functions/fn-1/deployments/code", nil)
-	r.Header.Set("X-Api-Key", "key")
-	r.AddCookie(&http.Cookie{Name: "TORCHWOOD_session_proj-1", Value: "token"}) // #nosec G124 -- 客户端测试请求无需安全属性
-	rec := httptest.NewRecorder()
-	h.upload(rec, r, map[string]string{"functionId": "fn-1"})
-	require.Equal(t, http.StatusUnauthorized, rec.Code)
-}
-
 // testPolicies 构造最小策略注册表（真实策略由 runtime.PolicySet 注入）。
 func testPolicies() *domainauth.PolicySet {
 	set, err := authz.NewPolicySet([]domainauth.MethodPolicy{
@@ -169,9 +155,6 @@ func testPolicies() *domainauth.PolicySet {
 			Scope:      &domainauth.ScopeRule{Resource: string(domainauth.ScopeStorage), Op: domainauth.ScopeWrite}},
 		{Method: domainauth.StorageServiceGetFile, Service: "/torchwood.server.v1.StorageService", Access: domainauth.AccessServer,
 			Scope: &domainauth.ScopeRule{Resource: string(domainauth.ScopeStorage), Op: domainauth.ScopeRead}},
-		{Method: FunctionsServiceCreateDeployment, Service: "/torchwood.server.v1.FunctionsService", Access: domainauth.AccessServer,
-			AdminRoles: []string{string(domainauth.AdminRoleAdmin), string(domainauth.AdminRoleOwner)},
-			Scope:      &domainauth.ScopeRule{Resource: string(domainauth.ScopeFunctions), Op: domainauth.ScopeWrite}},
 	}...)
 	if err != nil {
 		panic(err)

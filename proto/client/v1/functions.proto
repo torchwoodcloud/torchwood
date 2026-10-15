@@ -87,10 +87,12 @@ message InvokeFunctionRequest {
   string function_id = 1 [(buf.validate.field).required = true];
   // 函数入参：JSON object 字符串（≤32KB，服务端校验形状与字节上限）。
   string data = 2 [(buf.validate.field).string.max_len = 32768];
-  // 可选：指定 deployment（必须 ready）；缺省用最新 ready。
-  optional string deployment_id = 3;
+  // deployment_id（字段 3）已退役（Functions v4：部署面随执行面外包消解，
+  // 调用目标恒为函数当前的 endpoint target）。
+  reserved 3;
+  reserved "deployment_id";
   // 可选客户端幂等键：网络超时重试防重复执行。(project, function, user, key)
-  // 唯一去重，命中返回既有 execution 原样（进行中返回 running）。
+  // 唯一去重，命中返回既有 invocation 原样（进行中返回 running）。
   string idempotency_key = 4 [(buf.validate.field).string.max_len = 128];
 }
 

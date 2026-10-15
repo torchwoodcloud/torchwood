@@ -3,7 +3,6 @@ package bootkit
 import (
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
@@ -32,73 +31,6 @@ func ValidateAppConfig(logger *slog.Logger, c *config.AppConfig) error {
 		}
 	}
 	return ValidateJWTSecret(c.GetSecurity().GetJwt().GetSecret())
-}
-
-// ValidateFunctionsDispatchConfig 校验函数分发通路配置：v1 docker 执行器已
-// 移除，函数执行统一经 dispatcher 分发，functions.dispatcher.url
-// 必填（启动期 fail-fast，不留到首次执行）。仅 server/worker 组合根调用本
-// 函数——dispatcher 进程自身是通路终点，不消费 url 键。
-func ValidateFunctionsDispatchConfig(c *config.AppConfig) error {
-	if c.GetFunctions().GetDispatcher().GetUrl() == "" {
-		return fmt.Errorf("functions.dispatcher.url is required (function execution requires the dispatcher service; env TORCHWOOD_FUNCTIONS_DISPATCHER_URL)")
-	}
-	return nil
-}
-
-// ValidateFunctionsFleetlyConfig 校验 dispatcher 进程的 fleetly 控制面配置
-// （IMPL-T2-3）：endpoint 与机具令牌必填（缺失即拒绝启动——否则构建/执行在
-// 首次调用才以模糊错误暴露）；network_members 非空时 app 必填（挂靠声明的
-// 归属 app 不可省）。endpoint 二选一：显式 functions.fleetly.endpoint（形态
-// 经 config.ParseFleetlyEndpoint 校验：grpc:// 或裸 host:port 明文 / grpcs://
-// TLS（?insecure/?server_name），未知 scheme 启动期拒绝）或平台物化的
-// FLEETLY_CONTROL_GRPC_ADDR（engine ctrlinject 注入任务 spec 的控制面地址，
-// 集群内工作负载零配置回落）。IMPL-T2-5 起由 ValidateFunctionsDriverConfig
-// 在 driver=fleetly 分支调用。
-func ValidateFunctionsFleetlyConfig(c *config.AppConfig) error {
-	f := c.GetFunctions().GetFleetly()
-	explicit := strings.TrimSpace(f.GetEndpoint())
-	if explicit == "" && strings.TrimSpace(os.Getenv("FLEETLY_CONTROL_GRPC_ADDR")) == "" {
-		return fmt.Errorf("functions.fleetly.endpoint is required (the dispatcher runs function tasks and builds on the fleetly platform; env TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT, or the platform-materialized FLEETLY_CONTROL_GRPC_ADDR for in-cluster workloads)")
-	}
-	if explicit != "" {
-		if _, err := config.ParseFleetlyEndpoint(explicit); err != nil {
-			return err
-		}
-	}
-	if strings.TrimSpace(f.GetToken()) == "" {
-		return fmt.Errorf("functions.fleetly.token is required (machine token with the tasks,build scopes; inject it via env TORCHWOOD_FUNCTIONS_FLEETLY_TOKEN, never commit it to a config file)")
-	}
-	if len(f.GetNetworkMembers()) > 0 && strings.TrimSpace(f.GetApp()) == "" {
-		return fmt.Errorf("functions.fleetly.app is required when functions.fleetly.network_members is set (task-network members belong to this fleetly app; env TORCHWOOD_FUNCTIONS_FLEETLY_APP)")
-	}
-	return nil
-}
-
-// ValidateFunctionsDriverConfig 校验函数执行底座驱动选择并按驱动分发细节
-// 校验（IMPL-T2-5 双执行底座）：
-//   - functions.driver 未设置/未知值 fail-closed（启动期拒绝，错误文案列出
-//     两选项与各自配置键——不留到首次构建/执行才暴露）；
-//   - driver=fleetly → ValidateFunctionsFleetlyConfig（endpoint/机具令牌
-//     必填，IMPL-T2-3 口径不变）；
-//   - driver=docker → docker 底座段无必填键（host 可空，dockerdriver 侧
-//     回落缺省 unix:///var/run/docker.sock；docker.sock 可达性与 fleetly
-//     端点拨号同策略——首次调用暴露）。
-//
-// 仅 dispatcher 组合根调用（server/worker 零执行底座消费）。
-func ValidateFunctionsDriverConfig(c *config.AppConfig) error {
-	driver := strings.TrimSpace(c.GetFunctions().GetDriver())
-	switch driver {
-	case config.FunctionsDriverFleetly:
-		return ValidateFunctionsFleetlyConfig(c)
-	case config.FunctionsDriverDocker:
-		return nil
-	case "":
-		return fmt.Errorf("functions.driver is required: set it to %q for the fleetly platform (requires functions.fleetly.endpoint and functions.fleetly.token; env TORCHWOOD_FUNCTIONS_DRIVER=fleetly) or %q for direct docker execution (requires docker.sock access; env TORCHWOOD_FUNCTIONS_DRIVER=docker)",
-			config.FunctionsDriverFleetly, config.FunctionsDriverDocker)
-	default:
-		return fmt.Errorf("functions.driver %q is unknown: supported values are %q (fleetly platform; requires functions.fleetly.endpoint and functions.fleetly.token) and %q (direct docker execution; requires docker.sock access)",
-			driver, config.FunctionsDriverFleetly, config.FunctionsDriverDocker)
-	}
 }
 
 // WeakSecretTokens 是已知弱默认值/常见占位密钥的子串黑名单。

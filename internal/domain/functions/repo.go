@@ -2,6 +2,8 @@ package functions
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"time"
@@ -14,8 +16,8 @@ const OrphanGraceSeconds = 120
 
 // ——客户端调用面词表（P2，迁移 000016 CHECK 约束同源；设计 §4/§5）——
 const (
-	// TriggerSourceClient 是客户端调用面的执行记录 trigger_source 值
-	// （无后缀；http/cron 来源为 "<type>:{trigger_id}"）。
+	// TriggerSourceClient 是客户端调用面的调用记录 trigger_source 值
+	//（无后缀；http/cron 来源为 "<type>:{trigger_id}"）。
 	TriggerSourceClient = "client"
 
 	// 限频窗口词表（client_limit_window CHECK 同源）。
@@ -41,37 +43,21 @@ func IsTriggerSource(triggerSource string) bool {
 		strings.HasPrefix(triggerSource, TriggerTypeCron+":")
 }
 
-// RunnerTemplateVersion 是平台 runner 镜像模板版本（P0.5 执行器 v2 → v3
-// 实例内多路复用 §1.2 → v4 Web 标准 fetch 接口 §2.1 → v5 调用身份 ctx
-// 三件，docs/design/functions-v3.md 与 mlbridge fn-rpc 设计 §2.5；端口级
-// 契约单一事实源）：模板任何语义变更递增；
-// infra/functions/runner 的模板资产与本常量同步（编译期断言），构建时写入
-// function_deployments.template_version，存量 deployment 据此按新模板重建。
-// 0 = v1 模板或未知。v5 = ctx/env 增 source/invokingUserId/projectId
-// （分发 header x-tw-source/x-tw-invoking-user-id/x-tw-project-id）。
-const RunnerTemplateVersion int32 = 5
-
-// MinConcurrencyTemplateVersion 是支持实例内并发的最低模板版本（v3 §1.5
-// 降级保护的判定基准）：v3 引入 per-request 基建（ctx/分桶/per-request
-// 超时），并发语义自此成立；v4（§2.1）仅扩展接口面（fetch 双轨），并发
-// 语义不变。降级判定按「template_version < 本值」固定——**不得**改用
-// RunnerTemplateVersion 比较，否则 v4 版本 bump 会把存量 v3 deployment
-// 误降级（重部署才能恢复并发）。
-const MinConcurrencyTemplateVersion int32 = 3
-
-// ErrExecutionIdempotencyConflict 表示客户端幂等键冲突（P2）：并发同键的
+// ErrInvocationIdempotencyConflict 表示客户端幂等键冲突（P2）：并发同键的
 // 第二次预占 INSERT 撞 partial 唯一索引——调用方应回读既有行原样返回。
-var ErrExecutionIdempotencyConflict = errors.New("execution idempotency conflict")
+var ErrInvocationIdempotencyConflict = errors.New("invocation idempotency conflict")
 
-// ExecutionListFilter 是执行记录列表的结构化过滤（exact 匹配 + created_at
-// 闭区间；零值字段 = 不过滤）。Status 取值 = 下方 ExecutionStatus* 常量。
-type ExecutionListFilter struct {
+// InvocationListFilter 是调用记录列表的结构化过滤（exact 匹配 + created_at
+// 闭区间；零值字段 = 不过滤）。Status 取值 = 下方 InvocationStatus* 常量。
+type InvocationListFilter struct {
 	Status        string
 	CreatedAfter  time.Time
 	CreatedBefore time.Time
 }
 
-// FunctionRepo 持久化函数/部署/变量/执行记录（bun 静态表适配）。
+// FunctionRepo 持久化函数与调用记录（bun 静态表适配）。v4：部署/变量面随
+// 执行面外包退役（docs/design/functions-v4.md §10），Function 承载单一
+// endpoint target（§3）。
 type FunctionRepo interface {
 	CreateFunction(ctx context.Context, fn *Function) error
 	GetFunction(ctx context.Context, projectID, functionID string) (*Function, error)
@@ -79,100 +65,94 @@ type FunctionRepo interface {
 	UpdateFunction(ctx context.Context, fn *Function) error
 	DeleteFunction(ctx context.Context, projectID, functionID string) error
 
-	CreateDeployment(ctx context.Context, d *Deployment) error
-	GetDeployment(ctx context.Context, projectID, functionID, deploymentID string) (*Deployment, error)
-	// ListDeployments 全量列出（内部选部署逻辑：按 created_at DESC 取首个 ready）。
-	ListDeployments(ctx context.Context, projectID, functionID string) ([]Deployment, error)
-	// ListDeploymentsPaged 管理面分页列出（created_at DESC，offset 型分页，
-	// 返回总数供 next_page_token 计算）。
-	ListDeploymentsPaged(ctx context.Context, projectID, functionID string, limit, offset int) ([]Deployment, int, error)
-	UpdateDeployment(ctx context.Context, d *Deployment) error
-	// ActivateDeployment 在一个事务内把部署置 ready 并维护
-	// functions.latest_ready_deployment_id（热路径清账，P0.5）。
-	ActivateDeployment(ctx context.Context, d *Deployment) error
-	DeleteDeployment(ctx context.Context, projectID, functionID, deploymentID string) error
-
-	SetVariables(ctx context.Context, projectID, functionID string, vars map[string]string) error
-	GetVariables(ctx context.Context, projectID, functionID string) (map[string]string, error)
-
-	CreateExecution(ctx context.Context, e *ExecutionRecord) error
-	GetExecution(ctx context.Context, projectID, functionID, executionID string) (*ExecutionRecord, error)
-	// ListExecutions 管理面分页列出（created_at DESC + ExecutionListFilter
+	CreateInvocation(ctx context.Context, e *InvocationRecord) error
+	GetInvocation(ctx context.Context, projectID, functionID, invocationID string) (*InvocationRecord, error)
+	// ListInvocations 管理面分页列出（created_at DESC + InvocationListFilter
 	// 结构化过滤，offset 型分页，返回总数）。
-	ListExecutions(ctx context.Context, projectID, functionID string, limit, offset int, f ExecutionListFilter) ([]ExecutionRecord, int, error)
-	UpdateExecution(ctx context.Context, e *ExecutionRecord) error
-	// TransitionExecutionStatus 条件更新执行状态（CAS）：仅当当前状态等于 from
-	// 时置为 to 并刷新 updated_at，返回是否生效。用于 worker 领取闸门
-	// （queued→building 防重复消费）与可重试失败归还（building→queued）。
-	TransitionExecutionStatus(ctx context.Context, projectID, functionID, executionID, from, to string) (bool, error)
-	// FailExecutionIfActive 将仍处于未终态（queued/building/running）的执行
-	// 标记为 failed；completed/failed 不被覆盖（防重复投递回写覆盖终态）。
-	FailExecutionIfActive(ctx context.Context, projectID, functionID, executionID, reason string) error
-	// RecoverOrphanExecutionsInProject 将指定项目中停留未终态
-	// （queued/building/running，P0.5 起纳入 queued——同步快路径崩溃曾留
-	// queued 永不入队）且超过各自 staleAfter 的记录标记为 failed。staleAfter
-	// 按行计算：timeout_seconds 非空 = 该值 + 120s 宽限（两写预占的行内
-	// 快照）；NULL（存量行）回退 1h。limit 是本项目本轮上限，供 app/worker
-	// 扣减全局预算。
-	RecoverOrphanExecutionsInProject(ctx context.Context, projectID string, olderThan time.Time, limit int) (int64, error)
-	// PruneOldExecutionsInProject 清理该项目该函数 server 面来源
-	// （trigger_source = ''）超过 keepRecent 条最新之外的终态记录。
+	ListInvocations(ctx context.Context, projectID, functionID string, limit, offset int, f InvocationListFilter) ([]InvocationRecord, int, error)
+	UpdateInvocation(ctx context.Context, e *InvocationRecord) error
+	// TransitionInvocationStatus 条件更新调用状态（CAS）：仅当当前状态等于
+	// from 时置为 to 并刷新 updated_at，返回是否生效。用于 worker 领取闸门
+	//（queued→running 防重复投递并发执行）与可重试失败归还（running→queued）。
+	TransitionInvocationStatus(ctx context.Context, projectID, functionID, invocationID, from, to string) (bool, error)
+	// FailInvocationIfActive 将仍处于未终态（queued/running）的调用标记为
+	// failed；completed/failed 不被覆盖（防重复投递回写覆盖终态）。
+	FailInvocationIfActive(ctx context.Context, projectID, functionID, invocationID, reason string) error
+	// RecoverOrphanInvocationsInProject 将指定项目中停留未终态（queued/running）
+	// 且超过各自 staleAfter 的记录标记为 failed。staleAfter 按行计算：
+	// timeout_seconds 非空 = 该值 + 120s 宽限（两写预占的行内快照）；NULL
+	//（存量行）回退 1h。limit 是本项目本轮上限，供 app/worker 扣减全局预算。
+	RecoverOrphanInvocationsInProject(ctx context.Context, projectID string, olderThan time.Time, limit int) (int64, error)
+	// PruneOldInvocationsInProject 清理该项目该函数 server 面来源
+	//（trigger_source = ''）超过 keepRecent 条最新之外的终态记录。
 	// 条数式保留只作用于 server 面（Q7 保留分级）：client/http/cron 来源行
 	// 是限频 DB 降级的窗口内计数依据，条数裁剪会造成少计超发。
-	PruneOldExecutionsInProject(ctx context.Context, projectID, functionID string, keepRecent int) error
-	// PruneTriggerExecutionsInProject 清理该项目该函数 client/http/cron 来源
-	// （Q7 保留分级）超过 olderThan 的终态记录（time-based，48h ≥ 2× 最长
+	PruneOldInvocationsInProject(ctx context.Context, projectID, functionID string, keepRecent int) error
+	// PruneTriggerInvocationsInProject 清理该项目该函数 client/http/cron 来源
+	//（Q7 保留分级）超过 olderThan 的终态记录（time-based，48h ≥ 2× 最长
 	// 限频窗口 day——保证 DB 降级计数窗口内行不被 prune）。
-	PruneTriggerExecutionsInProject(ctx context.Context, projectID, functionID string, olderThan time.Time) error
-	// GetExecutionByIdempotencyKey 按 (project, function, user, key) 查既有
-	// 客户端执行（幂等冲突回读原样返回；running 返回 running）。未命中 nil。
-	GetExecutionByIdempotencyKey(ctx context.Context, projectID, functionID, userID, key string) (*ExecutionRecord, error)
-	// CountClientInvocations 统计窗口起点以来该用户的 client 来源执行数
-	// （限频 DB 降级路径的计数依据；P2 迁移 partial 索引支撑）。
+	PruneTriggerInvocationsInProject(ctx context.Context, projectID, functionID string, olderThan time.Time) error
+	// GetInvocationByIdempotencyKey 按 (project, function, user, key) 查既有
+	// 客户端调用（幂等冲突回读原样返回；running 返回 running）。未命中 nil。
+	GetInvocationByIdempotencyKey(ctx context.Context, projectID, functionID, userID, key string) (*InvocationRecord, error)
+	// CountClientInvocations 统计窗口起点以来该用户的 client 来源调用数
+	//（限频 DB 降级路径的计数依据；partial 索引支撑）。
 	CountClientInvocations(ctx context.Context, projectID, functionID, userID string, since time.Time) (int, error)
 }
 
-// Function 状态常量。
+// 调用状态常量（v4 §7 状态机收敛：building 态随补构建退役——构建外包后
+// 无中间构建态；异步链 = queued → worker CAS 领取 → running → 终态）。
 const (
-	DeploymentStatusPending  = "pending"
-	DeploymentStatusBuilding = "building"
-	DeploymentStatusReady    = "ready"
-	DeploymentStatusFailed   = "failed"
-
-	ExecutionStatusQueued    = "queued"
-	ExecutionStatusBuilding  = "building"
-	ExecutionStatusRunning   = "running"
-	ExecutionStatusCompleted = "completed"
-	ExecutionStatusFailed    = "failed"
+	InvocationStatusQueued    = "queued"
+	InvocationStatusRunning   = "running"
+	InvocationStatusCompleted = "completed"
+	InvocationStatusFailed    = "failed"
 )
 
+// SecretPrefix 是 endpoint target 签名密钥明文前缀（twfnsec_，与 webhooks
+// whsec_ 同构惯例；接收方一眼可辨用途）。
+const SecretPrefix = "twfnsec_" // #nosec G101 -- 前缀常量非凭证（密钥本体随机生成）
+
+// FingerprintPrefix 是指纹前缀（区别于明文前缀，管理面唯一可见形态）。
+const FingerprintPrefix = "twfnsec_"
+
+// TargetSecretRotationWindow 是 target 签名密钥轮换宽限窗缺省（v2 签名窗口
+// 24h；与 webhooks SecretRotationWindow 同构——独立常量避免子系统联动漂移）。
+const TargetSecretRotationWindow = 24 * time.Hour
+
+// Fingerprint 由 target 签名密钥明文派生指纹（twfnsec_ + SHA-256 前 8 hex）：
+// 管理面比对用，不可逆推明文（与 webhooks Fingerprint 同构）。
+func Fingerprint(secret string) string {
+	sum := sha256.Sum256([]byte(secret))
+	return FingerprintPrefix + hex.EncodeToString(sum[:])[:8]
+}
+
+// Function 是函数实体（v4 §3 target 模型：执行位置 = endpoint 常驻服务；
+// 池策略/运行时/资源规格归 substrate，字段整体退役）。
 type Function struct {
 	ID             string
 	ProjectID      string
 	Name           string
-	Runtime        string
-	Entrypoint     string
 	TimeoutSeconds int
-	Spec           string
 	Enabled        bool
 	// DeclaredScopes 是函数执行 principal 的平台访问声明（P0 执行身份）：
 	// 每项形如 "<resource>:<op>"（如 assets:write），词表校验见
 	// management.go ValidateDeclaredScopes；空集 = 无平台访问权限（fail-closed）。
 	DeclaredScopes []string
-	// ——池策略（P0.5 执行器 v2，迁移 000014；平台默认 + per-function 覆盖，
-	// 语义见设计 §6）——v1 docker executor 忽略这些字段。
-	MinInstances           int // 保温下限（0 = 纯 scale-from-zero）
-	MaxInstances           int // 突发并发上限（超限有界排队）
-	IdleTTLSeconds         int // 空闲回收阈值（实例数 > min 时）
-	MaxRequestsPerInstance int // 实例请求数到期排空替换（防内存泄漏，Lambda 同款）
-	// Concurrency 是单实例并发上限（v3 实例内多路复用，迁移 000017，
-	// docs/design/functions-v3.md §1.1/§1.5）：默认 1（v2 串行等价）、上限 16
-	//（DB CHECK 兜底），显式 opt-in 承诺 main 可重入。v1 docker executor 忽略。
-	Concurrency int
-	// LatestReadyDeploymentID 是最新 ready 部署的冗余投影（热路径清账，
-	// 设计 §6 约束③）：selectDeployment 优先读该列，NULL 回退全量列表逻辑；
-	// 由 CreateDeployment ready / DeleteDeployment 同事务维护。
-	LatestReadyDeploymentID string
+	// ——endpoint target（v4 §3 单一 endpoint kind）——
+	// TargetURL 是函数常驻服务的调用终点（https 强制；开发环境可放行 http，
+	// app 层按环境裁决）。
+	TargetURL string
+	// TargetSecretEnc 是签名密钥的 secretbox 密文（enc:v1: 前缀；明文仅在
+	// 创建/轮换响应出现一次，此后不落任何日志/响应面——签名方每次调用需
+	// 明文计算 HMAC，哈希落库无法签名，实施勘误 2026-10-15）。
+	TargetSecretEnc string
+	// TargetPreviousSecretEnc 是轮换窗口内的旧钥密文（空 = 无轮换或窗口已过）。
+	TargetPreviousSecretEnc string
+	// TargetSecretRotatedAt 是最近一次轮换时刻（读取侧据此判定旧钥宽限窗）。
+	TargetSecretRotatedAt time.Time
+	// TargetSecretFingerprint 是密钥指纹（管理面唯一可见形态）。
+	TargetSecretFingerprint string
 	// ——客户端调用面策略（P2，迁移 000016；设计 §4/§5）——
 	// ClientCallable=false（存量默认）时客户端 InvokeFunction 拒绝（fail-closed）。
 	ClientCallable bool
@@ -189,72 +169,15 @@ type Function struct {
 	UpdatedAt         time.Time
 }
 
-type Deployment struct {
-	ID         string
-	FunctionID string
-	ProjectID  string
-	Size       int64
-	Status     string // pending/building/ready/failed
-	Error      string
-	// TemplateVersion 是构建所用镜像模板版本（P0.5 模板版本化重建；构建时
-	// 由 runner 模板版本写入，0 = v1 模板或未知）。
-	TemplateVersion int32
-	// ——部署源快照（二期，迁移 000023；INSERT 期写全、之后不可变——
-	// UpdateDeployment 列白名单有意不含 source 列）——SourceType ∈
-	// zip|git|image（DeploymentSource* 词表）；zip 源的 URL/Ref/Dir 恒空串；
-	// git 源 Ref = 钉死 commit SHA；ContextSHA256 是代码包字节 sha256
-	// （git 源 = packer 物化产物、zip 源 = 上传字节——zip/git 共用的可复现
-	// 性锚，D9；空锚 = 持久层之前的存量 zip 部署）。凭证不出现在任何字段。
-	SourceType    string
-	SourceURL     string
-	SourceRef     string
-	SourceDir     string
-	ContextSHA256 string
-	// Runtime 是构建所用 runtime ID 快照（functions-runtime-selection.md
-	// §4，迁移 000025）：INSERT 期写全、之后不可变——补构建/审计以行内
-	// 快照为准，不随后续 fn.runtime 变更漂移（deployment = 源 + 运行时 +
-	// 模板版本的完整不可变快照）。
-	Runtime string
-	// BuildNode 是首个构建落成的 dispatcher 节点 ID（四期 4a-1，设计
-	// functions-runtimes-and-sources.md §4 M5 构建亲和；迁移 000024）：由
-	// buildDeployment 成功路径按 BuildResponse.node_id 写入（UpdateDeployment
-	// 列白名单登记——与 source 快照列不同，这是构建后写入的操作列）。
-	// 空串 = 无亲和（存量行/镜像导入路径，任意节点等价）。local 路由模式下
-	// 执行/补构建固定路由该节点（4a-2 消费）。
-	BuildNode string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-}
-
-// Variable 是函数环境变量实体。Kind 区分 text（普通文本）与 secret
-// （第三方密钥；P0 起弃用 variables 存平台凭证——平台能力一律走执行身份）。
-type Variable struct {
-	ID         string
-	FunctionID string
-	Key        string
-	Value      string
-	Kind       string
-}
-
-// Variable kind 词表（迁移 000013 function_variables.kind CHECK 约束同源）。
-const (
-	VariableKindText   = "text"
-	VariableKindSecret = "secret"
-)
-
-// ExecutionRecord 是执行记录实体；命名区别于 executor 入参 Execution。
-type ExecutionRecord struct {
+// InvocationRecord 是一次函数调用的记录实体；命名区别于 invoker 入参
+// Invocation（v4 §2：ExecutionRecord 改名——torchwood 只发起调用、不执行）。
+type InvocationRecord struct {
 	ID                string
 	FunctionID        string
 	ProjectID         string
-	DeploymentID      string
 	Status            string
 	Response          string
 	ResponseTruncated bool
-	Stdout            string
-	StdoutTruncated   bool
-	Stderr            string
-	StderrTruncated   bool
 	StatusCode        int
 	DurationMS        int64
 	Error             string
@@ -262,26 +185,26 @@ type ExecutionRecord struct {
 	// 的 staleAfter = 本值 + 120s 宽限，NULL 回退 1h）。
 	TimeoutSeconds *int
 	// ——触发来源（P1，迁移 000015）——TriggerSource 形如 http:{trigger_id} /
-	// cron:{trigger_id}（空 = server 面）；SourceIP 是 HTTP 触发的来源 IP
-	// 摘要。公开触发路由不经 gRPC 拦截器链，执行记录即审计载体（设计 §3）。
-	// INSERT 期写入、之后不可变。
+	// cron:{trigger_id} / event:{trigger_id}（空 = server 面）；SourceIP 是
+	// HTTP 触发的来源 IP 摘要。公开触发路由不经 gRPC 拦截器链，调用记录即
+	// 审计载体（设计 §3）。INSERT 期写入、之后不可变。
 	TriggerSource string
 	SourceIP      string
 	// ——客户端调用面（P2，迁移 000016）——InvokingUserID 是客户端触发时的
 	// 调用用户（执行身份 token info 携带 invoking_user → 账本 operator 溯源
 	// function+user）；ClientIdempotencyKey 是客户端幂等键（partial 唯一索引
 	// (project, function, user, key) WHERE key <> '' 去重）。INSERT 期写入、
-	// 之后不可变（UpdateExecution 列白名单排除）。
+	// 之后不可变（UpdateInvocation 列白名单排除）。
 	InvokingUserID       string
 	ClientIdempotencyKey string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 	// ——sync 完整透传（v3 §2.2 表「HTTP 触发器」行 / D10；运行期字段，
-	// **不落库**）——HTTPHeaders 是 fetch 风格函数设置的响应头（runner 已滤
-	// hop-by-hop/date/server）；ResponseB64 是无损响应 body（base64，≤64KB，
-	// 截断发生在 runner）。仅 executor 链路（dispatcher v4 fetch 风格）填充，
-	// 供 HTTP 触发器 sync 模式完整回写 HTTP 响应；bun 映射与 gRPC 投影均为
-	// 显式字段拷贝，二者天然排除（OQ7：headers 不持久化、流式后置）。
+	// **不落库**）——HTTPHeaders 是函数设置的响应头（服务方已滤 hop-by-hop）；
+	// ResponseB64 是无损响应 body（base64）。仅 Invoker 链路（http.request
+	// method 的 HTTPResult）填充，供 HTTP 触发器 sync 模式完整回写 HTTP 响应；
+	// bun 映射与 gRPC 投影均为显式字段拷贝，二者天然排除（OQ7：headers 不
+	// 持久化、流式后置）。
 	HTTPHeaders map[string]string
 	ResponseB64 string
 }

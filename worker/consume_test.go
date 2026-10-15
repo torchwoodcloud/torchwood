@@ -19,13 +19,13 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
-// retryRepo 是 FunctionRepo 的测试桩：GetExecution 返回固定记录，GetFunction
-// 注入瞬时错误（驱动重试路径），并记录 UpdateExecution 调用。
+// retryRepo 是 FunctionRepo 的测试桩：GetInvocation 返回固定记录，GetFunction
+// 注入瞬时错误（驱动重试路径），并记录 UpdateInvocation 调用。
 type retryRepo struct {
 	mu       sync.Mutex
-	rec      *domainfunctions.ExecutionRecord
+	rec      *domainfunctions.InvocationRecord
 	getFnErr error
-	updates  []*domainfunctions.ExecutionRecord
+	updates  []*domainfunctions.InvocationRecord
 }
 
 func (r *retryRepo) CreateFunction(context.Context, *domainfunctions.Function) error { return nil }
@@ -39,34 +39,10 @@ func (r *retryRepo) ListFunctions(context.Context, string) ([]domainfunctions.Fu
 }
 func (r *retryRepo) UpdateFunction(context.Context, *domainfunctions.Function) error { return nil }
 func (r *retryRepo) DeleteFunction(context.Context, string, string) error            { return nil }
-func (r *retryRepo) CreateDeployment(context.Context, *domainfunctions.Deployment) error {
+func (r *retryRepo) CreateInvocation(context.Context, *domainfunctions.InvocationRecord) error {
 	return nil
 }
-func (r *retryRepo) GetDeployment(context.Context, string, string, string) (*domainfunctions.Deployment, error) {
-	return nil, nil
-}
-func (r *retryRepo) ListDeployments(context.Context, string, string) ([]domainfunctions.Deployment, error) {
-	return nil, nil
-}
-func (r *retryRepo) ListDeploymentsPaged(context.Context, string, string, int, int) ([]domainfunctions.Deployment, int, error) {
-	return nil, 0, nil
-}
-func (r *retryRepo) UpdateDeployment(context.Context, *domainfunctions.Deployment) error { return nil }
-
-func (r *retryRepo) ActivateDeployment(context.Context, *domainfunctions.Deployment) error {
-	return nil
-}
-func (r *retryRepo) DeleteDeployment(context.Context, string, string, string) error { return nil }
-func (r *retryRepo) SetVariables(context.Context, string, string, map[string]string) error {
-	return nil
-}
-func (r *retryRepo) GetVariables(context.Context, string, string) (map[string]string, error) {
-	return map[string]string{}, nil
-}
-func (r *retryRepo) CreateExecution(context.Context, *domainfunctions.ExecutionRecord) error {
-	return nil
-}
-func (r *retryRepo) GetExecution(context.Context, string, string, string) (*domainfunctions.ExecutionRecord, error) {
+func (r *retryRepo) GetInvocation(context.Context, string, string, string) (*domainfunctions.InvocationRecord, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.rec == nil {
@@ -75,10 +51,10 @@ func (r *retryRepo) GetExecution(context.Context, string, string, string) (*doma
 	cp := *r.rec
 	return &cp, nil
 }
-func (r *retryRepo) ListExecutions(context.Context, string, string, int, int, domainfunctions.ExecutionListFilter) ([]domainfunctions.ExecutionRecord, int, error) {
+func (r *retryRepo) ListInvocations(context.Context, string, string, int, int, domainfunctions.InvocationListFilter) ([]domainfunctions.InvocationRecord, int, error) {
 	return nil, 0, nil
 }
-func (r *retryRepo) UpdateExecution(_ context.Context, e *domainfunctions.ExecutionRecord) error {
+func (r *retryRepo) UpdateInvocation(_ context.Context, e *domainfunctions.InvocationRecord) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	cp := *e
@@ -86,7 +62,7 @@ func (r *retryRepo) UpdateExecution(_ context.Context, e *domainfunctions.Execut
 	r.rec = &cp
 	return nil
 }
-func (r *retryRepo) TransitionExecutionStatus(_ context.Context, _, _, _ string, from, to string) (bool, error) {
+func (r *retryRepo) TransitionInvocationStatus(_ context.Context, _, _, _ string, from, to string) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.rec == nil || r.rec.Status != from {
@@ -95,51 +71,49 @@ func (r *retryRepo) TransitionExecutionStatus(_ context.Context, _, _, _ string,
 	r.rec.Status = to
 	return true, nil
 }
-func (r *retryRepo) FailExecutionIfActive(_ context.Context, _, _, _, reason string) error {
+func (r *retryRepo) FailInvocationIfActive(_ context.Context, _, _, _, reason string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.rec == nil {
 		return nil
 	}
 	switch r.rec.Status {
-	case domainfunctions.ExecutionStatusQueued,
-		domainfunctions.ExecutionStatusBuilding,
-		domainfunctions.ExecutionStatusRunning:
-		r.rec.Status = domainfunctions.ExecutionStatusFailed
+	case domainfunctions.InvocationStatusQueued,
+		domainfunctions.InvocationStatusRunning:
+		r.rec.Status = domainfunctions.InvocationStatusFailed
 		r.rec.Error = reason
 	}
 	return nil
 }
-func (r *retryRepo) RecoverOrphanExecutionsInProject(context.Context, string, time.Time, int) (int64, error) {
+func (r *retryRepo) RecoverOrphanInvocationsInProject(context.Context, string, time.Time, int) (int64, error) {
 	return 0, nil
 }
-func (r *retryRepo) PruneOldExecutionsInProject(context.Context, string, string, int) error {
+func (r *retryRepo) PruneOldInvocationsInProject(context.Context, string, string, int) error {
 	return nil
 }
-func (r *retryRepo) PruneTriggerExecutionsInProject(context.Context, string, string, time.Time) error {
+func (r *retryRepo) PruneTriggerInvocationsInProject(context.Context, string, string, time.Time) error {
 	return nil
 }
-func (r *retryRepo) GetExecutionByIdempotencyKey(context.Context, string, string, string, string) (*domainfunctions.ExecutionRecord, error) {
+func (r *retryRepo) GetInvocationByIdempotencyKey(context.Context, string, string, string, string) (*domainfunctions.InvocationRecord, error) {
 	return nil, nil
 }
 func (r *retryRepo) CountClientInvocations(context.Context, string, string, string, time.Time) (int, error) {
 	return 0, nil
 }
 
-// retryExecutor 是 functions.Executor 的零值桩（重试路径在 GetFunction 即
-// 失败，不会触达执行）。
-type retryExecutor struct{}
+// retryInvoker/retryNotifier 是双轴端口零值桩（重试路径在 GetFunction 即
+// 失败，不会触达调用）。
+type retryInvoker struct{}
 
-func (retryExecutor) Execute(context.Context, domainfunctions.Execution) (*domainfunctions.ExecutionResult, error) {
+func (retryInvoker) Invoke(context.Context, domainfunctions.Invocation) (*domainfunctions.InvocationResult, error) {
 	return nil, nil
 }
-func (retryExecutor) Build(context.Context, domainfunctions.BuildSpec) (string, error) {
-	return "", nil
+
+type retryNotifier struct{}
+
+func (retryNotifier) Notify(context.Context, domainfunctions.Notification) (domainfunctions.NotificationResult, error) {
+	return domainfunctions.NotificationResult{}, nil
 }
-func (retryExecutor) ImportImage(context.Context, domainfunctions.ImportImageSpec) (string, error) {
-	return "", nil // image 源不在本文件测试路径
-}
-func (retryExecutor) RemoveImage(context.Context, string, string) error { return nil }
 
 // channelQueue 是 shared.Queue 的测试桩：Enqueue 记录 payload 并送入有缓冲
 // channel，Dequeue 取出；空时按 timeout 返回 nil（与真实 BRPOP 语义对齐）。
@@ -225,14 +199,14 @@ func (h *captureHandler) has(msg string) bool {
 // 后不再 Enqueue，改由 MarkExecutionFailed 兜底标 failed。
 func TestConsume_RetryAttemptsInPayloadAndExhausts(t *testing.T) {
 	repo := &retryRepo{
-		rec: &domainfunctions.ExecutionRecord{
-			ID: "e1", FunctionID: "fn_1", ProjectID: "p1", DeploymentID: "dep_1",
-			Status: domainfunctions.ExecutionStatusQueued,
+		rec: &domainfunctions.InvocationRecord{
+			ID: "e1", FunctionID: "fn_1", ProjectID: "p1",
+			Status: domainfunctions.InvocationStatusQueued,
 		},
 		getFnErr: errors.New("db unavailable"), // 瞬时失败
 	}
 	q := newChannelQueue()
-	fn := appfunctions.NewFunctions(&config.AppConfig{}, retryExecutor{}, repo, q)
+	fn := appfunctions.NewFunctions(&config.AppConfig{}, retryInvoker{}, retryNotifier{}, repo, q, nil, nil, nil, nil, nil)
 	w := NewWorker(fn, q, slog.New(slog.DiscardHandler))
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -244,25 +218,25 @@ func TestConsume_RetryAttemptsInPayloadAndExhausts(t *testing.T) {
 	}()
 
 	// 初始 payload（旧格式，无 attempt 字段）。
-	q.ch <- []byte(`{"execution_id":"e1","function_id":"fn_1","project_id":"p1","data":"{\"x\":1}"}`)
+	q.ch <- []byte(`{"invocation_id":"e1","function_id":"fn_1","project_id":"p1","data":"{\"x\":1}"}`)
 
-	// 等待兜底 MarkExecutionFailed（第 4 次失败超限）。
+	// 等待兜底 MarkInvocationFailed（第 4 次失败超限）。
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		repo.mu.Lock()
-		failed := repo.rec != nil && repo.rec.Status == domainfunctions.ExecutionStatusFailed
+		failed := repo.rec != nil && repo.rec.Status == domainfunctions.InvocationStatusFailed
 		repo.mu.Unlock()
 		if failed {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("等待 MarkExecutionFailed 超时")
+			t.Fatal("等待 MarkInvocationFailed 超时")
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
 
 	repo.mu.Lock()
-	require.Equal(t, domainfunctions.ExecutionStatusFailed, repo.rec.Status)
+	require.Equal(t, domainfunctions.InvocationStatusFailed, repo.rec.Status)
 	require.Contains(t, repo.rec.Error, "worker retries exhausted")
 	repo.mu.Unlock()
 
@@ -273,7 +247,7 @@ func TestConsume_RetryAttemptsInPayloadAndExhausts(t *testing.T) {
 	for _, p := range q.enqueued {
 		var m retryMessage
 		require.NoError(t, json.Unmarshal(p, &m))
-		require.Equal(t, "e1", m.ExecutionID)
+		require.Equal(t, "e1", m.InvocationID)
 		require.Equal(t, "fn_1", m.FunctionID)
 		require.Equal(t, "p1", m.ProjectID)
 		require.Equal(t, `{"x":1}`, m.Data, "data 在重试往返中不丢失")
@@ -289,14 +263,14 @@ func TestConsume_RetryAttemptsInPayloadAndExhausts(t *testing.T) {
 // 经 consume 重试后 attempt=1（与 requeue 单测一致，跨重启兼容）。
 func TestConsume_OldFormatPayloadRetriesOnce(t *testing.T) {
 	repo := &retryRepo{
-		rec: &domainfunctions.ExecutionRecord{
-			ID: "e1", FunctionID: "fn_1", ProjectID: "p1", DeploymentID: "dep_1",
-			Status: domainfunctions.ExecutionStatusQueued,
+		rec: &domainfunctions.InvocationRecord{
+			ID: "e1", FunctionID: "fn_1", ProjectID: "p1",
+			Status: domainfunctions.InvocationStatusQueued,
 		},
 		getFnErr: errors.New("db unavailable"),
 	}
 	q := newChannelQueue()
-	fn := appfunctions.NewFunctions(&config.AppConfig{}, retryExecutor{}, repo, q)
+	fn := appfunctions.NewFunctions(&config.AppConfig{}, retryInvoker{}, retryNotifier{}, repo, q, nil, nil, nil, nil, nil)
 	w := NewWorker(fn, q, slog.New(slog.DiscardHandler))
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -307,7 +281,7 @@ func TestConsume_OldFormatPayloadRetriesOnce(t *testing.T) {
 		w.consume(ctx)
 	}()
 
-	q.ch <- []byte(`{"execution_id":"e1","function_id":"fn_1","project_id":"p1","data":"{}"}`)
+	q.ch <- []byte(`{"invocation_id":"e1","function_id":"fn_1","project_id":"p1","data":"{}"}`)
 
 	// 等待首个重试入队。
 	deadline := time.Now().Add(5 * time.Second)
@@ -342,16 +316,16 @@ func TestConsume_OldFormatPayloadRetriesOnce(t *testing.T) {
 // 兜底标 failed、不再重试。
 func TestConsume_RequeueEnqueueFailureDoesNotAck(t *testing.T) {
 	repo := &retryRepo{
-		rec: &domainfunctions.ExecutionRecord{
-			ID: "e1", FunctionID: "fn_1", ProjectID: "p1", DeploymentID: "dep_1",
-			Status: domainfunctions.ExecutionStatusQueued,
+		rec: &domainfunctions.InvocationRecord{
+			ID: "e1", FunctionID: "fn_1", ProjectID: "p1",
+			Status: domainfunctions.InvocationStatusQueued,
 		},
 		getFnErr: errors.New("db unavailable"), // 瞬时失败驱动重试路径
 	}
 	logs := &captureHandler{}
 	q := newChannelQueue()
 	q.enqueueErr = errors.New("redis unavailable") // 重入队失败
-	fn := appfunctions.NewFunctions(&config.AppConfig{}, retryExecutor{}, repo, q)
+	fn := appfunctions.NewFunctions(&config.AppConfig{}, retryInvoker{}, retryNotifier{}, repo, q, nil, nil, nil, nil, nil)
 	w := NewWorker(fn, q, slog.New(logs))
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -362,7 +336,7 @@ func TestConsume_RequeueEnqueueFailureDoesNotAck(t *testing.T) {
 		w.consume(ctx)
 	}()
 
-	q.ch <- []byte(`{"execution_id":"e1","function_id":"fn_1","project_id":"p1","data":"{}"}`)
+	q.ch <- []byte(`{"invocation_id":"e1","function_id":"fn_1","project_id":"p1","data":"{}"}`)
 
 	// 等待 Enqueue 失败分支触达（无返回值可观察，经日志同步）。
 	require.Eventually(t, func() bool {
@@ -389,26 +363,26 @@ func TestConsume_AckSucceedsAfterContextCancelled(t *testing.T) {
 	q := infraqueue.NewRedisQueue(rdb)
 	// ackMessage 不触达 functions，nil 即可。
 	w := NewWorker(nil, q, slog.New(slog.DiscardHandler))
-	group := domainshared.QueueFunctionsExecutions + "-group"
+	group := domainshared.QueueFunctionsInvocations + "-group"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	require.NoError(t, q.Enqueue(ctx, domainshared.QueueFunctionsExecutions, []byte(`{"execution_id":"e1"}`)))
-	payload, ack, err := q.Dequeue(ctx, domainshared.QueueFunctionsExecutions, time.Second)
+	require.NoError(t, q.Enqueue(ctx, domainshared.QueueFunctionsInvocations, []byte(`{"invocation_id":"e1"}`)))
+	payload, ack, err := q.Dequeue(ctx, domainshared.QueueFunctionsInvocations, time.Second)
 	require.NoError(t, err)
 	require.NotNil(t, payload)
 	require.NotEmpty(t, ack)
 
 	// 前置确认：消息在 PEL 中。
-	pending, err := rdb.XPending(context.Background(), domainshared.QueueFunctionsExecutions, group).Result()
+	pending, err := rdb.XPending(context.Background(), domainshared.QueueFunctionsInvocations, group).Result()
 	require.NoError(t, err)
 	require.Equal(t, int64(1), pending.Count)
 
 	// 取消消费 ctx 后 Ack：必须落盘。
 	cancel()
-	w.ackMessage(ctx, domainshared.QueueFunctionsExecutions, ack)
+	w.ackMessage(ctx, domainshared.QueueFunctionsInvocations, ack)
 
-	pending, err = rdb.XPending(context.Background(), domainshared.QueueFunctionsExecutions, group).Result()
+	pending, err = rdb.XPending(context.Background(), domainshared.QueueFunctionsInvocations, group).Result()
 	require.NoError(t, err)
 	require.Equal(t, int64(0), pending.Count, "ctx 取消后 XACK 仍须完成（重复消费缺陷回归）")
 }

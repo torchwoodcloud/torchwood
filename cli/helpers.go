@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // decodeJSON 以 UseNumber 解码，避免 64 位整型经 float64 丢精度。
@@ -96,4 +97,20 @@ func listJSON(pageSize int, pageToken string) map[string]any {
 		m["pageToken"] = pageToken
 	}
 	return m
+}
+
+// splitList 解析逗号分隔的列表 flag（declared_scopes / event 订阅串）；
+// 空串返回 nil，条目去首尾空白、滤空段。
+func splitList(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }

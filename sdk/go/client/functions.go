@@ -22,15 +22,13 @@ func (f *FunctionsService) InvokeFunction(ctx context.Context, req *clientv1.Inv
 	return f.c.functions.InvokeFunction(ctx, req)
 }
 
-// InvokeString 用基本类型调用函数（deploymentID 传空 = 最新 ready）。
-func (f *FunctionsService) InvokeString(ctx context.Context, functionID, data, idempotencyKey, deploymentID string) (*clientv1.InvokeFunctionResponse, error) {
+// InvokeString 用基本类型调用函数（v4：目标恒为函数当前的 endpoint target
+// ——deploymentID 参数随部署面退役）。
+func (f *FunctionsService) InvokeString(ctx context.Context, functionID, data, idempotencyKey string) (*clientv1.InvokeFunctionResponse, error) {
 	req := &clientv1.InvokeFunctionRequest{
 		FunctionId:     functionID,
 		Data:           data,
 		IdempotencyKey: idempotencyKey,
-	}
-	if deploymentID != "" {
-		req.DeploymentId = &deploymentID
 	}
 	return f.InvokeFunction(ctx, req)
 }

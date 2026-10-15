@@ -394,7 +394,9 @@ func (c *eventTriggerConsumer) deliverSystem(ctx context.Context, ev *domaineven
 }
 
 // invokeSubs 把投影后的 data 逐命中订阅异步入队（文档/系统两路共用的
-// 投递尾段：指标与失败语义一致——enqueue 失败不阻断其余订阅）。
+// 投递尾段：指标与失败语义一致——enqueue 失败不阻断其余订阅）。事件轴
+// 原料（v4 §4.2，D10）随命令携带：type=事件目录名、time=outbox 产生时刻、
+// seq=outbox 全局序——CloudEvent 组装在 app 层 runInvocation。
 func (c *eventTriggerConsumer) invokeSubs(ctx context.Context, ev *domainevents.Envelope, subs []domainfunctions.EventSubscription, data string) {
 	for _, s := range subs {
 		_, ierr := c.functions.InvokeTrigger(ctx, appfunctions.InvokeTriggerCommand{
@@ -403,10 +405,14 @@ func (c *eventTriggerConsumer) invokeSubs(ctx context.Context, ev *domainevents.
 			Data:       data,
 			Async:      true,
 			Source:     domainfunctions.TriggerTypeEvent + ":" + s.TriggerID,
-			// 投影预算即 data 上限：恒 32KB（v1 env 通道同样收在 32KB；
-			// 超预算只可能来自函数 variables 挤占 env 合并预算 → 400
-			// enqueue_error，风暴由异步通道既有信号量兜底）。
+			// 投影预算即 data 上限：恒 32KB（事件投影预算）；风暴由异步
+			// 通道既有信号量兜底。
 			BodyLimitBytes: domainfunctions.EventDataBudgetBytes,
+			EventAxis: &domainfunctions.EventNotificationMeta{
+				Type: ev.Event,
+				Time: ev.CreatedAt,
+				Seq:  ev.Seq,
+			},
 		})
 		if ierr != nil {
 			eventDeliveriesTotal.WithLabelValues(s.ProjectID, s.FunctionID, "enqueue_error").Inc()

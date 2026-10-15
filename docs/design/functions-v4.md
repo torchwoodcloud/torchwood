@@ -223,8 +223,7 @@ internal/infra/webhooks/
   delivery.go                ← 同引擎：投递 policy = 重试梯度 + DLQ（§7）
 ```
 
-- **出站姿态**：server（sync invoke）与 worker（async/webhook）均为出站源。SSRF guard 默认强制、无放行开关（webhook/endpoint 是用户配置的任意 URL，比 packer 的内网 git 更不可信）；出网走平台常规出口。
-- fleetly 部署形态下的私网寻址：函数跑在 fleetly app 上时 target.url 可为内网服务名——server 经 `EnsureTaskNetwork` members 挂靠项目任务网（现成机制，`tasks.proto:112-135`，一次性挂靠、别名互访），不走公网。
+- **出站姿态**：server（sync invoke）与 worker（async/webhook）均为出站源。SSRF guard 默认强制；用户配置的任意 URL（SaaS 多租户姿态）不放行私网——**实施勘误（2026-10-16，破坏波 A）**：自托管 fleetly 部署下函数常驻服务的 target.url 是任务网内网服务名（解析为 RFC1918 私址），守卫默认会拒绝，与 §4.2「私网寻址」需求正面冲突。解法 = 平台级配置开关 `functions.invoke.allow_private_targets`（默认 false；自托管运营方显式开启——这是运营者的拓扑信任决策，非 per-request 开关，与 packer `allow_insecure` 的自托管内网 git 同一信任模型）。`functions.fleetly` 配置段随之退役（网络挂靠是 fleetly 部署拓扑〔compose members〕的责任，torchwood 零 substrate 感知）。
 - 观测：per-target-kind（function/webhook）的时延/成功率/在途计数指标；dispatcher 池指标族（PoolReady/PoolBooting/PoolDraining/InstanceInflight 等）随池退役。
 
 ## §6 Webhooks 一等公民（D5）

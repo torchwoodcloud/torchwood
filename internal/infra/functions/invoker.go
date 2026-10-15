@@ -40,11 +40,15 @@ func NewHTTPInvoker(client *http.Client) *HTTPInvoker {
 	return &HTTPInvoker{client: client, now: time.Now}
 }
 
-// NewGuardedInvokerClient 返回生产出站 client：ssrfguard 拨号点校验、
-// 无放行开关（函数 endpoint 是用户配置的任意 URL）、无客户端级超时
-// （预算由每次调用的 ctx 承载）。
-func NewGuardedInvokerClient() *http.Client {
-	return ssrfguard.NewClient(ssrfguard.Options{})
+// NewGuardedInvokerClient 返回生产出站 client：ssrfguard 拨号点校验、无
+// 客户端级超时（预算由每次调用的 ctx 承载）。
+//
+// allowPrivateTargets 放行私网/回环 target（2026-10-15 私网 target 勘误，
+// 配置 functions.invoke.allow_private_targets）：自托管形态下函数与 server
+// 同处私网（fleetly 任务网成员挂靠 / k8s Service / 裸机内网）时由运营方
+// 显式开启——平台级信任决策，非 per-request 开关；托管形态恒 false（默认）。
+func NewGuardedInvokerClient(allowPrivateTargets bool) *http.Client {
+	return ssrfguard.NewClient(ssrfguard.Options{AllowInsecure: allowPrivateTargets})
 }
 
 // Invoke 实现 Invoker 端口。
@@ -75,7 +79,7 @@ func (i *HTTPInvoker) Invoke(ctx context.Context, inv functions.Invocation) (*fu
 		}
 		return nil, status.Errorf(codes.Unavailable, "invoker: dial %s: %v", redactURL(inv.TargetURL), err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	durationMS := time.Since(start).Milliseconds()
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {

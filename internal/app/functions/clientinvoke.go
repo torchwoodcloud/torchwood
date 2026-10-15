@@ -49,22 +49,20 @@ type ClientInvokeCommand struct {
 	ProjectID  string
 	FunctionID string
 	Data       string
-	// DeploymentID 可选：缺省用最新 ready deployment。
-	DeploymentID string
 	// IdempotencyKey 可选：网络超时重试防重复执行。(project, function, user,
-	// key) 唯一去重，命中返回既有 execution 原样（running 返回 running）。
+	// key) 唯一去重，命中返回既有 invocation 原样（running 返回 running）。
 	IdempotencyKey string
 }
 
 // ClientInvokeResult 是客户端调用结果：Reused=true 表示命中幂等（既有执行
 // 原样返回，未重新执行）。
 type ClientInvokeResult struct {
-	Record *domainfunctions.ExecutionRecord
+	Record *domainfunctions.InvocationRecord
 	Reused bool
 }
 
 // ClientInvoke 执行一次客户端调用（同步默认，≤30s 沿用既有路径；长任务走
-// Server 面 CreateExecution(async=true)）。
+// Server 面 Invoke(async=true)）。
 func (f *Functions) ClientInvoke(ctx context.Context, cmd ClientInvokeCommand) (*ClientInvokeResult, error) {
 	// 身份门：仅端用户（admin/API key/匿名一律拒绝）。匿名会话洗限频的
 	// 对策在一期是「匿名根本进不来」（Q4 拍板：client_anonymous_allowed
@@ -90,7 +88,7 @@ func (f *Functions) ClientInvoke(ctx context.Context, cmd ClientInvokeCommand) (
 		return nil, status.Error(codes.FailedPrecondition, "function is disabled")
 	}
 	// 策略门（存量全 FALSE ⇒ fail-closed）：非 client_callable →
-	// PermissionDenied（这不是 CreateExecution 的放开，是带独立策略门的新入口）。
+	// PermissionDenied（这是带独立策略门的调用入口——服务端面 Invoke 另行守卫）。
 	if !fn.ClientCallable {
 		f.observeClientInvoke(cmd, InvokeResultError)
 		return nil, status.Error(codes.PermissionDenied, "function is not client-callable")
@@ -106,8 +104,9 @@ func (f *Functions) ClientInvoke(ctx context.Context, cmd ClientInvokeCommand) (
 		}
 	}
 
-	// 每用户并发闸门（P2，设计 §5）：防单用户挤占执行槽（噪声邻居是开放
-	// 客户端触发面的头号风险）。全局 run 信号量/池上限之外的第二道门。
+	// 每用户并发闸门（P2，设计 §5）：防单用户挤占调用目标（噪声邻居是开放
+	// 客户端触发面的头号风险）。v4 执行面在常驻 endpoint（容量归 substrate），
+	// 闸门是平台侧唯一挤压防线。
 	release, err := f.userGate.acquire(ctx, userID)
 	if err != nil {
 		f.observeClientInvoke(cmd, InvokeResultQuota)
@@ -115,10 +114,9 @@ func (f *Functions) ClientInvoke(ctx context.Context, cmd ClientInvokeCommand) (
 	}
 	defer release()
 
-	rec, err := f.createExecution(ctx, CreateExecutionCommand{
+	rec, err := f.invokeInternal(ctx, InvokeCommand{
 		ProjectID:      cmd.ProjectID,
 		FunctionID:     cmd.FunctionID,
-		DeploymentID:   cmd.DeploymentID,
 		Data:           cmd.Data,
 		Source:         domainfunctions.TriggerSourceClient,
 		InvokingUserID: userID,
@@ -128,10 +126,10 @@ func (f *Functions) ClientInvoke(ctx context.Context, cmd ClientInvokeCommand) (
 	})
 	if err != nil {
 		// 幂等命中：并发同键第二请求预占 INSERT 冲突 → 回读既有行原样返回
-		// （running 返回 running；设计 §4「重复键在执行进行中返回既有记录，
+		// （running 返回 running；设计 §4「重复键在调用进行中返回既有记录，
 		// 完成则原样返回」）。
-		if cmd.IdempotencyKey != "" && errors.Is(err, domainfunctions.ErrExecutionIdempotencyConflict) {
-			existing, gerr := f.repo.GetExecutionByIdempotencyKey(ctx, cmd.ProjectID, cmd.FunctionID, userID, cmd.IdempotencyKey)
+		if cmd.IdempotencyKey != "" && errors.Is(err, domainfunctions.ErrInvocationIdempotencyConflict) {
+			existing, gerr := f.repo.GetInvocationByIdempotencyKey(ctx, cmd.ProjectID, cmd.FunctionID, userID, cmd.IdempotencyKey)
 			if gerr == nil && existing != nil {
 				f.observeClientInvoke(cmd, InvokeResultOK)
 				return &ClientInvokeResult{Record: existing, Reused: true}, nil
@@ -149,7 +147,7 @@ func (f *Functions) ClientInvoke(ctx context.Context, cmd ClientInvokeCommand) (
 		// 映射 FUNCTION_TIMEOUT 信封而非 payload 层错误）。执行级失败指标
 		// （executions_total{status=failed}）已由 runExecution 侧记录，入口
 		// 计数按调用面成功（face 200）记 ok。
-		if rec != nil && rec.Status == domainfunctions.ExecutionStatusFailed &&
+		if rec != nil && rec.Status == domainfunctions.InvocationStatusFailed &&
 			!errors.Is(err, context.DeadlineExceeded) && status.Code(err) != codes.DeadlineExceeded {
 			f.observeClientInvoke(cmd, InvokeResultOK)
 			return &ClientInvokeResult{Record: rec, Reused: false}, nil

@@ -44,7 +44,6 @@ func NewGRPCGatewayServer(
 	checkers *health.Checkers,
 	fileHandler *serverhttp.FileHandler,
 	oauthHandler *serverhttp.OAuthHandler,
-	functionsHandler *serverhttp.FunctionsHandler,
 	paymentsHandler *serverhttp.PaymentsHandler,
 	functionTriggersHandler *serverhttp.FunctionTriggersHandler,
 	realtimeHandler *apirealtime.Handler,
@@ -130,7 +129,6 @@ func NewGRPCGatewayServer(
 	// Custom HTTP handlers for file upload/download and OAuth callbacks.
 	fileHandler.Register(mux)
 	oauthHandler.Register(mux)
-	functionsHandler.Register(mux)
 	paymentsHandler.Register(mux)
 	// /f/{project_id}/{trigger_token}（P1 触发器模块）：公开触发路由，
 	// token 即鉴权，不经 gRPC 拦截器链。

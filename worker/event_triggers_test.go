@@ -59,43 +59,34 @@ func newEventTestRedis(t *testing.T) *redis.Client {
 
 // ——worker 侧测试桩（appfunctions.Functions 具体类型，注入 repo/queue）——
 
-// eventCaptureRepo 是 FunctionRepo 记录桩：只实现 createExecution 异步路径
-// 触达的方法（GetFunction/GetDeployment/GetVariables/CreateExecution），
-// 其余经 retryRepo 空转。
+// eventCaptureRepo 是 FunctionRepo 记录桩：只实现 invokeInternal 异步路径
+// 触达的方法（GetFunction/CreateInvocation），其余经 retryRepo 空转。
 type eventCaptureRepo struct {
 	retryRepo
-	mu         sync.Mutex
-	executions []*domainfunctions.ExecutionRecord
+	mu          sync.Mutex
+	invocations []*domainfunctions.InvocationRecord
 }
 
 func (r *eventCaptureRepo) GetFunction(_ context.Context, _, _ string) (*domainfunctions.Function, error) {
 	return &domainfunctions.Function{
 		ID: "fn_1", ProjectID: "p1", Enabled: true, TimeoutSeconds: 15,
-		LatestReadyDeploymentID: "dep_1",
+		TargetURL: "https://fn.example.com",
 	}, nil
 }
 
-func (r *eventCaptureRepo) GetDeployment(_ context.Context, _, _, id string) (*domainfunctions.Deployment, error) {
-	return &domainfunctions.Deployment{ID: id, Status: domainfunctions.DeploymentStatusReady}, nil
-}
-
-func (r *eventCaptureRepo) GetVariables(context.Context, string, string) (map[string]string, error) {
-	return map[string]string{}, nil
-}
-
-func (r *eventCaptureRepo) CreateExecution(_ context.Context, e *domainfunctions.ExecutionRecord) error {
+func (r *eventCaptureRepo) CreateInvocation(_ context.Context, e *domainfunctions.InvocationRecord) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	cp := *e
-	r.executions = append(r.executions, &cp)
+	r.invocations = append(r.invocations, &cp)
 	return nil
 }
 
-func (r *eventCaptureRepo) captured() []*domainfunctions.ExecutionRecord {
+func (r *eventCaptureRepo) captured() []*domainfunctions.InvocationRecord {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]*domainfunctions.ExecutionRecord, len(r.executions))
-	copy(out, r.executions)
+	out := make([]*domainfunctions.InvocationRecord, len(r.invocations))
+	copy(out, r.invocations)
 	return out
 }
 
@@ -163,8 +154,8 @@ func newEventTestConsumerWithEvents(t *testing.T, rdb *redis.Client, events []st
 		Type: domainfunctions.TriggerTypeEvent, Enabled: true,
 		Config: domainfunctions.TriggerConfig{Events: events},
 	}}}
-	fn := appfunctions.NewFunctionsWithUsage(&config.AppConfig{}, retryExecutor{}, repo, queue,
-		nil, eventProjectsStub{}, appfunctions.Semaphores{}, nil, triggers, nil)
+	fn := appfunctions.NewFunctions(&config.AppConfig{}, retryInvoker{}, retryNotifier{}, repo, queue,
+		nil, eventProjectsStub{}, nil, triggers, nil)
 	c := newEventTriggerConsumer(fn, rdb, &clients.Database{}, slog.New(slog.DiscardHandler))
 	return c, repo, queue
 }
@@ -291,10 +282,10 @@ func TestEventConsumer_DeliverRoundTrip(t *testing.T) {
 	caps := repo.captured()
 	require.Len(t, caps, 1)
 	require.Equal(t, "event:trg_1", caps[0].TriggerSource, "Source=event:{trigger_id}")
-	require.Equal(t, domainfunctions.ExecutionStatusQueued, caps[0].Status)
+	require.Equal(t, domainfunctions.InvocationStatusQueued, caps[0].Status)
 	var payload QueuePayloadShape
 	require.NoError(t, json.Unmarshal(queue.enqueued[0], &payload))
-	require.Equal(t, caps[0].ID, payload.ExecutionID)
+	require.Equal(t, caps[0].ID, payload.InvocationID)
 	var proj map[string]any
 	require.NoError(t, json.Unmarshal([]byte(payload.Data), &proj))
 	require.Equal(t, "event", proj["type"])
@@ -410,7 +401,7 @@ func TestEventConsumer_BackfillFromOutbox(t *testing.T) {
 	require.Len(t, caps, 3, "三行 outbox 全部经匹配路径补投")
 	for _, e := range caps {
 		require.Equal(t, "event:trg_1", e.TriggerSource)
-		require.Equal(t, domainfunctions.ExecutionStatusQueued, e.Status)
+		require.Equal(t, domainfunctions.InvocationStatusQueued, e.Status)
 	}
 	require.Equal(t, last, watermarkOf(t, c, ctx), "水位推进到区间上界")
 
@@ -427,8 +418,8 @@ func TestWorkerEventLoop_GracefulShutdown(t *testing.T) {
 	rdb := newEventTestRedis(t)
 	repo := &eventCaptureRepo{retryRepo: retryRepo{}}
 	queue := newChannelQueue()
-	fn := appfunctions.NewFunctionsWithUsage(&config.AppConfig{}, retryExecutor{}, repo, queue,
-		nil, eventProjectsStub{}, appfunctions.Semaphores{}, nil, &eventTriggerRepoStub{}, nil)
+	fn := appfunctions.NewFunctions(&config.AppConfig{}, retryInvoker{}, retryNotifier{}, repo, queue,
+		nil, eventProjectsStub{}, nil, &eventTriggerRepoStub{}, nil)
 	w := NewWorkerWithEventTriggers(fn, queue, slog.New(slog.DiscardHandler), rdb, &clients.Database{})
 	require.NotNil(t, w.events)
 
@@ -502,6 +493,8 @@ func TestEventConsumer_BackfillSkipsOnWatermarkError(t *testing.T) {
 // QueuePayloadShape 是 worker 侧解析队列 payload 的最小字段集（与 app 层
 // queueMessage 字段名一致；仅测试断言用）。
 type QueuePayloadShape struct {
-	ExecutionID string `json:"execution_id"`
-	Data        string `json:"data"`
+	InvocationID string                                 `json:"invocation_id"`
+	Source       string                                 `json:"source"`
+	EventAxis    *domainfunctions.EventNotificationMeta `json:"event_axis"`
+	Data         string                                 `json:"data"`
 }

@@ -299,15 +299,15 @@ type fakeNotifier struct {
 	last  error
 }
 
-func (f *fakeNotifier) Notify(_ context.Context, n domainfunctions.Notification) error {
+func (f *fakeNotifier) Notify(_ context.Context, n domainfunctions.Notification) (domainfunctions.NotificationResult, error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, n)
 	idx := len(f.calls) - 1
 	f.mu.Unlock()
 	if idx < len(f.errs) {
-		return f.errs[idx]
+		return domainfunctions.NotificationResult{}, f.errs[idx]
 	}
-	return f.last
+	return domainfunctions.NotificationResult{}, f.last
 }
 
 func (f *fakeNotifier) count() int {

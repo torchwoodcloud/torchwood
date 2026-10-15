@@ -55,7 +55,7 @@ func TestClientFunctions_Invoke(t *testing.T) {
 	c, rec := newFunctionsClient(t, nil)
 	ctx := context.Background()
 
-	res, err := c.Functions.InvokeString(ctx, "sign_in", `{"day":"2026-09-09"}`, "idem-1", "")
+	res, err := c.Functions.InvokeString(ctx, "sign_in", `{"day":"2026-09-09"}`, "idem-1")
 	require.NoError(t, err)
 	require.Equal(t, "exe-1", res.ExecutionId)
 	require.Equal(t, "completed", res.Status)
@@ -68,6 +68,6 @@ func TestClientFunctions_QuotaExceededSurfacesDetails(t *testing.T) {
 	// 透传给调用方（不是响应字段）。
 	st := status.New(codes.ResourceExhausted, "client invoke quota exceeded for this window")
 	c, _ := newFunctionsClient(t, st.Err())
-	_, err := c.Functions.InvokeString(context.Background(), "fn", `{}`, "", "")
+	_, err := c.Functions.InvokeString(context.Background(), "fn", `{}`, "")
 	require.Equal(t, codes.ResourceExhausted, status.Code(err))
 }

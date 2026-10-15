@@ -9,7 +9,6 @@ import (
 
 	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
-	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	domainstorage "github.com/torchwoodcloud/torchwood/internal/domain/storage"
@@ -54,8 +53,9 @@ type Projects struct {
 // ProjectsOption 定制 Projects 可选依赖。
 type ProjectsOption func(*Projects)
 
-// WithObjectPurger 注入对象存储 Purger 与存储配置（解析用户文件桶与
-// 函数代码包持久桶）。
+// WithObjectPurger 注入对象存储 Purger 与存储配置（解析用户文件桶）。
+// v4：函数代码包持久桶随执行面外包退役（docs/design/functions-v4.md §10
+// 连带项——torchwood 不再持有任何用户代码字节），项目 purge 只清用户文件桶。
 func WithObjectPurger(purger domainstorage.Purger, cfg *config.AppConfig) ProjectsOption {
 	return func(s *Projects) {
 		s.purger = purger
@@ -63,11 +63,7 @@ func WithObjectPurger(purger domainstorage.Purger, cfg *config.AppConfig) Projec
 		if files == "" {
 			files = domainstorage.DefaultBucketName
 		}
-		zip := cfg.GetFunctions().GetStorage().GetBucket()
-		if zip == "" {
-			zip = domainfunctions.DefaultZipBucketName
-		}
-		s.buckets = []string{files, zip}
+		s.buckets = []string{files}
 	}
 }
 

@@ -20,23 +20,16 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	FunctionsService_ListRuntimes_FullMethodName               = "/torchwood.server.v1.FunctionsService/ListRuntimes"
-	FunctionsService_ListSpecifications_FullMethodName         = "/torchwood.server.v1.FunctionsService/ListSpecifications"
 	FunctionsService_CreateFunction_FullMethodName             = "/torchwood.server.v1.FunctionsService/CreateFunction"
 	FunctionsService_ListFunctions_FullMethodName              = "/torchwood.server.v1.FunctionsService/ListFunctions"
 	FunctionsService_GetFunction_FullMethodName                = "/torchwood.server.v1.FunctionsService/GetFunction"
 	FunctionsService_UpdateFunction_FullMethodName             = "/torchwood.server.v1.FunctionsService/UpdateFunction"
 	FunctionsService_DeleteFunction_FullMethodName             = "/torchwood.server.v1.FunctionsService/DeleteFunction"
-	FunctionsService_CreateDeployment_FullMethodName           = "/torchwood.server.v1.FunctionsService/CreateDeployment"
-	FunctionsService_ListDeployments_FullMethodName            = "/torchwood.server.v1.FunctionsService/ListDeployments"
-	FunctionsService_GetDeployment_FullMethodName              = "/torchwood.server.v1.FunctionsService/GetDeployment"
-	FunctionsService_DeleteDeployment_FullMethodName           = "/torchwood.server.v1.FunctionsService/DeleteDeployment"
-	FunctionsService_SetVariables_FullMethodName               = "/torchwood.server.v1.FunctionsService/SetVariables"
-	FunctionsService_GetVariables_FullMethodName               = "/torchwood.server.v1.FunctionsService/GetVariables"
-	FunctionsService_CreateExecution_FullMethodName            = "/torchwood.server.v1.FunctionsService/CreateExecution"
-	FunctionsService_ListExecutions_FullMethodName             = "/torchwood.server.v1.FunctionsService/ListExecutions"
-	FunctionsService_GetExecution_FullMethodName               = "/torchwood.server.v1.FunctionsService/GetExecution"
+	FunctionsService_InvokeFunction_FullMethodName             = "/torchwood.server.v1.FunctionsService/InvokeFunction"
+	FunctionsService_ListInvocations_FullMethodName            = "/torchwood.server.v1.FunctionsService/ListInvocations"
+	FunctionsService_GetInvocation_FullMethodName              = "/torchwood.server.v1.FunctionsService/GetInvocation"
 	FunctionsService_SetFunctionScopes_FullMethodName          = "/torchwood.server.v1.FunctionsService/SetFunctionScopes"
+	FunctionsService_RotateFunctionSecret_FullMethodName       = "/torchwood.server.v1.FunctionsService/RotateFunctionSecret"
 	FunctionsService_CreateFunctionTrigger_FullMethodName      = "/torchwood.server.v1.FunctionsService/CreateFunctionTrigger"
 	FunctionsService_ListFunctionTriggers_FullMethodName       = "/torchwood.server.v1.FunctionsService/ListFunctionTriggers"
 	FunctionsService_DeleteFunctionTrigger_FullMethodName      = "/torchwood.server.v1.FunctionsService/DeleteFunctionTrigger"
@@ -47,37 +40,37 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// FunctionsService manages functions, their code deployments, variables
-// and executions. Deployments are zip code packages built into Docker
-// images; executions run the built image synchronously or asynchronously
-// via a worker queue.
+// FunctionsService 管理 Functions v4 的函数与调用（docs/design/functions-v4.md）：
+// 函数 = 常驻服务（endpoint target），torchwood 只做路由、身份、记账与投递
+// ——执行面（打包/构建/部署/池/运行时/变量）已整体外包，归 fleetly CLI 或
+// 用户自有工具链。一次调用统一为 invocation（v4 §2 重命名：CreateExecution →
+// InvokeFunction / executions → invocations）。
 type FunctionsServiceClient interface {
-	// functions:runtimes / functions:specifications 为自定义方法段（REST
-	// 自定义动词），不再占用 function_id 命名空间；function_id 可自由取任意合法值。
-	ListRuntimes(ctx context.Context, in *v1.Empty, opts ...grpc.CallOption) (*ListRuntimesResponse, error)
-	ListSpecifications(ctx context.Context, in *v1.Empty, opts ...grpc.CallOption) (*ListSpecificationsResponse, error)
-	CreateFunction(ctx context.Context, in *CreateFunctionRequest, opts ...grpc.CallOption) (*Function, error)
+	// CreateFunction 创建函数：endpoint target（url）创建时录入，签名密钥
+	// 服务端生成、明文仅在本响应出现一次（之后只出指纹）。
+	CreateFunction(ctx context.Context, in *CreateFunctionRequest, opts ...grpc.CallOption) (*CreateFunctionResponse, error)
 	ListFunctions(ctx context.Context, in *v1.ListRequest, opts ...grpc.CallOption) (*ListFunctionsResponse, error)
 	GetFunction(ctx context.Context, in *GetFunctionRequest, opts ...grpc.CallOption) (*Function, error)
 	UpdateFunction(ctx context.Context, in *UpdateFunctionRequest, opts ...grpc.CallOption) (*Function, error)
 	DeleteFunction(ctx context.Context, in *GetFunctionRequest, opts ...grpc.CallOption) (*v1.Empty, error)
-	CreateDeployment(ctx context.Context, in *CreateDeploymentRequest, opts ...grpc.CallOption) (*Deployment, error)
-	ListDeployments(ctx context.Context, in *ListDeploymentsRequest, opts ...grpc.CallOption) (*ListDeploymentsResponse, error)
-	GetDeployment(ctx context.Context, in *GetDeploymentRequest, opts ...grpc.CallOption) (*Deployment, error)
-	DeleteDeployment(ctx context.Context, in *GetDeploymentRequest, opts ...grpc.CallOption) (*v1.Empty, error)
-	SetVariables(ctx context.Context, in *SetVariablesRequest, opts ...grpc.CallOption) (*Variables, error)
-	GetVariables(ctx context.Context, in *GetFunctionRequest, opts ...grpc.CallOption) (*Variables, error)
-	CreateExecution(ctx context.Context, in *CreateExecutionRequest, opts ...grpc.CallOption) (*Execution, error)
-	ListExecutions(ctx context.Context, in *ListExecutionsRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error)
-	GetExecution(ctx context.Context, in *GetExecutionRequest, opts ...grpc.CallOption) (*Execution, error)
+	// InvokeFunction 调用一个函数（v4 §2：CreateExecution 改名——一个动作一个
+	// 名字，与 client 面同名对齐；async=true 时立即返回 queued invocation）。
+	InvokeFunction(ctx context.Context, in *InvokeFunctionRequest, opts ...grpc.CallOption) (*Invocation, error)
+	ListInvocations(ctx context.Context, in *ListInvocationsRequest, opts ...grpc.CallOption) (*ListInvocationsResponse, error)
+	GetInvocation(ctx context.Context, in *GetInvocationRequest, opts ...grpc.CallOption) (*Invocation, error)
 	// SetFunctionScopes 全量替换函数 declared_scopes（P0 执行身份）。独立 RPC
 	// 而非并入 UpdateFunctionRequest：repeated 字段无法表达「未设置=不修改」
 	// 的 presence 语义（proto 规范：更新类可选字段用 proto3 optional）。
 	SetFunctionScopes(ctx context.Context, in *SetFunctionScopesRequest, opts ...grpc.CallOption) (*Function, error)
+	// RotateFunctionSecret 轮换 endpoint target 签名密钥（v4 §3/§4，语义与
+	// webhooks RotateWebhookSecret 一致）：新钥即刻生效（v1 签名），旧钥保留
+	// 一个宽限窗（v2 双签）——函数侧持旧钥的 FDK 过渡期不断流。新明文仅在
+	// 本响应出现一次。
+	RotateFunctionSecret(ctx context.Context, in *RotateFunctionSecretRequest, opts ...grpc.CallOption) (*FunctionSecret, error)
 	// ——触发器管理（P1 触发器模块；K4/K10）——
 	//
-	// CreateFunctionTrigger 创建 HTTP 或 cron 触发器。http 的 token 由服务端
-	// 生成（128bit，URL 即鉴权）、不收入参；公开调用路由为
+	// CreateFunctionTrigger 创建 HTTP / cron / event 触发器。http 的 token 由
+	// 服务端生成（128bit，URL 即鉴权）、不收入参；公开调用路由为
 	// /f/{project_id}/{token}（FunctionTrigger.invoke_path）。
 	CreateFunctionTrigger(ctx context.Context, in *CreateFunctionTriggerRequest, opts ...grpc.CallOption) (*FunctionTrigger, error)
 	ListFunctionTriggers(ctx context.Context, in *GetFunctionRequest, opts ...grpc.CallOption) (*ListFunctionTriggersResponse, error)
@@ -95,29 +88,9 @@ func NewFunctionsServiceClient(cc grpc.ClientConnInterface) FunctionsServiceClie
 	return &functionsServiceClient{cc}
 }
 
-func (c *functionsServiceClient) ListRuntimes(ctx context.Context, in *v1.Empty, opts ...grpc.CallOption) (*ListRuntimesResponse, error) {
+func (c *functionsServiceClient) CreateFunction(ctx context.Context, in *CreateFunctionRequest, opts ...grpc.CallOption) (*CreateFunctionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListRuntimesResponse)
-	err := c.cc.Invoke(ctx, FunctionsService_ListRuntimes_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *functionsServiceClient) ListSpecifications(ctx context.Context, in *v1.Empty, opts ...grpc.CallOption) (*ListSpecificationsResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListSpecificationsResponse)
-	err := c.cc.Invoke(ctx, FunctionsService_ListSpecifications_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *functionsServiceClient) CreateFunction(ctx context.Context, in *CreateFunctionRequest, opts ...grpc.CallOption) (*Function, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Function)
+	out := new(CreateFunctionResponse)
 	err := c.cc.Invoke(ctx, FunctionsService_CreateFunction_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -165,90 +138,30 @@ func (c *functionsServiceClient) DeleteFunction(ctx context.Context, in *GetFunc
 	return out, nil
 }
 
-func (c *functionsServiceClient) CreateDeployment(ctx context.Context, in *CreateDeploymentRequest, opts ...grpc.CallOption) (*Deployment, error) {
+func (c *functionsServiceClient) InvokeFunction(ctx context.Context, in *InvokeFunctionRequest, opts ...grpc.CallOption) (*Invocation, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Deployment)
-	err := c.cc.Invoke(ctx, FunctionsService_CreateDeployment_FullMethodName, in, out, cOpts...)
+	out := new(Invocation)
+	err := c.cc.Invoke(ctx, FunctionsService_InvokeFunction_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *functionsServiceClient) ListDeployments(ctx context.Context, in *ListDeploymentsRequest, opts ...grpc.CallOption) (*ListDeploymentsResponse, error) {
+func (c *functionsServiceClient) ListInvocations(ctx context.Context, in *ListInvocationsRequest, opts ...grpc.CallOption) (*ListInvocationsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListDeploymentsResponse)
-	err := c.cc.Invoke(ctx, FunctionsService_ListDeployments_FullMethodName, in, out, cOpts...)
+	out := new(ListInvocationsResponse)
+	err := c.cc.Invoke(ctx, FunctionsService_ListInvocations_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *functionsServiceClient) GetDeployment(ctx context.Context, in *GetDeploymentRequest, opts ...grpc.CallOption) (*Deployment, error) {
+func (c *functionsServiceClient) GetInvocation(ctx context.Context, in *GetInvocationRequest, opts ...grpc.CallOption) (*Invocation, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Deployment)
-	err := c.cc.Invoke(ctx, FunctionsService_GetDeployment_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *functionsServiceClient) DeleteDeployment(ctx context.Context, in *GetDeploymentRequest, opts ...grpc.CallOption) (*v1.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(v1.Empty)
-	err := c.cc.Invoke(ctx, FunctionsService_DeleteDeployment_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *functionsServiceClient) SetVariables(ctx context.Context, in *SetVariablesRequest, opts ...grpc.CallOption) (*Variables, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Variables)
-	err := c.cc.Invoke(ctx, FunctionsService_SetVariables_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *functionsServiceClient) GetVariables(ctx context.Context, in *GetFunctionRequest, opts ...grpc.CallOption) (*Variables, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Variables)
-	err := c.cc.Invoke(ctx, FunctionsService_GetVariables_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *functionsServiceClient) CreateExecution(ctx context.Context, in *CreateExecutionRequest, opts ...grpc.CallOption) (*Execution, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Execution)
-	err := c.cc.Invoke(ctx, FunctionsService_CreateExecution_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *functionsServiceClient) ListExecutions(ctx context.Context, in *ListExecutionsRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListExecutionsResponse)
-	err := c.cc.Invoke(ctx, FunctionsService_ListExecutions_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *functionsServiceClient) GetExecution(ctx context.Context, in *GetExecutionRequest, opts ...grpc.CallOption) (*Execution, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Execution)
-	err := c.cc.Invoke(ctx, FunctionsService_GetExecution_FullMethodName, in, out, cOpts...)
+	out := new(Invocation)
+	err := c.cc.Invoke(ctx, FunctionsService_GetInvocation_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -259,6 +172,16 @@ func (c *functionsServiceClient) SetFunctionScopes(ctx context.Context, in *SetF
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Function)
 	err := c.cc.Invoke(ctx, FunctionsService_SetFunctionScopes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *functionsServiceClient) RotateFunctionSecret(ctx context.Context, in *RotateFunctionSecretRequest, opts ...grpc.CallOption) (*FunctionSecret, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FunctionSecret)
+	err := c.cc.Invoke(ctx, FunctionsService_RotateFunctionSecret_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -309,37 +232,37 @@ func (c *functionsServiceClient) RotateFunctionTriggerToken(ctx context.Context,
 // All implementations must embed UnimplementedFunctionsServiceServer
 // for forward compatibility.
 //
-// FunctionsService manages functions, their code deployments, variables
-// and executions. Deployments are zip code packages built into Docker
-// images; executions run the built image synchronously or asynchronously
-// via a worker queue.
+// FunctionsService 管理 Functions v4 的函数与调用（docs/design/functions-v4.md）：
+// 函数 = 常驻服务（endpoint target），torchwood 只做路由、身份、记账与投递
+// ——执行面（打包/构建/部署/池/运行时/变量）已整体外包，归 fleetly CLI 或
+// 用户自有工具链。一次调用统一为 invocation（v4 §2 重命名：CreateExecution →
+// InvokeFunction / executions → invocations）。
 type FunctionsServiceServer interface {
-	// functions:runtimes / functions:specifications 为自定义方法段（REST
-	// 自定义动词），不再占用 function_id 命名空间；function_id 可自由取任意合法值。
-	ListRuntimes(context.Context, *v1.Empty) (*ListRuntimesResponse, error)
-	ListSpecifications(context.Context, *v1.Empty) (*ListSpecificationsResponse, error)
-	CreateFunction(context.Context, *CreateFunctionRequest) (*Function, error)
+	// CreateFunction 创建函数：endpoint target（url）创建时录入，签名密钥
+	// 服务端生成、明文仅在本响应出现一次（之后只出指纹）。
+	CreateFunction(context.Context, *CreateFunctionRequest) (*CreateFunctionResponse, error)
 	ListFunctions(context.Context, *v1.ListRequest) (*ListFunctionsResponse, error)
 	GetFunction(context.Context, *GetFunctionRequest) (*Function, error)
 	UpdateFunction(context.Context, *UpdateFunctionRequest) (*Function, error)
 	DeleteFunction(context.Context, *GetFunctionRequest) (*v1.Empty, error)
-	CreateDeployment(context.Context, *CreateDeploymentRequest) (*Deployment, error)
-	ListDeployments(context.Context, *ListDeploymentsRequest) (*ListDeploymentsResponse, error)
-	GetDeployment(context.Context, *GetDeploymentRequest) (*Deployment, error)
-	DeleteDeployment(context.Context, *GetDeploymentRequest) (*v1.Empty, error)
-	SetVariables(context.Context, *SetVariablesRequest) (*Variables, error)
-	GetVariables(context.Context, *GetFunctionRequest) (*Variables, error)
-	CreateExecution(context.Context, *CreateExecutionRequest) (*Execution, error)
-	ListExecutions(context.Context, *ListExecutionsRequest) (*ListExecutionsResponse, error)
-	GetExecution(context.Context, *GetExecutionRequest) (*Execution, error)
+	// InvokeFunction 调用一个函数（v4 §2：CreateExecution 改名——一个动作一个
+	// 名字，与 client 面同名对齐；async=true 时立即返回 queued invocation）。
+	InvokeFunction(context.Context, *InvokeFunctionRequest) (*Invocation, error)
+	ListInvocations(context.Context, *ListInvocationsRequest) (*ListInvocationsResponse, error)
+	GetInvocation(context.Context, *GetInvocationRequest) (*Invocation, error)
 	// SetFunctionScopes 全量替换函数 declared_scopes（P0 执行身份）。独立 RPC
 	// 而非并入 UpdateFunctionRequest：repeated 字段无法表达「未设置=不修改」
 	// 的 presence 语义（proto 规范：更新类可选字段用 proto3 optional）。
 	SetFunctionScopes(context.Context, *SetFunctionScopesRequest) (*Function, error)
+	// RotateFunctionSecret 轮换 endpoint target 签名密钥（v4 §3/§4，语义与
+	// webhooks RotateWebhookSecret 一致）：新钥即刻生效（v1 签名），旧钥保留
+	// 一个宽限窗（v2 双签）——函数侧持旧钥的 FDK 过渡期不断流。新明文仅在
+	// 本响应出现一次。
+	RotateFunctionSecret(context.Context, *RotateFunctionSecretRequest) (*FunctionSecret, error)
 	// ——触发器管理（P1 触发器模块；K4/K10）——
 	//
-	// CreateFunctionTrigger 创建 HTTP 或 cron 触发器。http 的 token 由服务端
-	// 生成（128bit，URL 即鉴权）、不收入参；公开调用路由为
+	// CreateFunctionTrigger 创建 HTTP / cron / event 触发器。http 的 token 由
+	// 服务端生成（128bit，URL 即鉴权）、不收入参；公开调用路由为
 	// /f/{project_id}/{token}（FunctionTrigger.invoke_path）。
 	CreateFunctionTrigger(context.Context, *CreateFunctionTriggerRequest) (*FunctionTrigger, error)
 	ListFunctionTriggers(context.Context, *GetFunctionRequest) (*ListFunctionTriggersResponse, error)
@@ -357,13 +280,7 @@ type FunctionsServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedFunctionsServiceServer struct{}
 
-func (UnimplementedFunctionsServiceServer) ListRuntimes(context.Context, *v1.Empty) (*ListRuntimesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListRuntimes not implemented")
-}
-func (UnimplementedFunctionsServiceServer) ListSpecifications(context.Context, *v1.Empty) (*ListSpecificationsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListSpecifications not implemented")
-}
-func (UnimplementedFunctionsServiceServer) CreateFunction(context.Context, *CreateFunctionRequest) (*Function, error) {
+func (UnimplementedFunctionsServiceServer) CreateFunction(context.Context, *CreateFunctionRequest) (*CreateFunctionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateFunction not implemented")
 }
 func (UnimplementedFunctionsServiceServer) ListFunctions(context.Context, *v1.ListRequest) (*ListFunctionsResponse, error) {
@@ -378,35 +295,20 @@ func (UnimplementedFunctionsServiceServer) UpdateFunction(context.Context, *Upda
 func (UnimplementedFunctionsServiceServer) DeleteFunction(context.Context, *GetFunctionRequest) (*v1.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteFunction not implemented")
 }
-func (UnimplementedFunctionsServiceServer) CreateDeployment(context.Context, *CreateDeploymentRequest) (*Deployment, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateDeployment not implemented")
+func (UnimplementedFunctionsServiceServer) InvokeFunction(context.Context, *InvokeFunctionRequest) (*Invocation, error) {
+	return nil, status.Error(codes.Unimplemented, "method InvokeFunction not implemented")
 }
-func (UnimplementedFunctionsServiceServer) ListDeployments(context.Context, *ListDeploymentsRequest) (*ListDeploymentsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListDeployments not implemented")
+func (UnimplementedFunctionsServiceServer) ListInvocations(context.Context, *ListInvocationsRequest) (*ListInvocationsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListInvocations not implemented")
 }
-func (UnimplementedFunctionsServiceServer) GetDeployment(context.Context, *GetDeploymentRequest) (*Deployment, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetDeployment not implemented")
-}
-func (UnimplementedFunctionsServiceServer) DeleteDeployment(context.Context, *GetDeploymentRequest) (*v1.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteDeployment not implemented")
-}
-func (UnimplementedFunctionsServiceServer) SetVariables(context.Context, *SetVariablesRequest) (*Variables, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetVariables not implemented")
-}
-func (UnimplementedFunctionsServiceServer) GetVariables(context.Context, *GetFunctionRequest) (*Variables, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetVariables not implemented")
-}
-func (UnimplementedFunctionsServiceServer) CreateExecution(context.Context, *CreateExecutionRequest) (*Execution, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateExecution not implemented")
-}
-func (UnimplementedFunctionsServiceServer) ListExecutions(context.Context, *ListExecutionsRequest) (*ListExecutionsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListExecutions not implemented")
-}
-func (UnimplementedFunctionsServiceServer) GetExecution(context.Context, *GetExecutionRequest) (*Execution, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetExecution not implemented")
+func (UnimplementedFunctionsServiceServer) GetInvocation(context.Context, *GetInvocationRequest) (*Invocation, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetInvocation not implemented")
 }
 func (UnimplementedFunctionsServiceServer) SetFunctionScopes(context.Context, *SetFunctionScopesRequest) (*Function, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetFunctionScopes not implemented")
+}
+func (UnimplementedFunctionsServiceServer) RotateFunctionSecret(context.Context, *RotateFunctionSecretRequest) (*FunctionSecret, error) {
+	return nil, status.Error(codes.Unimplemented, "method RotateFunctionSecret not implemented")
 }
 func (UnimplementedFunctionsServiceServer) CreateFunctionTrigger(context.Context, *CreateFunctionTriggerRequest) (*FunctionTrigger, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateFunctionTrigger not implemented")
@@ -439,42 +341,6 @@ func RegisterFunctionsServiceServer(s grpc.ServiceRegistrar, srv FunctionsServic
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&FunctionsService_ServiceDesc, srv)
-}
-
-func _FunctionsService_ListRuntimes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(v1.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(FunctionsServiceServer).ListRuntimes(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: FunctionsService_ListRuntimes_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FunctionsServiceServer).ListRuntimes(ctx, req.(*v1.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _FunctionsService_ListSpecifications_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(v1.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(FunctionsServiceServer).ListSpecifications(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: FunctionsService_ListSpecifications_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FunctionsServiceServer).ListSpecifications(ctx, req.(*v1.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _FunctionsService_CreateFunction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -567,164 +433,56 @@ func _FunctionsService_DeleteFunction_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _FunctionsService_CreateDeployment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateDeploymentRequest)
+func _FunctionsService_InvokeFunction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InvokeFunctionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(FunctionsServiceServer).CreateDeployment(ctx, in)
+		return srv.(FunctionsServiceServer).InvokeFunction(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: FunctionsService_CreateDeployment_FullMethodName,
+		FullMethod: FunctionsService_InvokeFunction_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FunctionsServiceServer).CreateDeployment(ctx, req.(*CreateDeploymentRequest))
+		return srv.(FunctionsServiceServer).InvokeFunction(ctx, req.(*InvokeFunctionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _FunctionsService_ListDeployments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListDeploymentsRequest)
+func _FunctionsService_ListInvocations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListInvocationsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(FunctionsServiceServer).ListDeployments(ctx, in)
+		return srv.(FunctionsServiceServer).ListInvocations(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: FunctionsService_ListDeployments_FullMethodName,
+		FullMethod: FunctionsService_ListInvocations_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FunctionsServiceServer).ListDeployments(ctx, req.(*ListDeploymentsRequest))
+		return srv.(FunctionsServiceServer).ListInvocations(ctx, req.(*ListInvocationsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _FunctionsService_GetDeployment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetDeploymentRequest)
+func _FunctionsService_GetInvocation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetInvocationRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(FunctionsServiceServer).GetDeployment(ctx, in)
+		return srv.(FunctionsServiceServer).GetInvocation(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: FunctionsService_GetDeployment_FullMethodName,
+		FullMethod: FunctionsService_GetInvocation_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FunctionsServiceServer).GetDeployment(ctx, req.(*GetDeploymentRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _FunctionsService_DeleteDeployment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetDeploymentRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(FunctionsServiceServer).DeleteDeployment(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: FunctionsService_DeleteDeployment_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FunctionsServiceServer).DeleteDeployment(ctx, req.(*GetDeploymentRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _FunctionsService_SetVariables_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetVariablesRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(FunctionsServiceServer).SetVariables(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: FunctionsService_SetVariables_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FunctionsServiceServer).SetVariables(ctx, req.(*SetVariablesRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _FunctionsService_GetVariables_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetFunctionRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(FunctionsServiceServer).GetVariables(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: FunctionsService_GetVariables_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FunctionsServiceServer).GetVariables(ctx, req.(*GetFunctionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _FunctionsService_CreateExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateExecutionRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(FunctionsServiceServer).CreateExecution(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: FunctionsService_CreateExecution_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FunctionsServiceServer).CreateExecution(ctx, req.(*CreateExecutionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _FunctionsService_ListExecutions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListExecutionsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(FunctionsServiceServer).ListExecutions(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: FunctionsService_ListExecutions_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FunctionsServiceServer).ListExecutions(ctx, req.(*ListExecutionsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _FunctionsService_GetExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetExecutionRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(FunctionsServiceServer).GetExecution(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: FunctionsService_GetExecution_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FunctionsServiceServer).GetExecution(ctx, req.(*GetExecutionRequest))
+		return srv.(FunctionsServiceServer).GetInvocation(ctx, req.(*GetInvocationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -743,6 +501,24 @@ func _FunctionsService_SetFunctionScopes_Handler(srv interface{}, ctx context.Co
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(FunctionsServiceServer).SetFunctionScopes(ctx, req.(*SetFunctionScopesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FunctionsService_RotateFunctionSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RotateFunctionSecretRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FunctionsServiceServer).RotateFunctionSecret(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FunctionsService_RotateFunctionSecret_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FunctionsServiceServer).RotateFunctionSecret(ctx, req.(*RotateFunctionSecretRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -827,14 +603,6 @@ var FunctionsService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*FunctionsServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "ListRuntimes",
-			Handler:    _FunctionsService_ListRuntimes_Handler,
-		},
-		{
-			MethodName: "ListSpecifications",
-			Handler:    _FunctionsService_ListSpecifications_Handler,
-		},
-		{
 			MethodName: "CreateFunction",
 			Handler:    _FunctionsService_CreateFunction_Handler,
 		},
@@ -855,44 +623,24 @@ var FunctionsService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _FunctionsService_DeleteFunction_Handler,
 		},
 		{
-			MethodName: "CreateDeployment",
-			Handler:    _FunctionsService_CreateDeployment_Handler,
+			MethodName: "InvokeFunction",
+			Handler:    _FunctionsService_InvokeFunction_Handler,
 		},
 		{
-			MethodName: "ListDeployments",
-			Handler:    _FunctionsService_ListDeployments_Handler,
+			MethodName: "ListInvocations",
+			Handler:    _FunctionsService_ListInvocations_Handler,
 		},
 		{
-			MethodName: "GetDeployment",
-			Handler:    _FunctionsService_GetDeployment_Handler,
-		},
-		{
-			MethodName: "DeleteDeployment",
-			Handler:    _FunctionsService_DeleteDeployment_Handler,
-		},
-		{
-			MethodName: "SetVariables",
-			Handler:    _FunctionsService_SetVariables_Handler,
-		},
-		{
-			MethodName: "GetVariables",
-			Handler:    _FunctionsService_GetVariables_Handler,
-		},
-		{
-			MethodName: "CreateExecution",
-			Handler:    _FunctionsService_CreateExecution_Handler,
-		},
-		{
-			MethodName: "ListExecutions",
-			Handler:    _FunctionsService_ListExecutions_Handler,
-		},
-		{
-			MethodName: "GetExecution",
-			Handler:    _FunctionsService_GetExecution_Handler,
+			MethodName: "GetInvocation",
+			Handler:    _FunctionsService_GetInvocation_Handler,
 		},
 		{
 			MethodName: "SetFunctionScopes",
 			Handler:    _FunctionsService_SetFunctionScopes_Handler,
+		},
+		{
+			MethodName: "RotateFunctionSecret",
+			Handler:    _FunctionsService_RotateFunctionSecret_Handler,
 		},
 		{
 			MethodName: "CreateFunctionTrigger",

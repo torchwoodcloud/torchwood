@@ -30,10 +30,8 @@ type InvokeFunctionRequest struct {
 	FunctionId string                 `protobuf:"bytes,1,opt,name=function_id,json=functionId,proto3" json:"function_id,omitempty"`
 	// 函数入参：JSON object 字符串（≤32KB，服务端校验形状与字节上限）。
 	Data string `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
-	// 可选：指定 deployment（必须 ready）；缺省用最新 ready。
-	DeploymentId *string `protobuf:"bytes,3,opt,name=deployment_id,json=deploymentId,proto3,oneof" json:"deployment_id,omitempty"`
 	// 可选客户端幂等键：网络超时重试防重复执行。(project, function, user, key)
-	// 唯一去重，命中返回既有 execution 原样（进行中返回 running）。
+	// 唯一去重，命中返回既有 invocation 原样（进行中返回 running）。
 	IdempotencyKey string `protobuf:"bytes,4,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -79,13 +77,6 @@ func (x *InvokeFunctionRequest) GetFunctionId() string {
 func (x *InvokeFunctionRequest) GetData() string {
 	if x != nil {
 		return x.Data
-	}
-	return ""
-}
-
-func (x *InvokeFunctionRequest) GetDeploymentId() string {
-	if x != nil && x.DeploymentId != nil {
-		return *x.DeploymentId
 	}
 	return ""
 }
@@ -163,14 +154,12 @@ var File_client_v1_functions_proto protoreflect.FileDescriptor
 
 const file_client_v1_functions_proto_rawDesc = "" +
 	"\n" +
-	"\x19client/v1/functions.proto\x12\x13torchwood.client.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\"\xce\x01\n" +
+	"\x19client/v1/functions.proto\x12\x13torchwood.client.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\"\xa7\x01\n" +
 	"\x15InvokeFunctionRequest\x12'\n" +
 	"\vfunction_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"functionId\x12\x1d\n" +
-	"\x04data\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x02R\x04data\x12(\n" +
-	"\rdeployment_id\x18\x03 \x01(\tH\x00R\fdeploymentId\x88\x01\x01\x121\n" +
-	"\x0fidempotency_key\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x01R\x0eidempotencyKeyB\x10\n" +
-	"\x0e_deployment_id\"o\n" +
+	"\x04data\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x02R\x04data\x121\n" +
+	"\x0fidempotency_key\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x01R\x0eidempotencyKeyJ\x04\b\x03\x10\x04R\rdeployment_id\"o\n" +
 	"\x16InvokeFunctionResponse\x12!\n" +
 	"\fexecution_id\x18\x01 \x01(\tR\vexecutionId\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12\x1a\n" +
@@ -224,7 +213,6 @@ func file_client_v1_functions_proto_init() {
 	if File_client_v1_functions_proto != nil {
 		return
 	}
-	file_client_v1_functions_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

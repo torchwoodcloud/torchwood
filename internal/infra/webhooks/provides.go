@@ -26,10 +26,11 @@ var ProviderSet = wire.NewSet(
 )
 
 // NewGuardedDeliveryClient 返回生产出站 client：ssrfguard 拨号点校验、
-// 无放行开关（webhook endpoint 比内网 git 更不可信）、无客户端级超时
-// （预算由每次投递的 ctx 承载）。
+// 无放行开关（webhook 接收方不受 functions.invoke.allow_private_targets
+// 平台级开关影响——恒 false）、无客户端级超时（预算由每次投递的 ctx
+// 承载）。
 func NewGuardedDeliveryClient() *http.Client {
-	return infrafunctions.NewGuardedInvokerClient()
+	return infrafunctions.NewGuardedInvokerClient(false)
 }
 
 // NewNotifier 构造事件轴投递出口（domainfunctions.Notifier 生产实现）：

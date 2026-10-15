@@ -64,28 +64,17 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   }
 };
 
-// FunctionsService manages functions, their code deployments, variables
-// and executions. Deployments are zip code packages built into Docker
-// images; executions run the built image synchronously or asynchronously
-// via a worker queue.
+// FunctionsService 管理 Functions v4 的函数与调用（docs/design/functions-v4.md）：
+// 函数 = 常驻服务（endpoint target），torchwood 只做路由、身份、记账与投递
+// ——执行面（打包/构建/部署/池/运行时/变量）已整体外包，归 fleetly CLI 或
+// 用户自有工具链。一次调用统一为 invocation（v4 §2 重命名：CreateExecution →
+// InvokeFunction / executions → invocations）。
 service FunctionsService {
   option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
-  // functions:runtimes / functions:specifications 为自定义方法段（REST
-  // 自定义动词），不再占用 function_id 命名空间；function_id 可自由取任意合法值。
-  rpc ListRuntimes(shared.v1.Empty) returns (ListRuntimesResponse) {
-    option (google.api.http) = { get: "/v1/server/functions:runtimes" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
-    };
-  }
-  rpc ListSpecifications(shared.v1.Empty) returns (ListSpecificationsResponse) {
-    option (google.api.http) = { get: "/v1/server/functions:specifications" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
-    };
-  }
-  rpc CreateFunction(CreateFunctionRequest) returns (Function) {
+  // CreateFunction 创建函数：endpoint target（url）创建时录入，签名密钥
+  // 服务端生成、明文仅在本响应出现一次（之后只出指纹）。
+  rpc CreateFunction(CreateFunctionRequest) returns (CreateFunctionResponse) {
     option (google.api.http) = { post: "/v1/server/functions", body: "*" };
     option (grpcapi.v1.method_auth) = {
       admin_roles: ["admin", "owner"]
@@ -118,62 +107,23 @@ service FunctionsService {
       api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
     };
   }
-  rpc CreateDeployment(CreateDeploymentRequest) returns (Deployment) {
-    option (google.api.http) = { post: "/v1/server/functions/{function_id}/deployments", body: "*" };
+  // InvokeFunction 调用一个函数（v4 §2：CreateExecution 改名——一个动作一个
+  // 名字，与 client 面同名对齐；async=true 时立即返回 queued invocation）。
+  rpc InvokeFunction(InvokeFunctionRequest) returns (Invocation) {
+    option (google.api.http) = { post: "/v1/server/functions/{function_id}:invoke", body: "*" };
     option (grpcapi.v1.method_auth) = {
       admin_roles: ["admin", "owner"]
       api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
     };
   }
-  rpc ListDeployments(ListDeploymentsRequest) returns (ListDeploymentsResponse) {
-    option (google.api.http) = { get: "/v1/server/functions/{function_id}/deployments" };
+  rpc ListInvocations(ListInvocationsRequest) returns (ListInvocationsResponse) {
+    option (google.api.http) = { get: "/v1/server/functions/{function_id}/invocations" };
     option (grpcapi.v1.method_auth) = {
       api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
     };
   }
-  rpc GetDeployment(GetDeploymentRequest) returns (Deployment) {
-    option (google.api.http) = { get: "/v1/server/functions/{function_id}/deployments/{deployment_id}" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
-    };
-  }
-  rpc DeleteDeployment(GetDeploymentRequest) returns (shared.v1.Empty) {
-    option (google.api.http) = { delete: "/v1/server/functions/{function_id}/deployments/{deployment_id}" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
-    };
-  }
-  rpc SetVariables(SetVariablesRequest) returns (Variables) {
-    option (google.api.http) = { put: "/v1/server/functions/{function_id}/variables", body: "*" };
-    // 敏感方法显式声明 method_auth（R10-P1-1），不依赖服务级默认值。
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
-    };
-  }
-  rpc GetVariables(GetFunctionRequest) returns (Variables) {
-    option (google.api.http) = { get: "/v1/server/functions/{function_id}/variables" };
-    // 敏感方法显式声明 method_auth（R10-P1-1），不依赖服务级默认值。
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
-    };
-  }
-  rpc CreateExecution(CreateExecutionRequest) returns (Execution) {
-    option (google.api.http) = { post: "/v1/server/functions/{function_id}/executions", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
-    };
-  }
-  rpc ListExecutions(ListExecutionsRequest) returns (ListExecutionsResponse) {
-    option (google.api.http) = { get: "/v1/server/functions/{function_id}/executions" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
-    };
-  }
-  rpc GetExecution(GetExecutionRequest) returns (Execution) {
-    option (google.api.http) = { get: "/v1/server/functions/{function_id}/executions/{execution_id}" };
+  rpc GetInvocation(GetInvocationRequest) returns (Invocation) {
+    option (google.api.http) = { get: "/v1/server/functions/{function_id}/invocations/{invocation_id}" };
     option (grpcapi.v1.method_auth) = {
       api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
     };
@@ -183,7 +133,18 @@ service FunctionsService {
   // 的 presence 语义（proto 规范：更新类可选字段用 proto3 optional）。
   rpc SetFunctionScopes(SetFunctionScopesRequest) returns (Function) {
     option (google.api.http) = { put: "/v1/server/functions/{function_id}/scopes", body: "*" };
-    // 镜像 SetVariables 先例：敏感方法显式声明 method_auth（R10-P1-1）。
+    // 镜像敏感方法显式声明 method_auth 先例（R10-P1-1）。
+    option (grpcapi.v1.method_auth) = {
+      admin_roles: ["admin", "owner"]
+      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    };
+  }
+  // RotateFunctionSecret 轮换 endpoint target 签名密钥（v4 §3/§4，语义与
+  // webhooks RotateWebhookSecret 一致）：新钥即刻生效（v1 签名），旧钥保留
+  // 一个宽限窗（v2 双签）——函数侧持旧钥的 FDK 过渡期不断流。新明文仅在
+  // 本响应出现一次。
+  rpc RotateFunctionSecret(RotateFunctionSecretRequest) returns (FunctionSecret) {
+    option (google.api.http) = { post: "/v1/server/functions/{function_id}:rotate-secret", body: "*" };
     option (grpcapi.v1.method_auth) = {
       admin_roles: ["admin", "owner"]
       api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
@@ -192,8 +153,8 @@ service FunctionsService {
 
   // ——触发器管理（P1 触发器模块；K4/K10）——
   //
-  // CreateFunctionTrigger 创建 HTTP 或 cron 触发器。http 的 token 由服务端
-  // 生成（128bit，URL 即鉴权）、不收入参；公开调用路由为
+  // CreateFunctionTrigger 创建 HTTP / cron / event 触发器。http 的 token 由
+  // 服务端生成（128bit，URL 即鉴权）、不收入参；公开调用路由为
   // /f/{project_id}/{token}（FunctionTrigger.invoke_path）。
   rpc CreateFunctionTrigger(CreateFunctionTriggerRequest) returns (FunctionTrigger) {
     option (google.api.http) = { post: "/v1/server/functions/{function_id}/triggers", body: "*" };
@@ -227,14 +188,21 @@ service FunctionsService {
   }
 }
 
+// Function 是函数视图。v4 target 模型（§3）：执行位置 = endpoint 常驻服务；
+// 池策略/运行时/资源规格归 substrate（fleetly 副本数 / k8s HPA / 用户自管），
+// 字段号与名称 retired（见 reserved）。
 message Function {
   string id = 1;
   string project_id = 2;
   string name = 3;
-  string runtime = 4;
-  string entrypoint = 5;
+  // runtime（字段 4）/ entrypoint（字段 5）已退役（v4 执行面外包：运行时与
+  // 入口归部署侧；proto 纪律：号段与名称封存，永不复用）。
+  reserved 4, 5;
+  reserved "runtime", "entrypoint";
   int32 timeout_seconds = 6;
-  string spec = 7;
+  // spec（字段 7）已退役：资源规格归 substrate。
+  reserved 7;
+  reserved "spec";
   bool enabled = 8;
   google.protobuf.Timestamp created_at = 9;
   google.protobuf.Timestamp updated_at = 10;
@@ -253,103 +221,67 @@ message Function {
   int32 client_per_user_limit = 14;
   // 限频窗口：minute | hour | day（day 按 UTC 日期）。
   string client_limit_window = 15;
-  // ——池策略（只读视图；管理经 UpdateFunctionRequest optional ×5，
-  // docs/design/functions-v3.md §5/OQ2）——
-  int32 min_instances = 16;
-  int32 max_instances = 17;
-  int32 idle_ttl_seconds = 18;
-  int32 max_requests_per_instance = 19;
-  // 单实例并发上限（1..16；>1 要求函数可重入）。
-  int32 concurrency = 20;
+  // ——池策略五字段（字段 16-20）已退役（v4 §3：池策略归 substrate）——
+  reserved 16, 17, 18, 19, 20;
+  reserved "min_instances", "max_instances", "idle_ttl_seconds",
+      "max_requests_per_instance", "concurrency";
+  // endpoint target（v4 §3 单一 endpoint kind；proto 留 fleetly kind 扩展位
+  // ——仅当需要原生 warm invoke/指标透出时立项，v4 不实现）。
+  FunctionTarget target = 21;
 }
 
-message RuntimeInfo {
-  string id = 1;
-  string name = 2;
-  string entrypoint = 3;
-  // ——运行时指定扩展（docs/design/functions-runtime-selection.md §1/§6）——
-  // 语言族（node | go | image | python）：探测对账轴，客户端可据此做源
-  // 形态提示。
-  string family = 4;
-  // 生命周期状态（active | deprecated | eol；deprecated 可用但客户端应
-  // 提示；eol 拒绝新建函数/新部署，存量 ready 部署不受影响）。
-  string status = 5;
-  // 新建函数的缺省 runtime（node 家族内有且仅有一个）。
-  bool is_default = 6;
-  // 上游 EOL 日期（如 Node.js 官方时间表）；active 恒缺省。
-  optional google.protobuf.Timestamp eol_at = 7;
+// FunctionTarget 是函数的执行终点（v4 §3 单一 endpoint target 模型）。
+// 密钥任何形态不回显：明文仅在创建/轮换响应一次性返回（实施勘误 2026-10-15：
+// 签名方每次调用需明文计算 HMAC——密钥本体 secretbox 加密落库，API 面只出
+// 指纹），管理面只出 secret_fingerprint。
+message FunctionTarget {
+  // 函数常驻服务的调用终点（生产强制 https；开发环境经 app 层放行 http）。
+  string url = 1;
+  // 签名密钥指纹（"twfnsec_" + SHA-256 前 8 hex；比对用，非明文）。
+  string secret_fingerprint = 2;
+  // 最近一次密钥轮换时刻（宽限窗内旧钥 v2 双签）。
+  google.protobuf.Timestamp secret_rotated_at = 3;
 }
 
-message SpecificationInfo {
-  string id = 1;
-  string cpu = 2;
-  string memory = 3;
-}
-
-message Deployment {
+// Invocation 是一次函数调用记录（v4 §2：Execution 改名——torchwood 只发起
+// 调用、不执行）。stdout/stderr 已退役：日志归 substrate 侧（fleetly logs /
+// 用户服务自管），torchwood 只见网关往返结果。
+message Invocation {
   string id = 1;
   string function_id = 2;
-  int64 size = 3;
-  string status = 4;
-  string error = 5;
-  google.protobuf.Timestamp created_at = 6;
-  google.protobuf.Timestamp updated_at = 7;
-  // ——部署源只读投影（二期起，docs/design/functions-runtimes-and-sources.md
-  // §0；source 列 INSERT 期写全、之后不可变）——
-  // 部署源类型：zip | git | image（词表与 DB CHECK 同源）。
-  string source_type = 8;
-  // git 仓库 url / image 原始引用（host/repo[:tag|@sha256:...]）；zip 源恒空。
-  string source_url = 9;
-  // git 钉死的 commit SHA / image 钉死的 digest（sha256:...）；zip 源恒空。
-  string source_ref = 10;
-  // git 构建上下文子目录；zip/image 源恒空。凭证字段不出现在任何响应面。
-  string source_dir = 11;
-  // 构建所用 runtime ID 快照（docs/design/functions-runtime-selection.md
-  // §4；迁移 000025：INSERT 期写全、之后不可变）——补构建/审计以行内
-  // 快照为准，不随后续 fn.runtime 变更漂移。
-  string runtime = 12;
-}
-
-message Variables {
-  repeated Variable variables = 1;
-}
-
-message Variable {
-  string key = 1;
-  // 环境变量值：SetVariables 请求透传明文；GetVariables 与 SetVariables
-  // 响应统一返回掩码（"******"），真实值仅在 SetVariables 请求中可见一次
-  // （对齐 internal/app/functions/variables.go 的 secretMask 约定）。
-  string value = 2;
-}
-
-message Execution {
-  string id = 1;
-  string function_id = 2;
-  string deployment_id = 3;
+  // deployment_id（字段 3）已退役：部署面随执行面外包消解。
+  reserved 3;
+  reserved "deployment_id";
+  // queued | running | completed | failed（v4 收敛：building 态随补构建退役）。
   string status = 4;
   string response = 5;
-  string stdout = 6;
-  string stderr = 7;
+  // stdout/stderr（字段 6/7）已退役：日志归 substrate 侧。
+  reserved 6, 7;
+  reserved "stdout", "stderr";
   int32 status_code = 8;
   int64 duration_ms = 9;
   string error = 10;
   bool response_truncated = 11;
-  bool stdout_truncated = 12;
-  bool stderr_truncated = 13;
+  // stdout_truncated/stderr_truncated（字段 12/13）已退役（同 stdout/stderr）。
+  reserved 12, 13;
+  reserved "stdout_truncated", "stderr_truncated";
   google.protobuf.Timestamp created_at = 14;
   google.protobuf.Timestamp updated_at = 15;
 }
 
 message CreateFunctionRequest {
-  // 客户端自选 function_id；functions:runtimes / functions:specifications
-  // 为自定义方法段（REST 自定义动词），不再占用 function_id 命名空间，
+  // 客户端自选 function_id；functions:invoke / functions:rotate-secret
+  // 为自定义方法段（REST 自定义动词），不占用 function_id 命名空间，
   // 可自由取任意合法值。
   string id = 1;
   string name = 2;
-  string runtime = 3;
-  string entrypoint = 4;
+  // runtime（字段 3）/ entrypoint（字段 4）已退役（v4 执行面外包）。
+  reserved 3, 4;
+  reserved "runtime", "entrypoint";
   optional int32 timeout_seconds = 5;
-  optional string spec = 6;
+  // spec（字段 6）已退役：资源规格归 substrate。
+  reserved 6;
+  reserved "spec";
   optional bool enabled = 7;
   // 执行身份声明（P0）：词表校验/去重在服务端（app 层），空集合法。
   repeated string declared_scopes = 8;
@@ -360,14 +292,35 @@ message CreateFunctionRequest {
   // client_callable=true 时必须 >= 1。
   optional int32 client_per_user_limit = 11 [(buf.validate.field).int32.gte = 0];
   optional string client_limit_window = 12 [(buf.validate.field).string = { in: ["minute", "hour", "day"] }];
+  // endpoint target url（v4 §3）：函数常驻服务的调用终点。生产强制 https
+  //（开发环境可放行 http，校验在服务端 app 层按环境裁决）。
+  string target_url = 13 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string = { min_len: 9, max_len: 2048 }
+  ];
+  // 可选自定义签名密钥（twfnsec_ 前缀；空 = 服务端生成）。两种来源都只在
+  // 本请求出现一次，落库前加密。
+  optional string target_secret = 14 [(buf.validate.field).string.min_len = 16];
+}
+
+// CreateFunctionResponse 是创建响应：函数视图 + 一次性 target 签名密钥明文
+//（仅此一次；之后任何面只出指纹）。
+message CreateFunctionResponse {
+  Function function = 1;
+  // target 签名密钥明文（服务端生成或透传录入值）。之后只出指纹。
+  string target_secret = 2;
 }
 
 message UpdateFunctionRequest {
   string function_id = 1;
   optional string name = 2;
-  optional string entrypoint = 3;
+  // entrypoint（字段 3）已退役（v4 执行面外包）。
+  reserved 3;
+  reserved "entrypoint";
   optional int32 timeout_seconds = 4;
-  optional string spec = 5;
+  // spec（字段 5）已退役：资源规格归 substrate。
+  reserved 5;
+  reserved "spec";
   optional bool enabled = 6;
   // ——客户端调用面策略（P2，设计 §4；未设置 = 不修改）——
   optional bool client_callable = 7;
@@ -375,112 +328,44 @@ message UpdateFunctionRequest {
   optional bool client_anonymous_allowed = 8;
   optional int32 client_per_user_limit = 9 [(buf.validate.field).int32.gte = 0];
   optional string client_limit_window = 10 [(buf.validate.field).string = { in: ["minute", "hour", "day"] }];
-  // ——池策略（P0.5 执行器 v2 + v3 多路复用，docs/design/functions-v3.md
-  // §5/Key Decisions D15/OQ2 收口；未设置 = 不修改）——
-  // 范围注解与 DB CHECK 约束同源（迁移 000014/000017）：
-  // min>=0、max>=1、idle_ttl>=30、max_requests>=1、concurrency 1..16。
-  // min_instances ≤ max_instances 的跨字段校验在 app 用例层。
-  // 保温下限（0 = 纯 scale-from-zero）。
-  optional int32 min_instances = 11 [(buf.validate.field).int32.gte = 0];
-  // 突发并发上限（超限有界排队）。
-  optional int32 max_instances = 12 [(buf.validate.field).int32.gte = 1];
-  // 空闲回收阈值（秒；实例数 > min 时）。
-  optional int32 idle_ttl_seconds = 13 [(buf.validate.field).int32.gte = 30];
-  // 实例请求数到期排空替换（防内存泄漏，Lambda 同款）。
-  optional int32 max_requests_per_instance = 14 [(buf.validate.field).int32.gte = 1];
-  // 单实例并发上限（v3 实例内多路复用；默认 1 = v2 串行等价，>1 要求函数
-  // 可重入；CHECK 上限 16）。
-  optional int32 concurrency = 15 [
-    (buf.validate.field).int32.gte = 1,
-    (buf.validate.field).int32.lte = 16
+  // ——池策略五字段（字段 11-15）与 runtime（字段 16）已退役（v4 §3）——
+  reserved 11, 12, 13, 14, 15, 16;
+  reserved "min_instances", "max_instances", "idle_ttl_seconds",
+      "max_requests_per_instance", "concurrency", "runtime";
+  // endpoint target url（v4 §3）：未设置 = 不修改；密钥变更走
+  // RotateFunctionSecret（与 webhooks Update/Rotate 分工一致）。
+  optional string target_url = 17 [
+    (buf.validate.field).string = { min_len: 9, max_len: 2048 }
   ];
-  // 运行时 ID（docs/design/functions-runtime-selection.md §3）：未设置 =
-  // 不修改。只影响后续新 deployment 的构建（存量 ready 部署镜像已构建
-  // 完毕不受影响）；eol runtime 拒绝（app 层状态门，错误文案列出可选
-  // runtime）。从 eol 迁出到新版本是合法且期望的操作路径。
-  optional string runtime = 16;
 }
 
 message GetFunctionRequest {
   string function_id = 1;
 }
 
-// 部署源 oneof（二期起，docs/design/functions-runtimes-and-sources.md §0）：
-// code 为 zip 代码包，≤1MiB 走此通道；更大的 zip 包走 multipart 上传
-// （POST /v1/server/functions/{function_id}/deployments/code，仅承载 zip）。
-// git/image 源载荷极小，仅走本 gRPC JSON 通道、不设 multipart 形态：git 由
-// 独立 packer 服务物化为 zip 落既有构建路径；image 为免构建路径
-// （pull + digest 钉死 + retag + 契约验证，runtime 专用 ID `image`，源/运行时
-// 互斥见 §0）。字段号 2 原号移入 oneof，wire 兼容。
-message CreateDeploymentRequest {
+// RotateFunctionSecretRequest 轮换 endpoint target 签名密钥。
+message RotateFunctionSecretRequest {
+  string function_id = 1 [(buf.validate.field).required = true];
+}
+
+// FunctionSecret 是轮换响应：明文只出现这一次，调用方立即部署到函数侧。
+message FunctionSecret {
   string function_id = 1;
-  oneof source {
-    bytes code = 2;
-    GitSource git = 3;
-    ImageSource image = 4;
-  }
+  // 签名密钥明文（twfnsec_ 前缀 + 32 字节 base64url）。之后只出指纹。
+  string secret = 2;
+  // 轮换后的指纹（便于与既有记录核对）。
+  string secret_fingerprint = 3;
 }
 
-// GitSource 是 git 仓库部署源（packer 归一为 zip，设计 §2）。
-message GitSource {
-  // 仓库地址。https 为生产形态；file:// 仅 development 环境放行（server
-  // app 层按 TORCHWOOD_ENV 收紧，非 dev 一律 InvalidArgument）。SSRF 防护
-  // （拨号点 IP guard）与 userinfo 拒绝由 packer 服务执行。
-  string url = 1 [
-    (buf.validate.field).required = true,
-    (buf.validate.field).string.max_len = 2048,
-    (buf.validate.field).string.pattern = "^(https|file)://"
-  ];
-  // branch/tag/commit；缺省 HEAD（服务端解析并钉死为 commit SHA）。
-  string ref = 2 [(buf.validate.field).string.max_len = 256];
-  // 仓库内子目录 = 构建上下文根；缺省根目录。
-  string directory = 3 [(buf.validate.field).string.max_len = 512];
-  // 可选 Basic 凭证（PAT）。username/token 均一次性凭证：仅本次请求内存、
-  // 不落库不回显（D8），审计载荷由敏感键 mask 兜底。
-  string username = 4 [(buf.validate.field).string.max_len = 256];
-  string token = 5 [(buf.validate.field).string.max_len = 4096];
-}
-
-// ImageSource 是 BYO 镜像部署源（三期，设计 §3）：免构建路径——平台拉取
-// 引用镜像（tag 构建期钉死为 digest）→ retag 进平台命名 → 强制契约验证
-// （:18080 /_tw/health 探针）。仅 runtime = `image` 的函数接受（源/运行时
-// 互斥，§0/D7）。
-message ImageSource {
-  // 镜像引用：host/repo[:tag|@sha256:...]。tag 在导入期钉死为 digest（落
-  // Deployment.source_ref，防 tag 漂移）；host 侧 SSRF 防护与 registry
-  // 白名单由 dispatcher 侧执行（阶段 2 接线）。
-  string image = 1 [
-    (buf.validate.field).required = true,
-    (buf.validate.field).string.max_len = 500
-  ];
-  // 可选 registry 凭证。username/token 均一次性凭证：仅本次请求内存、转发
-  // dispatcher 拉取用、不落库不回显（D8），审计载荷由敏感键 mask 兜底；
-  // 私有镜像的 worker 补拉因凭证不落库而受限（声明边界，§3）。
-  string registry_username = 2 [(buf.validate.field).string.max_len = 256];
-  string registry_token = 3 [(buf.validate.field).string.max_len = 4096];
-}
-
-message GetDeploymentRequest {
+// InvokeFunctionRequest 调用一个函数（v4 §2：CreateExecutionRequest 改名；
+// deployment_id 已随部署面退役——目标恒为函数当前的 endpoint target）。
+message InvokeFunctionRequest {
   string function_id = 1;
-  string deployment_id = 2;
-}
-
-message CreateExecutionRequest {
-  string function_id = 1;
-  optional string deployment_id = 2; // 缺省用最新 ready deployment
+  // deployment_id（字段 2）已退役：部署面随执行面外包消解。
+  reserved 2;
+  reserved "deployment_id";
   string data = 3;
   optional bool async = 4;
-}
-
-message GetExecutionRequest {
-  string function_id = 1;
-  string execution_id = 2;
-}
-
-// SetVariablesRequest 全量替换函数环境变量。
-message SetVariablesRequest {
-  string function_id = 1;
-  repeated Variable variables = 2;
 }
 
 // SetFunctionScopesRequest 全量替换函数 declared_scopes（P0 执行身份；
@@ -488,6 +373,12 @@ message SetVariablesRequest {
 message SetFunctionScopesRequest {
   string function_id = 1;
   repeated string declared_scopes = 2;
+}
+
+// GetInvocationRequest 按 id 寻址调用记录。
+message GetInvocationRequest {
+  string function_id = 1;
+  string invocation_id = 2;
 }
 
 // ——触发器管理（P1）——
@@ -606,45 +497,24 @@ message RotateFunctionTriggerTokenRequest {
   string trigger_id = 2 [(buf.validate.field).required = true];
 }
 
-message ListRuntimesResponse {
-  repeated RuntimeInfo runtimes = 1;
-}
-
-message ListSpecificationsResponse {
-  repeated SpecificationInfo specifications = 1;
-}
-
 message ListFunctionsResponse {
   repeated Function functions = 1;
   shared.v1.ListResponseMeta meta = 2;
 }
 
-// ListDeploymentsRequest 分页拉取部署（created_at DESC，offset 型 page_token
-// 由服务端签发）。
-message ListDeploymentsRequest {
-  string function_id = 1 [(buf.validate.field).required = true];
-  int32 page_size = 2 [(buf.validate.field).int32 = { gte: 0, lte: 1000 }];
-  string page_token = 3 [(buf.validate.field).string.max_len = 4096];
-}
-
-// ListExecutionsRequest 分页拉取执行记录（排障面：status 精确 + created_at
+// ListInvocationsRequest 分页拉取调用记录（排障面：status 精确 + created_at
 // 闭区间过滤，结构化字段沿 audit-logs 先例）。
-message ListExecutionsRequest {
+message ListInvocationsRequest {
   string function_id = 1 [(buf.validate.field).required = true];
   int32 page_size = 2 [(buf.validate.field).int32 = { gte: 0, lte: 1000 }];
   string page_token = 3 [(buf.validate.field).string.max_len = 4096];
-  // 执行状态精确匹配：queued | building | running | completed | failed。
+  // 调用状态精确匹配：queued | running | completed | failed。
   string status = 4 [(buf.validate.field).string.max_len = 16];
   google.protobuf.Timestamp created_after = 5;
   google.protobuf.Timestamp created_before = 6;
 }
 
-message ListDeploymentsResponse {
-  repeated Deployment deployments = 1;
-  shared.v1.ListResponseMeta meta = 2;
-}
-
-message ListExecutionsResponse {
-  repeated Execution executions = 1;
+message ListInvocationsResponse {
+  repeated Invocation invocations = 1;
   shared.v1.ListResponseMeta meta = 2;
 }

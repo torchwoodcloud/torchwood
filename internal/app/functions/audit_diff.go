@@ -26,14 +26,11 @@ func recordAuditChanges(ctx context.Context, before, after *domainfunctions.Func
 	if before.Name != after.Name {
 		put("name", before.Name, after.Name)
 	}
-	if before.Entrypoint != after.Entrypoint {
-		put("entrypoint", before.Entrypoint, after.Entrypoint)
+	if before.TargetURL != after.TargetURL {
+		put("target_url", before.TargetURL, after.TargetURL)
 	}
 	if before.TimeoutSeconds != after.TimeoutSeconds {
 		put("timeout_seconds", before.TimeoutSeconds, after.TimeoutSeconds)
-	}
-	if before.Spec != after.Spec {
-		put("spec", before.Spec, after.Spec)
 	}
 	if before.Enabled != after.Enabled {
 		put("enabled", before.Enabled, after.Enabled)
@@ -49,21 +46,6 @@ func recordAuditChanges(ctx context.Context, before, after *domainfunctions.Func
 	}
 	if before.ClientLimitWindow != after.ClientLimitWindow {
 		put("client_limit_window", before.ClientLimitWindow, after.ClientLimitWindow)
-	}
-	if before.MinInstances != after.MinInstances {
-		put("min_instances", before.MinInstances, after.MinInstances)
-	}
-	if before.MaxInstances != after.MaxInstances {
-		put("max_instances", before.MaxInstances, after.MaxInstances)
-	}
-	if before.IdleTTLSeconds != after.IdleTTLSeconds {
-		put("idle_ttl_seconds", before.IdleTTLSeconds, after.IdleTTLSeconds)
-	}
-	if before.MaxRequestsPerInstance != after.MaxRequestsPerInstance {
-		put("max_requests_per_instance", before.MaxRequestsPerInstance, after.MaxRequestsPerInstance)
-	}
-	if before.Concurrency != after.Concurrency {
-		put("concurrency", before.Concurrency, after.Concurrency)
 	}
 	if len(changes) == 0 {
 		return

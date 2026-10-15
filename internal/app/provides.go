@@ -42,10 +42,9 @@ var ProviderSet = wire.NewSet(
 	console.NewAdmins,
 	console.NewSetup,
 	storage.NewStorage,
-	// P2 客户端调用面 + 二期阶段 3（git 部署源）：Wire 装配入口带每用户
-	// 限频端口与 SourcePacker（packer HTTP 客户端）。
-	functions.NewFunctionsWithSourcePacker,
-	functions.ProvideSemaphores,
+	// v4 Functions 聚合（Wire 装配入口）：双轴调用端口（Invoker/Notifier）、
+	// 每用户限频与身份/触发器端口经 infra 集绑定注入。
+	functions.NewFunctions,
 	// Webhooks 一等公民（v4 §6，D5）：CRUD + 投递引擎聚合（server 消费
 	// CRUD/浏览面，worker 另经 DeliveryScheduler 端口消费引擎面）。
 	webhooks.NewService,

@@ -47,7 +47,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/FunctionsServiceInvokeFunctionBody"
+              "$ref": "#/definitions/torchwoodclientv1FunctionsServiceInvokeFunctionBody"
             }
           }
         ],
@@ -58,20 +58,16 @@
     }
   },
   "definitions": {
-    "FunctionsServiceInvokeFunctionBody": {
+    "torchwoodclientv1FunctionsServiceInvokeFunctionBody": {
       "type": "object",
       "properties": {
         "data": {
           "type": "string",
           "title": "函数入参：JSON object 字符串（≤32KB，服务端校验形状与字节上限）。"
         },
-        "deployment_id": {
-          "type": "string",
-          "title": "可选：指定 deployment（必须 ready）；缺省用最新 ready。"
-        },
         "idempotency_key": {
           "type": "string",
-          "title": "可选客户端幂等键：网络超时重试防重复执行。(project, function, user, key)\n唯一去重，命中返回既有 execution 原样（进行中返回 running）。"
+          "title": "可选客户端幂等键：网络超时重试防重复执行。(project, function, user, key)\n唯一去重，命中返回既有 invocation 原样（进行中返回 running）。"
         }
       }
     },

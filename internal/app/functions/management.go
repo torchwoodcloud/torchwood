@@ -2,53 +2,56 @@ package functions
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
 	appshared "github.com/torchwoodcloud/torchwood/internal/app/shared"
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
+	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
+	"github.com/torchwoodcloud/torchwood/pkg/secretbox"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-// functionIDPattern 限制 Function ID 字符集与长度（防路径穿越拼入 zip 路径
-// 与镜像名；须以小写字母/数字开头，仅含小写字母/数字/下划线/连字符，最长 64；
-// 大写禁用：Docker 镜像仓库/标签名只允许小写，见 G6-3/R08-P1-1）。
+// functionIDPattern 限制 Function ID 字符集与长度（防路径穿越与逻辑名歧义；
+// 须以小写字母/数字开头，仅含小写字母/数字/下划线/连字符，最长 64）。
 var functionIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 
 const (
 	// minTimeoutSeconds / maxTimeoutSeconds 是函数超时允许范围（§5.2）。
 	minTimeoutSeconds = 1
 	maxTimeoutSeconds = 300
-	// maxSyncTimeoutSeconds 限制同步执行超时（grpc-gateway WriteTimeout 余量）。
+	// maxSyncTimeoutSeconds 限制同步调用超时（grpc-gateway WriteTimeout 余量）。
 	maxSyncTimeoutSeconds = 30
 	// defaultTimeoutSeconds 是创建函数未显式指定 timeout_seconds 时的服务端默认值
-	// （与 Console 前端默认值 15 及 DB 列 DEFAULT 15 保持一致）。
+	//（与 Console 前端默认值 15 及 DB 列 DEFAULT 15 保持一致）。
 	defaultTimeoutSeconds = 15
 
-	// ——池策略值域（P0.5 执行器 v2 + v3 多路复用；与 DB CHECK 约束同源，
-	// 迁移 000014/000017；docs/design/functions-v3.md §5/OQ2）——
-	minMinInstances    = 0
-	minMaxInstances    = 1
-	minIdleTTLSeconds  = 30
-	minMaxRequests     = 1
-	minConcurrency     = 1
-	maxConcurrency     = 16 // DB CHECK 与迁移 000017 同源（D2：8×16=128 够单机拓扑）
-	defaultConcurrency = 1
+	// targetSecretMinLen 是自定义 target 签名密钥的最小长度（protovalidate
+	// 同源；服务端生成值 43+ 字符恒满足）。
+	targetSecretMinLen = 16
+	// maxTargetURLBytes 是 target url 的字节上限（protovalidate 同源）。
+	maxTargetURLBytes = 2048
 )
 
+// CreateFunctionCommand 创建函数命令（v4：target 字段进、池字段退）。
 type CreateFunctionCommand struct {
-	ID             string
-	ProjectID      string
-	Name           string
-	Runtime        string
-	Entrypoint     string
+	ID        string
+	ProjectID string
+	Name      string
+	// TimeoutSeconds 可选（nil = 服务端默认 15）。
 	TimeoutSeconds *int
-	Spec           string
 	Enabled        *bool
 	DeclaredScopes []string
+	// ——endpoint target（v4 §3）——TargetURL 必填（https-or-dev 校验）；
+	// TargetSecret 可选（空 = 服务端生成；明文仅在本请求/响应出现一次）。
+	TargetURL    string
+	TargetSecret string
 	// ——客户端调用面策略（P2，设计 §4；nil = 未设置）——
 	ClientCallable         *bool
 	ClientAnonymousAllowed *bool
@@ -56,68 +59,52 @@ type CreateFunctionCommand struct {
 	ClientLimitWindow      *string
 }
 
+// UpdateFunctionCommand 更新函数命令（nil = 不修改）。
 type UpdateFunctionCommand struct {
-	ProjectID  string
-	FunctionID string
-	Name       *string
-	Entrypoint *string
-	// TimeoutSeconds 范围 [1,300]（Create 同）。
+	ProjectID      string
+	FunctionID     string
+	Name           *string
 	TimeoutSeconds *int
-	Spec           *string
 	Enabled        *bool
+	// TargetURL 可变（v4 §3：执行位置是一等配置）；密钥变更走
+	// RotateFunctionSecret（与 webhooks Update/Rotate 分工一致）。
+	TargetURL *string
 	// ——客户端调用面策略（P2，设计 §4；nil = 未设置，不修改）——
 	ClientCallable         *bool
 	ClientAnonymousAllowed *bool
 	ClientPerUserLimit     *int
 	ClientLimitWindow      *string
-	// ——池策略（v3 §5/OQ2；nil = 未设置，不修改）——
-	MinInstances           *int
-	MaxInstances           *int
-	IdleTTLSeconds         *int
-	MaxRequestsPerInstance *int
-	Concurrency            *int
-	// Runtime 是运行时 ID（functions-runtime-selection.md §3；nil = 未设置，
-	// 不修改）：只影响后续新 deployment 的构建，存量 ready 部署不受影响；
-	// 从 eol 迁出到新版本是合法且期望的操作路径。
-	Runtime *string
 }
 
-func (f *Functions) CreateFunction(ctx context.Context, cmd CreateFunctionCommand) (*domainfunctions.Function, error) {
+// CreateFunctionWithSecret 创建函数：endpoint target 录入（url 校验）+ 签名
+// 密钥（服务端生成或透传录入）加密落库、指纹投影、明文一次性回显（v4 §3
+// 实施勘误：签名方每次调用需明文计算 HMAC——密钥本体 secretbox 加密落库，
+// 模式照抄 webhooks CreateWebhook）。返回函数视图与**一次性明文密钥**。
+func (f *Functions) CreateFunctionWithSecret(ctx context.Context, cmd CreateFunctionCommand) (*domainfunctions.Function, string, error) {
 	// 纵深防御（G2-1/R06-P0，G12 产品决策 B 调整）：函数写操作允许 console
 	// admin 会话与 API key（拦截器分别以 adminRoleMethodRules 管角色、
 	// apiKeyScopeRules 管 scope），此处兜底拒绝端用户/匿名的直接调用。
 	if err := appshared.RequireServerPrincipal(ctx); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if !idgen.ID(cmd.ID).IsValid() {
-		return nil, status.Error(codes.InvalidArgument, "id is required")
+		return nil, "", status.Error(codes.InvalidArgument, "id is required")
 	}
 	if !functionIDPattern.MatchString(cmd.ID) {
-		return nil, status.Error(codes.InvalidArgument, "invalid function id: must match ^[a-z0-9][a-z0-9_-]{0,63}$")
+		return nil, "", status.Error(codes.InvalidArgument, "invalid function id: must match ^[a-z0-9][a-z0-9_-]{0,63}$")
 	}
 	if strings.TrimSpace(cmd.Name) == "" {
-		return nil, status.Error(codes.InvalidArgument, "name is required")
+		return nil, "", status.Error(codes.InvalidArgument, "name is required")
 	}
-	// 运行时校验：存在性 + 状态门（functions-runtime-selection.md §6）——
-	// eol 拒绝新建，deprecated 允许（客户端按 ListRuntimes 投影提示）。
-	if err := validateRuntimeSelectable(cmd.Runtime); err != nil {
-		return nil, err
+	if err := validateTargetURL(cmd.TargetURL, config.CurrentRuntimeEnv()); err != nil {
+		return nil, "", err
 	}
 	timeoutSeconds := defaultTimeoutSeconds
 	if cmd.TimeoutSeconds != nil {
 		timeoutSeconds = *cmd.TimeoutSeconds
 	}
 	if timeoutSeconds < minTimeoutSeconds || timeoutSeconds > maxTimeoutSeconds {
-		return nil, status.Errorf(codes.InvalidArgument, "timeout_seconds must be between %d and %d", minTimeoutSeconds, maxTimeoutSeconds)
-	}
-	if cmd.Spec == "" {
-		cmd.Spec = "shared-1x"
-	}
-	if !specificationExists(cmd.Spec) {
-		return nil, status.Errorf(codes.InvalidArgument, "unsupported spec %q", cmd.Spec)
-	}
-	if cmd.Entrypoint == "" {
-		cmd.Entrypoint = defaultEntrypoint(cmd.Runtime)
+		return nil, "", status.Errorf(codes.InvalidArgument, "timeout_seconds must be between %d and %d", minTimeoutSeconds, maxTimeoutSeconds)
 	}
 	enabled := true
 	if cmd.Enabled != nil {
@@ -127,32 +114,47 @@ func (f *Functions) CreateFunction(ctx context.Context, cmd CreateFunctionComman
 	// 访问权限，fail-closed 默认）。
 	declaredScopes, err := domainfunctions.NormalizeDeclaredScopes(cmd.DeclaredScopes)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+		return nil, "", status.Error(codes.InvalidArgument, err.Error())
 	}
-	now := time.Now()
+	// target 签名密钥（v4 §3）：透传录入（≥16 字节，调用方自管强度）或
+	// 服务端生成（twfnsec_ + 32 字节 base64url）。明文仅本响应出现一次。
+	secret := cmd.TargetSecret
+	if secret == "" {
+		secret, err = generateTargetSecret()
+		if err != nil {
+			return nil, "", status.Errorf(codes.Internal, "generate target secret: %v", err)
+		}
+	} else if len(secret) < targetSecretMinLen {
+		return nil, "", status.Errorf(codes.InvalidArgument, "target_secret must be at least %d bytes", targetSecretMinLen)
+	}
+	enc, err := secretbox.Encrypt(secret, f.encKey)
+	if err != nil {
+		return nil, "", status.Errorf(codes.Internal, "encrypt target secret: %v", err)
+	}
+	now := f.nowFn()
 	fn := &domainfunctions.Function{
-		ID:             cmd.ID,
-		ProjectID:      cmd.ProjectID,
-		Name:           cmd.Name,
-		Runtime:        cmd.Runtime,
-		Entrypoint:     cmd.Entrypoint,
-		TimeoutSeconds: timeoutSeconds,
-		Spec:           cmd.Spec,
-		Enabled:        enabled,
-		DeclaredScopes: declaredScopes,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:                      cmd.ID,
+		ProjectID:               cmd.ProjectID,
+		Name:                    cmd.Name,
+		TimeoutSeconds:          timeoutSeconds,
+		Enabled:                 enabled,
+		DeclaredScopes:          declaredScopes,
+		TargetURL:               cmd.TargetURL,
+		TargetSecretEnc:         enc,
+		TargetSecretFingerprint: domainfunctions.Fingerprint(secret),
+		CreatedAt:               now,
+		UpdatedAt:               now,
 	}
 	// 客户端调用面策略（P2）：anonymous 一期禁用、callable 要求 limit>=1、
 	// 窗口词表校验（设计 §4；存量全 FALSE ⇒ fail-closed）。
 	if err := applyClientPolicy(fn, cmd.ClientCallable, cmd.ClientAnonymousAllowed, cmd.ClientPerUserLimit, cmd.ClientLimitWindow); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := f.repo.CreateFunction(ctx, fn); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	f.cache.invalidate(cmd.ProjectID, cmd.ID)
-	return fn, nil
+	return fn, secret, nil
 }
 
 func (f *Functions) ListFunctions(ctx context.Context, projectID string) ([]domainfunctions.Function, error) {
@@ -188,33 +190,17 @@ func (f *Functions) UpdateFunction(ctx context.Context, cmd UpdateFunctionComman
 		}
 		fn.Name = *cmd.Name
 	}
-	if cmd.Entrypoint != nil {
-		fn.Entrypoint = *cmd.Entrypoint
-	}
 	if cmd.TimeoutSeconds != nil {
 		if *cmd.TimeoutSeconds < minTimeoutSeconds || *cmd.TimeoutSeconds > maxTimeoutSeconds {
 			return nil, status.Errorf(codes.InvalidArgument, "timeout_seconds must be between %d and %d", minTimeoutSeconds, maxTimeoutSeconds)
 		}
 		fn.TimeoutSeconds = *cmd.TimeoutSeconds
 	}
-	if cmd.Spec != nil {
-		if !specificationExists(*cmd.Spec) {
-			return nil, status.Errorf(codes.InvalidArgument, "unsupported spec %q", *cmd.Spec)
-		}
-		fn.Spec = *cmd.Spec
-	}
-	// 运行时（functions-runtime-selection.md §3）：存在性 + 状态门（eol 拒绝，
-	// deprecated 允许）。生效语义 = 只影响后续新 deployment 的构建；存量
-	// ready 部署镜像已构建完毕不受影响（快照忠实性由迁移 000025 的
-	// deployment.runtime 列承载，buildSpec 读行内快照）。
-	if cmd.Runtime != nil {
-		if !runtimeExists(*cmd.Runtime) {
-			return nil, status.Errorf(codes.InvalidArgument, "unsupported runtime %q", *cmd.Runtime)
-		}
-		if err := validateRuntimeSelectable(*cmd.Runtime); err != nil {
+	if cmd.TargetURL != nil {
+		if err := validateTargetURL(*cmd.TargetURL, config.CurrentRuntimeEnv()); err != nil {
 			return nil, err
 		}
-		fn.Runtime = *cmd.Runtime
+		fn.TargetURL = *cmd.TargetURL
 	}
 	if cmd.Enabled != nil {
 		fn.Enabled = *cmd.Enabled
@@ -223,12 +209,7 @@ func (f *Functions) UpdateFunction(ctx context.Context, cmd UpdateFunctionComman
 	if err := applyClientPolicy(fn, cmd.ClientCallable, cmd.ClientAnonymousAllowed, cmd.ClientPerUserLimit, cmd.ClientLimitWindow); err != nil {
 		return nil, err
 	}
-	// 池策略（v3 §5/OQ2）：未设置字段不修改；值域兜底 + min≤max 跨字段校验
-	// （protovalidate 管形状，业务规则在 app 层）。
-	if err := applyPoolPolicy(fn, cmd.MinInstances, cmd.MaxInstances, cmd.IdleTTLSeconds, cmd.MaxRequestsPerInstance, cmd.Concurrency); err != nil {
-		return nil, err
-	}
-	fn.UpdatedAt = time.Now()
+	fn.UpdatedAt = f.nowFn()
 	// before/after diff 落审计 metadata.changes（成功/失败均记变更尝试）。
 	recordAuditChanges(ctx, &before, fn)
 	if err := f.repo.UpdateFunction(ctx, fn); err != nil {
@@ -279,58 +260,6 @@ func applyClientPolicy(fn *domainfunctions.Function, callable, anonymous *bool, 
 	return nil
 }
 
-// applyPoolPolicy 校验并把池策略应用到函数记录（v3 多路复用 §5/OQ2；
-// P0.5 执行器 v2 五列语义见迁移 000014/000017 与 functions-v3.md §1.5）：
-//   - 单字段值域与 DB CHECK 同源：min>=0、max>=1、idle_ttl>=30、
-//     max_requests>=1、concurrency 1..16（protovalidate 已在 API 边界拦截，
-//     此处兜底防绕过传输层的直接调用）；
-//   - 跨字段：min_instances <= max_instances（Update 的跨字段比较对象是
-//     应用后的终值——单独调 min 时也要与存量 max 比较，反之亦然）；
-//   - concurrency>1 要求函数可重入（契约文档化，不做平台硬校验，D1/D2）；
-//     旧模板部署按 1 降级执行（D7，运行时语义）。
-//
-// nil 字段 = 未设置（不修改现有值）。
-func applyPoolPolicy(fn *domainfunctions.Function, minInstances, maxInstances, idleTTL, maxRequests, concurrency *int) error {
-	if minInstances != nil {
-		if *minInstances < minMinInstances {
-			return status.Errorf(codes.InvalidArgument, "min_instances must be >= %d", minMinInstances)
-		}
-		fn.MinInstances = *minInstances
-	}
-	if maxInstances != nil {
-		if *maxInstances < minMaxInstances {
-			return status.Errorf(codes.InvalidArgument, "max_instances must be >= %d", minMaxInstances)
-		}
-		fn.MaxInstances = *maxInstances
-	}
-	if idleTTL != nil {
-		if *idleTTL < minIdleTTLSeconds {
-			return status.Errorf(codes.InvalidArgument, "idle_ttl_seconds must be >= %d", minIdleTTLSeconds)
-		}
-		fn.IdleTTLSeconds = *idleTTL
-	}
-	if maxRequests != nil {
-		if *maxRequests < minMaxRequests {
-			return status.Errorf(codes.InvalidArgument, "max_requests_per_instance must be >= %d", minMaxRequests)
-		}
-		fn.MaxRequestsPerInstance = *maxRequests
-	}
-	if concurrency != nil {
-		if *concurrency < minConcurrency || *concurrency > maxConcurrency {
-			return status.Errorf(codes.InvalidArgument, "concurrency must be between %d and %d", minConcurrency, maxConcurrency)
-		}
-		fn.Concurrency = *concurrency
-	}
-	if fn.MinInstances > fn.MaxInstances {
-		return status.Errorf(codes.InvalidArgument, "min_instances (%d) must be <= max_instances (%d)", fn.MinInstances, fn.MaxInstances)
-	}
-	if fn.Concurrency < minConcurrency {
-		// 存量零值防御（理论不可达：建列带 DEFAULT 1）；保持 DB CHECK 对齐。
-		fn.Concurrency = defaultConcurrency
-	}
-	return nil
-}
-
 func (f *Functions) DeleteFunction(ctx context.Context, projectID, functionID string) error {
 	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return err
@@ -342,27 +271,17 @@ func (f *Functions) DeleteFunction(ctx context.Context, projectID, functionID st
 	if fn == nil {
 		return status.Error(codes.NotFound, "function not found")
 	}
-	deps, err := f.repo.ListDeployments(ctx, projectID, functionID)
-	if err != nil {
-		return err
-	}
-	// 先 DB 级联删除，再清理镜像与代码包（本地 + 持久层，全部幂等，失败仅
-	// 记日志）。
 	if err := f.repo.DeleteFunction(ctx, projectID, functionID); err != nil {
 		return err
 	}
 	f.cache.invalidate(projectID, functionID)
-	for i := range deps {
-		_ = f.executor.RemoveImage(ctx, deps[i].FunctionID, deps[i].ID)
-		f.removeCodePackage(ctx, deps[i].ProjectID, deps[i].FunctionID, deps[i].ID)
-	}
 	return nil
 }
 
 // SetFunctionScopes 全量替换函数 declared_scopes（P0 执行身份，镜像
-// SetVariables 的 PUT 全量替换先例；UpdateFunctionRequest 无 repeated 字段
-// 的未设置语义，故独立 RPC）。校验与去重同 CreateFunction；空集合法
-// （撤销全部平台访问）。
+// RotateFunctionSecret 的敏感独立 RPC 先例；UpdateFunctionRequest 无
+// repeated 字段的未设置语义，故独立 RPC）。校验与去重同 CreateFunction；
+// 空集合法（撤销全部平台访问）。
 func (f *Functions) SetFunctionScopes(ctx context.Context, projectID, functionID string, scopes []string) (*domainfunctions.Function, error) {
 	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return nil, err
@@ -379,10 +298,117 @@ func (f *Functions) SetFunctionScopes(ctx context.Context, projectID, functionID
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	fn.DeclaredScopes = normalized
-	fn.UpdatedAt = time.Now()
+	fn.UpdatedAt = f.nowFn()
 	if err := f.repo.UpdateFunction(ctx, fn); err != nil {
 		return nil, err
 	}
 	f.cache.invalidate(projectID, functionID)
 	return fn, nil
+}
+
+// RotateFunctionSecret 轮换 endpoint target 签名密钥（v4 §3/§4 v2 双签语义，
+// 与 webhooks RotateWebhookSecret 同构）：新钥即刻生效（v1 签名），旧钥移入
+// previous 槽、宽限窗内调用侧同时携带 v2 旧钥签名——函数侧持旧钥的 FDK
+// 过渡期不断流。返回**一次性新明文**。
+func (f *Functions) RotateFunctionSecret(ctx context.Context, projectID, functionID string) (*domainfunctions.Function, string, error) {
+	if err := appshared.RequireServerPrincipal(ctx); err != nil {
+		return nil, "", err
+	}
+	fn, err := f.repo.GetFunction(ctx, projectID, functionID)
+	if err != nil {
+		return nil, "", err
+	}
+	if fn == nil {
+		return nil, "", status.Error(codes.NotFound, "function not found")
+	}
+	secret, err := generateTargetSecret()
+	if err != nil {
+		return nil, "", status.Errorf(codes.Internal, "generate target secret: %v", err)
+	}
+	enc, err := secretbox.Encrypt(secret, f.encKey)
+	if err != nil {
+		return nil, "", status.Errorf(codes.Internal, "encrypt target secret: %v", err)
+	}
+	now := f.nowFn()
+	fn.TargetPreviousSecretEnc = fn.TargetSecretEnc
+	fn.TargetSecretRotatedAt = now
+	fn.TargetSecretEnc = enc
+	fn.TargetSecretFingerprint = domainfunctions.Fingerprint(secret)
+	fn.UpdatedAt = now
+	if err := f.repo.UpdateFunction(ctx, fn); err != nil {
+		return nil, "", err
+	}
+	f.cache.invalidate(projectID, functionID)
+	return fn, secret, nil
+}
+
+// decryptTargetSecrets 解密生效密钥对（当前钥 + 宽限窗内的旧钥；窗外的
+// previous 不再携带——调用侧 v2 签名通道收敛）。解密失败原样上抛（调用方
+// 按平台失败终态化当次调用——密钥材料配置错误的可恢复语义）。
+func (f *Functions) decryptTargetSecrets(fn *domainfunctions.Function) (current, previous string, err error) {
+	current, err = secretbox.Decrypt(fn.TargetSecretEnc, f.encKey)
+	if err != nil {
+		return "", "", status.Errorf(codes.Internal, "decrypt target secret %s: %v", fn.ID, err)
+	}
+	if fn.TargetPreviousSecretEnc != "" && effectivePreviousSecret(f.nowFn(), fn.TargetSecretRotatedAt, f.secretGrace) {
+		previous, err = secretbox.Decrypt(fn.TargetPreviousSecretEnc, f.encKey)
+		if err != nil {
+			// 旧钥解密失败不阻断调用（新钥仍有效）：降级为单钥签名。
+			f.logger().Warn("functions: decrypt previous target secret failed; invoking with current only",
+				"function_id", fn.ID, "error", err)
+			previous = ""
+		}
+	}
+	return current, previous, nil
+}
+
+// effectivePreviousSecret 报告旧钥是否仍在宽限窗内（rotatedAt 为零值 =
+// 从未轮换，不在窗内；window <=0 用缺省窗）。
+func effectivePreviousSecret(now, rotatedAt time.Time, window time.Duration) bool {
+	if rotatedAt.IsZero() {
+		return false
+	}
+	if window <= 0 {
+		window = domainfunctions.TargetSecretRotationWindow
+	}
+	return now.Sub(rotatedAt) < window
+}
+
+// validateTargetURL 校验 endpoint target（创建/更新期应用层校验；protovalidate
+// 管形状上限，业务规则在此）：URL 形状合法（绝对 http(s) URL + host 非空）、
+// 生产强制 https（开发环境放行 http——TORCHWOOD_ENV 裁决，v4 §3）。
+func validateTargetURL(u string, env config.RuntimeEnv) error {
+	if u == "" {
+		return status.Error(codes.InvalidArgument, "target_url is required")
+	}
+	if len(u) > maxTargetURLBytes {
+		return status.Errorf(codes.InvalidArgument, "target_url exceeds maximum of %d bytes", maxTargetURLBytes)
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, "target_url: %v", err)
+	}
+	switch parsed.Scheme {
+	case "https":
+	case "http":
+		if env != config.EnvDevelopment {
+			return status.Error(codes.InvalidArgument, "target_url must use https scheme (http is only allowed in development)")
+		}
+	default:
+		return status.Error(codes.InvalidArgument, "target_url must be an absolute http(s) URL")
+	}
+	if parsed.Host == "" {
+		return status.Error(codes.InvalidArgument, "target_url: host is required")
+	}
+	return nil
+}
+
+// generateTargetSecret 生成签名密钥明文（twfnsec_ + 32 字节 base64url，
+// 43 字符不可猜；与 webhooks generateSecret 同构）。
+func generateTargetSecret() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return domainfunctions.SecretPrefix + base64.RawURLEncoding.EncodeToString(buf), nil
 }

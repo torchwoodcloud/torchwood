@@ -29,8 +29,8 @@ func TestFunctionTriggersHandler_SyncFetchTransparent(t *testing.T) {
 	bodyBytes := []byte{0x00, 0x01, 0xff, 0xfe, '<', 'x', 'm', 'l', '>'}
 	inv := &fakeTriggerInvoker{
 		trg: trg,
-		rec: &domainfunctions.ExecutionRecord{
-			Status:      domainfunctions.ExecutionStatusCompleted,
+		rec: &domainfunctions.InvocationRecord{
+			Status:      domainfunctions.InvocationStatusCompleted,
 			StatusCode:  201,
 			HTTPHeaders: map[string]string{"Content-Type": "application/xml", "X-Custom-Trace": "abc"},
 			ResponseB64: base64.StdEncoding.EncodeToString(bodyBytes),
@@ -54,8 +54,8 @@ func TestFunctionTriggersHandler_SyncTransparentHeaderFilter(t *testing.T) {
 	trg := syncTrigger(t)
 	inv := &fakeTriggerInvoker{
 		trg: trg,
-		rec: &domainfunctions.ExecutionRecord{
-			Status:     domainfunctions.ExecutionStatusCompleted,
+		rec: &domainfunctions.InvocationRecord{
+			Status:     domainfunctions.InvocationStatusCompleted,
 			StatusCode: 200,
 			HTTPHeaders: map[string]string{
 				"Connection":        "close",
@@ -89,8 +89,8 @@ func TestFunctionTriggersHandler_SyncFetchEmptyBody(t *testing.T) {
 	trg := syncTrigger(t)
 	inv := &fakeTriggerInvoker{
 		trg: trg,
-		rec: &domainfunctions.ExecutionRecord{
-			Status:     domainfunctions.ExecutionStatusCompleted,
+		rec: &domainfunctions.InvocationRecord{
+			Status:     domainfunctions.InvocationStatusCompleted,
 			StatusCode: 204,
 		},
 	}
@@ -109,7 +109,7 @@ func TestFunctionTriggersHandler_EnvelopeAndRawBodyPassed(t *testing.T) {
 	trg := syncTrigger(t)
 	inv := &fakeTriggerInvoker{
 		trg: trg,
-		rec: &domainfunctions.ExecutionRecord{Status: domainfunctions.ExecutionStatusCompleted, Response: `{}`},
+		rec: &domainfunctions.InvocationRecord{Status: domainfunctions.InvocationStatusCompleted, Response: `{}`},
 	}
 	lim := &fakeTriggerLimiter{allowed: true}
 	_, mux := newTriggerTestHandler(t, inv, lim)

@@ -44,8 +44,7 @@ import (
 var ProviderSet = wire.NewSet(
 	boot.New,
 
-	appfunctions.ProvideSemaphores,
-	appfunctions.NewFunctionsWithUsage,
+	appfunctions.NewFunctions,
 	// Webhooks 一等公民（v4 §6，D5）：CRUD + 投递引擎聚合（worker 消费
 	// DeliveryScheduler 端口 + 事件入口；Bind 与具体类型 provider 同集）。
 	appwebhooks.NewService,
@@ -83,17 +82,11 @@ var ProviderSet = wire.NewSet(
 	clients.NewRedis,
 	wire.Bind(new(uow.Runner), new(*clients.Database)),
 	wire.Bind(new(uow.Isolator), new(*clients.Database)),
-	// P0 执行身份：worker 的 ProcessExecution 与 server 同步路径共用
+	// P0 执行身份：worker 的 ProcessInvocation 与 server 同步路径共用
 	// Redis 执行 token 服务（铸造/主动吊销）。实现在 infra/functions——
 	// worker 依赖图禁入 infra/auth（import guard）。
 	infrafunctions.NewRedisExecutionTokenService,
 	wire.Bind(new(domainfunctions.ExecutionTokenService), new(*infrafunctions.RedisExecutionTokenService)),
-	// 在途重建跨进程去重（镜像缺失自动重建缺陷 B）：worker 的异步执行错误
-	// 路径同样触发重建，与 server 多副本并发时经 Redis SETNX 收敛为一次
-	// （app 端口在组合根 Bind；具体类型 provider 不进桶包，同
-	// NewRedisExecutionTokenService 模式）。
-	infrafunctions.NewRedisRebuildDedup,
-	wire.Bind(new(appfunctions.RebuildDedup), new(*infrafunctions.RedisRebuildDedup)),
 	bunrepo.NewProjectRepository,
 	bunrepo.NewFunctionRepository,
 	// P1 触发器模块：cron 调度循环经 Functions 聚合领取到期触发器。
@@ -131,13 +124,14 @@ var ProviderSet = wire.NewSet(
 	wire.Bind(new(domainstorage.BucketRepository), new(*bunrepo.BucketRepository)),
 	wire.Bind(new(domainstorage.FileRepository), new(*bunrepo.FileRepository)),
 	infraevents.ProviderSet,
-	// 唯一执行器（v1 docker 执行器已移除）：经 dispatcher 分发，
-	// worker 零 docker.sock 依赖。
-	infrafunctions.NewDispatcherExecutor,
-	wire.Bind(new(domainfunctions.Executor), new(*infrafunctions.DispatcherExecutor)),
-	// 部署代码包持久层（zip 持久桶）：worker 异步执行错误路径同样触发
-	// 镜像缺失重建，需要从持久层拉回（ObjectStore 来自 infrastorage 集）。
-	infrafunctions.NewBucketZipStore,
+	// v4 RPC 轴调用出口（Invoker 端口）：worker 的异步调用（队列领取）与
+	// server 同步路径同一实现（守卫 client + functions.invoke 配置）。
+	infrafunctions.NewInvoker,
+	wire.Bind(new(domainfunctions.Invoker), new(*infrafunctions.HTTPInvoker)),
+	// P2 客户端调用面：每用户限频端口（worker 装配消费 ClientInvoke 用例
+	// 之外的构造依赖；消费路径本身不经 worker）。
+	infrafunctions.NewClientQuotaLimiter,
+	wire.Bind(new(domainfunctions.ClientQuotaLimiter), new(*infrafunctions.ClientQuotaLimiter)),
 	infrapayments.ProviderSet,
 	infrabilling.ProviderSet,
 	infraqueue.ProviderSet,
@@ -172,11 +166,6 @@ func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 	// server 签发的 page_token，弱主密钥属同一攻击面，故一并 fail-closed
 	// （此前仅 server 校验、worker 静默跳过，属装配分叉）。
 	if err := bootkit.ValidateAppConfig(app.Logger(), &c); err != nil {
-		return nil, err
-	}
-	// v1 docker 执行器已移除：函数执行统一经 dispatcher 分发，
-	// 分发通路缺失直接拒绝启动（不留到首次执行）。
-	if err := bootkit.ValidateFunctionsDispatchConfig(&c); err != nil {
 		return nil, err
 	}
 	if c.GetData().GetDatabase().GetSource() == "" {

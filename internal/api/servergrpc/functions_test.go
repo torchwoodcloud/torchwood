@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// stubRepo 是最小 FunctionRepo 桩（仅覆盖测试路径）。
+// stubRepo 是最小 FunctionRepo 桩（仅覆盖测试路径；v4 repo 面无部署/变量）。
 type stubRepo struct {
 	fn *domainfunctions.Function
 }
@@ -39,74 +39,53 @@ func (r *stubRepo) UpdateFunction(_ context.Context, fn *domainfunctions.Functio
 	r.fn = fn
 	return nil
 }
-func (r *stubRepo) DeleteFunction(context.Context, string, string) error                { return nil }
-func (r *stubRepo) CreateDeployment(context.Context, *domainfunctions.Deployment) error { return nil }
-func (r *stubRepo) GetDeployment(context.Context, string, string, string) (*domainfunctions.Deployment, error) {
-	return nil, nil
-}
-func (r *stubRepo) ListDeployments(context.Context, string, string) ([]domainfunctions.Deployment, error) {
-	return nil, nil
-}
-func (r *stubRepo) UpdateDeployment(context.Context, *domainfunctions.Deployment) error { return nil }
+func (r *stubRepo) DeleteFunction(context.Context, string, string) error { return nil }
 
-func (r *stubRepo) ActivateDeployment(context.Context, *domainfunctions.Deployment) error { return nil }
-func (r *stubRepo) DeleteDeployment(context.Context, string, string, string) error        { return nil }
-func (r *stubRepo) SetVariables(context.Context, string, string, map[string]string) error {
+func (r *stubRepo) CreateInvocation(context.Context, *domainfunctions.InvocationRecord) error {
 	return nil
 }
-func (r *stubRepo) GetVariables(context.Context, string, string) (map[string]string, error) {
-	return map[string]string{}, nil
-}
-func (r *stubRepo) CreateExecution(context.Context, *domainfunctions.ExecutionRecord) error {
-	return nil
-}
-func (r *stubRepo) GetExecution(context.Context, string, string, string) (*domainfunctions.ExecutionRecord, error) {
+func (r *stubRepo) GetInvocation(context.Context, string, string, string) (*domainfunctions.InvocationRecord, error) {
 	return nil, nil
 }
-func (r *stubRepo) ListExecutions(context.Context, string, string, int, int, domainfunctions.ExecutionListFilter) ([]domainfunctions.ExecutionRecord, int, error) {
+func (r *stubRepo) ListInvocations(context.Context, string, string, int, int, domainfunctions.InvocationListFilter) ([]domainfunctions.InvocationRecord, int, error) {
 	return nil, 0, nil
 }
-
-func (r *stubRepo) ListDeploymentsPaged(context.Context, string, string, int, int) ([]domainfunctions.Deployment, int, error) {
-	return nil, 0, nil
-}
-func (r *stubRepo) UpdateExecution(context.Context, *domainfunctions.ExecutionRecord) error {
+func (r *stubRepo) UpdateInvocation(context.Context, *domainfunctions.InvocationRecord) error {
 	return nil
 }
-func (r *stubRepo) RecoverOrphanExecutionsInProject(context.Context, string, time.Time, int) (int64, error) {
+func (r *stubRepo) RecoverOrphanInvocationsInProject(context.Context, string, time.Time, int) (int64, error) {
 	return 0, nil
 }
-func (r *stubRepo) PruneOldExecutionsInProject(context.Context, string, string, int) error {
+func (r *stubRepo) PruneOldInvocationsInProject(context.Context, string, string, int) error {
 	return nil
 }
-func (r *stubRepo) PruneTriggerExecutionsInProject(context.Context, string, string, time.Time) error {
+func (r *stubRepo) PruneTriggerInvocationsInProject(context.Context, string, string, time.Time) error {
 	return nil
 }
-func (r *stubRepo) GetExecutionByIdempotencyKey(context.Context, string, string, string, string) (*domainfunctions.ExecutionRecord, error) {
+func (r *stubRepo) GetInvocationByIdempotencyKey(context.Context, string, string, string, string) (*domainfunctions.InvocationRecord, error) {
 	return nil, nil
 }
 func (r *stubRepo) CountClientInvocations(context.Context, string, string, string, time.Time) (int, error) {
 	return 0, nil
 }
-func (r *stubRepo) TransitionExecutionStatus(context.Context, string, string, string, string, string) (bool, error) {
+func (r *stubRepo) TransitionInvocationStatus(context.Context, string, string, string, string, string) (bool, error) {
 	return false, nil
 }
-func (r *stubRepo) FailExecutionIfActive(context.Context, string, string, string, string) error {
+func (r *stubRepo) FailInvocationIfActive(context.Context, string, string, string, string) error {
 	return nil
 }
 
-type stubExecutor struct{}
+type stubInvoker struct{}
 
-func (s *stubExecutor) Build(context.Context, domainfunctions.BuildSpec) (string, error) {
-	return "", nil
+func (s *stubInvoker) Invoke(context.Context, domainfunctions.Invocation) (*domainfunctions.InvocationResult, error) {
+	return &domainfunctions.InvocationResult{Response: "ok"}, nil
 }
-func (s *stubExecutor) Execute(context.Context, domainfunctions.Execution) (*domainfunctions.ExecutionResult, error) {
-	return &domainfunctions.ExecutionResult{StatusCode: 0, Stdout: "ok"}, nil
+
+type stubNotifier struct{}
+
+func (s *stubNotifier) Notify(context.Context, domainfunctions.Notification) (domainfunctions.NotificationResult, error) {
+	return domainfunctions.NotificationResult{}, nil
 }
-func (s *stubExecutor) ImportImage(context.Context, domainfunctions.ImportImageSpec) (string, error) {
-	return "", nil // image 源不在本文件测试路径
-}
-func (s *stubExecutor) RemoveImage(context.Context, string, string) error { return nil }
 
 type stubQueue struct{}
 
@@ -118,7 +97,9 @@ func (s *stubQueue) Ack(context.Context, string, string) error { return nil }
 func (s *stubQueue) Trim(context.Context, string, int64) error { return nil }
 
 func newTestService(repo *stubRepo) *FunctionsService {
-	uc := appfunctions.NewFunctions(&config.AppConfig{}, &stubExecutor{}, repo, &stubQueue{})
+	// jwt.secret 承载 target 密钥加密材料（EncryptionSecret 回退路径）。
+	cfg := &config.AppConfig{Security: &config.Security{Jwt: &config.Security_Jwt{Secret: "test-jwt-secret-0123456789abcdef"}}}
+	uc := appfunctions.NewFunctions(cfg, &stubInvoker{}, &stubNotifier{}, repo, &stubQueue{}, nil, nil, nil, nil, nil)
 	return NewFunctionsService(uc)
 }
 
@@ -148,7 +129,7 @@ func TestFunctionsService_MissingProjectID(t *testing.T) {
 	_, err = s.CreateFunction(ctx, &serverv1.CreateFunctionRequest{})
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 
-	_, err = s.ListRuntimes(ctx, &sharedv1.Empty{})
+	_, err = s.InvokeFunction(ctx, &serverv1.InvokeFunctionRequest{})
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 }
 
@@ -158,35 +139,35 @@ func TestFunctionsService_EmptyProjectIDRejected(t *testing.T) {
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 }
 
-func TestFunctionsService_CreateFunctionValidatesBeforeRepo(t *testing.T) {
-	s := newTestService(&stubRepo{})
-
-	// 非法 runtime → InvalidArgument 透传（不落库）。
-	timeout := int32(15)
-	_, err := s.CreateFunction(principalCtx("p1"), &serverv1.CreateFunctionRequest{
-		Id: "fn_1", Name: "f", Runtime: "bogus", TimeoutSeconds: &timeout,
-	})
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.ErrorContains(t, err, "unsupported runtime")
-}
-
 func TestFunctionsService_CreateFunctionHappyPath(t *testing.T) {
 	repo := &stubRepo{}
 	s := newTestService(repo)
 
 	timeout := int32(15)
-	spec := "shared-1x"
-	fn, err := s.CreateFunction(principalCtx("p1"), &serverv1.CreateFunctionRequest{
-		Id: "fn_1", Name: "hello", Runtime: "node-24.0", TimeoutSeconds: &timeout, Spec: &spec,
+	resp, err := s.CreateFunction(principalCtx("p1"), &serverv1.CreateFunctionRequest{
+		Id: "fn_1", Name: "hello", TimeoutSeconds: &timeout, TargetUrl: "https://fn.example.com",
 	})
 	require.NoError(t, err)
-	require.NotNil(t, fn)
-	require.Equal(t, "fn_1", fn.Id)
-	require.Equal(t, "p1", fn.ProjectId)
+	require.NotNil(t, resp)
+	require.Equal(t, "fn_1", resp.GetFunction().GetId())
+	require.Equal(t, "p1", resp.GetFunction().GetProjectId())
+	// target 密钥一次性回显 + 指纹投影（v4 §3 实施勘误）。
+	require.NotEmpty(t, resp.GetTargetSecret())
+	require.NotEmpty(t, resp.GetFunction().GetTarget().GetSecretFingerprint())
 
 	list, err := s.ListFunctions(principalCtx("p1"), &sharedv1.ListRequest{})
 	require.NoError(t, err)
 	require.Len(t, list.Functions, 1)
+}
+
+func TestFunctionsService_CreateFunctionTargetRequired(t *testing.T) {
+	s := newTestService(&stubRepo{})
+	_, err := s.CreateFunction(principalCtx("p1"), &serverv1.CreateFunctionRequest{
+		Id: "fn_1", Name: "hello", TargetUrl: "http://fn.example.com",
+	})
+	// 非 dev 环境 http target 拒绝（v4 §3 https-or-dev）。
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.ErrorContains(t, err, "https")
 }
 
 func TestFunctionsService_GetFunctionNotFound(t *testing.T) {
@@ -195,65 +176,55 @@ func TestFunctionsService_GetFunctionNotFound(t *testing.T) {
 	require.Equal(t, codes.NotFound, status.Code(err))
 }
 
-// TestFunctionsService_ListRuntimesProjection 运行时指定扩展投影
-// （functions-runtime-selection.md §1/§6）：family/status/is_default/eol_at
-// 随 ListRuntimes 投影，node-18.0 以 eol 状态暴露，缺省项唯一。
-func TestFunctionsService_ListRuntimesProjection(t *testing.T) {
-	s := newTestService(&stubRepo{})
-	resp, err := s.ListRuntimes(principalCtx("p1"), &sharedv1.Empty{})
-	require.NoError(t, err)
-
-	defaults := 0
-	byID := map[string]*serverv1.RuntimeInfo{}
-	for _, r := range resp.Runtimes {
-		require.NotEmpty(t, r.Family)
-		require.NotEmpty(t, r.Status)
-		if r.IsDefault {
-			defaults++
-		}
-		byID[r.Id] = r
-	}
-	require.Equal(t, 1, defaults, "缺省 runtime 有且仅有一个")
-
-	node18, ok := byID["node-18.0"]
-	require.True(t, ok, "node-18.0 保留在表（旧 ID 不日落）")
-	require.Equal(t, "eol", node18.Status)
-	require.NotNil(t, node18.EolAt)
-
-	node24, ok := byID["node-24.0"]
-	require.True(t, ok)
-	require.Equal(t, "active", node24.Status)
-	require.Equal(t, "node", node24.Family)
-	require.True(t, node24.IsDefault)
-}
-
-// TestFunctionsService_UpdateFunctionRuntime UpdateFunction.runtime 接线
-// （functions-runtime-selection.md §3）：存在性 + eol 状态门在 app 层；
-// 合法变更落 repo。
-func TestFunctionsService_UpdateFunctionRuntime(t *testing.T) {
+// TestFunctionsService_UpdateFunctionTarget UpdateFunction.target_url 接线：
+// url 校验（https-or-dev）在 app 层；合法变更落 repo 且不改密钥（轮换走
+// RotateFunctionSecret）。
+func TestFunctionsService_UpdateFunctionTarget(t *testing.T) {
 	repo := &stubRepo{}
 	s := newTestService(repo)
 
-	timeout := int32(15)
-	_, err := s.CreateFunction(principalCtx("p1"), &serverv1.CreateFunctionRequest{
-		Id: "fn_rt", Name: "f", Runtime: "node-22.0", TimeoutSeconds: &timeout,
+	resp, err := s.CreateFunction(principalCtx("p1"), &serverv1.CreateFunctionRequest{
+		Id: "fn_t", Name: "f", TargetUrl: "https://old.example.com",
 	})
 	require.NoError(t, err)
+	oldFingerprint := resp.GetFunction().GetTarget().GetSecretFingerprint()
 
-	// eol runtime 拒绝。
-	runtime := "node-18.0"
+	// 非法 url 拒绝（不落库）。
+	bad := "ftp://fn.example.com"
 	_, err = s.UpdateFunction(principalCtx("p1"), &serverv1.UpdateFunctionRequest{
-		FunctionId: "fn_rt", Runtime: &runtime,
+		FunctionId: "fn_t", TargetUrl: &bad,
 	})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.ErrorContains(t, err, "end-of-life")
 
-	// 合法变更（node-22.0 → node-24.0）落库。
-	runtime = "node-24.0"
+	// 合法变更落库。
+	good := "https://new.example.com"
 	fn, err := s.UpdateFunction(principalCtx("p1"), &serverv1.UpdateFunctionRequest{
-		FunctionId: "fn_rt", Runtime: &runtime,
+		FunctionId: "fn_t", TargetUrl: &good,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "node-24.0", fn.Runtime)
-	require.Equal(t, "node-24.0", repo.fn.Runtime)
+	require.Equal(t, "https://new.example.com", fn.GetTarget().GetUrl())
+	require.Equal(t, oldFingerprint, repo.fn.TargetSecretFingerprint, "url 更新不触碰密钥")
+}
+
+// TestFunctionsService_RotateFunctionSecret 轮换接线：新明文一次性回显 +
+// 指纹更新 + 旧钥进宽限窗列。
+func TestFunctionsService_RotateFunctionSecret(t *testing.T) {
+	repo := &stubRepo{}
+	s := newTestService(repo)
+
+	resp, err := s.CreateFunction(principalCtx("p1"), &serverv1.CreateFunctionRequest{
+		Id: "fn_r", Name: "f", TargetUrl: "https://fn.example.com",
+	})
+	require.NoError(t, err)
+	oldEnc := repo.fn.TargetSecretEnc
+	oldFingerprint := resp.GetFunction().GetTarget().GetSecretFingerprint()
+
+	sec, err := s.RotateFunctionSecret(principalCtx("p1"), &serverv1.RotateFunctionSecretRequest{FunctionId: "fn_r"})
+	require.NoError(t, err)
+	require.NotEmpty(t, sec.GetSecret())
+	require.NotEqual(t, oldFingerprint, sec.GetSecretFingerprint())
+	// 双钥宽限窗：新钥入主列、旧钥移 previous、轮换时刻置位。
+	require.NotEqual(t, oldEnc, repo.fn.TargetSecretEnc)
+	require.Equal(t, oldEnc, repo.fn.TargetPreviousSecretEnc)
+	require.False(t, repo.fn.TargetSecretRotatedAt.IsZero())
 }

@@ -91,7 +91,7 @@ const webhookPruneTimeout = 5 * time.Minute
 // 样板与 infra/queue 坏消息 ack 的 5s 独立超时先例）。
 const ackTimeout = 5 * time.Second
 
-// Worker 消费函数异步执行队列（torchwood:queue:functions-executions）。
+// Worker 消费函数异步调用队列（torchwood:queue:functions-invocations，v4 改名）。
 type Worker struct {
 	functions *appfunctions.Functions
 	queue     domainshared.Queue
@@ -224,7 +224,7 @@ func (w *Worker) Start(ctx context.Context) error {
 
 // recoverOnce 单轮孤儿恢复（预算 ctx 由骨架派生）。
 func (w *Worker) recoverOnce(ctx context.Context) error {
-	recovered, err := w.functions.RecoverOrphanExecutions(ctx, orphanStaleFallback)
+	recovered, err := w.functions.RecoverOrphanInvocations(ctx, orphanStaleFallback)
 	if err != nil {
 		return err
 	}
@@ -234,14 +234,14 @@ func (w *Worker) recoverOnce(ctx context.Context) error {
 	return nil
 }
 
-// pruneOnce 单轮执行记录保留清理（预算 ctx 由骨架派生）。
+// pruneOnce 单轮调用记录保留清理（预算 ctx 由骨架派生）。
 func (w *Worker) pruneOnce(ctx context.Context) error {
-	pruned, err := w.functions.PruneOldExecutions(ctx)
+	pruned, err := w.functions.PruneOldInvocations(ctx)
 	if err != nil {
 		return err
 	}
 	if pruned > 0 {
-		w.logger.Info("pruned old executions", "functions", pruned)
+		w.logger.Info("pruned old invocations", "functions", pruned)
 	}
 	return nil
 }
@@ -331,7 +331,7 @@ func (w *Worker) Stop(ctx context.Context) error {
 
 func (w *Worker) consume(ctx context.Context) {
 	for {
-		payload, ack, err := w.queue.Dequeue(ctx, domainshared.QueueFunctionsExecutions, dequeuePollInterval)
+		payload, ack, err := w.queue.Dequeue(ctx, domainshared.QueueFunctionsInvocations, dequeuePollInterval)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
@@ -344,9 +344,9 @@ func (w *Worker) consume(ctx context.Context) {
 			continue
 		}
 		ackDone := func() {
-			w.ackMessage(ctx, domainshared.QueueFunctionsExecutions, ack)
+			w.ackMessage(ctx, domainshared.QueueFunctionsInvocations, ack)
 		}
-		if err := w.functions.ProcessExecutionPayload(ctx, payload); err != nil {
+		if err := w.functions.ProcessInvocationPayload(ctx, payload); err != nil {
 			if ctx.Err() != nil {
 				return
 			}
@@ -355,10 +355,10 @@ func (w *Worker) consume(ctx context.Context) {
 				ackDone()
 				continue
 			}
-			w.logger.Error("process execution failed", "error", err)
+			w.logger.Error("process invocation failed", "error", err)
 			// 瞬时失败重抛回队，最多 maxProcessAttempts 次；超限兜底标 failed。
 			if next, ok := requeue(payload); ok {
-				if qerr := w.queue.Enqueue(ctx, domainshared.QueueFunctionsExecutions, next); qerr != nil {
+				if qerr := w.queue.Enqueue(ctx, domainshared.QueueFunctionsInvocations, next); qerr != nil {
 					// Enqueue 失败**不 Ack**：消息留在 PEL，由 Dequeue 的
 					// XAUTOCLAIM（claimMinIdle 窗口后）重投。此处 Ack 掉会把
 					// 任务从 Stream/PEL 双双抹掉——蒸发后只剩孤儿恢复兜底标
@@ -417,24 +417,26 @@ func requeue(payload []byte) (next []byte, ok bool) {
 }
 
 // retryMessage 是 worker 侧解析队列 payload 的完整字段集合（与 functions 包
-// queueMessage 的 json 字段名一致，JSON 往返无损：execution_id/function_id/
-// project_id/data/attempt；用于 requeue 重抛与 failPayload 兜底标记 failed）。
+// queueMessage 的 json 字段名一致，JSON 往返无损：invocation_id/function_id/
+// project_id/data/attempt；用于 requeue 重抛与 failPayload 兜底标记 failed。
+// v4 起字段名 invocation_id（旧 execution_id 随改名退役，队列消息内部验证期
+// 无兼容负担））。
 type retryMessage struct {
-	ExecutionID string `json:"execution_id"`
-	FunctionID  string `json:"function_id"`
-	ProjectID   string `json:"project_id"`
-	Data        string `json:"data,omitempty"`
-	Attempt     int    `json:"attempt,omitempty"`
+	InvocationID string `json:"invocation_id"`
+	FunctionID   string `json:"function_id"`
+	ProjectID    string `json:"project_id"`
+	Data         string `json:"data,omitempty"`
+	Attempt      int    `json:"attempt,omitempty"`
 }
 
 // failPayload 解析 payload 并兜底标记执行失败（best-effort）。
 func (w *Worker) failPayload(ctx context.Context, payload []byte, reason string) {
 	var m retryMessage
-	if err := json.Unmarshal(payload, &m); err != nil || m.ExecutionID == "" {
+	if err := json.Unmarshal(payload, &m); err != nil || m.InvocationID == "" {
 		w.logger.Error("cannot parse payload to mark failed", "error", err, "payload", string(payload))
 		return
 	}
-	if err := w.functions.MarkExecutionFailed(ctx, m.ProjectID, m.FunctionID, m.ExecutionID, reason); err != nil {
-		w.logger.Error("mark execution failed", "execution_id", m.ExecutionID, "error", err)
+	if err := w.functions.MarkInvocationFailed(ctx, m.ProjectID, m.FunctionID, m.InvocationID, reason); err != nil {
+		w.logger.Error("mark invocation failed", "invocation_id", m.InvocationID, "error", err)
 	}
 }

@@ -53,7 +53,6 @@ var ProviderSet = wire.NewSet(
 	servergrpc.NewRuntimeVarsService,
 	serverhttp.NewFileHandler,
 	serverhttp.NewOAuthHandler,
-	serverhttp.NewFunctionsHandler,
 	serverhttp.NewPaymentsHandler,
 	// P1 触发器模块：/f/{project_id}/{trigger_token} 公开入口。
 	serverhttp.NewFunctionTriggersHandler,

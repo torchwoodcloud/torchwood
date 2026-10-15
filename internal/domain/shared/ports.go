@@ -9,8 +9,10 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain/events"
 )
 
-// QueueFunctionsExecutions 是函数异步执行的队列名（Redis Stream，至少一次）。
-const QueueFunctionsExecutions = "torchwood:queue:functions-executions"
+// QueueFunctionsInvocations 是函数异步调用的队列名（Redis Stream，至少一次；
+// v4 §2 重命名：functions-executions → functions-invocations，内部验证期
+// 无兼容负担）。
+const QueueFunctionsInvocations = "torchwood:queue:functions-invocations"
 
 // 事件脊柱 Stream 与函数事件触发器消费（v2 阶段④ §4.5 + functions-v3 §4.2）。
 const (

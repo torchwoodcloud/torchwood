@@ -23,18 +23,18 @@ import (
 )
 
 // 全路径身份断言（P0 执行身份 × P2 客户端调用面）：真实 Redis token 服务
-// （miniredis）之上的 mint（经 Functions.ClientInvoke，携带执行记录的
+// （miniredis）之上的 mint（经 Functions.ClientInvoke，携带调用记录的
 // InvokingUserID）→ Validate（真 Validator 构造 execution principal）→
 // operatorFrom 输出。operator_execution_test.go 直接手工构造 principal，
 // 证明不了 mint 侧是否真的把调用用户带进链路——本测试补上这一环。
 //
-// 函数仓储用接口内嵌桩（ClientInvoke 同步路径只触达下列五个方法，其余
-// 方法不被调用）。executor 桩捕获注入 env（TW_EXECUTION_TOKEN 即函数容器
-// 回访 Server API 用的凭证原值）。
+// 函数仓储用接口内嵌桩（ClientInvoke 同步路径只触达下列四个方法，其余
+// 方法不被调用）。Invoker 桩捕获随签名请求头注入的执行身份 token（v4：
+// X-Tw-Execution-Token——常驻的是服务不是凭证；函数在调用期间拿它回访
+// Server API）。
 type fullpathFnRepo struct {
 	domainfunctions.FunctionRepo
-	fn  *domainfunctions.Function
-	dep *domainfunctions.Deployment
+	fn *domainfunctions.Function
 }
 
 func (r *fullpathFnRepo) GetFunction(_ context.Context, projectID, functionID string) (*domainfunctions.Function, error) {
@@ -44,20 +44,12 @@ func (r *fullpathFnRepo) GetFunction(_ context.Context, projectID, functionID st
 	return r.fn, nil
 }
 
-func (r *fullpathFnRepo) ListDeployments(context.Context, string, string) ([]domainfunctions.Deployment, error) {
-	return []domainfunctions.Deployment{*r.dep}, nil
-}
-
-func (r *fullpathFnRepo) GetVariables(context.Context, string, string) (map[string]string, error) {
-	return map[string]string{}, nil
-}
-
-func (r *fullpathFnRepo) CreateExecution(_ context.Context, e *domainfunctions.ExecutionRecord) error {
-	e.ID = "exe_fullpath"
+func (r *fullpathFnRepo) CreateInvocation(_ context.Context, e *domainfunctions.InvocationRecord) error {
+	e.ID = "inv_fullpath"
 	return nil
 }
 
-func (r *fullpathFnRepo) UpdateExecution(context.Context, *domainfunctions.ExecutionRecord) error {
+func (r *fullpathFnRepo) UpdateInvocation(context.Context, *domainfunctions.InvocationRecord) error {
 	return nil
 }
 
@@ -65,27 +57,25 @@ func (r *fullpathFnRepo) CountClientInvocations(context.Context, string, string,
 	return 0, nil
 }
 
-type fullpathExecutor struct {
-	captured domainfunctions.Execution
-	// onExecute 在执行进行中回调（真实时序：函数容器是在执行期间拿 env 里的
-	// token 回访 Server API；执行结束 defer 即吊销，返回后 Validate 必 401）。
-	onExecute func(execToken string)
+type fullpathInvoker struct {
+	// onInvoke 在调用进行中回调（真实时序：函数 endpoint 是在调用期间拿
+	// X-Tw-Execution-Token 头回访 Server API；调用结束 defer 即吊销，返回后
+	// Validate 必 401）。
+	onInvoke func(execToken string)
 }
 
-func (m *fullpathExecutor) Build(context.Context, domainfunctions.BuildSpec) (string, error) {
-	return "", nil
-}
-func (m *fullpathExecutor) Execute(_ context.Context, e domainfunctions.Execution) (*domainfunctions.ExecutionResult, error) {
-	m.captured = e
-	if m.onExecute != nil {
-		m.onExecute(e.Env["TW_EXECUTION_TOKEN"])
+func (m *fullpathInvoker) Invoke(_ context.Context, inv domainfunctions.Invocation) (*domainfunctions.InvocationResult, error) {
+	if m.onInvoke != nil {
+		m.onInvoke(inv.ExecutionToken)
 	}
-	return &domainfunctions.ExecutionResult{StatusCode: 0}, nil
+	return &domainfunctions.InvocationResult{}, nil
 }
-func (m *fullpathExecutor) ImportImage(context.Context, domainfunctions.ImportImageSpec) (string, error) {
-	return "", nil // image 源不在本文件测试路径
+
+type fullpathNotifier struct{}
+
+func (fullpathNotifier) Notify(context.Context, domainfunctions.Notification) (domainfunctions.NotificationResult, error) {
+	return domainfunctions.NotificationResult{}, nil
 }
-func (m *fullpathExecutor) RemoveImage(context.Context, string, string) error { return nil }
 
 type fullpathQueue struct{}
 
@@ -103,12 +93,12 @@ func TestExecutionIdentity_FullPathMintValidateOperator(t *testing.T) {
 	tokenSvc := infrafunctions.NewRedisExecutionTokenService(rdb)
 
 	fn := &domainfunctions.Function{
-		ID: "fn_full", ProjectID: "p1", Name: "fn", Runtime: "node-18.0",
-		Entrypoint: "index.main", TimeoutSeconds: 15, Spec: "shared-1x", Enabled: true,
+		ID: "fn_full", ProjectID: "p1", Name: "fn",
+		TargetURL: "https://fn.example.com", TimeoutSeconds: 15, Enabled: true,
 		ClientCallable: true, ClientPerUserLimit: 5, ClientLimitWindow: domainfunctions.ClientLimitWindowDay,
 		DeclaredScopes: []string{"assets:write"},
 	}
-	executor := &fullpathExecutor{}
+	invoker := &fullpathInvoker{}
 	validator := infraauth.NewValidatorWithOneTimeTokens(
 		&config.AppConfig{Security: &config.Security{Jwt: &config.Security_Jwt{Secret: "test-secret"}}},
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, tokenSvc,
@@ -118,10 +108,10 @@ func TestExecutionIdentity_FullPathMintValidateOperator(t *testing.T) {
 		operatorOk bool
 		snap       domainassets.OperatorSnapshot
 	)
-	executor.onExecute = func(token string) {
+	invoker.onInvoke = func(token string) {
 		execToken = token
-		// ② Validate：函数容器回访 Server API 时真 Validator 构造 execution
-		// principal——invoking_user 必须穿透 Redis 投影回来。
+		// ② Validate：函数 endpoint 回访 Server API 时真 Validator 构造
+		// execution principal——invoking_user 必须穿透 Redis 投影回来。
 		p, err := validator.ValidateCredential(context.Background(), token, domainshared.CredentialTypeExecution)
 		require.NoError(t, err)
 		require.Equal(t, domainshared.ActorKindExecution, p.ActorKind)
@@ -139,13 +129,12 @@ func TestExecutionIdentity_FullPathMintValidateOperator(t *testing.T) {
 		require.Equal(t, "execution", snap.CredentialType)
 		operatorOk = true
 	}
-	fnUC := appfunctions.NewFunctionsWithUsage(
-		&config.AppConfig{}, executor, &fullpathFnRepo{fn: fn,
-			dep: &domainfunctions.Deployment{ID: "dep_1", Status: domainfunctions.DeploymentStatusReady}},
-		fullpathQueue{}, nil, nil, appfunctions.Semaphores{}, tokenSvc, nil, nil,
+	fnUC := appfunctions.NewFunctions(
+		&config.AppConfig{}, invoker, fullpathNotifier{}, &fullpathFnRepo{fn: fn},
+		fullpathQueue{}, nil, nil, tokenSvc, nil, nil,
 	)
 
-	// ① mint：端用户经客户端调用面触发执行（真实 token 服务落 Redis 投影）。
+	// ① mint：端用户经客户端调用面触发调用（真实 token 服务落 Redis 投影）。
 	userCtx := contexts.WithPrincipal(context.Background(), &domainshared.Principal{
 		ActorID:   "user-1",
 		ActorKind: domainshared.ActorKindEndUser,
@@ -155,11 +144,11 @@ func TestExecutionIdentity_FullPathMintValidateOperator(t *testing.T) {
 	_, err := fnUC.ClientInvoke(userCtx, appfunctions.ClientInvokeCommand{ProjectID: "p1", FunctionID: "fn_full"})
 	require.NoError(t, err)
 
-	require.True(t, operatorOk, "执行中回调必须已走完 Validate → operatorFrom 断言")
-	require.NotEmpty(t, execToken, "执行身份 token 应注入函数容器 env")
+	require.True(t, operatorOk, "调用中回调必须已走完 Validate → operatorFrom 断言")
+	require.NotEmpty(t, execToken, "执行身份 token 应随 X-Tw-Execution-Token 头注入")
 
-	// 执行结束即主动吊销：ClientInvoke 返回（defer 已 DEL）后同 token 二次
-	// 校验 401——「常驻的是容器不是凭证」。
+	// 调用结束即主动吊销：ClientInvoke 返回（defer 已 DEL）后同 token 二次
+	// 校验 401——「常驻的是服务不是凭证」。
 	_, err = validator.ValidateCredential(context.Background(), execToken, domainshared.CredentialTypeExecution)
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 }

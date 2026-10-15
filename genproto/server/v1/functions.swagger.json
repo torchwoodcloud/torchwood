@@ -77,12 +77,13 @@
         ]
       },
       "post": {
+        "summary": "CreateFunction 创建函数：endpoint target（url）创建时录入，签名密钥\n服务端生成、明文仅在本响应出现一次（之后只出指纹）。",
         "operationId": "FunctionsService_CreateFunction",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1Function"
+              "$ref": "#/definitions/v1CreateFunctionResponse"
             }
           },
           "default": {
@@ -201,163 +202,14 @@
         ]
       }
     },
-    "/v1/server/functions/{function_id}/deployments": {
+    "/v1/server/functions/{function_id}/invocations": {
       "get": {
-        "operationId": "FunctionsService_ListDeployments",
+        "operationId": "FunctionsService_ListInvocations",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1ListDeploymentsResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/v1ErrorResponse"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "function_id",
-            "in": "path",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "page_size",
-            "in": "query",
-            "required": false,
-            "type": "integer",
-            "format": "int32"
-          },
-          {
-            "name": "page_token",
-            "in": "query",
-            "required": false,
-            "type": "string"
-          }
-        ],
-        "tags": [
-          "FunctionsService"
-        ]
-      },
-      "post": {
-        "operationId": "FunctionsService_CreateDeployment",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1Deployment"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/v1ErrorResponse"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "function_id",
-            "in": "path",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/FunctionsServiceCreateDeploymentBody"
-            }
-          }
-        ],
-        "tags": [
-          "FunctionsService"
-        ]
-      }
-    },
-    "/v1/server/functions/{function_id}/deployments/{deployment_id}": {
-      "get": {
-        "operationId": "FunctionsService_GetDeployment",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1Deployment"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/v1ErrorResponse"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "function_id",
-            "in": "path",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "deployment_id",
-            "in": "path",
-            "required": true,
-            "type": "string"
-          }
-        ],
-        "tags": [
-          "FunctionsService"
-        ]
-      },
-      "delete": {
-        "operationId": "FunctionsService_DeleteDeployment",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1Empty"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/v1ErrorResponse"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "function_id",
-            "in": "path",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "deployment_id",
-            "in": "path",
-            "required": true,
-            "type": "string"
-          }
-        ],
-        "tags": [
-          "FunctionsService"
-        ]
-      }
-    },
-    "/v1/server/functions/{function_id}/executions": {
-      "get": {
-        "operationId": "FunctionsService_ListExecutions",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1ListExecutionsResponse"
+              "$ref": "#/definitions/v1ListInvocationsResponse"
             }
           },
           "default": {
@@ -389,7 +241,7 @@
           },
           {
             "name": "status",
-            "description": "执行状态精确匹配：queued | building | running | completed | failed。",
+            "description": "调用状态精确匹配：queued | running | completed | failed。",
             "in": "query",
             "required": false,
             "type": "string"
@@ -412,52 +264,16 @@
         "tags": [
           "FunctionsService"
         ]
-      },
-      "post": {
-        "operationId": "FunctionsService_CreateExecution",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1Execution"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/v1ErrorResponse"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "function_id",
-            "in": "path",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/FunctionsServiceCreateExecutionBody"
-            }
-          }
-        ],
-        "tags": [
-          "FunctionsService"
-        ]
       }
     },
-    "/v1/server/functions/{function_id}/executions/{execution_id}": {
+    "/v1/server/functions/{function_id}/invocations/{invocation_id}": {
       "get": {
-        "operationId": "FunctionsService_GetExecution",
+        "operationId": "FunctionsService_GetInvocation",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1Execution"
+              "$ref": "#/definitions/v1Invocation"
             }
           },
           "default": {
@@ -475,7 +291,7 @@
             "type": "string"
           },
           {
-            "name": "execution_id",
+            "name": "invocation_id",
             "in": "path",
             "required": true,
             "type": "string"
@@ -556,7 +372,7 @@
       },
       "post": {
         "summary": "——触发器管理（P1 触发器模块；K4/K10）——",
-        "description": "CreateFunctionTrigger 创建 HTTP 或 cron 触发器。http 的 token 由服务端\n生成（128bit，URL 即鉴权）、不收入参；公开调用路由为\n/f/{project_id}/{token}（FunctionTrigger.invoke_path）。",
+        "description": "CreateFunctionTrigger 创建 HTTP / cron / event 触发器。http 的 token 由\n服务端生成（128bit，URL 即鉴权）、不收入参；公开调用路由为\n/f/{project_id}/{token}（FunctionTrigger.invoke_path）。",
         "operationId": "FunctionsService_CreateFunctionTrigger",
         "responses": {
           "200": {
@@ -674,42 +490,15 @@
         ]
       }
     },
-    "/v1/server/functions/{function_id}/variables": {
-      "get": {
-        "operationId": "FunctionsService_GetVariables",
+    "/v1/server/functions/{function_id}:invoke": {
+      "post": {
+        "summary": "InvokeFunction 调用一个函数（v4 §2：CreateExecution 改名——一个动作一个\n名字，与 client 面同名对齐；async=true 时立即返回 queued invocation）。",
+        "operationId": "FunctionsService_InvokeFunction",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1Variables"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/v1ErrorResponse"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "function_id",
-            "in": "path",
-            "required": true,
-            "type": "string"
-          }
-        ],
-        "tags": [
-          "FunctionsService"
-        ]
-      },
-      "put": {
-        "operationId": "FunctionsService_SetVariables",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1Variables"
+              "$ref": "#/definitions/v1Invocation"
             }
           },
           "default": {
@@ -731,7 +520,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/FunctionsServiceSetVariablesBody"
+              "$ref": "#/definitions/torchwoodserverv1FunctionsServiceInvokeFunctionBody"
             }
           }
         ],
@@ -740,15 +529,15 @@
         ]
       }
     },
-    "/v1/server/functions:runtimes": {
-      "get": {
-        "summary": "functions:runtimes / functions:specifications 为自定义方法段（REST\n自定义动词），不再占用 function_id 命名空间；function_id 可自由取任意合法值。",
-        "operationId": "FunctionsService_ListRuntimes",
+    "/v1/server/functions/{function_id}:rotate-secret": {
+      "post": {
+        "summary": "RotateFunctionSecret 轮换 endpoint target 签名密钥（v4 §3/§4，语义与\nwebhooks RotateWebhookSecret 一致）：新钥即刻生效（v1 签名），旧钥保留\n一个宽限窗（v2 双签）——函数侧持旧钥的 FDK 过渡期不断流。新明文仅在\n本响应出现一次。",
+        "operationId": "FunctionsService_RotateFunctionSecret",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1ListRuntimesResponse"
+              "$ref": "#/definitions/v1FunctionSecret"
             }
           },
           "default": {
@@ -758,28 +547,22 @@
             }
           }
         },
-        "tags": [
-          "FunctionsService"
-        ]
-      }
-    },
-    "/v1/server/functions:specifications": {
-      "get": {
-        "operationId": "FunctionsService_ListSpecifications",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/v1ListSpecificationsResponse"
-            }
+        "parameters": [
+          {
+            "name": "function_id",
+            "in": "path",
+            "required": true,
+            "type": "string"
           },
-          "default": {
-            "description": "An unexpected error response.",
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
             "schema": {
-              "$ref": "#/definitions/v1ErrorResponse"
+              "$ref": "#/definitions/FunctionsServiceRotateFunctionSecretBody"
             }
           }
-        },
+        ],
         "tags": [
           "FunctionsService"
         ]
@@ -787,37 +570,6 @@
     }
   },
   "definitions": {
-    "FunctionsServiceCreateDeploymentBody": {
-      "type": "object",
-      "properties": {
-        "code": {
-          "type": "string",
-          "format": "byte"
-        },
-        "git": {
-          "$ref": "#/definitions/v1GitSource"
-        },
-        "image": {
-          "$ref": "#/definitions/v1ImageSource"
-        }
-      },
-      "title": "部署源 oneof（二期起，docs/design/functions-runtimes-and-sources.md §0）：\ncode 为 zip 代码包，≤1MiB 走此通道；更大的 zip 包走 multipart 上传\n（POST /v1/server/functions/{function_id}/deployments/code，仅承载 zip）。\ngit/image 源载荷极小，仅走本 gRPC JSON 通道、不设 multipart 形态：git 由\n独立 packer 服务物化为 zip 落既有构建路径；image 为免构建路径\n（pull + digest 钉死 + retag + 契约验证，runtime 专用 ID `image`，源/运行时\n互斥见 §0）。字段号 2 原号移入 oneof，wire 兼容。"
-    },
-    "FunctionsServiceCreateExecutionBody": {
-      "type": "object",
-      "properties": {
-        "deployment_id": {
-          "type": "string",
-          "title": "缺省用最新 ready deployment"
-        },
-        "data": {
-          "type": "string"
-        },
-        "async": {
-          "type": "boolean"
-        }
-      }
-    },
     "FunctionsServiceCreateFunctionTriggerBody": {
       "type": "object",
       "properties": {
@@ -840,6 +592,10 @@
       },
       "title": "CreateFunctionTriggerRequest 创建触发器：type 选择 http / cron / event，\n三选一填 http / cron / event 配置段。token 服务端生成，不收入参。"
     },
+    "FunctionsServiceRotateFunctionSecretBody": {
+      "type": "object",
+      "title": "RotateFunctionSecretRequest 轮换 endpoint target 签名密钥。"
+    },
     "FunctionsServiceRotateFunctionTriggerTokenBody": {
       "type": "object"
     },
@@ -855,34 +611,15 @@
       },
       "title": "SetFunctionScopesRequest 全量替换函数 declared_scopes（P0 执行身份；\n空集 = 撤销全部平台访问）。"
     },
-    "FunctionsServiceSetVariablesBody": {
-      "type": "object",
-      "properties": {
-        "variables": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/v1Variable"
-          }
-        }
-      },
-      "title": "SetVariablesRequest 全量替换函数环境变量。"
-    },
     "FunctionsServiceUpdateFunctionBody": {
       "type": "object",
       "properties": {
         "name": {
           "type": "string"
         },
-        "entrypoint": {
-          "type": "string"
-        },
         "timeout_seconds": {
           "type": "integer",
           "format": "int32"
-        },
-        "spec": {
-          "type": "string"
         },
         "enabled": {
           "type": "boolean"
@@ -902,59 +639,37 @@
         "client_limit_window": {
           "type": "string"
         },
-        "min_instances": {
-          "type": "integer",
-          "format": "int32",
-          "title": "——池策略（P0.5 执行器 v2 + v3 多路复用，docs/design/functions-v3.md\n§5/Key Decisions D15/OQ2 收口；未设置 = 不修改）——\n范围注解与 DB CHECK 约束同源（迁移 000014/000017）：\nmin\u003e=0、max\u003e=1、idle_ttl\u003e=30、max_requests\u003e=1、concurrency 1..16。\nmin_instances ≤ max_instances 的跨字段校验在 app 用例层。\n保温下限（0 = 纯 scale-from-zero）。"
-        },
-        "max_instances": {
-          "type": "integer",
-          "format": "int32",
-          "title": "突发并发上限（超限有界排队）。"
-        },
-        "idle_ttl_seconds": {
-          "type": "integer",
-          "format": "int32",
-          "title": "空闲回收阈值（秒；实例数 \u003e min 时）。"
-        },
-        "max_requests_per_instance": {
-          "type": "integer",
-          "format": "int32",
-          "title": "实例请求数到期排空替换（防内存泄漏，Lambda 同款）。"
-        },
-        "concurrency": {
-          "type": "integer",
-          "format": "int32",
-          "title": "单实例并发上限（v3 实例内多路复用；默认 1 = v2 串行等价，\u003e1 要求函数\n可重入；CHECK 上限 16）。"
-        },
-        "runtime": {
+        "target_url": {
           "type": "string",
-          "title": "运行时 ID（docs/design/functions-runtime-selection.md §3）：未设置 =\n不修改。只影响后续新 deployment 的构建（存量 ready 部署镜像已构建\n完毕不受影响）；eol runtime 拒绝（app 层状态门，错误文案列出可选\nruntime）。从 eol 迁出到新版本是合法且期望的操作路径。"
+          "title": "endpoint target url（v4 §3）：未设置 = 不修改；密钥变更走\nRotateFunctionSecret（与 webhooks Update/Rotate 分工一致）。"
         }
       }
+    },
+    "torchwoodserverv1FunctionsServiceInvokeFunctionBody": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "string"
+        },
+        "async": {
+          "type": "boolean"
+        }
+      },
+      "title": "InvokeFunctionRequest 调用一个函数（v4 §2：CreateExecutionRequest 改名；\ndeployment_id 已随部署面退役——目标恒为函数当前的 endpoint target）。"
     },
     "v1CreateFunctionRequest": {
       "type": "object",
       "properties": {
         "id": {
           "type": "string",
-          "title": "客户端自选 function_id；functions:runtimes / functions:specifications\n为自定义方法段（REST 自定义动词），不再占用 function_id 命名空间，\n可自由取任意合法值。"
+          "title": "客户端自选 function_id；functions:invoke / functions:rotate-secret\n为自定义方法段（REST 自定义动词），不占用 function_id 命名空间，\n可自由取任意合法值。"
         },
         "name": {
-          "type": "string"
-        },
-        "runtime": {
-          "type": "string"
-        },
-        "entrypoint": {
           "type": "string"
         },
         "timeout_seconds": {
           "type": "integer",
           "format": "int32"
-        },
-        "spec": {
-          "type": "string"
         },
         "enabled": {
           "type": "boolean"
@@ -981,8 +696,29 @@
         },
         "client_limit_window": {
           "type": "string"
+        },
+        "target_url": {
+          "type": "string",
+          "title": "endpoint target url（v4 §3）：函数常驻服务的调用终点。生产强制 https\n（开发环境可放行 http，校验在服务端 app 层按环境裁决）。"
+        },
+        "target_secret": {
+          "type": "string",
+          "title": "可选自定义签名密钥（twfnsec_ 前缀；空 = 服务端生成）。两种来源都只在\n本请求出现一次，落库前加密。"
         }
       }
+    },
+    "v1CreateFunctionResponse": {
+      "type": "object",
+      "properties": {
+        "function": {
+          "$ref": "#/definitions/v1Function"
+        },
+        "target_secret": {
+          "type": "string",
+          "title": "target 签名密钥明文（服务端生成或透传录入值）。之后只出指纹。"
+        }
+      },
+      "title": "CreateFunctionResponse 是创建响应：函数视图 + 一次性 target 签名密钥明文\n（仅此一次；之后任何面只出指纹）。"
     },
     "v1CronTriggerConfig": {
       "type": "object",
@@ -997,55 +733,6 @@
         }
       },
       "title": "CronTriggerConfig 是 cron 触发器配置（K10：一期 UTC）。"
-    },
-    "v1Deployment": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "function_id": {
-          "type": "string"
-        },
-        "size": {
-          "type": "string",
-          "format": "int64"
-        },
-        "status": {
-          "type": "string"
-        },
-        "error": {
-          "type": "string"
-        },
-        "created_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updated_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "source_type": {
-          "type": "string",
-          "title": "——部署源只读投影（二期起，docs/design/functions-runtimes-and-sources.md\n§0；source 列 INSERT 期写全、之后不可变）——\n部署源类型：zip | git | image（词表与 DB CHECK 同源）。"
-        },
-        "source_url": {
-          "type": "string",
-          "title": "git 仓库 url / image 原始引用（host/repo[:tag|@sha256:...]）；zip 源恒空。"
-        },
-        "source_ref": {
-          "type": "string",
-          "title": "git 钉死的 commit SHA / image 钉死的 digest（sha256:...）；zip 源恒空。"
-        },
-        "source_dir": {
-          "type": "string",
-          "title": "git 构建上下文子目录；zip/image 源恒空。凭证字段不出现在任何响应面。"
-        },
-        "runtime": {
-          "type": "string",
-          "title": "构建所用 runtime ID 快照（docs/design/functions-runtime-selection.md\n§4；迁移 000025：INSERT 期写全、之后不可变）——补构建/审计以行内\n快照为准，不随后续 fn.runtime 变更漂移。"
-        }
-      }
     },
     "v1Empty": {
       "type": "object"
@@ -1112,60 +799,6 @@
       },
       "title": "EventTriggerConfig 是事件触发器配置（v3 切片 D，functions-v3.md §4.1/D12\n+ §4.1 增补）。订阅串双形态：\n  文档写事件（业界同构）：\n    databases.{database_id}.collections.{collection_id}.documents.{op}\n  op ∈ {create, update, delete, *}；collection 段可为 `*`；database 段一期\n  必须精确（database 级通配后置）。\n  系统行为事件（§4.1 增补）：\n    {domain}.* | {domain}.{resource}.* | {domain}.{resource}.{op}（精确全名）\n  域词表 = 平台系统事件目录（auth / payments / economy / subscriptions，\n  唯一声明源 internal/domain/events/catalog.go，如 auth.users.created、\n  payments.orders.paid）；`*` 仅允许尾段；目录内无命中的前缀直接拒绝\n  （fail-closed，拼错立刻 400）。格式校验在服务端（领域层 eventmatch）。\n自环警告（D13）：订阅本函数自身写入的集合会形成「写→事件→再触发」循环，\n平台一期不做硬防护，Console 编辑处文案警告。"
     },
-    "v1Execution": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "function_id": {
-          "type": "string"
-        },
-        "deployment_id": {
-          "type": "string"
-        },
-        "status": {
-          "type": "string"
-        },
-        "response": {
-          "type": "string"
-        },
-        "stdout": {
-          "type": "string"
-        },
-        "stderr": {
-          "type": "string"
-        },
-        "status_code": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "duration_ms": {
-          "type": "string",
-          "format": "int64"
-        },
-        "error": {
-          "type": "string"
-        },
-        "response_truncated": {
-          "type": "boolean"
-        },
-        "stdout_truncated": {
-          "type": "boolean"
-        },
-        "stderr_truncated": {
-          "type": "boolean"
-        },
-        "created_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updated_at": {
-          "type": "string",
-          "format": "date-time"
-        }
-      }
-    },
     "v1Function": {
       "type": "object",
       "properties": {
@@ -1178,18 +811,9 @@
         "name": {
           "type": "string"
         },
-        "runtime": {
-          "type": "string"
-        },
-        "entrypoint": {
-          "type": "string"
-        },
         "timeout_seconds": {
           "type": "integer",
           "format": "int32"
-        },
-        "spec": {
-          "type": "string"
         },
         "enabled": {
           "type": "boolean"
@@ -1226,29 +850,48 @@
           "type": "string",
           "title": "限频窗口：minute | hour | day（day 按 UTC 日期）。"
         },
-        "min_instances": {
-          "type": "integer",
-          "format": "int32",
-          "title": "——池策略（只读视图；管理经 UpdateFunctionRequest optional ×5，\ndocs/design/functions-v3.md §5/OQ2）——"
-        },
-        "max_instances": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "idle_ttl_seconds": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "max_requests_per_instance": {
-          "type": "integer",
-          "format": "int32"
-        },
-        "concurrency": {
-          "type": "integer",
-          "format": "int32",
-          "title": "单实例并发上限（1..16；\u003e1 要求函数可重入）。"
+        "target": {
+          "$ref": "#/definitions/v1FunctionTarget",
+          "title": "endpoint target（v4 §3 单一 endpoint kind；proto 留 fleetly kind 扩展位\n——仅当需要原生 warm invoke/指标透出时立项，v4 不实现）。"
         }
-      }
+      },
+      "title": "Function 是函数视图。v4 target 模型（§3）：执行位置 = endpoint 常驻服务；\n池策略/运行时/资源规格归 substrate（fleetly 副本数 / k8s HPA / 用户自管），\n字段号与名称 retired（见 reserved）。"
+    },
+    "v1FunctionSecret": {
+      "type": "object",
+      "properties": {
+        "function_id": {
+          "type": "string"
+        },
+        "secret": {
+          "type": "string",
+          "title": "签名密钥明文（twfnsec_ 前缀 + 32 字节 base64url）。之后只出指纹。"
+        },
+        "secret_fingerprint": {
+          "type": "string",
+          "title": "轮换后的指纹（便于与既有记录核对）。"
+        }
+      },
+      "title": "FunctionSecret 是轮换响应：明文只出现这一次，调用方立即部署到函数侧。"
+    },
+    "v1FunctionTarget": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "title": "函数常驻服务的调用终点（生产强制 https；开发环境经 app 层放行 http）。"
+        },
+        "secret_fingerprint": {
+          "type": "string",
+          "title": "签名密钥指纹（\"twfnsec_\" + SHA-256 前 8 hex；比对用，非明文）。"
+        },
+        "secret_rotated_at": {
+          "type": "string",
+          "format": "date-time",
+          "title": "最近一次密钥轮换时刻（宽限窗内旧钥 v2 双签）。"
+        }
+      },
+      "title": "FunctionTarget 是函数的执行终点（v4 §3 单一 endpoint target 模型）。\n密钥任何形态不回显：明文仅在创建/轮换响应一次性返回（实施勘误 2026-10-15：\n签名方每次调用需明文计算 HMAC——密钥本体 secretbox 加密落库，API 面只出\n指纹），管理面只出 secret_fingerprint。"
     },
     "v1FunctionTrigger": {
       "type": "object",
@@ -1315,31 +958,6 @@
       },
       "title": "FunctionTrigger 是触发器视图。http 专有字段（token/invoke_path/response_mode/\nack_body/handshake/body_limit_bytes）与 cron 专有字段（expr/misfire/\nnext_run_at）按 type 取用；token 明文仅在管理面返回。"
     },
-    "v1GitSource": {
-      "type": "object",
-      "properties": {
-        "url": {
-          "type": "string",
-          "title": "仓库地址。https 为生产形态；file:// 仅 development 环境放行（server\napp 层按 TORCHWOOD_ENV 收紧，非 dev 一律 InvalidArgument）。SSRF 防护\n（拨号点 IP guard）与 userinfo 拒绝由 packer 服务执行。"
-        },
-        "ref": {
-          "type": "string",
-          "title": "branch/tag/commit；缺省 HEAD（服务端解析并钉死为 commit SHA）。"
-        },
-        "directory": {
-          "type": "string",
-          "title": "仓库内子目录 = 构建上下文根；缺省根目录。"
-        },
-        "username": {
-          "type": "string",
-          "title": "可选 Basic 凭证（PAT）。username/token 均一次性凭证：仅本次请求内存、\n不落库不回显（D8），审计载荷由敏感键 mask 兜底。"
-        },
-        "token": {
-          "type": "string"
-        }
-      },
-      "title": "GitSource 是 git 仓库部署源（packer 归一为 zip，设计 §2）。"
-    },
     "v1HttpTriggerConfig": {
       "type": "object",
       "properties": {
@@ -1363,52 +981,46 @@
       },
       "title": "HttpTriggerConfig 是 HTTP 触发器配置。"
     },
-    "v1ImageSource": {
+    "v1Invocation": {
       "type": "object",
       "properties": {
-        "image": {
-          "type": "string",
-          "title": "镜像引用：host/repo[:tag|@sha256:...]。tag 在导入期钉死为 digest（落\nDeployment.source_ref，防 tag 漂移）；host 侧 SSRF 防护与 registry\n白名单由 dispatcher 侧执行（阶段 2 接线）。"
-        },
-        "registry_username": {
-          "type": "string",
-          "title": "可选 registry 凭证。username/token 均一次性凭证：仅本次请求内存、转发\ndispatcher 拉取用、不落库不回显（D8），审计载荷由敏感键 mask 兜底；\n私有镜像的 worker 补拉因凭证不落库而受限（声明边界，§3）。"
-        },
-        "registry_token": {
+        "id": {
           "type": "string"
+        },
+        "function_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "title": "queued | running | completed | failed（v4 收敛：building 态随补构建退役）。"
+        },
+        "response": {
+          "type": "string"
+        },
+        "status_code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "duration_ms": {
+          "type": "string",
+          "format": "int64"
+        },
+        "error": {
+          "type": "string"
+        },
+        "response_truncated": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
         }
       },
-      "title": "ImageSource 是 BYO 镜像部署源（三期，设计 §3）：免构建路径——平台拉取\n引用镜像（tag 构建期钉死为 digest）→ retag 进平台命名 → 强制契约验证\n（:18080 /_tw/health 探针）。仅 runtime = `image` 的函数接受（源/运行时\n互斥，§0/D7）。"
-    },
-    "v1ListDeploymentsResponse": {
-      "type": "object",
-      "properties": {
-        "deployments": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/v1Deployment"
-          }
-        },
-        "meta": {
-          "$ref": "#/definitions/v1ListResponseMeta"
-        }
-      }
-    },
-    "v1ListExecutionsResponse": {
-      "type": "object",
-      "properties": {
-        "executions": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/v1Execution"
-          }
-        },
-        "meta": {
-          "$ref": "#/definitions/v1ListResponseMeta"
-        }
-      }
+      "title": "Invocation 是一次函数调用记录（v4 §2：Execution 改名——torchwood 只发起\n调用、不执行）。stdout/stderr 已退役：日志归 substrate 侧（fleetly logs /\n用户服务自管），torchwood 只见网关往返结果。"
     },
     "v1ListFunctionTriggersResponse": {
       "type": "object",
@@ -1437,6 +1049,21 @@
         }
       }
     },
+    "v1ListInvocationsResponse": {
+      "type": "object",
+      "properties": {
+        "invocations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Invocation"
+          }
+        },
+        "meta": {
+          "$ref": "#/definitions/v1ListResponseMeta"
+        }
+      }
+    },
     "v1ListResponseMeta": {
       "type": "object",
       "properties": {
@@ -1457,61 +1084,6 @@
         }
       }
     },
-    "v1ListRuntimesResponse": {
-      "type": "object",
-      "properties": {
-        "runtimes": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/v1RuntimeInfo"
-          }
-        }
-      }
-    },
-    "v1ListSpecificationsResponse": {
-      "type": "object",
-      "properties": {
-        "specifications": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/v1SpecificationInfo"
-          }
-        }
-      }
-    },
-    "v1RuntimeInfo": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "entrypoint": {
-          "type": "string"
-        },
-        "family": {
-          "type": "string",
-          "title": "——运行时指定扩展（docs/design/functions-runtime-selection.md §1/§6）——\n语言族（node | go | image | python）：探测对账轴，客户端可据此做源\n形态提示。"
-        },
-        "status": {
-          "type": "string",
-          "title": "生命周期状态（active | deprecated | eol；deprecated 可用但客户端应\n提示；eol 拒绝新建函数/新部署，存量 ready 部署不受影响）。"
-        },
-        "is_default": {
-          "type": "boolean",
-          "title": "新建函数的缺省 runtime（node 家族内有且仅有一个）。"
-        },
-        "eol_at": {
-          "type": "string",
-          "format": "date-time",
-          "title": "上游 EOL 日期（如 Node.js 官方时间表）；active 恒缺省。"
-        }
-      }
-    },
     "v1SortOrder": {
       "type": "string",
       "enum": [
@@ -1521,44 +1093,6 @@
       ],
       "default": "SORT_ORDER_UNSPECIFIED",
       "title": "SortOrder 是时间列排序方向（Console 列表页「按创建时间正/倒序」）。\n固定排序键 = 各端点的时间列（通常 created_at），不是 AIP-160 任意列\norder_by（W-K 终结裁决维持：filter/order_by 不复活）。UNSPECIFIED =\n各端点历史默认（created_at DESC，最新在前）。keyset 游标与方向耦合，\n换向必须从第一页重新开始，携带异向游标即 InvalidArgument。"
-    },
-    "v1SpecificationInfo": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "cpu": {
-          "type": "string"
-        },
-        "memory": {
-          "type": "string"
-        }
-      }
-    },
-    "v1Variable": {
-      "type": "object",
-      "properties": {
-        "key": {
-          "type": "string"
-        },
-        "value": {
-          "type": "string",
-          "title": "环境变量值：SetVariables 请求透传明文；GetVariables 与 SetVariables\n响应统一返回掩码（\"******\"），真实值仅在 SetVariables 请求中可见一次\n（对齐 internal/app/functions/variables.go 的 secretMask 约定）。"
-        }
-      }
-    },
-    "v1Variables": {
-      "type": "object",
-      "properties": {
-        "variables": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "$ref": "#/definitions/v1Variable"
-          }
-        }
-      }
     }
   },
   "securityDefinitions": {

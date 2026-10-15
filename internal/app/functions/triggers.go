@@ -33,14 +33,16 @@ type InvokeTriggerCommand struct {
 	// 上限随执行器模式放宽——v1 env 通道硬上限 32KB，v2 dispatcher body
 	// 通道 ≤1MB；cron 触发器封套恒小于 1KB，传 0 用默认）。
 	BodyLimitBytes int
-	// ——HTTP 触发器封套通道（v3 §2.3/D10；cron 不设置）——恒填充：app 不
-	// 探测 runner 风格，TriggerEnvelope 携带封套元数据（不含 body）、
-	// RawBody 携带触发器原始 body（已过 handler 入口 413 校验）。runner
-	// fetch 风格还原 Request；main 风格 runner 重组 TW_DATA（与现状等价，
-	// 双轨 D9）。RawBodyIsB64 场景（调用方手持 base64 文本）当前无来源——
-	// handler 手持原始字节，直接填充 RawBody。
+	// ——HTTP 触发器封套通道（v4 §4.1 http.request params；cron/event 不设置）
+	// ——恒填充：TriggerEnvelope 携带封套元数据（不含 body）、RawBody 携带
+	// 触发器原始 body（已过 handler 入口 413 校验）。非 nil = 该调用走
+	// RPC 轴 http.request method（fetch 语义）。
 	TriggerEnvelope *domainfunctions.TriggerEnvelope
 	RawBody         []byte
+	// ——事件轴投递元数据（v4 §4.2，D10；cron/event 触发器路径填充）——
+	// EventAxis 非 nil = 该调用走事件轴（Notifier.Notify，CloudEvents）；
+	// type/time/seq 原料由此携带，CloudEvent 组装在 app 层。
+	EventAxis *domainfunctions.EventNotificationMeta
 }
 
 // CreateTriggerCommand 创建触发器命令。
@@ -134,7 +136,7 @@ func (f *Functions) ListFunctionTriggers(ctx context.Context, projectID, functio
 }
 
 // DeleteFunctionTrigger 删除触发器（不存在 → 404）。函数删除经 FK CASCADE
-// 级联；dispatcher 不需要通知（P0.5 交接既定：靠 idle TTL 收敛）。
+// 级联。
 func (f *Functions) DeleteFunctionTrigger(ctx context.Context, projectID, functionID, triggerID string) error {
 	if err := appshared.RequireServerPrincipal(ctx); err != nil {
 		return err
@@ -183,14 +185,14 @@ func (f *Functions) GetHTTPTriggerByToken(ctx context.Context, projectID, token 
 	return trg, nil
 }
 
-// InvokeTrigger 触发器执行入口：与 CreateExecution 同一核心路径（两写预占
-// 语义/异步队列/执行身份铸造全部一致），差异仅两点——token 门禁在 handler
-// 已完成（不要求 principal）；data 上限随执行器模式放宽（触发器封套含透传
-// body）。Source/SourceIP 记入执行记录（审计载体）。HTTP 触发器场景恒填充
-// TriggerEnvelope/RawBody（v3 §2.3/D10 恒填充语义——app 不探测 runner 风格，
-// main 风格 runner 重组 TW_DATA 与 fetch 风格还原 Request 双轨并存）。
-func (f *Functions) InvokeTrigger(ctx context.Context, cmd InvokeTriggerCommand) (*domainfunctions.ExecutionRecord, error) {
-	return f.createExecution(ctx, CreateExecutionCommand{
+// InvokeTrigger 触发器调用入口：与 Invoke 同一核心路径（两写预占语义/异步
+// 队列/执行身份铸造全部一致），差异仅两点——token 门禁在 handler 已完成
+// （不要求 principal）；data 上限随触发器封套通道放宽。Source/SourceIP 记入
+// 调用记录（审计载体）。HTTP 触发器场景恒填充 TriggerEnvelope/RawBody
+// （RPC 轴 http.request）；cron/event 触发器场景填充 EventAxis（事件轴，
+// D10 双轴分流在 runInvocation）。
+func (f *Functions) InvokeTrigger(ctx context.Context, cmd InvokeTriggerCommand) (*domainfunctions.InvocationRecord, error) {
+	return f.invokeInternal(ctx, InvokeCommand{
 		ProjectID:       cmd.ProjectID,
 		FunctionID:      cmd.FunctionID,
 		Data:            cmd.Data,
@@ -200,6 +202,7 @@ func (f *Functions) InvokeTrigger(ctx context.Context, cmd InvokeTriggerCommand)
 		DataLimitBytes:  cmd.BodyLimitBytes,
 		TriggerEnvelope: cmd.TriggerEnvelope,
 		RawBody:         cmd.RawBody,
+		EventAxis:       cmd.EventAxis,
 	})
 }
 
@@ -237,7 +240,10 @@ func (f *Functions) DispatchDueCronTriggers(ctx context.Context, now time.Time, 
 			continue
 		}
 		for _, c := range claims {
-			data, err := json.Marshal(cronEnvelope{Type: "cron", TriggerID: c.TriggerID, ScheduledFor: c.ScheduledFor.UTC().Format(time.RFC3339)})
+			// 事件轴原料（v4 §4.2，D10）：data = CronTick 投影（trigger_id +
+			// scheduled_for，FDK parseCronTick 同源契约）；type=cron.tick、
+			// time=scheduled_for——CloudEvent 组装在 app 层 runInvocation。
+			data, err := json.Marshal(domainfunctions.CronTick{TriggerID: c.TriggerID, ScheduledFor: c.ScheduledFor.UTC().Format(time.RFC3339)})
 			if err != nil {
 				f.undoCronClaim(ctx, c, now)
 				continue
@@ -248,6 +254,10 @@ func (f *Functions) DispatchDueCronTriggers(ctx context.Context, now time.Time, 
 				Data:       string(data),
 				Async:      true,
 				Source:     domainfunctions.TriggerTypeCron + ":" + c.TriggerID,
+				EventAxis: &domainfunctions.EventNotificationMeta{
+					Type: domainfunctions.CloudEventTypeCronTick,
+					Time: c.ScheduledFor,
+				},
 			}); err != nil {
 				f.logger().Warn("dispatch cron trigger failed", "project_id", c.ProjectID,
 					"function_id", c.FunctionID, "trigger_id", c.TriggerID, "error", err)
@@ -362,13 +372,6 @@ func (f *Functions) RefreshEventTriggerIndex(ctx context.Context, budget int) (*
 	}
 	f.logger().Debug("event trigger index refreshed", "subscriptions", idx.Len())
 	return idx, nil
-}
-
-// cronEnvelope 是 cron 触发入队 data（函数内可读 scheduled_for 做幂等键）。
-type cronEnvelope struct {
-	Type         string `json:"type"`
-	TriggerID    string `json:"trigger_id"`
-	ScheduledFor string `json:"scheduled_for"`
 }
 
 // MaxTriggerBodyLimit 返回 HTTP 触发器请求体的生效上限（字节）：配置值

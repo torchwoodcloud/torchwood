@@ -4,12 +4,14 @@
 // 统一出站投递引擎——函数 endpoint 调用与 webhook 投递共享本防护）。核心设计：
 // 校验实施在 **connect 系统调用时拿到的真实 IP** 上（dialer Control 钩子），
 // 而非请求前 DNS 预解析——解析与连接之间换 DNS 记录的 rebinding 攻击因此失效
-//（多 A 记录每连接触发一次校验；TLS 叠在受控拨号之上，不设 DialTLSContext；
+// （多 A 记录每连接触发一次校验；TLS 叠在受控拨号之上，不设 DialTLSContext；
 // 重定向后的拨号同样经 Control，天然覆盖）。
 //
-// 信任边界：AllowInsecure 仅供自托管内网目标（packer 的内网 git 服务）使用；
-// 用户配置的任意 URL（函数 endpoint、webhook 接收方）必须恒 false——此类目标
-// 比内网 git 更不可信，不提供放行开关。
+// 信任边界：AllowInsecure 是**平台级**信任决策（非 per-request 开关）——
+// 仅自托管形态下目标与本平台同处可信私网时由运营方显式开启（v4：webhook
+// 接收方恒 false；函数 endpoint 经 functions.invoke.allow_private_targets
+// 平台级放行——2026-10-15 私网 target 勘误，fleetly 任务网成员挂靠 / k8s
+// Service / 裸机内网寻址是部署拓扑责任；托管形态恒 false）。
 package ssrfguard
 
 import (
@@ -30,7 +32,7 @@ type Options struct {
 }
 
 // NewClient 返回带拨号点校验的 *http.Client：基于 DefaultTransport 克隆
-//（保留代理/TLS 缺省），仅替换 DialContext 为带 Control 钩子的 dialer。
+// （保留代理/TLS 缺省），仅替换 DialContext 为带 Control 钩子的 dialer。
 // 代理场景下 Control 看到的是代理地址（拨号终点即代理，代理本身必须可信，
 // 与出网代理的既有信任模型一致）。
 func NewClient(opts Options) *http.Client {

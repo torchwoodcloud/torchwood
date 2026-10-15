@@ -7,24 +7,15 @@ import (
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 )
 
-// FunctionsService 封装 Server API 的 Functions 服务。
+// FunctionsService 封装 Server API 的 Functions 服务（v4 面：target + 调用
+// + 触发器；部署/变量/运行时 RPC 随执行面外包退役，docs/design/functions-v4.md §2）。
 type FunctionsService struct {
 	c   *Client
 	api serverv1.FunctionsServiceClient
 }
 
-// ListRuntimes 列出支持的运行时。
-func (s *FunctionsService) ListRuntimes(ctx context.Context, req *sharedv1.Empty) (*serverv1.ListRuntimesResponse, error) {
-	return s.api.ListRuntimes(ctx, req)
-}
-
-// ListSpecifications 列出支持的资源配置。
-func (s *FunctionsService) ListSpecifications(ctx context.Context, req *sharedv1.Empty) (*serverv1.ListSpecificationsResponse, error) {
-	return s.api.ListSpecifications(ctx, req)
-}
-
-// CreateFunction 创建函数。
-func (s *FunctionsService) CreateFunction(ctx context.Context, req *serverv1.CreateFunctionRequest) (*serverv1.Function, error) {
+// CreateFunction 创建函数（endpoint target + 签名密钥明文一次性回显）。
+func (s *FunctionsService) CreateFunction(ctx context.Context, req *serverv1.CreateFunctionRequest) (*serverv1.CreateFunctionResponse, error) {
 	return s.api.CreateFunction(ctx, req)
 }
 
@@ -49,44 +40,34 @@ func (s *FunctionsService) DeleteFunction(ctx context.Context, req *serverv1.Get
 	return err
 }
 
-// CreateDeployment 上传 zip 代码包创建部署。
-func (s *FunctionsService) CreateDeployment(ctx context.Context, req *serverv1.CreateDeploymentRequest) (*serverv1.Deployment, error) {
-	return s.api.CreateDeployment(ctx, req)
-}
-
-// ListDeployments 分页列出函数部署（page_size/page_token 见 ListDeploymentsRequest）。
-func (s *FunctionsService) ListDeployments(ctx context.Context, req *serverv1.ListDeploymentsRequest) (*serverv1.ListDeploymentsResponse, error) {
-	return s.api.ListDeployments(ctx, req)
-}
-
-// GetDeployment 按 ID 获取部署。
-func (s *FunctionsService) GetDeployment(ctx context.Context, req *serverv1.GetDeploymentRequest) (*serverv1.Deployment, error) {
-	return s.api.GetDeployment(ctx, req)
-}
-
-// DeleteDeployment 删除部署。
-func (s *FunctionsService) DeleteDeployment(ctx context.Context, req *serverv1.GetDeploymentRequest) error {
-	_, err := s.api.DeleteDeployment(ctx, req)
-	return err
-}
-
-// SetVariables 全量替换函数环境变量。
-func (s *FunctionsService) SetVariables(ctx context.Context, req *serverv1.SetVariablesRequest) (*serverv1.Variables, error) {
-	return s.api.SetVariables(ctx, req)
-}
-
-// GetVariables 获取函数环境变量。
-func (s *FunctionsService) GetVariables(ctx context.Context, req *serverv1.GetFunctionRequest) (*serverv1.Variables, error) {
-	return s.api.GetVariables(ctx, req)
-}
-
 // SetFunctionScopes 全量替换函数 declared_scopes（执行身份，P0）。
 func (s *FunctionsService) SetFunctionScopes(ctx context.Context, req *serverv1.SetFunctionScopesRequest) (*serverv1.Function, error) {
 	return s.api.SetFunctionScopes(ctx, req)
 }
 
-// CreateFunctionTrigger 创建函数触发器（P1）：type=http 需带 http 配置段
-// （token 服务端生成）；type=cron 需带 cron 配置段。
+// RotateFunctionSecret 轮换 endpoint target 签名密钥（新明文一次性回显；
+// 旧钥保留一个宽限窗双签 v2）。
+func (s *FunctionsService) RotateFunctionSecret(ctx context.Context, req *serverv1.RotateFunctionSecretRequest) (*serverv1.FunctionSecret, error) {
+	return s.api.RotateFunctionSecret(ctx, req)
+}
+
+// InvokeFunction 调用函数（同步或 async；v4 §2 由 CreateExecution 改名）。
+func (s *FunctionsService) InvokeFunction(ctx context.Context, req *serverv1.InvokeFunctionRequest) (*serverv1.Invocation, error) {
+	return s.api.InvokeFunction(ctx, req)
+}
+
+// ListInvocations 分页列出调用记录（支持 status/created_at 过滤）。
+func (s *FunctionsService) ListInvocations(ctx context.Context, req *serverv1.ListInvocationsRequest) (*serverv1.ListInvocationsResponse, error) {
+	return s.api.ListInvocations(ctx, req)
+}
+
+// GetInvocation 按 ID 获取调用记录。
+func (s *FunctionsService) GetInvocation(ctx context.Context, req *serverv1.GetInvocationRequest) (*serverv1.Invocation, error) {
+	return s.api.GetInvocation(ctx, req)
+}
+
+// CreateFunctionTrigger 创建函数触发器：type=http 需带 http 配置段（token
+// 服务端生成）；type=cron 需带 cron 配置段；type=event 需带 event 配置段。
 func (s *FunctionsService) CreateFunctionTrigger(ctx context.Context, req *serverv1.CreateFunctionTriggerRequest) (*serverv1.FunctionTrigger, error) {
 	return s.api.CreateFunctionTrigger(ctx, req)
 }
@@ -105,19 +86,4 @@ func (s *FunctionsService) DeleteFunctionTrigger(ctx context.Context, req *serve
 // RotateFunctionTriggerToken 轮换 http 触发器 token（旧 token 立即失效）。
 func (s *FunctionsService) RotateFunctionTriggerToken(ctx context.Context, req *serverv1.RotateFunctionTriggerTokenRequest) (*serverv1.FunctionTrigger, error) {
 	return s.api.RotateFunctionTriggerToken(ctx, req)
-}
-
-// CreateExecution 创建函数执行（同步或异步）。
-func (s *FunctionsService) CreateExecution(ctx context.Context, req *serverv1.CreateExecutionRequest) (*serverv1.Execution, error) {
-	return s.api.CreateExecution(ctx, req)
-}
-
-// ListExecutions 分页列出执行记录（支持 status/created_at 过滤，见 ListExecutionsRequest）。
-func (s *FunctionsService) ListExecutions(ctx context.Context, req *serverv1.ListExecutionsRequest) (*serverv1.ListExecutionsResponse, error) {
-	return s.api.ListExecutions(ctx, req)
-}
-
-// GetExecution 按 ID 获取执行记录。
-func (s *FunctionsService) GetExecution(ctx context.Context, req *serverv1.GetExecutionRequest) (*serverv1.Execution, error) {
-	return s.api.GetExecution(ctx, req)
 }

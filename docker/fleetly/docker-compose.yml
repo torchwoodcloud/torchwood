@@ -18,9 +18,15 @@
 # README §4；所有 `<...>` 占位按实际环境替换。
 #
 # 命令语义提醒：fleetly 受控子集的 `command` = 覆盖镜像 ENTRYPOINT（Swarm
-# ContainerSpec.Command），因此 worker/dispatcher/packer 用二进制绝对路径直接
-# 启动；`sh -c` 里的 `$VAR` 由容器 shell 在运行时展开（平台禁用 compose 插值，
-# `${...}` 不会被平台替换——本文件不使用 `${...}`）。
+# ContainerSpec.Command），因此 worker 用二进制绝对路径直接启动；`sh -c` 里
+# 的 `$VAR` 由容器 shell 在运行时展开（平台禁用 compose 插值，`${...}` 不会
+# 被平台替换——本文件不使用 `${...}`）。
+#
+# Functions v4（docs/design/functions-v4.md）：dispatcher/packer 服务退役——
+# 函数 = endpoint 常驻服务（torchwood 只做路由/身份/记账/投递），部署走
+# fleetly CLI（apps/deploy）；endpoint target 私网可达性（函数落本 app 任务
+# 网时的 server↔函数互访）是部署拓扑责任（必要时开 functions.invoke.
+# allow_private_targets）。
 
 name: torchwood
 
@@ -48,8 +54,7 @@ services:
   redis:
     image: redis:7-alpine
     # AOF 必开：refresh 轮换记录等存 Redis，无持久化时容器重启 = 已登录会话
-    # 下次刷新即失效（docs/developer/13-operations.md §6.1）；同时承载
-    # dispatcher 的函数镜像引用映射（torchwood:fnimg:*）。
+    # 下次刷新即失效（docs/developer/13-operations.md §6.1）。
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
@@ -114,17 +119,12 @@ services:
       TORCHWOOD_SECURITY_TRUSTED_PROXIES: "127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
       TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS: "*"
       TORCHWOOD_SERVER_HTTP_CORS_ALLOW_HEADERS: ""
-      # 函数执行统一经 dispatcher 分发（app 网短名 = compose 服务名）。
-      TORCHWOOD_FUNCTIONS_DISPATCHER_URL: "http://dispatcher:9070"
-      TORCHWOOD_FUNCTIONS_PACKER_URL: "http://packer:9071"
-      # 函数回访平台 API 的地址：任务网络成员挂靠后按项目网别名
-      # <app>-<service> 回访（IMPL-T2-3；容器名 container_name 已删除）。
-      TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL: "http://torchwood-server:9080"
+      # Functions v4：函数回访平台 API 的地址归部署侧 env（D9）；endpoint
+      # target 指向本 app 内常驻服务时按需开 functions.invoke.allow_private_targets。
       # —— 平台 env 必填（app 级注入；缺失即 fail-closed）——
       # TORCHWOOD_SECURITY_JWT_SECRET / TORCHWOOD_SECURITY_SETUP_TOKEN
       # TORCHWOOD_DATA_DATABASE_SOURCE（运行态 tw_authenticator DSN，见 README §4）
       # TORCHWOOD_STORAGE_S3_ACCESS_KEY_ID / TORCHWOOD_STORAGE_S3_SECRET_ACCESS_KEY
-      # TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN / TORCHWOOD_FUNCTIONS_PACKER_SHARED_TOKEN
       # TORCHWOOD_SECURITY_ENCRYPTION_KEY（可选）
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9080/healthz/readiness"]
@@ -153,10 +153,7 @@ services:
       TORCHWOOD_SECURITY_TRUSTED_PROXIES: "127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
       TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS: "*"
       TORCHWOOD_SERVER_HTTP_CORS_ALLOW_HEADERS: ""
-      # 异步执行同样经 dispatcher 分发；回访地址与 server 保持一致。
-      TORCHWOOD_FUNCTIONS_DISPATCHER_URL: "http://dispatcher:9070"
-      TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL: "http://torchwood-server:9080"
-      # 平台 env 必填键同 server（JWT/DB DSN/S3/dispatcher token）。
+      # 平台 env 必填键同 server（JWT/DB DSN/S3）。
     healthcheck:
       # worker 无 HTTP 监听面（cmd/worker 无 healthz）：进程存活探针，
       # 深度检查（队列消费/日志）留 runbook §6 验收探针 —— 诚实标注见 README §7。
@@ -167,75 +164,6 @@ services:
       # 是 shell 内建、零外部二进制依赖，对 dokploy（argv[0]=worker）与 fleetly
       # 两形态语义一致。深度检查同上留验收探针。
       test: ["CMD-SHELL", "kill -0 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 12
-      start_period: 20s
-
-  # ==================== 常驻：dispatcher（fleetly Tasks/build 客户端） ====================
-  dispatcher:
-    image: ghcr.io/torchwoodcloud/torchwood:sha-78ea1a4
-    # IMPL-T2-3：零 docker.sock / 零 docker client——函数实例 = fleetly Tasks、
-    # 构建 = fleetly build-from-upload。
-    command: ["/usr/local/bin/dispatcher"]
-    configs:
-      - source: config.yaml
-        target: /app/configs/config.yaml
-    environment:
-      TORCHWOOD_ENV: "production"
-      TORCHWOOD_SERVER_HTTP_ADDR: ":9080"
-      TORCHWOOD_SERVER_GRPC_ADDR: ":9060"
-      TORCHWOOD_SERVER_METRICS_ADDR: "127.0.0.1:9040"
-      TORCHWOOD_SERVER_HTTP_PUBLIC_URL: "https://change-me.example.com"
-      TORCHWOOD_SECURITY_TRUSTED_PROXIES: "127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-      TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS: "*"
-      TORCHWOOD_SERVER_HTTP_CORS_ALLOW_HEADERS: ""
-      TORCHWOOD_FUNCTIONS_DISPATCHER_ADDR: ":9070"
-      # 每 dispatcher 常驻实例总量上限（内存敞口 = 实例数 × spec 内存）。
-      TORCHWOOD_FUNCTIONS_DISPATCHER_MAX_RESIDENT_INSTANCES: "16"
-      # 平台镜像命名前缀（逻辑寻址键；server 同值，映射见 README §7）。
-      TORCHWOOD_FUNCTIONS_DOCKER_REGISTRY: "torchwood-funcs"
-      # ——fleetly 控制面（IMPL-T2-3；平台 env 注入）——
-      # TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT：fleetlyd gRPC 端点，容器内可达
-      #   （runbook §9 前置：绑定地址/TLS 形态需与明文 gRPC 客户端兼容）；
-      # TORCHWOOD_FUNCTIONS_FLEETLY_TOKEN：机具令牌（scope tasks,build）
-      TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT: ""
-      TORCHWOOD_FUNCTIONS_FLEETLY_TOKEN: ""
-      # 本栈的 fleetly app 名 + 挂靠任务网络的服务（一次声明，平台经发布管线
-      # 重部署挂靠；per-task 动态 attach 禁令的受控回访形态）。
-      TORCHWOOD_FUNCTIONS_FLEETLY_APP: "torchwood"
-      TORCHWOOD_FUNCTIONS_FLEETLY_NETWORK_MEMBERS: "dispatcher,server"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9070/healthz"]
-      interval: 15s
-      timeout: 5s
-      retries: 12
-      start_period: 20s
-
-  # ==================== 常驻：packer（git 部署源打包） ====================
-  packer:
-    image: ghcr.io/torchwoodcloud/torchwood:sha-78ea1a4
-    # 无状态、无 docker.sock、无业务依赖；资源尖峰隔离在可牺牲进程。
-    command: ["/usr/local/bin/packer"]
-    environment:
-      TORCHWOOD_ENV: "production"
-      TORCHWOOD_SERVER_HTTP_ADDR: ":9080"
-      TORCHWOOD_SERVER_GRPC_ADDR: ":9060"
-      TORCHWOOD_SERVER_METRICS_ADDR: "127.0.0.1:9040"
-      TORCHWOOD_SERVER_HTTP_PUBLIC_URL: "https://change-me.example.com"
-      TORCHWOOD_SECURITY_TRUSTED_PROXIES: "127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-      TORCHWOOD_SERVER_HTTP_CORS_ALLOW_ORIGINS: "*"
-      TORCHWOOD_SERVER_HTTP_CORS_ALLOW_HEADERS: ""
-      TORCHWOOD_FUNCTIONS_PACKER_ADDR: ":9071"
-      TORCHWOOD_FUNCTIONS_PACKER_FETCH_TIMEOUT: "120s"
-      TORCHWOOD_FUNCTIONS_PACKER_MAX_REPO_BYTES: "209715200"
-      TORCHWOOD_FUNCTIONS_PACKER_MAX_ZIP_BYTES: "52428800"
-      TORCHWOOD_FUNCTIONS_PACKER_CONCURRENCY: "4"
-      # 自托管内网 http forge 场景才开启（默认 https-only + 拨号点拒内网 IP）。
-      TORCHWOOD_FUNCTIONS_PACKER_ALLOW_INSECURE: "false"
-      # 平台 env 必填：TORCHWOOD_FUNCTIONS_PACKER_SHARED_TOKEN（与 server 同值）
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9071/healthz"]
       interval: 15s
       timeout: 5s
       retries: 12

@@ -73,10 +73,6 @@ var ProviderSet = wire.NewSet(
 	// 适配器把具体类型收敛在组合根；调用面窄接口直接 Bind 到 Functions 聚合。
 	NewTriggerIPLimiter,
 	wire.Bind(new(serverhttp.TriggerInvoker), new(*appfunctions.Functions)),
-	// 在途重建跨进程去重（镜像缺失自动重建缺陷 B）：实现 infra/functions
-	// Redis SETNX（ProviderSet 提供），app 端口在此 Bind——server 与 worker
-	// 多副本并发触发同一部署重建时收敛为一次。
-	wire.Bind(new(appfunctions.RebuildDedup), new(*infrafunctions.RedisRebuildDedup)),
 	// HTTP / gRPC handler 窄接口绑定（J4-5）：消费端仅依赖最小方法集，
 	// 具体类型 *auth.Validator / *health.Checkers 仅在组合根出现。
 	wire.Bind(new(serverhttp.AuthValidator), new(*auth.Validator)),
@@ -89,11 +85,6 @@ func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 		return nil, err
 	}
 	if err := bootkit.ValidateAppConfig(app.Logger(), &c); err != nil {
-		return nil, err
-	}
-	// v1 docker 执行器已移除：函数执行统一经 dispatcher 分发，
-	// 分发通路缺失直接拒绝启动（不留到首次执行）。
-	if err := bootkit.ValidateFunctionsDispatchConfig(&c); err != nil {
 		return nil, err
 	}
 	// R4-J2-4：启用页 token 签名（HMAC，purpose 派生自 jwt.secret）。

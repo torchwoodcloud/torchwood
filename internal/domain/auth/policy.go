@@ -285,7 +285,6 @@ var ProjectIDAllowlist = map[string]struct{}{
 	"/torchwood.server.v1.BillingService/ListRollups":              {},
 	"/torchwood.server.v1.BillingService/ListStatements":           {},
 	"/torchwood.server.v1.PaymentsService/GetOrder":                {},
-	"/torchwood.server.v1.FunctionsService/CreateExecution":        {},
 	"/torchwood.server.v1.SubscriptionsService/CancelSubscription": {},
 	"/torchwood.server.v1.SubscriptionsService/ExpireSubscription": {},
 	"/torchwood.server.v1.AssetsService/ListUserAssets":            {},

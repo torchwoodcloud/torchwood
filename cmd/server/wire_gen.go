@@ -149,17 +149,15 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	paymentsService := clientgrpc.NewPaymentsService(paymentsPayments)
 	assetsService := clientgrpc.NewAssetsService(assetsAssets)
 	subscriptionsService := clientgrpc.NewSubscriptionsService(subscriptionsSubscriptions)
-	dispatcherExecutor := functions.NewDispatcherExecutor(appConfig)
+	httpInvoker := functions.NewInvoker(appConfig)
+	httpClient := webhooks.NewGuardedDeliveryClient()
+	httpNotifier := webhooks.NewNotifier(httpClient)
 	functionRepo := bunrepo.NewFunctionRepository(database)
 	sharedQueue := queue.NewRedisQueue(redisClient)
 	redisCounter := billing.NewRedisCounter(redisClient)
-	redisRebuildDedup := functions.NewRedisRebuildDedup(redisClient)
-	semaphores := functions2.ProvideSemaphores(redisClient, appConfig, redisRebuildDedup)
 	triggerRepo := bunrepo.NewFunctionTriggerRepository(database)
 	clientQuotaLimiter := functions.NewClientQuotaLimiter(redisClient)
-	packerClient := functions.NewPackerClient(appConfig)
-	zipStore := functions.NewBucketZipStore(appConfig, objectStore)
-	functionsFunctions := functions2.NewFunctionsWithSourcePacker(appConfig, dispatcherExecutor, functionRepo, sharedQueue, redisCounter, repository, semaphores, redisExecutionTokenService, triggerRepo, clientQuotaLimiter, packerClient, zipStore)
+	functionsFunctions := functions2.NewFunctions(appConfig, httpInvoker, httpNotifier, functionRepo, sharedQueue, redisCounter, repository, redisExecutionTokenService, triggerRepo, clientQuotaLimiter)
 	functionsService := clientgrpc.NewFunctionsService(functionsFunctions)
 	boardRepo := bunrepo.NewLeaderboardBoardRepository(database)
 	entryRepo := bunrepo.NewLeaderboardEntryRepository(database)
@@ -208,8 +206,6 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	servergrpcFunctionsService := servergrpc.NewFunctionsService(functionsFunctions)
 	webhookRepo := bunrepo.NewWebhookRepository(database)
 	deliveryRepo := bunrepo.NewWebhookDeliveryRepository(database)
-	httpClient := webhooks.NewGuardedDeliveryClient()
-	httpNotifier := webhooks.NewNotifier(httpClient)
 	webhooksService := webhooks2.NewService(webhookRepo, deliveryRepo, httpNotifier, repository, appConfig)
 	servergrpcWebhooksService := servergrpc.NewWebhooksService(webhooksService)
 	servergrpcPaymentsService := servergrpc.NewPaymentsService(paymentsPayments)
@@ -255,11 +251,6 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	functionsHandler, err := serverhttp.NewFunctionsHandler(appConfig, validator, functionsFunctions, auditRepository, logger, v3)
-	if err != nil {
-		cleanup()
-		return nil, nil, err
-	}
 	paymentsHandler, err := serverhttp.NewPaymentsHandler(paymentsPayments, logger, auditRepository)
 	if err != nil {
 		cleanup()
@@ -278,7 +269,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	grpcGatewayServer, err := runtime.NewGRPCGatewayServer(app, appConfig, checkers, fileHandler, oAuthHandler, functionsHandler, paymentsHandler, functionTriggersHandler, handler, v3)
+	grpcGatewayServer, err := runtime.NewGRPCGatewayServer(app, appConfig, checkers, fileHandler, oAuthHandler, paymentsHandler, functionTriggersHandler, handler, v3)
 	if err != nil {
 		cleanup()
 		return nil, nil, err

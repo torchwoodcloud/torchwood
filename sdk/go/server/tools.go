@@ -101,8 +101,8 @@ var Tools = []Tool{
 	},
 	{
 		Name:       ToolInvokeFunction,
-		FullMethod: serverv1.FunctionsService_CreateExecution_FullMethodName,
-		InputNotes: "function_id; optional deployment_id, data, async",
+		FullMethod: serverv1.FunctionsService_InvokeFunction_FullMethodName,
+		InputNotes: "function_id; optional data, async",
 	},
 	{
 		Name:       ToolListFiles,

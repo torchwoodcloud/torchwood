@@ -2,8 +2,6 @@ package serverhttp
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -24,7 +22,7 @@ import (
 // 并可注入失败。
 type fakeTriggerInvoker struct {
 	trg    *domainfunctions.Trigger
-	rec    *domainfunctions.ExecutionRecord
+	rec    *domainfunctions.InvocationRecord
 	err    error
 	calls  []appfunctions.InvokeTriggerCommand
 	limitN int
@@ -40,7 +38,7 @@ func (f *fakeTriggerInvoker) GetHTTPTriggerByToken(_ context.Context, projectID,
 	return nil, nil
 }
 
-func (f *fakeTriggerInvoker) InvokeTrigger(_ context.Context, cmd appfunctions.InvokeTriggerCommand) (*domainfunctions.ExecutionRecord, error) {
+func (f *fakeTriggerInvoker) InvokeTrigger(_ context.Context, cmd appfunctions.InvokeTriggerCommand) (*domainfunctions.InvocationRecord, error) {
 	f.calls = append(f.calls, cmd)
 	if f.err != nil {
 		return nil, f.err
@@ -153,8 +151,8 @@ func TestFunctionTriggersHandler_TokenMiss404(t *testing.T) {
 // TestFunctionTriggersHandler_SyncPassthrough sync 模式透传函数响应。
 func TestFunctionTriggersHandler_SyncPassthrough(t *testing.T) {
 	trg := httpTrigger(t)
-	inv := &fakeTriggerInvoker{trg: trg, rec: &domainfunctions.ExecutionRecord{
-		Status: domainfunctions.ExecutionStatusCompleted, Response: `{"result":"ok"}`,
+	inv := &fakeTriggerInvoker{trg: trg, rec: &domainfunctions.InvocationRecord{
+		Status: domainfunctions.InvocationStatusCompleted, Response: `{"result":"ok"}`,
 	}}
 	lim := &fakeTriggerLimiter{allowed: true}
 	_, mux := newTriggerTestHandler(t, inv, lim)
@@ -193,7 +191,7 @@ func TestFunctionTriggersHandler_AsyncAckSuccess(t *testing.T) {
 		ResponseMode: domainfunctions.ResponseModeAsyncAck,
 		AckBody:      `{"is_valid":true}`,
 	}
-	inv := &fakeTriggerInvoker{trg: trg, rec: &domainfunctions.ExecutionRecord{Status: domainfunctions.ExecutionStatusQueued}}
+	inv := &fakeTriggerInvoker{trg: trg, rec: &domainfunctions.InvocationRecord{Status: domainfunctions.InvocationStatusQueued}}
 	lim := &fakeTriggerLimiter{allowed: true}
 	_, mux := newTriggerTestHandler(t, inv, lim)
 
@@ -221,7 +219,7 @@ func TestFunctionTriggersHandler_BodyLimit413(t *testing.T) {
 // （微信 SSV 验签参数在 query）；body 双通道无损。
 func TestFunctionTriggersHandler_HeaderWhitelist(t *testing.T) {
 	trg := httpTrigger(t)
-	inv := &fakeTriggerInvoker{trg: trg, rec: &domainfunctions.ExecutionRecord{Status: domainfunctions.ExecutionStatusCompleted}}
+	inv := &fakeTriggerInvoker{trg: trg, rec: &domainfunctions.InvocationRecord{Status: domainfunctions.InvocationStatusCompleted}}
 	lim := &fakeTriggerLimiter{allowed: true}
 	_, mux := newTriggerTestHandler(t, inv, lim)
 
@@ -235,28 +233,20 @@ func TestFunctionTriggersHandler_HeaderWhitelist(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Len(t, inv.calls, 1)
 
-	var envelope struct {
-		Method   string              `json:"method"`
-		Path     string              `json:"path"`
-		RawQuery string              `json:"raw_query"`
-		Headers  map[string][]string `json:"headers"`
-		Body     string              `json:"body"`
-		BodyB64  string              `json:"body_base64"`
-	}
-	require.NoError(t, json.Unmarshal([]byte(inv.calls[0].Data), &envelope))
-	require.Equal(t, http.MethodPost, envelope.Method)
-	require.Equal(t, "/f/p1/tok1", envelope.Path)
-	require.Equal(t, "signature=abc&timestamp=9", envelope.RawQuery, "raw_query 必须透传（SSV 验签参数在 query）")
-	require.Equal(t, []string{"sig-1"}, envelope.Headers["x-wx-signature"], "x-* 小写键放行")
-	require.Equal(t, []string{"ser-1"}, envelope.Headers["wechatpay-serial"])
-	require.Equal(t, []string{"sha"}, envelope.Headers["x-hub-signature-256"])
-	require.NotContains(t, envelope.Headers, "authorization", "非白名单头剥除（凭证不透传）")
-	require.NotContains(t, envelope.Headers, "user-agent")
-	require.Equal(t, []string{"application/xml"}, envelope.Headers["content-type"], "content-type 在白名单内")
-	require.Equal(t, `<xml>body-data</xml>`, envelope.Body)
-	raw, err := base64.StdEncoding.DecodeString(envelope.BodyB64)
-	require.NoError(t, err)
-	require.Equal(t, `<xml>body-data</xml>`, string(raw), "body_base64 无损")
+	// v4 §4.1：封套元数据随 http.request params 通道（TriggerEnvelope），
+	// 原始 body 收编为 params.body_b64——Data 通道（TW_DATA 投影）退役。
+	require.Empty(t, inv.calls[0].Data, "TW_DATA 投影通道已退役（封套进 http.request params）")
+	env := inv.calls[0].TriggerEnvelope
+	require.Equal(t, http.MethodPost, env.Method)
+	require.Equal(t, "/f/p1/tok1", env.Path)
+	require.Equal(t, "signature=abc&timestamp=9", env.RawQuery, "raw_query 必须透传（SSV 验签参数在 query）")
+	require.Equal(t, []string{"sig-1"}, env.Headers["x-wx-signature"], "x-* 小写键放行")
+	require.Equal(t, []string{"ser-1"}, env.Headers["wechatpay-serial"])
+	require.Equal(t, []string{"sha"}, env.Headers["x-hub-signature-256"])
+	require.NotContains(t, env.Headers, "authorization", "非白名单头剥除（凭证不透传）")
+	require.NotContains(t, env.Headers, "user-agent")
+	require.Equal(t, []string{"application/xml"}, env.Headers["content-type"], "content-type 在白名单内")
+	require.Equal(t, []byte(`<xml>body-data</xml>`), inv.calls[0].RawBody, "原始 body 无损随 params 通道")
 }
 
 // TestFunctionTriggersHandler_PerIPQuota429 per-IP 限频触发 429 + Retry-After。
@@ -299,8 +289,8 @@ func TestFunctionTriggersHandler_SyncTimeout504(t *testing.T) {
 // （exit != 0）→ 502 透传响应体。
 func TestFunctionTriggersHandler_SyncFunctionFailure502(t *testing.T) {
 	trg := httpTrigger(t)
-	inv := &fakeTriggerInvoker{trg: trg, rec: &domainfunctions.ExecutionRecord{
-		Status: domainfunctions.ExecutionStatusFailed, Response: `{"err":"boom"}`,
+	inv := &fakeTriggerInvoker{trg: trg, rec: &domainfunctions.InvocationRecord{
+		Status: domainfunctions.InvocationStatusFailed, Response: `{"err":"boom"}`,
 	}}
 	lim := &fakeTriggerLimiter{allowed: true}
 	_, mux := newTriggerTestHandler(t, inv, lim)

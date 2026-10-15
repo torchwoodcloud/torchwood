@@ -4,7 +4,7 @@ import "testing"
 
 // TestCheckDialAddress 是 IP guard 表驱动：loopback/private/link-local/
 // unspecified 拒、公网放行、allow_insecure 全放行、非 IP fail-closed
-//（用例随实现自 packer/gitpack_test.go 迁入，断言口径不变）。
+// （用例随实现自 packer/gitpack_test.go 迁入，断言口径不变）。
 func TestCheckDialAddress(t *testing.T) {
 	cases := []struct {
 		address       string
