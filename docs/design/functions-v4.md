@@ -1,7 +1,8 @@
 # Functions v4：执行面外包——从执行器到路由与身份层
 
-> 状态：**已批准（2026-10-15 owner 拍板：D1–D9 全部收口）**
+> 状态：**已批准（2026-10-15 owner 拍板：D1–D9 全部收口；同日 D10 协议双轴增补）**
 > 拍板记录（2026-10-15 owner）：D1 调用协议 = **JSON-RPC 2.0 over 签名 HTTP**（自有封套否决——同构表达力下零发明、`method`/`id` 字段白送路由与关联、与 MCP 同底座）；D2 fleetly 原生 functions face = **实现后置 + 提案先行**（§9 提案草稿随本稿呈审，审阅后排开发）；D4 迁移 = **一步到位**（单一发布窗口，无并存期，回退 = 整体回滚）；D5 Webhooks = **15 次/24h 指数退避 + 行内 DLQ + Redeliver API，计量一期仅进 metrics**；D8' target = **单一 endpoint kind**（proto 留 fleetly 扩展位）；D9 Variables 面 = **随 v4 退役**；D3 记账两写由代码核实定案（幂等/限频/审计三链）
+> 拍板记录（2026-10-15 owner，D10 协议双轴增补）：判定准则 =「有没有调用方在等应用层结果」而非触发器类型——**RPC 轴（JSON-RPC 2.0，有 id）：`invoke`（含 async）+ `http.request`（sync 与 async_ack 统一，同触发器不因响应模式换协议）；事件轴（CloudEvents 1.0 structured mode，通知）：`cron.tick`（平台自产时间事件，misfire catch_up_once 即重投语义）、事件触发（document/system，type=事件目录名）、webhook 投递**——CloudEvents 选 structured mode（属性全在 body 内，整体落在签名保护圈；binary mode 的 ce-* header 不受签名保护）；函数事件触发与 webhook 投递统一为同一投递管道（重试梯度/DLQ 语义免费覆盖函数侧，消灭「异步执行 attempt 重试」独有语义）；语义损失入册：事件轴投递行不记录函数返回值（响应 body 尾部截断留档作审计替代）
 > 定位：Functions 子系统第四代。谱系：v1「每请求一容器」（CGI 形态，已裁决设计缺陷）→ v2「常驻 runner + dispatcher 池」→ 底座两轮迭代（多机细胞模型 → fleetly swarm，IMPL-T2-3）→ **v4 = 执行面整体外包：打包/构建/部署/池/冷启动/运行时/变量全部移出 torchwood；torchwood 收敛为纯「路由与身份层」，Webhooks 升一等公民**
 > 裁决链（2026-10-15 owner 三轮收敛）：① 复杂度审计定性——「客户端可触发的服务端逻辑」是 BaaS 品类刚需（论证不推翻），但用容器编排机器承载它是 PaaS 错位；② 方向拍板——移除 dispatcher/packer，Webhooks 升一等公民，函数执行目标 = fleetly 托管或 BYO 常驻服务；③ 部署归属拍板——**torchwood 不再负责打包部署**，CLI 内嵌 esbuild 方案废弃，部署链 = fleetly CLI（或用户自有工具链）
 > 依据：全链路复杂度审计（§1）＋ fleetly proto 分工自证（`third_party/fleetly/proto/fleetly/server/v1/tasks.proto:25-27`「池语义（租约/保温/熔断）留给调用方」——dispatcher 全部池机器正是为在一次性 Task 上自建常驻池而付）＋ 8 项代码核实（幂等三链/状态机/eventmatch/FDK 验签缺口/SSRF 资产/配置面/透传面/测试面，内联证据见 §4–§8、§10）
@@ -140,20 +141,27 @@ message FunctionTarget {
 - **常驻即无唤醒**：用户裁决「按常驻服务来调用最简单」——torchwood 不做 0→1 唤醒、不做保温、不做排队。substrate 侧若要 scale-to-zero（如 fleetly 日后原生 functions face），那是 substrate 在同一 URL 后面自己做的事，对 torchwood 透明。
 - **超时与过载语义**：invoke 超时 = 函数记录的 timeout（透传为请求超时）；目标过载/失联 = 快速失败（§5.3），不再有 dispatcher 的有界排队 32 + 队首超时 10s + TimeoutBudget 熔断链。
 
-## §4 调用协议（D1 已拍板：JSON-RPC 2.0）
+## §4 调用协议（D1 + D10：RPC 轴 JSON-RPC 2.0 / 事件轴 CloudEvents 1.0）
 
-函数调用协议 = **JSON-RPC 2.0 over 签名 HTTP**（owner 拍板，取代自有封套）。FDK 常驻服务即 JSON-RPC 服务端；**webhook 投递不进 JSON-RPC**（通知与 RPC 形状不同，保持 §6 纯 JSON 事件信封；签名头语义两边共用）。
+协议按**语义轴**双轨（D10 拍板，判定准则 =「有没有调用方在等应用层结果」而非触发器类型）：
+
+| 轴 | 协议 | 通道 | 结果去向 |
+|---|---|---|---|
+| **RPC 轴**（请求-响应，有 id） | JSON-RPC 2.0 | `invoke`（client/server，含 async）、`http.request`（**sync 与 async_ack 统一**——同触发器不因响应模式换协议，async_ack 只是平台不把 result 回传外部调用方的投递策略） | 调用方 / invocation 行 |
+| **事件轴**（通知，无应用层结果） | CloudEvents 1.0 structured mode | `cron.tick`（平台自产时间事件，misfire catch_up_once 即重投语义）、事件触发（document/system，type = 事件目录名）、webhook 投递（§6） | 2xx=送达；非 2xx 按重试梯度重投 → 终态失败行=DLQ |
+
+FDK 单端点按 body 探测分流（有 `jsonrpc` → RPC 轴、有 `specversion` → 事件轴）；同一签名方案罩两面。
+
+### §4.1 RPC 轴：JSON-RPC 2.0 over 签名 HTTP
 
 **请求**（torchwood → endpoint，`POST {target.url}`）：
 
-- Body = JSON-RPC 2.0 request；**method 承接触发器路由**（收编现「TW_DATA 封套 + X-Tw-Source 头」双维度为一）：
+- Body = JSON-RPC 2.0 request；**method 承接调用语义路由**（收编现「TW_DATA 封套 + X-Tw-Source 头」双维度为一）：
 
 | method | params | 对应现状 |
 |---|---|---|
 | `invoke` | 函数载荷（原 TW_DATA JSON） | client/server 调用面（FDK StartInvoke） |
-| `cron.tick` | `{trigger_id, scheduled_for}` | FDK CronTick（sdk/go/functions/events.go:12-15） |
-| `event.document` | DocumentChange 投影（ID+摘要 ≤32KB，全量回读口径不变） | FDK StartEvent 载荷 |
-| `http.request` | `{envelope, body_b64}`（TriggerEnvelope，executor.go:13-18） | HTTP 触发器封套；fetch 语义经 result 形状表达 |
+| `http.request` | `{envelope, body_b64}`（TriggerEnvelope，executor.go:13-18） | HTTP 触发器封套（sync 与 async_ack 同形态）；fetch 语义经 result 形状表达 |
 
 - `id` = execution id（请求关联白送；FDK 回显）。
 - 签名/身份走 header（传输与载荷分离）：
@@ -174,6 +182,29 @@ message FunctionTarget {
 - **平台错误 vs 函数结果边界（代码核实定界）**：非 2xx / 连不通 / 超时 / 验签协议不符 = **平台语义错误**（`Unavailable`/`DeadlineExceeded`，HTTP 触发器应答 502/504）；2xx + JSON-RPC body = 函数结果（含 error 对象）。旧模型靠 `StatusCode>=100` 约定（`executions.go:346-348`），新模型靠 HTTP status 语义位 + error 对象。`finishTransparent`（function_triggers_handler.go:325-353）消费面已按 `InvocationResult` 收敛，透传适配只换实现不改 handler。
 - 大小上限：请求 body 沿用现有 413 校验；响应 ≤1MiB（对齐 `maxInvokeResponseBytes` 口径，dispatcher/types.go:63-67）。
 - **战略对齐**：MCP 构建在 JSON-RPC 2.0 上——roadmap P3「Functions as Tools」届时为函数暴露 JSON Schema（OpenRPC/MCP 工具定义）即同底座复用，无二次搬家。
+
+### §4.2 事件轴：CloudEvents 1.0 structured mode over 签名 HTTP
+
+**请求**（投递引擎 → 消费方 endpoint，`POST {target.url}`）：body 为 CloudEvents 1.0 **structured mode**（全部属性在 body 内——binary mode 的 `ce-*` header 不受签名保护，structured 整体落在签名圈内）：
+
+```json
+{
+  "specversion": "1.0",
+  "id": "<事件投递 ID（seq 派生或 UUID）>",
+  "source": "<事件源：cron 触发器 = projects/{p}/triggers/{t}；文档/系统事件 = projects/{p}>",
+  "type": "<cron.tick | 事件目录名（documents.created / auth.users.created …）>",
+  "time": "<RFC3339：cron = scheduled_for；事件 = outbox 产生时刻>",
+  "datacontenttype": "application/json",
+  "data": { "<CronTick 或 EventInvocationData/SystemEventInvocationData 投影>" },
+  "twproject": "<project id>",
+  "twseq": <outbox seq（cron 无）>
+}
+```
+
+- 签名头 `X-Tw-Signature` 与 RPC 轴同一方案（对整个 body 验签）；`X-Tw-Protocol-Version` 同。
+- **响应语义**：2xx = 送达（FDK 回 204 No Content，无应用层结果）；非 2xx / 超时 / 连不通 = 送达失败，由投递引擎按 §6/D5 重试梯度重投，终态失败行进 DLQ——**函数事件触发与 webhook 投递共用此管道与语义**（消灭函数侧独有的「异步执行 attempt 重试」）。
+- FDK 分发：`type=cron.tick` → data 解析为 CronTick → Cron handler；其余 → data 解析为事件投影 → Event handler；解析/处理失败回 400（= 失败信号，进入重投）。
+- 语义损失入册（D10）：事件轴投递行不记录函数返回值，响应 body 尾部截断留档作审计替代。
 
 ## §5 统一出站投递引擎
 
@@ -208,7 +239,7 @@ roadmap 原排 P3（`roadmap.md:31/:377/:412`「P2 只做内部消费」）—�
 **投递语义**：
 
 - 消费 outbox 事件脊柱的新消费组 `webhooks`（与 `functions-triggers` 同模式：XREADGROUP、at-least-once、停机补投经 outbox 按 seq 区间回放——`worker/event_triggers.go:437-489` 同款水位机制，新水位键 `torchwood:wh:lastseq`）。
-- 载荷：`{id, webhook_id, project_id, event, seq, created_at, data}`，data 投影 ≤32KB（与函数事件触发器同口径）；签名同 §4 协议（`X-Tw-Signature`，per-webhook 密钥）。
+- 载荷：**CloudEvents 1.0 structured mode**（§4.2——与函数事件触发同一信封同一管道；type = 事件目录名，data 投影 ≤32KB 与函数事件触发器同口径）；签名同 §4 协议（`X-Tw-Signature`，per-webhook 密钥）。
 - 重试梯度（D5 已拍板）：即时 → 10s → 1m → 5m → 30m → 2h → 8h ×2 …约 15 次封顶 24h；终态失败行进 DLQ（`webhook_deliveries` 表 status=failed 可浏览），`RedeliverDelivery` 手动重投。
 - 顺序：per-webhook at-least-once、尽力保序（不承诺严格序，文档声明）。
 - 配额与计量：per-project webhook 数上限、投递速率上限；投递量/时延一期仅进 metrics、不进 billing（D5 拍板）。

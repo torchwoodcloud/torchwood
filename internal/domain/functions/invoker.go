@@ -83,3 +83,26 @@ type InvocationResult struct {
 type Invoker interface {
 	Invoke(ctx context.Context, inv Invocation) (*InvocationResult, error)
 }
+
+// Notification 是一次事件轴投递的载荷（v4 §4.2，D10：cron / 事件触发 /
+// webhook 共用——判定准则「无调用方在等应用层结果」，2xx = 送达）。
+type Notification struct {
+	TargetURL            string
+	TargetSecret         string
+	TargetPreviousSecret string
+	// Event 是 CloudEvents 1.0 structured mode 信封（body 整体处于签名圈）。
+	Event CloudEvent
+	// TimeoutSeconds 是单次投递尝试预算（重试节奏由投递引擎调度，不在载荷）。
+	TimeoutSeconds int64
+	// ExecutionToken 是投递方铸造的 twx_ 执行身份（cron/事件函数回访平台
+	// API 写数据用——「货币/库存只能云函数写」场景在事件轴的凭证通道；
+	// webhook 外部投递方不铸造，空值不发头）。
+	ExecutionToken string
+}
+
+// Notifier 是事件轴投递端口：err = 送达失败（重试由投递引擎按 D5 梯度
+// 调度）；nil = 消费方已 2xx 确认。实现侧同 Invoker 纪律（守卫出站 +
+// 签名注入）。
+type Notifier interface {
+	Notify(ctx context.Context, n Notification) error
+}

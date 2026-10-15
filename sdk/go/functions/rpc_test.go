@@ -67,7 +67,7 @@ func TestRPCServerInvokeHappyPath(t *testing.T) {
 	})
 
 	rec := httptest.NewRecorder()
-	NewRPCServer(mux, testSecret).ServeHTTP(rec, signedRPCRequest(t, RPCMethodInvoke, map[string]string{"q": "hi"}, "exec_9", testSecret))
+	NewServer(mux, testSecret).ServeHTTP(rec, signedRPCRequest(t, RPCMethodInvoke, map[string]string{"q": "hi"}, "exec_9", testSecret))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200（函数成败在 body）", rec.Code)
@@ -95,32 +95,82 @@ func TestRPCServerInvokeHappyPath(t *testing.T) {
 	}
 }
 
-// TestRPCServerCronAndEvent cron.tick / event.document 两 method 直通
-// 既有 adapter（CronTick/DocumentChange typed 投影）。
-func TestRPCServerCronAndEvent(t *testing.T) {
+// signedEventRequest 组装一个经协议签名的 CloudEvents 通知请求（事件轴）。
+func signedEventRequest(t *testing.T, eventType string, data any, secret string) *http.Request {
+	t.Helper()
+	body, err := json.Marshal(cloudEvent{
+		Specversion: "1.0",
+		ID:          "evt_1",
+		Source:      "projects/prj_1/triggers/trg_1",
+		Type:        eventType,
+		Time:        "2026-10-15T00:00:00Z",
+		Data:        mustJSON(t, data),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := time.Now().Unix()
+	req, err := http.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set(hdrSignature, BuildSignatureHeader(ts, [][2]string{{"v1", ComputeSignature(secret, ts, body)}}))
+	req.Header.Set(hdrExecutionToken, "twx_tok")
+	req.Header.Set(hdrProjectID, "prj_1")
+	return req
+}
+
+// TestEventAxisCloudEvents 事件轴（D10）：cron.tick / documents.* 以
+// CloudEvents 通知送达——204 = 送达（无应用层结果）、处理失败/未注册 400
+// （投递失败信号）。同一 NewServer 与 RPC 轴共存（形态探测分流）。
+func TestEventAxisCloudEvents(t *testing.T) {
 	mux := NewMux()
 	var cronTick CronTick
 	var docChange DocumentChange
 	mux.Cron(func(ctx context.Context, tick CronTick) error { cronTick = tick; return nil })
 	mux.Event(func(ctx context.Context, ch DocumentChange) error { docChange = ch; return nil })
-	h := NewRPCServer(mux, testSecret)
+	h := NewServer(mux, testSecret)
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, signedRPCRequest(t, RPCMethodCronTick, map[string]string{
+	h.ServeHTTP(rec, signedEventRequest(t, cloudEventTypeCronTick, map[string]string{
 		"trigger_id": "trg_1", "scheduled_for": "2026-10-15T00:00:00Z",
-	}, "exec_c", testSecret))
-	if rec.Code != 200 || cronTick.TriggerID != "trg_1" {
-		t.Fatalf("cron dispatch: status=%d tick=%+v", rec.Code, cronTick)
+	}, testSecret))
+	if rec.Code != http.StatusNoContent || cronTick.TriggerID != "trg_1" {
+		t.Fatalf("cron dispatch: status=%d tick=%+v, want 204", rec.Code, cronTick)
 	}
 
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, signedRPCRequest(t, RPCMethodEventDocument, map[string]any{
+	h.ServeHTTP(rec, signedEventRequest(t, "documents.created", map[string]any{
 		"event": "documents.created", "database_id": "db", "collection_id": "col",
 		"document_id": "doc_1", "version": 3, "data": map[string]any{"id": "doc_1"},
-	}, "exec_e", testSecret))
-	if rec.Code != 200 || docChange.DocumentID != "doc_1" {
-		t.Fatalf("event dispatch: status=%d change=%+v", rec.Code, docChange)
+	}, testSecret))
+	if rec.Code != http.StatusNoContent || docChange.DocumentID != "doc_1" {
+		t.Fatalf("event dispatch: status=%d change=%+v, want 204", rec.Code, docChange)
 	}
+
+	t.Run("handler error is delivery failure", func(t *testing.T) {
+		failing := NewMux()
+		failing.Cron(func(ctx context.Context, tick CronTick) error { return context.DeadlineExceeded })
+		rec := httptest.NewRecorder()
+		NewServer(failing, testSecret).ServeHTTP(rec, signedEventRequest(t, cloudEventTypeCronTick, map[string]string{
+			"trigger_id": "trg_1", "scheduled_for": "2026-10-15T00:00:00Z",
+		}, testSecret))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400（进入重投梯度）", rec.Code)
+		}
+	})
+
+	t.Run("unregistered handler", func(t *testing.T) {
+		bare := NewMux()
+		rec := httptest.NewRecorder()
+		NewServer(bare, testSecret).ServeHTTP(rec, signedEventRequest(t, "documents.created", map[string]any{
+			"event": "documents.created", "database_id": "db", "collection_id": "col",
+			"document_id": "doc_1", "version": 1,
+		}, testSecret))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400", rec.Code)
+		}
+	})
 }
 
 // TestRPCServerFunctionError 函数 handler 报错 → error 对象（-32000 区段），
@@ -131,7 +181,7 @@ func TestRPCServerFunctionError(t *testing.T) {
 		return nil, context.DeadlineExceeded
 	})
 	rec := httptest.NewRecorder()
-	NewRPCServer(mux, testSecret).ServeHTTP(rec, signedRPCRequest(t, RPCMethodInvoke, map[string]string{}, "exec_err", testSecret))
+	NewServer(mux, testSecret).ServeHTTP(rec, signedRPCRequest(t, RPCMethodInvoke, map[string]string{}, "exec_err", testSecret))
 	if rec.Code != 200 {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -153,7 +203,7 @@ func TestRPCServerHTTPRequest(t *testing.T) {
 	}))
 	body := base64.StdEncoding.EncodeToString([]byte("<xml>ok</xml>"))
 	rec := httptest.NewRecorder()
-	NewRPCServer(mux, testSecret).ServeHTTP(rec, signedRPCRequest(t, RPCMethodHTTPRequest, httpRequestParams{
+	NewServer(mux, testSecret).ServeHTTP(rec, signedRPCRequest(t, RPCMethodHTTPRequest, httpRequestParams{
 		Envelope: &triggerEnvelope{Method: "POST", Path: "/cb", Headers: map[string][]string{"content-type": {"application/xml"}}},
 		BodyB64:  body,
 	}, "exec_h", testSecret))
@@ -178,7 +228,7 @@ func TestRPCServerHTTPRequest(t *testing.T) {
 // -32601 / 非 JSON-RPC 形态 -32600。
 func TestRPCServerRejects(t *testing.T) {
 	mux := NewMux()
-	h := NewRPCServer(mux, testSecret)
+	h := NewServer(mux, testSecret)
 
 	t.Run("bad signature", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte(`{"jsonrpc":"2.0","method":"invoke","id":"x"}`)))
@@ -207,20 +257,20 @@ func TestRPCServerRejects(t *testing.T) {
 		}
 	})
 	t.Run("not json-rpc", func(t *testing.T) {
+		// 无 jsonrpc 也无 specversion → 统一入口判「未识别协议」：传输层 400
+		//（无 RPC 信封可承载错误对象）。
 		req, _ := http.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte(`{"method":"invoke"}`)))
 		ts := time.Now().Unix()
 		req.Header.Set(hdrSignature, BuildSignatureHeader(ts, [][2]string{{"v1", ComputeSignature(testSecret, ts, []byte(`{"method":"invoke"}`))}}))
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
-		var resp rpcResponse
-		_ = json.Unmarshal(rec.Body.Bytes(), &resp)
-		if resp.Error == nil || resp.Error.Code != rpcCodeInvalidRequest {
-			t.Fatalf("error = %+v", resp.Error)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400 (unrecognized protocol)", rec.Code)
 		}
 	})
 	t.Run("verify requires secret", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		NewRPCServer(mux).ServeHTTP(rec, signedRPCRequest(t, RPCMethodInvoke, nil, "x", testSecret))
+		NewServer(mux).ServeHTTP(rec, signedRPCRequest(t, RPCMethodInvoke, nil, "x", testSecret))
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want 500 (fail-closed)", rec.Code)
 		}
@@ -240,7 +290,7 @@ func TestRPCServerRotation(t *testing.T) {
 		{"v2", ComputeSignature("whsec_old", ts, body)},
 	}))
 	rec := httptest.NewRecorder()
-	NewRPCServer(mux, "whsec_old").ServeHTTP(rec, req)
+	NewServer(mux, "whsec_old").ServeHTTP(rec, req)
 	if rec.Code != 200 {
 		t.Fatalf("status = %d, want 200（旧钥轮换窗口可验）", rec.Code)
 	}

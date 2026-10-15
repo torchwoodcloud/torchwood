@@ -104,12 +104,14 @@ func isHex(s string) bool {
 	return true
 }
 
-// TestRPCWireTypes 钉 wire 形态：请求必带 jsonrpc/method/id；error 对象
-// 三字段；omitempty 口径（id 空仍发——关联键必在）。
+// TestRPCWireTypes 钉 wire 形态：RPC 轴 method 词表（D10 后仅两 method）、
+// 事件轴 CloudEvents 常量、error 对象字段与协议版本。
 func TestRPCWireTypes(t *testing.T) {
-	if MethodInvoke != "invoke" || MethodCronTick != "cron.tick" ||
-		MethodEventDocument != "event.document" || MethodHTTPRequest != "http.request" {
-		t.Fatal("method vocabulary drifted")
+	if MethodInvoke != "invoke" || MethodHTTPRequest != "http.request" {
+		t.Fatal("rpc method vocabulary drifted")
+	}
+	if CloudEventsSpecVersion != "1.0" || CloudEventTypeCronTick != "cron.tick" {
+		t.Fatal("cloud events vocabulary drifted")
 	}
 	if ProtocolVersion != "1" {
 		t.Fatal("protocol version drifted")

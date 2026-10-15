@@ -10,17 +10,15 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"io"
 	"net/http"
 	"time"
 )
 
-// JSON-RPC method 词表（与平台 domain protocol.go 同值）。
+// JSON-RPC method 词表（与平台 domain protocol.go 同值；D10 双轴增补后
+// RPC 轴仅两 method——cron/事件走事件轴 CloudEvents，见 cloudevents.go）。
 const (
-	RPCMethodInvoke        = "invoke"
-	RPCMethodCronTick      = "cron.tick"
-	RPCMethodEventDocument = "event.document"
-	RPCMethodHTTPRequest   = "http.request"
+	RPCMethodInvoke      = "invoke"
+	RPCMethodHTTPRequest = "http.request"
 )
 
 // JSON-RPC 错误码（spec §5.1 + server 区段）。
@@ -70,31 +68,9 @@ type httpRequestParams struct {
 // 超时裁剪 ctx；此为函数侧兜底，防止注册了慢 handler 的服务被单请求挂死）。
 const rpcRequestTimeout = 30 * time.Second
 
-// NewRPCServer 构建函数常驻服务的 v4 标准 http.Handler：Verify 验签 →
-// JSON-RPC 解析与 method 分发 → Mux 注册的 handler。可直接挂任意
-// http.Server / 云平台 HTTP 入口（fleetly app / k8s Service / 裸机）。
-//
-// 用法：
-//
-//	mux := functions.NewMux()
-//	mux.Invoke(func(ctx context.Context, data json.RawMessage) (any, error) { … })
-//	http.ListenAndServe(":8080", functions.NewRPCServer(mux, secret))
-func NewRPCServer(mux *Mux, secrets ...string) http.Handler {
-	return Verify(secrets...)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		serveRPC(w, r, mux)
-	}))
-}
-
-func serveRPC(w http.ResponseWriter, r *http.Request, mux *Mux) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxBodyBytes+1))
-	if err != nil {
-		writeRPC(w, "", &rpcError{Code: rpcCodeParseError, Message: "read body: " + err.Error()})
-		return
-	}
-	if len(body) > maxBodyBytes {
-		http.Error(w, "functions: body too large", http.StatusRequestEntityTooLarge)
-		return
-	}
+// serveRPCBody 解析并分发 JSON-RPC 请求（body 已由统一入口 NewServer 读取
+// 并探测过形态）。
+func serveRPCBody(w http.ResponseWriter, r *http.Request, body []byte, mux *Mux) {
 	var req rpcRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeRPC(w, "", &rpcError{Code: rpcCodeParseError, Message: "malformed json-rpc request: " + err.Error()})
@@ -109,7 +85,7 @@ func serveRPC(w http.ResponseWriter, r *http.Request, mux *Mux) {
 	defer cancel()
 
 	switch req.Method {
-	case RPCMethodInvoke, RPCMethodCronTick, RPCMethodEventDocument:
+	case RPCMethodInvoke:
 		serveRPCMain(ctx, w, &req, mux)
 	case RPCMethodHTTPRequest:
 		serveRPCHTTP(ctx, w, &req, mux)
@@ -118,29 +94,16 @@ func serveRPC(w http.ResponseWriter, r *http.Request, mux *Mux) {
 	}
 }
 
-// serveRPCMain 处理 main 风格三 method：params 即 TW_DATA 语义，直通既有
-// adapter（invoke → mainAdapter、cron.tick → cronAdapter、event.document →
-// eventAdapter）。
+// serveRPCMain 处理 invoke：params 即 TW_DATA 语义，直通 mainAdapter。
 func serveRPCMain(ctx context.Context, w http.ResponseWriter, req *rpcRequest, mux *Mux) {
 	mux.mu.RLock()
 	var handler contractHandler
-	switch req.Method {
-	case RPCMethodCronTick:
-		if mux.cron != nil {
-			handler = cronAdapter(mux.cron)
-		}
-	case RPCMethodEventDocument:
-		if mux.event != nil {
-			handler = eventAdapter(mux.event)
-		}
-	default:
-		if mux.invoke != nil {
-			handler = mainAdapter(mux.invoke)
-		}
+	if mux.invoke != nil {
+		handler = mainAdapter(mux.invoke)
 	}
 	mux.mu.RUnlock()
 	if handler == nil {
-		writeRPC(w, req.ID, &rpcError{Code: rpcCodeMethodNotFound, Message: "no handler registered for " + req.Method})
+		writeRPC(w, req.ID, &rpcError{Code: rpcCodeMethodNotFound, Message: "no Invoke handler registered"})
 		return
 	}
 

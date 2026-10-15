@@ -1,23 +1,24 @@
 package functions
 
-// 本文件是 Functions v4 调用协议的单一事实源（docs/design/functions-v4.md §4，
-// owner 拍板 D1：JSON-RPC 2.0 over 签名 HTTP）。torchwood（调用方/签名方）、
-// Go/TS FDK（服务方/验签方）与日后 fleetly 原生托管面共用本契约；两面漂移
-// 由 X-Tw-Protocol-Version 头 + 双仓协议契约测试共同约束。
+// 本文件是 Functions v4 调用协议的单一事实源（docs/design/functions-v4.md
+// §4，owner 拍板 D1 + D10 双轴增补）。torchwood（调用方/签名方）、Go/TS FDK
+//（服务方/验签方）与日后 fleetly 原生托管面共用本契约；两面漂移由
+// X-Tw-Protocol-Version 头 + 双仓协议契约测试共同约束。
 //
-// 协议要点（v4 §4）：
-//   - Body = JSON-RPC 2.0 request；method 承接触发器路由（invoke / cron.tick /
-//     event.document / http.request），id = execution id（服务方回显）。
-//   - 签名/身份走 header（传输与载荷分离）；X-Tw-Execution-Id 与
-//     X-Tw-Trigger-Envelope 两头退役，职责并入 body。
-//   - 响应：送达成功恒 HTTP 200；函数成败在 JSON-RPC result / error 对象。
-//     非 2xx / 连不通 / 超时 / 验签协议不符 = 平台语义错误。
-//   - webhook 投递不进 JSON-RPC（通知与 RPC 形状不同），但签名头语义共用。
+// 协议要点（v4 §4，D10 判定准则「有没有调用方在等应用层结果」）：
+//   - RPC 轴（JSON-RPC 2.0，有 id，等 result/error）：invoke 与
+//     http.request（sync/async_ack 同形态）；id = execution id（回显）。
+//   - 事件轴（CloudEvents 1.0 structured mode，通知，无应用层结果）：
+//     cron.tick / 事件触发 / webhook 投递——2xx = 送达。
+//   - 签名/身份走 header（传输与载荷分离），两轴共用同一签名方案。
+//   - RPC 轴响应：送达成功恒 HTTP 200，函数成败在 result / error 对象；
+//     非 2xx / 超时 / 验签协议不符 = 平台语义错误。
 
 import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -29,20 +30,46 @@ import (
 // 由 "jsonrpc":"2.0" 自版本化，本头管 method 词表 / 头语义 / 签名方案的演进。
 const ProtocolVersion = "1"
 
-// Method 词表：触发器路由收编进 JSON-RPC method（v4 §4）。
+// Method 词表：调用语义路由（v4 §4.1，D10 双轴增补后 RPC 轴仅两 method；
+// cron 与事件触发走事件轴 CloudEvents，见 CloudEvent/CloudEventTypeCronTick）。
 const (
 	// MethodInvoke 是 client/server 调用面（params = 函数载荷，原 TW_DATA）。
 	MethodInvoke = "invoke"
-	// MethodCronTick 是 cron 触发器（params = CronTick 形状：trigger_id /
-	// scheduled_for；与 FDK sdk/go/functions/events.go 同构）。
-	MethodCronTick = "cron.tick"
-	// MethodEventDocument 是事件触发器（params = DocumentChange 投影，
-	// 形状见 eventdata.go 的 EventInvocationData / SystemEventInvocationData）。
-	MethodEventDocument = "event.document"
 	// MethodHTTPRequest 是 HTTP 触发器（params = {envelope, body_b64}；
-	// result = HTTPResult——fetch 语义经 result 形状表达）。
+	// result = HTTPResult——fetch 语义经 result 形状表达；sync 与
+	// async_ack 同形态——响应模式是平台投递策略，不换协议，D10）。
 	MethodHTTPRequest = "http.request"
 )
+
+// ——事件轴：CloudEvents 1.0 structured mode（v4 §4.2，D10）——
+// 判定准则「有没有调用方在等应用层结果」：cron / 事件触发 / webhook 投递
+// 均为通知（无应用层结果，2xx = 送达），与 RPC 轴分轨。structured mode 使
+// 全部属性落在 body 内——整体处于签名保护圈（binary mode 的 ce-* header
+// 不受签名保护，故不采用）。
+
+// CloudEventsSpecVersion 是本平台产出的 specversion（只产 1.0）。
+const CloudEventsSpecVersion = "1.0"
+
+// CloudEventTypeCronTick 是 cron 触发的时间事件 type（data = CronTick 形状：
+// {trigger_id, scheduled_for}）。document/system 事件的 type 直接用事件
+// 目录名（documents.created / auth.users.created …，见 events catalog）。
+const CloudEventTypeCronTick = "cron.tick"
+
+// CloudEvent 是事件轴投递信封（structured mode JSON）。扩展属性用
+// CloudEvents 扩展命名约定（小写字母数字）。
+type CloudEvent struct {
+	Specversion     string          `json:"specversion"`
+	ID              string          `json:"id"`
+	Source          string          `json:"source"`
+	Type            string          `json:"type"`
+	Time            string          `json:"time,omitempty"`
+	DataContentType string          `json:"datacontenttype,omitempty"`
+	Data            json.RawMessage `json:"data,omitempty"`
+	// TwProject 是项目 id（扩展属性）。
+	TwProject string `json:"twproject,omitempty"`
+	// TwSeq 是 outbox 全局序（cron 自产事件无，零值）。
+	TwSeq int64 `json:"twseq,omitempty"`
+}
 
 // Header 常量（HTTP 头大小写不敏感；与 FDK sdk/go/functions/serve.go 头族
 // 对齐，新增 Signature / ProtocolVersion 两头，退役 Execution-Id /

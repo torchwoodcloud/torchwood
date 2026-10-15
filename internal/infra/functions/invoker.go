@@ -105,11 +105,13 @@ func (i *HTTPInvoker) Invoke(ctx context.Context, inv functions.Invocation) (*fu
 	return result, nil
 }
 
-// marshalRequest 组装 JSON-RPC 请求 body：params 形状随 method（协议 §4）。
+// marshalRequest 组装 JSON-RPC 请求 body：params 形状随 method（协议 §4.1；
+// D10 后 RPC 轴仅 invoke/http.request 两 method——cron/事件走事件轴
+// HTTPNotifier）。
 func (i *HTTPInvoker) marshalRequest(inv functions.Invocation) ([]byte, error) {
 	var params any
 	switch inv.Method {
-	case functions.MethodInvoke, functions.MethodCronTick, functions.MethodEventDocument:
+	case functions.MethodInvoke:
 		if inv.Data != "" {
 			params = json.RawMessage(inv.Data)
 		}
