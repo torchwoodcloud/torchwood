@@ -11,16 +11,23 @@
 //
 // 运行环境：
 //
-//	WEBHOOK_SECRET  必填。torchwood webhooks create / rotate-secret 一次性
-//	                回显的 whsec_ 明文。缺失即启动失败（fail-closed：无密钥
-//	                等于不设防）。
-//	PORT            监听端口（缺省 8080）。
+//	WEBHOOK_SECRET   必填。torchwood webhooks create / rotate-secret 一次性
+//	                 回显的 whsec_ 明文。缺失即启动失败（fail-closed：无密钥
+//	                 等于不设防）。
+//	FUNCTION_SECRET  可选。torchwood functions create / rotate-secret 一次性
+//	                 回显的 twfnsec_ 明文；设置后启用 POST /fn 函数面
+//	                 （FDK RPC 轴同款协议），缺省该面不注册。
+//	PORT             监听端口（缺省 8080）。
 //
 // 面：
 //
 //	POST /hook        torchwood webhook target（验签必经，失败 401 → 平台按
 //	                  重试梯度重投）。
+//	POST /fn          torchwood 函数 endpoint target（FDK RPC 轴：JSON-RPC
+//	                  2.0 over 签名 HTTP；method=invoke，恒 200，成败在
+//	                  result / error 对象——送达成功与函数成败分离）。
 //	GET  /healthz     存活/就绪探针（不走验签）。
+//	GET  /_tw/health  FDK 风格探针（不走验签，与 FDK NewServer 对齐）。
 //	GET  /deliveries  最近投递的 JSON 视图（演示用；生产接收方不要裸暴露）。
 package main
 
@@ -185,14 +192,80 @@ func main() {
 		fmt.Fprintln(w, "ok")
 	})
 
-	mux.HandleFunc("GET /deliveries", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(s.snapshot()); err != nil {
-			http.Error(w, "encode: "+err.Error(), http.StatusInternalServerError)
-		}
+	mux.HandleFunc("GET /_tw/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, "ok")
 	})
+
+	// 函数面（FUNCTION_SECRET 在场才注册）：FDK RPC 轴同款 wire 形态——
+	// 请求 {jsonrpc, method, params, id}（method=invoke，params=函数载荷），
+	// 响应恒 200 {jsonrpc, id, result|error}；验签与 webhook 同方案同口径。
+	if fnSecret := os.Getenv("FUNCTION_SECRET"); fnSecret != "" {
+		mux.HandleFunc("POST /fn", func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(io.LimitReader(r.Body, maxBodyBytes+1))
+			if err != nil {
+				http.Error(w, "read body: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			if len(body) > maxBodyBytes {
+				http.Error(w, "body too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			if err := verifySignature(r.Header.Get(hdrSignature), body, []string{fnSecret}, time.Now()); err != nil {
+				log.Printf("fn signature verification failed: %v", err)
+				http.Error(w, "invalid signature", http.StatusUnauthorized)
+				return
+			}
+
+			// 响应恒 200：送达成功与函数成败分离（成败在 result / error）。
+			w.Header().Set("Content-Type", "application/json")
+			var req struct {
+				JSONRPC string          `json:"jsonrpc"`
+				Method  string          `json:"method"`
+				Params  json.RawMessage `json:"params"`
+				ID      string          `json:"id"`
+			}
+			if err := json.Unmarshal(body, &req); err != nil {
+				writeRPC(w, req.ID, nil, &rpcError{Code: -32600, Message: "invalid JSON-RPC request: " + err.Error()})
+				return
+			}
+			switch req.Method {
+			case "invoke":
+				log.Printf("fn invoke: id=%s bytes=%d", req.ID, len(req.Params))
+				// 演示语义：echo 载荷 + 问候 + 身份投影（生产函数在这里写业务）。
+				result := map[string]any{
+					"pong":             json.RawMessage(req.Params),
+					"greeting":         "hello from webhook-example /fn",
+					"source":           r.Header.Get("X-Tw-Source"),
+					"project_id":       r.Header.Get("X-Tw-Project-Id"),
+					"invoking_user_id": r.Header.Get("X-Tw-Invoking-User-Id"),
+					"execution_id":     req.ID,
+				}
+				writeRPC(w, req.ID, result, nil)
+			default:
+				writeRPC(w, req.ID, nil, &rpcError{Code: -32601, Message: "method not supported: " + req.Method})
+			}
+		})
+		log.Printf("function face enabled on POST /fn (signature verification on)")
+	}
 
 	addr := ":" + port
 	log.Printf("webhook-example listening on %s (signature verification on)", addr)
 	log.Fatal(http.ListenAndServe(addr, mux))
+}
+
+// rpcError / writeRPC 与 FDK rpc.go 的 wire 形态同构（{jsonrpc, id, result|error}）。
+type rpcError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func writeRPC(w http.ResponseWriter, id string, result any, rpcErr *rpcError) {
+	resp := struct {
+		JSONRPC string    `json:"jsonrpc"`
+		ID      string    `json:"id"`
+		Result  any       `json:"result,omitempty"`
+		Error   *rpcError `json:"error,omitempty"`
+	}{JSONRPC: "2.0", ID: id, Result: result, Error: rpcErr}
+	_ = json.NewEncoder(w).Encode(resp)
 }
