@@ -32,13 +32,18 @@ export interface ListParams {
   sortOrder?: SortOrder;
 }
 
-// axios params 形参（gateway UseProtoNames，query 用 snake_case；
-// sort_order 传 proto 枚举名，grpc-gateway 按枚举名解析）。
+// grpc-gateway 按 proto 枚举名解析 query 里的枚举（query.go：只认
+// SORT_ORDER_ASC/SORT_ORDER_DESC 或数字，ASC/DESC 直接 400）。
+export function sortOrderParam(order: SortOrder): string {
+  return order === "ASC" ? "SORT_ORDER_ASC" : "SORT_ORDER_DESC";
+}
+
+// axios params 形参（gateway UseProtoNames，query 用 snake_case）。
 export function pageQuery(params: ListParams) {
   return {
     page_size: params.pageSize,
     page_token: params.pageToken || undefined,
-    sort_order: params.sortOrder || undefined,
+    sort_order: params.sortOrder ? sortOrderParam(params.sortOrder) : undefined,
   };
 }
 

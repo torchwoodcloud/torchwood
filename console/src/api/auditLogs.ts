@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { sortOrderParam } from "./pagination";
 
 // 字段为 snake_case：grpc-gateway 以 json_names_for_fields=false 序列化
 // （与 users.ts 等现有封装一致）。
@@ -50,7 +51,7 @@ export async function listAuditLogs(
   const clean: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== "" && v !== false) {
-      clean[k] = v;
+      clean[k] = k === "sort_order" ? sortOrderParam(v as "ASC" | "DESC") : v;
     }
   }
   const res = await api.get<ListAuditLogsResponse>("/server/audit-logs", {
