@@ -43,8 +43,11 @@ export async function listPlans(params: ListParams): Promise<Page<SubscriptionPl
   return { rows: res.data.plans ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
+// __skipToast：详情页对"不存在"自行渲染 NotFound 空态，资源缺失不该全局
+// 报错（query 失败重试还会把 toast 叠成堆）。
 export async function getPlan(planId: string): Promise<SubscriptionPlan> {
-  const res = await api.get<SubscriptionPlan>(`/server/subscriptions/plans/${planId}`);
+  const config: ApiRequestConfig = { __skipToast: true };
+  const res = await api.get<SubscriptionPlan>(`/server/subscriptions/plans/${planId}`, config);
   return res.data;
 }
 
@@ -104,8 +107,10 @@ export async function listSubscriptions(
   return { rows: res.data.subscriptions ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
+// __skipToast：同 getPlan——详情页自行渲染 NotFound 空态。
 export async function getSubscription(subscriptionId: string): Promise<Subscription> {
-  const res = await api.get<Subscription>(`/server/subscriptions/${subscriptionId}`);
+  const config: ApiRequestConfig = { __skipToast: true };
+  const res = await api.get<Subscription>(`/server/subscriptions/${subscriptionId}`, config);
   return res.data;
 }
 
