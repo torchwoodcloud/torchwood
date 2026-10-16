@@ -2,7 +2,7 @@
 
 本章面向后端开发者，说明仓库的四套生成机制（Buf proto 生成 → `genproto/`、config proto 生成 → `config.pb.go`、Wire 依赖注入 → `wire_gen.go`、授权矩阵文档生成 → `authz-matrix.md`）与 mise 任务编排，以及配套的漂移门禁。原则只有一条：**生成产物一律不手改，一切改动回到源头（proto / provider 声明 / 策略注册表）后重新生成。**
 
-> 事实源：`mise.toml`、`buf.yaml`、`buf.gen.yaml`、`cmd/*/provides.go` → `wire_gen.go`、`cmd/server/internal/runtime/cmd/genauthzmatrix`。
+> 事实源：`mise.toml`、`buf.yaml`、`buf.gen.yaml`、`cmd/*/provides.go` → `wire_gen.go`、`cmd/server/cmd/genauthzmatrix`。
 
 ---
 
@@ -22,7 +22,7 @@
 |------|----------|------|
 | `mise run generate:proto` | `buf lint` → `buf generate` | proto → `genproto/`（§2） |
 | `mise run generate:config` | 在 `internal/pkg/config` 内 `protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto` | 生成 `config.pb.go`（§3） |
-| `mise run gen:authz-matrix` | `go run ./cmd/server/internal/runtime/cmd/genauthzmatrix` | 重新生成 `docs/developer/authz-matrix.md`（§5） |
+| `mise run gen:authz-matrix` | `go run ./cmd/server/cmd/genauthzmatrix` | 重新生成 `docs/developer/authz-matrix.md`（§5） |
 | `mise run wire:server` / `wire:worker` | 各自 `cmd/<name>` 目录内 `go mod tidy` + `go run -mod=mod github.com/google/wire/cmd/wire` | 重算各自 `wire_gen.go`（§4） |
 | `mise run wire:all` | 上述两个 wire 任务依次执行 | 全量 Wire |
 | `mise run generate:all` | generate:proto → generate:config → wire:all | 一键全量生成 |

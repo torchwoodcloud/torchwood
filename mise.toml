@@ -84,7 +84,7 @@ run = [
 
 [tasks."gen:authz-matrix"]
 description = "生成 docs/developer/authz-matrix.md（策略注册表派生，漂移即红）"
-run = "go run ./cmd/server/internal/runtime/cmd/genauthzmatrix"
+run = "go run ./cmd/server/cmd/genauthzmatrix"
 
 [tasks."console:install"]
 description = "pnpm install（console/）"

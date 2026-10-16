@@ -16,7 +16,7 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	// 输出路径锚定仓库根（本文件位于 <root>/cmd/server/internal/runtime/cmd/genauthzmatrix）。
+	// 输出路径锚定仓库根（本文件位于 <root>/cmd/server/cmd/genauthzmatrix）。
 	target := filepath.Join(repoRoot(), "docs", "developer", "authz-matrix.md")
 	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 		fail(err)
@@ -28,13 +28,13 @@ func main() {
 }
 
 // repoRoot 以本文件编译期位置向上回溯到仓库根
-// （<root>/cmd/server/internal/runtime/cmd/genauthzmatrix → 根）。
+// （<root>/cmd/server/cmd/genauthzmatrix → 根）。
 func repoRoot() string {
 	_, thisFile, _, ok := goruntime.Caller(0)
 	if !ok {
 		fail(fmt.Errorf("cannot locate source file position"))
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", "..", ".."))
+	return filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "..", ".."))
 }
 
 func fail(err error) {
