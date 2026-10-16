@@ -2,13 +2,15 @@
 
 面向运维 / 部署负责人：运行形态（五进程）、外部依赖、构建发布、生产配置要点（双账号契约、roles-sig 部署时序、Functions 运行面默认值）、健康检查、规模预警线、备份与升级、运维操作 runbook、多机部署。
 
-> **IMPL-T2-3 迁移注（2026-09-28）**：dispatcher 的执行底座已切换为 fleetly 平台（函数实例 = fleetly Tasks、构建 = fleetly build-from-upload；零 docker.sock、零 docker client），多节点细胞模型（node_id/node_url/routing_mode/容量键/跨节点转发）整体退役（多节点编排归 swarm）。本文中 dispatcher 的 docker.sock 持有方表述、`functions.docker.host` 配置与 §7 多机章节为迁移前形态，按「历史形态」阅读；fleetly 部署形态（端点/机具令牌/网络成员/域名）以 T2-4 割接为准。
+> **Functions v4 迁移注（2026-10-15）**：执行面整体外包（`docs/design/functions-v4.md`）——**dispatcher / packer 进程与 `cmd/dispatcher` / `cmd/packer` 入口已删除**，`mise run build` 产出 server / worker / torchwood 三个二进制；`functions.dispatcher.* / functions.packer.* / functions.image.* / functions.storage.* / functions.docker.* / functions.execution.* / functions.fleetly.*` 配置段全部退役（reserved，残留键被忽略）。函数 = 常驻服务（endpoint target），部署链归 fleetly CLI 或用户自有工具链；webhook 投递新增 `functions.webhooks.*` 配置段、出站 SSRF 守卫新增 `functions.invoke.allow_private_targets`（见 `08-functions.md` §9）。本文以下章节中 dispatcher / packer 进程行、`:9070` / `:9071` 端口、Functions 运行面默认值（池策略/构建信号量）等为 v3 形态，按「历史形态」阅读；现行运行面见 `08-functions.md`。
 
-> 事实源：`cmd/server/main.go`、`cmd/worker/provides.go`、`cmd/dispatcher`、`cmd/packer`、`mise.toml`、`configs/config.yaml.template`、`internal/pkg/config/config.proto`、`internal/infra/health/checks.go`、`docker/local/docker-compose.yml`、`docker/dokploy/`（README / docker-compose.yml / bootstrap-roles.sql）、`.github/workflows/image.yml`。
+> **IMPL-T2-3 迁移注（2026-09-28，历史）**：dispatcher 的执行底座曾切换为 fleetly 平台（函数实例 = fleetly Tasks、构建 = fleetly build-from-upload；零 docker.sock、零 docker client），多节点细胞模型（node_id/node_url/routing_mode/容量键/跨节点转发）退役（多节点编排归 swarm）。fleetly 部署形态（端点/机具令牌/网络成员/域名）以 T2-4 割接为准。
 
-## 1. 运行形态：五进程
+> 事实源：`cmd/server/main.go`、`cmd/worker/provides.go`、`mise.toml`、`configs/config.yaml.template`、`internal/pkg/config/config.proto`、`internal/infra/health/checks.go`、`docker/local/docker-compose.yml`、`docker/dokploy/`（README / docker-compose.yml / bootstrap-roles.sql）、`.github/workflows/image.yml`。
 
-系统由五个独立进程组成：server / worker / dispatcher / packer 四个常驻服务 + torchwood CLI。四个服务端入口启动时经 `godotenv.Load()` 加载部署环境的 `.env`；torchwood CLI **不加载 `.env`**（CLI 常在不可信仓库目录运行，自动加载会被恶意 `.env` 重定向 endpoint/DSN 窃取凭据，`TORCHWOOD_CLI_*` 环境变量需自行 export）。五进程共用同一 config schema（`internal/pkg/config/config.proto`），各自只消费自己的分段：
+## 1. 运行形态：三进程
+
+系统由三个进程组成：server / worker 两个常驻服务 + torchwood CLI（Functions v4：dispatcher / packer 已退役）。服务端入口启动时经 `godotenv.Load()` 加载部署环境的 `.env`；torchwood CLI **不加载 `.env`**（CLI 常在不可信仓库目录运行，自动加载会被恶意 `.env` 重定向 endpoint/DSN 窃取凭据，`TORCHWOOD_CLI_*` 环境变量需自行 export）。server / worker 共用同一 config schema（`internal/pkg/config/config.proto`），各自只消费自己的分段：
 
 | 进程 | 入口 | 职责 | 启动期校验 |
 |------|------|------|-----------|

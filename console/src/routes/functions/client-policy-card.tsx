@@ -28,9 +28,8 @@ import {
 // 开启后终端用户可 POST /v1/functions/{id}:invoke 同步调用本函数：
 //   - 每用户限频由平台强制（固定窗口计数，超限 429 + RetryInfo）；
 //   - 每用户并发闸门（平台默认每用户 2）；
-//   - 可选客户端幂等键（网络超时重试防重复执行，执行记录级去重）；
-//   - 函数容器进入 internal 隔离网络（出网全 deny）——开启 client_callable
-//     或存在 http/cron 触发器的函数都不可出网。
+//   - 可选客户端幂等键（网络超时重试防重复执行，调用记录级去重）；
+//   - v4：调用经签名 HTTP 送达 endpoint target，执行位置归部署侧。
 
 export function FunctionClientPolicyCard({
   fn,
@@ -79,8 +78,8 @@ export function FunctionClientPolicyCard({
             开启后终端用户（Client API 登录态）可
             <code className="font-mono"> POST /v1/functions/&#123;id&#125;:invoke</code>
             同步调用本函数。平台强制每用户限频（超限 429 + RetryInfo）与每用户
-            并发闸门；函数容器进入 internal 隔离网络（出网全 deny，平台回访走
-            TW_API_BASE_URL）。data 为 JSON object 且 ≤ 32KB。
+            并发闸门；调用经签名 HTTP 送达 endpoint target（v4：执行位置归
+            部署侧）。data 为 JSON object 且 ≤ 32KB。
           </p>
           <div className="text-xs text-muted-foreground">
             幂等：客户端可携带幂等键（≤128 字符），

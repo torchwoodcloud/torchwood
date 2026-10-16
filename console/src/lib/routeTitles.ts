@@ -7,6 +7,7 @@ const routeNames: Record<string, string> = {
   storage: "Storage",
   databases: "Databases",
   functions: "Functions",
+  webhooks: "Webhooks",
   analytics: "Analytics",
   events: "Events",
   retention: "Retention",

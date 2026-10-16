@@ -16,6 +16,7 @@ import {
   Trophy,
   Users,
   UsersRound,
+  Webhook,
   type LucideIcon,
 } from "lucide-react";
 
@@ -36,6 +37,8 @@ export const navSections: { title?: string; items: NavItem[] }[] = [
       { to: "/console/databases", label: "Databases", icon: Database },
       { to: "/console/storage", label: "Storage", icon: HardDrive },
       { to: "/console/functions", label: "Functions", icon: FunctionSquare },
+      // Webhooks：Functions v4 一等公民（事件订阅投递），与 Functions 同组。
+      { to: "/console/webhooks", label: "Webhooks", icon: Webhook },
       // RuntimeVars：项目级运行时配置下发（集合/可见性/版本回滚），
       // 与 API Keys 同为凭证相邻的开发者资源。
       { to: "/console/runtime-vars", label: "Runtime Vars", icon: SlidersHorizontal },

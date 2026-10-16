@@ -129,14 +129,14 @@ mise run generate:all      # generate:proto → generate:config → wire:all
 |------|------|
 | `generate:proto` | `buf lint` + `buf generate` → `genproto/` |
 | `generate:config` | 由 `internal/pkg/config/config.proto` 产出 `config.pb.go` |
-| `wire:all` | server / worker / dispatcher / packer 四份 `wire_gen.go` |
+| `wire:all` | server / worker 两份 `wire_gen.go` |
 
 生成物零漂移校验（生成后 `git diff --exit-code`）见 `04-codegen.md`。
 
 ### 步骤 5 — 构建并启动
 
 ```bash
-mise run build             # console:build → go build 五个二进制（server / worker / dispatcher / packer / torchwood）到 ./bin/
+mise run build             # console:build → go build 三个二进制（server / worker / torchwood）到 ./bin/
 ./bin/server               # Windows 下为 ./bin/server.exe
 # 开发态直跑：
 mise run dev:server        # go run ./cmd/server
@@ -228,7 +228,8 @@ CLI 二进制为 `bin/torchwood`（Windows 下 `bin/torchwood.exe`；入口 `cmd
 ./bin/torchwood analytics ingest --file events.json                                        # 或 --file - 走 stdin（analytics.write）
 ./bin/torchwood assets grant --quantity 100 --idempotency-key comp-2026-0914 user_42 gems  # 运营补偿（assets.write，进审计）
 ./bin/torchwood payments refund --help                                                     # 订单查询 / 退款 / 人工履约
-TORCHWOOD_GIT_TOKEN=ghp_xxx ./bin/torchwood functions deployments create-from-git --url https://github.com/acme/functions.git --ref main --dir functions/greet greet   # git 源部署（token 走环境变量，见 08-functions.md §3.4）
+./bin/torchwood functions create --id greet --name greet --url https://fn.example.com/greet   # Functions v4：登记 endpoint target（响应一次性回显签名密钥，见 08-functions.md）
+./bin/torchwood functions invoke --input '{"ping":"world"}' greet   # 调用并查看 invocation
 ./bin/torchwood runbook up --dir runbooks                                                  # 版本化资源迁移，见 19-runbook.md
 ./bin/torchwood rpc --data '{"pageSize":10}' --api-key <secret> /torchwood.server.v1.UsersService/ListUsers
 ```

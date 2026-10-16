@@ -32,7 +32,7 @@ Overlay，不是新 API。完整产品面仍是全部 RPC（当前 **263 个**�
 | `delete_document` | `Databases.DeleteDocument` | `/torchwood.server.v1.DatabasesService/DeleteDocument` | `databases.write` | 三元组；用户集合须带 `version`（OCC）；可选 `request_id` |
 | `list_collections` | `Databases.ListCollections` | `/torchwood.server.v1.DatabasesService/ListCollections` | `databases.read` | `database_id` + `page_size` / `page_token`（proto 仍留 `queries` 字段，服务端不消费） |
 | `get_collection` | `Databases.GetCollection` | `/torchwood.server.v1.DatabasesService/GetCollection` | `databases.read` | `database_id`, `collection_id` |
-| `invoke_function` | `Functions.CreateExecution` | `/torchwood.server.v1.FunctionsService/CreateExecution` | `functions.write` | `function_id`；可选 `deployment_id`（缺省最新 ready）、`data`、`async` |
+| `invoke_function` | `Functions.InvokeFunction` | `/torchwood.server.v1.FunctionsService/InvokeFunction` | `functions.write` | `function_id`；可选 `data`、`async`（Functions v4：目标恒为函数当前 endpoint target） |
 | `list_files` | `Storage.ListFiles` | `/torchwood.server.v1.StorageService/ListFiles` | `storage.read` | `bucket_id` + `page_size` / `page_token`；`queries[]` 不支持，携带即 InvalidArgument |
 | `get_file` | `Storage.GetFile` | `/torchwood.server.v1.StorageService/GetFile` | `storage.read` | `bucket_id`, `file_id` |
 | `grant_asset` | `Assets.Grant` | `/torchwood.server.v1.AssetsService/Grant` | `assets.write` | `owner_id`, `def_code`, `quantity`, `idempotency_key`；可选 `expires_at` / `level` / `metadata` / `ref_type` / `ref_id` |

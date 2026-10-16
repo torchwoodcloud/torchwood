@@ -24,7 +24,7 @@ SDK 是 Torchwood **AI/Agent-Native** 定位的集成层（`sdk/README.md`）：
 | 路径 | 说明 |
 |------|------|
 | `sdk/typescript/` | `@torchwood/sdk`，`type: module`，`main`/`types` → `dist/`，engines node ≥18，零运行时依赖（devDependencies 仅 `typescript`） |
-| `sdk/typescript/src/torchwood.ts` | `Torchwood` 门面：11 个 Client 服务字段 + 20 个 Server 服务字段 + `fromExecution` |
+| `sdk/typescript/src/torchwood.ts` | `Torchwood` 门面：11 个 Client 服务字段 + 21 个 Server 服务字段（含 webhooks）+ `fromExecution` |
 | `sdk/typescript/src/http.ts` | `HttpTransport` + `TorchwoodConfig` + `AuthMode` 四态 + `DEFAULT_TIMEOUT_MS`（30000） |
 | `sdk/typescript/src/server/` | 20 个 Server 服务类；`tools.ts` 为 18 动词工具目录 |
 | `sdk/typescript/src/client/` | 11 个 Client 服务类（account / analytics / assets / databases / functions / groups / leaderboards / payments / realtime / runtimeVars / subscriptions） |
@@ -118,7 +118,8 @@ export class Torchwood {
 | `apiKeys` | `APIKeysService` | list / get / create（`{api_key, secret}` 仅一次）/ update / delete / `whoAmI`；服务端禁止 API Key 凭证调用本服务（管理走 Console / admin session，`InvokeJSON` 亦排除） |
 | `oauthProviders` | `OAuthProvidersService` | 提供商 list / upsert / delete |
 | `storage` | `StorageService` | bucket / file 元数据管理、`createFileToken`、`getStorageUsage`；`uploadFile` 走 multipart |
-| `functions` | `FunctionsService` | 运行时 / 规格 / 函数 CRUD / 部署 / 变量 / `setScopes` / 执行 / 触发器（create / list / delete / rotateTriggerToken） |
+| `functions` | `FunctionsService` | 函数 CRUD（create 带 target_url + 一次性密钥）/ `rotateSecret` / `invoke` / invocations（list / get）/ `setScopes` / 触发器（create / list / delete / rotateTriggerToken）——Functions v4：部署/变量/运行时面已退役 |
+| `webhooks` | `WebhooksService` | 订阅 CRUD + `rotateSecret` + 投递浏览（`listDeliveries` / `getDelivery`）+ `redeliver` |
 | `payments` | `ServerPaymentsService` | 订单查询 / 退款 / 人工履约 |
 | `assets` | `ServerAssetsService` | 资产定义 CRUD + 授信动词（终端用户无写入口） |
 | `leaderboards` | `ServerLeaderboardsService` | 提交 / 条目 / top / 结算查询（可代任意 subject；`leaderboards.write`/`read`，见 `20-leaderboards.md`） |

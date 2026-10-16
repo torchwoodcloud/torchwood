@@ -1,49 +1,40 @@
 import { listQuery, type HttpTransport } from "../http.js";
 import type {
   CronTriggerConfig,
-  Deployment,
-  Execution,
+  CreateFunctionResult,
+  EventTriggerConfig,
   FunctionInfo,
+  FunctionSecret,
   FunctionTrigger,
   HttpTriggerConfig,
+  Invocation,
   ListMeta,
   ListParams,
-  RuntimeInfo,
-  SpecificationInfo,
-  Variable,
 } from "../types.js";
 
+// FunctionsService 对接 Functions v4 服务面（docs/design/functions-v4.md）：
+// 函数 = 常驻服务（endpoint target），torchwood 只做路由、身份、记账与投递；
+// 部署/变量/运行时面已随执行面外包退役（v4 §2/§10）。
 export class FunctionsService {
   constructor(private readonly http: HttpTransport) {}
 
-  async listRuntimes(): Promise<RuntimeInfo[]> {
-    const res = await this.http.request<{ runtimes: RuntimeInfo[] }>(
-      "GET",
-      "/v1/server/functions:runtimes",
-      { auth: "apiKey" }
-    );
-    return res.runtimes ?? [];
-  }
-
-  async listSpecifications(): Promise<SpecificationInfo[]> {
-    const res = await this.http.request<{ specifications: SpecificationInfo[] }>(
-      "GET",
-      "/v1/server/functions:specifications",
-      { auth: "apiKey" }
-    );
-    return res.specifications ?? [];
-  }
-
+  // 创建函数：endpoint target url 创建时录入，签名密钥服务端生成、明文仅在
+  // 本响应出现一次（之后只出指纹——见 CreateFunctionResult.target_secret）。
   async create(input: {
     id: string;
     name: string;
-    runtime: string;
-    entrypoint?: string;
     timeout_seconds?: number;
-    spec?: string;
     enabled?: boolean;
-  }): Promise<FunctionInfo> {
-    return this.http.request<FunctionInfo>("POST", "/v1/server/functions", {
+    declared_scopes?: string[];
+    client_callable?: boolean;
+    client_per_user_limit?: number;
+    client_limit_window?: "minute" | "hour" | "day";
+    // 函数常驻服务的调用终点（生产强制 https）。
+    target_url: string;
+    // 可选自定义签名密钥（twfnsec_ 前缀；空 = 服务端生成）。
+    target_secret?: string;
+  }): Promise<CreateFunctionResult> {
+    return this.http.request<CreateFunctionResult>("POST", "/v1/server/functions", {
       auth: "apiKey",
       body: input,
     });
@@ -72,10 +63,14 @@ export class FunctionsService {
     functionId: string,
     input: {
       name?: string;
-      entrypoint?: string;
       timeout_seconds?: number;
-      spec?: string;
       enabled?: boolean;
+      client_callable?: boolean;
+      client_anonymous_allowed?: boolean;
+      client_per_user_limit?: number;
+      client_limit_window?: "minute" | "hour" | "day";
+      // target url：未设置 = 不修改；密钥变更走 rotateSecret。
+      target_url?: string;
     }
   ): Promise<FunctionInfo> {
     return this.http.request<FunctionInfo>(
@@ -96,65 +91,15 @@ export class FunctionsService {
     );
   }
 
-  // 创建部署。code 为 zip 代码包（≤1MiB 走此 JSON 通道，base64 编码）；
-  // 更大的包请走 multipart 上传
-  // （POST /v1/server/functions/{function_id}/deployments/code）。
-  async createDeployment(functionId: string, code: string): Promise<Deployment> {
-    return this.http.request<Deployment>(
+  // 轮换 endpoint target 签名密钥：新钥即刻生效（v1 签名），旧钥保留一个
+  // 宽限窗（v2 双签）——函数侧持旧钥的 FDK 过渡期不断流。新明文仅在响应
+  // 出现一次，立即部署到函数侧。
+  async rotateSecret(functionId: string): Promise<FunctionSecret> {
+    return this.http.request<FunctionSecret>(
       "POST",
-      `/v1/server/functions/${encodeURIComponent(functionId)}/deployments`,
-      {
-        auth: "apiKey",
-        body: { function_id: functionId, code },
-      }
+      `/v1/server/functions/${encodeURIComponent(functionId)}:rotate-secret`,
+      { auth: "apiKey", body: {} }
     );
-  }
-
-  async listDeployments(functionId: string): Promise<Deployment[]> {
-    const res = await this.http.request<{ deployments: Deployment[] }>(
-      "GET",
-      `/v1/server/functions/${encodeURIComponent(functionId)}/deployments`,
-      { auth: "apiKey" }
-    );
-    return res.deployments ?? [];
-  }
-
-  async getDeployment(functionId: string, deploymentId: string): Promise<Deployment> {
-    return this.http.request<Deployment>(
-      "GET",
-      `/v1/server/functions/${encodeURIComponent(functionId)}/deployments/${encodeURIComponent(deploymentId)}`,
-      { auth: "apiKey" }
-    );
-  }
-
-  async deleteDeployment(functionId: string, deploymentId: string): Promise<void> {
-    await this.http.request<void>(
-      "DELETE",
-      `/v1/server/functions/${encodeURIComponent(functionId)}/deployments/${encodeURIComponent(deploymentId)}`,
-      { auth: "apiKey" }
-    );
-  }
-
-  // 全量替换函数环境变量（variables 为空数组 = 清空）。
-  async setVariables(functionId: string, variables: Variable[]): Promise<Variable[]> {
-    const res = await this.http.request<{ variables: Variable[] }>(
-      "PUT",
-      `/v1/server/functions/${encodeURIComponent(functionId)}/variables`,
-      {
-        auth: "apiKey",
-        body: { function_id: functionId, variables },
-      }
-    );
-    return res.variables ?? [];
-  }
-
-  async getVariables(functionId: string): Promise<Variable[]> {
-    const res = await this.http.request<{ variables: Variable[] }>(
-      "GET",
-      `/v1/server/functions/${encodeURIComponent(functionId)}/variables`,
-      { auth: "apiKey" }
-    );
-    return res.variables ?? [];
   }
 
   // 全量替换函数 declared_scopes（执行身份，P0；每项形如
@@ -170,17 +115,15 @@ export class FunctionsService {
     );
   }
 
-  async createExecution(
+  // 调用一个函数（v4 §2：CreateExecution 改名 InvokeFunction；目标恒为函数
+  // 当前的 endpoint target）。async=true 时立即返回 queued invocation。
+  async invoke(
     functionId: string,
-    input: {
-      deployment_id?: string;
-      data?: string;
-      async?: boolean;
-    }
-  ): Promise<Execution> {
-    return this.http.request<Execution>(
+    input?: { data?: string; async?: boolean }
+  ): Promise<Invocation> {
+    return this.http.request<Invocation>(
       "POST",
-      `/v1/server/functions/${encodeURIComponent(functionId)}/executions`,
+      `/v1/server/functions/${encodeURIComponent(functionId)}:invoke`,
       {
         auth: "apiKey",
         body: { function_id: functionId, ...input },
@@ -188,40 +131,66 @@ export class FunctionsService {
     );
   }
 
-  async listExecutions(functionId: string): Promise<Execution[]> {
-    const res = await this.http.request<{ executions: Execution[] }>(
+  // 调用记录列表（ListInvocationsRequest）：分页 + status 精确过滤
+  //（queued | running | completed | failed）+ created_at 闭区间（RFC3339）。
+  async listInvocations(
+    functionId: string,
+    params?: {
+      page_size?: number;
+      page_token?: string;
+      status?: string;
+      created_after?: string;
+      created_before?: string;
+    }
+  ): Promise<{ invocations: Invocation[]; meta?: ListMeta }> {
+    const query: Record<string, string | number | undefined> = {
+      page_size: params?.page_size,
+      page_token: params?.page_token,
+      status: params?.status,
+      created_after: params?.created_after,
+      created_before: params?.created_before,
+    };
+    for (const k of Object.keys(query)) {
+      if (query[k] === undefined || query[k] === "") delete query[k];
+    }
+    const res = await this.http.request<{ invocations: Invocation[]; meta?: ListMeta }>(
       "GET",
-      `/v1/server/functions/${encodeURIComponent(functionId)}/executions`,
-      { auth: "apiKey" }
+      `/v1/server/functions/${encodeURIComponent(functionId)}/invocations`,
+      { auth: "apiKey", query }
     );
-    return res.executions ?? [];
+    return { invocations: res.invocations ?? [], meta: res.meta };
   }
 
-  async getExecution(functionId: string, executionId: string): Promise<Execution> {
-    return this.http.request<Execution>(
+  async getInvocation(functionId: string, invocationId: string): Promise<Invocation> {
+    return this.http.request<Invocation>(
       "GET",
-      `/v1/server/functions/${encodeURIComponent(functionId)}/executions/${encodeURIComponent(executionId)}`,
+      `/v1/server/functions/${encodeURIComponent(functionId)}/invocations/${encodeURIComponent(invocationId)}`,
       { auth: "apiKey" }
     );
   }
 
-  // ——触发器管理（P1 触发器模块）——
+  // ——触发器管理（P1 触发器模块；三型 http / cron / event）——
 
   // 创建触发器：type=http 需带 http 配置段（token 服务端生成，公开调用
-  // 路径 /f/{project_id}/{token}）；type=cron 需带 cron 配置段（UTC）。
+  // 路径 /f/{project_id}/{token}）；type=cron 需带 cron 配置段（UTC）；
+  // type=event 需带 event 配置段（eventmatch 订阅串）。
   async createTrigger(
     functionId: string,
     input:
       | ({ type: "http" } & HttpTriggerConfig)
       | ({ type: "cron" } & CronTriggerConfig)
+      | ({ type: "event" } & EventTriggerConfig)
   ): Promise<FunctionTrigger> {
     const body: Record<string, unknown> = { function_id: functionId, type: input.type };
     if (input.type === "http") {
       const { type: _type, ...cfg } = input as { type: "http" } & HttpTriggerConfig;
       body.http = cfg;
-    } else {
+    } else if (input.type === "cron") {
       const { type: _type, ...cfg } = input as { type: "cron" } & CronTriggerConfig;
       body.cron = cfg;
+    } else {
+      const { type: _type, ...cfg } = input as { type: "event" } & EventTriggerConfig;
+      body.event = cfg;
     }
     return this.http.request<FunctionTrigger>(
       "POST",

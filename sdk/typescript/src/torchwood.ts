@@ -35,6 +35,7 @@ import {
   UsersService,
   OutboxService,
   ServerLeaderboardsService,
+  WebhooksService,
 } from "./server/index.js";
 
 export type { TorchwoodConfig } from "./http.js";
@@ -74,6 +75,7 @@ export class Torchwood {
     oauthProviders: OAuthProvidersService;
     storage: StorageService;
     functions: FunctionsService;
+    webhooks: WebhooksService;
     payments: ServerPaymentsService;
     assets: ServerAssetsService;
     leaderboards: ServerLeaderboardsService;
@@ -112,6 +114,7 @@ export class Torchwood {
       oauthProviders: new OAuthProvidersService(this.transport),
       storage: new StorageService(this.transport),
       functions: new FunctionsService(this.transport),
+      webhooks: new WebhooksService(this.transport),
       payments: new ServerPaymentsService(this.transport),
       assets: new ServerAssetsService(this.transport),
       leaderboards: new ServerLeaderboardsService(this.transport),

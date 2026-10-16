@@ -94,7 +94,7 @@ describe("agentTools catalog", () => {
       },
       {
         name: TOOL_INVOKE_FUNCTION,
-        fullMethod: "/torchwood.server.v1.FunctionsService/CreateExecution",
+        fullMethod: "/torchwood.server.v1.FunctionsService/InvokeFunction",
       },
       { name: TOOL_LIST_FILES, fullMethod: "/torchwood.server.v1.StorageService/ListFiles" },
       { name: TOOL_GET_FILE, fullMethod: "/torchwood.server.v1.StorageService/GetFile" },

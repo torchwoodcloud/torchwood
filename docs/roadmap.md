@@ -28,11 +28,11 @@ P2 先夯 BaaS 门面（Realtime + 事件 + 事务），Agent 表面后置。P1 
 
 | 任务 | 说明 | 目标阶段 |
 |------|------|----------|
-| Webhooks 出站（用户面 CRUD） | 业务事件推送到 n8n / Temporal 等 | P3（P2 只做内部消费，不先做 Webhook 产品） |
+| Webhooks 出站（用户面 CRUD） | 业务事件推送到 n8n / Temporal 等 | ~~P3~~ **已提前落地**（Functions v4 一等公民，`proto/server/v1/webhooks.proto` 九 RPC + Console 页，见 §2.6） |
 | MCP Server | 暴露 Server API 为 MCP Tools | P3 |
 | OpenAPI 聚合与 Tool Schema | 合并各服务 Swagger，导出 Agent 可用的 operation 清单 | P3 |
 | Agent 专用 API Key 模板 | Console 一键创建「只读 Agent」「文档读写 Agent」等预设 scope | P3 |
-| Functions Tool 运行时 | 函数声明 JSON Schema 入参/出参，Agent 当 Tool 调 | P3 |
+| Functions Tool 运行时 | 函数声明 JSON Schema 入参/出参，Agent 当 Tool 调（JSON-RPC 2.0 调用底座已就位——Functions v4 调用协议与 MCP 同底座） | P3 |
 | 多语言 SDK 生成 | 从 proto 生成 Python 等 SDK（Go/TS 已有） | P3 |
 
 **验收标准（Agent-Native MVP）**：
@@ -212,27 +212,34 @@ Sprint 1 已完成 Server/Client Document CRUD；批量操作与 attribute/index
 **执行器 v2/v3 已落地（2026-09）**：v2 = 独立 `dispatcher` 常驻进程
 （唯一 docker.sock 持有方，resident 实例池 + 租约认领）；v3 = runner 实例内
 并发复用（`main(data, ctx)`、runner fetch 协议、超时熔断、平台代装依赖构建、
-concurrency 策略链与函数内执行身份 `fromExecution`）。详见
-`docs/developer/08-functions.md` §4.3 与 `docs/design/functions-v3.md`。
+concurrency 策略链与函数内执行身份 `fromExecution`）。
+
+**Functions v4 已落地（2026-10-15，破坏波 A 提交 c925c33f）**：执行面整体外包——
+**dispatcher / packer 进程退役**（`mise run build` 产出收敛为 server / worker /
+torchwood CLI），部署/变量/运行时 RPC 退役（proto reserved）、`CreateExecution →
+InvokeFunction` / executions → invocations 改名、新增 `RotateFunctionSecret` 与
+endpoint target 模型（函数 = 常驻服务，torchwood 收敛为路由与身份层）；**Webhooks
+从 P3 提前落地为一等公民**（`WebhooksService` 九 RPC：订阅 CRUD + 密钥轮换 +
+投递浏览/Redeliver，重试梯度 15 次/24h + 行内 DLQ）。协议 = RPC 轴 JSON-RPC 2.0 +
+事件轴 CloudEvents 1.0 over 签名 HTTP。设计全文与裁决链见
+`docs/design/functions-v4.md`，开发者文档 `docs/developer/08-functions.md`（v4 重写）。
 
 | 任务 | 说明 | 关键端点 / 组件 | 状态 |
 |------|------|-----------------|------|
-| Runtime 列表 | 返回支持的运行时（node-18、python-3.11 等） | `GET /v1/server/functions/runtimes` | ✅ 完成 |
-| Specification 列表 | 返回 CPU/内存规格 | `GET /v1/server/functions/specifications` | ✅ 完成 |
-| Function CRUD | 创建/列表/获取/更新/删除函数 | `/v1/server/functions` | ✅ 完成 |
-| Deployment CRUD | 上传代码包、列表、获取、删除 | `/v1/server/functions/{id}/deployments` | ✅ 完成 |
-| Variables CRUD | 函数环境变量 | `/v1/server/functions/{id}/variables` | ✅ 完成 |
-| Execution CRUD | 同步/异步执行、获取结果 | `POST/GET /v1/server/functions/{id}/executions` | ✅ 完成 |
-| Docker build | 解压代码包，按运行时 Dockerfile 构建镜像（防 zip 炸弹/slip） | `internal/infra/functions/docker.go` | ✅ 完成 |
-| Docker run | 运行容器，收集 stdout/stderr，超时控制与安全基线 | `internal/infra/functions/docker.go` | ✅ 完成 |
-| 异步执行 Worker | `cmd/worker` 消费执行队列（Redis Stream、N=4 并发、周期孤儿对账） | `cmd/worker/`、`worker/` | ✅ 完成 |
-| 构建队列 | Redis List 队列 + CreateDeployment 同步构建（MVP 偏离） | `internal/domain/shared/ports.go`、`internal/infra/queue/` | ✅ 完成 |
+| Function CRUD + target | 创建（target url + 一次性签名密钥）/列表/获取/更新/删除；`RotateFunctionSecret` 轮换 | `/v1/server/functions`、`...:rotate-secret` | ✅ 完成（v4 重塑） |
+| InvokeFunction | 同步/异步调用（原 CreateExecution 改名；目标恒为 endpoint target） | `POST /v1/server/functions/{id}:invoke` | ✅ 完成 |
+| Invocations 记账 | 调用记录（queued/running/completed/failed；幂等/限频/审计三链挂行） | `GET /v1/server/functions/{id}/invocations` | ✅ 完成 |
+| 触发器三型 | HTTP（封套透传 + 双响应模式）/ cron（UTC + catch_up_once）/ event（eventmatch 订阅） | `.../triggers` | ✅ 完成 |
+| 客户端调用面 | client_callable + 每用户限频/并发闸门/幂等键 | `POST /v1/functions/{id}:invoke` | ✅ 完成 |
+| Webhooks 一等公民 | 订阅 CRUD + CloudEvents 投递 + 重试梯度/DLQ/Redeliver + per-webhook 签名 | `/v1/server/webhooks`、`internal/app/webhooks/` | ✅ 完成（自 P3 提前） |
+| ~~Runtime/Specification 列表~~ | ~~运行时目录与规格~~ | — | ⛔ v4 退役（归 substrate） |
+| ~~Deployment/Variables/Executions RPC~~ | ~~部署/变量/执行面~~ | — | ⛔ v4 退役（部署归 fleetly CLI / 用户工具链，执行统一为 invocations） |
 
-**验收标准**：
+**验收标准（v4）**：
 
-- 上传一个 Node.js 函数后，可同步调用并返回 `console.log` 输出。
-- 函数执行超时后返回 500 并清理容器。
-- 异步执行可在 Console 中查看 execution 状态与日志。
+- 创建函数登记 endpoint target（跑 FDK 的常驻服务）后，`torchwood functions invoke` 与客户端 SDK 均可调用并得到 JSON-RPC result。
+- cron / event 触发按签名 HTTP 送达 endpoint；事件触发与 webhook 投递共享重试梯度语义。
+- Webhook 订阅文档写事件后，接收方收到 CloudEvents 信封并可验签；投递失败进 DLQ 可 Redeliver。
 
 ---
 
@@ -258,7 +265,7 @@ concurrency 策略链与函数内执行身份 `fromExecution`）。详见
 | Databases 文档编辑器 | collection 下文档列表、新增/编辑/删除 | `console/src/routes/databases/` | ✅ 完成 |
 | Attributes / Indexes 管理 | 在 collection 详情中增删属性与索引（含 Attribute/Index 行内删除） | Databases 子页面 | ✅ 完成 |
 | Groups Memberships | 管理用户组邀请与成员 | `console/src/routes/groups/` | ✅ 完成 |
-| Functions 管理 | Functions / Deployments / Executions 页面 | `console/src/routes/functions/` | ✅ 完成 |
+| Functions 管理 | Functions 列表/详情（target 编辑 + 签名密钥轮换 + 触发器 + invocations）与 Webhooks 页（订阅 CRUD + 投递记录/Redeliver） | `console/src/routes/functions/`、`console/src/routes/webhooks/` | ✅ 完成 |
 | 项目设置区 | 项目配置统一收敛至 `/console/projects/:id/settings`（显式项目作用域：基本信息编辑 `PATCH /v1/server/projects/{id}`、注册与登录（注册策略/邀请码/SMTP 说明）、OAuth（Providers/重定向白名单）、危险区（删除项目））；旧全局 `/console/settings` 重定向退役 | `console/src/routes/projects/settings.tsx` | ✅ 完成 |
 | 侧边栏菜单分组 | Dashboard 置顶；Develop（API Keys/Databases/Storage/Functions/Analytics）、Auth（Users/Groups）、Economy（Orders/Assets/Subscriptions/Leaderboards）、System（Projects/Admins/Audit Logs）分组；项目设置入口在项目详情页与 Dashboard | `console/src/components/Layout.tsx` | ✅ 完成 |
 
@@ -374,7 +381,7 @@ v2 **不是**「把 Appwrite 剩下的模块搬过来」。Agent 叙事（MCP、
 
 | 模块 | 去向 |
 |------|------|
-| 用户面 Webhook CRUD、HMAC 投递产品 | P3 |
+| 用户面 Webhook CRUD、HMAC 投递产品 | ~~P3~~ **已提前落地**（Functions v4 一等公民，§2.6） |
 | MCP / OpenAPI 聚合 / Agent Key 模板 / Functions as Tools | P3（§0） |
 | 完整 Messaging（Topic / SMS / Push） | P3 |
 | Relationships、Vectors（pgvector）、Geo（PostGIS） | P3 |
@@ -409,9 +416,9 @@ count/自增/OCC 等 DIY 底料平台已有，但权限别扭（read:any 枚举�
 
 | 任务 | 说明 |
 |------|------|
-| Webhook 产品 | Webhook CRUD、HMAC 签名、重试与死信、投递 Worker |
+| ~~Webhook 产品~~ | **已提前落地**（Functions v4 一等公民：Webhook CRUD、HMAC 签名、重试与 DLQ、投递 Worker——§2.6；剩余演进如负载级过滤/计量进 billing 仍在 P3） |
 | MCP + Tool Schema + Agent Key 模板 | 见 §0 |
-| Functions as Tools | 函数 JSON Schema I/O |
+| Functions as Tools | 函数 JSON Schema I/O（JSON-RPC 2.0 调用底座已就位——Functions v4 协议与 MCP/OpenRPC 同底座，届时为函数暴露 Tool 定义即复用） |
 | Messaging | Providers / Topics / Subscribers / SMS / Push |
 | Relationships | 一对一、一对多、多对多 |
 | VectorsDB | `vector` attribute + pgvector 相似度查询 |

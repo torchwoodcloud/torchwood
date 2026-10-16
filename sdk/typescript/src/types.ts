@@ -284,68 +284,78 @@ export interface StorageUsage {
   total_size: string | number;
 }
 
+// ——Functions v4（docs/design/functions-v4.md）——
+// 函数 = 常驻服务（endpoint target），torchwood 只做路由、身份、记账与投递；
+// 执行面（打包/构建/部署/池/运行时/变量）已整体外包。一次调用统一为
+// invocation（v4 §2 重命名：CreateExecution → InvokeFunction / executions →
+// invocations）。
+
+// FunctionTarget 投影（v4 §3 单一 endpoint kind）：密钥任何形态不回显——
+// 明文仅在创建/轮换响应一次性返回，管理面只出指纹。
+export interface FunctionTarget {
+  // 函数常驻服务的调用终点（生产强制 https；开发环境经服务端放行 http）。
+  url: string;
+  // 签名密钥指纹（"twfnsec_" + SHA-256 前 8 hex；比对用，非明文）。
+  secret_fingerprint: string;
+  // 最近一次密钥轮换时刻（宽限窗内旧钥 v2 双签）。
+  secret_rotated_at?: string;
+}
+
 export interface FunctionInfo {
   id: string;
   project_id: string;
   name: string;
-  runtime: string;
-  entrypoint: string;
   timeout_seconds: number;
-  spec: string;
   enabled: boolean;
+  // 执行身份声明（P0）：每项形如 "<resource>:<op>"（如 "assets:write"）；
+  // 空数组 = 无平台访问权限（fail-closed）。
+  declared_scopes?: string[];
+  // ——客户端调用面策略（P2）——
+  client_callable?: boolean;
+  // 字段保留、一期禁用（服务端遇 true 显式报错）。
+  client_anonymous_allowed?: boolean;
+  client_per_user_limit?: number;
+  client_limit_window?: "minute" | "hour" | "day";
+  // endpoint target（v4）：执行位置 = 常驻服务调用终点。
+  target?: FunctionTarget;
   created_at: string;
   updated_at: string;
 }
 
-export interface RuntimeInfo {
-  id: string;
-  name: string;
-  entrypoint: string;
+// CreateFunction 响应：函数视图 + 一次性 target 签名密钥明文（仅此一次；
+// 之后任何面只出指纹）。调用方须立即把 secret 配置到函数侧（FDK 环境变量
+// 或部署注入）。
+export interface CreateFunctionResult {
+  function: FunctionInfo;
+  target_secret: string;
 }
 
-export interface SpecificationInfo {
-  id: string;
-  cpu: string;
-  memory: string;
+// RotateFunctionSecret 响应：明文只出现这一次；新钥即刻生效（v1 签名），
+// 旧钥保留一个宽限窗（v2 双签）。
+export interface FunctionSecret {
+  function_id: string;
+  secret: string;
+  secret_fingerprint: string;
 }
 
-export interface Deployment {
+// Invocation 是一次函数调用记录（torchwood 只发起调用、不执行；日志归
+// substrate 侧，只见网关往返结果）。status ∈ queued|running|completed|failed
+//（v4 收敛：building 态随补构建退役）。
+export interface Invocation {
   id: string;
   function_id: string;
-  // int64：网关序列化为字符串。
-  size: string | number;
-  status: string;
-  error?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Variable {
-  key: string;
-  // 敏感数据：调用方不得持久化/日志输出明文。
-  value: string;
-}
-
-export interface Execution {
-  id: string;
-  function_id: string;
-  deployment_id: string;
   status: string;
   response?: string;
-  stdout?: string;
-  stderr?: string;
   status_code?: number;
   // int64：网关序列化为字符串。
   duration_ms: string | number;
   error?: string;
   response_truncated?: boolean;
-  stdout_truncated?: boolean;
-  stderr_truncated?: boolean;
   created_at: string;
   updated_at: string;
 }
 
-// ——函数触发器（P1 触发器模块）——
+// ——函数触发器（P1 触发器模块；v3 切片 D 起含 event 型）——
 
 export interface HttpTriggerConfig {
   // 双响应模式：sync 同步透传；async_ack 立即 200 + ack_body（已受理语义）。
@@ -365,10 +375,20 @@ export interface CronTriggerConfig {
   misfire?: "skip" | "catch_up_once";
 }
 
+// EventTriggerConfig 订阅串双形态（eventmatch 语法，服务端逐条校验）：
+//   文档写事件 databases.{db}.collections.{col}.documents.{op}（op ∈
+//   create|update|delete|*；collection 与 op 段可为 *，database 段一期精确）；
+//   系统行为事件 {domain}.* / {domain}.{resource}.* / 精确全名（域 =
+//   auth / payments / economy / subscriptions）。
+export interface EventTriggerConfig {
+  // 订阅串列表（1..64 条，单条 ≤200 字节）。
+  events: string[];
+}
+
 export interface FunctionTrigger {
   id: string;
   function_id: string;
-  type: "http" | "cron";
+  type: "http" | "cron" | "event";
   enabled: boolean;
   // ——http 专有——
   response_mode?: string;
@@ -383,6 +403,8 @@ export interface FunctionTrigger {
   expr?: string;
   misfire?: string;
   next_run_at?: string;
+  // ——event 专有：订阅串列表（type=event 时非空）。
+  events?: string[];
   created_at: string;
   updated_at: string;
 }

@@ -7,6 +7,8 @@ export { APIKeysService } from "./apikeys.js";
 export { OAuthProvidersService } from "./oauthProviders.js";
 export { StorageService } from "./storage.js";
 export { FunctionsService } from "./functions.js";
+export { WebhooksService } from "./webhooks.js";
+export type { Webhook, WebhookDelivery, WebhookSecret } from "./webhooks.js";
 export { AuthService } from "./auth.js";
 export type { VerifyCredentialType, VerifyTokenGroupRef, VerifyTokenResponse } from "./auth.js";
 export { RunbookService } from "./runbook.js";

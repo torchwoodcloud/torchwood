@@ -4,11 +4,10 @@ import type { InvokeFunctionResponse } from "../types.js";
 export interface InvokeFunctionInput {
   /** 函数入参：JSON object 字符串（≤32KB）。 */
   data?: string;
-  /** 可选：指定 deployment（必须 ready）；缺省用最新 ready。 */
-  deployment_id?: string;
   /**
    * 可选客户端幂等键：网络超时重试防重复执行。(project, function, user, key)
-   * 唯一去重，命中返回既有 execution 原样（进行中返回 running）。
+   * 唯一去重，命中返回既有 invocation 原样（进行中返回 running）。
+   * v4：deployment_id 已随部署面退役（调用目标恒为 endpoint target）。
    */
   idempotency_key?: string;
 }
@@ -34,7 +33,6 @@ export class ClientFunctionsService {
         body: {
           function_id: functionId,
           data: input?.data,
-          deployment_id: input?.deployment_id,
           idempotency_key: input?.idempotency_key,
         },
       }

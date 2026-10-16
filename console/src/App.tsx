@@ -76,6 +76,12 @@ const FunctionsListPage = lazy(() =>
 const FunctionDetailPage = lazy(() =>
   import("@/routes/functions/pages").then((m) => ({ default: m.FunctionDetailPage }))
 );
+const WebhooksListPage = lazy(() =>
+  import("@/routes/webhooks/pages").then((m) => ({ default: m.WebhooksListPage }))
+);
+const WebhookDetailPage = lazy(() =>
+  import("@/routes/webhooks/pages").then((m) => ({ default: m.WebhookDetailPage }))
+);
 const VarSetsListPage = lazy(() =>
   import("@/routes/runtime-vars/pages").then((m) => ({ default: m.VarSetsListPage }))
 );
@@ -512,6 +518,25 @@ function AppRoutes() {
           element={
             <RouteErrorBoundary>
               <FunctionDetailPage />
+            </RouteErrorBoundary>
+          }
+        />
+
+        {/* Webhooks（functions-v4.md §6 一等公民）：读对全角色开放，写在
+            页面按钮层 canWrite 收口（与 Functions 同策略）。 */}
+        <Route
+          path="webhooks"
+          element={
+            <RouteErrorBoundary>
+              <WebhooksListPage />
+            </RouteErrorBoundary>
+          }
+        />
+        <Route
+          path="webhooks/:webhookId"
+          element={
+            <RouteErrorBoundary>
+              <WebhookDetailPage />
             </RouteErrorBoundary>
           }
         />

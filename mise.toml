@@ -147,7 +147,7 @@ description = "启动 worker（go run ./cmd/worker）"
 run = "go run ./cmd/worker"
 
 [tasks.build]
-description = "console 构建 + go build 五个二进制到 ./bin/"
+description = "console 构建 + go build 三个二进制到 ./bin/（v4：dispatcher/packer 已退役）"
 depends = ["console:build"]
 run = '''
 VERSION="$(git describe --tags --always)"
@@ -156,8 +156,6 @@ DATE="$(date +%Y%m%d%H%M%S)"
 LDFLAGS="-X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE"
 go build -ldflags "$LDFLAGS" -o ./bin/ ./cmd/server
 go build -ldflags "$LDFLAGS" -o ./bin/ ./cmd/worker
-go build -ldflags "$LDFLAGS" -o ./bin/ ./cmd/dispatcher
-go build -ldflags "$LDFLAGS" -o ./bin/ ./cmd/packer
 go build -ldflags "$LDFLAGS" -o ./bin/ ./cmd/torchwood
 '''
 

@@ -13,14 +13,9 @@ const PAGINATION_MARKERS = /pageQuery\(|page_size|page_token|next_page_token/;
 // 未接分页机制的登记处：每项注明理由；确认端点有分页后应迁出此表。
 // （2026-09-22 P0-P2 迁移后仅剩静态资源/有意的全量/免分页子资源。）
 const ALLOWLIST: Record<string, string[]> = {
-  // functions 各列表（运行时/规格 = 进程内静态注册表；变量读回显 = PUT 写操作；
-  // 触发器 = 单函数人手配置的量级）。
+  // functions 触发器 = 单函数人手配置的子资源（v4：运行时/规格/变量面已随
+  // 执行面外包退役）。
   "functions.ts": [
-    "listRuntimes",
-    "listSpecifications",
-    "getVariables",
-    // setVariables 是 PUT 写操作的读回显（数量 = 提交数），非列表查询。
-    "setVariables",
     // 单函数的触发器配置子资源，量级由人手配决定。
     "listFunctionTriggers",
   ],

@@ -92,8 +92,8 @@ export const agentTools: readonly Readonly<AgentTool>[] = Object.freeze([
   }),
   freezeTool({
     name: TOOL_INVOKE_FUNCTION,
-    fullMethod: "/torchwood.server.v1.FunctionsService/CreateExecution",
-    inputNotes: "function_id；可选 deployment_id、data、async",
+    fullMethod: "/torchwood.server.v1.FunctionsService/InvokeFunction",
+    inputNotes: "function_id；可选 data、async（v4：目标恒为 endpoint target）",
   }),
   freezeTool({
     name: TOOL_LIST_FILES,

@@ -208,7 +208,7 @@ API key 需同时覆盖**状态面**与动作触碰的**资源域**：
 
 ## 8. 设计边界（初期明确不做）
 
-- function 资源动作（deployments 是 zip 二进制）；文档 / 数据迁移（只管 schema 与配置资源面）；
+- function 资源动作（v4 部署面已随执行面外包退役，函数登记/轮换走 Server API）；文档 / 数据迁移（只管 schema 与配置资源面）；
 - 声明式收敛 / drift 自动修复（Terraform 化）；down 自动生成（down 由作者手写，可审阅可裁剪）；
 - 多 runbook 并行线（表留 `runbook` 列，恒为 `default`，CLI 不暴露分线参数）；
 - env 变量替换 / 模板（同文件异环境产出不同结果，与 checksum 环境无关性冲突）；
