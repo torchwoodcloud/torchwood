@@ -184,28 +184,16 @@ torchwood health get --endpoint <gRPC域名>:443 --tls   # gRPC 经 Traefik TLS�
   之后改 `TORCHWOOD_AUTH_PASSWORD` 不会同步数据库角色口令，需在 Dokploy 打开 postgres 终端手工执行：
   `ALTER ROLE tw_authenticator PASSWORD '<新口令>';`（同步改 Environment 后重启 server/worker）。
 - **MinIO bucket**：应用启动时自动创建（`torchwood-storage`，小写），无需 mc 初始化。
-  函数部署代码包专用桶 `torchwood-functions`（config.yaml `functions.storage.bucket`）
-  在首次函数部署时按需创建——MinIO/S3 因此是 Functions 的硬依赖（部署写路径失败整体回滚）。
 - **Redis AOF**：compose 已带 `--appendonly yes`——refresh 轮换记录存 Redis，
   无持久化时容器重启 = 全部已登录会话下次刷新即失效（重新登录即恢复，非故障）。
   换 Redis 实例同理（`docs/developer/13-operations.md` §6.1）。
-- **Functions（可选）**：worker 常驻消费函数执行队列；执行/构建统一经 dispatcher
-  ——**本栈为 docker 直接执行形态**（`TORCHWOOD_FUNCTIONS_DRIVER=docker`，
-  IMPL-T2-5 双执行底座）：dispatcher 持 docker.sock（compose 挂载 + `user: root`，
-  ⚠ sock 等同宿主 root 权限，仅在可信环境启用），函数实例 = 常驻容器
-  （per-project bridge 网络 `tw-func-<project>`，dispatcher 自 attach + 按
-  `functions.docker.callback_container` 把 server 容器 attach 进网络供函数
-  回访）、构建 = 本地 docker build，镜像逻辑名即本地 tag。fleetly 平台执行
-  形态（函数实例 = fleetly Tasks、构建 = fleetly build-from-upload）见
-  `../fleetly/`。不用 Functions 可删除 worker/dispatcher/packer 服务。
-- **函数镜像持久化模型（docker 底座）**：构建产物 = 部署机本地 docker 镜像
-  （tag = 镜像逻辑名）。宿主镜像被清理（`docker system prune -a` / 磁盘压力）
-  导致 ready 状态与镜像存量漂移时：有桶副本的部署在下次执行时自动识别 412
-  并后台重建（`functions.dispatcher.rebuild_on_missing_image`，默认开，
-  zip/git 源从 `torchwood-functions` 桶拉回复核重建）；持久层上线前的存量
-  部署桶内无副本，无法自愈，须 redeploy。备份时 `mc mirror` 连同
-  `torchwood-functions` 桶一起备份（fleetly 底座的产物映射模型见
-  `../fleetly/` README）。
+- **Functions（v4）**：函数 = endpoint 常驻服务（部署归 fleetly CLI 或用户自有
+  工具链，见 `docs/developer/08-functions.md`），torchwood 只做路由/身份/记账/
+  投递——本栈无需任何函数专用服务（dispatcher / packer 已随 v4 退役）；
+  worker 承载触发器消费与 webhook 投递等函数侧后台作业（worker 本就必配）。
+  函数回访/出站 target 默认仅放行公网地址，自托管私网形态按需开启
+  `TORCHWOOD_FUNCTIONS_INVOKE_ALLOW_PRIVATE_TARGETS=true`（config.yaml
+  `functions.invoke.allow_private_targets`）。
 
 ## 9. 日常运维
 

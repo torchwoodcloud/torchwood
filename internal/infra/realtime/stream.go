@@ -15,7 +15,7 @@ import (
 
 const (
 	// eventsStream 是事件投递的 Redis Stream（阶段④ B3，§4.5）：
-	// worker dispatcher XADD 完整信封 JSON（含 acl + seq），每个 server
+	// worker outbox 分发 XADD 完整信封 JSON（含 acl + seq），每个 server
 	// 实例一个消费组（见 subscriber.go）XREADGROUP 消费后 XACK。
 	// 回到 Stream 是有意决策：消费组模式同样解决多副本可见性，且换来
 	// 不丢帧与位点回放（A6 的 Pub/Sub 广播在阶段④被取代）。

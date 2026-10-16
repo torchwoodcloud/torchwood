@@ -69,7 +69,6 @@ func TestServerAssemblyL2(t *testing.T) {
 			"storage.s3.access_key_id":     l2EnvOr("TORCHWOOD_STORAGE_S3_ACCESS_KEY_ID", ""),
 			"storage.s3.secret_access_key": l2EnvOr("TORCHWOOD_STORAGE_S3_SECRET_ACCESS_KEY", ""),
 			"storage.s3.use_ssl":           false,
-			"functions.dispatcher.url":     "http://127.0.0.1:19099",
 		}),
 		// 真实 DB/Redis 连接池在 OnPostStop 关闭：放宽 lynxtest 1s 基线，
 		// 避免清理被 CleanupTimeout 截断（关停序列本身仍受 30s 上限保护）。

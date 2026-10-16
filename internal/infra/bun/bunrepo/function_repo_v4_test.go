@@ -189,14 +189,14 @@ func TestInvocationRepo_OrphanRecoverAndPrune(t *testing.T) {
 		VALUES ('inv_orphan', 'fn_or', ?, 'running', ?, '', ?, ?)`,
 		projectID, stale, old, old)
 	require.NoError(t, err0)
-	// 非孤儿：running 无快照（updated_at 刚刚）。
+	// 非孤儿：running + 超时快照 300s（updated_at 刚刚，远未到 staleAfter）。
 	_, err0 = db.Conn(ctx).ExecContext(ctx, `INSERT INTO `+quoted+`.function_invocations
-		(id, function_id, project_id, status, trigger_source, created_at, updated_at)
-		VALUES ('inv_fresh', 'fn_or', ?, 'running', '', NOW(), NOW())`,
+		(id, function_id, project_id, status, timeout_seconds, trigger_source, created_at, updated_at)
+		VALUES ('inv_fresh', 'fn_or', ?, 'running', 300, '', NOW(), NOW())`,
 		projectID)
 	require.NoError(t, err0)
 
-	n, err := repo.RecoverOrphanInvocationsInProject(ctx, projectID, time.Now().Add(-time.Hour), 100)
+	n, err := repo.RecoverOrphanInvocationsInProject(ctx, projectID, 100)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 	got, err := repo.GetInvocation(ctx, projectID, "fn_or", "inv_orphan")

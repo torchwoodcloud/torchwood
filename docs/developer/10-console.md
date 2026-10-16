@@ -43,7 +43,7 @@ console/
     │   ├── realtime.ts               # /v1/realtime WebSocket 试听客户端（cookie 握手）
     │   └── admins / analytics / apiKeys / assets / auditLogs / databases / functions / groups
     │       / leaderboards / oauthProviders / payments / projects / runtimeVars / storage
-    │       / subscriptions / users
+    │       / subscriptions / users / webhooks
     ├── components/
     │   ├── Layout.tsx                # 侧边栏（可收起）+ 面包屑顶栏 + Outlet；菜单数据来自 lib/nav
     │   ├── ProjectBootstrap.tsx      # 兜底选中默认项目（保证 X-Torchwood-Project）
@@ -74,9 +74,10 @@ console/
         ├── account/                  # 账户设置区（AccountLayout + Profile / Preferences 子页）
         ├── admins/ / api-keys/ / assets/ / audit-logs/ / groups/ / leaderboards/ / payments/
         │   / projects/（pages + settings）/ runtime-vars/ / settings/（重定向页）/ storage/
-        │   / subscriptions/ / users/
+        │   / subscriptions/ / users/ / webhooks/
         ├── databases/                # pages + CollectionLayout + ListenPanel（Realtime 试听）
-        ├── functions/                # pages + triggers-card 等
+        ├── functions/                # pages + triggers-card / client-policy-card（v4 target 模型）
+        ├── webhooks/                 # pages（Functions v4 一等公民：事件订阅投递）
         └── analytics/                # 概览 / 事件字典 / 事件详情 / 留存网格 / 单用户行为流
 ```
 
@@ -163,7 +164,7 @@ api.interceptors.request.use((config) => {
 mise run console:install   # pnpm install
 mise run console:dev       # vite dev server
 mise run console:build     # pnpm run build = tsc -b && vite build → dist/
-mise run build             # depends console:build → go build 五个二进制到 ./bin/
+mise run build             # depends console:build → go build 三个二进制到 ./bin/
 mise run lint:console      # eslint
 ```
 
@@ -264,7 +265,7 @@ API Keys 页详情另提供**编辑**（name / scopes / enabled / expire_at，pr
 
 ## 9. 页面全景
 
-侧边栏分组（`lib/nav.ts`）：Dashboard 置顶；Develop（API Keys / Databases / Storage / Functions / Runtime Vars / Analytics）、Auth（Users / Groups）、Economy（Orders / Assets / Subscriptions / Leaderboards）、System（Projects / Admins / Audit Logs）。
+侧边栏分组（`lib/nav.ts`）：Dashboard 置顶；Develop（API Keys / Databases / Storage / Functions / Webhooks / Runtime Vars / Analytics）、Auth（Users / Groups）、Economy（Orders / Assets / Subscriptions / Leaderboards）、System（Projects / Admins / Audit Logs）。
 
 桌面侧栏可收起为图标栏（`PanelLeftClose` / `PanelLeftOpen` 按钮）：收起态仅保留图标与项目/头像首字母，悬浮以 `title` 提示；状态持久化在 `localStorage.TORCHWOOD_console_sidebar_collapsed`（"1"/"0"），刷新后保持；移动端抽屉不受影响。顶栏为面包屑导航（`routeTitles.breadcrumbsFor`，长 ID 截断为 20 字符）+ `TimeBadge` 时钟。未匹配路由重定向 `/console`。
 
@@ -277,7 +278,8 @@ API Keys 页详情另提供**编辑**（name / scopes / enabled / expire_at，pr
 | `/console/users`（+ new / :id / :id/edit） | 用户 CRUD；详情头部直达入口：行为轨迹（全角色）、用户资产（`assets/users?owner=`）、用户订阅（`subscriptions?q=`）、模拟登录、重置密码（后四者 platformAdmin） | new / edit `RequireRole`（member 可写） |
 | `/console/groups`（+ new / :id） | 用户组 CRUD | new / edit `RequireRole` |
 | `/console/storage`（+ new / :bucketId / :bucketId/files/:fileId） | Bucket / 对象列表、上传（小文件 multipart 直传；>16MiB 走分片上传会话，上限 156.25GB）、文件详情 | new `RequireRole` |
-| `/console/functions`（+ :functionId） | 函数列表 / 详情（部署 zip/git/image、触发器、执行记录） | 路由不设守卫；写按钮按 `canWrite` / platformAdmin 收口 |
+| `/console/functions`（+ :functionId） | 函数列表 / 详情（v4 target 模型：endpoint target 编辑 + 签名密钥轮换、触发器卡、客户端调用策略卡、invocations 记录卡；无部署链路——执行面外包） | 路由不设守卫；写按钮按 `canWrite` / platformAdmin 收口 |
+| `/console/webhooks`（+ :webhookId） | Webhook 订阅 CRUD（url + 订阅串 eventmatch 语法 + 启停）、投递记录（终态失败行 = DLQ）、Redeliver 手动重投、签名密钥轮换 | 路由不设守卫；写按钮按 `canWrite` / platformAdmin 收口 |
 | `/console/runtime-vars`（+ :varSetId） | 变量集合（可见性 / 描述 / 限额足迹）/ 类型化变量 CRUD / 版本链（50 版窗口）+ 回滚 | 读全角色；写按钮 platformAdmin 收口 |
 | `/console/databases`（+ new / :dbId / :dbId/collections/…） | 库 / collection / 文档 CRUD；collection 内嵌 documents 与 listen 页签（Realtime 试听，cookie 握手 WebSocket，断线先续期再重订） | 库/collection 新建 platformAdmin；文档写 `RequireRole`；listen platformAdmin |
 | `/console/analytics`（+ events / events/:name / retention / users/:userId） | 事件分析：概览 / 事件字典 / 事件详情 / 留存网格 / 单用户行为流（recharts；UTC 桶口径） | 全角色 |

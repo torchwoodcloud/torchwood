@@ -85,7 +85,7 @@ mise run dev:worker   # go run ./cmd/worker
 
 ```bash
 mise run build
-# = console:build + go build 五个二进制（server / worker / dispatcher / packer / torchwood）到 ./bin/
+# = console:build + go build 三个二进制（server / worker / torchwood）到 ./bin/
 # ldflags 注入 VERSION/COMMIT/DATE（git describe / rev-parse / date），由 GET /v1/server/health/version 暴露
 ```
 
@@ -96,11 +96,11 @@ mise run build
 ### 3.2 Docker 镜像与 Dokploy
 
 ```bash
-mise run docker:build   # 多阶段 Dockerfile：builder 构 console + 五个二进制，runner 最小运行时
+mise run docker:build   # 多阶段 Dockerfile：builder 构 console + 三个二进制（server / worker / torchwood），runner 最小运行时
 docker run --env-file .env -p 9080:9080 -p 9060:9060 torchwood:<tag>
 ```
 
-本地镜像命名 `torchwood:1.0.0-<git>-<ts>`（git describe + 时间戳）。镜像内置全部五个二进制（`/usr/local/bin/{server,worker,dispatcher,packer,torchwood}`）与 `configs/` 基线，缺省 USER `torchwood`，ENTRYPOINT 为 server。
+本地镜像命名 `torchwood:1.0.0-<git>-<ts>`（git describe + 时间戳）。镜像内置全部三个二进制（`/usr/local/bin/{server,worker,torchwood}`）与 `configs/` 基线，缺省 USER `torchwood`，ENTRYPOINT 为 server。
 
 **Dokploy 一键部署**见 `docker/dokploy/README.md`。单 Compose 栈拓扑：
 
@@ -538,7 +538,7 @@ REVOKE tw_owner, tw_app, tw_system FROM <bootstrap_account>;
 
 ## 7. 多机部署（细胞模型，四期）
 
-设计源：`docs/design/functions-runtimes-and-sources.md` §4（M1-M8）；函数面语义见 `08-functions.md` §15。**细胞模型**：N 节点 ×（dispatcher 进程 + 本机 docker daemon），控制面共享（Redis：实例注册表 / spawn 锁 / 节点注册表 / 容量键；Postgres 元数据），**函数容器生命周期完全本机**——无 overlay 网络，函数容器只与本机 dispatcher 和本机 attach 的 server 回调容器通信。
+设计源：`docs/design/functions-runtimes-and-sources.md` §4（M1-M8）；函数面语义见 `08-functions.md` §5（触发器）。**细胞模型**：N 节点 ×（dispatcher 进程 + 本机 docker daemon），控制面共享（Redis：实例注册表 / spawn 锁 / 节点注册表 / 容量键；Postgres 元数据），**函数容器生命周期完全本机**——无 overlay 网络，函数容器只与本机 dispatcher 和本机 attach 的 server 回调容器通信。
 
 ### 7.1 拓扑与每节点一份 compose
 

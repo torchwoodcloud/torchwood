@@ -12,7 +12,7 @@ COPY console/ ./
 # 直接 vite build（跳过 tsc 全量类型检查：源码存在历史遗留的未使用导入报错）
 RUN pnpm exec vite build
 
-# ---------- 2) 构建 Go 二进制 ----------
+# ---------- 2) 构建 Go 二进制（v4 三二进制：server/worker/torchwood）----------
 FROM golang:1.26-alpine AS go-builder
 WORKDIR /src
 # 本地 replace 子模块需先于 go mod download 就位
@@ -35,10 +35,6 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/worker ./cmd/worker && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/dispatcher ./cmd/dispatcher && \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/packer ./cmd/packer && \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/torchwood ./cmd/torchwood
 
 # ---------- 3) 运行时 ----------
@@ -46,12 +42,6 @@ FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 torchwood
 COPY --from=go-builder /out/server /usr/local/bin/server
 COPY --from=go-builder /out/worker /usr/local/bin/worker
-# dispatcher：执行器 v2 独立分发进程（compose dispatcher
-# 服务专用；docker.sock 只挂给它，server/worker 零 daemon 依赖）
-COPY --from=go-builder /out/dispatcher /usr/local/bin/dispatcher
-# packer：git 部署源打包服务（compose packer 服务专用；无 docker.sock、
-# 无业务依赖，clone 资源尖峰隔离在可牺牲进程）
-COPY --from=go-builder /out/packer /usr/local/bin/packer
 # torchwood CLI：部署期 owner 作业（admin sync-roles-sig）与项目级备份（admin export/import）
 COPY --from=go-builder /out/torchwood /usr/local/bin/torchwood
 COPY configs/ /app/configs/

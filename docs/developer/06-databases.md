@@ -308,7 +308,7 @@ PG 实证：UPDATE / ON CONFLICT 修改 SELECT policy 引用的列（`_acl`）�
 - **锁纪律**：按 (collection, documentID) 排序预取 `pg_advisory_xact_lock` 防批间死锁；op 按请求序执行（事件序 = op 序）；各 op 复用单文档事务体（权限 / OCC / conflictColumns 校验同源）。
 - **模式**：`ATOMIC`（默认）任一失败整批回滚（错误带 op index 域码定位）；`PARTIAL` 逐 op SAVEPOINT 容错、已成功不回滚、返回 per-op 结果（含失败域码）。
 - create / upsert 空 ACE 种子与单文档 API 同语义。
-- **Functions 的多写原子性**：函数代码运行在外部 Docker 容器，不做跨进程事务——函数内的多写原子批一律经本 RPC 表达（函数通过 API/SDK 调用 `documents:execute-tx`），批内事件序 = op 序，成功全提交、失败（ATOMIC）整批回滚。
+- **Functions 的多写原子性**：函数代码运行在外部常驻服务（v4 endpoint target），不做跨进程事务——函数内的多写原子批一律经本 RPC 表达（函数通过 API/SDK 调用 `documents:execute-tx`），批内事件序 = op 序，成功全提交、失败（ATOMIC）整批回滚。
 
 ### 8.2 域错误码
 

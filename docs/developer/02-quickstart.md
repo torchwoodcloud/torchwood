@@ -188,7 +188,7 @@ mise run dev:worker        # go run ./cmd/worker（独立进程）
 | `mise run console:install` / `console:build` / `console:dev` | 前端依赖 / 构建 / 开发服务器 |
 | `mise run sdk:install` / `sdk:build` / `sdk:demo` | TS SDK：npm install / tsc 构建 / 构建 demo 并启动（:5174） |
 | `mise run dev:server` / `dev:worker` | 直跑 server / worker |
-| `mise run build` | console:build + 五个二进制到 `./bin/` |
+| `mise run build` | console:build + 三个二进制（server / worker / torchwood）到 `./bin/` |
 | `mise run test` | lint:go + lint:golangci + test:sdk-go + test:sdk-ts + `go test -race -v ./... -cover` |
 | `mise run lint` | lint:go + lint:golangci + lint:sdk-go + lint:console |
 | `mise run docker:build` | 构建本地镜像 `torchwood:1.0.0-<git>-<ts>` |

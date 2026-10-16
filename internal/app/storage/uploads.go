@@ -14,16 +14,15 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// CreateUploadCommand 创建分片上传会话。projectID 由 handler 传入，OwnerUserID 已废弃（A8）——统一从 principal 派生（EndUser 时取 user:<id>），请求中的 OwnerUserID/Permissions 仅为兼容旧调用方，服务端以 principal 为准忽略。
+// CreateUploadCommand 创建分片上传会话。projectID 由 handler 传入；OwnerUserID
+// 不收入参（A8）——统一从 principal 派生（EndUser 时取 user:<id>，其余主体为空）。
 type CreateUploadCommand struct {
-	ProjectID   string
-	BucketID    string
-	Name        string
-	MimeType    string
-	Size        int64
-	Metadata    map[string]string
-	Permissions []string
-	OwnerUserID string
+	ProjectID string
+	BucketID  string
+	Name      string
+	MimeType  string
+	Size      int64
+	Metadata  map[string]string
 }
 
 // CreateUploadSession 创建上传会话：校验 size 上限（part_count ≤ 10000）、
@@ -53,11 +52,9 @@ func (s *Storage) CreateUploadSession(ctx context.Context, cmd CreateUploadComma
 		return nil, status.Error(codes.NotFound, "bucket not found")
 	}
 
-	// A8：OwnerUserID 从 principal 派生（EndUser），丢弃未落地的 Permissions。兼容旧测试：若 principal 非 EndUser 但 cmd 带 OwnerUserID，则保留。
+	// A8：OwnerUserID 从 principal 派生（EndUser），其余主体为空（不归属到
+	// 特定用户）。
 	ownerUserID := storageEndUserID(principal)
-	if ownerUserID == "" && cmd.OwnerUserID != "" {
-		ownerUserID = cmd.OwnerUserID
-	}
 
 	chunkSize := int64(storage.DefaultChunkSize)
 	partCount := int((cmd.Size + chunkSize - 1) / chunkSize)

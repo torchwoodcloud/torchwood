@@ -100,15 +100,15 @@ type RealtimeConn struct {
 	// slowClosed 置位后连接视为已断开（后续入队直接失败）。
 	slowClosed atomic.Bool
 	// OnSlow 由 handler 侧注入：满水位时被调用恰一次（参数 = lastSeq），
-	// 实现必须非阻塞。nil 时 TrySend 退化为旧丢帧语义（测试桩兼容）。
+	// 实现必须非阻塞。必须注入——nil 在满水位路径是空指针调用，构造方
+	// （handler / 测试桩）一律显式提供。
 	OnSlow func(lastSeq int64)
 }
 
 // TrySend 非阻塞入队一帧；成功入队后才上抬 lastSeq 游标（断开 reason 的
 // seq 必须是「确实已入队」的最后一帧——失败帧不计入，否则客户端从该
 // seq 续传会漏掉未投递帧）。返回 false 表示连接已慢断开（或本次触发
-// 断开）。OnSlow 为 nil（旧语义）时满载丢帧并返回 true——调用方以返回
-// 值区分「已入队」与「断开」，丢帧路径由调用方自行计数。
+// 断开）。
 func (c *RealtimeConn) TrySend(frame map[string]any, seq int64) bool {
 	if c.slowClosed.Load() {
 		return false
@@ -118,14 +118,10 @@ func (c *RealtimeConn) TrySend(frame map[string]any, seq int64) bool {
 		c.RaiseLastSeq(seq)
 		return true
 	default:
-		if c.OnSlow != nil {
-			if c.slowClosed.CompareAndSwap(false, true) {
-				c.OnSlow(c.lastSeq.Load())
-			}
-			return false
+		if c.slowClosed.CompareAndSwap(false, true) {
+			c.OnSlow(c.lastSeq.Load())
 		}
-		// 旧语义（无 OnSlow）：丢帧续命，连接保持。
-		return true
+		return false
 	}
 }
 

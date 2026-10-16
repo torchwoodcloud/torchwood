@@ -29,6 +29,8 @@ func TestApply_IdempotentCatalogAndOAuth(t *testing.T) {
 	var version int64
 	require.NoError(t, db.QueryRowContext(ctx,
 		"SELECT MAX(version) FROM "+quoted+".schema_migrations").Scan(&version))
+	// 000029（B7 转出清理）：function_invocations.timeout_seconds 回填 + NOT NULL
+	// （NULL 存量行的 1h 孤儿恢复回退分支随模型 *int→int 退役）。
 	// 000028（Functions v4 破坏波，docs/design/functions-v4.md §2/§3/§7/§10）：
 	// function_executions → function_invocations 改名 + target 列族；
 	// function_deployments / function_variables 表退役；functions 池五列与
@@ -40,7 +42,7 @@ func TestApply_IdempotentCatalogAndOAuth(t *testing.T) {
 	// 六表。000019–000021（Leaderboards）。000018（v3 切片 D）：
 	// function_triggers.type CHECK 扩展 'event'。000015–000017（触发器/
 	// 客户端调用面/池策略）。
-	require.Equal(t, int64(28), version)
+	require.Equal(t, int64(29), version)
 
 	var dirty bool
 	require.NoError(t, db.QueryRowContext(ctx,

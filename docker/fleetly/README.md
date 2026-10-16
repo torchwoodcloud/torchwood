@@ -1,11 +1,13 @@
 # Torchwood —— fleetly 部署指南（IMPL-T2-4）
 
+> **历史文档注（2026-10-15）**：本文与 [cutover-runbook.md](cutover-runbook.md) 记录 v3→fleetly 割接形态；**Functions v4 起 dispatcher / packer 进程与 `TORCHWOOD_FUNCTIONS_DISPATCHER_*` / `TORCHWOOD_FUNCTIONS_PACKER_*` / `TORCHWOOD_FUNCTIONS_FLEETLY_*` 配置已整体退役**（函数 = endpoint 常驻服务，执行面外包，见 `docs/developer/08-functions.md`），下文相关段落按历史形态阅读；config.yaml 与常驻服务清单已按 v4 更新。
+
 | 状态 | 日期 | 关联 |
 |---|---|---|
 | **待使用者执行窗口**（本环境无 staging 凭据/访问权：真机步骤未执行、未虚构结果；本地等价实证见 [cutover-runbook.md](cutover-runbook.md) 附录 A） | 2026-09-28 | [割接 runbook](cutover-runbook.md)（逐步命令）；[dokploy 现役形态](../dokploy/README.md)；fleetly 设计档 DT-8/DT-9/OT-2/OT-3 |
 
-本目录是 torchwood 栈的 **fleetly（受控子集平台）部署形态**：六个常驻服务
-（redis + minio + server + worker + dispatcher + packer）+ 三个一次性 init job
+本目录是 torchwood 栈的 **fleetly（受控子集平台）部署形态**：四个常驻服务
+（redis + minio + server + worker）+ 三个一次性 init job
 （migrate / db-bootstrap / roles-sig），postgres 落 fleetly 托管实例，域名经平台
 域名资源 API 声明、运行时配置文件经平台 Config 资源提供、密钥与环境相关值经平台
 env 注入。`docker/dokploy/` 的现役 Dokploy 栈在割接验收前**并行保留**（回滚 =
@@ -21,10 +23,10 @@ dokploy 栈未拆）。
 | 项 | 形态 |
 |---|---|
 | app 名 | `torchwood`（compose 顶层 `name`；应用随首次部署自动创建） |
-| 常驻服务 | `redis`（AOF 卷）、`minio`（SILO，`torchwood-storage` + `torchwood-functions` 桶）、`server`（9080 HTTP + 9060 gRPC h2c + healthz）、`worker`（Functions 异步消费者）、`dispatcher`（fleetly Tasks/build 客户端）、`packer`（git 部署源打包） |
+| 常驻服务 | `redis`（AOF 卷）、`minio`（SILO，`torchwood-storage` 桶）、`server`（9080 HTTP + 9060 gRPC h2c + healthz）、`worker`（触发器消费 / webhook 投递等后台作业） |
 | 一次性作业 | `migrate`（控制面迁移，`fleetly.job: init`）、`db-bootstrap`（运行账号 + 授权）、`roles-sig`（roles 签名密钥落库）——发布管线在晋级前执行，失败即发布失败 |
 | 数据库 | **栈内无 postgres**：托管实例 `torchwood-pg`（模板 `percona-postgresql-18`，含 pgvector 0.8.6，torchwood 现役发行版）；服务经 `fleetly.databases: "torchwood-pg"` label 物化 `FLEETLY_DB_TORCHWOOD_PG_*` env 并挂库共享网络 |
-| 网络 | 平台 per-app overlay；**服务别名 = compose 服务名**（`redis` / `minio` / `dispatcher` / `packer` 按名互访）；库网络由 label 牵线；跨 app 回访（mlbridge → server）经项目网别名 `torchwood-server`（需 `fleetly projects network attach torchwood`） |
+| 网络 | 平台 per-app overlay；**服务别名 = compose 服务名**（`redis` / `minio` 按名互访）；库网络由 label 牵线；跨 app 回访（mlbridge → server）经项目网别名 `torchwood-server`（需 `fleetly projects network attach torchwood`） |
 | 入口 | 两域名（见 §3）：HTTP `http` 9080、gRPC `h2c` 9060；TLS 在平台边缘终结（ACME HTTP-01） |
 | 配置 | compose 字面量（非敏感基线）+ 平台 env（密钥/环境值）+ Config 资源 `config.yaml` ×3 服务挂载 + `bootstrap-runtime.sql` / `bootstrap-roles.sql`（init job 用） |
 | 镜像 | 应用镜像 `ghcr.io/torchwoodcloud/torchwood:sha-78ea1a4`；迁移源 ref 与镜像同 commit（裁决见 §5） |
@@ -74,14 +76,12 @@ dokploy 栈未拆）。
 | 21 | server `TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL: http://torchwood-server:9080` | 保留字面量 | 任务网细名即 `torchwood-server`（app 名 + 服务名；`network_members` 挂靠后生效，runbook §6.4） |
 | 22 | 三应用服务 `pull_policy: always` + `${TORCHWOOD_IMAGE:-…:latest}` | **删 pull_policy；镜像钉 sha tag** | DT-2 部署期 tag→digest 钉定 + Redeploy 重解析 = `always` 等价物；升级 = 改 tag 重部署（§5） |
 | 23 | worker（`entrypoint: worker` + `*app-env` + config bind + depends_on） | `command: ["/usr/local/bin/worker"]` + Config + 基线 env；**新增 `kill -0 1` 进程存活探针** | 平台 command 覆盖 ENTRYPOINT；镜像无 HTTP 健康面，进程存活探针（零告警要求；诚实标注见 §7）。**不用 `pgrep -x worker`**：fleetly 形态下 argv[0]=全路径 `/usr/local/bin/worker`，pgrep -x 按名匹配恒不中→健康门永不过（2026-09-29 staging 真机实证→E_HEALTH_TIMEOUT 循环）；`kill -0 1` 是 shell 内建、两形态通用 |
-| 24 | dispatcher（docker.sock 挂载/`user: root`/多节点 env — T2-3 已改） | **零 sock、零 docker client**；config bind → Config；T2-3 的 fleetly env 保留（endpoint/token 平台 env 注入，app/members 字面量）；`/healthz` 探针保留；`depends_on: redis healthy` 删除 | IMPL-T2-3 契约；`TORCHWOOD_FUNCTIONS_FLEETLY_*` 见 §4 |
-| 25 | packer（`entrypoint: packer` + `*app-env`） | `command: ["/usr/local/bin/packer"]` + 基线 env（无 config 挂载，现役同） | 平台 command 覆盖 ENTRYPOINT；`/healthz` 探针保留 |
-| 26 | 顶层 `networks: dokploy-network: external` | **删除** | external 网络在拒绝清单（平台建网） |
-| 27 | 顶层 `volumes: postgres_data` | **删除**（#7）；`redis_data` / `minio_data` 保留 | 平台卷注册表（`fleetly placement show` 可见） |
-| 28 | 部署时序契约（`depends_on` 链：迁移 → 授权 → roles_sig → 启动） | **三个 init job**（平台并行 + 后两者有界等待环；任一失败 → 发布失败 + `release.job_*` 事件） | DT-4；平台唯一「先于长驻服务」排序原语（T2-0④ spike 结论） |
-| 29 | Dokploy Environment 变量（`${VAR:?}` 必填守卫） | **平台 env（app 级）**；compose 不含 `${}`（插值禁用，会被当字面量）；必填缺失由应用侧 fail-closed + runbook §0 清单承担 | `fleetly env set`（§4）；DT-10 `fleetly.env.required` preflight **未实现**（平台挂账），见 §7 |
-| 30 | `TORCHWOOD_HTTP_DOMAIN` / `TORCHWOOD_GRPC_DOMAIN` / `TORCHWOOD_GRPC_PORT` | **删除** | 域名资源（§3）；宿主管端口不做 |
-| 31 | Dokploy psql 终端 / SSH 隧道（README §4/§9） | 平台面替代 | `fleetly databases`（托管库生命周期/备份）+ `fleetly domains verify` + `fleetly logs history`；隧道兜底退 T3-1 |
+| 24 | 顶层 `networks: dokploy-network: external` | **删除** | external 网络在拒绝清单（平台建网） |
+| 25 | 顶层 `volumes: postgres_data` | **删除**（#7）；`redis_data` / `minio_data` 保留 | 平台卷注册表（`fleetly placement show` 可见） |
+| 26 | 部署时序契约（`depends_on` 链：迁移 → 授权 → roles_sig → 启动） | **三个 init job**（平台并行 + 后两者有界等待环；任一失败 → 发布失败 + `release.job_*` 事件） | DT-4；平台唯一「先于长驻服务」排序原语（T2-0④ spike 结论） |
+| 27 | Dokploy Environment 变量（`${VAR:?}` 必填守卫） | **平台 env（app 级）**；compose 不含 `${}`（插值禁用，会被当字面量）；必填缺失由应用侧 fail-closed + runbook §0 清单承担 | `fleetly env set`（§4）；DT-10 `fleetly.env.required` preflight **未实现**（平台挂账），见 §7 |
+| 28 | `TORCHWOOD_HTTP_DOMAIN` / `TORCHWOOD_GRPC_DOMAIN` / `TORCHWOOD_GRPC_PORT` | **删除** | 域名资源（§3）；宿主管端口不做 |
+| 29 | Dokploy psql 终端 / SSH 隧道（README §4/§9） | 平台面替代 | `fleetly databases`（托管库生命周期/备份）+ `fleetly domains verify` + `fleetly logs history`；隧道兜底退 T3-1 |
 
 环境变量逐键映射（dokploy `Environment` → fleetly 落点）：
 
@@ -95,9 +95,6 @@ dokploy 栈未拆）。
 | `TORCHWOOD_AUTH_PASSWORD` | **平台 env（必填）** | 运行态 `tw_authenticator` 口令；db-bootstrap 作业写入数据库 |
 | —— | `TORCHWOOD_DATA_DATABASE_SOURCE` | **平台 env（必填）**：`postgres://tw_authenticator:<口令>@torchwood-pg:5432/torchwood_pg?sslmode=disable`（显式 env set：物化 env 的用户是 owner `fleetly`，运行态必须非 superuser） |
 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | **平台 env（必填）** + compose 占位 | 同时作为 server/worker 的 S3 凭据（`TORCHWOOD_STORAGE_S3_*`） |
-| `TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN` / `TORCHWOOD_FUNCTIONS_PACKER_SHARED_TOKEN` | **平台 env（必填）** | server/worker（客户端）与 dispatcher/packer（服务端）同值 |
-| `TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT` / `_TOKEN` | **平台 env（必填）** | fleetlyd gRPC 端点（容器内可达）+ 机具令牌（scope tasks,build，§4）。endpoint 传输模式 scheme 显式选择（gRPC 社区约定 grpc/grpcs）：裸 `host:port` 或 `grpc://host:port` = 明文（既有部署缺省）；`grpcs://host:port` = TLS + 系统 CA 校验（ServerName 缺省跟随拨号主机名，对 LE 等公共证书透明验证）；`grpcs://host:port?insecure=true` = TLS 跳过校验（按 IP 直连等无 SAN 形态）；`grpcs://host:port?server_name=<name>` = 覆盖 SNI——未知 scheme 启动期 fail-closed |
-| `TORCHWOOD_FUNCTIONS_FLEETLY_APP` / `_NETWORK_MEMBERS` | compose 字面量 | `torchwood` / `dispatcher,server`（受控回访挂靠声明） |
 | `TORCHWOOD_SECURITY_ENCRYPTION_KEY` | 平台 env（可选） | 未设置回退 jwt.secret（启动告警） |
 | `TORCHWOOD_SERVER_HTTP_CORS_ALLOW_HEADERS` 等非敏感基线 | compose 字面量 | 与现役同值；需要时平台 env 覆盖（`W_ENV_PLATFORM_OVERRIDE` 可见） |
 | `TORCHWOOD_IMAGE` | **删除** | 镜像钉在 compose（§5） |
@@ -137,10 +134,6 @@ fleetly env set torchwood TORCHWOOD_STORAGE_S3_ACCESS_KEY_ID     "<MINIO_ROOT_US
 fleetly env set torchwood TORCHWOOD_STORAGE_S3_SECRET_ACCESS_KEY "<MINIO_ROOT_PASSWORD>"
 fleetly env set torchwood MINIO_ROOT_USER     "<MINIO_ROOT_USER>"
 fleetly env set torchwood MINIO_ROOT_PASSWORD "<MINIO_ROOT_PASSWORD>"
-fleetly env set torchwood TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN "$(openssl rand -hex 32)"
-fleetly env set torchwood TORCHWOOD_FUNCTIONS_PACKER_SHARED_TOKEN     "$(openssl rand -hex 32)"
-fleetly env set torchwood TORCHWOOD_FUNCTIONS_FLEETLY_ENDPOINT "<fleetlyd gRPC 容器可达端点>"
-fleetly env set torchwood TORCHWOOD_FUNCTIONS_FLEETLY_TOKEN    "<机具令牌 see below>"
 fleetly env list torchwood
 
 # —— 可选 ——
@@ -155,23 +148,10 @@ fleetly configs set --from-file docker/fleetly/bootstrap-roles.sql   torchwood b
 fleetly configs ls torchwood
 ```
 
-**机具令牌（scope `tasks,build`）铸造与注入**（dispatcher → fleetlyd）：
-
-```bash
-# 平台管理员执行；明文仅创建响应一次可见（服务端只存哈希）
-fleetly tokens create --machine --scopes tasks,build \
-  --note "torchwood dispatcher (fleetly Tasks/build)" --json
-# 立即注入平台 env（不要落到仓库/对话/日志）：
-fleetly env set torchwood TORCHWOOD_FUNCTIONS_FLEETLY_TOKEN "<上一步输出的一次性明文>"
-# 轮换：fleetly tokens revoke <id> → 重新 create → env set → 重新部署
-```
-
 **dokploy → fleetly 变量对照**（同键同名，无需改名）：`TORCHWOOD_SECURITY_JWT_SECRET`、
 `TORCHWOOD_SECURITY_SETUP_TOKEN`、`TORCHWOOD_SERVER_HTTP_PUBLIC_URL`、
 `TORCHWOOD_AUTH_PASSWORD`、`TORCHWOOD_STORAGE_S3_ACCESS_KEY_ID/SECRET_ACCESS_KEY`、
-`MINIO_ROOT_USER/PASSWORD`、`TORCHWOOD_FUNCTIONS_DISPATCHER_SHARED_TOKEN`、
-`TORCHWOOD_FUNCTIONS_PACKER_SHARED_TOKEN`、`TORCHWOOD_FUNCTIONS_FLEETLY_*`
-（T2-3 引入）、`TORCHWOOD_SECURITY_ENCRYPTION_KEY`。新增键仅
+`MINIO_ROOT_USER/PASSWORD`、`TORCHWOOD_SECURITY_ENCRYPTION_KEY`。新增键仅
 `TORCHWOOD_DATA_DATABASE_SOURCE`（#2 映射表）。
 
 注意：
@@ -270,15 +250,15 @@ source driver，匿名 GitHub API 有 **每 IP 60 req/h** 限额；首次全量�
 | 看日志 | `fleetly logs history --limit 100 torchwood`（服务归因）；init job 日志同归因（`release.job_*` 事件点名） |
 | 数据库 | `fleetly databases show torchwood-pg` / `backup` / `backups` / `restore --snapshot <id> --confirm torchwood-pg torchwood-pg`（E4 生命周期与备份；restore 的 `--confirm` 带实例名做两段确认，位置参数实例名仍需尾随） |
 | 密钥轮换 | `TORCHWOOD_AUTH_PASSWORD`：`env set` 新值 → 重部署（db-bootstrap 作业重写数据库侧口令 + DSN 同步换）；`JWT_SECRET`：`env set` → 重部署（roles-sig 自动重落库，双钥窗口旧 sig 不降级） |
-| 函数底座 | dispatcher 常驻；镜像映射在 Redis（`torchwood:fnimg:*`，随 redis 卷持久化）；实例 = fleetly Tasks，`fleetly tasks ls` 可见 |
+| 函数面 | 函数 = endpoint 常驻服务（v4，执行面外包：fleetly Tasks 或用户自有 substrate），torchwood 只做路由/身份/记账/投递；配置见 `functions.invoke` / `functions.webhooks`（`docs/developer/08-functions.md` §9） |
 | 备份 | postgres 归平台（`fleetly databases backup`）；redis/minio 卷为残余栈内数据（DT-8 backlog：手动/Tasks BGSAVE），搬运步骤见 runbook §3 |
 
 ## 9. 文件清单
 
 | 文件 | 用途 |
 |---|---|
-| `docker-compose.yml` | fleetly 受控子集编排（六常驻 + 三 init job；postgres 不在栈内） |
-| `config.yaml` | Config 资源上传源（server/worker/dispatcher 的 `/app/configs/config.yaml`） |
+| `docker-compose.yml` | fleetly 受控子集编排（四常驻 + 三 init job；postgres 不在栈内） |
+| `config.yaml` | Config 资源上传源（server/worker 的 `/app/configs/config.yaml`） |
 | `bootstrap-runtime.sql` | db-bootstrap 作业：连接编码兜底 + `tw_authenticator` 创建/改密 |
 | `bootstrap-roles.sql` | db-bootstrap 作业：三角色授权补齐（与 dokploy 同内容副本） |
 | `cutover-runbook.md` | 割接 runbook（前置/两阶段 bootstrap/DT-8 数据面/函数端到端验收/回滚；真机段标注待窗口） |

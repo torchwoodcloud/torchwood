@@ -10,6 +10,10 @@ message AppConfig {
   Data data = 3;
   Storage storage = 4;
   Functions functions = 5;
+  // v4 退役段：telemetry（字段 6，OpenTelemetry 导出面从未启用——号段与名称
+  // 封存永不复用；存量 yaml 残留键会被容忍忽略，proto 未知字段语义）。
+  reserved 6;
+  reserved "telemetry";
   Messaging messaging = 7;
   IdGen idgen = 8;
   Payments payments = 9;
@@ -73,8 +77,8 @@ message Security {
     Dimension api_key = 4;
     // 函数执行身份维度（P0）：按 project:function 计数，默认对齐 api-key
     // 档 6000/min；必须在 user 维度回落之前特判（每次执行独立 ActorID，
-    // 落 user 维度 = 实质不限流；全部容器经 bridge NAT 同 IP，落 IP 维度
-    // = 互相击穿）。见 internal/api/interceptor/ratelimit.go。
+    // 落 user 维度 = 实质不限流；函数侧出口 IP 与部署拓扑相关，自托管形态
+    // 常同网段 NAT = 互相击穿）。见 internal/api/interceptor/ratelimit.go。
     Dimension functions_execution = 5;
   }
   Jwt jwt = 1;

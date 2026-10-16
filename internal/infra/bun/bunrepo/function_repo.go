@@ -291,7 +291,7 @@ func (r *functionRepo) FailInvocationIfActive(ctx context.Context, projectID, fu
 	return err
 }
 
-func (r *functionRepo) RecoverOrphanInvocationsInProject(ctx context.Context, projectID string, olderThan time.Time, limit int) (int64, error) {
+func (r *functionRepo) RecoverOrphanInvocationsInProject(ctx context.Context, projectID string, limit int) (int64, error) {
 	if limit <= 0 {
 		return 0, nil
 	}
@@ -303,19 +303,14 @@ func (r *functionRepo) RecoverOrphanInvocationsInProject(ctx context.Context, pr
 		return 0, err
 	}
 	// 孤儿恢复：staleAfter 按行判定（domainfunctions.OrphanGraceSeconds 宽限
-	// 与迁移/app 层同源）：timeout_seconds 非空 = 该值 + 宽限（两写预占的
-	// 行内快照），NULL（存量行）回退 olderThan（worker 传 1h）。
+	// 与迁移/app 层同源）：timeout_seconds（NOT NULL，迁移 000029——NULL 存量
+	// 行已回填，回退分支退役）= 该值 + 宽限（两写预占的行内快照）。
 	res, err := r.db.Conn(ctx).ExecContext(ctx, fmt.Sprintf(`
 WITH cte AS (
   SELECT id FROM %s.function_invocations
   WHERE project_id = ?
     AND status IN (?, ?)
-    AND (
-      (timeout_seconds IS NOT NULL
-        AND updated_at < NOW() - (timeout_seconds + ?) * INTERVAL '1 second')
-      OR
-      (timeout_seconds IS NULL AND updated_at < ?)
-    )
+    AND updated_at < NOW() - (timeout_seconds + ?) * INTERVAL '1 second'
   ORDER BY updated_at
   LIMIT ?
   FOR UPDATE SKIP LOCKED
@@ -328,7 +323,6 @@ FROM cte WHERE fi.id = cte.id
 		domainfunctions.InvocationStatusQueued,
 		domainfunctions.InvocationStatusRunning,
 		domainfunctions.OrphanGraceSeconds,
-		olderThan,
 		limit,
 		domainfunctions.InvocationStatusFailed,
 		"orphaned invocation recovered",

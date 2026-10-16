@@ -8,11 +8,12 @@ import (
 	domainfunctions "github.com/torchwoodcloud/torchwood/internal/domain/functions"
 )
 
-// ——观测补全（P0.5 子步骤 4；包内自注册，projectschema/dispatcher 同模式）——
+// ——观测补全（P0.5 子步骤 4；包内自注册，projectschema 同模式）——
 //
 // 执行时长/排队时长直方图（设计 Observability：补齐现状无 functions 专属
 // Prometheus 指标的缺口；source 维度 server 暂时单值，client/http/cron 留
-// 枚举位随 P1/P2 打开）。冷启动与池水位指标在 dispatcher 包内。
+// 枚举位随 P1/P2 打开）。v4 执行面外包后无平台侧冷启动/池水位指标——
+// 容量观测归 substrate。
 var (
 	executionDurationSeconds = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "torchwood_functions_execution_duration_seconds",

@@ -196,12 +196,12 @@ func TestAuthInterceptor_RejectsViewerOrMemberAdminOnWriteMethods(t *testing.T) 
 		"/torchwood.server.v1.DatabasesService/CreateDatabase",
 		"/torchwood.server.v1.DatabasesService/UpdateCollection",
 		"/torchwood.server.v1.DatabasesService/DeleteIndex",
-		"/torchwood.server.v1.FunctionsService/SetVariables",
+		"/torchwood.server.v1.FunctionsService/SetFunctionScopes",
 		"/torchwood.server.v1.OAuthProvidersService/UpsertOAuthProvider",
 	}
 	delegatedOnly := []string{
 		"/torchwood.server.v1.DatabasesService/CreateDatabase",
-		"/torchwood.server.v1.FunctionsService/SetVariables",
+		"/torchwood.server.v1.FunctionsService/RotateFunctionSecret",
 		"/torchwood.server.v1.OAuthProvidersService/UpsertOAuthProvider",
 	}
 	runCase := func(method string, role string, permissionWired bool, roles []string) {
@@ -253,7 +253,7 @@ func TestAuthInterceptor_AllowsOwnerAdminOnWriteMethods(t *testing.T) {
 			"/torchwood.server.v1.APIKeysService/CreateAPIKey",
 			"/torchwood.server.v1.UsersService/CreateUserToken",
 			"/torchwood.server.v1.DatabasesService/CreateDatabase",
-			"/torchwood.server.v1.FunctionsService/SetVariables",
+			"/torchwood.server.v1.FunctionsService/SetFunctionScopes",
 		} {
 			ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 				ActorKind:      shared.ActorKindAdmin,

@@ -1360,8 +1360,8 @@ type Security_RateLimit struct {
 	ApiKey  *Security_RateLimit_Dimension `protobuf:"bytes,4,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`
 	// 函数执行身份维度（P0）：按 project:function 计数，默认对齐 api-key
 	// 档 6000/min；必须在 user 维度回落之前特判（每次执行独立 ActorID，
-	// 落 user 维度 = 实质不限流；全部容器经 bridge NAT 同 IP，落 IP 维度
-	// = 互相击穿）。见 internal/api/interceptor/ratelimit.go。
+	// 落 user 维度 = 实质不限流；函数侧出口 IP 与部署拓扑相关，自托管形态
+	// 常同网段 NAT = 互相击穿）。见 internal/api/interceptor/ratelimit.go。
 	FunctionsExecution *Security_RateLimit_Dimension `protobuf:"bytes,5,opt,name=functions_execution,json=functionsExecution,proto3" json:"functions_execution,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
@@ -2697,7 +2697,7 @@ var File_config_proto protoreflect.FileDescriptor
 
 const file_config_proto_rawDesc = "" +
 	"\n" +
-	"\fconfig.proto\x12\x14torchwood.api.config\"\x92\x04\n" +
+	"\fconfig.proto\x12\x14torchwood.api.config\"\xa3\x04\n" +
 	"\tAppConfig\x124\n" +
 	"\x06server\x18\x01 \x01(\v2\x1c.torchwood.api.config.ServerR\x06server\x12:\n" +
 	"\bsecurity\x18\x02 \x01(\v2\x1e.torchwood.api.config.SecurityR\bsecurity\x12.\n" +
@@ -2708,7 +2708,7 @@ const file_config_proto_rawDesc = "" +
 	"\x05idgen\x18\b \x01(\v2\x1b.torchwood.api.config.IdGenR\x05idgen\x12:\n" +
 	"\bpayments\x18\t \x01(\v2\x1e.torchwood.api.config.PaymentsR\bpayments\x12=\n" +
 	"\tanalytics\x18\n" +
-	" \x01(\v2\x1f.torchwood.api.config.AnalyticsR\tanalytics\"\xd0\x01\n" +
+	" \x01(\v2\x1f.torchwood.api.config.AnalyticsR\tanalyticsJ\x04\b\x06\x10\aR\ttelemetry\"\xd0\x01\n" +
 	"\x06Server\x12.\n" +
 	"\x04grpc\x18\x01 \x01(\v2\x1a.torchwood.api.config.GRPCR\x04grpc\x12.\n" +
 	"\x04http\x18\x02 \x01(\v2\x1a.torchwood.api.config.HttpR\x04http\x124\n" +

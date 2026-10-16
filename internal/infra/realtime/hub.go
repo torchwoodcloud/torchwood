@@ -161,8 +161,8 @@ func (h *Hub) EndReplay(conn *Conn, seen map[string]struct{}) {
 // Dispatch 收**完整**信封（含 ev.ACL），按集合 + 文档两个频道扇出。
 // 连接只收 PlatformAdmin 旁路或 VisibleTo(ev.ACL) 通过的订阅者；
 // 入队帧只用 ev.ClientPayload()（剥掉 acl）。入队统一走 TrySend：
-// 满水位带因断开（resync + last_seq），不再丢帧（OnSlow 为 nil 的
-// 测试桩退化为旧丢帧语义）。
+// 满水位带因断开（resync + last_seq），不再丢帧（连接构造方必须注入
+// OnSlow——handler 生产路径与测试桩一致）。
 // B-1（终局安全评审）：频道名/ topic 是全局命名空间（不含 project 维度），
 // 跨项目同名集合订阅的是同一频道——文档事件必须先按连接归属项目等值
 // 过滤（ev.ProjectID == c.ProjectID），不等直接跳过（在他项目事件上不做

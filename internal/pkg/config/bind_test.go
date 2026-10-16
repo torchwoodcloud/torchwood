@@ -54,18 +54,10 @@ storage:
   local:
     path: ./data
 functions:
-  executor: docker
-  docker:
-    host: unix:///var/run/docker.sock
-  fleetly:
-    endpoint: fleetlyd.internal:8421
-    token: tok-from-yaml
-    app: torchwood
-    network_members: [dispatcher, server]
-telemetry:
-  enabled: true
-  otlp_endpoint: http://otel:4317
-  service_name: torchwood
+  invoke:
+    allow_private_targets: false
+  webhooks:
+    retry_backoff: "10s,1m,5m,30m,2h,8h"
 messaging:
   smtp:
     host: smtp.example.com
@@ -136,15 +128,9 @@ func TestUnmarshalConfig(t *testing.T) {
 	require.False(t, out.GetStorage().GetS3().GetUseSsl())
 	require.Equal(t, "./data", out.GetStorage().GetLocal().GetPath())
 
-	// executor/dispatcher/docker/packer/image/storage/fleetly/driver 键已随
-	// Functions v4 执行面外包整体退役（config.proto reserved，v4 §10 精确
-	// 退役表）；testYAML 特意保留这些残留键，钉住「proto 反序列化容忍未知
-	// 字段、不报错」的兼容行为——存量部署 yaml 携带旧段仍须无损绑定。
-	require.Equal(t, "", out.GetFunctions().GetWebhooks().GetRetryBackoff())
-
-	// telemetry 节是死配置退役（config.proto 已删 Telemetry message）后的同类
-	// 残留键：存量部署 yaml 携带它仍须无损反序列化（容忍未知字段，同 executor）；
-	// Telemetry 访问器已随消息删除，此处以 UnmarshalConfig 不报错钉住容忍行为。
+	// 退役键（functions.executor/docker/fleetly/driver/…、telemetry）不在本夹具
+	// 重建；proto 未知字段容忍语义（存量 yaml 残留键不报错不绑定）由
+	// TestFunctionsInvokeBinding 的 driver/docker 残留夹具钉住。
 
 	require.EqualValues(t, 587, out.GetMessaging().GetSmtp().GetPort())
 	require.True(t, out.GetMessaging().GetSmtp().GetUseTls())

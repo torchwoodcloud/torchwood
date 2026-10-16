@@ -1,7 +1,7 @@
 # Torchwood 开发路线图
 
 > 本文档基于已完成 P0 底座，规划 Torchwood 的短期、中期、长期开发方向。
-> 最新更新：2026-09-12（**Functions 执行器 v2/v3、一等排行榜（Phase 1/2）、事件分析 Analytics（PR1–PR6）、审计查询面与噪声治理均已落地**；此前 2026-08-24：v2 PR1–PR5 与 P2.5 / v3 经济系统实施，轻量 Realtime + 事件脊柱交付。设计文档存档：`docs/design/v3-payments-economy.md`、`docs/design/v3-execution-plan.md`、`docs/design/functions-v3.md`、`docs/design/analytics.md`）。
+> 最新更新：2026-10-15（**Functions v4 落地：执行面整体外包（dispatcher/packer 退役，函数 = endpoint 常驻服务）+ Webhooks 一等公民**；此前 2026-09-12：Functions 执行器 v2/v3、一等排行榜（Phase 1/2）、事件分析 Analytics（PR1–PR6）、审计查询面与噪声治理均已落地；再前 2026-08-24：v2 PR1–PR5 与 P2.5 / v3 经济系统实施，轻量 Realtime + 事件脊柱交付。设计文档存档：`docs/design/v3-payments-economy.md`、`docs/design/v3-execution-plan.md`、`docs/design/functions-v3.md`、`docs/design/analytics.md`、现行函数设计 `docs/design/functions-v4.md`）。
 
 ---
 
@@ -322,7 +322,7 @@ v2 **不是**「把 Appwrite 剩下的模块搬过来」。Agent 叙事（MCP、
 
 ### 3.1 事件脊柱（最小）
 
-现有 `Queue` 端口只服务 Functions 执行；`EventPublisher` / outbox **尚未落地**。v2 先做平台能力，不做 Webhook 产品。
+现有 `Queue` 端口只服务 Functions 调用；`EventPublisher` / outbox **已落地**（阶段④：文档写与 outbox 同 `COMMIT`，Realtime 与函数事件触发器/Webhooks 共用一条事件脊柱）。
 
 | 任务 | 说明 | 关键组件 |
 |------|------|----------|
@@ -435,7 +435,7 @@ count/自增/OCC 等 DIY 底料平台已有，但权限别扭（read:any 枚举�
 | Frameworks 列表 | 支持的框架模板 | `/v1/server/sites/frameworks` |
 | Deployments | 上传构建产物、激活 deployment | `/v1/server/sites/{id}/deployments` |
 | 静态文件托管 | 从 Storage 或专用 bucket serve | Storage adapter 扩展 |
-| SSR 运行时 | 边缘/容器 SSR 执行 | Functions executor 扩展 |
+| SSR 运行时 | 边缘/容器 SSR 执行 | v4 起平台无内建执行器——按 Functions endpoint target 同语义（外部常驻服务）承载 |
 
 ---
 
@@ -455,7 +455,7 @@ count/自增/OCC 等 DIY 底料平台已有，但权限别扭（read:any 枚举�
 |------|------|----------|
 | GitHub OAuth | 授权、callback、installation | `/v1/server/vcs/github/authorize` |
 | Repositories | 列出仓库、分支、文件内容 | `/v1/server/vcs/github/repositories` |
-| 自动部署 | GitHub webhook 触发 Functions/Sites 构建 | Webhook handler |
+| 自动部署 | GitHub webhook 触发 Functions/Sites 构建（设计期口径；Functions v4 起无平台内构建——落地时改为触发外部流水线或 endpoint 重部署） | Webhook handler |
 
 ---
 

@@ -154,7 +154,7 @@ API Key 不在注册时生成，登录后在 Console **API Keys** 页面创建�
 - **三类数据库**：`public` 控制面与事件脊柱（`projects`、`admins`、`api_keys`、`audit_logs`、`outbox`/`outbox_dead`、全局 catalog 两表 `catalog_databases`/`catalog_collections`，bun + golang-migrate）；`tw_<project.id>` 项目数据面——系统静态表（`users`/`sessions`/`identities`/`groups`/`memberships`/`buckets`/`files`）+ 账本/Functions/OAuth（`internal/infra/projectschema/`）；`tw_<project.id>_<database.id>` 业务文档面——仅放用户 collection（真实表，表名 = collectionID，`_tenant` + `_acl` 内嵌 + RLS policy）。
 - **API 形态**：Protobuf 为单一事实来源（`proto/` → `genproto/`），REST 由 grpc-gateway 暴露，文件 multipart 与 OAuth 回调走 `internal/api/serverhttp`；gRPC 方法须带 `method_auth` 注解（启动期收集为策略注册表）。
 - **认证**：end-user JWT/会话 Cookie、API Key（以 `keys` + `key:<id>` 双角色参与 `_acl` 判定，不绕过文档权限）、Console admin JWT（`TORCHWOOD_session_console` HttpOnly Cookie）。Admin 通过 `X-Torchwood-Project` header 指定项目。
-- **近期加固（点到为止）**：outbox 死信重放 `torchwood admin outbox list-dead/replay`（`document_events_outbox_dead`）；全局 Redis 信号量 `pkg/semaphore`（build 4 / run 16，TTL 租约，内存回退）；仓储层 per-statement 5s/10s `context.WithTimeout`；`golangci-lint` 全量 0 告警、`--new-from-rev=origin/main` 棘轮；`buf breaking --against '.git#branch=origin/main'` 门禁。
+- **近期加固（点到为止）**：outbox 死信重放 `torchwood admin outbox list-dead/replay`（`document_events_outbox_dead`）；全局 Redis 信号量 `pkg/semaphore`（build 4 / run 16，TTL 租约，内存回退）；仓储层 per-statement 5s/10s `context.WithTimeout`；`golangci-lint` 全量 0 告警；`buf breaking --against '.git#branch=origin/main'` 门禁。
 
 ## 测试
 

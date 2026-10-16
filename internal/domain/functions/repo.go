@@ -79,10 +79,10 @@ type FunctionRepo interface {
 	// failed；completed/failed 不被覆盖（防重复投递回写覆盖终态）。
 	FailInvocationIfActive(ctx context.Context, projectID, functionID, invocationID, reason string) error
 	// RecoverOrphanInvocationsInProject 将指定项目中停留未终态（queued/running）
-	// 且超过各自 staleAfter 的记录标记为 failed。staleAfter 按行计算：
-	// timeout_seconds 非空 = 该值 + 120s 宽限（两写预占的行内快照）；NULL
-	//（存量行）回退 1h。limit 是本项目本轮上限，供 app/worker 扣减全局预算。
-	RecoverOrphanInvocationsInProject(ctx context.Context, projectID string, olderThan time.Time, limit int) (int64, error)
+	// 且超过 staleAfter 的记录标记为 failed。staleAfter 按行计算：
+	// timeout_seconds（NOT NULL，迁移 000029）+ 120s 宽限（两写预占的行内
+	// 快照）。limit 是本项目本轮上限，供 app/worker 扣减全局预算。
+	RecoverOrphanInvocationsInProject(ctx context.Context, projectID string, limit int) (int64, error)
 	// PruneOldInvocationsInProject 清理该项目该函数 server 面来源
 	//（trigger_source = ''）超过 keepRecent 条最新之外的终态记录。
 	// 条数式保留只作用于 server 面（Q7 保留分级）：client/http/cron 来源行
@@ -182,8 +182,9 @@ type InvocationRecord struct {
 	DurationMS        int64
 	Error             string
 	// TimeoutSeconds 是函数超时的行内快照（P0.5 两写预占记账；周期孤儿恢复
-	// 的 staleAfter = 本值 + 120s 宽限，NULL 回退 1h）。
-	TimeoutSeconds *int
+	// 的 staleAfter = 本值 + 120s 宽限。迁移 000029 起 NOT NULL——NULL 存量
+	// 行已回填平台缺省 15，回退分支退役）。
+	TimeoutSeconds int
 	// ——触发来源（P1，迁移 000015）——TriggerSource 形如 http:{trigger_id} /
 	// cron:{trigger_id} / event:{trigger_id}（空 = server 面）；SourceIP 是
 	// HTTP 触发的来源 IP 摘要。公开触发路由不经 gRPC 拦截器链，调用记录即

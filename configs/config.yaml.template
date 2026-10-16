@@ -63,9 +63,9 @@ security:
       window: "60s"           # env: TORCHWOOD_SECURITY_RATE_LIMIT_API_KEY_WINDOW
     functions_execution:
       # 函数执行身份维度（P0）：按 project:function 计数，默认对齐 api-key
-      # 档 6000/60s。函数回访流量的全部容器经 bridge NAT 呈现同一来源 IP、
-      # 且每次执行 ActorID 独立——故必须走独立维度（落 IP 维度互相击穿、
-      # 落 user 维度实质不限流）。
+      # 档 6000/60s。每次函数调用 ActorID 独立（落 user 维度实质不限流），
+      # 函数侧出口 IP 与部署拓扑相关（自托管常同网段 NAT）——故必须走独立
+      # 维度，不落 IP/user 通用维度。
       limit: 6000             # env: TORCHWOOD_SECURITY_RATE_LIMIT_FUNCTIONS_EXECUTION_LIMIT
       window: "60s"           # env: TORCHWOOD_SECURITY_RATE_LIMIT_FUNCTIONS_EXECUTION_WINDOW
   # 认证面局部频控（登录失败双维计数 + 注册 IP 频控；T-01）。

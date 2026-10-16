@@ -17,7 +17,7 @@ const (
 	streamTrimTimeout = 10 * time.Second
 )
 
-// streamTrimMaxLen 是 functions-executions stream 的近似裁剪水位
+// streamTrimMaxLen 是 functions-invocations stream 的近似裁剪水位
 // （P1-15：XADD 不设 MaxLen 保未投递消息，裁剪交给本低频任务；APPROX
 // 语义下单次 O(被裁剪部分)，水位远高于正常积压）。
 const streamTrimMaxLen = 100000

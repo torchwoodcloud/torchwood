@@ -175,7 +175,7 @@ type TriggerRepo interface {
 	// 逐条 CAS 推进 next_run_at（UPDATE ... WHERE next_run_at=旧值，判
 	// rows=1）——多实例并发只有赢家；推进计划（含 misfire 语义）经 next 回调
 	// 由领域层给出。**必须先 CAS 后入队**：先入队后 CAS 在多实例下会双入队，
-	// 执行行 queued→building 的 CAS 防不了两条不同 execution。返回 CAS 赢家
+	// 执行行 queued→running 的 CAS 防不了两条不同 invocation。返回 CAS 赢家
 	// 中 Run=true 的条目（skip 的 misfire 行被推进但不返回）。
 	ClaimDueCron(ctx context.Context, projectID string, now time.Time, limit int, next CronNextFunc) ([]CronClaim, error)
 

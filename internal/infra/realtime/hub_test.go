@@ -44,8 +44,15 @@ func testEnvelope() events.Envelope {
 func newTestConn(id string, principal databases.Principal) *Conn {
 	// ProjectID 默认 "default"（与 testEnvelope 的 ProjectID 一致）：B-1 起
 	// Hub 对文档事件按连接归属项目等值过滤；跨项目场景在 hub_isolation_test
-	// 显式覆盖。
-	return &Conn{ID: id, ProjectID: "default", DocPrincipal: principal, Send: make(chan map[string]any, shared.RealtimeSendBuffer)}
+	// 显式覆盖。OnSlow 显式注入（TrySend 无 nil 兼容分支）：测试帧量远低于
+	// 水位，触发即桩缺陷，fail-loud。
+	return &Conn{
+		ID:           id,
+		ProjectID:    "default",
+		DocPrincipal: principal,
+		Send:         make(chan map[string]any, shared.RealtimeSendBuffer),
+		OnSlow:       func(int64) { panic("test conn unexpectedly hit slow watermark") },
+	}
 }
 
 // TestHub_DispatchFiltersByVisibleTo：非 admin 按写前/写后 _perms 过滤；

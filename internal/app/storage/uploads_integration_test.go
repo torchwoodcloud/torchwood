@@ -417,13 +417,12 @@ func TestUploads_OwnerBinding(t *testing.T) {
 	ctx, uc, projectID, _, _ := newUploadsUC(t)
 	bucketID := mustCreateBucket(t, ctx, uc, projectID)
 
-	// 端用户（owner="user-1"）创建会话。
+	// 端用户（owner="user-1"）创建会话：owner 从 principal 派生（不收入参）。
 	session, err := uc.CreateUploadSession(ctx, CreateUploadCommand{
-		ProjectID:   projectID,
-		BucketID:    bucketID,
-		Name:        "owner.bin",
-		Size:        1 << 20,
-		OwnerUserID: "user-1",
+		ProjectID: projectID,
+		BucketID:  bucketID,
+		Name:      "owner.bin",
+		Size:      1 << 20,
 	}, databases.Principal{Roles: []string{"users", "user:user-1"}})
 	require.NoError(t, err)
 	require.Equal(t, "user-1", session.OwnerUserID)
@@ -462,11 +461,10 @@ func TestUploads_OwnerBinding(t *testing.T) {
 
 	// keys 豁免：他人创建的会话 keys 角色可操作。
 	session2, err := uc.CreateUploadSession(ctx, CreateUploadCommand{
-		ProjectID:   projectID,
-		BucketID:    bucketID,
-		Name:        "keys-exempt.bin",
-		Size:        1 << 20,
-		OwnerUserID: "user-9",
+		ProjectID: projectID,
+		BucketID:  bucketID,
+		Name:      "keys-exempt.bin",
+		Size:      1 << 20,
 	}, databases.Principal{Roles: []string{"users", "user:user-9"}})
 	require.NoError(t, err)
 	_, err = uc.UploadChunk(ctx, projectID, session2.ID, 1, bytes.NewReader(make([]byte, 1<<20)), 1<<20, "", databases.Principal{Roles: []string{"keys"}})

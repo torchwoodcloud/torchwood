@@ -54,9 +54,9 @@ type FunctionInvocation struct {
 	StatusCode int    `bun:"status_code,notnull,default:0"`
 	DurationMS int64  `bun:"duration_ms,notnull,default:0"`
 	Error      string `bun:"error,notnull,default:''"`
-	// TimeoutSeconds 是函数超时的行内快照（P0.5 两写预占；NULL = 旧行，
-	// 孤儿恢复回退 1h）。
-	TimeoutSeconds *int `bun:"timeout_seconds"`
+	// TimeoutSeconds 是函数超时的行内快照（P0.5 两写预占；迁移 000029 起
+	// NOT NULL——NULL 存量行已回填平台缺省 15）。
+	TimeoutSeconds int `bun:"timeout_seconds,notnull,default:15"`
 	// ——触发器来源（P1，迁移 000015；INSERT 期写入、之后不可变）——
 	// TriggerSource 形如 http:{trigger_id} / cron:{trigger_id} / event:{id}；
 	// 空 = server 面。公开触发路由不经 gRPC 拦截器链，调用记录即审计载体。

@@ -11,7 +11,7 @@
 | 纯单元 | 否（stub / 内存实现） | `pkg/`、`internal/domain/`、`internal/api/*grpc/` | `pkg/crud/list_test.go`；`internal/api/servergrpc/projects_test.go`（stub repo + `contexts.WithPrincipal`）；`internal/api/interceptor/jwt_auth_test.go`（`policy_test_helper_test.go` 提供小策略注册表 + stub validator） |
 | 授权矩阵 | 否（stub validator） | `cmd/server/internal/runtime/` | `authz_matrix_test.go`：数据源为真实 proto 的 `BuildMethodPolicies` 策略集，全部方法按 access 级别裁剪凭证档（匿名 / 端用户 / admin 各角色 / API key 各 scope），过真实 `AuthInterceptor`，断言与独立推导函数 `expectedDecision` 全量一致；同目录 `grpc_authz_test.go`（`AssertSemantic` 真实注册表语义断言）、`sdk_scopes_contract_test.go`（SDK scope 词表契约锁） |
 | 集成 | 是（`SetupTestDB`） | `internal/infra/*`、`internal/app/*`、`internal/api/`（servergrpc / serverhttp / consolegrpc）、`cli/`、`worker/`、`tests/acceptance/` | `internal/infra/documentdb/postgres_test.go`；`tests/acceptance/p0_acceptance_test.go` |
-| 依赖外部 daemon | 是 + Docker daemon | `dispatcher/`、`internal/infra/storage/` | `dispatcher/daemon_integration_test.go`（`dockerAvailable(t)` 探测 daemon，不可达 `t.Skip`）；`internal/infra/storage/minio_integration_test.go`（`TORCHWOOD_TEST_MINIO_ENDPOINT` 未设跳过） |
+| 依赖外部服务 | 是 + Redis / MinIO | `worker/`、`internal/infra/storage/`、`internal/app/functions/` | `worker/event_triggers_test.go`（`TORCHWOOD_TEST_REDIS_ADDR` 未设跳过）；`internal/infra/storage/minio_integration_test.go`（`TORCHWOOD_TEST_MINIO_ENDPOINT` 未设跳过）。docker daemon 依赖测试已随 Functions v4 执行面外包整体退役 |
 
 通用约定：
 
@@ -145,24 +145,22 @@ Services（均带 healthcheck，与 `docker/local/docker-compose.yml` 同镜像�
 |------|------|------|
 | postgres | `percona/percona-distribution-postgresql:18` | 发行版基座内置 pgvector 0.8.3；`POSTGRES_INITDB_ARGS="--locale=C --encoding=UTF8"`——locale=C 时 initdb 默认 SQL_ASCII，pgdriver 握手校验 client_encoding=UTF8 失败直接拒连 |
 | minio | `pgsty/silo:RELEASE.2026-09-03T13-18-01Z` | MinIO 社区延续分支，钉 release tag |
-| redis | `redis:7-alpine` | 供 dispatcher 函数实例注册表真 Redis 集成测试 |
+| redis | `redis:7-alpine` | 真 Redis 集成测试（`worker/event_triggers_test.go` 事件触发器消费等） |
 
-job 级 env：`TORCHWOOD_TEST_DATABASE_SOURCE`、`TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE`、`TORCHWOOD_TEST_REDIS_ADDR`（`dispatcher/registry_redis_integration_test.go`、`worker/event_triggers_test.go` 消费）、`TORCHWOOD_TEST_MINIO_ENDPOINT`（`internal/infra/storage/minio_integration_test.go` 消费）、`TORCHWOOD_RUN_DOCKER_TESTS="1"`（当前无 Go 代码读取，仅 CI 侧预留开关；docker 集成测试实际用 `dockerAvailable(t)` 探测 daemon）。
+job 级 env：`TORCHWOOD_TEST_DATABASE_SOURCE`、`TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE`、`TORCHWOOD_TEST_REDIS_ADDR`（`worker/event_triggers_test.go` 消费）、`TORCHWOOD_TEST_MINIO_ENDPOINT`（`internal/infra/storage/minio_integration_test.go` 消费）。
 
 步骤（按 ci.yml 顺序）：
 
 1. checkout（`fetch-depth: 0`，buf breaking 需 origin/main 可解析）→ `jdx/mise-action` 按 `mise.toml` 装齐工具链 → Go 模块 / 构建缓存与 pnpm store 缓存；
 2. `buf lint` → **`buf breaking --against '.git#branch=origin/main'`**；
-3. 预拉 `node:18-alpine`（functions runner 基镜像，docker 集成测试用）；
-4. `mise run lint:go` / `mise run lint:golangci`（全量门禁）；
-5. `go test -race -covermode=atomic -coverprofile=coverage.out ./...`（单元 + 集成；race 与 coverage 合并跑避免重复集成成本）；
-6. **RLS 相对基准**（转出门禁 A7）：`go test ./internal/infra/documentdb/ -run 'TestRLS_RelativeBenchmark|TestRLS_ExplainInitPlanGate' -count=1 -v`；
-7. **Coverage gate**：`go tool cover -func` 总覆盖率 ≥48%，只升不降（阈值依据 main 实测 51.1% 向下取整留 3 点缓冲）；
-8. functions docker e2e 断言：`go test -v -count=1 -run 'TestDockerExecutor_' ./internal/infra/functions` 后断言输出无 `--- SKIP`（防静默跳过）。**注意：v1 docker 执行器移除（dispatcher 成为唯一执行路径）后，`TestDockerExecutor_` 前缀当前无匹配测试，该步骤空转过**；daemon 依赖的真集成测试已迁至 `dispatcher/`（`dockerAvailable` 探测）；
-9. SDK Go tests（独立 module）：`sdk/go` 内 `go test -race ./...`；
-10. **Codegen 漂移门禁**：`mise run generate:all`（generate:proto + generate:config + wire:all，protoc 31.1 / protoc-gen-go 1.36.11 由 mise 钉版）后 `git diff --exit-code -- genproto internal/pkg/config cmd go.mod go.sum`；
-11. TS SDK test：`sdk/typescript` 内 `npm ci && npm run test` → `mise run sdk:demo-build`；
-12. console 依赖安装（`pnpm install --frozen-lockfile`）→ `mise run build`（console:build + 五二进制 go build，验证 embed 链路）。
+3. `mise run lint:go` / `mise run lint:golangci`（全量门禁）；
+4. `go test -race -covermode=atomic -coverprofile=coverage.out ./...`（单元 + 集成；race 与 coverage 合并跑避免重复集成成本）；
+5. **RLS 相对基准**（转出门禁 A7）：`go test ./internal/infra/documentdb/ -run 'TestRLS_RelativeBenchmark|TestRLS_ExplainInitPlanGate' -count=1 -v`；
+6. **Coverage gate**：`go tool cover -func` 总覆盖率 ≥48%，只升不降（阈值依据 main 实测 51.1% 向下取整留 3 点缓冲）；
+7. SDK Go tests（独立 module）：`sdk/go` 内 `go test -race ./...`；
+8. TS SDK test：`sdk/typescript` 内 `npm ci && npm run test` → `mise run sdk:demo-build`。
+
+> functions docker e2e 断言步骤已随 Functions v4 删除（docker 执行器测试整体退役）；**codegen 漂移检查只在本地门禁**（`mise run test` 已含 test:codegen）——CI 冷环境重跑 `generate:all` 会受 tidy/网络影响产生本地不复现的 diff，CI 简化裁决不重复；全量构建验证（console + Go embed + 三二进制）由 Image workflow 的 docker 多阶段构建覆盖。
 
 ### 5.2 frontend job（ubuntu-latest）
 
@@ -179,7 +177,6 @@ job 级 env：`TORCHWOOD_TEST_DATABASE_SOURCE`、`TORCHWOOD_TEST_ADMIN_DATABASE_
 | SDK scope 词表 | `TestSDKScopesContract_AlignedWithVocabulary` | SDK 常量与 `domainauth.AllScopeResources` 派生词表失配 |
 | RLS 相对基准 | `TestRLS_RelativeBenchmark` / `TestRLS_ExplainInitPlanGate` | RLS 开/关 COUNT 比值 ≥30x（InitPlan 化失效或逐行 SubPlan 退化） |
 | Coverage gate | CI 步骤，总覆盖率 ≥48% 只升不降 | 覆盖率跌破下限 |
-| functions docker e2e 断言 | CI 步骤断言无 `--- SKIP` | 防静默跳过；**当前 `-run` 模式无匹配测试，步骤空转（见 §5.1 第 8 步）** |
 
 本地复现：
 
@@ -202,7 +199,7 @@ mise run gen:authz-matrix && git diff --exit-code -- docs/developer/authz-matrix
 mise run docker:up    # Postgres / Redis / MinIO（与 CI 同镜像）
 mise run lint         # lint:go + lint:golangci + lint:sdk-go + lint:console
 mise run test         # lint + sdk-go + sdk-ts + go test -race -cover（自动加载 .env）
-mise run build        # console:build + go build 五个二进制（ldflags 注入 version/commit/date）
+mise run build        # console:build + go build 三个二进制（ldflags 注入 version/commit/date）
 # 手工：curl /v1/health  /v1/server/health/version  /healthz/readiness
 ```
 

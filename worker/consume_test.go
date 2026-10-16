@@ -85,7 +85,7 @@ func (r *retryRepo) FailInvocationIfActive(_ context.Context, _, _, _, reason st
 	}
 	return nil
 }
-func (r *retryRepo) RecoverOrphanInvocationsInProject(context.Context, string, time.Time, int) (int64, error) {
+func (r *retryRepo) RecoverOrphanInvocationsInProject(context.Context, string, int) (int64, error) {
 	return 0, nil
 }
 func (r *retryRepo) PruneOldInvocationsInProject(context.Context, string, string, int) error {

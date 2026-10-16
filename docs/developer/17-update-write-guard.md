@@ -57,16 +57,15 @@ conn.NewUpdate().Model((*model.X)(nil)).
 - **禁止裸全模型覆盖 UPDATE**（struct + `WherePK()` 全列写）。"写哪些列"必须由代码声明，不能由 struct 恰好有什么决定。
 - **identity / DB 生成列对 UPDATE 只读**：`projects.internal_id` 模型侧 `skipupdate`；outbox `seq` 是 `GENERATED ALWAYS AS IDENTITY`（迁移 000002），模型无 skipupdate 标签，但 INSERT 列白名单排除该列、UPDATE 不得触碰（DB 层 GENERATED ALWAYS 直接拒绝）。
 - **白名单登记纪律**：迁移新增列默认不进任何 UPDATE 白名单；功能上需要可变时显式登记。漏登记的后果是"改不动"（显式失败），而不是"静默清零"。不可变列有意不登记同样是约定的一部分（如部署源快照五列 source_type / source_url / source_ref / source_dir / context_sha256，INSERT 期写全、之后不可变）。
-- **零值归一**：白名单是全模型写，struct 零值会原样写入。带 CHECK 约束或语义默认的列在映射层归一（如 function 池策略列零值归一为平台默认，`bunrepo/function_repo.go` `mapFunctionToModel`）。
+- **零值归一**：白名单是全模型写，struct 零值会原样写入。带 CHECK 约束或语义默认的列在映射层归一。
 
 白名单速查（当前登记，与各仓储注释一一对应）：
 
 | 更新方法 | 白名单列 |
 | --- | --- |
 | `UpdateProject` | name / description / registration_policy / updated_at |
-| `UpdateFunction` | name / entrypoint / runtime / timeout_seconds / spec / enabled / declared_scopes / min_instances / max_instances / idle_ttl_seconds / max_requests_per_instance / concurrency / client_callable / client_anonymous_allowed / client_per_user_limit / client_limit_window / updated_at |
-| `UpdateDeployment` | status / error / build_node / updated_at |
-| `UpdateExecution` | status / response / response_truncated / stdout / stdout_truncated / stderr / stderr_truncated / status_code / duration_ms / error / updated_at |
+| `UpdateFunction` | name / timeout_seconds / enabled / declared_scopes / target_url / target_secret_enc / target_previous_secret_enc / target_secret_rotated_at / target_secret_fingerprint / client_callable / client_anonymous_allowed / client_per_user_limit / client_limit_window / updated_at |
+| `UpdateInvocation` | status / response / response_truncated / status_code / duration_ms / error / updated_at（无 stdout/stderr——v4 起日志归 substrate；trigger_source 等 INSERT 期列不可变） |
 | `UpdateTrigger` | token / config / enabled / next_run_at / updated_at |
 | asset def `Update` | name / decimals / max_quantity / expires_in / tradable / unique_per_owner / upgradeable / metadata / status / updated_at |
 | subscription plan | name / amount / currency / interval / interval_days / grace_days / trial_days / benefits / provider_overrides / status / updated_at |

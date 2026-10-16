@@ -237,9 +237,9 @@ func whitelistHeaders(r *http.Request) map[string][]string {
 
 // invokeTriggerErrorStatus 把 InvokeTrigger 错误映射为 HTTP 状态
 // （DeadlineExceeded=504 对齐既有约定）。Unknown = 函数执行失败封套
-// （dispatcher runner ok=false）→ 502 BadGateway：对回调方而言上游函数
+// （endpoint 返回非 2xx / FDK 抛错）→ 502 BadGateway：对回调方而言上游函数
 // 失败即上游错误，与 rec.Status=failed 的 502 分支同语义（fetch/main 风格
-// 一致，v3 §2.2）。
+// 一致，v4 §4.1）。
 func invokeTriggerErrorStatus(err error) int {
 	code := status.Code(err)
 	switch code {

@@ -1,4 +1,4 @@
-> ⚠️ 现状更新（2026-09-16）：本文档是 v1 docker 执行器的原始实现方案；该执行器已移除，函数执行统一经 dispatcher 分发（常驻 runner 池）。现状以 `docs/developer/08-functions.md` 为准，本文保留为设计历史。
+> ⚠️ 现状更新（2026-09-16，2026-10-15 再注）：本文档是 v1 docker 执行器的原始实现方案；该执行器已移除，v3 一度统一经 dispatcher 分发（常驻 runner 池），**Functions v4 起 dispatcher 亦退役**——函数 = endpoint 常驻服务、执行面整体外包。现状以 `docs/developer/08-functions.md` 与 `docs/design/functions-v4.md` 为准，本文保留为设计历史。
 
 # Torchwood Functions 真实执行器实现方案
 

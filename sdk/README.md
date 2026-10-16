@@ -9,7 +9,7 @@
 | 管理面自动化（建用户、管文档、Storage） | **Server API** + API Key | 在 Console 或通过 `POST /v1/server/api-keys` 创建带 scope 的 Key |
 | 终端用户身份流（注册/登录/会话） | **Client API** + JWT | SDK 自动持久化 access token |
 | Agent 工具 schema 来源 | **OpenAPI** | `mise run generate:proto` 后在 `genproto/**/*.swagger.json` 获取 |
-| Agent 默认工具箱 | **E-7 overlay** | 18 个动词映射现有 Server RPC（`sdk/go/server/tools.go` / `agentTools`）；完整 API 仍是 188 RPC（Client 61 + Server 117 + Console 10），不含 API key 管理，见 `docs/developer/14-agent-tools.md` |
+| Agent 默认工具箱 | **E-7 overlay** | 18 个动词映射现有 Server RPC（`sdk/go/server/tools.go` / `agentTools`）；完整 API 为 Server 面 166 RPC（`sdk/go/server/invoke_test.go` 快照锁数，不含 API key 管理的 6 方法；另有 Client 面 69 + Console 面 25 RPC），见 `docs/developer/14-agent-tools.md` |
 | 快速验证 | **Web 演示** | `mise run sdk:demo`，设置页填入 Console API Keys 页面创建的 API Key |
 
 典型 Agent 工作流：用 scoped API Key 实例化 `Torchwood.withApiKey()` → 读取 OpenAPI 或 SDK 类型 → 调用 Server Databases/Users/Storage API → 将结构化响应回传给 LLM。
@@ -132,7 +132,7 @@ await client.databases.createDocument("app", "notes", { data: { title: "Hi" } })
 
 ## 已实现 API surface
 
-**Client：** Account（注册/登录/会话/偏好）、Databases（文档 CRUD + count）、Groups 与 Memberships、Realtime（WebSocket 订阅）、Assets、Payments、Subscriptions、Functions（`invokeFunction`）、Leaderboards（提交/me/top）、Analytics（`ingest` + 包根 `AnalyticsEventBuffer` 批量缓冲器）。
+**Client：** Account（注册/登录/会话/偏好）、Databases（文档 CRUD + count）、Groups 与 Memberships、Realtime（WebSocket 订阅）、Assets、Payments、Subscriptions、Functions（`invokeFunction`）、Leaderboards（提交/me/top）、RuntimeVars（`getRuntimeVars` 类型化读取）、Analytics（`ingest` + 包根 `AnalyticsEventBuffer` 批量缓冲器）。
 
 **Server：** Health、Projects、Users、Groups、Databases（库/集合/属性/索引/文档/Bulk）、API Keys、OAuthProviders、Storage（Bucket/File）、Functions（CRUD + `rotateSecret` + `invoke` + invocations + scopes + 触发器四方法——Functions v4：部署/变量/运行时面已退役，函数 = endpoint target 常驻服务）、**Webhooks**（订阅 CRUD + `rotateSecret` + 投递浏览 `listDeliveries`/`getDelivery` + `redeliver`，九方法）、Payments、Assets、Subscriptions、Billing、Outbox、AuditLogs、Leaderboards（提交/条目/top/结算查询）、Analytics（ingest + 固定形状查询），以及 18 个 Agent 默认工具目录（`agentTools` / `lookupAgentTool`）。
 

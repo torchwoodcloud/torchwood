@@ -144,7 +144,7 @@ func (r *triggerRepo) GetTriggerByToken(ctx context.Context, projectID, token st
 // function_triggers_cron_due partial 索引）后逐条 CAS 推进——
 // `UPDATE ... SET next_run_at=新 WHERE id=$1 AND next_run_at=旧` 判 rows=1，
 // 多实例并发只有赢家（先 CAS 后入队红线：先入队后 CAS 在多实例下双入队，
-// 执行行 queued→building 的 CAS 防不了两条不同 execution）。
+// 执行行 queued→running 的 CAS 防不了两条不同 invocation）。
 // 推进计划（misfire 语义、cron 解析）经 next 回调由领域层给出。
 func (r *triggerRepo) ClaimDueCron(ctx context.Context, projectID string, now time.Time, limit int, next domainfunctions.CronNextFunc) ([]domainfunctions.CronClaim, error) {
 	if limit <= 0 {

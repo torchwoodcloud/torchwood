@@ -1,5 +1,7 @@
 # Torchwood 栈割接 runbook（dokploy → fleetly）
 
+> **历史文档（v3 割接，v4 起 dispatcher/packer 已退役）**：本文记录 2026-09 的 dokploy → fleetly 割接步骤；Functions v4（`docs/design/functions-v4.md`）起 dispatcher / packer 进程及其配置面已整体删除，文中相关步骤与验收探针按历史形态阅读，现行函数形态见 `docs/developer/08-functions.md`。
+
 | 状态 | 日期 | 关联 |
 |---|---|---|
 | **待使用者执行窗口**（本环境无 staging 凭据/访问权，真机步骤未执行、未虚构结果；本地等价实证见附录 A） | 2026-09-28 | [README](README.md)（部署形态/改写清单/镜像裁决/env 与 Config 清单）；[Dokploy 形态基准](../dokploy/README.md) |

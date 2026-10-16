@@ -2,6 +2,8 @@
 
 本章说明 Torchwood 的配置如何定义、加载与覆盖：`internal/pkg/config/config.proto` 是配置 schema 的单一事实源，YAML 文件提供基础值，`TORCHWOOD_` 前缀环境变量逐键覆盖。读完本章可以定位任何一个配置项的声明位置、默认值与生效优先级。
 
+> **Functions v4 迁移注（2026-10-15）**：执行面整体外包（`docs/design/functions-v4.md`）——`functions.dispatcher.* / functions.packer.* / functions.image.* / functions.storage.* / functions.docker.* / functions.execution.* / functions.fleetly.*` 与历史 `telemetry` 段全部退役（config.proto reserved，存量 yaml 残留键被容忍忽略）；现行 functions 键 = `invoke` / `trigger` / `client_invoke` / `webhooks`（§1.5）。本文 functions 相关段落已按 v4 重写。
+
 > 事实源：`internal/pkg/config/config.proto`（schema）、`internal/pkg/config/bind.go`（绑定与解码）、`internal/pkg/config/runtime_env.go`（运行时环境）、`configs/config.yaml.template`（完整键模板）、`.env.example`（环境变量样例）。
 
 ---
@@ -16,7 +18,7 @@
 | `security` | `jwt`、`api_key`、`trusted_proxies`、`setup_token`、`sessions`、`rate_limit`、`login_throttle`、`encryption_key` |
 | `data` | `database`（DSN / debug / 连接池 / 慢查询阈值）+ `redis` |
 | `storage` | `s3` 对象存储连接（`provider` / `local` 为声明保留键，见 §6.4） |
-| `functions` | `execution`、`docker`、`dispatcher`、`trigger`、`client_invoke`、`packer`、`image`、`storage`（见 §1.5） |
+| `functions` | `invoke`（出站 SSRF 守卫）、`trigger`、`client_invoke`、`webhooks`（见 §1.5） |
 | `payments` | stripe / wechat / alipay / ios_iap 四渠道；secret 类字段一律走环境变量 |
 | `analytics` | `retention_days` |
 | `messaging` | SMTP、SMS(Twilio)、`dev_log_otp` / `dev_log_sms` 开发态开关 |
@@ -39,7 +41,7 @@
 
 ### 1.2 security
 
-**`security.jwt.secret`**：全局必填，server / worker / dispatcher / packer 四进程同一 fail-closed 口径。启动期校验 ≥32 字符且不含弱子串（黑名单 `internal/pkg/bootkit/config.go`：change-me / changeme / minioadmin / secret / password / torchwood），并从它派生页 token 与 roles GUC 的 HMAC 签名密钥。
+**`security.jwt.secret`**：全局必填，server / worker 两进程同一 fail-closed 口径。启动期校验 ≥32 字符且不含弱子串（黑名单 `internal/pkg/bootkit/config.go`：change-me / changeme / minioadmin / secret / password / torchwood），并从它派生页 token 与 roles GUC 的 HMAC 签名密钥。
 
 - `security.jwt.access_ttl`：端用户 access token 默认 15m；Console admin 的 access（亦即会话 cookie Max-Age）缺省 1h 且**上限封顶 1h**。
 - `security.jwt.refresh_ttl`：默认 7d。
@@ -55,7 +57,7 @@
 | `ip` | 300 次 / 60s |
 | `user` | 1000 次 / 60s |
 | `api_key` | 6000 次 / 60s |
-| `functions_execution` | 6000 次 / 60s（按 project:function 计数的独立维度；函数容器经 NAT 同 IP、每次执行 ActorID 独立，落 IP/user 维度都会失效） |
+| `functions_execution` | 6000 次 / 60s（按 project:function 计数的独立维度；每次执行 ActorID 独立、函数侧出口 IP 与部署拓扑相关，落 IP/user 维度都会失效） |
 
 **`security.login_throttle`**：认证面局部频控（失败计数 + 窗口；成功登录/注册清零；超限 429 + Retry-After）：
 
@@ -90,38 +92,13 @@
 
 ### 1.5 functions
 
-函数执行统一经 dispatcher 分发。IMPL-T2-3 起执行底座 = fleetly 平台：函数实例 = fleetly Tasks（swarm service 承载，稳定 DNS 名 + 平台强制加固：CapDrop ALL/只读 rootfs/非 root/pids）、构建 = fleetly build-from-upload；dispatcher 不再持有 docker.sock（本仓零 docker client），多节点编排归 swarm。
+Functions v4（`docs/design/functions-v4.md`）：函数 = endpoint 常驻服务，torchwood 只做路由 / 身份 / 记账 / 投递——执行面（打包 / 构建 / 部署 / 池 / 运行时 / 变量）整体外包（fleetly CLI 或用户自有工具链）。旧 `driver` / `docker` / `fleetly` / `execution` / `dispatcher` / `packer` / `image` / `storage` 段已整体退役（config.proto reserved）：存量 yaml 残留键会被容忍忽略（proto 未知字段语义）。现行四键：
 
-**`functions.execution`**：`api_base_url` 是函数回访 Server API 的基址（经 `TW_API_BASE_URL` 注入执行环境）。fleetly 拓扑下 = 任务网络成员挂靠后的 DNS 别名（`http://<app>-server:<端口>`，见 `functions.fleetly.network_members`）。空 = 不注入（函数需自行解析；自托管部署应显式配置，且 server/worker 两进程同值）。
-
-**`functions.docker`**：`host`/`network` 键已删除（proto reserved，存量 yaml 残留键被容忍忽略）；仅 `registry`（默认 `torchwood-funcs`）保留为**平台镜像命名前缀（逻辑寻址键）**——server 与 dispatcher 同源派生函数部署镜像逻辑名 `func-<function>-<deployment>`，dispatcher 以此名为键登记 fleetly 构建产物引用。
-
-**`functions.fleetly`**（仅 dispatcher 进程消费；fleetly 控制面唯一通路）：
+**`functions.invoke`**：v4 出站调用面（函数 endpoint 与 webhook 接收方都是用户配置的任意 URL，SSRF 守卫在拨号点强制）：
 
 | 键 | 默认 | 说明 |
 |----|------|------|
-| `endpoint` | 无（**必填**） | fleetlyd gRPC 端点（栈内可达地址，如 `fleetlyd:8421`）；缺失拒绝启动 |
-| `token` | 无（**必填**） | 机具令牌（scope `tasks,build`）；**经环境变量注入，不落配置文件/镜像** |
-| `app` | 空 | 本栈在 fleetly 中的 app 名（任务网络成员挂靠的归属 app）；`network_members` 非空时必填 |
-| `network_members` | 空 = 不声明挂靠 | 挂靠到任务网络的服务名列表（本 app 内；生产含 dispatcher 与 server）；fleetly 把成员服务双挂到任务网络，DNS 别名 = `<app>-<service>` |
-
-**`functions.dispatcher`**：`url` 指向 dispatcher 内网 HTTP 端点，server/worker **必填**（启动期校验）；`shared_token` 为内网可选认证（空 = 不校验）。其余字段仅 dispatcher 进程消费：
-
-| 键 | 默认 | 说明 |
-|----|------|------|
-| `max_resident_instances` | 16 | 每 dispatcher 常驻实例总量上限（本地容量门；平台侧另有每令牌任务配额 fail-closed） |
-| `queue_depth` | 32 | 单函数排队深度上限，超限立即 ResourceExhausted |
-| `queue_head_timeout` | 10s | 等待空闲实例的队首超时 |
-| `boot_timeout` | 60s | 平台任务收敛 + 实例启动健康探针等待上限 |
-| `addr` | `:9070` | dispatcher HTTP 监听地址（仅内网） |
-| `timeout_budget` | 5 | 实例累计超时熔断阈值（达到即杀实例重建） |
-| `build_timeout` | 5m | 部署构建整体超时（构建 ctx 与客户端断开解耦，由该值封顶；验证 spawn 预算嵌套其内） |
-| `verify_build` | 默认开启 | 部署后验证 spawn（build 成功后起池外实例轮询 `/_tw/health`）；optional presence：未配置 = 开启，显式 `false` = 关闭 |
-| `rebuild_on_missing_image` | 默认开启 | 执行命中「部署镜像不可得」（构建产物引用映射缺失/被清理，或 fleetly 侧镜像解析失败）时异步触发该部署重建（zip 源自愈；git 源桶 miss 回退 packer 重物化） |
-
-`callback_container` / `node_id` / `node_url` / `routing_mode` / `registry_push` / `max_resident_instances_global` 键已删除（proto reserved）：回访容器由 `functions.fleetly.network_members` 成员挂靠取代；多节点细胞模型（节点心跳/容量键/跨节点转发）整体退役。
-
-函数池策略（per-function，不在本配置内）的缺省值：`max_instances` 4、`idle_ttl` 300s、`max_requests_per_instance` 1000。
+| `allow_private_targets` | false | 放行私网 / 回环 target（ssrfguard `Options.AllowInsecure` 透传）：仅自托管形态下函数与 server 同处可信私网（fleetly 任务网成员挂靠 / k8s Service / 裸机内网）时由运营方显式开启——平台级信任决策，非 per-request 开关；托管形态恒 false |
 
 **`functions.trigger`**：`http_ip_per_minute` = 3000。HTTP 触发器公开端点（`/f/{project}/{token}`）的 per-IP 固定窗口限频；独立于全局 300/min 档（微信等回调出口 IP 段集中，沿用全局档会在回调风暴下丢事件）。
 
@@ -130,22 +107,20 @@
 | 键 | 默认 | 说明 |
 |----|------|------|
 | `per_user_concurrency` | 8 | 每用户并发闸门（进程内 keyed 信号量，多实例部署下全局上限 = 上限 × 实例数） |
-| `queue_head_timeout` | 10s | 闸门排队队首超时（与 dispatcher 池队首口径一致） |
+| `queue_head_timeout` | 10s | 闸门排队队首超时（超时 ResourceExhausted，同步调用方不无界等待） |
 
-**`functions.packer`**（git 部署源打包服务）：`url`（server 侧寻址 packer；空 = git 源未启用，zip 源不受影响）与 `shared_token` 两进程共享；其余仅 packer 进程消费：
+**`functions.webhooks`**：Webhooks 一等公民子系统平台级配置（15 次/24h 指数退避 + 行内 DLQ + Redeliver API；计量一期仅进 metrics 不进 billing）。全部字段可选，空 = 缺省值：
 
-| 键 | 默认 |
-|----|------|
-| `addr` | `:9071` |
-| `fetch_timeout` | 120s（单次 fetch+物化整体超时） |
-| `max_repo_bytes` | 200MiB（克隆 worktree 磁盘预算） |
-| `max_zip_bytes` | 50MiB（物化 zip 传输预算） |
-| `concurrency` | 4（饱和请求立即 429） |
-| `allow_insecure` | false（放行 http:// 与私网目标；仅自托管内网 git 场景开启） |
-
-**`functions.image`**（BYO 镜像源 registry 准入，仅 dispatcher 消费）：`allowed_registries` 为 host 正向白名单（空 = 不设白名单；非空时未命中一律拒绝，条目命中精确域名或其后缀域）；`allow_insecure` 放行 IP 字面量与 `*.localhost` host（默认 false）。
-
-**`functions.storage`**：`bucket` = 部署代码包专用物理桶（空 = 缺省 `torchwood-functions`）。平台内部资源，不进用户 bucket 命名空间；连接复用 `storage.s3` 的 endpoint/凭证，写路径失败整体回滚——MinIO/S3 是函数部署的硬依赖。
+| 键 | 默认 | 说明 |
+|----|------|------|
+| `retry_backoff` | `"10s,1m,5m,30m,2h,8h"` | 重试梯度（秒序列，逗号分隔 Go duration；失败后按序取用，末值循环） |
+| `max_attempts` | 15 | 最大投递尝试次数（含首投；达到即终态 failed = DLQ） |
+| `retry_window` | `24h` | 重试窗（首投起算的终态封顶；下一次尝试时刻越窗即终态 failed） |
+| `delivery_concurrency` | 4 | 单轮到期扫描的投递并发上限（worker 进程内） |
+| `delivery_timeout` | `10s` | 单次投递尝试的 HTTP 超时 |
+| `retention` | `168h` | 投递行保留窗（终态行清理口径） |
+| `secret_grace_period` | `24h` | 密钥轮换宽限窗（旧钥保留期，v2 签名窗口） |
+| `max_per_project` | 32 | per-project webhook 数上限（0 = 缺省，负值非法，启动期钳制） |
 
 ### 1.6 payments
 
@@ -168,7 +143,7 @@
 2. `SetEnvPrefix("TORCHWOOD")` + `SetEnvKeyReplacer("." → "_", "-" → "_")` + `AutomaticEnv()`：任意点分键都能被同名环境变量覆盖。
 3. `UnmarshalConfig` 调 `c.Unmarshal(out, lynx.WithEnvForAllKeys())`：按 AppConfig 结构体叶子逐键取值组装（tag 回退链 mapstructure → json → 小写字段名），再经 mapstructure 解码——弱类型转换、duration 字符串、逗号切分的 repeated 字段都在这一层完成；仅在环境变量中设置的键（YAML 无此键）同样参与解码。
 
-四个入口（`cmd/server` / `cmd/worker` / `cmd/dispatcher` / `cmd/packer`）都以 `--config-dir` 默认 `./configs` 注册 flag 并传入 `config.NewBindConfigFunc()`。配置文件不存在不是错误（纯环境变量部署合法）；只有显式指定的 `-c` 文件缺失或 YAML 解析错误才硬失败。
+两个入口（`cmd/server` / `cmd/worker`）都以 `--config-dir` 默认 `./configs` 注册 flag 并传入 `config.NewBindConfigFunc()`。配置文件不存在不是错误（纯环境变量部署合法）；只有显式指定的 `-c` 文件缺失或 YAML 解析错误才硬失败。
 
 `--config-dir` / `--log-level` 两个 flag 经 `BindPFlags` 进配置源；日志级别按 `logging.level`（YAML 键）→ `--log-level` → `log_level` 的优先级链解析，缺省 info。
 
@@ -202,14 +177,10 @@ storage.s3.access_key_id  →  TORCHWOOD_STORAGE_S3_ACCESS_KEY_ID
 | `data.database.source` | `TORCHWOOD_DATA_DATABASE_SOURCE` |
 | `data.redis.*` | `TORCHWOOD_DATA_REDIS_ADDR` / `_PASSWORD` / `_DB` |
 | `storage.s3.*` | `TORCHWOOD_STORAGE_S3_ENDPOINT` / `_BUCKET` / `_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` 等 |
-| `functions.dispatcher.*` | `TORCHWOOD_FUNCTIONS_DISPATCHER_*`（如 `_URL`、`_SHARED_TOKEN`） |
-| `functions.fleetly.*` | `TORCHWOOD_FUNCTIONS_FLEETLY_*`（如 `_ENDPOINT`、`_TOKEN`、`_APP`、`_NETWORK_MEMBERS`） |
-| `functions.execution.api_base_url` | `TORCHWOOD_FUNCTIONS_EXECUTION_API_BASE_URL` |
+| `functions.invoke.allow_private_targets` | `TORCHWOOD_FUNCTIONS_INVOKE_ALLOW_PRIVATE_TARGETS` |
 | `functions.trigger.http_ip_per_minute` | `TORCHWOOD_FUNCTIONS_TRIGGER_HTTP_IP_PER_MINUTE` |
 | `functions.client_invoke.*` | `TORCHWOOD_FUNCTIONS_CLIENT_INVOKE_*` |
-| `functions.packer.*` | `TORCHWOOD_FUNCTIONS_PACKER_*` |
-| `functions.image.*` | `TORCHWOOD_FUNCTIONS_IMAGE_*` |
-| `functions.storage.bucket` | `TORCHWOOD_FUNCTIONS_STORAGE_BUCKET` |
+| `functions.webhooks.*` | `TORCHWOOD_FUNCTIONS_WEBHOOKS_*`（如 `_RETRY_BACKOFF`、`_MAX_ATTEMPTS`） |
 | `payments.*` | `TORCHWOOD_PAYMENTS_*`（secret 类唯一注入通道，见 §1.6） |
 | `analytics.retention_days` | `TORCHWOOD_ANALYTICS_RETENTION_DAYS` |
 | `idgen.snowflake.node_id` | `TORCHWOOD_IDGEN_SNOWFLAKE_NODE_ID` |
@@ -229,7 +200,7 @@ MinIO 凭据变量名（`ACCESS_KEY_ID` / `SECRET_ACCESS_KEY`）由字段名直�
 | `development` / `dev` / `local` / `test` | development | 0（跳过排水） |
 | `production` / `prod` / `staging` / 空 / 未知 | production | 30s |
 
-排水窗口仅 **server** 进程设置（`cmd/server/main.go` 传 `WithDrainTimeout(CurrentDrainTimeout())`）：关停时 readiness 先摘流，窗口内等待在途请求收尾，之后才进入 ShutdownTimeout(30s) 与服务 Stop。worker / dispatcher / packer 无 LB 摘流语义，不设排水窗口，仅有界关停（ShutdownTimeout 30s；packer 的 HTTP 层另有 15s 在途排空）。
+排水窗口仅 **server** 进程设置（`cmd/server/main.go` 传 `WithDrainTimeout(CurrentDrainTimeout())`）：关停时 readiness 先摘流，窗口内等待在途请求收尾，之后才进入 ShutdownTimeout(30s) 与服务 Stop。worker 无 LB 摘流语义，不设排水窗口，仅有界关停（ShutdownTimeout 30s）。
 
 `TORCHWOOD_SERVER_DRAIN_TIMEOUT` 配置合法非负 duration（`0s`、`5s`；裸 `0` 有特判）时覆盖默认值，非法或负值回退默认。生产部署应保证容器的 `terminationGracePeriodSeconds ≥ DrainTimeout + ShutdownTimeout(30s) + StopTimeout`。该环境同时影响运行期行为判定：`dev_log_otp` / `dev_log_sms` 的生产禁止即按归一化结果判断。
 
@@ -243,7 +214,7 @@ MinIO 凭据变量名（`ACCESS_KEY_ID` / `SECRET_ACCESS_KEY`）由字段名直�
 | `configs/config.yaml` | 本地实际配置（已 gitignore），从模板复制修改 |
 | `.env` / `.env.example` | 环境变量载体；secret 一律走环境变量，不进 YAML。`mise.toml` 的 `[env] _.file = ".env"` 使所有 mise 任务自动加载它——mise 会覆盖同名 shell 变量，临时覆盖请用任务专属变量 |
 
-`cmd/server/main.go`（worker / dispatcher / packer 同构）的启动顺序：
+`cmd/server/main.go`（worker 同构）的启动顺序：
 
 ```
 godotenv.Load()                            1. 加载 .env（文件不存在则容忍跳过）
@@ -260,10 +231,8 @@ lynx.NewRunner(
 
 | 进程 | 校验 |
 |------|------|
-| server | `ValidateAppConfig`（jwt.secret 必填 + encryption_key/setup_token 条件强度校验）+ `ValidateFunctionsDispatchConfig`（`functions.dispatcher.url` 必填） |
+| server | `ValidateAppConfig`（jwt.secret 必填 + encryption_key/setup_token 条件强度校验）+ 页 token / roles-sig 签名密钥派生 |
 | worker | 同 server 全部校验 + `data.database.source` 显式必填校验 |
-| dispatcher | `ValidateAppConfig` + `ValidateFunctionsFleetlyConfig`（`functions.fleetly.endpoint`/`token` 必填；声明挂靠成员时 `app` 必填；自身是通路终点，不消费 `url`） |
-| packer | 仅 `ValidateAppConfig` |
 
 ---
 

@@ -274,9 +274,9 @@ wire.Bind(new(projects.SchemaManager), new(*projectschema.SchemaManager)) // 桥
 wire.Bind(new(uow.Runner), new(*clients.Database))
 ```
 
-改构造器签名后 `mise run wire:all` 重生成**四份** `wire_gen.go`（server / worker / dispatcher / packer）。
+改构造器签名后 `mise run wire:all` 重生成**两份** `wire_gen.go`（server / worker）。
 
-**注册**：业务 proto 文件清单单一登记在 `cmd/server/internal/runtime/grpc.go` 的 `authzFileDescriptors()`（33 个文件：client 面 10 + server 面 20 + console 面 3，新增服务文件只登记此处）；`ProvideMethodPolicies` → `BuildMethodPolicies` 启动期收集策略并过语义断言，`assertRegisteredMethodsHaveAuthz` 对已注册方法 fail-closed。gateway 侧在 `cmd/server/internal/runtime/grpc_gateway.go` 登记 `RegisterXxxHandlerFromEndpoint`。
+**注册**：业务 proto 文件清单单一登记在 `cmd/server/internal/runtime/grpc.go` 的 `authzFileDescriptors()`（34 个文件：client 面 10 + server 面 21 + console 面 3，新增服务文件只登记此处）；`ProvideMethodPolicies` → `BuildMethodPolicies` 启动期收集策略并过语义断言，`assertRegisteredMethodsHaveAuthz` 对已注册方法 fail-closed。gateway 侧在 `cmd/server/internal/runtime/grpc_gateway.go` 登记 `RegisterXxxHandlerFromEndpoint`。
 
 **授权矩阵**：`docs/developer/authz-matrix.md` 是生成物——`mise run gen:authz-matrix`（`go run ./cmd/server/internal/runtime/cmd/genauthzmatrix`）从 `PolicySet` 渲染；策略变更后重新生成，漂移由 `authz_matrix_doc_test.go` 字节级锁定（重渲染 ≠ 磁盘即红），勿手改。
 

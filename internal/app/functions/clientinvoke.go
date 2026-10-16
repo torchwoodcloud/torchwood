@@ -19,11 +19,11 @@ import (
 // 客户端调用面（P2，设计 §4/§5）：Client API（END_USER）按 per-function 策略
 // 调用函数。链路 = RequireEndUser → 策略门（enabled / client_callable /
 // 匿名一期拒绝）→ 每用户限频（可配窗口，Redis 固定窗口 + DB 降级）→ 每用户
-// 并发闸门 → 既有参数化 createExecution（Source="client"、invoking_user_id、
-// 幂等键、data 严格 32KB）。执行身份铸造（P0）与账本 operator 溯源
-// （function+user）在既有链路内自动生效。
+// 并发闸门 → 既有 invokeInternal 入账链路（TriggerSourceClient、invoking_user_id、
+// 幂等键、data 严格 32KB）。执行签名（v4 §3：函数密钥对 endpoint 出站请求
+// 签名）与账本 operator 溯源（function+user）在既有链路内自动生效。
 //
-// 审计豁免（设计 §6 约束③）：本入口的审计载体是 function_executions 行
+// 审计豁免（设计 §6 约束③）：本入口的审计载体是 function_invocations 行
 // （含 invoking_user_id），该 RPC 在 AuditInterceptor 跳过清单内。
 const (
 	// clientQuotaKeyPrefix 是限频 Redis 键前缀（设计 §5）：
@@ -32,12 +32,12 @@ const (
 	// defaultPerUserConcurrency 是每用户并发闸门默认上限（config 可覆盖）。
 	// 默认 8（2026-09-21 上调，原 2）：Agent-Native 定位下单用户（同一 API
 	// key / 会话）并发突发是常态，2 会在第 3 个请求就排队、5s 超时 429；8
-	// 配合函数层 max_instances/池总量上限仍约束单用户挤占（闸门是每用户
-	// 近似全局的，真正防耗尽在 dispatcher 容量门）。
+	// 配合每用户限频仍约束单用户挤占（闸门是每用户近似全局的，v4 执行容量
+	// 归 substrate——平台侧挤压防线即本闸门 + 限频）。
 	defaultPerUserConcurrency = 8
 	// defaultUserQueueHeadTimeout 是并发闸门排队队首默认超时。默认 10s
-	// （2026-09-21 上调，原 5s）：与 dispatcher 池队首超时口径一致——闸门
-	// 放行后仍可能在该函数的池队列上等，闸门先超时等于白等。
+	// （2026-09-21 上调，原 5s）：同步调用方不得无界等待——闸门队首超时
+	// ResourceExhausted，由调用方决定重试或放弃。
 	defaultUserQueueHeadTimeout = 10 * time.Second
 	// quotaReason 是配额超额错误的 ErrorInfo.Reason。
 	quotaReason = "FUNCTIONS.INVOKE_QUOTA_EXCEEDED"
@@ -83,7 +83,7 @@ func (f *Functions) ClientInvoke(ctx context.Context, cmd ClientInvokeCommand) (
 		f.observeClientInvoke(cmd, InvokeResultNotFound)
 		return nil, status.Error(codes.NotFound, "function not found")
 	}
-	// enabled 门沿用既有 disabled 语义（createExecution 同型错误）。
+	// enabled 门沿用既有 disabled 语义（Invoke 同型错误）。
 	if !fn.Enabled {
 		return nil, status.Error(codes.FailedPrecondition, "function is disabled")
 	}
@@ -139,13 +139,13 @@ func (f *Functions) ClientInvoke(ctx context.Context, cmd ClientInvokeCommand) (
 			return nil, status.Error(codes.Internal, "idempotency conflict but existing execution unavailable")
 		}
 		// 终态 failed 按结果返回（设计 §4「函数执行失败是结果而非传输错误」）：
-		// runExecution 的错误分支已把 failed 记录入库（摘要/Error + 输出截断），
+		// runInvocation 的错误分支已把 failed 记录入库（摘要/Error + 输出截断），
 		// 同步快路径却把 err 一路上抛成 grpc UNKNOWN/500——调用方拿不到
 		// execution_id，也无法区分函数失败与平台故障。此处回收：rec 非空且
 		// status=failed 即函数结局，按 200+failed 返回记录。**超时除外**：
 		// DeadlineExceeded 维持错误传播（调用方按超时语义重试/放弃，mlbridge
 		// 映射 FUNCTION_TIMEOUT 信封而非 payload 层错误）。执行级失败指标
-		// （executions_total{status=failed}）已由 runExecution 侧记录，入口
+		// （executions_total{status=failed}）已由 runInvocation 侧记录，入口
 		// 计数按调用面成功（face 200）记 ok。
 		if rec != nil && rec.Status == domainfunctions.InvocationStatusFailed &&
 			!errors.Is(err, context.DeadlineExceeded) && status.Code(err) != codes.DeadlineExceeded {
@@ -160,7 +160,7 @@ func (f *Functions) ClientInvoke(ctx context.Context, cmd ClientInvokeCommand) (
 }
 
 // checkClientQuota 判定每用户限频：Redis 固定窗口优先；Redis 故障降级为
-// function_executions 窗口内计数（trigger_source='client' AND invoking_user_id
+// function_invocations 窗口内计数（trigger_source='client' AND invoking_user_id
 // AND created_at >= 窗口起点——依赖 Q7 保留分级先落地，48h 时间窗保证计数行
 // 在最长窗口内不被条数 prune 裁掉）；DB 亦不可用则拒绝（fail-closed，与
 // 配额哲学对齐——经济语义的限频不做通用限流式 fail-open 熔断）。

@@ -23,8 +23,8 @@
 | `mise run generate:proto` | `buf lint` → `buf generate` | proto → `genproto/`（§2） |
 | `mise run generate:config` | 在 `internal/pkg/config` 内 `protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto` | 生成 `config.pb.go`（§3） |
 | `mise run gen:authz-matrix` | `go run ./cmd/server/internal/runtime/cmd/genauthzmatrix` | 重新生成 `docs/developer/authz-matrix.md`（§5） |
-| `mise run wire:server` / `wire:worker` / `wire:dispatcher` / `wire:packer` | 各自 `cmd/<name>` 目录内 `go mod tidy` + `go run -mod=mod github.com/google/wire/cmd/wire` | 重算各自 `wire_gen.go`（§4） |
-| `mise run wire:all` | 上述四个 wire 任务依次执行 | 全量 Wire |
+| `mise run wire:server` / `wire:worker` | 各自 `cmd/<name>` 目录内 `go mod tidy` + `go run -mod=mod github.com/google/wire/cmd/wire` | 重算各自 `wire_gen.go`（§4） |
+| `mise run wire:all` | 上述两个 wire 任务依次执行 | 全量 Wire |
 | `mise run generate:all` | generate:proto → generate:config → wire:all | 一键全量生成 |
 | `mise run lint:proto` | `buf lint` + `buf breaking --against '.git#branch=origin/main'` | proto 兼容门禁 |
 | `mise run lint:go` | `go vet ./...` + `gofmt -l .` 为空 | Go 静态与格式检查 |
@@ -102,7 +102,7 @@ protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto
 | `cmd/<name>/wire.go` | `wireinject` 构建标签下的 `wireBootstrap`，函数体 `panic(wire.Build(ProviderSet))` |
 | `cmd/<name>/wire_gen.go` | Wire 生成的真实装配代码（禁手改） |
 
-覆盖范围：`cmd/server`（boot / api / app / infra / domain / runtime 各层 + NewAppConfig / NewComponents / NewBuildInfo 等）、`cmd/worker`、`cmd/dispatcher`、`cmd/packer`。`cmd/torchwood`（CLI）无 Wire，装配在 `cli/` 包手工完成。worker 的 `provides.go` 另行校验 `data.database.source` 必填，缺失拒绝启动。
+覆盖范围：`cmd/server`（boot / api / app / infra / domain / runtime 各层 + NewAppConfig / NewComponents / NewBuildInfo 等）、`cmd/worker`。`cmd/torchwood`（CLI）无 Wire，装配在 `cli/` 包手工完成。worker 的 `provides.go` 另行校验 `data.database.source` 必填，缺失拒绝启动。
 
 **改动 provider（新增 / 删除 / 改签名）后必须 `mise run wire:all`**，否则 `wire_gen.go` 与 provider 声明失步，编译或启动失败。注意各 wire 任务先跑 `go mod tidy`——依赖变更时 `go.mod` / `go.sum` 也会更新，因此它们同属生成面（见 §5 门禁 2 的漂移范围）。
 
@@ -114,7 +114,7 @@ protoc -I. --go_out=. --go_opt=paths=source_relative ./config.proto
 generate:all
  ├─ generate:proto      # proto/ → genproto/
  ├─ generate:config     # config.proto → config.pb.go
- └─ wire:all            # server / worker / dispatcher / packer 四份 wire_gen.go（+ go.mod/go.sum）
+ └─ wire:all            # server / worker 两份 wire_gen.go（+ go.mod/go.sum）
 
 gen:authz-matrix        # 独立于 generate:all：策略注册表 → docs/developer/authz-matrix.md
 ```

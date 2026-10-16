@@ -44,10 +44,15 @@ configs:
   bootstrap-roles.sql:
     external: true
 
-# ---------- 命名卷（平台注册为 fleetly-<app>-<key>-<appid8>） ----------
+# ---------- 命名卷（ADR-0074 external 声明律：平台预建 + 显式 external；
+# 平台卷名是 dns label（下划线非法），经 name: 映射） ----------
 volumes:
   redis_data:
+    external: true
+    name: redis-data
   minio_data:
+    external: true
+    name: minio-data
 
 services:
   # ==================== 常驻：redis ====================
@@ -98,11 +103,8 @@ services:
     # 到库共享网络（别名 = 实例名 torchwood-pg）。实例须先创建（runbook §0）。
     labels:
       fleetly.databases: "torchwood-pg"
-    # 9080（HTTP）+ 9060（gRPC h2c）：域名资源的后端端口由域名行显式携带，
-    # expose 供人读与首部署种子语义（OT-2）。
-    expose:
-      - "9080"
-      - "9060"
+    # 9080（HTTP）+ 9060（gRPC h2c）：后端端口由域名行显式携带（expose 字段
+    # 不在 fleetly service 方言白名单，P0-4 收口后摘除）。
     configs:
       - source: config.yaml
         target: /app/configs/config.yaml
@@ -196,9 +198,7 @@ services:
       fleetly.job.timeout: "10m"
       fleetly.databases: "torchwood-pg"
     # 一次性作业无长驻监听面；探针仅作工具面在位自检（平台按任务终态判定作业）。
-    healthcheck:
-      test: ["CMD", "/migrate", "-version"]
-
+    # 一次性作业无 healthcheck(P0-4 job 方言白名单不收;平台按任务终态判定作业)。
   # ==================== 一次性作业 2：db-bootstrap（运行账号 + 授权） ====================
   #
   # 托管实例没有 postgres 入口 initdb 钩子：tw_authenticator 的创建与
@@ -214,6 +214,7 @@ services:
       - -c
       - |
         set -u
+        exec 2>&1
         db_url="${FLEETLY_DB_TORCHWOOD_PG_URL:-}"
         if [ -z "$db_url" ]; then
           echo "FLEETLY_DB_TORCHWOOD_PG_URL is empty: the fleetly.databases label was not resolved (create the managed instance 'torchwood-pg' first)" >&2
@@ -249,9 +250,7 @@ services:
       fleetly.job: "init"
       fleetly.job.timeout: "10m"
       fleetly.databases: "torchwood-pg"
-    healthcheck:
-      test: ["CMD", "psql", "--version"]
-
+    # 一次性作业无 healthcheck(P0-4 job 方言白名单不收;平台按任务终态判定作业)。
   # ==================== 一次性作业 3：roles-sig（B15 密钥落库） ====================
   #
   # 迁移（000004）→ 本作业 → server/worker 启动：把 HMAC-SHA256(jwt.secret,
@@ -265,6 +264,7 @@ services:
       - -c
       - |
         set -u
+        exec 2>&1
         db_url="${FLEETLY_DB_TORCHWOOD_PG_URL:-}"
         if [ -z "$db_url" ]; then
           echo "FLEETLY_DB_TORCHWOOD_PG_URL is empty: the fleetly.databases label was not resolved (create the managed instance 'torchwood-pg' first)" >&2
@@ -288,5 +288,4 @@ services:
       fleetly.job: "init"
       fleetly.job.timeout: "10m"
       fleetly.databases: "torchwood-pg"
-    healthcheck:
-      test: ["CMD", "/usr/local/bin/torchwood", "version"]
+    # 一次性作业无 healthcheck(P0-4 job 方言白名单不收;平台按任务终态判定作业)。

@@ -55,11 +55,10 @@ func TestHub_ReplayGateOrdersAndDedups(t *testing.T) {
 
 // TestHub_SlowConsumerDisconnects（阶段④水位断开）：send buffer 满载后
 // 下一次入队触发 OnSlow（恰一次，参数 = 最后入队 seq），之后投递跳过
-// 该连接；无 OnSlow 的旧语义退化为丢帧续命。
+// 该连接。
 func TestHub_SlowConsumerDisconnects(t *testing.T) {
 	h := NewHub(nil)
 
-	// 新语义：带 OnSlow。
 	conn := &shared.RealtimeConn{
 		ID:           "slow",
 		ProjectID:    "default", // 与 testEnvelope 一致（B-1 项目过滤）
@@ -81,18 +80,13 @@ func TestHub_SlowConsumerDisconnects(t *testing.T) {
 	require.True(t, conn.SlowClosed())
 	require.Len(t, drainCount2(conn.Send), 2, "已入队的 2 帧保留在缓冲")
 
-	// 旧语义（无 OnSlow）：丢帧续命，连接不断。
-	legacy := newTestConn("legacy", databases.Principal{Roles: []string{"users", "user:u1"}})
-	legacy.Send = make(chan map[string]any, 1)
-	h.Subscribe(ch, legacy)
-	for i := 0; i < 3; i++ {
-		ev := testEnvelope()
-		ev.EventID = "le"
-		ev.Seq = 1
-		h.Dispatch(ev)
-	}
-	require.False(t, legacy.SlowClosed())
-	require.Len(t, drainCount2(legacy.Send), 1, "旧语义满水位丢帧（dedup 同 id 只入队首帧）")
+	// 慢断开后投递跳过该连接（不再入队、不再触发 OnSlow）。
+	ev := testEnvelope()
+	ev.EventID = "after-close"
+	ev.Seq = 99
+	h.Dispatch(ev)
+	require.Len(t, gotSeq, 1, "slowClosed 后 OnSlow 不重复触发")
+	require.Len(t, drainCount2(conn.Send), 2)
 }
 
 // drainCount2 收走当前缓冲的全部帧（hub_test.go 的 drain 需要 *testing.T，

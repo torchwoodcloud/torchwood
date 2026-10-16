@@ -53,7 +53,7 @@ func (r *stubRepo) ListInvocations(context.Context, string, string, int, int, do
 func (r *stubRepo) UpdateInvocation(context.Context, *domainfunctions.InvocationRecord) error {
 	return nil
 }
-func (r *stubRepo) RecoverOrphanInvocationsInProject(context.Context, string, time.Time, int) (int64, error) {
+func (r *stubRepo) RecoverOrphanInvocationsInProject(context.Context, string, int) (int64, error) {
 	return 0, nil
 }
 func (r *stubRepo) PruneOldInvocationsInProject(context.Context, string, string, int) error {

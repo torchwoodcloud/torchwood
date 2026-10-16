@@ -30,8 +30,9 @@ type InvokeTriggerCommand struct {
 	Source     string
 	SourceIP   string
 	// BodyLimitBytes 是本次调用的 data 上限（HTTP 触发器：封套含透传 body，
-	// 上限随执行器模式放宽——v1 env 通道硬上限 32KB，v2 dispatcher body
-	// 通道 ≤1MB；cron 触发器封套恒小于 1KB，传 0 用默认）。
+	// data 通道仅承载小载荷元数据；body 经 TriggerEnvelope + RawBody 直传，
+	// 上限 = MaxTriggerBodyLimit——缺省 64KB、可配至 1MB；cron 触发器封套
+	// 恒小于 1KB，传 0 用默认）。
 	BodyLimitBytes int
 	// ——HTTP 触发器封套通道（v4 §4.1 http.request params；cron/event 不设置）
 	// ——恒填充：TriggerEnvelope 携带封套元数据（不含 body）、RawBody 携带
@@ -375,9 +376,9 @@ func (f *Functions) RefreshEventTriggerIndex(ctx context.Context, budget int) (*
 }
 
 // MaxTriggerBodyLimit 返回 HTTP 触发器请求体的生效上限（字节）：配置值
-// （0 = 平台缺省 64KB）与执行器通道能力取小——dispatcher 走 body 通道，
-// 配置值（≤1MB）全额生效。handler 据此做 413 判定，保证超限请求在入口被拒
-// 而不是执行创建期报 400。
+// （0 = 平台缺省 64KB）钳制到平台封套通道上限（1MB）——v4 执行面在
+// endpoint 常驻服务，body 随封套直传、无执行器通道差异。handler 据此做
+// 413 判定，保证超限请求在入口被拒而不是执行创建期报 400。
 func (f *Functions) MaxTriggerBodyLimit(configured int) int {
 	limit := configured
 	if limit <= 0 {

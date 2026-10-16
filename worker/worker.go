@@ -28,17 +28,13 @@ const dequeuePollInterval = time.Second
 const maxProcessAttempts = 3
 
 // orphanRecoverInterval 是孤儿恢复的周期（P0.5：从「启动跑一次」升级为
-// 周期任务）。扫描范围 queued/building/running，staleAfter 按行内
-// timeout_seconds + 120s 宽限判定（NULL 回退 1h）。
+// 周期任务）。扫描范围 queued/running，staleAfter 按行内
+// timeout_seconds + 120s 宽限判定（迁移 000029 起列 NOT NULL，无 NULL 回退）。
 const orphanRecoverInterval = time.Minute
 
 // orphanRecoverTimeout 是单轮孤儿恢复的预算上限（有界批量标 failed；
 // WithoutCancel 使停机不腰斩在途轮次）。
 const orphanRecoverTimeout = 30 * time.Second
-
-// orphanStaleFallback 是 timeout_seconds 为 NULL 的存量行的回退口径
-// （v1 兼容；P0.5 起新行均带快照）。
-const orphanStaleFallback = time.Hour
 
 // pruneInterval 是执行记录保留策略的周期清理间隔（P0.5：同步热路径的
 // Prune 调用移除后，由本 ticker 低频驱动；失败仅记日志）。
@@ -176,7 +172,7 @@ func (w *Worker) Start(ctx context.Context) error {
 	w.mu.Unlock()
 
 	// 孤儿恢复（P0.5 周期任务）：启动即跑一轮，随后每分钟对账——
-	// queued/building/running 超 staleAfter 判 failed（兜底 Redis 重启丢
+	// queued/running 超 staleAfter 判 failed（兜底 Redis 重启丢
 	// 任务、server/worker 崩溃孤儿；含 v1 既有洞：同步快路径崩溃留 queued
 	// 永不入队）。全局预算 recoverOrphanBatch + 轮转游标由 app 层持有。
 	w.wg.Go(func() { _ = w.recoverLoop.Start(runCtx) })
@@ -224,7 +220,7 @@ func (w *Worker) Start(ctx context.Context) error {
 
 // recoverOnce 单轮孤儿恢复（预算 ctx 由骨架派生）。
 func (w *Worker) recoverOnce(ctx context.Context) error {
-	recovered, err := w.functions.RecoverOrphanInvocations(ctx, orphanStaleFallback)
+	recovered, err := w.functions.RecoverOrphanInvocations(ctx)
 	if err != nil {
 		return err
 	}
@@ -401,7 +397,7 @@ func (w *Worker) ackMessage(ctx context.Context, queue, ack string) {
 func requeue(payload []byte) (next []byte, ok bool) {
 	var m retryMessage
 	if err := json.Unmarshal(payload, &m); err != nil {
-		// 防御分支：consume 仅对 ProcessExecutionPayload 解析成功的 payload
+		// 防御分支：consume 仅对 ProcessInvocationPayload 解析成功的 payload
 		// 调用本函数，正常不可达；视为超限避免坏消息无限重试。
 		return nil, false
 	}

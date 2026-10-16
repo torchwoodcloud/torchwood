@@ -223,9 +223,8 @@ func (f *Functions) invokeInternal(ctx context.Context, cmd InvokeCommand) (*dom
 	// 成为审计/限频计数依据；并发/重复由调用方幂等（P2 客户端幂等键）与本
 	// 行无关；调用中崩溃行留在 running，由周期孤儿恢复按
 	// staleAfter = timeout_seconds + 120s 判 failed。
-	timeoutSnapshot := fn.TimeoutSeconds
 	rec.Status = domainfunctions.InvocationStatusRunning
-	rec.TimeoutSeconds = &timeoutSnapshot
+	rec.TimeoutSeconds = fn.TimeoutSeconds
 	if err := f.repo.CreateInvocation(ctx, rec); err != nil {
 		return nil, err
 	}
@@ -520,11 +519,11 @@ func (f *Functions) MarkInvocationFailed(ctx context.Context, projectID, functio
 
 // RecoverOrphanInvocations 按 public.projects 枚举 active 项目，将停留未终态
 // （queued/running）超过 staleAfter 的记录标记为 failed。由 worker 周期
-// ticker（1min）驱动；staleAfter 是 timeout_seconds 为 NULL 的存量行的回退
-// 口径，非空行按行内快照 + 120s 宽限判定（repo 侧 SQL 同源）。全局预算
-// recoverOrphanBatch（K22），foreach 项目扣减 remaining；项目遍历按轮转
-// 游标起始（队尾饥饿防护）。
-func (f *Functions) RecoverOrphanInvocations(ctx context.Context, staleAfter time.Duration) (int64, error) {
+// ticker（1min）驱动；staleAfter 按行内 timeout_seconds 快照 + 120s 宽限
+// 判定（repo 侧 SQL 同源；迁移 000029 起列为 NOT NULL，无 NULL 回退）。
+// 全局预算 recoverOrphanBatch（K22），foreach 项目扣减 remaining；项目遍历
+// 按轮转游标起始（队尾饥饿防护）。
+func (f *Functions) RecoverOrphanInvocations(ctx context.Context) (int64, error) {
 	if f.projects == nil {
 		return 0, nil
 	}
@@ -534,7 +533,6 @@ func (f *Functions) RecoverOrphanInvocations(ctx context.Context, staleAfter tim
 	}
 	n := len(all)
 	start := f.scanCursor.Start(n)
-	olderThan := f.nowFn().Add(-staleAfter)
 	remaining := recoverOrphanBatch
 	var recovered int64
 	stopped := -1
@@ -547,7 +545,7 @@ func (f *Functions) RecoverOrphanInvocations(ctx context.Context, staleAfter tim
 		if all[idx].Status != "active" {
 			continue
 		}
-		c, err := f.repo.RecoverOrphanInvocationsInProject(ctx, all[idx].ID, olderThan, remaining)
+		c, err := f.repo.RecoverOrphanInvocationsInProject(ctx, all[idx].ID, remaining)
 		if err != nil {
 			continue
 		}

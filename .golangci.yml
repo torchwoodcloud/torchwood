@@ -59,12 +59,9 @@ linters:
         linters: [gosec]
         text: "G115"
       # ParseMultipartForm 内存上限已有 MaxBytesReader + gRPC MaxRecvMsgSize 兜底。
-      - path: internal/api/serverhttp/(file_handler|functions_handler)\.go
+      - path: internal/api/serverhttp/file_handler\.go
         linters: [gosec]
         text: "G120"
-      - path: internal/app/functions/deployments\.go
-        linters: [gosec]
-        text: "G301"
       - path: internal/infra/bun/bunrepo/outbox_repo\.go
         linters: [gosec]
         text: "G115"
