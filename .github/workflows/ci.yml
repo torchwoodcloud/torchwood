@@ -68,6 +68,12 @@ jobs:
       TORCHWOOD_TEST_REDIS_ADDR: localhost:6379
       TORCHWOOD_TEST_ADMIN_DATABASE_SOURCE: postgres://torchwood:torchwood@localhost:5432/postgres?sslmode=disable
       TORCHWOOD_TEST_MINIO_ENDPOINT: http://localhost:9000
+      # L2 整机装配测试（cmd/server TestServerAssemblyL2）的 readiness 聚合
+      # MinIO 检查走 storage.s3.* 配置（与 testutil 的 TORCHWOOD_TEST_MINIO_*
+      # 是两套通道）；凭证 = 上方 MinIO 服务的 root 账号，endpoint 缺省
+      # 127.0.0.1:9000 已对齐服务端口，无需另设。
+      TORCHWOOD_STORAGE_S3_ACCESS_KEY_ID: minioadmin
+      TORCHWOOD_STORAGE_S3_SECRET_ACCESS_KEY: minioadmin
     steps:
       - uses: actions/checkout@v4
         with:
