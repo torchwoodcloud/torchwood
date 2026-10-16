@@ -16,7 +16,7 @@ func newIdentityContext(baseURL string) context.Context {
 	return WithIdentity(context.Background(), Identity{
 		ExecutionToken: testToken,
 		APIBaseURL:     baseURL,
-		ExecutionID:    testExecID,
+		ExecutionID:    "exec-client",
 		Source:         testSource,
 		InvokingUserID: testUserID,
 		ProjectID:      testProjectID,
@@ -37,7 +37,10 @@ func TestClientCreateDocument(t *testing.T) {
 	}))
 	defer fake.Close()
 
-	c := NewClient(newIdentityContext(fake.URL))
+	c, err := NewClient(newIdentityContext(fake.URL))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
 	docID, err := c.CreateDocument(context.Background(), "app", "users", map[string]any{"k": "v"})
 	if err != nil {
 		t.Fatalf("CreateDocument: %v", err)
@@ -80,7 +83,10 @@ func TestClientGetDocument(t *testing.T) {
 	}))
 	defer fake.Close()
 
-	c := NewClient(newIdentityContext(fake.URL))
+	c, err := NewClient(newIdentityContext(fake.URL))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
 	rec, err := c.GetDocument(context.Background(), "app", "users", "doc-1")
 	if err != nil {
 		t.Fatalf("GetDocument: %v", err)
@@ -113,8 +119,11 @@ func TestClientAPIError(t *testing.T) {
 	}))
 	defer fake.Close()
 
-	c := NewClient(newIdentityContext(fake.URL))
-	_, err := c.GetDocument(context.Background(), "app", "users", "doc-1")
+	c, err := NewClient(newIdentityContext(fake.URL))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	_, err = c.GetDocument(context.Background(), "app", "users", "doc-1")
 	apiErr, ok := err.(*APIError)
 	if !ok {
 		t.Fatalf("err = %v (%T), want *APIError", err, err)
@@ -136,7 +145,10 @@ func TestClientDoGeneric(t *testing.T) {
 	}))
 	defer fake.Close()
 
-	c := NewClient(newIdentityContext(fake.URL))
+	c, err := NewClient(newIdentityContext(fake.URL))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
 	var out struct {
 		Items []any `json:"items"`
 	}
@@ -148,13 +160,26 @@ func TestClientDoGeneric(t *testing.T) {
 	}
 }
 
+// TestClientWithoutIdentityFailsCleanly ctx 无身份 → 构造期清晰报错（不构造
+// 半残客户端）。
 func TestClientWithoutIdentityFailsCleanly(t *testing.T) {
-	c := NewClient(context.Background())
-	_, err := c.GetDocument(context.Background(), "app", "users", "doc-1")
-	if err == nil {
-		t.Fatal("expected error without identity")
+	c, err := NewClient(context.Background())
+	if err == nil || c != nil {
+		t.Fatalf("NewClient = %v, %v; want nil client with error", c, err)
 	}
-	if strings.Contains(err.Error(), "nil pointer") {
-		t.Fatalf("error should be a clean request error, got %v", err)
+	if !strings.Contains(err.Error(), "no execution identity") {
+		t.Fatalf("error = %v, want identity hint", err)
+	}
+}
+
+// TestClientMissingAPIBaseURLErrors 身份缺 apiBaseUrl（部署侧未注入
+// TW_API_BASE_URL）→ 构造期报错并指明部署需注入该 env。
+func TestClientMissingAPIBaseURLErrors(t *testing.T) {
+	c, err := NewClient(WithIdentity(context.Background(), Identity{ExecutionToken: testToken}))
+	if err == nil || c != nil {
+		t.Fatalf("NewClient = %v, %v; want nil client with error", c, err)
+	}
+	if !strings.Contains(err.Error(), "TW_API_BASE_URL") {
+		t.Fatalf("error = %v, want TW_API_BASE_URL hint", err)
 	}
 }

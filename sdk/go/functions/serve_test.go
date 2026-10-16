@@ -2,7 +2,6 @@ package functions
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net"
@@ -11,48 +10,19 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"sync"
 	"syscall"
 	"testing"
 	"time"
 )
 
-// noopHandler 是不做事的 fetch 风格 handler（守卫类测试用）。
-var noopHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-	_, _ = w.Write([]byte("ok"))
-})
-
-func newTestServer(t *testing.T, h contractHandler) *httptest.Server {
+// signedInvoke 组装经协议签名的 JSON-RPC invoke 请求（联调/测试辅助口径）：
+// body 必须原样发送（签名覆盖其字节），signature 置入 X-Tw-Signature 头。
+func signedInvoke(t *testing.T, secret, id string) (body, signature string) {
 	t.Helper()
-	c := &contract{handler: h, exit: func(int) {}, maxRequests: parseMaxRequests()}
-	ts := httptest.NewServer(c)
-	t.Cleanup(ts.Close)
-	return ts
-}
-
-func doJSON(t *testing.T, method, url string, headers map[string]string, body string) (*http.Response, string) {
-	t.Helper()
-	var reader io.Reader
-	if body != "" || method == http.MethodPost {
-		reader = strings.NewReader(body)
-	}
-	req, err := http.NewRequest(method, url, reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return resp, string(raw)
+	body = `{"jsonrpc":"2.0","method":"invoke","id":"` + id + `"}`
+	ts := time.Now().Unix()
+	signature = BuildSignatureHeader(ts, [][2]string{{"v1", ComputeSignature(secret, ts, []byte(body))}})
+	return body, signature
 }
 
 func decodeEnvelope(t *testing.T, body string) map[string]any {
@@ -64,228 +34,68 @@ func decodeEnvelope(t *testing.T, body string) map[string]any {
 	return env
 }
 
-// —— 契约守卫：health / 405 / 404 / 413 ——
+// —— 可选探针 /_tw/health（不走验签；部署平台用） ——
 
-func TestContractGuards(t *testing.T) {
-	ts := newTestServer(t, resolveContract(noopHandler))
+func TestHealthProbe(t *testing.T) {
+	mux := NewMux()
+	mux.Invoke(func(_ context.Context, _ json.RawMessage) (any, error) { return "ok", nil })
+	h := NewServer(mux, testSecret)
 
-	// health：200，就绪恒 ready。
-	resp, body := doJSON(t, http.MethodGet, ts.URL+healthPath, nil, "")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("health status = %d, want 200", resp.StatusCode)
+	// GET → 200 ok/ready（无需签名：部署平台探活不持密钥）。
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, healthPath, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("health status = %d, want 200", rec.Code)
 	}
-	env := decodeEnvelope(t, body)
+	env := decodeEnvelope(t, rec.Body.String())
 	if env["ok"] != true || env["ready"] != true {
-		t.Fatalf("health envelope = %s, want ok/ready true", body)
-	}
-	if _, ok := env["served"]; !ok {
-		t.Fatalf("health envelope missing served: %s", body)
+		t.Fatalf("health envelope = %s, want ok/ready true", rec.Body.String())
 	}
 
-	// GET / → 405 + Allow: POST。
-	resp, body = doJSON(t, http.MethodGet, ts.URL+"/", nil, "")
-	if resp.StatusCode != http.StatusMethodNotAllowed {
-		t.Fatalf("GET / status = %d, want 405", resp.StatusCode)
+	// POST → 405 + Allow: GET。
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, healthPath, strings.NewReader("{}")))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST health status = %d, want 405", rec.Code)
 	}
-	if allow := resp.Header.Get("Allow"); allow != http.MethodPost {
-		t.Fatalf("GET / Allow = %q, want POST", allow)
-	}
-	if msg := decodeEnvelope(t, body)["error"]; msg == "" {
-		t.Fatalf("405 envelope missing error: %s", body)
-	}
-
-	// POST /_tw/health → 405 + Allow: GET。
-	resp, _ = doJSON(t, http.MethodPost, ts.URL+healthPath, nil, "{}")
-	if resp.StatusCode != http.StatusMethodNotAllowed {
-		t.Fatalf("POST health status = %d, want 405", resp.StatusCode)
-	}
-	if allow := resp.Header.Get("Allow"); allow != http.MethodGet {
+	if allow := rec.Header().Get("Allow"); allow != http.MethodGet {
 		t.Fatalf("POST health Allow = %q, want GET", allow)
 	}
 
-	// 未知路径 → 404。
-	resp, body = doJSON(t, http.MethodGet, ts.URL+"/nope", nil, "")
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("GET /nope status = %d, want 404", resp.StatusCode)
-	}
-	if msg := decodeEnvelope(t, body)["error"]; msg != "not found" {
-		t.Fatalf("404 envelope error = %v, want not found", msg)
-	}
-
-	// body 超 4MB → 413（不计 served）。
-	big := strings.Repeat("x", maxBodyBytes+1)
-	resp, body = doJSON(t, http.MethodPost, ts.URL+"/", nil, big)
-	if resp.StatusCode != http.StatusRequestEntityTooLarge {
-		t.Fatalf("oversized body status = %d, want 413", resp.StatusCode)
-	}
-	if msg := decodeEnvelope(t, body)["error"]; msg != "request body too large" {
-		t.Fatalf("413 envelope error = %v", msg)
-	}
-
-	// health 的 served 计数不受守卫路径影响（413/404/405 不计数）。
-	_, body = doJSON(t, http.MethodGet, ts.URL+healthPath, nil, "")
-	if served := decodeEnvelope(t, body)["served"]; served != float64(0) {
-		t.Fatalf("served = %v, want 0 (guards are uncounted)", served)
+	// 探针之外仍验签必经：未签名 invoke → 401（探针旁路不放大攻击面）。
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"jsonrpc":"2.0","method":"invoke","id":"x"}`)))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("unsigned invoke status = %d, want 401", rec.Code)
 	}
 }
 
-// —— main 风格契约：TW_DATA 非法 JSON → 400（计数） ——
+// —— SIGTERM drain：listener 关停（新连接拒绝）+ 等在途完成 + 兜底强退 ——
 
-func TestContractInvalidTWData400(t *testing.T) {
-	handler := mainAdapter(func(_ context.Context, _ json.RawMessage) (any, error) {
-		t.Fatal("handler must not run on invalid TW_DATA")
-		return nil, nil
-	})
-	ts := newTestServer(t, handler)
-	resp, body := doJSON(t, http.MethodPost, ts.URL+"/", nil, "{not json")
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", resp.StatusCode)
-	}
-	if msg, _ := decodeEnvelope(t, body)["error"].(string); !strings.Contains(msg, "invalid TW_DATA JSON") {
-		t.Fatalf("error = %q, want contains invalid TW_DATA JSON", msg)
-	}
-	// 400 计入 served（runner 同款）。
-	_, body = doJSON(t, http.MethodGet, ts.URL+healthPath, nil, "")
-	if served := decodeEnvelope(t, body)["served"]; served != float64(1) {
-		t.Fatalf("served = %v, want 1", served)
-	}
-}
-
-// —— per-request 超时：到点 500 封套 + 放弃等待 + 残跑不泄漏 ——
-
-func TestContractTimeoutAbandons(t *testing.T) {
-	release := make(chan struct{})
-	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("late"))
-		<-release // 超时后仍残跑
-	})
-	ts := newTestServer(t, fetchAdapter{inner: handler})
-
-	start := time.Now()
-	// runner.js 的 Number() 语义：小数秒合法。
-	resp, body := doJSON(t, http.MethodPost, ts.URL+"/", map[string]string{"X-Tw-Timeout-Seconds": "0.2"}, "data")
-	elapsed := time.Since(start)
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500", resp.StatusCode)
-	}
-	msg, _ := decodeEnvelope(t, body)["error"].(string)
-	if !strings.Contains(msg, "timed out") {
-		t.Fatalf("error = %q, want contains timed out", msg)
-	}
-	if elapsed > 1200*time.Millisecond {
-		t.Fatalf("timeout abandonment took %s, want well under handler runtime", elapsed)
-	}
-
-	// 放弃后 inflight 已按请求生命周期释放；残跑 goroutine 结束不产生二次
-	// 响应/计数（缓冲 1 channel）。
-	_, body = doJSON(t, http.MethodGet, ts.URL+healthPath, nil, "")
-	env := decodeEnvelope(t, body)
-	if env["inflight"] != float64(0) {
-		t.Fatalf("inflight = %v, want 0 (released at abandonment)", env["inflight"])
-	}
-	close(release)
-	time.Sleep(50 * time.Millisecond)
-	_, body = doJSON(t, http.MethodGet, ts.URL+healthPath, nil, "")
-	env = decodeEnvelope(t, body)
-	if env["served"] != float64(1) {
-		t.Fatalf("served = %v, want 1 (abandoned result dropped)", env["served"])
-	}
-}
-
-// —— TW_MAX_REQUESTS：每响应后计数达标自退出（Flush 后 Exit） ——
-
-func TestMaxRequestsAutoExit(t *testing.T) {
-	t.Setenv("TW_MAX_REQUESTS", "2")
-	var mu sync.Mutex
-	var exits []int
-	c := newContract(noopHandler, func(code int) {
-		mu.Lock()
-		defer mu.Unlock()
-		exits = append(exits, code)
-	})
-	post := func() {
-		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
-		c.ServeHTTP(httptest.NewRecorder(), req)
-	}
-	post()
-	mu.Lock()
-	if len(exits) != 0 {
-		t.Fatalf("exit called too early: %v", exits)
-	}
-	mu.Unlock()
-	post() // served==2 → 自退出
-	mu.Lock()
-	defer mu.Unlock()
-	if len(exits) != 1 || exits[0] != 0 {
-		t.Fatalf("exits = %v, want [0] after 2nd response", exits)
-	}
-}
-
-func TestMaxRequestsDisabledOnZero(t *testing.T) {
-	t.Setenv("TW_MAX_REQUESTS", "0") // 显式 0 = 关闭
-	var exits []int
-	c := newContract(noopHandler, func(code int) { exits = append(exits, code) })
-	for i := 0; i < 3; i++ {
-		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
-		c.ServeHTTP(httptest.NewRecorder(), req)
-	}
-	if len(exits) != 0 {
-		t.Fatalf("exits = %v, want none (disabled)", exits)
-	}
-}
-
-// —— SIGTERM drain：停止接新 + 等在途 + 兜底强退 ——
-
-// TestDrainStateRejectsNewRequests 直接驱动 drain 状态机（平台无关；
-// SIGTERM 信号投递本身是 Linux/POSIX 语义，端到端形态见
-// TestListenSigtermDrainEndToEnd——Windows 跳过）。
-func TestDrainStateRejectsNewRequests(t *testing.T) {
-	c := newContract(noopHandler, func(int) {})
-	c.draining.Store(true)
-
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
-	rec := httptest.NewRecorder()
-	c.ServeHTTP(rec, req)
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want 503", rec.Code)
-	}
-	if msg := decodeEnvelope(t, rec.Body.String())["error"]; msg != "instance draining" {
-		t.Fatalf("error = %v, want instance draining", msg)
-	}
-
-	// health 在 drain 期仍 200（runner 同款：探活不因 drain 翻脸）。
-	hw := httptest.NewRecorder()
-	c.ServeHTTP(hw, httptest.NewRequest(http.MethodGet, healthPath, nil))
-	if hw.Code != http.StatusOK {
-		t.Fatalf("health during drain = %d, want 200", hw.Code)
-	}
-}
-
-// TestListenSigtermDrainEndToEnd 走真实 serve 循环：health → 慢请求在途 →
-// SIGTERM → 停止接新（503）→ 在途完成 → exit(0)。信号投递为 Linux/POSIX
-// 语义，Windows 跳过（drain 状态机已由 TestDrainStateRejectsNewRequests
-// 平台无关覆盖）。
+// TestListenSigtermDrainEndToEnd 走真实 serve 循环：health 探针 → 慢 invoke
+// 在途 → SIGTERM → 新连接拒绝 → 在途完成 → exit(0)。信号投递为 Linux/POSIX
+// 语义，Windows 跳过。
 func TestListenSigtermDrainEndToEnd(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("SIGTERM 不可投递于 Windows（Linux/POSIX 语义）；drain 语义由注入通道测试覆盖")
+		t.Skip("SIGTERM 不可投递于 Windows（Linux/POSIX 语义）")
 	}
-	slow := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(300 * time.Millisecond)
-		_, _ = w.Write([]byte("slow-done"))
+	release := make(chan struct{})
+	mux := NewMux()
+	mux.Invoke(func(_ context.Context, _ json.RawMessage) (any, error) {
+		<-release // 慢 handler：drain 必须等它完成
+		return "slow-done", nil
 	})
 	sig := make(chan os.Signal, 1)
 	addrCh := make(chan string, 1)
 	exited := make(chan int, 1)
-	t.Setenv("TW_RUNNER_PORT", "0") // 临时端口
-	t.Setenv("TW_DRAIN_TIMEOUT_MS", "5000")
+	t.Setenv(envPort, "0") // 临时端口
+	t.Setenv(envDrainTimeoutMS, "5000")
 	go func() {
-		_ = serve(resolveContract(slow), serveOpts{exit: func(code int) { exited <- code }, addrCh: addrCh, sig: sig})
+		_ = serve(NewServer(mux, testSecret), serveOpts{exit: func(code int) { exited <- code }, addrCh: addrCh, sig: sig})
 	}()
 	// 通配监听的实际地址是 [::]:PORT（Go 双栈偏好，golang/go#7411）而非
-	// 0.0.0.0:PORT——按端口提取归一到 loopback（旧的 0.0.0.0 字符串替换
-	// 永远落空，[::] 不在标准库代理豁免清单内，携带 http_proxy 的环境下
-	// health 探针会被发进本地代理回 502）。
+	// 0.0.0.0:PORT——按端口提取归一到 loopback（携带 http_proxy 的环境下
+	// 探针会被发进本地代理回 502）。
 	_, port, _ := net.SplitHostPort(<-addrCh)
 	base := "http://127.0.0.1:" + port
 	t.Setenv("HTTP_PROXY", "")
@@ -293,58 +103,69 @@ func TestListenSigtermDrainEndToEnd(t *testing.T) {
 	t.Setenv("HTTPS_PROXY", "")
 	t.Setenv("https_proxy", "")
 
-	// 就绪探针。
-	resp, _ := doJSON(t, http.MethodGet, base+healthPath, nil, "")
+	// 就绪探针（不走验签）。
+	probeReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, base+healthPath, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(probeReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("health = %d, want 200", resp.StatusCode)
+		t.Fatalf("health = %d %s, want 200", resp.StatusCode, raw)
 	}
 
-	// 在途慢请求（异步）。
+	// 在途慢请求（经签名 + 身份头）。
 	slowDone := make(chan int, 1)
 	go func() {
-		r, _ := doJSON(t, http.MethodPost, base+"/", nil, `{}`)
+		body, sig := signedInvoke(t, testSecret, "drain-1")
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, base+"/", strings.NewReader(body))
+		if err != nil {
+			slowDone <- -1
+			return
+		}
+		req.Header.Set(hdrSignature, sig)
+		req.Header.Set(hdrExecutionToken, testToken)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			slowDone <- -1 // 连接被拒等传输失败
+			return
+		}
+		_, _ = io.Copy(io.Discard, r.Body)
+		_ = r.Body.Close()
 		slowDone <- r.StatusCode
 	}()
-	time.Sleep(50 * time.Millisecond) // 让慢请求进入 handler
+	time.Sleep(100 * time.Millisecond) // 让慢请求进入 handler
 
 	sig <- syscall.SIGTERM
 
-	// 停止接新：SIGTERM 后新请求不再成功。到达 handler 的吃 503（drain
-	// 拒新），listener 已关的吃 refused/reset（LB 摘实例信号）——同一语义
-	// 在 Shutdown 竞速窗口两侧的表现，端到端只断言"不再 200"；503 形状由
-	// 平台无关的 TestDrainStateRejectsNewRequests 覆盖。
+	// 新连接被拒：listener 已关（refused/reset 即 LB 摘实例信号）。
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		req, rerr := http.NewRequest(http.MethodPost, base+"/", strings.NewReader(`{}`))
+		req, rerr := http.NewRequestWithContext(context.Background(), http.MethodPost, base+"/", strings.NewReader(`{}`))
 		if rerr != nil {
 			t.Fatal(rerr)
 		}
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			break // listener 已关：refused/reset 即停接新
+			break // refused/reset：停接新生效
 		}
-		raw, _ := io.ReadAll(resp.Body)
+		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
-		if resp.StatusCode == http.StatusServiceUnavailable {
-			if msg := decodeEnvelope(t, string(raw))["error"]; msg != "instance draining" {
-				t.Fatalf("error = %v, want instance draining", msg)
-			}
-			break
-		}
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("post-sigterm status = %d, want 503 or refused", resp.StatusCode)
-		}
 		if time.Now().After(deadline) {
-			t.Fatal("post-sigterm requests still served 200 within 2s")
+			t.Fatal("post-sigterm connections still accepted within 2s")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	// 在途请求被等完成后正常收场。
+	// 放行在途 handler → 响应送达（drain 等待完成）→ exit(0)。
+	close(release)
 	if code := <-slowDone; code != http.StatusOK {
 		t.Fatalf("slow request status = %d, want 200 (drained)", code)
 	}
-	// drain 完成 → exit(0)。
 	select {
 	case code := <-exited:
 		if code != 0 {
@@ -357,41 +178,21 @@ func TestListenSigtermDrainEndToEnd(t *testing.T) {
 
 // —— env 解析单元 ——
 
-func TestParseTimeoutSeconds(t *testing.T) {
-	cases := []struct {
-		header string
-		want   time.Duration
-	}{
-		{"", defaultRequestTimeout},
-		{"abc", defaultRequestTimeout},
-		{"0", defaultRequestTimeout},
-		{"-3", defaultRequestTimeout},
-		{"30", 30 * time.Second},
-		{"0.2", 200 * time.Millisecond},
-		{" 2 ", 2 * time.Second},
-	}
-	for _, tc := range cases {
-		if got := parseTimeoutSeconds(tc.header); got != tc.want {
-			t.Errorf("parseTimeoutSeconds(%q) = %s, want %s", tc.header, got, tc.want)
-		}
-	}
-}
-
-func TestParseMaxRequests(t *testing.T) {
+func TestListenPort(t *testing.T) {
 	cases := []struct {
 		env  string
 		want int
 	}{
-		{"", defaultMaxRequests}, // 缺省 1000（runner.js 同款）
-		{"0", 0},
-		{"-1", 0},
-		{"abc", 0},
-		{"5", 5},
+		{"", defaultPort},
+		{"abc", defaultPort},
+		{"-1", defaultPort},
+		{"0", 0}, // 0 = 随机端口（临时端口语义合法）
+		{"18080", 18080},
 	}
 	for _, tc := range cases {
-		t.Setenv("TW_MAX_REQUESTS", tc.env)
-		if got := parseMaxRequests(); got != tc.want {
-			t.Errorf("parseMaxRequests(%q) = %d, want %d", tc.env, got, tc.want)
+		t.Setenv(envPort, tc.env)
+		if got := listenPort(); got != tc.want {
+			t.Errorf("listenPort(%q) = %d, want %d", tc.env, got, tc.want)
 		}
 	}
 }
@@ -407,28 +208,9 @@ func TestDrainTimeout(t *testing.T) {
 		{"250", 250 * time.Millisecond},
 	}
 	for _, tc := range cases {
-		t.Setenv("TW_DRAIN_TIMEOUT_MS", tc.env)
+		t.Setenv(envDrainTimeoutMS, tc.env)
 		if got := drainTimeout(); got != tc.want {
 			t.Errorf("drainTimeout(%q) = %s, want %s", tc.env, got, tc.want)
 		}
 	}
 }
-
-func TestParseTriggerEnvelope(t *testing.T) {
-	if parseTriggerEnvelope("") != nil {
-		t.Fatal("empty header must yield nil envelope")
-	}
-	if parseTriggerEnvelope("!!!not base64") != nil {
-		t.Fatal("invalid base64 must yield nil envelope")
-	}
-	if parseTriggerEnvelope("bm90IGpzb24=") != nil { // "not json"
-		t.Fatal("invalid json must yield nil envelope")
-	}
-	enc := base64Of(`{"method":"put","path":"/x","raw_query":"a=1","headers":{"k":["v"]}}`)
-	env := parseTriggerEnvelope(enc)
-	if env == nil || env.Method != "put" || env.Path != "/x" || env.RawQuery != "a=1" || len(env.Headers["k"]) != 1 {
-		t.Fatalf("envelope = %+v", env)
-	}
-}
-
-func base64Of(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }

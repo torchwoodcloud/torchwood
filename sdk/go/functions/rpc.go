@@ -1,16 +1,17 @@
 package functions
 
-// v4 JSON-RPC 2.0 服务面（docs/design/functions-v4.md §4）：函数常驻服务的
-// 标准入口——验签中间件 + method 分发（invoke / cron.tick / event.document /
-// http.request），复用 Mux 注册的 handler 与既有 adapter（dispatchInfo.rawBody
-// 直通 TW_DATA 语义）。响应恒 200（函数成败在 result / error 对象）；验签
-// 失败 401（传输层）。
+// v4 JSON-RPC 2.0 服务面（RPC 轴，docs/design/functions-v4.md §4.1）：函数
+// 常驻服务的标准入口之一——验签中间件 + method 分发（invoke / http.request），
+// 直通 Mux 注册的 handler。响应恒 200（送达成功；函数成败在 result / error
+// 对象）；验签失败 401（传输层，verify.go）。
 
 import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"runtime/debug"
 	"time"
 )
 
@@ -30,6 +31,20 @@ const (
 	rpcCodeInternalError  = -32603
 	rpcCodeServerRange    = -32000
 )
+
+// 身份投影头（协议 §4：传输与载荷分离）。X-Tw-Execution-Id /
+// X-Tw-Trigger-Envelope / X-Tw-Timeout-Seconds 三头已随 v4 退役——execution
+// id 走 JSON-RPC body、触发器封套走 http.request params、超时由调用方 ctx
+// 承载。未知 x-tw-* 头一律忽略（协议演进宪法，见包文档）。
+const (
+	hdrExecutionToken = "X-Tw-Execution-Token" // #nosec G101 -- 头名常量非凭证（与平台 protocol.go 同口径）
+	hdrSource         = "X-Tw-Source"
+	hdrInvokingUserID = "X-Tw-Invoking-User-Id"
+	hdrProjectID      = "X-Tw-Project-Id"
+)
+
+// serverSourceFallback 是 x-tw-source 缺省回落（事件轴只发 token 头，恒落此值）。
+const serverSourceFallback = "server"
 
 // rpcRequest / rpcResponse 是 wire 形态。
 type rpcRequest struct {
@@ -58,7 +73,18 @@ type httpResult struct {
 	BodyB64 string            `json:"body_b64,omitempty"`
 }
 
-// http.request 的 params 形状（与平台 HTTPRequestParams 同构）。
+// triggerEnvelope 是触发器封套元数据（http.request params.envelope 的 wire
+// 形状；形状对照 internal/domain/functions TriggerEnvelope——只读对齐，SDK
+// 自持结构体）。额外字段一律忽略（协议演进宪法）。
+type triggerEnvelope struct {
+	Method   string              `json:"method"`
+	Path     string              `json:"path"`
+	RawQuery string              `json:"raw_query"`
+	Headers  map[string][]string `json:"headers"`
+}
+
+// httpRequestParams 是 http.request 的 params 形状（与平台 HTTPRequestParams
+// 同构）。
 type httpRequestParams struct {
 	Envelope *triggerEnvelope `json:"envelope"`
 	BodyB64  string           `json:"body_b64,omitempty"`
@@ -68,9 +94,39 @@ type httpRequestParams struct {
 // 超时裁剪 ctx；此为函数侧兜底，防止注册了慢 handler 的服务被单请求挂死）。
 const rpcRequestTimeout = 30 * time.Second
 
-// serveRPCBody 解析并分发 JSON-RPC 请求（body 已由统一入口 NewServer 读取
-// 并探测过形态）。
-func serveRPCBody(w http.ResponseWriter, r *http.Request, body []byte, mux *Mux) {
+// identityContext 从请求头 + 载荷关联键 + 部署 env 组装执行身份（六件）：
+// token / source / invoking-user / project 四件走身份头（source 缺省回落
+// "server"），executionID 是本次执行的关联键（RPC 轴 = JSON-RPC id，平台
+// 白送的 invocation 关联），apiBaseURL 是平台 API base（server 构建期读入
+// 的 TW_API_BASE_URL，每请求恒定）。X-Tw-Protocol-Version 不匹配时宽容继续
+// （平台升版不立即打断旧 FDK；日志观察点后续接）。
+func identityContext(r *http.Request, executionID, apiBaseURL string) context.Context {
+	return WithIdentity(r.Context(), Identity{
+		ExecutionToken: r.Header.Get(hdrExecutionToken),
+		APIBaseURL:     apiBaseURL,
+		ExecutionID:    executionID,
+		Source:         orDefault(r.Header.Get(hdrSource), serverSourceFallback),
+		InvokingUserID: r.Header.Get(hdrInvokingUserID),
+		ProjectID:      r.Header.Get(hdrProjectID),
+	})
+}
+
+func orDefault(s, def string) string {
+	if s == "" {
+		return def
+	}
+	return s
+}
+
+// formatPanic 归一 panic 现场为 error 对象消息（含栈，平台侧 ≤1MiB 读取上
+// 限兜底）。
+func formatPanic(rec any) string {
+	return fmt.Sprintf("panic: %v\n\n%s", rec, debug.Stack())
+}
+
+// serveRPC 解析并分发 JSON-RPC 请求（body 已由统一入口 NewServer 读取并探
+// 测过形态）。
+func (s *server) serveRPC(w http.ResponseWriter, r *http.Request, body []byte) {
 	var req rpcRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeRPC(w, "", &rpcError{Code: rpcCodeParseError, Message: "malformed json-rpc request: " + err.Error()})
@@ -81,52 +137,56 @@ func serveRPCBody(w http.ResponseWriter, r *http.Request, body []byte, mux *Mux)
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(identityContext(r), rpcRequestTimeout)
+	ctx, cancel := context.WithTimeout(identityContext(r, req.ID, s.apiBaseURL), rpcRequestTimeout)
 	defer cancel()
 
 	switch req.Method {
 	case RPCMethodInvoke:
-		serveRPCMain(ctx, w, &req, mux)
+		s.serveRPCMain(ctx, w, &req)
 	case RPCMethodHTTPRequest:
-		serveRPCHTTP(ctx, w, &req, mux)
+		s.serveRPCHTTP(ctx, w, &req)
 	default:
 		writeRPC(w, req.ID, &rpcError{Code: rpcCodeMethodNotFound, Message: "unknown method " + req.Method})
 	}
 }
 
-// serveRPCMain 处理 invoke：params 即 TW_DATA 语义，直通 mainAdapter。
-func serveRPCMain(ctx context.Context, w http.ResponseWriter, req *rpcRequest, mux *Mux) {
-	mux.mu.RLock()
-	var handler contractHandler
-	if mux.invoke != nil {
-		handler = mainAdapter(mux.invoke)
-	}
-	mux.mu.RUnlock()
-	if handler == nil {
+// serveRPCMain 处理 invoke：params 即函数载荷（原 TW_DATA JSON，缺省补空对
+// 象零值安全），直通 Mux.Invoke 注册的 handler。
+func (s *server) serveRPCMain(ctx context.Context, w http.ResponseWriter, req *rpcRequest) {
+	invoke := s.mux.snapshot().invoke
+	if invoke == nil {
 		writeRPC(w, req.ID, &rpcError{Code: rpcCodeMethodNotFound, Message: "no Invoke handler registered"})
 		return
 	}
+	data := req.Params
+	if len(data) == 0 {
+		data = json.RawMessage("{}")
+	} else if !json.Valid(data) {
+		writeRPC(w, req.ID, &rpcError{Code: rpcCodeInvalidParams, Message: "invoke params: invalid JSON"})
+		return
+	}
 
-	res := handler.serveContract(ctx, &dispatchInfo{rawBody: req.Params})
-	env, ok := res.envelope.(*mainEnvelope)
-	if !ok {
-		writeRPC(w, req.ID, &rpcError{Code: rpcCodeInternalError, Message: "unexpected contract envelope"})
-		return
-	}
-	if !env.OK {
-		code := rpcCodeServerRange
-		if res.status == http.StatusBadRequest {
-			code = rpcCodeInvalidParams
+	defer func() {
+		if rec := recover(); rec != nil {
+			writeRPC(w, req.ID, &rpcError{Code: rpcCodeServerRange, Message: formatPanic(rec)})
 		}
-		writeRPC(w, req.ID, &rpcError{Code: code, Message: env.Error})
+	}()
+	out, err := invoke(ctx, data)
+	if err != nil {
+		writeRPC(w, req.ID, &rpcError{Code: rpcCodeServerRange, Message: err.Error()})
 		return
 	}
-	writeRPC(w, req.ID, env.Result)
+	raw, err := json.Marshal(out)
+	if err != nil {
+		writeRPC(w, req.ID, &rpcError{Code: rpcCodeInternalError, Message: "handler result is not JSON-serializable: " + err.Error()})
+		return
+	}
+	writeRPC(w, req.ID, json.RawMessage(raw))
 }
 
-// serveRPCHTTP 处理 http.request：params 组 dispatchInfo（envelope + body），
-// 复用 fetchAdapter，fetchEnvelope 映射为 httpResult。
-func serveRPCHTTP(ctx context.Context, w http.ResponseWriter, req *rpcRequest, mux *Mux) {
+// serveRPCHTTP 处理 http.request：params 组触发器封套 + body，还原真请求交
+// Fetch handler，响应捕获为 httpResult（status/headers/body_b64）。
+func (s *server) serveRPCHTTP(ctx context.Context, w http.ResponseWriter, req *rpcRequest) {
 	var params httpRequestParams
 	if len(req.Params) > 0 {
 		if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -138,9 +198,7 @@ func serveRPCHTTP(ctx context.Context, w http.ResponseWriter, req *rpcRequest, m
 		writeRPC(w, req.ID, &rpcError{Code: rpcCodeInvalidParams, Message: "http.request params: missing envelope"})
 		return
 	}
-	mux.mu.RLock()
-	fetch := mux.fetch
-	mux.mu.RUnlock()
+	fetch := s.mux.snapshot().fetch
 	if fetch == nil {
 		writeRPC(w, req.ID, &rpcError{Code: rpcCodeMethodNotFound, Message: "no Fetch handler registered"})
 		return
@@ -150,40 +208,12 @@ func serveRPCHTTP(ctx context.Context, w http.ResponseWriter, req *rpcRequest, m
 	if decoded, err := base64.StdEncoding.DecodeString(params.BodyB64); err == nil {
 		raw = string(decoded)
 	}
-	res := fetchAdapter{inner: fetch}.serveContract(ctx, &dispatchInfo{
-		rawBody:  []byte(raw),
-		envelope: params.Envelope,
-	})
-	env, ok := res.envelope.(*fetchEnvelope)
-	if !ok {
-		writeRPC(w, req.ID, &rpcError{Code: rpcCodeInternalError, Message: "unexpected contract envelope"})
-		return
-	}
-	if !env.OK {
+	res, err := invokeFetch(ctx, fetch, params.Envelope, []byte(raw))
+	if err != nil {
 		writeRPC(w, req.ID, &rpcError{Code: rpcCodeServerRange, Message: "http request failed"})
 		return
 	}
-	writeRPC(w, req.ID, httpResult{Status: env.Status, Headers: env.Headers, BodyB64: env.BodyB64})
-}
-
-// identityContext 从请求头组装执行身份（与契约循环同款头族；v4 下
-// X-Tw-Execution-Id 头退役、id 走 JSON-RPC body——身份头仅剩 token/source/
-// invoking-user/project 四件）。X-Tw-Protocol-Version 不匹配时宽容继续
-// （平台升版不立即打断旧 FDK；日志观察点后续接）。
-func identityContext(r *http.Request) context.Context {
-	return WithIdentity(r.Context(), Identity{
-		ExecutionToken: r.Header.Get(hdrExecutionToken),
-		Source:         orDefault(r.Header.Get(hdrSource), "server"),
-		InvokingUserID: r.Header.Get(hdrInvokingUserID),
-		ProjectID:      r.Header.Get(hdrProjectID),
-	})
-}
-
-func orDefault(s, def string) string {
-	if s == "" {
-		return def
-	}
-	return s
+	writeRPC(w, req.ID, res)
 }
 
 // writeRPC 恒写 200（送达成功；函数成败在 body）：payload 为 *rpcError

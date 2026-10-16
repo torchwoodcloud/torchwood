@@ -173,7 +173,7 @@ import (
 func main() {
     mux := functions.NewMux()
     mux.Invoke(func(ctx context.Context, data json.RawMessage) (any, error) {
-        // RPC 轴 invoke：TW_DATA 已解出；身份读 functions.FromContext(ctx)
+        // RPC 轴 invoke：函数载荷已解出（原 TW_DATA JSON）；身份读 functions.FromContext(ctx)
         return map[string]any{"pong": string(data)}, nil
     })
     mux.Cron(func(ctx context.Context, tick functions.CronTick) error { ... })       // 事件轴 cron.tick
@@ -184,7 +184,7 @@ func main() {
 }
 ```
 
-`functions.Verify(secrets...)` 可单独作中间件使用（校验 `X-Tw-Signature`：时间窗 + 常数时间比较 + 多密钥任一命中，失败 401）。`StartInvoke / StartCron / StartEvent / StartHTTP` 单源阻塞形态保留（内部同走 v4 协议面）。
+`functions.Verify(secrets...)` 可单独作中间件使用（校验 `X-Tw-Signature`：时间窗 + 常数时间比较 + 多密钥任一命中，失败 401）。统一入口内置可选探针 `GET /_tw/health`（不走验签，部署平台探活用）与 4MB body 上限，handler panic 捕获为 error 对象（RPC 轴）/ 400（事件轴），不杀进程。单源便捷封装 `StartInvoke / StartCron / StartEvent / StartHTTP(handler, secrets...)` 与阻塞形态 `Listen(mux, secrets...)` 全部构建在 `NewServer` 之上（同协议、验签必经）：`Listen` 绑定 `TW_RUNNER_PORT`（缺省 18080，v4 语义 = 常驻服务监听端口），SIGTERM/SIGINT → 优雅排水（停止接新 + 等在途完成 + `TW_DRAIN_TIMEOUT_MS` 兜底强退）。
 
 TS——`newServer(mux, ...secrets)` 同构：
 
@@ -205,27 +205,27 @@ TS FDK 同时导出 `verify` / `computeSignature` / `verifySignatureHeader`（�
 
 ### 4.2 执行身份（execution principal）
 
-每次调用平台铸造短期 `twx_` token 经 `X-Tw-Execution-Token` 头注入（Go 读 `functions.FromContext(ctx)`、TS 读 handler ctx）。服务端 Redis 投影 `{project_id, function_id, invocation_id, scopes, invoking_user_id}`，TTL = 函数超时 + 60s，执行结束即吊销。
+每次调用平台铸造短期 `twx_` token 经 `X-Tw-Execution-Token` 头注入（Go 读 `functions.FromContext(ctx)`、TS 读 handler `ctx.identity`）。服务端 Redis 投影 `{project_id, function_id, invocation_id, scopes, invoking_user_id}`，TTL = 函数超时 + 60s，执行结束即吊销。FDK 身份六件 = 四个身份头 + `executionId`（RPC 轴 = JSON-RPC `id`、事件轴 = CloudEvent `id`，日志关联 / 幂等键推荐来源）+ `apiBaseUrl`（部署侧注入的 `TW_API_BASE_URL`，见 §4.3）。
 
 **declared_scopes（最小特权，默认空 = 无任何平台访问）**：
 
 - 每项形如 `<resource>:<op>`；resource 白名单 = **assets / databases / users / groups / storage / subscriptions / payments**（平台与编排面资源一律拒绝）；op ∈ {read, write}。管理经 `CreateFunction.declared_scopes` / `SetFunctionScopes`（全量替换）；Console 详情页「执行身份 Scopes」卡片同源。
 - scope 门与 API key 完全同构（`PolicySet.AllowsAPIKeyTargets`，含实例寻址语义）；Redis 不可用 = 拒绝（fail-closed）。
 - **数据面语义**：scope 门只是第一层——文档/存储可见性基于角色 `key:function:<function_id>`，使用 `databases:*` / `storage:*` scope 前必须把目标集合/桶 ACL 授予该角色，否则 scope 过门但数据不可见（空结果最难排查）。
-- 函数内平台回访：`functions.NewClient(ctx)`（Go，token/baseURL 自动）/ `new Client(...)`（TS），`Authorization: Bearer twx_…` 调 Server API；限流维度 `api:execution:<project>:<function>`（默认 6000/min）。
+- 函数内平台回访：`functions.NewClient(ctx)`（Go，fail-closed 构造）/ `new Client(ctx.identity)`（TS），`Authorization: Bearer twx_…` 调 Server API；base 取身份投影的 `apiBaseUrl`——**由部署侧注入的 env `TW_API_BASE_URL` 供给**（v4 下 env 归部署侧下发，如 fleetly app env / compose；未注入时 Go 构造即报错、TS 请求期抛错，均指明部署需注入该 env）。限流维度 `api:execution:<project>:<function>`（默认 6000/min）。
 
 ### 4.3 部署：fleetly CLI 参考路径 / 任意 substrate
 
 v4 彻底 substrate-blind——函数常驻服务就是一个 URL 后面的进程，部署链完全归用户：
 
-- **参考路径（fleetly 托管）**：FDK 常驻服务打成 fleetly app（`fleetly` CLI deploy / compose / build-from-upload），密钥经部署 env 下发（`TW_FUNCTION_SECRET`），把 fleetly 给出的稳定服务 URL 登记为 torchwood 函数的 `target_url`。dogfood 函数即按此路径部署为常驻 app。私网寻址（fleetly 任务网内网服务名解析为 RFC1918 私址）需运营方显式开启 `functions.invoke.allow_private_targets`（平台级信任决策，见 §9）。
+- **参考路径（fleetly 托管）**：FDK 常驻服务打成 fleetly app（`fleetly` CLI deploy / compose / build-from-upload），密钥与平台 API base 经部署 env 下发（`TW_FUNCTION_SECRET` + `TW_API_BASE_URL`），把 fleetly 给出的稳定服务 URL 登记为 torchwood 函数的 `target_url`。dogfood 函数即按此路径部署为常驻 app。私网寻址（fleetly 任务网内网服务名解析为 RFC1918 私址）需运营方显式开启 `functions.invoke.allow_private_targets`（平台级信任决策，见 §9）。
 - **任意 substrate**：k8s Deployment + Service、裸机 systemd、Cloud Run——同一条签名 HTTP 协议，torchwood 零感知。
 - 池策略 / 副本数 / 扩缩 / 运行时版本 / 资源规格在**真正拥有它们的地方**配置：fleetly app 副本数、k8s HPA、用户自管。torchwood 不代理任何基础设施旋钮。
 - 常驻即无唤醒：torchwood 不做 0→1 唤醒、不保温、不排队；超时 = 函数记录的 timeout 透传为请求超时，目标过载/失联 = 快速失败。
 
 ### 4.4 本地开发
 
-`torchwood functions dev` 保留：本地起 FDK 服务 + 环境变量注入本地密钥，联调本地/远端 server（签名用 `BuildSignatureHeader`（Go）/ `buildSignatureHeader`（TS）自签测试）。FDK 的 runner 假设已去（`TW_RUNNER_PORT` / `TW_MAX_REQUESTS` 自回收 / `/_tw/health` 为可选探针——常驻服务不需要请求计数自退出）。
+暂无 `functions dev` 命令（CLI 的 dev 通道随 v4 部署面退役未补）。本地联调的真实路径：本地起 NewServer（Go `go run .` + `functions.Listen(mux, secret)` / TS 裸 `node:http` 挂 `newServer(mux, secret)`），注入部署 env（`TW_FUNCTION_SECRET` + `TW_API_BASE_URL`），再用 `BuildSignatureHeader`（Go）/ `buildSignatureHeader`（TS）对请求自签调用（载荷串 `"<t>.<body>"`，±5 分钟窗）——SDK 测试套件即按此口径全链自测，可直接照抄。探针 `GET /_tw/health` 不走验签，可作就绪检查；`TW_RUNNER_PORT` 语义 = 常驻服务监听端口（缺省 18080），`TW_DRAIN_TIMEOUT_MS` 控制排水窗。
 
 ## 5. 触发器（http / cron / event）
 

@@ -1,4 +1,4 @@
-import { assertCtx, type Ctx } from "./identity.js";
+import { assertIdentity, type ExecutionIdentity } from "./handlers.js";
 
 /**
  * PlatformDocument 是平台 REST Document 的投影（proto shared.v1.Document 的
@@ -71,13 +71,14 @@ export interface ClientOptions {
 
 /**
  * Client 是平台 API 客户端（业务核心）：鉴权自动——executionToken 与
- * apiBaseUrl 均取自 ctx（runner 注入的身份六件），零配置。方法面随阶段
- * 扩展（一期：databases 文档两法；Go 侧对称物为 `sdk/go/functions` 的
- * `functions.Client`，路径与鉴权口径一致）。
+ * apiBaseUrl 均取自执行身份（handler ctx 的 `ctx.identity`；apiBaseUrl 由
+ * 统一入口 newServer 每请求读部署侧注入的 process.env.TW_API_BASE_URL），
+ * 零配置。方法面随阶段扩展（一期：databases 文档两法；Go 侧对称物为
+ * `sdk/go/functions` 的 `functions.Client`，路径与鉴权口径一致）。
  *
  * 调用 Server API：`Authorization: Bearer <executionToken>`（项目绑定在
  * token 内，无需 X-Torchwood-Project），权限由函数的 declared_scopes 约束
- * （fail-closed）。ctx 形状在构造期校验；apiBaseUrl/executionToken 为空串
+ * （fail-closed）。身份形状在构造期校验；apiBaseUrl/executionToken 为空串
  * 时允许构造（本地装配/测试场景），发起请求时 fail-closed 抛错。
  */
 export class Client {
@@ -85,10 +86,10 @@ export class Client {
   private readonly token: string;
   private readonly fetchImpl: typeof fetch;
 
-  constructor(ctx: Ctx, opts?: ClientOptions) {
-    assertCtx(ctx, "functions.Client");
-    this.base = ctx.apiBaseUrl.replace(/\/+$/, "");
-    this.token = ctx.executionToken;
+  constructor(identity: ExecutionIdentity, opts?: ClientOptions) {
+    assertIdentity(identity, "functions.Client");
+    this.base = identity.apiBaseUrl.replace(/\/+$/, "");
+    this.token = identity.executionToken;
     this.fetchImpl = opts?.fetch ?? ((input, init) => globalThis.fetch(input, init));
   }
 
@@ -124,11 +125,13 @@ export class Client {
   /** request 统一通道：鉴权头 + JSON 编解码 + 非 2xx → APIError。 */
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     if (!this.base) {
-      throw new Error("functions.Client: ctx.apiBaseUrl is empty — cannot call platform api");
+      throw new Error(
+        "functions.Client: identity.apiBaseUrl is empty — 部署侧需注入 env TW_API_BASE_URL（v4 平台 API base 由部署侧下发，如 fleetly app env / compose）"
+      );
     }
     if (!this.token) {
       throw new Error(
-        "functions.Client: ctx.executionToken is empty — refusing unauthenticated platform call (fail-closed)"
+        "functions.Client: identity.executionToken is empty — refusing unauthenticated platform call (fail-closed)"
       );
     }
     const res = await this.fetchImpl(`${this.base}${path}`, {

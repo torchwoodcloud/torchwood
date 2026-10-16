@@ -16,6 +16,11 @@ import * as pkg from "../index.js";
 
 const SECRET = "whsec_test";
 
+// 部署侧注入的平台 API base（身份 apiBaseUrl 断言同源；node:test 每文件独立
+// 进程，模块级注入不跨文件泄漏）。
+const API_BASE_ENV = "http://api.internal:8080";
+process.env.TW_API_BASE_URL = API_BASE_ENV;
+
 const utf8 = (s: string): Uint8Array<ArrayBuffer> => new Uint8Array(new TextEncoder().encode(s));
 const b64 = (s: string): string => btoa(s);
 
@@ -118,14 +123,45 @@ describe("newServer · RPC 轴", () => {
     assert.equal(payload.error, undefined);
     assert.equal(captured.length, 1);
     assert.deepEqual(captured[0].data, { q: "hi" });
-    // 身份四件（身份头注入 ctx）。
+    // 身份六件（token/source/user/project 走身份头；executionId = JSON-RPC
+    // id；apiBaseUrl = 部署 env TW_API_BASE_URL）。
     assert.deepEqual(captured[0].ctx.identity, {
       executionToken: "twx_tok",
+      apiBaseUrl: API_BASE_ENV,
+      executionId: "exec_9",
       source: "client",
       invokingUserId: "usr_1",
       projectId: "prj_1",
     });
     assert.ok(captured[0].ctx.signal instanceof AbortSignal, "per-request 预算信号已注入");
+  });
+
+  it("身份注入：apiBaseUrl 读部署 env TW_API_BASE_URL（缺省空串），executionId = JSON-RPC id", async () => {
+    const mux = new Mux();
+    let got: HandlerContext["identity"] | null = null;
+    mux.invoke((_data, ctx) => {
+      got = ctx.identity;
+      return null;
+    });
+    // 未注入 env → apiBaseUrl 为空串（Client 请求期 fail-closed），id 仍进身份。
+    delete process.env.TW_API_BASE_URL;
+    await newServer(mux, SECRET)(signedRpcRequest(RPC_METHOD_INVOKE, {}, "exec_env", SECRET, identityHeaders()));
+    assert.deepEqual(got, {
+      executionToken: "twx_tok",
+      apiBaseUrl: "",
+      executionId: "exec_env",
+      source: "client",
+      invokingUserId: "usr_1",
+      projectId: "prj_1",
+    });
+
+    // 注入 env（部署侧下发语义）→ 每请求身份携带。
+    process.env.TW_API_BASE_URL = "https://api.example.com";
+    await newServer(mux, SECRET)(signedRpcRequest(RPC_METHOD_INVOKE, {}, "exec_env2", SECRET, identityHeaders()));
+    assert.equal(got!.apiBaseUrl, "https://api.example.com");
+    assert.equal(got!.executionId, "exec_env2");
+    // 还原模块级注入（后续用例与快照一致）。
+    process.env.TW_API_BASE_URL = API_BASE_ENV;
   });
 
   it("x-tw-source 头缺省回落 \"server\"", async () => {
@@ -296,10 +332,10 @@ describe("newServer · 事件轴", () => {
     const mux = new Mux();
     let cronTick: { triggerId: string; scheduledFor: string } | null = null;
     let docChange: Record<string, unknown> | null = null;
-    let cronSource = "";
+    let cronCtx: HandlerContext["identity"] | null = null;
     mux.cron(async (tick, ctx) => {
       cronTick = { triggerId: tick.triggerId, scheduledFor: tick.scheduledFor };
-      cronSource = ctx.identity.source;
+      cronCtx = ctx.identity;
     });
     mux.event(async (ch) => {
       docChange = ch as unknown as Record<string, unknown>;
@@ -308,12 +344,21 @@ describe("newServer · 事件轴", () => {
 
     const cronRes = await server(
       signedEventRequest("cron.tick", { trigger_id: "trg_1", scheduled_for: "2026-10-15T00:00:00Z" }, SECRET, "1.0", {
+        ...identityHeaders(),
         "x-tw-source": "cron:trg_1",
       })
     );
     assert.equal(cronRes.status, 204);
     assert.deepEqual(cronTick, { triggerId: "trg_1", scheduledFor: "2026-10-15T00:00:00Z" });
-    assert.equal(cronSource, "cron:trg_1");
+    // 事件轴身份：executionId = CloudEvent id（投递关联键）。
+    assert.deepEqual(cronCtx, {
+      executionToken: "twx_tok",
+      apiBaseUrl: API_BASE_ENV,
+      executionId: "evt_1",
+      source: "cron:trg_1",
+      invokingUserId: "usr_1",
+      projectId: "prj_1",
+    });
 
     const eventRes = await server(
       signedEventRequest(
@@ -440,5 +485,34 @@ describe("newServer · 统一入口守卫", () => {
 
   it("空密钥集 fail-closed：newServer / verify 构造期即抛", () => {
     assert.throws(() => newServer(new Mux()), /requires at least one secret/);
+  });
+});
+
+// ---- 可选探针 /_tw/health（不走验签；部署平台用，非平台强制）----
+
+describe("newServer · health 探针", () => {
+  const server: HttpHandler = newServer(new Mux(), SECRET);
+
+  it("GET /_tw/health 无签名 → 200 ok/ready（部署平台探活不持密钥）", async () => {
+    const res = await server(new Request("http://function/_tw/health"));
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") ?? "", /application\/json/);
+    assert.deepEqual(await res.json(), { ok: true, ready: true });
+  });
+
+  it("POST /_tw/health → 405 + Allow: GET", async () => {
+    const res = await server(new Request("http://function/_tw/health", { method: "POST", body: "{}" }));
+    assert.equal(res.status, 405);
+    assert.equal(res.headers.get("allow"), "GET");
+  });
+
+  it("探针之外仍验签必经：未签名 invoke → 401（探针旁路不放大攻击面）", async () => {
+    const res = await server(
+      new Request("http://function/", {
+        method: "POST",
+        body: utf8(JSON.stringify({ jsonrpc: "2.0", method: "invoke", id: "x" })),
+      })
+    );
+    assert.equal(res.status, 401);
   });
 });

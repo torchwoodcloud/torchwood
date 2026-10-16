@@ -34,15 +34,19 @@ export interface HttpResult {
 }
 
 /**
- * makeContext 组装执行上下文（Go identityContext 同款头族）：身份四件 +
- * 30s 预算信号。X-Tw-Protocol-Version 不匹配时宽容继续（平台升版不立即
- * 打断旧 FDK）。
+ * makeContext 组装执行上下文（与 Go rpc.go identityContext 同构）：身份六件
+ * + 30s 预算信号——token / source / invoking-user / project 四件走身份头，
+ * executionId 是载荷关联键（RPC 轴 = JSON-RPC id，调用方白送的 invocation
+ * 关联），apiBaseUrl 每请求读部署侧注入的 process.env.TW_API_BASE_URL。
+ * X-Tw-Protocol-Version 不匹配时宽容继续（平台升版不立即打断旧 FDK）。
  */
-export function makeContext(req: Request): HandlerContext {
+export function makeContext(req: Request, executionId = ""): HandlerContext {
   const header = (name: string): string => req.headers.get(name) ?? "";
   return {
     identity: {
       executionToken: header("x-tw-execution-token"),
+      apiBaseUrl: process.env.TW_API_BASE_URL ?? "",
+      executionId,
       source: header("x-tw-source") || "server",
       invokingUserId: header("x-tw-invoking-user-id"),
       projectId: header("x-tw-project-id"),
@@ -70,7 +74,7 @@ export function serveRpcBody(req: Request, fields: Record<string, unknown>, mux:
     return Promise.resolve(rpcError(id, RPC_CODE_INVALID_REQUEST, "not a json-rpc 2.0 request"));
   }
 
-  const ctx = makeContext(req);
+  const ctx = makeContext(req, id);
   const params = fields["params"];
   switch (method) {
     case RPC_METHOD_INVOKE:

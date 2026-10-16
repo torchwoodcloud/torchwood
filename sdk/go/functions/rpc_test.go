@@ -21,7 +21,7 @@ func signedRPCRequest(t *testing.T, method string, params any, id string, secret
 		t.Fatal(err)
 	}
 	ts := time.Now().Unix()
-	req, err := http.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,8 +55,10 @@ func TestCanonicalSignatureVector(t *testing.T) {
 }
 
 // TestRPCServerInvokeHappyPath invoke 分发全链：验签过 → Mux.Invoke 收到
-// params 原文与身份 → result 回包 + id 回显。
+// params 原文与身份六件（token/source/user/project 走身份头、executionId =
+// JSON-RPC id、apiBaseUrl = 部署 env）→ result 回包 + id 回显。
 func TestRPCServerInvokeHappyPath(t *testing.T) {
+	t.Setenv(envAPIBaseURL, testAPIBase)
 	mux := NewMux()
 	var gotParams json.RawMessage
 	var gotIdentity Identity
@@ -89,9 +91,29 @@ func TestRPCServerInvokeHappyPath(t *testing.T) {
 	if string(gotParams) != `{"q":"hi"}` {
 		t.Fatalf("params = %s", gotParams)
 	}
-	if gotIdentity.ExecutionToken != "twx_tok" || gotIdentity.Source != "client" ||
-		gotIdentity.InvokingUserID != "usr_1" || gotIdentity.ProjectID != "prj_1" {
-		t.Fatalf("identity = %+v", gotIdentity)
+	wantIdentity(t, gotIdentity, "exec_9")
+}
+
+// TestRPCServerInvokeIdentityDefaults 部署侧未注入 TW_API_BASE_URL → 身份
+// apiBaseUrl 为空串（NewClient 构造即报错，见 client_test）；source 头缺省
+// 回落 "server"。
+func TestRPCServerInvokeIdentityDefaults(t *testing.T) {
+	t.Setenv(envAPIBaseURL, "")
+	mux := NewMux()
+	var gotIdentity Identity
+	mux.Invoke(func(ctx context.Context, _ json.RawMessage) (any, error) {
+		gotIdentity = FromContext(ctx)
+		return nil, nil
+	})
+	req := signedRPCRequest(t, RPCMethodInvoke, nil, "exec_d", testSecret)
+	req.Header.Del(hdrSource) // 平台恒发 source 头；缺失按缺省回落处理
+	rec := httptest.NewRecorder()
+	NewServer(mux, testSecret).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if gotIdentity.Source != serverSourceFallback || gotIdentity.APIBaseURL != "" || gotIdentity.ExecutionID != "exec_d" {
+		t.Fatalf("identity = %+v, want source=%q base empty exec=exec_d", gotIdentity, serverSourceFallback)
 	}
 }
 
@@ -110,7 +132,7 @@ func signedEventRequest(t *testing.T, eventType string, data any, secret string)
 		t.Fatal(err)
 	}
 	ts := time.Now().Unix()
-	req, err := http.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,13 +144,24 @@ func signedEventRequest(t *testing.T, eventType string, data any, secret string)
 
 // TestEventAxisCloudEvents 事件轴（D10）：cron.tick / documents.* 以
 // CloudEvents 通知送达——204 = 送达（无应用层结果）、处理失败/未注册 400
-// （投递失败信号）。同一 NewServer 与 RPC 轴共存（形态探测分流）。
+// （投递失败信号）。同一 NewServer 与 RPC 轴共存（形态探测分流）；执行身份
+// 六件照常注入（executionId = CloudEvent id）。
 func TestEventAxisCloudEvents(t *testing.T) {
+	t.Setenv(envAPIBaseURL, testAPIBase)
 	mux := NewMux()
 	var cronTick CronTick
 	var docChange DocumentChange
-	mux.Cron(func(ctx context.Context, tick CronTick) error { cronTick = tick; return nil })
-	mux.Event(func(ctx context.Context, ch DocumentChange) error { docChange = ch; return nil })
+	var cronIdentity, eventIdentity Identity
+	mux.Cron(func(ctx context.Context, tick CronTick) error {
+		cronTick = tick
+		cronIdentity = FromContext(ctx)
+		return nil
+	})
+	mux.Event(func(ctx context.Context, ch DocumentChange) error {
+		docChange = ch
+		eventIdentity = FromContext(ctx)
+		return nil
+	})
 	h := NewServer(mux, testSecret)
 
 	rec := httptest.NewRecorder()
@@ -138,6 +171,11 @@ func TestEventAxisCloudEvents(t *testing.T) {
 	if rec.Code != http.StatusNoContent || cronTick.TriggerID != "trg_1" {
 		t.Fatalf("cron dispatch: status=%d tick=%+v, want 204", rec.Code, cronTick)
 	}
+	// 事件轴只发 token 头：source 回落 "server"，executionId = CloudEvent id。
+	if cronIdentity.ExecutionToken != "twx_tok" || cronIdentity.Source != serverSourceFallback ||
+		cronIdentity.ExecutionID != "evt_1" || cronIdentity.APIBaseURL != testAPIBase || cronIdentity.ProjectID != "prj_1" {
+		t.Fatalf("cron identity = %+v", cronIdentity)
+	}
 
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, signedEventRequest(t, "documents.created", map[string]any{
@@ -146,6 +184,9 @@ func TestEventAxisCloudEvents(t *testing.T) {
 	}, testSecret))
 	if rec.Code != http.StatusNoContent || docChange.DocumentID != "doc_1" {
 		t.Fatalf("event dispatch: status=%d change=%+v, want 204", rec.Code, docChange)
+	}
+	if eventIdentity.ExecutionID != "evt_1" {
+		t.Fatalf("event identity executionId = %q, want evt_1", eventIdentity.ExecutionID)
 	}
 
 	t.Run("handler error is delivery failure", func(t *testing.T) {
@@ -231,7 +272,7 @@ func TestRPCServerRejects(t *testing.T) {
 	h := NewServer(mux, testSecret)
 
 	t.Run("bad signature", func(t *testing.T) {
-		req, _ := http.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte(`{"jsonrpc":"2.0","method":"invoke","id":"x"}`)))
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewReader([]byte(`{"jsonrpc":"2.0","method":"invoke","id":"x"}`)))
 		req.Header.Set(hdrSignature, "t="+time.Now().Format("2006")+",v1=deadbeef")
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
@@ -240,7 +281,7 @@ func TestRPCServerRejects(t *testing.T) {
 		}
 	})
 	t.Run("no signature", func(t *testing.T) {
-		req, _ := http.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte(`{"jsonrpc":"2.0","method":"invoke","id":"x"}`)))
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewReader([]byte(`{"jsonrpc":"2.0","method":"invoke","id":"x"}`)))
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
 		if rec.Code != http.StatusUnauthorized {
@@ -259,7 +300,7 @@ func TestRPCServerRejects(t *testing.T) {
 	t.Run("not json-rpc", func(t *testing.T) {
 		// 无 jsonrpc 也无 specversion → 统一入口判「未识别协议」：传输层 400
 		//（无 RPC 信封可承载错误对象）。
-		req, _ := http.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte(`{"method":"invoke"}`)))
+		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewReader([]byte(`{"method":"invoke"}`)))
 		ts := time.Now().Unix()
 		req.Header.Set(hdrSignature, BuildSignatureHeader(ts, [][2]string{{"v1", ComputeSignature(testSecret, ts, []byte(`{"method":"invoke"}`))}}))
 		rec := httptest.NewRecorder()
@@ -284,7 +325,7 @@ func TestRPCServerRotation(t *testing.T) {
 
 	body, _ := json.Marshal(rpcRequest{JSONRPC: "2.0", Method: RPCMethodInvoke, ID: "exec_r"})
 	ts := time.Now().Unix()
-	req, _ := http.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewReader(body))
 	req.Header.Set(hdrSignature, BuildSignatureHeader(ts, [][2]string{
 		{"v1", ComputeSignature("whsec_new", ts, body)},
 		{"v2", ComputeSignature("whsec_old", ts, body)},

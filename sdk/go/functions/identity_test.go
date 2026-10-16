@@ -29,7 +29,7 @@ func TestFromContextWithoutIdentity(t *testing.T) {
 	if got := FromContext(context.Background()); got != (Identity{}) {
 		t.Fatalf("FromContext = %+v, want zero Identity", got)
 	}
-	if got := FromContext(nil); got != (Identity{}) {
-		t.Fatalf("FromContext(nil) = %+v, want zero Identity", got)
+	if got := FromContext(nil); got != (Identity{}) { //nolint:staticcheck // SA1012：nil ctx 返回零值是 FromContext 的显式契约，此处即为契约测试
+		t.Fatalf("FromContext = %+v, want zero Identity", got)
 	}
 }

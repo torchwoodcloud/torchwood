@@ -2,13 +2,13 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { Client, APIError } from "../client.js";
-import type { Ctx } from "../identity.js";
+import type { ExecutionIdentity } from "../handlers.js";
 
-const ctx: Ctx = {
+const identity: ExecutionIdentity = {
   executionToken: "twx_token_abc",
   apiBaseUrl: "http://gateway:9080/",
   executionId: "exec-1",
-  source: "event:t1",
+  source: "client",
   invokingUserId: "",
   projectId: "proj-1",
 };
@@ -35,7 +35,7 @@ function captureFetch(status: number, payload: unknown, contentType = "applicati
 describe("Client.createDocument", () => {
   it("POST 文档路径 + Bearer 鉴权 + JSON body {data}，返回 {id}", async () => {
     const { calls, fetchImpl } = captureFetch(200, { id: "doc-1", data: { k: "v" }, version: "1" });
-    const client = new Client(ctx, { fetch: fetchImpl });
+    const client = new Client(identity, { fetch: fetchImpl });
     const doc = await client.createDocument("app", "logs", { k: "v" });
 
     assert.equal(calls.length, 1);
@@ -49,7 +49,7 @@ describe("Client.createDocument", () => {
 
   it("apiBaseUrl 尾斜杠归一 + 路径段 encodeURIComponent", async () => {
     const { calls, fetchImpl } = captureFetch(200, { id: "d", data: {}, version: 2 });
-    const client = new Client({ ...ctx, apiBaseUrl: "https://api.example.com///" }, { fetch: fetchImpl });
+    const client = new Client({ ...identity, apiBaseUrl: "https://api.example.com///" }, { fetch: fetchImpl });
     await client.createDocument("my db", "col lect", { a: 1 });
     assert.equal(
       calls[0].url,
@@ -59,7 +59,7 @@ describe("Client.createDocument", () => {
 
   it("data 为 undefined → 清晰错误且不发请求", async () => {
     const { calls, fetchImpl } = captureFetch(200, {});
-    const client = new Client(ctx, { fetch: fetchImpl });
+    const client = new Client(identity, { fetch: fetchImpl });
     await assert.rejects(
       () => client.createDocument("app", "logs", undefined),
       /createDocument requires data/
@@ -77,7 +77,7 @@ describe("Client.getDocument", () => {
       permissions: ["perm:read"],
       created_at: "2026-09-18T00:00:00Z",
     });
-    const client = new Client(ctx, { fetch: fetchImpl });
+    const client = new Client(identity, { fetch: fetchImpl });
     const doc = await client.getDocument("app", "logs", "doc-9");
 
     assert.equal(calls.length, 1);
@@ -94,7 +94,7 @@ describe("Client.getDocument", () => {
 describe("Client 错误映射", () => {
   it("4xx → APIError（status + error.message 提取 + body 原文）", async () => {
     const { fetchImpl } = captureFetch(403, { error: { code: "PERMISSION_DENIED", message: "scope databases:write missing" } });
-    const client = new Client(ctx, { fetch: fetchImpl });
+    const client = new Client(identity, { fetch: fetchImpl });
     await assert.rejects(
       () => client.createDocument("app", "logs", {}),
       (e: unknown) => {
@@ -114,7 +114,7 @@ describe("Client 错误映射", () => {
     const fetchImpl = (async () => {
       return new Response("upstream exploded", { status: 502 });
     }) as typeof fetch;
-    const client = new Client(ctx, { fetch: fetchImpl });
+    const client = new Client(identity, { fetch: fetchImpl });
     await assert.rejects(
       () => client.getDocument("app", "logs", "d1"),
       (e: unknown) => {
@@ -131,20 +131,20 @@ describe("Client 错误映射", () => {
 describe("Client fail-closed", () => {
   it("executionToken 为空 → 不发请求直接抛错", async () => {
     const { calls, fetchImpl } = captureFetch(200, {});
-    const client = new Client({ ...ctx, executionToken: "" }, { fetch: fetchImpl });
+    const client = new Client({ ...identity, executionToken: "" }, { fetch: fetchImpl });
     await assert.rejects(() => client.getDocument("app", "logs", "d"), /executionToken is empty/);
     assert.equal(calls.length, 0);
   });
 
-  it("apiBaseUrl 为空 → 不发请求直接抛错", async () => {
+  it("apiBaseUrl 为空（部署侧未注入 TW_API_BASE_URL）→ 不发请求直接抛错并指明 env", async () => {
     const { calls, fetchImpl } = captureFetch(200, {});
-    const client = new Client({ ...ctx, apiBaseUrl: "" }, { fetch: fetchImpl });
-    await assert.rejects(() => client.createDocument("app", "logs", {}), /apiBaseUrl is empty/);
+    const client = new Client({ ...identity, apiBaseUrl: "" }, { fetch: fetchImpl });
+    await assert.rejects(() => client.createDocument("app", "logs", {}), /TW_API_BASE_URL/);
     assert.equal(calls.length, 0);
   });
 
-  it("ctx 形状非法 → 构造期即抛错", () => {
-    assert.throws(() => new Client({ ...ctx, projectId: 1 } as unknown as Ctx), /ctx\.projectId must be a string/);
-    assert.throws(() => new Client(null as unknown as Ctx), /ctx must be an object/);
+  it("身份形状非法 → 构造期即抛错（带字段名）", () => {
+    assert.throws(() => new Client({ ...identity, projectId: 1 } as unknown as ExecutionIdentity), /identity\.projectId must be a string/);
+    assert.throws(() => new Client(null as unknown as ExecutionIdentity), /identity must be an object/);
   });
 });

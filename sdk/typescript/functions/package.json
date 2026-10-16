@@ -1,7 +1,7 @@
 {
   "name": "@torchwood/functions",
   "version": "0.1.0",
-  "description": "Torchwood Functions TypeScript runtime SDK — typed defineMain + platform API client（函数五期 5c）",
+  "description": "Torchwood Functions TypeScript runtime SDK — v4 常驻服务统一入口（验签 + 双轴分发）+ typed handler 契约 + 平台 API 客户端",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

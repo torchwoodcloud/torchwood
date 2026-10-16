@@ -13,7 +13,7 @@ SDK 是 Torchwood **AI/Agent-Native** 定位的集成层（`sdk/README.md`）：
 | 管理面自动化（用户 / 文档 / 存储 / 变量） | **Server API** + API Key | Console 或 `POST /v1/server/api-keys` 创建带 scope 的 Key；scope 词表见 §4.3 |
 | 终端用户身份流 | **Client API** + JWT | TS 走 `fetch`，Go 走 TokenStore 自动刷新（§4.2） |
 | 函数内执行身份（TS） | **`Torchwood.fromExecution(apiBaseUrl, opts?)`** | 以 execution principal 构造 client，方法面 = server 服务类全量；token 优先级 = 显式 `opts.executionToken` > `TW_EXECUTION_TOKEN`，皆缺抛错（fail-closed）；并发函数必须显式传 token（env 通道仅同步段读取安全，见 `08-functions.md` §4.2/§4.3.1） |
-| 函数内回访平台（Go） | **`sdk/go/functions`** | Go 函数运行时 SDK：`FromContext(ctx)` 取执行身份、`NewClient(ctx)` 零配置构造平台 API 客户端（§4.6） |
+| 函数内回访平台（Go） | **`sdk/go/functions`** | Go 函数运行时 SDK：`FromContext(ctx)` 取执行身份、`NewClient(ctx)` 构造平台 API 客户端（apiBaseUrl 读部署注入的 `TW_API_BASE_URL`，§4.6） |
 | Agent 默认工具箱 | **overlay 18 动词** | TS `TOOL_*` / `agentTools` 与 Go `Tool*` / `Tools` 映射到现有 Server RPC（不新增服务、不含 API key 管理），见 `14-agent-tools.md` |
 | 逃生舱 | **Go `InvokeJSON`** | `sdk/go/server` 的 `Client.InvokeJSON(fullMethod, protojson)` 覆盖全部 `torchwood.server.v1.*` unary（排除 APIKeysService），proto 新增方法零登记自动可用 |
 
@@ -26,7 +26,7 @@ SDK 是 Torchwood **AI/Agent-Native** 定位的集成层（`sdk/README.md`）：
 | `sdk/typescript/` | `@torchwood/sdk`，`type: module`，`main`/`types` → `dist/`，engines node ≥18，零运行时依赖（devDependencies 仅 `typescript`） |
 | `sdk/typescript/src/torchwood.ts` | `Torchwood` 门面：11 个 Client 服务字段 + 21 个 Server 服务字段（含 webhooks）+ `fromExecution` |
 | `sdk/typescript/src/http.ts` | `HttpTransport` + `TorchwoodConfig` + `AuthMode` 四态 + `DEFAULT_TIMEOUT_MS`（30000） |
-| `sdk/typescript/src/server/` | 20 个 Server 服务类；`tools.ts` 为 18 动词工具目录 |
+| `sdk/typescript/src/server/` | 21 个 Server 服务类；`tools.ts` 为 18 动词工具目录 |
 | `sdk/typescript/src/client/` | 11 个 Client 服务类（account / analytics / assets / databases / functions / groups / leaderboards / payments / realtime / runtimeVars / subscriptions） |
 | `sdk/typescript/src/index.ts` | 包根导出（`AnalyticsEventBuffer`、typed query 构造器、`agentTools`、realtime 类型） |
 | `sdk/typescript/src/errors.ts` | `TorchwoodError` 与错误信封解析 |
@@ -36,7 +36,7 @@ SDK 是 Torchwood **AI/Agent-Native** 定位的集成层（`sdk/README.md`）：
 | `sdk/go/client/` | end-user 客户端（Bearer JWT 自动刷新、TokenStore、`ConnectRealtime`） |
 | `sdk/go/server/` | 管理面客户端（`x-api-key`、19 个服务 wrapper、`InvokeJSON`、`Tools`、scope 词表常量、错误分类 helper） |
 | `sdk/go/query/` | typed AST 构造器 + 链式 Builder + `FromDSL`（golden 用例与 `pkg/query` 锁对齐） |
-| `sdk/go/functions/` | Go 函数运行时 SDK（用户持有 main；`StartInvoke` / `StartCron` / `StartEvent` / `StartHTTP` / `Mux`） |
+| `sdk/go/functions/` | Go 函数运行时 SDK（用户持有 main；`NewServer` / `Listen` / `StartInvoke` / `StartCron` / `StartEvent` / `StartHTTP` / `Mux`） |
 | `sdk/go/docexamples/` | build tag `docexample`：承载本文档与 `sdk/README.md` 的 Go 示例，与文档一一对应（仅编译期校验） |
 | `sdk/go/internal/conn/` | 拨号封装：默认 insecure、30s 兜底超时、UNAVAILABLE 重试 service config、`MaxCallRecvMsgSize` 8MiB（与服务端对齐） |
 | `sdk/demo/` | Vite 演示站（端口 5174） |
@@ -101,12 +101,12 @@ export class Torchwood {
   readonly subscriptions: ClientSubscriptionsService;
   readonly functions: ClientFunctionsService;         // invokeFunction
   readonly runtimeVars: ClientRuntimeVarsService;     // getRuntimeVars（etag 短路）
-  readonly server: { /* 20 个 Server 服务，见 §3.3 */ };
+  readonly server: { /* 21 个 Server 服务，见 §3.3 */ };
   static fromExecution(apiBaseUrl: string, opts?): Torchwood;
 }
 ```
 
-### 3.3 Server 20 服务
+### 3.3 Server 21 服务
 
 | 字段 | TS 类 | 说明 |
 |------|-------|------|
@@ -181,7 +181,7 @@ respJSON, err := c.InvokeJSON(ctx, "/torchwood.server.v1.UsersService/CreateUser
 ```
 
 - `findServerMethod` 按 `protoregistry.GlobalFiles` 查 MethodDescriptor，限定 `torchwood.server.v1.*` 且排除 APIKeysService（服务端禁止 API Key 凭证调用）——proto 新增方法自动可用；`reqJSON` 为 protojson（未知字段报错），空请求等价 `{}`；响应为 2 空格缩进 protojson（与 CLI 输出同实现）；未知方法报 `torchwood: unknown method`。
-- **覆盖完整性由 `sdk/go/server` 反射测试保证**（`invoke_test.go`）：`TestInvokeJSONCompleteness` 遍历 registry 断言 server 包全部方法（快照 163 个，排除 APIKeysService）可经 `findServerMethod` 解析；`TestTypedWrappersCoverAllServerMethods` 反射断言每个 RPC 在 Client 对应 wrapper 上有同名词导出方法——InvokeJSON 面零登记自动覆盖新 RPC，类型化 wrapper 面由测试强制同步补齐。
+- **覆盖完整性由 `sdk/go/server` 反射测试保证**（`invoke_test.go`）：`TestInvokeJSONCompleteness` 遍历 registry 断言 server 包全部方法（快照 166 个，排除 APIKeysService）可经 `findServerMethod` 解析；`TestTypedWrappersCoverAllServerMethods` 反射断言每个 RPC 在 Client 对应 wrapper 上有同名词导出方法——InvokeJSON 面零登记自动覆盖新 RPC，类型化 wrapper 面由测试强制同步补齐。
 - Agent 工具箱：`server.Tools` / `LookupTool` / `Client.InvokeTool`（18 条工具目录，工具名常量 `Tool*`），TS 对等 `agentTools` / `lookupAgentTool` / `TOOL_*`；每条工具的 `InputSchema` 由 input descriptor 自动生成 JSON Schema（type: object）。
 - scope 词表常量镜像在 `sdk/go/server/scopes.go`：`*` / `all` 全量 + 17 个资源族（databases / users / groups / storage / projects / oauthproviders / functions / payments / assets / subscriptions / billing / outbox / audit_logs / leaderboards / analytics / runbooks / runtime_vars）的裸资源与 `.read` / `.write` 方向（leaderboards 另有 `.admin`；裸资源名放行该资源全部方向）。scope 只对 Server 面方法生效；语义与服务端 `PolicySet.AllowsAPIKey` 同源。
 - 错误 helper（`errors.go`）：`ErrorCode` / `IsPermissionDenied` / `IsUnauthenticated` / `HTTPErrorClass`（0 成功 / 2 客户端错 / 3 服务端错 / 4 限流，对齐 CLI 退出码契约）/ `ExtractRetryAfter`（从 RetryInfo detail 读限流退避秒数）。
@@ -233,10 +233,10 @@ _ = me
 
 ### 4.6 Go 函数运行时 SDK（sdk/go/functions）
 
-- 模型：用户持有 main + SDK——用户代码编译为根 main 包，经本 SDK 承接平台执行协议（:18080 runner 契约的自包含参考实现，仅依赖标准库 + genproto，不 import internal）。
-- 入口：`StartInvoke[Req, Resp]`（TW_DATA → 类型化请求）/ `StartCron` / `StartEvent` / `StartHTTP`（还原真 `*http.Request`）以 main 风格启动并阻塞；多触发源用 `NewMux()` + `Invoke` / `Cron` / `Event` / `Fetch` + `Listen(mux)`。
-- 执行身份：`FromContext(ctx)` 取身份（executionToken / apiBaseUrl / executionId 等）；`NewClient(ctx)` 零配置构造平台 API 客户端（`Authorization: Bearer twx_…` + `TW_API_BASE_URL`，非 2xx 返回 `*APIError`）。
-- 运行契约与协议演进宪法（未知 `x-tw-*` header 一律忽略）见 `08-functions.md` §3.1 与包文档。
+- 模型：用户持有 main + SDK——函数 = 常驻服务，本包是 v4 双轴调用协议（RPC 轴 JSON-RPC 2.0 / 事件轴 CloudEvents 1.0，见 `08-functions.md` §3）的自包含参考实现，仅依赖标准库，不 import internal，外部用户可经 Go proxy 独立拉取构建。
+- 入口：`NewServer(mux, secrets...)` 统一入口（验签 → body 形态探测 → 分发，可选探针 `/_tw/health`）可直接挂任意 `http.Server`；`Listen(mux, secrets...)` 阻塞便捷形态（绑定 `TW_RUNNER_PORT` 缺省 18080 + SIGTERM 优雅排水）；单源糖 `StartInvoke / StartCron / StartEvent / StartHTTP(handler, secrets...)`（= NewMux 注册 + Listen）；多触发源用 `NewMux()` + `Invoke` / `Cron` / `Event` / `Fetch`。
+- 执行身份：`FromContext(ctx)` 取身份六件（executionToken / apiBaseUrl / executionId / source / invokingUserID / projectID——token 等四件走身份头，executionId 走 JSON-RPC `id` / CloudEvent `id`，apiBaseUrl 走部署侧注入的 `TW_API_BASE_URL` env，NewServer 构建期读入）；`NewClient(ctx)` fail-closed 构造平台 API 客户端（`Authorization: Bearer twx_…`，env 未注入时报错并指明部署需注入；非 2xx 返回 `*APIError`）。
+- 协议与运行语义（验签口径 / 双轴分发 / 探针 / 排水 / 协议演进宪法——未知 `x-tw-*` 头一律忽略）见 `08-functions.md` §3/§4 与包文档。
 
 ### 4.7 CLI 边界
 

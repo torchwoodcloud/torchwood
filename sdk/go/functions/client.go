@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,24 +13,31 @@ import (
 	"time"
 )
 
-// Client 是平台 API 客户端雏形（函数内回访平台用）：鉴权自动——NewClient
-// 经 ctx 执行身份取 executionToken（Authorization: Bearer twx_…）与
-// apiBaseUrl（TW_API_BASE_URL），零配置。
+// Client 是平台 API 客户端（函数内回访平台用）：鉴权自动——executionToken
+// 取自 ctx 执行身份（Authorization: Bearer twx_…），apiBaseUrl 来自身份投影
+// （统一入口 NewServer 构建期读部署注入的 env TW_API_BASE_URL），零配置。
 type Client struct {
 	baseURL string
 	token   string
 	hc      *http.Client
 }
 
-// NewClient 从 ctx 执行身份构建平台 API 客户端。ctx 无身份（如脱离 Start
-// 系列的裸调用）时 base/token 为空，调用将以本地错误收场。
-func NewClient(ctx context.Context) *Client {
+// NewClient 从 ctx 执行身份构建平台 API 客户端。fail-closed：ctx 无身份
+// （如脱离 NewServer 的裸调用）或身份缺 apiBaseUrl（部署侧未注入
+// TW_API_BASE_URL env）时返回清晰错误，不构造半残客户端。
+func NewClient(ctx context.Context) (*Client, error) {
 	id := FromContext(ctx)
+	if id.ExecutionToken == "" {
+		return nil, errors.New("functions: NewClient: no execution identity in ctx（经 functions.NewServer / Listen 服务的请求自带身份；测试可 functions.WithIdentity 手工注入）")
+	}
+	if id.APIBaseURL == "" {
+		return nil, errors.New("functions: NewClient: platform api base is empty — 部署侧需注入 env TW_API_BASE_URL（v4 下 env 归部署侧下发，如 fleetly app env / compose）")
+	}
 	return &Client{
 		baseURL: strings.TrimRight(id.APIBaseURL, "/"),
 		token:   id.ExecutionToken,
 		hc:      &http.Client{},
-	}
+	}, nil
 }
 
 // APIError 是平台 API 非 2xx 响应。

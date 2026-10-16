@@ -2,12 +2,14 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  defineMain,
   Client,
   APIError,
-  type Ctx,
-  type MainHandler,
-  type MainEntrypoint,
+  type ExecutionIdentity,
+  type HandlerContext,
+  type InvokeHandler,
+  type CronHandler,
+  type EventHandler,
+  type FetchHandler,
   type PlatformDocument,
   type ClientOptions,
   type CronTick,
@@ -18,22 +20,18 @@ import {
 // ---- 导出面（运行时值） ----
 
 describe("导出面", () => {
-  it("值导出齐备：defineMain / Client / APIError", () => {
-    assert.equal(typeof defineMain, "function");
+  it("值导出齐备：Client / APIError（v4 服务面值导出在 server.test 覆盖）", () => {
     assert.equal(typeof Client, "function");
     assert.equal(typeof APIError, "function");
     assert.equal(new APIError(404, "Not Found", "{}").name, "APIError");
-  });
-
-  it("defineMain 收非函数 handler → 同步抛错（运行时校验兜底）", () => {
-    const anyFn = 42 as unknown as MainHandler;
-    assert.throws(() => defineMain(anyFn), /handler must be a function/);
   });
 });
 
 // ---- 类型形状（编译期断言；tsc -p 通过即验证） ----
 
-const ctx: Ctx = {
+// ExecutionIdentity 六件（与 Go identity.go 的 Identity 字段一一对应）；
+// 缺字段应编译失败。
+const identity: ExecutionIdentity = {
   executionToken: "twx_x",
   apiBaseUrl: "http://localhost:9080",
   executionId: "e1",
@@ -41,25 +39,39 @@ const ctx: Ctx = {
   invokingUserId: "",
   projectId: "p1",
 };
-
-// Ctx 六件与 runner.js 注入逐字段同源；缺字段应编译失败。
-// @ts-expect-error Ctx 缺 projectId 不允许
-const badCtx: Ctx = {
+void identity;
+// @ts-expect-error ExecutionIdentity 缺 projectId 不允许
+const badIdentity: ExecutionIdentity = {
   executionToken: "twx_x",
   apiBaseUrl: "http://localhost:9080",
   executionId: "e1",
   source: "server",
   invokingUserId: "",
 };
-void badCtx;
+void badIdentity;
 
-// defineMain 签名：MainHandler 可赋给 MainEntrypoint 的入参面（协变一致）。
-const handler: MainHandler = async (data, c) => {
-  void data;
-  return c.source;
+// HandlerContext：identity 六件 + per-request 预算信号。
+const handlerCtx: HandlerContext = { identity, signal: new AbortController().signal };
+void handlerCtx;
+
+// 四类 handler 签名（v4 分发维度 = 协议轴；仅编译期形状断言，不执行）。
+const invoke: InvokeHandler = async (data, ctx) => ({ pong: data, source: ctx.identity.source });
+void invoke;
+const cron: CronHandler = async (tick, ctx) => {
+  void tick;
+  void ctx.identity.executionId;
 };
-const entry: MainEntrypoint = defineMain(handler);
-void entry;
+void cron;
+const event: EventHandler = async (change) => {
+  void change.documentId;
+};
+void event;
+const fetchHandler: FetchHandler = async (req, ctx) => {
+  void req;
+  void ctx.identity.projectId;
+  return new Response("ok");
+};
+void fetchHandler;
 
 // CronTick：wire {type:"cron",trigger_id,scheduled_for} 的 camelCase 视图。
 const tick: CronTick = { triggerId: "cron-1", scheduledFor: "2026-09-18T00:00:00Z" };

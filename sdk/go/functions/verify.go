@@ -28,6 +28,10 @@ const (
 // ProtocolVersion 是扩展协议版本（与平台 domain protocol.go 同值）。
 const ProtocolVersion = "1"
 
+// maxBodyBytes 是请求体上限 4MB（触发器封套双编码口径；Verify 与统一入口
+// NewServer 共用）。
+const maxBodyBytes = 4 << 20
+
 // signatureTimestampTolerance 是签名时间窗（防重放）。
 const signatureTimestampTolerance = 5 * time.Minute
 
@@ -49,7 +53,7 @@ func ComputeSignature(secret string, timestamp int64, body []byte) string {
 }
 
 // BuildSignatureHeader 组装签名头（entries：v1=当前钥[,v2=轮换旧钥]）。
-// 本地开发联调（torchwood functions dev / 自签测试）用。
+// 本地开发联调（对本地 NewServer 自签测试请求）用。
 func BuildSignatureHeader(timestamp int64, entries [][2]string) string {
 	parts := []string{"t=" + strconv.FormatInt(timestamp, 10)}
 	for _, e := range entries {
@@ -108,7 +112,8 @@ func VerifySignatureHeader(header string, body []byte, secrets []string, now tim
 
 // Verify 是验签中间件：校验 X-Tw-Signature（对原始 body 逐字节验签），
 // 失败 401；成功后 body 原样续传给下一 handler。secrets 至少一个（空集
-// fail-closed——无密钥等于不设防）。本地开发联调可经 VerifySkip 显式豁免。
+// fail-closed——无密钥等于不设防）。v4 下验签必经：无豁免通道（本地联调
+// 用 BuildSignatureHeader 自签请求）。
 func Verify(secrets ...string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

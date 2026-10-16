@@ -1,21 +1,29 @@
 /**
- * 四类 handler 契约 + 多源组合器 Mux（对标 Go `sdk/go/functions` 的
- * handlers.go）：invoke / cron / event / fetch 四类触发源显式注册（重复
- * 注册后者覆盖），由统一服务入口 newServer 按请求形态分发。
+ * 四类 handler 契约 + 多源组合器 Mux（与 Go `sdk/go/functions` 的
+ * handlers.go 同构）：invoke / cron / event / fetch 四类触发源显式注册
+ * （重复注册后者覆盖），由统一服务入口 newServer 按请求形态分发。分发维度
+ * = 协议轴（invoke / http.request 走 RPC 轴 method，cron / event 走事件轴
+ * CloudEvents type）。
  */
 import type { CronTick, DocumentChange } from "./events.js";
 
-/** fetch 响应 body 截断上限（平台 maxOutputBytes；与 Go serve.go 同值）。 */
+/** fetch 响应 body 截断上限（64KB，平台 maxOutputBytes 口径；与 Go handlers.go 同值）。 */
 export const MAX_OUTPUT_BYTES = 64 * 1024;
 
 /**
- * ExecutionIdentity 是 v4 服务面的执行身份四件（身份头投影；与 Go
- * identityContext 注入的 Identity 字段一一对应——v4 下 X-Tw-Execution-Id
- * 头退役、id 走 JSON-RPC body，身份头仅剩 token/source/invoking-user/project）。
+ * ExecutionIdentity 是执行身份六件（v4 签名调用的身份投影，与 Go
+ * identity.go 的 Identity 字段一一对应）：token / source / invoking-user /
+ * project 四件走身份头，executionId 走载荷关联键（RPC 轴 = JSON-RPC id、
+ * 事件轴 = CloudEvent id），apiBaseUrl 走部署侧注入的 process.env
+ * TW_API_BASE_URL（makeContext 每请求读入）。
  */
 export interface ExecutionIdentity {
   /** 本次执行的短期凭证（x-tw-execution-token；Bearer twx_… 形态，供平台 API 鉴权，执行结束即失效）。 */
   executionToken: string;
+  /** 平台 API base（部署侧注入的 env TW_API_BASE_URL），如 https://api.example.com。 */
+  apiBaseUrl: string;
+  /** 本次执行的关联键（RPC 轴 = JSON-RPC id；事件轴 = CloudEvent id——日志关联 / 幂等键推荐来源）。 */
+  executionId: string;
   /** 调用来源（x-tw-source；恒非空——header 缺省回落 "server"）。 */
   source: string;
   /** 触发执行的端用户（x-tw-invoking-user-id；空串 = 非用户触发，系统语义）。 */
@@ -25,8 +33,52 @@ export interface ExecutionIdentity {
 }
 
 /**
+ * IDENTITY_FIELDS 是身份的规范字段清单（assertIdentity 的校验面 = 错误文案
+ * 的依据）。平台新增字段时旧版 SDK 保持可用（协议演进宪法：只读已知字段），
+ * 故校验只要求「已知字段存在且为 string」，不拒绝额外字段。
+ */
+const IDENTITY_FIELDS = [
+  "executionToken",
+  "apiBaseUrl",
+  "executionId",
+  "source",
+  "invokingUserId",
+  "projectId",
+] as const;
+
+/**
+ * assertIdentity 运行时校验身份形状（六字段齐备且均为 string），缺字段/
+ * 类型不符抛出带字段名的清晰错误——凭证错误在构造 Client 时即暴露，而不是
+ * 把 undefined 一路带进业务逻辑。校验通过返回原对象（透传，不拷贝）。
+ */
+export function assertIdentity(value: unknown, origin: string): ExecutionIdentity {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(
+      `${origin}: identity must be an object with fields {${IDENTITY_FIELDS.join(", ")}}, got ${describe(value)}`
+    );
+  }
+  const rec = value as Record<string, unknown>;
+  for (const field of IDENTITY_FIELDS) {
+    const v = rec[field];
+    if (typeof v !== "string") {
+      throw new Error(
+        `${origin}: identity.${field} must be a string, got ${describe(v)} — v4 注入形状为 {${IDENTITY_FIELDS.join(", ")}}`
+      );
+    }
+  }
+  return value as ExecutionIdentity;
+}
+
+function describe(v: unknown): string {
+  if (v === undefined) return "undefined";
+  if (v === null) return "null";
+  if (Array.isArray(v)) return "array";
+  return typeof v;
+}
+
+/**
  * HandlerContext 是 handler 的执行上下文（Go context 携带 Identity +
- * deadline 的 TS 对称物）：identity 为身份四件；signal 为 per-request
+ * deadline 的 TS 对称物）：identity 为身份六件；signal 为 per-request
  * 预算（30s 兜底，到点 abort——Go rpcRequestTimeout 同源）。
  */
 export interface HandlerContext {
@@ -64,9 +116,9 @@ export interface TriggerEnvelope {
 }
 
 /**
- * 响应头过滤清单（对照 runner.js RESPONSE_HEADER_BLOCKLIST）：hop-by-hop
- * + 平台头。content-length 由分发链路按实际 body 重算；date/server/host
- * 不得由用户代码冒充；其余头（含 content-type）原样透传。
+ * 响应头过滤清单（与 Go handlers.go responseHeaderBlocklist 同清单）：hop-
+ * by-hop + 平台头。content-length 由分发链路按实际 body 重算；date/server/
+ * host 不得由用户代码冒充；其余头（含 content-type）原样透传。
  */
 const RESPONSE_HEADER_BLOCKLIST = new Set([
   "connection",
@@ -129,8 +181,8 @@ export class Mux {
 }
 
 /**
- * buildTriggerRequest 还原 fetch 风格请求（对照 runner.js buildRequest /
- * Go buildTriggerRequest）：url = http://trigger{path}?{raw_query}、
+ * buildTriggerRequest 还原 fetch 风格请求（http.request params.envelope，
+ * 与 Go buildTriggerRequest 同构）：url = http://trigger{path}?{raw_query}、
  * headers 原样、body = 分发 body（GET/HEAD 不带 body）；method 大写化、
  * 缺省 GET。非法 method（非 HTTP token）抛 TypeError → 上层映射
  * "http request failed"。
