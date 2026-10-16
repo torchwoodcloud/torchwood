@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"log/slog"
 
 	"github.com/google/wire"
 	"github.com/lynx-go/lynx"
@@ -70,6 +71,7 @@ var ProviderSet = wire.NewSet(
 	NewGrantsReconcileHook,
 	NewScaleMetricsHook,
 	NewSchemaReconcileHook,
+	newOutboxWorkerService,
 	NewAppConfig,
 	NewComponents,
 	workerpkg.ProviderSet,
@@ -184,7 +186,13 @@ func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 	return &c, nil
 }
 
-func NewComponents(worker *workerpkg.Worker, cleaner *workerpkg.ChunkCleaner, trimmer *workerpkg.StreamTrimmer, outbox *workerpkg.OutboxWorkerService, paymentCloser *workerpkg.PaymentCloser, assetExpirer *workerpkg.AssetExpirer, subscriptionBiller *workerpkg.SubscriptionBiller, usageRollup *workerpkg.UsageRollupWorker, leaderboardsCleaner *workerpkg.LeaderboardsCleaner, leaderboardsSettler *workerpkg.LeaderboardsSettler, analyticsRollup *workerpkg.AnalyticsRollupWorker, analyticsMaintenance *workerpkg.AnalyticsMaintenanceWorker) []lynx.Service {
+// newOutboxWorkerService 把 outbox 领取端口包成 lynx actor（壳样板收敛于
+// bootkit.RunnerService，与 cmd/server 的 realtime-subscriber 同款）。
+func newOutboxWorkerService(w *infraevents.OutboxWorker, logger *slog.Logger) *bootkit.RunnerService {
+	return bootkit.NewRunnerService("outbox-worker", w, logger)
+}
+
+func NewComponents(worker *workerpkg.Worker, cleaner *workerpkg.ChunkCleaner, trimmer *workerpkg.StreamTrimmer, outbox *bootkit.RunnerService, paymentCloser *workerpkg.PaymentCloser, assetExpirer *workerpkg.AssetExpirer, subscriptionBiller *workerpkg.SubscriptionBiller, usageRollup *workerpkg.UsageRollupWorker, leaderboardsCleaner *workerpkg.LeaderboardsCleaner, leaderboardsSettler *workerpkg.LeaderboardsSettler, analyticsRollup *workerpkg.AnalyticsRollupWorker, analyticsMaintenance *workerpkg.AnalyticsMaintenanceWorker) []lynx.Service {
 	return []lynx.Service{worker, cleaner, trimmer, outbox, paymentCloser, assetExpirer, subscriptionBiller, usageRollup, leaderboardsCleaner, leaderboardsSettler, analyticsRollup, analyticsMaintenance}
 }
 

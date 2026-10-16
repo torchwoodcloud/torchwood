@@ -22,6 +22,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/domain"
 	databases "github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
+	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	domainstorage "github.com/torchwoodcloud/torchwood/internal/domain/storage"
 	"github.com/torchwoodcloud/torchwood/internal/infra"
 	"github.com/torchwoodcloud/torchwood/internal/infra/auth"
@@ -64,7 +65,7 @@ var ProviderSet = wire.NewSet(
 	wire.Bind(new(projects.SchemaManager), new(*projectschema.SchemaManager)),
 	NewProjectsOptions,
 	NewStorageOptions,
-	NewRealtimeSubscriberService,
+	newRealtimeSubscriber,
 	// Realtime 握手校验复用 auth.Validator（api.ProviderSet 与
 	// infra.ProviderSet 在此组合，Bind 放组合根）。
 	wire.Bind(new(apirealtime.CredentialValidator), new(*auth.Validator)),
@@ -124,7 +125,7 @@ func NewBuildInfo() buildinfo.BuildInfo {
 func NewComponents(
 	grpcServer *lynxgrpc.Server,
 	gatewayServer *runtime.GRPCGatewayServer,
-	realtimeSubscriber *RealtimeSubscriberService,
+	realtimeSubscriber *bootkit.RunnerService,
 	metricsServer *runtime.MetricsServer,
 	debugServer *lynxdebug.Service,
 ) []lynx.Service {
@@ -135,6 +136,12 @@ func NewComponents(
 		metricsServer,
 		debugServer,
 	}
+}
+
+// newRealtimeSubscriber 把 RealtimeFanout 端口包成 lynx actor（壳样板收敛于
+// bootkit.RunnerService，与 cmd/worker 的 outbox-worker 同款）。
+func newRealtimeSubscriber(sub shared.RealtimeFanout, logger *slog.Logger) *bootkit.RunnerService {
+	return bootkit.NewRunnerService("realtime-subscriber", sub, logger)
 }
 
 // NewSchemaManager 构造桥接了 documentdb internalIDCache 失效回调的 schema

@@ -86,7 +86,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	streamTrimmer := worker.NewStreamTrimmer(sharedQueue, logger)
 	realtimeTransport := realtime.NewStreamTransport(redisClient)
 	outboxWorker := events.NewOutboxWorker(database, realtimeTransport, logger)
-	outboxWorkerService := worker.NewOutboxWorkerService(outboxWorker, logger)
+	runnerService := newOutboxWorkerService(outboxWorker, logger)
 	orderRepo := bunrepo.NewPaymentOrderRepository(database)
 	callbackEventRepo := bunrepo.NewPaymentCallbackEventRepository(database)
 	fulfillmentRepo := bunrepo.NewPaymentFulfillmentRepository(database)
@@ -126,7 +126,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	analyticsRollupWorker := worker.NewAnalyticsRollupWorker(rollup, logger)
 	maintenance := analytics.NewMaintenanceFromConfig(appConfig, analyticsWorkerRepository, analyticsWorkerRepository, repository, logger)
 	analyticsMaintenanceWorker := worker.NewAnalyticsMaintenanceWorker(maintenance, logger)
-	v2 := NewComponents(workerWorker, chunkCleaner, streamTrimmer, outboxWorkerService, paymentCloser, assetExpirer, subscriptionBiller, usageRollupWorker, leaderboardsCleaner, leaderboardsSettler, analyticsRollupWorker, analyticsMaintenanceWorker)
+	v2 := NewComponents(workerWorker, chunkCleaner, streamTrimmer, runnerService, paymentCloser, assetExpirer, subscriptionBiller, usageRollupWorker, leaderboardsCleaner, leaderboardsSettler, analyticsRollupWorker, analyticsMaintenanceWorker)
 	v3 := bootkit.NewComponentBuilders()
 	bootstrap := boot.New(preStartHooks, drainHooks, preStopHooks, postStopHooks, v2, v3)
 	return bootstrap, func() {

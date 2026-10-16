@@ -15,7 +15,6 @@ var ProviderSet = wire.NewSet(
 	NewWorkerWithWebhooks,
 	NewChunkCleaner,
 	NewStreamTrimmer,
-	NewOutboxWorkerService,
 	NewPaymentCloser,
 	NewAssetExpirer,
 	NewSubscriptionBiller,
