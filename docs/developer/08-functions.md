@@ -290,7 +290,16 @@ v4 彻底 substrate-blind——函数常驻服务就是一个 URL 后面的进�
 
 - `Webhook` = URL + 订阅串集 + 签名密钥 + 状态（enabled / paused）。**url 强制 https**；订阅串复用 eventmatch 内核（与函数事件触发器同款语法，§5.3：文档写事件 + 系统行为事件双形态，1..64 条 × ≤200B，创建期逐条格式校验 fail-closed）。一期为路由级过滤（负载级过滤不做）。
 - per-project webhook 数上限默认 32（`functions.webhooks.max_per_project`）。
-- 管理面：`CreateWebhook / GetWebhook / ListWebhooks / UpdateWebhook / DeleteWebhook / RotateWebhookSecret / ListDeliveries / GetDelivery / RedeliverDelivery`。密钥服务端生成（`whsec_` 前缀），明文仅在**轮换响应**一次性出现（创建响应为视图投影只出指纹——需要明文创建后立即轮换）；管理面只出 `secret_fingerprint`。Console「Webhooks」页提供列表 / 创建编辑（url/订阅串/启停）/ 轮换 / 投递记录与 Redeliver。
+- 管理面：`CreateWebhook / GetWebhook / ListWebhooks / UpdateWebhook / DeleteWebhook / RotateWebhookSecret / ListDeliveries / GetDelivery / RedeliverDelivery`。密钥服务端生成（`whsec_` 前缀），明文仅在**创建 / 轮换响应**一次性出现（之后任何接口只出 `secret_fingerprint`）。Console「Webhooks」页提供列表 / 创建编辑（url/订阅串/启停）/ 轮换 / 投递记录与 Redeliver；CLI 同构：
+
+```bash
+torchwood webhooks create --url https://hooks.example.com/cb \
+  --events auth.users.created,databases.db.collections.col.documents.created
+torchwood webhooks list | get <wh-id> | update [--url|--events|--status] <wh-id> | delete <wh-id>
+torchwood webhooks rotate-secret <wh-id>          # 新明文一次性回显，旧钥宽限窗双签 v2
+torchwood webhooks deliveries list [--status failed] <wh-id>   # DLQ 浏览
+torchwood webhooks deliveries get|redeliver <wh-id> <delivery-id>
+```
 
 ### 7.2 投递语义
 

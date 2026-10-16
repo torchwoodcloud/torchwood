@@ -34,6 +34,7 @@ flag: explicit flag > TORCHWOOD_CLI_* env var > config file profile
 		cli.NewGroupsCmd(g),
 		cli.NewStorageCmd(g),
 		cli.NewFunctionsCmd(g),
+		cli.NewWebhooksCmd(g),
 		cli.NewOAuthProvidersCmd(g),
 		cli.NewLeaderboardsCmd(g),
 		cli.NewAnalyticsCmd(g),
