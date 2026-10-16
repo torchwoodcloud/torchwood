@@ -155,23 +155,29 @@ function parseEvents(text: string): string[] {
     .filter((line) => line !== "");
 }
 
-// OneTimeSecretDialog：轮换密钥的一次性明文回显——仅此一次，关闭后只出指纹。
+// OneTimeSecretDialog：创建/轮换密钥的一次性明文回显——仅此一次，关闭后只
+// 出指纹。title/description 缺省为轮换文案（创建方传入自定义文案）。
 function OneTimeSecretDialog({
+  title,
+  description,
   secret,
   fingerprint,
   onClose,
 }: {
+  title?: string;
+  description?: string;
   secret: string;
-  fingerprint: string;
+  fingerprint?: string;
   onClose: () => void;
 }) {
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>新签名密钥</DialogTitle>
+          <DialogTitle>{title ?? "新签名密钥"}</DialogTitle>
           <DialogDescription>
-            轮换完成：新钥即刻生效，旧钥保留一个窗口期（v2 双签过渡，接收方不断流）。
+            {description ??
+              "轮换完成：新钥即刻生效，旧钥保留一个窗口期（v2 双签过渡，接收方不断流）。"}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -285,6 +291,8 @@ export function WebhooksListPage() {
   const tz = useUserTimezone();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  // 创建响应的一次性明文密钥回显（OneTimeSecretDialog）。
+  const [createdSecret, setCreatedSecret] = useState<{ id: string; secret: string } | null>(null);
   const writeable = canWrite(role);
 
   const paging = useServerPaging();
@@ -300,8 +308,11 @@ export function WebhooksListPage() {
 
   const create = useMutation({
     mutationFn: createWebhook,
-    onSuccess: () => {
-      toast.success("Webhook 已创建（签名密钥已生成；需要明文请在详情页轮换）");
+    onSuccess: (result) => {
+      // 一次性明文回显（与 functions create 的 target_secret 同语义）：
+      // 关闭对话框后任何面只出指纹。
+      setCreatedSecret({ id: result.webhook.id, secret: result.secret });
+      toast.success("Webhook 已创建");
       queryClient.invalidateQueries({ queryKey: ["webhooks", projectId] });
       setCreateOpen(false);
     },
@@ -372,6 +383,15 @@ export function WebhooksListPage() {
         onSubmit={(input) => create.mutate(input)}
         pending={create.isPending}
       />
+
+      {createdSecret && (
+        <OneTimeSecretDialog
+          title="签名密钥已生成"
+          description={`Webhook ${createdSecret.id} 创建成功；平台以该密钥签名（HMAC-SHA256）投递请求，接收方按 X-Tw-Signature 验签。`}
+          secret={createdSecret.secret}
+          onClose={() => setCreatedSecret(null)}
+        />
+      )}
     </>
   );
 }

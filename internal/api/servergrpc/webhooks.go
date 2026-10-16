@@ -41,12 +41,12 @@ func (s *WebhooksService) projectID(ctx context.Context) (string, error) {
 	return p.ProjectID, nil
 }
 
-func (s *WebhooksService) CreateWebhook(ctx context.Context, req *serverv1.CreateWebhookRequest) (*serverv1.Webhook, error) {
+func (s *WebhooksService) CreateWebhook(ctx context.Context, req *serverv1.CreateWebhookRequest) (*serverv1.CreateWebhookResponse, error) {
 	projectID, err := s.projectID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	w, _, err := s.webhooks.CreateWebhook(ctx, appwebhooks.CreateWebhookCommand{
+	w, secret, err := s.webhooks.CreateWebhook(ctx, appwebhooks.CreateWebhookCommand{
 		ID:        req.GetId(),
 		ProjectID: projectID,
 		URL:       req.GetUrl(),
@@ -56,9 +56,9 @@ func (s *WebhooksService) CreateWebhook(ctx context.Context, req *serverv1.Creat
 	if err != nil {
 		return nil, err
 	}
-	// 明文密钥只在 CreateWebhookSecret/RotateWebhookSecret 的专用响应出现；
-	// 本响应按 Webhook 视图投影（仅指纹）。
-	return mapWebhook(w), nil
+	// 明文密钥仅在本次响应一次性回显（与 functions CreateFunction 的
+	// target_secret 同语义）；之后任何接口只出指纹，变更走 RotateWebhookSecret。
+	return &serverv1.CreateWebhookResponse{Webhook: mapWebhook(w), Secret: secret}, nil
 }
 
 func (s *WebhooksService) GetWebhook(ctx context.Context, req *serverv1.GetWebhookRequest) (*serverv1.Webhook, error) {

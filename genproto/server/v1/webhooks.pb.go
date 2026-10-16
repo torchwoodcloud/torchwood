@@ -545,6 +545,61 @@ func (x *Webhook) GetUpdatedAt() *timestamppb.Timestamp {
 }
 
 // WebhookSecret 是创建/轮换响应：明文只出现这一次，调用方立即持久化。
+// CreateWebhookResponse 是创建结果：webhook 视图（仅指纹）+ 一次性明文
+// 密钥（与 functions CreateFunction 的 target_secret 同语义；secret 之后
+// 任何接口不再出现，轮换走 RotateWebhookSecret）。
+type CreateWebhookResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Webhook       *Webhook               `protobuf:"bytes,1,opt,name=webhook,proto3" json:"webhook,omitempty"`
+	Secret        string                 `protobuf:"bytes,2,opt,name=secret,proto3" json:"secret,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateWebhookResponse) Reset() {
+	*x = CreateWebhookResponse{}
+	mi := &file_server_v1_webhooks_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateWebhookResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateWebhookResponse) ProtoMessage() {}
+
+func (x *CreateWebhookResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_server_v1_webhooks_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateWebhookResponse.ProtoReflect.Descriptor instead.
+func (*CreateWebhookResponse) Descriptor() ([]byte, []int) {
+	return file_server_v1_webhooks_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *CreateWebhookResponse) GetWebhook() *Webhook {
+	if x != nil {
+		return x.Webhook
+	}
+	return nil
+}
+
+func (x *CreateWebhookResponse) GetSecret() string {
+	if x != nil {
+		return x.Secret
+	}
+	return ""
+}
+
 type WebhookSecret struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	WebhookId string                 `protobuf:"bytes,1,opt,name=webhook_id,json=webhookId,proto3" json:"webhook_id,omitempty"`
@@ -558,7 +613,7 @@ type WebhookSecret struct {
 
 func (x *WebhookSecret) Reset() {
 	*x = WebhookSecret{}
-	mi := &file_server_v1_webhooks_proto_msgTypes[8]
+	mi := &file_server_v1_webhooks_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -570,7 +625,7 @@ func (x *WebhookSecret) String() string {
 func (*WebhookSecret) ProtoMessage() {}
 
 func (x *WebhookSecret) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_webhooks_proto_msgTypes[8]
+	mi := &file_server_v1_webhooks_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -583,7 +638,7 @@ func (x *WebhookSecret) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebhookSecret.ProtoReflect.Descriptor instead.
 func (*WebhookSecret) Descriptor() ([]byte, []int) {
-	return file_server_v1_webhooks_proto_rawDescGZIP(), []int{8}
+	return file_server_v1_webhooks_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *WebhookSecret) GetWebhookId() string {
@@ -637,7 +692,7 @@ type WebhookDelivery struct {
 
 func (x *WebhookDelivery) Reset() {
 	*x = WebhookDelivery{}
-	mi := &file_server_v1_webhooks_proto_msgTypes[9]
+	mi := &file_server_v1_webhooks_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -649,7 +704,7 @@ func (x *WebhookDelivery) String() string {
 func (*WebhookDelivery) ProtoMessage() {}
 
 func (x *WebhookDelivery) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_webhooks_proto_msgTypes[9]
+	mi := &file_server_v1_webhooks_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -662,7 +717,7 @@ func (x *WebhookDelivery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebhookDelivery.ProtoReflect.Descriptor instead.
 func (*WebhookDelivery) Descriptor() ([]byte, []int) {
-	return file_server_v1_webhooks_proto_rawDescGZIP(), []int{9}
+	return file_server_v1_webhooks_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *WebhookDelivery) GetId() string {
@@ -759,7 +814,7 @@ type ListWebhooksResponse struct {
 
 func (x *ListWebhooksResponse) Reset() {
 	*x = ListWebhooksResponse{}
-	mi := &file_server_v1_webhooks_proto_msgTypes[10]
+	mi := &file_server_v1_webhooks_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -771,7 +826,7 @@ func (x *ListWebhooksResponse) String() string {
 func (*ListWebhooksResponse) ProtoMessage() {}
 
 func (x *ListWebhooksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_webhooks_proto_msgTypes[10]
+	mi := &file_server_v1_webhooks_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -784,7 +839,7 @@ func (x *ListWebhooksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWebhooksResponse.ProtoReflect.Descriptor instead.
 func (*ListWebhooksResponse) Descriptor() ([]byte, []int) {
-	return file_server_v1_webhooks_proto_rawDescGZIP(), []int{10}
+	return file_server_v1_webhooks_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListWebhooksResponse) GetWebhooks() []*Webhook {
@@ -811,7 +866,7 @@ type ListDeliveriesResponse struct {
 
 func (x *ListDeliveriesResponse) Reset() {
 	*x = ListDeliveriesResponse{}
-	mi := &file_server_v1_webhooks_proto_msgTypes[11]
+	mi := &file_server_v1_webhooks_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -823,7 +878,7 @@ func (x *ListDeliveriesResponse) String() string {
 func (*ListDeliveriesResponse) ProtoMessage() {}
 
 func (x *ListDeliveriesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_server_v1_webhooks_proto_msgTypes[11]
+	mi := &file_server_v1_webhooks_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -836,7 +891,7 @@ func (x *ListDeliveriesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeliveriesResponse.ProtoReflect.Descriptor instead.
 func (*ListDeliveriesResponse) Descriptor() ([]byte, []int) {
-	return file_server_v1_webhooks_proto_rawDescGZIP(), []int{11}
+	return file_server_v1_webhooks_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ListDeliveriesResponse) GetDeliveries() []*WebhookDelivery {
@@ -905,7 +960,10 @@ const file_server_v1_webhooks_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"u\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"g\n" +
+	"\x15CreateWebhookResponse\x126\n" +
+	"\awebhook\x18\x01 \x01(\v2\x1c.torchwood.server.v1.WebhookR\awebhook\x12\x16\n" +
+	"\x06secret\x18\x02 \x01(\tR\x06secret\"u\n" +
 	"\rWebhookSecret\x12\x1d\n" +
 	"\n" +
 	"webhook_id\x18\x01 \x01(\tR\twebhookId\x12\x16\n" +
@@ -937,9 +995,9 @@ const file_server_v1_webhooks_proto_rawDesc = "" +
 	"\n" +
 	"deliveries\x18\x01 \x03(\v2$.torchwood.server.v1.WebhookDeliveryR\n" +
 	"deliveries\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xad\f\n" +
-	"\x0fWebhooksService\x12\x99\x01\n" +
-	"\rCreateWebhook\x12).torchwood.server.v1.CreateWebhookRequest\x1a\x1c.torchwood.server.v1.Webhook\"?\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xbb\f\n" +
+	"\x0fWebhooksService\x12\xa7\x01\n" +
+	"\rCreateWebhook\x12).torchwood.server.v1.CreateWebhookRequest\x1a*.torchwood.server.v1.CreateWebhookResponse\"?\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
 	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02\x18:\x01*\"\x13/v1/server/webhooks\x12\x8f\x01\n" +
 	"\n" +
 	"GetWebhook\x12&.torchwood.server.v1.GetWebhookRequest\x1a\x1c.torchwood.server.v1.Webhook\";\xea\xc4\x19\x0f\"\r\n" +
@@ -984,7 +1042,7 @@ func file_server_v1_webhooks_proto_rawDescGZIP() []byte {
 	return file_server_v1_webhooks_proto_rawDescData
 }
 
-var file_server_v1_webhooks_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_server_v1_webhooks_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_server_v1_webhooks_proto_goTypes = []any{
 	(*CreateWebhookRequest)(nil),       // 0: torchwood.server.v1.CreateWebhookRequest
 	(*GetWebhookRequest)(nil),          // 1: torchwood.server.v1.GetWebhookRequest
@@ -994,48 +1052,50 @@ var file_server_v1_webhooks_proto_goTypes = []any{
 	(*RedeliverDeliveryRequest)(nil),   // 5: torchwood.server.v1.RedeliverDeliveryRequest
 	(*GetDeliveryRequest)(nil),         // 6: torchwood.server.v1.GetDeliveryRequest
 	(*Webhook)(nil),                    // 7: torchwood.server.v1.Webhook
-	(*WebhookSecret)(nil),              // 8: torchwood.server.v1.WebhookSecret
-	(*WebhookDelivery)(nil),            // 9: torchwood.server.v1.WebhookDelivery
-	(*ListWebhooksResponse)(nil),       // 10: torchwood.server.v1.ListWebhooksResponse
-	(*ListDeliveriesResponse)(nil),     // 11: torchwood.server.v1.ListDeliveriesResponse
-	(*timestamppb.Timestamp)(nil),      // 12: google.protobuf.Timestamp
-	(*v1.ListResponseMeta)(nil),        // 13: torchwood.shared.v1.ListResponseMeta
-	(*v1.ListRequest)(nil),             // 14: torchwood.shared.v1.ListRequest
-	(*v1.Empty)(nil),                   // 15: torchwood.shared.v1.Empty
+	(*CreateWebhookResponse)(nil),      // 8: torchwood.server.v1.CreateWebhookResponse
+	(*WebhookSecret)(nil),              // 9: torchwood.server.v1.WebhookSecret
+	(*WebhookDelivery)(nil),            // 10: torchwood.server.v1.WebhookDelivery
+	(*ListWebhooksResponse)(nil),       // 11: torchwood.server.v1.ListWebhooksResponse
+	(*ListDeliveriesResponse)(nil),     // 12: torchwood.server.v1.ListDeliveriesResponse
+	(*timestamppb.Timestamp)(nil),      // 13: google.protobuf.Timestamp
+	(*v1.ListResponseMeta)(nil),        // 14: torchwood.shared.v1.ListResponseMeta
+	(*v1.ListRequest)(nil),             // 15: torchwood.shared.v1.ListRequest
+	(*v1.Empty)(nil),                   // 16: torchwood.shared.v1.Empty
 }
 var file_server_v1_webhooks_proto_depIdxs = []int32{
-	12, // 0: torchwood.server.v1.Webhook.created_at:type_name -> google.protobuf.Timestamp
-	12, // 1: torchwood.server.v1.Webhook.updated_at:type_name -> google.protobuf.Timestamp
-	12, // 2: torchwood.server.v1.WebhookDelivery.next_attempt_at:type_name -> google.protobuf.Timestamp
-	12, // 3: torchwood.server.v1.WebhookDelivery.created_at:type_name -> google.protobuf.Timestamp
-	12, // 4: torchwood.server.v1.WebhookDelivery.updated_at:type_name -> google.protobuf.Timestamp
-	7,  // 5: torchwood.server.v1.ListWebhooksResponse.webhooks:type_name -> torchwood.server.v1.Webhook
-	13, // 6: torchwood.server.v1.ListWebhooksResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
-	9,  // 7: torchwood.server.v1.ListDeliveriesResponse.deliveries:type_name -> torchwood.server.v1.WebhookDelivery
-	13, // 8: torchwood.server.v1.ListDeliveriesResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
-	0,  // 9: torchwood.server.v1.WebhooksService.CreateWebhook:input_type -> torchwood.server.v1.CreateWebhookRequest
-	1,  // 10: torchwood.server.v1.WebhooksService.GetWebhook:input_type -> torchwood.server.v1.GetWebhookRequest
-	14, // 11: torchwood.server.v1.WebhooksService.ListWebhooks:input_type -> torchwood.shared.v1.ListRequest
-	2,  // 12: torchwood.server.v1.WebhooksService.UpdateWebhook:input_type -> torchwood.server.v1.UpdateWebhookRequest
-	1,  // 13: torchwood.server.v1.WebhooksService.DeleteWebhook:input_type -> torchwood.server.v1.GetWebhookRequest
-	3,  // 14: torchwood.server.v1.WebhooksService.RotateWebhookSecret:input_type -> torchwood.server.v1.RotateWebhookSecretRequest
-	4,  // 15: torchwood.server.v1.WebhooksService.ListDeliveries:input_type -> torchwood.server.v1.ListDeliveriesRequest
-	6,  // 16: torchwood.server.v1.WebhooksService.GetDelivery:input_type -> torchwood.server.v1.GetDeliveryRequest
-	5,  // 17: torchwood.server.v1.WebhooksService.RedeliverDelivery:input_type -> torchwood.server.v1.RedeliverDeliveryRequest
-	7,  // 18: torchwood.server.v1.WebhooksService.CreateWebhook:output_type -> torchwood.server.v1.Webhook
-	7,  // 19: torchwood.server.v1.WebhooksService.GetWebhook:output_type -> torchwood.server.v1.Webhook
-	10, // 20: torchwood.server.v1.WebhooksService.ListWebhooks:output_type -> torchwood.server.v1.ListWebhooksResponse
-	7,  // 21: torchwood.server.v1.WebhooksService.UpdateWebhook:output_type -> torchwood.server.v1.Webhook
-	15, // 22: torchwood.server.v1.WebhooksService.DeleteWebhook:output_type -> torchwood.shared.v1.Empty
-	8,  // 23: torchwood.server.v1.WebhooksService.RotateWebhookSecret:output_type -> torchwood.server.v1.WebhookSecret
-	11, // 24: torchwood.server.v1.WebhooksService.ListDeliveries:output_type -> torchwood.server.v1.ListDeliveriesResponse
-	9,  // 25: torchwood.server.v1.WebhooksService.GetDelivery:output_type -> torchwood.server.v1.WebhookDelivery
-	9,  // 26: torchwood.server.v1.WebhooksService.RedeliverDelivery:output_type -> torchwood.server.v1.WebhookDelivery
-	18, // [18:27] is the sub-list for method output_type
-	9,  // [9:18] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	13, // 0: torchwood.server.v1.Webhook.created_at:type_name -> google.protobuf.Timestamp
+	13, // 1: torchwood.server.v1.Webhook.updated_at:type_name -> google.protobuf.Timestamp
+	7,  // 2: torchwood.server.v1.CreateWebhookResponse.webhook:type_name -> torchwood.server.v1.Webhook
+	13, // 3: torchwood.server.v1.WebhookDelivery.next_attempt_at:type_name -> google.protobuf.Timestamp
+	13, // 4: torchwood.server.v1.WebhookDelivery.created_at:type_name -> google.protobuf.Timestamp
+	13, // 5: torchwood.server.v1.WebhookDelivery.updated_at:type_name -> google.protobuf.Timestamp
+	7,  // 6: torchwood.server.v1.ListWebhooksResponse.webhooks:type_name -> torchwood.server.v1.Webhook
+	14, // 7: torchwood.server.v1.ListWebhooksResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	10, // 8: torchwood.server.v1.ListDeliveriesResponse.deliveries:type_name -> torchwood.server.v1.WebhookDelivery
+	14, // 9: torchwood.server.v1.ListDeliveriesResponse.meta:type_name -> torchwood.shared.v1.ListResponseMeta
+	0,  // 10: torchwood.server.v1.WebhooksService.CreateWebhook:input_type -> torchwood.server.v1.CreateWebhookRequest
+	1,  // 11: torchwood.server.v1.WebhooksService.GetWebhook:input_type -> torchwood.server.v1.GetWebhookRequest
+	15, // 12: torchwood.server.v1.WebhooksService.ListWebhooks:input_type -> torchwood.shared.v1.ListRequest
+	2,  // 13: torchwood.server.v1.WebhooksService.UpdateWebhook:input_type -> torchwood.server.v1.UpdateWebhookRequest
+	1,  // 14: torchwood.server.v1.WebhooksService.DeleteWebhook:input_type -> torchwood.server.v1.GetWebhookRequest
+	3,  // 15: torchwood.server.v1.WebhooksService.RotateWebhookSecret:input_type -> torchwood.server.v1.RotateWebhookSecretRequest
+	4,  // 16: torchwood.server.v1.WebhooksService.ListDeliveries:input_type -> torchwood.server.v1.ListDeliveriesRequest
+	6,  // 17: torchwood.server.v1.WebhooksService.GetDelivery:input_type -> torchwood.server.v1.GetDeliveryRequest
+	5,  // 18: torchwood.server.v1.WebhooksService.RedeliverDelivery:input_type -> torchwood.server.v1.RedeliverDeliveryRequest
+	8,  // 19: torchwood.server.v1.WebhooksService.CreateWebhook:output_type -> torchwood.server.v1.CreateWebhookResponse
+	7,  // 20: torchwood.server.v1.WebhooksService.GetWebhook:output_type -> torchwood.server.v1.Webhook
+	11, // 21: torchwood.server.v1.WebhooksService.ListWebhooks:output_type -> torchwood.server.v1.ListWebhooksResponse
+	7,  // 22: torchwood.server.v1.WebhooksService.UpdateWebhook:output_type -> torchwood.server.v1.Webhook
+	16, // 23: torchwood.server.v1.WebhooksService.DeleteWebhook:output_type -> torchwood.shared.v1.Empty
+	9,  // 24: torchwood.server.v1.WebhooksService.RotateWebhookSecret:output_type -> torchwood.server.v1.WebhookSecret
+	12, // 25: torchwood.server.v1.WebhooksService.ListDeliveries:output_type -> torchwood.server.v1.ListDeliveriesResponse
+	10, // 26: torchwood.server.v1.WebhooksService.GetDelivery:output_type -> torchwood.server.v1.WebhookDelivery
+	10, // 27: torchwood.server.v1.WebhooksService.RedeliverDelivery:output_type -> torchwood.server.v1.WebhookDelivery
+	19, // [19:28] is the sub-list for method output_type
+	10, // [10:19] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_server_v1_webhooks_proto_init() }
@@ -1050,7 +1110,7 @@ func file_server_v1_webhooks_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_server_v1_webhooks_proto_rawDesc), len(file_server_v1_webhooks_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

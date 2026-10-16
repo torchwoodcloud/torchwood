@@ -29,6 +29,12 @@ export interface WebhookSecret {
   secret_fingerprint: string;
 }
 
+/** CreateWebhook 响应：webhook 视图（仅指纹）+ 一次性明文密钥。 */
+export interface CreateWebhookResponse {
+  webhook: Webhook;
+  secret: string;
+}
+
 /** 投递行投影（DLQ 浏览/重投管理面）。status ∈ pending | delivered | failed。 */
 export interface WebhookDelivery {
   id: string;
@@ -55,8 +61,8 @@ export class WebhooksService {
   constructor(private readonly http: HttpTransport) {}
 
   // 创建订阅：url 强制 https；订阅串复用 eventmatch 语法（1..64 条 × ≤200B，
-  // 格式校验在服务端）。响应为 Webhook 视图（仅指纹）——签名密钥明文不在
-  // 创建响应出现，需要明文请创建后立即 rotateSecret（与 Go 侧 handler 一致）。
+  // 格式校验在服务端）。响应携带一次性明文密钥（与 CreateFunction 的
+  // target_secret 同语义）——之后任何接口只出指纹，变更走 rotateSecret。
   async create(input: {
     /** 可选（服务端生成 "wh-<uuid>"）；^$|^[a-z0-9][a-z0-9_-]{0,62}$。 */
     id?: string;
@@ -64,8 +70,8 @@ export class WebhooksService {
     events: string[];
     /** 缺省 enabled。 */
     status?: "enabled" | "paused";
-  }): Promise<Webhook> {
-    return this.http.request<Webhook>("POST", "/v1/server/webhooks", {
+  }): Promise<CreateWebhookResponse> {
+    return this.http.request<CreateWebhookResponse>("POST", "/v1/server/webhooks", {
       auth: "apiKey",
       body: input,
     });

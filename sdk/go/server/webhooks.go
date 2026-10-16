@@ -15,8 +15,9 @@ type WebhooksService struct {
 	api serverv1.WebhooksServiceClient
 }
 
-// CreateWebhook 创建订阅（https 强制；签名密钥服务端生成、明文一次性回显）。
-func (s *WebhooksService) CreateWebhook(ctx context.Context, req *serverv1.CreateWebhookRequest) (*serverv1.Webhook, error) {
+// CreateWebhook 创建订阅（https 强制；签名密钥服务端生成、明文一次性回显
+// ——与 CreateFunction 的 target_secret 同语义，之后只出指纹）。
+func (s *WebhooksService) CreateWebhook(ctx context.Context, req *serverv1.CreateWebhookRequest) (*serverv1.CreateWebhookResponse, error) {
 	return s.api.CreateWebhook(ctx, req)
 }
 

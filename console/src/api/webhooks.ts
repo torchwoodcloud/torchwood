@@ -65,16 +65,22 @@ export async function getWebhook(webhookId: string): Promise<Webhook> {
 }
 
 // CreateWebhook 响应为 Webhook 视图（仅指纹）：明文密钥不在创建响应出现，
-// 需要明文请创建后立即轮换（与 Go 侧 handler 一致——proto 注释与实际投影
-// 有出入，REST 形状以 genproto swagger 为准）。
+// CreateWebhookResponse：webhook 视图 + 一次性明文密钥（与 functions
+// create 的 target_secret 同语义；之后任何接口只出指纹，变更走轮换）。
+export interface CreateWebhookResponse {
+  webhook: Webhook;
+  secret: string;
+}
+
+// 创建订阅：响应携带一次性明文密钥，调用方立即展示/持久化。
 export async function createWebhook(input: {
   id?: string;
   url: string;
   events: string[];
   // 缺省 enabled。
   status?: "enabled" | "paused";
-}): Promise<Webhook> {
-  const res = await api.post<Webhook>("/server/webhooks", input);
+}): Promise<CreateWebhookResponse> {
+  const res = await api.post<CreateWebhookResponse>("/server/webhooks", input);
   return res.data;
 }
 

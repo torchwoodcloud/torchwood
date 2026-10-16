@@ -45,8 +45,11 @@ const (
 type WebhooksServiceClient interface {
 	// CreateWebhook 创建订阅：url 强制 https；订阅串复用 eventmatch 语法
 	// （函数事件触发器同款，1..64 条 × ≤200B）；签名密钥服务端生成，明文
-	// 仅在本响应出现一次，之后只出指纹（secret_fingerprint）。
-	CreateWebhook(ctx context.Context, in *CreateWebhookRequest, opts ...grpc.CallOption) (*Webhook, error)
+	// 仅在响应 secret 字段出现一次，之后只出指纹（secret_fingerprint）。
+	// 与 functions CreateFunction 的一次性密钥回显同语义（实施勘误
+	// 2026-10-16：初版误将明文丢弃、用户只能轮换才能取得，与 functions
+	// 面不一致——收编为专用响应）。
+	CreateWebhook(ctx context.Context, in *CreateWebhookRequest, opts ...grpc.CallOption) (*CreateWebhookResponse, error)
 	GetWebhook(ctx context.Context, in *GetWebhookRequest, opts ...grpc.CallOption) (*Webhook, error)
 	ListWebhooks(ctx context.Context, in *v1.ListRequest, opts ...grpc.CallOption) (*ListWebhooksResponse, error)
 	// UpdateWebhook 部分更新：optional 字段未设置 = 不修改；url/events/status
@@ -76,9 +79,9 @@ func NewWebhooksServiceClient(cc grpc.ClientConnInterface) WebhooksServiceClient
 	return &webhooksServiceClient{cc}
 }
 
-func (c *webhooksServiceClient) CreateWebhook(ctx context.Context, in *CreateWebhookRequest, opts ...grpc.CallOption) (*Webhook, error) {
+func (c *webhooksServiceClient) CreateWebhook(ctx context.Context, in *CreateWebhookRequest, opts ...grpc.CallOption) (*CreateWebhookResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Webhook)
+	out := new(CreateWebhookResponse)
 	err := c.cc.Invoke(ctx, WebhooksService_CreateWebhook_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -180,8 +183,11 @@ func (c *webhooksServiceClient) RedeliverDelivery(ctx context.Context, in *Redel
 type WebhooksServiceServer interface {
 	// CreateWebhook 创建订阅：url 强制 https；订阅串复用 eventmatch 语法
 	// （函数事件触发器同款，1..64 条 × ≤200B）；签名密钥服务端生成，明文
-	// 仅在本响应出现一次，之后只出指纹（secret_fingerprint）。
-	CreateWebhook(context.Context, *CreateWebhookRequest) (*Webhook, error)
+	// 仅在响应 secret 字段出现一次，之后只出指纹（secret_fingerprint）。
+	// 与 functions CreateFunction 的一次性密钥回显同语义（实施勘误
+	// 2026-10-16：初版误将明文丢弃、用户只能轮换才能取得，与 functions
+	// 面不一致——收编为专用响应）。
+	CreateWebhook(context.Context, *CreateWebhookRequest) (*CreateWebhookResponse, error)
 	GetWebhook(context.Context, *GetWebhookRequest) (*Webhook, error)
 	ListWebhooks(context.Context, *v1.ListRequest) (*ListWebhooksResponse, error)
 	// UpdateWebhook 部分更新：optional 字段未设置 = 不修改；url/events/status
@@ -211,7 +217,7 @@ type WebhooksServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedWebhooksServiceServer struct{}
 
-func (UnimplementedWebhooksServiceServer) CreateWebhook(context.Context, *CreateWebhookRequest) (*Webhook, error) {
+func (UnimplementedWebhooksServiceServer) CreateWebhook(context.Context, *CreateWebhookRequest) (*CreateWebhookResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateWebhook not implemented")
 }
 func (UnimplementedWebhooksServiceServer) GetWebhook(context.Context, *GetWebhookRequest) (*Webhook, error) {

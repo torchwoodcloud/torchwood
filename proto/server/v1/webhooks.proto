@@ -76,8 +76,11 @@ service WebhooksService {
 
   // CreateWebhook 创建订阅：url 强制 https；订阅串复用 eventmatch 语法
   //（函数事件触发器同款，1..64 条 × ≤200B）；签名密钥服务端生成，明文
-  // 仅在本响应出现一次，之后只出指纹（secret_fingerprint）。
-  rpc CreateWebhook(CreateWebhookRequest) returns (Webhook) {
+  // 仅在响应 secret 字段出现一次，之后只出指纹（secret_fingerprint）。
+  // 与 functions CreateFunction 的一次性密钥回显同语义（实施勘误
+  // 2026-10-16：初版误将明文丢弃、用户只能轮换才能取得，与 functions
+  // 面不一致——收编为专用响应）。
+  rpc CreateWebhook(CreateWebhookRequest) returns (CreateWebhookResponse) {
     option (google.api.http) = { post: "/v1/server/webhooks", body: "*" };
     // authz 比照 functions.proto：webhooks 属 Functions v4 面，scope 资源
     // 复用 functions（词表/SDK 契约零扩散；粒度 = functions.read/write）。
@@ -236,6 +239,14 @@ message Webhook {
 }
 
 // WebhookSecret 是创建/轮换响应：明文只出现这一次，调用方立即持久化。
+// CreateWebhookResponse 是创建结果：webhook 视图（仅指纹）+ 一次性明文
+// 密钥（与 functions CreateFunction 的 target_secret 同语义；secret 之后
+// 任何接口不再出现，轮换走 RotateWebhookSecret）。
+message CreateWebhookResponse {
+  Webhook webhook = 1;
+  string secret = 2;
+}
+
 message WebhookSecret {
   string webhook_id = 1;
   // 签名密钥明文（whsec_ 前缀 + 32 字节 base64url）。之后只出指纹。

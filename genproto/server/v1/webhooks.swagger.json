@@ -77,13 +77,13 @@
         ]
       },
       "post": {
-        "summary": "CreateWebhook 创建订阅：url 强制 https；订阅串复用 eventmatch 语法\n（函数事件触发器同款，1..64 条 × ≤200B）；签名密钥服务端生成，明文\n仅在本响应出现一次，之后只出指纹（secret_fingerprint）。",
+        "summary": "CreateWebhook 创建订阅：url 强制 https；订阅串复用 eventmatch 语法\n（函数事件触发器同款，1..64 条 × ≤200B）；签名密钥服务端生成，明文\n仅在响应 secret 字段出现一次，之后只出指纹（secret_fingerprint）。\n与 functions CreateFunction 的一次性密钥回显同语义（实施勘误\n2026-10-16：初版误将明文丢弃、用户只能轮换才能取得，与 functions\n面不一致——收编为专用响应）。",
         "operationId": "WebhooksService_CreateWebhook",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/v1Webhook"
+              "$ref": "#/definitions/v1CreateWebhookResponse"
             }
           },
           "default": {
@@ -428,6 +428,18 @@
       },
       "title": "CreateWebhookRequest 创建订阅。"
     },
+    "v1CreateWebhookResponse": {
+      "type": "object",
+      "properties": {
+        "webhook": {
+          "$ref": "#/definitions/v1Webhook"
+        },
+        "secret": {
+          "type": "string"
+        }
+      },
+      "title": "WebhookSecret 是创建/轮换响应：明文只出现这一次，调用方立即持久化。\nCreateWebhookResponse 是创建结果：webhook 视图（仅指纹）+ 一次性明文\n密钥（与 functions CreateFunction 的 target_secret 同语义；secret 之后\n任何接口不再出现，轮换走 RotateWebhookSecret）。"
+    },
     "v1Empty": {
       "type": "object"
     },
@@ -648,8 +660,7 @@
           "type": "string",
           "title": "轮换后的指纹（便于与既有记录核对）。"
         }
-      },
-      "title": "WebhookSecret 是创建/轮换响应：明文只出现这一次，调用方立即持久化。"
+      }
     }
   },
   "securityDefinitions": {
