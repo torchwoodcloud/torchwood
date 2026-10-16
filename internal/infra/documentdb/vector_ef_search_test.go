@@ -1,8 +1,8 @@
 // B7（ef_search 查询级暴露）端到端：显式拒绝矩阵（≤0 / >500 →
 // InvalidArgument，不静默 clamp）、边界值放行、默认（未设置）与显式
-// ef=40 逐字节同果（回归：缺省不 emit SET LOCAL）、近重复簇数据形态上的
-// 召回弱单调对比（recal(200) ≥ recall(40)，B2 实测边界的数据形态复用）
-// 与延迟对比取数（仅记录，不作时间断言）。
+// ef=40 逐字节同果（回归：缺省不 emit SET LOCAL）、近重复簇饱和边界数据
+// 形态上的召回/延迟对比取数（仅记录，不作召回/时间断言）+ 双 ef 通路
+// RLS 不泄漏守卫（显式 SET LOCAL 注入路径同样不得让不可见行漏出）。
 package documentdb
 
 import (
@@ -109,14 +109,25 @@ func TestVectorSearch_EfSearch_DefaultByteIdentical(t *testing.T) {
 
 // TestVectorSearch_EfSearch_RecallAndLatency：近重复簇 + 稀疏可见行数据形态
 // （B2 实测的 HNSW 饱和边界）上的召回/延迟对比取数——ef=40（缺省档）vs
-// ef=200。判据（弱单调）：聚合召回 recall(200) ≥ recall(40)（更大 ef 的候选
-// 池严格更大，聚合意义下召回不降）；召回数字与延迟均值经 t.Logf 记录（转出
-// POC B7 闭环证据），不作时间/绝对召回断言（近似索引的图构建随机性使绝对
-// 召回跨构建波动，弱单调 + 缺省同果断言才是稳定契约）。
-// 取数结论（开发期观测，pgvector 0.8.6 / 1k 行）：同一索引状态下 ef=40 与
-// ef=200/500 的召回一致（饱和形态下要么同满 5/5、要么同为 0/5——1k 规模
-// 上该边界由索引拓扑决定而非 ef 梯度），默认 40 在可达召回时不劣于更大 ef
-// ——佐证默认值；ef 暴露的价值在更大规模/更缓的梯度区间。
+// ef=200。稳定契约有二：(1) RLS 不泄漏——两档 ef（含 ef=200 的 SET LOCAL
+// 显式注入路径）返回的每行都必须属于可见集，近似索引与调参通路不得绕过
+// 行级安全；(2) 全部查询 NoError。召回数字与延迟均值经 t.Logf 记录（转出
+// POC B7 闭环证据）。
+// 不作召回断言（绝对或相对）——本数据形态落在 HNSW 图拓扑彩票上：995 个
+// 近重复行占满 M 邻接槽位，5 个可见行后插只形成单向辐条，能否召回取决于
+// pgvector 逐行插入的随机分层（后端 random()，逐轮不可复现）是否把可见行
+// 选为多层入口点。本地单测串行 6 轮实测：无任何其他测试并发，仍出现
+// [5 5 5] 与 [1 1 1] 两种拓扑（干扰假设排除）；同轮内 ef=40 与 ef=200 逐
+// 查询同果，CI run 38850847834 则跨 ef 分化（r40=1.00 [5 5 5] /
+// r200=0.47 [5 2 0]）。「更大 ef 候选池严格更大 → 聚合召回不降」是精确
+// 检索的直觉，对 strict_order iterative scan 在饱和图上的游走轨迹不成立
+// （原 require.GreaterOrEqual(r200, r40) 因此删除——能覆盖 CI 缺口 0.53
+// 的容忍带已形同虚设）。iterative scan 的语义锁定在分散形态：
+// TestVectorSearch_SparseVisibilityRecall（分散不可见行稳定全召回）。
+// 取数结论（开发期观测，pgvector 0.8.x / 1k 行）：饱和形态下召回由索引
+// 拓扑决定而非 ef 梯度（要么同满、要么同塌、极端轮次跨 ef 分化），默认 40
+// 在可达召回时不劣于更大 ef——佐证默认值；ef 暴露的价值在更大规模/更缓
+// 的梯度区间。
 func TestVectorSearch_EfSearch_RecallAndLatency(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
@@ -183,7 +194,7 @@ func TestVectorSearch_EfSearch_RecallAndLatency(t *testing.T) {
 		require.Len(t, truth[qi], 5)
 	}
 
-	recall := func(ef *int32) (float64, []int) {
+	recall := func(ef *int32, label string) (float64, []int) {
 		perQuery := make([]int, len(queries))
 		for qi, qv := range queries {
 			list, err := docDB.ListDocuments(ctx, projectID, "app", "knn",
@@ -191,6 +202,10 @@ func TestVectorSearch_EfSearch_RecallAndLatency(t *testing.T) {
 			require.NoError(t, err)
 			got := map[string]bool{}
 			for _, d := range list.Documents {
+				// RLS 不泄漏：饱和簇形态正是泄漏最易显形的边界（不可见行
+				// 距查询更近）——返回行必须全部属于 ground truth 可见集。
+				require.Containsf(t, truth[qi], d.ID,
+					"%s: RLS leak, invisible row %q in vector search result", label, d.ID)
 				got[d.ID] = true
 			}
 			want := map[string]bool{}
@@ -214,21 +229,29 @@ func TestVectorSearch_EfSearch_RecallAndLatency(t *testing.T) {
 	// 锁定同果；此处显式设 40 以走同一条注入路径计量）。
 	ef40 := int32(40)
 	ef200 := int32(200)
-	r40, per40 := recall(&ef40)
-	r200, per200 := recall(&ef200)
+	r40, per40 := recall(&ef40, "ef=40")
+	r200, per200 := recall(&ef200, "ef=200")
 	t.Logf("recall ef=40: %.2f %v ; ef=200: %.2f %v (visible ground truth = 5 per query)",
 		r40, per40, r200, per200)
-	require.GreaterOrEqual(t, r200, r40,
-		"aggregated recall at ef=200 must not be worse than ef=40")
+	// 弱单调 recall(200) ≥ recall(40) 不作断言（饱和图拓扑彩票，见函数头
+	// 注）；RLS 泄漏守卫已在 recall 内逐行断言。
 
 	// 延迟对比取数（均值，50 次每档；不做时间断言——只产出闭环证据数字）。
+	visibleIDs := make([]string, 0, len(visible))
+	for id := range visible {
+		visibleIDs = append(visibleIDs, id)
+	}
 	latency := func(ef int32) time.Duration {
 		start := time.Now()
 		const runs = 50
 		for i := 0; i < runs; i++ {
-			_, err := docDB.ListDocuments(ctx, projectID, "app", "knn",
+			list, err := docDB.ListDocuments(ctx, projectID, "app", "knn",
 				efQuery([]float64{0, 0, 0}, &ef, 25, nil), principal)
 			require.NoError(t, err)
+			for _, d := range list.Documents {
+				require.Containsf(t, visibleIDs, d.ID,
+					"ef=%d: RLS leak, invisible row %q in vector search result", ef, d.ID)
+			}
 		}
 		return time.Since(start) / runs
 	}

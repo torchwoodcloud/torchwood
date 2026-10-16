@@ -135,20 +135,29 @@ func TestHub_DispatchDedupsEventID(t *testing.T) {
 	require.Len(t, drain(t, conn.Send), 1)
 }
 
-// TestHub_SlowConsumerDropsEvent：发送 chan 满载时丢事件不阻塞 Dispatch。
-func TestHub_SlowConsumerDropsEvent(t *testing.T) {
+// TestHub_SlowConsumerDisconnectDoesNotBlockDispatch：发送 chan 满载时
+// Dispatch 不阻塞——按阶段④水位断开契约（TrySend 满水位触发 OnSlow 恰
+// 一次、连接置 slowClosed，不再丢帧续命），后续派发同步跳过，已入队帧
+// 保留。本测试刻意打满水位，故以记录型 OnSlow 覆盖 newTestConn 的
+// fail-loud 桩（其余测试帧量远低于水位，桩保持 fail-loud）。
+func TestHub_SlowConsumerDisconnectDoesNotBlockDispatch(t *testing.T) {
 	t.Parallel()
 	h := NewHub(nil)
 	conn := newTestConn("u1", databases.Principal{Roles: []string{"users", "user:u1"}})
 	conn.Send = make(chan map[string]any, 1)
+	var gotSeq []int64
+	conn.OnSlow = func(lastSeq int64) { gotSeq = append(gotSeq, lastSeq) }
 	h.Subscribe(testEnvelope().CollectionChannel(), conn)
 
 	for i := 0; i < 5; i++ {
 		ev := testEnvelope()
 		ev.EventID = ev.EventID + string(rune('0'+i))
-		h.Dispatch(ev) // 不阻塞
+		ev.Seq = int64(i + 1)
+		h.Dispatch(ev) // 满水位不阻塞：首帧入队，其后触发慢断开并跳过
 	}
-	require.Len(t, drain(t, conn.Send), 1)
+	require.Equal(t, []int64{1}, gotSeq, "首帧入队后满水位触发恰一次，last_seq=最后成功入队帧的 seq")
+	require.True(t, conn.SlowClosed())
+	require.Len(t, drain(t, conn.Send), 1, "仅首帧入队保留；慢断开后的派发不再入队")
 }
 
 // TestHub_UnsubscribeAndRemove：Unsubscribe 单频道、Remove 全频道摘除，

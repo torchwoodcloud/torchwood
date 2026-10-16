@@ -80,13 +80,14 @@ func TestHub_SlowConsumerDisconnects(t *testing.T) {
 	require.True(t, conn.SlowClosed())
 	require.Len(t, drainCount2(conn.Send), 2, "已入队的 2 帧保留在缓冲")
 
-	// 慢断开后投递跳过该连接（不再入队、不再触发 OnSlow）。
+	// 慢断开后投递跳过该连接（不再入队、不再触发 OnSlow）。缓冲已在上方
+	// drain 抽干，此处断言 after-close 派发零入队。
 	ev := testEnvelope()
 	ev.EventID = "after-close"
 	ev.Seq = 99
 	h.Dispatch(ev)
 	require.Len(t, gotSeq, 1, "slowClosed 后 OnSlow 不重复触发")
-	require.Len(t, drainCount2(conn.Send), 2)
+	require.Empty(t, drainCount2(conn.Send), "慢断开后的派发不得再入队")
 }
 
 // drainCount2 收走当前缓冲的全部帧（hub_test.go 的 drain 需要 *testing.T，
