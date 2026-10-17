@@ -26,16 +26,17 @@ COPY --from=console-builder /console/dist ./console/dist
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 # 版本元数据：CI 构建注入（.github/workflows/image.yml），缺省 dev/unknown
-# 与 mise run build 的本地形态对齐；由 /v1/server/health/version 暴露
+# 与 mise run build 的本地形态对齐；由 /v1/server/health/version 暴露。
+# 注入目标 = lynx v1.20.0 框架级 buildinfo 包（ldflags 唯一注入点）
 ARG VERSION=dev
 ARG COMMIT=unknown
 ARG DATE=unknown
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/server ./cmd/server && \
+    go build -trimpath -ldflags "-s -w -X github.com/lynx-go/lynx/buildinfo.Version=$VERSION -X github.com/lynx-go/lynx/buildinfo.Commit=$COMMIT -X github.com/lynx-go/lynx/buildinfo.Date=$DATE" -o /out/server ./cmd/server && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/worker ./cmd/worker && \
+    go build -trimpath -ldflags "-s -w -X github.com/lynx-go/lynx/buildinfo.Version=$VERSION -X github.com/lynx-go/lynx/buildinfo.Commit=$COMMIT -X github.com/lynx-go/lynx/buildinfo.Date=$DATE" -o /out/worker ./cmd/worker && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -o /out/torchwood ./cmd/torchwood
+    go build -trimpath -ldflags "-s -w -X github.com/lynx-go/lynx/buildinfo.Version=$VERSION -X github.com/lynx-go/lynx/buildinfo.Commit=$COMMIT -X github.com/lynx-go/lynx/buildinfo.Date=$DATE" -o /out/torchwood ./cmd/torchwood
 
 # ---------- 3) 运行时 ----------
 FROM alpine:3.21

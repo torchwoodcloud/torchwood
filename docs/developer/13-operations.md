@@ -86,7 +86,9 @@ mise run dev:worker   # go run ./cmd/worker
 ```bash
 mise run build
 # = console:build + go build 三个二进制（server / worker / torchwood）到 ./bin/
-# ldflags 注入 VERSION/COMMIT/DATE（git describe / rev-parse / date），由 GET /v1/server/health/version 暴露
+# ldflags 注入 VERSION/COMMIT/DATE（git describe / rev-parse / date）到 lynx
+# 框架级 buildinfo 包（v1.20.0 唯一注入目标），由 GET /v1/server/health/version
+# 与 debug /version 共同暴露
 ```
 
 - `console:build` 产物 `console/dist/` 经 `//go:embed` 打进 server 二进制，在 `/console/` 下 serve（SPA fallback + 安全头）。
@@ -296,11 +298,11 @@ torchwood admin sync-roles-sig \
 | 端点 | 说明 |
 |------|------|
 | `GET /v1/health`（别名 `/v1/server/health`，ACCESS_PUBLIC） | `{status:"ok"|"unavailable", dependencies:[{name,status,error?}]}`，HTTP 恒 200，状态在 body |
-| `GET /v1/server/health/version` | `{version, commit, date}`（ldflags 注入） |
+| `GET /v1/server/health/version` | `{version, commit, date}`（ldflags 注入 lynx buildinfo 包） |
 | `/healthz/liveness` | 常驻 200 |
 | `/healthz/readiness` | 全健康 200 / 任一失败 503（compose healthcheck 消费） |
 | `grpc.health.v1.Health` | gRPC 侧轮询快照 |
-| debug `GET :6060/healthz`、`GET :6060/version` | 进程存活 + 构建信息（Go/OS/Arch + ldflags 注入的 version/commit/date；`server.debug.addr`） |
+| debug `GET :6060/healthz`、`GET :6060/version` | 进程存活 + 构建信息（Go/OS/Arch + ldflags 注入的 version/commit/date，与 health/version 同源；`server.debug.addr`） |
 | dispatcher `GET :9070/healthz`、packer `GET :9071/healthz` | 各常驻进程存活面（豁免共享密钥，compose healthcheck 消费） |
 
 **Metrics**：server 独立 HTTP（`server.metrics.addr`，默认 `127.0.0.1:9040`），`GET /metrics`。除 runtime 采集器外还有自定义业务指标：realtime Hub / Stream、documentdb 列授权 reconcile 与 schema 漂移对账、projectschema 迁移耗时、规模预警三指标（§5.1）。dispatcher 有独立 `/metrics`（池 / 实例 / 节点 / 容量指标）。

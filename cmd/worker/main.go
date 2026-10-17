@@ -15,16 +15,12 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
-var version, commit, date string
+// 版本元数据：ldflags 由构建脚本注入 lynx 框架级 buildinfo 包（v1.20.0，
+// 唯一注入目标），App 元数据经兜底链自动取值——应用不再显式 WithVersion，
+// commit 修饰串由 buildinfo.Display 语义承接。
 
 func main() {
 	_ = godotenv.Load()
-
-	// commit 注入时拼进版本串，便于日志定位构建来源。
-	buildVersion := version
-	if commit != "" {
-		buildVersion = version + " (" + commit + ")"
-	}
 
 	runner := lynx.NewRunner(func(app lynx.App) error {
 		bootstrap, cleanup, err := wireBootstrap(app)
@@ -40,7 +36,8 @@ func main() {
 		return nil
 	},
 		lynx.WithName("Torchwood Worker"),
-		lynx.WithVersion(buildVersion),
+		// 版本不显式传入：lynx v1.20.0 兜底链 service.version 配置 →
+		// 编译期 buildinfo.Version（构建脚本 ldflags 注入）自动生效。
 		lynx.WithLoggerProvider(lynxzap.NewLogger),
 		lynx.WithBindFlagsFunc(func(f *pflag.FlagSet) {
 			f.String("config-dir", "./configs", "config file path")

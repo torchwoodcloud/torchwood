@@ -12,9 +12,9 @@
 # 首次发布后 GHCR 包默认私有：改为 Public（org → Packages → torchwood →
 # Package settings），或让部署机 docker login ghcr.io（PAT read:packages）。
 #
-# 版本元数据经 build-args 注入 -ldflags（main.version/commit/date），由
-# GET /v1/server/health/version 暴露；本地 mise run docker:build 不传参时为
-# dev/unknown，行为不变。
+# 版本元数据经 build-args 注入 -ldflags（目标 = lynx 框架级 buildinfo 包，
+# 见 Dockerfile），由 GET /v1/server/health/version 暴露；本地
+# mise run docker:build 不传参时为 dev/unknown，行为不变。
 
 name: Image
 

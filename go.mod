@@ -16,8 +16,8 @@ require (
 	github.com/lynx-go/commands v0.3.0
 	github.com/lynx-go/grpcapi v0.1.0
 	github.com/lynx-go/grpcapi/genproto v0.1.0
-	github.com/lynx-go/lynx v1.17.0
-	github.com/lynx-go/lynx/contrib/zap v1.17.0
+	github.com/lynx-go/lynx v1.20.0
+	github.com/lynx-go/lynx/contrib/zap v1.20.0
 	github.com/minio/minio-go/v7 v7.2.0
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/pquerna/otp v1.5.0
@@ -59,7 +59,7 @@ require (
 	github.com/docker/docker v28.5.2+incompatible // indirect
 	github.com/docker/go-connections v0.8.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -98,7 +98,7 @@ require (
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.70.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0 // indirect
 	go.opentelemetry.io/otel v1.46.0 // indirect
 	go.opentelemetry.io/otel/metric v1.46.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.46.0 // indirect

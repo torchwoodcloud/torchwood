@@ -8,6 +8,7 @@ import (
 	"github.com/google/wire"
 	"github.com/lynx-go/lynx"
 	"github.com/lynx-go/lynx/boot"
+	lynxbuildinfo "github.com/lynx-go/lynx/buildinfo"
 	lynxdebug "github.com/lynx-go/lynx/debug"
 	lynxgrpc "github.com/lynx-go/lynx/server/grpc"
 	"github.com/torchwoodcloud/torchwood/cmd/server/internal/runtime"
@@ -33,7 +34,6 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/projectschema"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/bootkit"
 	config "github.com/torchwoodcloud/torchwood/internal/pkg/config"
-	"github.com/torchwoodcloud/torchwood/pkg/buildinfo"
 )
 
 //go:generate wire
@@ -102,9 +102,11 @@ func NewAppConfig(app lynx.App) (*config.AppConfig, error) {
 	return &c, nil
 }
 
-// NewBuildInfo 返回编译期注入的版本信息（package 级 var，由 ldflags 填充）。
-func NewBuildInfo() buildinfo.BuildInfo {
-	return buildinfo.BuildInfo{Version: version, Commit: commit, Date: date}
+// NewBuildInfo 返回编译期注入的版本信息——lynx v1.20.0 框架级 buildinfo
+// 包（ldflags 唯一注入目标，构建脚本经 lynx/buildinfo.* 三元组注入），
+// /v1/server/health/version 与框架 debug /version 同源。
+func NewBuildInfo() lynxbuildinfo.BuildInfo {
+	return lynx.BuildInfo()
 }
 
 // NewComponents 返回服务注册顺序：grpc → gateway → realtime-subscriber

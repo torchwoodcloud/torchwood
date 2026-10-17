@@ -3,8 +3,8 @@ package servergrpc
 import (
 	"context"
 
+	lynxbuildinfo "github.com/lynx-go/lynx/buildinfo"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
-	"github.com/torchwoodcloud/torchwood/pkg/buildinfo"
 )
 
 // HealthCheckers 是健康检查所需的最小依赖探测面（infra/health.Checkers 满足；
@@ -16,10 +16,10 @@ type HealthCheckers interface {
 type HealthService struct {
 	serverv1.UnimplementedHealthServiceServer
 	checkers HealthCheckers
-	info     buildinfo.BuildInfo
+	info     lynxbuildinfo.BuildInfo
 }
 
-func NewHealthService(checkers HealthCheckers, info buildinfo.BuildInfo) *HealthService {
+func NewHealthService(checkers HealthCheckers, info lynxbuildinfo.BuildInfo) *HealthService {
 	return &HealthService{checkers: checkers, info: info}
 }
 

@@ -162,6 +162,10 @@ func TestFunctionsService_CreateFunctionHappyPath(t *testing.T) {
 
 func TestFunctionsService_CreateFunctionTargetRequired(t *testing.T) {
 	s := newTestService(&stubRepo{})
+	// 本测试断言「非 dev 环境 http target 拒绝」——环境假设显式钉死：
+	// mise run test 经 [env] _.file 加载仓库 .env（TORCHWOOD_ENV=development），
+	// 不钉死则测试对运行通道敏感（裸 go test 过、mise run 挂）。
+	t.Setenv("TORCHWOOD_ENV", "production")
 	_, err := s.CreateFunction(principalCtx("p1"), &serverv1.CreateFunctionRequest{
 		Id: "fn_1", Name: "hello", TargetUrl: "http://fn.example.com",
 	})

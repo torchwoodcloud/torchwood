@@ -148,7 +148,9 @@ run = '''
 VERSION="$(git describe --tags --always)"
 COMMIT="$(git rev-parse --short HEAD)"
 DATE="$(date +%Y%m%d%H%M%S)"
-LDFLAGS="-X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE"
+# 注入目标 = lynx v1.20.0 框架级 buildinfo 包（ldflags 唯一注入点，
+# debug /version 与 /v1/server/health/version 共用，应用侧无自有版本变量）
+LDFLAGS="-X github.com/lynx-go/lynx/buildinfo.Version=$VERSION -X github.com/lynx-go/lynx/buildinfo.Commit=$COMMIT -X github.com/lynx-go/lynx/buildinfo.Date=$DATE"
 go build -ldflags "$LDFLAGS" -o ./bin/ ./cmd/server
 go build -ldflags "$LDFLAGS" -o ./bin/ ./cmd/worker
 go build -ldflags "$LDFLAGS" -o ./bin/ ./cmd/torchwood

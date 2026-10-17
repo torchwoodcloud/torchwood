@@ -190,7 +190,7 @@ mise run gen:authz-matrix && git diff --exit-code -- docs/developer/authz-matrix
 ## 7. 健康检查与可观测（测试相关）
 
 - `internal/infra/health/checks.go`：`DependencyChecker` 实现 lynx `Checker`（默认超时 2s）；`NewCheckers(db, rdb, obj)` 覆盖 postgres（PingContext）/ redis（Ping）/ minio（BucketExists）。`Details(ctx)` 并行探测（各自超时 + panic 兜底为 unavailable），结果带 10s 快照缓存（singleflight 防并发打穿，`CacheTTL` 可覆盖）；readiness 实时语义仍由 lynx 聚合。
-- 端点：`GET /v1/health`（别名 `/v1/server/health`，service_auth `ACCESS_PUBLIC`）返回 `{status, dependencies}`——依赖不可用时 gRPC 返回码仍为 OK，503 语义由 readiness 端点承担；`GET /healthz/readiness`（lynxhttp `WithHealthCheckers`）任一依赖失败 503（`TestHealthz_Readiness` 锁定 200/503 行为）；`GET /v1/server/health/version` 返回构建注入的 `{version, commit, date}`（`mise run build` ldflags 注入，`pkg/buildinfo`）。
+- 端点：`GET /v1/health`（别名 `/v1/server/health`，service_auth `ACCESS_PUBLIC`）返回 `{status, dependencies}`——依赖不可用时 gRPC 返回码仍为 OK，503 语义由 readiness 端点承担；`GET /healthz/readiness`（lynxhttp `WithHealthCheckers`）任一依赖失败 503（`TestHealthz_Readiness` 锁定 200/503 行为）；`GET /v1/server/health/version` 返回构建注入的 `{version, commit, date}`（`mise run build` ldflags 注入 lynx 框架级 buildinfo 包，v1.20.0 唯一注入目标）。
 - 慢查询：`internal/infra/clients/dbhook.go` 的 `SlowQueryHook`（bun QueryHook），阈值 `data.database.slow_query_threshold`——空串默认 500ms，`"0"` 禁用，解析失败 Warn 并禁用；`debug=true` 时记录全量 SQL。
 
 ## 8. 本地验证清单

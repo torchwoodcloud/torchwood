@@ -16,7 +16,8 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 
-var version, commit, date string
+// 版本元数据：ldflags 由构建脚本注入 lynx 框架级 buildinfo 包（v1.20.0，
+// 唯一注入目标），App 元数据经兜底链自动取值——应用不再显式 WithVersion。
 
 // setupApp 是生产 main 与 lynxtest L2 装配测试（main_test.go）共用的组装
 // 函数：Wire 组装 → cleanup 挂 OnPostStop → 钩子/服务注册。logger 由
@@ -52,7 +53,8 @@ func main() {
 
 	runner := lynx.NewRunner(setupApp,
 		lynx.WithName("Torchwood"),
-		lynx.WithVersion(version),
+		// 版本不显式传入：lynx v1.20.0 兜底链 service.version 配置 →
+		// 编译期 buildinfo.Version（构建脚本 ldflags 注入）自动生效。
 		lynx.WithLoggerProvider(lynxzap.NewLogger),
 		lynx.WithBindFlagsFunc(func(f *pflag.FlagSet) {
 			f.String("config-dir", "./configs", "config file path")

@@ -2,14 +2,11 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/lynx-go/commands"
+	lynxbuildinfo "github.com/lynx-go/lynx/buildinfo"
 )
-
-// version/commit/date 由 mise run build 的 ldflags 注入（与 cmd/server、cmd/worker 一致）。
-var version, commit, date string
 
 func main() {
 	os.Exit(run(&commands.Environment{Stdout: os.Stdout, Stderr: os.Stderr}, os.Args[1:]))
@@ -25,25 +22,16 @@ func main() {
 // TORCHWOOD_CLI_* 环境变量需用户自行 export（或在 shell 里 set -a; source
 // .env; set +a），取值优先级不变（显式旗标 > env > profile > 内建默认）。
 // 守卫测试：TestMainNoDotEnvAutoLoad。
+//
+// 版本串：ldflags 由构建脚本注入 lynx 框架级 buildinfo 包（v1.20.0，唯一
+// 注入目标，与 cmd/server、cmd/worker 一致）；Display 把 commit/date 拼进
+// 人读串（空版本兜底 "dev"），与框架 debug /version 同源同形。此处 import
+// buildinfo 叶子包（零依赖）而非 lynx 根包，CLI 二进制不拖入框架。
 func run(env *commands.Environment, args []string) int {
-	app := NewApp(buildVersion(version, commit, date))
+	app := NewApp(lynxbuildinfo.BuildInfo{
+		Version: lynxbuildinfo.Version,
+		Commit:  lynxbuildinfo.Commit,
+		Date:    lynxbuildinfo.Date,
+	}.Display())
 	return app.Run(context.Background(), env, args)
-}
-
-// buildVersion 把 ldflags 注入的 commit/date 拼进版本串，避免元数据被丢弃；
-// 未注入时保持原值（如 "dev"）。
-func buildVersion(v, commitHash, builtAt string) string {
-	if v == "" {
-		v = "dev"
-	}
-	if commitHash == "" && builtAt == "" {
-		return v
-	}
-	if builtAt == "" {
-		return fmt.Sprintf("%s (commit %s)", v, commitHash)
-	}
-	if commitHash == "" {
-		return fmt.Sprintf("%s (built %s)", v, builtAt)
-	}
-	return fmt.Sprintf("%s (commit %s, built %s)", v, commitHash, builtAt)
 }

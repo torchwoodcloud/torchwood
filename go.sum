@@ -54,8 +54,8 @@ github.com/docker/go-units v0.5.0 h1:69rxXcBk27SvSaaxTtLh/8llcHD8vYHT7WSdRZ/jvr4
 github.com/docker/go-units v0.5.0/go.mod h1:fgPhTUdO+D/Jk86RDLlptpiXQzgHJF7gydDDbaIK4Dk=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
-github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
-github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
+github.com/felixge/httpsnoop v1.1.0 h1:3YtUj32ZZkqZtt3sZZsClsymw/QDuVfpNhoA31zeORc=
+github.com/felixge/httpsnoop v1.1.0/go.mod h1:Zqxgdd+1Rkcz8euOqdr7lqgCRJztwr5hp9vDSi5UZCE=
 github.com/frankban/quicktest v1.14.6 h1:7Xjx+VpznH+oBnejlPUj8oUpdxnVs4f8XU8WnHkI4W8=
 github.com/frankban/quicktest v1.14.6/go.mod h1:4ptaffx2x8+WTWXmUCuVU6aPUX1/Mz7zb5vbUoiM6w0=
 github.com/fsnotify/fsnotify v1.10.1 h1:b0/UzAf9yR5rhf3RPm9gf3ehBPpf0oZKIjtpKrx59Ho=
@@ -113,10 +113,10 @@ github.com/lynx-go/grpcapi v0.1.0 h1:VCxei/uj0CC3X5NL5sqZ25xZ/1qwXZzMZ6vKrQV0g4g
 github.com/lynx-go/grpcapi v0.1.0/go.mod h1:u52KP8XmJbwPPSC/OAzfmeYAiuGoh/an1FA74w6Wdbw=
 github.com/lynx-go/grpcapi/genproto v0.1.0 h1:d3VgPLXIJLMFPzWNoPnk2aUskHoZsvHfXgfx1U/qob4=
 github.com/lynx-go/grpcapi/genproto v0.1.0/go.mod h1:KCxDet6GpsDFsZmMfxT26fzxeRu1dmRzPFTqKrJUkSI=
-github.com/lynx-go/lynx v1.17.0 h1:TJLwKZplCmp2+gzOoGMixbNMXB5qJvrcAqGRDKZY+DU=
-github.com/lynx-go/lynx v1.17.0/go.mod h1:g2IwqcLMaG6Uq+ibsPbYg50chF/LAw3ezULOdBnI7y4=
-github.com/lynx-go/lynx/contrib/zap v1.17.0 h1:TQLa086qHJuoGQk9hIzt2wdn3U735SMKs4tuD8+GLvM=
-github.com/lynx-go/lynx/contrib/zap v1.17.0/go.mod h1:m8S+iytbxXhuNbq6FicdfFjXdWrqzVeJ3lzKYGojx/w=
+github.com/lynx-go/lynx v1.20.0 h1:qxYQxnvh/uMAoLZwE3Oc9ZM7yt/GnXTxxdySQ9DB0k4=
+github.com/lynx-go/lynx v1.20.0/go.mod h1:1/ICMKO0zAR7FD2ZFYkDp1kh6PtksttKm97371A71jA=
+github.com/lynx-go/lynx/contrib/zap v1.20.0 h1:rd3nloFwt/9ZZUP6f7cScpY+xPTnVzL8tmn7gMX5wCo=
+github.com/lynx-go/lynx/contrib/zap v1.20.0/go.mod h1:Eb+uFhGpX+SJpbXXlTvZ0Ksz0wP3SA+pn9RxD5Sqi2Q=
 github.com/minio/crc64nvme v1.1.1 h1:8dwx/Pz49suywbO+auHCBpCtlW1OfpcLN7wYgVR6wAI=
 github.com/minio/crc64nvme v1.1.1/go.mod h1:eVfm2fAzLlxMdUGc0EEBGSMmPwmXD5XiNRpnu9J3bvg=
 github.com/minio/md5-simd v1.1.2 h1:Gdi1DZK69+ZVMoNHRXJyNcxrMA4dSxoYHZSQbirFg34=
@@ -220,8 +220,8 @@ go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ
 go.opentelemetry.io/auto/sdk v1.2.1/go.mod h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.70.0 h1:oECp5f+hN7nkwjU/8BxQ/q23bGPb8FIrD839owX222E=
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.70.0/go.mod h1:DqEFwLumhzMBDQv9PcWbyoDxHI/4lAk6CM4nJBH39sc=
-go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0 h1:8tvICD4vSTOOsNrsI4Ljf6C+6UKvpTEH5XY3JMoyPoo=
-go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0/go.mod h1:z9+yiacE0IHRqM4qFfkbt/JYlmYXgss8GY/jXoNuPJI=
+go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0 h1:LMuyCAyfalSjDyjdC65nK6N0zoTT63+E/u95X0JovZI=
+go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0/go.mod h1:085m8qbm4hgc8rZWGDEa4vmyyo2c3nPxUslYUKUIU04=
 go.opentelemetry.io/otel v1.46.0 h1:FHt5/CDyVxi/8IM1CH7VE/rRgq3kLHa2mSTVMO8AWyc=
 go.opentelemetry.io/otel v1.46.0/go.mod h1:Gj3SEScelsNC45tp4nSxRYlS+f5iez7W8XPMCt905kE=
 go.opentelemetry.io/otel/metric v1.46.0 h1:yBnkXvgV7AXFILZc5K6IZe/CBFF3OS7BJ8ov6/lj0K8=

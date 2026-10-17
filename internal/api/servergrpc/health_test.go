@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
+	lynxbuildinfo "github.com/lynx-go/lynx/buildinfo"
 	"github.com/stretchr/testify/require"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	"github.com/torchwoodcloud/torchwood/internal/infra/health"
-	"github.com/torchwoodcloud/torchwood/pkg/buildinfo"
 )
 
 func fakeCheckers(results map[string]error) *health.Checkers {
@@ -21,7 +21,7 @@ func fakeCheckers(results map[string]error) *health.Checkers {
 }
 
 func TestHealthService_CheckAllOK(t *testing.T) {
-	s := NewHealthService(fakeCheckers(map[string]error{"postgres": nil, "redis": nil}), buildinfo.BuildInfo{})
+	s := NewHealthService(fakeCheckers(map[string]error{"postgres": nil, "redis": nil}), lynxbuildinfo.BuildInfo{})
 	resp, err := s.Check(context.Background(), &serverv1.HealthCheckRequest{})
 	require.NoError(t, err)
 	require.Equal(t, "ok", resp.GetStatus())
@@ -35,7 +35,7 @@ func TestHealthService_CheckUnavailable(t *testing.T) {
 	s := NewHealthService(fakeCheckers(map[string]error{
 		"postgres": nil,
 		"redis":    errors.New("connection refused"),
-	}), buildinfo.BuildInfo{})
+	}), lynxbuildinfo.BuildInfo{})
 	resp, err := s.Check(context.Background(), &serverv1.HealthCheckRequest{})
 	require.NoError(t, err)
 	require.Equal(t, "unavailable", resp.GetStatus())
@@ -52,7 +52,7 @@ func TestHealthService_CheckUnavailable(t *testing.T) {
 }
 
 func TestHealthService_GetVersion(t *testing.T) {
-	s := NewHealthService(fakeCheckers(map[string]error{}), buildinfo.BuildInfo{Version: "v1.2.3", Commit: "abc123", Date: "20260809"})
+	s := NewHealthService(fakeCheckers(map[string]error{}), lynxbuildinfo.BuildInfo{Version: "v1.2.3", Commit: "abc123", Date: "20260809"})
 	resp, err := s.GetVersion(context.Background(), &serverv1.GetVersionRequest{})
 	require.NoError(t, err)
 	require.Equal(t, "v1.2.3", resp.GetVersion())

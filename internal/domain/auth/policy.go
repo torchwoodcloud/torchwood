@@ -2,6 +2,7 @@ package auth
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -294,12 +295,7 @@ var ProjectIDAllowlist = map[string]struct{}{
 // requestHasProjectID 从排序字段投影判断 project_id 寻址（grpcapi
 // MethodPolicy.RequestFields 的消费面）。
 func requestHasProjectID(p MethodPolicy) bool {
-	for _, f := range p.RequestFields {
-		if f == "project_id" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(p.RequestFields, "project_id")
 }
 
 // AssertPolicy 是单方法语义断言（完备性/档位/值域/项目寻址；不含死 scope
