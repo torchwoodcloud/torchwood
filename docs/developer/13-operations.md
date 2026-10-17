@@ -114,7 +114,7 @@ docker run --env-file .env -p 9080:9080 -p 9060:9060 torchwood:<tag>
 | dispatcher | 常驻 | `user: root` + 挂载 docker.sock（镜像缺省 torchwood 用户读不了宿主 `root:docker` 的 sock，permission denied 会让函数构建必失败）；⚠ sock 等同宿主 root 权限，仅在可信环境启用 |
 | packer | 常驻 | 无状态（git clone + 物化 zip 回传 server），无 sock、无业务依赖 |
 
-应用镜像由 GitHub Actions 预构建推 GHCR（`.github/workflows/image.yml`，部署机仅 pull 不编译，`pull_policy: always`）：main push → `latest` + `sha-<短commit>`；`v*` tag → `vX.Y.Z` / `vX.Y`。回滚 = Environment 里 `TORCHWOOD_IMAGE` 钉到 sha tag 后 Redeploy（迁移只进不退，回滚不回退 schema）。CI 末段部署 job 在镜像推送成功后回调 Dokploy webhook 触发部署（Dokploy 侧需关闭 Auto Deploy、保持 Autodeploy 总闸开启，触发源唯一化避免竞态）。
+应用镜像由 GitHub Actions 预构建推 GHCR（`.github/workflows/image.yml`，部署机仅 pull 不编译，`pull_policy: always`）：main push → `latest` + `sha-<短commit>`；`v*` tag → `vX.Y.Z` / `vX.Y`。回滚 = Environment 里 `TORCHWOOD_IMAGE` 钉到 sha tag 后 Redeploy（迁移只进不退，回滚不回退 schema）。部署为部署机**手动 Redeploy**（CI 只管镜像，不触发部署）；Redeploy 即拉取 latest 新镜像并重跑迁移与启动链。
 
 对外面：HTTP 域名直达 9080（Traefik label 直接声明在 compose，不走 Domains UI；80 自动 301 → https）；gRPC 域名由 Traefik 终结 TLS 后以 **h2c** 转发 9060（gRPC 要求端到端 HTTP/2）。`/v1/server/health/version` 可验证部署到的确切版本。
 
