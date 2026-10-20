@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lynx-go/grpcapi/authz"
 	"github.com/stretchr/testify/require"
 )
 
@@ -89,7 +88,7 @@ func testVocabAllResources(t *testing.T) *ScopeVocabulary {
 			})
 		}
 	}
-	set, err := authz.NewPolicySet(pols...)
+	set, err := NewPolicySet(pols...)
 	require.NoError(t, err)
 	return VocabularyFromPolicies(set)
 }
@@ -133,7 +132,7 @@ func TestScopeVocabularyValid_CustomInterplay(t *testing.T) {
 // （fail-closed）：任意语法合法的自定义串经 AllowsAPIKeyTargets 一律拒绝，
 // mlbridge 等外部标签不得意外获得 TW 权限。
 func TestCustomScope_NeverGrantsTWAccess(t *testing.T) {
-	set, err := authz.NewPolicySet([]MethodPolicy{{
+	set, err := NewPolicySet([]MethodPolicy{{
 		Method: "/torchwood.server.v1.UsersService/ListUsers", Service: "/torchwood.server.v1.UsersService",
 		Access: AccessServer,
 		Scope:  &ScopeRule{Resource: string(ScopeUsers), Op: ScopeRead},

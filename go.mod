@@ -14,8 +14,6 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
 	github.com/lynx-go/commands v0.3.0
-	github.com/lynx-go/grpcapi v0.1.0
-	github.com/lynx-go/grpcapi/genproto v0.1.0
 	github.com/lynx-go/lynx v1.20.0
 	github.com/lynx-go/lynx/contrib/zap v1.20.0
 	github.com/minio/minio-go/v7 v7.2.0
@@ -71,6 +69,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
+	github.com/lynx-go/grpcapi v0.0.0-00010101000000-000000000000
 	github.com/minio/crc64nvme v1.1.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/moby/term v0.5.2 // indirect
@@ -121,3 +120,7 @@ require (
 replace github.com/torchwoodcloud/torchwood/genproto => ./genproto
 
 replace github.com/torchwoodcloud/torchwood/sdk/go => ./sdk/go
+
+replace github.com/lynx-go/grpcapi => ../grpcapi
+
+replace github.com/lynx-go/grpcapi/genproto => ../grpcapi/genproto

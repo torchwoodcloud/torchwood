@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynx-go/grpcapi/authz"
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
@@ -45,7 +44,7 @@ func testScopeVocabulary() *domainauth.ScopeVocabulary {
 			})
 		}
 	}
-	set, err := authz.NewPolicySet(pols...)
+	set, err := domainauth.NewPolicySet(pols...)
 	if err != nil {
 		panic(err)
 	}

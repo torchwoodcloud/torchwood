@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	grpcapiv1 "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	"github.com/stretchr/testify/require"
+	grpcapiv1 "github.com/torchwoodcloud/torchwood/genproto/grpcapi/v1"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/protobuf/proto"

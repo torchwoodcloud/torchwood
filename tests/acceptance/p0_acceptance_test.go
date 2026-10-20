@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/lynx-go/grpcapi/authz"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -208,7 +207,7 @@ func TestP0_Section8_AccessPermission(t *testing.T) {
 			Roles:          []string{"guests"},
 		},
 	}
-	policySet, err := authz.NewPolicySet([]domainauth.MethodPolicy{
+	policySet, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{
 		{Method: testutil.MethodAccountMe, Service: "/torchwood.client.v1.AccountService", Access: domainauth.AccessEndUser, Permissions: []string{"users"}},
 	}...)
 	require.NoError(t, err)

@@ -1,0 +1,16 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Package grpcapi.v1 定义 authz 策略注解扩展：proto 是策略唯一声明源，\n运行时由 github.com/lynx-go/grpcapi/authz.Build 收集为 PolicySet 并做\nfail-closed 断言（缺注解、词表外的资源、语义违例均启动失败）。",
+    "description": "字段号 52301/52302 刻意避开 torchwood 历史号段（52001/52002）：\n扩展字段号在 wire 层没有 package 命名空间，同号不同型的两套扩展\n并存于一个二进制时 GetExtension 会静默跳过，注解丢失无任何报错。",
+    "version": "version not set"
+  },
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {},
+  "definitions": {}
+}

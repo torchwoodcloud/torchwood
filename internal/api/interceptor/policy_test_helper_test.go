@@ -1,7 +1,6 @@
 package interceptor
 
 import (
-	"github.com/lynx-go/grpcapi/authz"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
 
@@ -23,7 +22,7 @@ func newTestInterceptor(v stubValidator, public []string, server []string, perms
 	for m, roles := range perms {
 		policies = append(policies, domainauth.MethodPolicy{Method: m, Service: serviceOf(m), Access: domainauth.AccessPermission, Permissions: roles})
 	}
-	set, err := authz.NewPolicySet(policies...)
+	set, err := domainauth.NewPolicySet(policies...)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +46,7 @@ func newTestInterceptorRoles(v stubValidator, public []string, serverRoles map[s
 	for m, roles := range perms {
 		policies = append(policies, domainauth.MethodPolicy{Method: m, Service: serviceOf(m), Access: domainauth.AccessPermission, Permissions: roles})
 	}
-	set, err := authz.NewPolicySet(policies...)
+	set, err := domainauth.NewPolicySet(policies...)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +65,7 @@ func serviceOf(fullMethod string) string {
 // mustPolicySet 构造含 ListUsers（SERVER）的最小注册表（failingValidator
 // 类用例：凭证校验失败发生在策略放行之后）。
 func mustPolicySet() *domainauth.PolicySet {
-	set, err := authz.NewPolicySet([]domainauth.MethodPolicy{
+	set, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{
 		{Method: "/torchwood.server.v1.UsersService/ListUsers", Service: "/torchwood.server.v1.UsersService", Access: domainauth.AccessServer},
 	}...)
 	if err != nil {
