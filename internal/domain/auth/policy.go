@@ -7,13 +7,10 @@ import (
 	"strings"
 )
 
-// 本文件是授权策略注册表的 domain 层（阶段 1 起类型本体移驻
-// github.com/lynx-go/grpcapi/authz，此处保留 torchwood 词表、档位分类与
-// 语义断言——值域因项目而异的部分按设计留在项目侧）：
-// 策略唯一声明在 proto（grpcapi.v1 method_auth/service_auth），由
-// cmd/server/internal/runtime 的收集入口（buildMethodPolicies）从 descriptor
-// 构造 authz.PolicySet 注入各执行点。domain 不依赖 genproto（AGENTS.md
-// 分层约定）；authz 包零 grpc/lynx 依赖，可安全被 domain 引用。
+// 本文件是授权策略注册表的 domain 层。v3 迁移期保留 project-owned 的
+// PolicySet/MethodPolicy 形状；cmd/server/internal/runtime 的 legacyProvider
+// 读取旧 authz 注解并用 policy.Build 收集，FromPolicySet 再转回 domain 形状，
+// 注入既有拦截器/矩阵/断言。词表、档位分类与语义断言仍属项目主权。
 
 // AdminRole 是 console admin 的 RBAC 角色（平台级角色体系；角色串即
 // principal.Roles 中的形态——proto 注解侧为 string，值域由本词表锁定）。
