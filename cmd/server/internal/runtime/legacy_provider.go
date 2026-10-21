@@ -61,7 +61,7 @@ func (legacyProvider) Method(md protoreflect.MethodDescriptor) (policy.MethodSpe
 	return policy.MethodSpec{
 		Policy:     &p,
 		Exposure:   exposure,
-		Label:      legacyAccessName(ma.GetAccess()),
+		Label:      legacyAccessName(access),
 		StreamAuth: policy.StreamAuthOpen,
 	}, true, nil
 }

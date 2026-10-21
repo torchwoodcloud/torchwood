@@ -115,7 +115,9 @@ func (s *PolicySet) Raw() *policy.Set {
 			Kind:     policy.KindGRPC,
 			Service:  p.Service,
 			Exposure: policy.ExposureInternal,
-			Policy:   policy.Policy{Anonymous: true},
+			// 仅存在性投影：用 require authenticated 而非 anonymous，
+			// 避免测试/手工 PolicySet 被误用于运行时授权时 fail-open。
+			Policy: policy.Policy{Require: []policy.Requirement{{Kind: "authenticated"}}},
 		})
 	}
 	set, err := policy.NewSet(ops...)

@@ -25,3 +25,8 @@ lint:
 breaking:
   use:
     - FILE
+  # 该文件是迁移期 vendored 的 grpcapi v1 authz.proto：proto 路径/包保持不变
+  # 以兼容业务注解，但 go_package 必须指向本仓库的 legacypb；这是有意的
+  # 单文件例外，不对上游做 breaking 比较。
+  ignore:
+    - proto/grpcapi/v1/authz.proto
