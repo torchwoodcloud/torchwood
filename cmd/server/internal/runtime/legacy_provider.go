@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -69,16 +70,21 @@ func (legacyProvider) Method(md protoreflect.MethodDescriptor) (policy.MethodSpe
 func legacyPolicy(access legacypb.AccessLevel, roles []string, scopeRule *legacypb.APIKeyScope, permissions []string) policy.Policy {
 	params := map[string]string{"access": legacyAccessName(access)}
 	if len(roles) > 0 {
-		params["admin_roles"] = strings.Join(roles, ",")
+		params["admin_roles_json"] = encodeStrings(roles)
 	}
 	if len(permissions) > 0 {
-		params["permissions"] = strings.Join(permissions, ",")
+		params["permissions_json"] = encodeStrings(permissions)
 	}
 	if scopeRule != nil {
 		params["scope_resource"] = scopeRule.GetResource()
 		params["scope_op"] = scopeOpName(scopeRule.GetOp())
 	}
 	return policy.Policy{Require: []policy.Requirement{{Kind: legacyAccessKind, Params: params}}}
+}
+
+func encodeStrings(values []string) string {
+	data, _ := json.Marshal(values)
+	return string(data)
 }
 
 func legacyAccessName(access legacypb.AccessLevel) string {

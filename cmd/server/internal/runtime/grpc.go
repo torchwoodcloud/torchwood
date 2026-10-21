@@ -186,10 +186,12 @@ func NewGRPCServer(
 	// 断言换库（grpcapi 阶段 1）：AssertAllRegisteredHavePolicy 与原实现同构
 	// （遍历 GetServiceInfo 全部方法，含流式；框架服务整体豁免），流式方法
 	// 覆盖不变。
-	if raw := policySet.Raw(); raw != nil {
-		if err := grpcapiinterceptor.AssertAllRegisteredHavePolicy(grpcSrv, raw); err != nil {
-			return nil, err
-		}
+	raw := policySet.Raw()
+	if raw == nil {
+		return nil, fmt.Errorf("policy set has no v3 projection; refusing to skip authz coverage assertion")
+	}
+	if err := grpcapiinterceptor.AssertAllRegisteredHavePolicy(grpcSrv, raw); err != nil {
+		return nil, err
 	}
 
 	return srv, nil

@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -80,8 +82,15 @@ func FromPolicySet(set *policy.Set) (*PolicySet, error) {
 		}
 		if req, ok := legacyAccessRequirement(op.Policy); ok {
 			mp.Access = accessFromString(req.Params["access"])
-			mp.Permissions = splitCSV(req.Params["permissions"])
-			mp.AdminRoles = splitCSV(req.Params["admin_roles"])
+			var err error
+			mp.Permissions, err = decodeStrings(req.Params["permissions_json"], req.Params["permissions"])
+			if err != nil {
+				return nil, fmt.Errorf("method %s: permissions: %w", op.ID, err)
+			}
+			mp.AdminRoles, err = decodeStrings(req.Params["admin_roles_json"], req.Params["admin_roles"])
+			if err != nil {
+				return nil, fmt.Errorf("method %s: admin_roles: %w", op.ID, err)
+			}
 			if res := req.Params["scope_resource"]; res != "" {
 				mp.Scope = &ScopeRule{Resource: res, Op: ScopeOp(req.Params["scope_op"])}
 			}
@@ -107,7 +116,19 @@ func (s *PolicySet) Raw() *policy.Set {
 		return s.raw
 	}
 	// NewPolicySet（测试/手工构造）没有 v3 raw；构造一个仅用于
-	// AssertAllRegisteredHavePolicy 的存在性投影。
+	// AssertAllRegisteredHavePolicy 的存在性投影。用永远拒绝的自定义 kind，
+	// 确保它即使被误接到运行时授权也不会 fail-open。
+	denyKind := policy.RequirementKind{
+		Name:         "legacy_projection_deny",
+		DefaultMatch: policy.MatchAny,
+		Evaluate: func(context.Context, policy.EvalContext, policy.Requirement) (bool, error) {
+			return false, nil
+		},
+	}
+	reg, err := policy.NewRegistry(denyKind)
+	if err != nil {
+		return nil
+	}
 	ops := make([]policy.Operation, 0, len(s.methods))
 	for _, p := range s.methods {
 		ops = append(ops, policy.Operation{
@@ -115,12 +136,10 @@ func (s *PolicySet) Raw() *policy.Set {
 			Kind:     policy.KindGRPC,
 			Service:  p.Service,
 			Exposure: policy.ExposureInternal,
-			// 仅存在性投影：用 require authenticated 而非 anonymous，
-			// 避免测试/手工 PolicySet 被误用于运行时授权时 fail-open。
-			Policy: policy.Policy{Require: []policy.Requirement{{Kind: "authenticated"}}},
+			Policy:   policy.Policy{Require: []policy.Requirement{{Kind: denyKind.Name}}},
 		})
 	}
-	set, err := policy.NewSet(ops...)
+	set, err := policy.NewSetWithRegistry(reg, ops...)
 	if err != nil {
 		return nil
 	}
@@ -188,6 +207,17 @@ func accessFromString(s string) AccessLevel {
 	default:
 		return AccessLevelUnspecified
 	}
+}
+
+func decodeStrings(encoded, legacy string) ([]string, error) {
+	if encoded != "" {
+		var out []string
+		if err := json.Unmarshal([]byte(encoded), &out); err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+	return splitCSV(legacy), nil
 }
 
 func splitCSV(s string) []string {
