@@ -3,7 +3,6 @@ package runtime
 import (
 	"testing"
 
-	"github.com/lynx-go/grpcapi/authz"
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
@@ -89,7 +88,7 @@ func TestAssertSemantic_DetectsViolations(t *testing.T) {
 		return []domainauth.MethodPolicy{p}
 	}
 
-	_, err := authz.NewPolicySet(base(nil)...)
+	_, err := domainauth.NewPolicySet(base(nil)...)
 	require.NoError(t, err)
 	require.NoError(t, domainauth.AssertPolicy(base(nil)[0]), "合法业务写档应通过（单方法断言）")
 
@@ -105,7 +104,7 @@ func TestAssertSemantic_DetectsViolations(t *testing.T) {
 			p.RequestFields = []string{"project_id"}
 		},
 	} {
-		_, err := authz.NewPolicySet(base(mutate)...)
+		_, err := domainauth.NewPolicySet(base(mutate)...)
 		require.NoError(t, err)
 		require.Error(t, domainauth.AssertPolicy(base(mutate)[0]), "违例 [%s] 必须被语义断言拒绝", name)
 	}

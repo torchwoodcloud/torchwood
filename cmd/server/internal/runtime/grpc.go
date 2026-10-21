@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"time"
 
-	grpcapiv1 "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
 	"github.com/lynx-go/lynx"
 	lynxgrpc "github.com/lynx-go/lynx/server/grpc"
 	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	consolev1 "github.com/torchwoodcloud/torchwood/genproto/console/v1"
+	grpcapiv1 "github.com/torchwoodcloud/torchwood/genproto/grpcapi/v1"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	"github.com/torchwoodcloud/torchwood/internal/api/clientgrpc"
 	"github.com/torchwoodcloud/torchwood/internal/api/consolegrpc"
@@ -186,7 +186,11 @@ func NewGRPCServer(
 	// 断言换库（grpcapi 阶段 1）：AssertAllRegisteredHavePolicy 与原实现同构
 	// （遍历 GetServiceInfo 全部方法，含流式；框架服务整体豁免），流式方法
 	// 覆盖不变。
-	if err := grpcapiinterceptor.AssertAllRegisteredHavePolicy(grpcSrv, policySet); err != nil {
+	raw := policySet.Raw()
+	if raw == nil {
+		return nil, fmt.Errorf("policy set has no v3 projection; refusing to skip authz coverage assertion")
+	}
+	if err := grpcapiinterceptor.AssertAllRegisteredHavePolicy(grpcSrv, raw); err != nil {
 		return nil, err
 	}
 

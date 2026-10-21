@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lynx-go/grpcapi/authz"
 	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
@@ -55,7 +54,7 @@ func newServerWithServices(serviceNames ...string) *grpc.Server {
 }
 
 func testPolicySet(policies ...domainauth.MethodPolicy) *domainauth.PolicySet {
-	set, err := authz.NewPolicySet(policies...)
+	set, err := domainauth.NewPolicySet(policies...)
 	if err != nil {
 		panic(err)
 	}
@@ -76,14 +75,14 @@ func TestAssertRegisteredMethodsHaveAuthz(t *testing.T) {
 			domainauth.MethodPolicy{Method: "/torchwood.test.v1.PublicService/DoThing", Service: "/torchwood.test.v1.PublicService", Access: domainauth.AccessPublic},
 			domainauth.MethodPolicy{Method: "/torchwood.test.v1.KeyService/DoThing", Service: "/torchwood.test.v1.KeyService", Access: domainauth.AccessServer, Scope: &domainauth.ScopeRule{Resource: string(domainauth.ScopeUsers), Op: domainauth.ScopeRead}},
 			domainauth.MethodPolicy{Method: "/torchwood.test.v1.PermService/DoThing", Service: "/torchwood.test.v1.PermService", Access: domainauth.AccessPermission, Permissions: []string{"users"}},
-		))
+		).Raw())
 		require.NoError(t, err)
 	})
 
 	t.Run("unannotated method fails closed", func(t *testing.T) {
 		t.Parallel()
 		srv := newServerWithServices("torchwood.test.v1.UnannotatedService")
-		err := grpcapiinterceptor.AssertAllRegisteredHavePolicy(srv, testPolicySet())
+		err := grpcapiinterceptor.AssertAllRegisteredHavePolicy(srv, testPolicySet().Raw())
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "/torchwood.test.v1.UnannotatedService/DoThing")
 	})
@@ -91,6 +90,6 @@ func TestAssertRegisteredMethodsHaveAuthz(t *testing.T) {
 	t.Run("framework services are exempt", func(t *testing.T) {
 		t.Parallel()
 		srv := newServerWithServices("grpc.health.v1.Health", "grpc.reflection.v1.ServerReflection", "grpc.reflection.v1alpha.ServerReflection")
-		require.NoError(t, grpcapiinterceptor.AssertAllRegisteredHavePolicy(srv, testPolicySet()))
+		require.NoError(t, grpcapiinterceptor.AssertAllRegisteredHavePolicy(srv, testPolicySet().Raw()))
 	})
 }

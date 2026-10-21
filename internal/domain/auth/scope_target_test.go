@@ -3,14 +3,13 @@ package auth
 import (
 	"testing"
 
-	"github.com/lynx-go/grpcapi/authz"
 	"github.com/stretchr/testify/require"
 )
 
 // testPolicySet 构造含 databases/storage 读写规则的最小策略集。
 func testPolicySet(t *testing.T) *PolicySet {
 	t.Helper()
-	set, err := authz.NewPolicySet([]MethodPolicy{
+	set, err := NewPolicySet([]MethodPolicy{
 		{Method: "/test/DBRead", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeDatabases), Op: ScopeRead}},
 		{Method: "/test/DBWrite", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeDatabases), Op: ScopeWrite}},
 		{Method: "/test/StRead", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeStorage), Op: ScopeRead}},
@@ -155,7 +154,7 @@ func TestValidateScopeTargetID(t *testing.T) {
 // testLeaderboardsPolicySet 构造 leaderboards 三方向的最小策略集。
 func testLeaderboardsPolicySet(t *testing.T) *PolicySet {
 	t.Helper()
-	set, err := authz.NewPolicySet([]MethodPolicy{
+	set, err := NewPolicySet([]MethodPolicy{
 		{Method: "/test/LBRead", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeLeaderboards), Op: ScopeRead}},
 		{Method: "/test/LBWrite", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeLeaderboards), Op: ScopeWrite}},
 		{Method: "/test/LBAdmin", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeLeaderboards), Op: ScopeAdmin}},

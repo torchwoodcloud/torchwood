@@ -8,9 +8,8 @@ import (
 	"testing"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/lynx-go/grpcapi/authz"
-	grpcapiv1 "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	"github.com/stretchr/testify/require"
+	grpcapiv1 "github.com/torchwoodcloud/torchwood/genproto/grpcapi/v1"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	"github.com/torchwoodcloud/torchwood/internal/domain/auth"
@@ -36,7 +35,7 @@ func wellKnownTestPolicies() *auth.PolicySet {
 			Access: auth.AccessServer, Scope: &auth.ScopeRule{Resource: string(auth.ScopeDatabases), Op: op},
 		})
 	}
-	set, err := authz.NewPolicySet(pols...)
+	set, err := auth.NewPolicySet(pols...)
 	if err != nil {
 		panic(err)
 	}

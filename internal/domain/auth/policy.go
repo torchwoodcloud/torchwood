@@ -5,54 +5,12 @@ import (
 	"slices"
 	"sort"
 	"strings"
-
-	"github.com/lynx-go/grpcapi/authz"
 )
 
-// 本文件是授权策略注册表的 domain 层（阶段 1 起类型本体移驻
-// github.com/lynx-go/grpcapi/authz，此处保留 torchwood 词表、档位分类与
-// 语义断言——值域因项目而异的部分按设计留在项目侧）：
-// 策略唯一声明在 proto（grpcapi.v1 method_auth/service_auth），由
-// cmd/server/internal/runtime 的收集入口（buildMethodPolicies）从 descriptor
-// 构造 authz.PolicySet 注入各执行点。domain 不依赖 genproto（AGENTS.md
-// 分层约定）；authz 包零 grpc/lynx 依赖，可安全被 domain 引用。
-
-// —— 类型别名（grpcapi.authz 本体）——
-
-type (
-	// PolicySet 是全量方法策略注册表（由 runtime 收集器构造，注入执行点）。
-	PolicySet = authz.PolicySet
-	// MethodPolicy 是单个方法的完整授权策略（proto 声明的运行时投影）。
-	// AdminRoles 为 []string（词表主权在项目，见下方 AdminRole 词表）；
-	// RequestFields 为输入消息排序全字段投影（project_id 寻址不变量消费）。
-	MethodPolicy = authz.MethodPolicy
-	// AccessLevel 是方法的凭证族门禁（与 proto grpcapi.v1.AccessLevel 一一对应）。
-	AccessLevel = authz.AccessLevel
-	// ScopeRule 是 SERVER 面方法对 API key 凭证开放的 scope 门。
-	ScopeRule = authz.ScopeRule
-	// ScopeOp 是 scope 的权限方向。
-	ScopeOp = authz.ScopeOp
-)
-
-const (
-	AccessLevelUnspecified AccessLevel = authz.AccessUnspecified
-	// AccessPublic 匿名可调（自证凭证型）。
-	AccessPublic AccessLevel = authz.AccessPublic
-	// AccessEndUser 端用户会话/JWT 专属（Client 面）。
-	AccessEndUser AccessLevel = authz.AccessEndUser
-	// AccessServer admin 会话（admin_roles）或 API key（scope）。
-	AccessServer AccessLevel = authz.AccessServer
-	// AccessPermission admin 会话专属（permissions），key 一律拒绝。
-	AccessPermission AccessLevel = authz.AccessPermission
-	// AccessSystem 内部系统调用（预留）。
-	AccessSystem AccessLevel = authz.AccessSystem
-)
-
-const (
-	ScopeRead  ScopeOp = authz.ScopeRead
-	ScopeWrite ScopeOp = authz.ScopeWrite
-	ScopeAdmin ScopeOp = authz.ScopeAdmin
-)
+// 本文件是授权策略注册表的 domain 层。v3 迁移期保留 project-owned 的
+// PolicySet/MethodPolicy 形状；cmd/server/internal/runtime 的 legacyProvider
+// 读取旧 authz 注解并用 policy.Build 收集，FromPolicySet 再转回 domain 形状，
+// 注入既有拦截器/矩阵/断言。词表、档位分类与语义断言仍属项目主权。
 
 // AdminRole 是 console admin 的 RBAC 角色（平台级角色体系；角色串即
 // principal.Roles 中的形态——proto 注解侧为 string，值域由本词表锁定）。

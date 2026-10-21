@@ -3,7 +3,6 @@ package testutil
 import (
 	"context"
 
-	"github.com/lynx-go/grpcapi/authz"
 	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
 	"github.com/torchwoodcloud/torchwood/internal/api/interceptor"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
@@ -79,7 +78,7 @@ func newInterceptorEnv(db *clients.Database, cfg *config.AppConfig, docDB databa
 	)
 	// 小策略注册表（与生产 BuildMethodPolicies 同构的 PolicySet 注入；
 	// 全量策略语义由 runtime AssertSemantic + 矩阵测试把关）。
-	policies, err := authz.NewPolicySet([]domainauth.MethodPolicy{
+	policies, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{
 		{Method: MethodHealthCheck, Service: "/torchwood.server.v1.HealthService", Access: domainauth.AccessPublic},
 		{Method: MethodListUsers, Service: "/torchwood.server.v1.UsersService", Access: domainauth.AccessServer,
 			Scope: &domainauth.ScopeRule{Resource: string(domainauth.ScopeUsers), Op: domainauth.ScopeRead}},

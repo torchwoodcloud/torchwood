@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynx-go/grpcapi/authz"
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
@@ -26,7 +25,7 @@ const (
 )
 
 func newExecutionTestInterceptor(principal *shared.Principal) (*AuthInterceptor, error) {
-	policies, err := authz.NewPolicySet([]domainauth.MethodPolicy{
+	policies, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{
 		{
 			Method: executionAssetsMethod, Service: "/torchwood.server.v1.AssetsService",
 			Access: domainauth.AccessServer,
