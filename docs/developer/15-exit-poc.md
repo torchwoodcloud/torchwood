@@ -105,6 +105,7 @@
 - **要做什么**：grpcapi 打 v0.3.0 tag（含 G-1 方向感知实例门/G-2 文档化与冻结面），torchwood 切 tag 并摘 replace。
 - **完成判据**：`go.mod` 无 grpcapi replace 项；干净环境（无相邻 checkout，如 CI）`go build ./...` 与 `mise run test` 通过；grpcapi 仓库存在 v0.3.0 tag 且其 commit ≥ `5ea3974`。
 - **建议归属**：grpcapi 发版 + torchwood 单独小 commit。
+- **闭环（2026-10-23）**：grpcapi 按「genproto/v0.3.0 tag → 主仓 require 抬至 v0.3.0 → 主仓 v0.3.0 tag」时序发版（`5ea3974`+`1024fa8`，含 G-1/G-2 补课，release workflow 机器校验通过），main 与双 tag 已推送；torchwood 摘 replace、require v0.3.0，核心包测试绿。**A11 关闭。**
 
 ## B 非阻塞功能债区（17 条，B14 为 C6 决议新立，B16-B17 为 grpcapi 执行侧迁移挂账）
 
