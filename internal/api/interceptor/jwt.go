@@ -30,7 +30,7 @@ type Validator interface {
 
 // AuthInterceptor 是统一认证拦截器（机制重设计 M3 → grpcapi 执行侧迁移）：
 // 本拦截器只做认证（凭证提取/校验/双 Principal 注入）与业务校验
-//（X-Torchwood-Project、ValidateAdminProjectAccess）；档位/角色/scope 的
+// （X-Torchwood-Project、ValidateAdminProjectAccess）；档位/角色/scope 的
 // 授权执行在库 authz 拦截器（authz.NewInterceptor + RequirementDecider，
 // 挂本拦截器之后），策略树唯一来自 proto 注解（policy.Build）。
 // DenyAuditor 是认证拒绝审计的最小写入口（audit.Repository 的窄投影，
@@ -105,7 +105,7 @@ func (i *AuthInterceptor) WithAPIKeyFailThrottle(limiter domainauth.RateLimiter,
 }
 
 // recordAPIKeyAuthFailure 在 API key 认证失败路径计数：超限返回 429
-//（带 RetryInfo detail），否则返回 nil 继续原有 401 语义。limiter 基础
+// （带 RetryInfo detail），否则返回 nil 继续原有 401 语义。limiter 基础
 // 设施故障只告警不拦截（fail-open：限速器故障不放大认证面故障）。
 func (i *AuthInterceptor) recordAPIKeyAuthFailure(ctx context.Context, ip string) error {
 	if i.apiKeyFailLimiter == nil || ip == "" {
@@ -156,7 +156,7 @@ func (i *AuthInterceptor) AuthzOnDecision() func(context.Context, policy.Operati
 // 拒绝原因类别与凭证类型，绝不记录 token 本体。M5 C6：并联 best-effort
 // 写一条拒绝审计行（Entry.Status="denied"，Metadata["denied"]=true、
 // Metadata["reason"]=拒绝原因），Actor/Project 从已解析 principal 取
-//（认证前拒绝为空）；复用 auditFromHTTP 的 3s + WithoutCancel 模式，
+// （认证前拒绝为空）；复用 auditFromHTTP 的 3s + WithoutCancel 模式，
 // 拒绝响应不被审计写阻塞或连带失败。
 func (i *AuthInterceptor) logAuthFailure(ctx context.Context, method, reason string, credentialType shared.CredentialType, principal *shared.Principal) {
 	ci := contexts.ClientInfoFrom(ctx)

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/lynx-go/grpcapi/policy"
 	"github.com/stretchr/testify/require"
 	grpcapiv1 "github.com/torchwoodcloud/torchwood/genproto/grpcapi/v1"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
@@ -20,7 +21,7 @@ import (
 
 // wellKnownTestPolicies 按 wellKnownVerbs 清单构造最小 databases 策略
 // （真实策略由 runtime.PolicySet 注入；本包测试不得 import runtime——会循环）。
-func wellKnownTestPolicies() *auth.PolicySet {
+func wellKnownTestPolicies() *policy.Set {
 	pols := make([]auth.MethodPolicy, 0, len(wellKnownVerbs))
 	for _, v := range wellKnownVerbs {
 		op := auth.ScopeWrite
@@ -35,7 +36,7 @@ func wellKnownTestPolicies() *auth.PolicySet {
 			Access: auth.AccessServer, Scope: &auth.ScopeRule{Resource: string(auth.ScopeDatabases), Op: op},
 		})
 	}
-	set, err := auth.NewPolicySet(pols...)
+	set, err := auth.NewSet(pols...)
 	if err != nil {
 		panic(err)
 	}

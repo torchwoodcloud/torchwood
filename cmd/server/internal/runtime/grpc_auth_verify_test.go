@@ -56,7 +56,8 @@ func TestAuthService_VerifyToken_Policy(t *testing.T) {
 	set, err := ProvideMethodPolicies()
 	require.NoError(t, err)
 
-	p, ok := set.Get(verifyTokenMethod)
+	p, ok, err := domainauth.ViewOf(set, verifyTokenMethod)
+	require.NoError(t, err)
 	require.True(t, ok, "%s 必须在策略注册表（missing auth policy 会启动失败）", verifyTokenMethod)
 	require.Equal(t, domainauth.AccessServer, p.Access)
 	require.Empty(t, p.AdminRoles, "读面：admin 角色不限")
@@ -67,8 +68,8 @@ func TestAuthService_VerifyToken_Policy(t *testing.T) {
 }
 
 // TestAuthService_VerifyToken_APIKeyScopeGate：真实策略注册表 + 生产拦截器链
-//（authn → 库 authz），持 users.read / 通配符 scope 的 key 放行；scope 不足
-//（users.write、空、其他资源）→ PermissionDenied（scope 四形态行为不变锚点）。
+// （authn → 库 authz），持 users.read / 通配符 scope 的 key 放行；scope 不足
+// （users.write、空、其他资源）→ PermissionDenied（scope 四形态行为不变锚点）。
 func TestAuthService_VerifyToken_APIKeyScopeGate(t *testing.T) {
 	t.Parallel()
 	set, err := ProvideMethodPolicies()
@@ -90,16 +91,15 @@ func TestAuthService_VerifyToken_APIKeyScopeGate(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			raw := set.Raw()
 			ic, err := interceptor.NewAuthInterceptor(stubVerifyValidator{principal: &shared.Principal{
 				ActorKind:      shared.ActorKindService,
 				CredentialType: shared.CredentialTypeAPIKey,
 				ProjectID:      "proj-1",
 				APIKeyID:       "key-1",
 				Permissions:    tc.scopes,
-			}}, raw)
+			}}, set)
 			require.NoError(t, err)
-			az, err := authz.NewInterceptor(raw, nil, authz.Options{})
+			az, err := authz.NewInterceptor(set, nil, authz.Options{})
 			require.NoError(t, err)
 
 			ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-api-key", "test-key"))

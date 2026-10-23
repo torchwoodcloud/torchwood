@@ -16,7 +16,7 @@ import (
 // newTestSet 按三桶语义构造可求值策略集（单测接线用，域 auth 树与生产
 // legacyProvider 同构——domainauth.NewSet）。真实策略（proto 声明 →
 // AssertSemantic）的语义断言由 cmd/server/internal/runtime 测试与矩阵测试
-//（Phase B）承担；此处只验证拦截器执行逻辑本身。
+// （Phase B）承担；此处只验证拦截器执行逻辑本身。
 //
 //	server: SERVER 面方法（key 通道 = users.write scope；admin 会话角色门
 //	        为不限角色——scopeless SERVER 在规范树中非法，生产面由
@@ -55,7 +55,7 @@ func newTestInterceptor(v stubValidator, public []string, server []string, perms
 }
 
 // newTestInterceptorRoles 同上，SERVER 方法带 admin 角色门与 key scope
-//（角色门为 serverRoles；scope 固定 users.write 供 key 通道用例）。
+// （角色门为 serverRoles；scope 固定 users.write 供 key 通道用例）。
 func newTestInterceptorRoles(v stubValidator, public []string, serverRoles map[string][]string, perms map[string][]string) (*AuthInterceptor, *policy.Set, error) {
 	policies := make([]domainauth.MethodPolicy, 0, len(public)+len(serverRoles)+len(perms))
 	for _, m := range public {
@@ -109,7 +109,7 @@ func serviceOf(fullMethod string) string {
 }
 
 // mustPolicySet 构造含 ListUsers（SERVER + users.read）的最小策略集
-//（failingValidator 类用例：凭证校验失败发生在策略求值之前）。
+// （failingValidator 类用例：凭证校验失败发生在策略求值之前）。
 func mustPolicySet() *policy.Set {
 	set, err := domainauth.NewSet([]domainauth.MethodPolicy{
 		{

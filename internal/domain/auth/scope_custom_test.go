@@ -88,7 +88,7 @@ func testVocabAllResources(t *testing.T) *ScopeVocabulary {
 			})
 		}
 	}
-	set, err := NewPolicySet(pols...)
+	set, err := NewSet(pols...)
 	require.NoError(t, err)
 	return VocabularyFromPolicies(set)
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lynx-go/grpcapi/policy"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
 
@@ -52,13 +53,16 @@ const authzMatrixThreatModelAppendix = `
   等于全部凭证面同时失守，轮换窗口内旧 token 不失效。
 `
 
-// RenderAuthzMatrix 从策略注册表渲染授权矩阵 Markdown（确定性输出：方法与
-// 服务按序遍历，列值全部来自 MethodPolicy 派生）。
-func RenderAuthzMatrix(set *domainauth.PolicySet) ([]byte, error) {
+// RenderAuthzMatrix 从策略集渲染授权矩阵 Markdown（确定性输出：方法与
+// 服务按序遍历，列值全部来自规范树 View 派生）。
+func RenderAuthzMatrix(set *policy.Set) ([]byte, error) {
 	if set == nil {
 		return nil, fmt.Errorf("policy registry is nil")
 	}
-	methods := set.Methods()
+	methods, err := domainauth.Views(set)
+	if err != nil {
+		return nil, err
+	}
 	if len(methods) == 0 {
 		return nil, fmt.Errorf("policy registry is empty")
 	}

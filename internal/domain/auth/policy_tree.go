@@ -31,10 +31,12 @@ import (
 //   - 组间 OR 复现旧的逐 token 合取语义：单 token 只需命中任一门——操作级
 //     token（databases.read）过 scope 门、实例 token（databases:blog）过
 //     resource 门、`*`/裸资源两者皆过。与 composite_gate 的组内 AND 范式
+//
 // （要求 key 同时持有操作级 + 实例级 token）不同：AND 会让 `databases.read`
-//     这类操作级 token 在实例寻址方法上被拒，违反「scope 四形态行为不变」
-//     验收；差异记录见迁移报告。
-//   - PERMISSION 门 match=any：旧执行语义为 HasAnyRole（任一命中）。
+//
+//	  这类操作级 token 在实例寻址方法上被拒，违反「scope 四形态行为不变」
+//	  验收；差异记录见迁移报告。
+//	- PERMISSION 门 match=any：旧执行语义为 HasAnyRole（任一命中）。
 const (
 	kindPrincipal  = "principal_kind"
 	kindAdminRole  = "admin_role"

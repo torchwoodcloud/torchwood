@@ -6,6 +6,7 @@ import (
 
 	"github.com/lynx-go/grpcapi/authz"
 	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
+	"github.com/lynx-go/grpcapi/policy"
 	"github.com/lynx-go/lynx"
 	lynxgrpc "github.com/lynx-go/lynx/server/grpc"
 	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
@@ -72,7 +73,7 @@ func NewGRPCServer(
 	serverAnalytics *servergrpc.AnalyticsService,
 	serverRunbook *servergrpc.RunbookService,
 	serverRuntimeVars *servergrpc.RuntimeVarsService,
-	policySet *domainauth.PolicySet,
+	policySet *policy.Set,
 ) (*lynxgrpc.Server, error) {
 	grpcCfg := cfg.GetServer().GetGrpc()
 	timeout := parseDuration(grpcCfg.GetTimeout(), 30*time.Second)
@@ -81,14 +82,14 @@ func NewGRPCServer(
 	//（RequirementDecider 按五档规范树求值），挂在 torchwood authn 拦截器
 	//（认证 + 业务校验 + 双 principal 注入）之后。策略唯一来源仍是
 	// ProvideMethodPolicies 注入的策略集。
-	authInterceptor, err := interceptor.NewAuthInterceptor(validator, policySet.Raw())
+	authInterceptor, err := interceptor.NewAuthInterceptor(validator, policySet)
 	if err != nil {
 		return nil, err
 	}
 	authInterceptor = authInterceptor.WithLogger(app.Logger())
 	// M5 C6：auth 拒绝并联审计（拦截器层拒绝到不了 audit 中间件，无双写）。
 	authInterceptor = authInterceptor.WithDenyAuditSink(auditRepo)
-	authzInterceptor, err := authz.NewInterceptor(policySet.Raw(), nil, authz.Options{
+	authzInterceptor, err := authz.NewInterceptor(policySet, nil, authz.Options{
 		OnDecision: authInterceptor.AuthzOnDecision(),
 		Logger:     app.Logger(),
 	})
@@ -204,11 +205,7 @@ func NewGRPCServer(
 	// 断言换库（grpcapi 阶段 1）：AssertAllRegisteredHavePolicy 与原实现同构
 	// （遍历 GetServiceInfo 全部方法，含流式；框架服务整体豁免），流式方法
 	// 覆盖不变。
-	raw := policySet.Raw()
-	if raw == nil {
-		return nil, fmt.Errorf("policy set has no v3 projection; refusing to skip authz coverage assertion")
-	}
-	if err := grpcapiinterceptor.AssertAllRegisteredHavePolicy(grpcSrv, raw); err != nil {
+	if err := grpcapiinterceptor.AssertAllRegisteredHavePolicy(grpcSrv, policySet); err != nil {
 		return nil, err
 	}
 

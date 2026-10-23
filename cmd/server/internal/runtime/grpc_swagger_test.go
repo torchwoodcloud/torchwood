@@ -102,7 +102,11 @@ func TestSwaggerAccessExtensionMatchesCollectMethodsByAccess(t *testing.T) {
 			defaultOf[serviceName] = def
 		}
 	}
-	for _, p := range policies.Methods() {
+	views, verr := domainauth.Views(policies)
+	if verr != nil {
+		t.Fatal(verr)
+	}
+	for _, p := range views {
 		as, ok := domainAccessString(p.Access)
 		require.True(t, ok, "method %s access 非法", p.Method)
 		accessOf[p.Method] = as

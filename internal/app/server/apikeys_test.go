@@ -44,7 +44,7 @@ func testScopeVocabulary() *domainauth.ScopeVocabulary {
 			})
 		}
 	}
-	set, err := domainauth.NewPolicySet(pols...)
+	set, err := domainauth.NewSet(pols...)
 	if err != nil {
 		panic(err)
 	}

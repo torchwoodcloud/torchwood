@@ -19,17 +19,17 @@ import (
 
 // 库 principal.Kind 投影值（五档树的 principal_kind 门消费）。
 const (
-	PrincipalKindUser      = principal.KindUser  // "user"    ← ActorKindEndUser
-	PrincipalKindAdmin     = principal.KindAdmin // "admin"   ← ActorKindAdmin
+	PrincipalKindUser      = principal.KindUser   // "user"    ← ActorKindEndUser
+	PrincipalKindAdmin     = principal.KindAdmin  // "admin"   ← ActorKindAdmin
 	PrincipalKindAPIKey    = principal.KindAPIKey // "api_key" ← ActorKindService
-	PrincipalKindExecution = "execution"         //           ← ActorKindExecution
-	PrincipalKindSystem    = "system"            //           ← ActorKindSystem
+	PrincipalKindExecution = "execution"          //           ← ActorKindExecution
+	PrincipalKindSystem    = "system"             //           ← ActorKindSystem
 )
 
 // PolicyRegistry 是 torchwood 的授权 kind 注册表：authenticated/claim/
 // principal_kind/role/admin_role/permission/scope/resource。permission 的
 // registry 默认 MatchAll 对齐库约定；torchwood 旧执行语义是任一命中
-//（HasAnyRole），TreeSpec 展开的 permission requirement 恒显式 MatchAny。
+// （HasAnyRole），TreeSpec 展开的 permission requirement 恒显式 MatchAny。
 func PolicyRegistry() (*policy.Registry, error) {
 	resourceKind, err := scope.ResourceKind(scope.ResourceOptions{
 		ID:                InstanceTargetID,
@@ -102,7 +102,7 @@ func InstanceTargetID(req any) (string, error) {
 }
 
 // ProjectPrincipal 把 torchwood shared.Principal 投影为库 principal.Principal
-//（库 authz 拦截器的求值输入）。claim 投影约定（与五档树门一一对应）：
+// （库 authz 拦截器的求值输入）。claim 投影约定（与五档树门一一对应）：
 //   - Kind：end_user→user、admin→admin、service→api_key、execution→execution、
 //     system→system；
 //   - roles / permissions claim = Roles（PERMISSION 面角色门读 permissions，

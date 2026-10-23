@@ -26,12 +26,13 @@ var ProviderSet = wire.NewSet(
 //
 //	policy.Build + legacyProvider —— 读取 vendored authz.proto 旧注解，展开为
 //	                                  库可求值的五档规范树（domainauth.TreeSpec）；
-//	domainauth.FromSet            —— 规范树识别回 MethodPolicy 视图（断言/文档）；
-//	domainauth.AssertSemantic     —— 项目断言（面前缀值域、档位分类、
+//	domainauth.AssertSemantic     —— 项目断言（规范树形、面前缀值域、档位分类、
 //	                                  project_id 寻址不变量、PUBLIC 白名单、console 值域）。
 //
-// 等价性由 testdata/policies.golden.json（阶段 0 基线）锁定。
-func buildMethodPolicies() (*domainauth.PolicySet, error) {
+// 产出的 *policy.Set 同时是声明面（View 派生文档/词表）与执行面（库 authz
+// 拦截器）的唯一载体。等价性由 testdata/policies.golden.json（阶段 0 基线）
+// 与 testdata/policies.manifest.golden.json（v3 树快照）锁定。
+func buildMethodPolicies() (*policy.Set, error) {
 	reg, err := domainauth.PolicyRegistry()
 	if err != nil {
 		return nil, err
@@ -45,24 +46,21 @@ func buildMethodPolicies() (*domainauth.PolicySet, error) {
 	if err != nil {
 		return nil, err
 	}
-	domainSet, err := domainauth.FromSet(set)
-	if err != nil {
+	if err := domainauth.AssertSemantic(set); err != nil {
 		return nil, err
 	}
-	if err := domainauth.AssertSemantic(domainSet); err != nil {
-		return nil, err
-	}
-	return domainSet, nil
+	return set, nil
 }
 
-// ProvideMethodPolicies 收集 proto 策略注解为 PolicySet（全进程唯一收集点，
-// 含语义断言——违例启动失败）。策略唯一声明在 proto。
-func ProvideMethodPolicies() (*domainauth.PolicySet, error) {
+// ProvideMethodPolicies 收集 proto 策略注解为规范树策略集（全进程唯一收集
+// 点，含语义断言——违例启动失败）。策略唯一声明在 proto；授权执行走库
+// authz 拦截器（消费同一 *policy.Set）。
+func ProvideMethodPolicies() (*policy.Set, error) {
 	return buildMethodPolicies()
 }
 
-// ProvideScopeVocabulary 从策略注册表派生合法 scope 词表（key 创建校验、
+// ProvideScopeVocabulary 从策略集派生合法 scope 词表（key 创建校验、
 // well-known 下发与 console/SDK 生成的单一来源）。
-func ProvideScopeVocabulary(set *domainauth.PolicySet) *domainauth.ScopeVocabulary {
+func ProvideScopeVocabulary(set *policy.Set) *domainauth.ScopeVocabulary {
 	return domainauth.VocabularyFromPolicies(set)
 }

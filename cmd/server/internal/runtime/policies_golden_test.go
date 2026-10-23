@@ -120,8 +120,12 @@ func buildGolden(t *testing.T) goldenFile {
 		}
 	}
 
+	methods, err := domainauth.Views(set)
+	if err != nil {
+		t.Fatalf("Views: %v", err)
+	}
 	g := goldenFile{Methods: make([]goldenPolicy, 0, 32)}
-	for _, p := range set.Methods() { // Methods() 已按方法名排序
+	for _, p := range methods { // Views 已按方法名排序
 		gp := goldenPolicy{
 			Method:              p.Method,
 			Service:             p.Service,

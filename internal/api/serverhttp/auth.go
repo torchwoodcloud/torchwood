@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/lynx-go/grpcapi/policy"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"google.golang.org/grpc/codes"
@@ -23,10 +24,10 @@ type AuthValidator interface {
 // 同源，禁止手写策略值）。
 type httpAuth struct {
 	validator AuthValidator
-	policies  *domainauth.PolicySet
+	policies  *policy.Set
 }
 
-func newHTTPAuth(validator AuthValidator, policies *domainauth.PolicySet) *httpAuth {
+func newHTTPAuth(validator AuthValidator, policies *policy.Set) *httpAuth {
 	return &httpAuth{validator: validator, policies: policies}
 }
 
@@ -51,7 +52,7 @@ func (a *httpAuth) authorize(r *http.Request, method string, target string) (*sh
 		return nil, err
 	}
 	if principal.CredentialType == shared.CredentialTypeAPIKey || principal.CredentialType == shared.CredentialTypeExecution {
-		if !domainauth.AllowsAPIKey(a.policies.ScopeRule(method), principal.Permissions, target) {
+		if !domainauth.AllowsAPIKey(domainauth.ScopeRuleOf(a.policies, method), principal.Permissions, target) {
 			return nil, status.Error(codes.PermissionDenied, "api key missing required scope")
 		}
 	}

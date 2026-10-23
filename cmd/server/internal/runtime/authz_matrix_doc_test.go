@@ -1,12 +1,13 @@
 package runtime
 
 import (
+	"github.com/lynx-go/grpcapi/policy"
+
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	authz "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
 
 // TestAuthzMatrixDoc_NoDrift CI 锁：重新渲染的授权矩阵文档必须与磁盘上的
@@ -36,7 +37,7 @@ func TestAuthzMatrixDoc_RenderRejectsEmpty(t *testing.T) {
 	_, err := RenderAuthzMatrix(nil)
 	require.Error(t, err)
 
-	empty, err := authz.NewPolicySet()
+	empty, err := policy.NewSet()
 	require.NoError(t, err)
 	_, err = RenderAuthzMatrix(empty)
 	require.Error(t, err)

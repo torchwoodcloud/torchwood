@@ -44,7 +44,7 @@ func newTestAPIKeysService(key *projects.APIKey) *APIKeysService {
 }
 
 func whoamiVocabulary() *domainauth.ScopeVocabulary {
-	set, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{{
+	set, err := domainauth.NewSet([]domainauth.MethodPolicy{{
 		Method: "/t/users.read", Service: "/t",
 		Access: domainauth.AccessServer,
 		Scope:  &domainauth.ScopeRule{Resource: string(domainauth.ScopeUsers), Op: domainauth.ScopeRead},

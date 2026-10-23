@@ -9,6 +9,7 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/lynx-go/grpcapi/gateway"
+	"github.com/lynx-go/grpcapi/policy"
 	"github.com/lynx-go/lynx"
 	lynxhttp "github.com/lynx-go/lynx/server/http"
 	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
@@ -16,7 +17,6 @@ import (
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	apirealtime "github.com/torchwoodcloud/torchwood/internal/api/realtime"
 	"github.com/torchwoodcloud/torchwood/internal/api/serverhttp"
-	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/infra/health"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"google.golang.org/grpc"
@@ -47,7 +47,7 @@ func NewGRPCGatewayServer(
 	paymentsHandler *serverhttp.PaymentsHandler,
 	functionTriggersHandler *serverhttp.FunctionTriggersHandler,
 	realtimeHandler *apirealtime.Handler,
-	policySet *domainauth.PolicySet,
+	policySet *policy.Set,
 ) (*GRPCGatewayServer, error) {
 	httpCfg := cfg.GetServer().GetHttp()
 	timeout := parseDuration(httpCfg.GetTimeout(), 60*time.Second)

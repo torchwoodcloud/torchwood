@@ -5,12 +5,13 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/lynx-go/grpcapi/policy"
 )
 
-// 本文件是授权策略注册表的 domain 层。v3 迁移期保留 project-owned 的
-// PolicySet/MethodPolicy 形状；cmd/server/internal/runtime 的 legacyProvider
-// 读取旧 authz 注解并用 policy.Build 收集，FromPolicySet 再转回 domain 形状，
-// 注入既有拦截器/矩阵/断言。词表、档位分类与语义断言仍属项目主权。
+// 本文件是授权策略的 domain 断言层（项目主权）：从 *policy.Set（规范树，
+// legacyProvider 展开）经 View 识别为 MethodPolicy 后做值域/档位/不变量
+// 断言。词表、档位分类与语义断言属项目主权；策略声明在 proto、执行在库。
 
 // AdminRole 是 console admin 的 RBAC 角色（平台级角色体系；角色串即
 // principal.Roles 中的形态——proto 注解侧为 string，值域由本词表锁定）。
@@ -79,8 +80,8 @@ func ScopeVocabularyResources() []string {
 // AllowedAdminRoles 返回 SERVER 面方法允许的 admin 角色集（非 SERVER 面
 // 或未声明返回 nil；nil 语义 = 不限角色，viewer 可调）。供 serverhttp/
 // realtime 等镜像消费点派生，禁止手写角色集。
-func AllowedAdminRoles(s *PolicySet, fullMethod string) []string {
-	return s.AllowedAdminRoles(fullMethod)
+func AllowedAdminRoles(s *policy.Set, fullMethod string) []string {
+	return AdminRolesOf(s, fullMethod)
 }
 
 // ScopeVocabulary 是从 PolicySet 派生的合法 scope 词表（创建校验与
@@ -92,12 +93,17 @@ type ScopeVocabulary struct {
 	ops       map[ScopeResource]map[ScopeOp]struct{}
 }
 
-// VocabularyFromPolicies 从策略注册表派生词表（死 scope 断言保证每个资源
+// VocabularyFromPolicies 从策略集派生词表（死 scope 断言保证每个资源
 // 至少被引用一次，因此 resources 恒非空）。
-func VocabularyFromPolicies(set *PolicySet) *ScopeVocabulary {
+func VocabularyFromPolicies(set *policy.Set) *ScopeVocabulary {
+	methods, err := Views(set)
+	if err != nil {
+		// 非规范树形：空词表 fail-closed（启动期 AssertSemantic 已先红）。
+		return &ScopeVocabulary{valid: map[string]struct{}{"*": {}, "all": {}}, ops: map[ScopeResource]map[ScopeOp]struct{}{}}
+	}
 	v := &ScopeVocabulary{valid: map[string]struct{}{"*": {}, "all": {}}, ops: map[ScopeResource]map[ScopeOp]struct{}{}}
 	seen := map[ScopeResource]struct{}{}
-	for _, p := range set.Methods() {
+	for _, p := range methods {
 		if p.Scope == nil {
 			continue
 		}
@@ -314,14 +320,19 @@ func AssertPolicy(p MethodPolicy) error {
 	return nil
 }
 
-// AssertSemantic 是 PolicySet 的全量语义断言（启动期 fail-closed）：
+// AssertSemantic 是策略集的全量语义断言（启动期 fail-closed）：规范树形、
 // 完备性、死 scope、档位合法性、client/console 值域、项目寻址不变量、
 // streaming 禁用。返回的 error 聚合全部违例。
-func AssertSemantic(set *PolicySet) error {
+func AssertSemantic(set *policy.Set) error {
 	var errs []string
 	referenced := map[string]struct{}{}
 
-	for _, p := range set.Methods() {
+	for _, op := range set.Operations() {
+		p, err := View(op)
+		if err != nil {
+			errs = append(errs, err.Error())
+			continue
+		}
 		if err := AssertPolicy(p); err != nil {
 			errs = append(errs, err.Error())
 		}

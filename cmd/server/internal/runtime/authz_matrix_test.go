@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lynx-go/grpcapi/authz"
+	"github.com/lynx-go/grpcapi/policy"
 
 	"github.com/stretchr/testify/require"
 	"github.com/torchwoodcloud/torchwood/internal/api/interceptor"
@@ -29,7 +30,7 @@ import (
 // matrixPolicySet 构造真实 proto 策略注册表（与 ProvideMethodPolicies 同源，
 // 含 AssertSemantic——语义断言另由 grpc_authz_test.go 独立覆盖，本文件专注
 // 执行行为与推导的一致性）。
-func matrixPolicySet(t *testing.T) *domainauth.PolicySet {
+func matrixPolicySet(t *testing.T) *policy.Set {
 	t.Helper()
 	set, err := buildMethodPolicies()
 	require.NoError(t, err)
@@ -352,13 +353,12 @@ func matrixMismatchScope(p domainauth.MethodPolicy, vocab *domainauth.ScopeVocab
 
 // matrixRunCase 过真实拦截器链执行单用例（生产链序：authn → 库 authz →
 // handler），返回实际裁决与捕获的主体。授权执行 = 库 RequirementDecider。
-func matrixRunCase(t *testing.T, set *domainauth.PolicySet, fullMethod string, cred matrixCredential) (matrixDecision, *shared.Principal) {
+func matrixRunCase(t *testing.T, set *policy.Set, fullMethod string, cred matrixCredential) (matrixDecision, *shared.Principal) {
 	t.Helper()
 	v := &matrixValidator{principal: cred.principal()}
-	raw := set.Raw()
-	ic, err := interceptor.NewAuthInterceptor(v, raw)
+	ic, err := interceptor.NewAuthInterceptor(v, set)
 	require.NoError(t, err)
-	az, err := authz.NewInterceptor(raw, nil, authz.Options{
+	az, err := authz.NewInterceptor(set, nil, authz.Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	require.NoError(t, err)
@@ -401,7 +401,8 @@ func TestAuthzMatrix_ExecutionMatchesIndependentDerivation(t *testing.T) {
 
 	set := matrixPolicySet(t)
 	vocab := domainauth.VocabularyFromPolicies(set)
-	methods := set.Methods()
+	methods, err := domainauth.Views(set)
+	require.NoError(t, err)
 	require.NotEmpty(t, methods)
 
 	byAccess := map[domainauth.AccessLevel]int{}
@@ -443,16 +444,17 @@ func TestAuthzMatrix_AdminProjectHeaderOverridesPrincipal(t *testing.T) {
 	set := matrixPolicySet(t)
 	owner := matrixAdmin(domainauth.AdminRoleOwner)
 	serverMethods := 0
-	for _, p := range set.Methods() {
+	methods, err := domainauth.Views(set)
+	require.NoError(t, err)
+	for _, p := range methods {
 		if p.Access != domainauth.AccessServer {
 			continue
 		}
 		serverMethods++
 		v := &matrixValidator{principal: owner.principal()}
-		raw := set.Raw()
-		ic, err := interceptor.NewAuthInterceptor(v, raw)
+		ic, err := interceptor.NewAuthInterceptor(v, set)
 		require.NoError(t, err)
-		az, err := authz.NewInterceptor(raw, nil, authz.Options{
+		az, err := authz.NewInterceptor(set, nil, authz.Options{
 			Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		})
 		require.NoError(t, err)
@@ -483,7 +485,8 @@ func TestAuthzMatrix_SemanticAnchors(t *testing.T) {
 
 	set := matrixPolicySet(t)
 	anchor := func(method string) domainauth.MethodPolicy {
-		p, ok := set.Get(method)
+		p, ok, err := domainauth.ViewOf(set, method)
+		require.NoError(t, err)
 		require.True(t, ok, "锚点方法 %s 不在策略注册表", method)
 		return p
 	}
@@ -574,7 +577,8 @@ func TestAuthzMatrix_MutationDetection(t *testing.T) {
 
 	set := matrixPolicySet(t)
 	method := "/torchwood.server.v1.DatabasesService/CreateDatabase"
-	p, ok := set.Get(method)
+	p, ok, perr := domainauth.ViewOf(set, method)
+	require.NoError(t, perr)
 	require.True(t, ok)
 	cred := matrixAdmin(domainauth.AdminRoleViewer)
 

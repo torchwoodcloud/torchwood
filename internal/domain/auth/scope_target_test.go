@@ -1,15 +1,17 @@
 package auth
 
 import (
+	"github.com/lynx-go/grpcapi/policy"
+
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
 // testPolicySet 构造含 databases/storage 读写规则的最小策略集。
-func testPolicySet(t *testing.T) *PolicySet {
+func testPolicySet(t *testing.T) *policy.Set {
 	t.Helper()
-	set, err := NewPolicySet([]MethodPolicy{
+	set, err := NewSet([]MethodPolicy{
 		{Method: "/test/DBRead", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeDatabases), Op: ScopeRead}},
 		{Method: "/test/DBWrite", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeDatabases), Op: ScopeWrite}},
 		{Method: "/test/StRead", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeStorage), Op: ScopeRead}},
@@ -59,7 +61,7 @@ func TestParseScopeToken(t *testing.T) {
 
 // allowsMethod 是 AllowsAPIKey 的方法级测试适配：按方法取规则，目标以
 // (databaseID, bucketID) 传入（空 = 不寻址实例）。
-func allowsMethod(t *testing.T, set *PolicySet, method string, scopes []string, databaseID, bucketID string) bool {
+func allowsMethod(t *testing.T, set *policy.Set, method string, scopes []string, databaseID, bucketID string) bool {
 	t.Helper()
 	target := ""
 	switch {
@@ -68,7 +70,7 @@ func allowsMethod(t *testing.T, set *PolicySet, method string, scopes []string, 
 	case bucketID != "":
 		target = bucketID
 	}
-	return AllowsAPIKey(set.ScopeRule(method), scopes, target)
+	return AllowsAPIKey(ScopeRuleOf(set, method), scopes, target)
 }
 
 // TestScopeVocabulary_Valid_ScopedForms：词表校验接受可寻址资源的实例限定，
@@ -167,9 +169,9 @@ func TestValidateScopeTargetID(t *testing.T) {
 }
 
 // testLeaderboardsPolicySet 构造 leaderboards 三方向的最小策略集。
-func testLeaderboardsPolicySet(t *testing.T) *PolicySet {
+func testLeaderboardsPolicySet(t *testing.T) *policy.Set {
 	t.Helper()
-	set, err := NewPolicySet([]MethodPolicy{
+	set, err := NewSet([]MethodPolicy{
 		{Method: "/test/LBRead", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeLeaderboards), Op: ScopeRead}},
 		{Method: "/test/LBWrite", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeLeaderboards), Op: ScopeWrite}},
 		{Method: "/test/LBAdmin", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeLeaderboards), Op: ScopeAdmin}},
