@@ -57,9 +57,10 @@ SERVER 档细节：
 | 提交 | 内容 |
 | --- | --- |
 | `af855f74` | C1 policy 树重写（provider 产树 + View 识别投影，golden 零漂移） |
-| `(C2)` | C2 执行点切换（jwt.go 手工判定退役、库 authz 拦截器接线、serverhttp 切库语义、stream 三流型测试） |
+| `579bca08` | C2 执行点切换（jwt.go 手工判定退役、库 authz 拦截器接线、serverhttp 切库语义、stream 三流型测试） |
 | `cfa9bb4c` | C3 投影退役（PolicySet 包装删除、消费面直吃 *policy.Set、wire 重生成） |
-| `(C4)` | C4 manifest golden 固化 + 本报告 |
+| `a4e14628` | C4 manifest golden 固化 + 本报告 |
+| `f8c12e42` | gateway 兼容垫片迁 v0.3.0 形态（HeaderPolicy/ErrorEncoder，独立提交不与执行侧混提） |
 
 ## 3. golden 等价性验收（MIGRATION §2.5 / §6）
 
