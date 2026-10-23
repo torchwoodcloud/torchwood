@@ -143,9 +143,19 @@ SERVER 档细节：
       `gateway_route_order_test`）
 - [x] 全量 `go test -race ./...` 与 CI 通过
 
-## 8. 后续（不属本次）
+## 8. 后续（2026-10-23 收尾状态）
 
-- grpcapi v0.3.0 打 tag 后撤 replace 切 tag（G-1 已于库 `5ea3974` 补课，
-  torchwood 断言已回正）；
-- 路径 B codemod（旧注解 → `policy.proto`）；
-- 流式 authn 拦截器（放开 streaming 前置条件）。
+- ~~grpcapi v0.3.0 打 tag 后撤 replace 切 tag~~ **已完成**：v0.3.0 发布
+  （genproto/v0.3.0 → 主仓 tag 时序，release workflow 校验通过），torchwood
+  require v0.3.0、replace 已摘（A11 闭环）。
+- ~~路径 B codemod~~ **已完成**：34 个业务 proto 迁 policy.proto 声明
+ （protopolicy provider），legacyProvider/vendored authz.proto/legacypb/
+  阶段 0 五档基线退役；manifest golden 保留为策略漂移 CI 基线（codemod
+  等价性：树逐字节一致，36 个继承方法 label 归一）。
+- ~~流式 authn 拦截器~~ **已完成**：StreamAuthMiddleware + 完整流式链
+ （clientInfo → authn → authz），streaming 禁用解除。
+- **lynx 深度集成（gRPC 面）已完成**：拦截器链经库 `AssembleWith` 装配、
+  gRPC 面经 `server.New`（注册/断言统一），`GRPCAPIService` 按 lynx 语义
+  自管 listener/排水/健康轮询。HTTP 面迁移（bufconn gateway + 自定义
+  HTTP 面路由语义拆分）挂账 B18。
+- 错误处理器 nolint（v0.2.x 垫片参数）随库 v1.0 移除垫片时清理。
