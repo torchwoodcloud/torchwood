@@ -140,10 +140,11 @@ func NewGRPCServer(
 			usageInterceptor.UnaryUsageMiddleware,
 			validateInterceptor.Unary(),
 		),
-		// 流式面先挂库 authz（open-time 授权）。torchwood 当前无流式 RPC
-		//（AssertSemantic 禁用 streaming），authn 尚无 stream 拦截器——
-		// 未来放开流式前须先补 authn stream（否则无 principal，authz 恒拒）。
+		// 流式面完整链（B17）：clientInfo → authn → authz（open-time /
+		// per-message 由方法 StreamAuth 声明决定）。
 		lynxgrpc.WithStreamInterceptors(
+			clientInfoInterceptor.Stream(),
+			authInterceptor.StreamAuthMiddleware,
 			authzInterceptor.Stream(),
 		),
 		// 允许 ≤1MiB 的 deployment 代码包走 gRPC（base64 膨胀后约 1.33x）。

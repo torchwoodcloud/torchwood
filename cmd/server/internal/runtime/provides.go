@@ -41,11 +41,10 @@ func buildMethodPolicies() (*policy.Set, error) {
 		return nil, err
 	}
 	set, err := policy.Build(context.Background(), policy.FromFiles(authzFileDescriptors()...), policy.Options{
-		Provider:         protopolicy.New(protopolicy.Options{}),
-		Registry:         reg,
-		Vocabulary:       domainauth.PolicyVocabulary(),
-		APIResolver:      apiOfPackage,
-		DisableStreaming: true,
+		Provider:    protopolicy.New(protopolicy.Options{}),
+		Registry:    reg,
+		Vocabulary:  domainauth.PolicyVocabulary(),
+		APIResolver: apiOfPackage,
 	})
 	if err != nil {
 		return nil, err

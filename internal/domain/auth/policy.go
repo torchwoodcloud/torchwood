@@ -321,8 +321,10 @@ func AssertPolicy(p MethodPolicy) error {
 }
 
 // AssertSemantic 是策略集的全量语义断言（启动期 fail-closed）：规范树形、
-// 完备性、死 scope、档位合法性、client/console 值域、项目寻址不变量、
-// streaming 禁用。返回的 error 聚合全部违例。
+// 完备性、死 scope、档位合法性、client/console 值域、项目寻址不变量。
+// 流式自 B17 起放行（完整链 clientInfo → authn → authz 已接线；open-time /
+// per-message 由方法 StreamAuth 声明决定，client/bidi 流不得挂 HTTP 绑定
+// 由库 Build 期断言）。返回的 error 聚合全部违例。
 func AssertSemantic(set *policy.Set) error {
 	var errs []string
 	referenced := map[string]struct{}{}
@@ -338,9 +340,6 @@ func AssertSemantic(set *policy.Set) error {
 		}
 		if p.Scope != nil {
 			referenced[p.Scope.Resource] = struct{}{}
-		}
-		if p.IsStreaming {
-			errs = append(errs, fmt.Sprintf("%s: streaming RPC is not wired into the auth interceptor (fail-closed)", p.Method))
 		}
 	}
 
