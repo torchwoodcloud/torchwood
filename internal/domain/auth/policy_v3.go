@@ -2,17 +2,16 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/lynx-go/grpcapi/policy"
 )
 
-// 本文件是 v3 迁移期的 domain 策略类型：保持 torchwood 现有执行点/测试的
-// 类型形状不变，同时从 grpcapi v3 policy.Set 转换。业务 proto 仍使用旧
-// authz 注解，由 runtime.legacyProvider 读取后编码成 legacy_access 谓词。
+// 本文件是 v3 迁移期的 domain 策略类型：MethodPolicy 保持 torchwood 既有
+// 断言/矩阵/文档消费的字段形状，从 grpcapi v3 policy.Set 经规范树识别
+// （View，见 policy_tree.go）派生。params-JSON 编解码（legacy 双投影）已
+// 退役——树是唯一策略载体，执行走库 RequirementDecider。
 
 type AccessLevel int32
 
@@ -38,7 +37,8 @@ type ScopeRule struct {
 	Op       ScopeOp
 }
 
-// MethodPolicy 保持 v2 的字段形状，供既有拦截器/矩阵/断言消费。
+// MethodPolicy 是规范树的单方法视图（断言/矩阵/文档/golden 消费；派生投影，
+// 不是第二棵策略树，也不参与执行）。
 type MethodPolicy struct {
 	Method, Service string
 	Access          AccessLevel
@@ -49,7 +49,8 @@ type MethodPolicy struct {
 	IsStreaming     bool
 }
 
-// PolicySet 是 domain 策略注册表；raw 保留 v3 Set 供库启动断言使用。
+// PolicySet 包装 v3 Set 并缓存 View 派生的方法视图（迁移期形状；执行点已
+// 不消费本类型——gRPC 链走库 authz 拦截器）。
 type PolicySet struct {
 	raw     *policy.Set
 	methods map[string]MethodPolicy
@@ -66,39 +67,17 @@ func NewPolicySet(policies ...MethodPolicy) (*PolicySet, error) {
 	return &PolicySet{methods: m}, nil
 }
 
-// FromPolicySet 把 v3 policy.Set 转回 domain 形状。legacyProvider 用
-// legacy_access requirement 编码旧字段；没有该 requirement 时按通用策略推断。
-func FromPolicySet(set *policy.Set) (*PolicySet, error) {
+// FromSet 把 v3 policy.Set 逐方法识别为 domain 视图。非规范树形（legacy
+// provider 只产出五档规范形）返回错误——fail-closed。
+func FromSet(set *policy.Set) (*PolicySet, error) {
 	if set == nil {
 		return nil, fmt.Errorf("policy.Set is nil")
 	}
 	out := &PolicySet{raw: set, methods: make(map[string]MethodPolicy, set.Len())}
 	for _, op := range set.Operations() {
-		mp := MethodPolicy{
-			Method:        op.ID,
-			Service:       "/" + strings.TrimPrefix(op.Service, "/"),
-			RequestFields: append([]string(nil), op.RequestFields...),
-			IsStreaming:   op.Streaming,
-		}
-		if req, ok := legacyAccessRequirement(op.Policy); ok {
-			mp.Access = accessFromString(req.Params["access"])
-			var err error
-			mp.Permissions, err = decodeStrings(req.Params["permissions_json"], req.Params["permissions"])
-			if err != nil {
-				return nil, fmt.Errorf("method %s: permissions: %w", op.ID, err)
-			}
-			mp.AdminRoles, err = decodeStrings(req.Params["admin_roles_json"], req.Params["admin_roles"])
-			if err != nil {
-				return nil, fmt.Errorf("method %s: admin_roles: %w", op.ID, err)
-			}
-			if res := req.Params["scope_resource"]; res != "" {
-				mp.Scope = &ScopeRule{Resource: res, Op: ScopeOp(req.Params["scope_op"])}
-			}
-		} else {
-			inferMethodPolicy(&mp, op.Policy)
-		}
-		if mp.Access == AccessEndUser && len(mp.Permissions) == 0 {
-			mp.Permissions = []string{RoleEndUserTag}
+		mp, err := View(op)
+		if err != nil {
+			return nil, fmt.Errorf("method %s: %w", op.ID, err)
 		}
 		if _, dup := out.methods[mp.Method]; dup {
 			return nil, fmt.Errorf("duplicate method policy %s", mp.Method)
@@ -108,6 +87,8 @@ func FromPolicySet(set *policy.Set) (*PolicySet, error) {
 	return out, nil
 }
 
+// Raw 返回 v3 Set（启动断言与库执行点消费）。手工构造的测试集没有 raw，
+// 返回永远拒绝的存在性投影——误接运行时授权时 fail-closed。
 func (s *PolicySet) Raw() *policy.Set {
 	if s == nil {
 		return nil
@@ -115,13 +96,10 @@ func (s *PolicySet) Raw() *policy.Set {
 	if s.raw != nil {
 		return s.raw
 	}
-	// NewPolicySet（测试/手工构造）没有 v3 raw；构造一个仅用于
-	// AssertAllRegisteredHavePolicy 的存在性投影。用永远拒绝的自定义 kind，
-	// 确保它即使被误接到运行时授权也不会 fail-open。
 	denyKind := policy.RequirementKind{
 		Name:         "legacy_projection_deny",
 		DefaultMatch: policy.MatchAny,
-		Evaluate: func(context.Context, policy.EvalContext, policy.Requirement) (bool, error) {
+		Evaluate: func(_ context.Context, _ policy.EvalContext, _ policy.Requirement) (bool, error) {
 			return false, nil
 		},
 	}
@@ -181,97 +159,4 @@ func (s *PolicySet) AllowedAdminRoles(method string) []string {
 		return nil
 	}
 	return append([]string(nil), p.AdminRoles...)
-}
-
-func legacyAccessRequirement(p policy.Policy) (policy.Requirement, bool) {
-	for _, r := range p.Require {
-		if r.Kind == "legacy_access" {
-			return r, true
-		}
-	}
-	return policy.Requirement{}, false
-}
-
-func accessFromString(s string) AccessLevel {
-	switch strings.ToUpper(s) {
-	case "PUBLIC":
-		return AccessPublic
-	case "END_USER":
-		return AccessEndUser
-	case "SERVER":
-		return AccessServer
-	case "PERMISSION":
-		return AccessPermission
-	case "SYSTEM":
-		return AccessSystem
-	default:
-		return AccessLevelUnspecified
-	}
-}
-
-func decodeStrings(encoded, legacy string) ([]string, error) {
-	if encoded != "" {
-		var out []string
-		if err := json.Unmarshal([]byte(encoded), &out); err != nil {
-			return nil, err
-		}
-		return out, nil
-	}
-	return splitCSV(legacy), nil
-}
-
-func splitCSV(s string) []string {
-	if strings.TrimSpace(s) == "" {
-		return nil
-	}
-	parts := strings.Split(s, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
-func inferMethodPolicy(mp *MethodPolicy, p policy.Policy) {
-	if p.Anonymous {
-		mp.Access = AccessPublic
-		return
-	}
-	for _, r := range p.Require {
-		switch r.Kind {
-		case "principal_kind":
-			for _, v := range r.Values {
-				if v == "user" {
-					mp.Access = AccessEndUser
-					return
-				}
-			}
-		case "permission":
-			mp.Access = AccessPermission
-			mp.Permissions = append(mp.Permissions, r.Values...)
-			return
-		case "scope":
-			mp.Access = AccessServer
-			if len(r.Values) > 0 {
-				res, op := splitScopeValue(r.Values[0])
-				mp.Scope = &ScopeRule{Resource: res, Op: ScopeOp(op)}
-			}
-			return
-		case "admin_role", "role":
-			mp.Access = AccessServer
-			mp.AdminRoles = append(mp.AdminRoles, r.Values...)
-		}
-	}
-}
-
-func splitScopeValue(v string) (resource, op string) {
-	if i := strings.LastIndex(v, ":"); i >= 0 {
-		return v[:i], v[i+1:]
-	}
-	if i := strings.LastIndex(v, "."); i >= 0 {
-		return v[:i], v[i+1:]
-	}
-	return v, ""
 }

@@ -22,10 +22,11 @@ var ProviderSet = wire.NewSet(
 	ProvideScopeVocabulary,
 )
 
-// buildMethodPolicies 是策略唯一收集入口（v3 迁移期）：
+// buildMethodPolicies 是策略唯一收集入口：
 //
-//	policy.Build + legacyProvider —— 读取 vendored authz.proto 旧注解，
-//	                                  fail-closed 校验后转回 domainauth.PolicySet；
+//	policy.Build + legacyProvider —— 读取 vendored authz.proto 旧注解，展开为
+//	                                  库可求值的五档规范树（domainauth.TreeSpec）；
+//	domainauth.FromSet            —— 规范树识别回 MethodPolicy 视图（断言/文档）；
 //	domainauth.AssertSemantic     —— 项目断言（面前缀值域、档位分类、
 //	                                  project_id 寻址不变量、PUBLIC 白名单、console 值域）。
 //
@@ -38,13 +39,13 @@ func buildMethodPolicies() (*domainauth.PolicySet, error) {
 	set, err := policy.Build(context.Background(), policy.FromFiles(authzFileDescriptors()...), policy.Options{
 		Provider:         legacyProvider{},
 		Registry:         reg,
-		Vocabulary:       policy.NewVocabulary(map[string][]string{"scope": domainauth.ScopeVocabularyResources()}),
+		Vocabulary:       legacyVocabulary(),
 		DisableStreaming: true,
 	})
 	if err != nil {
 		return nil, err
 	}
-	domainSet, err := domainauth.FromPolicySet(set)
+	domainSet, err := domainauth.FromSet(set)
 	if err != nil {
 		return nil, err
 	}
@@ -52,6 +53,15 @@ func buildMethodPolicies() (*domainauth.PolicySet, error) {
 		return nil, err
 	}
 	return domainSet, nil
+}
+
+// legacyVocabulary 注册 scope/resource 两个词表域（同一资源全集：scope 门
+// 与 resource 门各自按域校验声明值）。
+func legacyVocabulary() policy.Vocabulary {
+	return policy.NewVocabulary(map[string][]string{
+		"scope":    domainauth.ScopeVocabularyResources(),
+		"resource": domainauth.ScopeVocabularyResources(),
+	})
 }
 
 // ProvideMethodPolicies 收集 proto 策略注解为 PolicySet（全进程唯一收集点，
