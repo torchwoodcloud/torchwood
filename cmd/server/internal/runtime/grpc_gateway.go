@@ -27,16 +27,32 @@ type GRPCGatewayServer struct {
 }
 
 // authIncomingHeaderMatcher / authOutgoingHeaderMatcher：入/出站 header
-// matcher 机制换库（grpcapi 阶段 1，gateway.IncomingMatcher/OutgoingMatcher），
-// 项目专属头经参数注入，包级变量保留供矩阵测试与装配共用：
+// 策略（gateway.HeaderPolicy，v0.3.0 形态；原 v0.2.1 的 IncomingMatcher/
+// OutgoingMatcher 垫片已弃用），包级变量保留供矩阵测试与装配共用：
 //   - 入站 authorization 恒拒绝（放行即双写 401），基础放行集
 //     cookie/x-api-key/x-request-id/idempotency-key + 项目头 x-torchwood-project；
 //   - 出站 set-cookie 与幂等重放标记 x-torchwood-replayed 直透为响应头，
 //     其余 key 保持 Grpc-Metadata- 前缀默认行为。
 var (
-	authIncomingHeaderMatcher = gateway.IncomingMatcher("x-torchwood-project")
-	authOutgoingHeaderMatcher = gateway.OutgoingMatcher("x-torchwood-replayed")
+	authIncomingHeaderMatcher = incomingHeaderPolicy("x-torchwood-project")
+	authOutgoingHeaderMatcher = outgoingHeaderPolicy("x-torchwood-replayed")
 )
+
+// incomingHeaderPolicy 在默认放行集之上追加项目头（与 v0.2.1
+// IncomingMatcher 垫片行为等价）。
+func incomingHeaderPolicy(extra string) func(string) (string, bool) {
+	p := gateway.DefaultHeaderPolicy()
+	p.Allow = append(p.Allow, extra)
+	return gateway.IncomingPolicy(p)
+}
+
+// outgoingHeaderPolicy 在默认直透集之上追加项目头（与 v0.2.1
+// OutgoingMatcher 垫片行为等价）。
+func outgoingHeaderPolicy(extra string) func(string) (string, bool) {
+	p := gateway.DefaultHeaderPolicy()
+	p.Direct = append(p.Direct, extra)
+	return gateway.OutgoingPolicy(p)
+}
 
 func NewGRPCGatewayServer(
 	app lynx.App,

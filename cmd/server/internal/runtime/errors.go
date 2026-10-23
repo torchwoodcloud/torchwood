@@ -13,16 +13,18 @@ import (
 //
 // grpcapi 阶段 1 换库：机制本体（非状态错误归 Internal、Internal/Unknown
 // 脱敏 + error_id 关联、Retry-After 提取（整秒向上取整、至少 1s）、
-// Canceled→499 映射、经 mux marshaler 写 JSON）内置于 gateway.NewErrorHandler；
+// Canceled→499 映射、经 mux marshaler 写 JSON）内置于 gateway 错误编码器；
 // 项目错误契约（sharedv1.ErrorResponse 形状 + code→error_type/error_code
-// 映射表）经 errorBodyBuilder 注入。
+// 映射表）经 errorBodyBuilder 注入（BuilderEncoder 为库官方迁移适配器，
+// v1.0 移除 v0.2.x 形态后切换 ErrorEncoder 直写）。
 //
 // 与原本地实现的可见差异：error_id 由 uuid 改为库生成的 128 位随机十六进
 // 制（仅日志关联用途，格式不对客户端承诺）；脱敏日志键 "method" 更名
 // "path"（取值同为 r.URL.Path）；错误体序列化从 encoding/json 改为 mux 注入
 // 的 protojson marshaler（字段名同为 proto snake_case，行为由
 // errors_retry_after/observability 测试锁定）。
-var HTTPErrorHandler runtime.ErrorHandlerFunc = gateway.NewErrorHandler(errorBodyBuilder{}, gateway.HTTPOptions{})
+var HTTPErrorHandler runtime.ErrorHandlerFunc = gateway.NewEncoderErrorHandler(
+	gateway.BuilderEncoder(errorBodyBuilder{}, gateway.HTTPOptions{})) //nolint:staticcheck // 官方迁移垫片：错误契约经 BuilderEncoder 注入，v1.0 前保留
 
 // errorBodyBuilder 实现 gateway.ErrorBodyBuilder，承载 torchwood 对外错误
 // 契约：错误体形状（sharedv1.ErrorResponse）与 gRPC code → error_type /
