@@ -236,7 +236,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	runtimeVarRepository := bunrepo.NewRuntimeVarRepository(database)
 	serverRuntimeVars := server.NewRuntimeVars(runtimeVarRepository, database)
 	servergrpcRuntimeVarsService := servergrpc.NewRuntimeVarsService(serverRuntimeVars)
-	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, leaderboardsService, analyticsService, runtimeVarsService, healthService, projectsService, storageService, usersService, authService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcWebhooksService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, consolegrpcAuthService, adminsService, outboxService, auditLogsService, servergrpcLeaderboardsService, consolegrpcLeaderboardsService, servergrpcAnalyticsService, runbookService, servergrpcRuntimeVarsService, set)
+	grpcapiService, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, leaderboardsService, analyticsService, runtimeVarsService, healthService, projectsService, storageService, usersService, authService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcWebhooksService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, consolegrpcAuthService, adminsService, outboxService, auditLogsService, servergrpcLeaderboardsService, consolegrpcLeaderboardsService, servergrpcAnalyticsService, runbookService, servergrpcRuntimeVarsService, set)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -282,7 +282,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 		return nil, nil, err
 	}
 	debugService := runtime.NewDebugServer(appConfig)
-	v3 := NewComponents(grpcServer, grpcGatewayServer, runnerService, metricsServer, debugService)
+	v3 := NewComponents(grpcapiService, grpcGatewayServer, runnerService, metricsServer, debugService)
 	v4 := bootkit.NewComponentBuilders()
 	bootstrap := boot.New(preStartHooks, drainHooks, preStopHooks, postStopHooks, v3, v4)
 	return bootstrap, func() {

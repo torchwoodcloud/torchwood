@@ -18,7 +18,7 @@ import (
 var updateGolden = flag.Bool("update", false, "rewrite policy golden baseline")
 
 // TestPolicyManifestGolden 锁定 v3 规范树的 manifest 快照
-//（policy.Set.Manifest().JSON()）：路径 B codemod（2026-10-23）后策略声明
+// （policy.Set.Manifest().JSON()）：路径 B codemod（2026-10-23）后策略声明
 // 直读 policy.proto（protopolicy），树形状/kind/values/match/label 全量
 // 可见，供此后策略漂移的 CI diff。codemod 等价性验收已完成（树与
 // legacyProvider 展开逐字节一致；阶段 0 五档投影基线随之退役删除）。

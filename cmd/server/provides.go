@@ -10,7 +10,6 @@ import (
 	"github.com/lynx-go/lynx/boot"
 	lynxbuildinfo "github.com/lynx-go/lynx/buildinfo"
 	lynxdebug "github.com/lynx-go/lynx/debug"
-	lynxgrpc "github.com/lynx-go/lynx/server/grpc"
 	"github.com/torchwoodcloud/torchwood/cmd/server/internal/runtime"
 	"github.com/torchwoodcloud/torchwood/internal/api"
 	apirealtime "github.com/torchwoodcloud/torchwood/internal/api/realtime"
@@ -125,7 +124,7 @@ func NewBuildInfo() lynxbuildinfo.BuildInfo {
 // cleanup（DB/Redis 等底层资源）不注册进 Lynx，在 runner.RunE()
 // 返回后由 main 统一执行。
 func NewComponents(
-	grpcServer *lynxgrpc.Server,
+	grpcServer *runtime.GRPCAPIService,
 	gatewayServer *runtime.GRPCGatewayServer,
 	realtimeSubscriber *bootkit.RunnerService,
 	metricsServer *runtime.MetricsServer,
