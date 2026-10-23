@@ -9,7 +9,7 @@ import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "grpcapi/v1/authz.proto";
+import "grpcapi/v1/policy.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
@@ -69,106 +69,222 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // 写方法 scope economy.write（apiKeyScopeRules）并登记 adminRoleMethodRules；
 // 终端用户无写入口（红线 D6；use-case 再断言 system / admin-key）。
 service AssetsService {
-  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   rpc CreateAssetDef(CreateAssetDefRequest) returns (AssetDef) {
     option (google.api.http) = { post: "/v1/server/assets/defs", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "assets", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["assets:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc ListAssetDefs(shared.v1.ListRequest) returns (ListAssetDefsResponse) {
     option (google.api.http) = { get: "/v1/server/assets/defs" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "assets", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["assets:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc GetAssetDef(GetAssetDefRequest) returns (AssetDef) {
     option (google.api.http) = { get: "/v1/server/assets/defs/{def_id}" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "assets", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["assets:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc UpdateAssetDef(UpdateAssetDefRequest) returns (AssetDef) {
     option (google.api.http) = { patch: "/v1/server/assets/defs/{def_id}", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "assets", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["assets:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc DeleteAssetDef(DeleteAssetDefRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/assets/defs/{def_id}" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "assets", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["assets:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc Grant(GrantRequest) returns (AssetOpResponse) {
     option (google.api.http) = { post: "/v1/server/assets:grant", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "assets", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["assets:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc Consume(ConsumeRequest) returns (AssetOpResponse) {
     option (google.api.http) = { post: "/v1/server/assets:consume", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "assets", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["assets:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc Transfer(TransferRequest) returns (AssetOpResponse) {
     option (google.api.http) = { post: "/v1/server/assets:transfer", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "assets", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["assets:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc Mutate(MutateRequest) returns (AssetOpResponse) {
     option (google.api.http) = { post: "/v1/server/assets:mutate", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "assets", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["assets:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc Expire(ExpireRequest) returns (AssetOpResponse) {
     option (google.api.http) = { post: "/v1/server/assets:expire", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "assets", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["assets:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   // 对账任务手动触发（设计 §2.4 / PR2）：流水重放 = holdings 快照。
   rpc Reconcile(ReconcileRequest) returns (ReconcileResponse) {
     option (google.api.http) = { post: "/v1/server/assets:reconcile", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "assets", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["assets:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   // ListUserAssets / ListUserLedger：Console 用户资产查询（PR6，只读）。
   rpc ListUserAssets(ListUserAssetsRequest) returns (ListUserAssetsResponse) {
     option (google.api.http) = { get: "/v1/server/assets/users/{owner_id}" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "assets", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["assets:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc ListUserLedger(ListUserLedgerRequest) returns (ListUserLedgerResponse) {
     option (google.api.http) = { get: "/v1/server/assets/users/{owner_id}/ledger" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "assets", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["assets:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   // ListDefAssets：定义维度的用户持有列表（Console 资产详情页，只读）。
   // owner_id 为可选过滤（按 UserID 查询）；仅返回 owner_type=user 的持有。
   rpc ListDefAssets(ListDefAssetsRequest) returns (ListDefAssetsResponse) {
     option (google.api.http) = { get: "/v1/server/assets/defs/{def_id}/holders" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "assets", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["assets:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 }

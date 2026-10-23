@@ -8,7 +8,7 @@ import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "buf/validate/validate.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "grpcapi/v1/authz.proto";
+import "grpcapi/v1/policy.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
@@ -72,7 +72,6 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 //（status=failed，ListDeliveries 可浏览），RedeliverDelivery 手动重投。
 // 计量一期仅进 metrics、不进 billing（D5 拍板）。
 service WebhooksService {
-  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   // CreateWebhook 创建订阅：url 强制 https；订阅串复用 eventmatch 语法
   //（函数事件触发器同款，1..64 条 × ≤200B）；签名密钥服务端生成，明文
@@ -84,37 +83,79 @@ service WebhooksService {
     option (google.api.http) = { post: "/v1/server/webhooks", body: "*" };
     // authz 比照 functions.proto：webhooks 属 Functions v4 面，scope 资源
     // 复用 functions（词表/SDK 契约零扩散；粒度 = functions.read/write）。
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc GetWebhook(GetWebhookRequest) returns (Webhook) {
     option (google.api.http) = { get: "/v1/server/webhooks/{webhook_id}" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc ListWebhooks(shared.v1.ListRequest) returns (ListWebhooksResponse) {
     option (google.api.http) = { get: "/v1/server/webhooks" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   // UpdateWebhook 部分更新：optional 字段未设置 = 不修改；url/events/status
   // 可变，id/project/密钥/时间戳不可变（密钥变更走 RotateWebhookSecret）。
   rpc UpdateWebhook(UpdateWebhookRequest) returns (Webhook) {
     option (google.api.http) = { patch: "/v1/server/webhooks/{webhook_id}", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc DeleteWebhook(GetWebhookRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/webhooks/{webhook_id}" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   // RotateWebhookSecret 轮换签名密钥：新钥即刻生效（v1 签名），旧钥保留
@@ -122,23 +163,49 @@ service WebhooksService {
   // 语义同款）——接收方持旧钥的过渡期不断流。新明文仅在本响应出现一次。
   rpc RotateWebhookSecret(RotateWebhookSecretRequest) returns (WebhookSecret) {
     option (google.api.http) = { post: "/v1/server/webhooks/{webhook_id}:rotate-secret", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   // ListDeliveries 列出投递行（DLQ 浏览面）：按投递时间倒序分页；status
   // 过滤 optional（unset = 全部）。
   rpc ListDeliveries(ListDeliveriesRequest) returns (ListDeliveriesResponse) {
     option (google.api.http) = { get: "/v1/server/webhooks/{webhook_id}/deliveries" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc GetDelivery(GetDeliveryRequest) returns (WebhookDelivery) {
     option (google.api.http) = { get: "/v1/server/webhooks/{webhook_id}/deliveries/{delivery_id}" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   // RedeliverDelivery 手动重投：终态行（delivered/failed）重置为立即到期
@@ -147,9 +214,17 @@ service WebhooksService {
   // 语义 = 全新一轮投递）。
   rpc RedeliverDelivery(RedeliverDeliveryRequest) returns (WebhookDelivery) {
     option (google.api.http) = { post: "/v1/server/webhooks/{webhook_id}/deliveries/{delivery_id}:redeliver", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 }

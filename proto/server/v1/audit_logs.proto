@@ -9,7 +9,7 @@ import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "grpcapi/v1/authz.proto";
+import "grpcapi/v1/policy.proto";
 import "shared/v1/common.proto";
 
 // AuditLogsService 查询审计日志（roadmap §3.4「管理面写操作可查」）。
@@ -70,13 +70,20 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service AuditLogsService {
-  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   rpc ListAuditLogs(ListAuditLogsRequest) returns (ListAuditLogsResponse) {
     option (google.api.http) = { get: "/v1/server/audit-logs" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "audit_logs", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["audit_logs:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 }

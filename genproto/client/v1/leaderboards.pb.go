@@ -9,7 +9,7 @@ package clientv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	_ "github.com/torchwoodcloud/torchwood/genproto/grpcapi/v1"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -229,7 +229,7 @@ var File_client_v1_leaderboards_proto protoreflect.FileDescriptor
 
 const file_client_v1_leaderboards_proto_rawDesc = "" +
 	"\n" +
-	"\x1cclient/v1/leaderboards.proto\x12\x13torchwood.client.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x1bshared/v1/leaderboard.proto\"\xce\x01\n" +
+	"\x1cclient/v1/leaderboards.proto\x12\x13torchwood.client.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17grpcapi/v1/policy.proto\x1a\x1bshared/v1/leaderboard.proto\"\xce\x01\n" +
 	"\x1dSubmitLeaderboardScoreRequest\x12!\n" +
 	"\bboard_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aboardId\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x03R\x05value\x12*\n" +
@@ -246,11 +246,17 @@ const file_client_v1_leaderboards_proto_rawDesc = "" +
 	"\x06period\x18\x02 \x01(\tR\x06period\x12&\n" +
 	"\tpage_size\x18\x03 \x01(\x05B\t\xbaH\x06\x1a\x04\x18d(\x00R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x04 \x01(\tR\tpageToken2\x8f\x04\n" +
-	"\x13LeaderboardsService\x12\xaa\x01\n" +
-	"\x16SubmitLeaderboardScore\x122.torchwood.client.v1.SubmitLeaderboardScoreRequest\x1a-.torchwood.shared.v1.LeaderboardScoreSnapshot\"-\x82\xd3\xe4\x93\x02':\x01*\"\"/v1/leaderboards/{board_id}:submit\x12\xa1\x01\n" +
-	"\x15GetMyLeaderboardEntry\x121.torchwood.client.v1.GetMyLeaderboardEntryRequest\x1a-.torchwood.shared.v1.LeaderboardScoreSnapshot\"&\x82\xd3\xe4\x93\x02 \x12\x1e/v1/leaderboards/{board_id}/me\x12\x9e\x01\n" +
-	"\x12ListLeaderboardTop\x12..torchwood.client.v1.ListLeaderboardTopRequest\x1a/.torchwood.shared.v1.ListLeaderboardTopResponse\"'\x82\xd3\xe4\x93\x02!\x12\x1f/v1/leaderboards/{board_id}/top\x1a\x06\xf2\xc4\x19\x02\b\x02B\x95\x04\x92A\xd0\x03RR\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken2\x85\x05\n" +
+	"\x13LeaderboardsService\x12\xd4\x01\n" +
+	"\x16SubmitLeaderboardScore\x122.torchwood.client.v1.SubmitLeaderboardScoreRequest\x1a-.torchwood.shared.v1.LeaderboardScoreSnapshot\"W\xda\xf0\x19&\n" +
+	"\x18B\x16\n" +
+	"\x0eprincipal_kind\"\x04user\x10\x02\x1a\bEND_USER\x82\xd3\xe4\x93\x02':\x01*\"\"/v1/leaderboards/{board_id}:submit\x12\xcb\x01\n" +
+	"\x15GetMyLeaderboardEntry\x121.torchwood.client.v1.GetMyLeaderboardEntryRequest\x1a-.torchwood.shared.v1.LeaderboardScoreSnapshot\"P\xda\xf0\x19&\n" +
+	"\x18B\x16\n" +
+	"\x0eprincipal_kind\"\x04user\x10\x02\x1a\bEND_USER\x82\xd3\xe4\x93\x02 \x12\x1e/v1/leaderboards/{board_id}/me\x12\xc8\x01\n" +
+	"\x12ListLeaderboardTop\x12..torchwood.client.v1.ListLeaderboardTopRequest\x1a/.torchwood.shared.v1.ListLeaderboardTopResponse\"Q\xda\xf0\x19&\n" +
+	"\x18B\x16\n" +
+	"\x0eprincipal_kind\"\x04user\x10\x02\x1a\bEND_USER\x82\xd3\xe4\x93\x02!\x12\x1f/v1/leaderboards/{board_id}/topB\x95\x04\x92A\xd0\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xc9\x02\n" +

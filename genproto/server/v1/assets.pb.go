@@ -9,7 +9,7 @@ package serverv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	_ "github.com/torchwoodcloud/torchwood/genproto/grpcapi/v1"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -1859,7 +1859,7 @@ var File_server_v1_assets_proto protoreflect.FileDescriptor
 
 const file_server_v1_assets_proto_rawDesc = "" +
 	"\n" +
-	"\x16server/v1/assets.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xaa\x04\n" +
+	"\x16server/v1/assets.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17grpcapi/v1/policy.proto\x1a\x16shared/v1/common.proto\"\xaa\x04\n" +
 	"\bAssetDef\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -2047,50 +2047,73 @@ const file_server_v1_assets_proto_rawDesc = "" +
 	"sort_order\x18\x05 \x01(\x0e2\x1e.torchwood.shared.v1.SortOrderB\b\xbaH\x05\x82\x01\x02\x10\x01R\tsortOrder\"\x91\x01\n" +
 	"\x15ListDefAssetsResponse\x12=\n" +
 	"\bholdings\x18\x01 \x03(\v2!.torchwood.server.v1.AssetHoldingR\bholdings\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xdb\x11\n" +
-	"\rAssetsService\x12\xa4\x01\n" +
-	"\x0eCreateAssetDef\x12*.torchwood.server.v1.CreateAssetDefRequest\x1a\x1d.torchwood.server.v1.AssetDef\"G\xea\xc4\x19\"\x1a\x06member\x1a\x05admin\x1a\x05owner\"\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xc3\x16\n" +
+	"\rAssetsService\x12\xcd\x01\n" +
+	"\x0eCreateAssetDef\x12*.torchwood.server.v1.CreateAssetDefRequest\x1a\x1d.torchwood.server.v1.AssetDef\"p\xda\xf0\x19K\n" +
+	"?J$*\"\n" +
 	"\n" +
-	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/v1/server/assets/defs\x12\x8d\x01\n" +
-	"\rListAssetDefs\x12 .torchwood.shared.v1.ListRequest\x1a*.torchwood.server.v1.ListAssetDefsResponse\".\xea\xc4\x19\f\"\n" +
+	"admin_role\"\x06member\"\x05admin\"\x05ownerJ\x17*\x15\n" +
+	"\x05scope\"\fassets:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/v1/server/assets/defs\x12\xc0\x01\n" +
+	"\rListAssetDefs\x12 .torchwood.shared.v1.ListRequest\x1a*.torchwood.server.v1.ListAssetDefsResponse\"a\xda\xf0\x19?\n" +
+	"3J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x16*\x14\n" +
+	"\x05scope\"\vassets:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\x18\x12\x16/v1/server/assets/defs\x12\xc1\x01\n" +
+	"\vGetAssetDef\x12'.torchwood.server.v1.GetAssetDefRequest\x1a\x1d.torchwood.server.v1.AssetDef\"j\xda\xf0\x19?\n" +
+	"3J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x16*\x14\n" +
+	"\x05scope\"\vassets:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02!\x12\x1f/v1/server/assets/defs/{def_id}\x12\xd6\x01\n" +
+	"\x0eUpdateAssetDef\x12*.torchwood.server.v1.UpdateAssetDefRequest\x1a\x1d.torchwood.server.v1.AssetDef\"y\xda\xf0\x19K\n" +
+	"?J$*\"\n" +
 	"\n" +
-	"\x06assets\x10\x01\x82\xd3\xe4\x93\x02\x18\x12\x16/v1/server/assets/defs\x12\x8e\x01\n" +
-	"\vGetAssetDef\x12'.torchwood.server.v1.GetAssetDefRequest\x1a\x1d.torchwood.server.v1.AssetDef\"7\xea\xc4\x19\f\"\n" +
+	"admin_role\"\x06member\"\x05admin\"\x05ownerJ\x17*\x15\n" +
+	"\x05scope\"\fassets:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02$:\x01*2\x1f/v1/server/assets/defs/{def_id}\x12\xd0\x01\n" +
+	"\x0eDeleteAssetDef\x12*.torchwood.server.v1.DeleteAssetDefRequest\x1a\x1a.torchwood.shared.v1.Empty\"v\xda\xf0\x19K\n" +
+	"?J$*\"\n" +
 	"\n" +
-	"\x06assets\x10\x01\x82\xd3\xe4\x93\x02!\x12\x1f/v1/server/assets/defs/{def_id}\x12\xad\x01\n" +
-	"\x0eUpdateAssetDef\x12*.torchwood.server.v1.UpdateAssetDefRequest\x1a\x1d.torchwood.server.v1.AssetDef\"P\xea\xc4\x19\"\x1a\x06member\x1a\x05admin\x1a\x05owner\"\n" +
+	"admin_role\"\x06member\"\x05admin\"\x05ownerJ\x17*\x15\n" +
+	"\x05scope\"\fassets:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02!*\x1f/v1/server/assets/defs/{def_id}\x12\xbb\x01\n" +
+	"\x05Grant\x12!.torchwood.server.v1.GrantRequest\x1a$.torchwood.server.v1.AssetOpResponse\"i\xda\xf0\x19C\n" +
+	"7J\x1c*\x1a\n" +
 	"\n" +
-	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02$:\x01*2\x1f/v1/server/assets/defs/{def_id}\x12\xa7\x01\n" +
-	"\x0eDeleteAssetDef\x12*.torchwood.server.v1.DeleteAssetDefRequest\x1a\x1a.torchwood.shared.v1.Empty\"M\xea\xc4\x19\"\x1a\x06member\x1a\x05admin\x1a\x05owner\"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x17*\x15\n" +
+	"\x05scope\"\fassets:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\x1c:\x01*\"\x17/v1/server/assets:grant\x12\xc1\x01\n" +
+	"\aConsume\x12#.torchwood.server.v1.ConsumeRequest\x1a$.torchwood.server.v1.AssetOpResponse\"k\xda\xf0\x19C\n" +
+	"7J\x1c*\x1a\n" +
 	"\n" +
-	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02!*\x1f/v1/server/assets/defs/{def_id}\x12\x92\x01\n" +
-	"\x05Grant\x12!.torchwood.server.v1.GrantRequest\x1a$.torchwood.server.v1.AssetOpResponse\"@\xea\xc4\x19\x1a\x1a\x05admin\x1a\x05owner\"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x17*\x15\n" +
+	"\x05scope\"\fassets:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\x1e:\x01*\"\x19/v1/server/assets:consume\x12\xc4\x01\n" +
+	"\bTransfer\x12$.torchwood.server.v1.TransferRequest\x1a$.torchwood.server.v1.AssetOpResponse\"l\xda\xf0\x19C\n" +
+	"7J\x1c*\x1a\n" +
 	"\n" +
-	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02\x1c:\x01*\"\x17/v1/server/assets:grant\x12\x98\x01\n" +
-	"\aConsume\x12#.torchwood.server.v1.ConsumeRequest\x1a$.torchwood.server.v1.AssetOpResponse\"B\xea\xc4\x19\x1a\x1a\x05admin\x1a\x05owner\"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x17*\x15\n" +
+	"\x05scope\"\fassets:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/v1/server/assets:transfer\x12\xbe\x01\n" +
+	"\x06Mutate\x12\".torchwood.server.v1.MutateRequest\x1a$.torchwood.server.v1.AssetOpResponse\"j\xda\xf0\x19C\n" +
+	"7J\x1c*\x1a\n" +
 	"\n" +
-	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02\x1e:\x01*\"\x19/v1/server/assets:consume\x12\x9b\x01\n" +
-	"\bTransfer\x12$.torchwood.server.v1.TransferRequest\x1a$.torchwood.server.v1.AssetOpResponse\"C\xea\xc4\x19\x1a\x1a\x05admin\x1a\x05owner\"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x17*\x15\n" +
+	"\x05scope\"\fassets:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/server/assets:mutate\x12\xbe\x01\n" +
+	"\x06Expire\x12\".torchwood.server.v1.ExpireRequest\x1a$.torchwood.server.v1.AssetOpResponse\"j\xda\xf0\x19C\n" +
+	"7J\x1c*\x1a\n" +
 	"\n" +
-	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/v1/server/assets:transfer\x12\x95\x01\n" +
-	"\x06Mutate\x12\".torchwood.server.v1.MutateRequest\x1a$.torchwood.server.v1.AssetOpResponse\"A\xea\xc4\x19\x1a\x1a\x05admin\x1a\x05owner\"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x17*\x15\n" +
+	"\x05scope\"\fassets:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/server/assets:expire\x12\xc9\x01\n" +
+	"\tReconcile\x12%.torchwood.server.v1.ReconcileRequest\x1a&.torchwood.server.v1.ReconcileResponse\"m\xda\xf0\x19C\n" +
+	"7J\x1c*\x1a\n" +
 	"\n" +
-	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/server/assets:mutate\x12\x95\x01\n" +
-	"\x06Expire\x12\".torchwood.server.v1.ExpireRequest\x1a$.torchwood.server.v1.AssetOpResponse\"A\xea\xc4\x19\x1a\x1a\x05admin\x1a\x05owner\"\n" +
-	"\n" +
-	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/server/assets:expire\x12\xa0\x01\n" +
-	"\tReconcile\x12%.torchwood.server.v1.ReconcileRequest\x1a&.torchwood.server.v1.ReconcileResponse\"D\xea\xc4\x19\x1a\x1a\x05admin\x1a\x05owner\"\n" +
-	"\n" +
-	"\x06assets\x10\x02\x82\xd3\xe4\x93\x02 :\x01*\"\x1b/v1/server/assets:reconcile\x12\xa5\x01\n" +
-	"\x0eListUserAssets\x12*.torchwood.server.v1.ListUserAssetsRequest\x1a+.torchwood.server.v1.ListUserAssetsResponse\":\xea\xc4\x19\f\"\n" +
-	"\n" +
-	"\x06assets\x10\x01\x82\xd3\xe4\x93\x02$\x12\"/v1/server/assets/users/{owner_id}\x12\xac\x01\n" +
-	"\x0eListUserLedger\x12*.torchwood.server.v1.ListUserLedgerRequest\x1a+.torchwood.server.v1.ListUserLedgerResponse\"A\xea\xc4\x19\f\"\n" +
-	"\n" +
-	"\x06assets\x10\x01\x82\xd3\xe4\x93\x02+\x12)/v1/server/assets/users/{owner_id}/ledger\x12\xa7\x01\n" +
-	"\rListDefAssets\x12).torchwood.server.v1.ListDefAssetsRequest\x1a*.torchwood.server.v1.ListDefAssetsResponse\"?\xea\xc4\x19\f\"\n" +
-	"\n" +
-	"\x06assets\x10\x01\x82\xd3\xe4\x93\x02)\x12'/v1/server/assets/defs/{def_id}/holders\x1a\x06\xf2\xc4\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x17*\x15\n" +
+	"\x05scope\"\fassets:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02 :\x01*\"\x1b/v1/server/assets:reconcile\x12\xd8\x01\n" +
+	"\x0eListUserAssets\x12*.torchwood.server.v1.ListUserAssetsRequest\x1a+.torchwood.server.v1.ListUserAssetsResponse\"m\xda\xf0\x19?\n" +
+	"3J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x16*\x14\n" +
+	"\x05scope\"\vassets:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02$\x12\"/v1/server/assets/users/{owner_id}\x12\xdf\x01\n" +
+	"\x0eListUserLedger\x12*.torchwood.server.v1.ListUserLedgerRequest\x1a+.torchwood.server.v1.ListUserLedgerResponse\"t\xda\xf0\x19?\n" +
+	"3J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x16*\x14\n" +
+	"\x05scope\"\vassets:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02+\x12)/v1/server/assets/users/{owner_id}/ledger\x12\xda\x01\n" +
+	"\rListDefAssets\x12).torchwood.server.v1.ListDefAssetsRequest\x1a*.torchwood.server.v1.ListDefAssetsResponse\"r\xda\xf0\x19?\n" +
+	"3J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x16*\x14\n" +
+	"\x05scope\"\vassets:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02)\x12'/v1/server/assets/defs/{def_id}/holdersB\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

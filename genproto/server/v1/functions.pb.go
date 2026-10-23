@@ -9,7 +9,7 @@ package serverv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	_ "github.com/torchwoodcloud/torchwood/genproto/grpcapi/v1"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -1781,7 +1781,7 @@ var File_server_v1_functions_proto protoreflect.FileDescriptor
 
 const file_server_v1_functions_proto_rawDesc = "" +
 	"\n" +
-	"\x19server/v1/functions.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xd5\x05\n" +
+	"\x19server/v1/functions.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17grpcapi/v1/policy.proto\x1a\x16shared/v1/common.proto\"\xd5\x05\n" +
 	"\bFunction\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -1969,36 +1969,73 @@ const file_server_v1_functions_proto_rawDesc = "" +
 	"\x0ecreated_before\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\rcreatedBefore\"\x97\x01\n" +
 	"\x17ListInvocationsResponse\x12A\n" +
 	"\vinvocations\x18\x01 \x03(\v2\x1f.torchwood.server.v1.InvocationR\vinvocations\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xbb\x14\n" +
-	"\x10FunctionsService\x12\xab\x01\n" +
-	"\x0eCreateFunction\x12*.torchwood.server.v1.CreateFunctionRequest\x1a+.torchwood.server.v1.CreateFunctionResponse\"@\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02\x19:\x01*\"\x14/v1/server/functions\x12\x8e\x01\n" +
-	"\rListFunctions\x12 .torchwood.shared.v1.ListRequest\x1a*.torchwood.server.v1.ListFunctionsResponse\"/\xea\xc4\x19\x0f\"\r\n" +
-	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x02\x16\x12\x14/v1/server/functions\x12\x94\x01\n" +
-	"\vGetFunction\x12'.torchwood.server.v1.GetFunctionRequest\x1a\x1d.torchwood.server.v1.Function\"=\xea\xc4\x19\x0f\"\r\n" +
-	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x02$\x12\"/v1/server/functions/{function_id}\x12\xab\x01\n" +
-	"\x0eUpdateFunction\x12*.torchwood.server.v1.UpdateFunctionRequest\x1a\x1d.torchwood.server.v1.Function\"N\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02':\x01*2\"/v1/server/functions/{function_id}\x12\xa2\x01\n" +
-	"\x0eDeleteFunction\x12'.torchwood.server.v1.GetFunctionRequest\x1a\x1a.torchwood.shared.v1.Empty\"K\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02$*\"/v1/server/functions/{function_id}\x12\xb4\x01\n" +
-	"\x0eInvokeFunction\x12*.torchwood.server.v1.InvokeFunctionRequest\x1a\x1f.torchwood.server.v1.Invocation\"U\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02.:\x01*\")/v1/server/functions/{function_id}:invoke\x12\xb7\x01\n" +
-	"\x0fListInvocations\x12+.torchwood.server.v1.ListInvocationsRequest\x1a,.torchwood.server.v1.ListInvocationsResponse\"I\xea\xc4\x19\x0f\"\r\n" +
-	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x020\x12./v1/server/functions/{function_id}/invocations\x12\xb6\x01\n" +
-	"\rGetInvocation\x12).torchwood.server.v1.GetInvocationRequest\x1a\x1f.torchwood.server.v1.Invocation\"Y\xea\xc4\x19\x0f\"\r\n" +
-	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x02@\x12>/v1/server/functions/{function_id}/invocations/{invocation_id}\x12\xb8\x01\n" +
-	"\x11SetFunctionScopes\x12-.torchwood.server.v1.SetFunctionScopesRequest\x1a\x1d.torchwood.server.v1.Function\"U\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02.:\x01*\x1a)/v1/server/functions/{function_id}/scopes\x12\xcb\x01\n" +
-	"\x14RotateFunctionSecret\x120.torchwood.server.v1.RotateFunctionSecretRequest\x1a#.torchwood.server.v1.FunctionSecret\"\\\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x025:\x01*\"0/v1/server/functions/{function_id}:rotate-secret\x12\xc9\x01\n" +
-	"\x15CreateFunctionTrigger\x121.torchwood.server.v1.CreateFunctionTriggerRequest\x1a$.torchwood.server.v1.FunctionTrigger\"W\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x020:\x01*\"+/v1/server/functions/{function_id}/triggers\x12\xba\x01\n" +
-	"\x14ListFunctionTriggers\x12'.torchwood.server.v1.GetFunctionRequest\x1a1.torchwood.server.v1.ListFunctionTriggersResponse\"F\xea\xc4\x19\x0f\"\r\n" +
-	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x02-\x12+/v1/server/functions/{function_id}/triggers\x12\xc9\x01\n" +
-	"\x15DeleteFunctionTrigger\x121.torchwood.server.v1.DeleteFunctionTriggerRequest\x1a\x1a.torchwood.shared.v1.Empty\"a\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02:*8/v1/server/functions/{function_id}/triggers/{trigger_id}\x12\xed\x01\n" +
-	"\x1aRotateFunctionTriggerToken\x126.torchwood.server.v1.RotateFunctionTriggerTokenRequest\x1a$.torchwood.server.v1.FunctionTrigger\"q\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02J:\x01*\"E/v1/server/functions/{function_id}/triggers/{trigger_id}:rotate-token\x1a\x06\xf2\xc4\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xa8\x19\n" +
+	"\x10FunctionsService\x12\xd4\x01\n" +
+	"\x0eCreateFunction\x12*.torchwood.server.v1.CreateFunctionRequest\x1a+.torchwood.server.v1.CreateFunctionResponse\"i\xda\xf0\x19F\n" +
+	":J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x1a*\x18\n" +
+	"\x05scope\"\x0ffunctions:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\x19:\x01*\"\x14/v1/server/functions\x12\xc1\x01\n" +
+	"\rListFunctions\x12 .torchwood.shared.v1.ListRequest\x1a*.torchwood.server.v1.ListFunctionsResponse\"b\xda\xf0\x19B\n" +
+	"6J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x19*\x17\n" +
+	"\x05scope\"\x0efunctions:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\x16\x12\x14/v1/server/functions\x12\xc7\x01\n" +
+	"\vGetFunction\x12'.torchwood.server.v1.GetFunctionRequest\x1a\x1d.torchwood.server.v1.Function\"p\xda\xf0\x19B\n" +
+	"6J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x19*\x17\n" +
+	"\x05scope\"\x0efunctions:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02$\x12\"/v1/server/functions/{function_id}\x12\xd4\x01\n" +
+	"\x0eUpdateFunction\x12*.torchwood.server.v1.UpdateFunctionRequest\x1a\x1d.torchwood.server.v1.Function\"w\xda\xf0\x19F\n" +
+	":J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x1a*\x18\n" +
+	"\x05scope\"\x0ffunctions:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02':\x01*2\"/v1/server/functions/{function_id}\x12\xcb\x01\n" +
+	"\x0eDeleteFunction\x12'.torchwood.server.v1.GetFunctionRequest\x1a\x1a.torchwood.shared.v1.Empty\"t\xda\xf0\x19F\n" +
+	":J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x1a*\x18\n" +
+	"\x05scope\"\x0ffunctions:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02$*\"/v1/server/functions/{function_id}\x12\xdd\x01\n" +
+	"\x0eInvokeFunction\x12*.torchwood.server.v1.InvokeFunctionRequest\x1a\x1f.torchwood.server.v1.Invocation\"~\xda\xf0\x19F\n" +
+	":J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x1a*\x18\n" +
+	"\x05scope\"\x0ffunctions:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02.:\x01*\")/v1/server/functions/{function_id}:invoke\x12\xea\x01\n" +
+	"\x0fListInvocations\x12+.torchwood.server.v1.ListInvocationsRequest\x1a,.torchwood.server.v1.ListInvocationsResponse\"|\xda\xf0\x19B\n" +
+	"6J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x19*\x17\n" +
+	"\x05scope\"\x0efunctions:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x020\x12./v1/server/functions/{function_id}/invocations\x12\xea\x01\n" +
+	"\rGetInvocation\x12).torchwood.server.v1.GetInvocationRequest\x1a\x1f.torchwood.server.v1.Invocation\"\x8c\x01\xda\xf0\x19B\n" +
+	"6J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x19*\x17\n" +
+	"\x05scope\"\x0efunctions:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02@\x12>/v1/server/functions/{function_id}/invocations/{invocation_id}\x12\xe1\x01\n" +
+	"\x11SetFunctionScopes\x12-.torchwood.server.v1.SetFunctionScopesRequest\x1a\x1d.torchwood.server.v1.Function\"~\xda\xf0\x19F\n" +
+	":J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x1a*\x18\n" +
+	"\x05scope\"\x0ffunctions:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02.:\x01*\x1a)/v1/server/functions/{function_id}/scopes\x12\xf5\x01\n" +
+	"\x14RotateFunctionSecret\x120.torchwood.server.v1.RotateFunctionSecretRequest\x1a#.torchwood.server.v1.FunctionSecret\"\x85\x01\xda\xf0\x19F\n" +
+	":J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x1a*\x18\n" +
+	"\x05scope\"\x0ffunctions:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x025:\x01*\"0/v1/server/functions/{function_id}:rotate-secret\x12\xf3\x01\n" +
+	"\x15CreateFunctionTrigger\x121.torchwood.server.v1.CreateFunctionTriggerRequest\x1a$.torchwood.server.v1.FunctionTrigger\"\x80\x01\xda\xf0\x19F\n" +
+	":J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x1a*\x18\n" +
+	"\x05scope\"\x0ffunctions:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x020:\x01*\"+/v1/server/functions/{function_id}/triggers\x12\xed\x01\n" +
+	"\x14ListFunctionTriggers\x12'.torchwood.server.v1.GetFunctionRequest\x1a1.torchwood.server.v1.ListFunctionTriggersResponse\"y\xda\xf0\x19B\n" +
+	"6J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x19*\x17\n" +
+	"\x05scope\"\x0efunctions:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02-\x12+/v1/server/functions/{function_id}/triggers\x12\xf3\x01\n" +
+	"\x15DeleteFunctionTrigger\x121.torchwood.server.v1.DeleteFunctionTriggerRequest\x1a\x1a.torchwood.shared.v1.Empty\"\x8a\x01\xda\xf0\x19F\n" +
+	":J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x1a*\x18\n" +
+	"\x05scope\"\x0ffunctions:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02:*8/v1/server/functions/{function_id}/triggers/{trigger_id}\x12\x97\x02\n" +
+	"\x1aRotateFunctionTriggerToken\x126.torchwood.server.v1.RotateFunctionTriggerTokenRequest\x1a$.torchwood.server.v1.FunctionTrigger\"\x9a\x01\xda\xf0\x19F\n" +
+	":J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x1a*\x18\n" +
+	"\x05scope\"\x0ffunctions:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02J:\x01*\"E/v1/server/functions/{function_id}/triggers/{trigger_id}:rotate-tokenB\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

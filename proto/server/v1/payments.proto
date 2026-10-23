@@ -9,7 +9,7 @@ import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "grpcapi/v1/authz.proto";
+import "grpcapi/v1/policy.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
@@ -69,34 +69,65 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // 兜底。写方法 scope payments.write（apiKeyScopeRules）并登记
 // adminRoleMethodRules（owner/admin）；操作自动进审计日志（PR0 拦截器）。
 service PaymentsService {
-  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse) {
     option (google.api.http) = { get: "/v1/server/payments/orders" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "payments", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["payments:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc GetOrder(GetOrderRequest) returns (PaymentOrder) {
     option (google.api.http) = { get: "/v1/server/payments/orders/{order_id}" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "payments", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["payments:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc Refund(RefundRequest) returns (PaymentOrder) {
     option (google.api.http) = { post: "/v1/server/payments/orders/{order_id}:refund", body: "*" };
-    // 金额敏感写操作：显式声明 method_auth（R10-P1-1），不依赖服务级默认值。
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "payments", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["payments:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc ManualFulfill(ManualFulfillRequest) returns (ManualFulfillResponse) {
     option (google.api.http) = { post: "/v1/server/payments/orders/{order_id}:fulfill", body: "*" };
-    // 金额敏感写操作：显式声明 method_auth（R10-P1-1），不依赖服务级默认值。
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "payments", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["payments:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 }

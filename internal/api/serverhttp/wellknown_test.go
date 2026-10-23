@@ -10,7 +10,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/lynx-go/grpcapi/policy"
 	"github.com/stretchr/testify/require"
-	grpcapiv1 "github.com/torchwoodcloud/torchwood/genproto/grpcapi/v1"
+	grpcapiv1 "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	"github.com/torchwoodcloud/torchwood/internal/domain/auth"
@@ -177,17 +177,21 @@ func TestWellKnownResourcesSync(t *testing.T) {
 		require.NotContains(t, verbRPCs, v.RPC, "动词重复登记: %s", v.RPC)
 		verbRPCs[v.RPC] = struct{}{}
 		require.Contains(t, v.HTTP, " ", "动词 %s 缺 HTTP 形态", v.RPC)
-		// scope 与 proto 注解（单一事实源）逐动词锁定——注解漂移即红。
+		// scope 与 proto 策略声明（单一事实源）逐动词锁定——声明漂移即红。
 		md := serviceDesc.Methods().ByName(protoreflect.Name(v.RPC))
 		require.NotNil(t, md, "动词 %s 不在 proto 服务里", v.RPC)
-		ma, _ := proto.GetExtension(md.Options(), grpcapiv1.E_MethodAuth).(*grpcapiv1.MethodAuth)
-		require.NotNil(t, ma, "动词 %s 缺 method_auth 注解", v.RPC)
-		sc := ma.GetApiKeyScope()
-		require.NotNil(t, sc, "动词 %s 缺 api_key_scope", v.RPC)
-		// grpcapi.v1 起 resource 为 string、op 仍为枚举（String() 带前缀）。
-		want := sc.GetResource() +
-			"." + strings.ToLower(strings.TrimPrefix(sc.GetOp().String(), "SCOPE_OP_"))
-		require.Equal(t, want, v.Scope, "动词 %s scope 与 proto 注解不一致", v.RPC)
+		ms, _ := proto.GetExtension(md.Options(), grpcapiv1.E_Method).(*grpcapiv1.MethodSpec)
+		require.NotNil(t, ms, "动词 %s 缺 policy 声明", v.RPC)
+		want := ""
+		for _, alt := range ms.GetPolicy().GetAnyOf() {
+			for _, r := range alt.GetRequire() {
+				if r.GetKind() == "scope" && len(r.GetValues()) == 1 {
+					want = strings.Replace(r.GetValues()[0], ":", ".", 1)
+				}
+			}
+		}
+		require.NotEmpty(t, want, "动词 %s 缺 scope 门声明", v.RPC)
+		require.Equal(t, want, v.Scope, "动词 %s scope 与 proto 策略声明不一致", v.RPC)
 	}
 	require.Equal(t, protoMethods, verbRPCs, "目录动词清单必须与 proto 方法全集一致")
 

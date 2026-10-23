@@ -9,7 +9,7 @@ package serverv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	_ "github.com/torchwoodcloud/torchwood/genproto/grpcapi/v1"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -368,7 +368,7 @@ var File_server_v1_runbook_proto protoreflect.FileDescriptor
 
 const file_server_v1_runbook_proto_rawDesc = "" +
 	"\n" +
-	"\x17server/v1/runbook.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\x97\x01\n" +
+	"\x17server/v1/runbook.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17grpcapi/v1/policy.proto\x1a\x16shared/v1/common.proto\"\x97\x01\n" +
 	"\x10RunbookStepState\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
@@ -390,14 +390,22 @@ const file_server_v1_runbook_proto_rawDesc = "" +
 	"\x0fcurrent_version\x18\x01 \x01(\x03R\x0ecurrentVersion\"`\n" +
 	"\x18DeleteRunbookStepRequest\x12!\n" +
 	"\arunbook\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x18@R\arunbook\x12!\n" +
-	"\aversion\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x01R\aversion2\xc3\x04\n" +
-	"\x0eRunbookService\x12\xab\x01\n" +
-	"\x0fGetRunbookState\x12+.torchwood.server.v1.GetRunbookStateRequest\x1a,.torchwood.server.v1.GetRunbookStateResponse\"=\xea\xc4\x19\x0e\"\f\n" +
-	"\brunbooks\x10\x01\x82\xd3\xe4\x93\x02%\x12#/v1/server/runbooks/{runbook}/steps\x12\xc2\x01\n" +
-	"\x11RecordRunbookStep\x12-.torchwood.server.v1.RecordRunbookStepRequest\x1a..torchwood.server.v1.RecordRunbookStepResponse\"N\xea\xc4\x19\x1c\x1a\x05admin\x1a\x05owner\"\f\n" +
-	"\brunbooks\x10\x02\x82\xd3\xe4\x93\x02(:\x01*\"#/v1/server/runbooks/{runbook}/steps\x12\xb5\x01\n" +
-	"\x11DeleteRunbookStep\x12-.torchwood.server.v1.DeleteRunbookStepRequest\x1a\x1a.torchwood.shared.v1.Empty\"U\xea\xc4\x19\x1c\x1a\x05admin\x1a\x05owner\"\f\n" +
-	"\brunbooks\x10\x02\x82\xd3\xe4\x93\x02/*-/v1/server/runbooks/{runbook}/steps/{version}\x1a\x06\xf2\xc4\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
+	"\aversion\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02(\x01R\aversion2\xc0\x05\n" +
+	"\x0eRunbookService\x12\xde\x01\n" +
+	"\x0fGetRunbookState\x12+.torchwood.server.v1.GetRunbookStateRequest\x1a,.torchwood.server.v1.GetRunbookStateResponse\"p\xda\xf0\x19A\n" +
+	"5J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x18*\x16\n" +
+	"\x05scope\"\rrunbooks:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02%\x12#/v1/server/runbooks/{runbook}/steps\x12\xeb\x01\n" +
+	"\x11RecordRunbookStep\x12-.torchwood.server.v1.RecordRunbookStepRequest\x1a..torchwood.server.v1.RecordRunbookStepResponse\"w\xda\xf0\x19E\n" +
+	"9J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x19*\x17\n" +
+	"\x05scope\"\x0erunbooks:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02(:\x01*\"#/v1/server/runbooks/{runbook}/steps\x12\xde\x01\n" +
+	"\x11DeleteRunbookStep\x12-.torchwood.server.v1.DeleteRunbookStepRequest\x1a\x1a.torchwood.shared.v1.Empty\"~\xda\xf0\x19E\n" +
+	"9J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x19*\x17\n" +
+	"\x05scope\"\x0erunbooks:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02/*-/v1/server/runbooks/{runbook}/steps/{version}B\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

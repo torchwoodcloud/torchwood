@@ -8,7 +8,7 @@ package consolev1
 
 import (
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	_ "github.com/torchwoodcloud/torchwood/genproto/grpcapi/v1"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -452,7 +452,7 @@ var File_console_v1_auth_proto protoreflect.FileDescriptor
 
 const file_console_v1_auth_proto_rawDesc = "" +
 	"\n" +
-	"\x15console/v1/auth.proto\x12\x14torchwood.console.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17console/v1/admins.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"A\n" +
+	"\x15console/v1/auth.proto\x12\x14torchwood.console.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17console/v1/admins.proto\x1a\x17grpcapi/v1/policy.proto\x1a\x16shared/v1/common.proto\"A\n" +
 	"\rSignInRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\"\x93\x01\n" +
@@ -481,13 +481,18 @@ const file_console_v1_auth_proto_rawDesc = "" +
 	"\x0eSignUpResponse\x121\n" +
 	"\x05admin\x18\x01 \x01(\v2\x1b.torchwood.console.v1.AdminR\x05admin\x12!\n" +
 	"\faccess_token\x18\x02 \x01(\tR\vaccessToken\x12#\n" +
-	"\rrefresh_token\x18\x03 \x01(\tR\frefreshTokenJ\x04\b\x04\x10\x05R\x16default_api_key_secret2\x9f\x05\n" +
-	"\x12ConsoleAuthService\x12x\n" +
-	"\x06SignIn\x12#.torchwood.console.v1.SignInRequest\x1a$.torchwood.console.v1.SignInResponse\"#\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/console/auth/sign-in\x12\x84\x01\n" +
-	"\fRefreshToken\x12).torchwood.console.v1.RefreshTokenRequest\x1a$.torchwood.console.v1.SignInResponse\"#\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/console/auth/refresh\x12q\n" +
-	"\aSignOut\x12$.torchwood.console.v1.SignOutRequest\x1a\x1a.torchwood.shared.v1.Empty\"$\x82\xd3\xe4\x93\x02\x1e:\x01*\"\x19/v1/console/auth/sign-out\x12\x92\x01\n" +
-	"\x0eGetSetupStatus\x12+.torchwood.console.v1.GetSetupStatusRequest\x1a,.torchwood.console.v1.GetSetupStatusResponse\"%\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/console/auth/setup-status\x12x\n" +
-	"\x06SignUp\x12#.torchwood.console.v1.SignUpRequest\x1a$.torchwood.console.v1.SignUpResponse\"#\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/console/auth/sign-up\x1a\x06\xf2\xc4\x19\x02\b\x01B\xf2\x03\x92A\xab\x03RR\n" +
+	"\rrefresh_token\x18\x03 \x01(\tR\frefreshTokenJ\x04\b\x04\x10\x05R\x16default_api_key_secret2\xf4\x05\n" +
+	"\x12ConsoleAuthService\x12\x8a\x01\n" +
+	"\x06SignIn\x12#.torchwood.console.v1.SignInRequest\x1a$.torchwood.console.v1.SignInResponse\"5\xda\xf0\x19\x0e\n" +
+	"\x02\x18\x01\x10\x02\x1a\x06PUBLIC\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/console/auth/sign-in\x12\x96\x01\n" +
+	"\fRefreshToken\x12).torchwood.console.v1.RefreshTokenRequest\x1a$.torchwood.console.v1.SignInResponse\"5\xda\xf0\x19\x0e\n" +
+	"\x02\x18\x01\x10\x02\x1a\x06PUBLIC\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/console/auth/refresh\x12\x83\x01\n" +
+	"\aSignOut\x12$.torchwood.console.v1.SignOutRequest\x1a\x1a.torchwood.shared.v1.Empty\"6\xda\xf0\x19\x0e\n" +
+	"\x02\x18\x01\x10\x02\x1a\x06PUBLIC\x82\xd3\xe4\x93\x02\x1e:\x01*\"\x19/v1/console/auth/sign-out\x12\xa4\x01\n" +
+	"\x0eGetSetupStatus\x12+.torchwood.console.v1.GetSetupStatusRequest\x1a,.torchwood.console.v1.GetSetupStatusResponse\"7\xda\xf0\x19\x0e\n" +
+	"\x02\x18\x01\x10\x02\x1a\x06PUBLIC\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/console/auth/setup-status\x12\x8a\x01\n" +
+	"\x06SignUp\x12#.torchwood.console.v1.SignUpRequest\x1a$.torchwood.console.v1.SignUpResponse\"5\xda\xf0\x19\x0e\n" +
+	"\x02\x18\x01\x10\x02\x1a\x06PUBLIC\x82\xd3\xe4\x93\x02\x1d:\x01*\"\x18/v1/console/auth/sign-upB\xf2\x03\x92A\xab\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

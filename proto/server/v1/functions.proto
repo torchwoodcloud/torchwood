@@ -8,7 +8,7 @@ import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "buf/validate/validate.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "grpcapi/v1/authz.proto";
+import "grpcapi/v1/policy.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
@@ -70,62 +70,129 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // 用户自有工具链。一次调用统一为 invocation（v4 §2 重命名：CreateExecution →
 // InvokeFunction / executions → invocations）。
 service FunctionsService {
-  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   // CreateFunction 创建函数：endpoint target（url）创建时录入，签名密钥
   // 服务端生成、明文仅在本响应出现一次（之后只出指纹）。
   rpc CreateFunction(CreateFunctionRequest) returns (CreateFunctionResponse) {
     option (google.api.http) = { post: "/v1/server/functions", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc ListFunctions(shared.v1.ListRequest) returns (ListFunctionsResponse) {
     option (google.api.http) = { get: "/v1/server/functions" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc GetFunction(GetFunctionRequest) returns (Function) {
     option (google.api.http) = { get: "/v1/server/functions/{function_id}" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc UpdateFunction(UpdateFunctionRequest) returns (Function) {
     option (google.api.http) = { patch: "/v1/server/functions/{function_id}", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc DeleteFunction(GetFunctionRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/functions/{function_id}" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   // InvokeFunction 调用一个函数（v4 §2：CreateExecution 改名——一个动作一个
   // 名字，与 client 面同名对齐；async=true 时立即返回 queued invocation）。
   rpc InvokeFunction(InvokeFunctionRequest) returns (Invocation) {
     option (google.api.http) = { post: "/v1/server/functions/{function_id}:invoke", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc ListInvocations(ListInvocationsRequest) returns (ListInvocationsResponse) {
     option (google.api.http) = { get: "/v1/server/functions/{function_id}/invocations" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc GetInvocation(GetInvocationRequest) returns (Invocation) {
     option (google.api.http) = { get: "/v1/server/functions/{function_id}/invocations/{invocation_id}" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   // SetFunctionScopes 全量替换函数 declared_scopes（P0 执行身份）。独立 RPC
@@ -133,10 +200,17 @@ service FunctionsService {
   // 的 presence 语义（proto 规范：更新类可选字段用 proto3 optional）。
   rpc SetFunctionScopes(SetFunctionScopesRequest) returns (Function) {
     option (google.api.http) = { put: "/v1/server/functions/{function_id}/scopes", body: "*" };
-    // 镜像敏感方法显式声明 method_auth 先例（R10-P1-1）。
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   // RotateFunctionSecret 轮换 endpoint target 签名密钥（v4 §3/§4，语义与
@@ -145,9 +219,17 @@ service FunctionsService {
   // 本响应出现一次。
   rpc RotateFunctionSecret(RotateFunctionSecretRequest) returns (FunctionSecret) {
     option (google.api.http) = { post: "/v1/server/functions/{function_id}:rotate-secret", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
@@ -159,31 +241,64 @@ service FunctionsService {
   rpc CreateFunctionTrigger(CreateFunctionTriggerRequest) returns (FunctionTrigger) {
     option (google.api.http) = { post: "/v1/server/functions/{function_id}/triggers", body: "*" };
     // 镜像 SetFunctionScopes 先例：functions.write + admin/owner。
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc ListFunctionTriggers(GetFunctionRequest) returns (ListFunctionTriggersResponse) {
     option (google.api.http) = { get: "/v1/server/functions/{function_id}/triggers" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "functions", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc DeleteFunctionTrigger(DeleteFunctionTriggerRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/functions/{function_id}/triggers/{trigger_id}" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   // RotateFunctionTriggerToken 轮换 http 触发器 token（URL 含 token 会被
   // 代理/访问日志记录；轮换后旧 token 立即失效），返回带新 token 的触发器。
   rpc RotateFunctionTriggerToken(RotateFunctionTriggerTokenRequest) returns (FunctionTrigger) {
     option (google.api.http) = { post: "/v1/server/functions/{function_id}/triggers/{trigger_id}:rotate-token", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "functions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["functions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 }

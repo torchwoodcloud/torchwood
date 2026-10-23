@@ -9,7 +9,7 @@ package clientv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
-	_ "github.com/torchwoodcloud/torchwood/genproto/grpcapi/v1"
+	_ "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	v1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -877,7 +877,7 @@ var File_client_v1_databases_proto protoreflect.FileDescriptor
 
 const file_client_v1_databases_proto_rawDesc = "" +
 	"\n" +
-	"\x19client/v1/databases.proto\x12\x13torchwood.client.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\x1a\x18shared/v1/document.proto\x1a\x15shared/v1/query.proto\"\x80\x02\n" +
+	"\x19client/v1/databases.proto\x12\x13torchwood.client.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17grpcapi/v1/policy.proto\x1a\x16shared/v1/common.proto\x1a\x18shared/v1/document.proto\x1a\x15shared/v1/query.proto\"\x80\x02\n" +
 	"\x15CreateDocumentRequest\x12\x1f\n" +
 	"\vdatabase_id\x18\x01 \x01(\tR\n" +
 	"databaseId\x12#\n" +
@@ -977,19 +977,32 @@ const file_client_v1_databases_proto_rawDesc = "" +
 	"\x13ListChangesResponse\x125\n" +
 	"\achanges\x18\x01 \x03(\v2\x1b.torchwood.shared.v1.ChangeR\achanges\x12\x19\n" +
 	"\bhas_more\x18\x02 \x01(\bR\ahasMore\x12$\n" +
-	"\x0enext_since_seq\x18\x03 \x01(\x03R\fnextSinceSeq2\xe1\r\n" +
-	"\x10DatabasesService\x12\xa9\x01\n" +
-	"\x0eCreateDocument\x12*.torchwood.client.v1.CreateDocumentRequest\x1a\x1d.torchwood.shared.v1.Document\"L\x82\xd3\xe4\x93\x02F:\x01*\"A/v1/databases/{database_id}/collections/{collection_id}/documents\x12\xaf\x02\n" +
-	"\rListDocuments\x12).torchwood.client.v1.ListDocumentsRequest\x1a*.torchwood.client.v1.ListDocumentsResponse\"\xc6\x01\x92A\"b\x00j\x1e\n" +
-	"\x12x-torchwood-access\x12\b\x1a\x06public\xea\xc4\x19\x02\b\x01\x82\xd3\xe4\x93\x02\x94\x01ZO:\x05query\"F/v1/databases/{database_id}/collections/{collection_id}/documents:list\x12A/v1/databases/{database_id}/collections/{collection_id}/documents\x12\xda\x01\n" +
-	"\vGetDocument\x12'.torchwood.client.v1.GetDocumentRequest\x1a\x1d.torchwood.shared.v1.Document\"\x82\x01\x92A\"b\x00j\x1e\n" +
-	"\x12x-torchwood-access\x12\b\x1a\x06public\xea\xc4\x19\x02\b\x01\x82\xd3\xe4\x93\x02Q\x12O/v1/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\xb7\x01\n" +
-	"\x0eUpdateDocument\x12*.torchwood.client.v1.UpdateDocumentRequest\x1a\x1d.torchwood.shared.v1.Document\"Z\x82\xd3\xe4\x93\x02T:\x01*2O/v1/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\xb7\x01\n" +
-	"\x0eUpsertDocument\x12*.torchwood.client.v1.UpsertDocumentRequest\x1a\x1d.torchwood.shared.v1.Document\"Z\x82\xd3\xe4\x93\x02T:\x01*\x1aO/v1/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\xb1\x01\n" +
-	"\x0eDeleteDocument\x12*.torchwood.client.v1.DeleteDocumentRequest\x1a\x1a.torchwood.shared.v1.Empty\"W\x82\xd3\xe4\x93\x02Q*O/v1/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\xb5\x02\n" +
-	"\x0eCountDocuments\x12*.torchwood.client.v1.CountDocumentsRequest\x1a+.torchwood.client.v1.CountDocumentsResponse\"\xc9\x01\x92A\"b\x00j\x1e\n" +
-	"\x12x-torchwood-access\x12\b\x1a\x06public\xea\xc4\x19\x02\b\x01\x82\xd3\xe4\x93\x02\x97\x01ZL:\x01*\"G/v1/databases/{database_id}/collections/{collection_id}/documents:count\x12G/v1/databases/{database_id}/collections/{collection_id}/documents:count\x12\xa9\x01\n" +
-	"\vListChanges\x12'.torchwood.client.v1.ListChangesRequest\x1a(.torchwood.client.v1.ListChangesResponse\"G\x82\xd3\xe4\x93\x02A\x12?/v1/databases/{database_id}/collections/{collection_id}/changes\x1a\x06\xf2\xc4\x19\x02\b\x02B\x95\x04\x92A\xd0\x03RR\n" +
+	"\x0enext_since_seq\x18\x03 \x01(\x03R\fnextSinceSeq2\xd2\x0f\n" +
+	"\x10DatabasesService\x12\xd3\x01\n" +
+	"\x0eCreateDocument\x12*.torchwood.client.v1.CreateDocumentRequest\x1a\x1d.torchwood.shared.v1.Document\"v\xda\xf0\x19&\n" +
+	"\x18B\x16\n" +
+	"\x0eprincipal_kind\"\x04user\x10\x02\x1a\bEND_USER\x82\xd3\xe4\x93\x02F:\x01*\"A/v1/databases/{database_id}/collections/{collection_id}/documents\x12\xbb\x02\n" +
+	"\rListDocuments\x12).torchwood.client.v1.ListDocumentsRequest\x1a*.torchwood.client.v1.ListDocumentsResponse\"\xd2\x01\x92A\"b\x00j\x1e\n" +
+	"\x12x-torchwood-access\x12\b\x1a\x06public\xda\xf0\x19\x0e\n" +
+	"\x02\x18\x01\x10\x02\x1a\x06PUBLIC\x82\xd3\xe4\x93\x02\x94\x01ZO:\x05query\"F/v1/databases/{database_id}/collections/{collection_id}/documents:list\x12A/v1/databases/{database_id}/collections/{collection_id}/documents\x12\xe6\x01\n" +
+	"\vGetDocument\x12'.torchwood.client.v1.GetDocumentRequest\x1a\x1d.torchwood.shared.v1.Document\"\x8e\x01\x92A\"b\x00j\x1e\n" +
+	"\x12x-torchwood-access\x12\b\x1a\x06public\xda\xf0\x19\x0e\n" +
+	"\x02\x18\x01\x10\x02\x1a\x06PUBLIC\x82\xd3\xe4\x93\x02Q\x12O/v1/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\xe2\x01\n" +
+	"\x0eUpdateDocument\x12*.torchwood.client.v1.UpdateDocumentRequest\x1a\x1d.torchwood.shared.v1.Document\"\x84\x01\xda\xf0\x19&\n" +
+	"\x18B\x16\n" +
+	"\x0eprincipal_kind\"\x04user\x10\x02\x1a\bEND_USER\x82\xd3\xe4\x93\x02T:\x01*2O/v1/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\xe2\x01\n" +
+	"\x0eUpsertDocument\x12*.torchwood.client.v1.UpsertDocumentRequest\x1a\x1d.torchwood.shared.v1.Document\"\x84\x01\xda\xf0\x19&\n" +
+	"\x18B\x16\n" +
+	"\x0eprincipal_kind\"\x04user\x10\x02\x1a\bEND_USER\x82\xd3\xe4\x93\x02T:\x01*\x1aO/v1/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\xdc\x01\n" +
+	"\x0eDeleteDocument\x12*.torchwood.client.v1.DeleteDocumentRequest\x1a\x1a.torchwood.shared.v1.Empty\"\x81\x01\xda\xf0\x19&\n" +
+	"\x18B\x16\n" +
+	"\x0eprincipal_kind\"\x04user\x10\x02\x1a\bEND_USER\x82\xd3\xe4\x93\x02Q*O/v1/databases/{database_id}/collections/{collection_id}/documents/{document_id}\x12\xc1\x02\n" +
+	"\x0eCountDocuments\x12*.torchwood.client.v1.CountDocumentsRequest\x1a+.torchwood.client.v1.CountDocumentsResponse\"\xd5\x01\x92A\"b\x00j\x1e\n" +
+	"\x12x-torchwood-access\x12\b\x1a\x06public\xda\xf0\x19\x0e\n" +
+	"\x02\x18\x01\x10\x02\x1a\x06PUBLIC\x82\xd3\xe4\x93\x02\x97\x01ZL:\x01*\"G/v1/databases/{database_id}/collections/{collection_id}/documents:count\x12G/v1/databases/{database_id}/collections/{collection_id}/documents:count\x12\xd3\x01\n" +
+	"\vListChanges\x12'.torchwood.client.v1.ListChangesRequest\x1a(.torchwood.client.v1.ListChangesResponse\"q\xda\xf0\x19&\n" +
+	"\x18B\x16\n" +
+	"\x0eprincipal_kind\"\x04user\x10\x02\x1a\bEND_USER\x82\xd3\xe4\x93\x02A\x12?/v1/databases/{database_id}/collections/{collection_id}/changesB\x95\x04\x92A\xd0\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xc9\x02\n" +

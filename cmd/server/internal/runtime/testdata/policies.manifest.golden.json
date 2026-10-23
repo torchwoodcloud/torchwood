@@ -458,7 +458,7 @@
           "id": "/torchwood.client.v1.AnalyticsService/IngestEvents",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -474,7 +474,7 @@
           "id": "/torchwood.client.v1.AssetsService/ListAssetDefs",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -490,7 +490,7 @@
           "id": "/torchwood.client.v1.AssetsService/ListMyAssetLedger",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -506,7 +506,7 @@
           "id": "/torchwood.client.v1.AssetsService/ListMyAssets",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -531,7 +531,7 @@
           "id": "/torchwood.client.v1.DatabasesService/CreateDocument",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -547,7 +547,7 @@
           "id": "/torchwood.client.v1.DatabasesService/DeleteDocument",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -572,7 +572,7 @@
           "id": "/torchwood.client.v1.DatabasesService/ListChanges",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -597,7 +597,7 @@
           "id": "/torchwood.client.v1.DatabasesService/UpdateDocument",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -613,7 +613,7 @@
           "id": "/torchwood.client.v1.DatabasesService/UpsertDocument",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -629,7 +629,7 @@
           "id": "/torchwood.client.v1.FunctionsService/InvokeFunction",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -645,7 +645,7 @@
           "id": "/torchwood.client.v1.GroupsService/CreateGroup",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -661,7 +661,7 @@
           "id": "/torchwood.client.v1.GroupsService/CreateMembership",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -677,7 +677,7 @@
           "id": "/torchwood.client.v1.GroupsService/DeleteGroup",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -693,7 +693,7 @@
           "id": "/torchwood.client.v1.GroupsService/DeleteMembership",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -709,7 +709,7 @@
           "id": "/torchwood.client.v1.GroupsService/GetGroup",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -725,7 +725,7 @@
           "id": "/torchwood.client.v1.GroupsService/ListGroups",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -741,7 +741,7 @@
           "id": "/torchwood.client.v1.GroupsService/ListMemberships",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -757,7 +757,7 @@
           "id": "/torchwood.client.v1.GroupsService/UpdateMembershipStatus",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -773,7 +773,7 @@
           "id": "/torchwood.client.v1.LeaderboardsService/GetMyLeaderboardEntry",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -789,7 +789,7 @@
           "id": "/torchwood.client.v1.LeaderboardsService/ListLeaderboardTop",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -805,7 +805,7 @@
           "id": "/torchwood.client.v1.LeaderboardsService/SubmitLeaderboardScore",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -821,7 +821,7 @@
           "id": "/torchwood.client.v1.PaymentsService/CreateOrder",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -837,7 +837,7 @@
           "id": "/torchwood.client.v1.PaymentsService/GetMyOrder",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -853,7 +853,7 @@
           "id": "/torchwood.client.v1.PaymentsService/ListMyOrders",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -869,7 +869,7 @@
           "id": "/torchwood.client.v1.PaymentsService/VerifyReceipt",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -894,7 +894,7 @@
           "id": "/torchwood.client.v1.SubscriptionsService/Cancel",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -910,7 +910,7 @@
           "id": "/torchwood.client.v1.SubscriptionsService/GetMySubscription",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -926,7 +926,7 @@
           "id": "/torchwood.client.v1.SubscriptionsService/ListPlans",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -942,7 +942,7 @@
           "id": "/torchwood.client.v1.SubscriptionsService/Subscribe",
           "kind": "grpc",
           "exposure": "public",
-          "label": "custom",
+          "label": "END_USER",
           "policy": {
             "require": [
               {
@@ -1066,7 +1066,7 @@
           "id": "/torchwood.console.v1.ConsoleAuthService/GetSetupStatus",
           "kind": "grpc",
           "exposure": "public",
-          "label": "public",
+          "label": "PUBLIC",
           "policy": {
             "anonymous": true
           }
@@ -1075,7 +1075,7 @@
           "id": "/torchwood.console.v1.ConsoleAuthService/RefreshToken",
           "kind": "grpc",
           "exposure": "public",
-          "label": "public",
+          "label": "PUBLIC",
           "policy": {
             "anonymous": true
           }
@@ -1084,7 +1084,7 @@
           "id": "/torchwood.console.v1.ConsoleAuthService/SignIn",
           "kind": "grpc",
           "exposure": "public",
-          "label": "public",
+          "label": "PUBLIC",
           "policy": {
             "anonymous": true
           }
@@ -1093,7 +1093,7 @@
           "id": "/torchwood.console.v1.ConsoleAuthService/SignOut",
           "kind": "grpc",
           "exposure": "public",
-          "label": "public",
+          "label": "PUBLIC",
           "policy": {
             "anonymous": true
           }
@@ -1102,7 +1102,7 @@
           "id": "/torchwood.console.v1.ConsoleAuthService/SignUp",
           "kind": "grpc",
           "exposure": "public",
-          "label": "public",
+          "label": "PUBLIC",
           "policy": {
             "anonymous": true
           }
@@ -3837,7 +3837,7 @@
           "id": "/torchwood.server.v1.HealthService/Check",
           "kind": "grpc",
           "exposure": "public",
-          "label": "public",
+          "label": "PUBLIC",
           "policy": {
             "anonymous": true
           }
@@ -3846,7 +3846,7 @@
           "id": "/torchwood.server.v1.HealthService/GetVersion",
           "kind": "grpc",
           "exposure": "public",
-          "label": "public",
+          "label": "PUBLIC",
           "policy": {
             "anonymous": true
           }

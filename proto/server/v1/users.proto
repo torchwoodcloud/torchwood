@@ -9,7 +9,7 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 import "buf/validate/validate.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "grpcapi/v1/authz.proto";
+import "grpcapi/v1/policy.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
@@ -66,13 +66,20 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service UsersService {
-  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   rpc CreateUser(CreateUserRequest) returns (User) {
     option (google.api.http) = { post: "/v1/server/users", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "users", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["users:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
@@ -81,63 +88,129 @@ service UsersService {
   // 独立于文档查询栈的单 typed AST——勿与 databases 的 Query 混用。
   rpc ListUsers(shared.v1.ListRequest) returns (ListUsersResponse) {
     option (google.api.http) = { get: "/v1/server/users" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "users", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["users:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc GetUser(GetUserRequest) returns (User) {
     option (google.api.http) = { get: "/v1/server/users/{id}" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "users", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["users:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc UpdateUser(UpdateUserRequest) returns (User) {
     option (google.api.http) = { patch: "/v1/server/users/{id}", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "users", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["users:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc UpdateUserPassword(UpdateUserPasswordRequest) returns (User) {
     option (google.api.http) = { patch: "/v1/server/users/{id}/password", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "users", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["users:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc DeleteUser(GetUserRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/users/{id}" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "users", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["users:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc ListUserSessions(GetUserRequest) returns (ListUserSessionsResponse) {
     option (google.api.http) = { get: "/v1/server/users/{id}/sessions" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "users", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["users:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc DeleteUserSession(DeleteUserSessionRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/users/{id}/sessions/{session_id}" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "users", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["users:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc CreateUserToken(GetUserRequest) returns (CreateUserTokenResponse) {
     option (google.api.http) = { post: "/v1/server/users/{id}/tokens" };
-    // 敏感方法显式声明 method_auth（R10-P1-1），不依赖服务级默认值。
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "users", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["users:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 }

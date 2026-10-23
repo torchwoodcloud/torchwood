@@ -25,8 +25,8 @@ lint:
 breaking:
   use:
     - FILE
-  # 该文件是迁移期 vendored 的 grpcapi v1 authz.proto：proto 路径/包保持不变
-  # 以兼容业务注解，但 go_package 必须指向本仓库的 legacypb；这是有意的
-  # 单文件例外，不对上游做 breaking 比较。
+  # 该文件是 vendored 的 grpcapi v1 policy.proto（与 go.mod 的 grpcapi 版本
+  # 配对，升级库时同步重 vendor）：声明语法归库持有，torchwood 不做上游
+  # breaking 比较。生成侧经 buf.gen.yaml 排除（类型由库 genproto 提供）。
   ignore:
-    - proto/grpcapi/v1/authz.proto
+    - proto/grpcapi/v1/policy.proto

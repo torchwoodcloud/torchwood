@@ -7,13 +7,13 @@ option go_package = "github.com/torchwoodcloud/torchwood/genproto/console/v1;con
 import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "grpcapi/v1/authz.proto";
+import "grpcapi/v1/policy.proto";
 import "shared/v1/common.proto";
 import "shared/v1/leaderboard.proto";
 
 // 服务默认 access=permission（console admin 角色）：swagger 顶层声明
 // cookie security（TORCHWOOD_session_console 会话）；方法级角色以
-// method_auth.permissions 声明（详见 docs/developer/09-api-guide.md §1.4）。
+// policy 声明（详见 docs/developer/09-api-guide.md §1.4）。
 option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   security_definitions: {
     security: {
@@ -68,99 +68,137 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // LeaderboardsService 是排行榜 console 面：board 配置 CRUD、期 top、按
 // subject 查条目、删条目（作弊处理——只有未封榜期可删，封榜即终局）。
 service LeaderboardsService {
-  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_PERMISSION };
 
   rpc CreateLeaderboardBoard(CreateLeaderboardBoardRequest) returns (shared.v1.LeaderboardBoard) {
     option (google.api.http) = { post: "/v1/console/leaderboards/boards", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
   }
   rpc ListLeaderboardBoards(ListLeaderboardBoardsRequest) returns (ListLeaderboardBoardsResponse) {
     option (google.api.http) = { get: "/v1/console/leaderboards/boards" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner", "admin"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner", "admin"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
   }
   rpc GetLeaderboardBoard(GetLeaderboardBoardRequest) returns (shared.v1.LeaderboardBoard) {
     option (google.api.http) = { get: "/v1/console/leaderboards/boards/{board_id}" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner", "admin"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner", "admin"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
   }
   rpc UpdateLeaderboardBoard(UpdateLeaderboardBoardRequest) returns (shared.v1.LeaderboardBoard) {
     option (google.api.http) = { patch: "/v1/console/leaderboards/boards/{board_id}", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
   }
   rpc DeleteLeaderboardBoard(DeleteLeaderboardBoardRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/console/leaderboards/boards/{board_id}" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
   }
   rpc ListLeaderboardBoardPeriods(ListLeaderboardBoardPeriodsRequest) returns (ListLeaderboardBoardPeriodsResponse) {
     option (google.api.http) = { get: "/v1/console/leaderboards/boards/{board_id}/periods" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner", "admin"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner", "admin"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
   }
   rpc ListLeaderboardTop(ListLeaderboardTopRequest) returns (shared.v1.ListLeaderboardTopResponse) {
     option (google.api.http) = { get: "/v1/console/leaderboards/boards/{board_id}/top" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner", "admin"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner", "admin"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
   }
   rpc GetLeaderboardEntry(GetLeaderboardEntryRequest) returns (shared.v1.LeaderboardScoreSnapshot) {
     option (google.api.http) = { get: "/v1/console/leaderboards/boards/{board_id}/entries/{subject_id}" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner", "admin"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner", "admin"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
   }
   rpc DeleteLeaderboardEntry(DeleteLeaderboardEntryRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/console/leaderboards/boards/{board_id}/entries/{subject_id}" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
   }
 
   // —— Phase 2：结榜发奖（settled 拒绝 void/rerun；作弊处理窗口 = 宽限期）——
   rpc GetLeaderboardSettlement(GetLeaderboardSettlementRequest) returns (GetLeaderboardSettlementResponse) {
     option (google.api.http) = { get: "/v1/console/leaderboards/boards/{board_id}/settlements/{period}" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner", "admin"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner", "admin"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
   }
   rpc ListLeaderboardSettlements(ListLeaderboardSettlementsRequest) returns (ListLeaderboardSettlementsResponse) {
     option (google.api.http) = { get: "/v1/console/leaderboards/boards/{board_id}/settlements" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner", "admin"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner", "admin"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
   }
   rpc VoidLeaderboardSettlement(VoidLeaderboardSettlementRequest) returns (LeaderboardSettlementAck) {
     option (google.api.http) = { post: "/v1/console/leaderboards/boards/{board_id}/settlements/{period}:void" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
   }
   rpc RerunLeaderboardSettlement(RerunLeaderboardSettlementRequest) returns (LeaderboardSettlementAck) {
     option (google.api.http) = { post: "/v1/console/leaderboards/boards/{board_id}/settlements/{period}:rerun" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
   }
 }
