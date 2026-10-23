@@ -41,7 +41,7 @@ func (s stubValidator) ValidateAdminProjectAccess(context.Context, *shared.Princ
 func TestAuthInterceptor_RejectsAPIKeyOnUsersPermissionMethod(t *testing.T) {
 	t.Parallel()
 
-	ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
+	ic, set, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind:      shared.ActorKindService,
 		CredentialType: shared.CredentialTypeAPIKey,
 		Roles:          []string{"keys"},
@@ -52,7 +52,7 @@ func TestAuthInterceptor_RejectsAPIKeyOnUsersPermissionMethod(t *testing.T) {
 	requireNoError(t, err)
 
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-api-key", "test-key"))
-	_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{
+	_, err = invokeChain(t, ic, set, ctx, nil, &grpc.UnaryServerInfo{
 		FullMethod: "/torchwood.client.v1.GroupsService/CreateGroup",
 	}, func(context.Context, any) (any, error) {
 		t.Fatal("handler should not run")
@@ -64,7 +64,7 @@ func TestAuthInterceptor_RejectsAPIKeyOnUsersPermissionMethod(t *testing.T) {
 func TestAuthInterceptor_AllowsEndUserOnUsersPermissionMethod(t *testing.T) {
 	t.Parallel()
 
-	ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
+	ic, set, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind: shared.ActorKindEndUser,
 		UserID:    "user-1",
 		Roles:     []string{"users", "user:user-1"},
@@ -75,7 +75,7 @@ func TestAuthInterceptor_AllowsEndUserOnUsersPermissionMethod(t *testing.T) {
 
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer token"))
 	called := false
-	_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{
+	_, err = invokeChain(t, ic, set, ctx, nil, &grpc.UnaryServerInfo{
 		FullMethod: "/torchwood.client.v1.GroupsService/CreateGroup",
 	}, func(context.Context, any) (any, error) {
 		called = true
@@ -105,16 +105,16 @@ func requirePermissionDenied(t *testing.T, err error) {
 func TestAuthInterceptor_DeniesAPIKeyOnAPIKeysService(t *testing.T) {
 	t.Parallel()
 
-	ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
+	ic, set, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind:      shared.ActorKindService,
 		CredentialType: shared.CredentialTypeAPIKey,
 		Roles:          []string{"keys"},
 		Permissions:    []string{"*"},
-	}}, nil, []string{"/torchwood.server.v1.APIKeysService/CreateAPIKey"}, nil)
+	}}, nil, nil, map[string][]string{"/torchwood.server.v1.APIKeysService/CreateAPIKey": {"owner", "admin"}})
 	requireNoError(t, err)
 
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-api-key", "test-key"))
-	_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{
+	_, err = invokeChain(t, ic, set, ctx, nil, &grpc.UnaryServerInfo{
 		FullMethod: "/torchwood.server.v1.APIKeysService/CreateAPIKey",
 	}, func(context.Context, any) (any, error) {
 		t.Fatal("handler should not run")
@@ -126,16 +126,16 @@ func TestAuthInterceptor_DeniesAPIKeyOnAPIKeysService(t *testing.T) {
 func TestAuthInterceptor_AllowsAdminSessionOnAPIKeysService(t *testing.T) {
 	t.Parallel()
 
-	ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
+	ic, set, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind:      shared.ActorKindAdmin,
 		CredentialType: shared.CredentialTypeSession,
 		Roles:          []string{"admin"},
-	}}, nil, []string{"/torchwood.server.v1.APIKeysService/CreateAPIKey"}, nil)
+	}}, nil, nil, map[string][]string{"/torchwood.server.v1.APIKeysService/CreateAPIKey": {"owner", "admin"}})
 	requireNoError(t, err)
 
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Session admin-token"))
 	called := false
-	_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{
+	_, err = invokeChain(t, ic, set, ctx, nil, &grpc.UnaryServerInfo{
 		FullMethod: "/torchwood.server.v1.APIKeysService/CreateAPIKey",
 	}, func(context.Context, any) (any, error) {
 		called = true
@@ -161,7 +161,7 @@ func TestAuthInterceptor_RejectsAPIKeyWildcardScopeOnAdminsService(t *testing.T)
 	}
 	for _, scopes := range [][]string{{"*"}, {"all"}} {
 		for _, method := range methods {
-			ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
+			ic, set, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 				ActorKind:      shared.ActorKindService,
 				CredentialType: shared.CredentialTypeAPIKey,
 				Roles:          []string{"keys"},
@@ -170,7 +170,7 @@ func TestAuthInterceptor_RejectsAPIKeyWildcardScopeOnAdminsService(t *testing.T)
 			requireNoError(t, err)
 
 			ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-api-key", "test-key"))
-			_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{
+			_, err = invokeChain(t, ic, set, ctx, nil, &grpc.UnaryServerInfo{
 				FullMethod: method,
 			}, func(context.Context, any) (any, error) {
 				t.Fatal("handler should not run")
@@ -212,14 +212,14 @@ func TestAuthInterceptor_RejectsViewerOrMemberAdminOnWriteMethods(t *testing.T) 
 		} else {
 			serverRoles = map[string][]string{method: roles}
 		}
-		ic, err := newTestInterceptorRoles(stubValidator{principal: &shared.Principal{
+		ic, set, err := newTestInterceptorRoles(stubValidator{principal: &shared.Principal{
 			ActorKind:      shared.ActorKindAdmin,
 			CredentialType: shared.CredentialTypeSession,
 			Roles:          []string{role},
 		}}, nil, serverRoles, permissionMethods)
 		requireNoError(t, err)
 		ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Session admin-token"))
-		_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{
+		_, err = invokeChain(t, ic, set, ctx, nil, &grpc.UnaryServerInfo{
 			FullMethod: method,
 		}, func(context.Context, any) (any, error) {
 			t.Fatalf("handler should not run for %s on %s", role, method)
@@ -255,7 +255,7 @@ func TestAuthInterceptor_AllowsOwnerAdminOnWriteMethods(t *testing.T) {
 			"/torchwood.server.v1.DatabasesService/CreateDatabase",
 			"/torchwood.server.v1.FunctionsService/SetFunctionScopes",
 		} {
-			ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
+			ic, set, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 				ActorKind:      shared.ActorKindAdmin,
 				CredentialType: shared.CredentialTypeSession,
 				Roles:          []string{role},
@@ -264,7 +264,7 @@ func TestAuthInterceptor_AllowsOwnerAdminOnWriteMethods(t *testing.T) {
 
 			ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Session admin-token"))
 			called := false
-			_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{
+			_, err = invokeChain(t, ic, set, ctx, nil, &grpc.UnaryServerInfo{
 				FullMethod: method,
 			}, func(context.Context, any) (any, error) {
 				called = true
@@ -283,7 +283,7 @@ func TestAuthInterceptor_AllowsOwnerAdminOnWriteMethods(t *testing.T) {
 func TestAuthInterceptor_RejectsMultipleCredentials(t *testing.T) {
 	t.Parallel()
 
-	ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
+	ic, set, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind: shared.ActorKindEndUser,
 		UserID:    "user-1",
 		Roles:     []string{"users"},
@@ -296,7 +296,7 @@ func TestAuthInterceptor_RejectsMultipleCredentials(t *testing.T) {
 		metadata.Pairs("cookie", "TORCHWOOD_session_console=abc", "x-api-key", "key"),
 	} {
 		ctx := metadata.NewIncomingContext(context.Background(), md)
-		_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{
+		_, err = invokeChain(t, ic, set, ctx, nil, &grpc.UnaryServerInfo{
 			FullMethod: "/torchwood.server.v1.UsersService/ListUsers",
 		}, func(context.Context, any) (any, error) {
 			t.Fatal("handler should not run")
@@ -320,7 +320,7 @@ func requireUnauthenticated(t *testing.T, err error) {
 func TestAuthInterceptor_RejectsSameKeyMultipleCredentials(t *testing.T) {
 	t.Parallel()
 
-	ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
+	ic, set, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind: shared.ActorKindEndUser,
 		UserID:    "user-1",
 		Roles:     []string{"users"},
@@ -333,7 +333,7 @@ func TestAuthInterceptor_RejectsSameKeyMultipleCredentials(t *testing.T) {
 		metadata.Pairs("cookie", "TORCHWOOD_session_console=abc", "cookie", "TORCHWOOD_session_console=def"),
 	} {
 		ctx := metadata.NewIncomingContext(context.Background(), md)
-		_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{
+		_, err = invokeChain(t, ic, set, ctx, nil, &grpc.UnaryServerInfo{
 			FullMethod: "/torchwood.server.v1.UsersService/ListUsers",
 		}, func(context.Context, any) (any, error) {
 			t.Fatal("handler should not run")

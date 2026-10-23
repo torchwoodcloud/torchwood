@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lynx-go/grpcapi/authz"
 	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
 	"github.com/stretchr/testify/require"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
@@ -65,9 +66,9 @@ func TestAuthService_VerifyToken_Policy(t *testing.T) {
 	require.False(t, slices.Contains(p.RequestFields, "project_id"), "server 面请求体不得携带 project_id")
 }
 
-// TestAuthService_VerifyToken_APIKeyScopeGate：真实策略注册表 + 认证拦截器，
-// 持 users.read / 通配符 scope 的 key 放行；scope 不足（users.write、空、
-// 其他资源）→ PermissionDenied。
+// TestAuthService_VerifyToken_APIKeyScopeGate：真实策略注册表 + 生产拦截器链
+//（authn → 库 authz），持 users.read / 通配符 scope 的 key 放行；scope 不足
+//（users.write、空、其他资源）→ PermissionDenied（scope 四形态行为不变锚点）。
 func TestAuthService_VerifyToken_APIKeyScopeGate(t *testing.T) {
 	t.Parallel()
 	set, err := ProvideMethodPolicies()
@@ -89,22 +90,27 @@ func TestAuthService_VerifyToken_APIKeyScopeGate(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			raw := set.Raw()
 			ic, err := interceptor.NewAuthInterceptor(stubVerifyValidator{principal: &shared.Principal{
 				ActorKind:      shared.ActorKindService,
 				CredentialType: shared.CredentialTypeAPIKey,
 				ProjectID:      "proj-1",
 				APIKeyID:       "key-1",
 				Permissions:    tc.scopes,
-			}}, set)
+			}}, raw)
+			require.NoError(t, err)
+			az, err := authz.NewInterceptor(raw, nil, authz.Options{})
 			require.NoError(t, err)
 
 			ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-api-key", "test-key"))
 			reached := false
 			_, err = ic.UnaryAuthMiddleware(ctx, &serverv1.VerifyTokenRequest{Token: "t"}, &grpc.UnaryServerInfo{
 				FullMethod: verifyTokenMethod,
-			}, func(context.Context, any) (any, error) {
-				reached = true
-				return &serverv1.VerifyTokenResponse{}, nil
+			}, func(ctx context.Context, req any) (any, error) {
+				return az.Unary()(ctx, req, &grpc.UnaryServerInfo{FullMethod: verifyTokenMethod}, func(context.Context, any) (any, error) {
+					reached = true
+					return &serverv1.VerifyTokenResponse{}, nil
+				})
 			})
 			if tc.allowed {
 				require.NoError(t, err)

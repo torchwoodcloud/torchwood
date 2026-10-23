@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lynx-go/grpcapi/authz"
 	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
 	"github.com/lynx-go/lynx"
 	lynxgrpc "github.com/lynx-go/lynx/server/grpc"
@@ -76,14 +77,24 @@ func NewGRPCServer(
 	grpcCfg := cfg.GetServer().GetGrpc()
 	timeout := parseDuration(grpcCfg.GetTimeout(), 30*time.Second)
 
-	// 策略注册表由 ProvideMethodPolicies 注入（唯一收集点，含语义断言）。
-	authInterceptor, err := interceptor.NewAuthInterceptor(validator, policySet)
+	// 执行侧迁移（grpcapi v1.0 §11.4）：授权执行走库 authz 拦截器
+	//（RequirementDecider 按五档规范树求值），挂在 torchwood authn 拦截器
+	//（认证 + 业务校验 + 双 principal 注入）之后。策略唯一来源仍是
+	// ProvideMethodPolicies 注入的策略集。
+	authInterceptor, err := interceptor.NewAuthInterceptor(validator, policySet.Raw())
 	if err != nil {
 		return nil, err
 	}
 	authInterceptor = authInterceptor.WithLogger(app.Logger())
 	// M5 C6：auth 拒绝并联审计（拦截器层拒绝到不了 audit 中间件，无双写）。
 	authInterceptor = authInterceptor.WithDenyAuditSink(auditRepo)
+	authzInterceptor, err := authz.NewInterceptor(policySet.Raw(), nil, authz.Options{
+		OnDecision: authInterceptor.AuthzOnDecision(),
+		Logger:     app.Logger(),
+	})
+	if err != nil {
+		return nil, err
+	}
 	// T-02：X-API-Key 认证失败按来源 IP 频控（security.login_throttle
 	// .api_key_auth，默认 10 次/60s；未配置维度时 WithAPIKeyFailThrottle
 	// 回落内置默认）。
@@ -125,10 +136,17 @@ func NewGRPCServer(
 		lynxgrpc.WithInterceptors(
 			clientInfoInterceptor.Unary(),
 			authInterceptor.UnaryAuthMiddleware,
+			authzInterceptor.Unary(),
 			rateLimitInterceptor.UnaryRateLimitMiddleware,
 			auditInterceptor.UnaryAuditMiddleware,
 			usageInterceptor.UnaryUsageMiddleware,
 			validateInterceptor.Unary(),
+		),
+		// 流式面先挂库 authz（open-time 授权）。torchwood 当前无流式 RPC
+		//（AssertSemantic 禁用 streaming），authn 尚无 stream 拦截器——
+		// 未来放开流式前须先补 authn stream（否则无 principal，authz 恒拒）。
+		lynxgrpc.WithStreamInterceptors(
+			authzInterceptor.Stream(),
 		),
 		// 允许 ≤1MiB 的 deployment 代码包走 gRPC（base64 膨胀后约 1.33x）。
 		lynxgrpc.WithServerOptions(grpc.MaxRecvMsgSize(8<<20)),

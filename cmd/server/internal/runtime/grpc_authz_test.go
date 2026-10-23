@@ -62,7 +62,7 @@ func TestAssertSemantic_RealProtoRegistry(t *testing.T) {
 // （退役资源串的匹配面断言）。
 func setAllowsAnyMethod(set *domainauth.PolicySet, scope string) bool {
 	for _, p := range set.Methods() {
-		if domainauth.AllowsAPIKeyTargets(set, p.Method, []string{scope}, domainauth.ScopeTargets{}) {
+		if domainauth.AllowsAPIKey(set.ScopeRule(p.Method), []string{scope}, "") {
 			return true
 		}
 	}

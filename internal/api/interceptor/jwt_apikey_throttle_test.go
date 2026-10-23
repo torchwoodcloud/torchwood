@@ -62,7 +62,7 @@ const testAPIKeyMethod = "/torchwood.server.v1.UsersService/CreateUser"
 
 func newAPIKeyThrottleInterceptor(t *testing.T, limiter domainauth.RateLimiter, limit int) *AuthInterceptor {
 	t.Helper()
-	set, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{{
+	set, err := domainauth.NewSet([]domainauth.MethodPolicy{{
 		Method: testAPIKeyMethod, Service: serviceOf(testAPIKeyMethod),
 		Access: domainauth.AccessServer,
 		Scope:  &domainauth.ScopeRule{Resource: string(domainauth.ScopeUsers), Op: domainauth.ScopeWrite},

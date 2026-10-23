@@ -51,7 +51,7 @@ func TestAuthInterceptor_LogsCredentialMissing(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	ic, err := newTestInterceptor(stubValidator{}, nil,
+	ic, _, err := newTestInterceptor(stubValidator{}, nil,
 		[]string{"/torchwood.server.v1.UsersService/ListUsers"}, nil)
 	requireNoError(t, err)
 	ic.WithLogger(captureLogger(&buf))
@@ -82,7 +82,7 @@ func TestAuthInterceptor_LogsMultipleCredentials(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	ic, err := newTestInterceptor(stubValidator{}, nil, []string{"/torchwood.server.v1.UsersService/ListUsers"}, nil)
+	ic, _, err := newTestInterceptor(stubValidator{}, nil, []string{"/torchwood.server.v1.UsersService/ListUsers"}, nil)
 	requireNoError(t, err)
 	ic.WithLogger(captureLogger(&buf))
 
@@ -103,7 +103,7 @@ func TestAuthInterceptor_LogsInvalidAuthorization(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	ic, err := newTestInterceptor(stubValidator{}, nil, []string{"/torchwood.server.v1.UsersService/ListUsers"}, nil)
+	ic, _, err := newTestInterceptor(stubValidator{}, nil, []string{"/torchwood.server.v1.UsersService/ListUsers"}, nil)
 	requireNoError(t, err)
 	ic.WithLogger(captureLogger(&buf))
 
@@ -145,7 +145,7 @@ func TestAuthInterceptor_LogsPermissionDenied(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
+	ic, set, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind:      shared.ActorKindService,
 		CredentialType: shared.CredentialTypeAPIKey,
 		Roles:          []string{"keys"},
@@ -156,12 +156,16 @@ func TestAuthInterceptor_LogsPermissionDenied(t *testing.T) {
 	requireNoError(t, err)
 	ic.WithLogger(captureLogger(&buf))
 
+	// PERMISSION 面 API key 一律拒绝（角色门读 Roles claim，keys 族不中
+	// owner/admin 值域）；拒绝发生在库 authz，留痕经 OnDecision 回调。
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-api-key", "k"))
-	_ = invokeAuth(ic, ctx, "/torchwood.server.v1.APIKeysService/CreateAPIKey")
+	_, _ = invokeChain(t, ic, set, ctx, nil,
+		&grpc.UnaryServerInfo{FullMethod: "/torchwood.server.v1.APIKeysService/CreateAPIKey"},
+		func(context.Context, any) (any, error) { return nil, nil })
 
 	out := buf.String()
-	// IsAPIKeysServiceMethod 特例已退役（A2a）：PERMISSION 面 API key 一律拒绝。
-	if !strings.Contains(out, "reason=apikey_permission_method_denied") {
+	// TextHandler 会给含空格的 reason 加引号，按子串断言。
+	if !strings.Contains(out, "authz_denied:requirement not satisfied") {
 		t.Fatalf("unexpected log output: %s", out)
 	}
 }
@@ -170,7 +174,7 @@ func TestAuthInterceptor_NoLogOnSuccess(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	ic, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
+	ic, _, err := newTestInterceptor(stubValidator{principal: &shared.Principal{
 		ActorKind: shared.ActorKindEndUser,
 		UserID:    "user-1",
 		Roles:     []string{"users"},

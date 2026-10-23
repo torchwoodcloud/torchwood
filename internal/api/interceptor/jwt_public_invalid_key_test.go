@@ -21,7 +21,7 @@ const testPublicMethod = "/torchwood.client.v1.DatabasesService/ListDocuments"
 
 func newPublicInterceptor(t *testing.T, limiter domainauth.RateLimiter, limit int) *AuthInterceptor {
 	t.Helper()
-	set, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{{
+	set, err := domainauth.NewSet([]domainauth.MethodPolicy{{
 		Method: testPublicMethod, Service: serviceOf(testPublicMethod),
 		Access: domainauth.AccessPublic,
 	}}...)

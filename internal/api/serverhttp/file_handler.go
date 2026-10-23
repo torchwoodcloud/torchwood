@@ -842,7 +842,7 @@ func (h *FileHandler) authorize(r *http.Request, bucketID string) (*shared.Princ
 	if !isRead {
 		method = domainauth.StorageServiceCreateFile
 	}
-	p, err := h.auth.authorize(r, func(*http.Request) string { return method }, domainauth.ScopeTargets{BucketID: bucketID})
+	p, err := h.auth.authorize(r, method, bucketID)
 	if err != nil {
 		return nil, err
 	}

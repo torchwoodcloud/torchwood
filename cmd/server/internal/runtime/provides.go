@@ -32,14 +32,14 @@ var ProviderSet = wire.NewSet(
 //
 // 等价性由 testdata/policies.golden.json（阶段 0 基线）锁定。
 func buildMethodPolicies() (*domainauth.PolicySet, error) {
-	reg, err := legacyRegistry()
+	reg, err := domainauth.PolicyRegistry()
 	if err != nil {
 		return nil, err
 	}
 	set, err := policy.Build(context.Background(), policy.FromFiles(authzFileDescriptors()...), policy.Options{
 		Provider:         legacyProvider{},
 		Registry:         reg,
-		Vocabulary:       legacyVocabulary(),
+		Vocabulary:       domainauth.PolicyVocabulary(),
 		DisableStreaming: true,
 	})
 	if err != nil {
@@ -53,15 +53,6 @@ func buildMethodPolicies() (*domainauth.PolicySet, error) {
 		return nil, err
 	}
 	return domainSet, nil
-}
-
-// legacyVocabulary 注册 scope/resource 两个词表域（同一资源全集：scope 门
-// 与 resource 门各自按域校验声明值）。
-func legacyVocabulary() policy.Vocabulary {
-	return policy.NewVocabulary(map[string][]string{
-		"scope":    domainauth.ScopeVocabularyResources(),
-		"resource": domainauth.ScopeVocabularyResources(),
-	})
 }
 
 // ProvideMethodPolicies 收集 proto 策略注解为 PolicySet（全进程唯一收集点，

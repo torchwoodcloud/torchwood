@@ -37,20 +37,21 @@ func (a *httpAuth) authenticate(r *http.Request) (*shared.Principal, error) {
 }
 
 // authorize 对已认证主体做方法级授权：
-//   - API key 与函数执行 principal（P0 执行身份）必须持有 apiKeyScope(r)
-//     返回的 scope（按方法区分读写权限）；targets 携带请求寻址的目标实例
-//     （T-02 资源级 scope 强制；不可寻址的方法传零值——实例限定 scope 对其
-//     恒不匹配）。execution 的 Permissions 已是 API key 同款权限串，走同一
-//     AllowsAPIKeyTargets 求值——防执行 token 绕过 HTTP 面的 scope 门；
+//   - API key 与函数执行 principal（P0 执行身份）必须持有 method 的声明
+//     scope（按方法区分读写权限）；target 携带请求寻址的目标实例（T-02
+//     资源级 scope 强制；不可寻址的方法传空串——实例限定 scope 对其恒不
+//     匹配）。execution 的 Permissions 已是 API key 同款权限串，走同一
+//     AllowsAPIKey 求值（语义委托 grpcapi/policy/scope，与 gRPC 面的库
+//     authz 树同构）——防执行 token 绕过 HTTP 面的 scope 门；
 //   - admin 主体可经 X-Torchwood-Project 指定项目，并校验项目访问权。
-func (a *httpAuth) authorize(r *http.Request, apiKeyScope func(*http.Request) string, targets domainauth.ScopeTargets) (*shared.Principal, error) {
+func (a *httpAuth) authorize(r *http.Request, method string, target string) (*shared.Principal, error) {
 	ctx := r.Context()
 	principal, err := a.authenticate(r)
 	if err != nil {
 		return nil, err
 	}
 	if principal.CredentialType == shared.CredentialTypeAPIKey || principal.CredentialType == shared.CredentialTypeExecution {
-		if !domainauth.AllowsAPIKeyTargets(a.policies, apiKeyScope(r), principal.Permissions, targets) {
+		if !domainauth.AllowsAPIKey(a.policies.ScopeRule(method), principal.Permissions, target) {
 			return nil, status.Error(codes.PermissionDenied, "api key missing required scope")
 		}
 	}

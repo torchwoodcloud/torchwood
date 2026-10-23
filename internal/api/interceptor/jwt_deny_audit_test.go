@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -36,7 +37,7 @@ func TestAuthInterceptor_DenyAudit(t *testing.T) {
 	t.Run("credential_missing", func(t *testing.T) {
 		t.Parallel()
 		sink := &memDenyAudit{}
-		ic, err := newTestInterceptor(stubValidator{}, nil, []string{denyAuditTestMethod}, nil)
+		ic, _, err := newTestInterceptor(stubValidator{}, nil, []string{denyAuditTestMethod}, nil)
 		requireNoError(t, err)
 		ic.WithDenyAuditSink(sink)
 
@@ -60,26 +61,29 @@ func TestAuthInterceptor_DenyAudit(t *testing.T) {
 			CredentialType: shared.CredentialTypeToken,
 			ProjectID:      "proj-1",
 		}
-		ic, err := newTestInterceptor(stubValidator{principal: principal}, nil, nil,
+		ic, set, err := newTestInterceptor(stubValidator{principal: principal}, nil, nil,
 			map[string][]string{denyAuditTestMethod: {"owner"}})
 		requireNoError(t, err)
 		ic.WithDenyAuditSink(sink)
 
-		// 端用户主体调 PERMISSION 面：principal 解析成功但角色不匹配。
+		// admin 主体调 PERMISSION 面角色不匹配：拒绝发生在库 authz 拦截器，
+		// 拒绝审计经 OnDecision 回调并联写入（M5 C6 语义延续）。
 		ctx := metadata.NewIncomingContext(context.Background(),
 			metadata.Pairs("authorization", "Bearer tok"))
-		err = invokeAuth(ic, ctx, denyAuditTestMethod)
+		_, err = invokeChain(t, ic, set, ctx, nil,
+			&grpc.UnaryServerInfo{FullMethod: denyAuditTestMethod},
+			func(context.Context, any) (any, error) { return nil, nil })
 		require.Equal(t, codes.PermissionDenied, status.Code(err))
 		require.Len(t, sink.entries, 1)
 		e := sink.entries[0]
-		require.Equal(t, "permission_denied", e.Metadata["reason"])
+		require.Equal(t, "authz_denied:requirement not satisfied", e.Metadata["reason"])
 		require.Equal(t, "admin-1", e.ActorID, "拒绝审计应携带已解析 principal 的 Actor")
 		require.Equal(t, "proj-1", e.ProjectID)
 	})
 
 	t.Run("nil_sink_writes_nothing", func(t *testing.T) {
 		t.Parallel()
-		ic, err := newTestInterceptor(stubValidator{}, nil, []string{denyAuditTestMethod}, nil)
+		ic, _, err := newTestInterceptor(stubValidator{}, nil, []string{denyAuditTestMethod}, nil)
 		requireNoError(t, err)
 
 		// WithDenyAuditSink(nil) 保持纯日志行为（既有测试不受影响）。
@@ -93,7 +97,7 @@ func TestAuthInterceptor_DenyAudit(t *testing.T) {
 func TestAuthInterceptor_DenyAuditCarriesClientInfo(t *testing.T) {
 	t.Parallel()
 	sink := &memDenyAudit{}
-	ic, err := newTestInterceptor(stubValidator{}, nil, []string{denyAuditTestMethod}, nil)
+	ic, _, err := newTestInterceptor(stubValidator{}, nil, []string{denyAuditTestMethod}, nil)
 	requireNoError(t, err)
 	ic.WithDenyAuditSink(sink)
 

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/lynx-go/grpcapi/policy"
-	"github.com/lynx-go/grpcapi/policy/scope"
 	legacypb "github.com/torchwoodcloud/torchwood/genproto/grpcapi/v1"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"google.golang.org/genproto/googleapis/api/annotations"
@@ -179,66 +178,6 @@ func hasHTTP(opts proto.Message) bool {
 	return rule != nil
 }
 
-// noInstanceTarget 是「本请求不寻址任何实例」的哨兵：合法资源实例 ID 的
-// 字符集（数据库 ^[a-z][a-z0-9]{0,27}$ / 桶 ^[0-9a-zA-Z_-]{1,64}$）都不含
-// 控制字符，哨兵永不等于任何实例 token 的目标段。旧语义：无目标的方法对
-// 实例限定 scope 恒不匹配（403），其余 scope 形态不受影响——提取器返回
-// 哨兵而非错误，避免把空 id 请求放大成 Internal。
-const noInstanceTarget = "\x00no-instance-target"
-
-// instanceTargetID 是注册进库 resource kind 的实例 ID 提取器：
-//   - proto.Message：按 database_id → bucket_id → id 字段序取第一个非空值
-//     （与旧 apiKeyScopeTargets 的 getter 优先级一致）；
-//   - domainauth.TargetedRequest：serverhttp 面（存储 multipart 等无 proto
-//     请求体）由传输层显式携带目标实例；
-//   - 其余形态（nil 流式 open-time、未知类型）不寻址实例，返回哨兵。
-func instanceTargetID(req any) (string, error) {
-	switch v := req.(type) {
-	case domainauth.TargetedRequest:
-		if v.ID == "" {
-			return noInstanceTarget, nil
-		}
-		return v.ID, nil
-	case protoreflect.ProtoMessage:
-		m := v.ProtoReflect()
-		for _, name := range domainauth.InstanceExtractorFields {
-			fd := m.Descriptor().Fields().ByName(protoreflect.Name(name))
-			if fd == nil || fd.Kind() != protoreflect.StringKind {
-				continue
-			}
-			if s := m.Get(fd).String(); s != "" {
-				return s, nil
-			}
-		}
-		return noInstanceTarget, nil
-	default:
-		return noInstanceTarget, nil
-	}
-}
-
-// legacyRegistry 是 torchwood 的 kind 注册表：全部 kind 来自库（claim/
-// principal/scope/resource），torchwood 不再注册自定义执行 kind。
-func legacyRegistry() (*policy.Registry, error) {
-	resourceKind, err := scope.ResourceKind(scope.ResourceOptions{
-		ID:                instanceTargetID,
-		VocabularyDomain:  "resource",
-		RequireVocabulary: true,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return policy.NewRegistry(
-		policy.KindAuthenticated(),
-		policy.KindClaim(),
-		policy.KindPrincipal(),
-		policy.ClaimKind("role", "roles", policy.MatchAny),
-		policy.ClaimKind("admin_role", "admin_roles", policy.MatchAny),
-		policy.ClaimKind("permission", "permissions", policy.MatchAll),
-		scope.Kind(scope.Options{
-			Claim:             "scopes",
-			VocabularyDomain:  "scope",
-			RequireVocabulary: true,
-		}),
-		resourceKind,
-	)
-}
+// legacyRegistry / 词汇表 / 实例提取器已下沉 domainauth（PolicyRegistry /
+// PolicyVocabulary / InstanceTargetID，见 internal/domain/auth/registry.go）——
+// interceptor、testutil 与 runtime 共用同一装配。

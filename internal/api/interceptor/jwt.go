@@ -7,6 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lynx-go/grpcapi/authz"
+	"github.com/lynx-go/grpcapi/policy"
+	"github.com/lynx-go/grpcapi/principal"
 	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
@@ -25,10 +28,11 @@ type Validator interface {
 	ValidateAdminProjectAccess(ctx context.Context, principal *shared.Principal) error
 }
 
-// AuthInterceptor 是统一授权执行点（机制重设计 M3）：策略唯一声明在 proto
-// （authz 注解），经 runtime.BuildMethodPolicies 收集为 domainauth.PolicySet
-// 注入本拦截器；admin 角色/API key scope/permissions 全部从 PolicySet 读取，
-// 本包不再持有任何手写策略表。
+// AuthInterceptor 是统一认证拦截器（机制重设计 M3 → grpcapi 执行侧迁移）：
+// 本拦截器只做认证（凭证提取/校验/双 Principal 注入）与业务校验
+//（X-Torchwood-Project、ValidateAdminProjectAccess）；档位/角色/scope 的
+// 授权执行在库 authz 拦截器（authz.NewInterceptor + RequirementDecider，
+// 挂本拦截器之后），策略树唯一来自 proto 注解（policy.Build）。
 // DenyAuditor 是认证拒绝审计的最小写入口（audit.Repository 的窄投影，
 // 复用 Entry.Metadata 承载 denied/reason，M5 C6）。
 type DenyAuditor interface {
@@ -37,8 +41,10 @@ type DenyAuditor interface {
 
 type AuthInterceptor struct {
 	validator Validator
-	policies  *domainauth.PolicySet
-	logger    *slog.Logger
+	// policies 只消费 IsAnonymous（PUBLIC 面可选认证语义）；档位/角色/scope
+	// 执行不在此处——库 authz 拦截器按同一策略集求值。
+	policies *policy.Set
+	logger   *slog.Logger
 	// denyAudit 是可选的拒绝审计 sink（WithDenyAuditSink 注入，nil 不写）。
 	denyAudit DenyAuditor
 	// apiKeyFailThrottle 是 X-API-Key 认证失败的按 IP 频控（T-02，可选）：
@@ -48,8 +54,9 @@ type AuthInterceptor struct {
 	apiKeyFailWindow  time.Duration
 }
 
-// NewAuthInterceptor 构造拦截器；policies 为策略注册表（nil 拒绝构造）。
-func NewAuthInterceptor(validator Validator, policies *domainauth.PolicySet) (*AuthInterceptor, error) {
+// NewAuthInterceptor 构造认证拦截器；policies 为策略表（nil 拒绝构造），
+// 仅用于 PUBLIC 面判定——授权执行由库 authz 拦截器消费同一策略集。
+func NewAuthInterceptor(validator Validator, policies *policy.Set) (*AuthInterceptor, error) {
 	if validator == nil {
 		return nil, errors.New("validator cannot be nil")
 	}
@@ -98,7 +105,7 @@ func (i *AuthInterceptor) WithAPIKeyFailThrottle(limiter domainauth.RateLimiter,
 }
 
 // recordAPIKeyAuthFailure 在 API key 认证失败路径计数：超限返回 429
-// （带 RetryInfo detail），否则返回 nil 继续原有 401 语义。limiter 基础
+//（带 RetryInfo detail），否则返回 nil 继续原有 401 语义。limiter 基础
 // 设施故障只告警不拦截（fail-open：限速器故障不放大认证面故障）。
 func (i *AuthInterceptor) recordAPIKeyAuthFailure(ctx context.Context, ip string) error {
 	if i.apiKeyFailLimiter == nil || ip == "" {
@@ -126,11 +133,30 @@ func (i *AuthInterceptor) WithLogger(l *slog.Logger) *AuthInterceptor {
 	return i
 }
 
+// AuthzOnDecision 返回库 authz 拦截器的 OnDecision 回调（装配进
+// authz.Options.OnDecision）：拒绝裁决并联写拒绝审计行与结构化日志（M5 C6
+// 语义延续——原手工档位判定的 scope/角色/权限拒绝留痕迁移到本回调），
+// best-effort 不影响裁决。Reason 取库 Decision.Reason（requirement not
+// satisfied / no any_of alternative satisfied / missing principal 等）。
+func (i *AuthInterceptor) AuthzOnDecision() func(context.Context, policy.Operation, authz.Decision) {
+	return func(ctx context.Context, op policy.Operation, d authz.Decision) {
+		if d.Allow {
+			return
+		}
+		p, _ := contexts.Principal(ctx)
+		credentialType := shared.CredentialType("")
+		if p != nil {
+			credentialType = p.CredentialType
+		}
+		i.logAuthFailure(ctx, op.ID, "authz_denied:"+d.Reason, credentialType, p)
+	}
+}
+
 // logAuthFailure 在认证/鉴权拒绝路径输出结构化告警日志，只记录方法名、
 // 拒绝原因类别与凭证类型，绝不记录 token 本体。M5 C6：并联 best-effort
 // 写一条拒绝审计行（Entry.Status="denied"，Metadata["denied"]=true、
 // Metadata["reason"]=拒绝原因），Actor/Project 从已解析 principal 取
-// （认证前拒绝为空）；复用 auditFromHTTP 的 3s + WithoutCancel 模式，
+//（认证前拒绝为空）；复用 auditFromHTTP 的 3s + WithoutCancel 模式，
 // 拒绝响应不被审计写阻塞或连带失败。
 func (i *AuthInterceptor) logAuthFailure(ctx context.Context, method, reason string, credentialType shared.CredentialType, principal *shared.Principal) {
 	ci := contexts.ClientInfoFrom(ctx)
@@ -175,41 +201,8 @@ func (i *AuthInterceptor) writeDenyAudit(ctx context.Context, method, reason str
 }
 
 func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	policy, ok := i.policies.Get(info.FullMethod)
-	if !ok {
-		// fail-closed：未登记策略的方法一律拒绝（启动期另有
-		// assertRegisteredMethodsHaveAuthz 兜底，此处防御直接调用）。
-		i.logAuthFailure(ctx, info.FullMethod, "policy_missing", "", nil)
-		return nil, status.Error(codes.PermissionDenied, "no auth policy for method")
-	}
-
-	if policy.Access == domainauth.AccessPublic {
-		if md, ok := metadata.FromIncomingContext(ctx); ok {
-			authn := authnRequestFromMD(md)
-			principal, authnErr := i.validator.Authenticate(ctx, authn)
-			if authnErr != nil {
-				// T-02 复扫:PUBLIC 面显式携带的无效 X-API-Key 不得静默降级
-				// 为匿名——按匿名继续会让误配的调用方以"数据变空"呈现、且
-				// key 暴破与正常匿名流量在响应码上不可区分。无效 key 一律
-				// 401 并进入失败限速计数。浏览器不携带 X-API-Key,零误伤;
-				// 无效 Bearer/cookie(如过期会话)保持匿名降级,不破坏公开页
-				// 的无凭证/过期凭证浏览语义。
-				if ct, _, parseErr := shared.ParseAuthnRequest(authn); parseErr == nil && ct == shared.CredentialTypeAPIKey {
-					if ci := contexts.ClientInfoFrom(ctx); ci.IP != "" {
-						if throttleErr := i.recordAPIKeyAuthFailure(ctx, ci.IP); throttleErr != nil {
-							i.logAuthFailure(ctx, info.FullMethod, "apikey_auth_throttled", ct, nil)
-							return nil, throttleErr
-						}
-					}
-					i.logAuthFailure(ctx, info.FullMethod, "credential_invalid", ct, nil)
-					return nil, status.Error(codes.Unauthenticated, "invalid api key")
-				}
-			}
-			if authnErr == nil && principal != nil {
-				ctx = contexts.WithPrincipal(ctx, principal)
-			}
-		}
-		return handler(ctx, req)
+	if i.policies.IsAnonymous(info.FullMethod) {
+		return i.servePublic(ctx, req, info, handler)
 	}
 
 	md, ok := metadata.FromIncomingContext(ctx)
@@ -243,52 +236,56 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 		i.logAuthFailure(ctx, info.FullMethod, "credential_invalid", "", nil)
 		return nil, status.Error(codes.Unauthenticated, "invalid or expired credential")
 	}
-	credentialType := principal.CredentialType
 
-	if policy.Access == domainauth.AccessServer {
-		// SERVER 面（原 ACCESS_API_KEY）：凭证族 = API key、admin 会话或
-		// 函数执行 principal（P0 执行身份——Functions 是 D6 设计内的平台
-		// 写通道，细粒度由 scope 门约束）。
-		allowed := principal.CredentialType == shared.CredentialTypeAPIKey ||
-			principal.ActorKind == shared.ActorKindAdmin ||
-			principal.ActorKind == shared.ActorKindExecution
-		if !allowed {
-			i.logAuthFailure(ctx, info.FullMethod, "credential_type_not_allowed", credentialType, principal)
-			return nil, status.Error(codes.Unauthenticated, "developer API requires x-api-key header or admin session")
-		}
-		// scope 门：API key 与 execution principal 同一求值路径（declared
-		// scopes 已投影为 API key 同款权限串；资源实例寻址语义一致）。
-		if principal.CredentialType == shared.CredentialTypeAPIKey || principal.CredentialType == shared.CredentialTypeExecution {
-			// 平台专属面不声明 api_key_scope（AssertSemantic 保证），scope
-			// 匹配 fail-closed：未声明即拒绝（通配符不豁免）。
-			rule := i.policies.ScopeRule(info.FullMethod)
-			if rule == nil {
-				i.logAuthFailure(ctx, info.FullMethod, "apikey_scope_missing", credentialType, principal)
-				return nil, status.Error(codes.PermissionDenied, "api key missing required scope")
+	ctx, err = i.finalizePrincipal(ctx, md, info.FullMethod, principal)
+	if err != nil {
+		return nil, err
+	}
+	return handler(ctx, req)
+}
+
+// servePublic 处理 PUBLIC（anonymous 策略）方法：凭证尽力注入、失败不
+// 阻断——无条件放行（授权面的 anonymous 树恒放行，无效凭证语义在认证侧
+// 收口）。T-02 复扫：显式携带的无效 X-API-Key 不得静默降级为匿名——按
+// 匿名继续会让误配的调用方以"数据变空"呈现、且 key 暴破与正常匿名流量
+// 在响应码上不可区分。无效 key 一律 401 并进入失败限速计数。浏览器不携带
+// X-API-Key，零误伤；无效 Bearer/cookie（如过期会话）保持匿名降级，不破坏
+// 公开页的无凭证/过期凭证浏览语义。
+func (i *AuthInterceptor) servePublic(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return handler(ctx, req)
+	}
+	authn := authnRequestFromMD(md)
+	principal, authnErr := i.validator.Authenticate(ctx, authn)
+	if authnErr != nil {
+		if ct, _, parseErr := shared.ParseAuthnRequest(authn); parseErr == nil && ct == shared.CredentialTypeAPIKey {
+			if ci := contexts.ClientInfoFrom(ctx); ci.IP != "" {
+				if throttleErr := i.recordAPIKeyAuthFailure(ctx, ci.IP); throttleErr != nil {
+					i.logAuthFailure(ctx, info.FullMethod, "apikey_auth_throttled", ct, nil)
+					return nil, throttleErr
+				}
 			}
-			// 资源级 scope（T-02）：按方法声明的资源族从请求体提取目标实例
-			//（database_id/bucket_id；CreateDatabase/GetBucket 等以 id 寻址），
-			// `databases:blog` 只放行寻址 blog 的请求，全集型方法（List 等
-			// 无目标）对实例限定 scope 一律 403。
-			if !domainauth.AllowsAPIKeyTargets(i.policies, info.FullMethod, principal.Permissions, apiKeyScopeTargets(rule, req)) {
-				i.logAuthFailure(ctx, info.FullMethod, "apikey_scope_missing", credentialType, principal)
-				return nil, status.Error(codes.PermissionDenied, "api key missing required scope")
-			}
+			i.logAuthFailure(ctx, info.FullMethod, "credential_invalid", ct, nil)
+			return nil, status.Error(codes.Unauthenticated, "invalid api key")
 		}
 	}
+	if authnErr == nil && principal != nil {
+		ctx = injectPrincipals(ctx, principal)
+	}
+	return handler(ctx, req)
+}
 
-	// Allow admin console sessions to target a specific project via header.
+// finalizePrincipal 处理认证后的主体收尾（与档位无关的业务校验，保持
+// 原位）：X-Torchwood-Project 单值覆盖 + ValidateAdminProjectAccess（admin
+// 主体），并做双 principal 注入——torchwood contexts（下游 handler 消费）
+// 与库 principal（紧随其后的库 authz 拦截器求值输入，claim 投影约定见
+// domainauth.ProjectPrincipal）。
+func (i *AuthInterceptor) finalizePrincipal(ctx context.Context, md metadata.MD, fullMethod string, principal *shared.Principal) (context.Context, error) {
 	if principal.ActorKind == shared.ActorKindAdmin {
-		// 角色门（SERVER 面的 admin_roles；nil = 不限角色）。AdminRoles 为
-		// []string（阶段 1 grpcapi 切换；字符串形态即 principal.Roles 角色串，
-		// 由 policy.go 词表锁定一致）。
-		if roles := policy.AdminRoles; len(roles) > 0 && !principal.HasAnyRole(roles) {
-			i.logAuthFailure(ctx, info.FullMethod, "admin_role_denied", credentialType, principal)
-			return nil, status.Error(codes.PermissionDenied, "missing required admin role")
-		}
 		// P3-4：X-Torchwood-Project 多值拒绝（fail-closed，一致性缺口修复）。
 		if values := md.Get("x-torchwood-project"); len(values) > 1 {
-			i.logAuthFailure(ctx, info.FullMethod, "multi_project_header", credentialType, principal)
+			i.logAuthFailure(ctx, fullMethod, "multi_project_header", principal.CredentialType, principal)
 			return nil, status.Error(codes.InvalidArgument, "multiple X-Torchwood-Project headers not allowed")
 		} else if len(values) == 1 {
 			if projectID := strings.TrimSpace(values[0]); projectID != "" {
@@ -296,62 +293,26 @@ func (i *AuthInterceptor) UnaryAuthMiddleware(ctx context.Context, req any, info
 			}
 		}
 		if err := i.validator.ValidateAdminProjectAccess(ctx, principal); err != nil {
-			i.logAuthFailure(ctx, info.FullMethod, "admin_project_access_denied", credentialType, principal)
+			i.logAuthFailure(ctx, fullMethod, "admin_project_access_denied", principal.CredentialType, principal)
 			return nil, err
 		}
 	}
-
-	if perms := policy.Permissions; len(perms) > 0 {
-		// PERMISSION/END_USER 面角色门。API key 只允许经 SERVER 面的 scope
-		// 门禁调用；console/owner 类权限是 admin 会话专属，scope * / all
-		// 也不得放行（安全评审 M7）。
-		if principal.CredentialType == shared.CredentialTypeAPIKey {
-			i.logAuthFailure(ctx, info.FullMethod, "apikey_permission_method_denied", credentialType, principal)
-			return nil, status.Error(codes.PermissionDenied, "api key credentials not allowed on permission-gated methods")
-		}
-		if !principal.HasAnyRole(perms) {
-			i.logAuthFailure(ctx, info.FullMethod, "permission_denied", credentialType, principal)
-			return nil, status.Error(codes.PermissionDenied, "missing required permission")
-		}
-	}
-
-	ctx = contexts.WithPrincipal(ctx, principal)
-	return handler(ctx, req)
+	return injectPrincipals(ctx, principal), nil
 }
 
-// scopeTargetGetter 是 genproto 请求消息的实例寻址 getter（生成代码恒有）。
-type scopeTargetGetter interface{ GetId() string }
+// injectPrincipals 做双 principal 注入（torchwood + 库）。
+func injectPrincipals(ctx context.Context, p *shared.Principal) context.Context {
+	ctx = contexts.WithPrincipal(ctx, p)
+	return principal.With(ctx, domainauth.ProjectPrincipal(p))
+}
 
-// apiKeyScopeTargets 按方法 scope 声明的资源族从请求消息提取目标实例：
-//   - databases：优先 GetDatabaseId()（绝大多数方法），CreateDatabase 以
-//     GetId() 寻址被创建的库；
-//   - storage：优先 GetBucketId()（文件族），GetBucket/UpdateBucket 等
-//     以 GetId() 寻址；
-//   - 其余资源族不做实例寻址（零值 targets，资源限定 scope 恒不匹配）。
-func apiKeyScopeTargets(rule *domainauth.ScopeRule, req any) domainauth.ScopeTargets {
-	var targets domainauth.ScopeTargets
-	if rule == nil || req == nil {
-		return targets
+// firstMetadataValue 取 metadata 首值（去空白）；无值返回空串。
+func firstMetadataValue(md metadata.MD, key string) string {
+	values := md.Get(key)
+	if len(values) == 0 {
+		return ""
 	}
-	switch rule.Resource {
-	case string(domainauth.ScopeDatabases):
-		if g, ok := req.(interface{ GetDatabaseId() string }); ok {
-			targets.DatabaseID = g.GetDatabaseId()
-			return targets
-		}
-		if g, ok := req.(scopeTargetGetter); ok {
-			targets.DatabaseID = g.GetId()
-		}
-	case string(domainauth.ScopeStorage):
-		if g, ok := req.(interface{ GetBucketId() string }); ok {
-			targets.BucketID = g.GetBucketId()
-			return targets
-		}
-		if g, ok := req.(scopeTargetGetter); ok {
-			targets.BucketID = g.GetId()
-		}
-	}
-	return targets
+	return strings.TrimSpace(values[0])
 }
 
 func parseFailureReason(err error) string {
@@ -376,12 +337,4 @@ func authnRequestFromMD(md metadata.MD) shared.AuthnRequest {
 // ParseAuthorizationHeader 解析 Authorization 头；实现位于 shared.ParseAuthnRequest。
 func ParseAuthorizationHeader(raw string) (shared.CredentialType, string, bool) {
 	return shared.ParseAuthorizationHeader(raw)
-}
-
-func firstMetadataValue(md metadata.MD, key string) string {
-	values := md.Get(key)
-	if len(values) == 0 {
-		return ""
-	}
-	return strings.TrimSpace(values[0])
 }

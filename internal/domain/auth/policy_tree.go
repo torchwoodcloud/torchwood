@@ -36,15 +36,11 @@ import (
 //     验收；差异记录见迁移报告。
 //   - PERMISSION 门 match=any：旧执行语义为 HasAnyRole（任一命中）。
 const (
-	kindPrincipal   = "principal_kind"
-	kindAdminRole   = "admin_role"
-	kindPermission  = "permission"
-	kindScope       = "scope"
-	kindResource    = "resource"
-	principalUser   = "user"
-	principalAdmin  = "admin"
-	principalAPIKey = "api_key"
-	principalExec   = "execution"
+	kindPrincipal  = "principal_kind"
+	kindAdminRole  = "admin_role"
+	kindPermission = "permission"
+	kindScope      = "scope"
+	kindResource   = "resource"
 )
 
 // InstanceFields 返回资源族的实例寻址请求字段（按优先级）；非可寻址资源
@@ -91,7 +87,7 @@ func (s TreeSpec) Expand() (policy.Policy, error) {
 	case AccessPublic:
 		return policy.Policy{Anonymous: true}, nil
 	case AccessEndUser:
-		return policy.Policy{Require: []policy.Requirement{{Kind: kindPrincipal, Values: []string{principalUser}}}}, nil
+		return policy.Policy{Require: []policy.Requirement{{Kind: kindPrincipal, Values: []string{PrincipalKindUser}}}}, nil
 	case AccessPermission:
 		if len(s.Permissions) == 0 {
 			return policy.Policy{}, fmt.Errorf("PERMISSION access must declare explicit permissions")
@@ -122,7 +118,7 @@ func (s TreeSpec) adminGate() []policy.Requirement {
 		return []policy.Requirement{{Kind: kindAdminRole, Values: append([]string(nil), s.AdminRoles...)}}
 	}
 	// 未声明角色 = 不限角色，任何 admin 会话主体可入。
-	return []policy.Requirement{{Kind: kindPrincipal, Values: []string{principalAdmin}}}
+	return []policy.Requirement{{Kind: kindPrincipal, Values: []string{PrincipalKindAdmin}}}
 }
 
 func (s TreeSpec) scopeGate() []policy.Requirement {
@@ -146,7 +142,7 @@ func View(op policy.Operation) (MethodPolicy, error) {
 	case len(p.Require) == 1 && len(p.AnyOf) == 0 && len(p.Forbid) == 0:
 		r := p.Require[0]
 		switch {
-		case r.Kind == kindPrincipal && r.Match == policy.MatchDefault && len(r.Values) == 1 && r.Values[0] == principalUser:
+		case r.Kind == kindPrincipal && r.Match == policy.MatchDefault && len(r.Values) == 1 && r.Values[0] == PrincipalKindUser:
 			mp.Access = AccessEndUser
 			// 旧投影归一：END_USER 恒补 ["users"]（assertClientValueDomain 锁定）。
 			mp.Permissions = []string{RoleEndUserTag}
@@ -192,7 +188,7 @@ func viewAdminGate(group []policy.Requirement, mp *MethodPolicy) error {
 	switch {
 	case r.Kind == kindAdminRole && len(r.Values) > 0:
 		mp.AdminRoles = append([]string(nil), r.Values...)
-	case r.Kind == kindPrincipal && len(r.Values) == 1 && r.Values[0] == principalAdmin:
+	case r.Kind == kindPrincipal && len(r.Values) == 1 && r.Values[0] == PrincipalKindAdmin:
 		// 未声明角色（nil = 不限）。
 	default:
 		return fmt.Errorf("non-canonical policy tree (admin gate: %s)", formatRequirement(r))

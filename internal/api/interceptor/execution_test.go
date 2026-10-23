@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lynx-go/grpcapi/policy"
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
@@ -24,8 +25,8 @@ const (
 	executionUsersMethod  = "/torchwood.client.v1.GroupsService/CreateGroup"
 )
 
-func newExecutionTestInterceptor(principal *shared.Principal) (*AuthInterceptor, error) {
-	policies, err := domainauth.NewPolicySet([]domainauth.MethodPolicy{
+func newExecutionTestInterceptor(principal *shared.Principal) (*AuthInterceptor, *policy.Set, error) {
+	set, err := domainauth.NewSet([]domainauth.MethodPolicy{
 		{
 			Method: executionAssetsMethod, Service: "/torchwood.server.v1.AssetsService",
 			Access: domainauth.AccessServer,
@@ -37,9 +38,13 @@ func newExecutionTestInterceptor(principal *shared.Principal) (*AuthInterceptor,
 		},
 	}...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return NewAuthInterceptor(stubValidator{principal: principal}, policies)
+	ic, err := NewAuthInterceptor(stubValidator{principal: principal}, set)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ic, set, nil
 }
 
 func executionPrincipal(perms ...string) *shared.Principal {
@@ -59,12 +64,12 @@ func executionPrincipal(perms ...string) *shared.Principal {
 func TestAuthInterceptor_ExecutionPrincipalPassesServerGate(t *testing.T) {
 	t.Parallel()
 
-	ic, err := newExecutionTestInterceptor(executionPrincipal("assets.write"))
+	ic, set, err := newExecutionTestInterceptor(executionPrincipal("assets.write"))
 	require.NoError(t, err)
 
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer twx_token"))
 	called := false
-	_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{FullMethod: executionAssetsMethod},
+	_, err = invokeChain(t, ic, set, ctx, nil, &grpc.UnaryServerInfo{FullMethod: executionAssetsMethod},
 		func(context.Context, any) (any, error) {
 			called = true
 			return "ok", nil
@@ -77,11 +82,11 @@ func TestAuthInterceptor_ExecutionPrincipalPassesServerGate(t *testing.T) {
 func TestAuthInterceptor_ExecutionPrincipalScopeGate(t *testing.T) {
 	t.Parallel()
 
-	ic, err := newExecutionTestInterceptor(executionPrincipal("databases.read"))
+	ic, set, err := newExecutionTestInterceptor(executionPrincipal("databases.read"))
 	require.NoError(t, err)
 
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer twx_token"))
-	_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{FullMethod: executionAssetsMethod},
+	_, err = invokeChain(t, ic, set, ctx, nil, &grpc.UnaryServerInfo{FullMethod: executionAssetsMethod},
 		func(context.Context, any) (any, error) {
 			t.Fatal("handler should not run")
 			return nil, nil
@@ -94,11 +99,11 @@ func TestAuthInterceptor_ExecutionPrincipalScopeGate(t *testing.T) {
 func TestAuthInterceptor_ExecutionPrincipalRejectedOnEndUserMethod(t *testing.T) {
 	t.Parallel()
 
-	ic, err := newExecutionTestInterceptor(executionPrincipal("assets.write"))
+	ic, set, err := newExecutionTestInterceptor(executionPrincipal("assets.write"))
 	require.NoError(t, err)
 
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer twx_token"))
-	_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{FullMethod: executionUsersMethod},
+	_, err = invokeChain(t, ic, set, ctx, nil, &grpc.UnaryServerInfo{FullMethod: executionUsersMethod},
 		func(context.Context, any) (any, error) {
 			t.Fatal("handler should not run")
 			return nil, nil

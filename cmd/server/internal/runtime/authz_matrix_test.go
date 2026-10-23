@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/lynx-go/grpcapi/authz"
+
 	"github.com/stretchr/testify/require"
 	"github.com/torchwoodcloud/torchwood/internal/api/interceptor"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
@@ -183,9 +185,10 @@ func (d matrixDecision) String() string {
 // internal/api/interceptor/jwt.go 的 UnaryAuthMiddleware：
 //  1. PUBLIC：凭证尽力注入、失败不阻断——无条件放行；
 //  2. 非 PUBLIC：无凭证 → Unauthenticated；
-//  3. SERVER 面凭证族门禁：仅 API key / admin 会话可入，端用户 Unauthenticated；
+//  3. SERVER 面：admin 会话过 admin 角色门（AdminRoles 空 = 不限角色），
 //     API key 过 scope 门（* / all / 裸资源 / <res>.<op>；nil = 不对 key 开放，
-//     通配符不豁免）；
+//     通配符不豁免），端用户 any_of 全组失配 PermissionDenied（原 authn
+//     凭证族门禁 401 → 执行侧迁移后 403，拒绝方向不变）；
 //  4. admin 会话角色门（任意面；AdminRoles 空 = 不限角色）；
 //  5. PERMISSION/END_USER 面角色门；API key 一律 PermissionDenied
 //     （apikey_permission_method_denied，通配符不豁免）。
@@ -198,7 +201,9 @@ func expectedDecision(p domainauth.MethodPolicy, cred matrixCredential) matrixDe
 	}
 	if p.Access == domainauth.AccessServer {
 		if cred.kind == matrixCredEndUser {
-			return matrixUnauthenticated
+			// 执行侧迁移裁决：端用户不再被 authn 的凭证族门禁拦下（401），
+			// 而是在库 authz 的 any_of 全组失配后拒绝（403）。拒绝方向不变。
+			return matrixPermissionDenied
 		}
 		if cred.kind == matrixCredAPIKey && !matrixScopeAllows(p.Scope, cred.scopes) {
 			return matrixPermissionDenied
@@ -345,11 +350,17 @@ func matrixMismatchScope(p domainauth.MethodPolicy, vocab *domainauth.ScopeVocab
 // ---------------------------------------------------------------------------
 // 执行
 
-// matrixRunCase 过真实拦截器执行单用例，返回实际裁决与捕获的主体。
+// matrixRunCase 过真实拦截器链执行单用例（生产链序：authn → 库 authz →
+// handler），返回实际裁决与捕获的主体。授权执行 = 库 RequirementDecider。
 func matrixRunCase(t *testing.T, set *domainauth.PolicySet, fullMethod string, cred matrixCredential) (matrixDecision, *shared.Principal) {
 	t.Helper()
 	v := &matrixValidator{principal: cred.principal()}
-	ic, err := interceptor.NewAuthInterceptor(v, set)
+	raw := set.Raw()
+	ic, err := interceptor.NewAuthInterceptor(v, raw)
+	require.NoError(t, err)
+	az, err := authz.NewInterceptor(raw, nil, authz.Options{
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
 	require.NoError(t, err)
 	// 拒绝路径的留痕日志静音（矩阵大量拒绝用例属预期，避免刷屏）。
 	ic.WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -359,9 +370,11 @@ func matrixRunCase(t *testing.T, set *domainauth.PolicySet, fullMethod string, c
 		ctx = metadata.NewIncomingContext(ctx, md)
 	}
 	handlerRan := false
-	_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{FullMethod: fullMethod}, func(context.Context, any) (any, error) {
-		handlerRan = true
-		return "ok", nil
+	_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{FullMethod: fullMethod}, func(ctx context.Context, req any) (any, error) {
+		return az.Unary()(ctx, req, &grpc.UnaryServerInfo{FullMethod: fullMethod}, func(context.Context, any) (any, error) {
+			handlerRan = true
+			return "ok", nil
+		})
 	})
 	if err == nil {
 		require.True(t, handlerRan, "方法 %s × %s：裁决为放行但 handler 未执行", fullMethod, cred.name)
@@ -436,14 +449,21 @@ func TestAuthzMatrix_AdminProjectHeaderOverridesPrincipal(t *testing.T) {
 		}
 		serverMethods++
 		v := &matrixValidator{principal: owner.principal()}
-		ic, err := interceptor.NewAuthInterceptor(v, set)
+		raw := set.Raw()
+		ic, err := interceptor.NewAuthInterceptor(v, raw)
+		require.NoError(t, err)
+		az, err := authz.NewInterceptor(raw, nil, authz.Options{
+			Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		})
 		require.NoError(t, err)
 		ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
 			"authorization", "Session admin-token",
 			"x-torchwood-project", "proj-from-header",
 		))
-		_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{FullMethod: p.Method}, func(context.Context, any) (any, error) {
-			return "ok", nil
+		_, err = ic.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{FullMethod: p.Method}, func(ctx context.Context, req any) (any, error) {
+			return az.Unary()(ctx, req, &grpc.UnaryServerInfo{FullMethod: p.Method}, func(context.Context, any) (any, error) {
+				return "ok", nil
+			})
 		})
 		require.NoError(t, err, "%s：owner admin + 单值项目头应放行", p.Method)
 		require.NotNil(t, v.captured, "%s：ValidateAdminProjectAccess 未被调用（admin 主体必经）", p.Method)
