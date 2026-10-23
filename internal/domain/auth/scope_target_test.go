@@ -95,11 +95,10 @@ func TestScopeVocabulary_Valid_ScopedForms(t *testing.T) {
 	require.False(t, v.Valid("databases:blog.readwrite"))
 }
 
-// TestAllowsAPIKey_Scoped（T-02 验收，执行侧迁移后语义委托
-// grpcapi/policy/scope）：databases:blog 放行寻址 blog 的读写；其他库/
-// 无目标方法/其他资源 403；实例+方向单 token 形态（databases:blog.read）
-// 收窄为不放行（库 GrantsInstance 不剥离实例段 op 后缀——缺口记录见迁移
-// 报告；key 需并列携带 databases.read + databases:blog 两 token）。
+// TestAllowsAPIKey_Scoped（T-02 验收，语义委托 grpcapi/policy/scope，
+// G-1 修复后与旧逐 token 合取语义全量等价）：databases:blog 放行寻址
+// blog 的读写；其他库/无目标方法/其他资源 403；实例+方向单 token
+// （databases:blog.read）方向一致时放行。
 func TestAllowsAPIKey_Scoped(t *testing.T) {
 	t.Parallel()
 	set := testPolicySet(t)
@@ -111,8 +110,8 @@ func TestAllowsAPIKey_Scoped(t *testing.T) {
 	require.False(t, allowsMethod(t, set, "/test/DBWrite", []string{"databases:blog"}, "cms", ""))
 	// 无目标方法（List 类）→ 拒绝。
 	require.False(t, allowsMethod(t, set, "/test/DBWrite", []string{"databases:blog"}, "", ""))
-	// 实例+方向单 token：收窄后读写皆不放行（旧语义读放行）。
-	require.False(t, allowsMethod(t, set, "/test/DBRead", []string{"databases:blog.read"}, "blog", ""))
+	// 实例+方向单 token（G-1 修复后恢复 T-02 语义）：读放行、写拒绝。
+	require.True(t, allowsMethod(t, set, "/test/DBRead", []string{"databases:blog.read"}, "blog", ""))
 	require.False(t, allowsMethod(t, set, "/test/DBWrite", []string{"databases:blog.read"}, "blog", ""))
 	// 方向门照常：op token + 实例 token 并列携带放行。
 	require.True(t, allowsMethod(t, set, "/test/DBRead", []string{"databases.read", "databases:blog"}, "blog", ""))
@@ -149,8 +148,8 @@ func TestAllowsAPIKey_StorageBucket(t *testing.T) {
 	require.True(t, allowsMethod(t, set, "/test/StWrite", []string{"storage:media"}, "", "media"))
 	require.False(t, allowsMethod(t, set, "/test/StWrite", []string{"storage:media"}, "", "other"))
 	require.False(t, allowsMethod(t, set, "/test/StWrite", []string{"storage:media"}, "", ""))
-	require.False(t, allowsMethod(t, set, "/test/StRead", []string{"storage:media.read"}, "", "media"),
-		"实例+方向单 token 收窄（库 GrantsInstance 不剥实例段 op 后缀）")
+	require.True(t, allowsMethod(t, set, "/test/StRead", []string{"storage:media.read"}, "", "media"),
+		"实例+方向单 token（G-1 修复后恢复 T-02 语义）")
 	require.True(t, allowsMethod(t, set, "/test/StRead", []string{"storage.read", "storage:media"}, "", "media"))
 }
 

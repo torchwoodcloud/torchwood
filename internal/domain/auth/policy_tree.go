@@ -26,8 +26,10 @@ import (
 //     X-Torchwood-Project / ValidateAdminProjectAccess 业务校验仍在 torchwood
 //     authn 拦截器原位执行。
 //   - scope 门：操作级判定（`*`/`all`/裸资源/res:op 命中即过）。
-//   - resource 门（可选）：实例寻址判定，仅当资源可实例寻址且请求携带寻址
-//     字段时展开；admin 门不受实例门约束（组间 OR）。
+//   - resource 门（可选，方向感知）：实例寻址判定，仅当资源可实例寻址且
+//     请求携带寻址字段时展开；声明值携带方法方向（res:op），实例+方向单
+//     token（databases:blog.read）在方向一致时过本门（库 G-1 修复）；
+//     admin 门不受实例门约束（组间 OR）。
 //   - 组间 OR 复现旧的逐 token 合取语义：单 token 只需命中任一门——操作级
 //     token（databases.read）过 scope 门、实例 token（databases:blog）过
 //     resource 门、`*`/裸资源两者皆过。与 composite_gate 的组内 AND 范式
@@ -105,7 +107,9 @@ func (s TreeSpec) Expand() (policy.Policy, error) {
 		}
 		groups := [][]policy.Requirement{s.adminGate(), s.scopeGate()}
 		if s.InstanceAddressed {
-			groups = append(groups, []policy.Requirement{{Kind: kindResource, Values: []string{s.Scope.Resource}}})
+			// 方向感知实例门（G-1 修复后形态）：声明值携带方法方向，
+			// databases:blog.read 单 token 在方向一致时过本门。
+			groups = append(groups, []policy.Requirement{{Kind: kindResource, Values: []string{s.scopeValue()}}})
 		}
 		return policy.Policy{AnyOf: groups}, nil
 	case AccessSystem:
@@ -124,7 +128,12 @@ func (s TreeSpec) adminGate() []policy.Requirement {
 }
 
 func (s TreeSpec) scopeGate() []policy.Requirement {
-	return []policy.Requirement{{Kind: kindScope, Values: []string{s.Scope.Resource + ":" + string(s.Scope.Op)}}}
+	return []policy.Requirement{{Kind: kindScope, Values: []string{s.scopeValue()}}}
+}
+
+// scopeValue 是 scope/resource 门共用的声明值（res:op 规范形态）。
+func (s TreeSpec) scopeValue() string {
+	return s.Scope.Resource + ":" + string(s.Scope.Op)
 }
 
 // View 把规范树识别回 MethodPolicy（断言/矩阵/文档/golden 的消费视图）。
@@ -170,8 +179,12 @@ func View(op policy.Operation) (MethodPolicy, error) {
 		mp.Scope = &ScopeRule{Resource: res, Op: ScopeOp(opName)}
 		if len(p.AnyOf) == 3 {
 			rg := p.AnyOf[2]
-			if len(rg) != 1 || rg[0].Kind != kindResource || len(rg[0].Values) != 1 || rg[0].Values[0] != res {
+			if len(rg) != 1 || rg[0].Kind != kindResource || len(rg[0].Values) != 1 {
 				return mp, fmt.Errorf("non-canonical policy tree (resource gate)")
+			}
+			// 方向感知实例门：声明值 = scope 门的 res:op（同一方向）。
+			if rg[0].Values[0] != scope[0].Values[0] {
+				return mp, fmt.Errorf("non-canonical policy tree (resource gate %q ≠ scope gate %q)", rg[0].Values[0], scope[0].Values[0])
 			}
 		} else if len(p.AnyOf) > 3 {
 			return mp, fmt.Errorf("non-canonical policy tree (extra any_of groups)")

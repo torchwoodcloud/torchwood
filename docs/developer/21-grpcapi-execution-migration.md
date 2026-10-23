@@ -82,7 +82,7 @@ SERVER 档细节：
 | # | 差异 | 理由 |
 | --- | --- | --- |
 | D-1 | SERVER 档树形采用组间 **OR**（`any_of[admin门, scope, resource]`），非 composite_gate_test 的组内 AND（`[scope ∧ resource]`） | 库 `GrantsInstance` 不认操作级 token：AND 形会让 `databases.read` 这类**最常用**的操作级 scope 在全部实例寻址方法（Get/Update/GetDocument…）上被拒——违反 MIGRATION §6「scope 四形态（`*`/`all`/resource/resource.op）行为不变」与既有矩阵锁。OR 形逐组等价旧逐 token 合取语义（∃token: opOK ∧ instOK ≡ ∃token:opOK ∨ ∃token:instOK，因 opOK 类与 instOK 类的交集恰为两门皆过的 token 类）。 |
-| D-2 | 实例+方向**单 token** 形态（`databases:blog.read`）从放行收窄为拒绝（gRPC 树与 HTTP 面 `AllowsAPIKey` 一致） | 库缺口 G-1（见 §6）：`GrantsInstance` 不剥离实例段的 op 后缀，`scope.Satisfies` 也不把实例 token 计入操作门——单 token 同时证明「方向 + 实例」不可表达。收窄为 fail-closed 方向；等价授权 = 并列携带 `databases.read` + `databases:blog` 两 token（composite_gate 范式本意）。 |
+| D-2 | ~~实例+方向**单 token** 形态（`databases:blog.read`）从放行收窄为拒绝~~ **已修复**（2026-10-23，库 `5ea3974`）：resource 门声明值扩展 `<res>:<op>` 方向感知形态，`GrantsInstanceFor` 剥实例段方向后缀按方法方向比对——单 token「方向 + 实例」合取语义全量恢复（`TestAllowsAPIKey_Scoped` 断言已回正，manifest golden 37 个 resource 门改携方向）。修复前短暂收窄期间无真实用户（转出 POC 前），无兼容负担。 |
 | D-3 | SERVER 面端用户凭证：401 → 403（原 authn 凭证族门禁「developer API requires…」语义改由 any_of 全组失配表达） | 库 Decider 的拒绝码映射：有 principal 一律 PermissionDenied。CLI 退出码契约（40x→2）不受影响。矩阵 expectedDecision 已同步并注释。 |
 | D-4 | END_USER 门从角色串（`HasAnyRole(["users"])`）改为身份类型 `principal_kind(user)` | 生产等价：`UserRoles.LoadUserRoles` 无条件携带基础角色 `users`（docrole 词表主权），不存在无 users 角色的端用户主体；旧测试的合成主体（roles=["guests"]）在生产不可达。任务五档映射与 MIGRATION §2.2 均裁定为此形。 |
 | D-5 | 未登记策略的方法直接调用：403 → 500（库 MissingPolicyCode 默认 Internal） | 启动期 `AssertAllRegisteredHavePolicy` 兜底不变，运行期不可达；Internal 更符合「配置错误」语义。 |
@@ -113,14 +113,14 @@ SERVER 档细节：
 | `AssertSemantic`/档位分类/词表 | 项目主权断言，消费 View 派生面 |
 | legacy 注解（路径 A） | codemod 属独立后续工作（路径 B），不与本次混提 |
 
-## 6. grpcapi 缺口清单（回库侧补课）
+## 6. grpcapi 缺口清单（已闭环）
 
-| # | 位置 | 缺口 | 影响 |
+| # | 位置 | 缺口 | 处置 |
 | --- | --- | --- | --- |
-| G-1 | `policy/scope/resource.go:119-145`（`GrantsInstance`） | 实例段不剥离 op 后缀：`databases:blog.read` 的 seg=`blog.read` ≠ 目标 `blog`，且无 op 感知模式——torchwood T-02 的「单 token = 方向 + 实例」合取语义不可表达 | D-2 收窄；补法建议：`ResourceOptions.Op`（实例门按方法方向比对 token 方向后缀）或组合 kind（per-token `opOK ∧ instOK`） |
-| G-2 | `authz/interceptor.go:122`（Stream open-time） | open-time 授权 `Request=nil`，实例门在流建立时恒无目标 | D-8；若未来流式方法需要 open-time 实例寻址，需把首条消息纳入 open-time 决策或提供 StreamRequestExtractor |
+| G-1 | `policy/scope/resource.go`（`GrantsInstance`） | 实例段不剥离 op 后缀且无方向感知模式——T-02「单 token = 方向 + 实例」合取语义不可表达 | **已修复**（库 `5ea3974`）：resource 声明值扩展 `<res>:<op>` + `GrantsInstanceFor`（`GrantsInstance` 行为不变为兼容不变量）；OR 组合 + 方向感知门的完备范式用例入 `authz/composite_gate_test.go` |
+| G-2 | `authz/interceptor.go`（Stream open-time） | open-time 授权不携带请求消息，实例门在流建立时恒无目标（语义固有：open-time 时消息未读，读取即消费） | **文档化**（库 `5ea3974`）：此类方法应使用 `StreamAuthPerMessage` 或要求资源整体/通配授权；torchwood 无流式 RPC，暂无影响 |
 
-未列出的能力（`FieldID` 提取器、`Match` requirement 级覆盖、`OnDecision`
+其余能力（`FieldID` 提取器、`Match` requirement 级覆盖、`OnDecision`
 回调、`TargetedRequest` 侧通道）均足够表达，未在 torchwood 侧重新发明执行器。
 
 ## 7. 验收清单（MIGRATION §6 对照）
@@ -145,7 +145,7 @@ SERVER 档细节：
 
 ## 8. 后续（不属本次）
 
-- grpcapi v0.3.0 打 tag 后撤 replace 切 tag；G-1 补课后恢复单 token 实例
-  授权（届时 `TestAllowsAPIKey_Scoped` 两处翻转断言可回正）；
+- grpcapi v0.3.0 打 tag 后撤 replace 切 tag（G-1 已于库 `5ea3974` 补课，
+  torchwood 断言已回正）；
 - 路径 B codemod（旧注解 → `policy.proto`）；
 - 流式 authn 拦截器（放开 streaming 前置条件）。

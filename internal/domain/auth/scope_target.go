@@ -129,12 +129,12 @@ func ParseScopeToken(s string) (scopeToken, bool) {
 
 // AllowsAPIKey 判定 scope 集是否放行方法声明的 scope 规则（serverhttp/WS
 // 等镜像面消费；gRPC 链由库 authz 拦截器按同一规范树求值）。语义全部委托
-// grpcapi/policy/scope 实现，与五档树的 any_of[scope(res:op), resource(res)]
+// grpcapi/policy/scope 实现，与五档树的 any_of[scope(res:op), resource(res:op)]
 // 组间 OR 同构（单一语义源）：
 //   - 操作门 Set.Satisfies：`*`/`all`、裸资源、res:op 命中即过；
-//   - 实例门 GrantsInstance：实例 token（<res>:<id>）仅当请求寻址命中该实例；
-//     操作级 token（read/write/admin）不授予实例寻址（库语义，torchwood T-02
-//     逐 token 合取语义中 `<res>:<id>.op` 单 token 形态由此收窄，见迁移报告）。
+//   - 实例门 GrantsInstanceFor（方向感知，G-1 修复后）：实例 token 仅当
+//     请求寻址命中该实例；实例+方向单 token（<res>:<id>.op）方向一致时
+//     过门；操作级 token 不授予实例寻址。
 //
 // 未声明 scope 的方法（rule==nil）依旧一律拒绝；target 空串 = 请求不寻址
 // 实例（实例 token 恒不匹配）。
@@ -146,5 +146,5 @@ func AllowsAPIKey(rule *ScopeRule, scopes []string, target string) bool {
 	if set.Satisfies(rule.Resource, string(rule.Op)) {
 		return true
 	}
-	return gscope.GrantsInstance(set, rule.Resource, target, true)
+	return gscope.GrantsInstanceFor(set, rule.Resource, target, string(rule.Op), true)
 }

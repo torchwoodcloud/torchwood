@@ -2149,7 +2149,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:read"
                   ]
                 }
               ],
@@ -2185,7 +2185,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -2221,7 +2221,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -2255,7 +2255,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:read"
                   ]
                 }
               ],
@@ -2290,7 +2290,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -2325,7 +2325,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -2360,7 +2360,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -2396,7 +2396,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -2431,7 +2431,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -2466,7 +2466,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -2501,7 +2501,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -2536,7 +2536,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -2572,7 +2572,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -2607,7 +2607,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -2643,7 +2643,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -2677,7 +2677,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:read"
                   ]
                 }
               ],
@@ -2711,7 +2711,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:read"
                   ]
                 }
               ],
@@ -2745,7 +2745,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:read"
                   ]
                 }
               ],
@@ -2779,7 +2779,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:read"
                   ]
                 }
               ],
@@ -2813,7 +2813,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:read"
                   ]
                 }
               ],
@@ -2847,7 +2847,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:read"
                   ]
                 }
               ],
@@ -2907,7 +2907,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:read"
                   ]
                 }
               ],
@@ -2942,7 +2942,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -2977,7 +2977,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -3012,7 +3012,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -3047,7 +3047,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -3083,7 +3083,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -3119,7 +3119,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "databases"
+                    "databases:write"
                   ]
                 }
               ],
@@ -5016,7 +5016,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "storage"
+                    "storage:write"
                   ]
                 }
               ],
@@ -5052,7 +5052,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "storage"
+                    "storage:write"
                   ]
                 }
               ],
@@ -5088,7 +5088,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "storage"
+                    "storage:write"
                   ]
                 }
               ],
@@ -5124,7 +5124,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "storage"
+                    "storage:write"
                   ]
                 }
               ],
@@ -5158,7 +5158,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "storage"
+                    "storage:read"
                   ]
                 }
               ],
@@ -5192,7 +5192,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "storage"
+                    "storage:read"
                   ]
                 }
               ],
@@ -5278,7 +5278,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "storage"
+                    "storage:read"
                   ]
                 }
               ],
@@ -5314,7 +5314,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "storage"
+                    "storage:write"
                   ]
                 }
               ],
@@ -5350,7 +5350,7 @@
                 {
                   "kind": "resource",
                   "values": [
-                    "storage"
+                    "storage:write"
                   ]
                 }
               ],
