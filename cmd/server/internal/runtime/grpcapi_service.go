@@ -85,7 +85,7 @@ func (s *GRPCAPIService) Start(ctx context.Context) error {
 	if !s.started.CompareAndSwap(false, true) {
 		return errors.New("grpc api service: Start called more than once")
 	}
-	lis, err := net.Listen("tcp", s.addr)
+	lis, err := (&net.ListenConfig{}).Listen(ctx, "tcp", s.addr)
 	if err != nil {
 		s.started.Store(false)
 		return err
