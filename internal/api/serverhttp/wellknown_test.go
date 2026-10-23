@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	grpcapiv1 "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	"github.com/lynx-go/grpcapi/policy"
 	"github.com/stretchr/testify/require"
-	grpcapiv1 "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	"github.com/torchwoodcloud/torchwood/internal/domain/auth"
