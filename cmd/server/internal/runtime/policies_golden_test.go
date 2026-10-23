@@ -15,10 +15,11 @@ import (
 )
 
 // 阶段 0 golden 基线（grpcapi 迁移设计 DESIGN.md §7，仓库 D:\Codes\qiulin\grpcapi）。
-// 阶段 1 已切换：本测试现锁定 buildMethodPolicies（grpcapi.authz.Build +
-// END_USER 归一 + AssertSemantic）的输出，与切换前实现字节级等价。
+// 执行侧迁移后：本测试锁定 buildMethodPolicies（policy.Build + legacyProvider
+// 五档规范树 + View 识别 + AssertSemantic）的五档投影输出，与迁移前实现
+// 字节级等价（docs/developer/21 §3 等价性证明的第一基线）。
 //
-// 稳定 JSON 落盘，作为阶段 1 切换 grpcapi.authz.Build 的等价性证明基准与
+// 稳定 JSON 落盘，作为切换 grpcapi policy.Build 的等价性证明基准与
 // 回滚判据。投影刻意选择两套实现共有的语义面：
 //   - admin_roles 以 domain string 形态记录（词表基准 = 现网持久化形态）；
 //   - request_fields 从 descriptor 现算（现实现只有 RequestHasProjectID 布尔，
