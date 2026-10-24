@@ -10,6 +10,7 @@ import { RouteErrorFallback } from "@/components/ErrorBoundary";
 import { Layout } from "@/components/Layout";
 import { useAuth } from "@/hooks/useAuth";
 import { canWrite, isPlatformAdmin, useAdminRole } from "@/hooks/useAdminRole";
+import { auditLogsSearch } from "@/fleet/auditLogs";
 
 // 路由树（torchwood 批 A，design.md §12.2 裁决 1）：TanStack Router code-based
 // 集中表——镜像原 App.tsx 路由表，路径形态/守卫语义/lazy 分包零变化。
@@ -191,8 +192,15 @@ const leaderboardsRoute = createRoute({ getParentRoute: () => consoleRoute, path
 const leaderboardDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/leaderboards/$boardId", ...guarded(<LeaderboardBoardDetailPage />) });
 
 // 审计日志只读面：服务端 admin_roles 门 = admin/owner（与 isPlatformAdmin
-// 同集），路由侧 platformAdmin 守卫对齐。
-const auditLogsRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/audit-logs", ...roleGuarded("platformAdmin", <AuditLogsListPage />) });
+// 同集），路由侧 platformAdmin 守卫对齐。validateSearch = keyset 切片的
+// URL 即真相面（filter/sort/cursor/size；与页面 useCollection 共用同一
+// schema 实例）。
+const auditLogsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/audit-logs",
+  validateSearch: auditLogsSearch.toSearchSchema(),
+  ...roleGuarded("platformAdmin", <AuditLogsListPage />),
+});
 
 const apiKeysRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/api-keys", ...guarded(<ApiKeysListPage />) });
 const apiKeyNewRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/api-keys/new", ...roleGuarded("platformAdmin", <ApiKeyNewPage />) });
