@@ -3,7 +3,7 @@ import {
   useNavigate,
   useParams,
   useOutletContext,
-} from "react-router-dom";
+} from "@/router/compat";
 import {
   useQuery,
   useMutation,

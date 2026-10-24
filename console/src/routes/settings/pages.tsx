@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Navigate } from "@/router/compat";
 import { useAuth } from "@/hooks/useAuth";
 
 // /console/settings 全局 Settings 页已退役：项目配置统一收敛至

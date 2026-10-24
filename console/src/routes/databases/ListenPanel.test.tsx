@@ -1,6 +1,7 @@
 import { act } from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
+import { Outlet } from "@/router/compat";
+import { TestRouter } from "@/router/compat";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { refreshSession } from "@/api/auth";
 import { ListenPanel } from "./ListenPanel";
@@ -52,24 +53,36 @@ class MockWebSocket {
   }
 }
 
-function renderPanel() {
+async function renderPanel() {
   return render(
-    <MemoryRouter initialEntries={["/console/databases/app/collections/posts/listen"]}>
-      <Routes>
-        <Route
-          path="/console/databases/:dbId/collections/:collId"
-          element={<Outlet context={{ dbId: "app", collId: "posts" }} />}
-        >
-          <Route path="listen" element={<ListenPanel />} />
-        </Route>
-      </Routes>
-    </MemoryRouter>
+    <TestRouter
+      initialEntries={["/console/databases/app/collections/posts/listen"]}
+      routes={[
+        {
+          path: "/console/databases/:dbId/collections/:collId",
+          element: <Outlet context={{ dbId: "app", collId: "posts" }} />,
+          children: [{ path: "listen", element: <ListenPanel /> }],
+        },
+      ]}
+    />
   );
+  // TanStack RouterProvider 首帧异步挂载——flush 后 WS 实例已构造
+  await act(async () => {});
 }
 
 // 握手并进入已连接状态（hello → hello_ok → subscribe）。
-function connectFirst(): MockWebSocket {
-  const ws = MockWebSocket.instances[0];
+// RouterProvider 异步挂载 + effect 链（mount→查询→握手）后 WS 才构造——
+// waitFor 轮询首个实例。
+async function firstMockWs(): Promise<MockWebSocket> {
+  return waitFor(() => {
+    const ws = MockWebSocket.instances[0];
+    expect(ws).toBeTruthy();
+    return ws;
+  });
+}
+
+async function connectFirst(): Promise<MockWebSocket> {
+  const ws = await firstMockWs();
   act(() => ws.serverOpen());
   act(() => ws.serverSend({ type: "hello_ok", connection_id: "conn-1" }));
   return ws;
@@ -88,8 +101,8 @@ describe("ListenPanel", () => {
   });
 
   it("cookie 握手绑 project_id（不带 access_token），订阅集合频道并展示事件", async () => {
-    renderPanel();
-    const ws = MockWebSocket.instances[0];
+    await renderPanel();
+    const ws = await firstMockWs();
     act(() => ws.serverOpen());
 
     // hello 先绑 project_id，cookie 场景不带 access_token。
@@ -121,8 +134,8 @@ describe("ListenPanel", () => {
   });
 
   it("15m 到期断线（token_expired）：走 console auth refresh 后重新 hello + 重订", async () => {
-    renderPanel();
-    const ws1 = connectFirst();
+    await renderPanel();
+    const ws1 = await connectFirst();
     expect(await screen.findByText("已连接")).toBeTruthy();
 
     act(() => ws1.serverClose(1008, "token_expired"));
@@ -143,8 +156,8 @@ describe("ListenPanel", () => {
   });
 
   it("refresh 失败显示「已断开，点击重连」，点击后重新连接", async () => {
-    renderPanel();
-    const ws1 = connectFirst();
+    await renderPanel();
+    const ws1 = await connectFirst();
     expect(await screen.findByText("已连接")).toBeTruthy();
 
     vi.mocked(refreshSession).mockRejectedValueOnce(new Error("session gone"));

@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate, useParams } from "@/router/compat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, FileText, Layers, Radio } from "lucide-react";
 import { toast } from "sonner";

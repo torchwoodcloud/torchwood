@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link } from "@/router/compat";
 import { ArrowRight, FolderKanban, FolderPlus } from "lucide-react";
 import { listProjects } from "@/api/projects";
 import { listAPIKeys } from "@/api/apiKeys";

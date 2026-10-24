@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { TestRouter } from "@/router/compat";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FunctionsListPage } from "./pages";
 
@@ -50,9 +50,7 @@ function renderList() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <FunctionsListPage />
-      </MemoryRouter>
+      <TestRouter routes={[{ path: "/*", element: <FunctionsListPage /> }]} />
     </QueryClientProvider>
   );
 }

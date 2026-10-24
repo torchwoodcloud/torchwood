@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams } from "@/router/compat";
 import { toast } from "sonner";
 import { Pencil, Plus, Trophy } from "lucide-react";
 import {

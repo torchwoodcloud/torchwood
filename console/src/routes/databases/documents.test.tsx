@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { TestRouter } from "@/router/compat";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DocumentDetailPage } from "./documents";
 import { getCollection, getDocument } from "@/api/databases";
@@ -50,14 +50,15 @@ function renderDetail() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/console/databases/app/collections/posts/documents/doc-1"]}>
-        <Routes>
-          <Route
-            path="/console/databases/:dbId/collections/:collId/documents/:docId"
-            element={<DocumentDetailPage />}
-          />
-        </Routes>
-      </MemoryRouter>
+      <TestRouter
+        initialEntries={["/console/databases/app/collections/posts/documents/doc-1"]}
+        routes={[
+          {
+            path: "/console/databases/:dbId/collections/:collId/documents/:docId",
+            element: <DocumentDetailPage />,
+          },
+        ]}
+      />
     </QueryClientProvider>
   );
 }

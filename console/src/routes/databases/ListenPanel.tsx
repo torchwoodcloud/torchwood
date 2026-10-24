@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext } from "@/router/compat";
 import { Radio, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTimezone } from "@/hooks/useTimezone";

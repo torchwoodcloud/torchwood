@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { TestRouter } from "@/router/compat";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssetDefsListPage, AssetDefDetailPage, UserAssetsPage } from "./pages";
 
@@ -30,13 +30,16 @@ vi.mock("@/api/assets", () => ({
 
 import { getAssetDef, listAssetDefs, listDefHolders, listUserAssets, listUserLedger } from "@/api/assets";
 
-function wrap(ui: ReactNode) {
+async function wrap(ui: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const result = render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>{ui}</MemoryRouter>
+      <TestRouter routes={[{ path: "/*", element: ui }]} />
     </QueryClientProvider>
   );
+  // TanStack RouterProvider 首帧异步挂载——flush 微任务后再交还同步查询
+  await act(async () => {});
+  return result;
 }
 
 describe("AssetDefsListPage", () => {
@@ -59,7 +62,7 @@ describe("AssetDefsListPage", () => {
         },
       ],
     });
-    wrap(<AssetDefsListPage />);
+    await wrap(<AssetDefsListPage />);
     expect(await screen.findByText("gold")).toBeTruthy();
     expect(screen.queryByText(/Grant/i)).toBeNull();
     expect(screen.queryByText(/Consume/i)).toBeNull();
@@ -75,8 +78,8 @@ describe("UserAssetsPage", () => {
   });
   afterEach(() => cleanup());
 
-  it("只读查询表单，无资产写按钮", () => {
-    wrap(<UserAssetsPage />);
+  it("只读查询表单，无资产写按钮", async () => {
+    await wrap(<UserAssetsPage />);
     expect(screen.getByLabelText("用户 ID")).toBeTruthy();
     expect(screen.getByText("查询")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /grant/i })).toBeNull();
@@ -96,11 +99,13 @@ describe("UserAssetsPage", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={["/console/assets/users?owner=u1"]}>
-          <UserAssetsPage />
-        </MemoryRouter>
+        <TestRouter
+          initialEntries={["/console/assets/users?owner=u1"]}
+          routes={[{ path: "/console/assets/users", element: <UserAssetsPage /> }]}
+        />
       </QueryClientProvider>
     );
+    await act(async () => {});
     expect(await screen.findByText("gold")).toBeTruthy();
     expect(await screen.findByText("金币")).toBeTruthy();
     expect(screen.getByText("100")).toBeTruthy();
@@ -128,11 +133,13 @@ describe("UserAssetsPage", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={["/console/assets/users?owner=u1"]}>
-          <UserAssetsPage />
-        </MemoryRouter>
+        <TestRouter
+          initialEntries={["/console/assets/users?owner=u1"]}
+          routes={[{ path: "/console/assets/users", element: <UserAssetsPage /> }]}
+        />
       </QueryClientProvider>
     );
+    await act(async () => {});
     expect(await screen.findByText("金币")).toBeTruthy();
     expect(screen.getByText("貔貅")).toBeTruthy();
 
@@ -181,11 +188,13 @@ describe("UserAssetsPage", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={["/console/assets/users?owner=u1"]}>
-          <UserAssetsPage />
-        </MemoryRouter>
+        <TestRouter
+          initialEntries={["/console/assets/users?owner=u1"]}
+          routes={[{ path: "/console/assets/users", element: <UserAssetsPage /> }]}
+        />
       </QueryClientProvider>
     );
+    await act(async () => {});
     // radix Tabs 内容懒渲染：先切到流水 tab 再断言（radix Trigger 依赖
     // pointer 序列，jsdom 里需先 mouseDown 再 click 才会激活）。
     const ledgerTab = screen.getByRole("tab", { name: "流水" });
@@ -212,11 +221,13 @@ describe("UserAssetsPage", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={["/console/assets/users?owner=u1"]}>
-          <UserAssetsPage />
-        </MemoryRouter>
+        <TestRouter
+          initialEntries={["/console/assets/users?owner=u1"]}
+          routes={[{ path: "/console/assets/users", element: <UserAssetsPage /> }]}
+        />
       </QueryClientProvider>
     );
+    await act(async () => {});
     const ledgerTab = screen.getByRole("tab", { name: "流水" });
     fireEvent.mouseDown(ledgerTab);
     fireEvent.click(ledgerTab);
@@ -251,17 +262,17 @@ describe("AssetDefDetailPage 用户持有列表", () => {
   });
   afterEach(() => cleanup());
 
-  function renderDetail() {
+  async function renderDetail() {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={["/console/assets/defs/d1"]}>
-          <Routes>
-            <Route path="/console/assets/defs/:id" element={<AssetDefDetailPage />} />
-          </Routes>
-        </MemoryRouter>
+        <TestRouter
+          initialEntries={["/console/assets/defs/d1"]}
+          routes={[{ path: "/console/assets/defs/:id", element: <AssetDefDetailPage /> }]}
+        />
       </QueryClientProvider>
     );
+    await act(async () => {});
   }
 
   it("详情下方列出该定义的持有（UserID / 数量）并对接服务端分页", async () => {
@@ -280,7 +291,7 @@ describe("AssetDefDetailPage 用户持有列表", () => {
       ],
       nextPageToken: "tok-1",
     });
-    renderDetail();
+    await renderDetail();
     expect(await screen.findByText("用户持有（只读）")).toBeTruthy();
     expect(screen.getByText("u1")).toBeTruthy();
     expect(screen.getByText("u2")).toBeTruthy();
@@ -301,7 +312,7 @@ describe("AssetDefDetailPage 用户持有列表", () => {
       status: "active",
     });
     vi.mocked(listDefHolders).mockResolvedValue({ rows: [] });
-    renderDetail();
+    await renderDetail();
     await screen.findByText("用户持有（只读）");
     fireEvent.change(screen.getByLabelText("用户 ID"), { target: { value: "u2" } });
     fireEvent.click(screen.getByRole("button", { name: "查询" }));

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { TestRouter } from "@/router/compat";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountPreferencesPage, AccountProfilePage } from "./pages";
 import type { Admin } from "@/api/admins";
@@ -25,7 +25,7 @@ function renderPage(ui: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const result = render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>{ui}</MemoryRouter>
+      <TestRouter routes={[{ path: "/*", element: ui }]} />
     </QueryClientProvider>
   );
   return { ...result, client };

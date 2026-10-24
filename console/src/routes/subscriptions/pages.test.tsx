@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { TestRouter } from "@/router/compat";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PlansListPage } from "./pages";
 
@@ -46,9 +46,7 @@ describe("PlansListPage", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <MemoryRouter>
-          <PlansListPage />
-        </MemoryRouter>
+        <TestRouter routes={[{ path: "/*", element: <PlansListPage /> }]} />
       </QueryClientProvider>
     );
     expect(await screen.findByText("999 USD")).toBeTruthy();

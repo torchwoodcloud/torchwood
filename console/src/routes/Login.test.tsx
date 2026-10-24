@@ -1,5 +1,5 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { TestRouter, useLocation } from "@/router/compat";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getSetupStatus } from "@/api/auth";
 import { Login } from "./Login";
@@ -27,13 +27,21 @@ function LocationProbe() {
 
 function renderLogin(entry: string) {
   return render(
-    <MemoryRouter initialEntries={[entry]}>
-      <LocationProbe />
-      <Routes>
-        <Route path="/console/login" element={<Login />} />
-        <Route path="/console" element={<div>console-page</div>} />
-      </Routes>
-    </MemoryRouter>
+    <TestRouter
+      initialEntries={[entry]}
+      routes={[
+        {
+          path: "/console/login",
+          element: (
+            <>
+              <LocationProbe />
+              <Login />
+            </>
+          ),
+        },
+        { path: "/*", element: <div>console-page</div> },
+      ]}
+    />
   );
 }
 

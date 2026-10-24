@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "@/router/compat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Copy, Pencil, RefreshCw } from "lucide-react";
