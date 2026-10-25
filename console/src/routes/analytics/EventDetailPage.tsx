@@ -239,7 +239,7 @@ export function AnalyticsEventDetailPage() {
                         width={160}
                       />
                       <Tooltip />
-                      <Bar dataKey="total" name="事件数" fill="var(--chart-1)" radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="total" name="事件数" fill="var(--chart-1)" radius={[0, 4, 4, 0]} isAnimationActive={false} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
