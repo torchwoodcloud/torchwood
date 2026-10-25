@@ -1,17 +1,20 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@/router/compat";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCommand, useCommandForm } from "@lynx-go/ui-kit";
+import { useCollection, useCommand, useCommandForm } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Copy, Pencil, RefreshCw } from "lucide-react";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
-  listAPIKeys,
   getAPIKey,
   deleteAPIKey,
   type APIKey,
 } from "@/api/apiKeys";
 import { fetchApiKeyScopeCatalog, type WellKnownScopeResource } from "@/api/wellknown";
 import {
+  apiKeysResource,
+  apiKeysSearch,
+  enabledOf,
   createApiKeyCommand,
   removeApiKeyCommand,
   editApiKeyDescriptor,
@@ -24,8 +27,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
-import { ResourceListPage } from "@/components/list/ResourceListPage";
-import { useServerPaging } from "@/hooks/useServerPaging";
 import {
   Select,
   SelectContent,
@@ -35,8 +36,8 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -45,7 +46,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { ColumnDef } from "@/components/list/DataTable";
+import { PageHeader } from "@/components/PageHeader";
 import {
   FormPageWrapper,
   DetailPageWrapper,
@@ -58,60 +59,41 @@ import {
 } from "@/components/resource/shared";
 import { Form as FleetForm } from "@/components/fleet/command/form";
 import { TextField } from "@/components/fleet/command/fields";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 
 // 命令族切片（design.md §12.3）：写路径换 useCommand/useCommandForm（结果
 // 两分 + __skipToast + onSettled toast 单源）；失效 = kit 键自动 + 存量
 // ["api-keys"] 键手动桥（isFleetKey 守卫）。列表骨架（ResourceListPage/
 // useServerPaging/页内搜索/批量选择）留存量——kit DataTable 行选择未至。
 
-// columns 依赖管理员时区偏好，用工厂函数在组件内生成（与 admins 列表页同模式）。
-const columns = (tz: string): ColumnDef<APIKey>[] => [
-  {
-    key: "id",
-    header: "ID",
-    className: "font-mono text-xs max-w-[140px] truncate",
-    cell: (k) => k.id,
-  },
-  { key: "name", header: "名称", cell: (k) => k.name },
-  { key: "scopes", header: "Scopes", cell: (k) => k.scopes.join(", ") || "—" },
-  {
-    key: "status",
-    header: "状态",
-    cell: (k) => (
-      <Badge variant={k.enabled ? "default" : "secondary"}>
-        {k.enabled ? "Active" : "Disabled"}
-      </Badge>
-    ),
-  },
-  {
-    key: "created",
-    header: "创建时间",
-    cell: (k) => formatDateTime(k.created_at, tz),
-  },
-];
-
 export function ApiKeysListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const platformAdmin = isPlatformAdmin(role);
 
-  const paging = useServerPaging();
-  // 服务端过滤：enabled（proto3 optional——"all" = 不过滤）；变化 reset 回第一页。
-  const [enabledFilter, setEnabledFilter] = useState("all");
-  const enabled = enabledFilter === "all" ? undefined : enabledFilter === "enabled";
-  const { data, isLoading } = useQuery({
-    queryKey: ["api-keys", projectId, enabledFilter, paging.pageSize, paging.pageToken],
-    queryFn: () =>
-      listAPIKeys({ pageSize: paging.pageSize, pageToken: paging.pageToken, enabled }),
-    enabled: !!projectId,
-    placeholderData: (prev) => prev,
+  // 列表 fleet 化（§12.9-2）：游标/页大小/enabled 过滤进 URL（分页栈 =
+  // 浏览器历史）；页内当前页搜索保持本地态（旧页语义）。
+  const list = useCollection(apiKeysResource, {
+    from: "/console/api-keys",
+    search: apiKeysSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-  const keys = data?.rows ?? [];
 
-  // 命令接线：toast 单源 onSettled；存量查询键手动桥接失效。
+  const enabled = enabledOf(list.query.predicate);
+  const setEnabledFilter = (v: string) => {
+    list.setPredicate(v === "all" ? null : { field: "enabled", op: "eq", value: v });
+  };
+
+  // 命令接线：toast 单源 onSettled；kit 键自动失效 + 存量 ["api-keys"] 键手动桥。
   const remove = useCommand(removeApiKeyCommand, {
     scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
@@ -125,112 +107,175 @@ export function ApiKeysListPage() {
   });
 
   const getSearchText = useCallback(
-    (k: APIKey) => `${k.id} ${k.name} ${k.scopes.join(" ")}`,
+    (k: APIKey) => `${k.id} ${k.name} ${k.scopes.join(" ")}`.toLowerCase(),
     []
   );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((k) => getSearchText(k).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
 
-  const handleBulkDelete = async (selected: APIKey[], clear: () => void) => {
+  const toggleRow = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = (visibleIds: string[]) =>
+    setSelectedIds((prev) =>
+      new Set(visibleIds.length > 0 && visibleIds.every((id) => prev.has(id)) ? [] : visibleIds)
+    );
+  const selectedKeys = list.rows.filter((k) => selectedIds.has(k.id));
+
+  const handleBulkDelete = async () => {
     setBulkDeleting(true);
     try {
-      // N 命令聚合非 useCommand 面（§12.3 裁决 8）：单条失败汇总展示，
-      // 跳过全局 toast 避免刷屏（R11-P2-8）。
+      // N 命令聚合非 useCommand 面（§12.3 裁决 8）：单条失败汇总展示。
       const results = await Promise.allSettled(
-        selected.map((k) => deleteAPIKey(k.id, { __skipToast: true }))
+        selectedKeys.map((k) => deleteAPIKey(k.id, { __skipToast: true }))
       );
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
         toast.error(`删除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
       } else {
-        toast.success(`已删除 ${selected.length} 个 API Key`);
+        toast.success(`已删除 ${selectedKeys.length} 个 API Key`);
       }
       void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
-      clear();
+      setSelectedIds(new Set());
     } finally {
       setBulkDeleting(false);
     }
   };
 
-  return (
-    <ResourceListPage
-      title="API Keys"
-      description="管理当前项目的服务端 API Key"
-      searchPlaceholder="当前页内搜索名称或 ID..."
-      isLoading={isLoading}
-      items={keys}
-      columns={columns(tz)}
-      getSearchText={getSearchText}
-      serverPaging={{
-        page: paging.page,
-        pageSize: paging.pageSize,
-        hasPrev: paging.hasPrev,
-        hasNext: !!data?.nextPageToken,
-        onPrev: paging.goPrev,
-        onNext: () => paging.goNext(data?.nextPageToken),
-        onPageSizeChange: paging.setPageSize,
-      }}
-      filters={
-        <div className="flex items-center gap-2">
-          <Select
-            value={enabledFilter}
-            onValueChange={(v) => {
-              setEnabledFilter(v);
-              paging.reset();
-            }}
-          >
-            <SelectTrigger className="h-8 w-[120px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部状态</SelectItem>
-              <SelectItem value="enabled">启用</SelectItem>
-              <SelectItem value="disabled">禁用</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      }
-      detailPath={(k) => `/console/api-keys/${k.id}`}
-      toolbarActions={
-        platformAdmin ? (
-          <Button asChild>
-            <Link to="/console/api-keys/new">
-              <Plus className="h-4 w-4 mr-2" />
-              新建 API Key
-            </Link>
-          </Button>
-        ) : undefined
-      }
-      selectionActions={
-        platformAdmin
-          ? (selected, clear) => (
-              <BulkDeleteButton
-                count={selected.length}
-                loading={bulkDeleting}
-                onConfirm={() => handleBulkDelete(selected, clear)}
-              />
-            )
-          : undefined
-      }
-      rowActions={
-        platformAdmin
-          ? (k) => (
+  const tableColumns: LegacyColumnDef<APIKey, unknown>[] = [
+    {
+      id: "id",
+      header: "ID",
+      cell: ({ row }) => (
+        <span className="inline-block max-w-[140px] truncate font-mono text-xs">
+          {row.original.id}
+        </span>
+      ),
+    },
+    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
+    {
+      id: "scopes",
+      header: "Scopes",
+      cell: ({ row }) => row.original.scopes.join(", ") || "—",
+    },
+    {
+      id: "status",
+      header: "状态",
+      cell: ({ row }) => (
+        <Badge variant={row.original.enabled ? "default" : "secondary"}>
+          {row.original.enabled ? "Active" : "Disabled"}
+        </Badge>
+      ),
+    },
+    {
+      id: "created",
+      header: "创建时间",
+      cell: ({ row }) => formatDateTime(row.original.created_at, tz),
+    },
+    ...(platformAdmin
+      ? [
+          {
+            id: "actions",
+            header: "操作",
+            cell: ({ row }: { row: { original: APIKey } }) => (
               <RowDeleteButton
-                onConfirm={() => remove.mutate({ id: k.id })}
+                onConfirm={() => remove.mutate({ id: row.original.id })}
                 loading={remove.pending}
               />
-            )
-          : undefined
-      }
-      emptyTitle="暂无 API Key"
-      emptyDescription="创建 API Key 以访问服务端 API"
-      emptyAction={
-        platformAdmin ? (
-          <Button asChild>
-            <Link to="/console/api-keys/new">新建 API Key</Link>
-          </Button>
-        ) : undefined
-      }
-    />
+            ),
+          } satisfies LegacyColumnDef<APIKey, unknown>,
+        ]
+      : []),
+  ];
+
+  const filtered = list.query.predicate != null;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="API Keys" description="管理当前项目的服务端 API Key" />
+
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="当前页内搜索名称或 ID..."
+              className="h-8 w-56"
+            />
+            <Select
+              value={enabled === undefined ? "all" : enabled ? "enabled" : "disabled"}
+              onValueChange={setEnabledFilter}
+            >
+              <SelectTrigger className="h-8 w-[120px]" aria-label="状态过滤">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部状态</SelectItem>
+                <SelectItem value="enabled">启用</SelectItem>
+                <SelectItem value="disabled">禁用</SelectItem>
+              </SelectContent>
+            </Select>
+            {selectedKeys.length > 0 && platformAdmin ? (
+              <BulkDeleteButton
+                count={selectedKeys.length}
+                loading={bulkDeleting}
+                onConfirm={() => void handleBulkDelete()}
+              />
+            ) : null}
+            {platformAdmin ? (
+              <Button asChild className="ml-auto">
+                <Link to="/console/api-keys/new">
+                  <Plus className="h-4 w-4 mr-2" />
+                  新建 API Key
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+        }
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={list} />
+          </div>
+        }
+        emptyTitle={search !== "" ? "没有匹配的 API Key" : filtered ? "该状态下暂无 API Key" : "暂无 API Key"}
+        emptyDescription={
+          search !== ""
+            ? "调整搜索词，或清空恢复当前页全部行"
+            : filtered
+              ? "切换状态过滤或清空恢复全部"
+              : "创建 API Key 以访问服务端 API"
+        }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={tableColumns}
+            getRowId={(row) => row.id}
+            onRowClick={(k) => navigate(`/console/api-keys/${k.id}`)}
+            selection={
+              platformAdmin
+                ? {
+                    selectedIds,
+                    onToggle: toggleRow,
+                    onToggleAll: toggleAll,
+                  }
+                : undefined
+            }
+          />
+        </div>
+      </FleetListPage>
+    </div>
   );
 }
 

@@ -11,6 +11,7 @@ import { Layout } from "@/components/Layout";
 import { useAuth } from "@/hooks/useAuth";
 import { canWrite, isPlatformAdmin, useAdminRole } from "@/hooks/useAdminRole";
 import { auditLogsSearch } from "@/fleet/auditLogs";
+import { apiKeysSearch } from "@/fleet/apiKeys";
 
 // 路由树（torchwood 批 A，design.md §12.2 裁决 1）：TanStack Router code-based
 // 集中表——镜像原 App.tsx 路由表，路径形态/守卫语义/lazy 分包零变化。
@@ -202,7 +203,13 @@ const auditLogsRoute = createRoute({
   ...roleGuarded("platformAdmin", <AuditLogsListPage />),
 });
 
-const apiKeysRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/api-keys", ...guarded(<ApiKeysListPage />) });
+// validateSearch = 列表 fleet 化（§12.9）：游标/页大小/enabled 过滤进 URL。
+const apiKeysRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/api-keys",
+  validateSearch: apiKeysSearch.toSearchSchema(),
+  ...guarded(<ApiKeysListPage />),
+});
 const apiKeyNewRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/api-keys/new", ...roleGuarded("platformAdmin", <ApiKeyNewPage />) });
 const apiKeyDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/api-keys/$id", ...guarded(<ApiKeyDetailPage />) });
 

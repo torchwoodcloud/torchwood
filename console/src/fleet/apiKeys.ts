@@ -1,11 +1,16 @@
 import {
+  type CollectionQuery,
   defineResource,
   type CommandResult,
+  type Predicate,
   type ResourceScope,
+  type Segment,
 } from "@lynx-go/ui-kit/kernel";
+import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
 import {
   createAPIKey,
   deleteAPIKey,
+  listAPIKeys,
   updateAPIKey,
   type APIKey,
   type UpdateAPIKeyInput,
@@ -135,10 +140,49 @@ export const expireApiKeyDescriptor = {
     runCommandMapped(() => updateAPIKey(input.id, { expire_at: new Date().toISOString() }, SKIP)),
 };
 
+// URL 搜索 schema（路由 validateSearch 与绑定共用）。默认页大小 20 = 旧页
+// 默认；enabled 是真实服务端过滤参数（proto3 optional）→ URL 谓词。
+export const apiKeysSearch = collectionQuerySchema({
+  filters: [{ field: "enabled" }],
+  defaultSize: 20,
+});
+
+type EqLeaf = { field: string; op: string; value: unknown };
+
+function leavesOf(predicate: Predicate | undefined): EqLeaf[] {
+  if (predicate == null) return [];
+  if ("all" in predicate) return predicate.all.flatMap((l) => leavesOf(l));
+  if ("field" in predicate) return [predicate];
+  return [];
+}
+
+export function enabledOf(predicate: Predicate | undefined): boolean | undefined {
+  const raw = leavesOf(predicate).find((l) => l.field === "enabled")?.value;
+  return raw === "true" ? true : raw === "false" ? false : undefined;
+}
+
+async function fetchApiKeys(
+  q: CollectionQuery,
+  ctx: ResourceScope
+): Promise<Segment<APIKey>> {
+  if (ctx.projectId == null) return { rows: [] };
+  try {
+    const page = await listAPIKeys({
+      pageSize: q.window.size,
+      pageToken: q.window.cursor || undefined,
+      enabled: enabledOf(q.predicate),
+    });
+    return { rows: page.rows, nextCursor: page.nextPageToken };
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
 export const apiKeysResource = defineResource({
   name: "api-keys",
   getId: (row: APIKey) => row.id,
   scope: ["projectId"],
+  collection: fetchApiKeys,
   commands: {
     // 表单值→提交形收敛在 run 内（wildcard/勾选/手输合并去重排序）
     create: {

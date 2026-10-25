@@ -178,6 +178,23 @@ describe("ApiKeyDetailPage（编辑对话框 diff + 轮换双命令）", () => {
 });
 
 describe("ApiKeysListPage（行删命令接线）", () => {
+  it("URL 即真相：默认页大小/翻页游标透传 listAPIKeys（page_token）", async () => {
+    mockList.mockResolvedValue({ rows: [key], nextPageToken: "tok-2" });
+    await renderPage("/console/api-keys", <ApiKeysListPage />);
+    await screen.findByText("prod");
+    // defaultSize 20 = 旧页默认；首次请求无 token
+    expect(mockList).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pageSize: 20, pageToken: undefined }),
+    );
+    // 下一页 → 游标 push 进 URL → 请求带 page_token
+    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(() =>
+      expect(mockList).toHaveBeenLastCalledWith(
+        expect.objectContaining({ pageToken: "tok-2" }),
+      ),
+    );
+  });
+
   it("行删除确认走 useCommand（skipToast + 结果 ok 不抛）", async () => {
     mockList.mockResolvedValue({ rows: [key], nextPageToken: undefined });
     mockDelete.mockResolvedValue(undefined);
