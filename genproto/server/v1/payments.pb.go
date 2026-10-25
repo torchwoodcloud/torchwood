@@ -659,7 +659,7 @@ var File_server_v1_payments_proto protoreflect.FileDescriptor
 
 const file_server_v1_payments_proto_rawDesc = "" +
 	"\n" +
-	"\x18server/v1/payments.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xc4\x04\n" +
+	"\x18server/v1/payments.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17grpcapi/v1/policy.proto\x1a\x16shared/v1/common.proto\"\xc4\x04\n" +
 	"\fPaymentOrder\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -717,17 +717,27 @@ const file_server_v1_payments_proto_rawDesc = "" +
 	"sort_order\x18\a \x01(\x0e2\x1e.torchwood.shared.v1.SortOrderB\b\xbaH\x05\x82\x01\x02\x10\x01R\tsortOrder\"\x8a\x01\n" +
 	"\x12ListOrdersResponse\x129\n" +
 	"\x06orders\x18\x01 \x03(\v2!.torchwood.server.v1.PaymentOrderR\x06orders\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xb4\x05\n" +
-	"\x0fPaymentsService\x12\x93\x01\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xe6\x06\n" +
+	"\x0fPaymentsService\x12\xc6\x01\n" +
 	"\n" +
-	"ListOrders\x12&.torchwood.server.v1.ListOrdersRequest\x1a'.torchwood.server.v1.ListOrdersResponse\"4\xea\xc4\x19\x0e\"\f\n" +
-	"\bpayments\x10\x01\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/server/payments/orders\x12\x94\x01\n" +
-	"\bGetOrder\x12$.torchwood.server.v1.GetOrderRequest\x1a!.torchwood.server.v1.PaymentOrder\"?\xea\xc4\x19\x0e\"\f\n" +
-	"\bpayments\x10\x01\x82\xd3\xe4\x93\x02'\x12%/v1/server/payments/orders/{order_id}\x12\xa8\x01\n" +
-	"\x06Refund\x12\".torchwood.server.v1.RefundRequest\x1a!.torchwood.server.v1.PaymentOrder\"W\xea\xc4\x19\x1c\x1a\x05admin\x1a\x05owner\"\f\n" +
-	"\bpayments\x10\x02\x82\xd3\xe4\x93\x021:\x01*\",/v1/server/payments/orders/{order_id}:refund\x12\xc0\x01\n" +
-	"\rManualFulfill\x12).torchwood.server.v1.ManualFulfillRequest\x1a*.torchwood.server.v1.ManualFulfillResponse\"X\xea\xc4\x19\x1c\x1a\x05admin\x1a\x05owner\"\f\n" +
-	"\bpayments\x10\x02\x82\xd3\xe4\x93\x022:\x01*\"-/v1/server/payments/orders/{order_id}:fulfill\x1a\x06\xf2\xc4\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
+	"ListOrders\x12&.torchwood.server.v1.ListOrdersRequest\x1a'.torchwood.server.v1.ListOrdersResponse\"g\xda\xf0\x19A\n" +
+	"5J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x18*\x16\n" +
+	"\x05scope\"\rpayments:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/server/payments/orders\x12\xc7\x01\n" +
+	"\bGetOrder\x12$.torchwood.server.v1.GetOrderRequest\x1a!.torchwood.server.v1.PaymentOrder\"r\xda\xf0\x19A\n" +
+	"5J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x18*\x16\n" +
+	"\x05scope\"\rpayments:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02'\x12%/v1/server/payments/orders/{order_id}\x12\xd2\x01\n" +
+	"\x06Refund\x12\".torchwood.server.v1.RefundRequest\x1a!.torchwood.server.v1.PaymentOrder\"\x80\x01\xda\xf0\x19E\n" +
+	"9J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x19*\x17\n" +
+	"\x05scope\"\x0epayments:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x021:\x01*\",/v1/server/payments/orders/{order_id}:refund\x12\xea\x01\n" +
+	"\rManualFulfill\x12).torchwood.server.v1.ManualFulfillRequest\x1a*.torchwood.server.v1.ManualFulfillResponse\"\x81\x01\xda\xf0\x19E\n" +
+	"9J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x19*\x17\n" +
+	"\x05scope\"\x0epayments:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x022:\x01*\"-/v1/server/payments/orders/{order_id}:fulfillB\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

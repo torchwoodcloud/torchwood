@@ -1,10 +1,11 @@
 package runtime
 
 import (
+	"github.com/lynx-go/grpcapi/policy"
+
 	"context"
 	"testing"
 
-	"github.com/lynx-go/grpcapi/authz"
 	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
@@ -17,7 +18,8 @@ func TestBuildMethodPolicies_EndUserRequiresUsersRole(t *testing.T) {
 	set, err := buildMethodPolicies()
 	require.NoError(t, err)
 
-	p, ok := set.Get("/torchwood.client.v1.GroupsService/CreateGroup")
+	p, ok, err := domainauth.ViewOf(set, "/torchwood.client.v1.GroupsService/CreateGroup")
+	require.NoError(t, err)
 	require.True(t, ok, "GroupsService methods should be in the policy set")
 	require.Equal(t, domainauth.AccessEndUser, p.Access)
 	require.Equal(t, []string{"users"}, p.Permissions)
@@ -29,11 +31,13 @@ func TestBuildMethodPolicies_AccountPublicMethods(t *testing.T) {
 	set, err := buildMethodPolicies()
 	require.NoError(t, err)
 
-	p, ok := set.Get("/torchwood.client.v1.AccountService/SignIn")
+	p, ok, err := domainauth.ViewOf(set, "/torchwood.client.v1.AccountService/SignIn")
+	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, domainauth.AccessPublic, p.Access)
 
-	p, ok = set.Get("/torchwood.client.v1.AccountService/Me")
+	p, ok, err = domainauth.ViewOf(set, "/torchwood.client.v1.AccountService/Me")
+	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, []string{"users"}, p.Permissions)
 }
@@ -54,8 +58,8 @@ func newServerWithServices(serviceNames ...string) *grpc.Server {
 	return srv
 }
 
-func testPolicySet(policies ...domainauth.MethodPolicy) *domainauth.PolicySet {
-	set, err := authz.NewPolicySet(policies...)
+func testPolicySet(policies ...domainauth.MethodPolicy) *policy.Set {
+	set, err := domainauth.NewSet(policies...)
 	if err != nil {
 		panic(err)
 	}

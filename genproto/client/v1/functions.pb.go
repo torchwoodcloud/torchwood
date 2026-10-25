@@ -154,7 +154,7 @@ var File_client_v1_functions_proto protoreflect.FileDescriptor
 
 const file_client_v1_functions_proto_rawDesc = "" +
 	"\n" +
-	"\x19client/v1/functions.proto\x12\x13torchwood.client.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\"\xa7\x01\n" +
+	"\x19client/v1/functions.proto\x12\x13torchwood.client.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17grpcapi/v1/policy.proto\"\xa7\x01\n" +
 	"\x15InvokeFunctionRequest\x12'\n" +
 	"\vfunction_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"functionId\x12\x1d\n" +
@@ -163,9 +163,11 @@ const file_client_v1_functions_proto_rawDesc = "" +
 	"\x16InvokeFunctionResponse\x12!\n" +
 	"\fexecution_id\x18\x01 \x01(\tR\vexecutionId\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12\x1a\n" +
-	"\bresponse\x18\x03 \x01(\tR\bresponse2\xb5\x01\n" +
-	"\x10FunctionsService\x12\x98\x01\n" +
-	"\x0eInvokeFunction\x12*.torchwood.client.v1.InvokeFunctionRequest\x1a+.torchwood.client.v1.InvokeFunctionResponse\"-\x82\xd3\xe4\x93\x02':\x01*\"\"/v1/functions/{function_id}:invoke\x1a\x06\xf2\xc4\x19\x02\b\x02B\x95\x04\x92A\xd0\x03RR\n" +
+	"\bresponse\x18\x03 \x01(\tR\bresponse2\xd7\x01\n" +
+	"\x10FunctionsService\x12\xc2\x01\n" +
+	"\x0eInvokeFunction\x12*.torchwood.client.v1.InvokeFunctionRequest\x1a+.torchwood.client.v1.InvokeFunctionResponse\"W\xda\xf0\x19&\n" +
+	"\x18B\x16\n" +
+	"\x0eprincipal_kind\"\x04user\x10\x02\x1a\bEND_USER\x82\xd3\xe4\x93\x02':\x01*\"\"/v1/functions/{function_id}:invokeB\x95\x04\x92A\xd0\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xc9\x02\n" +

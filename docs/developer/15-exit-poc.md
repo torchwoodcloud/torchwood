@@ -12,7 +12,7 @@
 2. **过门禁 = A 区全部条目满足完成判据**：在对应条目下追加闭环证据（commit 哈希 / 测试名 / 命令输出摘要 / 决议链接 + 日期）。B/C 区不阻塞；C 区条目允许"拍板后维持现状"，但必须有决议记录。
 3. **新增挂账进本单**：阻塞发布的进 A；不阻塞的功能债进 B；纯产品决策进 C。措辞纪律：完成判据必须可验证，禁止"评估/考虑/研究"类虚词——需要评估的议题一律入 C 区并写明决策问题。
 
-## A 门禁区（阻塞对外发布，10 条）
+## A 门禁区（阻塞对外发布，11 条，A11 为 grpcapi 迁移挂账）
 
 ### A1 存量列授权全量 reconcile 扫描
 
@@ -99,7 +99,15 @@
 - **落地（2026-09-06）**：`.github/workflows/ci.yml` 新增 "RLS performance relative benchmark (A7)" 步骤——`TestRLS_RelativeBenchmark`（10 万行 RLS 开/关比值 < 30x 数值阈值，非口头约定）与 `TestRLS_ExplainInitPlanGate`（policy 计划形态断言）常驻 CI，主测试套件外独立步骤防管道吞噬。**绝对 P99 数值门禁（百万行级、专用基准规格）按原定位挂转出 POC 后上线**（06-databases §12 原文即"绝对 P99 门禁转出 POC 后上 CI 机器基准"）——本条目的"CI 存在基准 job"部分达成（相对基准 job 已在），"P99 数值阈值"部分待转出后以专用规格兑现，登记为转出后首批工作。
 - **判据达成状态**：部分——相对基准维度闭环；绝对 P99 维度显式挂转出后（非静默缺失）。
 
-## B 非阻塞功能债区（14 条，B14 为 C6 决议新立）
+### A11 grpcapi v0.3.0 发版与本地 replace 摘除〔2026-10-23，grpcapi 执行侧迁移立条〕
+
+- **出处**：`go.mod` 的 `replace github.com/lynx-go/grpcapi => /home/qiulin/workspace/qiulin/grpcapi`（钉 main@`5ea3974`，v0.3.0 未打 tag）；`docs/developer/21-grpcapi-execution-migration.md` §8。
+- **要做什么**：grpcapi 打 v0.3.0 tag（含 G-1 方向感知实例门/G-2 文档化与冻结面），torchwood 切 tag 并摘 replace。
+- **完成判据**：`go.mod` 无 grpcapi replace 项；干净环境（无相邻 checkout，如 CI）`go build ./...` 与 `mise run test` 通过；grpcapi 仓库存在 v0.3.0 tag 且其 commit ≥ `5ea3974`。
+- **建议归属**：grpcapi 发版 + torchwood 单独小 commit。
+- **闭环（2026-10-23）**：grpcapi 按「genproto/v0.3.0 tag → 主仓 require 抬至 v0.3.0 → 主仓 v0.3.0 tag」时序发版（`5ea3974`+`1024fa8`，含 G-1/G-2 补课，release workflow 机器校验通过），main 与双 tag 已推送；torchwood 摘 replace、require v0.3.0，核心包测试绿。**A11 关闭。**
+
+## B 非阻塞功能债区（17 条，B14 为 C6 决议新立，B16-B17 为 grpcapi 执行侧迁移挂账）
 
 ### B1 数组算子补全
 
@@ -233,6 +241,23 @@
 - **完成判据**：authenticator 对 `tw_secrets` 无任何权限（`\dp tw_secrets` 断言）；密钥落库走 admin 作业且运行态注入验签全路径回归绿；13-operations 部署步骤同步。
 - **建议归属**：auth/clients 会话（转出 POC 前必须完成，与 A2 同批部署验证）。
 - **闭环（2026-09-05）**：三步落地。① **admin 作业**：`torchwood admin sync-roles-sig`（`cli/admin_roles_sig.go`，对齐 B5 admin 直连形态——`--dsn` 缺省读 `TORCHWOOD_DATA_DATABASE_SOURCE`（作业场景必须指向 owner/引导账号，与运行态 DSN 分别注入）、`--jwt-secret` 缺省读 `TORCHWOOD_SECURITY_JWT_SECRET`（必须与运行态 `security.jwt.secret` 同源同值，派生钥 = HMAC-SHA256(主密钥, "tw-roles-guc-v1")），内部复用 `clients.InitRolesSigKey` + `SyncRolesSigKey` 双钥四语句平移（R16/A4 语义不变），幂等重跑安全；② **运行钩子退役**：`bootkit.RolesSigKeySyncHook` 从 `NewOnStarts` 移除（server/worker 均不再落库，wire 重生成），`InitRolesSigSigning` 进程内派生保留——注入 GUC 用的是进程内钥，无需读库；③ **权限收口迁移 `000033_roles_sig_key_plane`**（前向补丁，遵 A5"已应用迁移永不原地修订"；规划编号 000032 已被 catalog_migrations 占用故顺延）——`REVOKE ALL ON public.tw_secrets FROM tw_authenticator`（DO 块守护角色存在性；000029 `REVOKE ALL FROM PUBLIC` 后 base identity 直接 GRANT 是唯一可达通道，撤销即收口），SECURITY DEFINER 验签链核对不受影响（`tw_sig_match`/`tw_roles`/`tw_tenant` owner = 迁移执行者 = `tw_secrets` 表 owner，走 owner 隐式全权，无需显式 GRANT；`tw_set_document_acl` owner = tw_system 不读密钥表），down 对称恢复旧授权形态（配套回滚 B15 前二进制）。**时序契约**（13-operations §4.5/§6.1 成文）：迁移（含 000033）→ `torchwood admin sync-roles-sig` → server/worker 启动；首次部署或换钥后未跑作业前文档查询 fail-closed（零角色不可见）属预期，跑完作业即恢复（验签实时读表，无需重启）。**测试证据**（判据四条）：`TestNonSuperuserAuthenticator_MigrateAndSmoke` 改造（owner 落库 + authenticator 只注入验签；`has_table_privilege` 七特权位 SELECT/INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER 全 false + `pg_get_userbyid(relowner) ≠ authenticator` 断言 + RLS 写读冒烟 count=1）；`TestAdminSyncRolesSigViaCLI`（cobra 全路径：首落库 current=新钥/previous=旧钥、同钥重跑幂等 no-op、二次换钥 previous 平移 + third 条裁剪行数 ≤2）+ `TestAdminSyncRolesSig_RequiresFlags`（缺 DSN/缺主密钥 fail-fast）；`TestRolesSig_KeyNotSeeded_FailClosed`（钥未落库 → `tw_roles()` 零角色/`tw_tenant()` NULL/文档不可见 → owner 重跑作业恢复可见）；`TestMigrations_UpDownUpCycle`（000033 up→down→up 循环全绿，DO 块守护幂等）。回归面：RLS 全套（golden/behavior/自锁/tenant 绑定/ef_search/KNN 抽样）、`TestRolesSig_*` 全部、`TestDatabases_PerKeyDocumentIsolation` per-key 隔离、`go build ./...` + `go vet` 全量——全绿（详见 13-operations §4.5 授权面结论更新：运行 DSN 泄漏不再可读密钥，GUC 伪造通道封死）。
+
+### B16 路径 B codemod：业务 proto 迁 policy.proto 后删 legacyProvider 与 golden 基线〔已闭环〕
+
+- **出处**：grpcapi MIGRATION §3（路径 B）；`docs/developer/21` §8；~34 个业务 proto 文件仍 import vendored `grpcapi/v1/authz.proto`。
+- **闭环（2026-10-23）**：codemod 由两份 golden 反写（树形取 manifest、值序取阶段 0 基线，36 个继承方法显式化）；等价性验收——manifest 重生成 diff 仅 36 个继承方法 label 归一（派生 custom/public → 显式 END_USER/PUBLIC），**策略树逐字节一致**，矩阵文档重生成零漂移，全量测试绿。provider 切 protopolicy（v0.3.0）；vendored authz.proto、legacyProvider、genproto legacypb、阶段 0 五档基线删除；vendored policy.proto 与 go.mod 的 grpcapi v0.3.0 配对，manifest golden 保留为后续策略漂移的 CI diff 基线（判据中"两份 golden 全删"调整为保留 manifest 基线——grpcapi v1.0 验收项"policy manifest 可输出并在 CI diff"的承接面）。
+
+### B17 流式 authn 拦截器（放开 streaming RPC 的前置）〔已闭环〕
+
+- **出处**：`docs/developer/21` D-8/§8；`cmd/server/internal/runtime/grpc.go` stream 链注释；`domain/auth/policy.go` AssertSemantic 的 streaming 禁用（"authn 尚无 stream 拦截器——否则无 principal，authz 恒拒"）。
+- **闭环（2026-10-23）**：`interceptor.StreamAuthMiddleware`（与 unary 同语义：PUBLIC 可选认证 + 无效 key 401/频控、admin 业务校验、双 principal 注入经 ctxStream 包装）；流式链 clientInfo → authn → authz 装配（拦截器链已换库 AssembleWith，unary/stream 同链）；AssertSemantic streaming 禁用与 policy.Build DisableStreaming 解除。验收：三流型过完整链（匿名 401 / 无 scope key 403 / admin 放行 / PUBLIC 匿名放行）+ per-message 实例门中断流用例。业务 proto 尚无流式 RPC（放开只差声明）。
+
+### B18 HTTP/gateway 面经 grpcapi server.HTTPHandler() 迁移（bufconn 进程内 gateway）
+
+- **出处**：lynx 深度集成后续（gRPC 面已完成 server.New 装配 + lynx 适配器）；grpcapi `Server.HTTPHandler()`；`cmd/server/internal/runtime/grpc_gateway.go` 现为手工 gateway 装配 + 网络拨号。
+- **要做什么**：HTTP 面切 server.New 的 bufconn 进程内 gateway；自定义 HTTP 面（存储 multipart/OAuth/支付触发器/well-known）从 gateway-mux `HandlePath`（pathParams map 回调）迁 ExtraRoute/`net/http` 路由（`r.PathValue` 参数提取）；console/realtime/landing 外层路由与超时语义保持。
+- **完成判据**：gateway_route_order_test 等价的优先级矩阵在新路由下锁定；存储上传 100MiB 逐路由 body limit（ExtraRoute.MaxBodyBytes）；swagger/healthz/observability 验收全绿；gRPC 与 gateway 无双监听依赖（NetworkDial 移除）。
+- **建议归属**：transport 会话（改动面大，需独立评审路由优先级语义拆分）。
 
 ## C 决策确认区（7 条）
 

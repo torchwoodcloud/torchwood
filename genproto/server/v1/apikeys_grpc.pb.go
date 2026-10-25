@@ -32,6 +32,12 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type APIKeysServiceClient interface {
+	// 平台专属面（决策 v8）：全服务 PERMISSION owner/admin——API key 是平台级
+	// 凭据，管理权（含元数据读）仅 owner/admin console 会话；API key 凭证一律
+	// 拒绝（防泄露 key 自铸新 key 永久提权），apikeys scope 资源随之退役
+	// （key 不再可被授予 apikeys.read/write）。
+	// 唯一例外是 WhoAmI（自证凭证型 PUBLIC，逐方法覆盖）：它不管理 key、只
+	// 描述调用凭证自身，"知道 key 明文"即是查询授权，无自铸面。
 	CreateAPIKey(ctx context.Context, in *CreateAPIKeyRequest, opts ...grpc.CallOption) (*APIKeyWithSecret, error)
 	ListAPIKeys(ctx context.Context, in *ListAPIKeysRequest, opts ...grpc.CallOption) (*ListAPIKeysResponse, error)
 	GetAPIKey(ctx context.Context, in *GetAPIKeyRequest, opts ...grpc.CallOption) (*APIKey, error)
@@ -125,6 +131,12 @@ func (c *aPIKeysServiceClient) WhoAmI(ctx context.Context, in *WhoAmIRequest, op
 // All implementations must embed UnimplementedAPIKeysServiceServer
 // for forward compatibility.
 type APIKeysServiceServer interface {
+	// 平台专属面（决策 v8）：全服务 PERMISSION owner/admin——API key 是平台级
+	// 凭据，管理权（含元数据读）仅 owner/admin console 会话；API key 凭证一律
+	// 拒绝（防泄露 key 自铸新 key 永久提权），apikeys scope 资源随之退役
+	// （key 不再可被授予 apikeys.read/write）。
+	// 唯一例外是 WhoAmI（自证凭证型 PUBLIC，逐方法覆盖）：它不管理 key、只
+	// 描述调用凭证自身，"知道 key 明文"即是查询授权，无自铸面。
 	CreateAPIKey(context.Context, *CreateAPIKeyRequest) (*APIKeyWithSecret, error)
 	ListAPIKeys(context.Context, *ListAPIKeysRequest) (*ListAPIKeysResponse, error)
 	GetAPIKey(context.Context, *GetAPIKeyRequest) (*APIKey, error)

@@ -46,7 +46,8 @@ export interface ListAuditLogsResponse {
 // X-Torchwood-Project；include_platform/all_projects 仅平台 admin 可用，
 // 服务端 PermissionDenied 兜底）。
 export async function listAuditLogs(
-  params: ListAuditLogsParams
+  params: ListAuditLogsParams,
+  signal?: AbortSignal
 ): Promise<ListAuditLogsResponse> {
   const clean: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(params)) {
@@ -56,6 +57,7 @@ export async function listAuditLogs(
   }
   const res = await api.get<ListAuditLogsResponse>("/server/audit-logs", {
     params: clean,
+    signal,
   });
   return {
     audit_logs: res.data.audit_logs ?? [],

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/lynx-go/grpcapi/policy"
 	"github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"github.com/torchwoodcloud/torchwood/pkg/query"
@@ -110,7 +111,7 @@ const databasesServiceFullName = "/torchwood.server.v1.DatabasesService/"
 
 // buildWellKnownPayload 构造目录 JSON（进程内一次；错误码与 scope 两段构造期
 // 直读 PolicySet——proto 策略声明的唯一派生）。
-func buildWellKnownPayload(policies *auth.PolicySet) []byte {
+func buildWellKnownPayload(policies *policy.Set) []byte {
 	errorCodes := databases.ErrorCodeCatalog()
 	codeEntries := make([]map[string]any, 0, len(errorCodes))
 	for code := range errorCodes {
@@ -122,7 +123,7 @@ func buildWellKnownPayload(policies *auth.PolicySet) []byte {
 
 	verbs := make([]wellKnownVerb, 0, len(wellKnownVerbs))
 	for _, v := range wellKnownVerbs {
-		if rule := policies.ScopeRule(databasesServiceFullName + v.RPC); rule != nil {
+		if rule := auth.ScopeRuleOf(policies, databasesServiceFullName+v.RPC); rule != nil {
 			v.Scope = rule.Resource + "." + string(rule.Op)
 		}
 		verbs = append(verbs, v)
@@ -177,7 +178,7 @@ type WellKnownHandler struct {
 }
 
 // NewWellKnownHandler 构造目录 handler：payload 构造期生成一次（静态内容）。
-func NewWellKnownHandler(policies *auth.PolicySet) *WellKnownHandler {
+func NewWellKnownHandler(policies *policy.Set) *WellKnownHandler {
 	return &WellKnownHandler{payload: buildWellKnownPayload(policies)}
 }
 

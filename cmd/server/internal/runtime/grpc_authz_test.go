@@ -1,9 +1,10 @@
 package runtime
 
 import (
+	"github.com/lynx-go/grpcapi/policy"
+
 	"testing"
 
-	"github.com/lynx-go/grpcapi/authz"
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
@@ -17,7 +18,9 @@ func TestAssertSemantic_RealProtoRegistry(t *testing.T) {
 
 	set, err := ProvideMethodPolicies()
 	require.NoError(t, err)
-	require.NotEmpty(t, set.Methods())
+	views, err := domainauth.Views(set)
+	require.NoError(t, err)
+	require.NotEmpty(t, views)
 
 	// 抽查裁决决策已落地（锚点子集；完整锚点矩阵由 Phase B 生成）。
 	checks := []struct {
@@ -41,7 +44,7 @@ func TestAssertSemantic_RealProtoRegistry(t *testing.T) {
 		}, "死信读面限 owner/admin + outbox.read"},
 	}
 	for _, c := range checks {
-		p, ok := set.Get(c.method)
+		p, ok := viewLookup(views, c.method)
 		require.True(t, ok, "%s 必须在策略注册表", c.method)
 		require.True(t, c.verify(p), "%s：%s（实际 Access=%v AdminRoles=%v Scope=%v）", c.method, c.desc, p.Access, p.AdminRoles, p.Scope)
 	}
@@ -59,11 +62,25 @@ func TestAssertSemantic_RealProtoRegistry(t *testing.T) {
 	require.False(t, setAllowsAnyMethod(set, "economy.read"), "退役资源串不得匹配任何 TW 方法")
 }
 
+// viewLookup 在视图列表中查找方法。
+func viewLookup(views []domainauth.MethodPolicy, method string) (domainauth.MethodPolicy, bool) {
+	for _, p := range views {
+		if p.Method == method {
+			return p, true
+		}
+	}
+	return domainauth.MethodPolicy{}, false
+}
+
 // setAllowsAnyMethod 报告 scope 串能否匹配注册表内任一 SERVER 面方法
 // （退役资源串的匹配面断言）。
-func setAllowsAnyMethod(set *domainauth.PolicySet, scope string) bool {
-	for _, p := range set.Methods() {
-		if domainauth.AllowsAPIKeyTargets(set, p.Method, []string{scope}, domainauth.ScopeTargets{}) {
+func setAllowsAnyMethod(set *policy.Set, scope string) bool {
+	views, err := domainauth.Views(set)
+	if err != nil {
+		return false
+	}
+	for _, p := range views {
+		if domainauth.AllowsAPIKey(domainauth.ScopeRuleOf(set, p.Method), []string{scope}, "") {
 			return true
 		}
 	}
@@ -89,8 +106,6 @@ func TestAssertSemantic_DetectsViolations(t *testing.T) {
 		return []domainauth.MethodPolicy{p}
 	}
 
-	_, err := authz.NewPolicySet(base(nil)...)
-	require.NoError(t, err)
 	require.NoError(t, domainauth.AssertPolicy(base(nil)[0]), "合法业务写档应通过（单方法断言）")
 
 	for name, mutate := range map[string]func(*domainauth.MethodPolicy){
@@ -105,8 +120,6 @@ func TestAssertSemantic_DetectsViolations(t *testing.T) {
 			p.RequestFields = []string{"project_id"}
 		},
 	} {
-		_, err := authz.NewPolicySet(base(mutate)...)
-		require.NoError(t, err)
 		require.Error(t, domainauth.AssertPolicy(base(mutate)[0]), "违例 [%s] 必须被语义断言拒绝", name)
 	}
 }

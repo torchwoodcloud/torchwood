@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams } from "@/router/compat";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime, fromDateTimeLocalValue } from "@/lib/datetime";

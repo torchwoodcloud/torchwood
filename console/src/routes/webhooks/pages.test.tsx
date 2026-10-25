@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { TestRouter } from "@/router/compat";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebhooksListPage, WebhookDetailPage } from "./pages";
 
@@ -32,9 +32,7 @@ function renderList() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <WebhooksListPage />
-      </MemoryRouter>
+      <TestRouter routes={[{ path: "/*", element: <WebhooksListPage /> }]} />
     </QueryClientProvider>
   );
 }
@@ -43,11 +41,10 @@ function renderDetail() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/console/webhooks/wh-1"]}>
-        <Routes>
-          <Route path="/console/webhooks/:webhookId" element={<WebhookDetailPage />} />
-        </Routes>
-      </MemoryRouter>
+      <TestRouter
+        initialEntries={["/console/webhooks/wh-1"]}
+        routes={[{ path: "/console/webhooks/:webhookId", element: <WebhookDetailPage /> }]}
+      />
     </QueryClientProvider>
   );
 }

@@ -6,7 +6,7 @@ option go_package = "github.com/torchwoodcloud/torchwood/genproto/server/v1;serv
 
 import "google/api/annotations.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "grpcapi/v1/authz.proto";
+import "grpcapi/v1/policy.proto";
 
 // 服务默认 access=public：swagger 顶层不声明全局 security（匿名可达），
 // 仅声明 securityDefinitions 供统一引用（详见 docs/developer/09-api-guide.md §1.4）。
@@ -56,16 +56,25 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service HealthService {
-  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_PUBLIC };
 
   rpc Check(HealthCheckRequest) returns (HealthCheckResponse) {
     option (google.api.http) = {
       get: "/v1/health"
       additional_bindings { get: "/v1/server/health" }
     };
+    option (grpcapi.v1.method) = {
+      policy: { anonymous: true }
+      exposure: EXPOSURE_PUBLIC
+      label: "PUBLIC"
+    };
   }
   rpc GetVersion(GetVersionRequest) returns (GetVersionResponse) {
     option (google.api.http) = { get: "/v1/server/health/version" };
+    option (grpcapi.v1.method) = {
+      policy: { anonymous: true }
+      exposure: EXPOSURE_PUBLIC
+      label: "PUBLIC"
+    };
   }
 }
 

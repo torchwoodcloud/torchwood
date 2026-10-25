@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"time"
 
-	grpcapiv1 "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
+	"github.com/lynx-go/grpcapi/authz"
 	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
+	"github.com/lynx-go/grpcapi/policy"
+	grpcapiserver "github.com/lynx-go/grpcapi/server"
 	"github.com/lynx-go/lynx"
-	lynxgrpc "github.com/lynx-go/lynx/server/grpc"
 	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	consolev1 "github.com/torchwoodcloud/torchwood/genproto/console/v1"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
@@ -22,9 +23,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/infra/health"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 func NewGRPCServer(
@@ -71,12 +70,15 @@ func NewGRPCServer(
 	serverAnalytics *servergrpc.AnalyticsService,
 	serverRunbook *servergrpc.RunbookService,
 	serverRuntimeVars *servergrpc.RuntimeVarsService,
-	policySet *domainauth.PolicySet,
-) (*lynxgrpc.Server, error) {
+	policySet *policy.Set,
+) (*GRPCAPIService, error) {
 	grpcCfg := cfg.GetServer().GetGrpc()
 	timeout := parseDuration(grpcCfg.GetTimeout(), 30*time.Second)
 
-	// 策略注册表由 ProvideMethodPolicies 注入（唯一收集点，含语义断言）。
+	// 执行侧迁移（grpcapi v1.0 §11.4）：授权执行走库 authz 拦截器
+	//（RequirementDecider 按规范树求值），挂在 torchwood authn 拦截器
+	//（认证 + 业务校验 + 双 principal 注入）之后。策略唯一来源仍是
+	// ProvideMethodPolicies 注入的策略集。
 	authInterceptor, err := interceptor.NewAuthInterceptor(validator, policySet)
 	if err != nil {
 		return nil, err
@@ -84,14 +86,13 @@ func NewGRPCServer(
 	authInterceptor = authInterceptor.WithLogger(app.Logger())
 	// M5 C6：auth 拒绝并联审计（拦截器层拒绝到不了 audit 中间件，无双写）。
 	authInterceptor = authInterceptor.WithDenyAuditSink(auditRepo)
-	// T-02：X-API-Key 认证失败按来源 IP 频控（security.login_throttle
-	// .api_key_auth，默认 10 次/60s；未配置维度时 WithAPIKeyFailThrottle
-	// 回落内置默认）。
-	authInterceptor = authInterceptor.WithAPIKeyFailThrottle(
-		rateLimiter,
-		int(cfg.GetSecurity().GetLoginThrottle().GetApiKeyAuth().GetLimit()),
-		parseDuration(cfg.GetSecurity().GetLoginThrottle().GetApiKeyAuth().GetWindow(), 0),
-	)
+	authzInterceptor, err := authz.NewInterceptor(policySet, nil, authz.Options{
+		OnDecision: authInterceptor.AuthzOnDecision(),
+		Logger:     app.Logger(),
+	})
+	if err != nil {
+		return nil, err
+	}
 	trustedProxies, err := interceptor.ParseTrustedProxies(cfg.GetSecurity().GetTrustedProxies())
 	if err != nil {
 		return nil, fmt.Errorf("parse security.trusted_proxies: %w", err)
@@ -116,81 +117,123 @@ func NewGRPCServer(
 	// handler 开头的形状检查外提为 proto 声明。
 	validateInterceptor := grpcapiinterceptor.NewValidate()
 
-	srv := lynxgrpc.NewServer(
-		lynxgrpc.WithAddr(grpcCfg.GetAddr()),
-		lynxgrpc.WithTimeout(timeout),
-		lynxgrpc.WithLogger(app.Logger()),
-		// 轮询 checkers 并同步 grpc.health.v1.Health（10s 周期快照）。
-		lynxgrpc.WithHealthCheckers(func() []lynx.Checker { return checkers.Deps() }),
-		lynxgrpc.WithInterceptors(
-			clientInfoInterceptor.Unary(),
-			authInterceptor.UnaryAuthMiddleware,
-			rateLimitInterceptor.UnaryRateLimitMiddleware,
-			auditInterceptor.UnaryAuditMiddleware,
-			usageInterceptor.UnaryUsageMiddleware,
-			validateInterceptor.Unary(),
-		),
-		// 允许 ≤1MiB 的 deployment 代码包走 gRPC（base64 膨胀后约 1.33x）。
-		lynxgrpc.WithServerOptions(grpc.MaxRecvMsgSize(8<<20)),
+	// 拦截器链换库装配（lynx 深度集成）：torchwood 自有拦截器按库 Stage
+	// 语义入链（名字/顺序 = 库约定；clientinfo 打头、validate 收尾，
+	// authn 先于 authz 由 server.New 校验）。流式面 = clientInfo/authn/authz
+	//（rateLimit/audit/usage 暂无 stream 实现，与既有装配一致）。
+	chain, err := grpcapiinterceptor.AssembleWith(grpcapiinterceptor.DefaultChainOptions(),
+		grpcapiinterceptor.Stage{Name: grpcapiinterceptor.StageClientInfo, Order: grpcapiinterceptor.OrderClientInfo,
+			Unary: clientInfoInterceptor.Unary(), Stream: clientInfoInterceptor.Stream()},
+		grpcapiinterceptor.Stage{Name: grpcapiinterceptor.StageAuthn, Order: grpcapiinterceptor.OrderAuthn,
+			Unary: authInterceptor.UnaryAuthMiddleware, Stream: authInterceptor.StreamAuthMiddleware},
+		grpcapiinterceptor.Stage{Name: grpcapiinterceptor.StageRateLimit, Order: grpcapiinterceptor.OrderRateLimit,
+			Unary: rateLimitInterceptor.UnaryRateLimitMiddleware},
+		grpcapiinterceptor.Stage{Name: grpcapiinterceptor.StageAudit, Order: grpcapiinterceptor.OrderAudit,
+			Unary: auditInterceptor.UnaryAuditMiddleware},
+		grpcapiinterceptor.Stage{Name: grpcapiinterceptor.StageUsage, Order: grpcapiinterceptor.OrderUsage,
+			Unary: usageInterceptor.UnaryUsageMiddleware},
+		grpcapiinterceptor.Stage{Name: grpcapiinterceptor.StageAuthz, Order: grpcapiinterceptor.OrderAuthz,
+			Unary: authzInterceptor.Unary(), Stream: authzInterceptor.Stream()},
+		grpcapiinterceptor.Stage{Name: grpcapiinterceptor.StageValidate, Order: grpcapiinterceptor.OrderValidate,
+			Unary: validateInterceptor.Unary()},
 	)
-	grpcSrv := srv.GetServer()
-
-	clientv1.RegisterAccountServiceServer(grpcSrv, account)
-	clientv1.RegisterDatabasesServiceServer(grpcSrv, clientDatabases)
-	clientv1.RegisterGroupsServiceServer(grpcSrv, clientGroups)
-	clientv1.RegisterPaymentsServiceServer(grpcSrv, clientPayments)
-	clientv1.RegisterAssetsServiceServer(grpcSrv, clientAssets)
-	clientv1.RegisterSubscriptionsServiceServer(grpcSrv, clientSubscriptions)
-	clientv1.RegisterFunctionsServiceServer(grpcSrv, clientFunctions)
-	clientv1.RegisterLeaderboardsServiceServer(grpcSrv, clientLeaderboards)
-	// Analytics 摄入双面（PR2）：client 面 Principal 归因、server 面可信
-	// 代报；proto 策略 PR1 已登记（authzFileDescriptors）。
-	clientv1.RegisterAnalyticsServiceServer(grpcSrv, clientAnalytics)
-	// RuntimeVars client 面（阶段 3 匿名拉取端点）：GET /v1/runtime-vars/{set}。
-	clientv1.RegisterRuntimeVarsServiceServer(grpcSrv, clientRuntimeVars)
-	serverv1.RegisterHealthServiceServer(grpcSrv, health)
-	serverv1.RegisterProjectsServiceServer(grpcSrv, projects)
-	serverv1.RegisterStorageServiceServer(grpcSrv, storage)
-	serverv1.RegisterUsersServiceServer(grpcSrv, users)
-	// 对外 token 校验面（POST /v1/server/auth/tokens:verify）。
-	serverv1.RegisterAuthServiceServer(grpcSrv, serverAuth)
-	serverv1.RegisterAPIKeysServiceServer(grpcSrv, apiKeys)
-	serverv1.RegisterOAuthProvidersServiceServer(grpcSrv, oauthProviders)
-	serverv1.RegisterGroupsServiceServer(grpcSrv, groups)
-	serverv1.RegisterDatabasesServiceServer(grpcSrv, databases)
-	serverv1.RegisterFunctionsServiceServer(grpcSrv, functions)
-	// Webhooks 一等公民（functions-v4.md §6，D5）：9 方法全实现。
-	serverv1.RegisterWebhooksServiceServer(grpcSrv, webhooks)
-	serverv1.RegisterPaymentsServiceServer(grpcSrv, serverPayments)
-	serverv1.RegisterAssetsServiceServer(grpcSrv, serverAssets)
-	serverv1.RegisterSubscriptionsServiceServer(grpcSrv, serverSubscriptions)
-	serverv1.RegisterBillingServiceServer(grpcSrv, billingService)
-	consolev1.RegisterConsoleAuthServiceServer(grpcSrv, consoleAuth)
-	consolev1.RegisterAdminsServiceServer(grpcSrv, adminsService)
-	consolev1.RegisterLeaderboardsServiceServer(grpcSrv, consoleLeaderboards)
-	if outboxService != nil {
-		serverv1.RegisterOutboxServiceServer(grpcSrv, outboxService)
-	}
-	serverv1.RegisterAuditLogsServiceServer(grpcSrv, auditLogsService)
-	serverv1.RegisterLeaderboardsServiceServer(grpcSrv, serverLeaderboards)
-	// 查询方法嵌 Unimplemented 占位（实现随 PR3），注册保证策略/反射/
-	// swagger 覆盖断言即刻可见。
-	serverv1.RegisterAnalyticsServiceServer(grpcSrv, serverAnalytics)
-	// Runbook 迁移状态面（阶段 A：三方法全实现，策略/swagger 断言即刻可见）。
-	serverv1.RegisterRunbookServiceServer(grpcSrv, serverRunbook)
-	// RuntimeVars server 面（阶段 2 服务面：13 方法 + runtime_vars scope 词表）。
-	serverv1.RegisterRuntimeVarsServiceServer(grpcSrv, serverRuntimeVars)
-
-	// fail-closed：所有已注册方法都必须带有 authz 注解，缺失的方法会被拦截器
-	// fail-closed 拒绝（policy_missing），启动期直接报错以尽早暴露注解缺失。
-	// 断言换库（grpcapi 阶段 1）：AssertAllRegisteredHavePolicy 与原实现同构
-	// （遍历 GetServiceInfo 全部方法，含流式；框架服务整体豁免），流式方法
-	// 覆盖不变。
-	if err := grpcapiinterceptor.AssertAllRegisteredHavePolicy(grpcSrv, policySet); err != nil {
+	if err != nil {
 		return nil, err
 	}
 
-	return srv, nil
+	// gRPC 面装配换库（lynx 深度集成）：server.New 统一装配服务注册、
+	// 拦截器链与启动断言（注册↔策略双向覆盖、extra 冲突、链序），传输层
+	// 生命周期由 grpcAPIService 适配 lynx（listener/排水/健康轮询）。
+	// gateway（HTTP 面）维持既有装配：网络拨号到本服务监听地址。
+	apiServer, err := grpcapiserver.New(app.Context(), grpcapiserver.Config{
+		Policy:      policySet,
+		Services:    apiRegistrations(account, clientDatabases, clientGroups, clientPayments, clientAssets, clientSubscriptions, clientFunctions, clientLeaderboards, clientAnalytics, clientRuntimeVars, health, projects, storage, users, serverAuth, apiKeys, oauthProviders, groups, databases, functions, webhooks, serverPayments, serverAssets, serverSubscriptions, billingService, consoleAuth, adminsService, auditLogsService, serverLeaderboards, consoleLeaderboards, serverAnalytics, serverRunbook, serverRuntimeVars, outboxService),
+		DisableHTTP: true,
+		// 健康面由 grpcAPIService 自注册（lynx 风格轮询聚合）。
+		DisableHealth: true,
+		Chain:         chain,
+		// torchwood authn 是自定义 Stage（凭证语义归 torchwood），不经
+		// grpcapi authn.Chain；authz stage 在链上，受 server.New 校验。
+		AllowNoAuthenticator: true,
+		AllowNoCSRF:          true,
+		MaxRecvMsgSize:       8 << 20,
+		TrustedProxies:       cfg.GetSecurity().GetTrustedProxies(),
+		Logger:               app.Logger(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	gs := apiServer.GRPCServer()
+
+	// fail-closed：所有已注册方法都必须带有策略声明（注册 → 策略方向；
+	// 反向「策略 → 注册」由 server.New validateRegisteredPolicies 校验）。
+	if err := grpcapiinterceptor.AssertAllRegisteredHavePolicy(gs, policySet); err != nil {
+		return nil, err
+	}
+
+	svc := NewGRPCAPIService("grpc", grpcCfg.GetAddr(), apiServer, gs, checkers.Deps, timeout, app.Logger())
+	return svc, nil
+}
+
+// apiRegistrations 把业务服务实现登记为 grpcapi Registration（gRPC 注册
+// 回调 + 服务 descriptor；HTTP 注册由既有 gateway 装配承担，故不设
+// RegisterHTTP——server.New 以 DisableHTTP 跳过该面）。
+func apiRegistrations(account *clientgrpc.AccountService, clientDatabases *clientgrpc.DatabasesService, clientGroups *clientgrpc.GroupsService, clientPayments *clientgrpc.PaymentsService, clientAssets *clientgrpc.AssetsService, clientSubscriptions *clientgrpc.SubscriptionsService, clientFunctions *clientgrpc.FunctionsService, clientLeaderboards *clientgrpc.LeaderboardsService, clientAnalytics *clientgrpc.AnalyticsService, clientRuntimeVars *clientgrpc.RuntimeVarsService, health *servergrpc.HealthService, projects *servergrpc.ProjectsService, storage *servergrpc.StorageService, users *servergrpc.UsersService, serverAuth *servergrpc.AuthService, apiKeys *servergrpc.APIKeysService, oauthProviders *servergrpc.OAuthProvidersService, groups *servergrpc.GroupsService, databases *servergrpc.DatabasesService, functions *servergrpc.FunctionsService, webhooks *servergrpc.WebhooksService, serverPayments *servergrpc.PaymentsService, serverAssets *servergrpc.AssetsService, serverSubscriptions *servergrpc.SubscriptionsService, billingService *servergrpc.BillingService, consoleAuth *consolegrpc.AuthService, adminsService *consolegrpc.AdminsService, auditLogsService *servergrpc.AuditLogsService, serverLeaderboards *servergrpc.LeaderboardsService, consoleLeaderboards *consolegrpc.LeaderboardsService, serverAnalytics *servergrpc.AnalyticsService, serverRunbook *servergrpc.RunbookService, serverRuntimeVars *servergrpc.RuntimeVarsService, outboxService *servergrpc.OutboxService) []grpcapiserver.Registration {
+	reg := func(sd protoreflect.ServiceDescriptor, register func(*grpc.Server)) grpcapiserver.Registration {
+		return grpcapiserver.Registration{Name: string(sd.FullName()), Descriptor: sd, RegisterGRPC: register}
+	}
+	clientFile := func(f protoreflect.FileDescriptor) protoreflect.ServiceDescriptor { return f.Services().Get(0) }
+	serverFile := func(f protoreflect.FileDescriptor) protoreflect.ServiceDescriptor { return f.Services().Get(0) }
+	regs := []grpcapiserver.Registration{
+		reg(clientFile(clientv1.File_client_v1_account_proto), func(s *grpc.Server) { clientv1.RegisterAccountServiceServer(s, account) }),
+		reg(clientFile(clientv1.File_client_v1_databases_proto), func(s *grpc.Server) { clientv1.RegisterDatabasesServiceServer(s, clientDatabases) }),
+		reg(clientFile(clientv1.File_client_v1_groups_proto), func(s *grpc.Server) { clientv1.RegisterGroupsServiceServer(s, clientGroups) }),
+		reg(clientFile(clientv1.File_client_v1_payments_proto), func(s *grpc.Server) { clientv1.RegisterPaymentsServiceServer(s, clientPayments) }),
+		reg(clientFile(clientv1.File_client_v1_assets_proto), func(s *grpc.Server) { clientv1.RegisterAssetsServiceServer(s, clientAssets) }),
+		reg(clientFile(clientv1.File_client_v1_subscriptions_proto), func(s *grpc.Server) { clientv1.RegisterSubscriptionsServiceServer(s, clientSubscriptions) }),
+		reg(clientFile(clientv1.File_client_v1_functions_proto), func(s *grpc.Server) { clientv1.RegisterFunctionsServiceServer(s, clientFunctions) }),
+		reg(clientFile(clientv1.File_client_v1_leaderboards_proto), func(s *grpc.Server) { clientv1.RegisterLeaderboardsServiceServer(s, clientLeaderboards) }),
+		// Analytics 摄入双面（PR2）：client 面 Principal 归因、server 面
+		// 可信代报；查询实现随 PR3。
+		reg(clientFile(clientv1.File_client_v1_analytics_proto), func(s *grpc.Server) { clientv1.RegisterAnalyticsServiceServer(s, clientAnalytics) }),
+		// RuntimeVars client 面（阶段 3 匿名拉取端点）。
+		reg(clientFile(clientv1.File_client_v1_runtime_vars_proto), func(s *grpc.Server) { clientv1.RegisterRuntimeVarsServiceServer(s, clientRuntimeVars) }),
+		reg(serverFile(serverv1.File_server_v1_health_proto), func(s *grpc.Server) { serverv1.RegisterHealthServiceServer(s, health) }),
+		reg(serverFile(serverv1.File_server_v1_projects_proto), func(s *grpc.Server) { serverv1.RegisterProjectsServiceServer(s, projects) }),
+		reg(serverFile(serverv1.File_server_v1_storage_proto), func(s *grpc.Server) { serverv1.RegisterStorageServiceServer(s, storage) }),
+		reg(serverFile(serverv1.File_server_v1_users_proto), func(s *grpc.Server) { serverv1.RegisterUsersServiceServer(s, users) }),
+		// 对外 token 校验面（introspection）。
+		reg(serverFile(serverv1.File_server_v1_auth_proto), func(s *grpc.Server) { serverv1.RegisterAuthServiceServer(s, serverAuth) }),
+		reg(serverFile(serverv1.File_server_v1_apikeys_proto), func(s *grpc.Server) { serverv1.RegisterAPIKeysServiceServer(s, apiKeys) }),
+		reg(serverFile(serverv1.File_server_v1_oauth_providers_proto), func(s *grpc.Server) { serverv1.RegisterOAuthProvidersServiceServer(s, oauthProviders) }),
+		reg(serverFile(serverv1.File_server_v1_groups_proto), func(s *grpc.Server) { serverv1.RegisterGroupsServiceServer(s, groups) }),
+		reg(serverFile(serverv1.File_server_v1_databases_proto), func(s *grpc.Server) { serverv1.RegisterDatabasesServiceServer(s, databases) }),
+		reg(serverFile(serverv1.File_server_v1_functions_proto), func(s *grpc.Server) { serverv1.RegisterFunctionsServiceServer(s, functions) }),
+		// Webhooks 一等公民（functions-v4.md §6，D5）：9 方法全实现。
+		reg(serverFile(serverv1.File_server_v1_webhooks_proto), func(s *grpc.Server) { serverv1.RegisterWebhooksServiceServer(s, webhooks) }),
+		reg(serverFile(serverv1.File_server_v1_payments_proto), func(s *grpc.Server) { serverv1.RegisterPaymentsServiceServer(s, serverPayments) }),
+		reg(serverFile(serverv1.File_server_v1_assets_proto), func(s *grpc.Server) { serverv1.RegisterAssetsServiceServer(s, serverAssets) }),
+		reg(serverFile(serverv1.File_server_v1_subscriptions_proto), func(s *grpc.Server) { serverv1.RegisterSubscriptionsServiceServer(s, serverSubscriptions) }),
+		reg(serverFile(serverv1.File_server_v1_billing_proto), func(s *grpc.Server) { serverv1.RegisterBillingServiceServer(s, billingService) }),
+		reg(clientFile(consolev1.File_console_v1_auth_proto), func(s *grpc.Server) { consolev1.RegisterConsoleAuthServiceServer(s, consoleAuth) }),
+		reg(clientFile(consolev1.File_console_v1_admins_proto), func(s *grpc.Server) { consolev1.RegisterAdminsServiceServer(s, adminsService) }),
+		reg(clientFile(consolev1.File_console_v1_leaderboards_proto), func(s *grpc.Server) { consolev1.RegisterLeaderboardsServiceServer(s, consoleLeaderboards) }),
+		reg(serverFile(serverv1.File_server_v1_audit_logs_proto), func(s *grpc.Server) { serverv1.RegisterAuditLogsServiceServer(s, auditLogsService) }),
+		reg(serverFile(serverv1.File_server_v1_leaderboards_proto), func(s *grpc.Server) { serverv1.RegisterLeaderboardsServiceServer(s, serverLeaderboards) }),
+		// 查询方法嵌 Unimplemented 占位（实现随 PR3），注册保证策略/反射/
+		// swagger 覆盖断言即刻可见。
+		reg(serverFile(serverv1.File_server_v1_analytics_proto), func(s *grpc.Server) { serverv1.RegisterAnalyticsServiceServer(s, serverAnalytics) }),
+		// Runbook 迁移状态面（阶段 A：三方法全实现，策略/swagger 断言即刻可见）。
+		reg(serverFile(serverv1.File_server_v1_runbook_proto), func(s *grpc.Server) { serverv1.RegisterRunbookServiceServer(s, serverRunbook) }),
+		// RuntimeVars server 面（阶段 2 服务面：13 方法 + runtime_vars scope 词表）。
+		reg(serverFile(serverv1.File_server_v1_runtime_vars_proto), func(s *grpc.Server) { serverv1.RegisterRuntimeVarsServiceServer(s, serverRuntimeVars) }),
+	}
+	// Outbox 走读面条件装配（实现存在才登记，nil 跳过）。
+	if outboxService != nil {
+		regs = append(regs, reg(serverv1.File_server_v1_outbox_proto.Services().Get(0),
+			func(s *grpc.Server) { serverv1.RegisterOutboxServiceServer(s, outboxService) }))
+	}
+	return regs
 }
 
 // authzFileDescriptors 是 authz 推导（collectMethodsByAccess）与 swagger 一致性
@@ -244,23 +287,6 @@ func authzFileDescriptors() []protoreflect.FileDescriptor {
 		consolev1.File_console_v1_leaderboards_proto,
 	}
 }
-
-func resolveServiceDefaultAccess(service protoreflect.ServiceDescriptor) grpcapiv1.AccessLevel {
-	options, ok := service.Options().(*descriptorpb.ServiceOptions)
-	if !ok || options == nil || !proto.HasExtension(options, grpcapiv1.E_ServiceAuth) {
-		return grpcapiv1.AccessLevel_ACCESS_LEVEL_UNSPECIFIED
-	}
-	ext := proto.GetExtension(options, grpcapiv1.E_ServiceAuth)
-	policy, ok := ext.(*grpcapiv1.ServiceAuth)
-	if !ok {
-		return grpcapiv1.AccessLevel_ACCESS_LEVEL_UNSPECIFIED
-	}
-	return policy.GetDefaultAccess()
-}
-
-// resolveMethodAccess 已由 buildMethodPolicies（grpcapi.authz.Build）取代
-// （策略解析单一实现）；保留 resolveServiceDefaultAccess 供 swagger 一致性
-// 测试推导服务默认 access。
 
 func parseDuration(s string, fallback time.Duration) time.Duration {
 	if s == "" {

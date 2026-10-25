@@ -272,7 +272,7 @@ var File_server_v1_health_proto protoreflect.FileDescriptor
 
 const file_server_v1_health_proto_rawDesc = "" +
 	"\n" +
-	"\x16server/v1/health.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\"\x14\n" +
+	"\x16server/v1/health.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17grpcapi/v1/policy.proto\"\x14\n" +
 	"\x12HealthCheckRequest\"x\n" +
 	"\x13HealthCheckResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12I\n" +
@@ -285,12 +285,14 @@ const file_server_v1_health_proto_rawDesc = "" +
 	"\x12GetVersionResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
 	"\x06commit\x18\x02 \x01(\tR\x06commit\x12\x12\n" +
-	"\x04date\x18\x03 \x01(\tR\x04date2\xa0\x02\n" +
-	"\rHealthService\x12\x83\x01\n" +
-	"\x05Check\x12'.torchwood.server.v1.HealthCheckRequest\x1a(.torchwood.server.v1.HealthCheckResponse\"'\x82\xd3\xe4\x93\x02!Z\x13\x12\x11/v1/server/health\x12\n" +
-	"/v1/health\x12\x80\x01\n" +
+	"\x04date\x18\x03 \x01(\tR\x04date2\xbc\x02\n" +
+	"\rHealthService\x12\x95\x01\n" +
+	"\x05Check\x12'.torchwood.server.v1.HealthCheckRequest\x1a(.torchwood.server.v1.HealthCheckResponse\"9\xda\xf0\x19\x0e\n" +
+	"\x02\x18\x01\x10\x02\x1a\x06PUBLIC\x82\xd3\xe4\x93\x02!Z\x13\x12\x11/v1/server/health\x12\n" +
+	"/v1/health\x12\x92\x01\n" +
 	"\n" +
-	"GetVersion\x12&.torchwood.server.v1.GetVersionRequest\x1a'.torchwood.server.v1.GetVersionResponse\"!\x82\xd3\xe4\x93\x02\x1b\x12\x19/v1/server/health/version\x1a\x06\xf2\xc4\x19\x02\b\x01B\xf0\x03\x92A\xab\x03RR\n" +
+	"GetVersion\x12&.torchwood.server.v1.GetVersionRequest\x1a'.torchwood.server.v1.GetVersionResponse\"3\xda\xf0\x19\x0e\n" +
+	"\x02\x18\x01\x10\x02\x1a\x06PUBLIC\x82\xd3\xe4\x93\x02\x1b\x12\x19/v1/server/health/versionB\xf0\x03\x92A\xab\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

@@ -17,6 +17,7 @@ import (
 
 	"github.com/disintegration/imaging"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/lynx-go/grpcapi/policy"
 	"github.com/torchwoodcloud/torchwood/internal/api/interceptor"
 	appstorage "github.com/torchwoodcloud/torchwood/internal/app/storage"
 	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
@@ -49,7 +50,7 @@ var inlineSafeMimeTypes = map[string]struct{}{
 
 // FileHandler provides HTTP multipart upload/download for storage.
 type FileHandler struct {
-	policies    *domainauth.PolicySet
+	policies    *policy.Set
 	cfg         *config.AppConfig
 	auth        *httpAuth
 	storage     *appstorage.Storage
@@ -66,7 +67,7 @@ func NewFileHandler(
 	storage *appstorage.Storage,
 	auditRepo audit.Repository,
 	logger *slog.Logger,
-	policies *domainauth.PolicySet,
+	policies *policy.Set,
 ) (*FileHandler, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -842,7 +843,7 @@ func (h *FileHandler) authorize(r *http.Request, bucketID string) (*shared.Princ
 	if !isRead {
 		method = domainauth.StorageServiceCreateFile
 	}
-	p, err := h.auth.authorize(r, func(*http.Request) string { return method }, domainauth.ScopeTargets{BucketID: bucketID})
+	p, err := h.auth.authorize(r, method, bucketID)
 	if err != nil {
 		return nil, err
 	}
@@ -851,7 +852,7 @@ func (h *FileHandler) authorize(r *http.Request, bucketID string) (*shared.Princ
 	}
 	if p.ActorKind == shared.ActorKindAdmin && !isRead {
 		// 角色门从 PolicySet 派生（镜像收编 M3：与拦截器 admin_roles 同源）。
-		if !p.HasAnyRole(h.policies.AllowedAdminRoles(domainauth.StorageServiceCreateFile)) {
+		if !p.HasAnyRole(domainauth.AllowedAdminRoles(h.policies, domainauth.StorageServiceCreateFile)) {
 			return nil, status.Error(codes.PermissionDenied, "admin role not permitted for storage write")
 		}
 	}

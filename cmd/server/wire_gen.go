@@ -190,12 +190,12 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	usersService := servergrpc.NewUsersService(users)
 	serverAuth := server.NewAuth(validator, apiKeyRepository, userRepository, membershipRepository)
 	authService := servergrpc.NewAuthService(serverAuth)
-	v3, err := runtime.ProvideMethodPolicies()
+	set, err := runtime.ProvideMethodPolicies()
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	scopeVocabulary := runtime.ProvideScopeVocabulary(v3)
+	scopeVocabulary := runtime.ProvideScopeVocabulary(set)
 	apiKeys := server.NewAPIKeys(apiKeyRepository, scopeVocabulary)
 	apiKeysService := servergrpc.NewAPIKeysService(apiKeys)
 	oAuthProviders := server.NewOAuthProviders(oAuthProviderRepository)
@@ -236,12 +236,12 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 	runtimeVarRepository := bunrepo.NewRuntimeVarRepository(database)
 	serverRuntimeVars := server.NewRuntimeVars(runtimeVarRepository, database)
 	servergrpcRuntimeVarsService := servergrpc.NewRuntimeVarsService(serverRuntimeVars)
-	grpcServer, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, leaderboardsService, analyticsService, runtimeVarsService, healthService, projectsService, storageService, usersService, authService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcWebhooksService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, consolegrpcAuthService, adminsService, outboxService, auditLogsService, servergrpcLeaderboardsService, consolegrpcLeaderboardsService, servergrpcAnalyticsService, runbookService, servergrpcRuntimeVarsService, v3)
+	grpcapiService, err := runtime.NewGRPCServer(app, appConfig, validator, auditRepository, redisRateLimiter, checkers, accountService, databasesService, groupsService, paymentsService, assetsService, subscriptionsService, functionsService, leaderboardsService, analyticsService, runtimeVarsService, healthService, projectsService, storageService, usersService, authService, apiKeysService, oAuthProvidersService, servergrpcGroupsService, servergrpcDatabasesService, servergrpcFunctionsService, servergrpcWebhooksService, servergrpcPaymentsService, servergrpcAssetsService, servergrpcSubscriptionsService, billingService, redisCounter, consolegrpcAuthService, adminsService, outboxService, auditLogsService, servergrpcLeaderboardsService, consolegrpcLeaderboardsService, servergrpcAnalyticsService, runbookService, servergrpcRuntimeVarsService, set)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	fileHandler, err := serverhttp.NewFileHandler(appConfig, validator, storageStorage, auditRepository, logger, v3)
+	fileHandler, err := serverhttp.NewFileHandler(appConfig, validator, storageStorage, auditRepository, logger, set)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -269,7 +269,7 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	grpcGatewayServer, err := runtime.NewGRPCGatewayServer(app, appConfig, checkers, fileHandler, oAuthHandler, paymentsHandler, functionTriggersHandler, handler, v3)
+	grpcGatewayServer, err := runtime.NewGRPCGatewayServer(app, appConfig, checkers, fileHandler, oAuthHandler, paymentsHandler, functionTriggersHandler, handler, set)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -282,9 +282,9 @@ func wireBootstrap(app lynx.App) (*boot.Bootstrap, func(), error) {
 		return nil, nil, err
 	}
 	debugService := runtime.NewDebugServer(appConfig)
-	v4 := NewComponents(grpcServer, grpcGatewayServer, runnerService, metricsServer, debugService)
-	v5 := bootkit.NewComponentBuilders()
-	bootstrap := boot.New(preStartHooks, drainHooks, preStopHooks, postStopHooks, v4, v5)
+	v3 := NewComponents(grpcapiService, grpcGatewayServer, runnerService, metricsServer, debugService)
+	v4 := bootkit.NewComponentBuilders()
+	bootstrap := boot.New(preStartHooks, drainHooks, preStopHooks, postStopHooks, v3, v4)
 	return bootstrap, func() {
 		cleanup()
 	}, nil

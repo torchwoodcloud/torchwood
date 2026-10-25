@@ -1,11 +1,12 @@
 package runtime
 
 import (
+	"github.com/lynx-go/grpcapi/policy"
+
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/lynx-go/grpcapi/authz"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,7 +37,7 @@ func TestAuthzMatrixDoc_RenderRejectsEmpty(t *testing.T) {
 	_, err := RenderAuthzMatrix(nil)
 	require.Error(t, err)
 
-	empty, err := authz.NewPolicySet()
+	empty, err := policy.NewSet()
 	require.NoError(t, err)
 	_, err = RenderAuthzMatrix(empty)
 	require.Error(t, err)

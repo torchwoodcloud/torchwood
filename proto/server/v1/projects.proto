@@ -8,7 +8,7 @@ import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "grpcapi/v1/authz.proto";
+import "grpcapi/v1/policy.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
@@ -65,13 +65,15 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service ProjectsService {
-  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   rpc CreateProject(CreateProjectRequest) returns (Project) {
     option (google.api.http) = { post: "/v1/server/projects", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner", "admin"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner", "admin"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
@@ -83,31 +85,60 @@ service ProjectsService {
 
   rpc ListProjects(shared.v1.ListRequest) returns (ListProjectsResponse) {
     option (google.api.http) = { get: "/v1/server/projects" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "projects", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["projects:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc GetProject(GetProjectRequest) returns (Project) {
     option (google.api.http) = { get: "/v1/server/projects/{id}" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "projects", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["projects:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc UpdateProject(UpdateProjectRequest) returns (Project) {
     option (google.api.http) = { patch: "/v1/server/projects/{id}", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "projects", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["projects:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc DeleteProject(GetProjectRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/projects/{id}" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner", "admin"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner", "admin"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
@@ -123,13 +154,16 @@ service ProjectsService {
   // 实际准入比声明的 permissions 通道更窄：以下三个 RPC 的 use-case 层
   // 额外要求 platform admin（internal/app/server RequirePlatformPrincipal，
   // fail-closed 纵深防御）。proto 侧放开 owner/admin 角色访问通道 + app 层
-  // 收窄属有意分层，声明保持不变；authorization matrix 由 method_auth 派生，
+  // 收窄属有意分层，声明保持不变；authorization matrix 由策略声明派生，
   // 只反映本声明，不反映 app 层收窄。
   rpc CreateInviteCode(CreateInviteCodeRequest) returns (InviteCode) {
     option (google.api.http) = { post: "/v1/server/projects/{project_id}/invite-codes", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner", "admin"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner", "admin"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
@@ -141,9 +175,12 @@ service ProjectsService {
 
   rpc ListInviteCodes(ListInviteCodesRequest) returns (ListInviteCodesResponse) {
     option (google.api.http) = { get: "/v1/server/projects/{project_id}/invite-codes" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner", "admin"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner", "admin"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
@@ -156,9 +193,12 @@ service ProjectsService {
   // 吊销邀请码（软删：revoked_at 置位，消费路径立即拒绝）。
   rpc DeleteInviteCode(DeleteInviteCodeRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/projects/{project_id}/invite-codes/{id}" };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner", "admin"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner", "admin"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {
@@ -177,9 +217,12 @@ service ProjectsService {
       put: "/v1/server/projects/{project_id}/oauth-redirect-allowlist"
       body: "*"
     };
-    option (grpcapi.v1.method_auth) = {
-      access: ACCESS_LEVEL_PERMISSION
-      permissions: ["owner", "admin"]
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "permission" match: MATCH_ANY values: ["owner", "admin"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "PERMISSION"
     };
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       extensions: {

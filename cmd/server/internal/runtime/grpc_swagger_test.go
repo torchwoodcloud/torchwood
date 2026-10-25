@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	grpcapiv1 "github.com/lynx-go/grpcapi/genproto/grpcapi/v1"
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"google.golang.org/genproto/googleapis/api/annotations"
@@ -22,22 +21,6 @@ import (
 // （NewGRPCServer 的 collectMethodsByAccess 与本文件 swagger 覆盖检查同源）。
 func businessFileDescriptors() []protoreflect.FileDescriptor {
 	return authzFileDescriptors()
-}
-
-func accessLevelString(l grpcapiv1.AccessLevel) (string, bool) {
-	switch l {
-	case grpcapiv1.AccessLevel_ACCESS_LEVEL_PUBLIC:
-		return "public", true
-	case grpcapiv1.AccessLevel_ACCESS_LEVEL_END_USER:
-		return "end_user", true
-	case grpcapiv1.AccessLevel_ACCESS_LEVEL_SERVER:
-		return "server", true
-	case grpcapiv1.AccessLevel_ACCESS_LEVEL_PERMISSION:
-		return "permission", true
-	case grpcapiv1.AccessLevel_ACCESS_LEVEL_SYSTEM:
-		return "system", true
-	}
-	return "", false
 }
 
 // domainAccessString 映射 domain AccessLevel → swagger x-torchwood-access 字符串。
@@ -87,22 +70,18 @@ func TestSwaggerAccessExtensionMatchesCollectMethodsByAccess(t *testing.T) {
 	policies, err := buildMethodPolicies()
 	require.NoError(t, err)
 
-	// 按收集器解析语义（方法级 method_auth 优先，否则服务级默认）推导每个
-	// 方法的 access（直接消费 PolicySet，与启动路径同源）。
+	// 从策略注册表推导每个方法的有效 access（与启动路径同源；路径 B codemod
+	// 后策略逐方法声明，服务级默认已扁平化进各方法）。
 	accessOf := make(map[string]string)
-	defaultOf := make(map[string]string) // service full name → 服务默认 access
 	byProtoPath := make(map[string]protoreflect.FileDescriptor, len(descs))
 	for _, fd := range descs {
 		byProtoPath[fd.Path()] = fd
-		for i := 0; i < fd.Services().Len(); i++ {
-			s := fd.Services().Get(i)
-			serviceName := string(s.FullName())
-			def, ok := accessLevelString(resolveServiceDefaultAccess(s))
-			require.True(t, ok, "service %s 无法解析默认 access", serviceName)
-			defaultOf[serviceName] = def
-		}
 	}
-	for _, p := range policies.Methods() {
+	views, verr := domainauth.Views(policies)
+	if verr != nil {
+		t.Fatal(verr)
+	}
+	for _, p := range views {
 		as, ok := domainAccessString(p.Access)
 		require.True(t, ok, "method %s access 非法", p.Method)
 		accessOf[p.Method] = as
@@ -143,9 +122,10 @@ func TestSwaggerAccessExtensionMatchesCollectMethodsByAccess(t *testing.T) {
 			require.NoError(t, json.Unmarshal(raw, &doc))
 			checkedFiles++
 
-			wantDefault := defaultOf[serviceName]
-			require.Equal(t, wantDefault, doc.XAccess,
-				"%s 顶层 x-torchwood-access 应与服务默认 access 一致（%s）", name, serviceName)
+			// 文件级 x-torchwood-access 是未逐 operation 覆盖时的回退默认
+			//（09-api-guide §10 的 OpenAPI 建模约定），必须显式声明非空；
+			// 有效值与策略声明的一致性由下方逐 operation 比对保证。
+			require.NotEmpty(t, doc.XAccess, "%s 顶层 x-torchwood-access 必须声明", name)
 
 			for _, ops := range doc.Paths {
 				for _, op := range ops {
@@ -177,7 +157,7 @@ func TestSwaggerAccessExtensionMatchesCollectMethodsByAccess(t *testing.T) {
 						effective = doc.XAccess
 					}
 					require.Equal(t, want, effective,
-						"%s %s 有效 x-torchwood-access=%q 与 method_auth %q 不一致",
+						"%s %s 有效 x-torchwood-access=%q 与策略声明 %q 不一致",
 						name, op.OperationID, effective, want)
 					seenMethods[fullMethod]++
 					checkedOps++

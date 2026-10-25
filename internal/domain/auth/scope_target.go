@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	gscope "github.com/lynx-go/grpcapi/policy/scope"
 )
 
 // 本文件实现资源级 scope（安全审计 2026-09-08 T-02）：
@@ -18,22 +20,6 @@ import (
 // 目标实例 ID 在请求寻址点提取（gRPC 拦截器经 getter / serverhttp 经路径
 // 参数），无目标的方法（ListDatabases/ListBuckets/CreateBucket 等全集型）
 // 对资源限定 scope 一律 403。
-
-// ScopeTargets 是单次请求寻址到的目标资源实例（空 = 该方法不寻址具体实例）。
-type ScopeTargets struct {
-	DatabaseID string
-	BucketID   string
-}
-
-func (t ScopeTargets) match(r ScopeResource, id string) bool {
-	switch r {
-	case ScopeDatabases:
-		return t.DatabaseID != "" && t.DatabaseID == id
-	case ScopeStorage:
-		return t.BucketID != "" && t.BucketID == id
-	}
-	return false
-}
 
 // scopeToken 是 scope 字符串的解析结果。
 type scopeToken struct {
@@ -141,37 +127,24 @@ func ParseScopeToken(s string) (scopeToken, bool) {
 	return tok, true
 }
 
-// AllowsAPIKeyTargets 是 AllowsAPIKey 的目标感知扩展（T-02 匹配语义）：
-//   - `*`/`all`、裸资源、`<res>.op` 行为与既有 AllowsAPIKey 完全一致
-//     （向后兼容不变量，由回归测试锁定）；
-//   - `<res>:<id>[.op]` 仅当请求寻址恰好命中该实例时放行；方法不寻址实例
-//     （targets 零值）或寻址其他实例一律不放行。
+// AllowsAPIKey 判定 scope 集是否放行方法声明的 scope 规则（serverhttp/WS
+// 等镜像面消费；gRPC 链由库 authz 拦截器按同一规范树求值）。语义全部委托
+// grpcapi/policy/scope 实现，与五档树的 any_of[scope(res:op), resource(res:op)]
+// 组间 OR 同构（单一语义源）：
+//   - 操作门 Set.Satisfies：`*`/`all`、裸资源、res:op 命中即过；
+//   - 实例门 GrantsInstanceFor（方向感知，G-1 修复后）：实例 token 仅当
+//     请求寻址命中该实例；实例+方向单 token（<res>:<id>.op）方向一致时
+//     过门；操作级 token 不授予实例寻址。
 //
-// 未声明 scope 的方法（rule==nil）依旧一律拒绝。
-// 阶段 1 起为包级函数（类型本体移驻 grpcapi.authz，外部类型无法挂方法）。
-func AllowsAPIKeyTargets(s *PolicySet, fullMethod string, scopes []string, targets ScopeTargets) bool {
-	rule := s.ScopeRule(fullMethod)
+// 未声明 scope 的方法（rule==nil）依旧一律拒绝；target 空串 = 请求不寻址
+// 实例（实例 token 恒不匹配）。
+func AllowsAPIKey(rule *ScopeRule, scopes []string, target string) bool {
 	if rule == nil {
 		return false
 	}
-	for _, sc := range scopes {
-		if sc == "*" || sc == "all" {
-			return true
-		}
-		tok, ok := ParseScopeToken(sc)
-		if !ok {
-			continue
-		}
-		if string(tok.Resource) != rule.Resource {
-			continue
-		}
-		if tok.Op != "" && tok.Op != rule.Op {
-			continue
-		}
-		if tok.TargetID != "" && !targets.match(ScopeResource(rule.Resource), tok.TargetID) {
-			continue
-		}
+	set := gscope.Set(scopes)
+	if set.Satisfies(rule.Resource, string(rule.Op)) {
 		return true
 	}
-	return false
+	return gscope.GrantsInstanceFor(set, rule.Resource, target, string(rule.Op), true)
 }

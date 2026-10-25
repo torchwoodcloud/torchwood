@@ -41,12 +41,13 @@ const (
 	MethodAnalyticsListUserEvents  = "/torchwood.server.v1.AnalyticsService/ListUserEvents"
 )
 
-// InterceptorEnv wires clientInfo + auth + rate limit + audit interceptors
-// the same way production does.
+// InterceptorEnv wires clientInfo + auth + authz + rate limit + audit
+// interceptors the same way production does.
 type InterceptorEnv struct {
 	DB          *clients.Database
 	Validator   *auth.Validator
 	Auth        *interceptor.AuthInterceptor
+	Authz       *authz.Interceptor
 	RateLimit   *interceptor.RateLimitInterceptor
 	RateLimiter *FakeRateLimiter
 	Audit       *interceptor.AuditInterceptor
@@ -77,9 +78,9 @@ func newInterceptorEnv(db *clients.Database, cfg *config.AppConfig, docDB databa
 		nil,
 		execTokens,
 	)
-	// 小策略注册表（与生产 BuildMethodPolicies 同构的 PolicySet 注入；
-	// 全量策略语义由 runtime AssertSemantic + 矩阵测试把关）。
-	policies, err := authz.NewPolicySet([]domainauth.MethodPolicy{
+	// 小策略注册表（与生产装配同构：MethodPolicy → 规范树 → 库 authz 拦截器
+	// 求值；全量策略语义由 runtime AssertSemantic + 矩阵测试把关）。
+	set, err := domainauth.NewSet([]domainauth.MethodPolicy{
 		{Method: MethodHealthCheck, Service: "/torchwood.server.v1.HealthService", Access: domainauth.AccessPublic},
 		{Method: MethodListUsers, Service: "/torchwood.server.v1.UsersService", Access: domainauth.AccessServer,
 			Scope: &domainauth.ScopeRule{Resource: string(domainauth.ScopeUsers), Op: domainauth.ScopeRead}},
@@ -112,7 +113,13 @@ func newInterceptorEnv(db *clients.Database, cfg *config.AppConfig, docDB databa
 	if err != nil {
 		return nil, err
 	}
-	authIC, err := interceptor.NewAuthInterceptor(validator, policies)
+	authIC, err := interceptor.NewAuthInterceptor(validator, set)
+	if err != nil {
+		return nil, err
+	}
+	authzIC, err := authz.NewInterceptor(set, nil, authz.Options{
+		OnDecision: authIC.AuthzOnDecision(),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -121,14 +128,15 @@ func newInterceptorEnv(db *clients.Database, cfg *config.AppConfig, docDB databa
 		DB:          db,
 		Validator:   validator,
 		Auth:        authIC,
+		Authz:       authzIC,
 		RateLimit:   interceptor.NewRateLimitInterceptor(rateLimiter, cfg),
 		RateLimiter: rateLimiter,
 		Audit:       interceptor.NewAuditInterceptor(bunrepo.NewAuditRepository(db)),
 	}, nil
 }
 
-// InvokeUnary runs clientInfo -> auth -> rate limit -> audit -> handler for
-// the given gRPC method and metadata (production chain order).
+// InvokeUnary runs clientInfo -> auth -> authz -> rate limit -> audit -> handler
+// for the given gRPC method and metadata (production chain order).
 func (e *InterceptorEnv) InvokeUnary(ctx context.Context, method string, md metadata.MD) error {
 	return e.InvokeUnaryHandler(ctx, method, md, func(context.Context, any) (any, error) { return nil, nil })
 }
@@ -144,8 +152,11 @@ func (e *InterceptorEnv) InvokeUnaryHandler(ctx context.Context, method string, 
 	rateLimitHandler := func(ctx context.Context, req any) (any, error) {
 		return e.RateLimit.UnaryRateLimitMiddleware(ctx, req, info, auditHandler)
 	}
+	authzHandler := func(ctx context.Context, req any) (any, error) {
+		return e.Authz.Unary()(ctx, req, info, rateLimitHandler)
+	}
 	authHandler := func(ctx context.Context, req any) (any, error) {
-		return e.Auth.UnaryAuthMiddleware(ctx, req, info, rateLimitHandler)
+		return e.Auth.UnaryAuthMiddleware(ctx, req, info, authzHandler)
 	}
 	// clientInfo 换库（grpcapi 阶段 1）：测试环境无可信代理（空配置 =
 	// 不采信转发头），与生产装配同一实现。

@@ -6,7 +6,7 @@ import {
   Link,
   useNavigate,
   useParams,
-} from "react-router-dom";
+} from "@/router/compat";
 import {
   useQuery,
   useMutation,

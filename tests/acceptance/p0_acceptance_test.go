@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/lynx-go/grpcapi/authz"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -39,6 +38,8 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
+
+	"github.com/lynx-go/grpcapi/authz"
 )
 
 func TestP0_Section6_AdminProjectAccess(t *testing.T) {
@@ -198,26 +199,35 @@ func TestP0_Section8_AccessPermission(t *testing.T) {
 	err = env.InvokeUnary(ctx, testutil.MethodAccountSignOut, userMD)
 	require.NoError(t, err)
 
-	// §8.3 principal without users role is rejected on permission-gated methods.
+	// §8.3 END_USER 面按身份类型门禁（执行侧迁移：principal_kind(user) 取代
+	// 旧 HasAnyRole(["users"]) 角色串门）。生产端用户角色解析恒含基础角色
+	// users（UserRoles.LoadUserRoles 无条件携带），两门等价；非 user 主体
+	//（API key，即使 scope 为 *）在库 authz 拒绝。
 	mockValidator := &principalValidator{
 		principal: &shared.Principal{
-			ActorKind:      shared.ActorKindEndUser,
-			CredentialType: shared.CredentialTypeToken,
+			ActorKind:      shared.ActorKindService,
+			CredentialType: shared.CredentialTypeAPIKey,
 			ProjectID:      projectID,
-			UserID:         "no-users-role",
-			Roles:          []string{"guests"},
+			APIKeyID:       "key-1",
+			Roles:          []string{"keys"},
+			Permissions:    []string{"*"},
 		},
 	}
-	policySet, err := authz.NewPolicySet([]domainauth.MethodPolicy{
+	policySet, err := domainauth.NewSet([]domainauth.MethodPolicy{
 		{Method: testutil.MethodAccountMe, Service: "/torchwood.client.v1.AccountService", Access: domainauth.AccessEndUser, Permissions: []string{"users"}},
 	}...)
 	require.NoError(t, err)
 	authIC, err := interceptor.NewAuthInterceptor(mockValidator, policySet)
 	require.NoError(t, err)
-	ctx = metadata.NewIncomingContext(ctx, userMD)
+	authzIC, err := authz.NewInterceptor(policySet, nil, authz.Options{})
+	require.NoError(t, err)
+	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("x-api-key", "sk-test"))
 	_, err = authIC.UnaryAuthMiddleware(ctx, nil, &grpc.UnaryServerInfo{
 		FullMethod: testutil.MethodAccountMe,
-	}, func(ctx context.Context, req any) (any, error) { return nil, nil })
+	}, func(ctx context.Context, req any) (any, error) {
+		return authzIC.Unary()(ctx, req, &grpc.UnaryServerInfo{FullMethod: testutil.MethodAccountMe},
+			func(context.Context, any) (any, error) { return nil, nil })
+	})
 	require.Error(t, err)
 	st, ok := status.FromError(err)
 	require.True(t, ok)

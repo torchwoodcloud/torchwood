@@ -594,7 +594,7 @@ var File_client_v1_payments_proto protoreflect.FileDescriptor
 
 const file_client_v1_payments_proto_rawDesc = "" +
 	"\n" +
-	"\x18client/v1/payments.proto\x12\x13torchwood.client.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xd1\x03\n" +
+	"\x18client/v1/payments.proto\x12\x13torchwood.client.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17grpcapi/v1/policy.proto\x1a\x16shared/v1/common.proto\"\xd1\x03\n" +
 	"\fPaymentOrder\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bprovider\x18\x02 \x01(\tR\bprovider\x12\x16\n" +
@@ -643,13 +643,21 @@ const file_client_v1_payments_proto_rawDesc = "" +
 	"\x15VerifyReceiptResponse\x127\n" +
 	"\x05order\x18\x01 \x01(\v2!.torchwood.client.v1.PaymentOrderR\x05order\x12%\n" +
 	"\x0etransaction_id\x18\x02 \x01(\tR\rtransactionId\x12+\n" +
-	"\x11idempotent_replay\x18\x03 \x01(\bR\x10idempotentReplay2\xb5\x04\n" +
-	"\x0fPaymentsService\x12\x80\x01\n" +
-	"\vCreateOrder\x12'.torchwood.client.v1.CreateOrderRequest\x1a(.torchwood.client.v1.CreateOrderResponse\"\x1e\x82\xd3\xe4\x93\x02\x18:\x01*\"\x13/v1/payments/orders\x12\x7f\n" +
+	"\x11idempotent_replay\x18\x03 \x01(\bR\x10idempotentReplay2\xd6\x05\n" +
+	"\x0fPaymentsService\x12\xaa\x01\n" +
+	"\vCreateOrder\x12'.torchwood.client.v1.CreateOrderRequest\x1a(.torchwood.client.v1.CreateOrderResponse\"H\xda\xf0\x19&\n" +
+	"\x18B\x16\n" +
+	"\x0eprincipal_kind\"\x04user\x10\x02\x1a\bEND_USER\x82\xd3\xe4\x93\x02\x18:\x01*\"\x13/v1/payments/orders\x12\xa9\x01\n" +
 	"\n" +
-	"GetMyOrder\x12&.torchwood.client.v1.GetMyOrderRequest\x1a!.torchwood.client.v1.PaymentOrder\"&\x82\xd3\xe4\x93\x02 \x12\x1e/v1/payments/orders/{order_id}\x12\x80\x01\n" +
-	"\fListMyOrders\x12(.torchwood.client.v1.ListMyOrdersRequest\x1a).torchwood.client.v1.ListMyOrdersResponse\"\x1b\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/payments/orders\x12\x92\x01\n" +
-	"\rVerifyReceipt\x12).torchwood.client.v1.VerifyReceiptRequest\x1a*.torchwood.client.v1.VerifyReceiptResponse\"*\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/v1/payments/ios/verify-receipt\x1a\x06\xf2\xc4\x19\x02\b\x02B\x95\x04\x92A\xd0\x03RR\n" +
+	"GetMyOrder\x12&.torchwood.client.v1.GetMyOrderRequest\x1a!.torchwood.client.v1.PaymentOrder\"P\xda\xf0\x19&\n" +
+	"\x18B\x16\n" +
+	"\x0eprincipal_kind\"\x04user\x10\x02\x1a\bEND_USER\x82\xd3\xe4\x93\x02 \x12\x1e/v1/payments/orders/{order_id}\x12\xaa\x01\n" +
+	"\fListMyOrders\x12(.torchwood.client.v1.ListMyOrdersRequest\x1a).torchwood.client.v1.ListMyOrdersResponse\"E\xda\xf0\x19&\n" +
+	"\x18B\x16\n" +
+	"\x0eprincipal_kind\"\x04user\x10\x02\x1a\bEND_USER\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/payments/orders\x12\xbc\x01\n" +
+	"\rVerifyReceipt\x12).torchwood.client.v1.VerifyReceiptRequest\x1a*.torchwood.client.v1.VerifyReceiptResponse\"T\xda\xf0\x19&\n" +
+	"\x18B\x16\n" +
+	"\x0eprincipal_kind\"\x04user\x10\x02\x1a\bEND_USER\x82\xd3\xe4\x93\x02$:\x01*\"\x1f/v1/payments/ios/verify-receiptB\x95\x04\x92A\xd0\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xc9\x02\n" +

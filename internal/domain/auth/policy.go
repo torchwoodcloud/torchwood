@@ -6,53 +6,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lynx-go/grpcapi/authz"
+	"github.com/lynx-go/grpcapi/policy"
 )
 
-// 本文件是授权策略注册表的 domain 层（阶段 1 起类型本体移驻
-// github.com/lynx-go/grpcapi/authz，此处保留 torchwood 词表、档位分类与
-// 语义断言——值域因项目而异的部分按设计留在项目侧）：
-// 策略唯一声明在 proto（grpcapi.v1 method_auth/service_auth），由
-// cmd/server/internal/runtime 的收集入口（buildMethodPolicies）从 descriptor
-// 构造 authz.PolicySet 注入各执行点。domain 不依赖 genproto（AGENTS.md
-// 分层约定）；authz 包零 grpc/lynx 依赖，可安全被 domain 引用。
-
-// —— 类型别名（grpcapi.authz 本体）——
-
-type (
-	// PolicySet 是全量方法策略注册表（由 runtime 收集器构造，注入执行点）。
-	PolicySet = authz.PolicySet
-	// MethodPolicy 是单个方法的完整授权策略（proto 声明的运行时投影）。
-	// AdminRoles 为 []string（词表主权在项目，见下方 AdminRole 词表）；
-	// RequestFields 为输入消息排序全字段投影（project_id 寻址不变量消费）。
-	MethodPolicy = authz.MethodPolicy
-	// AccessLevel 是方法的凭证族门禁（与 proto grpcapi.v1.AccessLevel 一一对应）。
-	AccessLevel = authz.AccessLevel
-	// ScopeRule 是 SERVER 面方法对 API key 凭证开放的 scope 门。
-	ScopeRule = authz.ScopeRule
-	// ScopeOp 是 scope 的权限方向。
-	ScopeOp = authz.ScopeOp
-)
-
-const (
-	AccessLevelUnspecified AccessLevel = authz.AccessUnspecified
-	// AccessPublic 匿名可调（自证凭证型）。
-	AccessPublic AccessLevel = authz.AccessPublic
-	// AccessEndUser 端用户会话/JWT 专属（Client 面）。
-	AccessEndUser AccessLevel = authz.AccessEndUser
-	// AccessServer admin 会话（admin_roles）或 API key（scope）。
-	AccessServer AccessLevel = authz.AccessServer
-	// AccessPermission admin 会话专属（permissions），key 一律拒绝。
-	AccessPermission AccessLevel = authz.AccessPermission
-	// AccessSystem 内部系统调用（预留）。
-	AccessSystem AccessLevel = authz.AccessSystem
-)
-
-const (
-	ScopeRead  ScopeOp = authz.ScopeRead
-	ScopeWrite ScopeOp = authz.ScopeWrite
-	ScopeAdmin ScopeOp = authz.ScopeAdmin
-)
+// 本文件是授权策略的 domain 断言层（项目主权）：从 *policy.Set（规范树，
+// legacyProvider 展开）经 View 识别为 MethodPolicy 后做值域/档位/不变量
+// 断言。词表、档位分类与语义断言属项目主权；策略声明在 proto、执行在库。
 
 // AdminRole 是 console admin 的 RBAC 角色（平台级角色体系；角色串即
 // principal.Roles 中的形态——proto 注解侧为 string，值域由本词表锁定）。
@@ -121,8 +80,8 @@ func ScopeVocabularyResources() []string {
 // AllowedAdminRoles 返回 SERVER 面方法允许的 admin 角色集（非 SERVER 面
 // 或未声明返回 nil；nil 语义 = 不限角色，viewer 可调）。供 serverhttp/
 // realtime 等镜像消费点派生，禁止手写角色集。
-func AllowedAdminRoles(s *PolicySet, fullMethod string) []string {
-	return s.AllowedAdminRoles(fullMethod)
+func AllowedAdminRoles(s *policy.Set, fullMethod string) []string {
+	return AdminRolesOf(s, fullMethod)
 }
 
 // ScopeVocabulary 是从 PolicySet 派生的合法 scope 词表（创建校验与
@@ -134,12 +93,17 @@ type ScopeVocabulary struct {
 	ops       map[ScopeResource]map[ScopeOp]struct{}
 }
 
-// VocabularyFromPolicies 从策略注册表派生词表（死 scope 断言保证每个资源
+// VocabularyFromPolicies 从策略集派生词表（死 scope 断言保证每个资源
 // 至少被引用一次，因此 resources 恒非空）。
-func VocabularyFromPolicies(set *PolicySet) *ScopeVocabulary {
+func VocabularyFromPolicies(set *policy.Set) *ScopeVocabulary {
+	methods, err := Views(set)
+	if err != nil {
+		// 非规范树形：空词表 fail-closed（启动期 AssertSemantic 已先红）。
+		return &ScopeVocabulary{valid: map[string]struct{}{"*": {}, "all": {}}, ops: map[ScopeResource]map[ScopeOp]struct{}{}}
+	}
 	v := &ScopeVocabulary{valid: map[string]struct{}{"*": {}, "all": {}}, ops: map[ScopeResource]map[ScopeOp]struct{}{}}
 	seen := map[ScopeResource]struct{}{}
-	for _, p := range set.Methods() {
+	for _, p := range methods {
 		if p.Scope == nil {
 			continue
 		}
@@ -356,22 +320,26 @@ func AssertPolicy(p MethodPolicy) error {
 	return nil
 }
 
-// AssertSemantic 是 PolicySet 的全量语义断言（启动期 fail-closed）：
-// 完备性、死 scope、档位合法性、client/console 值域、项目寻址不变量、
-// streaming 禁用。返回的 error 聚合全部违例。
-func AssertSemantic(set *PolicySet) error {
+// AssertSemantic 是策略集的全量语义断言（启动期 fail-closed）：规范树形、
+// 完备性、死 scope、档位合法性、client/console 值域、项目寻址不变量。
+// 流式自 B17 起放行（完整链 clientInfo → authn → authz 已接线；open-time /
+// per-message 由方法 StreamAuth 声明决定，client/bidi 流不得挂 HTTP 绑定
+// 由库 Build 期断言）。返回的 error 聚合全部违例。
+func AssertSemantic(set *policy.Set) error {
 	var errs []string
 	referenced := map[string]struct{}{}
 
-	for _, p := range set.Methods() {
+	for _, op := range set.Operations() {
+		p, err := View(op)
+		if err != nil {
+			errs = append(errs, err.Error())
+			continue
+		}
 		if err := AssertPolicy(p); err != nil {
 			errs = append(errs, err.Error())
 		}
 		if p.Scope != nil {
 			referenced[p.Scope.Resource] = struct{}{}
-		}
-		if p.IsStreaming {
-			errs = append(errs, fmt.Sprintf("%s: streaming RPC is not wired into the auth interceptor (fail-closed)", p.Method))
 		}
 	}
 

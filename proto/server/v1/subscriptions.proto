@@ -8,7 +8,7 @@ import "buf/validate/validate.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "grpcapi/v1/authz.proto";
+import "grpcapi/v1/policy.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
@@ -68,66 +68,141 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // 强制 Cancel/Expire。写方法 scope subscriptions.write（apiKeyScopeRules）
 // 并登记 adminRoleMethodRules。
 service SubscriptionsService {
-  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   rpc CreatePlan(CreatePlanRequest) returns (SubscriptionPlan) {
     option (google.api.http) = { post: "/v1/server/subscriptions/plans", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "subscriptions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["subscriptions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc ListPlans(shared.v1.ListRequest) returns (ListPlansResponse) {
     option (google.api.http) = { get: "/v1/server/subscriptions/plans" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "subscriptions", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["subscriptions:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc GetPlan(GetPlanRequest) returns (SubscriptionPlan) {
     option (google.api.http) = { get: "/v1/server/subscriptions/plans/{plan_id}" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "subscriptions", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["subscriptions:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc UpdatePlan(UpdatePlanRequest) returns (SubscriptionPlan) {
     option (google.api.http) = { patch: "/v1/server/subscriptions/plans/{plan_id}", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "subscriptions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["subscriptions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc DeletePlan(DeletePlanRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/subscriptions/plans/{plan_id}" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "subscriptions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["subscriptions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse) {
     option (google.api.http) = { get: "/v1/server/subscriptions" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "subscriptions", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["subscriptions:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc GetSubscription(GetSubscriptionRequest) returns (Subscription) {
     option (google.api.http) = { get: "/v1/server/subscriptions/{subscription_id}" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "subscriptions", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["subscriptions:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc CancelSubscription(CancelSubscriptionRequest) returns (Subscription) {
     option (google.api.http) = { post: "/v1/server/subscriptions/{subscription_id}:cancel", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "subscriptions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["subscriptions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
   rpc ExpireSubscription(ExpireSubscriptionRequest) returns (Subscription) {
     option (google.api.http) = { post: "/v1/server/subscriptions/{subscription_id}:expire", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["admin", "owner"]
-      api_key_scope: { resource: "subscriptions", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["subscriptions:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 }

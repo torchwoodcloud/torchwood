@@ -13,7 +13,7 @@ require (
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2 // indirect
-	github.com/lynx-go/grpcapi/genproto v0.1.0 // indirect
+	github.com/lynx-go/grpcapi/genproto v0.3.0 // indirect
 )
 
 require (

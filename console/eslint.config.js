@@ -26,6 +26,34 @@ export default defineConfig([
       ],
       // 受控 Dialog 表单初始化模式（open 时同步初始值）为仓库惯例，规则过新
       'react-hooks/set-state-in-effect': 'off',
+      // 路由换轨后禁回 react-router-dom（design.md §12.2 裁决 1）——一切
+      // 路由 API 经 @/router/compat 过渡层或 @tanstack/react-router 原生。
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'react-router-dom',
+              message: '路由已换轨 TanStack Router——用 @/router/compat（过渡层）或 @tanstack/react-router（原生）',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/router/compat.tsx'],
+    rules: {
+      // 兼容层注释提及 react-router-dom 字样即可，无 import 面
+      'no-restricted-imports': 'off',
+    },
+  },
+  {
+    // 路由定义文件（router.tsx）与 react-router 兼容层（compat.tsx）导出
+    // hooks/路由表/组件混合——fast-refresh 只 export-components 规则不适用
+    files: ['src/router.tsx', 'src/router/compat.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
     },
   },
   {

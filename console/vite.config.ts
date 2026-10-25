@@ -35,7 +35,11 @@ export default defineConfig({
     // 代理 API 到本地 Go server（configs/config.yaml.template 的 server.http
     // 端口），保证 dev 下 /v1 与页面同源，HttpOnly 会话 cookie 正常工作。
     proxy: {
-      '/v1': 'http://localhost:9080',
+      '/v1': {
+        target: 'http://localhost:9080',
+        // /v1/realtime WebSocket 同源代理（试听面板，design.md §12.4）
+        ws: true,
+      },
     },
   },
 })

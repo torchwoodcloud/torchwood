@@ -1528,7 +1528,7 @@ var File_server_v1_analytics_proto protoreflect.FileDescriptor
 
 const file_server_v1_analytics_proto_rawDesc = "" +
 	"\n" +
-	"\x19server/v1/analytics.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xa2\x03\n" +
+	"\x19server/v1/analytics.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17grpcapi/v1/policy.proto\x1a\x16shared/v1/common.proto\"\xa2\x03\n" +
 	"\x14ServerAnalyticsEvent\x12=\n" +
 	"\x04name\x18\x01 \x01(\tB)\xbaH&r$\x10\x01\x18@2\x1e^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$R\x04name\x12@\n" +
 	"\voccurred_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\n" +
@@ -1654,22 +1654,37 @@ const file_server_v1_analytics_proto_rawDesc = "" +
 	"\x14AnalyticsGranularity\x12%\n" +
 	"!ANALYTICS_GRANULARITY_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aANALYTICS_GRANULARITY_HOUR\x10\x01\x12\x1d\n" +
-	"\x19ANALYTICS_GRANULARITY_DAY\x10\x022\xe9\t\n" +
-	"\x10AnalyticsService\x12\xba\x01\n" +
-	"\fIngestEvents\x12..torchwood.server.v1.IngestServerEventsRequest\x1a).torchwood.server.v1.IngestEventsResponse\"O\xea\xc4\x19%\x1a\x06member\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tanalytics\x10\x02\x82\xd3\xe4\x93\x02 :\x01*\"\x1b/v1/server/analytics/events\x12\xa1\x01\n" +
-	"\vGetOverview\x120.torchwood.server.v1.GetAnalyticsOverviewRequest\x1a&.torchwood.server.v1.AnalyticsOverview\"8\xea\xc4\x19\x0f\"\r\n" +
-	"\tanalytics\x10\x01\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/server/analytics/overview\x12\xbe\x01\n" +
-	"\x14ListEventDefinitions\x120.torchwood.server.v1.ListEventDefinitionsRequest\x1a1.torchwood.server.v1.ListEventDefinitionsResponse\"A\xea\xc4\x19\x0f\"\r\n" +
-	"\tanalytics\x10\x01\x82\xd3\xe4\x93\x02(\x12&/v1/server/analytics/event-definitions\x12\xa8\x01\n" +
-	"\x0fQueryTimeseries\x12+.torchwood.server.v1.QueryTimeseriesRequest\x1a,.torchwood.server.v1.QueryTimeseriesResponse\":\xea\xc4\x19\x0f\"\r\n" +
-	"\tanalytics\x10\x01\x82\xd3\xe4\x93\x02!\x12\x1f/v1/server/analytics/timeseries\x12\xa4\x01\n" +
-	"\x0eQueryBreakdown\x12*.torchwood.server.v1.QueryBreakdownRequest\x1a+.torchwood.server.v1.QueryBreakdownResponse\"9\xea\xc4\x19\x0f\"\r\n" +
-	"\tanalytics\x10\x01\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/analytics/breakdown\x12\xa4\x01\n" +
-	"\x0eQueryRetention\x12*.torchwood.server.v1.QueryRetentionRequest\x1a+.torchwood.server.v1.QueryRetentionResponse\"9\xea\xc4\x19\x0f\"\r\n" +
-	"\tanalytics\x10\x01\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/analytics/retention\x12\xb1\x01\n" +
-	"\x0eListUserEvents\x12*.torchwood.server.v1.ListUserEventsRequest\x1a+.torchwood.server.v1.ListUserEventsResponse\"F\xea\xc4\x19\x0f\"\r\n" +
-	"\tanalytics\x10\x01\x82\xd3\xe4\x93\x02-\x12+/v1/server/analytics/users/{user_id}/events\x1a\x06\xf2\xc4\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
+	"\x19ANALYTICS_GRANULARITY_DAY\x10\x022\xbc\f\n" +
+	"\x10AnalyticsService\x12\xe3\x01\n" +
+	"\fIngestEvents\x12..torchwood.server.v1.IngestServerEventsRequest\x1a).torchwood.server.v1.IngestEventsResponse\"x\xda\xf0\x19N\n" +
+	"BJ$*\"\n" +
+	"\n" +
+	"admin_role\"\x06member\"\x05admin\"\x05ownerJ\x1a*\x18\n" +
+	"\x05scope\"\x0fanalytics:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02 :\x01*\"\x1b/v1/server/analytics/events\x12\xd4\x01\n" +
+	"\vGetOverview\x120.torchwood.server.v1.GetAnalyticsOverviewRequest\x1a&.torchwood.server.v1.AnalyticsOverview\"k\xda\xf0\x19B\n" +
+	"6J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x19*\x17\n" +
+	"\x05scope\"\x0eanalytics:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\x1f\x12\x1d/v1/server/analytics/overview\x12\xf1\x01\n" +
+	"\x14ListEventDefinitions\x120.torchwood.server.v1.ListEventDefinitionsRequest\x1a1.torchwood.server.v1.ListEventDefinitionsResponse\"t\xda\xf0\x19B\n" +
+	"6J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x19*\x17\n" +
+	"\x05scope\"\x0eanalytics:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02(\x12&/v1/server/analytics/event-definitions\x12\xdb\x01\n" +
+	"\x0fQueryTimeseries\x12+.torchwood.server.v1.QueryTimeseriesRequest\x1a,.torchwood.server.v1.QueryTimeseriesResponse\"m\xda\xf0\x19B\n" +
+	"6J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x19*\x17\n" +
+	"\x05scope\"\x0eanalytics:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02!\x12\x1f/v1/server/analytics/timeseries\x12\xd7\x01\n" +
+	"\x0eQueryBreakdown\x12*.torchwood.server.v1.QueryBreakdownRequest\x1a+.torchwood.server.v1.QueryBreakdownResponse\"l\xda\xf0\x19B\n" +
+	"6J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x19*\x17\n" +
+	"\x05scope\"\x0eanalytics:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/analytics/breakdown\x12\xd7\x01\n" +
+	"\x0eQueryRetention\x12*.torchwood.server.v1.QueryRetentionRequest\x1a+.torchwood.server.v1.QueryRetentionResponse\"l\xda\xf0\x19B\n" +
+	"6J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x19*\x17\n" +
+	"\x05scope\"\x0eanalytics:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/analytics/retention\x12\xe4\x01\n" +
+	"\x0eListUserEvents\x12*.torchwood.server.v1.ListUserEventsRequest\x1a+.torchwood.server.v1.ListUserEventsResponse\"y\xda\xf0\x19B\n" +
+	"6J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x19*\x17\n" +
+	"\x05scope\"\x0eanalytics:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02-\x12+/v1/server/analytics/users/{user_id}/eventsB\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

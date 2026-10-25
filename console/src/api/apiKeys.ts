@@ -41,13 +41,17 @@ export async function getAPIKey(id: string): Promise<APIKey> {
   return res.data;
 }
 
-export async function createAPIKey(input: {
-  name: string;
-  scopes?: string[];
-}): Promise<{ api_key: APIKey; secret: string }> {
+export async function createAPIKey(
+  input: {
+    name: string;
+    scopes?: string[];
+  },
+  config?: ApiRequestConfig
+): Promise<{ api_key: APIKey; secret: string }> {
   const res = await api.post<{ api_key: APIKey; secret: string }>(
     "/server/api-keys",
-    input
+    input,
+    config
   );
   return res.data;
 }
@@ -63,9 +67,10 @@ export interface UpdateAPIKeyInput {
 
 export async function updateAPIKey(
   id: string,
-  input: UpdateAPIKeyInput
+  input: UpdateAPIKeyInput,
+  config?: ApiRequestConfig
 ): Promise<APIKey> {
-  const res = await api.patch<APIKey>(`/server/api-keys/${id}`, input);
+  const res = await api.patch<APIKey>(`/server/api-keys/${id}`, input, config);
   return res.data;
 }
 

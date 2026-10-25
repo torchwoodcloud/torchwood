@@ -1,0 +1,6098 @@
+{
+  "version": 1,
+  "apis": [
+    {
+      "name": "client",
+      "operations": [
+        {
+          "id": "/torchwood.client.v1.AccountService/ConfirmEmailChange",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/CreateAnonymousSession",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/CreateEmailOTP",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/CreateEmailOTPSession",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/CreateJWT",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/CreateMFASession",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/CreateMagicURLSession",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/CreateOAuth2LinkSession",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/CreateOAuth2LinkTokenSession",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/CreateOAuth2Session",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/CreateOAuth2TokenSession",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/CreatePhoneOTP",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/CreatePhoneOTPSession",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/CreateRecovery",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/CreateTOTPFactor",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/CreateVerification",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/CreateWeChatMiniProgramSession",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/DeleteAccount",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/DeleteFactor",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/DeleteSession",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/DeleteSessions",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/GetPrefs",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/ListFactors",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/ListLogs",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/ListSessions",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/Me",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/RefreshToken",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/SignIn",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/SignOut",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/SignUp",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/UpdateAccount",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/UpdateMagicURLSession",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/UpdatePrefs",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/UpdateRecovery",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/UpdateVerification",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AccountService/VerifyTOTPFactor",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AnalyticsService/IngestEvents",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AssetsService/ListAssetDefs",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AssetsService/ListMyAssetLedger",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.AssetsService/ListMyAssets",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.DatabasesService/CountDocuments",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.DatabasesService/CreateDocument",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.DatabasesService/DeleteDocument",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.DatabasesService/GetDocument",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.DatabasesService/ListChanges",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.DatabasesService/ListDocuments",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.DatabasesService/UpdateDocument",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.DatabasesService/UpsertDocument",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.FunctionsService/InvokeFunction",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.GroupsService/CreateGroup",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.GroupsService/CreateMembership",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.GroupsService/DeleteGroup",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.GroupsService/DeleteMembership",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.GroupsService/GetGroup",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.GroupsService/ListGroups",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.GroupsService/ListMemberships",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.GroupsService/UpdateMembershipStatus",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.LeaderboardsService/GetMyLeaderboardEntry",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.LeaderboardsService/ListLeaderboardTop",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.LeaderboardsService/SubmitLeaderboardScore",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.PaymentsService/CreateOrder",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.PaymentsService/GetMyOrder",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.PaymentsService/ListMyOrders",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.PaymentsService/VerifyReceipt",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.RuntimeVarsService/GetRuntimeVars",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.SubscriptionsService/Cancel",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.SubscriptionsService/GetMySubscription",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.SubscriptionsService/ListPlans",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.client.v1.SubscriptionsService/Subscribe",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "END_USER",
+          "policy": {
+            "require": [
+              {
+                "kind": "principal_kind",
+                "values": [
+                  "user"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "console",
+      "operations": [
+        {
+          "id": "/torchwood.console.v1.AdminsService/CreateAdmin",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.AdminsService/DeleteAdmin",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.AdminsService/GetCurrentAdmin",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "console"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.AdminsService/ListAdmins",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.AdminsService/UpdateAdmin",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.AdminsService/UpdateCurrentAdmin",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "console"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.ConsoleAuthService/GetSetupStatus",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.ConsoleAuthService/RefreshToken",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.ConsoleAuthService/SignIn",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.ConsoleAuthService/SignOut",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.ConsoleAuthService/SignUp",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.LeaderboardsService/CreateLeaderboardBoard",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.LeaderboardsService/DeleteLeaderboardBoard",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.LeaderboardsService/DeleteLeaderboardEntry",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.LeaderboardsService/GetLeaderboardBoard",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.LeaderboardsService/GetLeaderboardEntry",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.LeaderboardsService/GetLeaderboardSettlement",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.LeaderboardsService/ListLeaderboardBoardPeriods",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.LeaderboardsService/ListLeaderboardBoards",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.LeaderboardsService/ListLeaderboardSettlements",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.LeaderboardsService/ListLeaderboardTop",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.LeaderboardsService/RerunLeaderboardSettlement",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.LeaderboardsService/UpdateLeaderboardBoard",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.console.v1.LeaderboardsService/VoidLeaderboardSettlement",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "owner"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "server",
+      "operations": [
+        {
+          "id": "/torchwood.server.v1.APIKeysService/CreateAPIKey",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.APIKeysService/DeleteAPIKey",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.APIKeysService/GetAPIKey",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.APIKeysService/ListAPIKeys",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.APIKeysService/UpdateAPIKey",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.APIKeysService/WhoAmI",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AnalyticsService/GetOverview",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "analytics:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AnalyticsService/IngestEvents",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "analytics:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AnalyticsService/ListEventDefinitions",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "analytics:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AnalyticsService/ListUserEvents",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "analytics:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AnalyticsService/QueryBreakdown",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "analytics:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AnalyticsService/QueryRetention",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "analytics:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AnalyticsService/QueryTimeseries",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "analytics:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AssetsService/Consume",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "assets:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AssetsService/CreateAssetDef",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "assets:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AssetsService/DeleteAssetDef",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "assets:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AssetsService/Expire",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "assets:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AssetsService/GetAssetDef",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "assets:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AssetsService/Grant",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "assets:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AssetsService/ListAssetDefs",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "assets:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AssetsService/ListDefAssets",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "assets:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AssetsService/ListUserAssets",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "assets:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AssetsService/ListUserLedger",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "assets:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AssetsService/Mutate",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "assets:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AssetsService/Reconcile",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "assets:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AssetsService/Transfer",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "assets:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AssetsService/UpdateAssetDef",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "assets:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AuditLogsService/ListAuditLogs",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "audit_logs:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.AuthService/VerifyToken",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "users:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.BillingService/GetUsage",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "billing:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.BillingService/ListRollups",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "billing:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.BillingService/ListStatements",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "billing:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/AggregateDocuments",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/BulkDeleteDocuments",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/BulkUpdateDocuments",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/CountDocuments",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/CreateAttribute",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/CreateCollection",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/CreateDatabase",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/CreateDocument",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/CreateIndex",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/DeleteAttribute",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/DeleteCollection",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/DeleteDatabase",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/DeleteDocument",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/DeleteIndex",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/ExecuteTransactions",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/ExportCollectionSchema",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/GetCollection",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/GetDatabase",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/GetDocument",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/ListChanges",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/ListCollections",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/ListDatabases",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/ListDocuments",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/MigrateAttribute",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/RestoreAttribute",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/RetireAttribute",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/UpdateCollection",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/UpdateDocument",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.DatabasesService/UpsertDocument",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "databases:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.FunctionsService/CreateFunction",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.FunctionsService/CreateFunctionTrigger",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.FunctionsService/DeleteFunction",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.FunctionsService/DeleteFunctionTrigger",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.FunctionsService/GetFunction",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.FunctionsService/GetInvocation",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.FunctionsService/InvokeFunction",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.FunctionsService/ListFunctionTriggers",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.FunctionsService/ListFunctions",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.FunctionsService/ListInvocations",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.FunctionsService/RotateFunctionSecret",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.FunctionsService/RotateFunctionTriggerToken",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.FunctionsService/SetFunctionScopes",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.FunctionsService/UpdateFunction",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.GroupsService/CreateGroup",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "groups:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.GroupsService/CreateMembership",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "groups:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.GroupsService/DeleteGroup",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "groups:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.GroupsService/DeleteMembership",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "groups:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.GroupsService/GetGroup",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "groups:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.GroupsService/GetGroupPrefs",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "groups:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.GroupsService/GetMembership",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "groups:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.GroupsService/ListGroups",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "groups:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.GroupsService/ListMemberships",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "groups:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.GroupsService/UpdateGroupPrefs",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "groups:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.GroupsService/UpdateMembership",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "groups:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.GroupsService/UpdateMembershipStatus",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "groups:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.HealthService/Check",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.HealthService/GetVersion",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PUBLIC",
+          "policy": {
+            "anonymous": true
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.LeaderboardsService/CreateLeaderboardBoard",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "leaderboards:admin"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.LeaderboardsService/GetLeaderboardBoard",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "leaderboards:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.LeaderboardsService/GetLeaderboardEntry",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "leaderboards:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.LeaderboardsService/GetLeaderboardSettlement",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "leaderboards:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.LeaderboardsService/ListLeaderboardBoardPeriods",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "leaderboards:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.LeaderboardsService/ListLeaderboardBoards",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "leaderboards:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.LeaderboardsService/ListLeaderboardSettlements",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "leaderboards:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.LeaderboardsService/ListLeaderboardTop",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "leaderboards:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.LeaderboardsService/SubmitLeaderboardScore",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "leaderboards:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.LeaderboardsService/UpdateLeaderboardBoard",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "leaderboards:admin"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.OAuthProvidersService/DeleteOAuthProvider",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "oauthproviders:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.OAuthProvidersService/ListOAuthProviders",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "oauthproviders:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.OAuthProvidersService/UpsertOAuthProvider",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "oauthproviders:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.OutboxService/ListDeadLetters",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "outbox:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.OutboxService/ReplayDeadLetter",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "outbox:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.PaymentsService/GetOrder",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "payments:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.PaymentsService/ListOrders",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "payments:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.PaymentsService/ManualFulfill",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "payments:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.PaymentsService/Refund",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "payments:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.ProjectsService/CreateInviteCode",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.ProjectsService/CreateProject",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.ProjectsService/DeleteInviteCode",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.ProjectsService/DeleteProject",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.ProjectsService/GetProject",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "projects:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.ProjectsService/ListInviteCodes",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.ProjectsService/ListProjects",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "projects:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.ProjectsService/UpdateOAuthRedirectAllowlist",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "PERMISSION",
+          "policy": {
+            "require": [
+              {
+                "kind": "permission",
+                "match": "any",
+                "values": [
+                  "admin",
+                  "owner"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.ProjectsService/UpdateProject",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "projects:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.RunbookService/DeleteRunbookStep",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "runbooks:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.RunbookService/GetRunbookState",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "runbooks:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.RunbookService/RecordRunbookStep",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "runbooks:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.RuntimeVarsService/CreateRuntimeVar",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "runtime_vars:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.RuntimeVarsService/CreateVarSet",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "runtime_vars:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.RuntimeVarsService/DeleteRuntimeVar",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "runtime_vars:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.RuntimeVarsService/DeleteVarSet",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "runtime_vars:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.RuntimeVarsService/GetRuntimeVar",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "runtime_vars:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.RuntimeVarsService/GetRuntimeVarVersion",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "runtime_vars:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.RuntimeVarsService/GetVarSet",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "runtime_vars:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.RuntimeVarsService/ListRuntimeVarVersions",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "runtime_vars:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.RuntimeVarsService/ListRuntimeVars",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "runtime_vars:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.RuntimeVarsService/ListVarSets",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "runtime_vars:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.RuntimeVarsService/RollbackRuntimeVar",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "runtime_vars:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.RuntimeVarsService/UpdateRuntimeVar",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "runtime_vars:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.RuntimeVarsService/UpdateVarSet",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "runtime_vars:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.StorageService/CreateBucket",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "storage:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.StorageService/CreateFile",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "storage:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "storage:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.StorageService/CreateFileToken",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "storage:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "storage:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.StorageService/DeleteBucket",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "storage:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "storage:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.StorageService/DeleteFile",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "storage:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "storage:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.StorageService/GetBucket",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "storage:read"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "storage:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.StorageService/GetFile",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "storage:read"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "storage:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.StorageService/GetStorageUsage",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "storage:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.StorageService/ListBuckets",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "storage:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.StorageService/ListFiles",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "storage:read"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "storage:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.StorageService/UpdateBucket",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "storage:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "storage:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.StorageService/UpdateFile",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "resource",
+                  "values": [
+                    "storage:write"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "storage:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.SubscriptionsService/CancelSubscription",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "subscriptions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.SubscriptionsService/CreatePlan",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "subscriptions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.SubscriptionsService/DeletePlan",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "subscriptions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.SubscriptionsService/ExpireSubscription",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "subscriptions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.SubscriptionsService/GetPlan",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "subscriptions:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.SubscriptionsService/GetSubscription",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "subscriptions:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.SubscriptionsService/ListPlans",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "subscriptions:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.SubscriptionsService/ListSubscriptions",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "subscriptions:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.SubscriptionsService/UpdatePlan",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "subscriptions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.UsersService/CreateUser",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "users:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.UsersService/CreateUserToken",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "users:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.UsersService/DeleteUser",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "users:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.UsersService/DeleteUserSession",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "users:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.UsersService/GetUser",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "users:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.UsersService/ListUserSessions",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "users:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.UsersService/ListUsers",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "users:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.UsersService/UpdateUser",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "users:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.UsersService/UpdateUserPassword",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "member",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "users:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.WebhooksService/CreateWebhook",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.WebhooksService/DeleteWebhook",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.WebhooksService/GetDelivery",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.WebhooksService/GetWebhook",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.WebhooksService/ListDeliveries",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.WebhooksService/ListWebhooks",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "principal_kind",
+                  "values": [
+                    "admin"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:read"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.WebhooksService/RedeliverDelivery",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.WebhooksService/RotateWebhookSecret",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "id": "/torchwood.server.v1.WebhooksService/UpdateWebhook",
+          "kind": "grpc",
+          "exposure": "public",
+          "label": "SERVER",
+          "policy": {
+            "any_of": [
+              [
+                {
+                  "kind": "admin_role",
+                  "values": [
+                    "admin",
+                    "owner"
+                  ]
+                }
+              ],
+              [
+                {
+                  "kind": "scope",
+                  "values": [
+                    "functions:write"
+                  ]
+                }
+              ]
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

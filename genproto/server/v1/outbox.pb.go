@@ -335,7 +335,7 @@ var File_server_v1_outbox_proto protoreflect.FileDescriptor
 
 const file_server_v1_outbox_proto_rawDesc = "" +
 	"\n" +
-	"\x16server/v1/outbox.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"T\n" +
+	"\x16server/v1/outbox.proto\x12\x13torchwood.server.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17grpcapi/v1/policy.proto\x1a\x16shared/v1/common.proto\"T\n" +
 	"\x16ListDeadLettersRequest\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
@@ -360,14 +360,18 @@ const file_server_v1_outbox_proto_rawDesc = "" +
 	"\bevent_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aeventId\"t\n" +
 	"\x18ReplayDeadLetterResponse\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12=\n" +
-	"\favailable_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vavailableAt2\x99\x03\n" +
-	"\rOutboxService\x12\xb2\x01\n" +
-	"\x0fListDeadLetters\x12+.torchwood.server.v1.ListDeadLettersRequest\x1a,.torchwood.server.v1.ListDeadLettersResponse\"D\xea\xc4\x19\x1a\x1a\x05admin\x1a\x05owner\"\n" +
+	"\favailable_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vavailableAt2\xe3\x03\n" +
+	"\rOutboxService\x12\xda\x01\n" +
+	"\x0fListDeadLetters\x12+.torchwood.server.v1.ListDeadLettersRequest\x1a,.torchwood.server.v1.ListDeadLettersResponse\"l\xda\xf0\x19B\n" +
+	"6J\x1c*\x1a\n" +
 	"\n" +
-	"\x06outbox\x10\x01\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/outbox/dead-letters\x12\xca\x01\n" +
-	"\x10ReplayDeadLetter\x12,.torchwood.server.v1.ReplayDeadLetterRequest\x1a-.torchwood.server.v1.ReplayDeadLetterResponse\"Y\xea\xc4\x19\x1a\x1a\x05admin\x1a\x05owner\"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x16*\x14\n" +
+	"\x05scope\"\voutbox:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02 \x12\x1e/v1/server/outbox/dead-letters\x12\xf4\x01\n" +
+	"\x10ReplayDeadLetter\x12,.torchwood.server.v1.ReplayDeadLetterRequest\x1a-.torchwood.server.v1.ReplayDeadLetterResponse\"\x82\x01\xda\xf0\x19C\n" +
+	"7J\x1c*\x1a\n" +
 	"\n" +
-	"\x06outbox\x10\x02\x82\xd3\xe4\x93\x025:\x01*\"0/v1/server/outbox/dead-letters/{event_id}:replay\x1a\x06\xf2\xc4\x19\x02\b\x03B\xd4\x02\x92A\x8f\x02RR\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x17*\x15\n" +
+	"\x05scope\"\foutbox:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x025:\x01*\"0/v1/server/outbox/dead-letters/{event_id}:replayB\xd4\x02\x92A\x8f\x02RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\x8a\x01\n" +

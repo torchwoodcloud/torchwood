@@ -1,10 +1,8 @@
-import { useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useState } from "react";
+import { useParams } from "@/router/compat";
 import { useQuery } from "@tanstack/react-query";
 import {
   ResponsiveContainer,
-  LineChart,
-  Line,
   BarChart,
   Bar,
   XAxis,
@@ -40,9 +38,9 @@ import {
   detailWindow,
   errText,
   granularityRange,
-  timeseriesRows,
   type DetailRange,
 } from "./shared";
+import { TrendChart } from "./metricChart";
 
 const GRANULARITIES: { key: "HOUR" | "DAY"; label: string }[] = [
   { key: "DAY", label: "按天" },
@@ -78,9 +76,11 @@ export function AnalyticsEventDetailPage() {
     enabled: !!projectId && !!name,
   });
 
-  const rows = useMemo(
-    () => timeseriesRows(trendQ.data?.points ?? [], granularity),
-    [trendQ.data, granularity]
+  const trendPoints = trendQ.data?.points ?? [];
+  // 全零窗口 = 该事件无上报（业务口径）——空态判断留在页面（§12.6-4），
+  // 块内"全零是合法序列"照画的哲学与此两层各司其职。
+  const trendAllZero = trendPoints.every(
+    (p) => num(p.total) === 0 && num(p.unique_users) === 0
   );
 
   // 拆解维度键：输入后显式提交（避免逐键触发查询）；服务端白名单校验为准，
@@ -168,38 +168,13 @@ export function AnalyticsEventDetailPage() {
               <Skeleton className="h-64 w-full" />
             ) : trendQ.error ? (
               <p className="text-sm text-destructive">加载失败：{errText(trendQ.error)}</p>
-            ) : rows.every((r) => r.total === 0 && r.uv === 0) ? (
+            ) : trendAllZero ? (
               <EmptyState
                 title="窗口内暂无该事件"
                 description="该事件在所选窗口内没有上报记录；可切换粒度或扩大时间范围。"
               />
             ) : (
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={rows} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 12 }} allowDecimals={false} width={48} />
-                    <Tooltip />
-                    <Line
-                      type="monotone"
-                      dataKey="total"
-                      name="事件数"
-                      stroke="#2563eb"
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="uv"
-                      name="活跃用户"
-                      stroke="#16a34a"
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              <TrendChart points={trendPoints} granularity={granularity} />
             )}
           </CardContent>
         </Card>
@@ -255,7 +230,7 @@ export function AnalyticsEventDetailPage() {
                       layout="vertical"
                       margin={{ top: 4, right: 24, bottom: 4, left: 8 }}
                     >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
                       <XAxis type="number" tick={{ fontSize: 12 }} allowDecimals={false} />
                       <YAxis
                         type="category"
@@ -264,7 +239,7 @@ export function AnalyticsEventDetailPage() {
                         width={160}
                       />
                       <Tooltip />
-                      <Bar dataKey="total" name="事件数" fill="#2563eb" radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="total" name="事件数" fill="var(--chart-1)" radius={[0, 4, 4, 0]} isAnimationActive={false} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

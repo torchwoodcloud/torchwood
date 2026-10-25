@@ -1,6 +1,6 @@
 import { act } from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
+import { Outlet, TestRouter } from "@/router/compat";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { refreshSession } from "@/api/auth";
 import { ListenPanel } from "./ListenPanel";
@@ -52,24 +52,35 @@ class MockWebSocket {
   }
 }
 
-function renderPanel() {
+async function renderPanel() {
   return render(
-    <MemoryRouter initialEntries={["/console/databases/app/collections/posts/listen"]}>
-      <Routes>
-        <Route
-          path="/console/databases/:dbId/collections/:collId"
-          element={<Outlet context={{ dbId: "app", collId: "posts" }} />}
-        >
-          <Route path="listen" element={<ListenPanel />} />
-        </Route>
-      </Routes>
-    </MemoryRouter>
+    <TestRouter
+      initialEntries={["/console/databases/app/collections/posts/listen"]}
+      routes={[
+        {
+          path: "/console/databases/:dbId/collections/:collId",
+          element: <Outlet context={{ dbId: "app", collId: "posts" }} />,
+          children: [{ path: "listen", element: <ListenPanel /> }],
+        },
+      ]}
+    />
   );
+  // TanStack RouterProvider 首帧异步挂载——flush 后引擎开流
+  await act(async () => {});
 }
 
-// 握手并进入已连接状态（hello → hello_ok → subscribe）。
-function connectFirst(): MockWebSocket {
-  const ws = MockWebSocket.instances[0];
+// 引擎开流链（mount→useSubscription→引擎 start→迭代器首 next→WS 构造）
+// 跨多个 Effect 微任务——waitFor 轮询首个实例。
+async function firstMockWs(): Promise<MockWebSocket> {
+  return waitFor(() => {
+    const ws = MockWebSocket.instances[0];
+    expect(ws).toBeTruthy();
+    return ws;
+  });
+}
+
+async function connectFirst(): Promise<MockWebSocket> {
+  const ws = await firstMockWs();
   act(() => ws.serverOpen());
   act(() => ws.serverSend({ type: "hello_ok", connection_id: "conn-1" }));
   return ws;
@@ -87,9 +98,9 @@ describe("ListenPanel", () => {
     vi.unstubAllGlobals();
   });
 
-  it("cookie 握手绑 project_id（不带 access_token），订阅集合频道并展示事件", async () => {
-    renderPanel();
-    const ws = MockWebSocket.instances[0];
+  it("cookie 握手绑 project_id（不带 access_token），订阅集合频道并展示事件（最新在上）", async () => {
+    await renderPanel();
+    const ws = await firstMockWs();
     act(() => ws.serverOpen());
 
     // hello 先绑 project_id，cookie 场景不带 access_token。
@@ -115,20 +126,33 @@ describe("ListenPanel", () => {
       await screen.findByText("databases.app.collections.posts.documents.d1.create")
     ).toBeTruthy();
 
+    // 第二条事件到达——最新在上（行序倒序）。
+    act(() =>
+      ws.serverSend({
+        type: "event",
+        channel: "databases.app.collections.posts",
+        payload: { event: "databases.app.collections.posts.documents.d2.delete", event_id: "e2" },
+      })
+    );
+    await waitFor(() => expect(screen.getByText("2 条事件")).toBeTruthy());
+    const rows = document.querySelectorAll("ul > li[data-key]");
+    expect(rows[0]?.getAttribute("data-key")).toBe("2"); // d2.delete 最新在上
+
     // 服务端 30s ping → 回 pong。
     act(() => ws.serverSend({ type: "ping" }));
     expect(ws.frames().at(-1)).toEqual({ type: "pong" });
   });
 
   it("15m 到期断线（token_expired）：走 console auth refresh 后重新 hello + 重订", async () => {
-    renderPanel();
-    const ws1 = connectFirst();
+    await renderPanel();
+    const ws1 = await connectFirst();
     expect(await screen.findByText("已连接")).toBeTruthy();
 
     act(() => ws1.serverClose(1008, "token_expired"));
     await waitFor(() => expect(vi.mocked(refreshSession)).toHaveBeenCalledTimes(1));
 
-    // refresh 成功后自动重连：新 WS、重新 hello、重订频道（不补历史）。
+    // refresh 成功后自动重连（引擎退避首档 250ms）：新 WS、重新 hello、
+    // 重订频道（不补历史——无 backlog 前缀/游标重放帧）。
     await waitFor(() => expect(MockWebSocket.instances.length).toBe(2));
     const ws2 = MockWebSocket.instances[1];
     act(() => ws2.serverOpen());
@@ -142,22 +166,40 @@ describe("ListenPanel", () => {
     expect(await screen.findByText("已连接")).toBeTruthy();
   });
 
-  it("refresh 失败显示「已断开，点击重连」，点击后重新连接", async () => {
-    renderPanel();
-    const ws1 = connectFirst();
+  it("refresh 持续失败：多轮退避后 stalled「已断开，点击重连」，点击后重连恢复", { timeout: 20000 }, async () => {
+    // 引擎语义（§12.4-2）：refresh 失败不阻断重订——服务端持续 1008 时
+    // 逐档退避（250+500+1000+2000ms），预算耗尽 stalled；手动重连 restart
+    // 重置预算。模拟死会话：每次新连接都被服务端以 token_expired 关闭。
+    vi.mocked(refreshSession).mockRejectedValue(new Error("session gone"));
+    await renderPanel();
+    const ws1 = await connectFirst();
     expect(await screen.findByText("已连接")).toBeTruthy();
 
-    vi.mocked(refreshSession).mockRejectedValueOnce(new Error("session gone"));
+    // 首连 + 4 次重试 = 5 个连接；每次服务端关闭 → 退避 → refresh（失败）
+    // → 重开。第 5 次关闭后预算耗尽 → stalled。
     act(() => ws1.serverClose(1008, "token_expired"));
-    const reconnectBtn = await screen.findByText("已断开，点击重连");
-    expect(MockWebSocket.instances.length).toBe(1); // 未自动重连
+    for (let n = 1; n < 5; n += 1) {
+      const index = n;
+      await waitFor(
+        () => expect(MockWebSocket.instances.length).toBe(index + 1),
+        { timeout: 4000 }
+      );
+      act(() => MockWebSocket.instances[index].serverClose(1008, "token_expired"));
+    }
+    // stalled 徽章（精确匹配——按钮文案是「已断开，点击重连」，substring 会撞两者）
+    expect(await screen.findByText("已断开")).toBeTruthy();
+    // refresh 按重试次数调用（每轮退避后一次），非按 close 次数。
+    expect(vi.mocked(refreshSession)).toHaveBeenCalledTimes(4);
 
+    const reconnectBtn = await screen.findByText("已断开，点击重连");
+    // 会话已在别处恢复（refresh 转成功）；restart 重置退避预算立即重开。
+    vi.mocked(refreshSession).mockResolvedValue(undefined);
     act(() => reconnectBtn.click());
-    await waitFor(() => expect(MockWebSocket.instances.length).toBe(2));
-    const ws2 = MockWebSocket.instances[1];
-    act(() => ws2.serverOpen());
-    expect(ws2.frames()).toEqual([{ type: "hello", project_id: "proj-1" }]);
-    act(() => ws2.serverSend({ type: "hello_ok", connection_id: "conn-2" }));
+    await waitFor(() => expect(MockWebSocket.instances.length).toBe(6), { timeout: 4000 });
+    const ws6 = MockWebSocket.instances[5];
+    act(() => ws6.serverOpen());
+    expect(ws6.frames()).toEqual([{ type: "hello", project_id: "proj-1" }]);
+    act(() => ws6.serverSend({ type: "hello_ok", connection_id: "conn-6" }));
     expect(await screen.findByText("已连接")).toBeTruthy();
   });
 });

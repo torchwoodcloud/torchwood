@@ -9,7 +9,7 @@ import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "grpcapi/v1/authz.proto";
+import "grpcapi/v1/policy.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=api_key：swagger 顶层声明 X-API-Key security（详见
@@ -66,96 +66,196 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 };
 
 service GroupsService {
-  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_SERVER };
 
   rpc CreateGroup(CreateGroupRequest) returns (Group) {
     option (google.api.http) = { post: "/v1/server/groups", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "groups", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["groups:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc ListGroups(shared.v1.ListRequest) returns (ListGroupsResponse) {
     option (google.api.http) = { get: "/v1/server/groups" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "groups", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["groups:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc GetGroup(GetGroupRequest) returns (Group) {
     option (google.api.http) = { get: "/v1/server/groups/{id}" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "groups", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["groups:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc DeleteGroup(GetGroupRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/groups/{id}" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "groups", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["groups:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc GetGroupPrefs(GetGroupRequest) returns (GetGroupPrefsResponse) {
     option (google.api.http) = { get: "/v1/server/groups/{id}/prefs" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "groups", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["groups:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc UpdateGroupPrefs(UpdateGroupPrefsRequest) returns (GetGroupPrefsResponse) {
     option (google.api.http) = { put: "/v1/server/groups/{id}/prefs", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "groups", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["groups:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc CreateMembership(CreateMembershipRequest) returns (Membership) {
     option (google.api.http) = { post: "/v1/server/groups/{group_id}/memberships", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "groups", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["groups:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc ListMemberships(ListMembershipsRequest) returns (ListMembershipsResponse) {
     option (google.api.http) = { get: "/v1/server/groups/{group_id}/memberships" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "groups", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["groups:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc GetMembership(GetMembershipRequest) returns (Membership) {
     option (google.api.http) = { get: "/v1/server/groups/{group_id}/memberships/{membership_id}" };
-    option (grpcapi.v1.method_auth) = {
-      api_key_scope: { resource: "groups", op: SCOPE_OP_READ }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "principal_kind" values: ["admin"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["groups:read"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc UpdateMembership(UpdateMembershipRequest) returns (Membership) {
     option (google.api.http) = { patch: "/v1/server/groups/{group_id}/memberships/{membership_id}", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "groups", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["groups:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc UpdateMembershipStatus(UpdateMembershipStatusRequest) returns (Membership) {
     option (google.api.http) = { patch: "/v1/server/groups/{group_id}/memberships/{membership_id}/status", body: "*" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "groups", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["groups:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 
   rpc DeleteMembership(GetMembershipRequest) returns (shared.v1.Empty) {
     option (google.api.http) = { delete: "/v1/server/groups/{group_id}/memberships/{membership_id}" };
-    option (grpcapi.v1.method_auth) = {
-      admin_roles: ["member", "admin", "owner"]
-      api_key_scope: { resource: "groups", op: SCOPE_OP_WRITE }
+    option (grpcapi.v1.method) = {
+      policy: {
+        any_of: {
+          require: { kind: "admin_role" values: ["member", "admin", "owner"] }
+        }
+        any_of: {
+          require: { kind: "scope" values: ["groups:write"] }
+        }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "SERVER"
     };
   }
 }

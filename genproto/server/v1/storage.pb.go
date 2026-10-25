@@ -976,7 +976,7 @@ var File_server_v1_storage_proto protoreflect.FileDescriptor
 
 const file_server_v1_storage_proto_rawDesc = "" +
 	"\n" +
-	"\x17server/v1/storage.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"k\n" +
+	"\x17server/v1/storage.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17grpcapi/v1/policy.proto\x1a\x16shared/v1/common.proto\"k\n" +
 	"\x13CreateBucketRequest\x12\x1a\n" +
 	"\x04name\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x04name\x12 \n" +
 	"\vpermissions\x18\x02 \x03(\tR\vpermissions\x12\x16\n" +
@@ -1064,35 +1064,75 @@ const file_server_v1_storage_proto_rawDesc = "" +
 	"\abuckets\x18\x01 \x01(\x03R\abuckets\x12\x14\n" +
 	"\x05files\x18\x02 \x01(\x03R\x05files\x12\x1d\n" +
 	"\n" +
-	"total_size\x18\x03 \x01(\x03R\ttotalSize2\xf9\x0f\n" +
-	"\x0eStorageService\x12\xa3\x01\n" +
-	"\fCreateBucket\x12(.torchwood.server.v1.CreateBucketRequest\x1a\x1b.torchwood.server.v1.Bucket\"L\xea\xc4\x19#\x1a\x06member\x1a\x05admin\x1a\x05owner\"\v\n" +
-	"\astorage\x10\x02\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/v1/server/storage/buckets\x12\x8e\x01\n" +
-	"\vListBuckets\x12 .torchwood.shared.v1.ListRequest\x1a(.torchwood.server.v1.ListBucketsResponse\"3\xea\xc4\x19\r\"\v\n" +
-	"\astorage\x10\x01\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/server/storage/buckets\x12\x89\x01\n" +
-	"\tGetBucket\x12%.torchwood.server.v1.GetBucketRequest\x1a\x1b.torchwood.server.v1.Bucket\"8\xea\xc4\x19\r\"\v\n" +
-	"\astorage\x10\x01\x82\xd3\xe4\x93\x02!\x12\x1f/v1/server/storage/buckets/{id}\x12\xa1\x01\n" +
-	"\fDeleteBucket\x12%.torchwood.server.v1.GetBucketRequest\x1a\x1a.torchwood.shared.v1.Empty\"N\xea\xc4\x19#\x1a\x06member\x1a\x05admin\x1a\x05owner\"\v\n" +
-	"\astorage\x10\x02\x82\xd3\xe4\x93\x02!*\x1f/v1/server/storage/buckets/{id}\x12\xa8\x01\n" +
-	"\fUpdateBucket\x12(.torchwood.server.v1.UpdateBucketRequest\x1a\x1b.torchwood.server.v1.Bucket\"Q\xea\xc4\x19#\x1a\x06member\x1a\x05admin\x1a\x05owner\"\v\n" +
-	"\astorage\x10\x02\x82\xd3\xe4\x93\x02$:\x01*2\x1f/v1/server/storage/buckets/{id}\x12\xaf\x01\n" +
+	"total_size\x18\x03 \x01(\x03R\ttotalSize2\x9a\x16\n" +
+	"\x0eStorageService\x12\xcc\x01\n" +
+	"\fCreateBucket\x12(.torchwood.server.v1.CreateBucketRequest\x1a\x1b.torchwood.server.v1.Bucket\"u\xda\xf0\x19L\n" +
+	"@J$*\"\n" +
 	"\n" +
-	"CreateFile\x12&.torchwood.server.v1.CreateFileRequest\x1a\x19.torchwood.server.v1.File\"^\xea\xc4\x19#\x1a\x06member\x1a\x05admin\x1a\x05owner\"\v\n" +
-	"\astorage\x10\x02\x82\xd3\xe4\x93\x021:\x01*\",/v1/server/storage/buckets/{bucket_id}/files\x12\xa1\x01\n" +
-	"\tListFiles\x12%.torchwood.server.v1.ListFilesRequest\x1a&.torchwood.server.v1.ListFilesResponse\"E\xea\xc4\x19\r\"\v\n" +
-	"\astorage\x10\x01\x82\xd3\xe4\x93\x02.\x12,/v1/server/storage/buckets/{bucket_id}/files\x12\x9a\x01\n" +
-	"\aGetFile\x12#.torchwood.server.v1.GetFileRequest\x1a\x19.torchwood.server.v1.File\"O\xea\xc4\x19\r\"\v\n" +
-	"\astorage\x10\x01\x82\xd3\xe4\x93\x028\x126/v1/server/storage/buckets/{bucket_id}/files/{file_id}\x12\xb4\x01\n" +
+	"admin_role\"\x06member\"\x05admin\"\x05ownerJ\x18*\x16\n" +
+	"\x05scope\"\rstorage:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/v1/server/storage/buckets\x12\xc1\x01\n" +
+	"\vListBuckets\x12 .torchwood.shared.v1.ListRequest\x1a(.torchwood.server.v1.ListBucketsResponse\"f\xda\xf0\x19@\n" +
+	"4J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x17*\x15\n" +
+	"\x05scope\"\fstorage:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\x1c\x12\x1a/v1/server/storage/buckets\x12\xd9\x01\n" +
+	"\tGetBucket\x12%.torchwood.server.v1.GetBucketRequest\x1a\x1b.torchwood.server.v1.Bucket\"\x87\x01\xda\xf0\x19\\\n" +
+	"PJ\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x17*\x15\n" +
+	"\x05scope\"\fstorage:readJ\x1a*\x18\n" +
+	"\bresource\"\fstorage:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02!\x12\x1f/v1/server/storage/buckets/{id}\x12\xe8\x01\n" +
+	"\fDeleteBucket\x12%.torchwood.server.v1.GetBucketRequest\x1a\x1a.torchwood.shared.v1.Empty\"\x94\x01\xda\xf0\x19i\n" +
+	"]J$*\"\n" +
 	"\n" +
-	"DeleteFile\x12#.torchwood.server.v1.GetFileRequest\x1a\x1a.torchwood.shared.v1.Empty\"e\xea\xc4\x19#\x1a\x06member\x1a\x05admin\x1a\x05owner\"\v\n" +
-	"\astorage\x10\x02\x82\xd3\xe4\x93\x028*6/v1/server/storage/buckets/{bucket_id}/files/{file_id}\x12\xb9\x01\n" +
+	"admin_role\"\x06member\"\x05admin\"\x05ownerJ\x18*\x16\n" +
+	"\x05scope\"\rstorage:writeJ\x1b*\x19\n" +
+	"\bresource\"\rstorage:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02!*\x1f/v1/server/storage/buckets/{id}\x12\xef\x01\n" +
+	"\fUpdateBucket\x12(.torchwood.server.v1.UpdateBucketRequest\x1a\x1b.torchwood.server.v1.Bucket\"\x97\x01\xda\xf0\x19i\n" +
+	"]J$*\"\n" +
 	"\n" +
-	"UpdateFile\x12&.torchwood.server.v1.UpdateFileRequest\x1a\x19.torchwood.server.v1.File\"h\xea\xc4\x19#\x1a\x06member\x1a\x05admin\x1a\x05owner\"\v\n" +
-	"\astorage\x10\x02\x82\xd3\xe4\x93\x02;:\x01*26/v1/server/storage/buckets/{bucket_id}/files/{file_id}\x12\xcf\x01\n" +
-	"\x0fCreateFileToken\x12+.torchwood.server.v1.CreateFileTokenRequest\x1a\x1e.torchwood.server.v1.FileToken\"o\xea\xc4\x19#\x1a\x06member\x1a\x05admin\x1a\x05owner\"\v\n" +
-	"\astorage\x10\x02\x82\xd3\xe4\x93\x02B:\x01*\"=/v1/server/storage/buckets/{bucket_id}/files/{file_id}/tokens\x12\x94\x01\n" +
-	"\x0fGetStorageUsage\x12+.torchwood.server.v1.GetStorageUsageRequest\x1a!.torchwood.server.v1.StorageUsage\"1\xea\xc4\x19\r\"\v\n" +
-	"\astorage\x10\x01\x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/server/storage/usage\x1a\x06\xf2\xc4\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
+	"admin_role\"\x06member\"\x05admin\"\x05ownerJ\x18*\x16\n" +
+	"\x05scope\"\rstorage:writeJ\x1b*\x19\n" +
+	"\bresource\"\rstorage:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02$:\x01*2\x1f/v1/server/storage/buckets/{id}\x12\xf6\x01\n" +
+	"\n" +
+	"CreateFile\x12&.torchwood.server.v1.CreateFileRequest\x1a\x19.torchwood.server.v1.File\"\xa4\x01\xda\xf0\x19i\n" +
+	"]J$*\"\n" +
+	"\n" +
+	"admin_role\"\x06member\"\x05admin\"\x05ownerJ\x18*\x16\n" +
+	"\x05scope\"\rstorage:writeJ\x1b*\x19\n" +
+	"\bresource\"\rstorage:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x021:\x01*\",/v1/server/storage/buckets/{bucket_id}/files\x12\xf1\x01\n" +
+	"\tListFiles\x12%.torchwood.server.v1.ListFilesRequest\x1a&.torchwood.server.v1.ListFilesResponse\"\x94\x01\xda\xf0\x19\\\n" +
+	"PJ\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x17*\x15\n" +
+	"\x05scope\"\fstorage:readJ\x1a*\x18\n" +
+	"\bresource\"\fstorage:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02.\x12,/v1/server/storage/buckets/{bucket_id}/files\x12\xea\x01\n" +
+	"\aGetFile\x12#.torchwood.server.v1.GetFileRequest\x1a\x19.torchwood.server.v1.File\"\x9e\x01\xda\xf0\x19\\\n" +
+	"PJ\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x17*\x15\n" +
+	"\x05scope\"\fstorage:readJ\x1a*\x18\n" +
+	"\bresource\"\fstorage:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x028\x126/v1/server/storage/buckets/{bucket_id}/files/{file_id}\x12\xfb\x01\n" +
+	"\n" +
+	"DeleteFile\x12#.torchwood.server.v1.GetFileRequest\x1a\x1a.torchwood.shared.v1.Empty\"\xab\x01\xda\xf0\x19i\n" +
+	"]J$*\"\n" +
+	"\n" +
+	"admin_role\"\x06member\"\x05admin\"\x05ownerJ\x18*\x16\n" +
+	"\x05scope\"\rstorage:writeJ\x1b*\x19\n" +
+	"\bresource\"\rstorage:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x028*6/v1/server/storage/buckets/{bucket_id}/files/{file_id}\x12\x80\x02\n" +
+	"\n" +
+	"UpdateFile\x12&.torchwood.server.v1.UpdateFileRequest\x1a\x19.torchwood.server.v1.File\"\xae\x01\xda\xf0\x19i\n" +
+	"]J$*\"\n" +
+	"\n" +
+	"admin_role\"\x06member\"\x05admin\"\x05ownerJ\x18*\x16\n" +
+	"\x05scope\"\rstorage:writeJ\x1b*\x19\n" +
+	"\bresource\"\rstorage:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02;:\x01*26/v1/server/storage/buckets/{bucket_id}/files/{file_id}\x12\x96\x02\n" +
+	"\x0fCreateFileToken\x12+.torchwood.server.v1.CreateFileTokenRequest\x1a\x1e.torchwood.server.v1.FileToken\"\xb5\x01\xda\xf0\x19i\n" +
+	"]J$*\"\n" +
+	"\n" +
+	"admin_role\"\x06member\"\x05admin\"\x05ownerJ\x18*\x16\n" +
+	"\x05scope\"\rstorage:writeJ\x1b*\x19\n" +
+	"\bresource\"\rstorage:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02B:\x01*\"=/v1/server/storage/buckets/{bucket_id}/files/{file_id}/tokens\x12\xc7\x01\n" +
+	"\x0fGetStorageUsage\x12+.torchwood.server.v1.GetStorageUsageRequest\x1a!.torchwood.server.v1.StorageUsage\"d\xda\xf0\x19@\n" +
+	"4J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x17*\x15\n" +
+	"\x05scope\"\fstorage:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\x1a\x12\x18/v1/server/storage/usageB\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lynx-go/grpcapi/authz"
 	"github.com/stretchr/testify/require"
 )
 
@@ -89,7 +88,7 @@ func testVocabAllResources(t *testing.T) *ScopeVocabulary {
 			})
 		}
 	}
-	set, err := authz.NewPolicySet(pols...)
+	set, err := NewSet(pols...)
 	require.NoError(t, err)
 	return VocabularyFromPolicies(set)
 }
@@ -130,24 +129,19 @@ func TestScopeVocabularyValid_CustomInterplay(t *testing.T) {
 }
 
 // TestCustomScope_NeverGrantsTWAccess 锁定"自定义 scope 对 TW 方法永不匹配"
-// （fail-closed）：任意语法合法的自定义串经 AllowsAPIKeyTargets 一律拒绝，
+// （fail-closed）：任意语法合法的自定义串经 AllowsAPIKey 一律拒绝，
 // mlbridge 等外部标签不得意外获得 TW 权限。
 func TestCustomScope_NeverGrantsTWAccess(t *testing.T) {
-	set, err := authz.NewPolicySet([]MethodPolicy{{
-		Method: "/torchwood.server.v1.UsersService/ListUsers", Service: "/torchwood.server.v1.UsersService",
-		Access: AccessServer,
-		Scope:  &ScopeRule{Resource: string(ScopeUsers), Op: ScopeRead},
-	}}...)
-	require.NoError(t, err)
+	rule := &ScopeRule{Resource: string(ScopeUsers), Op: ScopeRead}
 	for _, s := range []string{
 		"messageloop.session.act",
 		"mlbridge.users.read", // 即使 name 段伪装成内建形态也不放行
 		"messageloop.all",     // 无点 → 语法非法，更不放行
 		"x.users",             // service 单字符 → 语法非法
 	} {
-		require.False(t, AllowsAPIKeyTargets(set, "/torchwood.server.v1.UsersService/ListUsers", []string{s}, ScopeTargets{}),
+		require.False(t, AllowsAPIKey(rule, []string{s}, ""),
 			"自定义 scope %q 不得匹配 TW 方法", s)
 	}
 	// 内建对照：users.read 照常放行（匹配语义不受影响）。
-	require.True(t, AllowsAPIKeyTargets(set, "/torchwood.server.v1.UsersService/ListUsers", []string{"users.read"}, ScopeTargets{}))
+	require.True(t, AllowsAPIKey(rule, []string{"users.read"}, ""))
 }

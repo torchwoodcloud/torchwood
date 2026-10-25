@@ -1,21 +1,14 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp } from "lucide-react";
-import {
-  listAuditLogs,
-  type AuditLog,
-} from "@/api/auditLogs";
+import { useState } from "react";
+import { useCollection } from "@lynx-go/ui-kit";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
+import type { Predicate } from "@lynx-go/ui-kit/kernel";
+import type { AuditLog } from "@/api/auditLogs";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
-import { useServerPaging } from "@/hooks/useServerPaging";
 import { useUserTimezone } from "@/hooks/useTimezone";
-import { formatDateTime, fromDateTimeLocalValue } from "@/lib/datetime";
+import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
 import { PageHeader } from "@/components/PageHeader";
-import { EmptyState } from "@/components/EmptyState";
-import { LoadingTable } from "@/components/LoadingTable";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { JsonEditor } from "@/components/ui/json-editor";
@@ -32,14 +25,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  auditLogsResource,
+  auditLogsSearch,
+  filtersOf,
+  type FilterField,
+} from "@/fleet/auditLogs";
 
 // —— 语义化渲染辅助：把 gRPC FullMethod / 结构化 metadata 变成人话 ——
 
@@ -134,59 +128,117 @@ function formatValue(v: unknown): string {
 
 // —— 页面 ——
 
-type ScopeMode = "project" | "include_platform" | "all_projects";
-
 export function AuditLogsListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const platformAdmin = isPlatformAdmin(role);
   const tz = useUserTimezone();
 
-  // 过滤条件与排序变化经 resetKeys 自动回第一页（机制，非手动 reset）。
-  const [action, setAction] = useState("");
-  const [status, setStatus] = useState("");
-  const [actorId, setActorId] = useState("");
-  const [resourceId, setResourceId] = useState("");
-  const [createdAfter, setCreatedAfter] = useState("");
-  const [createdBefore, setCreatedBefore] = useState("");
-  const [scope, setScope] = useState<ScopeMode>("project");
-  // 服务端时间排序：换向必须回第一页（offset token 不编码方向）。
-  const [sortOrder, setSortOrder] = useState<"ASC" | "DESC">("DESC");
-  const toggleSort = () => setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
-
-  // 服务端分页（useServerPaging：token 栈 + resetKeys 机制）。
-  const paging = useServerPaging(50, {
-    resetKeys: [action, status, actorId, resourceId, createdAfter, createdBefore, scope, sortOrder],
+  // keyset 切片：过滤/排序/游标/页大小全部进 URL（filter=field:op:value /
+  // sort / cursor / size），游标分页栈 = 浏览器历史。from 用路由 id（代码式
+  // 路由树中 id = 完整路径；useSearch 按 id 锚定活跃 match）。
+  const list = useCollection(auditLogsResource, {
+    from: "/console/audit-logs",
+    search: auditLogsSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-
+  const filters = filtersOf(list.query.predicate);
   const [selected, setSelected] = useState<AuditLog | null>(null);
 
-  const params = useMemo(
-    () => ({
-      page_size: paging.pageSize,
-      page_token: paging.pageToken || undefined,
-      action: action || undefined,
-      status: status || undefined,
-      actor_id: actorId || undefined,
-      resource_id: resourceId || undefined,
-      // datetime-local 筛选值按管理员时区偏好解释为绝对时刻（非法输入视为未填）。
-      created_after: createdAfter ? fromDateTimeLocalValue(createdAfter, tz) || undefined : undefined,
-      created_before: createdBefore ? fromDateTimeLocalValue(createdBefore, tz) || undefined : undefined,
-      include_platform: scope === "include_platform" || scope === "all_projects" || undefined,
-      all_projects: scope === "all_projects" || undefined,
-      sort_order: sortOrder,
-    }),
-    [paging.pageSize, paging.pageToken, action, status, actorId, resourceId, createdAfter, createdBefore, scope, tz, sortOrder]
-  );
+  // setFilter 写谓词（replace + 清游标回第一页）；datetime 字段在写入边界
+  // 做墙钟↔绝对换算——URL 存绝对时刻，跨时区分享同一过滤窗口。
+  const setFilter = (field: FilterField, value: string) => {
+    const next = { ...filters, [field]: value || undefined };
+    const leaves: Predicate[] = [];
+    for (const [f, v] of Object.entries(next)) {
+      if (f === "created_after" || f === "created_before") continue;
+      if (typeof v === "string" && v !== "") leaves.push({ field: f, op: "eq", value: v });
+    }
+    const after = fromDateTimeLocalValue(next.created_after ?? "", tz);
+    if (after) leaves.push({ field: "created_after", op: "eq", value: after });
+    const before = fromDateTimeLocalValue(next.created_before ?? "", tz);
+    if (before) leaves.push({ field: "created_before", op: "eq", value: before });
+    list.setPredicate(leaves.length === 0 ? null : leaves.length === 1 ? leaves[0] : { all: leaves });
+  };
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["audit-logs", projectId, params],
-    queryFn: () => listAuditLogs(params),
-    enabled: !!projectId,
-  });
+  const columns: LegacyColumnDef<AuditLog, unknown>[] = [
+    {
+      id: "created_at",
+      header: "时间",
+      meta: { sortField: "created_at" },
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap text-xs text-muted-foreground">
+          {row.original.created_at ? formatDateTime(row.original.created_at, tz) : "—"}
+        </span>
+      ),
+    },
+    {
+      id: "change",
+      header: "变更",
+      cell: ({ row }) => (
+        <div className="max-w-[320px]">
+          <div className="truncate font-medium" title={describeAudit(row.original)}>
+            {describeAudit(row.original)}
+          </div>
+          <div
+            className="truncate font-mono text-xs text-muted-foreground"
+            title={row.original.action}
+          >
+            {row.original.action}
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "status",
+      header: "状态",
+      cell: ({ row }) => (
+        <Badge variant={statusBadgeVariant(row.original.status)}>{row.original.status}</Badge>
+      ),
+    },
+    {
+      id: "channel",
+      header: "通道",
+      cell: ({ row }) => {
+        const channel = channelOf(row.original);
+        return channel ? (
+          <Badge variant="outline">{CHANNEL_LABELS[channel] ?? channel}</Badge>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        );
+      },
+    },
+    {
+      id: "actor",
+      header: "操作者",
+      cell: ({ row }) => (
+        <span className="block max-w-[160px] truncate font-mono text-xs">
+          {row.original.actor_kind ? `${row.original.actor_kind}:` : ""}
+          {row.original.actor_id || "—"}
+        </span>
+      ),
+    },
+    {
+      id: "resource",
+      header: "资源",
+      cell: ({ row }) => (
+        <span className="block max-w-[140px] truncate font-mono text-xs">
+          {row.original.resource_id || "—"}
+        </span>
+      ),
+    },
+    {
+      id: "ip",
+      header: "IP",
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">{row.original.ip || "—"}</span>
+      ),
+    },
+  ];
 
-  const logs = data?.audit_logs ?? [];
-  const meta = data?.meta;
+  // 源空与过滤空两套文案：谓词在场 = 过滤空。
+  const filtered = list.query.predicate != null;
 
   return (
     <div className="space-y-6">
@@ -195,244 +247,125 @@ export function AuditLogsListPage() {
         description="管理面（Console / CLI / SDK / API Key）全部系统变更的完整审计轨迹"
       />
 
-      <Card>
-        <CardHeader className="space-y-4">
-          <CardTitle>审计记录</CardTitle>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <div className="space-y-1">
-              <Label htmlFor="audit-action">操作</Label>
-              <Input
-                id="audit-action"
-                placeholder="如 FunctionsService/UpdateFunction"
-                value={action}
-                onChange={(e) => {
-                  setAction(e.target.value);
-                }}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>状态</Label>
-              <Select
-                value={status || "all"}
-                onValueChange={(v) => {
-                  setStatus(v === "all" ? "" : v);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="全部" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部</SelectItem>
-                  <SelectItem value="success">success</SelectItem>
-                  <SelectItem value="denied">denied</SelectItem>
-                  <SelectItem value="throttled">throttled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="audit-actor">操作者 ID</Label>
-              <Input
-                id="audit-actor"
-                value={actorId}
-                onChange={(e) => {
-                  setActorId(e.target.value);
-                }}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="audit-resource">资源 ID</Label>
-              <Input
-                id="audit-resource"
-                value={resourceId}
-                onChange={(e) => {
-                  setResourceId(e.target.value);
-                }}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="audit-after">起始时间</Label>
-              <Input
-                id="audit-after"
-                type="datetime-local"
-                value={createdAfter}
-                onChange={(e) => {
-                  setCreatedAfter(e.target.value);
-                }}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="audit-before">截止时间</Label>
-              <Input
-                id="audit-before"
-                type="datetime-local"
-                value={createdBefore}
-                onChange={(e) => {
-                  setCreatedBefore(e.target.value);
-                }}
-              />
-            </div>
-          </div>
-          {platformAdmin && (
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="w-56 space-y-1">
-                <Label>视图范围</Label>
+      <FleetListPage
+        list={list}
+        toolbar={
+          <div className="space-y-4 p-6 pb-0">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
+              <div className="space-y-1">
+                <Label htmlFor="audit-action">操作</Label>
+                <Input
+                  id="audit-action"
+                  placeholder="如 FunctionsService/UpdateFunction"
+                  value={filters.action ?? ""}
+                  onChange={(e) => setFilter("action", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>状态</Label>
                 <Select
-                  value={scope}
-                  onValueChange={(v) => {
-                    setScope(v as ScopeMode);
-                  }}
+                  value={filters.status ?? "all"}
+                  onValueChange={(v) => setFilter("status", v === "all" ? "" : v)}
                 >
-                  <SelectTrigger>
-                    <SelectValue />
+                  <SelectTrigger aria-label="状态">
+                    <SelectValue placeholder="全部" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="project">当前项目</SelectItem>
-                    <SelectItem value="include_platform">当前项目 + 平台级</SelectItem>
-                    <SelectItem value="all_projects">全部项目</SelectItem>
+                    <SelectItem value="all">全部</SelectItem>
+                    <SelectItem value="success">success</SelectItem>
+                    <SelectItem value="denied">denied</SelectItem>
+                    <SelectItem value="throttled">throttled</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-1">
+                <Label htmlFor="audit-actor">操作者 ID</Label>
+                <Input
+                  id="audit-actor"
+                  value={filters.actor_id ?? ""}
+                  onChange={(e) => setFilter("actor_id", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="audit-resource">资源 ID</Label>
+                <Input
+                  id="audit-resource"
+                  value={filters.resource_id ?? ""}
+                  onChange={(e) => setFilter("resource_id", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="audit-after">起始时间</Label>
+                <Input
+                  id="audit-after"
+                  type="datetime-local"
+                  value={toDateTimeLocalValue(filters.created_after, tz)}
+                  onChange={(e) => setFilter("created_after", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="audit-before">截止时间</Label>
+                <Input
+                  id="audit-before"
+                  type="datetime-local"
+                  value={toDateTimeLocalValue(filters.created_before, tz)}
+                  onChange={(e) => setFilter("created_before", e.target.value)}
+                />
+              </div>
             </div>
-          )}
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <LoadingTable columns={7} />
-          ) : logs.length === 0 ? (
-            <EmptyState
-              title="暂无审计记录"
-              description="调整过滤条件，或等待系统变更产生新的审计行"
-            />
-          ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>
-                      <button
-                        type="button"
-                        onClick={toggleSort}
-                        className="inline-flex items-center gap-1 hover:text-foreground"
-                        title={sortOrder === "ASC" ? "按时间正序，点击切换倒序" : "按时间倒序，点击切换正序"}
-                      >
-                        时间
-                        {sortOrder === "ASC" ? (
-                          <ArrowUp className="h-3.5 w-3.5" />
-                        ) : (
-                          <ArrowDown className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                    </TableHead>
-                    <TableHead>变更</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead>通道</TableHead>
-                    <TableHead>操作者</TableHead>
-                    <TableHead>资源</TableHead>
-                    <TableHead>IP</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {logs.map((log) => {
-                    const channel = channelOf(log);
-                    return (
-                      <TableRow
-                        key={log.id}
-                        className="cursor-pointer"
-                        onClick={() => setSelected(log)}
-                      >
-                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                          {log.created_at
-                            ? formatDateTime(log.created_at, tz)
-                            : "—"}
-                        </TableCell>
-                        <TableCell className="max-w-[320px]">
-                          <div className="truncate font-medium" title={describeAudit(log)}>
-                            {describeAudit(log)}
-                          </div>
-                          <div className="truncate font-mono text-xs text-muted-foreground" title={log.action}>
-                            {log.action}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={statusBadgeVariant(log.status)}>
-                            {log.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {channel ? (
-                            <Badge variant="outline">
-                              {CHANNEL_LABELS[channel] ?? channel}
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="max-w-[160px] truncate font-mono text-xs">
-                          {log.actor_kind ? `${log.actor_kind}:` : ""}
-                          {log.actor_id || "—"}
-                        </TableCell>
-                        <TableCell className="max-w-[140px] truncate font-mono text-xs">
-                          {log.resource_id || "—"}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {log.ip || "—"}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-              <div className="flex items-center justify-between pt-4">
-                <div className="text-sm text-muted-foreground">
-                  共 {meta?.total_count ?? "—"} 条 · 每页 {meta?.page_size ?? paging.pageSize} 条
-                </div>
-                <div className="flex items-center gap-2">
+            {platformAdmin && (
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="w-56 space-y-1">
+                  <Label>视图范围</Label>
                   <Select
-                    value={String(paging.pageSize)}
-                    onValueChange={(v) => {
-                      paging.setPageSize(Number(v));
-                    }}
+                    value={filters.scope ?? "project"}
+                    onValueChange={(v) => setFilter("scope", v === "project" ? "" : v)}
                   >
-                    <SelectTrigger className="w-24">
+                    <SelectTrigger aria-label="视图范围">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="20">20 条</SelectItem>
-                      <SelectItem value="50">50 条</SelectItem>
-                      <SelectItem value="100">100 条</SelectItem>
+                      <SelectItem value="project">当前项目</SelectItem>
+                      <SelectItem value="include_platform">当前项目 + 平台级</SelectItem>
+                      <SelectItem value="all_projects">全部项目</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!paging.hasPrev}
-                    onClick={paging.goPrev}
-                  >
-                    上一页
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!meta?.next_page_token}
-                    onClick={() => paging.goNext(meta?.next_page_token)}
-                  >
-                    下一页
-                  </Button>
                 </div>
               </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="font-mono text-base">{selected?.action}</DialogTitle>
-          </DialogHeader>
-          {selected && <AuditLogDetail log={selected} />}
-        </DialogContent>
-      </Dialog>
+            )}
+          </div>
+        }
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={list} />
+          </div>
+        }
+        emptyTitle={filtered ? "没有匹配的审计记录" : "暂无审计记录"}
+        emptyDescription={
+          filtered
+            ? "调整过滤条件，或清空过滤恢复全部记录"
+            : "等待系统变更产生新的审计行"
+        }
+        appendix={
+          <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
+            <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="font-mono text-base">{selected?.action}</DialogTitle>
+              </DialogHeader>
+              {selected && <AuditLogDetail log={selected} />}
+            </DialogContent>
+          </Dialog>
+        }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={list}
+            columns={columns}
+            getRowId={(row) => row.id}
+            onRowClick={(log) => setSelected(log)}
+          />
+        </div>
+      </FleetListPage>
     </div>
   );
 }
@@ -477,29 +410,16 @@ function AuditLogDetail({ log }: { log: AuditLog }) {
       {changes && Object.keys(changes).length > 0 && (
         <div className="space-y-2">
           <div className="text-xs font-semibold text-muted-foreground">字段变更</div>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>字段</TableHead>
-                  <TableHead>旧值</TableHead>
-                  <TableHead>新值</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {Object.entries(changes).map(([field, change]) => (
-                  <TableRow key={field}>
-                    <TableCell className="font-mono text-xs">{field}</TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {formatValue(change?.from)}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {formatValue(change?.to)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <div className="rounded-md border p-3 space-y-1.5">
+            {Object.entries(changes).map(([field, change]) => (
+              <div key={field} className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 font-mono text-xs">
+                <span>{field}</span>
+                <span className="text-muted-foreground">→</span>
+                <span>
+                  {formatValue(change?.from)} → {formatValue(change?.to)}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}

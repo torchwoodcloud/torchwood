@@ -1,4 +1,4 @@
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink } from "@/router/compat";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 

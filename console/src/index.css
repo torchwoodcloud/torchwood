@@ -33,7 +33,14 @@
     --sidebar-accent-foreground: 0 0% 9%;
     --sidebar-border: 0 0% 89.8%;
     --sidebar-ring: 0 0% 63.9%;
-  }
+    /* 图表序列色（fleet-ui MetricChart 块经 var() 直用——完整色值非三元组；
+     chart-1/2 沿用旧图视觉身份：蓝=事件数、绿=活跃用户） */
+  --chart-1: hsl(221 83% 53%);
+  --chart-2: hsl(142 71% 45%);
+  --chart-3: hsl(173 58% 39%);
+  --chart-4: hsl(43 74% 66%);
+  --chart-5: hsl(27 87% 67%);
+}
 }
 
 @layer base {

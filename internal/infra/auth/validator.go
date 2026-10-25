@@ -179,7 +179,7 @@ func (v *Validator) validateAPIKey(ctx context.Context, raw string) (*shared.Pri
 
 // validateExecutionToken 校验函数执行 token 并构造 execution principal
 // （P0 执行身份，设计 §1）。Permissions 按 declared_scopes 投影为 API key
-// 同款权限串（"<res>.<op>"），scope 门（PolicySet.AllowsAPIKeyTargets）原样
+// 同款权限串（"<res>.<op>"），scope 门（domainauth.AllowsAPIKey）原样
 // 生效；Roles 复用 B14 key 族模型（keys + key:function:<id>）——数据面可见
 // 性由开发者把集合/桶授予 key:function:<id> 角色决定（scope 过门但角色未
 // 授予 = 数据不可见，fail-closed）。

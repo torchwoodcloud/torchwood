@@ -1,16 +1,17 @@
 package auth
 
 import (
+	"github.com/lynx-go/grpcapi/policy"
+
 	"testing"
 
-	"github.com/lynx-go/grpcapi/authz"
 	"github.com/stretchr/testify/require"
 )
 
 // testPolicySet 构造含 databases/storage 读写规则的最小策略集。
-func testPolicySet(t *testing.T) *PolicySet {
+func testPolicySet(t *testing.T) *policy.Set {
 	t.Helper()
-	set, err := authz.NewPolicySet([]MethodPolicy{
+	set, err := NewSet([]MethodPolicy{
 		{Method: "/test/DBRead", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeDatabases), Op: ScopeRead}},
 		{Method: "/test/DBWrite", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeDatabases), Op: ScopeWrite}},
 		{Method: "/test/StRead", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeStorage), Op: ScopeRead}},
@@ -58,6 +59,20 @@ func TestParseScopeToken(t *testing.T) {
 	}
 }
 
+// allowsMethod 是 AllowsAPIKey 的方法级测试适配：按方法取规则，目标以
+// (databaseID, bucketID) 传入（空 = 不寻址实例）。
+func allowsMethod(t *testing.T, set *policy.Set, method string, scopes []string, databaseID, bucketID string) bool {
+	t.Helper()
+	target := ""
+	switch {
+	case databaseID != "":
+		target = databaseID
+	case bucketID != "":
+		target = bucketID
+	}
+	return AllowsAPIKey(ScopeRuleOf(set, method), scopes, target)
+}
+
 // TestScopeVocabulary_Valid_ScopedForms：词表校验接受可寻址资源的实例限定，
 // 拒绝不可寻址资源与未声明方向的形态。
 func TestScopeVocabulary_Valid_ScopedForms(t *testing.T) {
@@ -80,62 +95,62 @@ func TestScopeVocabulary_Valid_ScopedForms(t *testing.T) {
 	require.False(t, v.Valid("databases:blog.readwrite"))
 }
 
-// TestAllowsAPIKeyTargets_Scoped（T-02 验收）：databases:blog 放行寻址 blog
-// 的读写；其他库/无目标方法/其他资源 403；.read 单向限定生效。
-func TestAllowsAPIKeyTargets_Scoped(t *testing.T) {
+// TestAllowsAPIKey_Scoped（T-02 验收，语义委托 grpcapi/policy/scope，
+// G-1 修复后与旧逐 token 合取语义全量等价）：databases:blog 放行寻址
+// blog 的读写；其他库/无目标方法/其他资源 403；实例+方向单 token
+// （databases:blog.read）方向一致时放行。
+func TestAllowsAPIKey_Scoped(t *testing.T) {
 	t.Parallel()
 	set := testPolicySet(t)
-	blog := ScopeTargets{DatabaseID: "blog"}
 
 	// 读写皆放行（blog）。
-	require.True(t, AllowsAPIKeyTargets(set, "/test/DBRead", []string{"databases:blog"}, blog))
-	require.True(t, AllowsAPIKeyTargets(set, "/test/DBWrite", []string{"databases:blog"}, blog))
+	require.True(t, allowsMethod(t, set, "/test/DBRead", []string{"databases:blog"}, "blog", ""))
+	require.True(t, allowsMethod(t, set, "/test/DBWrite", []string{"databases:blog"}, "blog", ""))
 	// 其他库 → 拒绝。
-	require.False(t, AllowsAPIKeyTargets(set, "/test/DBWrite", []string{"databases:blog"}, ScopeTargets{DatabaseID: "cms"}))
+	require.False(t, allowsMethod(t, set, "/test/DBWrite", []string{"databases:blog"}, "cms", ""))
 	// 无目标方法（List 类）→ 拒绝。
-	require.False(t, AllowsAPIKeyTargets(set, "/test/DBWrite", []string{"databases:blog"}, ScopeTargets{}))
-	// .read 单向限定：读放行、写拒绝。
-	require.True(t, AllowsAPIKeyTargets(set, "/test/DBRead", []string{"databases:blog.read"}, blog))
-	require.False(t, AllowsAPIKeyTargets(set, "/test/DBWrite", []string{"databases:blog.read"}, blog))
+	require.False(t, allowsMethod(t, set, "/test/DBWrite", []string{"databases:blog"}, "", ""))
+	// 实例+方向单 token（G-1 修复后恢复 T-02 语义）：读放行、写拒绝。
+	require.True(t, allowsMethod(t, set, "/test/DBRead", []string{"databases:blog.read"}, "blog", ""))
+	require.False(t, allowsMethod(t, set, "/test/DBWrite", []string{"databases:blog.read"}, "blog", ""))
+	// 方向门照常：op token + 实例 token 并列携带放行。
+	require.True(t, allowsMethod(t, set, "/test/DBRead", []string{"databases.read", "databases:blog"}, "blog", ""))
 	// 跨资源族不混淆：storage scope 不放行 databases 方法。
-	require.False(t, AllowsAPIKeyTargets(set, "/test/DBRead", []string{"storage:blog"}, blog))
+	require.False(t, allowsMethod(t, set, "/test/DBRead", []string{"storage:blog"}, "blog", ""))
 }
 
-// TestAllowsAPIKeyTargets_BackwardCompat（T-02 回归不变量）：无资源限定的
-// 既有 scope 形态行为与目标完全无关。
-func TestAllowsAPIKeyTargets_BackwardCompat(t *testing.T) {
+// TestAllowsAPIKey_BackwardCompat（T-02 回归不变量，MIGRATION §6「scope
+// 四形态行为不变」锚点）：无资源限定的既有 scope 形态行为与目标完全无关。
+func TestAllowsAPIKey_BackwardCompat(t *testing.T) {
 	t.Parallel()
 	set := testPolicySet(t)
-	anyTarget := ScopeTargets{DatabaseID: "whatever", BucketID: "b"}
 
-	require.True(t, AllowsAPIKeyTargets(set, "/test/DBRead", []string{"*"}, anyTarget))
-	require.True(t, AllowsAPIKeyTargets(set, "/test/DBWrite", []string{"all"}, anyTarget))
-	require.True(t, AllowsAPIKeyTargets(set, "/test/DBRead", []string{"databases"}, anyTarget))
-	require.True(t, AllowsAPIKeyTargets(set, "/test/DBWrite", []string{"databases"}, anyTarget))
-	require.True(t, AllowsAPIKeyTargets(set, "/test/DBRead", []string{"databases.read"}, anyTarget))
-	require.False(t, AllowsAPIKeyTargets(set, "/test/DBWrite", []string{"databases.read"}, anyTarget))
-	require.True(t, AllowsAPIKeyTargets(set, "/test/DBWrite", []string{"databases.write"}, anyTarget))
-	// 零目标时既有形态同样放行（与旧 AllowsAPIKey 一致）。
-	require.True(t, AllowsAPIKeyTargets(set, "/test/DBRead", []string{"databases"}, ScopeTargets{}))
+	require.True(t, allowsMethod(t, set, "/test/DBRead", []string{"*"}, "whatever", "b"))
+	require.True(t, allowsMethod(t, set, "/test/DBWrite", []string{"all"}, "whatever", "b"))
+	require.True(t, allowsMethod(t, set, "/test/DBRead", []string{"databases"}, "whatever", "b"))
+	require.True(t, allowsMethod(t, set, "/test/DBWrite", []string{"databases"}, "whatever", "b"))
+	require.True(t, allowsMethod(t, set, "/test/DBRead", []string{"databases.read"}, "whatever", "b"))
+	require.False(t, allowsMethod(t, set, "/test/DBWrite", []string{"databases.read"}, "whatever", "b"))
+	require.True(t, allowsMethod(t, set, "/test/DBWrite", []string{"databases.write"}, "whatever", "b"))
+	// 零目标时既有形态同样放行。
+	require.True(t, allowsMethod(t, set, "/test/DBRead", []string{"databases"}, "", ""))
 	// 未声明 scope 的方法一律拒绝。
-	require.False(t, AllowsAPIKeyTargets(set, "/test/Nope", []string{"*"}, anyTarget))
-	// 旧 AllowsAPIKey 与零目标新判定等价。
-	require.Equal(t,
-		AllowsAPIKeyTargets(set, "/test/DBWrite", []string{"databases.read", "storage"}, ScopeTargets{}),
-		AllowsAPIKeyTargets(set, "/test/DBWrite", []string{"databases.read", "storage"}, ScopeTargets{}),
-	)
+	require.False(t, allowsMethod(t, set, "/test/Nope", []string{"*"}, "whatever", "b"))
+	require.False(t, allowsMethod(t, set, "/test/DBWrite", []string{"databases.read", "storage"}, "", ""))
 }
 
-// TestAllowsAPIKeyTargets_StorageBucket：storage:media 只放行该桶。
-func TestAllowsAPIKeyTargets_StorageBucket(t *testing.T) {
+// TestAllowsAPIKey_StorageBucket：storage:media 只放行该桶；实例+方向单
+// token（storage:media.read）同 databases 族收窄。
+func TestAllowsAPIKey_StorageBucket(t *testing.T) {
 	t.Parallel()
 	set := testPolicySet(t)
-	media := ScopeTargets{BucketID: "media"}
 
-	require.True(t, AllowsAPIKeyTargets(set, "/test/StWrite", []string{"storage:media"}, media))
-	require.False(t, AllowsAPIKeyTargets(set, "/test/StWrite", []string{"storage:media"}, ScopeTargets{BucketID: "other"}))
-	require.False(t, AllowsAPIKeyTargets(set, "/test/StWrite", []string{"storage:media"}, ScopeTargets{}))
-	require.True(t, AllowsAPIKeyTargets(set, "/test/StRead", []string{"storage:media.read"}, media))
+	require.True(t, allowsMethod(t, set, "/test/StWrite", []string{"storage:media"}, "", "media"))
+	require.False(t, allowsMethod(t, set, "/test/StWrite", []string{"storage:media"}, "", "other"))
+	require.False(t, allowsMethod(t, set, "/test/StWrite", []string{"storage:media"}, "", ""))
+	require.True(t, allowsMethod(t, set, "/test/StRead", []string{"storage:media.read"}, "", "media"),
+		"实例+方向单 token（G-1 修复后恢复 T-02 语义）")
+	require.True(t, allowsMethod(t, set, "/test/StRead", []string{"storage.read", "storage:media"}, "", "media"))
 }
 
 // TestValidateScopeTargetID：实例 ID 格式校验（与物理命名规则同源）。
@@ -153,9 +168,9 @@ func TestValidateScopeTargetID(t *testing.T) {
 }
 
 // testLeaderboardsPolicySet 构造 leaderboards 三方向的最小策略集。
-func testLeaderboardsPolicySet(t *testing.T) *PolicySet {
+func testLeaderboardsPolicySet(t *testing.T) *policy.Set {
 	t.Helper()
-	set, err := authz.NewPolicySet([]MethodPolicy{
+	set, err := NewSet([]MethodPolicy{
 		{Method: "/test/LBRead", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeLeaderboards), Op: ScopeRead}},
 		{Method: "/test/LBWrite", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeLeaderboards), Op: ScopeWrite}},
 		{Method: "/test/LBAdmin", Access: AccessServer, Scope: &ScopeRule{Resource: string(ScopeLeaderboards), Op: ScopeAdmin}},
@@ -173,17 +188,17 @@ func TestScopeAdminOp(t *testing.T) {
 	set := testLeaderboardsPolicySet(t)
 
 	// admin 门：admin 钥/裸资源/通配符放行；write、read 钥拒绝。
-	require.True(t, AllowsAPIKeyTargets(set, "/test/LBAdmin", []string{"leaderboards.admin"}, ScopeTargets{}))
-	require.True(t, AllowsAPIKeyTargets(set, "/test/LBAdmin", []string{"leaderboards"}, ScopeTargets{}))
-	require.True(t, AllowsAPIKeyTargets(set, "/test/LBAdmin", []string{"all"}, ScopeTargets{}))
-	require.False(t, AllowsAPIKeyTargets(set, "/test/LBAdmin", []string{"leaderboards.write"}, ScopeTargets{}))
-	require.False(t, AllowsAPIKeyTargets(set, "/test/LBAdmin", []string{"leaderboards.read"}, ScopeTargets{}))
+	require.True(t, allowsMethod(t, set, "/test/LBAdmin", []string{"leaderboards.admin"}, "", ""))
+	require.True(t, allowsMethod(t, set, "/test/LBAdmin", []string{"leaderboards"}, "", ""))
+	require.True(t, allowsMethod(t, set, "/test/LBAdmin", []string{"all"}, "", ""))
+	require.False(t, allowsMethod(t, set, "/test/LBAdmin", []string{"leaderboards.write"}, "", ""))
+	require.False(t, allowsMethod(t, set, "/test/LBAdmin", []string{"leaderboards.read"}, "", ""))
 	// write 门：admin 钥拒绝（管理权不放大提交权）。
-	require.True(t, AllowsAPIKeyTargets(set, "/test/LBWrite", []string{"leaderboards.write"}, ScopeTargets{}))
-	require.False(t, AllowsAPIKeyTargets(set, "/test/LBWrite", []string{"leaderboards.admin"}, ScopeTargets{}))
+	require.True(t, allowsMethod(t, set, "/test/LBWrite", []string{"leaderboards.write"}, "", ""))
+	require.False(t, allowsMethod(t, set, "/test/LBWrite", []string{"leaderboards.admin"}, "", ""))
 	// read 门：admin 钥拒绝（读单独授予——管理钥如需读配置须并列携带 read）。
-	require.True(t, AllowsAPIKeyTargets(set, "/test/LBRead", []string{"leaderboards.read"}, ScopeTargets{}))
-	require.False(t, AllowsAPIKeyTargets(set, "/test/LBRead", []string{"leaderboards.admin"}, ScopeTargets{}))
+	require.True(t, allowsMethod(t, set, "/test/LBRead", []string{"leaderboards.read"}, "", ""))
+	require.False(t, allowsMethod(t, set, "/test/LBRead", []string{"leaderboards.admin"}, "", ""))
 }
 
 // TestScopeAdmin_Vocabulary：词表派生自动收录 admin 方向；不可寻址资源

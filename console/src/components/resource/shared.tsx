@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "@/router/compat";
 import { useState } from "react";
 import { PageCard } from "@/components/PageCard";
 import { Input } from "@/components/ui/input";

@@ -9,7 +9,7 @@ import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
-import "grpcapi/v1/authz.proto";
+import "grpcapi/v1/policy.proto";
 import "shared/v1/common.proto";
 
 // 服务默认 access=authenticated：swagger 顶层声明 Bearer security
@@ -69,21 +69,48 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 // 与本人订单查询。回调端点 POST /v1/payments/callbacks/{provider} 是裸
 // HTTP（渠道验签，不走 gRPC gateway，见 internal/api/serverhttp）。
 service PaymentsService {
-  option (grpcapi.v1.service_auth) = { default_access: ACCESS_LEVEL_END_USER };
 
   rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse) {
     option (google.api.http) = { post: "/v1/payments/orders", body: "*" };
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "principal_kind" values: ["user"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "END_USER"
+    };
   }
   rpc GetMyOrder(GetMyOrderRequest) returns (PaymentOrder) {
     option (google.api.http) = { get: "/v1/payments/orders/{order_id}" };
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "principal_kind" values: ["user"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "END_USER"
+    };
   }
   rpc ListMyOrders(ListMyOrdersRequest) returns (ListMyOrdersResponse) {
     option (google.api.http) = { get: "/v1/payments/orders" };
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "principal_kind" values: ["user"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "END_USER"
+    };
   }
   // VerifyReceipt 校验 iOS IAP receipt / StoreKit 2 JWS 并履约对应订单
   // （设计 §1.2：iOS 无服务端下单，走验票路径）。
   rpc VerifyReceipt(VerifyReceiptRequest) returns (VerifyReceiptResponse) {
     option (google.api.http) = { post: "/v1/payments/ios/verify-receipt", body: "*" };
+    option (grpcapi.v1.method) = {
+      policy: {
+        require: { kind: "principal_kind" values: ["user"] }
+      }
+      exposure: EXPOSURE_PUBLIC
+      label: "END_USER"
+    };
   }
 }
 

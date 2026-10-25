@@ -62,7 +62,8 @@ export interface ListEventDefinitionsResponse {
 export interface AnalyticsTimeseriesPoint {
   bucket: string;
   total: number | string;
-  unique_users: number | string;
+  // protojson 零值省略方言：全零 UV 的桶可能缺席该键（投影层 num 收敛为 0）。
+  unique_users?: number | string;
 }
 
 export interface QueryTimeseriesResponse {

@@ -912,7 +912,7 @@ var File_server_v1_webhooks_proto protoreflect.FileDescriptor
 
 const file_server_v1_webhooks_proto_rawDesc = "" +
 	"\n" +
-	"\x18server/v1/webhooks.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x16grpcapi/v1/authz.proto\x1a\x16shared/v1/common.proto\"\xd5\x01\n" +
+	"\x18server/v1/webhooks.proto\x12\x13torchwood.server.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\x1a\x17grpcapi/v1/policy.proto\x1a\x16shared/v1/common.proto\"\xd5\x01\n" +
 	"\x14CreateWebhookRequest\x124\n" +
 	"\x02id\x18\x01 \x01(\tB$\xbaH!r\x1f2\x1d^$|^[a-z0-9][a-z0-9_-]{0,62}$R\x02id\x12*\n" +
 	"\x03url\x18\x02 \x01(\tB\x18\xbaH\x15\xc8\x01\x01r\x10\x10\t\x18\x80\x102\t^https://R\x03url\x12)\n" +
@@ -995,27 +995,50 @@ const file_server_v1_webhooks_proto_rawDesc = "" +
 	"\n" +
 	"deliveries\x18\x01 \x03(\v2$.torchwood.server.v1.WebhookDeliveryR\n" +
 	"deliveries\x129\n" +
-	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xbb\f\n" +
-	"\x0fWebhooksService\x12\xa7\x01\n" +
-	"\rCreateWebhook\x12).torchwood.server.v1.CreateWebhookRequest\x1a*.torchwood.server.v1.CreateWebhookResponse\"?\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02\x18:\x01*\"\x13/v1/server/webhooks\x12\x8f\x01\n" +
+	"\x04meta\x18\x02 \x01(\v2%.torchwood.shared.v1.ListResponseMetaR\x04meta2\xcf\x0f\n" +
+	"\x0fWebhooksService\x12\xd0\x01\n" +
+	"\rCreateWebhook\x12).torchwood.server.v1.CreateWebhookRequest\x1a*.torchwood.server.v1.CreateWebhookResponse\"h\xda\xf0\x19F\n" +
+	":J\x1c*\x1a\n" +
 	"\n" +
-	"GetWebhook\x12&.torchwood.server.v1.GetWebhookRequest\x1a\x1c.torchwood.server.v1.Webhook\";\xea\xc4\x19\x0f\"\r\n" +
-	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x02\"\x12 /v1/server/webhooks/{webhook_id}\x12\x8b\x01\n" +
-	"\fListWebhooks\x12 .torchwood.shared.v1.ListRequest\x1a).torchwood.server.v1.ListWebhooksResponse\".\xea\xc4\x19\x0f\"\r\n" +
-	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/server/webhooks\x12\xa6\x01\n" +
-	"\rUpdateWebhook\x12).torchwood.server.v1.UpdateWebhookRequest\x1a\x1c.torchwood.server.v1.Webhook\"L\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02%:\x01*2 /v1/server/webhooks/{webhook_id}\x12\x9e\x01\n" +
-	"\rDeleteWebhook\x12&.torchwood.server.v1.GetWebhookRequest\x1a\x1a.torchwood.shared.v1.Empty\"I\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02\"* /v1/server/webhooks/{webhook_id}\x12\xc6\x01\n" +
-	"\x13RotateWebhookSecret\x12/.torchwood.server.v1.RotateWebhookSecretRequest\x1a\".torchwood.server.v1.WebhookSecret\"Z\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x023:\x01*\"./v1/server/webhooks/{webhook_id}:rotate-secret\x12\xb1\x01\n" +
-	"\x0eListDeliveries\x12*.torchwood.server.v1.ListDeliveriesRequest\x1a+.torchwood.server.v1.ListDeliveriesResponse\"F\xea\xc4\x19\x0f\"\r\n" +
-	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x02-\x12+/v1/server/webhooks/{webhook_id}/deliveries\x12\xb2\x01\n" +
-	"\vGetDelivery\x12'.torchwood.server.v1.GetDeliveryRequest\x1a$.torchwood.server.v1.WebhookDelivery\"T\xea\xc4\x19\x0f\"\r\n" +
-	"\tfunctions\x10\x01\x82\xd3\xe4\x93\x02;\x129/v1/server/webhooks/{webhook_id}/deliveries/{delivery_id}\x12\xd9\x01\n" +
-	"\x11RedeliverDelivery\x12-.torchwood.server.v1.RedeliverDeliveryRequest\x1a$.torchwood.server.v1.WebhookDelivery\"o\xea\xc4\x19\x1d\x1a\x05admin\x1a\x05owner\"\r\n" +
-	"\tfunctions\x10\x02\x82\xd3\xe4\x93\x02H:\x01*\"C/v1/server/webhooks/{webhook_id}/deliveries/{delivery_id}:redeliver\x1a\x06\xf2\xc4\x19\x02\b\x03B\xfe\x03\x92A\xb9\x03RR\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x1a*\x18\n" +
+	"\x05scope\"\x0ffunctions:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\x18:\x01*\"\x13/v1/server/webhooks\x12\xc2\x01\n" +
+	"\n" +
+	"GetWebhook\x12&.torchwood.server.v1.GetWebhookRequest\x1a\x1c.torchwood.server.v1.Webhook\"n\xda\xf0\x19B\n" +
+	"6J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x19*\x17\n" +
+	"\x05scope\"\x0efunctions:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\"\x12 /v1/server/webhooks/{webhook_id}\x12\xbe\x01\n" +
+	"\fListWebhooks\x12 .torchwood.shared.v1.ListRequest\x1a).torchwood.server.v1.ListWebhooksResponse\"a\xda\xf0\x19B\n" +
+	"6J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x19*\x17\n" +
+	"\x05scope\"\x0efunctions:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/server/webhooks\x12\xcf\x01\n" +
+	"\rUpdateWebhook\x12).torchwood.server.v1.UpdateWebhookRequest\x1a\x1c.torchwood.server.v1.Webhook\"u\xda\xf0\x19F\n" +
+	":J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x1a*\x18\n" +
+	"\x05scope\"\x0ffunctions:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02%:\x01*2 /v1/server/webhooks/{webhook_id}\x12\xc7\x01\n" +
+	"\rDeleteWebhook\x12&.torchwood.server.v1.GetWebhookRequest\x1a\x1a.torchwood.shared.v1.Empty\"r\xda\xf0\x19F\n" +
+	":J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x1a*\x18\n" +
+	"\x05scope\"\x0ffunctions:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02\"* /v1/server/webhooks/{webhook_id}\x12\xf0\x01\n" +
+	"\x13RotateWebhookSecret\x12/.torchwood.server.v1.RotateWebhookSecretRequest\x1a\".torchwood.server.v1.WebhookSecret\"\x83\x01\xda\xf0\x19F\n" +
+	":J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x1a*\x18\n" +
+	"\x05scope\"\x0ffunctions:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x023:\x01*\"./v1/server/webhooks/{webhook_id}:rotate-secret\x12\xe4\x01\n" +
+	"\x0eListDeliveries\x12*.torchwood.server.v1.ListDeliveriesRequest\x1a+.torchwood.server.v1.ListDeliveriesResponse\"y\xda\xf0\x19B\n" +
+	"6J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x19*\x17\n" +
+	"\x05scope\"\x0efunctions:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02-\x12+/v1/server/webhooks/{webhook_id}/deliveries\x12\xe6\x01\n" +
+	"\vGetDelivery\x12'.torchwood.server.v1.GetDeliveryRequest\x1a$.torchwood.server.v1.WebhookDelivery\"\x87\x01\xda\xf0\x19B\n" +
+	"6J\x19*\x17\n" +
+	"\x0eprincipal_kind\"\x05adminJ\x19*\x17\n" +
+	"\x05scope\"\x0efunctions:read\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02;\x129/v1/server/webhooks/{webhook_id}/deliveries/{delivery_id}\x12\x83\x02\n" +
+	"\x11RedeliverDelivery\x12-.torchwood.server.v1.RedeliverDeliveryRequest\x1a$.torchwood.server.v1.WebhookDelivery\"\x98\x01\xda\xf0\x19F\n" +
+	":J\x1c*\x1a\n" +
+	"\n" +
+	"admin_role\"\x05admin\"\x05ownerJ\x1a*\x18\n" +
+	"\x05scope\"\x0ffunctions:write\x10\x02\x1a\x06SERVER\x82\xd3\xe4\x93\x02H:\x01*\"C/v1/server/webhooks/{webhook_id}/deliveries/{delivery_id}:redeliverB\xfe\x03\x92A\xb9\x03RR\n" +
 	"\adefault\x12G\n" +
 	"\x1dAn unexpected error response.\x12&\n" +
 	"$\x1a\".torchwood.shared.v1.ErrorResponseZ\xb4\x02\n" +

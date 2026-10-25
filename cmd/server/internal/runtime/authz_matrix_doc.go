@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lynx-go/grpcapi/policy"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 )
 
@@ -19,7 +20,7 @@ const authzMatrixHeader = `# 授权矩阵（Authorization Matrix）
 > **本文件由策略注册表生成（` + "`mise run gen:authz-matrix`" + `），勿手改。**
 >
 > - 声明源：` + "`grpcapi/v1/authz.proto`" + `（vendored 于 ` + "`proto/third_party/`" + `，本体在 lynx-go/grpcapi 仓库）的 ` + "`method_auth`/`service_auth`" + ` 注解 →
->   ` + "`cmd/server/internal/runtime.buildMethodPolicies`" + `（` + "`grpcapi.authz.Build`" + ` + torchwood 断言；启动期经 ` + "`ProvideMethodPolicies`" + ` 注入执行点）。
+>   ` + "`cmd/server/internal/runtime.buildMethodPolicies`" + `（` + "`grpcapi policy.Build`" + ` + legacyProvider 五档规范树 + torchwood 断言；启动期经 ` + "`ProvideMethodPolicies`" + ` 注入，授权执行走库 authz 拦截器）。
 > - 策略变更后重新生成：` + "`mise run gen:authz-matrix`" + `；漂移由
 >   ` + "`cmd/server/internal/runtime/authz_matrix_doc_test.go`" + ` 字节级锁定（重渲染 ≠ 磁盘即红）。
 > - 执行器消费同一策略的行为一致性证明见 ` + "`cmd/server/internal/runtime/authz_matrix_test.go`" + `
@@ -52,13 +53,16 @@ const authzMatrixThreatModelAppendix = `
   等于全部凭证面同时失守，轮换窗口内旧 token 不失效。
 `
 
-// RenderAuthzMatrix 从策略注册表渲染授权矩阵 Markdown（确定性输出：方法与
-// 服务按序遍历，列值全部来自 MethodPolicy 派生）。
-func RenderAuthzMatrix(set *domainauth.PolicySet) ([]byte, error) {
+// RenderAuthzMatrix 从策略集渲染授权矩阵 Markdown（确定性输出：方法与
+// 服务按序遍历，列值全部来自规范树 View 派生）。
+func RenderAuthzMatrix(set *policy.Set) ([]byte, error) {
 	if set == nil {
 		return nil, fmt.Errorf("policy registry is nil")
 	}
-	methods := set.Methods()
+	methods, err := domainauth.Views(set)
+	if err != nil {
+		return nil, err
+	}
 	if len(methods) == 0 {
 		return nil, fmt.Errorf("policy registry is empty")
 	}

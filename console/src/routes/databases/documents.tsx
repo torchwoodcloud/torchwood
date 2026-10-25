@@ -10,14 +10,15 @@ import {
   useNavigate,
   useParams,
   useOutletContext,
-} from "react-router-dom";
+} from "@/router/compat";
 import {
   useQuery,
-  useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import {
+  ArrowLeft,
   Pencil,
   Plus,
   Settings2,
@@ -27,9 +28,6 @@ import {
   getCollection,
   listDocuments,
   getDocument,
-  createDocument,
-  updateDocument,
-  deleteDocument,
   bulkUpdateDocuments,
   bulkDeleteDocuments,
   type Attribute,
@@ -62,7 +60,6 @@ import {
 } from "@/components/ui/card";
 import type { ColumnDef } from "@/components/list/DataTable";
 import {
-  FormPageWrapper,
   FormField,
   DetailPageWrapper,
   DetailGrid,
@@ -73,6 +70,13 @@ import {
   DeleteButton,
 } from "@/components/resource/shared";
 import { PermissionEditor } from "@/components/resource/PermissionEditor";
+import { Form as CommandForm } from "@/components/fleet/command/form";
+import {
+  createDocumentCommand,
+  removeDocumentCommand,
+  updateDocumentCommand,
+} from "@/fleet/documents";
+import { describeApiError } from "@/fleet/errors";
 
 import { documentToValues, MAX_BULK_OPERATIONS } from "./collectionMeta";
 
@@ -118,18 +122,19 @@ function DocumentListSection({
   });
   const documents = data?.rows ?? [];
 
-  const remove = useMutation({
-    mutationFn: (doc: Document) => {
-      if (!doc.version || doc.version <= 0) {
-        throw new Error("文档缺少 OCC 版本信息，请刷新列表后重试");
+  // 行删除命令化（§12.5-8）：无表单容器——结果分支以 toast 呈现；失效 =
+  // 存量 ["documents", dbId, collId] 前缀手动桥（kit 键不存在）。
+  const remove = useCommand(removeDocumentCommand(dbId, collId), {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Document 已删除");
+        void queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
       }
-      return deleteDocument(dbId, collId, doc.id, doc.version);
     },
-    onSuccess: () => {
-      toast.success("Document 已删除");
-      queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId] });
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "删除失败"),
   });
 
   const columns: ColumnDef<Document>[] = [
@@ -254,8 +259,8 @@ function DocumentListSection({
       rowActions={(d) =>
         readonly ? null : (
           <RowDeleteButton
-            onConfirm={() => remove.mutate(d)}
-            loading={remove.isPending}
+            onConfirm={() => remove.mutate({ docId: d.id, version: d.version })}
+            loading={remove.pending}
           />
         )
       }
@@ -378,30 +383,23 @@ export function DocumentsListPage() {
   );
 }
 
-function parseFieldValue(type: string, raw: string): unknown {
-  if (raw === "") return null;
-  switch (type) {
-    case "integer":
-      return Number.parseInt(raw, 10);
-    case "float":
-      return Number.parseFloat(raw);
-    case "boolean":
-      return raw === "true";
-    case "json":
-      return JSON.parse(raw);
-    default:
-      return raw;
-  }
+// 字段级校验文案（rejected.fieldErrors——客户端收敛是 fieldErrors 的唯一
+// 真实来源，§12.5-5）；errors 键与 attr.key 对齐（增量区为 "keyΔ"）。
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="text-xs text-destructive">{message}</p>;
 }
 
 function DocumentFormFields({
   attributes,
   values,
   onChange,
+  errors,
 }: {
   attributes: Attribute[];
   values: Record<string, string>;
   onChange: (key: string, value: string) => void;
+  errors?: Record<string, string>;
 }) {
   if (attributes.length === 0) {
     return (
@@ -412,6 +410,7 @@ function DocumentFormFields({
           value={values.__json ?? "{}"}
           onChange={(v) => onChange("__json", v)}
         />
+        <FieldError message={errors?.__json} />
       </div>
     );
   }
@@ -430,6 +429,7 @@ function DocumentFormFields({
               onChange={(v) => onChange(attr.key, v)}
               required={attr.required}
             />
+            <FieldError message={errors?.[attr.key]} />
           </div>
         ) : (
           <div key={attr.key} className="max-w-lg">
@@ -441,6 +441,7 @@ function DocumentFormFields({
               required={attr.required}
               type={attr.type === "integer" || attr.type === "float" ? "number" : "text"}
             />
+            <FieldError message={errors?.[attr.key]} />
           </div>
         )
       )}
@@ -512,29 +513,10 @@ function DocumentReadonlyFields({
   );
 }
 
-function buildDocumentData(
-  attributes: Attribute[],
-  values: Record<string, string>
-): Record<string, unknown> {
-  if (attributes.length === 0) {
-    return JSON.parse(values.__json || "{}") as Record<string, unknown>;
-  }
-  const data: Record<string, unknown> = {};
-  for (const attr of attributes) {
-    if (values[attr.key] === undefined || values[attr.key] === "") {
-      if (attr.required) {
-        throw new Error(`${attr.key} is required`);
-      }
-      continue;
-    }
-    data[attr.key] = parseFieldValue(attr.type, values[attr.key]);
-  }
-  return data;
-}
-
 export function DocumentNewPage() {
   const { dbId, collId } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { role } = useAdminRole();
   const [values, setValues] = useState<Record<string, string>>({ __json: "{}" });
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -545,17 +527,21 @@ export function DocumentNewPage() {
     enabled: !!dbId && !!collId,
   });
 
-  const create = useMutation({
-    mutationFn: () =>
-      createDocument(dbId!, collId!, {
-        data: buildDocumentData(collection!.attributes, values),
-        permissions: permissions.length > 0 ? permissions : undefined,
-      }),
-    onSuccess: (doc) => {
-      toast.success("Document 已创建");
-      navigate(`/console/databases/${dbId}/collections/${collId}/documents/${doc.id}`);
+  // 创建命令化（§12.5）：表单值展示形在 descriptor.run 内收敛；rejected 的
+  // fieldErrors 回流字段级红字；conflict（重复 ID）/其余 rejected 走结果盒。
+  const create = useCommand(createDocumentCommand(dbId!, collId!, collection?.attributes ?? []), {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Document 已创建");
+        void queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId] });
+        navigate(`/console/databases/${dbId}/collections/${collId}/documents/${result.payload.id}`);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
+  const fieldErrors =
+    create.result?.status === "rejected" ? create.result.fieldErrors : undefined;
 
   if (isLoading) return <DetailSkeleton />;
   if (!collection) {
@@ -563,31 +549,49 @@ export function DocumentNewPage() {
   }
 
   const documentsPath = `/console/databases/${dbId}/collections/${collId}/documents`;
+  const submit = () => {
+    create.mutate({ values, permissions });
+  };
 
   return (
-    <FormPageWrapper
-      title="新建 Document"
-      description={`Collection: ${collection.name}`}
-      backTo={documentsPath}
-      backLabel="返回文档列表"
-      loading={create.isPending}
-      submitLabel="创建"
-      submitDisabled={!canWrite(role)}
-      formClassName="space-y-4 max-w-3xl"
-      onSubmit={(e) => {
-        e.preventDefault();
-        create.mutate();
-      }}
-    >
-      <DocumentFormFields
-        attributes={collection.attributes}
-        values={values}
-        onChange={(key, value) => setValues((prev) => ({ ...prev, [key]: value }))}
-      />
-      <div className="pt-2 border-t">
-        <PermissionEditor permissions={permissions} onChange={setPermissions} />
+    <div className="mx-auto max-w-4xl space-y-6 p-6">
+      <div className="flex items-start gap-4">
+        <Button variant="ghost" size="icon" asChild aria-label="返回">
+          <Link to={documentsPath}>
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+        </Button>
+        <div>
+          <h1 className="text-lg font-semibold">新建 Document</h1>
+          <p className="text-sm text-muted-foreground">Collection: {collection.name}</p>
+        </div>
       </div>
-    </FormPageWrapper>
+      {/* CommandForm 内芯持有提交（FormPageWrapper 的 onSubmit 外壳与之互斥，
+          §12.3 方言③——api-keys 新建页同款结构）；无写权限不给可提交面 */}
+      <div className="max-w-3xl space-y-4">
+        {canWrite(role) ? (
+          <CommandForm
+            form={{ handleSubmit: submit }}
+            submitting={create.pending}
+            result={create.result}
+            submitLabel="创建"
+            onCancel={() => navigate(documentsPath)}
+          >
+            <DocumentFormFields
+              attributes={collection.attributes}
+              values={values}
+              onChange={(key, value) => setValues((prev) => ({ ...prev, [key]: value }))}
+              errors={fieldErrors}
+            />
+            <div className="pt-2 border-t">
+              <PermissionEditor permissions={permissions} onChange={setPermissions} />
+            </div>
+          </CommandForm>
+        ) : (
+          <p className="text-sm text-muted-foreground">当前角色没有该集合的写权限。</p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -645,52 +649,50 @@ export function DocumentDetailPage() {
     setEditing(false);
   };
 
-  const save = useMutation({
-    mutationFn: () => {
-      if (!document?.version || document.version <= 0) {
-        throw new Error("文档缺少 OCC 版本信息，请刷新后重试");
-      }
-      const increment: Record<string, number> = {};
-      for (const attr of collection?.attributes ?? []) {
-        const delta = increments[attr.key]?.trim();
-        if (!delta) continue;
-        const n = Number(delta);
-        if (!Number.isInteger(n)) {
-          throw new Error(`增量必须是整数: ${attr.key}`);
+  // OCC 主面（§12.5）：保存命令化——version 随 data/increment 同一次 PATCH；
+  // rejected.fieldErrors 回流字段红字；conflict（版本不匹配）→ 结果盒 +
+  // 「刷新重载」（fetchQuery fresh-read 重建表单，草稿按服务端态重置）。
+  const save = useCommand(
+    updateDocumentCommand(dbId!, collId!, collection?.attributes ?? []),
+    {
+      onSettled: (result, failure) => {
+        if (result?.status === "ok") {
+          toast.success("Document 已更新");
+          setIncrements({});
+          // 用响应文档重建表单，避免与（可能被自增/服务端归一化修改的）服务端状态失同步。
+          setValues(documentToValues(collection?.attributes ?? [], result.payload));
+          setEditing(false);
+          void queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId] });
+        } else if (failure) {
+          toast.error(describeApiError(failure));
         }
-        if (n !== 0) increment[attr.key] = n;
-      }
-      return updateDocument(dbId!, collId!, docId!, {
-        data: buildDocumentData(collection!.attributes, values),
-        increment: Object.keys(increment).length > 0 ? increment : undefined,
-        // OCC：data 与 increment 同一次 PATCH 使用同一个版本。
-        version: document.version,
-      });
-    },
-    onSuccess: (doc) => {
-      toast.success("Document 已更新");
-      setIncrements({});
-      // 用响应文档重建表单，避免与（可能被自增/服务端归一化修改的）服务端状态失同步。
-      setValues(documentToValues(collection?.attributes ?? [], doc));
-      setEditing(false);
-      queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId] });
-      queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId, docId] });
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "保存失败"),
-  });
+        // rejected/conflict 不 toast——结果盒呈现（批 B 裁决 3）
+      },
+    }
+  );
 
-  const remove = useMutation({
-    mutationFn: () => {
-      if (!document?.version || document.version <= 0) {
-        throw new Error("文档缺少 OCC 版本信息，请刷新后重试");
+  const reloadAfterConflict = async () => {
+    save.reset();
+    const fresh = await queryClient.fetchQuery({
+      queryKey: ["documents", dbId, collId, docId],
+      queryFn: () => getDocument(dbId!, collId!, docId!),
+      staleTime: 0,
+    });
+    setValues(documentToValues(collection?.attributes ?? [], fresh));
+    setIncrements({});
+  };
+
+  const remove = useCommand(removeDocumentCommand(dbId!, collId!), {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Document 已删除");
+        navigate(`/console/databases/${dbId}/collections/${collId}/documents`);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
       }
-      return deleteDocument(dbId!, collId!, docId!, document.version);
     },
-    onSuccess: () => {
-      toast.success("Document 已删除");
-      navigate(`/console/databases/${dbId}/collections/${collId}/documents`);
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "删除失败"),
   });
 
   const documentsPath = `/console/databases/${dbId}/collections/${collId}/documents`;
@@ -713,7 +715,12 @@ export function DocumentDetailPage() {
               <Pencil className="mr-2 h-4 w-4" />
               编辑
             </Button>
-            <DeleteButton onConfirm={() => remove.mutate()} loading={remove.isPending} />
+            <DeleteButton
+              onConfirm={() =>
+                remove.mutate({ docId: docId!, version: document.version })
+              }
+              loading={remove.pending}
+            />
           </>
         )
       }
@@ -728,17 +735,42 @@ export function DocumentDetailPage() {
       <Card className="mt-6">
         <CardContent className="pt-6">
           {editing ? (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                save.mutate();
+            <CommandForm
+              form={{
+                handleSubmit: () => {
+                  save.mutate({
+                    docId: docId!,
+                    values,
+                    increments,
+                    // OCC：data 与 increment 同一次 PATCH 使用同一个版本。
+                    version: document.version,
+                  });
+                },
               }}
-              className="space-y-4"
+              submitting={save.pending}
+              result={save.result}
+              resultAction={
+                save.result?.status === "conflict" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void reloadAfterConflict()}
+                  >
+                    刷新重载
+                  </Button>
+                ) : undefined
+              }
+              submitLabel="保存"
+              onCancel={cancelEdit}
             >
               <DocumentFormFields
                 attributes={collection.attributes}
                 values={values}
                 onChange={(key, value) => setValues((prev) => ({ ...prev, [key]: value }))}
+                errors={
+                  save.result?.status === "rejected" ? save.result.fieldErrors : undefined
+                }
               />
               {collection.attributes.some((a) => a.type === "integer" || a.type === "float") && (
                 <div className="rounded-lg border p-4 space-y-3 max-w-lg">
@@ -762,25 +794,19 @@ export function DocumentDetailPage() {
                             type="number"
                             step="any"
                           />
+                          <FieldError
+                            message={
+                              save.result?.status === "rejected"
+                                ? save.result.fieldErrors?.[`${attr.key}Δ`]
+                                : undefined
+                            }
+                          />
                         </div>
                       ))}
                   </div>
                 </div>
               )}
-              <div className="flex items-center gap-2">
-                <Button type="submit" disabled={save.isPending}>
-                  {save.isPending ? "保存中..." : "保存"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={cancelEdit}
-                  disabled={save.isPending}
-                >
-                  取消
-                </Button>
-              </div>
-            </form>
+            </CommandForm>
           ) : (
             <div className="space-y-4">
               <DocumentReadonlyFields
