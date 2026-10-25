@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import { Plus, Settings } from "lucide-react";
@@ -143,20 +143,18 @@ export function ProjectsListPage() {
 
 export function ProjectNewPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { role } = useAdminRole();
   const [id, setId] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
   // 创建命令接线（§12.3）：挂 projects 资源（kit 集合键自动失效）+ 存量
-  // ["projects"] 键手动桥；description 空 = 不发送（run 内收敛）。toast
-  // 单源 onSettled。
+  // ["projects"] 键经 resource.legacyKeys 宽前缀失效（§12.10-②）；
+  // description 空 = 不发送（run 内收敛）。toast 单源 onSettled。
   const create = useCommand(createProjectCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("项目创建成功");
-        void queryClient.invalidateQueries({ queryKey: ["projects"] });
         navigate({ to: `/console/projects/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);

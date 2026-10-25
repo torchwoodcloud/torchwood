@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
+import { predicateOf } from "@lynx-go/ui-kit/schema";
 import type { Predicate } from "@lynx-go/ui-kit/kernel";
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
@@ -27,7 +28,6 @@ import {
   type UserFilterField,
 } from "@/fleet/users";
 import { describeApiError } from "@/fleet/errors";
-import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
@@ -61,7 +61,6 @@ import {
 } from "@/components/resource/shared";
 
 export function UsersListPage() {
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const queryClient = useQueryClient();
@@ -74,11 +73,10 @@ export function UsersListPage() {
 
   // 列表 fleet 化（§12.9-2）：游标/页大小/服务端过滤（ID/状态/创建时间
   // 范围）进 URL（分页栈 = 浏览器历史）；页内当前页搜索保持本地态（旧页语义）。
+  // scope/enabled 不再逐处传（§12.10-③）：资源声明了 projectId，Provider 单源 + 未就绪自动停用
   const list = useCollection(usersResource, {
     from: "/console/users",
     search: usersSearch,
-    scope: { projectId: projectId ?? undefined },
-    query: { enabled: !!projectId },
   });
 
   // 服务端过滤（ParseUserList 白名单 DSL）：ID 精确（受控输入按「查询」提交，
@@ -96,9 +94,8 @@ export function UsersListPage() {
       leaves.push({ field: "created_after", op: "eq", value: merged.created_after });
     if (merged.created_before)
       leaves.push({ field: "created_before", op: "eq", value: merged.created_before });
-    list.setPredicate(
-      leaves.length === 0 ? null : leaves.length === 1 ? leaves[0] : { all: leaves },
-    );
+    // kit 纯函数归一化（schema/filters）：0 → null、1 → 裸叶、n → AND。
+    list.setPredicate(predicateOf(leaves));
   };
   const setCreatedAfter = (local: string) =>
     setFilters({ created_after: fromDateTimeLocalValue(local, tz) || undefined });
@@ -110,14 +107,12 @@ export function UsersListPage() {
   };
   const filtersDirty = list.query.predicate != null;
 
-  // 命令接线（§12.3）：toast 单源 onSettled；kit 列表键自动失效（descriptor
-  // 挂 resource）+ 存量 ["users", …] 键手动桥（详情/编辑页仍吃存量键）。
+  // 命令接线（§12.3）：toast 单源 onSettled；失效 = kit 键 + 存量键
+  //（resource.legacyKeys 宽前缀 ["users"]——详情/会话页仍吃存量键）。
   const remove = useCommand(removeUserCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("用户已删除");
-        void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -163,7 +158,6 @@ export function UsersListPage() {
         toast.success(`已删除 ${selectedUsers.length} 个用户`);
       }
       void queryClient.invalidateQueries({ queryKey: usersCollectionKey });
-      void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
       setSelectedIds(new Set());
     } finally {
       setBulkDeleting(false);
@@ -376,8 +370,6 @@ export function UsersListPage() {
 
 export function CreateUserPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -388,11 +380,9 @@ export function CreateUserPage() {
   // 无表单容器（FormPageWrapper 本地态）：结果分支 toast；failure → describeApiError。
   // labels 逗号串→数组的收敛在命令 run 内（fleet/users.ts）。
   const create = useCommand(createUserCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("用户已创建");
-        void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
         navigate({ to: `/console/users/${result.payload.id}` });
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -451,7 +441,6 @@ export function CreateUserPage() {
 }
 
 function SessionsCard({ user }: { user: User }) {
-  const queryClient = useQueryClient();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const writeable = canWrite(role);
@@ -462,12 +451,12 @@ function SessionsCard({ user }: { user: User }) {
     enabled: !!user.id,
   });
 
-  // 裸 descriptor（不挂 resource）：会话不是 users 集合形态；存量会话键手动桥。
+  // 裸 descriptor（不挂 resource）：会话不是 users 集合形态；存量
+  // ["users", …] 前缀（含本会话键）由 descriptor 自带 legacyKeys 失效。
   const revoke = useCommand(revokeUserSessionDescriptor, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("会话已删除，对应令牌立即失效");
-        void queryClient.invalidateQueries({ queryKey: ["users", user.id, "sessions"] });
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -523,8 +512,6 @@ function SessionsCard({ user }: { user: User }) {
 export function UserDetailPage() {
   const { id } = useParams({ strict: false });
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const [resetOpen, setResetOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -540,13 +527,12 @@ export function UserDetailPage() {
     enabled: !!id,
   });
 
-  // 命令接线（§12.3）：toast 单源 onSettled；存量键手动桥（kit 列表键自动）。
+  // 命令接线（§12.3）：toast 单源 onSettled；失效 = kit 键 + 存量键
+  //（resource.legacyKeys 宽前缀 ["users"]）。
   const remove = useCommand(removeUserCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("用户已删除");
-        void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
         navigate({ to: "/console/users" });
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -556,13 +542,11 @@ export function UserDetailPage() {
 
   // 对话框内含输入框但无错误行容器 → 结果分支 toast（api-keys 编辑对话框同款）。
   const resetPassword = useCommand(resetUserPasswordCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("密码已重置，该用户全部会话已失效");
         setResetOpen(false);
         setNewPassword("");
-        void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
       } else if (failure) {
         toast.error(describeApiError(failure));
       } else if (result) {
@@ -733,8 +717,6 @@ export function UserDetailPage() {
 export function UserEditPage() {
   const { id } = useParams({ strict: false });
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const [status, setStatus] = useState<string>("");
   const [name, setName] = useState<string>("");
@@ -749,7 +731,6 @@ export function UserEditPage() {
 
   // 无表单容器（FormPageWrapper 本地态）：结果分支 toast；failure → describeApiError。
   const update = useCommand(updateUserCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("用户已更新");
@@ -758,7 +739,6 @@ export function UserEditPage() {
         setName(result.payload.name ?? "");
         setEmail(result.payload.email);
         setEmailVerified(result.payload.email_verified);
-        void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
         navigate({ to: `/console/users/${id}` });
       } else if (failure) {
         toast.error(describeApiError(failure));

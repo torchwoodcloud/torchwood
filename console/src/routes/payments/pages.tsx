@@ -1,14 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
+import { predicateOf } from "@lynx-go/ui-kit/schema";
 import type { Predicate } from "@lynx-go/ui-kit/kernel";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
 import { toast } from "sonner";
 import { getOrder, type PaymentOrder } from "@/api/payments";
-import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,19 +42,17 @@ const ORDER_STATUS_OPTIONS = [
 ] as const;
 
 export function OrdersListPage() {
-  const { projectId } = useAuth();
   const navigate = useNavigate();
   const tz = useUserTimezone();
   const [search, setSearch] = useState("");
 
   // 列表 fleet 化（§12.9-2）：服务端过滤（UserID/状态/创建时间区间）、时间
   // 排序、游标/页大小进 URL（过滤/换向 = replace + 清游标回第一页）；页内
-  // 当前页搜索保持本地态（旧页语义）。
+  // 当前页搜索保持本地态（旧页语义）。scope/enabled 不再逐处传（§12.10-③）：
+  // 资源声明了 projectId，Provider 单源 + 未就绪自动停用。
   const list = useCollection(ordersResource, {
     from: "/console/orders",
     search: ordersSearch,
-    scope: { projectId: projectId ?? undefined },
-    query: { enabled: !!projectId },
   });
 
   const filters = filtersOf(list.query.predicate);
@@ -62,7 +60,8 @@ export function OrdersListPage() {
   const [userIdInput, setUserIdInput] = useState(filters.user_id ?? "");
 
   // setFilter 写谓词（replace + 清游标回第一页）；datetime 字段在写入边界
-  // 做墙钟↔绝对换算——URL 存绝对时刻，跨时区分享同一过滤窗口。
+  // 做墙钟↔绝对换算——URL 存绝对时刻，跨时区分享同一过滤窗口。叶子归一化
+  // 用 kit predicateOf（0→null / 1→裸叶 / n→AND，§12.10-④）。
   const setFilter = (field: FilterField, value: string) => {
     const next = { ...filters, [field]: value || undefined };
     const leaves: Predicate[] = [];
@@ -74,7 +73,7 @@ export function OrdersListPage() {
     if (after) leaves.push({ field: "created_after", op: "eq", value: after });
     const before = fromDateTimeLocalValue(next.created_before ?? "", tz);
     if (before) leaves.push({ field: "created_before", op: "eq", value: before });
-    list.setPredicate(leaves.length === 0 ? null : leaves.length === 1 ? leaves[0] : { all: leaves });
+    list.setPredicate(predicateOf(leaves));
   };
 
   const applyUserId = () => setFilter("user_id", userIdInput.trim());
@@ -253,8 +252,6 @@ export function OrdersListPage() {
 
 export function OrderDetailPage() {
   const { id } = useParams({ strict: false });
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const platformAdmin = isPlatformAdmin(role);
@@ -265,16 +262,13 @@ export function OrderDetailPage() {
     enabled: !!id,
   });
 
-  // 命令接线（§12.3）：refund/fulfill 挂订单资源（kit 集合键自动失效）+
-  // 存量 ["payments-orders"] 键手动桥（列表前缀 + 详情）；toast 单源
-  // onSettled。
+  // 命令接线（§12.3）：refund/fulfill 挂订单资源——失效 = kit 集合键 +
+  // 存量 ["payments-orders"] 前缀（resource.legacyKeys 声明，§12.10-②——
+  // 覆盖列表前缀与详情键两形）；toast 单源 onSettled。
   const refund = useCommand(refundOrderCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("已发起退款");
-        void queryClient.invalidateQueries({ queryKey: ["payments-orders", projectId] });
-        void queryClient.invalidateQueries({ queryKey: ["payments-orders", id] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -284,11 +278,9 @@ export function OrderDetailPage() {
   });
 
   const fulfill = useCommand(fulfillOrderCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("已标记履约");
-        void queryClient.invalidateQueries({ queryKey: ["payments-orders", id] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {

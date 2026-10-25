@@ -249,15 +249,13 @@ export function AnalyticsOverviewPage() {
 
 // AnalyticsEventsPage 事件字典（自由上报 + 事后发现入口）。
 export function AnalyticsEventsPage() {
-  const { projectId } = useAuth();
   const [filter, setFilter] = useState("");
 
   // 事件字典 fleet 化（§12.9-2）：游标/页大小进 URL；页内过滤保持本地态。
   const list = useCollection(eventDefinitionsResource, {
     from: "/console/analytics/events",
     search: eventDefinitionsSearch,
-    scope: { projectId: projectId ?? undefined },
-    query: { enabled: !!projectId },
+
   });
   const filtered = filter
     ? list.rows.filter((d) => d.name.toLowerCase().includes(filter.toLowerCase()))

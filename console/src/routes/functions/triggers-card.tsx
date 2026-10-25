@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import { AlertTriangle, Plus } from "lucide-react";
@@ -45,7 +45,6 @@ export function FunctionTriggersCard({
   functionId: string;
   writeable: boolean;
 }) {
-  const queryClient = useQueryClient();
   const tz = useUserTimezone();
   const [showCreate, setShowCreate] = useState(false);
   const [type, setType] = useState<"http" | "cron" | "event">("http");
@@ -69,17 +68,15 @@ export function FunctionTriggersCard({
     queryFn: () => listFunctionTriggers(functionId),
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey });
-
   // 命令接线（§12.3，裸 descriptor——触发器是 function 子资源）：不涉
-  // functions 集合失效；存量 ["function-triggers"] 键手动桥。创建的表单
-  // 展示形在 descriptor run 内收敛为提交形。toast 单源 onSettled。
+  // functions 集合失效；存量 ["function-triggers"] 键由 descriptor 级
+  // legacyKeys 桥（§12.10-②）。创建的表单展示形在 descriptor run 内收敛
+  // 为提交形。toast 单源 onSettled。
   const create = useCommand(createTriggerDescriptor, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("触发器已创建");
         setShowCreate(false);
-        invalidate();
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -92,7 +89,6 @@ export function FunctionTriggersCard({
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("触发器已删除");
-        invalidate();
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -105,7 +101,6 @@ export function FunctionTriggersCard({
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("token 已轮换（旧 URL 立即失效）");
-        invalidate();
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {

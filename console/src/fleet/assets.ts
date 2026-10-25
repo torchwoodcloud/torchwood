@@ -16,11 +16,11 @@ import { runCommandMapped, toApiError } from "@/fleet/errors";
 // （本地态），不是服务端过滤参数 → 无谓词白名单。
 //
 // 命令族切片（写路径命令化，§12.3）：建/删挂资源 commands（kit 集合键由
-// useCommand 自动失效）；存量 ["asset-defs"] 键（详情/下拉选项仍消费）由
-// 页面 onSettled 手动桥。结果两分映射同 apiKeys 先例（400→rejected
-// {code,message}、409→conflict、其余 throw ApiError）；api 调用一律
-// __skipToast（toast 单源 = onSettled）。创建的 decimals/上限文本展示形在
-// run 内收敛为提交形。
+// useCommand 自动失效）；存量 ["asset-defs"] 前缀键（详情/下拉选项仍消费）
+// 由资源 legacyKeys 声明桥（§12.10-②，页面 onSettled 手动桥退役）。结果
+// 两分映射同 apiKeys 先例（400→rejected {code,message}、409→conflict、
+// 其余 throw ApiError）；api 调用一律 __skipToast（toast 单源 = onSettled）。
+// 创建的 decimals/上限文本展示形在 run 内收敛为提交形。
 
 // —— 新建：decimals/上限为文本展示形，run 内收敛提交形（decimals 非法回退
 // 0；max_quantity 空 = 不限不发送）——
@@ -63,6 +63,9 @@ export const assetDefsResource = defineResource({
   getId: (row: AssetDef) => row.id,
   scope: ["projectId"],
   collection: fetchAssetDefs,
+  // 存量键失效桥（§12.10-②）：宽前缀覆盖 ["asset-defs", projectId]（列表桥）
+  // 与 ["asset-defs", id]（详情键）两形。
+  legacyKeys: () => [["asset-defs"]],
   commands: {
     create: {
       run: async (form: CreateAssetDefForm): Promise<CommandResult<AssetDef>> =>
@@ -91,6 +94,6 @@ export const assetDefsResource = defineResource({
   },
 });
 
-// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
-export const createAssetDefCommand = assetDefsResource.commands!.create;
-export const removeAssetDefCommand = assetDefsResource.commands!.remove;
+// 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
+export const createAssetDefCommand = assetDefsResource.commands.create;
+export const removeAssetDefCommand = assetDefsResource.commands.remove;

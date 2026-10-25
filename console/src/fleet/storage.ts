@@ -25,8 +25,9 @@ import { runCommandMapped, toApiError } from "@/fleet/errors";
 // 在适配器收敛为 ApiError（fleet/errors.ts 收敛缝）。
 //
 // 命令族切片（§12.3）：桶建/改/删挂资源 commands（kit 集合键由 useCommand
-// 自动失效）；文件是桶子资源、无 kit 集合——独立 descriptor，失效由页面
-// 桥存量 ["files"] 键。结果两分映射同 apiKeys 先例（400→rejected、
+// 自动失效）；文件是桶子资源、无 kit 集合——独立 descriptor，descriptor 级
+// legacyKeys 声明存量 ["files"] 前缀键桥（§12.10-②，宽前缀覆盖
+// ["files", bucketId] 全族）。结果两分映射同 apiKeys 先例（400→rejected、
 // 409→conflict、其余 throw ApiError）；命令调用一律 __skipToast（toast
 // 单源 = onSettled）。
 
@@ -51,6 +52,9 @@ export const bucketsResource = defineResource({
   getId: (row: Bucket) => row.id,
   scope: ["projectId"],
   collection: fetchBuckets,
+  // 存量键失效桥（§12.10-②）：命令 ok 后除 kit 键外失效存量 ["buckets"]/
+  // ["storage-usage"] 前缀键——页面 onSettled 手动桥退役。
+  legacyKeys: () => [["buckets"], ["storage-usage"]],
   commands: {
     create: {
       run: async (input: { name: string; public: boolean }): Promise<CommandResult<Bucket>> =>
@@ -76,17 +80,19 @@ export const bucketsResource = defineResource({
   },
 });
 
-// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
-export const createBucketCommand = bucketsResource.commands!.create;
-export const updateBucketCommand = bucketsResource.commands!.update;
-export const removeBucketCommand = bucketsResource.commands!.remove;
+// 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
+export const createBucketCommand = bucketsResource.commands.create;
+export const updateBucketCommand = bucketsResource.commands.update;
+export const removeBucketCommand = bucketsResource.commands.remove;
 
-// ——文件子资源命令（独立 descriptor：不挂桶资源——文件写不改变桶集合，
-// 失效由页面桥存量 ["files", bucketId] 键）——
+// ——文件子资源命令（独立 descriptor：不挂桶资源——文件写不改变桶集合；
+// 存量 ["files"] 前缀键桥在 descriptor 级声明，宽前缀覆盖
+// ["files", bucketId] 全族——页面手动桥退役）——
 
 export const uploadFileDescriptor = {
   run: async (input: { bucketId: string; file: File }): Promise<CommandResult<FileItem>> =>
     runCommandMapped(() => uploadFile(input.bucketId, input.file, SKIP)),
+  legacyKeys: () => [["files"]],
 };
 
 export const removeFileDescriptor = {
@@ -96,6 +102,7 @@ export const removeFileDescriptor = {
       return null;
     }),
   treatAs: { "not-found": { status: "ok" as const, payload: null } },
+  legacyKeys: () => [["files"]],
 };
 
 export const renameFileDescriptor = {
@@ -105,6 +112,7 @@ export const renameFileDescriptor = {
     name: string;
   }): Promise<CommandResult<FileItem>> =>
     runCommandMapped(() => updateFile(input.bucketId, input.fileId, { name: input.name }, SKIP)),
+  legacyKeys: () => [["files"]],
 };
 
 // URL 搜索 schema（路由 validateSearch 与绑定共用同一实例）。默认页大小

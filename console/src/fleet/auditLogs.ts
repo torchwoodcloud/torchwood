@@ -5,7 +5,7 @@ import {
   type ResourceScope,
   type Segment,
 } from "@lynx-go/ui-kit/kernel";
-import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
+import { collectionQuerySchema, filterValues } from "@lynx-go/ui-kit/schema";
 import { listAuditLogs, type AuditLog } from "@/api/auditLogs";
 import { toApiError } from "@/fleet/errors";
 
@@ -30,15 +30,13 @@ type FilterField = (typeof FILTER_FIELDS)[number];
 export type { FilterField };
 
 export function filtersOf(predicate: Predicate | undefined): Partial<Record<FilterField, string>> {
-  if (!predicate) return {};
-  const leaves = "all" in predicate ? predicate.all : "field" in predicate ? [predicate] : [];
+  // kit filterValues 逐叶抽 field→单值（AND/OR 展开同 codec 产物形）；白名单
+  // 与字符串值筛选留在域层（scope 伪字段的布尔展开在适配器）。
+  const values = filterValues(predicate);
   const out: Partial<Record<FilterField, string>> = {};
-  for (const leaf of leaves) {
-    if (!("field" in leaf)) continue;
-    const field = leaf.field as FilterField;
-    if ((FILTER_FIELDS as readonly string[]).includes(field) && typeof leaf.value === "string") {
-      out[field] = leaf.value;
-    }
+  for (const field of FILTER_FIELDS) {
+    const v = values[field];
+    if (typeof v === "string") out[field] = v;
   }
   return out;
 }

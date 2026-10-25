@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useCollection } from "@lynx-go/ui-kit";
+import { predicateOf } from "@lynx-go/ui-kit/schema";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import type { Predicate } from "@lynx-go/ui-kit/kernel";
 import type { AuditLog } from "@/api/auditLogs";
-import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
@@ -129,7 +129,6 @@ function formatValue(v: unknown): string {
 // —— 页面 ——
 
 export function AuditLogsListPage() {
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const platformAdmin = isPlatformAdmin(role);
   const tz = useUserTimezone();
@@ -140,14 +139,14 @@ export function AuditLogsListPage() {
   const list = useCollection(auditLogsResource, {
     from: "/console/audit-logs",
     search: auditLogsSearch,
-    scope: { projectId: projectId ?? undefined },
-    query: { enabled: !!projectId },
+
   });
   const filters = filtersOf(list.query.predicate);
   const [selected, setSelected] = useState<AuditLog | null>(null);
 
   // setFilter 写谓词（replace + 清游标回第一页）；datetime 字段在写入边界
-  // 做墙钟↔绝对换算——URL 存绝对时刻，跨时区分享同一过滤窗口。
+  // 做墙钟↔绝对换算——URL 存绝对时刻，跨时区分享同一过滤窗口。叶子归一化
+  // 用 kit predicateOf（0→null / 1→裸叶 / n→AND，§12.10-④）。
   const setFilter = (field: FilterField, value: string) => {
     const next = { ...filters, [field]: value || undefined };
     const leaves: Predicate[] = [];
@@ -159,7 +158,7 @@ export function AuditLogsListPage() {
     if (after) leaves.push({ field: "created_after", op: "eq", value: after });
     const before = fromDateTimeLocalValue(next.created_before ?? "", tz);
     if (before) leaves.push({ field: "created_before", op: "eq", value: before });
-    list.setPredicate(leaves.length === 0 ? null : leaves.length === 1 ? leaves[0] : { all: leaves });
+    list.setPredicate(predicateOf(leaves));
   };
 
   const columns: LegacyColumnDef<AuditLog, unknown>[] = [

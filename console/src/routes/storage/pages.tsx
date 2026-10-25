@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/ui-kit";
+import { invalidateAfterCommand, useCollection, useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { Plus, Download, UploadCloud, Link2, Copy } from "lucide-react";
@@ -121,7 +121,6 @@ function UsageStatCard({
 }
 
 export function StorageListPage() {
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const navigate = useNavigate();
@@ -132,17 +131,16 @@ export function StorageListPage() {
 
   // 列表 fleet 化（§12.9-2）：游标/页大小进 URL（分页栈 = 浏览器历史）；
   // 页内当前页搜索保持本地态（旧页语义）。
+  // scope/enabled 不再逐处传（§12.10-③）：资源声明了 projectId，Provider 单源 + 未就绪自动停用。
   const list = useCollection(bucketsResource, {
     from: "/console/storage",
     search: bucketsSearch,
-    scope: { projectId: projectId ?? undefined },
-    query: { enabled: !!projectId },
   });
 
   // 行删除命令接线（§12.3）：remove 挂桶资源——kit 集合键由 useCommand 自动
-  // 失效（本页无存量 ["buckets"] 列表键消费方）；toast 单源 onSettled。
+  // 失效；存量 ["buckets"]/["storage-usage"] 键由 resource.legacyKeys 桥。
+  // toast 单源 onSettled。
   const remove = useCommand(removeBucketCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Bucket 已删除");
@@ -289,19 +287,15 @@ export function StorageListPage() {
 
 export function BucketNewPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const [name, setName] = useState("");
   const [publicBucket, setPublicBucket] = useState(false);
 
-  // 创建命令接线：kit 桶集合自动失效；存量 ["buckets"] 键（详情页）手动桥。
+  // 创建命令接线：kit 桶集合自动失效；存量 ["buckets"] 键由 resource.legacyKeys 桥。
   const create = useCommand(createBucketCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Bucket 创建成功");
-        void queryClient.invalidateQueries({ queryKey: ["buckets"] });
         navigate({ to: `/console/storage/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
@@ -367,15 +361,13 @@ export function BucketDetailPage() {
   const files = filesData?.rows ?? [];
 
   // 命令接线（§12.3）：桶 update/remove 挂资源（kit 集合自动失效），
-  // 存量 ["buckets"]/["storage-usage"] 键手动桥；文件命令独立 descriptor
-  //（无 kit 集合）——存量 ["files"] 键手动桥。toast 单源 onSettled。
+  // 存量 ["buckets"]/["storage-usage"] 键由 resource.legacyKeys 桥；文件命令
+  // 独立 descriptor——存量 ["files"] 键由 descriptor.legacyKeys 桥。
+  // toast 单源 onSettled。
   const updateBucketHandle = useCommand(updateBucketCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Bucket 设置已更新");
-        void queryClient.invalidateQueries({ queryKey: ["buckets"] });
-        void queryClient.invalidateQueries({ queryKey: ["storage-usage", projectId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -385,11 +377,9 @@ export function BucketDetailPage() {
   });
 
   const removeBucket = useCommand(removeBucketCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Bucket 已删除");
-        void queryClient.invalidateQueries({ queryKey: ["buckets"] });
         navigate({ to: "/console/storage" });
       } else if (result) {
         toast.error(result.message);
@@ -403,7 +393,6 @@ export function BucketDetailPage() {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("文件上传成功");
-        void queryClient.invalidateQueries({ queryKey: ["files", bucketId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -416,7 +405,6 @@ export function BucketDetailPage() {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("文件已删除");
-        void queryClient.invalidateQueries({ queryKey: ["files", bucketId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -455,7 +443,9 @@ export function BucketDetailPage() {
       } else {
         toast.success(`已删除 ${selected.length} 个文件`);
       }
-      queryClient.invalidateQueries({ queryKey: ["files", bucketId] });
+      // 直调路径的失效（§12.10-② 命令式编排）：走 remove descriptor 的
+      // legacyKeys 声明（["files"] 前缀），不手写存量键。
+      invalidateAfterCommand(queryClient, removeFileDescriptor, {});
       clear();
     } finally {
       setBulkDeleting(false);
@@ -520,7 +510,9 @@ export function BucketDetailPage() {
             file={chunkUpload.file}
             onSuccess={() => {
               toast.success("文件上传成功");
-              queryClient.invalidateQueries({ queryKey: ["files", bucketId] });
+              // 直调路径的失效（§12.10-② 命令式编排）：upload descriptor 的
+              // legacyKeys 声明（["files"] 前缀）。
+              invalidateAfterCommand(queryClient, uploadFileDescriptor, {});
               setChunkUpload(null);
             }}
             onError={() => {
@@ -613,7 +605,6 @@ export function BucketDetailPage() {
 export function FileDetailPage() {
   const { bucketId, fileId } = useParams({ strict: false });
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const [shareOpen, setShareOpen] = useState(false);
@@ -653,13 +644,12 @@ export function FileDetailPage() {
     };
   }, [bucketId, fileId]);
 
-  // 文件命令接线（独立 descriptor）：存量 ["files"] 键手动桥（前缀匹配覆盖
-  // 文件详情键）；toast 单源 onSettled（§12.3）。
+  // 文件命令接线（独立 descriptor）：存量 ["files"] 键由 descriptor.legacyKeys
+  // 桥（前缀匹配覆盖文件列表/详情键）；toast 单源 onSettled（§12.3）。
   const remove = useCommand(removeFileDescriptor, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("文件已删除");
-        void queryClient.invalidateQueries({ queryKey: ["files", bucketId] });
         navigate({ to: `/console/storage/${bucketId}` });
       } else if (result) {
         toast.error(result.message);
@@ -673,7 +663,6 @@ export function FileDetailPage() {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("文件名已更新");
-        void queryClient.invalidateQueries({ queryKey: ["files", bucketId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {

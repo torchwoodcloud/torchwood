@@ -23,7 +23,6 @@ import {
   type EditApiKeyForm,
 } from "@/fleet/apiKeys";
 import { describeApiError } from "@/fleet/errors";
-import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
@@ -277,8 +276,6 @@ export function ApiKeysListPage() {
 
 export function ApiKeyNewPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
 
   // scope 词表来自 /.well-known/torchwood（服务端策略注册表派生的静态目录，
   // 长缓存即可）；加载失败时退回手动高级输入。
@@ -294,11 +291,9 @@ export function ApiKeyNewPage() {
   // useCommandForm：secret = reveal（ok payload，卸载即弃，§12.3 裁决 5）。
   const create = useCommandForm(createApiKeyCommand, {
     defaultValues: { name: "", wildcard: false, selected: [] as string[], manual: "" },
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("API Key 创建成功，请立即复制 Secret");
-        void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -515,8 +510,6 @@ function ScopeResourceRow({
 export function ApiKeyDetailPage() {
   const { id } = useParams({ strict: false });
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const [editOpen, setEditOpen] = useState(false);
   const [rotateOpen, setRotateOpen] = useState(false);
@@ -529,11 +522,9 @@ export function ApiKeyDetailPage() {
   });
 
   const remove = useCommand(removeApiKeyCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("API Key 已删除");
-        void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
         navigate({ to: "/console/api-keys" });
       } else if (failure) {
         toast.error(describeApiError(failure));

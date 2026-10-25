@@ -6,7 +6,7 @@ import {
   type ResourceScope,
   type Segment,
 } from "@lynx-go/ui-kit/kernel";
-import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
+import { collectionQuerySchema, filterValues } from "@lynx-go/ui-kit/schema";
 import { skipToast as SKIP } from "@/api/client";
 import {
   cancelSubscription,
@@ -26,9 +26,10 @@ import { runCommandMapped, toApiError } from "@/fleet/errors";
 //
 // 命令族切片（写路径命令化）：计划建/删挂 plansResource、订阅期末取消/强制
 // 过期挂 subscriptionsResource（kit 列表键随 ok 自动失效）；存量
-// ["sub-plans"] / ["subscriptions"] 键由页面 onSettled 手动桥。结果两分映射
-// 同 apiKeys（400→rejected、409→conflict、其余 throw ApiError）；api 调用
-// 一律 __skipToast（toast 单源 = onSettled/结果盒）。
+// ["sub-plans"] / ["subscriptions"] 前缀键由资源 legacyKeys 声明桥
+//（§12.10-②，页面 onSettled 手动桥退役）。结果两分映射同 apiKeys
+//（400→rejected、409→conflict、其余 throw ApiError）；api 调用一律
+// __skipToast（toast 单源 = onSettled/结果盒）。
 
 // —— 计划新建：表单值（展示形）在 run 内收敛为提交形 ——
 //（grace_days 文本 → 整数回退 0；amount 为最小单位整数字符串——客户端
@@ -102,6 +103,9 @@ export const plansResource = defineResource({
   getId: (row: SubscriptionPlan) => row.id,
   scope: ["projectId"],
   collection: fetchPlans,
+  // 存量键失效桥（§12.10-②）：宽前缀覆盖 ["sub-plans", projectId]（列表桥）
+  // 与 ["sub-plans", id]（详情键）两形。
+  legacyKeys: () => [["sub-plans"]],
   commands: {
     // 表单值→提交形收敛在 run 内（amount int64 校验、grace_days 文本→整数）
     create: {
@@ -136,15 +140,13 @@ export type { FilterField };
 export function filtersOf(
   predicate: Predicate | undefined
 ): Partial<Record<FilterField, string>> {
-  if (!predicate) return {};
-  const leaves = "all" in predicate ? predicate.all : "field" in predicate ? [predicate] : [];
+  // kit filterValues 逐叶抽 field→单值（AND/OR 展开同 codec 产物形）；白名单
+  // 与字符串值筛选（真实服务端参数面）留在域层。
+  const values = filterValues(predicate);
   const out: Partial<Record<FilterField, string>> = {};
-  for (const leaf of leaves) {
-    if (!("field" in leaf)) continue;
-    const field = leaf.field as FilterField;
-    if ((FILTER_FIELDS as readonly string[]).includes(field) && typeof leaf.value === "string") {
-      out[field] = leaf.value;
-    }
+  for (const field of FILTER_FIELDS) {
+    const v = values[field];
+    if (typeof v === "string") out[field] = v;
   }
   return out;
 }
@@ -177,6 +179,9 @@ export const subscriptionsResource = defineResource({
   getId: (row: Subscription) => row.id,
   scope: ["projectId"],
   collection: fetchSubscriptions,
+  // 存量键失效桥（§12.10-②）：宽前缀覆盖 ["subscriptions", projectId]
+  //（列表桥）与 ["subscriptions", id]（详情键）两形。
+  legacyKeys: () => [["subscriptions"]],
   commands: {
     // 期末取消（custom verb，reason = "console" 操作审计）
     cancel: {
@@ -197,11 +202,11 @@ export const subscriptionsResource = defineResource({
   },
 });
 
-// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
-export const createPlanCommand = plansResource.commands!.create;
-export const removePlanCommand = plansResource.commands!.remove;
-export const cancelSubscriptionCommand = subscriptionsResource.commands!.cancel;
-export const expireSubscriptionCommand = subscriptionsResource.commands!.expire;
+// 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
+export const createPlanCommand = plansResource.commands.create;
+export const removePlanCommand = plansResource.commands.remove;
+export const cancelSubscriptionCommand = subscriptionsResource.commands.cancel;
+export const expireSubscriptionCommand = subscriptionsResource.commands.expire;
 
 // URL 搜索 schema（路由 validateSearch 与绑定共用同一实例）。默认页大小
 // 20 = 旧页默认。

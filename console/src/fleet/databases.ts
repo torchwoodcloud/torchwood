@@ -33,10 +33,11 @@ import { runCommandMapped, toApiError } from "@/fleet/errors";
 // 收敛为 ApiError（fleet/errors.ts）。
 //
 // 建删命令族切片：database/collection 的 create/remove 挂各自资源（kit 列表
-// 键随 ok 自动失效）；存量 ["databases"] / ["collections"] 键由页面 onSettled
-// 手动桥。结果两分映射同 apiKeys（400→rejected、409→conflict、其余 throw
-// ApiError）；api 调用一律 __skipToast（toast 单源 = onSettled）。集合
-// schema 编辑器（属性/索引/设置/权限）同挂 collections 资源命令。
+// 键随 ok 自动失效）；存量 ["databases"] / ["collections"] 前缀键由资源
+// legacyKeys 声明桥（§12.10-②，页面 onSettled 手动桥退役）。结果两分映射同
+// apiKeys（400→rejected、409→conflict、其余 throw ApiError）；api 调用一律
+// __skipToast（toast 单源 = onSettled）。集合 schema 编辑器（属性/索引/设置/
+// 权限）同挂 collections 资源命令。
 
 // —— databases（顶层列表；scope 只有 projectId）——
 
@@ -65,6 +66,10 @@ export const databasesResource = defineResource({
   getId: (row: Database) => row.id,
   scope: ["projectId"],
   collection: fetchDatabases,
+  // 存量键失效桥（§12.10-②）：命令 ok 后除 kit 键外失效存量前缀键。
+  // 宽前缀两族——databases 命令 scope 只有 projectId（构不出 ["collections",
+  // dbId]），且删库连带其下集合缓存失活，["collections"] 前缀一并覆盖。
+  legacyKeys: () => [["databases"], ["collections"]],
   commands: {
     create: {
       run: async (input: { id: string; name: string }): Promise<CommandResult<Database>> =>
@@ -117,6 +122,10 @@ export const collectionsResource = defineResource({
   getId: (row: Collection) => row.id,
   scope: ["projectId", "dbId"],
   collection: fetchCollections,
+  // 存量键失效桥（§12.10-②）：宽前缀覆盖两形存量键——列表桥
+  // ["collections", dbId] 与详情键 ["collections", dbId, collId]（getCollection
+  // useQuery 仍消费）；命令 scope 的 dbId 构键，宽前缀等价且少一处闭包。
+  legacyKeys: () => [["collections"]],
   commands: {
     create: {
       run: async (form: CreateCollectionForm): Promise<CommandResult<Collection>> =>
@@ -254,14 +263,14 @@ export const collectionsResource = defineResource({
   },
 });
 
-// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
-export const createDatabaseCommand = databasesResource.commands!.create;
-export const removeDatabaseCommand = databasesResource.commands!.remove;
-export const createCollectionCommand = collectionsResource.commands!.create;
-export const removeCollectionCommand = collectionsResource.commands!.remove;
-export const updateCollectionSettingsCommand = collectionsResource.commands!.updateSettings;
-export const updateCollectionPermissionsCommand = collectionsResource.commands!.updatePermissions;
-export const addCollectionAttributeCommand = collectionsResource.commands!.addAttribute;
-export const addCollectionIndexCommand = collectionsResource.commands!.addIndex;
-export const removeCollectionAttributeCommand = collectionsResource.commands!.removeAttribute;
-export const removeCollectionIndexCommand = collectionsResource.commands!.removeIndex;
+// 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
+export const createDatabaseCommand = databasesResource.commands.create;
+export const removeDatabaseCommand = databasesResource.commands.remove;
+export const createCollectionCommand = collectionsResource.commands.create;
+export const removeCollectionCommand = collectionsResource.commands.remove;
+export const updateCollectionSettingsCommand = collectionsResource.commands.updateSettings;
+export const updateCollectionPermissionsCommand = collectionsResource.commands.updatePermissions;
+export const addCollectionAttributeCommand = collectionsResource.commands.addAttribute;
+export const addCollectionIndexCommand = collectionsResource.commands.addIndex;
+export const removeCollectionAttributeCommand = collectionsResource.commands.removeAttribute;
+export const removeCollectionIndexCommand = collectionsResource.commands.removeIndex;

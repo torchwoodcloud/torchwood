@@ -27,10 +27,11 @@ import { runCommandMapped, toApiError } from "@/fleet/errors";
 //
 // 命令族切片（§12.3）：榜建/改/删挂资源 commands（kit 集合键由 useCommand
 // 自动失效——现页 refresh 桥退场）；条目删除/结算弃奖/重跑是榜子资源写、
-// 不改变榜集合——独立 descriptor，失效由页面桥存量
-// ["leaderboards-top"/"-periods"/"-settlements"] 键。结果两分映射同 apiKeys
-// 先例（400→rejected{code,message}、409→conflict、其余 throw ApiError）；
-// 命令调用一律 __skipToast（toast 单源 = onSettled）。
+// 不改变榜集合——独立 descriptor，存量
+// ["leaderboards-top"/"-periods"/"-settlements"] 前缀键在 descriptor 级
+// legacyKeys 声明（§12.10-②，宽前缀覆盖 boardId 形）——页面手动桥退役。
+// 结果两分映射同 apiKeys 先例（400→rejected{code,message}、409→conflict、
+// 其余 throw ApiError）；命令调用一律 __skipToast（toast 单源 = onSettled）。
 
 async function fetchBoards(): Promise<Segment<LeaderboardBoard>> {
   try {
@@ -79,13 +80,14 @@ export const boardsResource = defineResource({
   },
 });
 
-// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
-export const createBoardCommand = boardsResource.commands!.create;
-export const updateBoardCommand = boardsResource.commands!.update;
-export const removeBoardCommand = boardsResource.commands!.remove;
+// 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
+export const createBoardCommand = boardsResource.commands.create;
+export const updateBoardCommand = boardsResource.commands.update;
+export const removeBoardCommand = boardsResource.commands.remove;
 
-// ——榜子资源命令（独立 descriptor：条目/结算写不改变榜集合；失效由页面桥
-// 存量 ["leaderboards-*"] 键）——
+// ——榜子资源命令（独立 descriptor：条目/结算写不改变榜集合；存量
+// ["leaderboards-*"] 前缀键在 descriptor 级 legacyKeys 声明——宽前缀覆盖
+// ["leaderboards-top"/"-periods"/"-settlements", boardId] 全族）——
 
 export const removeBoardEntryDescriptor = {
   run: async (input: {
@@ -98,6 +100,7 @@ export const removeBoardEntryDescriptor = {
       return null;
     }),
   treatAs: { "not-found": { status: "ok" as const, payload: null } },
+  legacyKeys: () => [["leaderboards-top"], ["leaderboards-periods"], ["leaderboards-settlements"]],
 };
 
 export const voidSettlementDescriptor = {
@@ -106,6 +109,7 @@ export const voidSettlementDescriptor = {
       await voidSettlement(input.boardId, input.period, SKIP);
       return null;
     }),
+  legacyKeys: () => [["leaderboards-top"], ["leaderboards-periods"], ["leaderboards-settlements"]],
 };
 
 export const rerunSettlementDescriptor = {
@@ -114,6 +118,7 @@ export const rerunSettlementDescriptor = {
       await rerunSettlement(input.boardId, input.period, SKIP);
       return null;
     }),
+  legacyKeys: () => [["leaderboards-top"], ["leaderboards-periods"], ["leaderboards-settlements"]],
 };
 
 // URL 搜索 schema（路由 validateSearch 与绑定共用同一实例）。端点全量返回

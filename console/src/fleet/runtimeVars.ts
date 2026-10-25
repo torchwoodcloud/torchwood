@@ -32,10 +32,22 @@ import { runCommandMapped, toApiError } from "@/fleet/errors";
 //
 // 命令族切片（写路径命令化）：全部写动词挂 varSetsResource——var 写会 bump
 // 集合 revision/var_count/footprint，列表（kit 键）随资源命令 ok 自动失效；
-// vars/versions 子视图的存量键由页面 useInvalidateVarSet 手动桥。并发面 =
-// LWW（design.md §12.5 已证：UpdateVarSet/UpdateVar 等无写前件），不设
-// OCC 守卫；结果两分映射同 apiKeys（400→rejected、409→conflict、其余
+// 存量键失效桥（§12.10-②）：集合级动词（create/remove）经资源 legacyKeys
+// 失效 ["runtime-var-sets"] 前缀（宽前缀）；var 级动词（varCreate/varRemove/
+// rollback）与裸工厂（editVar/editVarSet）在 descriptor 级声明全族前缀键
+//（列表/详情/变量/版本/版本快照）——页面 useInvalidateVarSet 手动桥退役。
+// 并发面 = LWW（design.md §12.5 已证：UpdateVarSet/UpdateVar 等无写前件），
+// 不设 OCC 守卫；结果两分映射同 apiKeys（400→rejected、409→conflict、其余
 // throw ApiError）；api 调用一律 __skipToast（toast 单源 = onSettled）。
+
+/** var 级写的存量子视图键族（宽前缀，projectId/varSetId 形全覆盖）。 */
+const varSetSubviewKeys = () => [
+  ["runtime-var-sets"],
+  ["runtime-var-set"],
+  ["runtime-vars"],
+  ["runtime-var-versions"],
+  ["runtime-var-version"],
+];
 
 // —— 新建集合：表单值（展示形）在 run 内原样收敛为提交形 ——
 
@@ -75,8 +87,10 @@ export function editVarSetDescriptor(varSet: VarSet): CommandDescriptor<EditVarS
           SKIP
         )
       ),
-    // 裸工厂无 __resource：kit 列表键（visibility 列会变）显式声明失效
+    // 裸工厂无 __resource：kit 列表键（visibility 列会变）显式声明失效；
+    // 存量子视图键族（§12.10-②）在 legacyKeys 声明——两者并存。
     invalidates: [{ resource: varSetsResource.name }],
+    legacyKeys: varSetSubviewKeys,
   };
 }
 
@@ -153,8 +167,10 @@ export function editVarDescriptor(
         updateVar(varSetId, key, { value, description: input.description }, SKIP)
       );
     },
-    // var 写 bump 集合 revision/var_count/footprint——kit 列表键显式声明失效
+    // var 写 bump 集合 revision/var_count/footprint——kit 列表键显式声明失效；
+    // 存量子视图键族（§12.10-②）在 legacyKeys 声明——两者并存。
     invalidates: [{ resource: varSetsResource.name }],
+    legacyKeys: varSetSubviewKeys,
   };
 }
 
@@ -181,6 +197,10 @@ export const varSetsResource = defineResource({
   getId: (row: VarSet) => row.id,
   scope: ["projectId"],
   collection: fetchVarSets,
+  // 存量键失效桥（§12.10-②，宽前缀）：集合级动词 ok 后除 kit 键外失效存量
+  // ["runtime-var-sets"] 前缀键（覆盖 ["runtime-var-sets", projectId] 形）；
+  // var 级动词的子视图键族在各自 descriptor 内声明（见上）。
+  legacyKeys: () => [["runtime-var-sets"]],
   commands: {
     // 新建集合（var_set_id 创建后不可改，D9）
     create: {
@@ -219,6 +239,8 @@ export const varSetsResource = defineResource({
           )
         );
       },
+      // var 写 bump revision/var_count/footprint——存量子视图键族全桥（§12.10-②）
+      legacyKeys: varSetSubviewKeys,
     },
     // 删除变量：已删 → 幂等 ok
     varRemove: {
@@ -231,6 +253,7 @@ export const varSetsResource = defineResource({
           return null;
         }),
       treatAs: { "not-found": { status: "ok" as const, payload: null } },
+      legacyKeys: varSetSubviewKeys,
     },
     // 回滚到目标版本（custom verb）；目标=当前版本 → 400 InvalidArgument（D12）
     // → rejected；窗口淘汰 → 404（失败通道，describeApiError）
@@ -240,6 +263,7 @@ export const varSetsResource = defineResource({
         targetRevision: number;
       }): Promise<CommandResult<RuntimeVarVersion>> =>
         runCommandMapped(() => rollback(input.varSetId, input.targetRevision, SKIP)),
+      legacyKeys: varSetSubviewKeys,
     },
   },
 });
@@ -249,9 +273,9 @@ export const varSetsResource = defineResource({
 // filters 白名单（页内搜索是本地态，不进 URL 谓词）。
 export const varSetsSearch = collectionQuerySchema({ defaultSize: 20 });
 
-// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
-export const createVarSetCommand = varSetsResource.commands!.create;
-export const removeVarSetCommand = varSetsResource.commands!.remove;
-export const createVarCommand = varSetsResource.commands!.varCreate;
-export const removeVarCommand = varSetsResource.commands!.varRemove;
-export const rollbackVarSetCommand = varSetsResource.commands!.rollback;
+// 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
+export const createVarSetCommand = varSetsResource.commands.create;
+export const removeVarSetCommand = varSetsResource.commands.remove;
+export const createVarCommand = varSetsResource.commands.varCreate;
+export const removeVarCommand = varSetsResource.commands.varRemove;
+export const rollbackVarSetCommand = varSetsResource.commands.rollback;

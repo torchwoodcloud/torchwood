@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { useUserTimezone } from "@/hooks/useTimezone";
@@ -55,32 +55,27 @@ import { describeApiError } from "@/fleet/errors";
 const CLASSES = ["currency", "stack", "instance", "entitlement"] as const;
 
 export function AssetDefsListPage() {
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const tz = useUserTimezone();
   const writeable = canWrite(role);
   const [search, setSearch] = useState("");
 
   // 列表 fleet 化（§12.9-2）：游标/页大小/时间排序进 URL（分页栈 = 浏览器
-  // 历史）；页内当前页搜索保持本地态（旧页语义）。
+  // 历史）；页内当前页搜索保持本地态（旧页语义）。scope/enabled 不再逐处
+  // 传（§12.10-③）：资源声明了 projectId，Provider 单源 + 未就绪自动停用。
   const list = useCollection(assetDefsResource, {
     from: "/console/assets",
     search: assetDefsSearch,
-    scope: { projectId: projectId ?? undefined },
-    query: { enabled: !!projectId },
   });
 
-  // 行删除命令接线（§12.3）：挂 asset-defs 资源——kit 集合键自动失效；
-  // 存量 ["asset-defs"] 键（详情/下拉选项仍消费）手动桥。toast 单源
-  // onSettled。
+  // 行删除命令接线（§12.3）：挂 asset-defs 资源——失效 = kit 集合键 +
+  // 存量 ["asset-defs"] 前缀（resource.legacyKeys 声明，§12.10-②）。
+  // toast 单源 onSettled。
   const remove = useCommand(removeAssetDefCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("资产定义已删除");
-        void queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -197,23 +192,19 @@ export function AssetDefsListPage() {
 
 export function AssetDefNewPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [klass, setKlass] = useState<string>("currency");
   const [decimals, setDecimals] = useState("0");
   const [maxQuantity, setMaxQuantity] = useState("");
 
-  // 创建命令接线（§12.3）：挂 asset-defs 资源（kit 集合键自动失效）+ 存量
-  // ["asset-defs"] 键手动桥；decimals/上限文本展示形在 descriptor run 内
-  // 收敛。toast 单源 onSettled。
+  // 创建命令接线（§12.3）：挂 asset-defs 资源——失效 = kit 集合键 + 存量
+  // ["asset-defs"] 前缀（resource.legacyKeys 声明，§12.10-②）；
+  // decimals/上限文本展示形在 descriptor run 内收敛。toast 单源 onSettled。
   const create = useCommand(createAssetDefCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("资产定义已创建");
-        void queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
         navigate({ to: `/console/assets/defs/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
@@ -277,7 +268,6 @@ export function AssetDefNewPage() {
 export function AssetDefDetailPage() {
   const { id } = useParams({ strict: false });
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
@@ -289,14 +279,13 @@ export function AssetDefDetailPage() {
     enabled: !!id,
   });
 
-  // 删除命令接线（§12.3）：挂 asset-defs 资源（kit 集合键自动失效）+ 存量
-  // ["asset-defs"] 键手动桥。toast 单源 onSettled。
+  // 删除命令接线（§12.3）：挂 asset-defs 资源——失效 = kit 集合键 + 存量
+  // ["asset-defs"] 前缀（resource.legacyKeys 声明，§12.10-②）。
+  // toast 单源 onSettled。
   const remove = useCommand(removeAssetDefCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("资产定义已删除");
-        void queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
         navigate({ to: "/console/assets" });
       } else if (result) {
         toast.error(result.message);

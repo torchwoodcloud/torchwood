@@ -83,7 +83,7 @@ export const adminsSearch = collectionQuerySchema({ defaultSize: 20 });
 // 命令式编排（N 条聚合等非 useCommand 面）的手动失效。
 export const adminsCollectionKey = ["collection", "admins"] as const;
 
-// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
-export const createAdminCommand = adminsResource.commands!.create;
-export const updateAdminCommand = adminsResource.commands!.update;
-export const removeAdminCommand = adminsResource.commands!.remove;
+// 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
+export const createAdminCommand = adminsResource.commands.create;
+export const updateAdminCommand = adminsResource.commands.update;
+export const removeAdminCommand = adminsResource.commands.remove;

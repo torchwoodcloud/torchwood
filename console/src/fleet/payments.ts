@@ -6,7 +6,7 @@ import {
   type ResourceScope,
   type Segment,
 } from "@lynx-go/ui-kit/kernel";
-import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
+import { collectionQuerySchema, filterValues } from "@lynx-go/ui-kit/schema";
 import { skipToast as SKIP } from "@/api/client";
 import {
   listOrders,
@@ -37,15 +37,13 @@ export type { FilterField };
 export function filtersOf(
   predicate: Predicate | undefined
 ): Partial<Record<FilterField, string>> {
-  if (!predicate) return {};
-  const leaves = "all" in predicate ? predicate.all : "field" in predicate ? [predicate] : [];
+  // kit filterValues 逐叶抽 field→单值（AND/OR 展开同 codec 产物形）；白名单
+  // 与字符串值筛选（真实服务端参数面）留在域层。
+  const values = filterValues(predicate);
   const out: Partial<Record<FilterField, string>> = {};
-  for (const leaf of leaves) {
-    if (!("field" in leaf)) continue;
-    const field = leaf.field as FilterField;
-    if ((FILTER_FIELDS as readonly string[]).includes(field) && typeof leaf.value === "string") {
-      out[field] = leaf.value;
-    }
+  for (const field of FILTER_FIELDS) {
+    const v = values[field];
+    if (typeof v === "string") out[field] = v;
   }
   return out;
 }
@@ -80,6 +78,9 @@ export const ordersResource = defineResource({
   getId: (row: PaymentOrder) => row.id,
   scope: ["projectId"],
   collection: fetchOrders,
+  // 存量键失效桥（§12.10-②）：宽前缀覆盖 ["payments-orders", projectId]
+  //（列表桥）与 ["payments-orders", id]（详情键）两形。
+  legacyKeys: () => [["payments-orders"]],
   commands: {
     // 退款（paid → refunded）；reason 缺省 console（操作审计标记）。
     refund: {
@@ -99,9 +100,9 @@ export const ordersResource = defineResource({
   },
 });
 
-// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
-export const refundOrderCommand = ordersResource.commands!.refund;
-export const fulfillOrderCommand = ordersResource.commands!.fulfill;
+// 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
+export const refundOrderCommand = ordersResource.commands.refund;
+export const fulfillOrderCommand = ordersResource.commands.fulfill;
 
 // URL 搜索 schema（路由 validateSearch 与绑定共用同一实例）。默认页大小
 // 20 = 旧页默认。

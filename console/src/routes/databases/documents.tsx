@@ -72,6 +72,7 @@ import {
   createDocumentCommand,
   documentsResource,
   documentsSearch,
+  invalidateDocumentsAfterBulkWrite,
   removeDocumentCommand,
   updateDocumentCommand,
 } from "@/fleet/documents";
@@ -106,22 +107,26 @@ function DocumentListSection({
   const tz = useUserTimezone();
   const navigate = useNavigate();
 
+  // 嵌套 from = 完整路径；scope 显式全量（嵌套是替换语义；projectId 未就绪
+  // 由资源声明的 scope 键自动停用）。
   const list = useCollection(documentsResource, {
     from: "/console/databases/$dbId/collections/$collId/documents",
     search: documentsSearch,
     scope: { projectId: projectId ?? undefined, dbId, collId },
-    query: { enabled: !!projectId },
   });
 
+  // 命令/失效共用的嵌套 scope（与列表绑定同形——kit selector 的 scope 相交
+  // 按全量对象匹配）。
+  const commandScope = { projectId: projectId ?? undefined, dbId, collId };
+
   // 行删除命令化（§12.5-8）：无表单容器——结果分支以 toast 呈现；失效 =
-  // 存量 ["documents", dbId, collId] 前缀手动桥（kit 键不存在）+ 本页
-  // list.refetch。
+  // descriptor 声明（kit documents 键自动刷新列表 + 存量 ["documents"]
+  // 前缀，§12.10-②——手动桥与 list.refetch 退役）。
   const remove = useCommand(removeDocumentCommand(dbId, collId), {
+    scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Document 已删除");
-        void queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId] });
-        list.refetch();
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -211,8 +216,8 @@ function DocumentListSection({
         selected.map((d) => d.id)
       );
       toast.success(`已删除 ${affected} 个 Document`);
-      queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId] });
-      list.refetch();
+      // 直调批量路径无命令容器：复用文档命令的失效声明（§12.10-②）。
+      invalidateDocumentsAfterBulkWrite(queryClient, commandScope);
       clearSelection();
     } finally {
       setBulkDeleting(false);
@@ -231,8 +236,8 @@ function DocumentListSection({
         data,
       });
       toast.success(`已更新 ${affected} 个 Document`);
-      queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId] });
-      list.refetch();
+      // 直调批量路径无命令容器：复用文档命令的失效声明（§12.10-②）。
+      invalidateDocumentsAfterBulkWrite(queryClient, commandScope);
       clearSelection();
       setBulkUpdateOpen(false);
     } finally {
@@ -561,7 +566,7 @@ function DocumentReadonlyFields({
 export function DocumentNewPage() {
   const { dbId, collId } = useParams({ strict: false });
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const [values, setValues] = useState<Record<string, string>>({ __json: "{}" });
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -574,11 +579,13 @@ export function DocumentNewPage() {
 
   // 创建命令化（§12.5）：表单值展示形在 descriptor.run 内收敛；rejected 的
   // fieldErrors 回流字段级红字；conflict（重复 ID）/其余 rejected 走结果盒。
+  // 失效 = descriptor 声明（kit 键 + 存量前缀，§12.10-②——scope 传全量嵌套
+  // 对象与列表绑定同形相交）。
   const create = useCommand(createDocumentCommand(dbId!, collId!, collection?.attributes ?? []), {
+    scope: { projectId: projectId ?? undefined, dbId: dbId!, collId: collId! },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Document 已创建");
-        void queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId] });
         navigate({ to: `/console/databases/${dbId}/collections/${collId}/documents/${result.payload.id}` });
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -649,6 +656,7 @@ export function DocumentDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { role } = useAdminRole();
+  const { projectId } = useAuth();
   const tz = useUserTimezone();
   const [values, setValues] = useState<Record<string, string>>({});
   const [increments, setIncrements] = useState<Record<string, string>>({});
@@ -701,9 +709,12 @@ export function DocumentDetailPage() {
   // OCC 主面（§12.5）：保存命令化——version 随 data/increment 同一次 PATCH；
   // rejected.fieldErrors 回流字段红字；conflict（版本不匹配）→ 结果盒 +
   // 「刷新重载」（fetchQuery fresh-read 重建表单，草稿按服务端态重置）。
+  // 失效 = descriptor 声明（kit documents 键 + 存量 ["documents"] 前缀——
+  // 详情键经前缀失效，§12.10-②）。
   const save = useCommand(
     updateDocumentCommand(dbId!, collId!, collection?.attributes ?? []),
     {
+      scope: { projectId: projectId ?? undefined, dbId: dbId!, collId: collId! },
       onSettled: (result, failure) => {
         if (result?.status === "ok") {
           toast.success("Document 已更新");
@@ -711,7 +722,6 @@ export function DocumentDetailPage() {
           // 用响应文档重建表单，避免与（可能被自增/服务端归一化修改的）服务端状态失同步。
           setValues(documentToValues(collection?.attributes ?? [], result.payload));
           setEditing(false);
-          void queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId] });
         } else if (failure) {
           toast.error(describeApiError(failure));
         }
@@ -720,6 +730,8 @@ export function DocumentDetailPage() {
     }
   );
 
+  // OCC 冲突的「刷新重载」：刻意的 fetchQuery fresh-read（staleTime 0 绕过
+  // 缓存重建草稿），非失效路径——保留（§12.5-3）。
   const reloadAfterConflict = async () => {
     save.reset();
     const fresh = await queryClient.fetchQuery({
@@ -732,6 +744,7 @@ export function DocumentDetailPage() {
   };
 
   const remove = useCommand(removeDocumentCommand(dbId!, collId!), {
+    scope: { projectId: projectId ?? undefined, dbId: dbId!, collId: collId! },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Document 已删除");

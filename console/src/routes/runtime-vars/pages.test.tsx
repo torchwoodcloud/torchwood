@@ -110,7 +110,9 @@ describe("VarSetsListPage（列表 fleet 化）", () => {
     mockList.mockResolvedValue({ rows: [] });
     mockCreateVarSet.mockResolvedValue(varSet);
     await renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "新建变量集" }));
+    // 空列表时工具栏与空态各有一个「新建变量集」钮（开门竞赛与空态渲染
+    // 时序相关）——取第一个（工具栏钮，两者都开同一对话框）。
+    fireEvent.click(screen.getAllByRole("button", { name: "新建变量集" })[0]);
     fireEvent.change(await screen.findByLabelText("集合 ID"), {
       target: { value: "feature_flags" },
     });
