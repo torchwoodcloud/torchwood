@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
-import {
-  updateFunction,
-  type FunctionItem,
-} from "@/api/functions";
+import type { FunctionItem } from "@/api/functions";
+import { updateFunctionClientPolicyCommand } from "@/fleet/functions";
+import { describeApiError } from "@/fleet/errors";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,6 +40,7 @@ export function FunctionClientPolicyCard({
   writeable: boolean;
 }) {
   const queryClient = useQueryClient();
+  const { projectId } = useAuth();
   const [callable, setCallable] = useState(fn.client_callable);
   const [limit, setLimit] = useState(String(fn.client_per_user_limit || 10));
   const [limitWindow, setLimitWindow] = useState<"minute" | "hour" | "day">(
@@ -51,19 +53,20 @@ export function FunctionClientPolicyCard({
     setLimitWindow((fn.client_limit_window as "minute" | "hour" | "day") || "day");
   }, [fn]);
 
-  const save = useMutation({
-    mutationFn: () => {
-      const parsedLimit = Number.parseInt(limit, 10);
-      return updateFunction(fn.id, {
-        client_callable: callable,
-        // client_callable=true 要求 limit >= 1（服务端校验同规则）。
-        client_per_user_limit: Number.isFinite(parsedLimit) && parsedLimit >= 0 ? parsedLimit : 0,
-        client_limit_window: limitWindow,
-      });
-    },
-    onSuccess: () => {
-      toast.success("客户端调用策略已保存");
-      queryClient.invalidateQueries({ queryKey: ["functions"] });
+  // 命令接线（§12.3）：client_* 面是 function 实体更新——挂函数资源（kit
+  // 集合自动失效）+ 存量 ["functions"] 键手动桥；配额文本展示形在 descriptor
+  // run 内收敛整数。toast 单源 onSettled。
+  const save = useCommand(updateFunctionClientPolicyCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("客户端调用策略已保存");
+        queryClient.invalidateQueries({ queryKey: ["functions"] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -133,10 +136,17 @@ export function FunctionClientPolicyCard({
             <Button
               type="button"
               size="sm"
-              disabled={save.isPending}
-              onClick={() => save.mutate()}
+              disabled={save.pending}
+              onClick={() =>
+                save.mutate({
+                  id: fn.id,
+                  client_callable: callable,
+                  clientPerUserLimit: limit,
+                  client_limit_window: limitWindow,
+                })
+              }
             >
-              {save.isPending ? "保存中..." : "保存策略"}
+              {save.pending ? "保存中..." : "保存策略"}
             </Button>
           )}
         </div>

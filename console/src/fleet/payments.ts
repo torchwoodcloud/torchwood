@@ -1,17 +1,74 @@
 import {
   defineResource,
   type CollectionQuery,
+  type CommandResult,
   type Predicate,
   type ResourceScope,
   type Segment,
 } from "@lynx-go/ui-kit/kernel";
 import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
-import { listOrders, type PaymentOrder } from "@/api/payments";
-import { toApiError } from "@/fleet/errors";
+import {
+  listOrders,
+  manualFulfillOrder,
+  refundOrder,
+  type PaymentOrder,
+} from "@/api/payments";
+import { gatewayErrorCode, toApiError } from "@/fleet/errors";
 
 // 列表 fleet 化（§12.9-2）：订单列表换 useCollection——过滤（UserID/状态/
 // 创建时间区间）/时间排序/游标/页大小进 URL，数据面复用 axios 管线，失败
 // 在适配器收敛为 ApiError。订单 ID/用户的页内搜索是本地态，不走谓词。
+//
+// 命令族切片（写路径命令化，§12.3）：退款/人工履约挂订单资源——订单实体
+// 状态机变更，kit 集合键由 useCommand 自动失效；存量 ["payments-orders"]
+// 键（详情仍消费）由页面 onSettled 手动桥。结果两分映射同 apiKeys 先例
+//（400→rejected{code,message}、409→conflict、其余 throw ApiError）；api
+// 调用一律 __skipToast（toast 单源 = onSettled）。
+
+// 网关错误体（结果分支用）。
+interface GatewayErrorBody {
+  error?: { code?: string; message?: string };
+}
+
+function gatewayMessage(err: unknown): string {
+  if (
+    typeof err === "object" &&
+    err !== null &&
+    "response" in err &&
+    (err as { response?: { data?: GatewayErrorBody } }).response?.data?.error?.message
+  ) {
+    return String((err as { response: { data: GatewayErrorBody } }).response.data.error!.message);
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
+function isStatus(err: unknown, status: number): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "response" in err &&
+    (err as { response?: { status?: number } }).response?.status === status
+  );
+}
+
+/** 结果两分映射：400→rejected、409→conflict、404 按 treatAs 由调用方裁决、其余 throw。 */
+async function runCommandMapped<Payload>(
+  op: () => Promise<Payload>
+): Promise<CommandResult<Payload>> {
+  try {
+    return { status: "ok", payload: await op() };
+  } catch (err) {
+    if (isStatus(err, 400)) {
+      return { status: "rejected", code: gatewayErrorCode(err), message: gatewayMessage(err) };
+    }
+    if (isStatus(err, 409)) {
+      return { status: "conflict", message: gatewayMessage(err) };
+    }
+    throw toApiError(err);
+  }
+}
+
+const SKIP = { __skipToast: true } as const;
 
 // 谓词 eq 叶子 → ListOrdersFilter 键的白名单（真实服务端过滤参数，
 // payments.proto ListOrdersRequest 结构化字段）；created_after/created_before
@@ -67,7 +124,28 @@ export const ordersResource = defineResource({
   getId: (row: PaymentOrder) => row.id,
   scope: ["projectId"],
   collection: fetchOrders,
+  commands: {
+    // 退款（paid → refunded）；reason 缺省 console（操作审计标记）。
+    refund: {
+      run: async (input: { id: string; reason?: string }): Promise<CommandResult<PaymentOrder>> =>
+        runCommandMapped(() =>
+          refundOrder(input.id, { reason: input.reason ?? "console" }, SKIP)
+        ),
+    },
+    // 人工履约（paid 订单补标）；payload 解包 { order } 投影订单实体。
+    fulfill: {
+      run: async (input: { id: string; reason?: string }): Promise<CommandResult<PaymentOrder>> =>
+        runCommandMapped(async () => {
+          const res = await manualFulfillOrder(input.id, input.reason ?? "console", SKIP);
+          return res.order;
+        }),
+    },
+  },
 });
+
+// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
+export const refundOrderCommand = ordersResource.commands!.refund;
+export const fulfillOrderCommand = ordersResource.commands!.fulfill;
 
 // URL 搜索 schema（路由 validateSearch 与绑定共用同一实例）。默认页大小
 // 20 = 旧页默认。

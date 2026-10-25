@@ -12,7 +12,9 @@ import {
   updateWebhook,
   deleteWebhook,
   rotateWebhookSecret,
+  redeliverDelivery,
   type Webhook,
+  type WebhookDelivery,
   type CreateWebhookResponse,
   type WebhookSecret,
 } from "@/api/webhooks";
@@ -137,6 +139,17 @@ export const createWebhookCommand = webhooksResource.commands!.create;
 export const updateWebhookCommand = webhooksResource.commands!.update;
 export const removeWebhookCommand = webhooksResource.commands!.remove;
 export const rotateWebhookSecretCommand = webhooksResource.commands!.rotateSecret;
+
+// 投递重投（webhook 子资源动作，users 会话撤销同款先例）：独立 descriptor
+// 不挂资源——不涉 webhooks 集合语义；存量 ["webhook-deliveries"] 键由页面
+// onSettled 手动桥。
+export const redeliverDeliveryDescriptor = {
+  run: async (input: {
+    webhookId: string;
+    deliveryId: string;
+  }): Promise<CommandResult<WebhookDelivery>> =>
+    runCommandMapped(() => redeliverDelivery(input.webhookId, input.deliveryId, SKIP)),
+};
 
 // URL 搜索 schema（路由 validateSearch 与绑定共用同一实例）。默认页大小
 // 20 = 旧页 useServerPaging 默认；订阅列表无真实服务端过滤参数——不设

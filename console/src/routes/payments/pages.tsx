@@ -1,18 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@/router/compat";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCollection } from "@lynx-go/ui-kit";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import type { Predicate } from "@lynx-go/ui-kit/kernel";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
 import { toast } from "sonner";
-import {
-  getOrder,
-  manualFulfillOrder,
-  refundOrder,
-  type PaymentOrder,
-} from "@/api/payments";
+import { getOrder, type PaymentOrder } from "@/api/payments";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +27,8 @@ import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
-import { filtersOf, ordersResource, ordersSearch, type FilterField } from "@/fleet/payments";
+import { filtersOf, ordersResource, ordersSearch, refundOrderCommand, fulfillOrderCommand, type FilterField } from "@/fleet/payments";
+import { describeApiError } from "@/fleet/errors";
 
 // 订单状态选项与 payments.proto 状态机一致。
 const ORDER_STATUS_OPTIONS = [
@@ -269,20 +265,35 @@ export function OrderDetailPage() {
     enabled: !!id,
   });
 
-  const refund = useMutation({
-    mutationFn: () => refundOrder(id!, { reason: "console" }),
-    onSuccess: () => {
-      toast.success("已发起退款");
-      queryClient.invalidateQueries({ queryKey: ["payments-orders", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["payments-orders", id] });
+  // 命令接线（§12.3）：refund/fulfill 挂订单资源（kit 集合键自动失效）+
+  // 存量 ["payments-orders"] 键手动桥（列表前缀 + 详情）；toast 单源
+  // onSettled。
+  const refund = useCommand(refundOrderCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("已发起退款");
+        void queryClient.invalidateQueries({ queryKey: ["payments-orders", projectId] });
+        void queryClient.invalidateQueries({ queryKey: ["payments-orders", id] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const fulfill = useMutation({
-    mutationFn: () => manualFulfillOrder(id!, "console"),
-    onSuccess: () => {
-      toast.success("已标记履约");
-      queryClient.invalidateQueries({ queryKey: ["payments-orders", id] });
+  const fulfill = useCommand(fulfillOrderCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("已标记履约");
+        void queryClient.invalidateQueries({ queryKey: ["payments-orders", id] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -300,16 +311,16 @@ export function OrderDetailPage() {
             <Button
               variant="outline"
               size="sm"
-              disabled={fulfill.isPending || order.status !== "paid"}
-              onClick={() => fulfill.mutate()}
+              disabled={fulfill.pending || order.status !== "paid"}
+              onClick={() => fulfill.mutate({ id: id! })}
             >
               人工履约
             </Button>
             <Button
               variant="destructive"
               size="sm"
-              disabled={refund.isPending || order.status !== "paid"}
-              onClick={() => refund.mutate()}
+              disabled={refund.pending || order.status !== "paid"}
+              onClick={() => refund.mutate({ id: id! })}
             >
               退款
             </Button>

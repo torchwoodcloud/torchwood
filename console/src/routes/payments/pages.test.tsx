@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TestRouter } from "@/router/compat";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { OrdersListPage } from "./pages";
+import { OrdersListPage, OrderDetailPage } from "./pages";
 
 // radix Select 在 jsdom 里滚动选中项：scrollIntoView 未实现，桩掉。
 beforeAll(() => {
@@ -23,7 +23,7 @@ vi.mock("@/api/payments", () => ({
   manualFulfillOrder: vi.fn(),
 }));
 
-import { listOrders } from "@/api/payments";
+import { listOrders, getOrder, refundOrder } from "@/api/payments";
 
 const mockList = vi.mocked(listOrders);
 
@@ -109,6 +109,33 @@ describe("OrdersListPage", () => {
       expect(mockList).toHaveBeenLastCalledWith(
         expect.objectContaining({ sortOrder: undefined })
       )
+    );
+  });
+});
+
+describe("OrderDetailPage（写路径命令化）", () => {
+  // 写路径锚（§12.3）：退款走 useCommand（挂订单资源）——api 收到 SKIP 且
+  // 成功路径不抛。
+  it("退款走 useCommand（reason 收敛 + skipToast + 结果 ok 不抛）", async () => {
+    vi.mocked(getOrder).mockResolvedValue(order);
+    vi.mocked(refundOrder).mockResolvedValue(order);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <TestRouter
+          routes={[{ path: "/console/orders/:id", element: <OrderDetailPage /> }]}
+          initialEntries={["/console/orders/ord-1"]}
+        />
+      </QueryClientProvider>
+    );
+    await act(async () => {});
+    fireEvent.click(await screen.findByRole("button", { name: "退款" }));
+    await waitFor(() =>
+      expect(refundOrder).toHaveBeenCalledWith(
+        "ord-1",
+        { reason: "console" },
+        { __skipToast: true },
+      ),
     );
   });
 });

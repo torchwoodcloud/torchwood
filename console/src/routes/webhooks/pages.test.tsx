@@ -27,7 +27,7 @@ vi.mock("@/api/webhooks", () => ({
   redeliverDelivery: vi.fn(),
 }));
 
-import { listWebhooks, getWebhook, listDeliveries, deleteWebhook } from "@/api/webhooks";
+import { listWebhooks, getWebhook, listDeliveries, deleteWebhook, redeliverDelivery } from "@/api/webhooks";
 
 async function renderList() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -225,6 +225,57 @@ describe("WebhookDetailPage", () => {
         pageToken: "",
         status: "failed",
       })
+    );
+  });
+
+  // 写路径锚（§12.3）：Redeliver 走 useCommand（裸 descriptor）——api 收到
+  // SKIP 且成功路径不抛。
+  it("Redeliver 走 useCommand（skipToast + 结果 ok 不抛）", async () => {
+    vi.mocked(getWebhook).mockResolvedValue({
+      id: "wh-1",
+      project_id: "proj-1",
+      url: "https://api.example.com/hooks",
+      events: ["auth.users.created"],
+      status: "enabled",
+      secret_fingerprint: "whsec_ab12cd34",
+      created_at: "2026-10-01T00:00:00Z",
+      updated_at: "2026-10-01T00:00:00Z",
+    });
+    vi.mocked(listDeliveries).mockResolvedValue({
+      rows: [
+        {
+          id: "dlv-1",
+          webhook_id: "wh-1",
+          event_id: "evt-1",
+          event_type: "auth.users.created",
+          seq: 42,
+          attempts: 3,
+          next_attempt_at: "2026-10-02T00:00:00Z",
+          status: "failed",
+          last_response_code: 500,
+          last_error: "upstream 500",
+          created_at: "2026-10-01T00:00:00Z",
+          updated_at: "2026-10-01T00:05:00Z",
+        },
+      ],
+    });
+    vi.mocked(redeliverDelivery).mockResolvedValue({
+      id: "dlv-1",
+      webhook_id: "wh-1",
+      event_id: "evt-1",
+      event_type: "auth.users.created",
+      seq: 42,
+      attempts: 0,
+      status: "pending",
+      last_response_code: 0,
+      last_error: "",
+      created_at: "2026-10-01T00:00:00Z",
+      updated_at: "2026-10-03T00:00:00Z",
+    });
+    renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: "Redeliver" }));
+    await waitFor(() =>
+      expect(redeliverDelivery).toHaveBeenCalledWith("wh-1", "dlv-1", { __skipToast: true }),
     );
   });
 });

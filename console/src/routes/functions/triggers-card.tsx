@@ -1,15 +1,15 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import { AlertTriangle, Plus } from "lucide-react";
+import { listFunctionTriggers, type FunctionTrigger } from "@/api/functions";
 import {
-  listFunctionTriggers,
-  createFunctionTrigger,
-  deleteFunctionTrigger,
-  rotateFunctionTriggerToken,
-  type CreateTriggerInput,
-  type FunctionTrigger,
-} from "@/api/functions";
+  createTriggerDescriptor,
+  removeTriggerDescriptor,
+  rotateTriggerTokenDescriptor,
+} from "@/fleet/functions";
+import { describeApiError } from "@/fleet/errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -71,60 +71,46 @@ export function FunctionTriggersCard({
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey });
 
-  const create = useMutation({
-    mutationFn: () => {
-      const bodyLimit = Number.parseInt(bodyLimitKB, 10);
-      const input: CreateTriggerInput =
-        type === "http"
-          ? {
-              type,
-              http: {
-                response_mode: responseMode,
-                ...(responseMode === "async_ack" && ackBody.trim() !== ""
-                  ? { ack_body: ackBody }
-                  : {}),
-                ...(handshake ? { handshake: "echo" } : {}),
-                ...(Number.isFinite(bodyLimit) && bodyLimit > 0
-                  ? { body_limit_bytes: bodyLimit * 1024 }
-                  : {}),
-              },
-            }
-          : type === "cron"
-            ? {
-                type,
-                cron: { expr, misfire },
-              }
-            : {
-                type,
-                event: {
-                  events: eventsText
-                    .split("\n")
-                    .map((line) => line.trim())
-                    .filter((line) => line !== ""),
-                },
-              };
-      return createFunctionTrigger(functionId, input);
-    },
-    onSuccess: () => {
-      toast.success("触发器已创建");
-      setShowCreate(false);
-      invalidate();
+  // 命令接线（§12.3，裸 descriptor——触发器是 function 子资源）：不涉
+  // functions 集合失效；存量 ["function-triggers"] 键手动桥。创建的表单
+  // 展示形在 descriptor run 内收敛为提交形。toast 单源 onSettled。
+  const create = useCommand(createTriggerDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("触发器已创建");
+        setShowCreate(false);
+        invalidate();
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const remove = useMutation({
-    mutationFn: (id: string) => deleteFunctionTrigger(functionId, id),
-    onSuccess: () => {
-      toast.success("触发器已删除");
-      invalidate();
+  const remove = useCommand(removeTriggerDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("触发器已删除");
+        invalidate();
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const rotate = useMutation({
-    mutationFn: (id: string) => rotateFunctionTriggerToken(functionId, id),
-    onSuccess: () => {
-      toast.success("token 已轮换（旧 URL 立即失效）");
-      invalidate();
+  const rotate = useCommand(rotateTriggerTokenDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("token 已轮换（旧 URL 立即失效）");
+        invalidate();
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -299,10 +285,22 @@ export function FunctionTriggersCard({
               <Button
                 type="button"
                 size="sm"
-                disabled={create.isPending}
-                onClick={() => create.mutate()}
+                disabled={create.pending}
+                onClick={() =>
+                  create.mutate({
+                    functionId,
+                    type,
+                    responseMode,
+                    ackBody,
+                    handshake,
+                    bodyLimitKB,
+                    expr,
+                    misfire,
+                    eventsText,
+                  })
+                }
               >
-                {create.isPending ? "创建中..." : "创建"}
+                {create.pending ? "创建中..." : "创建"}
               </Button>
             </div>
           )}
@@ -337,15 +335,19 @@ export function FunctionTriggersCard({
                             type="button"
                             size="sm"
                             variant="ghost"
-                            disabled={rotate.isPending}
-                            onClick={() => rotate.mutate(trg.id)}
+                            disabled={rotate.pending}
+                            onClick={() =>
+                              rotate.mutate({ functionId, triggerId: trg.id })
+                            }
                           >
                             轮换 token
                           </Button>
                         )}
                         <RowDeleteButton
-                          onConfirm={() => remove.mutate(trg.id)}
-                          loading={remove.isPending}
+                          onConfirm={() =>
+                            remove.mutate({ functionId, triggerId: trg.id })
+                          }
+                          loading={remove.pending}
                         />
                       </div>
                     )}

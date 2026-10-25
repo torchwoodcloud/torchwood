@@ -1,19 +1,17 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@/router/compat";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCollection } from "@lynx-go/ui-kit";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import { Plus, Settings } from "lucide-react";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
-import {
-  getProject,
-  createProject,
-  type Project,
-} from "@/api/projects";
+import { getProject, type Project } from "@/api/projects";
 import {
   projectsResource,
   projectsSearch,
+  createProjectCommand,
 } from "@/fleet/projects";
+import { describeApiError } from "@/fleet/errors";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useProjectScopeSync } from "@/hooks/useProjectScopeSync";
 import { useUserTimezone } from "@/hooks/useTimezone";
@@ -151,12 +149,20 @@ export function ProjectNewPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
-  const mutation = useMutation({
-    mutationFn: createProject,
-    onSuccess: (project) => {
-      toast.success("项目创建成功");
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
-      navigate(`/console/projects/${project.id}`);
+  // 创建命令接线（§12.3）：挂 projects 资源（kit 集合键自动失效）+ 存量
+  // ["projects"] 键手动桥；description 空 = 不发送（run 内收敛）。toast
+  // 单源 onSettled。
+  const create = useCommand(createProjectCommand, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("项目创建成功");
+        void queryClient.invalidateQueries({ queryKey: ["projects"] });
+        navigate(`/console/projects/${result.payload.id}`);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -168,9 +174,9 @@ export function ProjectNewPage() {
       submitLabel="创建"
       onSubmit={(e) => {
         e.preventDefault();
-        mutation.mutate({ id, name, description: description || undefined });
+        create.mutate({ id, name, description: description || undefined });
       }}
-      loading={mutation.isPending}
+      loading={create.pending}
       submitDisabled={!isPlatformAdmin(role)}
     >
       <FormField

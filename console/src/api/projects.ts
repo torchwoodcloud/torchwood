@@ -31,12 +31,15 @@ export async function getProject(id: string): Promise<Project> {
   return res.data;
 }
 
-export async function createProject(input: {
-  id: string;
-  name: string;
-  description?: string;
-}): Promise<Project> {
-  const res = await api.post<Project>("/server/projects", input);
+export async function createProject(
+  input: {
+    id: string;
+    name: string;
+    description?: string;
+  },
+  config?: ApiRequestConfig
+): Promise<Project> {
+  const res = await api.post<Project>("/server/projects", input, config);
   return res.data;
 }
 

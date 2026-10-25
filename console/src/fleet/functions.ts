@@ -14,9 +14,14 @@ import {
   rotateFunctionSecret,
   setFunctionScopes,
   invokeFunction,
+  createFunctionTrigger,
+  deleteFunctionTrigger,
+  rotateFunctionTriggerToken,
   type FunctionItem,
   type FunctionSecret,
   type CreateFunctionResult,
+  type CreateTriggerInput,
+  type FunctionTrigger,
   type Invocation,
 } from "@/api/functions";
 import { gatewayErrorCode, toApiError } from "@/fleet/errors";
@@ -153,6 +158,29 @@ export const functionsResource = defineResource({
           )
         ),
     },
+    // 客户端调用策略（function 实体的 client_* 面）：配额为文本展示形，
+    // run 内收敛整数（非法/负数回退 0；callable=true 要求 ≥1 由服务端校验）。
+    updateClientPolicy: {
+      run: async (input: {
+        id: string;
+        client_callable: boolean;
+        /** 展示形（文本）。 */
+        clientPerUserLimit: string;
+        client_limit_window: "minute" | "hour" | "day";
+      }): Promise<CommandResult<FunctionItem>> =>
+        runCommandMapped(() => {
+          const parsed = Number.parseInt(input.clientPerUserLimit, 10);
+          return updateFunction(
+            input.id,
+            {
+              client_callable: input.client_callable,
+              client_per_user_limit: Number.isFinite(parsed) && parsed >= 0 ? parsed : 0,
+              client_limit_window: input.client_limit_window,
+            },
+            SKIP
+          );
+        }),
+    },
   },
 });
 
@@ -162,6 +190,7 @@ export const updateFunctionCommand = functionsResource.commands!.update;
 export const removeFunctionCommand = functionsResource.commands!.remove;
 export const rotateFunctionSecretCommand = functionsResource.commands!.rotateSecret;
 export const setFunctionScopesCommand = functionsResource.commands!.setScopes;
+export const updateFunctionClientPolicyCommand = functionsResource.commands!.updateClientPolicy;
 
 // invoke 是调试/联调动作：不改变函数实体——独立 descriptor（无集合失效；
 // 调用记录由页面桥存量 ["invocations"] 键）。
@@ -172,6 +201,90 @@ export const invokeFunctionDescriptor = {
     async: boolean;
   }): Promise<CommandResult<Invocation>> =>
     runCommandMapped(() => invokeFunction(input.id, { data: input.data, async: input.async }, SKIP)),
+};
+
+// ——触发器（function 子资源，users 会话撤销同款先例）：独立 descriptor
+// 不挂资源——触发器集合不是 functions 列表语义；存量 ["function-triggers"]
+// 键由页面 onSettled 手动桥。创建的表单展示形（KB 文本/条件勾选/多行订阅
+// 串）在 run 内收敛为 oneof 提交形。
+
+export interface CreateTriggerForm {
+  type: "http" | "cron" | "event";
+  // http 展示形。
+  responseMode: string;
+  /** async_ack 的回执体（空 = 不发送）。 */
+  ackBody: string;
+  handshake: boolean;
+  /** body 上限（KB 文本；run 内换算字节，非法/≤0 不发送）。 */
+  bodyLimitKB: string;
+  // cron 展示形。
+  expr: string;
+  misfire: string;
+  /** event 展示形：多行订阅串，一行一条。 */
+  eventsText: string;
+}
+
+export interface TriggerCreateInput extends CreateTriggerForm {
+  functionId: string;
+}
+
+function buildTriggerInput(form: CreateTriggerForm): CreateTriggerInput {
+  if (form.type === "http") {
+    const bodyLimit = Number.parseInt(form.bodyLimitKB, 10);
+    return {
+      type: form.type,
+      http: {
+        response_mode: form.responseMode,
+        ...(form.responseMode === "async_ack" && form.ackBody.trim() !== ""
+          ? { ack_body: form.ackBody }
+          : {}),
+        ...(form.handshake ? { handshake: "echo" } : {}),
+        ...(Number.isFinite(bodyLimit) && bodyLimit > 0
+          ? { body_limit_bytes: bodyLimit * 1024 }
+          : {}),
+      },
+    };
+  }
+  if (form.type === "cron") {
+    return { type: form.type, cron: { expr: form.expr, misfire: form.misfire } };
+  }
+  return {
+    type: form.type,
+    event: {
+      events: form.eventsText
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line !== ""),
+    },
+  };
+}
+
+export const createTriggerDescriptor = {
+  run: async (input: TriggerCreateInput): Promise<CommandResult<FunctionTrigger>> =>
+    runCommandMapped(() =>
+      createFunctionTrigger(input.functionId, buildTriggerInput(input), SKIP)
+    ),
+};
+
+export const removeTriggerDescriptor = {
+  run: async (input: {
+    functionId: string;
+    triggerId: string;
+  }): Promise<CommandResult<null>> =>
+    runCommandMapped(async () => {
+      await deleteFunctionTrigger(input.functionId, input.triggerId, SKIP);
+      return null;
+    }),
+  // 已删 → 幂等 ok（apiKeys remove 先例）
+  treatAs: { "not-found": { status: "ok" as const, payload: null } },
+};
+
+export const rotateTriggerTokenDescriptor = {
+  run: async (input: {
+    functionId: string;
+    triggerId: string;
+  }): Promise<CommandResult<FunctionTrigger>> =>
+    runCommandMapped(() => rotateFunctionTriggerToken(input.functionId, input.triggerId, SKIP)),
 };
 
 // URL 搜索 schema（路由 validateSearch 与绑定共用同一实例）。默认页大小

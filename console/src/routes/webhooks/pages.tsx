@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@/router/compat";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
@@ -8,7 +8,6 @@ import { Plus, KeyRound, RotateCcw, AlertTriangle } from "lucide-react";
 import {
   getWebhook,
   listDeliveries,
-  redeliverDelivery,
   type Webhook,
   type WebhookDelivery,
 } from "@/api/webhooks";
@@ -19,6 +18,7 @@ import {
   updateWebhookCommand,
   removeWebhookCommand,
   rotateWebhookSecretCommand,
+  redeliverDeliveryDescriptor,
 } from "@/fleet/webhooks";
 import { describeApiError } from "@/fleet/errors";
 import { PageHeader } from "@/components/PageHeader";
@@ -476,11 +476,18 @@ function DeliveriesCard({ webhookId, writeable }: { webhookId: string; writeable
   });
   const deliveries = data?.rows ?? [];
 
-  const redeliver = useMutation({
-    mutationFn: (deliveryId: string) => redeliverDelivery(webhookId, deliveryId),
-    onSuccess: () => {
-      toast.success("已重置为立即重投");
-      queryClient.invalidateQueries({ queryKey: ["webhook-deliveries", webhookId] });
+  // 重投命令接线（§12.3，裸 descriptor）：投递行不是 webhooks 集合语义——
+  // 存量 ["webhook-deliveries"] 键手动桥；toast 单源 onSettled。
+  const redeliver = useCommand(redeliverDeliveryDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("已重置为立即重投");
+        void queryClient.invalidateQueries({ queryKey: ["webhook-deliveries", webhookId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -542,8 +549,8 @@ function DeliveriesCard({ webhookId, writeable }: { webhookId: string; writeable
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={redeliver.isPending}
-                    onClick={() => redeliver.mutate(d.id)}
+                    disabled={redeliver.pending}
+                    onClick={() => redeliver.mutate({ webhookId, deliveryId: d.id })}
                   >
                     <RotateCcw className="h-3 w-3 mr-1" />
                     Redeliver

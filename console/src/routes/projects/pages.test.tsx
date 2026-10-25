@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TestRouter, useRouterState } from "@/router/compat";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { ProjectsListPage } from "./pages";
+import { ProjectsListPage, ProjectNewPage } from "./pages";
 import type { Project } from "@/api/projects";
 
 // radix Select 在 jsdom 里滚动选中项：scrollIntoView 未实现，桩掉。
@@ -24,7 +24,7 @@ vi.mock("@/api/projects", () => ({
   createProject: vi.fn(),
 }));
 
-import { listProjects } from "@/api/projects";
+import { listProjects, createProject } from "@/api/projects";
 
 const mockList = vi.mocked(listProjects);
 
@@ -94,5 +94,36 @@ describe("ProjectsListPage（列表 fleet 化：URL 即真相）", () => {
       ),
     );
     expect(search().cursor).toBe("tok-2");
+  });
+});
+
+describe("ProjectNewPage（写路径命令化）", () => {
+  // 写路径锚（§12.3）：创建走 useCommand（挂 projects 资源）——description 空
+  // 不发送（run 内收敛）+ api 收到 SKIP。
+  it("创建走 useCommand（description 空不发送 + skipToast）", async () => {
+    vi.mocked(createProject).mockResolvedValue(project);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <TestRouter
+          routes={[
+            { path: "/console/projects/new", element: <ProjectNewPage /> },
+            // ok 后 navigate 到项目详情——目标路由注册
+            { path: "/console/projects/:id", element: <div /> },
+          ]}
+          initialEntries={["/console/projects/new"]}
+        />
+      </QueryClientProvider>,
+    );
+    await act(async () => {});
+    fireEvent.change(await screen.findByLabelText("ID"), { target: { value: "shop" } });
+    fireEvent.change(screen.getByLabelText("名称"), { target: { value: "My Shop" } });
+    fireEvent.click(screen.getByRole("button", { name: "创建" }));
+    await waitFor(() =>
+      expect(createProject).toHaveBeenCalledWith(
+        { id: "shop", name: "My Shop", description: undefined },
+        { __skipToast: true },
+      ),
+    );
   });
 });

@@ -257,31 +257,37 @@ export async function listFunctionTriggers(
 
 export async function createFunctionTrigger(
   functionId: string,
-  input: CreateTriggerInput
+  input: CreateTriggerInput,
+  config?: ApiRequestConfig
 ): Promise<FunctionTrigger> {
   const res = await api.post<FunctionTrigger>(
     `/server/functions/${functionId}/triggers`,
-    { function_id: functionId, ...input }
+    { function_id: functionId, ...input },
+    config
   );
   return res.data;
 }
 
 export async function deleteFunctionTrigger(
   functionId: string,
-  triggerId: string
+  triggerId: string,
+  config?: ApiRequestConfig
 ): Promise<void> {
   await api.delete(
-    `/server/functions/${functionId}/triggers/${triggerId}`
+    `/server/functions/${functionId}/triggers/${triggerId}`,
+    config
   );
 }
 
 export async function rotateFunctionTriggerToken(
   functionId: string,
-  triggerId: string
+  triggerId: string,
+  config?: ApiRequestConfig
 ): Promise<FunctionTrigger> {
   const res = await api.post<FunctionTrigger>(
     `/server/functions/${functionId}/triggers/${triggerId}:rotate-token`,
-    {}
+    {},
+    config
   );
   return res.data;
 }

@@ -157,11 +157,13 @@ export async function getDelivery(
 // attempts=0），语义 = 全新一轮投递。
 export async function redeliverDelivery(
   webhookId: string,
-  deliveryId: string
+  deliveryId: string,
+  config?: ApiRequestConfig
 ): Promise<WebhookDelivery> {
   const res = await api.post<WebhookDelivery>(
     `/server/webhooks/${webhookId}/deliveries/${deliveryId}:redeliver`,
-    {}
+    {},
+    config
   );
   return res.data;
 }

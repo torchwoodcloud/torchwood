@@ -1,15 +1,14 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TestRouter } from "@/router/compat";
+import { Outlet, TestRouter } from "@/router/compat";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DatabasesListPage, DatabaseDetailPage } from "./databases";
-import { CollectionNewPage } from "./collections";
+import { CollectionNewPage, CollectionDetailPage } from "./collections";
 import type { Collection, Database } from "@/api/databases";
 
 // 列表 fleet 化（§12.9-2）URL 锚：默认页大小/翻页游标透传 fetch 函数
-//（URL 即真相；嵌套 from = 路由 id）。写路径命令化锚：行删/建走 useCommand
-//（提交形收敛 + __skipToast）。写函数全 mock；collections.tsx 的属性/索引
-// 等命令外写函数一并 mock（模块加载面）。
+//（URL 即真相；嵌套 from = 路由 id）。写路径命令化锚：行删/建/集合 schema
+// 编辑器写路径走 useCommand（提交形收敛 + __skipToast）。写函数全 mock。
 
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ projectId: "p1" }) }));
 vi.mock("@/hooks/useAdminRole", () => ({
@@ -36,7 +35,9 @@ vi.mock("@/api/databases", () => ({
 
 import {
   createCollection,
+  deleteAttribute,
   deleteDatabase,
+  getCollection,
   getDatabase,
   listCollections,
   listDatabases,
@@ -47,6 +48,8 @@ const mockGetDatabase = vi.mocked(getDatabase);
 const mockListCollections = vi.mocked(listCollections);
 const mockDeleteDatabase = vi.mocked(deleteDatabase);
 const mockCreateCollection = vi.mocked(createCollection);
+const mockGetCollection = vi.mocked(getCollection);
+const mockDeleteAttribute = vi.mocked(deleteAttribute);
 
 const db: Database = {
   id: "app",
@@ -165,6 +168,46 @@ describe("DatabaseDetailPage（collections 列表嵌套 scope URL 锚）", () =>
         "app",
         expect.objectContaining({ pageToken: "tok-2" }),
       ),
+    );
+  });
+});
+
+describe("CollectionDetailPage（写路径命令化：schema 编辑器）", () => {
+  // 写路径锚（§12.3）：属性删除走 useCommand（挂 collections 资源）——api
+  // 收到 SKIP 且成功路径不抛。Outlet context 提供 dbId/collId（嵌套路由形态）。
+  it("属性删除走 useCommand（skipToast + 结果 ok 不抛）", async () => {
+    mockGetCollection.mockResolvedValue({
+      ...coll,
+      attributes: [
+        { id: "attr-1", key: "title", type: "string", required: false, array: false },
+      ],
+      indexes: [],
+    });
+    mockDeleteAttribute.mockResolvedValue(undefined);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <TestRouter
+          routes={[
+            {
+              path: "/console/databases/:dbId/collections/:collId",
+              element: <Outlet context={{ dbId: "app", collId: "posts" }} />,
+              children: [{ path: "/", element: <CollectionDetailPage /> }],
+            },
+          ]}
+          initialEntries={["/console/databases/app/collections/posts"]}
+        />
+      </QueryClientProvider>
+    );
+    await act(async () => {});
+    fireEvent.click(await screen.findByRole("button", { name: "删除" }));
+    // torchwood 存量确认壳：确认钮与触发钮同名，scope 到对话框内
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    await waitFor(() =>
+      expect(mockDeleteAttribute).toHaveBeenCalledWith("app", "posts", "title", {
+        __skipToast: true,
+      }),
     );
   });
 });

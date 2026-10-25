@@ -6,7 +6,6 @@ import {
 } from "@/router/compat";
 import {
   useQuery,
-  useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
 import { useCommand } from "@lynx-go/ui-kit";
@@ -26,15 +25,16 @@ import {
 import {
   getDatabase,
   getCollection,
-  updateCollection,
-  createAttribute,
-  createIndex,
-  deleteAttribute,
-  deleteIndex,
-  type Collection,
-  type Attribute,
 } from "@/api/databases";
-import { createCollectionCommand } from "@/fleet/databases";
+import {
+  addCollectionAttributeCommand,
+  addCollectionIndexCommand,
+  createCollectionCommand,
+  removeCollectionAttributeCommand,
+  removeCollectionIndexCommand,
+  updateCollectionPermissionsCommand,
+  updateCollectionSettingsCommand,
+} from "@/fleet/databases";
 import { describeApiError } from "@/fleet/errors";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -130,6 +130,7 @@ export function CollectionNewPage() {
 export function CollectionDetailPage() {
   const { dbId, collId } = useOutletContext<CollectionOutletContext>();
   const queryClient = useQueryClient();
+  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const [attrDialogOpen, setAttrDialogOpen] = useState(false);
@@ -142,72 +143,105 @@ export function CollectionDetailPage() {
     queryFn: () => getCollection(dbId, collId),
   });
 
-  const updatePerms = useMutation({
-    mutationFn: (input: { permissions: string[] }) =>
-      updateCollection(dbId, collId, input),
-    onSuccess: () => {
-      toast.success("权限已更新");
-      queryClient.invalidateQueries({ queryKey: ["collections", dbId, collId] });
-      setPermDialogOpen(false);
+  // 命令接线（§12.3）：schema 编辑器写路径挂 collections 资源（kit 集合键
+  // 自动失效）+ 存量 ["collections"] 键手动桥（详情键 + db 前缀列表键）；
+  // 提交形收敛（索引 orders 全 asc）在 descriptor run 内。toast 单源
+  // onSettled。
+  const commandScope = { projectId: projectId ?? undefined, dbId: dbId ?? undefined };
+  const invalidateDetail = () =>
+    queryClient.invalidateQueries({ queryKey: ["collections", dbId, collId] });
+  const invalidateDb = () => queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
+
+  const updatePerms = useCommand(updateCollectionPermissionsCommand, {
+    scope: commandScope,
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("权限已更新");
+        void invalidateDetail();
+        setPermDialogOpen(false);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const addAttribute = useMutation({
-    mutationFn: (input: {
-      key: string;
-      type: string;
-      size?: number;
-      required: boolean;
-      array: boolean;
-    }) => createAttribute(dbId, collId, input),
-    onSuccess: () => {
-      toast.success("Attribute 已添加");
-      queryClient.invalidateQueries({ queryKey: ["collections", dbId, collId] });
-      queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
-      setAttrDialogOpen(false);
+  const addAttribute = useCommand(addCollectionAttributeCommand, {
+    scope: commandScope,
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Attribute 已添加");
+        void invalidateDetail();
+        void invalidateDb();
+        setAttrDialogOpen(false);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const addIndex = useMutation({
-    mutationFn: (input: { id: string; type: string; attributes: string[] }) =>
-      createIndex(dbId, collId, {
-        ...input,
-        orders: input.attributes.map(() => "asc"),
-      }),
-    onSuccess: () => {
-      toast.success("Index 已添加");
-      queryClient.invalidateQueries({ queryKey: ["collections", dbId, collId] });
-      queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
-      setIndexDialogOpen(false);
+  const addIndex = useCommand(addCollectionIndexCommand, {
+    scope: commandScope,
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Index 已添加");
+        void invalidateDetail();
+        void invalidateDb();
+        setIndexDialogOpen(false);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const removeAttribute = useMutation({
-    mutationFn: (attr: Attribute) => deleteAttribute(dbId, collId, attr.key),
-    onSuccess: () => {
-      toast.success("Attribute 已删除");
-      queryClient.invalidateQueries({ queryKey: ["collections", dbId, collId] });
-      queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
+  const removeAttribute = useCommand(removeCollectionAttributeCommand, {
+    scope: commandScope,
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Attribute 已删除");
+        void invalidateDetail();
+        void invalidateDb();
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const removeIndex = useMutation({
-    mutationFn: (index: Collection["indexes"][number]) => deleteIndex(dbId, collId, index.id),
-    onSuccess: () => {
-      toast.success("Index 已删除");
-      queryClient.invalidateQueries({ queryKey: ["collections", dbId, collId] });
-      queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
+  const removeIndex = useCommand(removeCollectionIndexCommand, {
+    scope: commandScope,
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Index 已删除");
+        void invalidateDetail();
+        void invalidateDb();
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const updateSettings = useMutation({
-    mutationFn: (input: { name?: string; disabled?: boolean }) =>
-      updateCollection(dbId, collId, input),
-    onSuccess: () => {
-      toast.success("集合设置已更新");
-      queryClient.invalidateQueries({ queryKey: ["collections", dbId, collId] });
-      queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
-      setSettingsDialogOpen(false);
+  const updateSettings = useCommand(updateCollectionSettingsCommand, {
+    scope: commandScope,
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("集合设置已更新");
+        void invalidateDetail();
+        void invalidateDb();
+        setSettingsDialogOpen(false);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -312,14 +346,24 @@ export function CollectionDetailPage() {
           <AttributeList
             attributes={collection.attributes}
             onAdd={() => setAttrDialogOpen(true)}
-            onRemove={readonly ? undefined : (attr) => removeAttribute.mutate(attr)}
+            onRemove={
+              readonly
+                ? undefined
+                : (attr) =>
+                    removeAttribute.mutate({ dbId, collId, key: attr.key })
+            }
             disabled={readonly}
           />
           <IndexList
             indexes={collection.indexes}
             canAdd={collection.attributes.length > 0}
             onAdd={() => setIndexDialogOpen(true)}
-            onRemove={readonly ? undefined : (index) => removeIndex.mutate(index)}
+            onRemove={
+              readonly
+                ? undefined
+                : (index) =>
+                    removeIndex.mutate({ dbId, collId, indexId: index.id })
+            }
             disabled={readonly}
           />
         </div>
@@ -328,30 +372,30 @@ export function CollectionDetailPage() {
       <AddAttributeDialog
         open={attrDialogOpen}
         onOpenChange={setAttrDialogOpen}
-        loading={addAttribute.isPending}
-        onSubmit={(input) => addAttribute.mutate(input)}
+        loading={addAttribute.pending}
+        onSubmit={(input) => addAttribute.mutate({ dbId, collId, ...input })}
       />
       <AddIndexDialog
         open={indexDialogOpen}
         onOpenChange={setIndexDialogOpen}
-        loading={addIndex.isPending}
+        loading={addIndex.pending}
         attributes={collection.attributes}
-        onSubmit={(input) => addIndex.mutate(input)}
+        onSubmit={(input) => addIndex.mutate({ dbId, collId, ...input })}
       />
       <EditPermissionsDialog
         open={permDialogOpen}
         onOpenChange={setPermDialogOpen}
-        loading={updatePerms.isPending}
+        loading={updatePerms.pending}
         initialPermissions={collection.permissions}
-        onSubmit={(perms) => updatePerms.mutate({ permissions: perms })}
+        onSubmit={(perms) => updatePerms.mutate({ dbId, collId, permissions: perms })}
       />
       <EditCollectionDialog
         open={settingsDialogOpen}
         onOpenChange={setSettingsDialogOpen}
-        loading={updateSettings.isPending}
+        loading={updateSettings.pending}
         initialName={collection.name}
         initialDisabled={collection.disabled ?? false}
-        onSubmit={(input) => updateSettings.mutate(input)}
+        onSubmit={(input) => updateSettings.mutate({ dbId, collId, ...input })}
       />
     </>
   );

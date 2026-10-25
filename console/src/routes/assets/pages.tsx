@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "@/router/compat";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCollection } from "@lynx-go/ui-kit";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Plus, Search, X } from "lucide-react";
 import {
-  createAssetDef,
-  deleteAssetDef,
   getAssetDef,
   listAssetDefs,
   listDefHolders,
@@ -51,7 +49,8 @@ import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
-import { assetDefsResource, assetDefsSearch } from "@/fleet/assets";
+import { assetDefsResource, assetDefsSearch, createAssetDefCommand, removeAssetDefCommand } from "@/fleet/assets";
+import { describeApiError } from "@/fleet/errors";
 
 const CLASSES = ["currency", "stack", "instance", "entitlement"] as const;
 
@@ -73,14 +72,20 @@ export function AssetDefsListPage() {
     query: { enabled: !!projectId },
   });
 
-  // 行删除保持存量 useMutation（toast 语义不变）；失效 = 存量 ["asset-defs"]
-  // 键（详情/用户资产页仍消费）+ kit 句柄 refetch 桥接。
-  const remove = useMutation({
-    mutationFn: (id: string) => deleteAssetDef(id),
-    onSuccess: () => {
-      toast.success("资产定义已删除");
-      queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
-      list.refetch();
+  // 行删除命令接线（§12.3）：挂 asset-defs 资源——kit 集合键自动失效；
+  // 存量 ["asset-defs"] 键（详情/下拉选项仍消费）手动桥。toast 单源
+  // onSettled。
+  const remove = useCommand(removeAssetDefCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("资产定义已删除");
+        void queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -127,8 +132,8 @@ export function AssetDefsListPage() {
             header: "操作",
             cell: ({ row }: { row: { original: AssetDef } }) => (
               <RowDeleteButton
-                onConfirm={() => remove.mutate(row.original.id)}
-                loading={remove.isPending}
+                onConfirm={() => remove.mutate({ id: row.original.id })}
+                loading={remove.pending}
               />
             ),
           } satisfies LegacyColumnDef<AssetDef, unknown>,
@@ -200,19 +205,21 @@ export function AssetDefNewPage() {
   const [decimals, setDecimals] = useState("0");
   const [maxQuantity, setMaxQuantity] = useState("");
 
-  const mutation = useMutation({
-    mutationFn: () =>
-      createAssetDef({
-        code,
-        name,
-        class: klass,
-        decimals: Number.parseInt(decimals, 10) || 0,
-        max_quantity: maxQuantity === "" ? undefined : maxQuantity,
-      }),
-    onSuccess: (def) => {
-      toast.success("资产定义已创建");
-      queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
-      navigate(`/console/assets/defs/${def.id}`);
+  // 创建命令接线（§12.3）：挂 asset-defs 资源（kit 集合键自动失效）+ 存量
+  // ["asset-defs"] 键手动桥；decimals/上限文本展示形在 descriptor run 内
+  // 收敛。toast 单源 onSettled。
+  const create = useCommand(createAssetDefCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("资产定义已创建");
+        void queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
+        navigate(`/console/assets/defs/${result.payload.id}`);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -227,9 +234,15 @@ export function AssetDefNewPage() {
           toast.error("max_quantity 必须是整数最小单位");
           return;
         }
-        mutation.mutate();
+        create.mutate({
+          code,
+          name,
+          class: klass,
+          decimalsText: decimals,
+          maxQuantityText: maxQuantity,
+        });
       }}
-      loading={mutation.isPending}
+      loading={create.pending}
       submitDisabled={!code || !name}
     >
       <FormField id="code" label="Code" value={code} onChange={setCode} required placeholder="gold" />
@@ -276,12 +289,20 @@ export function AssetDefDetailPage() {
     enabled: !!id,
   });
 
-  const remove = useMutation({
-    mutationFn: () => deleteAssetDef(id!),
-    onSuccess: () => {
-      toast.success("资产定义已删除");
-      queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
-      navigate("/console/assets");
+  // 删除命令接线（§12.3）：挂 asset-defs 资源（kit 集合键自动失效）+ 存量
+  // ["asset-defs"] 键手动桥。toast 单源 onSettled。
+  const remove = useCommand(removeAssetDefCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("资产定义已删除");
+        void queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
+        navigate("/console/assets");
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -319,7 +340,7 @@ export function AssetDefDetailPage() {
       title={def.name}
       description={def.code}
       backTo="/console/assets"
-      actions={writeable ? <DeleteButton onConfirm={() => remove.mutate()} loading={remove.isPending} /> : undefined}
+      actions={writeable ? <DeleteButton onConfirm={() => remove.mutate({ id: id! })} loading={remove.pending} /> : undefined}
     >
       <DetailGrid
         items={[

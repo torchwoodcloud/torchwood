@@ -8,6 +8,7 @@ import {
 import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
 import {
   createInviteCode,
+  createProject,
   deleteInviteCode,
   deleteProject,
   listProjects,
@@ -40,11 +41,30 @@ export const projectsResource = defineResource({
   name: "projects",
   getId: (row: Project) => row.id,
   collection: fetchProjects,
+  commands: {
+    // 新建项目（实体集合变更）：description 空 = 不发送（run 内收敛）。
+    create: {
+      run: async (input: {
+        id: string;
+        name: string;
+        description?: string;
+      }): Promise<CommandResult<Project>> =>
+        runCommandMapped(() =>
+          createProject(
+            { id: input.id, name: input.name, description: input.description || undefined },
+            SKIP
+          )
+        ),
+    },
+  },
 });
 
 // URL 搜索 schema（路由 validateSearch 与绑定共用同一实例）。默认页大小 20
 // = 旧页默认；无服务端过滤参数——不设 filters。
 export const projectsSearch = collectionQuerySchema({ defaultSize: 20 });
+
+// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
+export const createProjectCommand = projectsResource.commands!.create;
 
 // —— 写路径命令化（§12.9 阶段 2）：settings 页的更新/删除 ——
 

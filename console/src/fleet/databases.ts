@@ -7,14 +7,21 @@ import {
 } from "@lynx-go/ui-kit/kernel";
 import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
 import {
+  createAttribute,
   createCollection,
   createDatabase,
+  createIndex,
+  deleteAttribute,
   deleteCollection,
   deleteDatabase,
+  deleteIndex,
   listCollections,
   listDatabases,
+  updateCollection,
+  type Attribute,
   type Collection,
   type Database,
+  type Index,
 } from "@/api/databases";
 import { gatewayErrorCode, toApiError } from "@/fleet/errors";
 
@@ -27,7 +34,8 @@ import { gatewayErrorCode, toApiError } from "@/fleet/errors";
 // 建删命令族切片：database/collection 的 create/remove 挂各自资源（kit 列表
 // 键随 ok 自动失效）；存量 ["databases"] / ["collections"] 键由页面 onSettled
 // 手动桥。结果两分映射同 apiKeys（400→rejected、409→conflict、其余 throw
-// ApiError）；api 调用一律 __skipToast（toast 单源 = onSettled）。
+// ApiError）；api 调用一律 __skipToast（toast 单源 = onSettled）。集合
+// schema 编辑器（属性/索引/设置/权限）同挂 collections 资源命令。
 
 // 网关错误体（结果分支用）。
 interface GatewayErrorBody {
@@ -180,6 +188,113 @@ export const collectionsResource = defineResource({
         }),
       treatAs: { "not-found": { status: "ok" as const, payload: null } },
     },
+    // ——集合 schema 编辑器（属性/索引/设置/权限写路径，写路径命令化收尾）：
+    // 提交形复杂度收敛在 run（索引 orders 缺省全 asc——一期 UI 无方向选择；
+    // permissions 全量替换）。输入自包含（dbId/collId 在入参里）。——
+    updateSettings: {
+      run: async (input: {
+        dbId: string;
+        collId: string;
+        name?: string;
+        disabled?: boolean;
+      }): Promise<CommandResult<Collection>> =>
+        runCommandMapped(() =>
+          updateCollection(
+            input.dbId,
+            input.collId,
+            { name: input.name, disabled: input.disabled },
+            SKIP
+          )
+        ),
+    },
+    updatePermissions: {
+      run: async (input: {
+        dbId: string;
+        collId: string;
+        permissions: string[];
+      }): Promise<CommandResult<Collection>> =>
+        runCommandMapped(() =>
+          updateCollection(
+            input.dbId,
+            input.collId,
+            { permissions: input.permissions },
+            SKIP
+          )
+        ),
+    },
+    addAttribute: {
+      run: async (input: {
+        dbId: string;
+        collId: string;
+        key: string;
+        type: string;
+        size?: number;
+        required: boolean;
+        array: boolean;
+      }): Promise<CommandResult<Attribute>> =>
+        runCommandMapped(() =>
+          createAttribute(
+            input.dbId,
+            input.collId,
+            {
+              key: input.key,
+              type: input.type,
+              size: input.size,
+              required: input.required,
+              array: input.array,
+            },
+            SKIP
+          )
+        ),
+    },
+    addIndex: {
+      run: async (input: {
+        dbId: string;
+        collId: string;
+        id: string;
+        type: string;
+        attributes: string[];
+      }): Promise<CommandResult<Index>> =>
+        runCommandMapped(() =>
+          createIndex(
+            input.dbId,
+            input.collId,
+            {
+              id: input.id,
+              type: input.type,
+              attributes: input.attributes,
+              orders: input.attributes.map(() => "asc"),
+            },
+            SKIP
+          )
+        ),
+    },
+    removeAttribute: {
+      run: async (input: {
+        dbId: string;
+        collId: string;
+        key: string;
+      }): Promise<CommandResult<null>> =>
+        runCommandMapped(async () => {
+          await deleteAttribute(input.dbId, input.collId, input.key, SKIP);
+          return null;
+        }),
+      // 已删 → 幂等 ok
+      treatAs: { "not-found": { status: "ok" as const, payload: null } },
+    },
+    removeIndex: {
+      run: async (input: {
+        dbId: string;
+        collId: string;
+        indexId: string;
+      }): Promise<CommandResult<null>> =>
+        runCommandMapped(async () => {
+          await deleteIndex(input.dbId, input.collId, input.indexId, SKIP);
+          return null;
+        }),
+      // 已删 → 幂等 ok
+      treatAs: { "not-found": { status: "ok" as const, payload: null } },
+    },
   },
 });
 
@@ -188,3 +303,9 @@ export const createDatabaseCommand = databasesResource.commands!.create;
 export const removeDatabaseCommand = databasesResource.commands!.remove;
 export const createCollectionCommand = collectionsResource.commands!.create;
 export const removeCollectionCommand = collectionsResource.commands!.remove;
+export const updateCollectionSettingsCommand = collectionsResource.commands!.updateSettings;
+export const updateCollectionPermissionsCommand = collectionsResource.commands!.updatePermissions;
+export const addCollectionAttributeCommand = collectionsResource.commands!.addAttribute;
+export const addCollectionIndexCommand = collectionsResource.commands!.addIndex;
+export const removeCollectionAttributeCommand = collectionsResource.commands!.removeAttribute;
+export const removeCollectionIndexCommand = collectionsResource.commands!.removeIndex;
