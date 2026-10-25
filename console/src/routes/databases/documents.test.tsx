@@ -1,10 +1,22 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TestRouter } from "@/router/compat";
+import { AxiosError } from "axios";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DocumentDetailPage } from "./documents";
-import { getCollection, getDocument } from "@/api/databases";
+import { getCollection, getDocument, updateDocument } from "@/api/databases";
 import { canWrite } from "@/hooks/useAdminRole";
+
+// OCC 通道方言（§12.5）：冲突 = HTTP 400 + message 前缀域码（非 409）。
+function occConflict(): AxiosError {
+  return new AxiosError("Request failed", "ERR_BAD_REQUEST", undefined, undefined, {
+    status: 400,
+    statusText: "",
+    headers: {},
+    config: {} as never,
+    data: { error: { code: "FailedPrecondition", message: "DOCUMENT.VERSION_CONFLICT: version_mismatch" } },
+  } as never);
+}
 
 vi.mock("@/hooks/useAdminRole", () => ({
   useAdminRole: () => ({ role: "owner", isLoading: false }),
@@ -30,6 +42,7 @@ const collection = {
   permissions: [],
   is_system: false,
   attributes: [
+    { id: "a0", key: "title", type: "string", required: true, array: false },
     { id: "a1", key: "count", type: "integer", required: false, array: false },
     { id: "a2", key: "meta", type: "json", required: false, array: false },
   ],
@@ -40,7 +53,7 @@ const collection = {
 
 const document = {
   id: "doc-1",
-  data: { count: 42, meta: { a: 1 } },
+  data: { title: "hello", count: 42, meta: { a: 1 } },
   created_at: "2026-09-14T00:00:00Z",
   updated_at: "2026-09-14T00:13:22Z",
   version: 3,
@@ -66,8 +79,9 @@ function renderDetail() {
 describe("DocumentDetailPage", () => {
   beforeEach(() => {
     vi.mocked(canWrite).mockReturnValue(true);
-    vi.mocked(getCollection).mockResolvedValue(collection);
-    vi.mocked(getDocument).mockResolvedValue(document);
+    vi.mocked(getCollection).mockReset().mockResolvedValue(collection);
+    vi.mocked(getDocument).mockReset().mockResolvedValue(document);
+    vi.mocked(updateDocument).mockReset();
   });
   afterEach(() => cleanup());
 
@@ -103,5 +117,72 @@ describe("DocumentDetailPage", () => {
     expect(await screen.findByText("count (integer)")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /编辑/ })).toBeNull();
     expect(screen.queryByRole("spinbutton")).toBeNull();
+  });
+
+  it("保存 ok：data/increment/version 同一次 PATCH，成功后回只读并重建表单", async () => {
+    vi.mocked(updateDocument).mockResolvedValue({
+      ...document,
+      data: { ...document.data, count: 7 },
+      version: 4,
+    });
+    // invalidate 触发的 refetch 返回更新态（只读视图由查询数据派生）
+    vi.mocked(getDocument)
+      .mockResolvedValueOnce(document)
+      .mockResolvedValue({ ...document, data: { ...document.data, count: 7 }, version: 4 });
+    renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: /编辑/ }));
+    fireEvent.change(screen.getByLabelText("count (integer)"), { target: { value: "7" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() =>
+      expect(vi.mocked(updateDocument)).toHaveBeenCalledWith(
+        "app",
+        "posts",
+        "doc-1",
+        { data: { title: "hello", count: 7, meta: { a: 1 } }, version: 3 },
+        { __skipToast: true }
+      )
+    );
+    // 回只读 + 用响应文档重建（count=7 呈现）
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "保存" })).toBeNull()
+    );
+    expect(screen.getByText("7")).toBeTruthy();
+  });
+
+  it("OCC 冲突：结果盒中文文案 + 「刷新重载」重建表单（fresh-read）", async () => {
+    vi.mocked(updateDocument).mockRejectedValue(occConflict());
+    renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: /编辑/ }));
+    fireEvent.change(screen.getByLabelText("title (string)"), { target: { value: "stale-edit" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    // 冲突走结果盒（非 toast）：域码中文 + 重载动作
+    expect(
+      await screen.findByText("文档已被其他修改抢先提交（版本不匹配），请刷新后重试")
+    ).toBeTruthy();
+    const reload = screen.getByRole("button", { name: "刷新重载" });
+
+    // fresh-read 重载：getDocument 二次调用（fetchQuery），草稿按服务端态重建
+    fireEvent.click(reload);
+    await waitFor(() => expect(vi.mocked(getDocument)).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect((screen.getByLabelText("title (string)") as HTMLInputElement).value).toBe("hello")
+    );
+    // 结果盒随 reset 清空，仍处编辑态
+    expect(
+      screen.queryByText("文档已被其他修改抢先提交（版本不匹配），请刷新后重试")
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "保存" })).toBeTruthy();
+  });
+
+  it("required 缺失：rejected.fieldErrors 字段级红字，不发请求", async () => {
+    renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: /编辑/ }));
+    fireEvent.change(screen.getByLabelText("title (string)"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    expect(await screen.findByText("必填字段")).toBeTruthy();
+    expect(vi.mocked(updateDocument)).not.toHaveBeenCalled();
   });
 });

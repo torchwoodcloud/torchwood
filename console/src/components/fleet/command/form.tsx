@@ -1,6 +1,8 @@
 // vendored from fleet-ui registry/command/form.tsx @0.1.1（2026-10-25 命令族切片）
 // 拷贝适配（design.md §12.1）：token 方言映射 text-err→text-destructive；
-// 按钮文案中文化（submitLabel/submitting 由调用方传）；其余与上游一致。
+// 按钮文案中文化（submitLabel/submitting 由调用方传）；
+// 本地扩展 resultAction 结果盒动作槽（OCC 冲突的「刷新重载」——B2 批，上游
+// 候选）。其余与上游一致。
 import type { CommandResult } from "@lynx-go/ui-kit/kernel";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -19,6 +21,8 @@ export interface FormProps<Payload> {
   form: { handleSubmit: (submitMeta?: unknown) => void | Promise<void> };
   submitting?: boolean;
   result?: CommandResult<Payload> | null;
+  /** 结果盒内的动作槽（conflict 的「刷新重载」等页面编排；本地扩展） */
+  resultAction?: ReactNode;
   submitLabel?: string;
   onCancel?: () => void;
   children: ReactNode;
@@ -28,6 +32,7 @@ export function Form<Payload>({
   form,
   submitting = false,
   result = null,
+  resultAction,
   submitLabel = "保存",
   onCancel,
   children,
@@ -45,12 +50,15 @@ export function Form<Payload>({
       {result !== null && result.status !== "ok" ? (
         <div
           role="alert"
-          className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+          className="flex items-center justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
         >
-          {result.status === "rejected" && result.code ? (
-            <span className="font-mono">[{result.code}] </span>
-          ) : null}
-          {result.message}
+          <span>
+            {result.status === "rejected" && result.code ? (
+              <span className="font-mono">[{result.code}] </span>
+            ) : null}
+            {result.message}
+          </span>
+          {resultAction}
         </div>
       ) : null}
       <div className="flex justify-end gap-2 pt-1">

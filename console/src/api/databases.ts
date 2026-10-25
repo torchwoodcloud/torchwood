@@ -256,11 +256,13 @@ export async function getDocument(
 export async function createDocument(
   databaseId: string,
   collectionId: string,
-  input: { data: Record<string, unknown>; document_id?: string; permissions?: string[] }
+  input: { data: Record<string, unknown>; document_id?: string; permissions?: string[] },
+  config?: ApiRequestConfig
 ): Promise<Document> {
   const res = await api.post<Document>(
     `/server/databases/${databaseId}/collections/${collectionId}/documents`,
-    input
+    input,
+    config
   );
   return res.data;
 }
@@ -275,11 +277,13 @@ export async function updateDocument(
     increment?: Record<string, number>;
     // 用户集合 OCC 必填：来自 GetDocument/List 的 version。
     version: number;
-  }
+  },
+  config?: ApiRequestConfig
 ): Promise<Document> {
   const res = await api.patch<Document>(
     `/server/databases/${databaseId}/collections/${collectionId}/documents/${documentId}`,
-    input
+    input,
+    config
   );
   return res.data;
 }
@@ -289,11 +293,12 @@ export async function deleteDocument(
   collectionId: string,
   documentId: string,
   // 用户集合 OCC 必填：来自 GetDocument/List 的 version。
-  version: number
+  version: number,
+  config?: ApiRequestConfig
 ): Promise<void> {
   await api.delete(
     `/server/databases/${databaseId}/collections/${collectionId}/documents/${documentId}`,
-    { params: { version } }
+    { params: { version }, ...config }
   );
 }
 
