@@ -185,7 +185,7 @@ export function realtimeTransport(
 // project 绑定（作用域概念本体）；policy：100 条环形缓冲 + 4 档退避
 // （~3.75s 到 stalled，试听面板量级）。
 export const collectionEvents: SubscriptionDescriptor<CollectionEventsParams, EventFrame> = {
-  policy: { buffer: 100, retry: { backoffMs: [250, 500, 1000, 2000] } },
+  policy: { buffer: 100, pauseable: true, retry: { backoffMs: [250, 500, 1000, 2000] } },
   open(params, scope: ResourceScope) {
     return realtimeTransport(collectionChannel(params), scope.projectId ?? null);
   },

@@ -44,6 +44,7 @@ import {
   type OverviewRange,
 } from "./shared";
 import { TrendChart } from "./metricChart";
+import { StatCard } from "@/components/fleet/values/stat-card";
 
 const OVERVIEW_RANGES: { key: OverviewRange; label: string }[] = [
   { key: "today", label: "今日" },
@@ -78,20 +79,6 @@ function RangeSwitcher<T extends string | number>({
 
 function LoadError({ error }: { error: unknown }) {
   return <p className="text-sm text-destructive">加载失败：{errText(error)}</p>;
-}
-
-function KpiCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className="text-2xl tabular-nums">{value}</CardTitle>
-      </CardHeader>
-      {hint && (
-        <CardContent className="text-xs text-muted-foreground">{hint}</CardContent>
-      )}
-    </Card>
-  );
 }
 
 // AnalyticsOverviewPage 概览：日期范围切换 → KPI 卡 + 趋势图 + Top 事件表。
@@ -154,21 +141,21 @@ export function AnalyticsOverviewPage() {
             ))
           ) : (
             <>
-              <KpiCard label="事件总量" value={num(kpi?.total_events).toLocaleString()} />
-              <KpiCard
+              <StatCard label="事件总量" value={num(kpi?.total_events).toLocaleString()} />
+              <StatCard
                 label="活跃用户（UV）"
                 value={num(kpi?.unique_users).toLocaleString()}
               />
-              <KpiCard
+              <StatCard
                 label="新增用户"
                 value={num(kpi?.new_users).toLocaleString()}
                 hint="首次上报口径（first_seen 表）"
               />
-              <KpiCard
+              <StatCard
                 label="人均事件"
                 value={num(kpi?.events_per_user).toFixed(2)}
               />
-              <KpiCard
+              <StatCard
                 label="今日实时"
                 value={`${num(today?.total_events).toLocaleString()} / ${num(today?.unique_users).toLocaleString()}`}
                 hint="事件 / UV（raw 直读，恒为实时口径）"
