@@ -1,22 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@/router/compat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCollection } from "@lynx-go/ui-kit";
+import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { Plus, KeyRound, RotateCcw, AlertTriangle } from "lucide-react";
 import {
   getWebhook,
-  createWebhook,
-  updateWebhook,
-  deleteWebhook,
-  rotateWebhookSecret,
   listDeliveries,
   redeliverDelivery,
   type Webhook,
   type WebhookDelivery,
 } from "@/api/webhooks";
-import { webhooksResource, webhooksSearch } from "@/fleet/webhooks";
+import {
+  webhooksResource,
+  webhooksSearch,
+  createWebhookCommand,
+  updateWebhookCommand,
+  removeWebhookCommand,
+  rotateWebhookSecretCommand,
+} from "@/fleet/webhooks";
+import { describeApiError } from "@/fleet/errors";
 import { PageHeader } from "@/components/PageHeader";
 import { ListPaginationKeyset } from "@/components/list/ListToolbar";
 import { useServerPaging } from "@/hooks/useServerPaging";
@@ -315,25 +319,35 @@ export function WebhooksListPage() {
     query: { enabled: !!projectId },
   });
 
-  const create = useMutation({
-    mutationFn: createWebhook,
-    onSuccess: (result) => {
-      // 一次性明文回显（与 functions create 的 target_secret 同语义）：
-      // 关闭对话框后任何面只出指纹。
-      setCreatedSecret({ id: result.webhook.id, secret: result.secret });
-      toast.success("Webhook 已创建");
-      list.refetch();
-      setCreateOpen(false);
+  // 创建命令接线（§12.3）：kit 集合键由 useCommand 自动失效；payload 携带
+  // 一次性明文密钥（reveal，关闭即弃——与 functions create 的 target_secret
+  // 同语义）。toast 单源 onSettled。
+  const create = useCommand(createWebhookCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        setCreatedSecret({ id: result.payload.webhook.id, secret: result.payload.secret });
+        toast.success("Webhook 已创建");
+        setCreateOpen(false);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  // 行删除仍是存量 useMutation（命令族切片未及本页）：成功后手动桥——
-  // kit 集合无存量键，直接 refetch 当前窗口。
-  const remove = useMutation({
-    mutationFn: (id: string) => deleteWebhook(id),
-    onSuccess: () => {
-      toast.success("Webhook 已删除");
-      list.refetch();
+  // 行删除命令接线：kit 集合键自动失效（本页无存量列表键消费方）。
+  const remove = useCommand(removeWebhookCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Webhook 已删除");
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -357,8 +371,8 @@ export function WebhooksListPage() {
             header: "操作",
             cell: ({ row }: { row: { original: Webhook } }) => (
               <RowDeleteButton
-                onConfirm={() => remove.mutate(row.original.id)}
-                loading={remove.isPending}
+                onConfirm={() => remove.mutate({ id: row.original.id })}
+                loading={remove.pending}
               />
             ),
           } satisfies LegacyColumnDef<Webhook, unknown>,
@@ -420,7 +434,7 @@ export function WebhooksListPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onSubmit={(input) => create.mutate(input)}
-        pending={create.isPending}
+        pending={create.pending}
       />
 
       {createdSecret && (
@@ -570,37 +584,52 @@ export function WebhookDetailPage() {
     enabled: !!webhookId,
   });
 
-  const update = useMutation({
-    mutationFn: (input: { url: string; events: string[]; status?: "enabled" | "paused" }) => {
-      const payload: Parameters<typeof updateWebhook>[1] = { status: input.status };
-      if (input.url !== (hook?.url ?? "")) payload.url = input.url;
-      if ((input.events ?? []).join("\n") !== (hook?.events ?? []).join("\n")) {
-        payload.events = input.events;
+  // 命令接线（§12.3）：update/rotate/remove 挂 webhook 资源（kit 集合自动
+  // 失效）+ 存量详情键手动桥；字段 diff 留在提交处（页面持原实体快照——
+  // url/events 仅变更时随请求发送，proto3 optional）。toast 单源 onSettled。
+  const update = useCommand(updateWebhookCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Webhook 已更新");
+        setEditOpen(false);
+        void queryClient.invalidateQueries({ queryKey: ["webhooks", projectId, webhookId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
       }
-      return updateWebhook(webhookId!, payload);
-    },
-    onSuccess: () => {
-      toast.success("Webhook 已更新");
-      setEditOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["webhooks", projectId, webhookId] });
     },
   });
 
-  const rotate = useMutation({
-    mutationFn: () => rotateWebhookSecret(webhookId!),
-    onSuccess: (result) => {
-      toast.success("签名密钥已轮换（旧钥保留一个窗口期）");
-      setRotatedSecret({ secret: result.secret, fingerprint: result.secret_fingerprint });
-      queryClient.invalidateQueries({ queryKey: ["webhooks", projectId, webhookId] });
+  // 轮换 payload 携带一次性明文（reveal，关闭即弃）。
+  const rotate = useCommand(rotateWebhookSecretCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("签名密钥已轮换（旧钥保留一个窗口期）");
+        setRotatedSecret({ secret: result.payload.secret, fingerprint: result.payload.secret_fingerprint });
+        void queryClient.invalidateQueries({ queryKey: ["webhooks", projectId, webhookId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const remove = useMutation({
-    mutationFn: () => deleteWebhook(webhookId!),
-    onSuccess: () => {
-      toast.success("Webhook 已删除");
-      queryClient.invalidateQueries({ queryKey: ["webhooks", projectId] });
-      window.history.back();
+  const remove = useCommand(removeWebhookCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Webhook 已删除");
+        void queryClient.invalidateQueries({ queryKey: ["webhooks", projectId] });
+        window.history.back();
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -621,15 +650,15 @@ export function WebhookDetailPage() {
               </Button>
               <Button
                 variant="outline"
-                disabled={rotate.isPending}
-                onClick={() => rotate.mutate()}
+                disabled={rotate.pending}
+                onClick={() => rotate.mutate({ id: webhookId! })}
               >
                 <KeyRound className="h-4 w-4 mr-2" />
-                {rotate.isPending ? "轮换中..." : "轮换密钥"}
+                {rotate.pending ? "轮换中..." : "轮换密钥"}
               </Button>
               <DeleteButton
-                onConfirm={() => remove.mutate()}
-                loading={remove.isPending}
+                onConfirm={() => remove.mutate({ id: webhookId! })}
+                loading={remove.pending}
               />
             </div>
           ) : undefined
@@ -677,8 +706,20 @@ export function WebhookDetailPage() {
         initial={hook}
         open={editOpen}
         onOpenChange={setEditOpen}
-        onSubmit={(input) => update.mutate(input)}
-        pending={update.isPending}
+        onSubmit={(input) => {
+          // diff 归提交处（页面持原实体快照）：未修改字段不随请求发送。
+          const payload: {
+            url?: string;
+            events?: string[];
+            status?: "enabled" | "paused";
+          } = { status: input.status };
+          if (input.url !== (hook?.url ?? "")) payload.url = input.url;
+          if ((input.events ?? []).join("\n") !== (hook?.events ?? []).join("\n")) {
+            payload.events = input.events;
+          }
+          update.mutate({ id: webhookId!, ...payload });
+        }}
+        pending={update.pending}
       />
 
       {rotatedSecret && (

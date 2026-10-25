@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@/router/compat";
-import { useCollection } from "@lynx-go/ui-kit";
+import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { toast } from "sonner";
 import { Pencil, Plus, Trophy } from "lucide-react";
 import {
-  createBoard,
-  deleteBoard,
-  deleteBoardEntry,
   getBoard,
   getBoardEntry,
   getSettlement,
@@ -19,13 +16,21 @@ import {
   LEADERBOARD_TIE_BREAKS,
   listBoardPeriods,
   listBoardTop,
-  rerunSettlement,
-  updateBoard,
-  voidSettlement,
   type LeaderboardBoard,
   type LeaderboardScoreSnapshot,
   type LeaderboardSettlement,
 } from "@/api/leaderboards";
+import {
+  boardsResource,
+  boardsSearch,
+  createBoardCommand,
+  updateBoardCommand,
+  removeBoardCommand,
+  removeBoardEntryDescriptor,
+  voidSettlementDescriptor,
+  rerunSettlementDescriptor,
+} from "@/fleet/leaderboards";
+import { describeApiError } from "@/fleet/errors";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -56,7 +61,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
-import { boardsResource, boardsSearch } from "@/fleet/leaderboards";
 
 export function LeaderboardsListPage() {
   const { projectId } = useAuth();
@@ -72,15 +76,18 @@ export function LeaderboardsListPage() {
     scope: { projectId: projectId ?? undefined },
   });
 
-  // 写路径保持存量 useMutation（toast 语义不变）；失效 = kit 句柄 refetch
-  // 桥接（存量 ["leaderboards-boards"] 键已无消费方）。
-  const refresh = useCallback(() => list.refetch(), [list]);
-
-  const remove = useMutation({
-    mutationFn: deleteBoard,
-    onSuccess: () => {
-      toast.success("榜已删除（条目级联删除）");
-      refresh();
+  // 写路径命令化（§12.3）：remove 挂榜资源——kit 集合键由 useCommand 自动
+  // 失效（现页 refresh 桥退场）；toast 单源 onSettled。
+  const remove = useCommand(removeBoardCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("榜已删除（条目级联删除）");
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -159,10 +166,10 @@ export function LeaderboardsListPage() {
       header: "操作",
       cell: ({ row }) => (
         <div className="flex items-center gap-1">
-          <EditBoardDialog board={row.original} onSaved={refresh} />
+          <EditBoardDialog board={row.original} />
           <RowDeleteButton
-            onConfirm={() => remove.mutate(row.original.id)}
-            loading={remove.isPending}
+            onConfirm={() => remove.mutate({ id: row.original.id })}
+            loading={remove.pending}
           />
         </div>
       ),
@@ -187,7 +194,7 @@ export function LeaderboardsListPage() {
               className="h-8 w-56"
             />
             <div className="ml-auto">
-              <CreateBoardDialog onCreated={refresh} />
+              <CreateBoardDialog />
             </div>
           </div>
         }
@@ -212,7 +219,8 @@ export function LeaderboardsListPage() {
 
 const inputCls = "space-y-2";
 
-function CreateBoardDialog({ onCreated }: { onCreated: () => void }) {
+function CreateBoardDialog() {
+  const { projectId } = useAuth();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     id: "",
@@ -231,12 +239,19 @@ function CreateBoardDialog({ onCreated }: { onCreated: () => void }) {
     rewards: [] as Array<{ rank_min: string; rank_max: string; value_min: string; asset_code: string; amount: string }>,
   });
 
-  const mutation = useMutation({
-    mutationFn: createBoard,
-    onSuccess: () => {
-      toast.success("榜已创建");
-      setOpen(false);
-      onCreated();
+  // 创建命令接线（§12.3）：kit 榜集合自动失效（onCreated 桥退场）；输入 =
+  // 现页面提交形（rewards 映射留在提交处）。toast 单源 onSettled。
+  const create = useCommand(createBoardCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("榜已创建");
+        setOpen(false);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -259,7 +274,7 @@ function CreateBoardDialog({ onCreated }: { onCreated: () => void }) {
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
-            mutation.mutate({
+            create.mutate({
               id: form.id,
               sort: form.sort,
               tiebreak_order: form.tiebreakOrder || undefined,
@@ -390,8 +405,8 @@ function CreateBoardDialog({ onCreated }: { onCreated: () => void }) {
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "创建中…" : "创建"}
+            <Button type="submit" disabled={create.pending}>
+              {create.pending ? "创建中…" : "创建"}
             </Button>
           </DialogFooter>
         </form>
@@ -400,7 +415,8 @@ function CreateBoardDialog({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-function EditBoardDialog({ board, onSaved }: { board: LeaderboardBoard; onSaved: () => void }) {
+function EditBoardDialog({ board }: { board: LeaderboardBoard }) {
+  const { projectId } = useAuth();
   const [open, setOpen] = useState(false);
   const [valueMin, setValueMin] = useState(board.value_min ?? "");
   const [valueMax, setValueMax] = useState(board.value_max ?? "");
@@ -409,12 +425,19 @@ function EditBoardDialog({ board, onSaved }: { board: LeaderboardBoard; onSaved:
   const [retention, setRetention] = useState(String(board.retention_periods ?? 0));
   const [subjectKind, setSubjectKind] = useState(board.subject_kind ?? "user");
 
-  const mutation = useMutation({
-    mutationFn: (input: Parameters<typeof updateBoard>[1]) => updateBoard(board.id, input),
-    onSuccess: () => {
-      toast.success("榜已更新");
-      setOpen(false);
-      onSaved();
+  // 编辑命令接线（§12.3）：kit 榜集合自动失效（onSaved 桥退场）；输入 =
+  // 现页面提交形（clear_value_bounds 等语义留在提交处）。
+  const update = useCommand(updateBoardCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("榜已更新");
+        setOpen(false);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -436,7 +459,8 @@ function EditBoardDialog({ board, onSaved }: { board: LeaderboardBoard; onSaved:
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
-            mutation.mutate({
+            update.mutate({
+              id: board.id,
               clear_value_bounds: valueMin === "" && valueMax === "",
               value_min: valueMin === "" ? undefined : valueMin,
               value_max: valueMax === "" ? undefined : valueMax,
@@ -479,8 +503,8 @@ function EditBoardDialog({ board, onSaved }: { board: LeaderboardBoard; onSaved:
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "保存中…" : "保存"}
+            <Button type="submit" disabled={update.pending}>
+              {update.pending ? "保存中…" : "保存"}
             </Button>
           </DialogFooter>
         </form>
@@ -538,12 +562,19 @@ export function BoardDetailPage() {
     onError: () => setLookupResult(null),
   });
 
-  const removeEntry = useMutation({
-    mutationFn: (subjectId: string) => deleteBoardEntry(boardId!, activePeriod, subjectId),
-    onSuccess: () => {
-      toast.success("条目已删除（仅未封榜期可删）");
-      queryClient.invalidateQueries({ queryKey: ["leaderboards-top", boardId] });
-      queryClient.invalidateQueries({ queryKey: ["leaderboards-periods", boardId] });
+  // 条目删除命令接线（独立 descriptor）：不改变榜集合——存量
+  // ["leaderboards-top"/"-periods"] 键手动桥；toast 单源 onSettled（§12.3）。
+  const removeEntry = useCommand(removeBoardEntryDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("条目已删除（仅未封榜期可删）");
+        void queryClient.invalidateQueries({ queryKey: ["leaderboards-top", boardId] });
+        void queryClient.invalidateQueries({ queryKey: ["leaderboards-periods", boardId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -614,8 +645,14 @@ export function BoardDetailPage() {
                   </td>
                   <td className="p-2">
                     <RowDeleteButton
-                      onConfirm={() => removeEntry.mutate(e.subject_id)}
-                      loading={removeEntry.isPending}
+                      onConfirm={() =>
+                        removeEntry.mutate({
+                          boardId: boardId!,
+                          period: activePeriod,
+                          subjectId: e.subject_id,
+                        })
+                      }
+                      loading={removeEntry.pending}
                     />
                   </td>
                 </tr>
@@ -741,24 +778,35 @@ function SettlementsSection({ boardId }: { boardId: string }) {
     queryKey: ["leaderboards-settlements", boardId],
     queryFn: () => listSettlements(boardId, 50),
   });
+  // 结算命令接线（独立 descriptor）：不改变榜集合——存量
+  // ["leaderboards-settlements"] 键手动桥（无论成败都刷新，与旧页
+  // onError invalidate 语义一致）；toast 单源 onSettled（§12.3）。
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["leaderboards-settlements", boardId] });
 
-  const voidMutation = useMutation({
-    mutationFn: (period: string) => voidSettlement(boardId, period),
-    onSuccess: () => {
-      toast.success("期已弃奖（settled 期不可 void）");
+  const voidMutation = useCommand(voidSettlementDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("期已弃奖（settled 期不可 void）");
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
       invalidate();
     },
-    onError: () => invalidate(),
   });
-  const rerunMutation = useMutation({
-    mutationFn: (period: string) => rerunSettlement(boardId, period),
-    onSuccess: () => {
-      toast.success("重跑完成（只补发未发放明细）");
+  const rerunMutation = useCommand(rerunSettlementDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("重跑完成（只补发未发放明细）");
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
       invalidate();
     },
-    onError: () => invalidate(),
   });
 
   if (isLoading) {
@@ -792,9 +840,9 @@ function SettlementsSection({ boardId }: { boardId: string }) {
                 key={s.period}
                 boardId={boardId}
                 settlement={s}
-                onVoid={() => voidMutation.mutate(s.period)}
-                onRerun={() => rerunMutation.mutate(s.period)}
-                busy={voidMutation.isPending || rerunMutation.isPending}
+                onVoid={() => voidMutation.mutate({ boardId, period: s.period })}
+                onRerun={() => rerunMutation.mutate({ boardId, period: s.period })}
+                busy={voidMutation.pending || rerunMutation.pending}
               />
             ))}
           </tbody>

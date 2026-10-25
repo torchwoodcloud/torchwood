@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TestRouter, useRouterState } from "@/router/compat";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -29,9 +29,10 @@ vi.mock("@/api/users", () => ({
   createUserToken: vi.fn(),
 }));
 
-import { listUsers } from "@/api/users";
+import { deleteUser, listUsers } from "@/api/users";
 
 const mockList = vi.mocked(listUsers);
+const mockDelete = vi.mocked(deleteUser);
 
 const user: User = {
   id: "u-1",
@@ -145,5 +146,18 @@ describe("UsersListPage（列表 fleet 化：URL 即真相）", () => {
       ),
     );
     expect(search().filter).toContain("created_after:eq:2026-01-01T00:00:00.000Z");
+  });
+
+  it("行删除确认走 useCommand（skipToast + 结果 ok 不抛）", async () => {
+    mockList.mockResolvedValue({ rows: [user], nextPageToken: undefined });
+    mockDelete.mockResolvedValue(undefined);
+    await renderPage();
+    await screen.findByText("ada@example.com");
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    await waitFor(() =>
+      expect(mockDelete).toHaveBeenCalledWith("u-1", { __skipToast: true }),
+    );
   });
 });

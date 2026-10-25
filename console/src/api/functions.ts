@@ -76,21 +76,24 @@ export interface CreateFunctionResult {
   target_secret: string;
 }
 
-export async function createFunction(input: {
-  id: string;
-  name: string;
-  timeout_seconds?: number;
-  enabled?: boolean;
-  declared_scopes?: string[];
-  client_callable?: boolean;
-  client_per_user_limit?: number;
-  client_limit_window?: "minute" | "hour" | "day";
-  // endpoint target url（v4）：函数常驻服务的调用终点（生产强制 https）。
-  target_url: string;
-  // 可选自定义签名密钥（twfnsec_ 前缀；空 = 服务端生成）。
-  target_secret?: string;
-}): Promise<CreateFunctionResult> {
-  const res = await api.post<CreateFunctionResult>("/server/functions", input);
+export async function createFunction(
+  input: {
+    id: string;
+    name: string;
+    timeout_seconds?: number;
+    enabled?: boolean;
+    declared_scopes?: string[];
+    client_callable?: boolean;
+    client_per_user_limit?: number;
+    client_limit_window?: "minute" | "hour" | "day";
+    // endpoint target url（v4）：函数常驻服务的调用终点（生产强制 https）。
+    target_url: string;
+    // 可选自定义签名密钥（twfnsec_ 前缀；空 = 服务端生成）。
+    target_secret?: string;
+  },
+  config?: ApiRequestConfig
+): Promise<CreateFunctionResult> {
+  const res = await api.post<CreateFunctionResult>("/server/functions", input, config);
   return res.data;
 }
 
@@ -106,9 +109,10 @@ export async function updateFunction(
     client_limit_window?: "minute" | "hour" | "day";
     // target url（v4）：未设置 = 不修改；密钥变更走 rotateFunctionSecret。
     target_url?: string;
-  }
+  },
+  config?: ApiRequestConfig
 ): Promise<FunctionItem> {
-  const res = await api.patch<FunctionItem>(`/server/functions/${id}`, input);
+  const res = await api.patch<FunctionItem>(`/server/functions/${id}`, input, config);
   return res.data;
 }
 
@@ -125,19 +129,24 @@ export interface FunctionSecret {
 
 // 轮换 endpoint target 签名密钥：新钥即刻生效（v1 签名），旧钥保留一个宽限
 // 窗（v2 双签）——函数侧持旧钥的 FDK 过渡期不断流。
-export async function rotateFunctionSecret(id: string): Promise<FunctionSecret> {
-  const res = await api.post<FunctionSecret>(`/server/functions/${id}:rotate-secret`, {});
+export async function rotateFunctionSecret(
+  id: string,
+  config?: ApiRequestConfig
+): Promise<FunctionSecret> {
+  const res = await api.post<FunctionSecret>(`/server/functions/${id}:rotate-secret`, {}, config);
   return res.data;
 }
 
 // 全量替换函数 declared_scopes（执行身份，P0）。空数组 = 撤销全部平台访问。
 export async function setFunctionScopes(
   functionId: string,
-  declaredScopes: string[]
+  declaredScopes: string[],
+  config?: ApiRequestConfig
 ): Promise<FunctionItem> {
   const res = await api.put<FunctionItem>(
     `/server/functions/${functionId}/scopes`,
-    { declared_scopes: declaredScopes }
+    { declared_scopes: declaredScopes },
+    config
   );
   return res.data;
 }
@@ -146,11 +155,13 @@ export async function setFunctionScopes(
 // 的 endpoint target）。async=true 时立即返回 queued invocation。
 export async function invokeFunction(
   functionId: string,
-  input: { data?: string; async?: boolean }
+  input: { data?: string; async?: boolean },
+  config?: ApiRequestConfig
 ): Promise<Invocation> {
   const res = await api.post<Invocation>(
     `/server/functions/${functionId}:invoke`,
-    input
+    input,
+    config
   );
   return res.data;
 }

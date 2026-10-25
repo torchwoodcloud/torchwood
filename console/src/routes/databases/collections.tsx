@@ -9,6 +9,7 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import {
   Settings2,
@@ -25,7 +26,6 @@ import {
 import {
   getDatabase,
   getCollection,
-  createCollection,
   updateCollection,
   createAttribute,
   createIndex,
@@ -34,6 +34,9 @@ import {
   type Collection,
   type Attribute,
 } from "@/api/databases";
+import { createCollectionCommand } from "@/fleet/databases";
+import { describeApiError } from "@/fleet/errors";
+import { useAuth } from "@/hooks/useAuth";
 import {
   useAdminRole,
   isPlatformAdmin,
@@ -69,6 +72,7 @@ export function CollectionNewPage() {
   const { dbId } = useParams<{ dbId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const [name, setName] = useState("");
   const [id, setId] = useState("");
@@ -81,17 +85,20 @@ export function CollectionNewPage() {
     enabled: !!dbId,
   });
 
-  const mutation = useMutation({
-    mutationFn: () =>
-      createCollection(dbId!, {
-        id: id || name.toLowerCase().replace(/\s+/g, "_"),
-        name,
-        permissions: permissions.length > 0 ? permissions : undefined,
-      }),
-    onSuccess: (coll) => {
-      toast.success("Collection 创建成功");
-      queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
-      navigate(`/console/databases/${dbId}/collections/${coll.id}`);
+  // 命令化：schema 定义表单的提交形收敛（ID 空则从名称派生、权限空不发送）
+  // 在 descriptor run 内；ok 后 kit collections 键自动失效 + 存量键手动桥。
+  const create = useCommand(createCollectionCommand, {
+    scope: { projectId: projectId ?? undefined, dbId: dbId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Collection 创建成功");
+        void queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
+        navigate(`/console/databases/${dbId}/collections/${result.payload.id}`);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -106,9 +113,9 @@ export function CollectionNewPage() {
       submitLabel="创建"
       onSubmit={(e) => {
         e.preventDefault();
-        mutation.mutate();
+        create.mutate({ dbId: dbId!, id, name, permissions });
       }}
-      loading={mutation.isPending}
+      loading={create.pending}
       submitDisabled={!isPlatformAdmin(role)}
     >
       <FormField id="name" label="名称" value={name} onChange={setName} required placeholder="posts" />

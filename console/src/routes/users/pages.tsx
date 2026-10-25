@@ -1,20 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@/router/compat";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCollection } from "@lynx-go/ui-kit";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import type { Predicate } from "@lynx-go/ui-kit/kernel";
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
   getUser,
-  createUser,
-  updateUser,
-  updateUserPassword,
   deleteUser,
   listUserSessions,
-  deleteUserSession,
-  createUserToken,
   type User,
   type UserSession,
 } from "@/api/users";
@@ -23,8 +18,15 @@ import {
   usersSearch,
   usersCollectionKey,
   userFiltersOf,
+  createUserCommand,
+  updateUserCommand,
+  removeUserCommand,
+  resetUserPasswordCommand,
+  revokeUserSessionDescriptor,
+  issueUserTokenDescriptor,
   type UserFilterField,
 } from "@/fleet/users";
+import { describeApiError } from "@/fleet/errors";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
@@ -108,13 +110,17 @@ export function UsersListPage() {
   };
   const filtersDirty = list.query.predicate != null;
 
-  const remove = useMutation({
-    mutationFn: (id: string) => deleteUser(id),
-    onSuccess: () => {
-      toast.success("用户已删除");
-      // kit 列表键（useCollection）+ 存量键双失效（详情/编辑页仍吃存量键）。
-      void queryClient.invalidateQueries({ queryKey: usersCollectionKey });
-      void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
+  // 命令接线（§12.3）：toast 单源 onSettled；kit 列表键自动失效（descriptor
+  // 挂 resource）+ 存量 ["users", …] 键手动桥（详情/编辑页仍吃存量键）。
+  const remove = useCommand(removeUserCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("用户已删除");
+        void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -211,8 +217,8 @@ export function UsersListPage() {
                 ) : null}
                 {platformAdmin ? (
                   <RowDeleteButton
-                    onConfirm={() => remove.mutate(row.original.id)}
-                    loading={remove.isPending}
+                    onConfirm={() => remove.mutate({ id: row.original.id })}
+                    loading={remove.pending}
                   />
                 ) : null}
               </div>
@@ -379,22 +385,20 @@ export function CreateUserPage() {
   const [status, setStatus] = useState("active");
   const [labels, setLabels] = useState("");
 
-  const mutation = useMutation({
-    mutationFn: () =>
-      createUser({
-        email,
-        password,
-        name,
-        status,
-        labels: labels
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-      }),
-    onSuccess: (user) => {
-      toast.success("用户已创建");
-      queryClient.invalidateQueries({ queryKey: ["users", projectId] });
-      navigate(`/console/users/${user.id}`);
+  // 无表单容器（FormPageWrapper 本地态）：结果分支 toast；failure → describeApiError。
+  // labels 逗号串→数组的收敛在命令 run 内（fleet/users.ts）。
+  const create = useCommand(createUserCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("用户已创建");
+        void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
+        navigate(`/console/users/${result.payload.id}`);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      } else if (result) {
+        toast.error(result.message);
+      }
     },
   });
 
@@ -406,9 +410,9 @@ export function CreateUserPage() {
       submitLabel="创建"
       onSubmit={(e) => {
         e.preventDefault();
-        mutation.mutate();
+        create.mutate({ email, password, name, status, labels });
       }}
-      loading={mutation.isPending}
+      loading={create.pending}
       submitDisabled={!canWrite(role)}
     >
       <FormField id="email" label="邮箱" value={email} onChange={setEmail} required type="email" />
@@ -458,11 +462,15 @@ function SessionsCard({ user }: { user: User }) {
     enabled: !!user.id,
   });
 
-  const revoke = useMutation({
-    mutationFn: (sessionId: string) => deleteUserSession(user.id, sessionId),
-    onSuccess: () => {
-      toast.success("会话已删除，对应令牌立即失效");
-      queryClient.invalidateQueries({ queryKey: ["users", user.id, "sessions"] });
+  // 裸 descriptor（不挂 resource）：会话不是 users 集合形态；存量会话键手动桥。
+  const revoke = useCommand(revokeUserSessionDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("会话已删除，对应令牌立即失效");
+        void queryClient.invalidateQueries({ queryKey: ["users", user.id, "sessions"] });
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -498,8 +506,8 @@ function SessionsCard({ user }: { user: User }) {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!writeable || revoke.isPending}
-                  onClick={() => revoke.mutate(s.id)}
+                  disabled={!writeable || revoke.pending}
+                  onClick={() => revoke.mutate({ userId: user.id, sessionId: s.id })}
                 >
                   删除
                 </Button>
@@ -532,30 +540,48 @@ export function UserDetailPage() {
     enabled: !!id,
   });
 
-  const remove = useMutation({
-    mutationFn: (id: string) => deleteUser(id),
-    onSuccess: () => {
-      toast.success("用户已删除");
-      queryClient.invalidateQueries({ queryKey: ["users", projectId] });
-      navigate("/console/users");
+  // 命令接线（§12.3）：toast 单源 onSettled；存量键手动桥（kit 列表键自动）。
+  const remove = useCommand(removeUserCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("用户已删除");
+        void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
+        navigate("/console/users");
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const resetPassword = useMutation({
-    mutationFn: (password: string) => updateUserPassword(id!, password),
-    onSuccess: () => {
-      toast.success("密码已重置，该用户全部会话已失效");
-      setResetOpen(false);
-      setNewPassword("");
-      queryClient.invalidateQueries({ queryKey: ["users", projectId] });
+  // 对话框内含输入框但无错误行容器 → 结果分支 toast（api-keys 编辑对话框同款）。
+  const resetPassword = useCommand(resetUserPasswordCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("密码已重置，该用户全部会话已失效");
+        setResetOpen(false);
+        setNewPassword("");
+        void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      } else if (result) {
+        toast.error(result.message);
+      }
     },
   });
 
-  const issueToken = useMutation({
-    mutationFn: createUserToken,
-    onSuccess: (tokens) => {
-      setTokenOpen(false);
-      setIssuedToken(tokens.access_token);
+  // 裸 descriptor：令牌签发不涉 users 集合；payload 一次性展示（reveal 语义）。
+  const issueToken = useCommand(issueUserTokenDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        setTokenOpen(false);
+        setIssuedToken(result.payload.access_token);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      } else if (result) {
+        toast.error(result.message);
+      }
     },
   });
 
@@ -591,7 +617,7 @@ export function UserDetailPage() {
             </Button>
           )}
           {platformAdmin && (
-            <Button size="sm" onClick={() => issueToken.mutate(user.id)} disabled={issueToken.isPending}>
+            <Button size="sm" onClick={() => issueToken.mutate({ userId: user.id })} disabled={issueToken.pending}>
               模拟登录
             </Button>
           )}
@@ -606,7 +632,7 @@ export function UserDetailPage() {
             </Button>
           )}
           {platformAdmin && (
-            <DeleteButton onConfirm={() => remove.mutate(user.id)} loading={remove.isPending} />
+            <DeleteButton onConfirm={() => remove.mutate({ id: user.id })} loading={remove.pending} />
           )}
         </div>
       }
@@ -641,8 +667,8 @@ export function UserDetailPage() {
         title="重置密码"
         description="重置后该用户的所有会话将立即失效，需要重新登录。"
         confirmLabel="重置"
-        loading={resetPassword.isPending}
-        onConfirm={() => resetPassword.mutate(newPassword)}
+        loading={resetPassword.pending}
+        onConfirm={() => resetPassword.mutate({ id: id!, password: newPassword })}
         onOpenChange={(open) => {
           setResetOpen(open);
           if (!open) setNewPassword("");
@@ -665,8 +691,8 @@ export function UserDetailPage() {
         title="模拟登录"
         description="将以该用户身份创建一个新会话并签发令牌（用户不会收到通知）。"
         confirmLabel="签发"
-        loading={issueToken.isPending}
-        onConfirm={() => issueToken.mutate(user.id)}
+        loading={issueToken.pending}
+        onConfirm={() => issueToken.mutate({ userId: user.id })}
         onOpenChange={setTokenOpen}
       />
 
@@ -721,22 +747,24 @@ export function UserEditPage() {
     enabled: !!id,
   });
 
-  const mutation = useMutation({
-    mutationFn: (input: {
-      status: string;
-      name?: string;
-      email?: string;
-      email_verified?: boolean;
-    }) => updateUser(id!, input),
-    onSuccess: (updated) => {
-      toast.success("用户已更新");
-      // 用响应重建表单，避免与（可能被服务端归一化/回写修改的）服务端状态失同步（R11-P3-11）。
-      setStatus(updated.status);
-      setName(updated.name ?? "");
-      setEmail(updated.email);
-      setEmailVerified(updated.email_verified);
-      queryClient.invalidateQueries({ queryKey: ["users", projectId] });
-      navigate(`/console/users/${id}`);
+  // 无表单容器（FormPageWrapper 本地态）：结果分支 toast；failure → describeApiError。
+  const update = useCommand(updateUserCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("用户已更新");
+        // 用响应重建表单，避免与（可能被服务端归一化/回写修改的）服务端状态失同步（R11-P3-11）。
+        setStatus(result.payload.status);
+        setName(result.payload.name ?? "");
+        setEmail(result.payload.email);
+        setEmailVerified(result.payload.email_verified);
+        void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
+        navigate(`/console/users/${id}`);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      } else if (result) {
+        toast.error(result.message);
+      }
     },
   });
 
@@ -753,14 +781,15 @@ export function UserEditPage() {
       backLabel="返回详情"
       onSubmit={(e) => {
         e.preventDefault();
-        mutation.mutate({
+        update.mutate({
+          id: id!,
           status: currentStatus,
           name: name || undefined,
           email: email || undefined,
           email_verified: emailVerified,
         });
       }}
-      loading={mutation.isPending}
+      loading={update.pending}
       submitDisabled={!canWrite(role)}
     >
       <FormField id="name" label="名称" value={name || user.name} onChange={setName} />

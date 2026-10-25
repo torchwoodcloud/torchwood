@@ -92,11 +92,14 @@ export async function getDatabase(id: string): Promise<Database> {
   return res.data;
 }
 
-export async function createDatabase(input: {
-  id: string;
-  name: string;
-}): Promise<Database> {
-  const res = await api.post<Database>("/server/databases", input);
+export async function createDatabase(
+  input: {
+    id: string;
+    name: string;
+  },
+  config?: ApiRequestConfig
+): Promise<Database> {
+  const res = await api.post<Database>("/server/databases", input, config);
   return res.data;
 }
 
@@ -128,11 +131,13 @@ export async function getCollection(
 
 export async function createCollection(
   databaseId: string,
-  input: { id: string; name: string; permissions?: string[]; document_security?: boolean }
+  input: { id: string; name: string; permissions?: string[]; document_security?: boolean },
+  config?: ApiRequestConfig
 ): Promise<Collection> {
   const res = await api.post<Collection>(
     `/server/databases/${databaseId}/collections`,
-    input
+    input,
+    config
   );
   return normalizeCollection(res.data);
 }

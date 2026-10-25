@@ -1,9 +1,15 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCommand } from "@lynx-go/ui-kit";
 import { Check, ChevronRight, Globe } from "lucide-react";
 import { toast } from "sonner";
-import { getCurrentAdmin, updateCurrentAdmin, type Admin } from "@/api/admins";
+import { getCurrentAdmin } from "@/api/admins";
 import { setProjectID } from "@/api/client";
+import {
+  changeCurrentPasswordCommand,
+  updateCurrentTimezoneCommand,
+} from "@/fleet/account";
+import { describeApiError } from "@/fleet/errors";
 import { AdminRoleBadge } from "@/components/AdminRoleBadge";
 import {
   FormField,
@@ -48,12 +54,6 @@ function useCurrentAdmin() {
   });
 }
 
-function apiErrorMessage(err: unknown): string | undefined {
-  return (
-    err as { response?: { data?: { error?: { message?: string } } } }
-  )?.response?.data?.error?.message;
-}
-
 export function AccountProfilePage() {
   const { data: me, isLoading } = useCurrentAdmin();
   const tz = useUserTimezone();
@@ -95,18 +95,20 @@ function ChangePasswordCard() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
 
-  const change = useMutation({
-    mutationFn: () =>
-      updateCurrentAdmin(
-        { current_password: currentPassword, new_password: newPassword },
-        { __skipToast: true }
-      ),
-    onSuccess: () => {
-      // reason 标记抑制登录页的"探测成功自动跳回 console"（见 Login.tsx）。
-      setProjectID(null);
-      window.location.href = "/console/login?reason=password_changed";
+  // useCommand（结果两分）：表单有内联错误行 → rejected/conflict 进 setError；
+  // failure → describeApiError（失败通道用户文案）。
+  const change = useCommand(changeCurrentPasswordCommand, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        // reason 标记抑制登录页的"探测成功自动跳回 console"（见 Login.tsx）。
+        setProjectID(null);
+        window.location.href = "/console/login?reason=password_changed";
+      } else if (result) {
+        setError(result.message);
+      } else if (failure) {
+        setError(describeApiError(failure));
+      }
     },
-    onError: (err) => setError(apiErrorMessage(err) ?? "修改失败，请重试"),
   });
 
   return (
@@ -127,7 +129,10 @@ function ChangePasswordCard() {
               setError("两次输入的新密码不一致");
               return;
             }
-            change.mutate();
+            change.mutate({
+              current_password: currentPassword,
+              new_password: newPassword,
+            });
           }}
         >
           <FormField
@@ -156,8 +161,8 @@ function ChangePasswordCard() {
             required
           />
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <Button type="submit" disabled={change.isPending}>
-            {change.isPending ? "提交中…" : "修改密码"}
+          <Button type="submit" disabled={change.pending}>
+            {change.pending ? "提交中…" : "修改密码"}
           </Button>
         </form>
       </CardContent>
@@ -216,17 +221,22 @@ function TimezoneDialog({
     return all.filter((tz) => tz.toLowerCase().includes(q));
   }, [filter]);
 
-  const save = useMutation({
-    mutationFn: (timezone: string) =>
-      updateCurrentAdmin({ timezone }, { __skipToast: true }),
-    onSuccess: (admin: Admin) => {
-      queryClient.setQueryData(["console-admin-me"], admin);
-      toast.success("偏好已保存");
-      onOpenChange(false);
-      setDraft(null);
-      setFilter("");
+  // useCommand（结果两分）：无表单容器（列表选择器）→ rejected/conflict 走
+  // toast；ok 后 setQueryData 刷新 ["console-admin-me"]（现页行为）。
+  const save = useCommand(updateCurrentTimezoneCommand, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        queryClient.setQueryData(["console-admin-me"], result.payload);
+        toast.success("偏好已保存");
+        onOpenChange(false);
+        setDraft(null);
+        setFilter("");
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
-    onError: (err) => toast.error(apiErrorMessage(err) ?? "保存失败，请重试"),
   });
 
   const dirty = value !== (current ?? "");
@@ -300,10 +310,10 @@ function TimezoneDialog({
             取消
           </Button>
           <Button
-            disabled={!dirty || save.isPending}
-            onClick={() => save.mutate(value)}
+            disabled={!dirty || save.pending}
+            onClick={() => save.mutate({ timezone: value })}
           >
-            {save.isPending ? "保存中…" : "保存"}
+            {save.pending ? "保存中…" : "保存"}
           </Button>
         </DialogFooter>
       </DialogContent>

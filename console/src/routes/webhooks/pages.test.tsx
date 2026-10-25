@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TestRouter } from "@/router/compat";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -27,7 +27,7 @@ vi.mock("@/api/webhooks", () => ({
   redeliverDelivery: vi.fn(),
 }));
 
-import { listWebhooks, getWebhook, listDeliveries } from "@/api/webhooks";
+import { listWebhooks, getWebhook, listDeliveries, deleteWebhook } from "@/api/webhooks";
 
 async function renderList() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -111,6 +111,35 @@ describe("WebhooksListPage", () => {
       expect(listWebhooks).toHaveBeenLastCalledWith(
         expect.objectContaining({ pageToken: "tok-2" }),
       ),
+    );
+  });
+
+  // 写路径锚（§12.3）：行删确认走 useCommand——api 收到 SKIP 且成功路径不抛。
+  it("行删除确认走 useCommand（skipToast + 结果 ok 不抛）", async () => {
+    vi.mocked(listWebhooks).mockResolvedValue({
+      rows: [
+        {
+          id: "wh-1",
+          project_id: "proj-1",
+          url: "https://api.example.com/hooks",
+          events: ["auth.users.created"],
+          status: "enabled",
+          secret_fingerprint: "whsec_ab12cd34",
+          created_at: "2026-10-01T00:00:00Z",
+          updated_at: "2026-10-01T00:00:00Z",
+        },
+      ],
+      nextPageToken: undefined,
+    });
+    vi.mocked(deleteWebhook).mockResolvedValue(undefined);
+    await renderList();
+    await screen.findByText("wh-1");
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    // torchwood 存量确认壳：确认钮与触发钮同名，scope 到对话框内
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    await waitFor(() =>
+      expect(deleteWebhook).toHaveBeenCalledWith("wh-1", { __skipToast: true }),
     );
   });
 });

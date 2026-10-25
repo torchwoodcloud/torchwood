@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TestRouter } from "@/router/compat";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -32,9 +32,10 @@ vi.mock("@/api/leaderboards", () => ({
   voidSettlement: vi.fn(),
 }));
 
-import { listBoards } from "@/api/leaderboards";
+import { listBoards, deleteBoard } from "@/api/leaderboards";
 
 const mockListBoards = vi.mocked(listBoards);
+const mockDeleteBoard = vi.mocked(deleteBoard);
 
 const boards: LeaderboardBoard[] = [
   {
@@ -114,5 +115,20 @@ describe("LeaderboardsListPage", () => {
     // 清空恢复全部行
     fireEvent.change(screen.getByPlaceholderText(/搜索榜 ID/), { target: { value: "" } });
     expect(screen.getByText("daily_final")).toBeTruthy();
+  });
+
+  // 写路径锚（§12.3）：行删确认走 useCommand——api 收到 SKIP 且成功路径不抛。
+  it("行删除确认走 useCommand（skipToast + 结果 ok 不抛）", async () => {
+    mockListBoards.mockResolvedValue([boards[0]]);
+    mockDeleteBoard.mockResolvedValue(undefined);
+    await renderList();
+    await screen.findByText("daily_final");
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    // torchwood 存量确认壳：确认钮与触发钮同名，scope 到对话框内
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    await waitFor(() =>
+      expect(mockDeleteBoard).toHaveBeenCalledWith("daily_final", { __skipToast: true }),
+    );
   });
 });

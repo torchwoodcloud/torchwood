@@ -1,8 +1,8 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TestRouter } from "@/router/compat";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { PlansListPage, SubscriptionsListPage } from "./pages";
+import { PlanNewPage, PlansListPage, SubscriptionsListPage } from "./pages";
 
 // radix Select 在 jsdom 里滚动选中项：scrollIntoView 未实现，桩掉。
 beforeAll(() => {
@@ -27,10 +27,12 @@ vi.mock("@/api/subscriptions", () => ({
   expireSubscription: vi.fn(),
 }));
 
-import { listPlans, listSubscriptions } from "@/api/subscriptions";
+import { createPlan, deletePlan, listPlans, listSubscriptions } from "@/api/subscriptions";
 
 const mockListPlans = vi.mocked(listPlans);
 const mockListSubs = vi.mocked(listSubscriptions);
+const mockCreatePlan = vi.mocked(createPlan);
+const mockDeletePlan = vi.mocked(deletePlan);
 
 const plan = {
   id: "p1",
@@ -51,11 +53,18 @@ const sub = {
 };
 
 // useCollection 的 from 锚定真实路由 id——两个列表各挂各自真实路径。
-async function renderPage(path: string, element: React.ReactElement) {
+async function renderPage(
+  path: string,
+  element: React.ReactElement,
+  entry = path,
+  // 额外路由：命令 onSettled 里 navigate 的目标必须真实注册（api-keys 测试
+  // 同款——not-found rejection 落点随并行时序漂移）。
+  extraRoutes: { path: string; element: React.ReactElement }[] = [],
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <TestRouter routes={[{ path, element }]} initialEntries={[path]} />
+      <TestRouter routes={[{ path, element }, ...extraRoutes]} initialEntries={[entry]} />
     </QueryClientProvider>
   );
   await act(async () => {});
@@ -88,6 +97,51 @@ describe("PlansListPage", () => {
       expect(mockListPlans).toHaveBeenLastCalledWith(
         expect.objectContaining({ pageToken: "tok-2" })
       )
+    );
+  });
+
+  it("行删除确认走 useCommand（skipToast + 结果 ok 不抛）", async () => {
+    mockListPlans.mockResolvedValue({ rows: [plan], nextPageToken: undefined });
+    mockDeletePlan.mockResolvedValue(undefined);
+    await renderPage("/console/subscriptions/plans", <PlansListPage />);
+    await screen.findByText("999 USD");
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    await waitFor(() =>
+      expect(mockDeletePlan).toHaveBeenCalledWith("p1", { __skipToast: true })
+    );
+  });
+});
+
+describe("PlanNewPage（写路径命令化）", () => {
+  it("创建：grace_days 文本收敛为整数 + __skipToast", async () => {
+    mockCreatePlan.mockResolvedValue({ ...plan, id: "plan-9" });
+    await renderPage(
+      "/console/subscriptions/plans/new",
+      <PlanNewPage />,
+      "/console/subscriptions/plans/new",
+      // ok 后 navigate 到详情——目标路由注册
+      [{ path: "/console/subscriptions/plans/$id", element: <div /> }],
+    );
+    fireEvent.change(screen.getByLabelText("Code"), { target: { value: "pro" } });
+    fireEvent.change(screen.getByLabelText("名称"), { target: { value: "Pro" } });
+    fireEvent.change(screen.getByLabelText("金额（最小单位整数）"), {
+      target: { value: "999" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "创建" }));
+    await waitFor(() =>
+      expect(mockCreatePlan).toHaveBeenCalledWith(
+        {
+          code: "pro",
+          name: "Pro",
+          amount: "999",
+          currency: "USD",
+          interval: "month",
+          grace_days: 3,
+        },
+        { __skipToast: true },
+      ),
     );
   });
 });

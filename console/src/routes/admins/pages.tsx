@@ -1,24 +1,20 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCollection } from "@lynx-go/ui-kit";
+import { useQuery } from "@tanstack/react-query";
+import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
 import { Plus, ShieldCheck } from "lucide-react";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
-import {
-  ADMIN_ROLES,
-  createAdmin,
-  deleteAdmin,
-  getCurrentAdmin,
-  updateAdmin,
-  type Admin,
-} from "@/api/admins";
+import { ADMIN_ROLES, getCurrentAdmin, type Admin } from "@/api/admins";
 import {
   adminsResource,
   adminsSearch,
-  adminsCollectionKey,
+  createAdminCommand,
+  removeAdminCommand,
+  updateAdminCommand,
 } from "@/fleet/admins";
+import { describeApiError } from "@/fleet/errors";
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
@@ -47,7 +43,6 @@ import {
 import { RowDeleteButton } from "@/components/resource/shared";
 
 export function AdminsListPage() {
-  const queryClient = useQueryClient();
   const tz = useUserTimezone();
   const [search, setSearch] = useState("");
 
@@ -66,17 +61,15 @@ export function AdminsListPage() {
 
   const isOwner = me?.role === "owner";
 
-  // kit 列表键（useCollection）+ 存量键双失效（写路径仍走存量 useMutation）。
-  const invalidateAdmins = () => {
-    void queryClient.invalidateQueries({ queryKey: adminsCollectionKey });
-    void queryClient.invalidateQueries({ queryKey: ["console-admins"] });
-  };
-
-  const remove = useMutation({
-    mutationFn: deleteAdmin,
-    onSuccess: () => {
-      toast.success("管理员已删除");
-      invalidateAdmins();
+  // 命令接线（§12.3）：toast 单源 onSettled；kit 列表键自动失效（descriptor
+  // 挂 resource，平台级无 scope）；存量键无消费方——不桥。
+  const remove = useCommand(removeAdminCommand, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("管理员已删除");
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -107,10 +100,10 @@ export function AdminsListPage() {
         <div className="flex items-center justify-end gap-1">
           {isOwner && row.original.id !== me?.id ? (
             <>
-              <EditAdminDialog admin={row.original} onSaved={invalidateAdmins} />
+              <EditAdminDialog admin={row.original} />
               <RowDeleteButton
-                onConfirm={() => remove.mutate(row.original.id)}
-                loading={remove.isPending}
+                onConfirm={() => remove.mutate({ id: row.original.id })}
+                loading={remove.pending}
               />
             </>
           ) : row.original.id === me?.id ? (
@@ -140,7 +133,7 @@ export function AdminsListPage() {
               placeholder="当前页内搜索邮箱..."
               className="h-8 w-56"
             />
-            {isOwner ? <CreateAdminDialog onCreated={invalidateAdmins} /> : null}
+            {isOwner ? <CreateAdminDialog /> : null}
           </div>
         }
         pagination={
@@ -167,21 +160,26 @@ export function AdminsListPage() {
   );
 }
 
-function CreateAdminDialog({ onCreated }: { onCreated: () => void }) {
+function CreateAdminDialog() {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("member");
 
-  const mutation = useMutation({
-    mutationFn: createAdmin,
-    onSuccess: () => {
-      toast.success("管理员已创建");
-      setOpen(false);
-      setEmail("");
-      setPassword("");
-      setRole("member");
-      onCreated();
+  // 无表单容器（本地态表单）：rejected/conflict → toast；failure → describeApiError。
+  const create = useCommand(createAdminCommand, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("管理员已创建");
+        setOpen(false);
+        setEmail("");
+        setPassword("");
+        setRole("member");
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      } else if (result) {
+        toast.error(result.message);
+      }
     },
   });
 
@@ -202,7 +200,7 @@ function CreateAdminDialog({ onCreated }: { onCreated: () => void }) {
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
-            mutation.mutate({ email, password, role });
+            create.mutate({ email, password, role });
           }}
         >
           <div className="space-y-2">
@@ -249,8 +247,8 @@ function CreateAdminDialog({ onCreated }: { onCreated: () => void }) {
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               取消
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "创建中…" : "创建"}
+            <Button type="submit" disabled={create.pending}>
+              {create.pending ? "创建中…" : "创建"}
             </Button>
           </DialogFooter>
         </form>
@@ -259,25 +257,23 @@ function CreateAdminDialog({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-function EditAdminDialog({
-  admin,
-  onSaved,
-}: {
-  admin: Admin;
-  onSaved: () => void;
-}) {
+function EditAdminDialog({ admin }: { admin: Admin }) {
   const [open, setOpen] = useState(false);
   const [role, setRole] = useState(admin.role);
   const [password, setPassword] = useState("");
 
-  const mutation = useMutation({
-    mutationFn: (input: { role?: string; password?: string }) =>
-      updateAdmin(admin.id, input),
-    onSuccess: () => {
-      toast.success("管理员已更新");
-      setOpen(false);
-      setPassword("");
-      onSaved();
+  // diff 在提交处收敛（角色变更/密码非空才传）；无表单容器：结果分支 toast。
+  const update = useCommand(updateAdminCommand, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("管理员已更新");
+        setOpen(false);
+        setPassword("");
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      } else if (result) {
+        toast.error(result.message);
+      }
     },
   });
 
@@ -304,7 +300,7 @@ function EditAdminDialog({
               toast.error("没有需要保存的变更");
               return;
             }
-            mutation.mutate(input);
+            update.mutate({ id: admin.id, ...input });
           }}
         >
           <div className="space-y-2">
@@ -336,8 +332,8 @@ function EditAdminDialog({
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               取消
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "保存中…" : "保存"}
+            <Button type="submit" disabled={update.pending}>
+              {update.pending ? "保存中…" : "保存"}
             </Button>
           </DialogFooter>
         </form>

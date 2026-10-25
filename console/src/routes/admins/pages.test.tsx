@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TestRouter, useRouterState } from "@/router/compat";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -26,10 +26,11 @@ vi.mock("@/api/admins", () => ({
   deleteAdmin: vi.fn(),
 }));
 
-import { getCurrentAdmin, listAdmins } from "@/api/admins";
+import { deleteAdmin, getCurrentAdmin, listAdmins } from "@/api/admins";
 
 const mockList = vi.mocked(listAdmins);
 const mockMe = vi.mocked(getCurrentAdmin);
+const mockDelete = vi.mocked(deleteAdmin);
 
 const me: Admin = { id: "a-1", email: "me@example.com", role: "owner" };
 const other: Admin = {
@@ -99,5 +100,20 @@ describe("AdminsListPage（列表 fleet 化：URL 即真相）", () => {
       ),
     );
     expect(search().cursor).toBe("tok-2");
+  });
+
+  it("行删除确认走 useCommand（skipToast + 结果 ok 不抛）", async () => {
+    mockMe.mockResolvedValue(me);
+    mockList.mockResolvedValue({ rows: [me, other], nextPageToken: undefined });
+    mockDelete.mockResolvedValue(undefined);
+    await renderPage();
+    await screen.findByText("ops@example.com");
+    // 当前行（me）无删除钮；仅 other 行可删
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    await waitFor(() =>
+      expect(mockDelete).toHaveBeenCalledWith("a-2", { __skipToast: true }),
+    );
   });
 });

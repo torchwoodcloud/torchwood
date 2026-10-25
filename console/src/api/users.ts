@@ -69,18 +69,25 @@ export async function getUser(id: string): Promise<User> {
   return res.data;
 }
 
-export async function createUser(input: {
-  email: string;
-  password: string;
-  name?: string;
-  status?: string;
-  labels?: string[];
-  prefs?: Record<string, unknown>;
-}): Promise<User> {
-  const res = await api.post<User>("/server/users", {
-    ...input,
-    labels: input.labels ? { values: input.labels } : undefined,
-  });
+export async function createUser(
+  input: {
+    email: string;
+    password: string;
+    name?: string;
+    status?: string;
+    labels?: string[];
+    prefs?: Record<string, unknown>;
+  },
+  config?: ApiRequestConfig
+): Promise<User> {
+  const res = await api.post<User>(
+    "/server/users",
+    {
+      ...input,
+      labels: input.labels ? { values: input.labels } : undefined,
+    },
+    config
+  );
   return res.data;
 }
 
@@ -93,17 +100,26 @@ export async function updateUser(
     email_verified?: boolean;
     labels?: string[];
     prefs?: Record<string, unknown>;
-  }
+  },
+  config?: ApiRequestConfig
 ): Promise<User> {
-  const res = await api.patch<User>(`/server/users/${id}`, {
-    ...input,
-    labels: input.labels ? { values: input.labels } : undefined,
-  });
+  const res = await api.patch<User>(
+    `/server/users/${id}`,
+    {
+      ...input,
+      labels: input.labels ? { values: input.labels } : undefined,
+    },
+    config
+  );
   return res.data;
 }
 
-export async function updateUserPassword(id: string, password: string): Promise<User> {
-  const res = await api.patch<User>(`/server/users/${id}/password`, { password });
+export async function updateUserPassword(
+  id: string,
+  password: string,
+  config?: ApiRequestConfig
+): Promise<User> {
+  const res = await api.patch<User>(`/server/users/${id}/password`, { password }, config);
   return res.data;
 }
 
@@ -116,11 +132,18 @@ export async function listUserSessions(id: string): Promise<UserSession[]> {
   return res.data.sessions ?? [];
 }
 
-export async function deleteUserSession(id: string, sessionId: string): Promise<void> {
-  await api.delete(`/server/users/${id}/sessions/${sessionId}`);
+export async function deleteUserSession(
+  id: string,
+  sessionId: string,
+  config?: ApiRequestConfig
+): Promise<void> {
+  await api.delete(`/server/users/${id}/sessions/${sessionId}`, config);
 }
 
-export async function createUserToken(id: string): Promise<TokenBundle> {
-  const res = await api.post<{ tokens: TokenBundle }>(`/server/users/${id}/tokens`);
+export async function createUserToken(
+  id: string,
+  config?: ApiRequestConfig
+): Promise<TokenBundle> {
+  const res = await api.post<{ tokens: TokenBundle }>(`/server/users/${id}/tokens`, undefined, config);
   return res.data.tokens;
 }

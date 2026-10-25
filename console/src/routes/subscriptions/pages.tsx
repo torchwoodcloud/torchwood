@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@/router/compat";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCollection } from "@lynx-go/ui-kit";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import type { Predicate } from "@lynx-go/ui-kit/kernel";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { useUserTimezone } from "@/hooks/useTimezone";
@@ -9,10 +9,6 @@ import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import {
-  cancelSubscription,
-  createPlan,
-  deletePlan,
-  expireSubscription,
   getPlan,
   getSubscription,
   type Subscription,
@@ -41,15 +37,20 @@ import {
   NotFound,
   RowDeleteButton,
 } from "@/components/resource/shared";
-import { formatInt64, isInt64Input } from "@/lib/utils";
+import { formatInt64 } from "@/lib/utils";
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
+import { describeApiError } from "@/fleet/errors";
 import {
+  cancelSubscriptionCommand,
+  createPlanCommand,
+  expireSubscriptionCommand,
   filtersOf,
   plansResource,
   plansSearch,
+  removePlanCommand,
   subscriptionsResource,
   subscriptionsSearch,
   type FilterField,
@@ -73,14 +74,19 @@ export function PlansListPage() {
     query: { enabled: !!projectId },
   });
 
-  // 行删除保持存量 useMutation（toast 语义不变）；失效 = 存量 ["sub-plans"]
-  // 键（详情页仍消费）+ kit 句柄 refetch 桥接。
-  const remove = useMutation({
-    mutationFn: (id: string) => deletePlan(id),
-    onSuccess: () => {
-      toast.success("计划已删除");
-      queryClient.invalidateQueries({ queryKey: ["sub-plans", projectId] });
-      list.refetch();
+  // 行删除命令化：kit plans 列表键随资源命令 ok 自动失效；存量 ["sub-plans"]
+  // 键（详情页仍消费）手动桥。RowDeleteButton 无表单容器——结果分支 toast。
+  const remove = useCommand(removePlanCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("计划已删除");
+        void queryClient.invalidateQueries({ queryKey: ["sub-plans", projectId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -130,8 +136,8 @@ export function PlansListPage() {
             header: "操作",
             cell: ({ row }: { row: { original: SubscriptionPlan } }) => (
               <RowDeleteButton
-                onConfirm={() => remove.mutate(row.original.id)}
-                loading={remove.isPending}
+                onConfirm={() => remove.mutate({ id: row.original.id })}
+                loading={remove.pending}
               />
             ),
           } satisfies LegacyColumnDef<SubscriptionPlan, unknown>,
@@ -202,20 +208,20 @@ export function PlanNewPage() {
   const [interval, setInterval] = useState("month");
   const [graceDays, setGraceDays] = useState("3");
 
-  const mutation = useMutation({
-    mutationFn: () =>
-      createPlan({
-        code,
-        name,
-        amount,
-        currency,
-        interval,
-        grace_days: Number.parseInt(graceDays, 10) || 0,
-      }),
-    onSuccess: (plan) => {
-      toast.success("计划已创建");
-      queryClient.invalidateQueries({ queryKey: ["sub-plans", projectId] });
-      navigate(`/console/subscriptions/plans/${plan.id}`);
+  // 命令化：amount int64 校验 + grace_days 文本→整数收敛在 descriptor run 内
+  //（非法 → rejected 结果分支，toast）；ok 后 kit plans 键自动失效。
+  const create = useCommand(createPlanCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("计划已创建");
+        void queryClient.invalidateQueries({ queryKey: ["sub-plans", projectId] });
+        navigate(`/console/subscriptions/plans/${result.payload.id}`);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -226,13 +232,9 @@ export function PlanNewPage() {
       submitLabel="创建"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!isInt64Input(amount) || amount === "") {
-          toast.error("amount 必须是最小货币单位整数");
-          return;
-        }
-        mutation.mutate();
+        create.mutate({ code, name, amount, currency, interval, graceDays });
       }}
-      loading={mutation.isPending}
+      loading={create.pending}
       submitDisabled={!code || !name || !amount}
     >
       <FormField id="code" label="Code" value={code} onChange={setCode} required placeholder="pro" />
@@ -270,12 +272,18 @@ export function PlanDetailPage() {
     queryFn: () => getPlan(id!),
     enabled: !!id,
   });
-  const remove = useMutation({
-    mutationFn: () => deletePlan(id!),
-    onSuccess: () => {
-      toast.success("计划已删除");
-      queryClient.invalidateQueries({ queryKey: ["sub-plans", projectId] });
-      navigate("/console/subscriptions/plans");
+  const remove = useCommand(removePlanCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("计划已删除");
+        void queryClient.invalidateQueries({ queryKey: ["sub-plans", projectId] });
+        navigate("/console/subscriptions/plans");
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -287,7 +295,7 @@ export function PlanDetailPage() {
       title={plan.name}
       description={plan.code}
       backTo="/console/subscriptions/plans"
-      actions={writeable ? <DeleteButton onConfirm={() => remove.mutate()} loading={remove.isPending} /> : undefined}
+      actions={writeable ? <DeleteButton onConfirm={() => remove.mutate({ id: id! })} loading={remove.pending} /> : undefined}
     >
       <DetailGrid
         items={[
@@ -534,19 +542,33 @@ export function SubscriptionDetailPage() {
     enabled: !!id,
   });
 
-  const cancel = useMutation({
-    mutationFn: () => cancelSubscription(id!, "console"),
-    onSuccess: () => {
-      toast.success("已标记期末取消");
-      queryClient.invalidateQueries({ queryKey: ["subscriptions", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["subscriptions", id] });
+  // 写路径命令化（useCommand×2）：kit subscriptions 列表键随 ok 自动失效；
+  // 详情存量 ["subscriptions", id] 键手动桥；结果分支 toast（无表单容器）。
+  const cancel = useCommand(cancelSubscriptionCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("已标记期末取消");
+        void queryClient.invalidateQueries({ queryKey: ["subscriptions", projectId] });
+        void queryClient.invalidateQueries({ queryKey: ["subscriptions", id] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
-  const expire = useMutation({
-    mutationFn: () => expireSubscription(id!, "console"),
-    onSuccess: () => {
-      toast.success("已强制过期");
-      queryClient.invalidateQueries({ queryKey: ["subscriptions", id] });
+  const expire = useCommand(expireSubscriptionCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("已强制过期");
+        void queryClient.invalidateQueries({ queryKey: ["subscriptions", id] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -560,10 +582,20 @@ export function SubscriptionDetailPage() {
       actions={
         platformAdmin ? (
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={cancel.pending}
+              onClick={() => cancel.mutate({ id: id!, reason: "console" })}
+            >
               期末取消
             </Button>
-            <Button variant="destructive" size="sm" disabled={expire.isPending} onClick={() => expire.mutate()}>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={expire.pending}
+              onClick={() => expire.mutate({ id: id!, reason: "console" })}
+            >
               强制过期
             </Button>
           </div>

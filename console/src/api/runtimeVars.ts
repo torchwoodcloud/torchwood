@@ -1,4 +1,5 @@
 import { api } from "./client";
+import type { ApiRequestConfig } from "./client";
 import { pageQuery, type ListMeta, type ListParams, type Page } from "./pagination";
 
 // RuntimeVars Console 数据层（docs/design/runtime-vars.md §2.7）。接口形状对齐
@@ -151,16 +152,23 @@ export async function getVarSet(varSetId: string): Promise<VarSet> {
 }
 
 /** 创建集合（var_set_id 创建后不可改，D9；visibility 缺省 public）。 */
-export async function createVarSet(input: {
-  var_set_id: string;
-  visibility?: VarSetVisibilityInput;
-  description?: string;
-}): Promise<VarSet> {
-  const res = await api.post<VarSet>("/server/runtime-var-sets", {
-    var_set_id: input.var_set_id,
-    visibility: input.visibility ?? "VAR_SET_VISIBILITY_PUBLIC",
-    description: input.description ?? "",
-  });
+export async function createVarSet(
+  input: {
+    var_set_id: string;
+    visibility?: VarSetVisibilityInput;
+    description?: string;
+  },
+  config?: ApiRequestConfig
+): Promise<VarSet> {
+  const res = await api.post<VarSet>(
+    "/server/runtime-var-sets",
+    {
+      var_set_id: input.var_set_id,
+      visibility: input.visibility ?? "VAR_SET_VISIBILITY_PUBLIC",
+      description: input.description ?? "",
+    },
+    config
+  );
   return normalizeVarSet(res.data);
 }
 
@@ -173,18 +181,23 @@ export interface UpdateVarSetInput {
 /** 只改集合元数据；元数据变更不入版本链（D10），visibility 双向切换为破坏性操作（D15）。 */
 export async function updateVarSet(
   varSetId: string,
-  input: UpdateVarSetInput
+  input: UpdateVarSetInput,
+  config?: ApiRequestConfig
 ): Promise<VarSet> {
   const res = await api.patch<VarSet>(
     `/server/runtime-var-sets/${encodeURIComponent(varSetId)}`,
-    { var_set_id: varSetId, visibility: input.visibility, description: input.description }
+    { var_set_id: varSetId, visibility: input.visibility, description: input.description },
+    config
   );
   return normalizeVarSet(res.data);
 }
 
 /** 删除集合：vars/heads/versions 经 FK CASCADE 连带销毁，全部历史不可恢复。 */
-export async function deleteVarSet(varSetId: string): Promise<void> {
-  await api.delete(`/server/runtime-var-sets/${encodeURIComponent(varSetId)}`);
+export async function deleteVarSet(
+  varSetId: string,
+  config?: ApiRequestConfig
+): Promise<void> {
+  await api.delete(`/server/runtime-var-sets/${encodeURIComponent(varSetId)}`, config);
 }
 
 // ---- 变量 ----
@@ -208,7 +221,8 @@ export async function getVar(varSetId: string, key: string): Promise<RuntimeVar>
 /** 创建类型化变量（类型创建时锁定；value 恰携带一个 oneof 分支）。 */
 export async function createVar(
   varSetId: string,
-  input: { key: string; value: RuntimeVarValueInput; description?: string }
+  input: { key: string; value: RuntimeVarValueInput; description?: string },
+  config?: ApiRequestConfig
 ): Promise<RuntimeVar> {
   const res = await api.post<RuntimeVar>(
     `/server/runtime-var-sets/${encodeURIComponent(varSetId)}/vars`,
@@ -217,7 +231,8 @@ export async function createVar(
       key: input.key,
       value: input.value,
       description: input.description ?? "",
-    }
+    },
+    config
   );
   return normalizeVar(res.data);
 }
@@ -226,18 +241,25 @@ export async function createVar(
 export async function updateVar(
   varSetId: string,
   key: string,
-  input: { value: RuntimeVarValueInput; description?: string }
+  input: { value: RuntimeVarValueInput; description?: string },
+  config?: ApiRequestConfig
 ): Promise<RuntimeVar> {
   const res = await api.patch<RuntimeVar>(
     `/server/runtime-var-sets/${encodeURIComponent(varSetId)}/vars/${encodeURIComponent(key)}`,
-    { var_set_id: varSetId, key, value: input.value, description: input.description }
+    { var_set_id: varSetId, key, value: input.value, description: input.description },
+    config
   );
   return normalizeVar(res.data);
 }
 
-export async function deleteVar(varSetId: string, key: string): Promise<void> {
+export async function deleteVar(
+  varSetId: string,
+  key: string,
+  config?: ApiRequestConfig
+): Promise<void> {
   await api.delete(
-    `/server/runtime-var-sets/${encodeURIComponent(varSetId)}/vars/${encodeURIComponent(key)}`
+    `/server/runtime-var-sets/${encodeURIComponent(varSetId)}/vars/${encodeURIComponent(key)}`,
+    config
   );
 }
 
@@ -273,11 +295,13 @@ export async function getVersion(
  */
 export async function rollback(
   varSetId: string,
-  targetRevision: number
+  targetRevision: number,
+  config?: ApiRequestConfig
 ): Promise<RuntimeVarVersion> {
   const res = await api.post<RuntimeVarVersion>(
     `/server/runtime-var-sets/${encodeURIComponent(varSetId)}/versions:rollback`,
-    { var_set_id: varSetId, target_revision: targetRevision }
+    { var_set_id: varSetId, target_revision: targetRevision },
+    config
   );
   return normalizeVersion(res.data);
 }

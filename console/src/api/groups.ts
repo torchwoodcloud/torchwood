@@ -39,8 +39,11 @@ export async function getGroup(id: string): Promise<Group> {
   return res.data;
 }
 
-export async function createGroup(input: { name: string }): Promise<Group> {
-  const res = await api.post<Group>("/server/groups", input);
+export async function createGroup(
+  input: { name: string },
+  config?: ApiRequestConfig
+): Promise<Group> {
+  const res = await api.post<Group>("/server/groups", input, config);
   return res.data;
 }
 
@@ -55,11 +58,14 @@ export async function getGroupPrefs(id: string): Promise<Record<string, unknown>
 
 export async function updateGroupPrefs(
   id: string,
-  prefs: Record<string, unknown>
+  prefs: Record<string, unknown>,
+  config?: ApiRequestConfig
 ): Promise<Record<string, unknown>> {
-  const res = await api.put<{ prefs: Record<string, unknown> }>(`/server/groups/${id}/prefs`, {
-    prefs,
-  });
+  const res = await api.put<{ prefs: Record<string, unknown> }>(
+    `/server/groups/${id}/prefs`,
+    { prefs },
+    config
+  );
   return res.data.prefs ?? {};
 }
 
@@ -83,19 +89,25 @@ export async function createMembership(
     name?: string;
     roles?: string[];
     status?: string;
-  }
+  },
+  config?: ApiRequestConfig
 ): Promise<Membership> {
-  const res = await api.post<Membership>(`/server/groups/${groupId}/memberships`, {
-    group_id: groupId,
-    ...input,
-  });
+  const res = await api.post<Membership>(
+    `/server/groups/${groupId}/memberships`,
+    {
+      group_id: groupId,
+      ...input,
+    },
+    config
+  );
   return res.data;
 }
 
 export async function updateMembership(
   groupId: string,
   membershipId: string,
-  input: { roles: string[] }
+  input: { roles: string[] },
+  config?: ApiRequestConfig
 ): Promise<Membership> {
   const res = await api.patch<Membership>(
     `/server/groups/${groupId}/memberships/${membershipId}`,
@@ -103,7 +115,8 @@ export async function updateMembership(
       group_id: groupId,
       membership_id: membershipId,
       roles: input.roles,
-    }
+    },
+    config
   );
   return res.data;
 }
@@ -111,7 +124,8 @@ export async function updateMembership(
 export async function updateMembershipStatus(
   groupId: string,
   membershipId: string,
-  status: string
+  status: string,
+  config?: ApiRequestConfig
 ): Promise<Membership> {
   const res = await api.patch<Membership>(
     `/server/groups/${groupId}/memberships/${membershipId}/status`,
@@ -119,7 +133,8 @@ export async function updateMembershipStatus(
       group_id: groupId,
       membership_id: membershipId,
       status,
-    }
+    },
+    config
   );
   return res.data;
 }

@@ -21,6 +21,13 @@ const me: Admin = {
   updated_at: "2026-09-10T00:00:00Z",
 };
 
+function axiosErr(status: number, body?: { code?: string; message?: string }) {
+  return Object.assign(new Error("req failed"), {
+    isAxiosError: true,
+    response: { status, data: body ? { error: body } : undefined },
+  });
+}
+
 function renderPage(ui: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const result = render(
@@ -93,6 +100,28 @@ describe("AccountProfilePage", () => {
       writable: true,
       value: originalLocation,
     });
+  });
+
+  it("改密 400 → rejected 走内联错误（结果两分，不跳登录页）", async () => {
+    vi.mocked(updateCurrentAdmin).mockRejectedValue(
+      axiosErr(400, { code: "E_INVALID_CREDENTIALS", message: "当前密码不正确" })
+    );
+    renderPage(<AccountProfilePage />);
+    await screen.findByText("liqiulin@outlook.com");
+
+    fireEvent.change(screen.getByLabelText("当前密码"), { target: { value: "WrongPassw0rd" } });
+    fireEvent.change(screen.getByLabelText("新密码"), { target: { value: "NewPassw0rd" } });
+    fireEvent.change(screen.getByLabelText("确认新密码"), { target: { value: "NewPassw0rd" } });
+    fireEvent.click(screen.getByRole("button", { name: "修改密码" }));
+
+    await waitFor(() =>
+      expect(updateCurrentAdmin).toHaveBeenCalledWith(
+        { current_password: "WrongPassw0rd", new_password: "NewPassw0rd" },
+        { __skipToast: true }
+      )
+    );
+    // rejected 是结果分支（mutation.data）：渲染表单内联错误，不跳转
+    expect(await screen.findByText("当前密码不正确")).toBeTruthy();
   });
 });
 
