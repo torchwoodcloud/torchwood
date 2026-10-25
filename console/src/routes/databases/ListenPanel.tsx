@@ -1,4 +1,4 @@
-import { useOutletContext } from "@/router/compat";
+import { useOutletContext } from "@/router/outlet-context";
 import { useSubscription } from "@lynx-go/ui-kit";
 import { RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -32,8 +32,22 @@ export function ListenPanel() {
     cursor: null, // 活尾即开；重连即重订（服务端不补历史，无游标语义）
   });
 
+  const paused = sub.status === "paused";
+
   return (
-    <EventFeed
+    <div className="space-y-2">
+      {/* 暂停/恢复（页面编排）：暂停后帧自游标缓冲，恢复续订——试听场景
+          用于冻结画面对照 */}
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => (paused ? sub.resume() : sub.pause())}
+        >
+          {paused ? "恢复" : "暂停"}
+        </Button>
+      </div>
+      <EventFeed
       sub={sub}
       getKey={(frame) => frame.seq}
       render={(frame: EventFrame) => (
@@ -50,12 +64,13 @@ export function ListenPanel() {
         </>
       )}
       emptyText="暂无事件。对该集合执行写操作后将在此实时显示。"
-      resyncAction={
-        <Button variant="outline" size="sm" onClick={() => sub.restart()}>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          已断开，点击重连
-        </Button>
-      }
-    />
+        resyncAction={
+          <Button variant="outline" size="sm" onClick={() => sub.restart()}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            已断开，点击重连
+          </Button>
+        }
+      />
+    </div>
   );
 }

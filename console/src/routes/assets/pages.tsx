@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "@/router/compat";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCollection, useCommand } from "@lynx-go/ui-kit";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Plus, Search, X } from "lucide-react";
 import {
-  createAssetDef,
-  deleteAssetDef,
   getAssetDef,
   listAssetDefs,
   listDefHolders,
@@ -19,7 +19,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
 import { useServerPaging } from "@/hooks/useServerPaging";
 import { filterByQuery } from "@/hooks/useListParams";
-import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { ListPaginationKeyset } from "@/components/list/ListToolbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,8 +34,6 @@ import {
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { ColumnDef } from "@/components/list/DataTable";
-import type { SortOrder } from "@/api/pagination";
 import {
   DeleteButton,
   DetailGrid,
@@ -48,95 +45,153 @@ import {
   RowDeleteButton,
 } from "@/components/resource/shared";
 import { formatInt64, isInt64Input } from "@/lib/utils";
+import { PageHeader } from "@/components/PageHeader";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
+import { assetDefsResource, assetDefsSearch, createAssetDefCommand, removeAssetDefCommand } from "@/fleet/assets";
+import { describeApiError } from "@/fleet/errors";
 
 const CLASSES = ["currency", "stack", "instance", "entitlement"] as const;
-
-const defColumns = (tz: string): ColumnDef<AssetDef>[] => [
-  { key: "code", header: "Code", className: "font-mono text-xs", cell: (d) => d.code },
-  { key: "name", header: "名称", cell: (d) => d.name },
-  { key: "class", header: "类别", cell: (d) => d.class },
-  {
-    key: "status",
-    header: "状态",
-    cell: (d) => <Badge variant={d.status === "archived" ? "secondary" : "default"}>{d.status ?? "active"}</Badge>,
-  },
-  { key: "created", header: "创建时间", sortable: true, cell: (d) => formatDateTime(d.created_at, tz) },
-];
 
 export function AssetDefsListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const tz = useUserTimezone();
   const writeable = canWrite(role);
-  // 服务端时间排序：换向必须回第一页（keyset 游标与方向耦合）——经
-  // resetKeys 机制自动 reset。
-  const [sortOrder, setSortOrder] = useState<SortOrder>("DESC");
-  const toggleSort = () => setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
-  const paging = useServerPaging(20, { resetKeys: [sortOrder] });
+  const [search, setSearch] = useState("");
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["asset-defs", projectId, paging.pageSize, paging.pageToken, sortOrder],
-    queryFn: () => listAssetDefs({ pageSize: paging.pageSize, pageToken: paging.pageToken, sortOrder }),
-    enabled: !!projectId,
-    placeholderData: (prev) => prev,
+  // 列表 fleet 化（§12.9-2）：游标/页大小/时间排序进 URL（分页栈 = 浏览器
+  // 历史）；页内当前页搜索保持本地态（旧页语义）。
+  const list = useCollection(assetDefsResource, {
+    from: "/console/assets",
+    search: assetDefsSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-  const defs = data?.rows ?? [];
-  const paging_ = {
-    page: paging.page,
-    pageSize: paging.pageSize,
-    hasPrev: paging.hasPrev,
-    hasNext: !!data?.nextPageToken,
-    onPrev: paging.goPrev,
-    onNext: () => paging.goNext(data?.nextPageToken),
-    onPageSizeChange: paging.setPageSize,
-  };
 
-  const remove = useMutation({
-    mutationFn: (id: string) => deleteAssetDef(id),
-    onSuccess: () => {
-      toast.success("资产定义已删除");
-      queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
+  // 行删除命令接线（§12.3）：挂 asset-defs 资源——kit 集合键自动失效；
+  // 存量 ["asset-defs"] 键（详情/下拉选项仍消费）手动桥。toast 单源
+  // onSettled。
+  const remove = useCommand(removeAssetDefCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("资产定义已删除");
+        void queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const getSearchText = useCallback((d: AssetDef) => `${d.id} ${d.code} ${d.name} ${d.class}`, []);
+  const getSearchText = useCallback(
+    (d: AssetDef) => `${d.id} ${d.code} ${d.name} ${d.class}`.toLowerCase(),
+    []
+  );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((d) => getSearchText(d).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
+
+  const columns: LegacyColumnDef<AssetDef, unknown>[] = [
+    {
+      id: "code",
+      header: "Code",
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">{row.original.code}</span>
+      ),
+    },
+    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
+    { id: "class", header: "类别", cell: ({ row }) => row.original.class },
+    {
+      id: "status",
+      header: "状态",
+      cell: ({ row }) => (
+        <Badge variant={row.original.status === "archived" ? "secondary" : "default"}>
+          {row.original.status ?? "active"}
+        </Badge>
+      ),
+    },
+    {
+      id: "created",
+      header: "创建时间",
+      meta: { sortField: "created_at" },
+      cell: ({ row }) => formatDateTime(row.original.created_at, tz),
+    },
+    ...(writeable
+      ? [
+          {
+            id: "actions",
+            header: "操作",
+            cell: ({ row }: { row: { original: AssetDef } }) => (
+              <RowDeleteButton
+                onConfirm={() => remove.mutate({ id: row.original.id })}
+                loading={remove.pending}
+              />
+            ),
+          } satisfies LegacyColumnDef<AssetDef, unknown>,
+        ]
+      : []),
+  ];
 
   return (
-    <ResourceListPage
-      title="资产定义"
-      description="管理代币 / 物品 / 权益目录。终端用户无写入口。"
-      searchPlaceholder="当前页内搜索 code / 名称 / 类别..."
-      isLoading={isLoading}
-      items={defs}
-      columns={defColumns(tz)}
-      getSearchText={getSearchText}
-      serverPaging={paging_}
-      serverSort={{ order: sortOrder, onToggle: toggleSort }}
-      detailPath={(d) => `/console/assets/defs/${d.id}`}
-      toolbarActions={
-        <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <Link to="/console/assets/users">查询用户资产</Link>
-          </Button>
-          {writeable ? (
-            <Button asChild>
-              <Link to="/console/assets/defs/new">
-                <Plus className="h-4 w-4 mr-2" />
-                新建定义
-              </Link>
-            </Button>
-          ) : undefined}
+    <div className="space-y-6">
+      <PageHeader title="资产定义" description="管理代币 / 物品 / 权益目录。终端用户无写入口。" />
+
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="当前页内搜索 code / 名称 / 类别..."
+              className="h-8 w-56"
+            />
+            <div className="ml-auto flex gap-2">
+              <Button variant="outline" asChild>
+                <Link to="/console/assets/users">查询用户资产</Link>
+              </Button>
+              {writeable ? (
+                <Button asChild>
+                  <Link to="/console/assets/defs/new">
+                    <Plus className="h-4 w-4 mr-2" />
+                    新建定义
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        }
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={list} />
+          </div>
+        }
+        emptyTitle={search !== "" ? "没有匹配的资产定义" : "暂无资产定义"}
+        emptyDescription={
+          search !== ""
+            ? "调整搜索词，或清空恢复当前页全部行"
+            : "创建 currency / stack / instance / entitlement 定义"
+        }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={columns}
+            getRowId={(row) => row.id}
+            onRowClick={(d) => navigate({ to: `/console/assets/defs/${d.id}` })}
+          />
         </div>
-      }
-      rowActions={
-        writeable
-          ? (d) => <RowDeleteButton onConfirm={() => remove.mutate(d.id)} loading={remove.isPending} />
-          : undefined
-      }
-      emptyTitle="暂无资产定义"
-      emptyDescription="创建 currency / stack / instance / entitlement 定义"
-    />
+      </FleetListPage>
+    </div>
   );
 }
 
@@ -150,19 +205,21 @@ export function AssetDefNewPage() {
   const [decimals, setDecimals] = useState("0");
   const [maxQuantity, setMaxQuantity] = useState("");
 
-  const mutation = useMutation({
-    mutationFn: () =>
-      createAssetDef({
-        code,
-        name,
-        class: klass,
-        decimals: Number.parseInt(decimals, 10) || 0,
-        max_quantity: maxQuantity === "" ? undefined : maxQuantity,
-      }),
-    onSuccess: (def) => {
-      toast.success("资产定义已创建");
-      queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
-      navigate(`/console/assets/defs/${def.id}`);
+  // 创建命令接线（§12.3）：挂 asset-defs 资源（kit 集合键自动失效）+ 存量
+  // ["asset-defs"] 键手动桥；decimals/上限文本展示形在 descriptor run 内
+  // 收敛。toast 单源 onSettled。
+  const create = useCommand(createAssetDefCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("资产定义已创建");
+        void queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
+        navigate({ to: `/console/assets/defs/${result.payload.id}` });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -177,9 +234,15 @@ export function AssetDefNewPage() {
           toast.error("max_quantity 必须是整数最小单位");
           return;
         }
-        mutation.mutate();
+        create.mutate({
+          code,
+          name,
+          class: klass,
+          decimalsText: decimals,
+          maxQuantityText: maxQuantity,
+        });
       }}
-      loading={mutation.isPending}
+      loading={create.pending}
       submitDisabled={!code || !name}
     >
       <FormField id="code" label="Code" value={code} onChange={setCode} required placeholder="gold" />
@@ -212,7 +275,7 @@ export function AssetDefNewPage() {
 }
 
 export function AssetDefDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
@@ -226,12 +289,20 @@ export function AssetDefDetailPage() {
     enabled: !!id,
   });
 
-  const remove = useMutation({
-    mutationFn: () => deleteAssetDef(id!),
-    onSuccess: () => {
-      toast.success("资产定义已删除");
-      queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
-      navigate("/console/assets");
+  // 删除命令接线（§12.3）：挂 asset-defs 资源（kit 集合键自动失效）+ 存量
+  // ["asset-defs"] 键手动桥。toast 单源 onSettled。
+  const remove = useCommand(removeAssetDefCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("资产定义已删除");
+        void queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
+        navigate({ to: "/console/assets" });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -269,7 +340,7 @@ export function AssetDefDetailPage() {
       title={def.name}
       description={def.code}
       backTo="/console/assets"
-      actions={writeable ? <DeleteButton onConfirm={() => remove.mutate()} loading={remove.isPending} /> : undefined}
+      actions={writeable ? <DeleteButton onConfirm={() => remove.mutate({ id: id! })} loading={remove.pending} /> : undefined}
     >
       <DetailGrid
         items={[
@@ -335,7 +406,7 @@ export function AssetDefDetailPage() {
                     <TableRow key={h.id}>
                       <TableCell>
                         <Link
-                          to={`/console/users/${encodeURIComponent(h.owner_id ?? "")}`}
+                          to="/console/users/$id" params={{ id: encodeURIComponent(h.owner_id ?? "") }}
                           className="font-mono text-xs hover:underline"
                         >
                           {h.owner_id}
@@ -391,9 +462,16 @@ function sameScopePlaceholder<T>(
 export function UserAssetsPage() {
   const { projectId } = useAuth();
   const tz = useUserTimezone();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const search = useSearch({ strict: false }) as Record<string, unknown>;
+  const navigate = useNavigate();
   // 查询目标以 URL owner 参数为事实源：支持 /console/assets/users?owner=<id> 直达（用户详情页入口跳入）。
-  const queryOwner = searchParams.get("owner")?.trim() ?? "";
+  const queryOwner = String(search.owner ?? "").trim();
+  const setSearchParams = (next: { owner?: string }) =>
+    void navigate({
+      to: ".",
+      search: (prev: Record<string, unknown>) => ({ ...prev, ...next }),
+      replace: true,
+    });
   const [ownerId, setOwnerId] = useState(queryOwner);
 
   useEffect(() => {
@@ -471,7 +549,7 @@ export function UserAssetsPage() {
 
   const submit = () => {
     const v = ownerId.trim();
-    setSearchParams(v ? { owner: v } : {});
+    setSearchParams(v ? { owner: v } : { owner: undefined });
   };
 
   return (

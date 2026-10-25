@@ -1,21 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "@/router/compat";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { Plus, KeyRound, RotateCcw, AlertTriangle } from "lucide-react";
 import {
-  listWebhooks,
   getWebhook,
-  createWebhook,
-  updateWebhook,
-  deleteWebhook,
-  rotateWebhookSecret,
   listDeliveries,
-  redeliverDelivery,
   type Webhook,
   type WebhookDelivery,
 } from "@/api/webhooks";
-import { ResourceListPage } from "@/components/list/ResourceListPage";
+import {
+  webhooksResource,
+  webhooksSearch,
+  createWebhookCommand,
+  updateWebhookCommand,
+  removeWebhookCommand,
+  rotateWebhookSecretCommand,
+  redeliverDeliveryDescriptor,
+} from "@/fleet/webhooks";
+import { describeApiError } from "@/fleet/errors";
+import { PageHeader } from "@/components/PageHeader";
 import { ListPaginationKeyset } from "@/components/list/ListToolbar";
 import { useServerPaging } from "@/hooks/useServerPaging";
 import { Button } from "@/components/ui/button";
@@ -46,11 +52,13 @@ import {
   DeleteButton,
   RowDeleteButton,
 } from "@/components/resource/shared";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
 import { formatDateTime } from "@/lib/datetime";
-import type { ColumnDef } from "@/components/list/DataTable";
 
 // ——Webhooks 一等公民（functions-v4.md §6，D5）——
 //
@@ -78,33 +86,39 @@ function deliveryStatusBadge(status: string) {
   }
 }
 
-const webhookColumns = (tz: string): ColumnDef<Webhook>[] => [
+const webhookColumns = (tz: string): LegacyColumnDef<Webhook, unknown>[] => [
   {
-    key: "id",
+    id: "id",
     header: "ID",
-    className: "font-mono text-xs max-w-[140px] truncate",
-    cell: (w) => w.id,
+    cell: ({ row }) => (
+      <span className="inline-block max-w-[140px] truncate font-mono text-xs">
+        {row.original.id}
+      </span>
+    ),
   },
   {
-    key: "url",
+    id: "url",
     header: "URL",
-    className: "font-mono text-xs max-w-[260px] truncate",
-    cell: (w) => w.url,
+    cell: ({ row }) => (
+      <span className="inline-block max-w-[260px] truncate font-mono text-xs" title={row.original.url}>
+        {row.original.url}
+      </span>
+    ),
   },
   {
-    key: "status",
+    id: "status",
     header: "状态",
-    cell: (w) => webhookStatusBadge(w.status),
+    cell: ({ row }) => webhookStatusBadge(row.original.status),
   },
   {
-    key: "events",
+    id: "events",
     header: "订阅",
-    cell: (w) => `${w.events?.length ?? 0} 条`,
+    cell: ({ row }) => `${row.original.events?.length ?? 0} 条`,
   },
   {
-    key: "created",
+    id: "created",
     header: "创建时间",
-    cell: (w) => formatDateTime(w.created_at, tz),
+    cell: ({ row }) => formatDateTime(row.original.created_at, tz),
   },
 ];
 
@@ -289,99 +303,138 @@ export function WebhooksListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
+  const [search, setSearch] = useState("");
   // 创建响应的一次性明文密钥回显（OneTimeSecretDialog）。
   const [createdSecret, setCreatedSecret] = useState<{ id: string; secret: string } | null>(null);
   const writeable = canWrite(role);
 
-  const paging = useServerPaging();
-  const { data, isLoading } = useQuery({
-    queryKey: ["webhooks", projectId, paging.pageSize, paging.pageToken],
-    queryFn: () => listWebhooks({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
-    enabled: !!projectId,
-    placeholderData: (prev) => prev,
+  // 列表 fleet 化（§12.9-2）：游标/页大小进 URL（分页栈 = 浏览器历史）；
+  // 页内当前页搜索保持本地态（旧页语义）。
+  const list = useCollection(webhooksResource, {
+    from: "/console/webhooks",
+    search: webhooksSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-  const webhooks = data?.rows ?? [];
 
-  const columns = useMemo(() => webhookColumns(tz), [tz]);
-
-  const create = useMutation({
-    mutationFn: createWebhook,
-    onSuccess: (result) => {
-      // 一次性明文回显（与 functions create 的 target_secret 同语义）：
-      // 关闭对话框后任何面只出指纹。
-      setCreatedSecret({ id: result.webhook.id, secret: result.secret });
-      toast.success("Webhook 已创建");
-      queryClient.invalidateQueries({ queryKey: ["webhooks", projectId] });
-      setCreateOpen(false);
+  // 创建命令接线（§12.3）：kit 集合键由 useCommand 自动失效；payload 携带
+  // 一次性明文密钥（reveal，关闭即弃——与 functions create 的 target_secret
+  // 同语义）。toast 单源 onSettled。
+  const create = useCommand(createWebhookCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        setCreatedSecret({ id: result.payload.webhook.id, secret: result.payload.secret });
+        toast.success("Webhook 已创建");
+        setCreateOpen(false);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const remove = useMutation({
-    mutationFn: (id: string) => deleteWebhook(id),
-    onSuccess: () => {
-      toast.success("Webhook 已删除");
-      queryClient.invalidateQueries({ queryKey: ["webhooks", projectId] });
+  // 行删除命令接线：kit 集合键自动失效（本页无存量列表键消费方）。
+  const remove = useCommand(removeWebhookCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Webhook 已删除");
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
   const getSearchText = useCallback(
-    (w: Webhook) => `${w.id} ${w.url} ${(w.events ?? []).join(" ")}`,
+    (w: Webhook) => `${w.id} ${w.url} ${(w.events ?? []).join(" ")}`.toLowerCase(),
     []
   );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((w) => getSearchText(w).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
+
+  const tableColumns: LegacyColumnDef<Webhook, unknown>[] = [
+    ...webhookColumns(tz),
+    ...(writeable
+      ? [
+          {
+            id: "actions",
+            header: "操作",
+            cell: ({ row }: { row: { original: Webhook } }) => (
+              <RowDeleteButton
+                onConfirm={() => remove.mutate({ id: row.original.id })}
+                loading={remove.pending}
+              />
+            ),
+          } satisfies LegacyColumnDef<Webhook, unknown>,
+        ]
+      : []),
+  ];
 
   return (
     <>
-      <ResourceListPage
-        title="Webhooks"
-        description="订阅平台事件并投递到你的 HTTPS endpoint"
-        searchPlaceholder="当前页内搜索 URL 或订阅串..."
-        isLoading={isLoading}
-        items={webhooks}
-        columns={columns}
-        getSearchText={getSearchText}
-        serverPaging={{
-          page: paging.page,
-          pageSize: paging.pageSize,
-          hasPrev: paging.hasPrev,
-          hasNext: !!data?.nextPageToken,
-          onPrev: paging.goPrev,
-          onNext: () => paging.goNext(data?.nextPageToken),
-          onPageSizeChange: paging.setPageSize,
-        }}
-        detailPath={(w) => `/console/webhooks/${w.id}`}
-        toolbarActions={
-          writeable ? (
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              新建 Webhook
-            </Button>
-          ) : undefined
-        }
-        rowActions={
-          writeable
-            ? (w) => (
-                <RowDeleteButton
-                  onConfirm={() => remove.mutate(w.id)}
-                  loading={remove.isPending}
-                />
-              )
-            : undefined
-        }
-        emptyTitle="暂无 Webhook"
-        emptyDescription="创建订阅，平台事件将按 CloudEvents 信封投递到你的 endpoint"
-        emptyAction={
-          writeable ? <Button onClick={() => setCreateOpen(true)}>新建 Webhook</Button> : undefined
-        }
-      />
+      <div className="space-y-6">
+        <PageHeader title="Webhooks" description="订阅平台事件并投递到你的 HTTPS endpoint" />
+
+        <FleetListPage
+          list={shownList}
+          toolbar={
+            <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="当前页内搜索 URL 或订阅串..."
+                className="h-8 w-56"
+              />
+              {writeable ? (
+                <Button className="ml-auto" onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  新建 Webhook
+                </Button>
+              ) : null}
+            </div>
+          }
+          pagination={
+            <div className="px-4 pb-4">
+              <KeysetPagination list={list} />
+            </div>
+          }
+          emptyTitle={search !== "" ? "没有匹配的 Webhook" : "暂无 Webhook"}
+          emptyDescription={
+            search !== ""
+              ? "调整搜索词，或清空恢复当前页全部行"
+              : "创建订阅，平台事件将按 CloudEvents 信封投递到你的 endpoint"
+          }
+          emptyAction={
+            writeable ? <Button onClick={() => setCreateOpen(true)}>新建 Webhook</Button> : undefined
+          }
+        >
+          <div className="px-6 pb-2 pt-2">
+            <DataTable
+              list={shownList}
+              columns={tableColumns}
+              getRowId={(w) => w.id}
+              onRowClick={(w) => navigate({ to: `/console/webhooks/${w.id}` })}
+            />
+          </div>
+        </FleetListPage>
+      </div>
 
       <WebhookFormDialog
         mode="create"
         open={createOpen}
         onOpenChange={setCreateOpen}
         onSubmit={(input) => create.mutate(input)}
-        pending={create.isPending}
+        pending={create.pending}
       />
 
       {createdSecret && (
@@ -423,11 +476,18 @@ function DeliveriesCard({ webhookId, writeable }: { webhookId: string; writeable
   });
   const deliveries = data?.rows ?? [];
 
-  const redeliver = useMutation({
-    mutationFn: (deliveryId: string) => redeliverDelivery(webhookId, deliveryId),
-    onSuccess: () => {
-      toast.success("已重置为立即重投");
-      queryClient.invalidateQueries({ queryKey: ["webhook-deliveries", webhookId] });
+  // 重投命令接线（§12.3，裸 descriptor）：投递行不是 webhooks 集合语义——
+  // 存量 ["webhook-deliveries"] 键手动桥；toast 单源 onSettled。
+  const redeliver = useCommand(redeliverDeliveryDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("已重置为立即重投");
+        void queryClient.invalidateQueries({ queryKey: ["webhook-deliveries", webhookId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -489,8 +549,8 @@ function DeliveriesCard({ webhookId, writeable }: { webhookId: string; writeable
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={redeliver.isPending}
-                    onClick={() => redeliver.mutate(d.id)}
+                    disabled={redeliver.pending}
+                    onClick={() => redeliver.mutate({ webhookId, deliveryId: d.id })}
                   >
                     <RotateCcw className="h-3 w-3 mr-1" />
                     Redeliver
@@ -516,7 +576,7 @@ function DeliveriesCard({ webhookId, writeable }: { webhookId: string; writeable
 }
 
 export function WebhookDetailPage() {
-  const { webhookId } = useParams<{ webhookId: string }>();
+  const { webhookId } = useParams({ strict: false });
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
@@ -531,37 +591,52 @@ export function WebhookDetailPage() {
     enabled: !!webhookId,
   });
 
-  const update = useMutation({
-    mutationFn: (input: { url: string; events: string[]; status?: "enabled" | "paused" }) => {
-      const payload: Parameters<typeof updateWebhook>[1] = { status: input.status };
-      if (input.url !== (hook?.url ?? "")) payload.url = input.url;
-      if ((input.events ?? []).join("\n") !== (hook?.events ?? []).join("\n")) {
-        payload.events = input.events;
+  // 命令接线（§12.3）：update/rotate/remove 挂 webhook 资源（kit 集合自动
+  // 失效）+ 存量详情键手动桥；字段 diff 留在提交处（页面持原实体快照——
+  // url/events 仅变更时随请求发送，proto3 optional）。toast 单源 onSettled。
+  const update = useCommand(updateWebhookCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Webhook 已更新");
+        setEditOpen(false);
+        void queryClient.invalidateQueries({ queryKey: ["webhooks", projectId, webhookId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
       }
-      return updateWebhook(webhookId!, payload);
-    },
-    onSuccess: () => {
-      toast.success("Webhook 已更新");
-      setEditOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["webhooks", projectId, webhookId] });
     },
   });
 
-  const rotate = useMutation({
-    mutationFn: () => rotateWebhookSecret(webhookId!),
-    onSuccess: (result) => {
-      toast.success("签名密钥已轮换（旧钥保留一个窗口期）");
-      setRotatedSecret({ secret: result.secret, fingerprint: result.secret_fingerprint });
-      queryClient.invalidateQueries({ queryKey: ["webhooks", projectId, webhookId] });
+  // 轮换 payload 携带一次性明文（reveal，关闭即弃）。
+  const rotate = useCommand(rotateWebhookSecretCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("签名密钥已轮换（旧钥保留一个窗口期）");
+        setRotatedSecret({ secret: result.payload.secret, fingerprint: result.payload.secret_fingerprint });
+        void queryClient.invalidateQueries({ queryKey: ["webhooks", projectId, webhookId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const remove = useMutation({
-    mutationFn: () => deleteWebhook(webhookId!),
-    onSuccess: () => {
-      toast.success("Webhook 已删除");
-      queryClient.invalidateQueries({ queryKey: ["webhooks", projectId] });
-      window.history.back();
+  const remove = useCommand(removeWebhookCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Webhook 已删除");
+        void queryClient.invalidateQueries({ queryKey: ["webhooks", projectId] });
+        window.history.back();
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -582,15 +657,15 @@ export function WebhookDetailPage() {
               </Button>
               <Button
                 variant="outline"
-                disabled={rotate.isPending}
-                onClick={() => rotate.mutate()}
+                disabled={rotate.pending}
+                onClick={() => rotate.mutate({ id: webhookId! })}
               >
                 <KeyRound className="h-4 w-4 mr-2" />
-                {rotate.isPending ? "轮换中..." : "轮换密钥"}
+                {rotate.pending ? "轮换中..." : "轮换密钥"}
               </Button>
               <DeleteButton
-                onConfirm={() => remove.mutate()}
-                loading={remove.isPending}
+                onConfirm={() => remove.mutate({ id: webhookId! })}
+                loading={remove.pending}
               />
             </div>
           ) : undefined
@@ -638,8 +713,20 @@ export function WebhookDetailPage() {
         initial={hook}
         open={editOpen}
         onOpenChange={setEditOpen}
-        onSubmit={(input) => update.mutate(input)}
-        pending={update.isPending}
+        onSubmit={(input) => {
+          // diff 归提交处（页面持原实体快照）：未修改字段不随请求发送。
+          const payload: {
+            url?: string;
+            events?: string[];
+            status?: "enabled" | "paused";
+          } = { status: input.status };
+          if (input.url !== (hook?.url ?? "")) payload.url = input.url;
+          if ((input.events ?? []).join("\n") !== (hook?.events ?? []).join("\n")) {
+            payload.events = input.events;
+          }
+          update.mutate({ id: webhookId!, ...payload });
+        }}
+        pending={update.pending}
       />
 
       {rotatedSecret && (

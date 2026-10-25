@@ -1,6 +1,7 @@
 import { act } from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { Outlet, TestRouter } from "@/router/compat";
+import { Outlet } from "@/router/outlet-context.tsx";
+import { TestRouter } from "@/test-utils/TestRouter";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { refreshSession } from "@/api/auth";
 import { ListenPanel } from "./ListenPanel";
@@ -141,6 +142,26 @@ describe("ListenPanel", () => {
     // 服务端 30s ping → 回 pong。
     act(() => ws.serverSend({ type: "ping" }));
     expect(ws.frames().at(-1)).toEqual({ type: "pong" });
+
+    // 暂停/恢复（页面编排）：暂停 → paused 指示灯 + 连接关闭；恢复 → 重连。
+    act(() => {
+      const btn = [...document.querySelectorAll("button")].find(
+        (b) => b.textContent?.trim() === "暂停"
+      );
+      btn?.click();
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("paused-indicator")).toBeTruthy()
+    );
+    act(() => {
+      const btn = [...document.querySelectorAll("button")].find(
+        (b) => b.textContent?.trim() === "恢复"
+      );
+      btn?.click();
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId("paused-indicator")).toBeNull()
+    );
   });
 
   it("15m 到期断线（token_expired）：走 console auth refresh 后重新 hello + 重订", async () => {

@@ -1,25 +1,31 @@
+import {
+  createInviteCodeCommand,
+  removeInviteCodeCommand,
+  removeProjectCommand,
+  updateOAuthAllowlistCommand,
+  updateProjectCommand,
+} from "@/fleet/projects";
+import {
+  removeOAuthProviderCommand,
+  upsertOAuthProviderCommand,
+} from "@/fleet/oauthProviders";
+import { describeApiError } from "@/fleet/errors";
 import { useState } from "react";
-import { useNavigate, useParams } from "@/router/compat";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import { Copy, Plus, Trash2 } from "lucide-react";
 import {
-  deleteProject,
   getProject,
-  updateProject,
-  updateOAuthRedirectAllowlist,
   listInviteCodes,
-  createInviteCode,
-  deleteInviteCode,
   type Project,
   type InviteCode,
 } from "@/api/projects";
 import {
   OAUTH_PROVIDER_OPTIONS,
-  deleteOAuthProvider,
   listOAuthProviders,
   oauthCallbackURL,
-  upsertOAuthProvider,
   type OAuthProvider,
 } from "@/api/oauthProviders";
 import { useAuth } from "@/hooks/useAuth";
@@ -66,7 +72,7 @@ type SettingsTab = "general" | "auth" | "oauth" | "danger";
 // 因此页面挂载时经 useProjectScopeSync 把 selector 同步到 :id，并在同步完成前
 // 不渲染 OAuth 面板——否则直接访问 URL 时会以旧项目身份查询/保存。
 export function ProjectSettingsPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams({ strict: false });
   const [tab, setTab] = useState<SettingsTab>("general");
   const { role } = useAdminRole();
 
@@ -150,19 +156,24 @@ function GeneralPanel({
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description ?? "");
 
-  const update = useMutation({
-    mutationFn: () =>
-      updateProject(project.id, { name, description }),
-    onSuccess: () => {
-      toast.success("项目信息已保存");
-      queryClient.invalidateQueries({ queryKey: ["projects", project.id] });
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+  // 写路径命令化（§12.9 阶段 2）：结果两分；存量项目键手动桥。
+  const update = useCommand(updateProjectCommand, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("项目信息已保存");
+        void queryClient.invalidateQueries({ queryKey: ["projects", project.id] });
+        void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    update.mutate();
+    update.mutate({ id: project.id, name, description });
   };
 
   return (
@@ -194,8 +205,8 @@ function GeneralPanel({
           onChange={setDescription}
           placeholder="可选描述"
         />
-        <Button type="submit" disabled={!editable || update.isPending}>
-          {update.isPending ? "保存中…" : "保存"}
+        <Button type="submit" disabled={!editable || update.pending}>
+          {update.pending ? "保存中…" : "保存"}
         </Button>
       </form>
     </div>
@@ -243,12 +254,17 @@ function DangerZonePanel({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const remove = useMutation({
-    mutationFn: () => deleteProject(project.id),
-    onSuccess: () => {
-      toast.success("项目已删除");
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
-      navigate("/console/projects");
+  const remove = useCommand(removeProjectCommand, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("项目已删除");
+        void queryClient.invalidateQueries({ queryKey: ["projects"] });
+        navigate({ to: "/console/projects" });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -264,8 +280,8 @@ function DangerZonePanel({
           <DeleteButton
             label="删除项目"
             description="将永久删除该项目及其全部数据（数据库、存储元数据、函数、账本等），此操作不可撤销。"
-            onConfirm={() => remove.mutate()}
-            loading={remove.isPending}
+            onConfirm={() => remove.mutate({ id: project.id })}
+            loading={remove.pending}
           />
         )}
       </div>
@@ -290,12 +306,16 @@ function RegistrationPolicySection({
   const queryClient = useQueryClient();
   const policy = project.registration_policy || "open";
 
-  const save = useMutation({
-    mutationFn: (next: string) =>
-      updateProject(project.id, { registration_policy: next }),
-    onSuccess: () => {
-      toast.success("注册策略已更新");
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+  const save = useCommand(updateProjectCommand, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("注册策略已更新");
+        void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -308,9 +328,9 @@ function RegistrationPolicySection({
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <Select
           value={policy}
-          disabled={!editable || save.isPending}
+          disabled={!editable || save.pending}
           onValueChange={(v) => {
-            if (v !== policy) save.mutate(v);
+            if (v !== policy) save.mutate({ id: project.id, registration_policy: v });
           }}
         >
           <SelectTrigger className="w-full sm:w-72">
@@ -349,17 +369,21 @@ function RedirectAllowlistSection({
   );
   const [dirty, setDirty] = useState(false);
 
-  const save = useMutation({
-    mutationFn: (urls: string[]) =>
-      updateOAuthRedirectAllowlist(project.id, urls),
-    onSuccess: (p) => {
-      const next = p.oauth_allowed_redirect_urls ?? [];
-      toast.success(
-        next.length ? "重定向白名单已更新" : "重定向白名单已清空，回落默认白名单"
-      );
-      setRows(next);
-      setDirty(false);
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+  const save = useCommand(updateOAuthAllowlistCommand, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        const next = result.payload.oauth_allowed_redirect_urls ?? [];
+        toast.success(
+          next.length ? "重定向白名单已更新" : "重定向白名单已清空，回落默认白名单"
+        );
+        setRows(next);
+        setDirty(false);
+        void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -378,7 +402,7 @@ function RedirectAllowlistSection({
         return;
       }
     }
-    save.mutate(urls);
+    save.mutate({ id: project.id, urls });
   };
 
   return (
@@ -413,7 +437,7 @@ function RedirectAllowlistSection({
                   }}
                   placeholder="https://app.example.com"
                   className="font-mono text-xs"
-                  disabled={save.isPending}
+                  disabled={save.pending}
                 />
                 <Button
                   size="sm"
@@ -422,7 +446,7 @@ function RedirectAllowlistSection({
                     setRows(rows.filter((_, j) => j !== i));
                     setDirty(true);
                   }}
-                  disabled={save.isPending}
+                  disabled={save.pending}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -442,13 +466,13 @@ function RedirectAllowlistSection({
                 setRows([...rows, ""]);
                 setDirty(true);
               }}
-              disabled={save.isPending || rows.length >= 100}
+              disabled={save.pending || rows.length >= 100}
             >
               <Plus className="h-3.5 w-3.5 mr-1" />
               添加条目
             </Button>
-            <Button size="sm" onClick={onSave} disabled={save.isPending || !dirty}>
-              {save.isPending ? "保存中…" : "保存"}
+            <Button size="sm" onClick={onSave} disabled={save.pending || !dirty}>
+              {save.pending ? "保存中…" : "保存"}
             </Button>
           </div>
         </>
@@ -478,11 +502,16 @@ function InviteCodesSection({
   });
   const codes = data?.rows ?? [];
 
-  const remove = useMutation({
-    mutationFn: (id: string) => deleteInviteCode(projectId, id),
-    onSuccess: () => {
-      toast.success("邀请码已吊销");
-      queryClient.invalidateQueries({ queryKey: ["invite-codes", projectId] });
+  const remove = useCommand(removeInviteCodeCommand, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("邀请码已吊销");
+        void queryClient.invalidateQueries({ queryKey: ["invite-codes", projectId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -508,7 +537,7 @@ function InviteCodesSection({
         ) : codes.length === 0 ? (
           <p className="text-xs text-muted-foreground">暂无邀请码。</p>
         ) : (
-          codes.map((c) => <InviteCodeRow key={c.id} code={c} onRevoke={() => remove.mutate(c.id)} canRevoke={editable} />)
+          codes.map((c) => <InviteCodeRow key={c.id} code={c} onRevoke={() => remove.mutate({ projectId, id: c.id })} canRevoke={editable} />)
         )}
       </div>
       {!isLoading && (codes.length > 0 || paging.hasPrev) && (
@@ -594,16 +623,17 @@ function InviteCodeCreateDialog({
   const [expireAt, setExpireAt] = useState("");
   const [created, setCreated] = useState<InviteCode | null>(null);
 
-  const create = useMutation({
-    mutationFn: () => {
-      const input: { max_uses?: number; expire_at?: string } = {};
-      if (!unlimited) input.max_uses = Math.max(1, parseInt(maxUses, 10) || 1);
-      if (expireAt) input.expire_at = new Date(expireAt).toISOString();
-      return createInviteCode(projectId, input);
-    },
-    onSuccess: (code) => {
-      setCreated(code);
-      queryClient.invalidateQueries({ queryKey: ["invite-codes", projectId] });
+  // 提交收敛在 run 内（maxUses/expireAt 展示形→提交形）
+  const create = useCommand(createInviteCodeCommand, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        setCreated(result.payload);
+        void queryClient.invalidateQueries({ queryKey: ["invite-codes", projectId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -649,7 +679,11 @@ function InviteCodeCreateDialog({
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
-              create.mutate();
+              create.mutate({
+        projectId,
+        ...(unlimited ? {} : { maxUses: Math.max(1, parseInt(maxUses, 10) || 1) }),
+        ...(expireAt ? { expireAt } : {}),
+      });
             }}
           >
             <div className="flex items-center gap-2">
@@ -688,8 +722,8 @@ function InviteCodeCreateDialog({
               <Button type="button" variant="outline" onClick={() => close(false)}>
                 取消
               </Button>
-              <Button type="submit" disabled={create.isPending}>
-                {create.isPending ? "生成中…" : "生成"}
+              <Button type="submit" disabled={create.pending}>
+                {create.pending ? "生成中…" : "生成"}
               </Button>
             </div>
           </form>
@@ -720,20 +754,30 @@ function OAuthProvidersPanel() {
   });
   const providers = providersData?.rows ?? [];
 
-  const save = useMutation({
-    mutationFn: upsertOAuthProvider,
-    onSuccess: () => {
-      toast.success("OAuth 配置已保存");
-      setClientSecret("");
-      queryClient.invalidateQueries({ queryKey: ["oauth-providers"] });
+  const save = useCommand(upsertOAuthProviderCommand, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("OAuth 配置已保存");
+        setClientSecret("");
+        void queryClient.invalidateQueries({ queryKey: ["oauth-providers"] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const remove = useMutation({
-    mutationFn: deleteOAuthProvider,
-    onSuccess: () => {
-      toast.success("OAuth 配置已删除");
-      queryClient.invalidateQueries({ queryKey: ["oauth-providers"] });
+  const remove = useCommand(removeOAuthProviderCommand, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("OAuth 配置已删除");
+        void queryClient.invalidateQueries({ queryKey: ["oauth-providers"] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -854,8 +898,8 @@ function OAuthProvidersPanel() {
           </code>
         </p>
 
-        <Button type="submit" disabled={!platformAdmin || save.isPending}>
-          {save.isPending ? "保存中…" : "保存配置"}
+        <Button type="submit" disabled={!platformAdmin || save.pending}>
+          {save.pending ? "保存中…" : "保存配置"}
         </Button>
       </form>
 
@@ -872,8 +916,8 @@ function OAuthProvidersPanel() {
               provider={p}
               readonly={!platformAdmin}
               onEdit={() => loadProvider(p.provider)}
-              onDelete={() => remove.mutate(p.provider)}
-              deleting={remove.isPending}
+              onDelete={() => remove.mutate({ provider: p.provider })}
+              deleting={remove.pending}
             />
           ))
         )}

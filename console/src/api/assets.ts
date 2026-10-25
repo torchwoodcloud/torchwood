@@ -56,18 +56,21 @@ export async function getAssetDef(defId: string): Promise<AssetDef> {
   return res.data;
 }
 
-export async function createAssetDef(input: {
-  code: string;
-  name: string;
-  class: string;
-  decimals?: number;
-  max_quantity?: string;
-  expires_in?: string;
-  tradable?: boolean;
-  unique_per_owner?: boolean;
-  upgradeable?: boolean;
-}): Promise<AssetDef> {
-  const res = await api.post<AssetDef>("/server/assets/defs", input);
+export async function createAssetDef(
+  input: {
+    code: string;
+    name: string;
+    class: string;
+    decimals?: number;
+    max_quantity?: string;
+    expires_in?: string;
+    tradable?: boolean;
+    unique_per_owner?: boolean;
+    upgradeable?: boolean;
+  },
+  config?: ApiRequestConfig
+): Promise<AssetDef> {
+  const res = await api.post<AssetDef>("/server/assets/defs", input, config);
   return res.data;
 }
 

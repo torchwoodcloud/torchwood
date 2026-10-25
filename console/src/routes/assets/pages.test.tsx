@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TestRouter } from "@/router/compat";
+import { TestRouter } from "@/test-utils/TestRouter";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssetDefsListPage, AssetDefDetailPage, UserAssetsPage } from "./pages";
 
@@ -28,7 +28,14 @@ vi.mock("@/api/assets", () => ({
   listDefHolders: vi.fn(),
 }));
 
-import { getAssetDef, listAssetDefs, listDefHolders, listUserAssets, listUserLedger } from "@/api/assets";
+import {
+  getAssetDef,
+  listAssetDefs,
+  listDefHolders,
+  listUserAssets,
+  listUserLedger,
+  deleteAssetDef,
+} from "@/api/assets";
 
 async function wrap(ui: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -48,6 +55,21 @@ describe("AssetDefsListPage", () => {
   });
   afterEach(() => cleanup());
 
+  // useCollection 的 from 锚定真实路由 id（/console/assets）——列表页测试
+  // 用真实路径挂载（api-keys pages.test.tsx 同款）。
+  async function renderListPage() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <TestRouter
+          routes={[{ path: "/console/assets", element: <AssetDefsListPage /> }]}
+          initialEntries={["/console/assets"]}
+        />
+      </QueryClientProvider>
+    );
+    await act(async () => {});
+  }
+
   it("列出定义且无 Grant/Consume/Transfer 写入口", async () => {
     vi.mocked(listAssetDefs).mockResolvedValue({
       rows: [
@@ -62,12 +84,70 @@ describe("AssetDefsListPage", () => {
         },
       ],
     });
-    await wrap(<AssetDefsListPage />);
+    await renderListPage();
     expect(await screen.findByText("gold")).toBeTruthy();
     expect(screen.queryByText(/Grant/i)).toBeNull();
     expect(screen.queryByText(/Consume/i)).toBeNull();
     expect(screen.queryByText(/Transfer/i)).toBeNull();
     expect(screen.getByText("查询用户资产")).toBeTruthy();
+  });
+
+  it("URL 即真相：默认页大小/翻页游标透传 listAssetDefs（page_token）", async () => {
+    vi.mocked(listAssetDefs).mockResolvedValue({
+      rows: [
+        {
+          id: "d1",
+          code: "gold",
+          name: "金币",
+          class: "currency",
+          decimals: 0,
+          status: "active",
+          created_at: "2026-08-20T00:00:00Z",
+        },
+      ],
+      nextPageToken: "tok-2",
+    });
+    await renderListPage();
+    await screen.findByText("gold");
+    // defaultSize 20 = 旧页默认；首次请求无 token，sort_order 落服务端默认 DESC
+    expect(listAssetDefs).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pageSize: 20, pageToken: undefined, sortOrder: undefined })
+    );
+    // 下一页 → 游标 push 进 URL → 请求带 page_token
+    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(() =>
+      expect(listAssetDefs).toHaveBeenLastCalledWith(
+        expect.objectContaining({ pageToken: "tok-2" })
+      )
+    );
+  });
+
+  // 写路径锚（§12.3）：行删确认走 useCommand——api 收到 SKIP 且成功路径不抛。
+  it("行删除确认走 useCommand（skipToast + 结果 ok 不抛）", async () => {
+    vi.mocked(listAssetDefs).mockResolvedValue({
+      rows: [
+        {
+          id: "d1",
+          code: "gold",
+          name: "金币",
+          class: "currency",
+          decimals: 0,
+          status: "active",
+          created_at: "2026-08-20T00:00:00Z",
+        },
+      ],
+      nextPageToken: undefined,
+    });
+    vi.mocked(deleteAssetDef).mockResolvedValue(undefined);
+    await renderListPage();
+    await screen.findByText("gold");
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    // torchwood 存量确认壳：确认钮与触发钮同名，scope 到对话框内
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    await waitFor(() =>
+      expect(deleteAssetDef).toHaveBeenCalledWith("d1", { __skipToast: true })
+    );
   });
 });
 

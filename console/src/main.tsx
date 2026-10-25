@@ -6,6 +6,8 @@ import { Toaster } from "sonner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/hooks/useAuth";
 import { router } from "./router";
+// 路由类型注册（类型副作用导入——必须与 router 同批加载）
+import "./router.register";
 import "./index.css";
 
 const queryClient = new QueryClient({

@@ -92,11 +92,14 @@ export async function getDatabase(id: string): Promise<Database> {
   return res.data;
 }
 
-export async function createDatabase(input: {
-  id: string;
-  name: string;
-}): Promise<Database> {
-  const res = await api.post<Database>("/server/databases", input);
+export async function createDatabase(
+  input: {
+    id: string;
+    name: string;
+  },
+  config?: ApiRequestConfig
+): Promise<Database> {
+  const res = await api.post<Database>("/server/databases", input, config);
   return res.data;
 }
 
@@ -128,11 +131,13 @@ export async function getCollection(
 
 export async function createCollection(
   databaseId: string,
-  input: { id: string; name: string; permissions?: string[]; document_security?: boolean }
+  input: { id: string; name: string; permissions?: string[]; document_security?: boolean },
+  config?: ApiRequestConfig
 ): Promise<Collection> {
   const res = await api.post<Collection>(
     `/server/databases/${databaseId}/collections`,
-    input
+    input,
+    config
   );
   return normalizeCollection(res.data);
 }
@@ -156,7 +161,8 @@ export async function updateCollection(
     permissions?: string[];
     document_security?: boolean;
     disabled?: boolean;
-  }
+  },
+  config?: ApiRequestConfig
 ): Promise<Collection> {
   const body: Record<string, unknown> = {};
   if (input.name !== undefined) body.name = input.name;
@@ -167,7 +173,8 @@ export async function updateCollection(
   }
   const res = await api.patch<Collection>(
     `/server/databases/${databaseId}/collections/${collectionId}`,
-    body
+    body,
+    config
   );
   return normalizeCollection(res.data);
 }
@@ -181,11 +188,13 @@ export async function createAttribute(
     size?: number;
     required?: boolean;
     array?: boolean;
-  }
+  },
+  config?: ApiRequestConfig
 ): Promise<Attribute> {
   const res = await api.post<Attribute>(
     `/server/databases/${databaseId}/collections/${collectionId}/attributes`,
-    input
+    input,
+    config
   );
   return res.data;
 }
@@ -198,11 +207,13 @@ export async function createIndex(
     type: string;
     attributes: string[];
     orders?: string[];
-  }
+  },
+  config?: ApiRequestConfig
 ): Promise<Index> {
   const res = await api.post<Index>(
     `/server/databases/${databaseId}/collections/${collectionId}/indexes`,
-    input
+    input,
+    config
   );
   return res.data;
 }
@@ -210,20 +221,24 @@ export async function createIndex(
 export async function deleteAttribute(
   databaseId: string,
   collectionId: string,
-  key: string
+  key: string,
+  config?: ApiRequestConfig
 ): Promise<void> {
   await api.delete(
-    `/server/databases/${databaseId}/collections/${collectionId}/attributes/${key}`
+    `/server/databases/${databaseId}/collections/${collectionId}/attributes/${key}`,
+    config
   );
 }
 
 export async function deleteIndex(
   databaseId: string,
   collectionId: string,
-  indexId: string
+  indexId: string,
+  config?: ApiRequestConfig
 ): Promise<void> {
   await api.delete(
-    `/server/databases/${databaseId}/collections/${collectionId}/indexes/${indexId}`
+    `/server/databases/${databaseId}/collections/${collectionId}/indexes/${indexId}`,
+    config
   );
 }
 

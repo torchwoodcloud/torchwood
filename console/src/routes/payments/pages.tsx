@@ -1,20 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
-import { useParams } from "@/router/compat";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCollection, useCommand } from "@lynx-go/ui-kit";
+import type { Predicate } from "@lynx-go/ui-kit/kernel";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { useUserTimezone } from "@/hooks/useTimezone";
-import { formatDateTime, fromDateTimeLocalValue } from "@/lib/datetime";
+import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
 import { toast } from "sonner";
-import {
-  getOrder,
-  listOrders,
-  manualFulfillOrder,
-  refundOrder,
-  type PaymentOrder,
-} from "@/api/payments";
+import { getOrder, type PaymentOrder } from "@/api/payments";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
-import { useServerPaging } from "@/hooks/useServerPaging";
-import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,23 +21,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { ColumnDef } from "@/components/list/DataTable";
-import type { SortOrder } from "@/api/pagination";
 import { DetailGrid, DetailPageWrapper, DetailSkeleton, NotFound } from "@/components/resource/shared";
 import { formatInt64 } from "@/lib/utils";
-
-const orderColumns = (tz: string): ColumnDef<PaymentOrder>[] => [
-  { key: "id", header: "ID", className: "font-mono text-xs max-w-[140px] truncate", cell: (o) => o.id },
-  { key: "user", header: "用户", className: "font-mono text-xs", cell: (o) => o.user_id ?? "—" },
-  { key: "amount", header: "金额", cell: (o) => `${formatInt64(o.amount)} ${o.currency}` },
-  { key: "purpose", header: "用途", cell: (o) => o.purpose_kind },
-  {
-    key: "status",
-    header: "状态",
-    cell: (o) => <Badge variant={o.status === "paid" ? "default" : "secondary"}>{o.status}</Badge>,
-  },
-  { key: "created", header: "创建时间", sortable: true, cell: (o) => formatDateTime(o.created_at, tz) },
-];
+import { PageHeader } from "@/components/PageHeader";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
+import { filtersOf, ordersResource, ordersSearch, refundOrderCommand, fulfillOrderCommand, type FilterField } from "@/fleet/payments";
+import { describeApiError } from "@/fleet/errors";
 
 // 订单状态选项与 payments.proto 状态机一致。
 const ORDER_STATUS_OPTIONS = [
@@ -57,178 +43,216 @@ const ORDER_STATUS_OPTIONS = [
 
 export function OrdersListPage() {
   const { projectId } = useAuth();
+  const navigate = useNavigate();
   const tz = useUserTimezone();
-  // 服务端过滤（ListOrdersRequest 结构化字段）：UserID 精确 + 状态 + 创建时间
-  // 范围；任何过滤/换向变化经 resetKeys 自动回第一页（机制，非手动 reset）。
-  const [userIdInput, setUserIdInput] = useState("");
-  const [userIdFilter, setUserIdFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [createdAfter, setCreatedAfter] = useState("");
-  const [createdBefore, setCreatedBefore] = useState("");
+  const [search, setSearch] = useState("");
 
-  // 服务端时间排序：换向必须回第一页（keyset 游标与方向耦合）。
-  const [sortOrder, setSortOrder] = useState<SortOrder>("DESC");
-  const toggleSort = () => setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
-
-  const paging = useServerPaging(20, {
-    resetKeys: [userIdFilter, statusFilter, createdAfter, createdBefore, sortOrder],
+  // 列表 fleet 化（§12.9-2）：服务端过滤（UserID/状态/创建时间区间）、时间
+  // 排序、游标/页大小进 URL（过滤/换向 = replace + 清游标回第一页）；页内
+  // 当前页搜索保持本地态（旧页语义）。
+  const list = useCollection(ordersResource, {
+    from: "/console/orders",
+    search: ordersSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
 
-  const filters = useMemo(
-    () => ({
-      userId: userIdFilter.trim() || undefined,
-      status: statusFilter || undefined,
-      createdAfter: fromDateTimeLocalValue(createdAfter, tz) || undefined,
-      createdBefore: fromDateTimeLocalValue(createdBefore, tz) || undefined,
-    }),
-    [userIdFilter, statusFilter, createdAfter, createdBefore, tz]
-  );
-  const filtersDirty = !!(
-    userIdFilter ||
-    statusFilter ||
-    createdAfter ||
-    createdBefore
-  );
+  const filters = filtersOf(list.query.predicate);
+  // UserID 是自由文本：输入区本地态，提交（查询/回车）才写 URL 谓词。
+  const [userIdInput, setUserIdInput] = useState(filters.user_id ?? "");
 
-  const { data, isLoading } = useQuery({
-    queryKey: [
-      "payments-orders",
-      projectId,
-      filters,
-      sortOrder,
-      paging.pageSize,
-      paging.pageToken,
-    ],
-    queryFn: () =>
-      listOrders({ pageSize: paging.pageSize, pageToken: paging.pageToken, sortOrder, ...filters }),
-    enabled: !!projectId,
-    placeholderData: (prev) => prev,
-  });
-  const orders = data?.rows ?? [];
-
-  const applyUserId = () => {
-    setUserIdFilter(userIdInput);
+  // setFilter 写谓词（replace + 清游标回第一页）；datetime 字段在写入边界
+  // 做墙钟↔绝对换算——URL 存绝对时刻，跨时区分享同一过滤窗口。
+  const setFilter = (field: FilterField, value: string) => {
+    const next = { ...filters, [field]: value || undefined };
+    const leaves: Predicate[] = [];
+    for (const [f, v] of Object.entries(next)) {
+      if (f === "created_after" || f === "created_before") continue;
+      if (typeof v === "string" && v !== "") leaves.push({ field: f, op: "eq", value: v });
+    }
+    const after = fromDateTimeLocalValue(next.created_after ?? "", tz);
+    if (after) leaves.push({ field: "created_after", op: "eq", value: after });
+    const before = fromDateTimeLocalValue(next.created_before ?? "", tz);
+    if (before) leaves.push({ field: "created_before", op: "eq", value: before });
+    list.setPredicate(leaves.length === 0 ? null : leaves.length === 1 ? leaves[0] : { all: leaves });
   };
+
+  const applyUserId = () => setFilter("user_id", userIdInput.trim());
   const clearFilters = () => {
     setUserIdInput("");
-    setUserIdFilter("");
-    setStatusFilter("");
-    setCreatedAfter("");
-    setCreatedBefore("");
+    list.setPredicate(null);
   };
+  const filtersDirty = list.query.predicate != null || userIdInput.trim() !== "";
 
   const getSearchText = useCallback(
-    (o: PaymentOrder) => `${o.id} ${o.user_id ?? ""} ${o.status} ${o.purpose_kind}`,
+    (o: PaymentOrder) => `${o.id} ${o.user_id ?? ""} ${o.status} ${o.purpose_kind}`.toLowerCase(),
     []
   );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((o) => getSearchText(o).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
+
+  const columns: LegacyColumnDef<PaymentOrder, unknown>[] = [
+    {
+      id: "id",
+      header: "ID",
+      cell: ({ row }) => (
+        <span className="inline-block max-w-[140px] truncate font-mono text-xs">
+          {row.original.id}
+        </span>
+      ),
+    },
+    {
+      id: "user",
+      header: "用户",
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">{row.original.user_id ?? "—"}</span>
+      ),
+    },
+    {
+      id: "amount",
+      header: "金额",
+      cell: ({ row }) => `${formatInt64(row.original.amount)} ${row.original.currency}`,
+    },
+    { id: "purpose", header: "用途", cell: ({ row }) => row.original.purpose_kind },
+    {
+      id: "status",
+      header: "状态",
+      cell: ({ row }) => (
+        <Badge variant={row.original.status === "paid" ? "default" : "secondary"}>
+          {row.original.status}
+        </Badge>
+      ),
+    },
+    {
+      id: "created",
+      header: "创建时间",
+      meta: { sortField: "created_at" },
+      cell: ({ row }) => formatDateTime(row.original.created_at, tz),
+    },
+  ];
+
+  const filtered = list.query.predicate != null;
 
   return (
-    <ResourceListPage
-      title="订单"
-      description="项目支付订单（金额为最小货币单位）"
-      searchPlaceholder="当前页内搜索订单 ID / 用户 / 状态..."
-      isLoading={isLoading}
-      items={orders}
-      columns={orderColumns(tz)}
-      getSearchText={getSearchText}
-      serverPaging={{
-        page: paging.page,
-        pageSize: paging.pageSize,
-        hasPrev: paging.hasPrev,
-        hasNext: !!data?.nextPageToken,
-        onPrev: paging.goPrev,
-        onNext: () => paging.goNext(data?.nextPageToken),
-        onPageSizeChange: paging.setPageSize,
-      }}
-      serverSort={{ order: sortOrder, onToggle: toggleSort }}
-      filters={
-        <form
-          className="flex flex-wrap items-end gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            applyUserId();
-          }}
-        >
-          <div className="space-y-1">
-            <Label htmlFor="orders-filter-user" className="text-xs text-muted-foreground">
-              用户 ID
-            </Label>
-            <Input
-              id="orders-filter-user"
-              value={userIdInput}
-              onChange={(e) => setUserIdInput(e.target.value)}
-              placeholder="按 UserID 精确过滤"
-              className="h-8 w-[280px] font-mono text-xs"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">状态</Label>
-            <Select
-              value={statusFilter || "all"}
-              onValueChange={(v) => {
-                setStatusFilter(v === "all" ? "" : v);
+    <div className="space-y-6">
+      <PageHeader title="订单" description="项目支付订单（金额为最小货币单位）" />
+
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="space-y-2 px-4 pb-2 pt-2">
+            <form
+              className="flex flex-wrap items-end gap-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                applyUserId();
               }}
             >
-              <SelectTrigger className="h-8 w-[130px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部</SelectItem>
-                {ORDER_STATUS_OPTIONS.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="orders-filter-after" className="text-xs text-muted-foreground">
-              创建时间从
-            </Label>
+              <div className="space-y-1">
+                <Label htmlFor="orders-filter-user" className="text-xs text-muted-foreground">
+                  用户 ID
+                </Label>
+                <Input
+                  id="orders-filter-user"
+                  value={userIdInput}
+                  onChange={(e) => setUserIdInput(e.target.value)}
+                  placeholder="按 UserID 精确过滤"
+                  className="h-8 w-[280px] font-mono text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">状态</Label>
+                <Select
+                  value={filters.status || "all"}
+                  onValueChange={(v) => setFilter("status", v === "all" ? "" : v)}
+                >
+                  <SelectTrigger className="h-8 w-[130px]" aria-label="状态过滤">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部</SelectItem>
+                    {ORDER_STATUS_OPTIONS.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="orders-filter-after" className="text-xs text-muted-foreground">
+                  创建时间从
+                </Label>
+                <Input
+                  id="orders-filter-after"
+                  type="datetime-local"
+                  value={toDateTimeLocalValue(filters.created_after, tz)}
+                  onChange={(e) => setFilter("created_after", e.target.value)}
+                  className="h-8 w-[210px]"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="orders-filter-before" className="text-xs text-muted-foreground">
+                  到
+                </Label>
+                <Input
+                  id="orders-filter-before"
+                  type="datetime-local"
+                  value={toDateTimeLocalValue(filters.created_before, tz)}
+                  onChange={(e) => setFilter("created_before", e.target.value)}
+                  className="h-8 w-[210px]"
+                />
+              </div>
+              <Button type="submit" variant="outline" size="sm">
+                查询
+              </Button>
+              {filtersDirty && (
+                <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
+                  清除
+                </Button>
+              )}
+            </form>
             <Input
-              id="orders-filter-after"
-              type="datetime-local"
-              value={createdAfter}
-              onChange={(e) => {
-                setCreatedAfter(e.target.value);
-              }}
-              className="h-8 w-[210px]"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="当前页内搜索订单 ID / 用户 / 状态..."
+              className="h-8 w-56"
             />
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="orders-filter-before" className="text-xs text-muted-foreground">
-              到
-            </Label>
-            <Input
-              id="orders-filter-before"
-              type="datetime-local"
-              value={createdBefore}
-              onChange={(e) => {
-                setCreatedBefore(e.target.value);
-              }}
-              className="h-8 w-[210px]"
-            />
+        }
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={list} />
           </div>
-          <Button type="submit" variant="outline" size="sm">
-            查询
-          </Button>
-          {filtersDirty && (
-            <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
-              清除
-            </Button>
-          )}
-        </form>
-      }
-      detailPath={(o) => `/console/orders/${o.id}`}
-      emptyTitle="暂无订单"
-      emptyDescription="终端用户建单后将出现在此"
-    />
+        }
+        emptyTitle={search !== "" ? "没有匹配的订单" : filtered ? "该过滤条件下暂无订单" : "暂无订单"}
+        emptyDescription={
+          search !== ""
+            ? "调整搜索词，或清空恢复当前页全部行"
+            : filtered
+              ? "调整过滤条件，或清除恢复全部"
+              : "终端用户建单后将出现在此"
+        }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={columns}
+            getRowId={(row) => row.id}
+            onRowClick={(o) => navigate({ to: `/console/orders/${o.id}` })}
+          />
+        </div>
+      </FleetListPage>
+    </div>
   );
 }
 
 export function OrderDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams({ strict: false });
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
   const { role } = useAdminRole();
@@ -241,20 +265,35 @@ export function OrderDetailPage() {
     enabled: !!id,
   });
 
-  const refund = useMutation({
-    mutationFn: () => refundOrder(id!, { reason: "console" }),
-    onSuccess: () => {
-      toast.success("已发起退款");
-      queryClient.invalidateQueries({ queryKey: ["payments-orders", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["payments-orders", id] });
+  // 命令接线（§12.3）：refund/fulfill 挂订单资源（kit 集合键自动失效）+
+  // 存量 ["payments-orders"] 键手动桥（列表前缀 + 详情）；toast 单源
+  // onSettled。
+  const refund = useCommand(refundOrderCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("已发起退款");
+        void queryClient.invalidateQueries({ queryKey: ["payments-orders", projectId] });
+        void queryClient.invalidateQueries({ queryKey: ["payments-orders", id] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const fulfill = useMutation({
-    mutationFn: () => manualFulfillOrder(id!, "console"),
-    onSuccess: () => {
-      toast.success("已标记履约");
-      queryClient.invalidateQueries({ queryKey: ["payments-orders", id] });
+  const fulfill = useCommand(fulfillOrderCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("已标记履约");
+        void queryClient.invalidateQueries({ queryKey: ["payments-orders", id] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -272,16 +311,16 @@ export function OrderDetailPage() {
             <Button
               variant="outline"
               size="sm"
-              disabled={fulfill.isPending || order.status !== "paid"}
-              onClick={() => fulfill.mutate()}
+              disabled={fulfill.pending || order.status !== "paid"}
+              onClick={() => fulfill.mutate({ id: id! })}
             >
               人工履约
             </Button>
             <Button
               variant="destructive"
               size="sm"
-              disabled={refund.isPending || order.status !== "paid"}
-              onClick={() => refund.mutate()}
+              disabled={refund.pending || order.status !== "paid"}
+              onClick={() => refund.mutate({ id: id! })}
             >
               退款
             </Button>

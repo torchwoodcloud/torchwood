@@ -1,4 +1,5 @@
 import { api } from "./client";
+import type { ApiRequestConfig } from "./client";
 import { pageQuery, type ListParams, type Page } from "./pagination";
 
 export interface LeaderboardBoard {
@@ -88,8 +89,11 @@ export async function getBoard(boardId: string): Promise<LeaderboardBoard> {
   return res.data;
 }
 
-export async function createBoard(input: CreateBoardInput): Promise<LeaderboardBoard> {
-  const res = await api.post<LeaderboardBoard>("/console/leaderboards/boards", input);
+export async function createBoard(
+  input: CreateBoardInput,
+  config?: ApiRequestConfig
+): Promise<LeaderboardBoard> {
+  const res = await api.post<LeaderboardBoard>("/console/leaderboards/boards", input, config);
   return res.data;
 }
 
@@ -102,17 +106,22 @@ export async function updateBoard(
     tie_break?: string;
     period_kind?: string;
     policy?: string;
-  }
+  },
+  config?: ApiRequestConfig
 ): Promise<LeaderboardBoard> {
   const res = await api.patch<LeaderboardBoard>(
     `/console/leaderboards/boards/${encodeURIComponent(boardId)}`,
-    input
+    input,
+    config
   );
   return res.data;
 }
 
-export async function deleteBoard(boardId: string): Promise<void> {
-  await api.delete(`/console/leaderboards/boards/${encodeURIComponent(boardId)}`);
+export async function deleteBoard(
+  boardId: string,
+  config?: ApiRequestConfig
+): Promise<void> {
+  await api.delete(`/console/leaderboards/boards/${encodeURIComponent(boardId)}`, config);
 }
 
 export async function listBoardPeriods(boardId: string): Promise<string[]> {
@@ -161,11 +170,15 @@ export async function getBoardEntry(
 export async function deleteBoardEntry(
   boardId: string,
   period: string,
-  subjectId: string
+  subjectId: string,
+  config?: ApiRequestConfig
 ): Promise<void> {
+  // 显式收敛类型：config 展开 + params 字面量合并会让 axios 的 D 泛型
+  // 推导炸开（paramsSerializer 协变不兼容）。
+  const requestConfig: ApiRequestConfig = { ...config, params: { period } };
   await api.delete(
     `/console/leaderboards/boards/${encodeURIComponent(boardId)}/entries/${encodeURIComponent(subjectId)}`,
-    { params: { period } }
+    requestConfig
   );
 }
 
@@ -214,14 +227,26 @@ export async function getSettlement(
   return res.data;
 }
 
-export async function voidSettlement(boardId: string, period: string): Promise<void> {
+export async function voidSettlement(
+  boardId: string,
+  period: string,
+  config?: ApiRequestConfig
+): Promise<void> {
   await api.post(
-    `/console/leaderboards/boards/${encodeURIComponent(boardId)}/settlements/${encodeURIComponent(period)}:void`
+    `/console/leaderboards/boards/${encodeURIComponent(boardId)}/settlements/${encodeURIComponent(period)}:void`,
+    undefined,
+    config
   );
 }
 
-export async function rerunSettlement(boardId: string, period: string): Promise<void> {
+export async function rerunSettlement(
+  boardId: string,
+  period: string,
+  config?: ApiRequestConfig
+): Promise<void> {
   await api.post(
-    `/console/leaderboards/boards/${encodeURIComponent(boardId)}/settlements/${encodeURIComponent(period)}:rerun`
+    `/console/leaderboards/boards/${encodeURIComponent(boardId)}/settlements/${encodeURIComponent(period)}:rerun`,
+    undefined,
+    config
   );
 }

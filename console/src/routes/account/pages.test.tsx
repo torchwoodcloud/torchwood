@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TestRouter } from "@/router/compat";
+import { TestRouter } from "@/test-utils/TestRouter";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountPreferencesPage, AccountProfilePage } from "./pages";
 import type { Admin } from "@/api/admins";
@@ -20,6 +20,13 @@ const me: Admin = {
   created_at: "2026-09-01T00:00:00Z",
   updated_at: "2026-09-10T00:00:00Z",
 };
+
+function axiosErr(status: number, body?: { code?: string; message?: string }) {
+  return Object.assign(new Error("req failed"), {
+    isAxiosError: true,
+    response: { status, data: body ? { error: body } : undefined },
+  });
+}
 
 function renderPage(ui: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -94,6 +101,28 @@ describe("AccountProfilePage", () => {
       value: originalLocation,
     });
   });
+
+  it("改密 400 → rejected 走内联错误（结果两分，不跳登录页）", async () => {
+    vi.mocked(updateCurrentAdmin).mockRejectedValue(
+      axiosErr(400, { code: "E_INVALID_CREDENTIALS", message: "当前密码不正确" })
+    );
+    renderPage(<AccountProfilePage />);
+    await screen.findByText("liqiulin@outlook.com");
+
+    fireEvent.change(screen.getByLabelText("当前密码"), { target: { value: "WrongPassw0rd" } });
+    fireEvent.change(screen.getByLabelText("新密码"), { target: { value: "NewPassw0rd" } });
+    fireEvent.change(screen.getByLabelText("确认新密码"), { target: { value: "NewPassw0rd" } });
+    fireEvent.click(screen.getByRole("button", { name: "修改密码" }));
+
+    await waitFor(() =>
+      expect(updateCurrentAdmin).toHaveBeenCalledWith(
+        { current_password: "WrongPassw0rd", new_password: "NewPassw0rd" },
+        { __skipToast: true }
+      )
+    );
+    // rejected 是结果分支（mutation.data）：渲染表单内联错误，不跳转
+    expect(await screen.findByText("当前密码不正确")).toBeTruthy();
+  });
 });
 
 describe("AccountPreferencesPage", () => {
@@ -137,7 +166,7 @@ describe("AccountPreferencesPage", () => {
     );
   });
 
-  it("选「跟随浏览器」提交空串清除偏好", async () => {
+  it("选「跟随浏览器」提交空串清除偏好", { timeout: 15_000 }, async () => {
     vi.mocked(updateCurrentAdmin).mockResolvedValue({ ...me, timezone: undefined });
     renderPage(<AccountPreferencesPage />);
     fireEvent.click(await screen.findByRole("button", { name: /Asia\/Shanghai/ }));

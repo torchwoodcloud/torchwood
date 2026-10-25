@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "@/router/compat";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCollection, useCommand } from "@lynx-go/ui-kit";
+import type { ApiError, CommandResult } from "@lynx-go/ui-kit/kernel";
 import { toast } from "sonner";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
   ArrowRightLeft,
   Eye,
@@ -12,26 +15,30 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  createVar,
-  createVarSet,
-  deleteVar,
-  deleteVarSet,
   getVarSet,
   getVersion,
-  listVarSets,
   listVars,
   listVersions,
-  rollback,
-  updateVar,
-  updateVarSet,
   type RuntimeVar,
   type RuntimeVarValue,
-  type RuntimeVarValueInput,
   type RuntimeVarVersion,
   type RuntimeVarVersionEntry,
   type VarSet,
   type VarSetVisibilityInput,
 } from "@/api/runtimeVars";
+import {
+  createVarCommand,
+  createVarSetCommand,
+  editVarDescriptor,
+  editVarSetDescriptor,
+  removeVarCommand,
+  removeVarSetCommand,
+  rollbackVarSetCommand,
+  type VarKind,
+  varSetsResource,
+  varSetsSearch,
+} from "@/fleet/runtimeVars";
+import { describeApiError } from "@/fleet/errors";
 import { useAuth } from "@/hooks/useAuth";
 import { isPlatformAdmin, useAdminRole } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
@@ -39,14 +46,15 @@ import { formatDateTime } from "@/lib/datetime";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingTable } from "@/components/LoadingTable";
-import { ResourceListPage } from "@/components/list/ResourceListPage";
-import { useServerPaging } from "@/hooks/useServerPaging";
-import type { ColumnDef } from "@/components/list/DataTable";
+import { PageHeader } from "@/components/PageHeader";
 import {
   DetailPageWrapper,
   DetailSkeleton,
   NotFound,
 } from "@/components/resource/shared";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,7 +94,6 @@ const SET_LIMIT_BYTES = 1024 * 1024;
 const VAR_COUNT_LIMIT = 500;
 const ID_PATTERN = "^[a-z_][a-z0-9_]*$";
 const KEY_PATTERN = "^[a-z_][a-z0-9_]*$";
-const SAFE_INTEGER_LIMIT = 9007199254740991;
 
 const ACTION_LABEL: Record<string, string> = {
   RUNTIME_VAR_VERSION_ACTION_CREATE: "创建",
@@ -95,7 +102,6 @@ const ACTION_LABEL: Record<string, string> = {
   RUNTIME_VAR_VERSION_ACTION_ROLLBACK: "回滚",
 };
 
-type VarKind = "string" | "integer" | "float" | "boolean" | "json";
 const VAR_KINDS: VarKind[] = ["string", "integer", "float", "boolean", "json"];
 
 function toVisibility(v: string): VarSetVisibilityInput {
@@ -140,46 +146,6 @@ function formatValueText(v: RuntimeVarValue | undefined): string {
     }
   }
   return "—";
-}
-
-// buildValueInput 前端构造 oneof 输入并做格式校验（json 的 JSON.parse 校验是
-// 交接要点；integer 限 ±2^53−1 与 protovalidate 对齐）。
-function buildValueInput(
-  kind: VarKind,
-  s: { str: string; num: string; bool: boolean; json: string }
-): { value?: RuntimeVarValueInput; error?: string } {
-  switch (kind) {
-    case "string":
-      return { value: { string_value: s.str } };
-    case "integer": {
-      if (!s.num.trim()) return { error: "整数不能为空" };
-      const n = Number(s.num);
-      if (!Number.isInteger(n)) return { error: "不是合法的整数" };
-      if (Math.abs(n) > SAFE_INTEGER_LIMIT) {
-        return { error: "超出安全整数范围（±2^53−1）" };
-      }
-      return { value: { integer_value: n } };
-    }
-    case "float": {
-      if (!s.num.trim()) return { error: "数值不能为空" };
-      const n = Number(s.num);
-      if (!Number.isFinite(n)) return { error: "不是合法的数值" };
-      return { value: { float_value: n } };
-    }
-    case "boolean":
-      return { value: { bool_value: s.bool } };
-    case "json": {
-      if (!s.json.trim()) return { error: "JSON 不能为空" };
-      try {
-        JSON.parse(s.json);
-      } catch (e) {
-        return {
-          error: `JSON 格式不合法：${e instanceof Error ? e.message : String(e)}`,
-        };
-      }
-      return { value: { json_value: s.json } };
-    }
-  }
 }
 
 // SecretWarningBanner 两页顶部固定警示条（§2.7：public 集 = 持 project_id 的
@@ -270,86 +236,122 @@ export function VarSetsListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
+  const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const platformAdmin = isPlatformAdmin(role);
 
-  const paging = useServerPaging();
-  const { data, isLoading } = useQuery({
-    queryKey: ["runtime-var-sets", projectId, paging.pageSize, paging.pageToken],
-    queryFn: () => listVarSets({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
-    enabled: !!projectId,
-    placeholderData: (prev) => prev,
+  // 列表 fleet 化（§12.9-2）：游标/页大小进 URL（分页栈 = 浏览器历史）；
+  // 页内当前页搜索保持本地态（旧页语义）。vars/versions 子视图与表单不动。
+  const list = useCollection(varSetsResource, {
+    from: "/console/runtime-vars",
+    search: varSetsSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-  const sets = data?.rows ?? [];
 
-  const columns: ColumnDef<VarSet>[] = [
+  const getSearchText = useCallback(
+    (s: VarSet) => `${s.var_set_id} ${s.description}`.toLowerCase(),
+    []
+  );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((s) => getSearchText(s).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
+
+  const columns: LegacyColumnDef<VarSet, unknown>[] = [
     {
-      key: "var_set_id",
+      id: "var_set_id",
       header: "集合 ID",
-      className: "font-mono text-xs",
-      cell: (s) => s.var_set_id,
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">{row.original.var_set_id}</span>
+      ),
     },
     {
-      key: "visibility",
+      id: "visibility",
       header: "可见性",
-      cell: (s) => <VisibilityBadge visibility={s.visibility} />,
+      cell: ({ row }) => <VisibilityBadge visibility={row.original.visibility} />,
     },
     {
-      key: "var_count",
+      id: "var_count",
       header: "变量数",
-      cell: (s) => `${s.var_count} / ${VAR_COUNT_LIMIT}`,
+      cell: ({ row }) => `${row.original.var_count} / ${VAR_COUNT_LIMIT}`,
     },
     {
-      key: "revision",
+      id: "revision",
       header: "当前版本",
-      cell: (s) => `#${s.revision}`,
+      cell: ({ row }) => `#${row.original.revision}`,
     },
     {
-      key: "footprint",
+      id: "footprint",
       header: "占用（上限 1 MB）",
-      cell: (s) => <FootprintCell bytes={s.total_bytes} />,
+      cell: ({ row }) => <FootprintCell bytes={row.original.total_bytes} />,
     },
     {
-      key: "updated_at",
+      id: "updated_at",
       header: "更新时间",
-      cell: (s) => formatDateTime(s.updated_at, tz),
+      cell: ({ row }) => formatDateTime(row.original.updated_at, tz),
     },
   ];
 
   return (
     <div className="space-y-6">
       <SecretWarningBanner />
-      <ResourceListPage
-        title="Runtime Vars"
-        description="管理项目级运行时配置：类型化变量集合、可见性与版本回滚"
-        searchPlaceholder="当前页内搜索集合 ID 或描述..."
-        isLoading={isLoading}
-        items={sets}
-        columns={columns}
-        getSearchText={(s) => `${s.var_set_id} ${s.description}`}
-        detailPath={(s) => `/console/runtime-vars/${s.var_set_id}`}
-        toolbarActions={
-          platformAdmin ? (
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              新建变量集
-            </Button>
-          ) : undefined
+      <PageHeader title="Runtime Vars" description="管理项目级运行时配置：类型化变量集合、可见性与版本回滚" />
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="当前页内搜索集合 ID 或描述..."
+              className="h-8 w-56"
+            />
+            {platformAdmin ? (
+              <Button className="ml-auto" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                新建变量集
+              </Button>
+            ) : null}
+          </div>
         }
-        emptyTitle="暂无变量集"
-        emptyDescription="创建第一个变量集，向客户端下发功能开关、文案、阈值等运行时配置"
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={list} />
+          </div>
+        }
+        emptyTitle={search !== "" ? "没有匹配的变量集" : "暂无变量集"}
+        emptyDescription={
+          search !== ""
+            ? "调整搜索词，或清空恢复当前页全部行"
+            : "创建第一个变量集，向客户端下发功能开关、文案、阈值等运行时配置"
+        }
         emptyAction={
           platformAdmin ? (
             <Button onClick={() => setCreateOpen(true)}>新建变量集</Button>
           ) : undefined
         }
-      />
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={columns}
+            getRowId={(s) => s.id}
+            onRowClick={(s) => navigate({ to: `/console/runtime-vars/${s.var_set_id}` })}
+          />
+        </div>
+      </FleetListPage>
       <VarSetCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }
 
-// VarSetCreateDialog 新建集合（var_set_id 创建后不可改，D9）。
+// VarSetCreateDialog 新建集合（var_set_id 创建后不可改，D9）。命令化：表单
+// 本体不动；kit 列表键随资源命令 ok 自动失效（onCreated refetch 桥退役），
+// 存量 ["runtime-var-sets"] 键手动桥；结果分支无表单容器 → toast。
 function VarSetCreateDialog({
   open,
   onOpenChange,
@@ -372,19 +374,20 @@ function VarSetCreateDialog({
     }
   }, [open]);
 
-  const mutation = useMutation({
-    mutationFn: () =>
-      createVarSet({
-        var_set_id: varSetId,
-        visibility,
-        description,
-      }),
-    onSuccess: () => {
-      toast.success("变量集已创建");
-      queryClient.invalidateQueries({
-        queryKey: ["runtime-var-sets", projectId],
-      });
-      onOpenChange(false);
+  const create = useCommand(createVarSetCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("变量集已创建");
+        void queryClient.invalidateQueries({
+          queryKey: ["runtime-var-sets", projectId],
+        });
+        onOpenChange(false);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -401,7 +404,7 @@ function VarSetCreateDialog({
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
-            mutation.mutate();
+            create.mutate({ varSetId, visibility, description });
           }}
         >
           <div className="space-y-1.5">
@@ -450,8 +453,8 @@ function VarSetCreateDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               取消
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "创建中…" : "创建"}
+            <Button type="submit" disabled={create.pending}>
+              {create.pending ? "创建中…" : "创建"}
             </Button>
           </div>
         </form>
@@ -465,7 +468,7 @@ function VarSetCreateDialog({
 // ---------------------------------------------------------------------------
 
 export function VarSetDetailPage() {
-  const { varSetId = "" } = useParams<{ varSetId: string }>();
+  const { varSetId = "" } = useParams({ strict: false });
   const navigate = useNavigate();
   const { projectId } = useAuth();
   const { role } = useAdminRole();
@@ -507,32 +510,57 @@ export function VarSetDetailPage() {
   const versionsRaw = versionsQuery.data;
   const versions = versionsRaw ?? [];
 
-  const removeVar = useMutation({
-    mutationFn: (key: string) => deleteVar(varSetId, key),
-    onSuccess: () => {
-      toast.success("变量已删除");
-      invalidate();
-      setDeletingVarKey(null);
+  // 写路径命令化：kit var-sets 列表键随资源命令 ok 自动失效；vars/versions
+  // 子视图存量键经 invalidate()（useInvalidateVarSet）手动桥。删除/回滚走
+  // ConfirmDialog（无表单容器）——结果分支 toast。
+  const removeVar = useCommand(removeVarCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("变量已删除");
+        invalidate();
+        setDeletingVarKey(null);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const removeSet = useMutation({
-    mutationFn: () => deleteVarSet(varSetId),
-    onSuccess: () => {
-      toast.success("变量集已删除");
-      queryClient.invalidateQueries({
-        queryKey: ["runtime-var-sets", projectId],
-      });
-      navigate("/console/runtime-vars");
+  const removeSet = useCommand(removeVarSetCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("变量集已删除");
+        void queryClient.invalidateQueries({
+          queryKey: ["runtime-var-sets", projectId],
+        });
+        navigate({ to: "/console/runtime-vars" });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const rollbackMut = useMutation({
-    mutationFn: (targetRevision: number) => rollback(varSetId, targetRevision),
-    onSuccess: (created, target) => {
-      toast.success(`已回滚到版本 #${target}，产生新版本 #${created.revision}`);
-      invalidate();
-      setRollbackVersion(null);
+  const rollbackMut = useCommand(rollbackVarSetCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        if (rollbackVersion) {
+          toast.success(
+            `已回滚到版本 #${rollbackVersion.revision}，产生新版本 #${result.payload.revision}`
+          );
+          invalidate();
+        }
+        setRollbackVersion(null);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -856,8 +884,10 @@ export function VarSetDetailPage() {
         title="确认删除变量"
         description={`删除变量 ${deletingVarKey ?? ""} 会立即生效并产生一个新版本；客户端下次拉取将不再收到该变量。可通过版本回滚恢复。`}
         confirmLabel="删除"
-        loading={removeVar.isPending}
-        onConfirm={() => deletingVarKey && removeVar.mutate(deletingVarKey)}
+        loading={removeVar.pending}
+        onConfirm={() =>
+          deletingVarKey && removeVar.mutate({ varSetId, key: deletingVarKey })
+        }
       />
       <VersionSnapshotDialog
         varSetId={varSetId}
@@ -875,9 +905,10 @@ export function VarSetDetailPage() {
         title={`确认回滚到版本 #${rollbackVersion?.revision ?? ""}`}
         description={`将集合回滚到版本 #${rollbackVersion?.revision ?? ""}：当前全部变量会被该版本的快照整替，同时产生一个新的版本记录；目标版本本身保持不变。`}
         confirmLabel="回滚"
-        loading={rollbackMut.isPending}
+        loading={rollbackMut.pending}
         onConfirm={() =>
-          rollbackVersion && rollbackMut.mutate(rollbackVersion.revision)
+          rollbackVersion &&
+          rollbackMut.mutate({ varSetId, targetRevision: rollbackVersion.revision })
         }
       />
       <VarSetSettingsDialog
@@ -891,8 +922,8 @@ export function VarSetDetailPage() {
         title="确认删除变量集"
         description={`删除变量集 ${varSetId} 将连同全部变量与全部版本历史一起销毁（不可恢复）。此操作不可撤销。`}
         confirmLabel="删除"
-        loading={removeSet.isPending}
-        onConfirm={() => removeSet.mutate()}
+        loading={removeSet.pending}
+        onConfirm={() => removeSet.mutate({ varSetId })}
       />
     </div>
   );
@@ -900,7 +931,9 @@ export function VarSetDetailPage() {
 
 // ---------------------------------------------------------------------------
 // 变量新建/编辑 Dialog（key 编辑时禁改；类型 select 切换值输入控件；json 用
-// textarea + 前端 JSON.parse 校验）
+// textarea）。命令化（useCommand×2，§12.3 裁决 8）：值展示形→oneof 提交形
+// 收敛与 JSON/整数校验在 descriptor run 内——rejected/conflict 走既有内联错
+// 误行（表单容器原样），失败通道 toast。
 // ---------------------------------------------------------------------------
 
 function VarFormDialog({
@@ -915,6 +948,7 @@ function VarFormDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const invalidate = useInvalidateVarSet(varSetId);
+  const { projectId } = useAuth();
   const [key, setKey] = useState("");
   const [kind, setKind] = useState<VarKind>("string");
   const [str, setStr] = useState("");
@@ -922,13 +956,43 @@ function VarFormDialog({
   const [bool, setBool] = useState("false");
   const [json, setJson] = useState("");
   const [description, setDescription] = useState("");
-  const [error, setError] = useState<string | null>(null);
+
+  // 编辑 descriptor：key 闭包原实体（创建后不可改）；创建态实例惰性（不会被
+  // mutate——submit 分流）。
+  const settled = (
+    result: CommandResult<RuntimeVar> | null,
+    failure: ApiError | null
+  ) => {
+    if (result?.status === "ok") {
+      toast.success(editing ? "变量已更新" : "变量已创建");
+      invalidate();
+      onOpenChange(false);
+    } else if (failure) {
+      toast.error(describeApiError(failure));
+    }
+    // rejected/conflict 不 toast——内联错误行呈现
+  };
+
+  const create = useCommand(createVarCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: settled,
+  });
+  const update = useCommand(editVarDescriptor(varSetId, editing?.key ?? ""), {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: settled,
+  });
+
+  const pending = editing ? update.pending : create.pending;
+  const result = editing ? update.result : create.result;
+  const error =
+    result != null && result.status !== "ok" ? result.message : null;
 
   // 仅在打开时同步一次编辑目标（依赖 [open] 而非 editing：背景 refetch 换掉
-  // vars 数组对象身份时不应重置正在填写的表单）。
+  // vars 数组对象身份时不应重置正在填写的表单）；命令结果态一并复位。
   useEffect(() => {
     if (!open) return;
-    setError(null);
+    create.reset();
+    update.reset();
     if (editing) {
       setKey(editing.key);
       const k = detectKind(editing.value);
@@ -956,18 +1020,6 @@ function VarFormDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const mutation = useMutation({
-    mutationFn: (value: RuntimeVarValueInput) =>
-      editing
-        ? updateVar(varSetId, editing.key, { value, description })
-        : createVar(varSetId, { key, value, description }),
-    onSuccess: () => {
-      toast.success(editing ? "变量已更新" : "变量已创建");
-      invalidate();
-      onOpenChange(false);
-    },
-  });
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -981,18 +1033,9 @@ function VarFormDialog({
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
-            const built = buildValueInput(kind, {
-              str,
-              num,
-              bool: bool === "true",
-              json,
-            });
-            if (!built.value) {
-              setError(built.error ?? "值不合法");
-              return;
-            }
-            setError(null);
-            mutation.mutate(built.value);
+            const form = { key, kind, str, num, bool, json, description };
+            if (editing) update.mutate({ ...form, varSetId });
+            else create.mutate({ ...form, varSetId });
           }}
         >
           <div className="space-y-1.5">
@@ -1087,8 +1130,8 @@ function VarFormDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               取消
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "保存中…" : "保存"}
+            <Button type="submit" disabled={pending}>
+              {pending ? "保存中…" : "保存"}
             </Button>
           </div>
         </form>
@@ -1339,6 +1382,7 @@ function VarSetSettingsDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const invalidate = useInvalidateVarSet(varSet.var_set_id);
+  const { projectId } = useAuth();
   const [visibility, setVisibility] = useState<VarSetVisibilityInput>(
     toVisibility(varSet.visibility)
   );
@@ -1353,18 +1397,21 @@ function VarSetSettingsDialog({
     }
   }, [open, varSet]);
 
-  const save = useMutation({
-    mutationFn: () =>
-      updateVarSet(varSet.var_set_id, {
-        // proto3 optional：未变化的 visibility 不发送 = 不修改。
-        visibility:
-          visibility !== toVisibility(varSet.visibility) ? visibility : undefined,
-        description,
-      }),
-    onSuccess: () => {
-      toast.success("集合设置已更新");
-      invalidate();
-      onOpenChange(false);
+  // 命令化：visibility diff（未变化不发送）归 descriptor（闭包原实体，LWW
+  // 无 OCC 前置守卫）；kit 列表键经 descriptor.invalidates 失效，存量键经
+  // invalidate() 桥；结果分支无表单容器 → toast。
+  const save = useCommand(editVarSetDescriptor(varSet), {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("集合设置已更新");
+        invalidate();
+        onOpenChange(false);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -1389,7 +1436,7 @@ function VarSetSettingsDialog({
                 setConfirmOpen(true);
                 return;
               }
-              save.mutate();
+              save.mutate({ visibility, description });
             }}
           >
             <div className="space-y-1.5">
@@ -1430,8 +1477,8 @@ function VarSetSettingsDialog({
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 取消
               </Button>
-              <Button type="submit" disabled={save.isPending}>
-                {save.isPending ? "保存中…" : "保存"}
+              <Button type="submit" disabled={save.pending}>
+                {save.pending ? "保存中…" : "保存"}
               </Button>
             </div>
           </form>
@@ -1444,10 +1491,10 @@ function VarSetSettingsDialog({
           title="确认切换为公开"
           description="切换后整个变量集（含全部当前值）将对任何持有 project_id 的客户端公开，无需登录即可读取。请确认其中不含敏感信息。"
           confirmLabel="切换为公开"
-          loading={save.isPending}
+          loading={save.pending}
           onConfirm={() => {
             setConfirmOpen(false);
-            save.mutate();
+            save.mutate({ visibility, description });
           }}
         />
       ) : (
@@ -1457,10 +1504,10 @@ function VarSetSettingsDialog({
           title="确认切换为私有"
           description="切换后匿名客户端将立即收到 404，App 会回退到内置默认值或本地缓存的 last-known-good 配置，直到用户登录。"
           confirmLabel="切换为私有"
-          loading={save.isPending}
+          loading={save.pending}
           onConfirm={() => {
             setConfirmOpen(false);
-            save.mutate();
+            save.mutate({ visibility, description });
           }}
         />
       )}

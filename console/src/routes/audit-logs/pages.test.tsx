@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TestRouter, useRouterState } from "@/router/compat";
+import { useRouterState } from "@tanstack/react-router";
+import { TestRouter } from "@/test-utils/TestRouter";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuditLogsListPage } from "./pages";
 import type { ListAuditLogsParams, ListAuditLogsResponse } from "@/api/auditLogs";

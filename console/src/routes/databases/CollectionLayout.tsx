@@ -1,8 +1,14 @@
-import { Link, NavLink, Outlet, useNavigate, useParams } from "@/router/compat";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { NavLink } from "@/router/nav-link";
+import { Outlet } from "@/router/outlet-context.tsx";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCommand } from "@lynx-go/ui-kit";
 import { ArrowLeft, FileText, Layers, Radio } from "lucide-react";
 import { toast } from "sonner";
-import { getDatabase, getCollection, deleteCollection } from "@/api/databases";
+import { getDatabase, getCollection } from "@/api/databases";
+import { removeCollectionCommand } from "@/fleet/databases";
+import { describeApiError } from "@/fleet/errors";
+import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -24,9 +30,10 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   );
 
 export function CollectionLayout() {
-  const { dbId, collId } = useParams<{ dbId: string; collId: string }>();
+  const { dbId, collId } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const platformAdmin = isPlatformAdmin(role);
 
@@ -42,12 +49,20 @@ export function CollectionLayout() {
     enabled: !!dbId && !!collId,
   });
 
-  const remove = useMutation({
-    mutationFn: () => deleteCollection(dbId!, collId!),
-    onSuccess: () => {
-      toast.success("Collection 已删除");
-      queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
-      navigate(`/console/databases/${dbId}`);
+  // 删除命令化：kit collections 键随资源命令 ok 自动失效；存量 ["collections",
+  // dbId] 键手动桥。DeleteButton 无表单容器——结果分支 toast。
+  const remove = useCommand(removeCollectionCommand, {
+    scope: { projectId: projectId ?? undefined, dbId: dbId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Collection 已删除");
+        void queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
+        navigate({ to: `/console/databases/${dbId}` });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -72,14 +87,17 @@ export function CollectionLayout() {
         description={database ? `${database.name} · ${collection.id}` : collection.id}
         actions={
           collection.is_system || !platformAdmin ? undefined : (
-            <DeleteButton onConfirm={() => remove.mutate()} loading={remove.isPending} />
+            <DeleteButton
+              onConfirm={() => remove.mutate({ dbId: dbId!, collId: collId! })}
+              loading={remove.pending}
+            />
           )
         }
       />
 
       <div className="space-y-4">
         <Button variant="ghost" size="sm" className="w-fit" asChild>
-          <Link to={`/console/databases/${dbId}`}>
+          <Link to="/console/databases/$dbId" params={{ dbId: dbId }}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             返回 Database
           </Link>

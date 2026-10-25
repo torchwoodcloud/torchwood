@@ -22,6 +22,8 @@ vi.mock("@/api/databases", () => ({
   createDocument: vi.fn(),
   updateDocument: vi.fn(),
   deleteDocument: vi.fn(),
+  // 列表 fleet 化（§12.9-2）后 fetchDocuments 引用；OCC 用例不触达
+  listDocuments: vi.fn(),
 }));
 
 const attrs: Attribute[] = [

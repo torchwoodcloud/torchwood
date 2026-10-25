@@ -1,4 +1,5 @@
-import { Link, NavLink } from "@/router/compat";
+import { Link } from "@tanstack/react-router";
+import { NavLink } from "@/router/nav-link";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -75,7 +76,7 @@ export function AnalyticsTabs() {
 export function EventLink({ name }: { name: string }) {
   return (
     <Link
-      to={`/console/analytics/events/${encodeURIComponent(name)}`}
+      to="/console/analytics/events/$name" params={{ name: encodeURIComponent(name) }}
       className="font-mono text-sm hover:underline"
     >
       {name}

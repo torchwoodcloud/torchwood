@@ -1,4 +1,4 @@
-import { Link } from "@/router/compat";
+import { Link } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, Eye, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";

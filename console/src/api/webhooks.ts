@@ -1,4 +1,5 @@
 import { api } from "./client";
+import type { ApiRequestConfig } from "./client";
 import { pageQuery, type ListMeta, type ListParams, type Page } from "./pagination";
 
 // ——Webhooks 一等公民（functions-v4.md §6，D5）——
@@ -73,14 +74,17 @@ export interface CreateWebhookResponse {
 }
 
 // 创建订阅：响应携带一次性明文密钥，调用方立即展示/持久化。
-export async function createWebhook(input: {
-  id?: string;
-  url: string;
-  events: string[];
-  // 缺省 enabled。
-  status?: "enabled" | "paused";
-}): Promise<CreateWebhookResponse> {
-  const res = await api.post<CreateWebhookResponse>("/server/webhooks", input);
+export async function createWebhook(
+  input: {
+    id?: string;
+    url: string;
+    events: string[];
+    // 缺省 enabled。
+    status?: "enabled" | "paused";
+  },
+  config?: ApiRequestConfig
+): Promise<CreateWebhookResponse> {
+  const res = await api.post<CreateWebhookResponse>("/server/webhooks", input, config);
   return res.data;
 }
 
@@ -91,21 +95,29 @@ export async function updateWebhook(
     url?: string;
     events?: string[];
     status?: "enabled" | "paused";
-  }
+  },
+  config?: ApiRequestConfig
 ): Promise<Webhook> {
-  const res = await api.patch<Webhook>(`/server/webhooks/${webhookId}`, input);
+  const res = await api.patch<Webhook>(`/server/webhooks/${webhookId}`, input, config);
   return res.data;
 }
 
-export async function deleteWebhook(webhookId: string): Promise<void> {
-  await api.delete(`/server/webhooks/${webhookId}`);
+export async function deleteWebhook(
+  webhookId: string,
+  config?: ApiRequestConfig
+): Promise<void> {
+  await api.delete(`/server/webhooks/${webhookId}`, config);
 }
 
 // 轮换签名密钥：新钥即刻生效（v1 签名），旧钥保留一个窗口期（v2 双签）。
-export async function rotateWebhookSecret(webhookId: string): Promise<WebhookSecret> {
+export async function rotateWebhookSecret(
+  webhookId: string,
+  config?: ApiRequestConfig
+): Promise<WebhookSecret> {
   const res = await api.post<WebhookSecret>(
     `/server/webhooks/${webhookId}:rotate-secret`,
-    {}
+    {},
+    config
   );
   return res.data;
 }
@@ -145,11 +157,13 @@ export async function getDelivery(
 // attempts=0），语义 = 全新一轮投递。
 export async function redeliverDelivery(
   webhookId: string,
-  deliveryId: string
+  deliveryId: string,
+  config?: ApiRequestConfig
 ): Promise<WebhookDelivery> {
   const res = await api.post<WebhookDelivery>(
     `/server/webhooks/${webhookId}/deliveries/${deliveryId}:redeliver`,
-    {}
+    {},
+    config
   );
   return res.data;
 }

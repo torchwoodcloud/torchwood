@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { useSearchParams } from "@/router/compat";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 
 export interface ListParams {
   q: string;
@@ -10,48 +10,55 @@ export interface ListParams {
 
 const RESERVED = new Set(["q", "page", "pageSize"]);
 
+// 存量子视图列表（ResourceListPage 族）的本地分页/搜索参数钩子：URL 键值
+// 以字符串面存取（TanStack search 对象 ↔ 平面 record 投影，语义与旧
+// URLSearchParams 形等价——空值删除、resetPage 推页、replace 写入）。
 export function useListParams(defaults?: Partial<ListParams>) {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const search = useSearch({ strict: false }) as Record<string, unknown>;
+  const navigate = useNavigate();
 
   const params = useMemo((): ListParams => {
     const extra: Record<string, string> = {};
-    searchParams.forEach((value, key) => {
-      if (!RESERVED.has(key)) extra[key] = value;
-    });
+    for (const [key, value] of Object.entries(search)) {
+      if (RESERVED.has(key) || value === undefined || value === null) continue;
+      extra[key] = String(value);
+    }
     return {
-      q: searchParams.get("q") ?? defaults?.q ?? "",
-      page: Number(searchParams.get("page") ?? defaults?.page ?? 1),
-      pageSize: Number(searchParams.get("pageSize") ?? defaults?.pageSize ?? 20),
+      q: String(search.q ?? defaults?.q ?? ""),
+      page: Number(search.page ?? defaults?.page ?? 1),
+      pageSize: Number(search.pageSize ?? defaults?.pageSize ?? 20),
       ...extra,
     };
-  }, [searchParams, defaults]);
+  }, [search, defaults]);
 
   const setParams = useCallback(
     (updates: Partial<ListParams>, options?: { resetPage?: boolean }) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
+      void navigate({
+        to: ".",
+        replace: true,
+        search: (prev: Record<string, unknown>) => {
+          const next: Record<string, string> = {};
+          for (const [k, v] of Object.entries(prev)) {
+            if (v !== undefined && v !== null) next[k] = String(v);
+          }
           const shouldResetPage =
             options?.resetPage ??
             Object.keys(updates).some((k) => k !== "page" && k !== "pageSize");
-
-          Object.entries(updates).forEach(([key, value]) => {
+          for (const [key, value] of Object.entries(updates)) {
             if (value === "" || value === undefined || value === null) {
-              next.delete(key);
+              delete next[key];
             } else {
-              next.set(key, String(value));
+              next[key] = String(value);
             }
-          });
-
+          }
           if (shouldResetPage && !("page" in updates)) {
-            next.set("page", "1");
+            next.page = "1";
           }
           return next;
         },
-        { replace: true }
-      );
+      });
     },
-    [setSearchParams]
+    [navigate]
   );
 
   return { params, setParams };

@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCollection } from "@lynx-go/ui-kit";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -23,7 +24,6 @@ import {
 } from "@/components/ui/table";
 import {
   getOverview,
-  listEventDefinitions,
   queryRetention,
   queryTimeseries,
   num,
@@ -44,6 +44,12 @@ import {
   type OverviewRange,
 } from "./shared";
 import { TrendChart } from "./metricChart";
+import { StatCard } from "@/components/fleet/values/stat-card";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import {
+  eventDefinitionsResource,
+  eventDefinitionsSearch,
+} from "@/fleet/analytics";
 
 const OVERVIEW_RANGES: { key: OverviewRange; label: string }[] = [
   { key: "today", label: "今日" },
@@ -78,20 +84,6 @@ function RangeSwitcher<T extends string | number>({
 
 function LoadError({ error }: { error: unknown }) {
   return <p className="text-sm text-destructive">加载失败：{errText(error)}</p>;
-}
-
-function KpiCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className="text-2xl tabular-nums">{value}</CardTitle>
-      </CardHeader>
-      {hint && (
-        <CardContent className="text-xs text-muted-foreground">{hint}</CardContent>
-      )}
-    </Card>
-  );
 }
 
 // AnalyticsOverviewPage 概览：日期范围切换 → KPI 卡 + 趋势图 + Top 事件表。
@@ -154,21 +146,21 @@ export function AnalyticsOverviewPage() {
             ))
           ) : (
             <>
-              <KpiCard label="事件总量" value={num(kpi?.total_events).toLocaleString()} />
-              <KpiCard
+              <StatCard label="事件总量" value={num(kpi?.total_events).toLocaleString()} />
+              <StatCard
                 label="活跃用户（UV）"
                 value={num(kpi?.unique_users).toLocaleString()}
               />
-              <KpiCard
+              <StatCard
                 label="新增用户"
                 value={num(kpi?.new_users).toLocaleString()}
                 hint="首次上报口径（first_seen 表）"
               />
-              <KpiCard
+              <StatCard
                 label="人均事件"
                 value={num(kpi?.events_per_user).toFixed(2)}
               />
-              <KpiCard
+              <StatCard
                 label="今日实时"
                 value={`${num(today?.total_events).toLocaleString()} / ${num(today?.unique_users).toLocaleString()}`}
                 hint="事件 / UV（raw 直读，恒为实时口径）"
@@ -260,21 +252,16 @@ export function AnalyticsEventsPage() {
   const { projectId } = useAuth();
   const [filter, setFilter] = useState("");
 
-  const defsQ = useInfiniteQuery({
-    queryKey: ["analytics", "definitions", projectId],
-    queryFn: ({ pageParam }) => listEventDefinitions(100, pageParam || undefined),
-    initialPageParam: "",
-    getNextPageParam: (last) => last.meta?.next_page_token || undefined,
-    enabled: !!projectId,
+  // 事件字典 fleet 化（§12.9-2）：游标/页大小进 URL；页内过滤保持本地态。
+  const list = useCollection(eventDefinitionsResource, {
+    from: "/console/analytics/events",
+    search: eventDefinitionsSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-
-  const definitions = useMemo(
-    () => defsQ.data?.pages.flatMap((p) => p.definitions ?? []) ?? [],
-    [defsQ.data]
-  );
   const filtered = filter
-    ? definitions.filter((d) => d.name.toLowerCase().includes(filter.toLowerCase()))
-    : definitions;
+    ? list.rows.filter((d) => d.name.toLowerCase().includes(filter.toLowerCase()))
+    : list.rows;
 
   return (
     <>
@@ -301,10 +288,10 @@ export function AnalyticsEventsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {defsQ.isLoading ? (
+          {list.status === "loading" ? (
             <Skeleton className="h-40 w-full" />
-          ) : defsQ.error ? (
-            <LoadError error={defsQ.error} />
+          ) : list.status === "error" ? (
+            <LoadError error={list.error} />
           ) : filtered.length === 0 ? (
             <EmptyState
               title="暂无事件"
@@ -344,18 +331,9 @@ export function AnalyticsEventsPage() {
                   ))}
                 </TableBody>
               </Table>
-              {defsQ.hasNextPage && (
-                <div className="mt-4 flex justify-center">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => defsQ.fetchNextPage()}
-                    disabled={defsQ.isFetchingNextPage}
-                  >
-                    {defsQ.isFetchingNextPage ? "加载中…" : "加载更多"}
-                  </Button>
-                </div>
-              )}
+              <div className="mt-4">
+                <KeysetPagination list={list} />
+              </div>
             </>
           )}
         </CardContent>

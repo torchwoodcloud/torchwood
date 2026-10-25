@@ -1,18 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "@/router/compat";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { Plus, Download, UploadCloud, Link2, Copy } from "lucide-react";
 import {
-  listBuckets,
   getBucket,
-  createBucket,
-  updateBucket,
   deleteBucket,
   listFiles,
   getFile,
-  uploadFile,
-  updateFile,
   createFileToken,
   getStorageUsage,
   deleteFile,
@@ -24,11 +21,23 @@ import {
   type Bucket,
   type FileItem,
 } from "@/api/storage";
+import {
+  bucketsResource,
+  bucketsSearch,
+  createBucketCommand,
+  updateBucketCommand,
+  removeBucketCommand,
+  uploadFileDescriptor,
+  removeFileDescriptor,
+  renameFileDescriptor,
+} from "@/fleet/storage";
+import { describeApiError } from "@/fleet/errors";
 import { ChunkedUploader } from "@/routes/storage/chunked-uploader";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
+import { PageHeader } from "@/components/PageHeader";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { useServerPaging } from "@/hooks/useServerPaging";
 import { Button } from "@/components/ui/button";
@@ -48,6 +57,9 @@ import {
   RowDeleteButton,
   DeleteButton,
 } from "@/components/resource/shared";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import {
   Dialog,
   DialogContent,
@@ -58,27 +70,30 @@ import {
 } from "@/components/ui/dialog";
 
 // 工厂：时区来自管理员偏好（hook 无法在模块级使用），由列表页传入。
-const bucketColumns = (tz: string): ColumnDef<Bucket>[] => [
+const bucketColumns = (tz: string): LegacyColumnDef<Bucket, unknown>[] => [
   {
-    key: "id",
+    id: "id",
     header: "ID",
-    className: "font-mono text-xs max-w-[140px] truncate",
-    cell: (b) => b.id,
-  },
-  {
-    key: "name",
-    header: "名称",
-    cell: (b) => (
-      <span className="inline-flex items-center gap-2">
-        {b.name}
-        {b.public && <Badge variant="secondary">公开</Badge>}
+    cell: ({ row }) => (
+      <span className="inline-block max-w-[140px] truncate font-mono text-xs">
+        {row.original.id}
       </span>
     ),
   },
   {
-    key: "created",
+    id: "name",
+    header: "名称",
+    cell: ({ row }) => (
+      <span className="inline-flex items-center gap-2">
+        {row.original.name}
+        {row.original.public && <Badge variant="secondary">公开</Badge>}
+      </span>
+    ),
+  },
+  {
+    id: "created",
     header: "创建时间",
-    cell: (b) => formatDateTime(b.created_at, tz),
+    cell: ({ row }) => formatDateTime(row.original.created_at, tz),
   },
 ];
 
@@ -109,107 +124,166 @@ export function StorageListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const writeable = canWrite(role);
 
-  const paging = useServerPaging();
-  const { data, isLoading } = useQuery({
-    queryKey: ["buckets", projectId, paging.pageSize, paging.pageToken],
-    queryFn: () => listBuckets({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
-    enabled: !!projectId,
-    placeholderData: (prev) => prev,
+  // 列表 fleet 化（§12.9-2）：游标/页大小进 URL（分页栈 = 浏览器历史）；
+  // 页内当前页搜索保持本地态（旧页语义）。
+  const list = useCollection(bucketsResource, {
+    from: "/console/storage",
+    search: bucketsSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-  const buckets = data?.rows ?? [];
 
-  const remove = useMutation({
-    mutationFn: (id: string) => deleteBucket(id),
-    onSuccess: () => {
-      toast.success("Bucket 已删除");
-      queryClient.invalidateQueries({ queryKey: ["buckets", projectId] });
+  // 行删除命令接线（§12.3）：remove 挂桶资源——kit 集合键由 useCommand 自动
+  // 失效（本页无存量 ["buckets"] 列表键消费方）；toast 单源 onSettled。
+  const remove = useCommand(removeBucketCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Bucket 已删除");
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const getSearchText = useCallback((b: Bucket) => `${b.id} ${b.name}`, []);
+  const getSearchText = useCallback(
+    (b: Bucket) => `${b.id} ${b.name}`.toLowerCase(),
+    []
+  );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((b) => getSearchText(b).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
 
-  const handleBulkDelete = async (selected: Bucket[], clear: () => void) => {
+  const toggleRow = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = (visibleIds: string[]) =>
+    setSelectedIds((prev) =>
+      new Set(visibleIds.length > 0 && visibleIds.every((id) => prev.has(id)) ? [] : visibleIds)
+    );
+  const selectedBuckets = list.rows.filter((b) => selectedIds.has(b.id));
+
+  const handleBulkDelete = async () => {
     setBulkDeleting(true);
     try {
       // 单条失败由页面汇总展示，跳过全局 toast 避免刷屏（R11-P2-8）。
       const results = await Promise.allSettled(
-        selected.map((b) => deleteBucket(b.id, { __skipToast: true }))
+        selectedBuckets.map((b) => deleteBucket(b.id, { __skipToast: true }))
       );
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
         toast.error(`删除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
       } else {
-        toast.success(`已删除 ${selected.length} 个 Bucket`);
+        toast.success(`已删除 ${selectedBuckets.length} 个 Bucket`);
       }
-      queryClient.invalidateQueries({ queryKey: ["buckets", projectId] });
-      clear();
+      list.refetch();
+      setSelectedIds(new Set());
     } finally {
       setBulkDeleting(false);
     }
   };
 
-  return (
-    <ResourceListPage
-      title="Storage"
-      description="管理存储 Bucket"
-      searchPlaceholder="当前页内搜索 Bucket 名称或 ID..."
-      isLoading={isLoading}
-      items={buckets}
-      columns={bucketColumns(tz)}
-      getSearchText={getSearchText}
-      serverPaging={{
-        page: paging.page,
-        pageSize: paging.pageSize,
-        hasPrev: paging.hasPrev,
-        hasNext: !!data?.nextPageToken,
-        onPrev: paging.goPrev,
-        onNext: () => paging.goNext(data?.nextPageToken),
-        onPageSizeChange: paging.setPageSize,
-      }}
-      detailPath={(b) => `/console/storage/${b.id}`}
-      toolbarActions={
-        writeable ? (
-          <Button asChild>
-            <Link to="/console/storage/new">
-              <Plus className="h-4 w-4 mr-2" />
-              新建 Bucket
-            </Link>
-          </Button>
-        ) : undefined
-      }
-      selectionActions={
-        writeable
-          ? (selected, clear) => (
-              <BulkDeleteButton
-                count={selected.length}
-                loading={bulkDeleting}
-                onConfirm={() => handleBulkDelete(selected, clear)}
+  const tableColumns: LegacyColumnDef<Bucket, unknown>[] = [
+    ...bucketColumns(tz),
+    ...(writeable
+      ? [
+          {
+            id: "actions",
+            header: "操作",
+            cell: ({ row }: { row: { original: Bucket } }) => (
+              <RowDeleteButton
+                onConfirm={() => remove.mutate({ id: row.original.id })}
+                loading={remove.pending}
               />
-            )
-          : undefined
-      }
-      rowActions={
-        writeable
-          ? (b) => (
-              <RowDeleteButton onConfirm={() => remove.mutate(b.id)} loading={remove.isPending} />
-            )
-          : undefined
-      }
-      emptyTitle="暂无 Bucket"
-      emptyDescription="创建 Bucket 以上传文件"
-      emptyAction={
-        writeable ? (
-          <Button asChild>
-            <Link to="/console/storage/new">新建 Bucket</Link>
-          </Button>
-        ) : undefined
-      }
-    />
+            ),
+          } satisfies LegacyColumnDef<Bucket, unknown>,
+        ]
+      : []),
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Storage" description="管理存储 Bucket" />
+
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="当前页内搜索 Bucket 名称或 ID..."
+              className="h-8 w-56"
+            />
+            {selectedBuckets.length > 0 && writeable ? (
+              <BulkDeleteButton
+                count={selectedBuckets.length}
+                loading={bulkDeleting}
+                onConfirm={() => void handleBulkDelete()}
+              />
+            ) : null}
+            {writeable ? (
+              <Button asChild className="ml-auto">
+                <Link to="/console/storage/new">
+                  <Plus className="h-4 w-4 mr-2" />
+                  新建 Bucket
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+        }
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={list} />
+          </div>
+        }
+        emptyTitle={search !== "" ? "没有匹配的 Bucket" : "暂无 Bucket"}
+        emptyDescription={
+          search !== "" ? "调整搜索词，或清空恢复当前页全部行" : "创建 Bucket 以上传文件"
+        }
+        emptyAction={
+          writeable ? (
+            <Button asChild>
+              <Link to="/console/storage/new">新建 Bucket</Link>
+            </Button>
+          ) : undefined
+        }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={tableColumns}
+            getRowId={(b) => b.id}
+            onRowClick={(b) => navigate({ to: `/console/storage/${b.id}` })}
+            selection={
+              writeable
+                ? {
+                    selectedIds,
+                    onToggle: toggleRow,
+                    onToggleAll: toggleAll,
+                  }
+                : undefined
+            }
+          />
+        </div>
+      </FleetListPage>
+    </div>
   );
 }
 
@@ -221,12 +295,19 @@ export function BucketNewPage() {
   const [name, setName] = useState("");
   const [publicBucket, setPublicBucket] = useState(false);
 
-  const mutation = useMutation({
-    mutationFn: createBucket,
-    onSuccess: (bucket) => {
-      toast.success("Bucket 创建成功");
-      queryClient.invalidateQueries({ queryKey: ["buckets", projectId] });
-      navigate(`/console/storage/${bucket.id}`);
+  // 创建命令接线：kit 桶集合自动失效；存量 ["buckets"] 键（详情页）手动桥。
+  const create = useCommand(createBucketCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Bucket 创建成功");
+        void queryClient.invalidateQueries({ queryKey: ["buckets"] });
+        navigate({ to: `/console/storage/${result.payload.id}` });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -237,9 +318,9 @@ export function BucketNewPage() {
       submitLabel="创建"
       onSubmit={(e) => {
         e.preventDefault();
-        mutation.mutate({ name, public: publicBucket });
+        create.mutate({ name, public: publicBucket });
       }}
-      loading={mutation.isPending}
+      loading={create.pending}
       submitDisabled={!canWrite(role)}
     >
       <FormField id="name" label="Bucket 名称" value={name} onChange={setName} required placeholder="uploads" />
@@ -252,7 +333,7 @@ export function BucketNewPage() {
 }
 
 export function BucketDetailPage() {
-  const { bucketId } = useParams<{ bucketId: string }>();
+  const { bucketId } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const tz = useUserTimezone();
@@ -285,39 +366,62 @@ export function BucketDetailPage() {
   });
   const files = filesData?.rows ?? [];
 
-  const updateBucketMutation = useMutation({
-    mutationFn: (input: { name?: string; public?: boolean }) =>
-      updateBucket(bucketId!, input),
-    onSuccess: () => {
-      toast.success("Bucket 设置已更新");
-      queryClient.invalidateQueries({ queryKey: ["buckets", bucketId] });
-      queryClient.invalidateQueries({ queryKey: ["buckets", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["storage-usage", projectId] });
+  // 命令接线（§12.3）：桶 update/remove 挂资源（kit 集合自动失效），
+  // 存量 ["buckets"]/["storage-usage"] 键手动桥；文件命令独立 descriptor
+  //（无 kit 集合）——存量 ["files"] 键手动桥。toast 单源 onSettled。
+  const updateBucketHandle = useCommand(updateBucketCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Bucket 设置已更新");
+        void queryClient.invalidateQueries({ queryKey: ["buckets"] });
+        void queryClient.invalidateQueries({ queryKey: ["storage-usage", projectId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const removeBucket = useMutation({
-    mutationFn: (id: string) => deleteBucket(id),
-    onSuccess: () => {
-      toast.success("Bucket 已删除");
-      queryClient.invalidateQueries({ queryKey: ["buckets", projectId] });
-      navigate("/console/storage");
+  const removeBucket = useCommand(removeBucketCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("Bucket 已删除");
+        void queryClient.invalidateQueries({ queryKey: ["buckets"] });
+        navigate({ to: "/console/storage" });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const uploadMutation = useMutation({
-    mutationFn: (file: File) => uploadFile(bucketId!, file),
-    onSuccess: () => {
-      toast.success("文件上传成功");
-      queryClient.invalidateQueries({ queryKey: ["files", bucketId] });
+  const uploadMutation = useCommand(uploadFileDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("文件上传成功");
+        void queryClient.invalidateQueries({ queryKey: ["files", bucketId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (fileId: string) => deleteFile(bucketId!, fileId),
-    onSuccess: () => {
-      toast.success("文件已删除");
-      queryClient.invalidateQueries({ queryKey: ["files", bucketId] });
+  const deleteMutation = useCommand(removeFileDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("文件已删除");
+        void queryClient.invalidateQueries({ queryKey: ["files", bucketId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -370,8 +474,8 @@ export function BucketDetailPage() {
         actions={
           writeable ? (
             <DeleteButton
-              onConfirm={() => removeBucket.mutate(bucket.id)}
-              loading={removeBucket.isPending}
+              onConfirm={() => removeBucket.mutate({ id: bucket.id })}
+              loading={removeBucket.pending}
             />
           ) : undefined
         }
@@ -396,9 +500,9 @@ export function BucketDetailPage() {
           <CardContent className="flex items-center gap-2">
             <Checkbox
               checked={bucket.public ?? false}
-              disabled={!writeable || updateBucketMutation.isPending}
+              disabled={!writeable || updateBucketHandle.pending}
               onChange={(e) =>
-                updateBucketMutation.mutate({ public: e.target.checked })
+                updateBucketHandle.mutate({ id: bucketId!, public: e.target.checked })
               }
             />
             <span className="text-sm text-muted-foreground">
@@ -464,7 +568,7 @@ export function BucketDetailPage() {
                     setChunkUpload({ file, key: `${file.name}:${file.size}:${Date.now()}` });
                     return;
                   }
-                  uploadMutation.mutate(file);
+                  uploadMutation.mutate({ bucketId: bucketId!, file });
                 }}
               />
             </div>
@@ -493,8 +597,8 @@ export function BucketDetailPage() {
             </Button>
             {writeable && (
               <RowDeleteButton
-                onConfirm={() => deleteMutation.mutate(f.id)}
-                loading={deleteMutation.isPending}
+                onConfirm={() => deleteMutation.mutate({ bucketId: bucketId!, fileId: f.id })}
+                loading={deleteMutation.pending}
               />
             )}
           </>
@@ -507,7 +611,7 @@ export function BucketDetailPage() {
 }
 
 export function FileDetailPage() {
-  const { bucketId, fileId } = useParams<{ bucketId: string; fileId: string }>();
+  const { bucketId, fileId } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { role } = useAdminRole();
@@ -549,21 +653,32 @@ export function FileDetailPage() {
     };
   }, [bucketId, fileId]);
 
-  const remove = useMutation({
-    mutationFn: () => deleteFile(bucketId!, fileId!),
-    onSuccess: () => {
-      toast.success("文件已删除");
-      queryClient.invalidateQueries({ queryKey: ["files", bucketId] });
-      navigate(`/console/storage/${bucketId}`);
+  // 文件命令接线（独立 descriptor）：存量 ["files"] 键手动桥（前缀匹配覆盖
+  // 文件详情键）；toast 单源 onSettled（§12.3）。
+  const remove = useCommand(removeFileDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("文件已删除");
+        void queryClient.invalidateQueries({ queryKey: ["files", bucketId] });
+        navigate({ to: `/console/storage/${bucketId}` });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const rename = useMutation({
-    mutationFn: (name: string) => updateFile(bucketId!, fileId!, { name }),
-    onSuccess: () => {
-      toast.success("文件名已更新");
-      queryClient.invalidateQueries({ queryKey: ["files", bucketId, fileId] });
-      queryClient.invalidateQueries({ queryKey: ["files", bucketId] });
+  const rename = useCommand(renameFileDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("文件名已更新");
+        void queryClient.invalidateQueries({ queryKey: ["files", bucketId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -628,7 +743,10 @@ export function FileDetailPage() {
             下载
           </Button>
           {writeable && (
-            <DeleteButton onConfirm={() => remove.mutate()} loading={remove.isPending} />
+            <DeleteButton
+              onConfirm={() => remove.mutate({ bucketId: bucketId!, fileId: fileId! })}
+              loading={remove.pending}
+            />
           )}
         </div>
       }
@@ -684,10 +802,12 @@ export function FileDetailPage() {
             />
           </div>
           <Button
-            disabled={!writeable || !nameDirty || !newName.trim() || rename.isPending}
-            onClick={() => rename.mutate(newName.trim())}
+            disabled={!writeable || !nameDirty || !newName.trim() || rename.pending}
+            onClick={() =>
+              rename.mutate({ bucketId: bucketId!, fileId: fileId!, name: newName.trim() })
+            }
           >
-            {rename.isPending ? "保存中..." : "保存"}
+            {rename.pending ? "保存中..." : "保存"}
           </Button>
         </CardContent>
       </Card>

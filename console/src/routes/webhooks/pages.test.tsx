@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TestRouter } from "@/router/compat";
+import { TestRouter } from "@/test-utils/TestRouter";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebhooksListPage, WebhookDetailPage } from "./pages";
 
@@ -14,6 +14,7 @@ vi.mock("@/hooks/useAdminRole", () => ({
   canWrite: () => true,
   isPlatformAdmin: () => true,
 }));
+vi.mock("@/hooks/useTimezone", () => ({ useUserTimezone: () => "UTC" }));
 vi.mock("@/api/webhooks", () => ({
   listWebhooks: vi.fn(),
   getWebhook: vi.fn(),
@@ -26,15 +27,20 @@ vi.mock("@/api/webhooks", () => ({
   redeliverDelivery: vi.fn(),
 }));
 
-import { listWebhooks, getWebhook, listDeliveries } from "@/api/webhooks";
+import { listWebhooks, getWebhook, listDeliveries, deleteWebhook, redeliverDelivery } from "@/api/webhooks";
 
-function renderList() {
+async function renderList() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  render(
     <QueryClientProvider client={client}>
-      <TestRouter routes={[{ path: "/*", element: <WebhooksListPage /> }]} />
+      <TestRouter
+        routes={[{ path: "/console/webhooks", element: <WebhooksListPage /> }]}
+        initialEntries={["/console/webhooks"]}
+      />
     </QueryClientProvider>
   );
+  // RouterProvider 首提交异步：冲刷后再断言（仓库惯例）。
+  await act(async () => {});
 }
 
 function renderDetail() {
@@ -70,11 +76,71 @@ describe("WebhooksListPage", () => {
         },
       ],
     });
-    renderList();
+    await renderList();
     expect(await screen.findByText("https://api.example.com/hooks")).toBeTruthy();
     expect(screen.getByText("wh-1")).toBeTruthy();
     expect(screen.getByText("2 条")).toBeTruthy();
     expect(screen.getByText("enabled")).toBeTruthy();
+  });
+
+  it("URL 即真相：默认页大小/翻页游标透传 listWebhooks（page_token）", async () => {
+    vi.mocked(listWebhooks).mockResolvedValue({
+      rows: [
+        {
+          id: "wh-1",
+          project_id: "proj-1",
+          url: "https://api.example.com/hooks",
+          events: ["auth.users.created"],
+          status: "enabled",
+          secret_fingerprint: "whsec_ab12cd34",
+          created_at: "2026-10-01T00:00:00Z",
+          updated_at: "2026-10-01T00:00:00Z",
+        },
+      ],
+      nextPageToken: "tok-2",
+    });
+    await renderList();
+    await screen.findByText("wh-1");
+    // defaultSize 20 = 旧页默认；首次请求无 token
+    expect(listWebhooks).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pageSize: 20, pageToken: undefined }),
+    );
+    // 下一页 → 游标 push 进 URL → 请求带 page_token
+    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(() =>
+      expect(listWebhooks).toHaveBeenLastCalledWith(
+        expect.objectContaining({ pageToken: "tok-2" }),
+      ),
+    );
+  });
+
+  // 写路径锚（§12.3）：行删确认走 useCommand——api 收到 SKIP 且成功路径不抛。
+  it("行删除确认走 useCommand（skipToast + 结果 ok 不抛）", async () => {
+    vi.mocked(listWebhooks).mockResolvedValue({
+      rows: [
+        {
+          id: "wh-1",
+          project_id: "proj-1",
+          url: "https://api.example.com/hooks",
+          events: ["auth.users.created"],
+          status: "enabled",
+          secret_fingerprint: "whsec_ab12cd34",
+          created_at: "2026-10-01T00:00:00Z",
+          updated_at: "2026-10-01T00:00:00Z",
+        },
+      ],
+      nextPageToken: undefined,
+    });
+    vi.mocked(deleteWebhook).mockResolvedValue(undefined);
+    await renderList();
+    await screen.findByText("wh-1");
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    // torchwood 存量确认壳：确认钮与触发钮同名，scope 到对话框内
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    await waitFor(() =>
+      expect(deleteWebhook).toHaveBeenCalledWith("wh-1", { __skipToast: true }),
+    );
   });
 });
 
@@ -159,6 +225,57 @@ describe("WebhookDetailPage", () => {
         pageToken: "",
         status: "failed",
       })
+    );
+  });
+
+  // 写路径锚（§12.3）：Redeliver 走 useCommand（裸 descriptor）——api 收到
+  // SKIP 且成功路径不抛。
+  it("Redeliver 走 useCommand（skipToast + 结果 ok 不抛）", async () => {
+    vi.mocked(getWebhook).mockResolvedValue({
+      id: "wh-1",
+      project_id: "proj-1",
+      url: "https://api.example.com/hooks",
+      events: ["auth.users.created"],
+      status: "enabled",
+      secret_fingerprint: "whsec_ab12cd34",
+      created_at: "2026-10-01T00:00:00Z",
+      updated_at: "2026-10-01T00:00:00Z",
+    });
+    vi.mocked(listDeliveries).mockResolvedValue({
+      rows: [
+        {
+          id: "dlv-1",
+          webhook_id: "wh-1",
+          event_id: "evt-1",
+          event_type: "auth.users.created",
+          seq: 42,
+          attempts: 3,
+          next_attempt_at: "2026-10-02T00:00:00Z",
+          status: "failed",
+          last_response_code: 500,
+          last_error: "upstream 500",
+          created_at: "2026-10-01T00:00:00Z",
+          updated_at: "2026-10-01T00:05:00Z",
+        },
+      ],
+    });
+    vi.mocked(redeliverDelivery).mockResolvedValue({
+      id: "dlv-1",
+      webhook_id: "wh-1",
+      event_id: "evt-1",
+      event_type: "auth.users.created",
+      seq: 42,
+      attempts: 0,
+      status: "pending",
+      last_response_code: 0,
+      last_error: "",
+      created_at: "2026-10-01T00:00:00Z",
+      updated_at: "2026-10-03T00:00:00Z",
+    });
+    renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: "Redeliver" }));
+    await waitFor(() =>
+      expect(redeliverDelivery).toHaveBeenCalledWith("wh-1", "dlv-1", { __skipToast: true }),
     );
   });
 });

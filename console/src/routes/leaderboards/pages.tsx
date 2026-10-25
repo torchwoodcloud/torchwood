@@ -1,12 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "@/router/compat";
+import { Link, useParams } from "@tanstack/react-router";
+import { useCollection, useCommand } from "@lynx-go/ui-kit";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { toast } from "sonner";
 import { Pencil, Plus, Trophy } from "lucide-react";
 import {
-  createBoard,
-  deleteBoard,
-  deleteBoardEntry,
   getBoard,
   getBoardEntry,
   getSettlement,
@@ -17,14 +16,21 @@ import {
   LEADERBOARD_TIE_BREAKS,
   listBoardPeriods,
   listBoardTop,
-  listBoards,
-  rerunSettlement,
-  updateBoard,
-  voidSettlement,
   type LeaderboardBoard,
   type LeaderboardScoreSnapshot,
   type LeaderboardSettlement,
 } from "@/api/leaderboards";
+import {
+  boardsResource,
+  boardsSearch,
+  createBoardCommand,
+  updateBoardCommand,
+  removeBoardCommand,
+  removeBoardEntryDescriptor,
+  voidSettlementDescriptor,
+  rerunSettlementDescriptor,
+} from "@/fleet/leaderboards";
+import { describeApiError } from "@/fleet/errors";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -46,112 +52,175 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { ListPaginationKeyset } from "@/components/list/ListToolbar";
 import { useServerPaging } from "@/hooks/useServerPaging";
 import { RowDeleteButton } from "@/components/resource/shared";
-import type { ColumnDef } from "@/components/list/DataTable";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
-
-// 工厂：时区来自管理员偏好（hook 无法在模块级使用），由列表页传入。
-const boardColumns = (tz: string): ColumnDef<LeaderboardBoard>[] => [
-  {
-    key: "id",
-    header: "榜 ID",
-    cell: (b) => <Link className="font-medium underline-offset-2 hover:underline" to={`/console/leaderboards/${b.id}`}>{b.id}</Link>,
-  },
-  {
-    key: "period",
-    header: "期 / 时区",
-    cell: (b) => (
-      <span className="text-sm">
-        {b.period_kind === "none" ? "全期" : `${b.period_kind}${b.period_tz ? ` · ${b.period_tz}` : ""}`}
-      </span>
-    ),
-  },
-  {
-    key: "semantics",
-    header: "排序 / 合并",
-    cell: (b) => (
-      <div className="flex flex-wrap gap-1">
-        <Badge variant="secondary">{b.sort ?? "desc"}</Badge>
-        <Badge variant="outline">{b.policy ?? "best"}</Badge>
-        {b.tiebreak_order ? <Badge variant="outline">tb:{b.tiebreak_order}</Badge> : null}
-        <Badge variant="outline">{b.tie_break ?? "parallel"}</Badge>
-      </div>
-    ),
-  },
-  {
-    key: "client_submit",
-    header: "客户端提交",
-    cell: (b) =>
-      b.client_submit ? <Badge>开放</Badge> : <Badge variant="outline">仅服务端</Badge>,
-  },
-  {
-    key: "limit",
-    header: "限频 / 保留",
-    cell: (b) => (
-      <span className="text-sm text-muted-foreground">
-        {b.per_subject_submit_limit ?? 100}/期 · {b.retention_periods ? `${b.retention_periods} 期` : "永久"}
-      </span>
-    ),
-  },
-  {
-    key: "updated_at",
-    header: "更新时间",
-    cell: (b) => (b.updated_at ? formatDateTime(b.updated_at, tz) : "—"),
-  },
-];
+import { useAuth } from "@/hooks/useAuth";
+import { PageHeader } from "@/components/PageHeader";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 
 export function LeaderboardsListPage() {
-  const queryClient = useQueryClient();
+  const { projectId } = useAuth();
   const tz = useUserTimezone();
-  const { data: boards = [], isLoading } = useQuery({
-    queryKey: ["leaderboards-boards"],
-    queryFn: listBoards,
-  });
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["leaderboards-boards"] });
+  const [search, setSearch] = useState("");
 
-  const remove = useMutation({
-    mutationFn: deleteBoard,
-    onSuccess: () => {
-      toast.success("榜已删除（条目级联删除）");
-      invalidate();
+  // 列表 fleet 化（§12.9-2）：boards 端点全量返回（非分页、无服务端过滤），
+  // useCollection 只吃四态/错误收敛面；榜 ID 页内搜索保持本地态（旧页语义）。
+  // 旧页 fetch 不随项目禁用 → 无 enabled 门（scope 仍带 projectId 分区缓存）。
+  const list = useCollection(boardsResource, {
+    from: "/console/leaderboards",
+    search: boardsSearch,
+    scope: { projectId: projectId ?? undefined },
+  });
+
+  // 写路径命令化（§12.3）：remove 挂榜资源——kit 集合键由 useCommand 自动
+  // 失效（现页 refresh 桥退场）；toast 单源 onSettled。
+  const remove = useCommand(removeBoardCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("榜已删除（条目级联删除）");
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  return (
-    <ResourceListPage
-      title="排行榜"
-      description="榜配置（期 / 排序 / 合并策略 / 限频 / 保留 / 奖励规则）。作弊处理：进入榜详情删条目——封榜后的期不可变；结算见详情页。"
-      searchPlaceholder="搜索榜 ID..."
-      isLoading={isLoading}
-      items={boards}
-      columns={boardColumns(tz)}
-      getSearchText={(b) => `${b.id} ${b.subject_kind ?? ""}`}
-      toolbarActions={
-        <CreateBoardDialog onCreated={invalidate} />
-      }
-      rowActions={(b) => (
+  const getSearchText = useCallback(
+    (b: LeaderboardBoard) => `${b.id} ${b.subject_kind ?? ""}`.toLowerCase(),
+    []
+  );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((b) => getSearchText(b).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
+
+  const columns: LegacyColumnDef<LeaderboardBoard, unknown>[] = [
+    {
+      id: "id",
+      header: "榜 ID",
+      cell: ({ row }) => (
+        <Link
+          className="font-medium underline-offset-2 hover:underline"
+          to="/console/leaderboards/$boardId" params={{ boardId: row.original.id }}
+        >
+          {row.original.id}
+        </Link>
+      ),
+    },
+    {
+      id: "period",
+      header: "期 / 时区",
+      cell: ({ row }) => (
+        <span className="text-sm">
+          {row.original.period_kind === "none"
+            ? "全期"
+            : `${row.original.period_kind}${row.original.period_tz ? ` · ${row.original.period_tz}` : ""}`}
+        </span>
+      ),
+    },
+    {
+      id: "semantics",
+      header: "排序 / 合并",
+      cell: ({ row }) => (
+        <div className="flex flex-wrap gap-1">
+          <Badge variant="secondary">{row.original.sort ?? "desc"}</Badge>
+          <Badge variant="outline">{row.original.policy ?? "best"}</Badge>
+          {row.original.tiebreak_order ? (
+            <Badge variant="outline">tb:{row.original.tiebreak_order}</Badge>
+          ) : null}
+          <Badge variant="outline">{row.original.tie_break ?? "parallel"}</Badge>
+        </div>
+      ),
+    },
+    {
+      id: "client_submit",
+      header: "客户端提交",
+      cell: ({ row }) =>
+        row.original.client_submit ? <Badge>开放</Badge> : <Badge variant="outline">仅服务端</Badge>,
+    },
+    {
+      id: "limit",
+      header: "限频 / 保留",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {row.original.per_subject_submit_limit ?? 100}/期 ·{" "}
+          {row.original.retention_periods ? `${row.original.retention_periods} 期` : "永久"}
+        </span>
+      ),
+    },
+    {
+      id: "updated_at",
+      header: "更新时间",
+      cell: ({ row }) => (row.original.updated_at ? formatDateTime(row.original.updated_at, tz) : "—"),
+    },
+    {
+      id: "actions",
+      header: "操作",
+      cell: ({ row }) => (
         <div className="flex items-center gap-1">
-          <EditBoardDialog board={b} onSaved={invalidate} />
+          <EditBoardDialog board={row.original} />
           <RowDeleteButton
-            onConfirm={() => remove.mutate(b.id)}
-            loading={remove.isPending}
+            onConfirm={() => remove.mutate({ id: row.original.id })}
+            loading={remove.pending}
           />
         </div>
-      )}
-      emptyTitle="暂无排行榜"
-      emptyDescription="创建第一个榜后即可开始提交分数"
-    />
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="排行榜"
+        description="榜配置（期 / 排序 / 合并策略 / 限频 / 保留 / 奖励规则）。作弊处理：进入榜详情删条目——封榜后的期不可变；结算见详情页。"
+      />
+
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="搜索榜 ID..."
+              className="h-8 w-56"
+            />
+            <div className="ml-auto">
+              <CreateBoardDialog />
+            </div>
+          </div>
+        }
+        emptyTitle={search !== "" ? "没有匹配的排行榜" : "暂无排行榜"}
+        emptyDescription={
+          search !== ""
+            ? "调整搜索词，或清空恢复全部榜"
+            : "创建第一个榜后即可开始提交分数"
+        }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={columns}
+            getRowId={(row) => row.id}
+          />
+        </div>
+      </FleetListPage>
+    </div>
   );
 }
 
 const inputCls = "space-y-2";
 
-function CreateBoardDialog({ onCreated }: { onCreated: () => void }) {
+function CreateBoardDialog() {
+  const { projectId } = useAuth();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     id: "",
@@ -170,12 +239,19 @@ function CreateBoardDialog({ onCreated }: { onCreated: () => void }) {
     rewards: [] as Array<{ rank_min: string; rank_max: string; value_min: string; asset_code: string; amount: string }>,
   });
 
-  const mutation = useMutation({
-    mutationFn: createBoard,
-    onSuccess: () => {
-      toast.success("榜已创建");
-      setOpen(false);
-      onCreated();
+  // 创建命令接线（§12.3）：kit 榜集合自动失效（onCreated 桥退场）；输入 =
+  // 现页面提交形（rewards 映射留在提交处）。toast 单源 onSettled。
+  const create = useCommand(createBoardCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("榜已创建");
+        setOpen(false);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -198,7 +274,7 @@ function CreateBoardDialog({ onCreated }: { onCreated: () => void }) {
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
-            mutation.mutate({
+            create.mutate({
               id: form.id,
               sort: form.sort,
               tiebreak_order: form.tiebreakOrder || undefined,
@@ -329,8 +405,8 @@ function CreateBoardDialog({ onCreated }: { onCreated: () => void }) {
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "创建中…" : "创建"}
+            <Button type="submit" disabled={create.pending}>
+              {create.pending ? "创建中…" : "创建"}
             </Button>
           </DialogFooter>
         </form>
@@ -339,7 +415,8 @@ function CreateBoardDialog({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-function EditBoardDialog({ board, onSaved }: { board: LeaderboardBoard; onSaved: () => void }) {
+function EditBoardDialog({ board }: { board: LeaderboardBoard }) {
+  const { projectId } = useAuth();
   const [open, setOpen] = useState(false);
   const [valueMin, setValueMin] = useState(board.value_min ?? "");
   const [valueMax, setValueMax] = useState(board.value_max ?? "");
@@ -348,12 +425,19 @@ function EditBoardDialog({ board, onSaved }: { board: LeaderboardBoard; onSaved:
   const [retention, setRetention] = useState(String(board.retention_periods ?? 0));
   const [subjectKind, setSubjectKind] = useState(board.subject_kind ?? "user");
 
-  const mutation = useMutation({
-    mutationFn: (input: Parameters<typeof updateBoard>[1]) => updateBoard(board.id, input),
-    onSuccess: () => {
-      toast.success("榜已更新");
-      setOpen(false);
-      onSaved();
+  // 编辑命令接线（§12.3）：kit 榜集合自动失效（onSaved 桥退场）；输入 =
+  // 现页面提交形（clear_value_bounds 等语义留在提交处）。
+  const update = useCommand(updateBoardCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("榜已更新");
+        setOpen(false);
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -375,7 +459,8 @@ function EditBoardDialog({ board, onSaved }: { board: LeaderboardBoard; onSaved:
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
-            mutation.mutate({
+            update.mutate({
+              id: board.id,
               clear_value_bounds: valueMin === "" && valueMax === "",
               value_min: valueMin === "" ? undefined : valueMin,
               value_max: valueMax === "" ? undefined : valueMax,
@@ -418,8 +503,8 @@ function EditBoardDialog({ board, onSaved }: { board: LeaderboardBoard; onSaved:
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "保存中…" : "保存"}
+            <Button type="submit" disabled={update.pending}>
+              {update.pending ? "保存中…" : "保存"}
             </Button>
           </DialogFooter>
         </form>
@@ -429,7 +514,7 @@ function EditBoardDialog({ board, onSaved }: { board: LeaderboardBoard; onSaved:
 }
 
 export function BoardDetailPage() {
-  const { boardId } = useParams<{ boardId: string }>();
+  const { boardId } = useParams({ strict: false });
   const queryClient = useQueryClient();
   const tz = useUserTimezone();
   const { data: board } = useQuery({
@@ -477,12 +562,19 @@ export function BoardDetailPage() {
     onError: () => setLookupResult(null),
   });
 
-  const removeEntry = useMutation({
-    mutationFn: (subjectId: string) => deleteBoardEntry(boardId!, activePeriod, subjectId),
-    onSuccess: () => {
-      toast.success("条目已删除（仅未封榜期可删）");
-      queryClient.invalidateQueries({ queryKey: ["leaderboards-top", boardId] });
-      queryClient.invalidateQueries({ queryKey: ["leaderboards-periods", boardId] });
+  // 条目删除命令接线（独立 descriptor）：不改变榜集合——存量
+  // ["leaderboards-top"/"-periods"] 键手动桥；toast 单源 onSettled（§12.3）。
+  const removeEntry = useCommand(removeBoardEntryDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("条目已删除（仅未封榜期可删）");
+        void queryClient.invalidateQueries({ queryKey: ["leaderboards-top", boardId] });
+        void queryClient.invalidateQueries({ queryKey: ["leaderboards-periods", boardId] });
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
@@ -553,8 +645,14 @@ export function BoardDetailPage() {
                   </td>
                   <td className="p-2">
                     <RowDeleteButton
-                      onConfirm={() => removeEntry.mutate(e.subject_id)}
-                      loading={removeEntry.isPending}
+                      onConfirm={() =>
+                        removeEntry.mutate({
+                          boardId: boardId!,
+                          period: activePeriod,
+                          subjectId: e.subject_id,
+                        })
+                      }
+                      loading={removeEntry.pending}
                     />
                   </td>
                 </tr>
@@ -680,24 +778,35 @@ function SettlementsSection({ boardId }: { boardId: string }) {
     queryKey: ["leaderboards-settlements", boardId],
     queryFn: () => listSettlements(boardId, 50),
   });
+  // 结算命令接线（独立 descriptor）：不改变榜集合——存量
+  // ["leaderboards-settlements"] 键手动桥（无论成败都刷新，与旧页
+  // onError invalidate 语义一致）；toast 单源 onSettled（§12.3）。
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["leaderboards-settlements", boardId] });
 
-  const voidMutation = useMutation({
-    mutationFn: (period: string) => voidSettlement(boardId, period),
-    onSuccess: () => {
-      toast.success("期已弃奖（settled 期不可 void）");
+  const voidMutation = useCommand(voidSettlementDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("期已弃奖（settled 期不可 void）");
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
       invalidate();
     },
-    onError: () => invalidate(),
   });
-  const rerunMutation = useMutation({
-    mutationFn: (period: string) => rerunSettlement(boardId, period),
-    onSuccess: () => {
-      toast.success("重跑完成（只补发未发放明细）");
+  const rerunMutation = useCommand(rerunSettlementDescriptor, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("重跑完成（只补发未发放明细）");
+      } else if (result) {
+        toast.error(result.message);
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
       invalidate();
     },
-    onError: () => invalidate(),
   });
 
   if (isLoading) {
@@ -731,9 +840,9 @@ function SettlementsSection({ boardId }: { boardId: string }) {
                 key={s.period}
                 boardId={boardId}
                 settlement={s}
-                onVoid={() => voidMutation.mutate(s.period)}
-                onRerun={() => rerunMutation.mutate(s.period)}
-                busy={voidMutation.isPending || rerunMutation.isPending}
+                onVoid={() => voidMutation.mutate({ boardId, period: s.period })}
+                onRerun={() => rerunMutation.mutate({ boardId, period: s.period })}
+                busy={voidMutation.pending || rerunMutation.pending}
               />
             ))}
           </tbody>

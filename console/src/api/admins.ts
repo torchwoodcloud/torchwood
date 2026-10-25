@@ -47,26 +47,31 @@ export async function listAdmins(params: ListParams): Promise<Page<Admin>> {
   return { rows: res.data.admins ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
-export async function createAdmin(input: {
-  email: string;
-  password: string;
-  role: string;
-}): Promise<Admin> {
-  const res = await api.post<Admin>("/console/admins", input);
+export async function createAdmin(
+  input: {
+    email: string;
+    password: string;
+    role: string;
+  },
+  config?: ApiRequestConfig
+): Promise<Admin> {
+  const res = await api.post<Admin>("/console/admins", input, config);
   return res.data;
 }
 
 export async function updateAdmin(
   id: string,
-  input: { role?: string; password?: string }
+  input: { role?: string; password?: string },
+  config?: ApiRequestConfig
 ): Promise<Admin> {
   const res = await api.patch<Admin>(
     `/console/admins/${encodeURIComponent(id)}`,
-    input
+    input,
+    config
   );
   return res.data;
 }
 
-export async function deleteAdmin(id: string): Promise<void> {
-  await api.delete(`/console/admins/${encodeURIComponent(id)}`);
+export async function deleteAdmin(id: string, config?: ApiRequestConfig): Promise<void> {
+  await api.delete(`/console/admins/${encodeURIComponent(id)}`, config);
 }

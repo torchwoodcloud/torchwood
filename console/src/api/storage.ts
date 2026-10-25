@@ -53,11 +53,14 @@ export async function getBucket(id: string): Promise<Bucket> {
   return normalizeBucket(res.data);
 }
 
-export async function createBucket(input: {
-  name: string;
-  public?: boolean;
-}): Promise<Bucket> {
-  const res = await api.post<Bucket>("/server/storage/buckets", input);
+export async function createBucket(
+  input: {
+    name: string;
+    public?: boolean;
+  },
+  config?: ApiRequestConfig
+): Promise<Bucket> {
+  const res = await api.post<Bucket>("/server/storage/buckets", input, config);
   return normalizeBucket(res.data);
 }
 
@@ -67,9 +70,10 @@ export async function deleteBucket(id: string, config?: ApiRequestConfig): Promi
 
 export async function updateBucket(
   id: string,
-  input: { name?: string; public?: boolean }
+  input: { name?: string; public?: boolean },
+  config?: ApiRequestConfig
 ): Promise<Bucket> {
-  const res = await api.patch<Bucket>(`/server/storage/buckets/${id}`, input);
+  const res = await api.patch<Bucket>(`/server/storage/buckets/${id}`, input, config);
   return normalizeBucket(res.data);
 }
 
@@ -91,7 +95,8 @@ export async function getFile(bucketId: string, fileId: string): Promise<FileIte
 
 export async function uploadFile(
   bucketId: string,
-  file: File
+  file: File,
+  config?: ApiRequestConfig
 ): Promise<FileItem> {
   const form = new FormData();
   form.append("file", file);
@@ -99,6 +104,7 @@ export async function uploadFile(
     `/storage/buckets/${bucketId}/files`,
     form,
     {
+      ...config,
       headers: { "Content-Type": "multipart/form-data" },
     }
   );
@@ -251,11 +257,13 @@ export async function updateFile(
     name?: string;
     mime_type?: string;
     metadata?: Record<string, string>;
-  }
+  },
+  config?: ApiRequestConfig
 ): Promise<FileItem> {
   const res = await api.patch<FileItem>(
     `/server/storage/buckets/${bucketId}/files/${fileId}`,
-    input
+    input,
+    config
   );
   return res.data;
 }

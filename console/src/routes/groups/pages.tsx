@@ -1,29 +1,42 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "@/router/compat";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
 import { Plus, Settings2, UserPlus } from "lucide-react";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
-  listGroups,
   getGroup,
-  createGroup,
   deleteGroup,
   listMemberships,
-  createMembership,
-  updateMembership,
-  updateMembershipStatus,
   deleteMembership,
   getGroupPrefs,
-  updateGroupPrefs,
   type Group,
   type Membership,
 } from "@/api/groups";
+import {
+  groupsResource,
+  groupsSearch,
+  groupsCollectionKey,
+  createGroupCommand,
+  removeGroupCommand,
+  updateGroupPrefsCommand,
+  addGroupMemberCommand,
+  setGroupMemberRoleCommand,
+  setGroupMemberStatusCommand,
+  removeGroupMemberCommand,
+} from "@/fleet/groups";
+import { describeApiError } from "@/fleet/errors";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { useServerPaging } from "@/hooks/useServerPaging";
+import { PageHeader } from "@/components/PageHeader";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,127 +76,190 @@ function statusBadge(status: string) {
   return <Badge variant={variant}>{STATUS_LABELS[status] ?? status}</Badge>;
 }
 
-const groupColumns = (tz: string): ColumnDef<Group>[] => [
-  {
-    key: "id",
-    header: "ID",
-    className: "font-mono text-xs max-w-[140px] truncate",
-    cell: (t) => t.id,
-  },
-  { key: "name", header: "名称", cell: (t) => t.name },
-  { key: "total", header: "成员数", cell: (t) => String(t.total ?? 0) },
-  {
-    key: "created",
-    header: "创建时间",
-    cell: (t) => formatDateTime(t.created_at, tz),
-  },
-];
-
 export function GroupsListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const tz = useUserTimezone();
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const writeable = canWrite(role);
 
-  const paging = useServerPaging();
-  const { data, isLoading } = useQuery({
-    queryKey: ["groups", projectId, paging.pageSize, paging.pageToken],
-    queryFn: () => listGroups({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
-    enabled: !!projectId,
-    placeholderData: (prev) => prev,
+  // 列表 fleet 化（§12.9-2）：游标/页大小进 URL（分页栈 = 浏览器历史；旧页
+  // 无服务端过滤）；页内当前页搜索保持本地态（旧页语义）。
+  const list = useCollection(groupsResource, {
+    from: "/console/groups",
+    search: groupsSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-  const groups = data?.rows ?? [];
 
-  const remove = useMutation({
-    mutationFn: (id: string) => deleteGroup(id),
-    onSuccess: () => {
-      toast.success("用户组已删除");
-      queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
+  // 命令接线（§12.3）：toast 单源 onSettled；kit 列表键自动失效（descriptor
+  // 挂 resource）+ 存量 ["groups", …] 键手动桥（详情/成员页仍吃存量键）。
+  const remove = useCommand(removeGroupCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("用户组已删除");
+        void queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const getSearchText = useCallback((t: Group) => `${t.id} ${t.name}`, []);
+  const getSearchText = useCallback((t: Group) => `${t.id} ${t.name}`.toLowerCase(), []);
 
-  const handleBulkDelete = async (selected: Group[], clear: () => void) => {
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((t) => getSearchText(t).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
+
+  const toggleRow = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = (visibleIds: string[]) =>
+    setSelectedIds((prev) =>
+      new Set(visibleIds.length > 0 && visibleIds.every((id) => prev.has(id)) ? [] : visibleIds)
+    );
+  const selectedGroups = list.rows.filter((t) => selectedIds.has(t.id));
+
+  const handleBulkDelete = async () => {
     setBulkDeleting(true);
     try {
       // 单条失败由页面汇总展示，跳过全局 toast 避免刷屏（R11-P2-8）。
       const results = await Promise.allSettled(
-        selected.map((t) => deleteGroup(t.id, { __skipToast: true }))
+        selectedGroups.map((t) => deleteGroup(t.id, { __skipToast: true }))
       );
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
         toast.error(`删除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
       } else {
-        toast.success(`已删除 ${selected.length} 个用户组`);
+        toast.success(`已删除 ${selectedGroups.length} 个用户组`);
       }
-      queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
-      clear();
+      void queryClient.invalidateQueries({ queryKey: groupsCollectionKey });
+      void queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
+      setSelectedIds(new Set());
     } finally {
       setBulkDeleting(false);
     }
   };
 
-  return (
-    <ResourceListPage
-      title="Groups"
-      description="管理项目用户组与成员邀请"
-      searchPlaceholder="当前页内搜索用户组名称或 ID..."
-      isLoading={isLoading}
-      items={groups}
-      columns={groupColumns(tz)}
-      getSearchText={getSearchText}
-      serverPaging={{
-        page: paging.page,
-        pageSize: paging.pageSize,
-        hasPrev: paging.hasPrev,
-        hasNext: !!data?.nextPageToken,
-        onPrev: paging.goPrev,
-        onNext: () => paging.goNext(data?.nextPageToken),
-        onPageSizeChange: paging.setPageSize,
-      }}
-      detailPath={(t) => `/console/groups/${t.id}`}
-      toolbarActions={
-        writeable ? (
-          <Button asChild>
-            <Link to="/console/groups/new">
-              <Plus className="h-4 w-4 mr-2" />
-              新建用户组
-            </Link>
-          </Button>
-        ) : undefined
-      }
-      selectionActions={
-        writeable
-          ? (selected, clear) => (
-              <BulkDeleteButton
-                count={selected.length}
-                loading={bulkDeleting}
-                onConfirm={() => handleBulkDelete(selected, clear)}
+  const tableColumns: LegacyColumnDef<Group, unknown>[] = [
+    {
+      id: "id",
+      header: "ID",
+      cell: ({ row }) => (
+        <span className="inline-block max-w-[140px] truncate font-mono text-xs">
+          {row.original.id}
+        </span>
+      ),
+    },
+    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
+    {
+      id: "total",
+      header: "成员数",
+      cell: ({ row }) => String(row.original.total ?? 0),
+    },
+    {
+      id: "created",
+      header: "创建时间",
+      cell: ({ row }) => formatDateTime(row.original.created_at, tz),
+    },
+    ...(writeable
+      ? [
+          {
+            id: "actions",
+            header: "操作",
+              cell: ({ row }: { row: { original: Group } }) => (
+              <RowDeleteButton
+                onConfirm={() => remove.mutate({ id: row.original.id })}
+                loading={remove.pending}
               />
-            )
-          : undefined
-      }
-      rowActions={
-        writeable
-          ? (t) => (
-              <RowDeleteButton onConfirm={() => remove.mutate(t.id)} loading={remove.isPending} />
-            )
-          : undefined
-      }
-      emptyTitle="暂无用户组"
-      emptyDescription="创建用户组并邀请成员协作"
-      emptyAction={
-        writeable ? (
-          <Button asChild>
-            <Link to="/console/groups/new">新建用户组</Link>
-          </Button>
-        ) : undefined
-      }
-    />
+            ),
+          } satisfies LegacyColumnDef<Group, unknown>,
+        ]
+      : []),
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Groups" description="管理项目用户组与成员邀请" />
+
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="当前页内搜索用户组名称或 ID..."
+              className="h-8 w-56"
+            />
+            {selectedGroups.length > 0 && writeable ? (
+              <BulkDeleteButton
+                count={selectedGroups.length}
+                loading={bulkDeleting}
+                onConfirm={() => void handleBulkDelete()}
+              />
+            ) : null}
+            {writeable ? (
+              <Button asChild className="ml-auto">
+                <Link to="/console/groups/new">
+                  <Plus className="h-4 w-4 mr-2" />
+                  新建用户组
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+        }
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={list} />
+          </div>
+        }
+        emptyTitle={search !== "" ? "没有匹配的用户组" : "暂无用户组"}
+        emptyDescription={
+          search !== ""
+            ? "调整搜索词，或清空恢复当前页全部行"
+            : "创建用户组并邀请成员协作"
+        }
+        emptyAction={
+          writeable ? (
+            <Button asChild>
+              <Link to="/console/groups/new">新建用户组</Link>
+            </Button>
+          ) : undefined
+        }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={tableColumns}
+            getRowId={(row) => row.id}
+            onRowClick={(t) => navigate({ to: `/console/groups/${t.id}` })}
+            selection={
+              writeable
+                ? {
+                    selectedIds,
+                    onToggle: toggleRow,
+                    onToggleAll: toggleAll,
+                  }
+                : undefined
+            }
+          />
+        </div>
+      </FleetListPage>
+    </div>
   );
 }
 
@@ -194,12 +270,19 @@ export function GroupNewPage() {
   const { role } = useAdminRole();
   const [name, setName] = useState("");
 
-  const mutation = useMutation({
-    mutationFn: createGroup,
-    onSuccess: (group) => {
-      toast.success("用户组创建成功");
-      queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
-      navigate(`/console/groups/${group.id}`);
+  // 无表单容器（FormPageWrapper 本地态）：结果分支 toast；failure → describeApiError。
+  const create = useCommand(createGroupCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("用户组创建成功");
+        void queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
+        navigate({ to: `/console/groups/${result.payload.id}` });
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      } else if (result) {
+        toast.error(result.message);
+      }
     },
   });
 
@@ -210,9 +293,9 @@ export function GroupNewPage() {
       submitLabel="创建"
       onSubmit={(e) => {
         e.preventDefault();
-        mutation.mutate({ name });
+        create.mutate({ name });
       }}
-      loading={mutation.isPending}
+      loading={create.pending}
       submitDisabled={!canWrite(role)}
     >
       <FormField id="name" label="用户组名称" value={name} onChange={setName} required placeholder="Engineering" />
@@ -261,12 +344,18 @@ function GroupPrefsCard({ groupId }: { groupId: string }) {
     if (prefs !== undefined) setPrefsText(JSON.stringify(prefs));
   }, [prefs]);
 
-  const save = useMutation({
-    mutationFn: (data: Record<string, unknown>) => updateGroupPrefs(groupId, data),
-    onSuccess: (updated) => {
-      toast.success("用户组偏好已保存");
-      setPrefsText(JSON.stringify(updated));
-      queryClient.invalidateQueries({ queryKey: ["groups", groupId, "prefs"] });
+  // 无表单容器（JSON 文本域本地态）：结果分支 toast；failure → describeApiError。
+  const save = useCommand(updateGroupPrefsCommand, {
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("用户组偏好已保存");
+        setPrefsText(JSON.stringify(result.payload));
+        void queryClient.invalidateQueries({ queryKey: ["groups", groupId, "prefs"] });
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      } else if (result) {
+        toast.error(result.message);
+      }
     },
   });
 
@@ -282,7 +371,7 @@ function GroupPrefsCard({ groupId }: { groupId: string }) {
       toast.error("必须是 JSON 对象，如 {\"theme\":\"dark\"}");
       return;
     }
-    save.mutate(data as Record<string, unknown>);
+    save.mutate({ id: groupId, prefs: data as Record<string, unknown> });
   };
 
   return (
@@ -311,8 +400,8 @@ function GroupPrefsCard({ groupId }: { groupId: string }) {
             onChange={setPrefsText}
             placeholder='{"theme":"dark"}'
           />
-          <Button type="submit" disabled={!writeable || isLoading || save.isPending}>
-            {save.isPending ? "保存中..." : "保存"}
+          <Button type="submit" disabled={!writeable || isLoading || save.pending}>
+            {save.pending ? "保存中..." : "保存"}
           </Button>
         </form>
       </CardContent>
@@ -321,7 +410,7 @@ function GroupPrefsCard({ groupId }: { groupId: string }) {
 }
 
 export function GroupDetailPage() {
-  const { id: groupId } = useParams<{ id: string }>();
+  const { id: groupId } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
@@ -353,62 +442,82 @@ export function GroupDetailPage() {
   });
   const memberships = membershipsData?.rows ?? [];
 
+  // 存量键手动桥（kit 列表键由 useCommand 按 resource 自动失效）。
   const invalidateGroup = () => {
     queryClient.invalidateQueries({ queryKey: ["groups", groupId] });
     queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
     queryClient.invalidateQueries({ queryKey: ["memberships", groupId] });
   };
 
-  const removeGroup = useMutation({
-    mutationFn: (id: string) => deleteGroup(id),
-    onSuccess: () => {
-      toast.success("用户组已删除");
-      queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
-      navigate("/console/groups");
+  // 命令接线（§12.3）：toast 单源 onSettled；无表单容器 → 结果分支 toast。
+  const removeGroup = useCommand(removeGroupCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("用户组已删除");
+        void queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
+        navigate({ to: "/console/groups" });
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const invite = useMutation({
-    mutationFn: () =>
-      createMembership(groupId!, {
-        email: inviteEmail,
-        name: inviteName,
-        roles: [inviteRole],
-        status: inviteStatus,
-      }),
-    onSuccess: () => {
-      toast.success("成员邀请已创建");
-      setInviteEmail("");
-      setInviteName("");
-      setInviteRole("member");
-      setInviteStatus("pending");
-      invalidateGroup();
+  const invite = useCommand(addGroupMemberCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("成员邀请已创建");
+        setInviteEmail("");
+        setInviteName("");
+        setInviteRole("member");
+        setInviteStatus("pending");
+        invalidateGroup();
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      } else if (result) {
+        toast.error(result.message);
+      }
     },
   });
 
-  const removeMembership = useMutation({
-    mutationFn: (membershipId: string) => deleteMembership(groupId!, membershipId),
-    onSuccess: () => {
-      toast.success("成员已移除");
-      invalidateGroup();
+  const removeMembership = useCommand(removeGroupMemberCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("成员已移除");
+        invalidateGroup();
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      }
     },
   });
 
-  const setStatus = useMutation({
-    mutationFn: ({ membershipId, status }: { membershipId: string; status: string }) =>
-      updateMembershipStatus(groupId!, membershipId, status),
-    onSuccess: () => {
-      toast.success("成员状态已更新");
-      invalidateGroup();
+  const setStatus = useCommand(setGroupMemberStatusCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("成员状态已更新");
+        invalidateGroup();
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      } else if (result) {
+        toast.error(result.message);
+      }
     },
   });
 
-  const setRole = useMutation({
-    mutationFn: ({ membershipId, roles }: { membershipId: string; roles: string[] }) =>
-      updateMembership(groupId!, membershipId, { roles }),
-    onSuccess: () => {
-      toast.success("成员角色已更新");
-      invalidateGroup();
+  const setRole = useCommand(setGroupMemberRoleCommand, {
+    scope: { projectId: projectId ?? undefined },
+    onSettled: (result, failure) => {
+      if (result?.status === "ok") {
+        toast.success("成员角色已更新");
+        invalidateGroup();
+      } else if (failure) {
+        toast.error(describeApiError(failure));
+      } else if (result) {
+        toast.error(result.message);
+      }
     },
   });
 
@@ -426,7 +535,7 @@ export function GroupDetailPage() {
         writeable ? (
           <Select
             value={m.roles?.[0] ?? "member"}
-            onValueChange={(role) => setRole.mutate({ membershipId: m.id, roles: [role] })}
+            onValueChange={(role) => setRole.mutate({ groupId: groupId!, membershipId: m.id, roles: [role] })}
           >
             <SelectTrigger className="h-8 w-[108px]">
               <SelectValue />
@@ -452,7 +561,7 @@ export function GroupDetailPage() {
             value={m.status}
             onValueChange={(status) => {
               if (status === "pending") return;
-              setStatus.mutate({ membershipId: m.id, status });
+              setStatus.mutate({ groupId: groupId!, membershipId: m.id, status });
             }}
           >
             <SelectTrigger className="h-8 w-[108px]">
@@ -513,8 +622,8 @@ export function GroupDetailPage() {
         actions={
           writeable ? (
             <DeleteButton
-              onConfirm={() => removeGroup.mutate(group.id)}
-              loading={removeGroup.isPending}
+              onConfirm={() => removeGroup.mutate({ id: group.id })}
+              loading={removeGroup.pending}
             />
           ) : undefined
         }
@@ -551,7 +660,13 @@ export function GroupDetailPage() {
                 toast.error("请填写邮箱");
                 return;
               }
-              invite.mutate();
+              invite.mutate({
+                groupId: groupId!,
+                email: inviteEmail,
+                name: inviteName,
+                roles: [inviteRole],
+                status: inviteStatus,
+              });
             }}
           >
             <div className="space-y-2 lg:col-span-2">
@@ -590,8 +705,8 @@ export function GroupDetailPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button type="submit" disabled={!writeable || invite.isPending}>
-              {invite.isPending ? "提交中..." : "发送邀请"}
+            <Button type="submit" disabled={!writeable || invite.pending}>
+              {invite.pending ? "提交中..." : "发送邀请"}
             </Button>
           </form>
         </CardContent>
@@ -629,8 +744,10 @@ export function GroupDetailPage() {
           writeable
             ? (m) => (
                 <RowDeleteButton
-                  onConfirm={() => removeMembership.mutate(m.id)}
-                  loading={removeMembership.isPending}
+                  onConfirm={() =>
+                    removeMembership.mutate({ groupId: groupId!, membershipId: m.id })
+                  }
+                  loading={removeMembership.pending}
                 />
               )
             : undefined

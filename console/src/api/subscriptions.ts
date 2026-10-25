@@ -51,17 +51,20 @@ export async function getPlan(planId: string): Promise<SubscriptionPlan> {
   return res.data;
 }
 
-export async function createPlan(input: {
-  code: string;
-  name: string;
-  amount: string;
-  currency: string;
-  interval: string;
-  interval_days?: string;
-  grace_days?: number;
-  trial_days?: number;
-}): Promise<SubscriptionPlan> {
-  const res = await api.post<SubscriptionPlan>("/server/subscriptions/plans", input);
+export async function createPlan(
+  input: {
+    code: string;
+    name: string;
+    amount: string;
+    currency: string;
+    interval: string;
+    interval_days?: string;
+    grace_days?: number;
+    trial_days?: number;
+  },
+  config?: ApiRequestConfig
+): Promise<SubscriptionPlan> {
+  const res = await api.post<SubscriptionPlan>("/server/subscriptions/plans", input, config);
   return res.data;
 }
 
@@ -114,18 +117,34 @@ export async function getSubscription(subscriptionId: string): Promise<Subscript
   return res.data;
 }
 
-export async function cancelSubscription(subscriptionId: string, reason?: string): Promise<Subscription> {
-  const res = await api.post<Subscription>(`/server/subscriptions/${subscriptionId}:cancel`, {
-    subscription_id: subscriptionId,
-    reason,
-  });
+export async function cancelSubscription(
+  subscriptionId: string,
+  reason?: string,
+  config?: ApiRequestConfig
+): Promise<Subscription> {
+  const res = await api.post<Subscription>(
+    `/server/subscriptions/${subscriptionId}:cancel`,
+    {
+      subscription_id: subscriptionId,
+      reason,
+    },
+    config
+  );
   return res.data;
 }
 
-export async function expireSubscription(subscriptionId: string, reason?: string): Promise<Subscription> {
-  const res = await api.post<Subscription>(`/server/subscriptions/${subscriptionId}:expire`, {
-    subscription_id: subscriptionId,
-    reason,
-  });
+export async function expireSubscription(
+  subscriptionId: string,
+  reason?: string,
+  config?: ApiRequestConfig
+): Promise<Subscription> {
+  const res = await api.post<Subscription>(
+    `/server/subscriptions/${subscriptionId}:expire`,
+    {
+      subscription_id: subscriptionId,
+      reason,
+    },
+    config
+  );
   return res.data;
 }

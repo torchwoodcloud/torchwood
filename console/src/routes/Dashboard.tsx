@@ -1,47 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@/router/compat";
+import { collectionQueryOptions } from "@lynx-go/ui-kit";
+import { scoped } from "@lynx-go/ui-kit/kernel";
+import { Link } from "@tanstack/react-router";
 import { ArrowRight, FolderKanban, FolderPlus } from "lucide-react";
-import { listProjects } from "@/api/projects";
-import { listAPIKeys } from "@/api/apiKeys";
-import { listBuckets } from "@/api/storage";
-import { listDatabases } from "@/api/databases";
 import { getCurrentAdmin } from "@/api/admins";
+import { projectsResource } from "@/fleet/projects";
+import { apiKeysResource } from "@/fleet/apiKeys";
+import { bucketsResource } from "@/fleet/storage";
+import { databasesResource } from "@/fleet/databases";
+import { StatCard } from "@/components/fleet/values/stat-card";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/datetime";
-
-function StatCard({
-  label,
-  value,
-  delta,
-  isLoading,
-}: {
-  label: string;
-  value: number;
-  delta?: string;
-  isLoading?: boolean;
-}) {
-  return (
-    <div className="flex min-h-[140px] flex-col justify-between rounded-xl border bg-background p-5">
-      <span className="text-xs uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      <div className="flex flex-col gap-1">
-        {isLoading ? (
-          <Skeleton className="h-9 w-16" />
-        ) : (
-          <span className="text-3xl font-semibold tabular-nums tracking-tight">
-            {value}
-          </span>
-        )}
-        {delta && <span className="text-xs text-muted-foreground">{delta}</span>}
-      </div>
-    </div>
-  );
-}
 
 export function Dashboard() {
   const { projectId } = useAuth();
@@ -54,9 +27,10 @@ export function Dashboard() {
     staleTime: 60_000,
   });
 
+  // 数据面 = kit 资源（collectionQueryOptions 非 URL 上下文形态——命令失效
+  // 自动覆盖 kit 键）；统计口径 = 单页上限 100 计数（keyset 无总数，同旧页）。
   const { data, isLoading: projectsLoading } = useQuery({
-    queryKey: ["projects"],
-    queryFn: () => listProjects({ pageSize: 100 }),
+    ...collectionQueryOptions(projectsResource, { window: { size: 100 } }),
   });
   const projects = data?.rows ?? [];
 
@@ -64,23 +38,20 @@ export function Dashboard() {
   const activeProject = projects.find((p) => p.id === selectedProjectId);
 
   const { data: apiKeyPage } = useQuery({
-    queryKey: ["api-keys", selectedProjectId],
-    queryFn: () => listAPIKeys({ pageSize: 100 }),
+    ...collectionQueryOptions(scoped(apiKeysResource, { projectId: selectedProjectId }), { window: { size: 100 } }),
     enabled: !!selectedProjectId,
   });
   const apiKeys = apiKeyPage?.rows ?? [];
 
   const { data: bucketPage } = useQuery({
-    queryKey: ["buckets", selectedProjectId],
-    queryFn: () => listBuckets({ pageSize: 100 }),
+    ...collectionQueryOptions(scoped(bucketsResource, { projectId: selectedProjectId }), { window: { size: 100 } }),
     enabled: !!selectedProjectId,
   });
   const buckets = bucketPage?.rows ?? [];
 
   // keyset 分页下拿不到总数；统计卡取上限一页（100）计数，超出封顶。
   const { data: dbPage } = useQuery({
-    queryKey: ["databases", selectedProjectId, 100],
-    queryFn: () => listDatabases({ pageSize: 100 }),
+    ...collectionQueryOptions(scoped(databasesResource, { projectId: selectedProjectId }), { window: { size: 100 } }),
     enabled: !!selectedProjectId,
   });
   const databases = dbPage?.rows ?? [];
@@ -111,20 +82,19 @@ export function Dashboard() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Projects"
-          value={projects.length}
-          delta={activeProject ? `active: ${activeProject.name}` : "no active project"}
-          isLoading={projectsLoading}
+          value={projectsLoading ? <Skeleton className="h-9 w-16" /> : projects.length}
+          hint={activeProject ? `active: ${activeProject.name}` : "no active project"}
         />
-        <StatCard label="Databases" value={databases.length} delta={projectScope} />
+        <StatCard label="Databases" value={databases.length} hint={projectScope} />
         <StatCard
           label="Buckets"
           value={buckets.length}
-          delta={`${publicBuckets} public · ${projectScope}`}
+          hint={`${publicBuckets} public · ${projectScope}`}
         />
         <StatCard
           label="API Keys"
           value={apiKeys.length}
-          delta={`${enabledKeys} enabled · ${projectScope}`}
+          hint={`${enabledKeys} enabled · ${projectScope}`}
         />
       </div>
 
@@ -157,7 +127,7 @@ export function Dashboard() {
             {recentProjects.map((project) => (
               <li key={project.id}>
                 <Link
-                  to={`/console/projects/${project.id}`}
+                  to="/console/projects/$id" params={{ id: project.id }}
                   className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-muted/40"
                 >
                   <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-medium text-muted-foreground">
