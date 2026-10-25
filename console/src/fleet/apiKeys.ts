@@ -86,6 +86,9 @@ export function editApiKeyDescriptor(key: APIKey) {
       }),
     // delete 已删 → 幂等 ok 同族语义：编辑目标消失视为已达成
     treatAs: { "not-found": { status: "ok" as const, payload: key } },
+    // 裸 descriptor 的失效声明（§12.10-②）：kit 键 + 存量 ["api-keys"] 前缀
+    invalidates: [{ resource: "api-keys" }],
+    legacyKeys: () => [["api-keys"]],
   };
 }
 
@@ -139,6 +142,9 @@ export const apiKeysResource = defineResource({
   getId: (row: APIKey) => row.id,
   scope: ["projectId"],
   collection: fetchApiKeys,
+  // 存量键失效桥（§12.10-②）：命令 ok 后除 kit 键外失效存量 ["api-keys"]
+  // 前缀键——页面 onSettled 手动桥退役。
+  legacyKeys: () => [["api-keys"]],
   commands: {
     // 表单值→提交形收敛在 run 内（wildcard/勾选/手输合并去重排序）
     create: {
@@ -147,7 +153,7 @@ export const apiKeysResource = defineResource({
     },
     // update 不进资源 commands：它需要原实体快照做 diff（输入不自包含），
     // 经 editApiKeyDescriptor(key) 工厂按行构造、页面级 useCommandForm 消费
-    //（失效走存量 ["api-keys"] 手动桥——本切片所有消费方都是存量键）。
+    //（失效 = invalidates 声明 + 存量键 legacyKeys，见工厂内）。
     remove: {
       run: async (input: { id: string }): Promise<CommandResult<null>> =>
         runCommandMapped(async () => {
@@ -160,9 +166,10 @@ export const apiKeysResource = defineResource({
   },
 });
 
-// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
-export const createApiKeyCommand = apiKeysResource.commands!.create;
-export const removeApiKeyCommand = apiKeysResource.commands!.remove;
+// 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
+export const createApiKeyCommand = apiKeysResource.commands.create;
+export const removeApiKeyCommand = apiKeysResource.commands.remove;
+export const expireOldApiKeyCommand = apiKeysResource.commands.expireOld;
 
 // 资源 scope 约定（页面 useCommand 传 {projectId}）。
 export type ApiKeysScope = ResourceScope;

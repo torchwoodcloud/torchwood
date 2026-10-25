@@ -18,7 +18,7 @@ import {
   createApiKeyCommand,
   removeApiKeyCommand,
   editApiKeyDescriptor,
-  expireApiKeyDescriptor,
+  expireOldApiKeyCommand,
   type CreateApiKeyForm,
   type EditApiKeyForm,
 } from "@/fleet/apiKeys";
@@ -69,7 +69,6 @@ import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 // useCollection + DataTable selection 受控面（批量删/行删接线）。
 
 export function ApiKeysListPage() {
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const queryClient = useQueryClient();
@@ -81,11 +80,10 @@ export function ApiKeysListPage() {
 
   // 列表 fleet 化（§12.9-2）：游标/页大小/enabled 过滤进 URL（分页栈 =
   // 浏览器历史）；页内当前页搜索保持本地态（旧页语义）。
+  // scope/enabled 不再逐处传（§12.10-③）：资源声明了 projectId，Provider 单源 + 未就绪自动停用
   const list = useCollection(apiKeysResource, {
     from: "/console/api-keys",
     search: apiKeysSearch,
-    scope: { projectId: projectId ?? undefined },
-    query: { enabled: !!projectId },
   });
 
   const enabled = enabledOf(list.query.predicate);
@@ -93,13 +91,11 @@ export function ApiKeysListPage() {
     list.setPredicate(v === "all" ? null : { field: "enabled", op: "eq", value: v });
   };
 
-  // 命令接线：toast 单源 onSettled；kit 键自动失效 + 存量 ["api-keys"] 键手动桥。
+  // 命令接线：toast 单源 onSettled；失效 = kit 键 + 存量键（resource.legacyKeys 声明）。
   const remove = useCommand(removeApiKeyCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("API Key 已删除");
-        void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -609,9 +605,7 @@ function ApiKeyEditDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const queryClient = useQueryClient();
   const tz = useUserTimezone();
-  const { projectId } = useAuth();
 
   const edit = useCommandForm(editApiKeyDescriptor(key_), {
     defaultValues: {
@@ -620,11 +614,9 @@ function ApiKeyEditDialog({
       enabled: key_.enabled,
       expireAt: key_.expire_at ? new Date(key_.expire_at).toISOString() : "",
     } satisfies EditApiKeyForm,
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("API Key 已更新");
-        void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
         onOpenChange(false);
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -728,33 +720,28 @@ function ApiKeyRotateDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { projectId } = useAuth();
   const [step, setStep] = useState<"intro" | "created">("intro");
   const [newKey, setNewKey] = useState<APIKey | null>(null);
   const [newSecret, setNewSecret] = useState("");
 
   const create = useCommand(createApiKeyCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         setNewKey(result.payload.api_key);
         setNewSecret(result.payload.secret);
         setStep("created");
-        void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
     },
   });
 
-  const expireOld = useCommand(expireApiKeyDescriptor, {
-    scope: { projectId: projectId ?? undefined },
+  // 资源挂载句柄（非裸 descriptor）：invalidates/legacyKeys 注入生效
+  const expireOld = useCommand(expireOldApiKeyCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("旧 Key 已设置立即过期，轮换完成");
-        void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
         onOpenChange(false);
       } else if (failure) {
         toast.error(describeApiError(failure));
