@@ -22,3 +22,31 @@ export function toApiError(err: unknown): ApiError {
   }
   return { kind: "server", status: 0, message: err instanceof Error ? err.message : String(err) };
 }
+
+// 失败通道的用户文案（toast 用）：与 fleet/values/states 的 ErrorState
+// describe 同口径。结果通道（rejected/conflict）不走这里——归 Form 块结果盒。
+export function describeApiError(error: ApiError): string {
+  switch (error.kind) {
+    case "network":
+      return "网络不可达，请检查连接后重试";
+    case "auth":
+      return "会话已过期";
+    case "forbidden":
+      return "没有访问该资源的权限";
+    case "not-found":
+      return "资源不存在";
+    case "decode":
+      return `响应格式异常（${error.detail}）`;
+    case "server":
+      return `服务端错误 ${error.status}${error.message ? `：${error.message}` : ""}`;
+  }
+}
+
+// gateway 错误体 {error:{code,message}} 的取码（结果两分映射用）。
+export function gatewayErrorCode(err: unknown): string | undefined {
+  if (isAxiosError(err)) {
+    const body = err.response?.data as { error?: { code?: unknown } } | undefined;
+    if (typeof body?.error?.code === "string" && body.error.code !== "") return body.error.code;
+  }
+  return undefined;
+}
