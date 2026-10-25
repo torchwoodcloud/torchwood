@@ -1,14 +1,5 @@
 import { useMemo, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-} from "recharts";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -50,9 +41,9 @@ import {
   retentionFutureDay,
   retentionPercent,
   retentionWindow,
-  timeseriesRows,
   type OverviewRange,
 } from "./shared";
+import { TrendChart } from "./metricChart";
 
 const OVERVIEW_RANGES: { key: OverviewRange; label: string }[] = [
   { key: "today", label: "今日" },
@@ -127,10 +118,6 @@ export function AnalyticsOverviewPage() {
   const kpi = overviewQ.data?.kpi;
   const today = overviewQ.data?.today;
   const topEvents = overviewQ.data?.top_events ?? [];
-  const rows = useMemo(
-    () => timeseriesRows(trendQ.data?.points ?? [], granularity),
-    [trendQ.data, granularity]
-  );
   const hasData = num(kpi?.total_events) > 0;
   const kpiLoading = overviewQ.isLoading;
   const trendLoading = trendQ.isLoading;
@@ -216,32 +203,10 @@ export function AnalyticsOverviewPage() {
                 description="接入端 SDK 或调用摄入 API 上报事件后，这里会出现趋势曲线。"
               />
             ) : (
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={rows} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 12 }} allowDecimals={false} width={48} />
-                    <Tooltip />
-                    <Line
-                      type="monotone"
-                      dataKey="total"
-                      name="事件数"
-                      stroke="#2563eb"
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="uv"
-                      name="活跃用户"
-                      stroke="#16a34a"
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              <TrendChart
+                points={trendQ.data?.points ?? []}
+                granularity={granularity}
+              />
             )}
           </CardContent>
         </Card>

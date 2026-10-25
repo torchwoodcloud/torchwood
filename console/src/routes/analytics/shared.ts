@@ -2,7 +2,8 @@
 // 口径对齐服务端（docs/design/analytics.md）：v1 UTC 切日；窗口护栏
 // HOUR ≤7 天 / DAY ≤366 天 / Breakdown ≤30 天 / Retention cohort ≤92 天。
 
-import { num } from "@/api/analytics";
+import { num, type AnalyticsTimeseriesPoint } from "@/api/analytics";
+import type { MetricSeries } from "@/components/fleet/values/metric-chart";
 
 // int64 数值化统一复用 api 模块的 num（re-export 供页面与测试统一入口）。
 export { num };
@@ -72,18 +73,6 @@ export function formatBucket(iso: string, granularity: "HOUR" | "DAY"): string {
   return `${mm}-${dd} ${hh}:00`;
 }
 
-// 趋势数据转图表行（total/uv 数值化）。
-export function timeseriesRows(
-  points: { bucket: string; total: number | string; unique_users?: number | string }[],
-  granularity: "HOUR" | "DAY"
-): { label: string; total: number; uv: number }[] {
-  return points.map((p) => ({
-    label: formatBucket(p.bucket, granularity),
-    total: num(p.total),
-    uv: num(p.unique_users),
-  }));
-}
-
 // retentionPercent 留存率（百分比，四舍五入；size 为 0 时无意义返回 null）。
 export function retentionPercent(retained: number, size: number): number | null {
   if (size <= 0) return null;
@@ -113,6 +102,26 @@ export function retentionWindow(
   );
   const start = new Date(end.getTime() - days * DAY_MS);
   return { start: start.toISOString(), end: end.toISOString() };
+}
+
+// 趋势点 → fleet-ui MetricChart 序列投影（D 批，design.md §12.6-3）：固定
+// 双序列（key 语义名跨刷新稳定）、t = Date.parse(bucket)（UTC 毫秒数值时间
+// 轴）、v = num()（int64 string 收敛；unique_users 零值省略缺席 → 0）。
+export function toTrendSeries(
+  points: ReadonlyArray<AnalyticsTimeseriesPoint>
+): MetricSeries[] {
+  return [
+    {
+      key: "total",
+      label: "事件数",
+      points: points.map((p) => ({ t: Date.parse(p.bucket), v: num(p.total) })),
+    },
+    {
+      key: "uv",
+      label: "活跃用户",
+      points: points.map((p) => ({ t: Date.parse(p.bucket), v: num(p.unique_users) })),
+    },
+  ];
 }
 
 // errText 提取 axios/gRPC 网关错误信息（ErrorResponse.error.message 优先）。
