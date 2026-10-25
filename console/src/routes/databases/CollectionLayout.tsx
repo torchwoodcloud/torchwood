@@ -1,4 +1,6 @@
-import { Link, NavLink, Outlet, useNavigate, useParams } from "@/router/compat";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { NavLink } from "@/router/nav-link";
+import { Outlet } from "@/router/outlet-context.tsx";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCommand } from "@lynx-go/ui-kit";
 import { ArrowLeft, FileText, Layers, Radio } from "lucide-react";
@@ -28,7 +30,7 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   );
 
 export function CollectionLayout() {
-  const { dbId, collId } = useParams<{ dbId: string; collId: string }>();
+  const { dbId, collId } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
@@ -55,7 +57,7 @@ export function CollectionLayout() {
       if (result?.status === "ok") {
         toast.success("Collection 已删除");
         void queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
-        navigate(`/console/databases/${dbId}`);
+        navigate({ to: `/console/databases/${dbId}` });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -95,7 +97,7 @@ export function CollectionLayout() {
 
       <div className="space-y-4">
         <Button variant="ghost" size="sm" className="w-fit" asChild>
-          <Link to={`/console/databases/${dbId}`}>
+          <Link to="/console/databases/$dbId" params={{ dbId: dbId }}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             返回 Database
           </Link>

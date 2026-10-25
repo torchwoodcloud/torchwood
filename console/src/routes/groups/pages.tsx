@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "@/router/compat";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import { useUserTimezone } from "@/hooks/useTimezone";
@@ -246,7 +246,7 @@ export function GroupsListPage() {
             list={shownList}
             columns={tableColumns}
             getRowId={(row) => row.id}
-            onRowClick={(t) => navigate(`/console/groups/${t.id}`)}
+            onRowClick={(t) => navigate({ to: `/console/groups/${t.id}` })}
             selection={
               writeable
                 ? {
@@ -277,7 +277,7 @@ export function GroupNewPage() {
       if (result?.status === "ok") {
         toast.success("用户组创建成功");
         void queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
-        navigate(`/console/groups/${result.payload.id}`);
+        navigate({ to: `/console/groups/${result.payload.id}` });
       } else if (failure) {
         toast.error(describeApiError(failure));
       } else if (result) {
@@ -410,7 +410,7 @@ function GroupPrefsCard({ groupId }: { groupId: string }) {
 }
 
 export function GroupDetailPage() {
-  const { id: groupId } = useParams<{ id: string }>();
+  const { id: groupId } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
@@ -456,7 +456,7 @@ export function GroupDetailPage() {
       if (result?.status === "ok") {
         toast.success("用户组已删除");
         void queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
-        navigate("/console/groups");
+        navigate({ to: "/console/groups" });
       } else if (failure) {
         toast.error(describeApiError(failure));
       }

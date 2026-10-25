@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TestRouter } from "@/router/compat";
+import { TestRouter } from "@/test-utils/TestRouter";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountPreferencesPage, AccountProfilePage } from "./pages";
 import type { Admin } from "@/api/admins";

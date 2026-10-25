@@ -1,5 +1,7 @@
 import { Fragment, useState } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "@/router/compat";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { NavLink } from "@/router/nav-link";
+import { Outlet } from "@/router/outlet-context.tsx";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { getCurrentAdmin } from "@/api/admins";
@@ -40,7 +42,7 @@ export function Layout() {
 
   const handleLogout = async () => {
     await logout();
-    navigate("/console/login");
+    navigate({ to: "/console/login" });
   };
 
   const closeMobile = () => setMobileOpen(false);

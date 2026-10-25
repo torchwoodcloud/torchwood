@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TestRouter } from "@/router/compat";
+import { TestRouter } from "@/test-utils/TestRouter";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { VarSetDetailPage, VarSetsListPage } from "./pages";
 import type { RuntimeVar, VarSet } from "@/api/runtimeVars";

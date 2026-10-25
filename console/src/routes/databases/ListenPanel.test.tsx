@@ -1,6 +1,7 @@
 import { act } from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { Outlet, TestRouter } from "@/router/compat";
+import { Outlet } from "@/router/outlet-context.tsx";
+import { TestRouter } from "@/test-utils/TestRouter";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { refreshSession } from "@/api/auth";
 import { ListenPanel } from "./ListenPanel";

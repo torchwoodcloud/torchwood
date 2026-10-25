@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useParams } from "@/router/compat";
+import { Link, useParams } from "@tanstack/react-router";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/PageHeader";
@@ -54,7 +54,7 @@ function EventItem({ ev }: { ev: AnalyticsUserEvent }) {
 // AnalyticsUserActivityPage 用户行为轨迹（ListUserEvents raw keyset 分页，
 // 窗口 ≤92 天缺省全保留期倒序；事件名过滤为已加载页内的客户端过滤）。
 export function AnalyticsUserActivityPage() {
-  const { userId = "" } = useParams<{ userId: string }>();
+  const { userId = "" } = useParams({ strict: false });
   const { projectId } = useAuth();
   const [nameFilter, setNameFilter] = useState("");
 
@@ -82,7 +82,7 @@ export function AnalyticsUserActivityPage() {
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild variant="outline" size="sm">
-            <Link to={`/console/users/${encodeURIComponent(userId)}`}>返回用户详情</Link>
+            <Link to="/console/users/$id" params={{ id: encodeURIComponent(userId) }}>返回用户详情</Link>
           </Button>
           <Input
             value={nameFilter}

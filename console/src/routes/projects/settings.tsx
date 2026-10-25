@@ -11,7 +11,7 @@ import {
 } from "@/fleet/oauthProviders";
 import { describeApiError } from "@/fleet/errors";
 import { useState } from "react";
-import { useNavigate, useParams } from "@/router/compat";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
@@ -72,7 +72,7 @@ type SettingsTab = "general" | "auth" | "oauth" | "danger";
 // 因此页面挂载时经 useProjectScopeSync 把 selector 同步到 :id，并在同步完成前
 // 不渲染 OAuth 面板——否则直接访问 URL 时会以旧项目身份查询/保存。
 export function ProjectSettingsPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams({ strict: false });
   const [tab, setTab] = useState<SettingsTab>("general");
   const { role } = useAdminRole();
 
@@ -259,7 +259,7 @@ function DangerZonePanel({
       if (result?.status === "ok") {
         toast.success("项目已删除");
         void queryClient.invalidateQueries({ queryKey: ["projects"] });
-        navigate("/console/projects");
+        navigate({ to: "/console/projects" });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {

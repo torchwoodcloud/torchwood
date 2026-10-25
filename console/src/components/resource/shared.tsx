@@ -1,4 +1,4 @@
-import { Link } from "@/router/compat";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageCard } from "@/components/PageCard";
 import { Input } from "@/components/ui/input";

@@ -1,4 +1,6 @@
-import { NavLink, Outlet } from "@/router/compat";
+
+import { Outlet } from "@/router/outlet-context.tsx";
+import { NavLink } from "@/router/nav-link";
 import { CircleUserRound, SlidersHorizontal, UserRound } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";

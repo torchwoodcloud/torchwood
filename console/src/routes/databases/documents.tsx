@@ -5,12 +5,8 @@ import {
   useEffect,
   useMemo,
 } from "react";
-import {
-  Link,
-  useNavigate,
-  useParams,
-  useOutletContext,
-} from "@/router/compat";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { useOutletContext } from "@/router/outlet-context";
 import {
   useQuery,
   useQueryClient,
@@ -315,7 +311,7 @@ function DocumentListSection({
             columns={columns}
             getRowId={(d) => d.id}
             onRowClick={(d) =>
-              navigate(`/console/databases/${dbId}/collections/${collId}/documents/${d.id}`)
+              navigate({ to: `/console/databases/${dbId}/collections/${collId}/documents/${d.id}` })
             }
             selection={
               readonly
@@ -563,7 +559,7 @@ function DocumentReadonlyFields({
 }
 
 export function DocumentNewPage() {
-  const { dbId, collId } = useParams();
+  const { dbId, collId } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { role } = useAdminRole();
@@ -583,7 +579,7 @@ export function DocumentNewPage() {
       if (result?.status === "ok") {
         toast.success("Document 已创建");
         void queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId] });
-        navigate(`/console/databases/${dbId}/collections/${collId}/documents/${result.payload.id}`);
+        navigate({ to: `/console/databases/${dbId}/collections/${collId}/documents/${result.payload.id}` });
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -624,7 +620,11 @@ export function DocumentNewPage() {
             submitting={create.pending}
             result={create.result}
             submitLabel="创建"
-            onCancel={() => navigate(documentsPath)}
+            onCancel={() =>
+                    void navigate({
+                      to: "/console/databases/$dbId/collections/$collId/documents",
+                      params: { dbId: dbId!, collId: collId! },
+                    })}
           >
             <DocumentFormFields
               attributes={collection.attributes}
@@ -645,7 +645,7 @@ export function DocumentNewPage() {
 }
 
 export function DocumentDetailPage() {
-  const { dbId, collId, docId } = useParams();
+  const { dbId, collId, docId } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { role } = useAdminRole();
@@ -735,7 +735,7 @@ export function DocumentDetailPage() {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Document 已删除");
-        navigate(`/console/databases/${dbId}/collections/${collId}/documents`);
+        navigate({ to: `/console/databases/${dbId}/collections/${collId}/documents` });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {

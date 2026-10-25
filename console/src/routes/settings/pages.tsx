@@ -1,4 +1,4 @@
-import { Navigate } from "@/router/compat";
+import { Navigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/useAuth";
 
 // /console/settings 全局 Settings 页已退役：项目配置统一收敛至
@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 export function SettingsRedirect() {
   const { projectId } = useAuth();
   if (projectId) {
-    return <Navigate to={`/console/projects/${projectId}/settings`} replace />;
+    return <Navigate to="/console/projects/$id/settings" params={{ id: projectId }} replace />;
   }
   return <Navigate to="/console/projects" replace />;
 }

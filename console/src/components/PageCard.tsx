@@ -1,4 +1,4 @@
-import { Link, useLocation } from "@/router/compat";
+import { Link, useLocation } from "@tanstack/react-router";
 import { ArrowLeft, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "@/router/compat";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCollection, useCommand, useCommandForm } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
@@ -262,7 +262,7 @@ export function ApiKeysListPage() {
             list={shownList}
             columns={tableColumns}
             getRowId={(row) => row.id}
-            onRowClick={(k) => navigate(`/console/api-keys/${k.id}`)}
+            onRowClick={(k) => navigate({ to: `/console/api-keys/${k.id}` })}
             selection={
               platformAdmin
                 ? {
@@ -327,7 +327,7 @@ export function ApiKeyNewPage() {
         submitLabel="返回列表"
         onSubmit={(e) => {
           e.preventDefault();
-          navigate("/console/api-keys");
+          navigate({ to: "/console/api-keys" });
         }}
       >
         <div className="rounded-md bg-muted p-4 flex items-center justify-between gap-4">
@@ -362,7 +362,7 @@ export function ApiKeyNewPage() {
           submitting={create.submitting}
           result={create.result}
           submitLabel="创建"
-          onCancel={() => navigate("/console/api-keys")}
+          onCancel={() => navigate({ to: "/console/api-keys" })}
         >
           <TextField
             form={form}
@@ -517,7 +517,7 @@ function ScopeResourceRow({
 }
 
 export function ApiKeyDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
@@ -538,7 +538,7 @@ export function ApiKeyDetailPage() {
       if (result?.status === "ok") {
         toast.success("API Key 已删除");
         void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
-        navigate("/console/api-keys");
+        navigate({ to: "/console/api-keys" });
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -835,7 +835,7 @@ function ApiKeyRotateDialog({
                 variant="outline"
                 onClick={() => {
                   close(false);
-                  navigate(`/console/api-keys/${key_.id}`);
+                  navigate({ to: `/console/api-keys/${key_.id}` });
                 }}
               >
                 前往旧 Key 设置过期

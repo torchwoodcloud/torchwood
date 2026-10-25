@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { collectionQueryOptions } from "@lynx-go/ui-kit";
 import { scoped } from "@lynx-go/ui-kit/kernel";
-import { Link } from "@/router/compat";
+import { Link } from "@tanstack/react-router";
 import { ArrowRight, FolderKanban, FolderPlus } from "lucide-react";
 import { getCurrentAdmin } from "@/api/admins";
 import { projectsResource } from "@/fleet/projects";
@@ -127,7 +127,7 @@ export function Dashboard() {
             {recentProjects.map((project) => (
               <li key={project.id}>
                 <Link
-                  to={`/console/projects/${project.id}`}
+                  to="/console/projects/$id" params={{ id: project.id }}
                   className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-muted/40"
                 >
                   <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-medium text-muted-foreground">

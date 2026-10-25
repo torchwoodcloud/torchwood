@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "@/router/compat";
+import { Link, useParams } from "@tanstack/react-router";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { toast } from "sonner";
@@ -109,7 +109,7 @@ export function LeaderboardsListPage() {
       cell: ({ row }) => (
         <Link
           className="font-medium underline-offset-2 hover:underline"
-          to={`/console/leaderboards/${row.original.id}`}
+          to="/console/leaderboards/$boardId" params={{ boardId: row.original.id }}
         >
           {row.original.id}
         </Link>
@@ -514,7 +514,7 @@ function EditBoardDialog({ board }: { board: LeaderboardBoard }) {
 }
 
 export function BoardDetailPage() {
-  const { boardId } = useParams<{ boardId: string }>();
+  const { boardId } = useParams({ strict: false });
   const queryClient = useQueryClient();
   const tz = useUserTimezone();
   const { data: board } = useQuery({

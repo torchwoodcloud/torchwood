@@ -1,9 +1,6 @@
 import { useState } from "react";
-import {
-  useNavigate,
-  useParams,
-  useOutletContext,
-} from "@/router/compat";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { useOutletContext } from "@/router/outlet-context";
 import {
   useQuery,
   useQueryClient,
@@ -69,7 +66,7 @@ import {
 } from "./components";
 
 export function CollectionNewPage() {
-  const { dbId } = useParams<{ dbId: string }>();
+  const { dbId } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
@@ -93,7 +90,7 @@ export function CollectionNewPage() {
       if (result?.status === "ok") {
         toast.success("Collection 创建成功");
         void queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
-        navigate(`/console/databases/${dbId}/collections/${result.payload.id}`);
+        navigate({ to: `/console/databases/${dbId}/collections/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {

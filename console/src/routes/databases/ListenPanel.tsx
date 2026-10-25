@@ -1,4 +1,4 @@
-import { useOutletContext } from "@/router/compat";
+import { useOutletContext } from "@/router/outlet-context";
 import { useSubscription } from "@lynx-go/ui-kit";
 import { RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";

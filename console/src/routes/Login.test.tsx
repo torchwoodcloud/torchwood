@@ -1,5 +1,6 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { TestRouter, useLocation } from "@/router/compat";
+import { useLocation } from "@tanstack/react-router";
+import { TestRouter } from "@/test-utils/TestRouter";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getSetupStatus } from "@/api/auth";
 import { Login } from "./Login";
@@ -22,7 +23,11 @@ vi.mocked(getSetupStatus).mockResolvedValue({
 
 function LocationProbe() {
   const loc = useLocation();
-  return <div data-testid="loc">{loc.pathname + loc.search}</div>;
+  // TanStack search 是对象——回拼查询串形态（探针断言用）
+  const qs = new URLSearchParams(
+    Object.entries(loc.search as Record<string, unknown>).map(([k, v]) => [k, String(v)])
+  ).toString();
+  return <div data-testid="loc">{loc.pathname + (qs ? `?${qs}` : "")}</div>;
 }
 
 function renderLogin(entry: string) {

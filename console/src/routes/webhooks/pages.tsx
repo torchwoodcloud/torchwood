@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "@/router/compat";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
@@ -423,7 +423,7 @@ export function WebhooksListPage() {
               list={shownList}
               columns={tableColumns}
               getRowId={(w) => w.id}
-              onRowClick={(w) => navigate(`/console/webhooks/${w.id}`)}
+              onRowClick={(w) => navigate({ to: `/console/webhooks/${w.id}` })}
             />
           </div>
         </FleetListPage>
@@ -576,7 +576,7 @@ function DeliveriesCard({ webhookId, writeable }: { webhookId: string; writeable
 }
 
 export function WebhookDetailPage() {
-  const { webhookId } = useParams<{ webhookId: string }>();
+  const { webhookId } = useParams({ strict: false });
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();

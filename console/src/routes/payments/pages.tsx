@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { useNavigate, useParams } from "@/router/compat";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import type { Predicate } from "@lynx-go/ui-kit/kernel";
@@ -243,7 +243,7 @@ export function OrdersListPage() {
             list={shownList}
             columns={columns}
             getRowId={(row) => row.id}
-            onRowClick={(o) => navigate(`/console/orders/${o.id}`)}
+            onRowClick={(o) => navigate({ to: `/console/orders/${o.id}` })}
           />
         </div>
       </FleetListPage>
@@ -252,7 +252,7 @@ export function OrdersListPage() {
 }
 
 export function OrderDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams({ strict: false });
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
   const { role } = useAdminRole();

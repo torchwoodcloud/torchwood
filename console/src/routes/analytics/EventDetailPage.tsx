@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "@/router/compat";
+import { useParams } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   ResponsiveContainer,
@@ -56,7 +56,7 @@ const RANGES: { key: DetailRange; label: string }[] = [
 // AnalyticsEventDetailPage 事件详情：趋势（HOUR/DAY 切换）+ 维度拆解
 // （prop_key + Top-N 条形，QueryBreakdown 恒 raw，D9）。
 export function AnalyticsEventDetailPage() {
-  const { name = "" } = useParams<{ name: string }>();
+  const { name = "" } = useParams({ strict: false });
   const { projectId } = useAuth();
   const [granularity, setGranularity] = useState<"HOUR" | "DAY">("DAY");
   const [range, setRange] = useState<DetailRange>("7d");

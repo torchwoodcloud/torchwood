@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "@/router/compat";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
@@ -221,7 +221,7 @@ export function DatabasesListPage() {
             list={shownList}
             columns={tableColumns}
             getRowId={(d) => d.id}
-            onRowClick={(d) => navigate(`/console/databases/${d.id}`)}
+            onRowClick={(d) => navigate({ to: `/console/databases/${d.id}` })}
             selection={
               platformAdmin
                 ? { selectedIds, onToggle: toggleRow, onToggleAll: toggleAll }
@@ -250,7 +250,7 @@ export function DatabaseNewPage() {
       if (result?.status === "ok") {
         toast.success("Database 创建成功");
         void queryClient.invalidateQueries({ queryKey: ["databases", projectId] });
-        navigate(`/console/databases/${result.payload.id}`);
+        navigate({ to: `/console/databases/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -286,7 +286,7 @@ export function DatabaseNewPage() {
 }
 
 export function DatabaseDetailPage() {
-  const { dbId } = useParams<{ dbId: string }>();
+  const { dbId } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
@@ -319,7 +319,7 @@ export function DatabaseDetailPage() {
       if (result?.status === "ok") {
         toast.success("Database 已删除");
         void queryClient.invalidateQueries({ queryKey: ["databases", projectId] });
-        navigate("/console/databases");
+        navigate({ to: "/console/databases" });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -490,7 +490,7 @@ export function DatabaseDetailPage() {
               ) : null}
               {platformAdmin ? (
                 <Button asChild className="ml-auto">
-                  <Link to={`/console/databases/${dbId}/collections/new`}>
+                  <Link to="/console/databases/$dbId/collections/new" params={{ dbId: dbId! }}>
                     <Plus className="h-4 w-4 mr-2" />
                     新建 Collection
                   </Link>
@@ -511,7 +511,7 @@ export function DatabaseDetailPage() {
         emptyAction={
           platformAdmin ? (
             <Button asChild size="sm">
-              <Link to={`/console/databases/${dbId}/collections/new`}>新建 Collection</Link>
+              <Link to="/console/databases/$dbId/collections/new" params={{ dbId: dbId! }}>新建 Collection</Link>
             </Button>
           ) : undefined
         }
@@ -521,7 +521,7 @@ export function DatabaseDetailPage() {
             list={shownCollList}
             columns={collColumns}
             getRowId={(c) => c.id}
-            onRowClick={(c) => navigate(`/console/databases/${dbId}/collections/${c.id}`)}
+            onRowClick={(c) => navigate({ to: `/console/databases/${dbId}/collections/${c.id}` })}
             selection={
               platformAdmin
                 ? {

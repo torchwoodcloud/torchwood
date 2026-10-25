@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "@/router/compat";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
@@ -133,7 +133,7 @@ export function ProjectsListPage() {
             list={shownList}
             columns={tableColumns}
             getRowId={(row) => row.id}
-            onRowClick={(p) => navigate(`/console/projects/${p.id}`)}
+            onRowClick={(p) => navigate({ to: `/console/projects/${p.id}` })}
           />
         </div>
       </FleetListPage>
@@ -157,7 +157,7 @@ export function ProjectNewPage() {
       if (result?.status === "ok") {
         toast.success("项目创建成功");
         void queryClient.invalidateQueries({ queryKey: ["projects"] });
-        navigate(`/console/projects/${result.payload.id}`);
+        navigate({ to: `/console/projects/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -203,7 +203,7 @@ export function ProjectNewPage() {
 // ProjectDetailPage 项目概览（只读）：项目级配置统一在设置区
 // /console/projects/:id/settings（基本信息编辑、注册与登录、OAuth、危险区）。
 export function ProjectDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams({ strict: false });
   const tz = useUserTimezone();
   const { data: project, isLoading } = useQuery({
     queryKey: ["projects", id],
@@ -225,7 +225,7 @@ export function ProjectDetailPage() {
       backTo="/console/projects"
       actions={
         <Button asChild variant="outline" size="sm">
-          <Link to={`/console/projects/${project.id}/settings`}>
+          <Link to="/console/projects/$id/settings" params={{ id: project.id }}>
             <Settings className="h-4 w-4 mr-2" />
             项目设置
           </Link>

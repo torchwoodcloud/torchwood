@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "@/router/compat";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import type { ApiError, CommandResult } from "@lynx-go/ui-kit/kernel";
@@ -340,7 +340,7 @@ export function VarSetsListPage() {
             list={shownList}
             columns={columns}
             getRowId={(s) => s.id}
-            onRowClick={(s) => navigate(`/console/runtime-vars/${s.var_set_id}`)}
+            onRowClick={(s) => navigate({ to: `/console/runtime-vars/${s.var_set_id}` })}
           />
         </div>
       </FleetListPage>
@@ -468,7 +468,7 @@ function VarSetCreateDialog({
 // ---------------------------------------------------------------------------
 
 export function VarSetDetailPage() {
-  const { varSetId = "" } = useParams<{ varSetId: string }>();
+  const { varSetId = "" } = useParams({ strict: false });
   const navigate = useNavigate();
   const { projectId } = useAuth();
   const { role } = useAdminRole();
@@ -536,7 +536,7 @@ export function VarSetDetailPage() {
         void queryClient.invalidateQueries({
           queryKey: ["runtime-var-sets", projectId],
         });
-        navigate("/console/runtime-vars");
+        navigate({ to: "/console/runtime-vars" });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {

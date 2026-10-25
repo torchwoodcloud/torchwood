@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "@/router/compat";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,11 +31,12 @@ export function Login() {
   // expired=1 由 API 层 401 强制跳转携带(见 api/client.ts forceReLogin)。
   // 此时不能凭探测成功的 isAuthenticated 自动跳回 console——那正是
   // console↔login 无限弹跳的根源;必须显式重新登录。
-  const [searchParams] = useSearchParams();
-  const sessionExpired = searchParams.get("expired") === "1";
+  // TanStack 默认解析会把 "1" 解析为数字——String() 归一后比较
+  const search = useSearch({ strict: false }) as Record<string, unknown>;
+  const sessionExpired = String(search.expired ?? "") === "1";
   // reason=password_changed 由账户设置页改密成功后携带：凭证已全部撤销，
   // 与 expired 同样必须显式重新登录（抑制自动跳回 console）。
-  const passwordChanged = searchParams.get("reason") === "password_changed";
+  const passwordChanged = String(search.reason ?? "") === "password_changed";
 
   const probeSetup = useCallback(() => {
     setSetupProbeError(null);
@@ -61,7 +62,7 @@ export function Login() {
 
   useEffect(() => {
     if (isAuthenticated && !sessionExpired && !passwordChanged) {
-      navigate("/console", { replace: true });
+      navigate({ to: "/console", replace: true });
       return;
     }
     return probeSetup();
@@ -74,7 +75,7 @@ export function Login() {
     try {
       await login(email, password);
       // 显式进入 Console:带 expired 标记时 useEffect 的自动跳转被抑制。
-      navigate("/console", { replace: true });
+      navigate({ to: "/console", replace: true });
     } catch (err) {
       const msg = extractErrorMessage(err);
       setError(msg || "登录失败");
@@ -102,7 +103,7 @@ export function Login() {
       // 会话 cookie 已由服务端下发；再调 login 同步本地认证状态后进入 Console。
       // API Key 不在引导阶段生成，登录后到 API Keys 页面创建。
       await login(email, password);
-      navigate("/console", { replace: true });
+      navigate({ to: "/console", replace: true });
     } catch (err) {
       const msg = extractErrorMessage(err);
       setError(msg || "初始化失败");

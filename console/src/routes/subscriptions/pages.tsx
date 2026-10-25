@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "@/router/compat";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import type { Predicate } from "@lynx-go/ui-kit/kernel";
@@ -189,7 +189,7 @@ export function PlansListPage() {
             list={shownList}
             columns={columns}
             getRowId={(row) => row.id}
-            onRowClick={(p) => navigate(`/console/subscriptions/plans/${p.id}`)}
+            onRowClick={(p) => navigate({ to: `/console/subscriptions/plans/${p.id}` })}
           />
         </div>
       </FleetListPage>
@@ -216,7 +216,7 @@ export function PlanNewPage() {
       if (result?.status === "ok") {
         toast.success("计划已创建");
         void queryClient.invalidateQueries({ queryKey: ["sub-plans", projectId] });
-        navigate(`/console/subscriptions/plans/${result.payload.id}`);
+        navigate({ to: `/console/subscriptions/plans/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -260,7 +260,7 @@ export function PlanNewPage() {
 }
 
 export function PlanDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
@@ -278,7 +278,7 @@ export function PlanDetailPage() {
       if (result?.status === "ok") {
         toast.success("计划已删除");
         void queryClient.invalidateQueries({ queryKey: ["sub-plans", projectId] });
-        navigate("/console/subscriptions/plans");
+        navigate({ to: "/console/subscriptions/plans" });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -520,7 +520,7 @@ export function SubscriptionsListPage() {
             list={shownList}
             columns={columns}
             getRowId={(row) => row.id}
-            onRowClick={(s) => navigate(`/console/subscriptions/${s.id}`)}
+            onRowClick={(s) => navigate({ to: `/console/subscriptions/${s.id}` })}
           />
         </div>
       </FleetListPage>
@@ -529,7 +529,7 @@ export function SubscriptionsListPage() {
 }
 
 export function SubscriptionDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams({ strict: false });
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
   const { role } = useAdminRole();

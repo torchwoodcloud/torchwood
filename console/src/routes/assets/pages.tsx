@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "@/router/compat";
+import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
@@ -187,7 +187,7 @@ export function AssetDefsListPage() {
             list={shownList}
             columns={columns}
             getRowId={(row) => row.id}
-            onRowClick={(d) => navigate(`/console/assets/defs/${d.id}`)}
+            onRowClick={(d) => navigate({ to: `/console/assets/defs/${d.id}` })}
           />
         </div>
       </FleetListPage>
@@ -214,7 +214,7 @@ export function AssetDefNewPage() {
       if (result?.status === "ok") {
         toast.success("资产定义已创建");
         void queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
-        navigate(`/console/assets/defs/${result.payload.id}`);
+        navigate({ to: `/console/assets/defs/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -275,7 +275,7 @@ export function AssetDefNewPage() {
 }
 
 export function AssetDefDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
@@ -297,7 +297,7 @@ export function AssetDefDetailPage() {
       if (result?.status === "ok") {
         toast.success("资产定义已删除");
         void queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
-        navigate("/console/assets");
+        navigate({ to: "/console/assets" });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -406,7 +406,7 @@ export function AssetDefDetailPage() {
                     <TableRow key={h.id}>
                       <TableCell>
                         <Link
-                          to={`/console/users/${encodeURIComponent(h.owner_id ?? "")}`}
+                          to="/console/users/$id" params={{ id: encodeURIComponent(h.owner_id ?? "") }}
                           className="font-mono text-xs hover:underline"
                         >
                           {h.owner_id}
@@ -462,9 +462,16 @@ function sameScopePlaceholder<T>(
 export function UserAssetsPage() {
   const { projectId } = useAuth();
   const tz = useUserTimezone();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const search = useSearch({ strict: false }) as Record<string, unknown>;
+  const navigate = useNavigate();
   // 查询目标以 URL owner 参数为事实源：支持 /console/assets/users?owner=<id> 直达（用户详情页入口跳入）。
-  const queryOwner = searchParams.get("owner")?.trim() ?? "";
+  const queryOwner = String(search.owner ?? "").trim();
+  const setSearchParams = (next: { owner?: string }) =>
+    void navigate({
+      to: ".",
+      search: (prev: Record<string, unknown>) => ({ ...prev, ...next }),
+      replace: true,
+    });
   const [ownerId, setOwnerId] = useState(queryOwner);
 
   useEffect(() => {
@@ -542,7 +549,7 @@ export function UserAssetsPage() {
 
   const submit = () => {
     const v = ownerId.trim();
-    setSearchParams(v ? { owner: v } : {});
+    setSearchParams(v ? { owner: v } : { owner: undefined });
   };
 
   return (

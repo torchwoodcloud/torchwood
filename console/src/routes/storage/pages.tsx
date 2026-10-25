@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "@/router/compat";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
@@ -270,7 +270,7 @@ export function StorageListPage() {
             list={shownList}
             columns={tableColumns}
             getRowId={(b) => b.id}
-            onRowClick={(b) => navigate(`/console/storage/${b.id}`)}
+            onRowClick={(b) => navigate({ to: `/console/storage/${b.id}` })}
             selection={
               writeable
                 ? {
@@ -302,7 +302,7 @@ export function BucketNewPage() {
       if (result?.status === "ok") {
         toast.success("Bucket 创建成功");
         void queryClient.invalidateQueries({ queryKey: ["buckets"] });
-        navigate(`/console/storage/${result.payload.id}`);
+        navigate({ to: `/console/storage/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -333,7 +333,7 @@ export function BucketNewPage() {
 }
 
 export function BucketDetailPage() {
-  const { bucketId } = useParams<{ bucketId: string }>();
+  const { bucketId } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const tz = useUserTimezone();
@@ -390,7 +390,7 @@ export function BucketDetailPage() {
       if (result?.status === "ok") {
         toast.success("Bucket 已删除");
         void queryClient.invalidateQueries({ queryKey: ["buckets"] });
-        navigate("/console/storage");
+        navigate({ to: "/console/storage" });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -611,7 +611,7 @@ export function BucketDetailPage() {
 }
 
 export function FileDetailPage() {
-  const { bucketId, fileId } = useParams<{ bucketId: string; fileId: string }>();
+  const { bucketId, fileId } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { role } = useAdminRole();
@@ -660,7 +660,7 @@ export function FileDetailPage() {
       if (result?.status === "ok") {
         toast.success("文件已删除");
         void queryClient.invalidateQueries({ queryKey: ["files", bucketId] });
-        navigate(`/console/storage/${bucketId}`);
+        navigate({ to: `/console/storage/${bucketId}` });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {

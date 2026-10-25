@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "@/router/compat";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import type { Predicate } from "@lynx-go/ui-kit/kernel";
@@ -210,7 +210,7 @@ export function UsersListPage() {
               <div className="flex items-center justify-end gap-1">
                 {writeable ? (
                   <Button variant="ghost" size="icon" asChild>
-                    <Link to={`/console/users/${row.original.id}/edit`} title="编辑">
+                    <Link to="/console/users/$id/edit" params={{ id: row.original.id }} title="编辑">
                       <Pencil className="h-4 w-4" />
                     </Link>
                   </Button>
@@ -357,7 +357,7 @@ export function UsersListPage() {
             list={shownList}
             columns={tableColumns}
             getRowId={(row) => row.id}
-            onRowClick={(u) => navigate(`/console/users/${u.id}`)}
+            onRowClick={(u) => navigate({ to: `/console/users/${u.id}` })}
             selection={
               platformAdmin
                 ? {
@@ -393,7 +393,7 @@ export function CreateUserPage() {
       if (result?.status === "ok") {
         toast.success("用户已创建");
         void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
-        navigate(`/console/users/${result.payload.id}`);
+        navigate({ to: `/console/users/${result.payload.id}` });
       } else if (failure) {
         toast.error(describeApiError(failure));
       } else if (result) {
@@ -521,7 +521,7 @@ function SessionsCard({ user }: { user: User }) {
 }
 
 export function UserDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
@@ -547,7 +547,7 @@ export function UserDetailPage() {
       if (result?.status === "ok") {
         toast.success("用户已删除");
         void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
-        navigate("/console/users");
+        navigate({ to: "/console/users" });
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -598,20 +598,20 @@ export function UserDetailPage() {
           {/* 行为轨迹：Analytics 读方法对 Console admin 全角色开放（viewer 含），
               不做角色 gating（docs/design/analytics.md §4.1/§9）。 */}
           <Button asChild size="sm" variant="outline">
-            <Link to={`/console/analytics/users/${encodeURIComponent(user.id)}`}>
+            <Link to="/console/analytics/users/$userId" params={{ userId: encodeURIComponent(user.id) }}>
               行为轨迹
             </Link>
           </Button>
           {platformAdmin && (
             <Button asChild size="sm" variant="outline">
-              <Link to={`/console/assets/users?owner=${encodeURIComponent(user.id)}`}>
+              <Link to="/console/assets/users" search={{ owner: user.id }}>
                 用户资产
               </Link>
             </Button>
           )}
           {platformAdmin && (
             <Button asChild size="sm" variant="outline">
-              <Link to={`/console/subscriptions?q=${encodeURIComponent(user.id)}`}>
+              <Link to="/console/subscriptions" search={{ q: user.id }}>
                 用户订阅
               </Link>
             </Button>
@@ -628,7 +628,7 @@ export function UserDetailPage() {
           )}
           {writeable && (
             <Button asChild variant="outline" size="sm">
-              <Link to={`/console/users/${user.id}/edit`}>编辑</Link>
+              <Link to="/console/users/$id/edit" params={{ id: user.id }}>编辑</Link>
             </Button>
           )}
           {platformAdmin && (
@@ -731,7 +731,7 @@ export function UserDetailPage() {
 }
 
 export function UserEditPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
@@ -759,7 +759,7 @@ export function UserEditPage() {
         setEmail(result.payload.email);
         setEmailVerified(result.payload.email_verified);
         void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
-        navigate(`/console/users/${id}`);
+        navigate({ to: `/console/users/${id}` });
       } else if (failure) {
         toast.error(describeApiError(failure));
       } else if (result) {
