@@ -50,11 +50,21 @@ function axiosErr(status: number, body?: { code?: string; message?: string }) {
   });
 }
 
-async function renderPage(routePath: string, element: React.ReactElement, entry = routePath) {
+async function renderPage(
+  routePath: string,
+  element: React.ReactElement,
+  entry = routePath,
+  // 额外路由：命令 onSettled 里 navigate 的目标必须真实注册，否则
+  // not-found rejection 落点随并行时序漂移（全套跑时偶发失败）。
+  extraRoutes: { path: string; element: React.ReactElement }[] = [],
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <TestRouter routes={[{ path: routePath, element }]} initialEntries={[entry]} />
+      <TestRouter
+        routes={[{ path: routePath, element }, ...extraRoutes]}
+        initialEntries={[entry]}
+      />
     </QueryClientProvider>,
   );
   // RouterProvider 首提交异步：冲刷后再断言（仓库惯例）。
@@ -150,7 +160,13 @@ describe("ApiKeyDetailPage（编辑对话框 diff + 轮换双命令）", () => {
   it("删除：确认后 deleteAPIKey 带 __skipToast", async () => {
     mockGet.mockResolvedValue(key);
     mockDelete.mockResolvedValue(undefined);
-    await renderPage("/console/api-keys/$id", <ApiKeyDetailPage />, "/console/api-keys/key-1");
+    await renderPage(
+      "/console/api-keys/$id",
+      <ApiKeyDetailPage />,
+      "/console/api-keys/key-1",
+      // onSettled navigate 回列表——目标路由要在 harness 里注册
+      [{ path: "/console/api-keys", element: <div /> }],
+    );
     fireEvent.click(await screen.findByRole("button", { name: "删除" }));
     // torchwood 存量确认壳：确认钮与触发钮同名，scope 到对话框内
     const dialog = await screen.findByRole("dialog");
