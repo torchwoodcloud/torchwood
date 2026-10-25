@@ -1,4 +1,4 @@
-import { api } from "./client";
+import { api, type ApiRequestConfig } from "./client";
 import { pageQuery, type ListMeta, type ListParams, type Page } from "./pagination";
 
 export interface Project {
@@ -42,25 +42,28 @@ export async function createProject(input: {
 
 export async function updateProject(
   id: string,
-  input: { name?: string; description?: string; registration_policy?: string }
+  input: { name?: string; description?: string; registration_policy?: string },
+  config?: ApiRequestConfig
 ): Promise<Project> {
-  const res = await api.patch<Project>(`/server/projects/${id}`, input);
+  const res = await api.patch<Project>(`/server/projects/${id}`, input, config);
   return res.data;
 }
 
-export async function deleteProject(id: string): Promise<void> {
-  await api.delete(`/server/projects/${id}`);
+export async function deleteProject(id: string, config?: ApiRequestConfig): Promise<void> {
+  await api.delete(`/server/projects/${id}`, config);
 }
 
 // ---- OAuth 重定向白名单（settings auth.oauth_allowed_redirect_urls）----
 
 export async function updateOAuthRedirectAllowlist(
   projectId: string,
-  urls: string[]
+  urls: string[],
+  config?: ApiRequestConfig
 ): Promise<Project> {
   const res = await api.put<Project>(
     `/server/projects/${projectId}/oauth-redirect-allowlist`,
-    { urls }
+    { urls },
+    config
   );
   return res.data;
 }
@@ -99,18 +102,21 @@ export async function listInviteCodes(
 
 export async function createInviteCode(
   projectId: string,
-  input: { max_uses?: number; expire_at?: string }
+  input: { max_uses?: number; expire_at?: string },
+  config?: ApiRequestConfig
 ): Promise<InviteCode> {
   const res = await api.post<InviteCode>(
     `/server/projects/${projectId}/invite-codes`,
-    input
+    input,
+    config
   );
   return res.data;
 }
 
 export async function deleteInviteCode(
   projectId: string,
-  id: string
+  id: string,
+  config?: ApiRequestConfig
 ): Promise<void> {
-  await api.delete(`/server/projects/${projectId}/invite-codes/${id}`);
+  await api.delete(`/server/projects/${projectId}/invite-codes/${id}`, config);
 }

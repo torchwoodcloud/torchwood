@@ -1,4 +1,4 @@
-import { api } from "./client";
+import { api, type ApiRequestConfig } from "./client";
 import { pageQuery, type ListMeta, type ListParams, type Page } from "./pagination";
 
 export interface OAuthProvider {
@@ -31,13 +31,16 @@ export async function listOAuthProviders(params: ListParams): Promise<Page<OAuth
   return { rows: res.data.oauth_providers ?? [], nextPageToken: res.data.meta?.next_page_token };
 }
 
-export async function upsertOAuthProvider(input: {
-  provider: string;
-  enabled: boolean;
-  client_id: string;
-  client_secret?: string;
-  scopes?: string[];
-}): Promise<OAuthProvider> {
+export async function upsertOAuthProvider(
+  input: {
+    provider: string;
+    enabled: boolean;
+    client_id: string;
+    client_secret?: string;
+    scopes?: string[];
+  },
+  config?: ApiRequestConfig
+): Promise<OAuthProvider> {
   const res = await api.put<OAuthProvider>(
     `/server/oauth-providers/${encodeURIComponent(input.provider)}`,
     {
@@ -46,13 +49,14 @@ export async function upsertOAuthProvider(input: {
       client_id: input.client_id,
       client_secret: input.client_secret ?? "",
       scopes: input.scopes ?? [],
-    }
+    },
+    config
   );
   return res.data;
 }
 
-export async function deleteOAuthProvider(provider: string): Promise<void> {
-  await api.delete(`/server/oauth-providers/${encodeURIComponent(provider)}`);
+export async function deleteOAuthProvider(provider: string, config?: ApiRequestConfig): Promise<void> {
+  await api.delete(`/server/oauth-providers/${encodeURIComponent(provider)}`, config);
 }
 
 export function oauthCallbackURL(provider: string, publicBase = window.location.origin): string {
