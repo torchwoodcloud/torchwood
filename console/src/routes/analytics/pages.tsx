@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCollection } from "@lynx-go/ui-kit";
 import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -23,7 +24,6 @@ import {
 } from "@/components/ui/table";
 import {
   getOverview,
-  listEventDefinitions,
   queryRetention,
   queryTimeseries,
   num,
@@ -45,6 +45,11 @@ import {
 } from "./shared";
 import { TrendChart } from "./metricChart";
 import { StatCard } from "@/components/fleet/values/stat-card";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import {
+  eventDefinitionsResource,
+  eventDefinitionsSearch,
+} from "@/fleet/analytics";
 
 const OVERVIEW_RANGES: { key: OverviewRange; label: string }[] = [
   { key: "today", label: "今日" },
@@ -247,21 +252,16 @@ export function AnalyticsEventsPage() {
   const { projectId } = useAuth();
   const [filter, setFilter] = useState("");
 
-  const defsQ = useInfiniteQuery({
-    queryKey: ["analytics", "definitions", projectId],
-    queryFn: ({ pageParam }) => listEventDefinitions(100, pageParam || undefined),
-    initialPageParam: "",
-    getNextPageParam: (last) => last.meta?.next_page_token || undefined,
-    enabled: !!projectId,
+  // 事件字典 fleet 化（§12.9-2）：游标/页大小进 URL；页内过滤保持本地态。
+  const list = useCollection(eventDefinitionsResource, {
+    from: "/console/analytics/events",
+    search: eventDefinitionsSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-
-  const definitions = useMemo(
-    () => defsQ.data?.pages.flatMap((p) => p.definitions ?? []) ?? [],
-    [defsQ.data]
-  );
   const filtered = filter
-    ? definitions.filter((d) => d.name.toLowerCase().includes(filter.toLowerCase()))
-    : definitions;
+    ? list.rows.filter((d) => d.name.toLowerCase().includes(filter.toLowerCase()))
+    : list.rows;
 
   return (
     <>
@@ -288,10 +288,10 @@ export function AnalyticsEventsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {defsQ.isLoading ? (
+          {list.status === "loading" ? (
             <Skeleton className="h-40 w-full" />
-          ) : defsQ.error ? (
-            <LoadError error={defsQ.error} />
+          ) : list.status === "error" ? (
+            <LoadError error={list.error} />
           ) : filtered.length === 0 ? (
             <EmptyState
               title="暂无事件"
@@ -331,18 +331,9 @@ export function AnalyticsEventsPage() {
                   ))}
                 </TableBody>
               </Table>
-              {defsQ.hasNextPage && (
-                <div className="mt-4 flex justify-center">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => defsQ.fetchNextPage()}
-                    disabled={defsQ.isFetchingNextPage}
-                  >
-                    {defsQ.isFetchingNextPage ? "加载中…" : "加载更多"}
-                  </Button>
-                </div>
-              )}
+              <div className="mt-4">
+                <KeysetPagination list={list} />
+              </div>
             </>
           )}
         </CardContent>
