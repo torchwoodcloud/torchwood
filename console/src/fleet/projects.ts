@@ -6,6 +6,7 @@ import {
   type Segment,
 } from "@lynx-go/ui-kit/kernel";
 import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
+import { skipToast as SKIP } from "@/api/client";
 import {
   createInviteCode,
   createProject,
@@ -17,7 +18,7 @@ import {
   type InviteCode,
   type Project,
 } from "@/api/projects";
-import { toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/fleet/errors";
 
 // 列表 fleet 化（§12.9-2）：projects 是平台级资源（GET /server/projects，
 // 旧页不随项目作用域）——defineResource 不设 scope，直接请求；游标/页大小
@@ -67,49 +68,6 @@ export const projectsSearch = collectionQuerySchema({ defaultSize: 20 });
 export const createProjectCommand = projectsResource.commands!.create;
 
 // —— 写路径命令化（§12.9 阶段 2）：settings 页的更新/删除 ——
-
-interface GatewayErrorBody {
-  error?: { code?: string; message?: string };
-}
-
-function gatewayMessage(err: unknown): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { data?: GatewayErrorBody } }).response?.data?.error?.message
-  ) {
-    return String((err as { response: { data: GatewayErrorBody } }).response.data.error!.message);
-  }
-  return err instanceof Error ? err.message : String(err);
-}
-
-function isStatus(err: unknown, status: number): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { status?: number } }).response?.status === status
-  );
-}
-
-async function runCommandMapped<Payload>(
-  op: () => Promise<Payload>,
-): Promise<CommandResult<Payload>> {
-  try {
-    return { status: "ok", payload: await op() };
-  } catch (err) {
-    if (isStatus(err, 400)) {
-      return { status: "rejected", message: gatewayMessage(err) };
-    }
-    if (isStatus(err, 409)) {
-      return { status: "conflict", message: gatewayMessage(err) };
-    }
-    throw toApiError(err);
-  }
-}
-
-const SKIP = { __skipToast: true } as const;
 
 export interface UpdateProjectInput {
   id: string;

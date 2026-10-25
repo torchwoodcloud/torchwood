@@ -15,58 +15,14 @@ import {
   type APIKey,
   type UpdateAPIKeyInput,
 } from "@/api/apiKeys";
-import { gatewayErrorCode, toApiError } from "@/fleet/errors";
+import { skipToast as SKIP } from "@/api/client";
+import { runCommandMapped, toApiError } from "@/fleet/errors";
 
 // fleet-ui 命令族切片（api-keys 首个 commands 资源，design.md §12.3）：
 // 结果两分映射——400→rejected{code,message}、409→conflict、其余 throw
 // ApiError（toApiError 收敛缝）；命令调用一律 __skipToast（toast 单源 =
 // onSettled/结果盒，防与 axios 拦截器双 toast）。失效：kit 键自动 +
 // 存量 ["api-keys"] 键由页面 onSettled 手动桥接（isFleetKey 守卫）。
-
-// 网关错误体（结果分支用）。
-interface GatewayErrorBody {
-  error?: { code?: string; message?: string };
-}
-
-function gatewayMessage(err: unknown): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { data?: GatewayErrorBody } }).response?.data?.error?.message
-  ) {
-    return String((err as { response: { data: GatewayErrorBody } }).response.data.error!.message);
-  }
-  return err instanceof Error ? err.message : String(err);
-}
-
-function isStatus(err: unknown, status: number): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { status?: number } }).response?.status === status
-  );
-}
-
-/** 结果两分映射：400→rejected、409→conflict、404 按 treatAs 由调用方裁决、其余 throw。 */
-async function runCommandMapped<Payload>(
-  op: () => Promise<Payload>,
-): Promise<CommandResult<Payload>> {
-  try {
-    return { status: "ok", payload: await op() };
-  } catch (err) {
-    if (isStatus(err, 400)) {
-      return { status: "rejected", code: gatewayErrorCode(err), message: gatewayMessage(err) };
-    }
-    if (isStatus(err, 409)) {
-      return { status: "conflict", message: gatewayMessage(err) };
-    }
-    throw toApiError(err);
-  }
-}
-
-const SKIP = { __skipToast: true } as const;
 
 // —— 新建：表单值（展示形）在 run 内收敛为提交形（wildcard/勾选/手输合并）——
 

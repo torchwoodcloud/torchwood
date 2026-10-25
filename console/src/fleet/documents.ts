@@ -1,3 +1,4 @@
+import { skipToast as SKIP } from "@/api/client";
 import {
   type CollectionQuery,
   type CommandDescriptor,
@@ -16,7 +17,7 @@ import {
   type Attribute,
   type Document,
 } from "@/api/databases";
-import { toApiError } from "@/fleet/errors";
+import { gatewayErrorBody, toApiError } from "@/fleet/errors";
 
 // fleet-ui OCC 切片（documents，design.md §12.5）：update/delete 必带 version
 // （CAS）。通道方言：OCC 冲突 = HTTP 400 + FailedPrecondition + message 前缀
@@ -58,20 +59,6 @@ export function domainCodeOf(message: string | undefined): string | undefined {
   return m?.[1];
 }
 
-function gatewayBody(err: unknown): { code?: string; message?: string } | undefined {
-  if (isAxiosError(err)) {
-    const data = err.response?.data as { error?: { code?: unknown; message?: unknown } } | undefined;
-    const e = data?.error;
-    if (e && typeof e === "object") {
-      return {
-        code: typeof e.code === "string" ? e.code : undefined,
-        message: typeof e.message === "string" ? e.message : undefined,
-      };
-    }
-  }
-  return undefined;
-}
-
 function messageOf(domainCode: string | undefined, fallback: string | undefined): string {
   if (domainCode && DOMAIN_MESSAGES[domainCode]) return DOMAIN_MESSAGES[domainCode];
   return fallback ?? "请求失败";
@@ -91,7 +78,7 @@ async function runDocumentCommand<Payload>(
   } catch (err) {
     if (isAxiosError(err) && err.response) {
       const status = err.response.status;
-      const body = gatewayBody(err);
+      const body = gatewayErrorBody(err);
       const domainCode = domainCodeOf(body?.message);
       if (status === 400 && domainCode === "DOCUMENT.VERSION_CONFLICT") {
         return { status: "conflict", message: messageOf(domainCode, body?.message) };
@@ -199,8 +186,6 @@ function buildIncrement(
   }
   return Object.keys(increment).length > 0 ? { increment } : {};
 }
-
-const SKIP = { __skipToast: true } as const;
 
 // —— descriptor 工厂（裸 CommandDescriptor，路径参数闭包——批 B editApiKeyDescriptor 先例）——
 

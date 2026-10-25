@@ -7,7 +7,8 @@ import {
 } from "@lynx-go/ui-kit/kernel";
 import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
 import { createAssetDef, deleteAssetDef, listAssetDefs, type AssetDef } from "@/api/assets";
-import { gatewayErrorCode, toApiError } from "@/fleet/errors";
+import { skipToast as SKIP } from "@/api/client";
+import { runCommandMapped, toApiError } from "@/fleet/errors";
 
 // 列表 fleet 化（§12.9-2）：资产定义主列表换 useCollection——游标/页大小/
 // 时间排序进 URL（分页栈 = 浏览器历史），数据面复用 axios 管线，失败在
@@ -20,51 +21,6 @@ import { gatewayErrorCode, toApiError } from "@/fleet/errors";
 // {code,message}、409→conflict、其余 throw ApiError）；api 调用一律
 // __skipToast（toast 单源 = onSettled）。创建的 decimals/上限文本展示形在
 // run 内收敛为提交形。
-
-// 网关错误体（结果分支用）。
-interface GatewayErrorBody {
-  error?: { code?: string; message?: string };
-}
-
-function gatewayMessage(err: unknown): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { data?: GatewayErrorBody } }).response?.data?.error?.message
-  ) {
-    return String((err as { response: { data: GatewayErrorBody } }).response.data.error!.message);
-  }
-  return err instanceof Error ? err.message : String(err);
-}
-
-function isStatus(err: unknown, status: number): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { status?: number } }).response?.status === status
-  );
-}
-
-/** 结果两分映射：400→rejected、409→conflict、404 按 treatAs 由调用方裁决、其余 throw。 */
-async function runCommandMapped<Payload>(
-  op: () => Promise<Payload>
-): Promise<CommandResult<Payload>> {
-  try {
-    return { status: "ok", payload: await op() };
-  } catch (err) {
-    if (isStatus(err, 400)) {
-      return { status: "rejected", code: gatewayErrorCode(err), message: gatewayMessage(err) };
-    }
-    if (isStatus(err, 409)) {
-      return { status: "conflict", message: gatewayMessage(err) };
-    }
-    throw toApiError(err);
-  }
-}
-
-const SKIP = { __skipToast: true } as const;
 
 // —— 新建：decimals/上限为文本展示形，run 内收敛提交形（decimals 非法回退
 // 0；max_quantity 空 = 不限不发送）——

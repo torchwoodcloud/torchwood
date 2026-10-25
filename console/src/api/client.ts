@@ -26,6 +26,10 @@ export interface ApiRequestConfig extends AxiosRequestConfig {
   __skipToast?: boolean;
 }
 
+// 命令调用的透传配置（toast 单源 = onSettled/结果盒，防与拦截器双 toast）。
+// fleet/ 各域经 `import { skipToast as SKIP }` 消费，取代逐文件常量副本。
+export const skipToast = { __skipToast: true } as const;
+
 // refreshAuthTokenSingleFlight refreshes the console session via the
 // HttpOnly refresh cookie (empty body; the server reads the cookie).
 // Concurrent callers share one in-flight request so a burst of 401s

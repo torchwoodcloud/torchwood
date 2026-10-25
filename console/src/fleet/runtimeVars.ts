@@ -7,6 +7,7 @@ import {
   type Segment,
 } from "@lynx-go/ui-kit/kernel";
 import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
+import { skipToast as SKIP } from "@/api/client";
 import {
   createVar,
   createVarSet,
@@ -22,7 +23,7 @@ import {
   type VarSet,
   type VarSetVisibilityInput,
 } from "@/api/runtimeVars";
-import { gatewayErrorCode, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/fleet/errors";
 
 // 列表 fleet 化（§12.9-2）：var-sets 主列表走 useCollection（URL 即真相：
 // cursor/size 进 URL，分页栈 = 浏览器历史）。vars/versions 子视图仍为有意
@@ -35,51 +36,6 @@ import { gatewayErrorCode, toApiError } from "@/fleet/errors";
 // LWW（design.md §12.5 已证：UpdateVarSet/UpdateVar 等无写前件），不设
 // OCC 守卫；结果两分映射同 apiKeys（400→rejected、409→conflict、其余
 // throw ApiError）；api 调用一律 __skipToast（toast 单源 = onSettled）。
-
-// 网关错误体（结果分支用）。
-interface GatewayErrorBody {
-  error?: { code?: string; message?: string };
-}
-
-function gatewayMessage(err: unknown): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { data?: GatewayErrorBody } }).response?.data?.error?.message
-  ) {
-    return String((err as { response: { data: GatewayErrorBody } }).response.data.error!.message);
-  }
-  return err instanceof Error ? err.message : String(err);
-}
-
-function isStatus(err: unknown, status: number): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { status?: number } }).response?.status === status
-  );
-}
-
-/** 结果两分映射：400→rejected、409→conflict、404 按 treatAs 由调用方裁决、其余 throw。 */
-async function runCommandMapped<Payload>(
-  op: () => Promise<Payload>
-): Promise<CommandResult<Payload>> {
-  try {
-    return { status: "ok", payload: await op() };
-  } catch (err) {
-    if (isStatus(err, 400)) {
-      return { status: "rejected", code: gatewayErrorCode(err), message: gatewayMessage(err) };
-    }
-    if (isStatus(err, 409)) {
-      return { status: "conflict", message: gatewayMessage(err) };
-    }
-    throw toApiError(err);
-  }
-}
-
-const SKIP = { __skipToast: true } as const;
 
 // —— 新建集合：表单值（展示形）在 run 内原样收敛为提交形 ——
 

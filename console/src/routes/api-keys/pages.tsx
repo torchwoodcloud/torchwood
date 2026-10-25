@@ -65,8 +65,8 @@ import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 
 // 命令族切片（design.md §12.3）：写路径换 useCommand/useCommandForm（结果
 // 两分 + __skipToast + onSettled toast 单源）；失效 = kit 键自动 + 存量
-// ["api-keys"] 键手动桥（isFleetKey 守卫）。列表骨架（ResourceListPage/
-// useServerPaging/页内搜索/批量选择）留存量——kit DataTable 行选择未至。
+// ["api-keys"] 键手动桥（isFleetKey 守卫）。列表已 fleet 化（§12.9-1）：
+// useCollection + DataTable selection 受控面（批量删/行删接线）。
 
 export function ApiKeysListPage() {
   const { projectId } = useAuth();

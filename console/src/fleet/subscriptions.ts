@@ -7,6 +7,7 @@ import {
   type Segment,
 } from "@lynx-go/ui-kit/kernel";
 import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
+import { skipToast as SKIP } from "@/api/client";
 import {
   cancelSubscription,
   createPlan,
@@ -17,7 +18,7 @@ import {
   type Subscription,
   type SubscriptionPlan,
 } from "@/api/subscriptions";
-import { gatewayErrorCode, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/fleet/errors";
 
 // 列表 fleet 化（§12.9-2）：订阅域两个列表（plans / subscriptions）各换
 // useCollection——过滤/时间排序/游标/页大小进 URL，数据面复用 axios 管线，
@@ -28,51 +29,6 @@ import { gatewayErrorCode, toApiError } from "@/fleet/errors";
 // ["sub-plans"] / ["subscriptions"] 键由页面 onSettled 手动桥。结果两分映射
 // 同 apiKeys（400→rejected、409→conflict、其余 throw ApiError）；api 调用
 // 一律 __skipToast（toast 单源 = onSettled/结果盒）。
-
-// 网关错误体（结果分支用）。
-interface GatewayErrorBody {
-  error?: { code?: string; message?: string };
-}
-
-function gatewayMessage(err: unknown): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { data?: GatewayErrorBody } }).response?.data?.error?.message
-  ) {
-    return String((err as { response: { data: GatewayErrorBody } }).response.data.error!.message);
-  }
-  return err instanceof Error ? err.message : String(err);
-}
-
-function isStatus(err: unknown, status: number): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { status?: number } }).response?.status === status
-  );
-}
-
-/** 结果两分映射：400→rejected、409→conflict、404 按 treatAs 由调用方裁决、其余 throw。 */
-async function runCommandMapped<Payload>(
-  op: () => Promise<Payload>
-): Promise<CommandResult<Payload>> {
-  try {
-    return { status: "ok", payload: await op() };
-  } catch (err) {
-    if (isStatus(err, 400)) {
-      return { status: "rejected", code: gatewayErrorCode(err), message: gatewayMessage(err) };
-    }
-    if (isStatus(err, 409)) {
-      return { status: "conflict", message: gatewayMessage(err) };
-    }
-    throw toApiError(err);
-  }
-}
-
-const SKIP = { __skipToast: true } as const;
 
 // —— 计划新建：表单值（展示形）在 run 内收敛为提交形 ——
 //（grace_days 文本 → 整数回退 0；amount 为最小单位整数字符串——客户端
