@@ -1,8 +1,17 @@
-import type { CommandDescriptor, CommandResult } from "@lynx-go/ui-kit/kernel";
+import {
+  type CollectionQuery,
+  type CommandDescriptor,
+  type CommandResult,
+  defineResource,
+  type ResourceScope,
+  type Segment,
+} from "@lynx-go/ui-kit/kernel";
+import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
 import { isAxiosError } from "axios";
 import {
   createDocument,
   deleteDocument,
+  listDocuments,
   updateDocument,
   type Attribute,
   type Document,
@@ -15,6 +24,10 @@ import { toApiError } from "@/fleet/errors";
 // 网关错误体的 ErrorInfo/BadRequest details（域码 reason、current_version、
 // field_violations）在 HTTP 面被丢弃，域码判别唯一可靠面 = message 前缀
 // "DOMAIN.CODE:"。域码中文映射表在本层（消费方文案权）。
+
+// —— 列表 fleet 化（§12.9-2）：文档列表换轨 collection（命令族保持工厂
+// 形态——dbId/collId 闭包是既有消费面与 OCC 测试面，不搬进资源 commands；
+// kit 键失效由页面在 onSettled 手动桥 list.refetch）。——
 
 export interface DocumentFormValues {
   /** 展示形字段值（string；__json = 无 attributes 集合的整体 JSON） */
@@ -287,3 +300,36 @@ export function removeDocumentCommand(
     },
   };
 }
+
+// —— 列表资源（§12.9-2）——
+
+// URL 搜索 schema（路由 validateSearch 与绑定共用同一实例）。默认页大小
+// 20 = 旧页默认（useServerPaging 缺省）；listDocuments 无真实服务端过滤
+// 参数（仅分页）→ 不设 filters/text，页内搜索是本地态投影不进 URL。
+export const documentsSearch = collectionQuerySchema({ defaultSize: 20 });
+
+async function fetchDocuments(
+  q: CollectionQuery,
+  ctx: ResourceScope
+): Promise<Segment<Document>> {
+  // 嵌套 scope：dbId/collId 进 ctx（projectId 缺 = 会话未就绪），缺参静默空段。
+  if (ctx.projectId == null || ctx.dbId == null || ctx.collId == null) {
+    return { rows: [] };
+  }
+  try {
+    const page = await listDocuments(ctx.dbId, ctx.collId, {
+      pageSize: q.window.size,
+      pageToken: q.window.cursor || undefined,
+    });
+    return { rows: page.rows, nextCursor: page.nextPageToken };
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+export const documentsResource = defineResource({
+  name: "documents",
+  getId: (row: Document) => row.id,
+  scope: ["projectId", "dbId", "collId"],
+  collection: fetchDocuments,
+});

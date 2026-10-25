@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@/router/compat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCollection } from "@lynx-go/ui-kit";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
 import { Plus, Settings2, UserPlus } from "lucide-react";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
-  listGroups,
   getGroup,
   createGroup,
   deleteGroup,
@@ -20,10 +21,19 @@ import {
   type Group,
   type Membership,
 } from "@/api/groups";
+import {
+  groupsResource,
+  groupsSearch,
+  groupsCollectionKey,
+} from "@/fleet/groups";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { useServerPaging } from "@/hooks/useServerPaging";
+import { PageHeader } from "@/components/PageHeader";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,127 +73,186 @@ function statusBadge(status: string) {
   return <Badge variant={variant}>{STATUS_LABELS[status] ?? status}</Badge>;
 }
 
-const groupColumns = (tz: string): ColumnDef<Group>[] => [
-  {
-    key: "id",
-    header: "ID",
-    className: "font-mono text-xs max-w-[140px] truncate",
-    cell: (t) => t.id,
-  },
-  { key: "name", header: "名称", cell: (t) => t.name },
-  { key: "total", header: "成员数", cell: (t) => String(t.total ?? 0) },
-  {
-    key: "created",
-    header: "创建时间",
-    cell: (t) => formatDateTime(t.created_at, tz),
-  },
-];
-
 export function GroupsListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const tz = useUserTimezone();
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const writeable = canWrite(role);
 
-  const paging = useServerPaging();
-  const { data, isLoading } = useQuery({
-    queryKey: ["groups", projectId, paging.pageSize, paging.pageToken],
-    queryFn: () => listGroups({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
-    enabled: !!projectId,
-    placeholderData: (prev) => prev,
+  // 列表 fleet 化（§12.9-2）：游标/页大小进 URL（分页栈 = 浏览器历史；旧页
+  // 无服务端过滤）；页内当前页搜索保持本地态（旧页语义）。
+  const list = useCollection(groupsResource, {
+    from: "/console/groups",
+    search: groupsSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-  const groups = data?.rows ?? [];
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteGroup(id),
     onSuccess: () => {
       toast.success("用户组已删除");
-      queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
+      // kit 列表键（useCollection）+ 存量键双失效（详情/成员页仍吃存量键）。
+      void queryClient.invalidateQueries({ queryKey: groupsCollectionKey });
+      void queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
     },
   });
 
-  const getSearchText = useCallback((t: Group) => `${t.id} ${t.name}`, []);
+  const getSearchText = useCallback((t: Group) => `${t.id} ${t.name}`.toLowerCase(), []);
 
-  const handleBulkDelete = async (selected: Group[], clear: () => void) => {
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((t) => getSearchText(t).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
+
+  const toggleRow = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = (visibleIds: string[]) =>
+    setSelectedIds((prev) =>
+      new Set(visibleIds.length > 0 && visibleIds.every((id) => prev.has(id)) ? [] : visibleIds)
+    );
+  const selectedGroups = list.rows.filter((t) => selectedIds.has(t.id));
+
+  const handleBulkDelete = async () => {
     setBulkDeleting(true);
     try {
       // 单条失败由页面汇总展示，跳过全局 toast 避免刷屏（R11-P2-8）。
       const results = await Promise.allSettled(
-        selected.map((t) => deleteGroup(t.id, { __skipToast: true }))
+        selectedGroups.map((t) => deleteGroup(t.id, { __skipToast: true }))
       );
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
         toast.error(`删除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
       } else {
-        toast.success(`已删除 ${selected.length} 个用户组`);
+        toast.success(`已删除 ${selectedGroups.length} 个用户组`);
       }
-      queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
-      clear();
+      void queryClient.invalidateQueries({ queryKey: groupsCollectionKey });
+      void queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
+      setSelectedIds(new Set());
     } finally {
       setBulkDeleting(false);
     }
   };
 
-  return (
-    <ResourceListPage
-      title="Groups"
-      description="管理项目用户组与成员邀请"
-      searchPlaceholder="当前页内搜索用户组名称或 ID..."
-      isLoading={isLoading}
-      items={groups}
-      columns={groupColumns(tz)}
-      getSearchText={getSearchText}
-      serverPaging={{
-        page: paging.page,
-        pageSize: paging.pageSize,
-        hasPrev: paging.hasPrev,
-        hasNext: !!data?.nextPageToken,
-        onPrev: paging.goPrev,
-        onNext: () => paging.goNext(data?.nextPageToken),
-        onPageSizeChange: paging.setPageSize,
-      }}
-      detailPath={(t) => `/console/groups/${t.id}`}
-      toolbarActions={
-        writeable ? (
-          <Button asChild>
-            <Link to="/console/groups/new">
-              <Plus className="h-4 w-4 mr-2" />
-              新建用户组
-            </Link>
-          </Button>
-        ) : undefined
-      }
-      selectionActions={
-        writeable
-          ? (selected, clear) => (
-              <BulkDeleteButton
-                count={selected.length}
-                loading={bulkDeleting}
-                onConfirm={() => handleBulkDelete(selected, clear)}
+  const tableColumns: LegacyColumnDef<Group, unknown>[] = [
+    {
+      id: "id",
+      header: "ID",
+      cell: ({ row }) => (
+        <span className="inline-block max-w-[140px] truncate font-mono text-xs">
+          {row.original.id}
+        </span>
+      ),
+    },
+    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
+    {
+      id: "total",
+      header: "成员数",
+      cell: ({ row }) => String(row.original.total ?? 0),
+    },
+    {
+      id: "created",
+      header: "创建时间",
+      cell: ({ row }) => formatDateTime(row.original.created_at, tz),
+    },
+    ...(writeable
+      ? [
+          {
+            id: "actions",
+            header: "操作",
+            cell: ({ row }: { row: { original: Group } }) => (
+              <RowDeleteButton
+                onConfirm={() => remove.mutate(row.original.id)}
+                loading={remove.isPending}
               />
-            )
-          : undefined
-      }
-      rowActions={
-        writeable
-          ? (t) => (
-              <RowDeleteButton onConfirm={() => remove.mutate(t.id)} loading={remove.isPending} />
-            )
-          : undefined
-      }
-      emptyTitle="暂无用户组"
-      emptyDescription="创建用户组并邀请成员协作"
-      emptyAction={
-        writeable ? (
-          <Button asChild>
-            <Link to="/console/groups/new">新建用户组</Link>
-          </Button>
-        ) : undefined
-      }
-    />
+            ),
+          } satisfies LegacyColumnDef<Group, unknown>,
+        ]
+      : []),
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Groups" description="管理项目用户组与成员邀请" />
+
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="当前页内搜索用户组名称或 ID..."
+              className="h-8 w-56"
+            />
+            {selectedGroups.length > 0 && writeable ? (
+              <BulkDeleteButton
+                count={selectedGroups.length}
+                loading={bulkDeleting}
+                onConfirm={() => void handleBulkDelete()}
+              />
+            ) : null}
+            {writeable ? (
+              <Button asChild className="ml-auto">
+                <Link to="/console/groups/new">
+                  <Plus className="h-4 w-4 mr-2" />
+                  新建用户组
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+        }
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={list} />
+          </div>
+        }
+        emptyTitle={search !== "" ? "没有匹配的用户组" : "暂无用户组"}
+        emptyDescription={
+          search !== ""
+            ? "调整搜索词，或清空恢复当前页全部行"
+            : "创建用户组并邀请成员协作"
+        }
+        emptyAction={
+          writeable ? (
+            <Button asChild>
+              <Link to="/console/groups/new">新建用户组</Link>
+            </Button>
+          ) : undefined
+        }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={tableColumns}
+            getRowId={(row) => row.id}
+            onRowClick={(t) => navigate(`/console/groups/${t.id}`)}
+            selection={
+              writeable
+                ? {
+                    selectedIds,
+                    onToggle: toggleRow,
+                    onToggleAll: toggleAll,
+                  }
+                : undefined
+            }
+          />
+        </div>
+      </FleetListPage>
+    </div>
   );
 }
 

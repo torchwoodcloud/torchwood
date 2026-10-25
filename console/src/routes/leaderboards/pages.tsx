@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@/router/compat";
+import { useCollection } from "@lynx-go/ui-kit";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { toast } from "sonner";
 import { Pencil, Plus, Trophy } from "lucide-react";
 import {
@@ -17,7 +19,6 @@ import {
   LEADERBOARD_TIE_BREAKS,
   listBoardPeriods,
   listBoardTop,
-  listBoards,
   rerunSettlement,
   updateBoard,
   voidSettlement,
@@ -46,106 +47,166 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { ListPaginationKeyset } from "@/components/list/ListToolbar";
 import { useServerPaging } from "@/hooks/useServerPaging";
 import { RowDeleteButton } from "@/components/resource/shared";
-import type { ColumnDef } from "@/components/list/DataTable";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
-
-// 工厂：时区来自管理员偏好（hook 无法在模块级使用），由列表页传入。
-const boardColumns = (tz: string): ColumnDef<LeaderboardBoard>[] => [
-  {
-    key: "id",
-    header: "榜 ID",
-    cell: (b) => <Link className="font-medium underline-offset-2 hover:underline" to={`/console/leaderboards/${b.id}`}>{b.id}</Link>,
-  },
-  {
-    key: "period",
-    header: "期 / 时区",
-    cell: (b) => (
-      <span className="text-sm">
-        {b.period_kind === "none" ? "全期" : `${b.period_kind}${b.period_tz ? ` · ${b.period_tz}` : ""}`}
-      </span>
-    ),
-  },
-  {
-    key: "semantics",
-    header: "排序 / 合并",
-    cell: (b) => (
-      <div className="flex flex-wrap gap-1">
-        <Badge variant="secondary">{b.sort ?? "desc"}</Badge>
-        <Badge variant="outline">{b.policy ?? "best"}</Badge>
-        {b.tiebreak_order ? <Badge variant="outline">tb:{b.tiebreak_order}</Badge> : null}
-        <Badge variant="outline">{b.tie_break ?? "parallel"}</Badge>
-      </div>
-    ),
-  },
-  {
-    key: "client_submit",
-    header: "客户端提交",
-    cell: (b) =>
-      b.client_submit ? <Badge>开放</Badge> : <Badge variant="outline">仅服务端</Badge>,
-  },
-  {
-    key: "limit",
-    header: "限频 / 保留",
-    cell: (b) => (
-      <span className="text-sm text-muted-foreground">
-        {b.per_subject_submit_limit ?? 100}/期 · {b.retention_periods ? `${b.retention_periods} 期` : "永久"}
-      </span>
-    ),
-  },
-  {
-    key: "updated_at",
-    header: "更新时间",
-    cell: (b) => (b.updated_at ? formatDateTime(b.updated_at, tz) : "—"),
-  },
-];
+import { useAuth } from "@/hooks/useAuth";
+import { PageHeader } from "@/components/PageHeader";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
+import { boardsResource, boardsSearch } from "@/fleet/leaderboards";
 
 export function LeaderboardsListPage() {
-  const queryClient = useQueryClient();
+  const { projectId } = useAuth();
   const tz = useUserTimezone();
-  const { data: boards = [], isLoading } = useQuery({
-    queryKey: ["leaderboards-boards"],
-    queryFn: listBoards,
+  const [search, setSearch] = useState("");
+
+  // 列表 fleet 化（§12.9-2）：boards 端点全量返回（非分页、无服务端过滤），
+  // useCollection 只吃四态/错误收敛面；榜 ID 页内搜索保持本地态（旧页语义）。
+  // 旧页 fetch 不随项目禁用 → 无 enabled 门（scope 仍带 projectId 分区缓存）。
+  const list = useCollection(boardsResource, {
+    from: "/console/leaderboards",
+    search: boardsSearch,
+    scope: { projectId: projectId ?? undefined },
   });
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["leaderboards-boards"] });
+
+  // 写路径保持存量 useMutation（toast 语义不变）；失效 = kit 句柄 refetch
+  // 桥接（存量 ["leaderboards-boards"] 键已无消费方）。
+  const refresh = useCallback(() => list.refetch(), [list]);
 
   const remove = useMutation({
     mutationFn: deleteBoard,
     onSuccess: () => {
       toast.success("榜已删除（条目级联删除）");
-      invalidate();
+      refresh();
     },
   });
 
-  return (
-    <ResourceListPage
-      title="排行榜"
-      description="榜配置（期 / 排序 / 合并策略 / 限频 / 保留 / 奖励规则）。作弊处理：进入榜详情删条目——封榜后的期不可变；结算见详情页。"
-      searchPlaceholder="搜索榜 ID..."
-      isLoading={isLoading}
-      items={boards}
-      columns={boardColumns(tz)}
-      getSearchText={(b) => `${b.id} ${b.subject_kind ?? ""}`}
-      toolbarActions={
-        <CreateBoardDialog onCreated={invalidate} />
-      }
-      rowActions={(b) => (
+  const getSearchText = useCallback(
+    (b: LeaderboardBoard) => `${b.id} ${b.subject_kind ?? ""}`.toLowerCase(),
+    []
+  );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((b) => getSearchText(b).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
+
+  const columns: LegacyColumnDef<LeaderboardBoard, unknown>[] = [
+    {
+      id: "id",
+      header: "榜 ID",
+      cell: ({ row }) => (
+        <Link
+          className="font-medium underline-offset-2 hover:underline"
+          to={`/console/leaderboards/${row.original.id}`}
+        >
+          {row.original.id}
+        </Link>
+      ),
+    },
+    {
+      id: "period",
+      header: "期 / 时区",
+      cell: ({ row }) => (
+        <span className="text-sm">
+          {row.original.period_kind === "none"
+            ? "全期"
+            : `${row.original.period_kind}${row.original.period_tz ? ` · ${row.original.period_tz}` : ""}`}
+        </span>
+      ),
+    },
+    {
+      id: "semantics",
+      header: "排序 / 合并",
+      cell: ({ row }) => (
+        <div className="flex flex-wrap gap-1">
+          <Badge variant="secondary">{row.original.sort ?? "desc"}</Badge>
+          <Badge variant="outline">{row.original.policy ?? "best"}</Badge>
+          {row.original.tiebreak_order ? (
+            <Badge variant="outline">tb:{row.original.tiebreak_order}</Badge>
+          ) : null}
+          <Badge variant="outline">{row.original.tie_break ?? "parallel"}</Badge>
+        </div>
+      ),
+    },
+    {
+      id: "client_submit",
+      header: "客户端提交",
+      cell: ({ row }) =>
+        row.original.client_submit ? <Badge>开放</Badge> : <Badge variant="outline">仅服务端</Badge>,
+    },
+    {
+      id: "limit",
+      header: "限频 / 保留",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {row.original.per_subject_submit_limit ?? 100}/期 ·{" "}
+          {row.original.retention_periods ? `${row.original.retention_periods} 期` : "永久"}
+        </span>
+      ),
+    },
+    {
+      id: "updated_at",
+      header: "更新时间",
+      cell: ({ row }) => (row.original.updated_at ? formatDateTime(row.original.updated_at, tz) : "—"),
+    },
+    {
+      id: "actions",
+      header: "操作",
+      cell: ({ row }) => (
         <div className="flex items-center gap-1">
-          <EditBoardDialog board={b} onSaved={invalidate} />
+          <EditBoardDialog board={row.original} onSaved={refresh} />
           <RowDeleteButton
-            onConfirm={() => remove.mutate(b.id)}
+            onConfirm={() => remove.mutate(row.original.id)}
             loading={remove.isPending}
           />
         </div>
-      )}
-      emptyTitle="暂无排行榜"
-      emptyDescription="创建第一个榜后即可开始提交分数"
-    />
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="排行榜"
+        description="榜配置（期 / 排序 / 合并策略 / 限频 / 保留 / 奖励规则）。作弊处理：进入榜详情删条目——封榜后的期不可变；结算见详情页。"
+      />
+
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="搜索榜 ID..."
+              className="h-8 w-56"
+            />
+            <div className="ml-auto">
+              <CreateBoardDialog onCreated={refresh} />
+            </div>
+          </div>
+        }
+        emptyTitle={search !== "" ? "没有匹配的排行榜" : "暂无排行榜"}
+        emptyDescription={
+          search !== ""
+            ? "调整搜索词，或清空恢复全部榜"
+            : "创建第一个榜后即可开始提交分数"
+        }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={columns}
+            getRowId={(row) => row.id}
+          />
+        </div>
+      </FleetListPage>
+    </div>
   );
 }
 

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@/router/compat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCollection } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { Plus, Download, UploadCloud, Link2, Copy } from "lucide-react";
 import {
-  listBuckets,
   getBucket,
   createBucket,
   updateBucket,
@@ -24,11 +25,13 @@ import {
   type Bucket,
   type FileItem,
 } from "@/api/storage";
+import { bucketsResource, bucketsSearch } from "@/fleet/storage";
 import { ChunkedUploader } from "@/routes/storage/chunked-uploader";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
+import { PageHeader } from "@/components/PageHeader";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { useServerPaging } from "@/hooks/useServerPaging";
 import { Button } from "@/components/ui/button";
@@ -48,6 +51,9 @@ import {
   RowDeleteButton,
   DeleteButton,
 } from "@/components/resource/shared";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import {
   Dialog,
   DialogContent,
@@ -58,27 +64,30 @@ import {
 } from "@/components/ui/dialog";
 
 // 工厂：时区来自管理员偏好（hook 无法在模块级使用），由列表页传入。
-const bucketColumns = (tz: string): ColumnDef<Bucket>[] => [
+const bucketColumns = (tz: string): LegacyColumnDef<Bucket, unknown>[] => [
   {
-    key: "id",
+    id: "id",
     header: "ID",
-    className: "font-mono text-xs max-w-[140px] truncate",
-    cell: (b) => b.id,
-  },
-  {
-    key: "name",
-    header: "名称",
-    cell: (b) => (
-      <span className="inline-flex items-center gap-2">
-        {b.name}
-        {b.public && <Badge variant="secondary">公开</Badge>}
+    cell: ({ row }) => (
+      <span className="inline-block max-w-[140px] truncate font-mono text-xs">
+        {row.original.id}
       </span>
     ),
   },
   {
-    key: "created",
+    id: "name",
+    header: "名称",
+    cell: ({ row }) => (
+      <span className="inline-flex items-center gap-2">
+        {row.original.name}
+        {row.original.public && <Badge variant="secondary">公开</Badge>}
+      </span>
+    ),
+  },
+  {
+    id: "created",
     header: "创建时间",
-    cell: (b) => formatDateTime(b.created_at, tz),
+    cell: ({ row }) => formatDateTime(row.original.created_at, tz),
   },
 ];
 
@@ -109,107 +118,161 @@ export function StorageListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const writeable = canWrite(role);
 
-  const paging = useServerPaging();
-  const { data, isLoading } = useQuery({
-    queryKey: ["buckets", projectId, paging.pageSize, paging.pageToken],
-    queryFn: () => listBuckets({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
-    enabled: !!projectId,
-    placeholderData: (prev) => prev,
+  // 列表 fleet 化（§12.9-2）：游标/页大小进 URL（分页栈 = 浏览器历史）；
+  // 页内当前页搜索保持本地态（旧页语义）。
+  const list = useCollection(bucketsResource, {
+    from: "/console/storage",
+    search: bucketsSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-  const buckets = data?.rows ?? [];
 
+  // 行删除仍是存量 useMutation（命令族切片未及本页）：成功后手动桥——
+  // kit 集合无 ["buckets"] 存量键，直接 refetch 当前窗口。
   const remove = useMutation({
     mutationFn: (id: string) => deleteBucket(id),
     onSuccess: () => {
       toast.success("Bucket 已删除");
-      queryClient.invalidateQueries({ queryKey: ["buckets", projectId] });
+      list.refetch();
     },
   });
 
-  const getSearchText = useCallback((b: Bucket) => `${b.id} ${b.name}`, []);
+  const getSearchText = useCallback(
+    (b: Bucket) => `${b.id} ${b.name}`.toLowerCase(),
+    []
+  );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((b) => getSearchText(b).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
 
-  const handleBulkDelete = async (selected: Bucket[], clear: () => void) => {
+  const toggleRow = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = (visibleIds: string[]) =>
+    setSelectedIds((prev) =>
+      new Set(visibleIds.length > 0 && visibleIds.every((id) => prev.has(id)) ? [] : visibleIds)
+    );
+  const selectedBuckets = list.rows.filter((b) => selectedIds.has(b.id));
+
+  const handleBulkDelete = async () => {
     setBulkDeleting(true);
     try {
       // 单条失败由页面汇总展示，跳过全局 toast 避免刷屏（R11-P2-8）。
       const results = await Promise.allSettled(
-        selected.map((b) => deleteBucket(b.id, { __skipToast: true }))
+        selectedBuckets.map((b) => deleteBucket(b.id, { __skipToast: true }))
       );
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
         toast.error(`删除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
       } else {
-        toast.success(`已删除 ${selected.length} 个 Bucket`);
+        toast.success(`已删除 ${selectedBuckets.length} 个 Bucket`);
       }
-      queryClient.invalidateQueries({ queryKey: ["buckets", projectId] });
-      clear();
+      list.refetch();
+      setSelectedIds(new Set());
     } finally {
       setBulkDeleting(false);
     }
   };
 
-  return (
-    <ResourceListPage
-      title="Storage"
-      description="管理存储 Bucket"
-      searchPlaceholder="当前页内搜索 Bucket 名称或 ID..."
-      isLoading={isLoading}
-      items={buckets}
-      columns={bucketColumns(tz)}
-      getSearchText={getSearchText}
-      serverPaging={{
-        page: paging.page,
-        pageSize: paging.pageSize,
-        hasPrev: paging.hasPrev,
-        hasNext: !!data?.nextPageToken,
-        onPrev: paging.goPrev,
-        onNext: () => paging.goNext(data?.nextPageToken),
-        onPageSizeChange: paging.setPageSize,
-      }}
-      detailPath={(b) => `/console/storage/${b.id}`}
-      toolbarActions={
-        writeable ? (
-          <Button asChild>
-            <Link to="/console/storage/new">
-              <Plus className="h-4 w-4 mr-2" />
-              新建 Bucket
-            </Link>
-          </Button>
-        ) : undefined
-      }
-      selectionActions={
-        writeable
-          ? (selected, clear) => (
-              <BulkDeleteButton
-                count={selected.length}
-                loading={bulkDeleting}
-                onConfirm={() => handleBulkDelete(selected, clear)}
+  const tableColumns: LegacyColumnDef<Bucket, unknown>[] = [
+    ...bucketColumns(tz),
+    ...(writeable
+      ? [
+          {
+            id: "actions",
+            header: "操作",
+            cell: ({ row }: { row: { original: Bucket } }) => (
+              <RowDeleteButton
+                onConfirm={() => remove.mutate(row.original.id)}
+                loading={remove.isPending}
               />
-            )
-          : undefined
-      }
-      rowActions={
-        writeable
-          ? (b) => (
-              <RowDeleteButton onConfirm={() => remove.mutate(b.id)} loading={remove.isPending} />
-            )
-          : undefined
-      }
-      emptyTitle="暂无 Bucket"
-      emptyDescription="创建 Bucket 以上传文件"
-      emptyAction={
-        writeable ? (
-          <Button asChild>
-            <Link to="/console/storage/new">新建 Bucket</Link>
-          </Button>
-        ) : undefined
-      }
-    />
+            ),
+          } satisfies LegacyColumnDef<Bucket, unknown>,
+        ]
+      : []),
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Storage" description="管理存储 Bucket" />
+
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="当前页内搜索 Bucket 名称或 ID..."
+              className="h-8 w-56"
+            />
+            {selectedBuckets.length > 0 && writeable ? (
+              <BulkDeleteButton
+                count={selectedBuckets.length}
+                loading={bulkDeleting}
+                onConfirm={() => void handleBulkDelete()}
+              />
+            ) : null}
+            {writeable ? (
+              <Button asChild className="ml-auto">
+                <Link to="/console/storage/new">
+                  <Plus className="h-4 w-4 mr-2" />
+                  新建 Bucket
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+        }
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={list} />
+          </div>
+        }
+        emptyTitle={search !== "" ? "没有匹配的 Bucket" : "暂无 Bucket"}
+        emptyDescription={
+          search !== "" ? "调整搜索词，或清空恢复当前页全部行" : "创建 Bucket 以上传文件"
+        }
+        emptyAction={
+          writeable ? (
+            <Button asChild>
+              <Link to="/console/storage/new">新建 Bucket</Link>
+            </Button>
+          ) : undefined
+        }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={tableColumns}
+            getRowId={(b) => b.id}
+            onRowClick={(b) => navigate(`/console/storage/${b.id}`)}
+            selection={
+              writeable
+                ? {
+                    selectedIds,
+                    onToggle: toggleRow,
+                    onToggleAll: toggleAll,
+                  }
+                : undefined
+            }
+          />
+        </div>
+      </FleetListPage>
+    </div>
   );
 }
 

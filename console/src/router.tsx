@@ -12,6 +12,20 @@ import { useAuth } from "@/hooks/useAuth";
 import { canWrite, isPlatformAdmin, useAdminRole } from "@/hooks/useAdminRole";
 import { auditLogsSearch } from "@/fleet/auditLogs";
 import { apiKeysSearch } from "@/fleet/apiKeys";
+import { bucketsSearch } from "@/fleet/storage";
+import { functionsSearch } from "@/fleet/functions";
+import { webhooksSearch } from "@/fleet/webhooks";
+import { varSetsSearch } from "@/fleet/runtimeVars";
+import { assetDefsSearch } from "@/fleet/assets";
+import { ordersSearch } from "@/fleet/payments";
+import { plansSearch, subscriptionsSearch } from "@/fleet/subscriptions";
+import { boardsSearch } from "@/fleet/leaderboards";
+import { usersSearch } from "@/fleet/users";
+import { groupsSearch } from "@/fleet/groups";
+import { adminsSearch } from "@/fleet/admins";
+import { projectsSearch } from "@/fleet/projects";
+import { databasesSearch, collectionsSearch } from "@/fleet/databases";
+import { documentsSearch } from "@/fleet/documents";
 
 // 路由树（torchwood 批 A，design.md §12.2 裁决 1）：TanStack Router code-based
 // 集中表——镜像原 App.tsx 路由表，路径形态/守卫语义/lazy 分包零变化。
@@ -170,7 +184,12 @@ const dashboardRoute = createRoute({
   ...guarded(<Dashboard />),
 });
 
-const projectsRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/projects", ...guarded(<ProjectsListPage />) });
+const projectsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/projects",
+  validateSearch: projectsSearch.toSearchSchema(),
+  ...guarded(<ProjectsListPage />),
+});
 const projectNewRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/projects/new", ...roleGuarded("platformAdmin", <ProjectNewPage />) });
 const projectDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/projects/$id", ...guarded(<ProjectDetailPage />) });
 const projectSettingsRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/projects/$id/settings", ...guarded(<ProjectSettingsPage />) });
@@ -187,9 +206,19 @@ const accountIndexRoute = createRoute({
 const accountProfileRoute = createRoute({ getParentRoute: () => accountRoute, path: "/profile", ...guarded(<AccountProfilePage />) });
 const accountPreferencesRoute = createRoute({ getParentRoute: () => accountRoute, path: "/preferences", ...guarded(<AccountPreferencesPage />) });
 
-const adminsRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/admins", ...guarded(<AdminsListPage />) });
+const adminsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/admins",
+  validateSearch: adminsSearch.toSearchSchema(),
+  ...guarded(<AdminsListPage />),
+});
 
-const leaderboardsRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/leaderboards", ...guarded(<LeaderboardsListPage />) });
+const leaderboardsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/leaderboards",
+  validateSearch: boardsSearch.toSearchSchema(),
+  ...guarded(<LeaderboardsListPage />),
+});
 const leaderboardDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/leaderboards/$boardId", ...guarded(<LeaderboardBoardDetailPage />) });
 
 // 审计日志只读面：服务端 admin_roles 门 = admin/owner（与 isPlatformAdmin
@@ -213,41 +242,86 @@ const apiKeysRoute = createRoute({
 const apiKeyNewRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/api-keys/new", ...roleGuarded("platformAdmin", <ApiKeyNewPage />) });
 const apiKeyDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/api-keys/$id", ...guarded(<ApiKeyDetailPage />) });
 
-const usersRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/users", ...guarded(<UsersListPage />) });
+const usersRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/users",
+  validateSearch: usersSearch.toSearchSchema(),
+  ...guarded(<UsersListPage />),
+});
 const userNewRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/users/new", ...roleGuarded("write", <CreateUserPage />) });
 const userDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/users/$id", ...guarded(<UserDetailPage />) });
 const userEditRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/users/$id/edit", ...roleGuarded("write", <UserEditPage />) });
 
-const groupsRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/groups", ...guarded(<GroupsListPage />) });
+const groupsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/groups",
+  validateSearch: groupsSearch.toSearchSchema(),
+  ...guarded(<GroupsListPage />),
+});
 const groupNewRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/groups/new", ...roleGuarded("write", <GroupNewPage />) });
 const groupDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/groups/$id", ...guarded(<GroupDetailPage />) });
 
-const storageRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/storage", ...guarded(<StorageListPage />) });
+const storageRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/storage",
+  validateSearch: bucketsSearch.toSearchSchema(),
+  ...guarded(<StorageListPage />),
+});
 const bucketNewRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/storage/new", ...roleGuarded("write", <BucketNewPage />) });
 const bucketDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/storage/$bucketId", ...guarded(<BucketDetailPage />) });
 const fileDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/storage/$bucketId/files/$fileId", ...guarded(<FileDetailPage />) });
 
-const functionsRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/functions", ...guarded(<FunctionsListPage />) });
+const functionsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/functions",
+  validateSearch: functionsSearch.toSearchSchema(),
+  ...guarded(<FunctionsListPage />),
+});
 const functionDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/functions/$functionId", ...guarded(<FunctionDetailPage />) });
 
 // Webhooks：读对全角色开放，写在页面按钮层 canWrite 收口（与 Functions 同策略）。
-const webhooksRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/webhooks", ...guarded(<WebhooksListPage />) });
+const webhooksRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/webhooks",
+  validateSearch: webhooksSearch.toSearchSchema(),
+  ...guarded(<WebhooksListPage />),
+});
 const webhookDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/webhooks/$webhookId", ...guarded(<WebhookDetailPage />) });
 
 // RuntimeVars：读动词全角色会话开放；写动词在页面按钮层收口（无独立 new 路由）。
-const runtimeVarsRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/runtime-vars", ...guarded(<VarSetsListPage />) });
+const runtimeVarsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/runtime-vars",
+  validateSearch: varSetsSearch.toSearchSchema(),
+  ...guarded(<VarSetsListPage />),
+});
 const varSetDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/runtime-vars/$varSetId", ...guarded(<VarSetDetailPage />) });
 
-const databasesRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/databases", ...guarded(<DatabasesListPage />) });
+const databasesRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/databases",
+  validateSearch: databasesSearch.toSearchSchema(),
+  ...guarded(<DatabasesListPage />),
+});
 const databaseNewRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/databases/new", ...roleGuarded("platformAdmin", <DatabaseNewPage />) });
-const databaseDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/databases/$dbId", ...guarded(<DatabaseDetailPage />) });
+const databaseDetailRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/databases/$dbId",
+  validateSearch: collectionsSearch.toSearchSchema(),
+  ...guarded(<DatabaseDetailPage />),
+});
 const collectionNewRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/databases/$dbId/collections/new", ...roleGuarded("platformAdmin", <CollectionNewPage />) });
 const documentNewRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/databases/$dbId/collections/$collId/documents/new", ...roleGuarded("write", <DocumentNewPage />) });
 const documentDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/databases/$dbId/collections/$collId/documents/$docId", ...guarded(<DocumentDetailPage />) });
 
 const collectionLayoutRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/databases/$dbId/collections/$collId", ...guarded(<CollectionLayout />) });
 const collectionIndexRoute = createRoute({ getParentRoute: () => collectionLayoutRoute, path: "/", ...guarded(<CollectionDetailPage />) });
-const documentsRoute = createRoute({ getParentRoute: () => collectionLayoutRoute, path: "/documents", ...guarded(<DocumentsListPage />) });
+const documentsRoute = createRoute({
+  getParentRoute: () => collectionLayoutRoute,
+  path: "/documents",
+  validateSearch: documentsSearch.toSearchSchema(),
+  ...guarded(<DocumentsListPage />),
+});
 const listenRoute = createRoute({ getParentRoute: () => collectionLayoutRoute, path: "/listen", ...roleGuarded("platformAdmin", <ListenPanel />) });
 
 // Analytics：读方法对全角色会话开放，不设 RequireRole。
@@ -257,18 +331,38 @@ const analyticsEventDetailRoute = createRoute({ getParentRoute: () => consoleRou
 const analyticsRetentionRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/analytics/retention", ...guarded(<AnalyticsRetentionPage />) });
 const analyticsUserActivityRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/analytics/users/$userId", ...guarded(<AnalyticsUserActivityPage />) });
 
-const ordersRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/orders", ...roleGuarded("platformAdmin", <OrdersListPage />) });
+const ordersRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/orders",
+  validateSearch: ordersSearch.toSearchSchema(),
+  ...roleGuarded("platformAdmin", <OrdersListPage />),
+});
 const orderDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/orders/$id", ...roleGuarded("platformAdmin", <OrderDetailPage />) });
 
-const assetsRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/assets", ...roleGuarded("platformAdmin", <AssetDefsListPage />) });
+const assetsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/assets",
+  validateSearch: assetDefsSearch.toSearchSchema(),
+  ...roleGuarded("platformAdmin", <AssetDefsListPage />),
+});
 const assetDefNewRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/assets/defs/new", ...roleGuarded("platformAdmin", <AssetDefNewPage />) });
 const assetDefDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/assets/defs/$id", ...roleGuarded("platformAdmin", <AssetDefDetailPage />) });
 const userAssetsRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/assets/users", ...roleGuarded("platformAdmin", <UserAssetsPage />) });
 
-const plansRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/subscriptions/plans", ...roleGuarded("platformAdmin", <PlansListPage />) });
+const plansRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/subscriptions/plans",
+  validateSearch: plansSearch.toSearchSchema(),
+  ...roleGuarded("platformAdmin", <PlansListPage />),
+});
 const planNewRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/subscriptions/plans/new", ...roleGuarded("platformAdmin", <PlanNewPage />) });
 const planDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/subscriptions/plans/$id", ...roleGuarded("platformAdmin", <PlanDetailPage />) });
-const subscriptionsRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/subscriptions", ...roleGuarded("platformAdmin", <SubscriptionsListPage />) });
+const subscriptionsRoute = createRoute({
+  getParentRoute: () => consoleRoute,
+  path: "/subscriptions",
+  validateSearch: subscriptionsSearch.toSearchSchema(),
+  ...roleGuarded("platformAdmin", <SubscriptionsListPage />),
+});
 const subscriptionDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/subscriptions/$id", ...roleGuarded("platformAdmin", <SubscriptionDetailPage />) });
 
 const routeTree = rootRoute.addChildren([

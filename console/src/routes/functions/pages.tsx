@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "@/router/compat";
+import { useNavigate, useParams } from "@/router/compat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCollection } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { Plus, Play, KeyRound } from "lucide-react";
 import {
-  listFunctions,
   getFunction,
   createFunction,
   updateFunction,
@@ -16,7 +17,8 @@ import {
   type FunctionItem,
   type Invocation,
 } from "@/api/functions";
-import { ResourceListPage } from "@/components/list/ResourceListPage";
+import { functionsResource, functionsSearch } from "@/fleet/functions";
+import { PageHeader } from "@/components/PageHeader";
 import { ListPaginationKeyset } from "@/components/list/ListToolbar";
 import { useServerPaging } from "@/hooks/useServerPaging";
 import { Button } from "@/components/ui/button";
@@ -49,46 +51,54 @@ import {
   RowDeleteButton,
   BulkDeleteButton,
 } from "@/components/resource/shared";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
 import { formatDateTime } from "@/lib/datetime";
-import type { ColumnDef } from "@/components/list/DataTable";
 import { FunctionTriggersCard } from "./triggers-card";
 import { FunctionClientPolicyCard } from "./client-policy-card";
 
-const functionColumns = (tz: string): ColumnDef<FunctionItem>[] => [
+const functionColumns = (tz: string): LegacyColumnDef<FunctionItem, unknown>[] => [
   {
-    key: "id",
+    id: "id",
     header: "ID",
-    className: "font-mono text-xs max-w-[140px] truncate",
-    cell: (f) => f.id,
+    cell: ({ row }) => (
+      <span className="inline-block max-w-[140px] truncate font-mono text-xs">
+        {row.original.id}
+      </span>
+    ),
   },
   {
-    key: "name",
+    id: "name",
     header: "名称",
-    cell: (f) => f.name,
+    cell: ({ row }) => row.original.name,
   },
   {
-    key: "target",
+    id: "target",
     header: "Target",
-    className: "font-mono text-xs max-w-[240px] truncate",
-    cell: (f) => f.target?.url ?? "—",
+    cell: ({ row }) => (
+      <span className="inline-block max-w-[240px] truncate font-mono text-xs" title={row.original.target?.url}>
+        {row.original.target?.url ?? "—"}
+      </span>
+    ),
   },
   {
-    key: "enabled",
+    id: "enabled",
     header: "状态",
-    cell: (f) =>
-      f.enabled ? (
+    cell: ({ row }) =>
+      row.original.enabled ? (
         <Badge variant="secondary">启用</Badge>
       ) : (
         <Badge variant="destructive">禁用</Badge>
       ),
   },
   {
-    key: "created",
+    id: "created",
     header: "创建时间",
-    cell: (f) => formatDateTime(f.created_at, tz),
+    cell: ({ row }) => formatDateTime(row.original.created_at, tz),
   },
 ];
 
@@ -140,9 +150,11 @@ export function FunctionsListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [name, setName] = useState("");
   const [targetUrl, setTargetUrl] = useState("");
   const [timeoutSeconds, setTimeoutSeconds] = useState("15");
@@ -151,22 +163,22 @@ export function FunctionsListPage() {
   const [createdSecret, setCreatedSecret] = useState<{ secret: string; fingerprint: string } | null>(null);
   const writeable = canWrite(role);
 
-  const paging = useServerPaging();
-  const { data, isLoading } = useQuery({
-    queryKey: ["functions", projectId, paging.pageSize, paging.pageToken],
-    queryFn: () => listFunctions({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
-    enabled: !!projectId,
-    placeholderData: (prev) => prev,
+  // 列表 fleet 化（§12.9-2）：游标/页大小进 URL（分页栈 = 浏览器历史）；
+  // 页内当前页搜索保持本地态（旧页语义）。
+  const list = useCollection(functionsResource, {
+    from: "/console/functions",
+    search: functionsSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-  const functions = data?.rows ?? [];
 
-  const columns = useMemo(() => functionColumns(tz), [tz]);
-
+  // 行删除仍是存量 useMutation（命令族切片未及本页）：成功后手动桥——
+  // kit 集合无存量键，直接 refetch 当前窗口。
   const remove = useMutation({
     mutationFn: (id: string) => deleteFunction(id),
     onSuccess: () => {
       toast.success("函数已删除");
-      queryClient.invalidateQueries({ queryKey: ["functions", projectId] });
+      list.refetch();
     },
   });
 
@@ -174,7 +186,7 @@ export function FunctionsListPage() {
     mutationFn: createFunction,
     onSuccess: (result) => {
       toast.success("函数创建成功");
-      queryClient.invalidateQueries({ queryKey: ["functions", projectId] });
+      list.refetch();
       setCreateOpen(false);
       setName("");
       setTargetUrl("");
@@ -188,86 +200,132 @@ export function FunctionsListPage() {
   });
 
   const getSearchText = useCallback(
-    (f: FunctionItem) => `${f.id} ${f.name} ${f.target?.url ?? ""}`,
+    (f: FunctionItem) => `${f.id} ${f.name} ${f.target?.url ?? ""}`.toLowerCase(),
     []
   );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((f) => getSearchText(f).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
 
-  const handleBulkDelete = async (selected: FunctionItem[], clear: () => void) => {
+  const toggleRow = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = (visibleIds: string[]) =>
+    setSelectedIds((prev) =>
+      new Set(visibleIds.length > 0 && visibleIds.every((id) => prev.has(id)) ? [] : visibleIds)
+    );
+  const selectedFunctions = list.rows.filter((f) => selectedIds.has(f.id));
+
+  const handleBulkDelete = async () => {
     setBulkDeleting(true);
     try {
       // 单条失败由页面汇总展示，跳过全局 toast 避免刷屏（R11-P2-8）。
       const results = await Promise.allSettled(
-        selected.map((f) => deleteFunction(f.id, { __skipToast: true }))
+        selectedFunctions.map((f) => deleteFunction(f.id, { __skipToast: true }))
       );
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
         toast.error(`删除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
       } else {
-        toast.success(`已删除 ${selected.length} 个函数`);
+        toast.success(`已删除 ${selectedFunctions.length} 个函数`);
       }
-      queryClient.invalidateQueries({ queryKey: ["functions", projectId] });
-      clear();
+      list.refetch();
+      setSelectedIds(new Set());
     } finally {
       setBulkDeleting(false);
     }
   };
 
+  const tableColumns: LegacyColumnDef<FunctionItem, unknown>[] = [
+    ...functionColumns(tz),
+    ...(writeable
+      ? [
+          {
+            id: "actions",
+            header: "操作",
+            cell: ({ row }: { row: { original: FunctionItem } }) => (
+              <RowDeleteButton
+                onConfirm={() => remove.mutate(row.original.id)}
+                loading={remove.isPending}
+              />
+            ),
+          } satisfies LegacyColumnDef<FunctionItem, unknown>,
+        ]
+      : []),
+  ];
+
   return (
     <>
-      <ResourceListPage
-        title="Functions"
-        description="常驻服务函数：调用路由、触发器与 Webhooks"
-        searchPlaceholder="当前页内搜索函数名称或 ID..."
-        isLoading={isLoading}
-        items={functions}
-        columns={columns}
-        getSearchText={getSearchText}
-        serverPaging={{
-          page: paging.page,
-          pageSize: paging.pageSize,
-          hasPrev: paging.hasPrev,
-          hasNext: !!data?.nextPageToken,
-          onPrev: paging.goPrev,
-          onNext: () => paging.goNext(data?.nextPageToken),
-          onPageSizeChange: paging.setPageSize,
-        }}
-        detailPath={(f) => `/console/functions/${f.id}`}
-        toolbarActions={
-          writeable ? (
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              新建函数
-            </Button>
-          ) : undefined
-        }
-        selectionActions={
-          writeable
-            ? (selected, clear) => (
+      <div className="space-y-6">
+        <PageHeader title="Functions" description="常驻服务函数：调用路由、触发器与 Webhooks" />
+
+        <FleetListPage
+          list={shownList}
+          toolbar={
+            <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="当前页内搜索函数名称或 ID..."
+                className="h-8 w-56"
+              />
+              {selectedFunctions.length > 0 && writeable ? (
                 <BulkDeleteButton
-                  count={selected.length}
+                  count={selectedFunctions.length}
                   loading={bulkDeleting}
-                  onConfirm={() => handleBulkDelete(selected, clear)}
+                  onConfirm={() => void handleBulkDelete()}
                 />
-              )
-            : undefined
-        }
-        rowActions={
-          writeable
-            ? (f) => (
-                <RowDeleteButton
-                  onConfirm={() => remove.mutate(f.id)}
-                  loading={remove.isPending}
-                />
-              )
-            : undefined
-        }
-        emptyTitle="暂无函数"
-        emptyDescription="创建函数并登记常驻服务的 target URL 开始使用"
-        emptyAction={
-          writeable ? <Button onClick={() => setCreateOpen(true)}>新建函数</Button> : undefined
-        }
-      />
+              ) : null}
+              {writeable ? (
+                <Button className="ml-auto" onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  新建函数
+                </Button>
+              ) : null}
+            </div>
+          }
+          pagination={
+            <div className="px-4 pb-4">
+              <KeysetPagination list={list} />
+            </div>
+          }
+          emptyTitle={search !== "" ? "没有匹配的函数" : "暂无函数"}
+          emptyDescription={
+            search !== ""
+              ? "调整搜索词，或清空恢复当前页全部行"
+              : "创建函数并登记常驻服务的 target URL 开始使用"
+          }
+          emptyAction={
+            writeable ? <Button onClick={() => setCreateOpen(true)}>新建函数</Button> : undefined
+          }
+        >
+          <div className="px-6 pb-2 pt-2">
+            <DataTable
+              list={shownList}
+              columns={tableColumns}
+              getRowId={(f) => f.id}
+              onRowClick={(f) => navigate(`/console/functions/${f.id}`)}
+              selection={
+                writeable
+                  ? {
+                      selectedIds,
+                      onToggle: toggleRow,
+                      onToggleAll: toggleAll,
+                    }
+                  : undefined
+              }
+            />
+          </div>
+        </FleetListPage>
+      </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>

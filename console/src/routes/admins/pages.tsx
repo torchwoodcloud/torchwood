@@ -1,18 +1,28 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCollection } from "@lynx-go/ui-kit";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
 import { Plus, ShieldCheck } from "lucide-react";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
   ADMIN_ROLES,
   createAdmin,
   deleteAdmin,
   getCurrentAdmin,
-  listAdmins,
   updateAdmin,
   type Admin,
 } from "@/api/admins";
+import {
+  adminsResource,
+  adminsSearch,
+  adminsCollectionKey,
+} from "@/fleet/admins";
+import { PageHeader } from "@/components/PageHeader";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AdminRoleBadge } from "@/components/AdminRoleBadge";
@@ -34,36 +44,20 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { RowDeleteButton } from "@/components/resource/shared";
-import type { ColumnDef } from "@/components/list/DataTable";
-import { useServerPaging } from "@/hooks/useServerPaging";
-
-const columns = (tz: string): ColumnDef<Admin>[] => [
-  { key: "email", header: "邮箱", cell: (a) => a.email },
-  {
-    key: "role",
-    header: "角色",
-    cell: (a) => <AdminRoleBadge role={a.role} />,
-  },
-  {
-    key: "created_at",
-    header: "创建时间",
-    cell: (a) => formatDateTime(a.created_at, tz),
-  },
-];
 
 export function AdminsListPage() {
   const queryClient = useQueryClient();
   const tz = useUserTimezone();
+  const [search, setSearch] = useState("");
 
-  const paging = useServerPaging();
-  const { data, isLoading } = useQuery({
-    queryKey: ["console-admins", paging.pageSize, paging.pageToken],
-    queryFn: () => listAdmins({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
-    placeholderData: (prev) => prev,
+  // 列表 fleet 化（§12.9-2）：admins 是平台级资源——不随项目作用域；游标/
+  // 页大小进 URL（分页栈 = 浏览器历史；旧页无服务端过滤）；页内当前页搜索
+  // 保持本地态（旧页语义）。
+  const list = useCollection(adminsResource, {
+    from: "/console/admins",
+    search: adminsSearch,
   });
-  const admins = data?.rows ?? [];
 
   const { data: me } = useQuery({
     queryKey: ["console-admin-me"],
@@ -72,61 +66,104 @@ export function AdminsListPage() {
 
   const isOwner = me?.role === "owner";
 
+  // kit 列表键（useCollection）+ 存量键双失效（写路径仍走存量 useMutation）。
+  const invalidateAdmins = () => {
+    void queryClient.invalidateQueries({ queryKey: adminsCollectionKey });
+    void queryClient.invalidateQueries({ queryKey: ["console-admins"] });
+  };
+
   const remove = useMutation({
     mutationFn: deleteAdmin,
     onSuccess: () => {
       toast.success("管理员已删除");
-      queryClient.invalidateQueries({ queryKey: ["console-admins"] });
+      invalidateAdmins();
     },
   });
 
-  return (
-    <ResourceListPage
-      title="系统管理员"
-      description="管理可登录 Console 的管理员账户（仅 owner 可增删改）"
-      searchPlaceholder="当前页内搜索邮箱..."
-      isLoading={isLoading}
-      items={admins}
-      columns={columns(tz)}
-      getSearchText={(a) => `${a.email} ${a.role}`}
-      serverPaging={{
-        page: paging.page,
-        pageSize: paging.pageSize,
-        hasPrev: paging.hasPrev,
-        hasNext: !!data?.nextPageToken,
-        onPrev: paging.goPrev,
-        onNext: () => paging.goNext(data?.nextPageToken),
-        onPageSizeChange: paging.setPageSize,
-      }}
+  const getSearchText = (a: Admin) => `${a.email} ${a.role}`.toLowerCase();
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((a) => getSearchText(a).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
 
-      toolbarActions={
-        isOwner ? (
-          <CreateAdminDialog onCreated={() => queryClient.invalidateQueries({ queryKey: ["console-admins"] })} />
-        ) : undefined
-      }
-      rowActions={(a) => (
-        <div className="flex items-center gap-1">
-          {isOwner && a.id !== me?.id ? (
+  const tableColumns: LegacyColumnDef<Admin, unknown>[] = [
+    { id: "email", header: "邮箱", cell: ({ row }) => row.original.email },
+    {
+      id: "role",
+      header: "角色",
+      cell: ({ row }) => <AdminRoleBadge role={row.original.role} />,
+    },
+    {
+      id: "created_at",
+      header: "创建时间",
+      cell: ({ row }) => formatDateTime(row.original.created_at, tz),
+    },
+    {
+      id: "actions",
+      header: "操作",
+      cell: ({ row }) => (
+        <div className="flex items-center justify-end gap-1">
+          {isOwner && row.original.id !== me?.id ? (
             <>
-              <EditAdminDialog
-                admin={a}
-                onSaved={() => queryClient.invalidateQueries({ queryKey: ["console-admins"] })}
-              />
+              <EditAdminDialog admin={row.original} onSaved={invalidateAdmins} />
               <RowDeleteButton
-                onConfirm={() => remove.mutate(a.id)}
+                onConfirm={() => remove.mutate(row.original.id)}
                 loading={remove.isPending}
               />
             </>
-          ) : a.id === me?.id ? (
+          ) : row.original.id === me?.id ? (
             <Badge variant="outline" className="text-xs">
               当前账户
             </Badge>
           ) : null}
         </div>
-      )}
-      emptyTitle="暂无管理员"
-      emptyDescription="创建第一个管理员后即可协同管理 Console"
-    />
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="系统管理员"
+        description="管理可登录 Console 的管理员账户（仅 owner 可增删改）"
+      />
+
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="当前页内搜索邮箱..."
+              className="h-8 w-56"
+            />
+            {isOwner ? <CreateAdminDialog onCreated={invalidateAdmins} /> : null}
+          </div>
+        }
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={list} />
+          </div>
+        }
+        emptyTitle={search !== "" ? "没有匹配的管理员" : "暂无管理员"}
+        emptyDescription={
+          search !== ""
+            ? "调整搜索词，或清空恢复当前页全部行"
+            : "创建第一个管理员后即可协同管理 Console"
+        }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={tableColumns}
+            getRowId={(row) => row.id}
+          />
+        </div>
+      </FleetListPage>
+    </div>
   );
 }
 

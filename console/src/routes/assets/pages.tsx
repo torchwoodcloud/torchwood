@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "@/router/compat";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCollection } from "@lynx-go/ui-kit";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
@@ -19,7 +21,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
 import { useServerPaging } from "@/hooks/useServerPaging";
 import { filterByQuery } from "@/hooks/useListParams";
-import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { ListPaginationKeyset } from "@/components/list/ListToolbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,8 +36,6 @@ import {
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { ColumnDef } from "@/components/list/DataTable";
-import type { SortOrder } from "@/api/pagination";
 import {
   DeleteButton,
   DetailGrid,
@@ -48,95 +47,146 @@ import {
   RowDeleteButton,
 } from "@/components/resource/shared";
 import { formatInt64, isInt64Input } from "@/lib/utils";
+import { PageHeader } from "@/components/PageHeader";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
+import { assetDefsResource, assetDefsSearch } from "@/fleet/assets";
 
 const CLASSES = ["currency", "stack", "instance", "entitlement"] as const;
-
-const defColumns = (tz: string): ColumnDef<AssetDef>[] => [
-  { key: "code", header: "Code", className: "font-mono text-xs", cell: (d) => d.code },
-  { key: "name", header: "名称", cell: (d) => d.name },
-  { key: "class", header: "类别", cell: (d) => d.class },
-  {
-    key: "status",
-    header: "状态",
-    cell: (d) => <Badge variant={d.status === "archived" ? "secondary" : "default"}>{d.status ?? "active"}</Badge>,
-  },
-  { key: "created", header: "创建时间", sortable: true, cell: (d) => formatDateTime(d.created_at, tz) },
-];
 
 export function AssetDefsListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const tz = useUserTimezone();
   const writeable = canWrite(role);
-  // 服务端时间排序：换向必须回第一页（keyset 游标与方向耦合）——经
-  // resetKeys 机制自动 reset。
-  const [sortOrder, setSortOrder] = useState<SortOrder>("DESC");
-  const toggleSort = () => setSortOrder((o) => (o === "DESC" ? "ASC" : "DESC"));
-  const paging = useServerPaging(20, { resetKeys: [sortOrder] });
+  const [search, setSearch] = useState("");
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["asset-defs", projectId, paging.pageSize, paging.pageToken, sortOrder],
-    queryFn: () => listAssetDefs({ pageSize: paging.pageSize, pageToken: paging.pageToken, sortOrder }),
-    enabled: !!projectId,
-    placeholderData: (prev) => prev,
+  // 列表 fleet 化（§12.9-2）：游标/页大小/时间排序进 URL（分页栈 = 浏览器
+  // 历史）；页内当前页搜索保持本地态（旧页语义）。
+  const list = useCollection(assetDefsResource, {
+    from: "/console/assets",
+    search: assetDefsSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-  const defs = data?.rows ?? [];
-  const paging_ = {
-    page: paging.page,
-    pageSize: paging.pageSize,
-    hasPrev: paging.hasPrev,
-    hasNext: !!data?.nextPageToken,
-    onPrev: paging.goPrev,
-    onNext: () => paging.goNext(data?.nextPageToken),
-    onPageSizeChange: paging.setPageSize,
-  };
 
+  // 行删除保持存量 useMutation（toast 语义不变）；失效 = 存量 ["asset-defs"]
+  // 键（详情/用户资产页仍消费）+ kit 句柄 refetch 桥接。
   const remove = useMutation({
     mutationFn: (id: string) => deleteAssetDef(id),
     onSuccess: () => {
       toast.success("资产定义已删除");
       queryClient.invalidateQueries({ queryKey: ["asset-defs", projectId] });
+      list.refetch();
     },
   });
 
-  const getSearchText = useCallback((d: AssetDef) => `${d.id} ${d.code} ${d.name} ${d.class}`, []);
+  const getSearchText = useCallback(
+    (d: AssetDef) => `${d.id} ${d.code} ${d.name} ${d.class}`.toLowerCase(),
+    []
+  );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((d) => getSearchText(d).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
+
+  const columns: LegacyColumnDef<AssetDef, unknown>[] = [
+    {
+      id: "code",
+      header: "Code",
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">{row.original.code}</span>
+      ),
+    },
+    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
+    { id: "class", header: "类别", cell: ({ row }) => row.original.class },
+    {
+      id: "status",
+      header: "状态",
+      cell: ({ row }) => (
+        <Badge variant={row.original.status === "archived" ? "secondary" : "default"}>
+          {row.original.status ?? "active"}
+        </Badge>
+      ),
+    },
+    {
+      id: "created",
+      header: "创建时间",
+      meta: { sortField: "created_at" },
+      cell: ({ row }) => formatDateTime(row.original.created_at, tz),
+    },
+    ...(writeable
+      ? [
+          {
+            id: "actions",
+            header: "操作",
+            cell: ({ row }: { row: { original: AssetDef } }) => (
+              <RowDeleteButton
+                onConfirm={() => remove.mutate(row.original.id)}
+                loading={remove.isPending}
+              />
+            ),
+          } satisfies LegacyColumnDef<AssetDef, unknown>,
+        ]
+      : []),
+  ];
 
   return (
-    <ResourceListPage
-      title="资产定义"
-      description="管理代币 / 物品 / 权益目录。终端用户无写入口。"
-      searchPlaceholder="当前页内搜索 code / 名称 / 类别..."
-      isLoading={isLoading}
-      items={defs}
-      columns={defColumns(tz)}
-      getSearchText={getSearchText}
-      serverPaging={paging_}
-      serverSort={{ order: sortOrder, onToggle: toggleSort }}
-      detailPath={(d) => `/console/assets/defs/${d.id}`}
-      toolbarActions={
-        <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <Link to="/console/assets/users">查询用户资产</Link>
-          </Button>
-          {writeable ? (
-            <Button asChild>
-              <Link to="/console/assets/defs/new">
-                <Plus className="h-4 w-4 mr-2" />
-                新建定义
-              </Link>
-            </Button>
-          ) : undefined}
+    <div className="space-y-6">
+      <PageHeader title="资产定义" description="管理代币 / 物品 / 权益目录。终端用户无写入口。" />
+
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="当前页内搜索 code / 名称 / 类别..."
+              className="h-8 w-56"
+            />
+            <div className="ml-auto flex gap-2">
+              <Button variant="outline" asChild>
+                <Link to="/console/assets/users">查询用户资产</Link>
+              </Button>
+              {writeable ? (
+                <Button asChild>
+                  <Link to="/console/assets/defs/new">
+                    <Plus className="h-4 w-4 mr-2" />
+                    新建定义
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        }
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={list} />
+          </div>
+        }
+        emptyTitle={search !== "" ? "没有匹配的资产定义" : "暂无资产定义"}
+        emptyDescription={
+          search !== ""
+            ? "调整搜索词，或清空恢复当前页全部行"
+            : "创建 currency / stack / instance / entitlement 定义"
+        }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={columns}
+            getRowId={(row) => row.id}
+            onRowClick={(d) => navigate(`/console/assets/defs/${d.id}`)}
+          />
         </div>
-      }
-      rowActions={
-        writeable
-          ? (d) => <RowDeleteButton onConfirm={() => remove.mutate(d.id)} loading={remove.isPending} />
-          : undefined
-      }
-      emptyTitle="暂无资产定义"
-      emptyDescription="创建 currency / stack / instance / entitlement 定义"
-    />
+      </FleetListPage>
+    </div>
   );
 }
 

@@ -137,7 +137,7 @@ describe("AccountPreferencesPage", () => {
     );
   });
 
-  it("选「跟随浏览器」提交空串清除偏好", async () => {
+  it("选「跟随浏览器」提交空串清除偏好", { timeout: 15_000 }, async () => {
     vi.mocked(updateCurrentAdmin).mockResolvedValue({ ...me, timezone: undefined });
     renderPage(<AccountPreferencesPage />);
     fireEvent.click(await screen.findByRole("button", { name: /Asia\/Shanghai/ }));

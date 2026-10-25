@@ -1,41 +1,36 @@
-import {
-  useCallback,
-  useState,
-} from "react";
-import {
-  Link,
-  useNavigate,
-  useParams,
-} from "@/router/compat";
-import {
-  useQuery,
-  useMutation,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "@/router/compat";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCollection } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
-  listDatabases,
   getDatabase,
   createDatabase,
   deleteDatabase,
-  listCollections,
   deleteCollection,
   type Database,
   type Collection,
 } from "@/api/databases";
+import {
+  collectionsResource,
+  collectionsSearch,
+  databasesResource,
+  databasesSearch,
+} from "@/fleet/databases";
 import { useAuth } from "@/hooks/useAuth";
 import {
   useAdminRole,
   isPlatformAdmin,
 } from "@/hooks/useAdminRole";
-import { useServerPaging } from "@/hooks/useServerPaging";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
-import { ResourceListPage } from "@/components/list/ResourceListPage";
+import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { ColumnDef } from "@/components/list/DataTable";
+import { Input } from "@/components/ui/input";
+import { CardTitle } from "@/components/ui/card";
 import {
   FormPageWrapper,
   FormField,
@@ -47,128 +42,184 @@ import {
   RowDeleteButton,
   DeleteButton,
 } from "@/components/resource/shared";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 
-// 模块级 columns 无法用 hook，工厂化注入管理员时区偏好。
-const dbColumns = (tz: string): ColumnDef<Database>[] => [
-  {
-    key: "id",
-    header: "ID",
-    className: "font-mono text-xs max-w-[140px] truncate",
-    cell: (d) => d.id,
-  },
-  { key: "name", header: "名称", cell: (d) => d.name },
-  {
-    key: "created",
-    header: "创建时间",
-    cell: (d) => formatDateTime(d.created_at, tz),
-  },
-];
+// 列表 fleet 化（§12.9-2）：databases 顶层列表与 Database 详情内嵌的
+// collections 列表换轨 useCollection（游标/页大小进 URL，分页栈 = 浏览器
+// 历史）；页内当前页搜索保持本地态（旧页语义）；选择态受控归页面。
+// 删除仍走存量 useMutation——kit collection 键不在存量 queryKey 前缀下，
+// 成功后由页面手动桥 list.refetch 刷新本页。
 
 export function DatabasesListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const platformAdmin = isPlatformAdmin(role);
 
-  const paging = useServerPaging();
-  const { data, isLoading } = useQuery({
-    queryKey: ["databases", projectId, paging.pageSize, paging.pageToken],
-    queryFn: () => listDatabases({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
-    enabled: !!projectId,
-    placeholderData: (prev) => prev,
+  const list = useCollection(databasesResource, {
+    from: "/console/databases",
+    search: databasesSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-  const databases = data?.rows ?? [];
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteDatabase(id),
     onSuccess: () => {
       toast.success("Database 已删除");
       queryClient.invalidateQueries({ queryKey: ["databases", projectId] });
+      list.refetch();
     },
   });
 
-  const getSearchText = useCallback((d: Database) => `${d.id} ${d.name}`, []);
+  const getSearchText = useCallback(
+    (d: Database) => `${d.id} ${d.name}`.toLowerCase(),
+    []
+  );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((d) => getSearchText(d).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
 
-  const handleBulkDelete = async (selected: Database[], clear: () => void) => {
+  const toggleRow = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = (visibleIds: string[]) =>
+    setSelectedIds((prev) =>
+      new Set(visibleIds.length > 0 && visibleIds.every((id) => prev.has(id)) ? [] : visibleIds)
+    );
+  const selectedDatabases = list.rows.filter((d) => selectedIds.has(d.id));
+
+  const handleBulkDelete = async () => {
     setBulkDeleting(true);
     try {
       // 单条失败由页面汇总展示，跳过全局 toast 避免刷屏（R11-P2-8）。
       const results = await Promise.allSettled(
-        selected.map((d) => deleteDatabase(d.id, { __skipToast: true }))
+        selectedDatabases.map((d) => deleteDatabase(d.id, { __skipToast: true }))
       );
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
         toast.error(`删除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
       } else {
-        toast.success(`已删除 ${selected.length} 个 Database`);
+        toast.success(`已删除 ${selectedDatabases.length} 个 Database`);
       }
       queryClient.invalidateQueries({ queryKey: ["databases", projectId] });
-      clear();
+      list.refetch();
+      setSelectedIds(new Set());
     } finally {
       setBulkDeleting(false);
     }
   };
 
-  return (
-    <ResourceListPage
-      title="Databases"
-      description="管理数据库与集合"
-      searchPlaceholder="搜索数据库名称或 ID..."
-      isLoading={isLoading}
-      items={databases}
-      columns={dbColumns(tz)}
-      getSearchText={getSearchText}
-      serverPaging={{
-        page: paging.page,
-        pageSize: paging.pageSize,
-        hasPrev: paging.hasPrev,
-        hasNext: !!data?.nextPageToken,
-        onPrev: paging.goPrev,
-        onNext: () => paging.goNext(data?.nextPageToken),
-        onPageSizeChange: paging.setPageSize,
-      }}
-      detailPath={(d) => `/console/databases/${d.id}`}
-      toolbarActions={
-        platformAdmin ? (
-          <Button asChild>
-            <Link to="/console/databases/new">
-              <Plus className="h-4 w-4 mr-2" />
-              新建 Database
-            </Link>
-          </Button>
-        ) : undefined
-      }
-      selectionActions={
-        platformAdmin
-          ? (selected, clear) => (
-              <BulkDeleteButton
-                count={selected.length}
-                loading={bulkDeleting}
-                onConfirm={() => handleBulkDelete(selected, clear)}
+  const tableColumns: LegacyColumnDef<Database, unknown>[] = [
+    {
+      id: "id",
+      header: "ID",
+      cell: ({ row }) => (
+        <span className="inline-block max-w-[140px] truncate font-mono text-xs">
+          {row.original.id}
+        </span>
+      ),
+    },
+    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
+    {
+      id: "created",
+      header: "创建时间",
+      cell: ({ row }) => formatDateTime(row.original.created_at, tz),
+    },
+    ...(platformAdmin
+      ? [
+          {
+            id: "actions",
+            header: "操作",
+            cell: ({ row }: { row: { original: Database } }) => (
+              <RowDeleteButton
+                onConfirm={() => remove.mutate(row.original.id)}
+                loading={remove.isPending}
               />
-            )
-          : undefined
-      }
-      rowActions={
-        platformAdmin
-          ? (d) => (
-              <RowDeleteButton onConfirm={() => remove.mutate(d.id)} loading={remove.isPending} />
-            )
-          : undefined
-      }
-      emptyTitle="暂无 Database"
-      emptyDescription="创建第一个 Database"
-      emptyAction={
-        platformAdmin ? (
-          <Button asChild>
-            <Link to="/console/databases/new">新建 Database</Link>
-          </Button>
-        ) : undefined
-      }
-    />
+            ),
+          } satisfies LegacyColumnDef<Database, unknown>,
+        ]
+      : []),
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Databases" description="管理数据库与集合" />
+
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="当前页内搜索名称或 ID..."
+              className="h-8 w-56"
+            />
+            {selectedDatabases.length > 0 && platformAdmin ? (
+              <BulkDeleteButton
+                count={selectedDatabases.length}
+                loading={bulkDeleting}
+                onConfirm={() => void handleBulkDelete()}
+              />
+            ) : null}
+            {platformAdmin ? (
+              <Button asChild className="ml-auto">
+                <Link to="/console/databases/new">
+                  <Plus className="h-4 w-4 mr-2" />
+                  新建 Database
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+        }
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={list} />
+          </div>
+        }
+        emptyTitle={search !== "" ? "没有匹配的 Database" : "暂无 Database"}
+        emptyDescription={
+          search !== "" ? "调整搜索词，或清空恢复当前页全部行" : "创建第一个 Database"
+        }
+        emptyAction={
+          platformAdmin ? (
+            <Button asChild size="sm">
+              <Link to="/console/databases/new">新建 Database</Link>
+            </Button>
+          ) : undefined
+        }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={tableColumns}
+            getRowId={(d) => d.id}
+            onRowClick={(d) => navigate(`/console/databases/${d.id}`)}
+            selection={
+              platformAdmin
+                ? { selectedIds, onToggle: toggleRow, onToggleAll: toggleAll }
+                : undefined
+            }
+          />
+        </div>
+      </FleetListPage>
+    </div>
   );
 }
 
@@ -226,6 +277,8 @@ export function DatabaseDetailPage() {
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const platformAdmin = isPlatformAdmin(role);
 
   const { data: database, isLoading: dbLoading } = useQuery({
@@ -234,15 +287,13 @@ export function DatabaseDetailPage() {
     enabled: !!dbId,
   });
 
-  const collPaging = useServerPaging();
-  const { data: collPage, isLoading: collLoading } = useQuery({
-    queryKey: ["collections", dbId, collPaging.pageSize, collPaging.pageToken],
-    queryFn: () =>
-      listCollections(dbId!, { pageSize: collPaging.pageSize, pageToken: collPaging.pageToken }),
-    enabled: !!dbId,
-    placeholderData: (prev) => prev,
+  // 嵌套 from = Database 详情完整路径；dbId 进 scope（适配器缺参静默空段）。
+  const collList = useCollection(collectionsResource, {
+    from: "/console/databases/$dbId",
+    search: collectionsSearch,
+    scope: { projectId: projectId ?? undefined, dbId: dbId ?? undefined },
+    query: { enabled: !!projectId },
   });
-  const collections = collPage?.rows ?? [];
 
   const removeDb = useMutation({
     mutationFn: (id: string) => deleteDatabase(id),
@@ -258,46 +309,87 @@ export function DatabaseDetailPage() {
     onSuccess: () => {
       toast.success("Collection 已删除");
       queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
+      collList.refetch();
     },
   });
 
-  const collColumns: ColumnDef<Collection>[] = [
+  const collColumns: LegacyColumnDef<Collection, unknown>[] = [
     {
-      key: "id",
+      id: "id",
       header: "ID",
-      className: "font-mono text-xs max-w-[140px] truncate",
-      cell: (c) => (
+      cell: ({ row }) => (
         <span className="flex items-center gap-2">
-          <span className="truncate">{c.id}</span>
+          <span className="inline-block max-w-[140px] truncate font-mono text-xs">
+            {row.original.id}
+          </span>
           {/* 系统集合已不经 Databases 页列出（在 tw_<project>，走 Users/Storage/Groups）；徽章仅兜底 is_system。 */}
-          {c.is_system && <Badge variant="secondary">系统</Badge>}
+          {row.original.is_system && <Badge variant="secondary">系统</Badge>}
         </span>
       ),
     },
-    { key: "name", header: "名称", cell: (c) => c.name },
+    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
     {
-      key: "attributes",
+      id: "attributes",
       header: "Attributes",
-      cell: (c) => <Badge variant="secondary">{c.attributes.length}</Badge>,
+      cell: ({ row }) => (
+        <Badge variant="secondary">{row.original.attributes.length}</Badge>
+      ),
     },
     {
-      key: "indexes",
+      id: "indexes",
       header: "Indexes",
-      cell: (c) => <Badge variant="secondary">{c.indexes.length}</Badge>,
+      cell: ({ row }) => <Badge variant="secondary">{row.original.indexes.length}</Badge>,
     },
+    ...(platformAdmin
+      ? [
+          {
+            id: "actions",
+            header: "操作",
+            cell: ({ row }: { row: { original: Collection } }) =>
+              row.original.is_system ? null : (
+                <RowDeleteButton
+                  onConfirm={() => removeColl.mutate(row.original.id)}
+                  loading={removeColl.isPending}
+                />
+              ),
+          } satisfies LegacyColumnDef<Collection, unknown>,
+        ]
+      : []),
   ];
 
   const getCollSearchText = useCallback(
-    (c: Collection) => `${c.id} ${c.name}`,
+    (c: Collection) => `${c.id} ${c.name}`.toLowerCase(),
     []
   );
+  const shownColls =
+    search === ""
+      ? collList.rows
+      : collList.rows.filter((c) => getCollSearchText(c).includes(search.toLowerCase()));
+  const shownCollList = useMemo(
+    () => ({ ...collList, rows: shownColls }),
+    [collList, shownColls]
+  );
 
-  const handleBulkDeleteColl = async (selected: Collection[], clear: () => void) => {
+  const toggleRow = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = (visibleIds: string[]) =>
+    setSelectedIds((prev) =>
+      new Set(visibleIds.length > 0 && visibleIds.every((id) => prev.has(id)) ? [] : visibleIds)
+    );
+  const selectedCollections = collList.rows.filter((c) => selectedIds.has(c.id));
+
+  const handleBulkDeleteColl = async () => {
     setBulkDeleting(true);
     try {
-      const deletable = selected.filter((c) => !c.is_system);
+      // 系统集合不可删（选择面已禁选，此处兜底过滤）。
+      const deletable = selectedCollections.filter((c) => !c.is_system);
       if (deletable.length === 0) {
-        clear();
+        setSelectedIds(new Set());
         return;
       }
       // 单条失败由页面汇总展示，跳过全局 toast 避免刷屏（R11-P2-8）。
@@ -312,7 +404,8 @@ export function DatabaseDetailPage() {
         toast.success(`已删除 ${deletable.length} 个 Collection`);
       }
       queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
-      clear();
+      collList.refetch();
+      setSelectedIds(new Set());
     } finally {
       setBulkDeleting(false);
     }
@@ -345,68 +438,72 @@ export function DatabaseDetailPage() {
         />
       </DetailPageWrapper>
 
-      <ResourceListPage
-        title=""
-        cardTitle="Collections"
-        searchPlaceholder="当前页内搜索 Collection..."
-        isLoading={collLoading}
-        items={collections}
-        columns={collColumns}
-        getSearchText={getCollSearchText}
-        serverPaging={{
-          page: collPaging.page,
-          pageSize: collPaging.pageSize,
-          hasPrev: collPaging.hasPrev,
-          hasNext: !!collPage?.nextPageToken,
-          onPrev: collPaging.goPrev,
-          onNext: () => collPaging.goNext(collPage?.nextPageToken),
-          onPageSizeChange: collPaging.setPageSize,
-        }}
-        isRowSelectable={(c) => !c.is_system}
-        detailPath={(c) => `/console/databases/${dbId}/collections/${c.id}`}
-        toolbarActions={
-          platformAdmin ? (
-            <Button asChild>
-              <Link to={`/console/databases/${dbId}/collections/new`}>
-                <Plus className="h-4 w-4 mr-2" />
-                新建 Collection
-              </Link>
-            </Button>
-          ) : undefined
-        }
-        selectionActions={
-          platformAdmin
-            ? (selected, clear) => (
+      <FleetListPage
+        list={shownCollList}
+        toolbar={
+          <div className="space-y-4 border-b px-4 py-4">
+            <CardTitle className="text-base">Collections</CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="当前页内搜索 Collection..."
+                className="h-8 w-56"
+              />
+              {selectedCollections.length > 0 && platformAdmin ? (
                 <BulkDeleteButton
-                  count={selected.filter((c) => !c.is_system).length}
+                  count={selectedCollections.filter((c) => !c.is_system).length}
                   loading={bulkDeleting}
-                  onConfirm={() => handleBulkDeleteColl(selected, clear)}
+                  onConfirm={() => void handleBulkDeleteColl()}
                 />
-              )
-            : undefined
+              ) : null}
+              {platformAdmin ? (
+                <Button asChild className="ml-auto">
+                  <Link to={`/console/databases/${dbId}/collections/new`}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    新建 Collection
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+          </div>
         }
-        rowActions={
-          platformAdmin
-            ? (c) =>
-                c.is_system ? null : (
-                  <RowDeleteButton
-                    onConfirm={() => removeColl.mutate(c.id)}
-                    loading={removeColl.isPending}
-                  />
-                )
-            : undefined
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={collList} />
+          </div>
         }
-        emptyTitle="暂无 Collection"
-        emptyDescription="在此 Database 中创建 Collection"
+        emptyTitle={search !== "" ? "没有匹配的 Collection" : "暂无 Collection"}
+        emptyDescription={
+          search !== "" ? "调整搜索词，或清空恢复当前页全部行" : "在此 Database 中创建 Collection"
+        }
         emptyAction={
           platformAdmin ? (
-            <Button asChild>
+            <Button asChild size="sm">
               <Link to={`/console/databases/${dbId}/collections/new`}>新建 Collection</Link>
             </Button>
           ) : undefined
         }
-      />
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownCollList}
+            columns={collColumns}
+            getRowId={(c) => c.id}
+            onRowClick={(c) => navigate(`/console/databases/${dbId}/collections/${c.id}`)}
+            selection={
+              platformAdmin
+                ? {
+                    selectedIds,
+                    onToggle: toggleRow,
+                    onToggleAll: toggleAll,
+                    isRowSelectable: (c: Collection) => !c.is_system,
+                  }
+                : undefined
+            }
+          />
+        </div>
+      </FleetListPage>
     </div>
   );
 }
-

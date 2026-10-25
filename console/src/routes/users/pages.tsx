@@ -1,9 +1,12 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@/router/compat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCollection } from "@lynx-go/ui-kit";
+import type { Predicate } from "@lynx-go/ui-kit/kernel";
 import { toast } from "sonner";
+import { Pencil } from "lucide-react";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
-  listUsers,
   getUser,
   createUser,
   updateUser,
@@ -15,12 +18,21 @@ import {
   type User,
   type UserSession,
 } from "@/api/users";
+import {
+  usersResource,
+  usersSearch,
+  usersCollectionKey,
+  userFiltersOf,
+  type UserFilterField,
+} from "@/fleet/users";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite, isPlatformAdmin } from "@/hooks/useAdminRole";
-import { useServerPaging } from "@/hooks/useServerPaging";
 import { useUserTimezone } from "@/hooks/useTimezone";
-import { formatDateTime, fromDateTimeLocalValue } from "@/lib/datetime";
-import { ResourceListPage } from "@/components/list/ResourceListPage";
+import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
+import { PageHeader } from "@/components/PageHeader";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -34,7 +46,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import type { ColumnDef } from "@/components/list/DataTable";
 import {
   FormPageWrapper,
   FormField,
@@ -47,256 +58,313 @@ import {
   DeleteButton,
 } from "@/components/resource/shared";
 
-// 工厂：时区来自管理员偏好（hook 无法在模块级使用），由列表页传入。
-const columns = (tz: string): ColumnDef<User>[] => [
-  {
-    key: "id",
-    header: "ID",
-    className: "font-mono text-xs max-w-[140px] truncate",
-    cell: (u) => u.id,
-  },
-  { key: "email", header: "邮箱", cell: (u) => u.email },
-  { key: "name", header: "名称", cell: (u) => u.name },
-  {
-    key: "status",
-    header: "状态",
-    cell: (u) => (
-      <Badge variant={u.status === "active" ? "default" : "secondary"}>{u.status}</Badge>
-    ),
-  },
-  { key: "verified", header: "已验证", cell: (u) => (u.email_verified ? "是" : "否") },
-  {
-    key: "created",
-    header: "创建时间",
-    cell: (u) => formatDateTime(u.created_at, tz),
-  },
-];
-
-// DSL 字符串值消毒：剥离引号/反斜杠/括号，防止用户输入破坏 equal(...) 语法
-//（非法输入只会查不到，不会注入——ParseUserList 白名单编译列名）。
-const sanitizeDSLValue = (v: string) => v.replace(/[\\ "']/g, "").trim();
-
 export function UsersListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const writeable = canWrite(role);
   const platformAdmin = isPlatformAdmin(role);
 
-  const paging = useServerPaging();
-  // 服务端过滤（ParseUserList 白名单 DSL）：ID 精确 + 状态 + 创建时间范围。
-  // 输入（受控）与已应用过滤分离，ID 按「查询」提交；任何过滤变化 reset 回第一页。
-  const [idInput, setIdInput] = useState("");
-  const [idFilter, setIdFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [createdAfter, setCreatedAfter] = useState("");
-  const [createdBefore, setCreatedBefore] = useState("");
-
-  const queries = useMemo(() => {
-    const q: string[] = [];
-    const id = sanitizeDSLValue(idFilter);
-    if (id) q.push(`equal("id","${id}")`);
-    if (statusFilter) q.push(`equal("status","${statusFilter}")`);
-    const after = fromDateTimeLocalValue(createdAfter, tz);
-    if (after) q.push(`greaterThan("created_at","${after}")`);
-    const before = fromDateTimeLocalValue(createdBefore, tz);
-    if (before) q.push(`lessThan("created_at","${before}")`);
-    return q;
-  }, [idFilter, statusFilter, createdAfter, createdBefore, tz]);
-
-  const { data, isLoading } = useQuery({
-    queryKey: ["users", projectId, queries, paging.pageSize, paging.pageToken],
-    queryFn: () =>
-      listUsers({ pageSize: paging.pageSize, pageToken: paging.pageToken, queries }),
-    enabled: !!projectId,
-    placeholderData: (prev) => prev,
+  // 列表 fleet 化（§12.9-2）：游标/页大小/服务端过滤（ID/状态/创建时间
+  // 范围）进 URL（分页栈 = 浏览器历史）；页内当前页搜索保持本地态（旧页语义）。
+  const list = useCollection(usersResource, {
+    from: "/console/users",
+    search: usersSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-  const users = data?.rows ?? [];
 
-  const applyFilters = (next: {
-    id?: string;
-    status?: string;
-    after?: string;
-    before?: string;
-  }) => {
-    if (next.id !== undefined) setIdFilter(next.id);
-    if (next.status !== undefined) setStatusFilter(next.status);
-    if (next.after !== undefined) setCreatedAfter(next.after);
-    if (next.before !== undefined) setCreatedBefore(next.before);
-    paging.reset();
+  // 服务端过滤（ParseUserList 白名单 DSL）：ID 精确（受控输入按「查询」提交，
+  // 消毒在适配器）+ 状态 + 创建时间范围；setPredicate 即 replace + 清游标
+  // 回第一页（旧页手动 reset 的机制化）。创建时间在 URL 存绝对时刻（ISO），
+  // 写入边界按管理员时区做墙钟↔绝对换算（audit-logs 同款）。
+  const filters = userFiltersOf(list.query.predicate);
+  const [idInput, setIdInput] = useState("");
+  const setFilters = (next: Partial<Record<UserFilterField, string>>) => {
+    const merged = { ...filters, ...next };
+    const leaves: Predicate[] = [];
+    if (merged.id) leaves.push({ field: "id", op: "eq", value: merged.id });
+    if (merged.status) leaves.push({ field: "status", op: "eq", value: merged.status });
+    if (merged.created_after)
+      leaves.push({ field: "created_after", op: "eq", value: merged.created_after });
+    if (merged.created_before)
+      leaves.push({ field: "created_before", op: "eq", value: merged.created_before });
+    list.setPredicate(
+      leaves.length === 0 ? null : leaves.length === 1 ? leaves[0] : { all: leaves },
+    );
   };
+  const setCreatedAfter = (local: string) =>
+    setFilters({ created_after: fromDateTimeLocalValue(local, tz) || undefined });
+  const setCreatedBefore = (local: string) =>
+    setFilters({ created_before: fromDateTimeLocalValue(local, tz) || undefined });
   const clearFilters = () => {
     setIdInput("");
-    setIdFilter("");
-    setStatusFilter("");
-    setCreatedAfter("");
-    setCreatedBefore("");
-    paging.reset();
+    list.setPredicate(null);
   };
-  const filtersDirty = !!(idFilter || statusFilter || createdAfter || createdBefore);
+  const filtersDirty = list.query.predicate != null;
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteUser(id),
     onSuccess: () => {
       toast.success("用户已删除");
-      queryClient.invalidateQueries({ queryKey: ["users", projectId] });
+      // kit 列表键（useCollection）+ 存量键双失效（详情/编辑页仍吃存量键）。
+      void queryClient.invalidateQueries({ queryKey: usersCollectionKey });
+      void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
     },
   });
 
   const getSearchText = useCallback(
-    (u: User) => `${u.id} ${u.email} ${u.name} ${u.status}`,
+    (u: User) => `${u.id} ${u.email} ${u.name} ${u.status}`.toLowerCase(),
     []
   );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((u) => getSearchText(u).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
 
-  const handleBulkDelete = async (selected: User[], clear: () => void) => {
+  const toggleRow = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = (visibleIds: string[]) =>
+    setSelectedIds((prev) =>
+      new Set(visibleIds.length > 0 && visibleIds.every((id) => prev.has(id)) ? [] : visibleIds)
+    );
+  const selectedUsers = list.rows.filter((u) => selectedIds.has(u.id));
+
+  const handleBulkDelete = async () => {
     setBulkDeleting(true);
     try {
       // 单条失败由页面汇总展示，跳过全局 toast 避免刷屏（R11-P2-8）。
       const results = await Promise.allSettled(
-        selected.map((u) => deleteUser(u.id, { __skipToast: true }))
+        selectedUsers.map((u) => deleteUser(u.id, { __skipToast: true }))
       );
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
         toast.error(`删除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
       } else {
-        toast.success(`已删除 ${selected.length} 个用户`);
+        toast.success(`已删除 ${selectedUsers.length} 个用户`);
       }
-      queryClient.invalidateQueries({ queryKey: ["users", projectId] });
-      clear();
+      void queryClient.invalidateQueries({ queryKey: usersCollectionKey });
+      void queryClient.invalidateQueries({ queryKey: ["users", projectId] });
+      setSelectedIds(new Set());
     } finally {
       setBulkDeleting(false);
     }
   };
 
+  const tableColumns: LegacyColumnDef<User, unknown>[] = [
+    {
+      id: "id",
+      header: "ID",
+      cell: ({ row }) => (
+        <span className="inline-block max-w-[140px] truncate font-mono text-xs">
+          {row.original.id}
+        </span>
+      ),
+    },
+    { id: "email", header: "邮箱", cell: ({ row }) => row.original.email },
+    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
+    {
+      id: "status",
+      header: "状态",
+      cell: ({ row }) => (
+        <Badge variant={row.original.status === "active" ? "default" : "secondary"}>
+          {row.original.status}
+        </Badge>
+      ),
+    },
+    {
+      id: "verified",
+      header: "已验证",
+      cell: ({ row }) => (row.original.email_verified ? "是" : "否"),
+    },
+    {
+      id: "created",
+      header: "创建时间",
+      cell: ({ row }) => formatDateTime(row.original.created_at, tz),
+    },
+    ...(writeable || platformAdmin
+      ? [
+          {
+            id: "actions",
+            header: "操作",
+            cell: ({ row }: { row: { original: User } }) => (
+              <div className="flex items-center justify-end gap-1">
+                {writeable ? (
+                  <Button variant="ghost" size="icon" asChild>
+                    <Link to={`/console/users/${row.original.id}/edit`} title="编辑">
+                      <Pencil className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                ) : null}
+                {platformAdmin ? (
+                  <RowDeleteButton
+                    onConfirm={() => remove.mutate(row.original.id)}
+                    loading={remove.isPending}
+                  />
+                ) : null}
+              </div>
+            ),
+          } satisfies LegacyColumnDef<User, unknown>,
+        ]
+      : []),
+  ];
+
+  const filtered = list.query.predicate != null;
+
   return (
-    <ResourceListPage
-      title="Users"
-      description="当前项目的注册用户"
-      searchPlaceholder="当前页内搜索邮箱、名称或 ID..."
-      isLoading={isLoading}
-      items={users}
-      columns={columns(tz)}
-      getSearchText={getSearchText}
-      serverPaging={{
-        page: paging.page,
-        pageSize: paging.pageSize,
-        hasPrev: paging.hasPrev,
-        hasNext: !!data?.nextPageToken,
-        onPrev: paging.goPrev,
-        onNext: () => paging.goNext(data?.nextPageToken),
-        onPageSizeChange: paging.setPageSize,
-      }}
-      filters={
-        <form
-          className="flex flex-wrap items-end gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            applyFilters({ id: sanitizeDSLValue(idInput) });
-          }}
-        >
-          <div className="space-y-1">
-            <Label htmlFor="users-filter-id" className="text-xs text-muted-foreground">
-              用户 ID
-            </Label>
-            <Input
-              id="users-filter-id"
-              value={idInput}
-              onChange={(e) => setIdInput(e.target.value)}
-              placeholder="按 UserID 精确过滤"
-              className="h-8 w-[280px] font-mono text-xs"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">状态</Label>
-            <Select
-              value={statusFilter || "all"}
-              onValueChange={(v) => applyFilters({ status: v === "all" ? "" : v })}
-            >
-              <SelectTrigger className="h-8 w-[120px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部</SelectItem>
-                <SelectItem value="active">active</SelectItem>
-                <SelectItem value="inactive">inactive</SelectItem>
-                <SelectItem value="blocked">blocked</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="users-filter-after" className="text-xs text-muted-foreground">
-              创建时间从
-            </Label>
-            <Input
-              id="users-filter-after"
-              type="datetime-local"
-              value={createdAfter}
-              onChange={(e) => applyFilters({ after: e.target.value })}
-              className="h-8 w-[210px]"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="users-filter-before" className="text-xs text-muted-foreground">
-              到
-            </Label>
-            <Input
-              id="users-filter-before"
-              type="datetime-local"
-              value={createdBefore}
-              onChange={(e) => applyFilters({ before: e.target.value })}
-              className="h-8 w-[210px]"
-            />
-          </div>
-          <Button type="submit" variant="outline" size="sm">
-            查询
-          </Button>
-          {filtersDirty && (
-            <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
-              清除
-            </Button>
-          )}
-        </form>
-      }
-      detailPath={(u) => `/console/users/${u.id}`}
-      editPath={writeable ? (u) => `/console/users/${u.id}/edit` : undefined}
-      toolbarActions={
-        writeable ? (
-          <Button asChild size="sm">
-            <Link to="/console/users/new">创建用户</Link>
-          </Button>
-        ) : undefined
-      }
-      selectionActions={
-        platformAdmin
-          ? (selected, clear) => (
-              <BulkDeleteButton
-                count={selected.length}
-                loading={bulkDeleting}
-                onConfirm={() => handleBulkDelete(selected, clear)}
+    <div className="space-y-6">
+      <PageHeader title="Users" description="当前项目的注册用户" />
+
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="space-y-3 px-4 pb-2 pt-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="当前页内搜索邮箱、名称或 ID..."
+                className="h-8 w-56"
               />
-            )
-          : undefined
-      }
-      rowActions={
-        platformAdmin
-          ? (u) => (
-              <RowDeleteButton onConfirm={() => remove.mutate(u.id)} loading={remove.isPending} />
-            )
-          : undefined
-      }
-      emptyTitle="暂无用户"
-      emptyDescription="用户注册后将显示在此"
-      emptyAction={
-        writeable ? (
-          <Button asChild variant="outline" size="sm">
-            <Link to="/console/users/new">创建用户</Link>
-          </Button>
-        ) : undefined
-      }
-    />
+              {selectedUsers.length > 0 && platformAdmin ? (
+                <BulkDeleteButton
+                  count={selectedUsers.length}
+                  loading={bulkDeleting}
+                  onConfirm={() => void handleBulkDelete()}
+                />
+              ) : null}
+              {writeable ? (
+                <Button asChild size="sm" className="ml-auto">
+                  <Link to="/console/users/new">创建用户</Link>
+                </Button>
+              ) : null}
+            </div>
+            <form
+              className="flex flex-wrap items-end gap-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setFilters({ id: idInput.trim() || undefined });
+              }}
+            >
+              <div className="space-y-1">
+                <Label htmlFor="users-filter-id" className="text-xs text-muted-foreground">
+                  用户 ID
+                </Label>
+                <Input
+                  id="users-filter-id"
+                  value={idInput}
+                  onChange={(e) => setIdInput(e.target.value)}
+                  placeholder="按 UserID 精确过滤"
+                  className="h-8 w-[280px] font-mono text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">状态</Label>
+                <Select
+                  value={filters.status || "all"}
+                  onValueChange={(v) => setFilters({ status: v === "all" ? undefined : v })}
+                >
+                  <SelectTrigger className="h-8 w-[120px]" aria-label="状态">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部</SelectItem>
+                    <SelectItem value="active">active</SelectItem>
+                    <SelectItem value="inactive">inactive</SelectItem>
+                    <SelectItem value="blocked">blocked</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="users-filter-after" className="text-xs text-muted-foreground">
+                  创建时间从
+                </Label>
+                <Input
+                  id="users-filter-after"
+                  type="datetime-local"
+                  value={toDateTimeLocalValue(filters.created_after, tz)}
+                  onChange={(e) => setCreatedAfter(e.target.value)}
+                  className="h-8 w-[210px]"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="users-filter-before" className="text-xs text-muted-foreground">
+                  到
+                </Label>
+                <Input
+                  id="users-filter-before"
+                  type="datetime-local"
+                  value={toDateTimeLocalValue(filters.created_before, tz)}
+                  onChange={(e) => setCreatedBefore(e.target.value)}
+                  className="h-8 w-[210px]"
+                />
+              </div>
+              <Button type="submit" variant="outline" size="sm">
+                查询
+              </Button>
+              {filtersDirty && (
+                <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
+                  清除
+                </Button>
+              )}
+            </form>
+          </div>
+        }
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={list} />
+          </div>
+        }
+        emptyTitle={
+          search !== "" ? "没有匹配的用户" : filtered ? "该过滤条件下暂无用户" : "暂无用户"
+        }
+        emptyDescription={
+          search !== ""
+            ? "调整搜索词，或清空恢复当前页全部行"
+            : filtered
+              ? "调整过滤条件或清除恢复全部"
+              : "用户注册后将显示在此"
+        }
+        emptyAction={
+          writeable ? (
+            <Button asChild variant="outline" size="sm">
+              <Link to="/console/users/new">创建用户</Link>
+            </Button>
+          ) : undefined
+        }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={tableColumns}
+            getRowId={(row) => row.id}
+            onRowClick={(u) => navigate(`/console/users/${u.id}`)}
+            selection={
+              platformAdmin
+                ? {
+                    selectedIds,
+                    onToggle: toggleRow,
+                    onToggleAll: toggleAll,
+                  }
+                : undefined
+            }
+          />
+        </div>
+      </FleetListPage>
+    </div>
   );
 }
 

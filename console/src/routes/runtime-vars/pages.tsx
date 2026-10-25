@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@/router/compat";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCollection } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
   ArrowRightLeft,
   Eye,
@@ -18,7 +20,6 @@ import {
   deleteVarSet,
   getVarSet,
   getVersion,
-  listVarSets,
   listVars,
   listVersions,
   rollback,
@@ -32,6 +33,7 @@ import {
   type VarSet,
   type VarSetVisibilityInput,
 } from "@/api/runtimeVars";
+import { varSetsResource, varSetsSearch } from "@/fleet/runtimeVars";
 import { useAuth } from "@/hooks/useAuth";
 import { isPlatformAdmin, useAdminRole } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
@@ -39,14 +41,15 @@ import { formatDateTime } from "@/lib/datetime";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingTable } from "@/components/LoadingTable";
-import { ResourceListPage } from "@/components/list/ResourceListPage";
-import { useServerPaging } from "@/hooks/useServerPaging";
-import type { ColumnDef } from "@/components/list/DataTable";
+import { PageHeader } from "@/components/PageHeader";
 import {
   DetailPageWrapper,
   DetailSkeleton,
   NotFound,
 } from "@/components/resource/shared";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -270,92 +273,133 @@ export function VarSetsListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
+  const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const platformAdmin = isPlatformAdmin(role);
 
-  const paging = useServerPaging();
-  const { data, isLoading } = useQuery({
-    queryKey: ["runtime-var-sets", projectId, paging.pageSize, paging.pageToken],
-    queryFn: () => listVarSets({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
-    enabled: !!projectId,
-    placeholderData: (prev) => prev,
+  // 列表 fleet 化（§12.9-2）：游标/页大小进 URL（分页栈 = 浏览器历史）；
+  // 页内当前页搜索保持本地态（旧页语义）。vars/versions 子视图与表单不动。
+  const list = useCollection(varSetsResource, {
+    from: "/console/runtime-vars",
+    search: varSetsSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-  const sets = data?.rows ?? [];
 
-  const columns: ColumnDef<VarSet>[] = [
+  const getSearchText = useCallback(
+    (s: VarSet) => `${s.var_set_id} ${s.description}`.toLowerCase(),
+    []
+  );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((s) => getSearchText(s).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
+
+  const columns: LegacyColumnDef<VarSet, unknown>[] = [
     {
-      key: "var_set_id",
+      id: "var_set_id",
       header: "集合 ID",
-      className: "font-mono text-xs",
-      cell: (s) => s.var_set_id,
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">{row.original.var_set_id}</span>
+      ),
     },
     {
-      key: "visibility",
+      id: "visibility",
       header: "可见性",
-      cell: (s) => <VisibilityBadge visibility={s.visibility} />,
+      cell: ({ row }) => <VisibilityBadge visibility={row.original.visibility} />,
     },
     {
-      key: "var_count",
+      id: "var_count",
       header: "变量数",
-      cell: (s) => `${s.var_count} / ${VAR_COUNT_LIMIT}`,
+      cell: ({ row }) => `${row.original.var_count} / ${VAR_COUNT_LIMIT}`,
     },
     {
-      key: "revision",
+      id: "revision",
       header: "当前版本",
-      cell: (s) => `#${s.revision}`,
+      cell: ({ row }) => `#${row.original.revision}`,
     },
     {
-      key: "footprint",
+      id: "footprint",
       header: "占用（上限 1 MB）",
-      cell: (s) => <FootprintCell bytes={s.total_bytes} />,
+      cell: ({ row }) => <FootprintCell bytes={row.original.total_bytes} />,
     },
     {
-      key: "updated_at",
+      id: "updated_at",
       header: "更新时间",
-      cell: (s) => formatDateTime(s.updated_at, tz),
+      cell: ({ row }) => formatDateTime(row.original.updated_at, tz),
     },
   ];
 
   return (
     <div className="space-y-6">
       <SecretWarningBanner />
-      <ResourceListPage
-        title="Runtime Vars"
-        description="管理项目级运行时配置：类型化变量集合、可见性与版本回滚"
-        searchPlaceholder="当前页内搜索集合 ID 或描述..."
-        isLoading={isLoading}
-        items={sets}
-        columns={columns}
-        getSearchText={(s) => `${s.var_set_id} ${s.description}`}
-        detailPath={(s) => `/console/runtime-vars/${s.var_set_id}`}
-        toolbarActions={
-          platformAdmin ? (
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              新建变量集
-            </Button>
-          ) : undefined
+      <PageHeader title="Runtime Vars" description="管理项目级运行时配置：类型化变量集合、可见性与版本回滚" />
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="当前页内搜索集合 ID 或描述..."
+              className="h-8 w-56"
+            />
+            {platformAdmin ? (
+              <Button className="ml-auto" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                新建变量集
+              </Button>
+            ) : null}
+          </div>
         }
-        emptyTitle="暂无变量集"
-        emptyDescription="创建第一个变量集，向客户端下发功能开关、文案、阈值等运行时配置"
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={list} />
+          </div>
+        }
+        emptyTitle={search !== "" ? "没有匹配的变量集" : "暂无变量集"}
+        emptyDescription={
+          search !== ""
+            ? "调整搜索词，或清空恢复当前页全部行"
+            : "创建第一个变量集，向客户端下发功能开关、文案、阈值等运行时配置"
+        }
         emptyAction={
           platformAdmin ? (
             <Button onClick={() => setCreateOpen(true)}>新建变量集</Button>
           ) : undefined
         }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={columns}
+            getRowId={(s) => s.id}
+            onRowClick={(s) => navigate(`/console/runtime-vars/${s.var_set_id}`)}
+          />
+        </div>
+      </FleetListPage>
+      <VarSetCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={() => list.refetch()}
       />
-      <VarSetCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }
 
-// VarSetCreateDialog 新建集合（var_set_id 创建后不可改，D9）。
+// VarSetCreateDialog 新建集合（var_set_id 创建后不可改，D9）。onCreated =
+// 列表 fleet 化的最小桥（kit 集合 refetch；表单本体不动）。
 function VarSetCreateDialog({
   open,
   onOpenChange,
+  onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCreated?: () => void;
 }) {
   const queryClient = useQueryClient();
   const { projectId } = useAuth();
@@ -384,6 +428,7 @@ function VarSetCreateDialog({
       queryClient.invalidateQueries({
         queryKey: ["runtime-var-sets", projectId],
       });
+      onCreated?.();
       onOpenChange(false);
     },
   });

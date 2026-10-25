@@ -1,10 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TestRouter } from "@/router/compat";
+import { Outlet, TestRouter } from "@/router/compat";
 import { AxiosError } from "axios";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DocumentDetailPage } from "./documents";
-import { getCollection, getDocument, updateDocument } from "@/api/databases";
+import { DocumentDetailPage, DocumentsListPage } from "./documents";
+import { getCollection, getDocument, listDocuments, updateDocument } from "@/api/databases";
 import { canWrite } from "@/hooks/useAdminRole";
 
 // OCC 通道方言（§12.5）：冲突 = HTTP 400 + message 前缀域码（非 409）。
@@ -23,6 +23,7 @@ vi.mock("@/hooks/useAdminRole", () => ({
   canWrite: vi.fn(() => true),
   isPlatformAdmin: () => true,
 }));
+vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ projectId: "p1" }) }));
 vi.mock("@/hooks/useTimezone", () => ({ useUserTimezone: () => "UTC" }));
 vi.mock("@/api/databases", () => ({
   getCollection: vi.fn(),
@@ -184,5 +185,56 @@ describe("DocumentDetailPage", () => {
 
     expect(await screen.findByText("必填字段")).toBeTruthy();
     expect(vi.mocked(updateDocument)).not.toHaveBeenCalled();
+  });
+});
+
+// 列表 fleet 化（§12.9-2）URL 锚：DocumentsListPage 经 CollectionLayout 的
+// Outlet context 取 dbId/collId（嵌套 scope），游标/页大小进 URL 透传
+// listDocuments。
+describe("DocumentsListPage（列表 fleet 化 URL 锚）", () => {
+  afterEach(() => cleanup());
+
+  function renderList() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={client}>
+        <TestRouter
+          initialEntries={["/console/databases/app/collections/posts/documents"]}
+          routes={[
+            {
+              // CollectionLayout 替身：只提供 Outlet context（dbId/collId）
+              path: "/console/databases/:dbId/collections/:collId",
+              element: <Outlet context={{ dbId: "app", collId: "posts" }} />,
+              children: [{ path: "/documents", element: <DocumentsListPage /> }],
+            },
+          ]}
+        />
+      </QueryClientProvider>
+    );
+  }
+
+  it("URL 即真相：默认页大小/翻页游标透传 listDocuments（page_token）", async () => {
+    vi.mocked(getCollection).mockReset().mockResolvedValue(collection);
+    vi.mocked(listDocuments)
+      .mockReset()
+      .mockResolvedValue({ rows: [document], nextPageToken: "tok-2" });
+    renderList();
+    await act(async () => {});
+    await screen.findByText("hello");
+    // defaultSize 20 = 旧页默认（useServerPaging 缺省）；首次请求无 token
+    expect(vi.mocked(listDocuments)).toHaveBeenLastCalledWith(
+      "app",
+      "posts",
+      expect.objectContaining({ pageSize: 20, pageToken: undefined }),
+    );
+    // 下一页 → 游标 push 进 URL → 请求带 page_token
+    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(() =>
+      expect(vi.mocked(listDocuments)).toHaveBeenLastCalledWith(
+        "app",
+        "posts",
+        expect.objectContaining({ pageToken: "tok-2" }),
+      ),
+    );
   });
 });

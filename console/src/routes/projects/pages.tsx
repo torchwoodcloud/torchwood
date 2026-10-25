@@ -1,23 +1,30 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@/router/compat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCollection } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import { Plus, Settings } from "lucide-react";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
-  listProjects,
   getProject,
   createProject,
   type Project,
 } from "@/api/projects";
+import {
+  projectsResource,
+  projectsSearch,
+} from "@/fleet/projects";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useProjectScopeSync } from "@/hooks/useProjectScopeSync";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
-import { ResourceListPage } from "@/components/list/ResourceListPage";
+import { PageHeader } from "@/components/PageHeader";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { ColumnDef } from "@/components/list/DataTable";
-import { useServerPaging } from "@/hooks/useServerPaging";
+import { Input } from "@/components/ui/input";
 import {
   FormPageWrapper,
   FormField,
@@ -27,90 +34,112 @@ import {
   NotFound,
 } from "@/components/resource/shared";
 
-// 工厂：时区来自管理员偏好（hook 无法在模块级使用），由列表页传入。
-const columns = (tz: string): ColumnDef<Project>[] => [
-  {
-    key: "id",
-    header: "ID",
-    className: "font-mono text-xs max-w-[140px] truncate",
-    cell: (p) => p.id,
-  },
-  {
-    key: "name",
-    header: "名称",
-    cell: (p) => p.name,
-  },
-  {
-    key: "status",
-    header: "状态",
-    cell: (p) => (
-      <Badge variant={p.status === "active" ? "default" : "secondary"}>{p.status}</Badge>
-    ),
-  },
-  {
-    key: "created",
-    header: "创建时间",
-    cell: (p) => formatDateTime(p.created_at, tz),
-  },
-];
-
 export function ProjectsListPage() {
   const { role } = useAdminRole();
+  const navigate = useNavigate();
   const tz = useUserTimezone();
   const platformAdmin = isPlatformAdmin(role);
+  const [search, setSearch] = useState("");
 
-  const paging = useServerPaging();
-  const { data, isLoading } = useQuery({
-    queryKey: ["projects", paging.pageSize, paging.pageToken],
-    queryFn: () => listProjects({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
-    placeholderData: (prev) => prev,
+  // 列表 fleet 化（§12.9-2）：projects 是平台级资源——不随项目作用域；
+  // 游标/页大小进 URL（分页栈 = 浏览器历史；旧页无服务端过滤）；页内当前
+  // 页搜索保持本地态（旧页语义）。
+  const list = useCollection(projectsResource, {
+    from: "/console/projects",
+    search: projectsSearch,
   });
-  const projects = data?.rows ?? [];
 
   const getSearchText = useCallback(
-    (p: Project) => `${p.id} ${p.name} ${p.description ?? ""} ${p.status}`,
+    (p: Project) => `${p.id} ${p.name} ${p.description ?? ""} ${p.status}`.toLowerCase(),
     []
   );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((p) => getSearchText(p).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
+
+  const tableColumns: LegacyColumnDef<Project, unknown>[] = [
+    {
+      id: "id",
+      header: "ID",
+      cell: ({ row }) => (
+        <span className="inline-block max-w-[140px] truncate font-mono text-xs">
+          {row.original.id}
+        </span>
+      ),
+    },
+    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
+    {
+      id: "status",
+      header: "状态",
+      cell: ({ row }) => (
+        <Badge variant={row.original.status === "active" ? "default" : "secondary"}>
+          {row.original.status}
+        </Badge>
+      ),
+    },
+    {
+      id: "created",
+      header: "创建时间",
+      cell: ({ row }) => formatDateTime(row.original.created_at, tz),
+    },
+  ];
 
   return (
-    <ResourceListPage
-      title="Projects"
-      description="管理 Torchwood 项目"
-      searchPlaceholder="当前页内搜索项目名称或 ID..."
-      isLoading={isLoading}
-      items={projects}
-      columns={columns(tz)}
-      getSearchText={getSearchText}
-      serverPaging={{
-        page: paging.page,
-        pageSize: paging.pageSize,
-        hasPrev: paging.hasPrev,
-        hasNext: !!data?.nextPageToken,
-        onPrev: paging.goPrev,
-        onNext: () => paging.goNext(data?.nextPageToken),
-        onPageSizeChange: paging.setPageSize,
-      }}
-      detailPath={(p) => `/console/projects/${p.id}`}
-      toolbarActions={
-        platformAdmin ? (
-          <Button asChild>
-            <Link to="/console/projects/new">
-              <Plus className="h-4 w-4 mr-2" />
-              新建项目
-            </Link>
-          </Button>
-        ) : undefined
-      }
-      emptyTitle="暂无项目"
-      emptyDescription="创建第一个项目以开始使用"
-      emptyAction={
-        platformAdmin ? (
-          <Button asChild>
-            <Link to="/console/projects/new">新建项目</Link>
-          </Button>
-        ) : undefined
-      }
-    />
+    <div className="space-y-6">
+      <PageHeader title="Projects" description="管理 Torchwood 项目" />
+
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="当前页内搜索项目名称或 ID..."
+              className="h-8 w-56"
+            />
+            {platformAdmin ? (
+              <Button asChild className="ml-auto">
+                <Link to="/console/projects/new">
+                  <Plus className="h-4 w-4 mr-2" />
+                  新建项目
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+        }
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={list} />
+          </div>
+        }
+        emptyTitle={search !== "" ? "没有匹配的项目" : "暂无项目"}
+        emptyDescription={
+          search !== ""
+            ? "调整搜索词，或清空恢复当前页全部行"
+            : "创建第一个项目以开始使用"
+        }
+        emptyAction={
+          platformAdmin ? (
+            <Button asChild>
+              <Link to="/console/projects/new">新建项目</Link>
+            </Button>
+          ) : undefined
+        }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={tableColumns}
+            getRowId={(row) => row.id}
+            onRowClick={(p) => navigate(`/console/projects/${p.id}`)}
+          />
+        </div>
+      </FleetListPage>
+    </div>
   );
 }
 

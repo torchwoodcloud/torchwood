@@ -1,0 +1,114 @@
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { TestRouter } from "@/router/compat";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { DatabasesListPage, DatabaseDetailPage } from "./databases";
+import type { Collection, Database } from "@/api/databases";
+
+// 列表 fleet 化（§12.9-2）URL 锚：默认页大小/翻页游标透传 fetch 函数
+// （URL 即真相；嵌套 from = 路由 id）。写函数全 mock，只测列表接线。
+
+vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ projectId: "p1" }) }));
+vi.mock("@/hooks/useAdminRole", () => ({
+  useAdminRole: () => ({ role: "owner", isLoading: false }),
+  canWrite: () => true,
+  isPlatformAdmin: () => true,
+}));
+vi.mock("@/hooks/useTimezone", () => ({ useUserTimezone: () => "UTC" }));
+vi.mock("@/api/databases", () => ({
+  listDatabases: vi.fn(),
+  getDatabase: vi.fn(),
+  createDatabase: vi.fn(),
+  deleteDatabase: vi.fn(),
+  listCollections: vi.fn(),
+  getCollection: vi.fn(),
+  deleteCollection: vi.fn(),
+}));
+
+import { getDatabase, listCollections, listDatabases } from "@/api/databases";
+
+const mockListDatabases = vi.mocked(listDatabases);
+const mockGetDatabase = vi.mocked(getDatabase);
+const mockListCollections = vi.mocked(listCollections);
+
+const db: Database = {
+  id: "app",
+  name: "Production DB",
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+};
+
+const coll: Collection = {
+  id: "posts",
+  database_id: "app",
+  name: "文章",
+  permissions: [],
+  is_system: false,
+  attributes: [],
+  indexes: [],
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+};
+
+async function renderPage(
+  routePath: string,
+  element: React.ReactElement,
+  entry = routePath,
+) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <TestRouter routes={[{ path: routePath, element }]} initialEntries={[entry]} />
+    </QueryClientProvider>,
+  );
+  // RouterProvider 首提交异步：冲刷后再断言（仓库惯例）。
+  await act(async () => {});
+}
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+describe("DatabasesListPage（列表 fleet 化 URL 锚）", () => {
+  it("URL 即真相：默认页大小/翻页游标透传 listDatabases（page_token）", async () => {
+    mockListDatabases.mockResolvedValue({ rows: [db], nextPageToken: "tok-2" });
+    await renderPage("/console/databases", <DatabasesListPage />);
+    await screen.findByText("Production DB");
+    // defaultSize 20 = 旧页默认（useServerPaging 缺省）；首次请求无 token
+    expect(mockListDatabases).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pageSize: 20, pageToken: undefined }),
+    );
+    // 下一页 → 游标 push 进 URL → 请求带 page_token
+    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(() =>
+      expect(mockListDatabases).toHaveBeenLastCalledWith(
+        expect.objectContaining({ pageToken: "tok-2" }),
+      ),
+    );
+  });
+});
+
+describe("DatabaseDetailPage（collections 列表嵌套 scope URL 锚）", () => {
+  it("嵌套 from：dbId 取自路径参数，默认页大小/游标透传 listCollections", async () => {
+    mockGetDatabase.mockResolvedValue(db);
+    mockListCollections.mockResolvedValue({ rows: [coll], nextPageToken: "tok-2" });
+    await renderPage(
+      "/console/databases/:dbId",
+      <DatabaseDetailPage />,
+      "/console/databases/app",
+    );
+    await screen.findByText("文章");
+    expect(mockListCollections).toHaveBeenLastCalledWith(
+      "app",
+      expect.objectContaining({ pageSize: 20, pageToken: undefined }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(() =>
+      expect(mockListCollections).toHaveBeenLastCalledWith(
+        "app",
+        expect.objectContaining({ pageToken: "tok-2" }),
+      ),
+    );
+  });
+});

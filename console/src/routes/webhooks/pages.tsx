@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "@/router/compat";
+import { useNavigate, useParams } from "@/router/compat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCollection } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { Plus, KeyRound, RotateCcw, AlertTriangle } from "lucide-react";
 import {
-  listWebhooks,
   getWebhook,
   createWebhook,
   updateWebhook,
@@ -15,7 +16,8 @@ import {
   type Webhook,
   type WebhookDelivery,
 } from "@/api/webhooks";
-import { ResourceListPage } from "@/components/list/ResourceListPage";
+import { webhooksResource, webhooksSearch } from "@/fleet/webhooks";
+import { PageHeader } from "@/components/PageHeader";
 import { ListPaginationKeyset } from "@/components/list/ListToolbar";
 import { useServerPaging } from "@/hooks/useServerPaging";
 import { Button } from "@/components/ui/button";
@@ -46,11 +48,13 @@ import {
   DeleteButton,
   RowDeleteButton,
 } from "@/components/resource/shared";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
 import { formatDateTime } from "@/lib/datetime";
-import type { ColumnDef } from "@/components/list/DataTable";
 
 // ——Webhooks 一等公民（functions-v4.md §6，D5）——
 //
@@ -78,33 +82,39 @@ function deliveryStatusBadge(status: string) {
   }
 }
 
-const webhookColumns = (tz: string): ColumnDef<Webhook>[] => [
+const webhookColumns = (tz: string): LegacyColumnDef<Webhook, unknown>[] => [
   {
-    key: "id",
+    id: "id",
     header: "ID",
-    className: "font-mono text-xs max-w-[140px] truncate",
-    cell: (w) => w.id,
+    cell: ({ row }) => (
+      <span className="inline-block max-w-[140px] truncate font-mono text-xs">
+        {row.original.id}
+      </span>
+    ),
   },
   {
-    key: "url",
+    id: "url",
     header: "URL",
-    className: "font-mono text-xs max-w-[260px] truncate",
-    cell: (w) => w.url,
+    cell: ({ row }) => (
+      <span className="inline-block max-w-[260px] truncate font-mono text-xs" title={row.original.url}>
+        {row.original.url}
+      </span>
+    ),
   },
   {
-    key: "status",
+    id: "status",
     header: "状态",
-    cell: (w) => webhookStatusBadge(w.status),
+    cell: ({ row }) => webhookStatusBadge(row.original.status),
   },
   {
-    key: "events",
+    id: "events",
     header: "订阅",
-    cell: (w) => `${w.events?.length ?? 0} 条`,
+    cell: ({ row }) => `${row.original.events?.length ?? 0} 条`,
   },
   {
-    key: "created",
+    id: "created",
     header: "创建时间",
-    cell: (w) => formatDateTime(w.created_at, tz),
+    cell: ({ row }) => formatDateTime(row.original.created_at, tz),
   },
 ];
 
@@ -289,22 +299,21 @@ export function WebhooksListPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
+  const [search, setSearch] = useState("");
   // 创建响应的一次性明文密钥回显（OneTimeSecretDialog）。
   const [createdSecret, setCreatedSecret] = useState<{ id: string; secret: string } | null>(null);
   const writeable = canWrite(role);
 
-  const paging = useServerPaging();
-  const { data, isLoading } = useQuery({
-    queryKey: ["webhooks", projectId, paging.pageSize, paging.pageToken],
-    queryFn: () => listWebhooks({ pageSize: paging.pageSize, pageToken: paging.pageToken }),
-    enabled: !!projectId,
-    placeholderData: (prev) => prev,
+  // 列表 fleet 化（§12.9-2）：游标/页大小进 URL（分页栈 = 浏览器历史）；
+  // 页内当前页搜索保持本地态（旧页语义）。
+  const list = useCollection(webhooksResource, {
+    from: "/console/webhooks",
+    search: webhooksSearch,
+    scope: { projectId: projectId ?? undefined },
+    query: { enabled: !!projectId },
   });
-  const webhooks = data?.rows ?? [];
-
-  const columns = useMemo(() => webhookColumns(tz), [tz]);
 
   const create = useMutation({
     mutationFn: createWebhook,
@@ -313,68 +322,98 @@ export function WebhooksListPage() {
       // 关闭对话框后任何面只出指纹。
       setCreatedSecret({ id: result.webhook.id, secret: result.secret });
       toast.success("Webhook 已创建");
-      queryClient.invalidateQueries({ queryKey: ["webhooks", projectId] });
+      list.refetch();
       setCreateOpen(false);
     },
   });
 
+  // 行删除仍是存量 useMutation（命令族切片未及本页）：成功后手动桥——
+  // kit 集合无存量键，直接 refetch 当前窗口。
   const remove = useMutation({
     mutationFn: (id: string) => deleteWebhook(id),
     onSuccess: () => {
       toast.success("Webhook 已删除");
-      queryClient.invalidateQueries({ queryKey: ["webhooks", projectId] });
+      list.refetch();
     },
   });
 
   const getSearchText = useCallback(
-    (w: Webhook) => `${w.id} ${w.url} ${(w.events ?? []).join(" ")}`,
+    (w: Webhook) => `${w.id} ${w.url} ${(w.events ?? []).join(" ")}`.toLowerCase(),
     []
   );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((w) => getSearchText(w).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
+
+  const tableColumns: LegacyColumnDef<Webhook, unknown>[] = [
+    ...webhookColumns(tz),
+    ...(writeable
+      ? [
+          {
+            id: "actions",
+            header: "操作",
+            cell: ({ row }: { row: { original: Webhook } }) => (
+              <RowDeleteButton
+                onConfirm={() => remove.mutate(row.original.id)}
+                loading={remove.isPending}
+              />
+            ),
+          } satisfies LegacyColumnDef<Webhook, unknown>,
+        ]
+      : []),
+  ];
 
   return (
     <>
-      <ResourceListPage
-        title="Webhooks"
-        description="订阅平台事件并投递到你的 HTTPS endpoint"
-        searchPlaceholder="当前页内搜索 URL 或订阅串..."
-        isLoading={isLoading}
-        items={webhooks}
-        columns={columns}
-        getSearchText={getSearchText}
-        serverPaging={{
-          page: paging.page,
-          pageSize: paging.pageSize,
-          hasPrev: paging.hasPrev,
-          hasNext: !!data?.nextPageToken,
-          onPrev: paging.goPrev,
-          onNext: () => paging.goNext(data?.nextPageToken),
-          onPageSizeChange: paging.setPageSize,
-        }}
-        detailPath={(w) => `/console/webhooks/${w.id}`}
-        toolbarActions={
-          writeable ? (
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              新建 Webhook
-            </Button>
-          ) : undefined
-        }
-        rowActions={
-          writeable
-            ? (w) => (
-                <RowDeleteButton
-                  onConfirm={() => remove.mutate(w.id)}
-                  loading={remove.isPending}
-                />
-              )
-            : undefined
-        }
-        emptyTitle="暂无 Webhook"
-        emptyDescription="创建订阅，平台事件将按 CloudEvents 信封投递到你的 endpoint"
-        emptyAction={
-          writeable ? <Button onClick={() => setCreateOpen(true)}>新建 Webhook</Button> : undefined
-        }
-      />
+      <div className="space-y-6">
+        <PageHeader title="Webhooks" description="订阅平台事件并投递到你的 HTTPS endpoint" />
+
+        <FleetListPage
+          list={shownList}
+          toolbar={
+            <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="当前页内搜索 URL 或订阅串..."
+                className="h-8 w-56"
+              />
+              {writeable ? (
+                <Button className="ml-auto" onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  新建 Webhook
+                </Button>
+              ) : null}
+            </div>
+          }
+          pagination={
+            <div className="px-4 pb-4">
+              <KeysetPagination list={list} />
+            </div>
+          }
+          emptyTitle={search !== "" ? "没有匹配的 Webhook" : "暂无 Webhook"}
+          emptyDescription={
+            search !== ""
+              ? "调整搜索词，或清空恢复当前页全部行"
+              : "创建订阅，平台事件将按 CloudEvents 信封投递到你的 endpoint"
+          }
+          emptyAction={
+            writeable ? <Button onClick={() => setCreateOpen(true)}>新建 Webhook</Button> : undefined
+          }
+        >
+          <div className="px-6 pb-2 pt-2">
+            <DataTable
+              list={shownList}
+              columns={tableColumns}
+              getRowId={(w) => w.id}
+              onRowClick={(w) => navigate(`/console/webhooks/${w.id}`)}
+            />
+          </div>
+        </FleetListPage>
+      </div>
 
       <WebhookFormDialog
         mode="create"

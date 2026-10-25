@@ -15,7 +15,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useCommand } from "@lynx-go/ui-kit";
+import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -23,10 +23,10 @@ import {
   Plus,
   Settings2,
 } from "lucide-react";
+import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { type CollectionOutletContext } from "@/routes/databases/CollectionLayout";
 import {
   getCollection,
-  listDocuments,
   getDocument,
   bulkUpdateDocuments,
   bulkDeleteDocuments,
@@ -37,11 +37,10 @@ import {
   useAdminRole,
   canWrite,
 } from "@/hooks/useAdminRole";
-import { useServerPaging } from "@/hooks/useServerPaging";
+import { useAuth } from "@/hooks/useAuth";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
-import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -58,7 +57,6 @@ import {
   Card,
   CardContent,
 } from "@/components/ui/card";
-import type { ColumnDef } from "@/components/list/DataTable";
 import {
   FormField,
   DetailPageWrapper,
@@ -71,8 +69,13 @@ import {
 } from "@/components/resource/shared";
 import { PermissionEditor } from "@/components/resource/PermissionEditor";
 import { Form as CommandForm } from "@/components/fleet/command/form";
+import { DataTable } from "@/components/fleet/query/data-table";
+import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import {
   createDocumentCommand,
+  documentsResource,
+  documentsSearch,
   removeDocumentCommand,
   updateDocumentCommand,
 } from "@/fleet/documents";
@@ -80,20 +83,10 @@ import { describeApiError } from "@/fleet/errors";
 
 import { documentToValues, MAX_BULK_OPERATIONS } from "./collectionMeta";
 
-// 模块级 columns 无法用 hook，工厂化注入管理员时区偏好。
-const documentColumns = (tz: string): ColumnDef<Document>[] => [
-  {
-    key: "id",
-    header: "ID",
-    className: "font-mono text-xs max-w-[160px] truncate",
-    cell: (d) => d.id,
-  },
-  {
-    key: "updated",
-    header: "更新时间",
-    cell: (d) => formatDateTime(d.updated_at, tz),
-  },
-];
+// 列表 fleet 化（§12.9-2）：DocumentListSection 换轨 useCollection（嵌套
+// from = 完整路径，dbId/collId 进 scope；游标/页大小进 URL，分页栈 = 浏览器
+// 历史）；页内当前页搜索保持本地态（旧页语义）；只读态不给 selection/操作
+// 列；批量更新对话框与行删命令（§12.5-8）原样保留。
 
 function DocumentListSection({
   dbId,
@@ -107,28 +100,32 @@ function DocumentListSection({
   readonly?: boolean;
 }) {
   const queryClient = useQueryClient();
+  const { projectId } = useAuth();
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
   const [bulkUpdateIds, setBulkUpdateIds] = useState<string[]>([]);
-  const clearRef = useRef<(() => void) | null>(null);
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const tz = useUserTimezone();
-  const paging = useServerPaging();
-  const { data, isLoading } = useQuery({
-    queryKey: ["documents", dbId, collId, paging.pageSize, paging.pageToken],
-    queryFn: () =>
-      listDocuments(dbId, collId, { pageSize: paging.pageSize, pageToken: paging.pageToken }),
-    placeholderData: (prev) => prev,
+  const navigate = useNavigate();
+
+  const list = useCollection(documentsResource, {
+    from: "/console/databases/$dbId/collections/$collId/documents",
+    search: documentsSearch,
+    scope: { projectId: projectId ?? undefined, dbId, collId },
+    query: { enabled: !!projectId },
   });
-  const documents = data?.rows ?? [];
 
   // 行删除命令化（§12.5-8）：无表单容器——结果分支以 toast 呈现；失效 =
-  // 存量 ["documents", dbId, collId] 前缀手动桥（kit 键不存在）。
+  // 存量 ["documents", dbId, collId] 前缀手动桥（kit 键不存在）+ 本页
+  // list.refetch。
   const remove = useCommand(removeDocumentCommand(dbId, collId), {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Document 已删除");
         void queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId] });
+        list.refetch();
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -137,26 +134,75 @@ function DocumentListSection({
     },
   });
 
-  const columns: ColumnDef<Document>[] = [
-    ...documentColumns(tz),
+  const columns: LegacyColumnDef<Document, unknown>[] = [
+    {
+      id: "id",
+      header: "ID",
+      cell: ({ row }) => (
+        <span className="inline-block max-w-[160px] truncate font-mono text-xs">
+          {row.original.id}
+        </span>
+      ),
+    },
+    {
+      id: "updated",
+      header: "更新时间",
+      cell: ({ row }) => formatDateTime(row.original.updated_at, tz),
+    },
     ...attributes.slice(0, 4).map((attr) => ({
-      key: attr.key,
+      id: attr.key,
       header: attr.key,
-      cell: (d: Document) => {
-        const val = d.data?.[attr.key];
+      cell: ({ row }: { row: { original: Document } }) => {
+        const val = row.original.data?.[attr.key];
         if (val == null) return "—";
         const text = typeof val === "object" ? JSON.stringify(val) : String(val);
         return text.length > 48 ? `${text.slice(0, 48)}…` : text;
       },
     })),
+    ...(!readonly
+      ? [
+          {
+            id: "actions",
+            header: "操作",
+            cell: ({ row }: { row: { original: Document } }) => (
+              <RowDeleteButton
+                onConfirm={() =>
+                  remove.mutate({ docId: row.original.id, version: row.original.version })
+                }
+                loading={remove.pending}
+              />
+            ),
+          } satisfies LegacyColumnDef<Document, unknown>,
+        ]
+      : []),
   ];
 
   const getSearchText = useCallback(
-    (d: Document) => `${d.id} ${JSON.stringify(d.data ?? {})}`,
+    (d: Document) => `${d.id} ${JSON.stringify(d.data ?? {})}`.toLowerCase(),
     []
   );
+  const shown =
+    search === ""
+      ? list.rows
+      : list.rows.filter((d) => getSearchText(d).includes(search.toLowerCase()));
+  // 搜索过滤的句柄视图（页面投影——四态/分页以服务端句柄为准，表体吃过滤行）
+  const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
 
-  const handleBulkDelete = async (selected: Document[], clear: () => void) => {
+  const toggleRow = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = (visibleIds: string[]) =>
+    setSelectedIds((prev) =>
+      new Set(visibleIds.length > 0 && visibleIds.every((id) => prev.has(id)) ? [] : visibleIds)
+    );
+  const selectedDocuments = list.rows.filter((d) => selectedIds.has(d.id));
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkDelete = async (selected: Document[]) => {
     if (selected.length > MAX_BULK_OPERATIONS) {
       toast.error(`单次批量操作最多 ${MAX_BULK_OPERATIONS} 个 Document`);
       return;
@@ -170,17 +216,14 @@ function DocumentListSection({
       );
       toast.success(`已删除 ${affected} 个 Document`);
       queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId] });
-      clear();
+      list.refetch();
+      clearSelection();
     } finally {
       setBulkDeleting(false);
     }
   };
 
-  const handleBulkUpdate = async (
-    ids: string[],
-    data: Record<string, unknown>,
-    clear: () => void
-  ) => {
+  const handleBulkUpdate = async (ids: string[], data: Record<string, unknown>) => {
     if (ids.length > MAX_BULK_OPERATIONS) {
       toast.error(`单次批量操作最多 ${MAX_BULK_OPERATIONS} 个 Document`);
       return;
@@ -193,96 +236,102 @@ function DocumentListSection({
       });
       toast.success(`已更新 ${affected} 个 Document`);
       queryClient.invalidateQueries({ queryKey: ["documents", dbId, collId] });
-      clear();
+      list.refetch();
+      clearSelection();
       setBulkUpdateOpen(false);
     } finally {
       setBulkUpdating(false);
     }
   };
 
+  const documentsNewPath = `/console/databases/${dbId}/collections/${collId}/documents/new`;
+
   return (
     <>
-      <ResourceListPage
-        cardTitle="文档"
-        searchPlaceholder="当前页内搜索 Document ID 或字段内容..."
-        isLoading={isLoading}
-        items={documents}
-        columns={columns}
-        getSearchText={getSearchText}
-        serverPaging={{
-          page: paging.page,
-          pageSize: paging.pageSize,
-          hasPrev: paging.hasPrev,
-          hasNext: !!data?.nextPageToken,
-          onPrev: paging.goPrev,
-          onNext: () => paging.goNext(data?.nextPageToken),
-          onPageSizeChange: paging.setPageSize,
-        }}
-        toolbarActions={
-        readonly ? undefined : (
-          <Button asChild size="sm">
-            <Link to={`/console/databases/${dbId}/collections/${collId}/documents/new`}>
-              <Plus className="mr-2 h-4 w-4" />
-              新建 Document
-            </Link>
-          </Button>
-        )
-      }
-      selectionActions={
-        readonly
-          ? undefined
-          : (selected, clear) => (
-              <div className="flex items-center gap-2">
+      <FleetListPage
+        list={shownList}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="当前页内搜索 Document ID 或字段内容..."
+              className="h-8 w-56"
+            />
+            {!readonly && selectedDocuments.length > 0 ? (
+              <>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => {
-                    clearRef.current = clear;
-                    setBulkUpdateIds(selected.map((d) => d.id));
+                    setBulkUpdateIds(selectedDocuments.map((d) => d.id));
                     setBulkUpdateOpen(true);
                   }}
                 >
                   <Settings2 className="mr-2 h-4 w-4" />
-                  批量更新 ({selected.length})
+                  批量更新 ({selectedDocuments.length})
                 </Button>
                 <BulkDeleteButton
-                  count={selected.length}
+                  count={selectedDocuments.length}
                   loading={bulkDeleting}
-                  onConfirm={() => handleBulkDelete(selected, clear)}
+                  onConfirm={() => void handleBulkDelete(selectedDocuments)}
                 />
-              </div>
-            )
-      }
-      detailPath={(d) =>
-        `/console/databases/${dbId}/collections/${collId}/documents/${d.id}`
-      }
-      rowActions={(d) =>
-        readonly ? null : (
-          <RowDeleteButton
-            onConfirm={() => remove.mutate({ docId: d.id, version: d.version })}
-            loading={remove.pending}
+              </>
+            ) : null}
+            {!readonly ? (
+              <Button asChild size="sm" className="ml-auto">
+                <Link to={documentsNewPath}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  新建 Document
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+        }
+        pagination={
+          <div className="px-4 pb-4">
+            <KeysetPagination list={list} />
+          </div>
+        }
+        emptyTitle={search !== "" ? "没有匹配的 Document" : "暂无 Document"}
+        emptyDescription={
+          search !== ""
+            ? "调整搜索词，或清空恢复当前页全部行"
+            : readonly
+              ? undefined
+              : "在此 Collection 中创建第一条文档记录"
+        }
+        emptyAction={
+          readonly ? undefined : (
+            <Button asChild size="sm">
+              <Link to={documentsNewPath}>新建 Document</Link>
+            </Button>
+          )
+        }
+      >
+        <div className="px-6 pb-2 pt-2">
+          <DataTable
+            list={shownList}
+            columns={columns}
+            getRowId={(d) => d.id}
+            onRowClick={(d) =>
+              navigate(`/console/databases/${dbId}/collections/${collId}/documents/${d.id}`)
+            }
+            selection={
+              readonly
+                ? undefined
+                : { selectedIds, onToggle: toggleRow, onToggleAll: toggleAll }
+            }
           />
-        )
-      }
-      emptyTitle="暂无 Document"
-      emptyDescription={readonly ? undefined : "在此 Collection 中创建第一条文档记录"}
-      emptyAction={
-        readonly ? undefined : (
-          <Button asChild size="sm">
-            <Link to={`/console/databases/${dbId}/collections/${collId}/documents/new`}>
-              新建 Document
-            </Link>
-          </Button>
-        )
-      }
-    />
-    <BulkUpdateDialog
-      open={bulkUpdateOpen}
-      onOpenChange={setBulkUpdateOpen}
-      loading={bulkUpdating}
-      count={bulkUpdateIds.length}
-      onSubmit={(data) => handleBulkUpdate(bulkUpdateIds, data, clearRef.current ?? (() => {}))}
-    />
+        </div>
+      </FleetListPage>
+      <BulkUpdateDialog
+        open={bulkUpdateOpen}
+        onOpenChange={setBulkUpdateOpen}
+        loading={bulkUpdating}
+        count={bulkUpdateIds.length}
+        onSubmit={(data) => void handleBulkUpdate(bulkUpdateIds, data)}
+      />
     </>
   );
 }
