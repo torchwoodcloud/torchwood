@@ -46,6 +46,7 @@ import {
 import { TrendChart } from "./metricChart";
 import { StatCard } from "@/components/fleet/values/stat-card";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
 import {
   eventDefinitionsResource,
   eventDefinitionsSearch,
@@ -330,7 +331,7 @@ export function AnalyticsEventsPage() {
                 </TableBody>
               </Table>
               <div className="mt-4">
-                <KeysetPagination list={list} />
+                <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
               </div>
             </>
           )}

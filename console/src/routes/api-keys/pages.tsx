@@ -60,6 +60,7 @@ import { Form as FleetForm } from "@/components/fleet/command/form";
 import { TextField } from "@/components/fleet/command/fields";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 
 // 命令族切片（design.md §12.3）：写路径换 useCommand/useCommandForm（结果
@@ -240,7 +241,7 @@ export function ApiKeysListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
           </div>
         }
         emptyTitle={search !== "" ? "没有匹配的 API Key" : filtered ? "该状态下暂无 API Key" : "暂无 API Key"}
@@ -353,13 +354,15 @@ export function ApiKeyNewPage() {
           submitting={create.submitting}
           result={create.result}
           submitLabel="创建"
+          submittingLabel="创建中…"
+          cancelLabel="取消"
           onCancel={() => navigate({ to: "/console/api-keys" })}
         >
           <TextField
             form={form}
             name="name"
             label="名称"
-            required
+            required="必填"
             placeholder="Production API Key"
           />
           <div className="space-y-3">
@@ -630,9 +633,11 @@ function ApiKeyEditDialog({
           submitting={edit.submitting}
           result={edit.result}
           submitLabel="保存"
+          submittingLabel="保存中…"
+          cancelLabel="取消"
           onCancel={() => onOpenChange(false)}
         >
-          <TextField form={form} name="name" label="名称" required />
+          <TextField form={form} name="name" label="名称" required="必填" />
           <form.Field name="scopes">
             {(field: {
               state: { value: unknown; meta: { errors: ReadonlyArray<unknown> } };

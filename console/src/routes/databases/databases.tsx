@@ -47,6 +47,7 @@ import {
 } from "@/components/resource/shared";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 
 // 列表 fleet 化（§12.9-2）：databases 顶层列表与 Database 详情内嵌的
@@ -203,7 +204,7 @@ export function DatabasesListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
           </div>
         }
         emptyTitle={search !== "" ? "没有匹配的 Database" : "暂无 Database"}
@@ -500,7 +501,7 @@ export function DatabaseDetailPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={collList} />
+            <KeysetPagination list={collList} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
           </div>
         }
         emptyTitle={search !== "" ? "没有匹配的 Collection" : "暂无 Collection"}

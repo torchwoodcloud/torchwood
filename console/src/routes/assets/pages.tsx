@@ -48,6 +48,7 @@ import { formatInt64, isInt64Input } from "@/lib/utils";
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { assetDefsResource, assetDefsSearch, createAssetDefCommand, removeAssetDefCommand } from "@/fleet/assets";
 import { describeApiError } from "@/fleet/errors";
@@ -167,7 +168,7 @@ export function AssetDefsListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
           </div>
         }
         emptyTitle={search !== "" ? "没有匹配的资产定义" : "暂无资产定义"}

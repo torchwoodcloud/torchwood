@@ -67,6 +67,7 @@ import { PermissionEditor } from "@/components/resource/PermissionEditor";
 import { Form as CommandForm } from "@/components/fleet/command/form";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import {
   createDocumentCommand,
@@ -291,7 +292,7 @@ function DocumentListSection({
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
           </div>
         }
         emptyTitle={search !== "" ? "没有匹配的 Document" : "暂无 Document"}
@@ -627,6 +628,8 @@ export function DocumentNewPage() {
             submitting={create.pending}
             result={create.result}
             submitLabel="创建"
+            submittingLabel="创建中…"
+            cancelLabel="取消"
             onCancel={() =>
                     void navigate({
                       to: "/console/databases/$dbId/collections/$collId/documents",
@@ -824,6 +827,8 @@ export function DocumentDetailPage() {
                 ) : undefined
               }
               submitLabel="保存"
+              submittingLabel="保存中…"
+              cancelLabel="取消"
               onCancel={cancelEdit}
             >
               <DocumentFormFields

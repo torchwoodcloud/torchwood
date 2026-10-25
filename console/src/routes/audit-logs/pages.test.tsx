@@ -148,8 +148,8 @@ describe("AuditLogsListPage（keyset 切片：URL 即真相）", () => {
   it("页大小切换进 URL 并映射 page_size（keyset 语义：保位置改页宽）", async () => {
     await renderPage();
     await screen.findByText(/共 45 条/);
-    fireEvent.click(screen.getByRole("combobox", { name: "页大小" }));
-    fireEvent.click(await screen.findByRole("option", { name: /100 条\/页/ }));
+    // 页大小切换是原生 select（§12.10-⑤ 上游化后）——change 事件驱动
+    fireEvent.change(screen.getByLabelText("页大小"), { target: { value: "100" } });
     await waitFor(() => expect(search().size).toBe(100));
     await waitFor(() => expect(lastParams().page_size).toBe(100));
   });

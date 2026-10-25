@@ -26,6 +26,7 @@ import { formatInt64 } from "@/lib/utils";
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { filtersOf, ordersResource, ordersSearch, refundOrderCommand, fulfillOrderCommand, type FilterField } from "@/fleet/payments";
 import { describeApiError } from "@/fleet/errors";
@@ -225,7 +226,7 @@ export function OrdersListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
           </div>
         }
         emptyTitle={search !== "" ? "没有匹配的订单" : filtered ? "该过滤条件下暂无订单" : "暂无订单"}

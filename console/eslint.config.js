@@ -63,4 +63,12 @@ export default defineConfig([
       'react-refresh/only-export-components': 'off',
     },
   },
+  {
+    // 应用入口（main.tsx）：createRoot 直渲染 + 根级 scope 绑定组件
+    //（FleetScopeBinding，§12.10-③）——无导出面，入口不参与热替换，规则不适用
+    files: ['src/main.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])

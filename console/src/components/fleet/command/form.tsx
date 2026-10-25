@@ -1,8 +1,7 @@
-// vendored from fleet-ui registry/command/form.tsx @0.1.1（2026-10-25 命令族切片）
-// 拷贝适配（design.md §12.1）：token 方言映射 text-err→text-destructive；
-// 按钮文案中文化（submitLabel/submitting 由调用方传）；
-// 本地扩展 resultAction 结果盒动作槽（OCC 冲突的「刷新重载」——B2 批，上游
-// 候选）。其余与上游一致。
+// vendored from @lynx-go/ui registry/command/form.tsx @0.2.1（2026-10-25 §12.10-⑤ 上游回流 re-vendor（labels 面，bisect 误还原后重拷））
+// 拷贝适配（scripts/devtool.mjs --profile torchwood）：
+// token 方言映射 text-err→text-destructive、bg-err→bg-destructive、border-err→border-destructive；cn 统一 @/lib/utils。
+// 其余与上游一致。
 import type { CommandResult } from "@lynx-go/ui-kit/kernel";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -21,9 +20,12 @@ export interface FormProps<Payload> {
   form: { handleSubmit: (submitMeta?: unknown) => void | Promise<void> };
   submitting?: boolean;
   result?: CommandResult<Payload> | null;
-  /** 结果盒内的动作槽（conflict 的「刷新重载」等页面编排；本地扩展） */
+  /** 结果盒内的动作槽（conflict 的"刷新重载"等页面编排；§12.10-⑤ 回流） */
   resultAction?: ReactNode;
   submitLabel?: string;
+  /** 提交中标签；缺省 "Saving…" */
+  submittingLabel?: string;
+  cancelLabel?: string;
   onCancel?: () => void;
   children: ReactNode;
 }
@@ -33,7 +35,9 @@ export function Form<Payload>({
   submitting = false,
   result = null,
   resultAction,
-  submitLabel = "保存",
+  submitLabel = "Save",
+  submittingLabel = "Saving…",
+  cancelLabel = "Cancel",
   onCancel,
   children,
 }: FormProps<Payload>) {
@@ -64,11 +68,11 @@ export function Form<Payload>({
       <div className="flex justify-end gap-2 pt-1">
         {onCancel ? (
           <Button type="button" variant="ghost" onClick={onCancel}>
-            取消
+            {cancelLabel}
           </Button>
         ) : null}
         <Button type="submit" disabled={submitting}>
-          {submitting ? "保存中…" : submitLabel}
+          {submitting ? submittingLabel : submitLabel}
         </Button>
       </div>
     </form>

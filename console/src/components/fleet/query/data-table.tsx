@@ -1,12 +1,11 @@
-// vendored from fleet-ui registry/query/data-table.tsx @0.1.1（2026-10-24 keyset 切片）
-// 拷贝适配（design.md §12.1）：token 方言映射 border-line→border-border、
-// text-muted→text-muted-foreground、text-fg→text-foreground、bg-panel-2/50→
-// bg-muted/50；RowData 改从 @tanstack/react-table 取（本仓不引 table-core）；
-// 本地扩展 selection 受控行选择（§12.9-3：选择态归页面——批量动作是业务
-// 编排，块只渲染复选列并上报；上游候选）。其余与上游一致。
+// vendored from @lynx-go/ui registry/query/data-table.tsx @0.2.1（2026-10-25 §12.10-⑤ 上游回流 re-vendor）
+// 拷贝适配（scripts/devtool.mjs --profile torchwood）：
+// token 方言映射 text-muted→text-muted-foreground、bg-panel-2→bg-muted、border-line→border-border、text-fg→text-foreground；cn 统一 @/lib/utils。
+// 其余与上游一致。
+// LegacyColumnDef<T, any> 是上游形（列定义值类型开放）——vendored 保留。
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { CollectionHandle } from "@lynx-go/ui-kit/react";
-import { flexRender } from "@tanstack/react-table";
-import type { RowData } from "@tanstack/react-table";
+import { flexRender, type RowData } from "@tanstack/react-table";
 import {
   getCoreRowModel,
   type LegacyColumnDef,
@@ -19,8 +18,13 @@ import { cn } from "@/lib/utils";
  * DataTable（query 块）—— 消费 useCollection 句柄的表格。
  *
  * 状态归属（design.md §6.1）：排序/过滤/窗口归 URL（CollectionQuery），表内禁用内建
- * sorting/filtering 分支；列经 meta.sortField 声明可排序，点击头循环 none→asc→desc
- * （走 list.setOrder，URL 为真相）。行选择为受控面（页面持选择态）。
+ * sorting/filtering 分支；行选择为受控面（选择态归页面——批量动作是业务编排，
+ * 块只渲染复选列并上报；§12.10-⑤ 自 torchwood 回流）。列经 meta.sortField 声明
+ * 可排序，点击头循环 none→asc→desc（走 list.setOrder，URL 为真相）。
+ *
+ * 注：当前经 @tanstack/react-table/legacy（v8 兼容层，双 console 现行用法）；
+ * 迁移 v9 原生 features 是块内改动，块 API 不变。RowData 取 react-table 主入口
+ * （消费方不引 table-core）。
  */
 export interface SortableColumnMeta {
   sortField?: string;
@@ -30,14 +34,14 @@ export interface SortableColumnMeta {
 export interface RowSelection<T> {
   selectedIds: ReadonlySet<string>;
   onToggle: (id: string) => void;
-  /** 表头全选/清空（visibleIds = 当前页可见行 id） */
+  /** 表头全选/清空（visibleIds = 当前页可选行 id） */
   onToggleAll: (visibleIds: string[]) => void;
   isRowSelectable?: (row: T) => boolean;
 }
 
 export interface DataTableProps<T extends RowData> {
   list: CollectionHandle<T>;
-  columns: LegacyColumnDef<T, unknown>[];
+  columns: LegacyColumnDef<T, any>[];
   getRowId: (row: T) => string;
   onRowClick?: (row: T) => void;
   selection?: RowSelection<T>;
@@ -71,9 +75,7 @@ export function DataTable<T extends RowData>({
 
   const rows = table.getRowModel().rows;
   const selectableRows = selection
-    ? rows.filter(
-        (r) => selection.isRowSelectable?.(r.original as T) ?? true,
-      )
+    ? rows.filter((r) => selection.isRowSelectable?.(r.original as T) ?? true)
     : [];
   const visibleIds = selectableRows.map((r) => r.id);
   const allSelected =
@@ -86,13 +88,18 @@ export function DataTable<T extends RowData>({
       <table className="w-full border-collapse text-sm">
         <thead>
           {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id} className="border-b border-border text-left text-xs text-muted-foreground">
+            <tr
+              key={headerGroup.id}
+              className="border-b border-border text-left text-xs text-muted-foreground"
+            >
               {selection ? (
                 <th className="w-10 px-3 py-2">
                   <Checkbox
-                    aria-label="全选"
+                    aria-label="Select all"
                     checked={allSelected}
-                    indeterminate={!allSelected && visibleIds.some((id) => selection.selectedIds.has(id))}
+                    indeterminate={
+                      !allSelected && visibleIds.some((id) => selection.selectedIds.has(id))
+                    }
                     onChange={() => selection.onToggleAll(visibleIds)}
                     disabled={visibleIds.length === 0}
                   />
@@ -144,7 +151,7 @@ export function DataTable<T extends RowData>({
                 onClick={
                   onRowClick
                     ? (e) => {
-                        // 行内交互元素（操作按钮/链接/复选）不触发行导航
+                        // 行内交互元素（操作按钮/链接/复选/label）不触发行导航
                         if ((e.target as HTMLElement).closest("button, a, input, label")) return;
                         onRowClick(row.original as T);
                       }
@@ -154,7 +161,7 @@ export function DataTable<T extends RowData>({
                 {selection ? (
                   <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                     <Checkbox
-                      aria-label={`选择 ${row.id}`}
+                      aria-label={`Select ${row.id}`}
                       checked={rowSelected}
                       disabled={!rowSelectable}
                       onChange={() => selection.onToggle(row.id)}

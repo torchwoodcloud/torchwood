@@ -58,6 +58,7 @@ import {
 } from "@/components/resource/shared";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTimezone } from "@/hooks/useTimezone";
@@ -306,7 +307,7 @@ export function FunctionsListPage() {
           }
           pagination={
             <div className="px-4 pb-4">
-              <KeysetPagination list={list} />
+              <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
             </div>
           }
           emptyTitle={search !== "" ? "没有匹配的函数" : "暂无函数"}
