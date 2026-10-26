@@ -10,3 +10,6 @@ deps:
   - name: buf.build/grpc-ecosystem/grpc-gateway
     commit: 89be2984f4584fcaa40f0157c2bbc61a
     digest: b5:0e09bfc40a544b9bb1c71b1dd491d99305d64ed0e84b87dd1c66bba92f1ff6391059ca037c12b179da1f4712fdd11831d3662c3f36512d5b141d72b22a198e59
+  - name: buf.build/lynx-go/grpcapi
+    commit: 368cbc01221443579003d58d08850f98
+    digest: b5:d5d266ac854a4cd4629a520e188012aa1e4ad956911f8461ff1adb1e0c63afde93d4a130ce2d8aba46e3bdcf32bad4e6e32f1cbc11c333624d055c586899466b

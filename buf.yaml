@@ -4,6 +4,10 @@ deps:
   - buf.build/googleapis/googleapis
   - buf.build/bufbuild/protovalidate
   - buf.build/grpc-ecosystem/grpc-gateway
+  # grpcapi 的 policy.proto 声明语法归库持有（lynx-go/grpcapi），label 与
+  # go.mod 的库 tag 配对升级；其 Go 类型由 github.com/lynx-go/grpcapi/genproto
+  # 提供，不在本仓生成（见 buf.gen.yaml）。
+  - buf.build/lynx-go/grpcapi:v0.4.0
 modules:
   - path: proto
 lint:
@@ -25,8 +29,3 @@ lint:
 breaking:
   use:
     - FILE
-  # 该文件是 vendored 的 grpcapi v1 policy.proto（与 go.mod 的 grpcapi 版本
-  # 配对，升级库时同步重 vendor）：声明语法归库持有，torchwood 不做上游
-  # breaking 比较。生成侧经 buf.gen.yaml 排除（类型由库 genproto 提供）。
-  ignore:
-    - proto/grpcapi/v1/policy.proto
