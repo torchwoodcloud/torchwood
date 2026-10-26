@@ -2,7 +2,7 @@
 // 拷贝适配（scripts/devtool.mjs --profile torchwood）：
 // token 方言映射 text-err→text-destructive、bg-err→bg-destructive、border-err→border-destructive；cn 统一 @/lib/utils。
 // 其余与上游一致。
-import type { CommandResult } from "@lynx-go/ui-kit/kernel";
+import type { CommandResult } from "@lynx-go/uikit-core/kernel";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 

@@ -4,7 +4,7 @@
 // 其余与上游一致。
 // LegacyColumnDef<T, any> 是上游形（列定义值类型开放）——vendored 保留。
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { CollectionHandle } from "@lynx-go/ui-kit/react";
+import type { CollectionHandle } from "@lynx-go/uikit-core/react";
 import { flexRender, type RowData } from "@tanstack/react-table";
 import {
   getCoreRowModel,

@@ -2,8 +2,8 @@ import {
   type CommandResult,
   defineResource,
   type Segment,
-} from "@lynx-go/ui-kit/kernel";
-import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
+} from "@lynx-go/uikit-core/kernel";
+import { collectionQuerySchema } from "@lynx-go/uikit-core/schema";
 import { skipToast as SKIP } from "@/api/client";
 import {
   listBoards,

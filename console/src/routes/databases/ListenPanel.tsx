@@ -1,5 +1,5 @@
 import { useOutletContext } from "@/router/outlet-context";
-import { useSubscription } from "@lynx-go/ui-kit";
+import { useSubscription } from "@lynx-go/uikit-core";
 import { RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTimezone } from "@/hooks/useTimezone";

@@ -2,7 +2,7 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { NavLink } from "@/router/nav-link";
 import { Outlet } from "@/router/outlet-context.tsx";
 import { useQuery } from "@tanstack/react-query";
-import { useCommand } from "@lynx-go/ui-kit";
+import { useCommand } from "@lynx-go/uikit-core";
 import { ArrowLeft, FileText, Layers, Radio } from "lucide-react";
 import { toast } from "sonner";
 import { getDatabase, getCollection } from "@/api/databases";

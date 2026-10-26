@@ -4,8 +4,8 @@
 // 手工适配层（判断题）：①容器改全宽（本仓页面统一 PageHeader + 自有页宽）；
 // ②错误态中文经 props 注入（errorTitle/describeError/retryLabel 缺省值），
 // states 块保持上游纯拷贝。
-import type { CollectionHandle } from "@lynx-go/ui-kit";
-import type { ApiError } from "@lynx-go/ui-kit/kernel";
+import type { CollectionHandle } from "@lynx-go/uikit-core";
+import type { ApiError } from "@lynx-go/uikit-core/kernel";
 import { describeApiError } from "@/kit/errors";
 import type { ReactNode } from "react";
 import { Card } from "@/components/ui/card";

@@ -2,7 +2,7 @@
 // 拷贝适配（scripts/devtool.mjs --profile torchwood）：
 // token 方言映射 text-muted→text-muted-foreground、bg-panel→bg-card、border-line→border-border、text-fg→text-foreground；cn 统一 @/lib/utils。
 // 其余与上游一致。
-import type { CollectionHandle } from "@lynx-go/ui-kit/react";
+import type { CollectionHandle } from "@lynx-go/uikit-core/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 

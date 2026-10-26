@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/ui-kit";
-import { predicateOf } from "@lynx-go/ui-kit/schema";
-import type { Predicate } from "@lynx-go/ui-kit/kernel";
+import { useCollection, useCommand } from "@lynx-go/uikit-core";
+import { predicateOf } from "@lynx-go/uikit-core/schema";
+import type { Predicate } from "@lynx-go/uikit-core/kernel";
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";

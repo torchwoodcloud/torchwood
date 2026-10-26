@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCommand } from "@lynx-go/ui-kit";
+import { useCommand } from "@lynx-go/uikit-core";
 import { Check, ChevronRight, Globe } from "lucide-react";
 import { toast } from "sonner";
 import { getCurrentAdmin } from "@/api/admins";

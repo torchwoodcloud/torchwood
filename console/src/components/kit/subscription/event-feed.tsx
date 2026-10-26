@@ -10,7 +10,7 @@
 // 手工适配层（判断题，devtool 交接单）：① demo Badge tone → 本仓 shadcn
 // variant（live=default、error=destructive、其余 secondary+amber 字色）；
 // ② warn 系 token 本仓无 → amber 惯例；③ 瞬态文案经 labels 由 ListenPanel 注入。
-import type { SubscriptionEngine } from "@lynx-go/ui-kit/react";
+import type { SubscriptionEngine } from "@lynx-go/uikit-core/react";
 import { PauseCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import { useSyncExternalStore } from "react";

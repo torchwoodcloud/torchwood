@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AxiosError } from "axios";
 import { auditLogsResource, filtersOf } from "./auditLogs";
-import type { CollectionQuery, Predicate } from "@lynx-go/ui-kit/kernel";
+import type { CollectionQuery, Predicate } from "@lynx-go/uikit-core/kernel";
 
 vi.mock("@/api/auditLogs", () => ({ listAuditLogs: vi.fn() }));
 import { listAuditLogs } from "@/api/auditLogs";

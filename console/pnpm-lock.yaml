@@ -8,9 +8,9 @@ importers:
 
   .:
     dependencies:
-      '@lynx-go/ui-kit':
-        specifier: ^0.2.1
-        version: 0.2.1(@tanstack/react-form@1.33.5(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@tanstack/react-query@5.101.4(react@19.2.8))(@tanstack/react-router@1.170.46(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
+      '@lynx-go/uikit-core':
+        specifier: ^0.3.0
+        version: 0.3.0(@tanstack/react-form@1.33.5(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@tanstack/react-query@5.101.4(react@19.2.8))(@tanstack/react-router@1.170.46(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
       '@radix-ui/react-avatar':
         specifier: ^1.2.0
         version: 1.2.6(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -366,8 +366,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@lynx-go/ui-kit@0.2.1':
-    resolution: {integrity: sha512-nZy7tFWvBeVzTjrZcBI1iRtvJsGYnAMi6lHITUN2XBav5SMg3azzxIjhQMh+cBi756BI0YCMwOFIRxNHs494lA==}
+  '@lynx-go/uikit-core@0.3.0':
+    resolution: {integrity: sha512-2V1nBJVZL7Z//FF2ydzv/vc+v8ne5Seaa/47hHPuKc0xpNwSTWLZOa6AmY85uuQ+R7+5ZUCLmuao3Gw9HW9fsQ==}
     peerDependencies:
       '@tanstack/react-form': '>=1.30'
       '@tanstack/react-query': '>=5.100'
@@ -2679,7 +2679,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@lynx-go/ui-kit@0.2.1(@tanstack/react-form@1.33.5(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@tanstack/react-query@5.101.4(react@19.2.8))(@tanstack/react-router@1.170.46(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)':
+  '@lynx-go/uikit-core@0.3.0(@tanstack/react-form@1.33.5(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@tanstack/react-query@5.101.4(react@19.2.8))(@tanstack/react-router@1.170.46(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@tanstack/react-form': 1.33.5(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       effect: 4.0.6

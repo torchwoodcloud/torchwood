@@ -1,5 +1,5 @@
-import { ResourceScopeProvider } from "@lynx-go/ui-kit";
-import type { ResourceScope } from "@lynx-go/ui-kit/kernel";
+import { ResourceScopeProvider } from "@lynx-go/uikit-core";
+import type { ResourceScope } from "@lynx-go/uikit-core/kernel";
 import {
   RouterProvider,
   createMemoryHistory,

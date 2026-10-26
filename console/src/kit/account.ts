@@ -1,4 +1,4 @@
-import type { CommandResult } from "@lynx-go/ui-kit/kernel";
+import type { CommandResult } from "@lynx-go/uikit-core/kernel";
 import { updateCurrentAdmin, type Admin } from "@/api/admins";
 import { skipToast as SKIP } from "@/api/client";
 import { runCommandMapped } from "@/kit/errors";

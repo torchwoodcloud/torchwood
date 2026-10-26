@@ -1,4 +1,4 @@
-import { isApiError, type ApiError, type CommandResult } from "@lynx-go/ui-kit/kernel";
+import { isApiError, type ApiError, type CommandResult } from "@lynx-go/uikit-core/kernel";
 import { isAxiosError } from "axios";
 
 // torchwood axios 管线 → kit ApiError 封闭集的收敛缝（§12.2 裁决：axios

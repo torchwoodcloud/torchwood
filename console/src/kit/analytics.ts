@@ -3,8 +3,8 @@ import {
   defineResource,
   type ResourceScope,
   type Segment,
-} from "@lynx-go/ui-kit/kernel";
-import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
+} from "@lynx-go/uikit-core/kernel";
+import { collectionQuerySchema } from "@lynx-go/uikit-core/schema";
 import { listEventDefinitions, type AnalyticsEventDefinition } from "@/api/analytics";
 import { toApiError } from "@/kit/errors";
 

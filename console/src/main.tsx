@@ -1,7 +1,7 @@
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ResourceScopeProvider } from "@lynx-go/ui-kit";
+import { ResourceScopeProvider } from "@lynx-go/uikit-core";
 import { RouterProvider } from "@tanstack/react-router";
 import { Toaster } from "sonner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";

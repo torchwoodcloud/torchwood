@@ -1,4 +1,4 @@
-import type { CommandDescriptor } from "@lynx-go/ui-kit/kernel";
+import type { CommandDescriptor } from "@lynx-go/uikit-core/kernel";
 import { skipToast as SKIP } from "@/api/client";
 import { deleteOAuthProvider, upsertOAuthProvider, type OAuthProvider } from "@/api/oauthProviders";
 import { runCommandMapped } from "@/kit/errors";

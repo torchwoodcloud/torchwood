@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/ui-kit";
+import { useCollection, useCommand } from "@lynx-go/uikit-core";
 import { toast } from "sonner";
 import { Plus, Settings } from "lucide-react";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";

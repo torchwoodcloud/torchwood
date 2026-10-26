@@ -1,5 +1,5 @@
 import { skipToast as SKIP } from "@/api/client";
-import { invalidateAfterCommand } from "@lynx-go/ui-kit";
+import { invalidateAfterCommand } from "@lynx-go/uikit-core";
 import {
   type CollectionQuery,
   type CommandDescriptor,
@@ -7,8 +7,8 @@ import {
   defineResource,
   type ResourceScope,
   type Segment,
-} from "@lynx-go/ui-kit/kernel";
-import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
+} from "@lynx-go/uikit-core/kernel";
+import { collectionQuerySchema } from "@lynx-go/uikit-core/schema";
 import { isAxiosError } from "axios";
 import {
   createDocument,

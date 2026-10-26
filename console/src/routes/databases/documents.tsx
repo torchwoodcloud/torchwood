@@ -11,7 +11,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/ui-kit";
+import { useCollection, useCommand } from "@lynx-go/uikit-core";
 import { toast } from "sonner";
 import {
   ArrowLeft,

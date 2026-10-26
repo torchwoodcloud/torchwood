@@ -4,8 +4,8 @@ import {
   type Predicate,
   type ResourceScope,
   type Segment,
-} from "@lynx-go/ui-kit/kernel";
-import { collectionQuerySchema, filterValues } from "@lynx-go/ui-kit/schema";
+} from "@lynx-go/uikit-core/kernel";
+import { collectionQuerySchema, filterValues } from "@lynx-go/uikit-core/schema";
 import { listAuditLogs, type AuditLog } from "@/api/auditLogs";
 import { toApiError } from "@/kit/errors";
 

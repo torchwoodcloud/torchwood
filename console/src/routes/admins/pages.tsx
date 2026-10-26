@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/ui-kit";
+import { useCollection, useCommand } from "@lynx-go/uikit-core";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";

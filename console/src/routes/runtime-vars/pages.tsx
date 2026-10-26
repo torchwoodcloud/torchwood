@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/ui-kit";
-import type { ApiError, CommandResult } from "@lynx-go/ui-kit/kernel";
+import { useCollection, useCommand } from "@lynx-go/uikit-core";
+import type { ApiError, CommandResult } from "@lynx-go/uikit-core/kernel";
 import { toast } from "sonner";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
