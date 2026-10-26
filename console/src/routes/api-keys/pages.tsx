@@ -21,8 +21,8 @@ import {
   expireOldApiKeyCommand,
   type CreateApiKeyForm,
   type EditApiKeyForm,
-} from "@/fleet/apiKeys";
-import { describeApiError } from "@/fleet/errors";
+} from "@/kit/apiKeys";
+import { describeApiError } from "@/kit/errors";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
@@ -56,12 +56,12 @@ import {
   RowDeleteButton,
   DeleteButton,
 } from "@/components/resource/shared";
-import { Form as FleetForm } from "@/components/fleet/command/form";
-import { TextField } from "@/components/fleet/command/fields";
-import { DataTable } from "@/components/fleet/query/data-table";
-import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
-import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
+import { Form as KitForm } from "@/components/kit/command/form";
+import { TextField } from "@/components/kit/command/fields";
+import { DataTable } from "@/components/kit/query/data-table";
+import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 
 // 命令族切片（design.md §12.3）：写路径换 useCommand/useCommandForm（结果
 // 两分 + __skipToast + onSettled toast 单源）；失效 = kit 键自动 + 存量
@@ -199,7 +199,7 @@ export function ApiKeysListPage() {
     <div className="space-y-6">
       <PageHeader title="API Keys" description="管理当前项目的服务端 API Key" />
 
-      <FleetListPage
+      <KitListPage
         list={shownList}
         toolbar={
           <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
@@ -270,7 +270,7 @@ export function ApiKeysListPage() {
             }
           />
         </div>
-      </FleetListPage>
+      </KitListPage>
     </div>
   );
 }
@@ -349,7 +349,7 @@ export function ApiKeyNewPage() {
       {/* Form 块自带提交/取消（宿主不渲染 footer——FormPageWrapper 的 onSubmit
           形态与 Form 内芯互斥，§12.3 裁决 1/7） */}
       <div className="max-w-4xl">
-        <FleetForm
+        <KitForm
           form={form}
           submitting={create.submitting}
           result={create.result}
@@ -451,7 +451,7 @@ export function ApiKeyNewPage() {
               </div>
             </div>
           </div>
-        </FleetForm>
+        </KitForm>
       </div>
     </div>
   );
@@ -628,7 +628,7 @@ function ApiKeyEditDialog({
             禁用与过期立即生效（每次请求鉴权实时校验）；Secret 不可修改。
           </DialogDescription>
         </DialogHeader>
-        <FleetForm
+        <KitForm
           form={form}
           submitting={edit.submitting}
           result={edit.result}
@@ -698,7 +698,7 @@ function ApiKeyEditDialog({
               );
             }}
           </form.Field>
-        </FleetForm>
+        </KitForm>
       </DialogContent>
     </Dialog>
   );

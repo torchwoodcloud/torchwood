@@ -12,7 +12,7 @@ import { useMemo, type ReactNode } from "react";
 // TestRouter：MemoryRouter+Routes+Route 声明式的 TanStack 替身（自 compat
 // 退役迁入，§12.9-5）。routes 的 path 支持 ':param' 与 '$param' 双写；
 // initialEntries 定位首地址。测试文件统一从 @/test-utils/TestRouter 导入。
-// scope = ResourceScopeProvider 接线（镜像 main.tsx 的 FleetScopeBinding——
+// scope = ResourceScopeProvider 接线（镜像 main.tsx 的 KitScopeBinding——
 // 声明了 scope 键的资源绑定从这里取值，缺省 {projectId:"p1"} 对齐各测试
 // 的 useAuth mock 惯例）。
 

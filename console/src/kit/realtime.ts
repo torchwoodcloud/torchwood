@@ -48,7 +48,7 @@ const globalWebSocket: WebSocketFactory = (url) =>
 
 class TransportAbort extends Error {
   constructor() {
-    super("fleet-ui: realtime transport aborted");
+    super("kit: realtime transport aborted");
     this.name = "AbortError";
   }
 }

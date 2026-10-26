@@ -16,7 +16,7 @@ import {
   type CreateBoardInput,
   type LeaderboardBoard,
 } from "@/api/leaderboards";
-import { runCommandMapped, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2）：排行榜主列表换 useCollection。 boards 端点
 // （/console/leaderboards/boards）非分页——一次返回全量，无 next_page_token、

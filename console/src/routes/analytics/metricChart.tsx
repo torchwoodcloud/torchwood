@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { AnalyticsTimeseriesPoint } from "@/api/analytics";
-import { MetricChart as FleetMetricChart } from "@/components/fleet/values/metric-chart";
+import { MetricChart as KitMetricChart } from "@/components/kit/values/metric-chart";
 import { formatBucket, toTrendSeries } from "./shared";
 
 // 图表披露文案（§12.10-⑤ labels 注入面；原 vendored 内置中文改页面注入）
@@ -26,7 +26,7 @@ export function TrendChart({
 }) {
   const series = useMemo(() => toTrendSeries(points), [points]);
   return (
-    <FleetMetricChart
+    <KitMetricChart
       series={series}
       height={height}
       formatValue={(value) => value.toLocaleString()}

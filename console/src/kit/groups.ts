@@ -19,12 +19,12 @@ import {
   type Group,
   type Membership,
 } from "@/api/groups";
-import { runCommandMapped, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2）+ 命令族切片（§12.3，apiKeys 同款）：groups 列表
 // 换 useCollection——游标/页大小进 URL（旧页无服务端过滤——不设 filters）；
 // 数据面复用 axios 管线（刷新/项目头），失败在适配器收敛为 ApiError
-//（fleet/errors.ts）。写路径换 useCommand：结果两分映射——400→rejected、
+//（kit/errors.ts）。写路径换 useCommand：结果两分映射——400→rejected、
 // 409→conflict、其余 throw ApiError；命令调用一律 __skipToast（toast 单源 =
 // onSettled）；kit 列表键自动失效（descriptor 挂 resource），存量键
 //（["groups", …]/["memberships", …]——详情页仍吃存量键）由

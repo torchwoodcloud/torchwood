@@ -4,8 +4,8 @@ import { RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatTimeOnly } from "@/lib/datetime";
-import { collectionEvents, type EventFrame } from "@/fleet/realtime";
-import { EventFeed } from "@/components/fleet/subscription/event-feed";
+import { collectionEvents, type EventFrame } from "@/kit/realtime";
+import { EventFeed } from "@/components/kit/subscription/event-feed";
 import { Button } from "@/components/ui/button";
 import type { CollectionOutletContext } from "./CollectionLayout";
 

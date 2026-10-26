@@ -20,8 +20,8 @@ import {
   collectionsSearch,
   databasesResource,
   databasesSearch,
-} from "@/fleet/databases";
-import { describeApiError } from "@/fleet/errors";
+} from "@/kit/databases";
+import { describeApiError } from "@/kit/errors";
 import { useAuth } from "@/hooks/useAuth";
 import {
   useAdminRole,
@@ -45,10 +45,10 @@ import {
   RowDeleteButton,
   DeleteButton,
 } from "@/components/resource/shared";
-import { DataTable } from "@/components/fleet/query/data-table";
-import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
-import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
+import { DataTable } from "@/components/kit/query/data-table";
+import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 
 // 列表 fleet 化（§12.9-2）：databases 顶层列表与 Database 详情内嵌的
 // collections 列表换轨 useCollection（游标/页大小进 URL，分页栈 = 浏览器
@@ -175,7 +175,7 @@ export function DatabasesListPage() {
     <div className="space-y-6">
       <PageHeader title="Databases" description="管理数据库与集合" />
 
-      <FleetListPage
+      <KitListPage
         list={shownList}
         toolbar={
           <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
@@ -232,7 +232,7 @@ export function DatabasesListPage() {
             }
           />
         </div>
-      </FleetListPage>
+      </KitListPage>
     </div>
   );
 }
@@ -469,7 +469,7 @@ export function DatabaseDetailPage() {
         />
       </DetailPageWrapper>
 
-      <FleetListPage
+      <KitListPage
         list={shownCollList}
         toolbar={
           <div className="space-y-4 border-b px-4 py-4">
@@ -534,7 +534,7 @@ export function DatabaseDetailPage() {
             }
           />
         </div>
-      </FleetListPage>
+      </KitListPage>
     </div>
   );
 }

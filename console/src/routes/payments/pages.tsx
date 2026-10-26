@@ -24,12 +24,12 @@ import {
 import { DetailGrid, DetailPageWrapper, DetailSkeleton, NotFound } from "@/components/resource/shared";
 import { formatInt64 } from "@/lib/utils";
 import { PageHeader } from "@/components/PageHeader";
-import { DataTable } from "@/components/fleet/query/data-table";
-import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
-import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
-import { filtersOf, ordersResource, ordersSearch, refundOrderCommand, fulfillOrderCommand, type FilterField } from "@/fleet/payments";
-import { describeApiError } from "@/fleet/errors";
+import { DataTable } from "@/components/kit/query/data-table";
+import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { ListPage as KitListPage } from "@/components/kit/query/list-page";
+import { filtersOf, ordersResource, ordersSearch, refundOrderCommand, fulfillOrderCommand, type FilterField } from "@/kit/payments";
+import { describeApiError } from "@/kit/errors";
 
 // 订单状态选项与 payments.proto 状态机一致。
 const ORDER_STATUS_OPTIONS = [
@@ -141,7 +141,7 @@ export function OrdersListPage() {
     <div className="space-y-6">
       <PageHeader title="订单" description="项目支付订单（金额为最小货币单位）" />
 
-      <FleetListPage
+      <KitListPage
         list={shownList}
         toolbar={
           <div className="space-y-2 px-4 pb-2 pt-2">
@@ -246,7 +246,7 @@ export function OrdersListPage() {
             onRowClick={(o) => navigate({ to: `/console/orders/${o.id}` })}
           />
         </div>
-      </FleetListPage>
+      </KitListPage>
     </div>
   );
 }

@@ -46,12 +46,12 @@ import {
 } from "@/components/resource/shared";
 import { formatInt64, isInt64Input } from "@/lib/utils";
 import { PageHeader } from "@/components/PageHeader";
-import { DataTable } from "@/components/fleet/query/data-table";
-import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
-import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
-import { assetDefsResource, assetDefsSearch, createAssetDefCommand, removeAssetDefCommand } from "@/fleet/assets";
-import { describeApiError } from "@/fleet/errors";
+import { DataTable } from "@/components/kit/query/data-table";
+import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { ListPage as KitListPage } from "@/components/kit/query/list-page";
+import { assetDefsResource, assetDefsSearch, createAssetDefCommand, removeAssetDefCommand } from "@/kit/assets";
+import { describeApiError } from "@/kit/errors";
 
 const CLASSES = ["currency", "stack", "instance", "entitlement"] as const;
 
@@ -141,7 +141,7 @@ export function AssetDefsListPage() {
     <div className="space-y-6">
       <PageHeader title="资产定义" description="管理代币 / 物品 / 权益目录。终端用户无写入口。" />
 
-      <FleetListPage
+      <KitListPage
         list={shownList}
         toolbar={
           <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
@@ -186,7 +186,7 @@ export function AssetDefsListPage() {
             onRowClick={(d) => navigate({ to: `/console/assets/defs/${d.id}` })}
           />
         </div>
-      </FleetListPage>
+      </KitListPage>
     </div>
   );
 }

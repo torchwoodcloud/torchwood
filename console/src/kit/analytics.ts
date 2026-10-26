@@ -6,7 +6,7 @@ import {
 } from "@lynx-go/ui-kit/kernel";
 import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
 import { listEventDefinitions, type AnalyticsEventDefinition } from "@/api/analytics";
-import { toApiError } from "@/fleet/errors";
+import { toApiError } from "@/kit/errors";
 
 // analytics 事件字典的列表 fleet 化（§12.9-2）：数据面换 useCollection（游标/
 // 页大小进 URL），事件字典量级小（近 30 天活跃事件名），defaultSize 100 沿旧

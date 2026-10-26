@@ -18,12 +18,12 @@ import {
   type InviteCode,
   type Project,
 } from "@/api/projects";
-import { runCommandMapped, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2）：projects 是平台级资源（GET /server/projects，
 // 旧页不随项目作用域）——defineResource 不设 scope，直接请求；游标/页大小
 // 进 URL（旧页无服务端过滤——不设 filters）。数据面复用 axios 管线，失败
-// 在适配器收敛为 ApiError（fleet/errors.ts）。
+// 在适配器收敛为 ApiError（kit/errors.ts）。
 
 // 平台级域无 scope 约定：ctx 恒为 {}，签名只收 q。
 async function fetchProjects(q: CollectionQuery): Promise<Segment<Project>> {

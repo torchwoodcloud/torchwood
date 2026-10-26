@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMetricRows } from "@/components/fleet/values/metric-rows";
+import { buildMetricRows } from "@/components/kit/values/metric-rows";
 import {
   EVENT_NAME_PATTERN,
   PROP_KEY_PATTERN,

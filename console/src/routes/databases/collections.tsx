@@ -28,8 +28,8 @@ import {
   removeCollectionIndexCommand,
   updateCollectionPermissionsCommand,
   updateCollectionSettingsCommand,
-} from "@/fleet/databases";
-import { describeApiError } from "@/fleet/errors";
+} from "@/kit/databases";
+import { describeApiError } from "@/kit/errors";
 import { useAuth } from "@/hooks/useAuth";
 import {
   useAdminRole,

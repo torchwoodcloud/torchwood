@@ -6,7 +6,7 @@
 // states 块保持上游纯拷贝。
 import type { CollectionHandle } from "@lynx-go/ui-kit";
 import type { ApiError } from "@lynx-go/ui-kit/kernel";
-import { describeApiError } from "@/fleet/errors";
+import { describeApiError } from "@/kit/errors";
 import type { ReactNode } from "react";
 import { Card } from "@/components/ui/card";
 import { EmptyState, ErrorState, LoadingState } from "../values/states";

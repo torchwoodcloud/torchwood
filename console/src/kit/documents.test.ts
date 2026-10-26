@@ -12,7 +12,7 @@ import {
   domainCodeOf,
   removeDocumentCommand,
   updateDocumentCommand,
-} from "@/fleet/documents";
+} from "@/kit/documents";
 
 // OCC 切片（§12.5）映射矩阵：通道方言 = OCC 冲突走 HTTP 400 + message 前缀
 // 域码（非 409）；409 是重复键/幂等；404 → toApiError not-found，幂等归

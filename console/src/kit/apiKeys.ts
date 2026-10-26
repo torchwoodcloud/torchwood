@@ -16,7 +16,7 @@ import {
   type UpdateAPIKeyInput,
 } from "@/api/apiKeys";
 import { skipToast as SKIP } from "@/api/client";
-import { runCommandMapped, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/kit/errors";
 
 // fleet-ui 命令族切片（api-keys 首个 commands 资源，design.md §12.3）：
 // 结果两分映射——400→rejected{code,message}、409→conflict、其余 throw

@@ -1,7 +1,7 @@
 import type { CommandResult } from "@lynx-go/ui-kit/kernel";
 import { updateCurrentAdmin, type Admin } from "@/api/admins";
 import { skipToast as SKIP } from "@/api/client";
-import { runCommandMapped } from "@/fleet/errors";
+import { runCommandMapped } from "@/kit/errors";
 
 // account 域命令族切片（§12.3，apiKeys 同款）：profile/preferences 自助写
 // （PATCH /console/admins/me）。account 是单例 me——无集合语义，命令用裸

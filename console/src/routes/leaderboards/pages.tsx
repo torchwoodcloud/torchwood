@@ -29,8 +29,8 @@ import {
   removeBoardEntryDescriptor,
   voidSettlementDescriptor,
   rerunSettlementDescriptor,
-} from "@/fleet/leaderboards";
-import { describeApiError } from "@/fleet/errors";
+} from "@/kit/leaderboards";
+import { describeApiError } from "@/kit/errors";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -58,8 +58,8 @@ import { RowDeleteButton } from "@/components/resource/shared";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { PageHeader } from "@/components/PageHeader";
-import { DataTable } from "@/components/fleet/query/data-table";
-import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
+import { DataTable } from "@/components/kit/query/data-table";
+import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 
 export function LeaderboardsListPage() {
   const tz = useUserTimezone();
@@ -180,7 +180,7 @@ export function LeaderboardsListPage() {
         description="榜配置（期 / 排序 / 合并策略 / 限频 / 保留 / 奖励规则）。作弊处理：进入榜详情删条目——封榜后的期不可变；结算见详情页。"
       />
 
-      <FleetListPage
+      <KitListPage
         list={shownList}
         toolbar={
           <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
@@ -209,7 +209,7 @@ export function LeaderboardsListPage() {
             getRowId={(row) => row.id}
           />
         </div>
-      </FleetListPage>
+      </KitListPage>
     </div>
   );
 }

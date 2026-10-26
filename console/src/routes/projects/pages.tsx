@@ -10,17 +10,17 @@ import {
   projectsResource,
   projectsSearch,
   createProjectCommand,
-} from "@/fleet/projects";
-import { describeApiError } from "@/fleet/errors";
+} from "@/kit/projects";
+import { describeApiError } from "@/kit/errors";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useProjectScopeSync } from "@/hooks/useProjectScopeSync";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { PageHeader } from "@/components/PageHeader";
-import { DataTable } from "@/components/fleet/query/data-table";
-import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
-import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
+import { DataTable } from "@/components/kit/query/data-table";
+import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -90,7 +90,7 @@ export function ProjectsListPage() {
     <div className="space-y-6">
       <PageHeader title="Projects" description="管理 Torchwood 项目" />
 
-      <FleetListPage
+      <KitListPage
         list={shownList}
         toolbar={
           <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
@@ -137,7 +137,7 @@ export function ProjectsListPage() {
             onRowClick={(p) => navigate({ to: `/console/projects/${p.id}` })}
           />
         </div>
-      </FleetListPage>
+      </KitListPage>
     </div>
   );
 }

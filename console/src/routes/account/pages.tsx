@@ -8,8 +8,8 @@ import { setProjectID } from "@/api/client";
 import {
   changeCurrentPasswordCommand,
   updateCurrentTimezoneCommand,
-} from "@/fleet/account";
-import { describeApiError } from "@/fleet/errors";
+} from "@/kit/account";
+import { describeApiError } from "@/kit/errors";
 import { AdminRoleBadge } from "@/components/AdminRoleBadge";
 import {
   FormField,

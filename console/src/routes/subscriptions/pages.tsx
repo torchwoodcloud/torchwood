@@ -39,11 +39,11 @@ import {
 } from "@/components/resource/shared";
 import { formatInt64 } from "@/lib/utils";
 import { PageHeader } from "@/components/PageHeader";
-import { DataTable } from "@/components/fleet/query/data-table";
-import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
-import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
-import { describeApiError } from "@/fleet/errors";
+import { DataTable } from "@/components/kit/query/data-table";
+import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { ListPage as KitListPage } from "@/components/kit/query/list-page";
+import { describeApiError } from "@/kit/errors";
 import {
   cancelSubscriptionCommand,
   createPlanCommand,
@@ -55,7 +55,7 @@ import {
   subscriptionsResource,
   subscriptionsSearch,
   type FilterField,
-} from "@/fleet/subscriptions";
+} from "@/kit/subscriptions";
 
 export function PlansListPage() {
   const { role } = useAdminRole();
@@ -146,7 +146,7 @@ export function PlansListPage() {
     <div className="space-y-6">
       <PageHeader title="订阅计划" description="平台托管 / 渠道托管共用计划" />
 
-      <FleetListPage
+      <KitListPage
         list={shownList}
         toolbar={
           <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
@@ -189,7 +189,7 @@ export function PlansListPage() {
             onRowClick={(p) => navigate({ to: `/console/subscriptions/plans/${p.id}` })}
           />
         </div>
-      </FleetListPage>
+      </KitListPage>
     </div>
   );
 }
@@ -401,7 +401,7 @@ export function SubscriptionsListPage() {
     <div className="space-y-6">
       <PageHeader title="订阅" description="用户订阅合同（不是资产）" />
 
-      <FleetListPage
+      <KitListPage
         list={shownList}
         toolbar={
           <div className="space-y-2 px-4 pb-2 pt-2">
@@ -511,7 +511,7 @@ export function SubscriptionsListPage() {
             onRowClick={(s) => navigate({ to: `/console/subscriptions/${s.id}` })}
           />
         </div>
-      </FleetListPage>
+      </KitListPage>
     </div>
   );
 }

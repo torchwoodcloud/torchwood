@@ -8,11 +8,11 @@ import {
 import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
 import { createAssetDef, deleteAssetDef, listAssetDefs, type AssetDef } from "@/api/assets";
 import { skipToast as SKIP } from "@/api/client";
-import { runCommandMapped, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2）：资产定义主列表换 useCollection——游标/页大小/
 // 时间排序进 URL（分页栈 = 浏览器历史），数据面复用 axios 管线，失败在
-// 适配器收敛为 ApiError（fleet/errors.ts）。code/名称/类别是页内搜索
+// 适配器收敛为 ApiError（kit/errors.ts）。code/名称/类别是页内搜索
 // （本地态），不是服务端过滤参数 → 无谓词白名单。
 //
 // 命令族切片（写路径命令化，§12.3）：建/删挂资源 commands（kit 集合键由

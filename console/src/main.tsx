@@ -26,13 +26,13 @@ createRoot(document.getElementById("root")!).render(
       <AuthProvider>
         {/* scope 线程单源（§12.10-③）：声明了 scope 键的资源绑定从这里取值；
             projectId 未就绪 ⇒ 查询自动停用（fail-safe） */}
-        <FleetScopeBinding>
+        <KitScopeBinding>
           <ErrorBoundary>
           {/* lazy 页面的 Suspense 在路由树根组件内（router.tsx），加载中文案不变 */}
           <RouterProvider router={router} />
           </ErrorBoundary>
           <Toaster position="top-right" />
-        </FleetScopeBinding>
+        </KitScopeBinding>
       </AuthProvider>
     </QueryClientProvider>
   </StrictMode>
@@ -40,7 +40,7 @@ createRoot(document.getElementById("root")!).render(
 
 
 /** 应用根的 scope 线程绑定：AuthProvider 的当前项目 → ResourceScopeProvider。 */
-function FleetScopeBinding({ children }: { children: ReactNode }) {
+function KitScopeBinding({ children }: { children: ReactNode }) {
   const { projectId } = useAuth();
   return (
     <ResourceScopeProvider value={{ projectId: projectId ?? undefined }}>

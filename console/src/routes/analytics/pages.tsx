@@ -44,13 +44,13 @@ import {
   type OverviewRange,
 } from "./shared";
 import { TrendChart } from "./metricChart";
-import { StatCard } from "@/components/fleet/values/stat-card";
-import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
+import { StatCard } from "@/components/kit/values/stat-card";
+import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
 import {
   eventDefinitionsResource,
   eventDefinitionsSearch,
-} from "@/fleet/analytics";
+} from "@/kit/analytics";
 
 const OVERVIEW_RANGES: { key: OverviewRange; label: string }[] = [
   { key: "today", label: "今日" },

@@ -18,11 +18,11 @@ import {
   type Bucket,
   type FileItem,
 } from "@/api/storage";
-import { runCommandMapped, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2）：Bucket 主列表走 useCollection（URL 即真相：
 // cursor/size 进 URL，分页栈 = 浏览器历史）。数据面复用 axios 管线，失败
-// 在适配器收敛为 ApiError（fleet/errors.ts 收敛缝）。
+// 在适配器收敛为 ApiError（kit/errors.ts 收敛缝）。
 //
 // 命令族切片（§12.3）：桶建/改/删挂资源 commands（kit 集合键由 useCommand
 // 自动失效）；文件是桶子资源、无 kit 集合——独立 descriptor，descriptor 级

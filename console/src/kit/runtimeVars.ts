@@ -23,12 +23,12 @@ import {
   type VarSet,
   type VarSetVisibilityInput,
 } from "@/api/runtimeVars";
-import { runCommandMapped, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2）：var-sets 主列表走 useCollection（URL 即真相：
 // cursor/size 进 URL，分页栈 = 浏览器历史）。vars/versions 子视图仍为有意
 // 的全量拉取（设计决定 D13/D11），不在此列。数据面复用 axios 管线，失败
-// 在适配器收敛为 ApiError（fleet/errors.ts 收敛缝）。
+// 在适配器收敛为 ApiError（kit/errors.ts 收敛缝）。
 //
 // 命令族切片（写路径命令化）：全部写动词挂 varSetsResource——var 写会 bump
 // 集合 revision/var_count/footprint，列表（kit 键）随资源命令 ok 自动失效；

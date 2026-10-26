@@ -24,13 +24,13 @@ import {
   type Database,
   type Index,
 } from "@/api/databases";
-import { runCommandMapped, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2，databases 域）：databases 顶层列表 + Database 详情
 // 内嵌的 collections 列表。游标/页大小进 URL（分页栈 = 浏览器历史）；两个
 // 端点均无真实服务端过滤参数（仅分页）→ schema 不设 filters/text，页内搜索
 // 是本地态投影不进 URL。数据面复用 axios 管线（刷新/项目头），失败在适配器
-// 收敛为 ApiError（fleet/errors.ts）。
+// 收敛为 ApiError（kit/errors.ts）。
 //
 // 建删命令族切片：database/collection 的 create/remove 挂各自资源（kit 列表
 // 键随 ok 自动失效）；存量 ["databases"] / ["collections"] 前缀键由资源

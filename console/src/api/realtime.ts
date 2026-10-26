@@ -2,7 +2,7 @@
 // （TORCHWOOD_session_console）握手——hello 绑 project_id、不带 access_token；
 // hello_ok 后 subscribe 频道；服务端 30s ping 回 pong；15m 会话到期服务端以
 // close 1008 token_expired 关连接（无连接内 refresh）。重连/退避/refresh
-// 编排归 fleet-ui 订阅引擎（src/fleet/realtime.ts，design.md §12.4 裁决）——
+// 编排归 fleet-ui 订阅引擎（src/kit/realtime.ts，design.md §12.4 裁决）——
 // 本模块只持帧方言与连接 URL，不自带监听状态机。
 
 /** 可注入的 WebSocket 最小接口（浏览器原生 WebSocket 满足；测试注入）。 */

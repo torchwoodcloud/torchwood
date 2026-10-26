@@ -19,11 +19,11 @@ import {
   type CreateWebhookResponse,
   type WebhookSecret,
 } from "@/api/webhooks";
-import { runCommandMapped, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2）：Webhooks 主列表走 useCollection（URL 即真相：
 // cursor/size 进 URL，分页栈 = 浏览器历史）。数据面复用 axios 管线，失败
-// 在适配器收敛为 ApiError（fleet/errors.ts 收敛缝）。
+// 在适配器收敛为 ApiError（kit/errors.ts 收敛缝）。
 //
 // 命令族切片（§12.3）：建/改/删/轮换挂资源 commands（kit 集合键由
 // useCommand 自动失效）；投递重投是子资源动作——挂资源但显式 invalidates: []

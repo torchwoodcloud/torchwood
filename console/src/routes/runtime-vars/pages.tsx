@@ -37,8 +37,8 @@ import {
   type VarKind,
   varSetsResource,
   varSetsSearch,
-} from "@/fleet/runtimeVars";
-import { describeApiError } from "@/fleet/errors";
+} from "@/kit/runtimeVars";
+import { describeApiError } from "@/kit/errors";
 import { useAuth } from "@/hooks/useAuth";
 import { isPlatformAdmin, useAdminRole } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
@@ -52,10 +52,10 @@ import {
   DetailSkeleton,
   NotFound,
 } from "@/components/resource/shared";
-import { DataTable } from "@/components/fleet/query/data-table";
-import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
-import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
+import { DataTable } from "@/components/kit/query/data-table";
+import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -277,7 +277,7 @@ export function VarSetsListPage() {
     <div className="space-y-6">
       <SecretWarningBanner />
       <PageHeader title="Runtime Vars" description="管理项目级运行时配置：类型化变量集合、可见性与版本回滚" />
-      <FleetListPage
+      <KitListPage
         list={shownList}
         toolbar={
           <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
@@ -320,7 +320,7 @@ export function VarSetsListPage() {
             onRowClick={(s) => navigate({ to: `/console/runtime-vars/${s.var_set_id}` })}
           />
         </div>
-      </FleetListPage>
+      </KitListPage>
       <VarSetCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );

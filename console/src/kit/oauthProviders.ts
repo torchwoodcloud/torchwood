@@ -1,7 +1,7 @@
 import type { CommandDescriptor } from "@lynx-go/ui-kit/kernel";
 import { skipToast as SKIP } from "@/api/client";
 import { deleteOAuthProvider, upsertOAuthProvider, type OAuthProvider } from "@/api/oauthProviders";
-import { runCommandMapped } from "@/fleet/errors";
+import { runCommandMapped } from "@/kit/errors";
 
 // OAuth 提供方配置的写路径命令化（§12.9 阶段 2）：结果两分 + __skipToast。
 // 裸 descriptor（配置非集合形态，不挂 resource——kit 键无谓失效可免）；

@@ -3,7 +3,7 @@
 // HOUR ≤7 天 / DAY ≤366 天 / Breakdown ≤30 天 / Retention cohort ≤92 天。
 
 import { num, type AnalyticsTimeseriesPoint } from "@/api/analytics";
-import type { MetricSeries } from "@/components/fleet/values/metric-rows";
+import type { MetricSeries } from "@/components/kit/values/metric-rows";
 
 // int64 数值化统一复用 api 模块的 num（re-export 供页面与测试统一入口）。
 export { num };

@@ -23,7 +23,7 @@ export function toApiError(err: unknown): ApiError {
   return { kind: "server", status: 0, message: err instanceof Error ? err.message : String(err) };
 }
 
-// 失败通道的用户文案（toast 用）：与 fleet/values/states 的 ErrorState
+// 失败通道的用户文案（toast 用）：与 kit/values/states 的 ErrorState
 // describe 同口径。结果通道（rejected/conflict）不走这里——归 Form 块结果盒。
 export function describeApiError(error: ApiError): string {
   switch (error.kind) {

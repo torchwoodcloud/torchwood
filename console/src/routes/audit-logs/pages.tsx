@@ -25,16 +25,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DataTable } from "@/components/fleet/query/data-table";
-import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
-import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
+import { DataTable } from "@/components/kit/query/data-table";
+import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import {
   auditLogsResource,
   auditLogsSearch,
   filtersOf,
   type FilterField,
-} from "@/fleet/auditLogs";
+} from "@/kit/auditLogs";
 
 // —— 语义化渲染辅助：把 gRPC FullMethod / 结构化 metadata 变成人话 ——
 
@@ -247,7 +247,7 @@ export function AuditLogsListPage() {
         description="管理面（Console / CLI / SDK / API Key）全部系统变更的完整审计轨迹"
       />
 
-      <FleetListPage
+      <KitListPage
         list={list}
         toolbar={
           <div className="space-y-4 p-6 pb-0">
@@ -365,7 +365,7 @@ export function AuditLogsListPage() {
             onRowClick={(log) => setSelected(log)}
           />
         </div>
-      </FleetListPage>
+      </KitListPage>
     </div>
   );
 }

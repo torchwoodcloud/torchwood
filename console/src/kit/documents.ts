@@ -18,7 +18,7 @@ import {
   type Attribute,
   type Document,
 } from "@/api/databases";
-import { gatewayErrorBody, toApiError } from "@/fleet/errors";
+import { gatewayErrorBody, toApiError } from "@/kit/errors";
 
 // fleet-ui OCC 切片（documents，design.md §12.5）：update/delete 必带 version
 // （CAS）。通道方言：OCC 冲突 = HTTP 400 + FailedPrecondition + message 前缀

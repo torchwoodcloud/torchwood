@@ -7,12 +7,12 @@ import {
 } from "@lynx-go/ui-kit/kernel";
 import { collectionQuerySchema, filterValues } from "@lynx-go/ui-kit/schema";
 import { listAuditLogs, type AuditLog } from "@/api/auditLogs";
-import { toApiError } from "@/fleet/errors";
+import { toApiError } from "@/kit/errors";
 
 // fleet-ui keyset 切片（audit-logs 首个资源）：URL 即真相（q/filter/sort/
 // cursor/size），useCollection 消费；分页栈 = 浏览器历史（KeysetPagination
 // 的 Prev 在不可算游标时走 history.back）。数据面复用 axios 管线（刷新/
-// 项目头），失败在适配器收敛为 ApiError（fleet/errors.ts）。
+// 项目头），失败在适配器收敛为 ApiError（kit/errors.ts）。
 
 // 谓词 eq 叶子 → ListAuditLogsParams 键的白名单；scope 是伪字段（视图
 // 范围三态），由适配器展开为 include_platform/all_projects 布尔参数。

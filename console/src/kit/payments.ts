@@ -14,7 +14,7 @@ import {
   refundOrder,
   type PaymentOrder,
 } from "@/api/payments";
-import { runCommandMapped, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2）：订单列表换 useCollection——过滤（UserID/状态/
 // 创建时间区间）/时间排序/游标/页大小进 URL，数据面复用 axios 管线，失败

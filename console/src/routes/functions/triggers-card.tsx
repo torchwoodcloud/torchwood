@@ -8,8 +8,8 @@ import {
   createTriggerDescriptor,
   removeTriggerDescriptor,
   rotateTriggerTokenDescriptor,
-} from "@/fleet/functions";
-import { describeApiError } from "@/fleet/errors";
+} from "@/kit/functions";
+import { describeApiError } from "@/kit/errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

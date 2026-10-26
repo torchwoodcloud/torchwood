@@ -26,16 +26,16 @@ import {
   revokeUserSessionDescriptor,
   issueUserTokenDescriptor,
   type UserFilterField,
-} from "@/fleet/users";
-import { describeApiError } from "@/fleet/errors";
+} from "@/kit/users";
+import { describeApiError } from "@/kit/errors";
 import { useAdminRole, canWrite, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
 import { PageHeader } from "@/components/PageHeader";
-import { DataTable } from "@/components/fleet/query/data-table";
-import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
-import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
+import { DataTable } from "@/components/kit/query/data-table";
+import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -229,7 +229,7 @@ export function UsersListPage() {
     <div className="space-y-6">
       <PageHeader title="Users" description="当前项目的注册用户" />
 
-      <FleetListPage
+      <KitListPage
         list={shownList}
         toolbar={
           <div className="space-y-3 px-4 pb-2 pt-2">
@@ -364,7 +364,7 @@ export function UsersListPage() {
             }
           />
         </div>
-      </FleetListPage>
+      </KitListPage>
     </div>
   );
 }
@@ -379,7 +379,7 @@ export function CreateUserPage() {
   const [labels, setLabels] = useState("");
 
   // 无表单容器（FormPageWrapper 本地态）：结果分支 toast；failure → describeApiError。
-  // labels 逗号串→数组的收敛在命令 run 内（fleet/users.ts）。
+  // labels 逗号串→数组的收敛在命令 run 内（kit/users.ts）。
   const create = useCommand(createUserCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {

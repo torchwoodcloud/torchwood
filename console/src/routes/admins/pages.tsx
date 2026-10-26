@@ -13,13 +13,13 @@ import {
   createAdminCommand,
   removeAdminCommand,
   updateAdminCommand,
-} from "@/fleet/admins";
-import { describeApiError } from "@/fleet/errors";
+} from "@/kit/admins";
+import { describeApiError } from "@/kit/errors";
 import { PageHeader } from "@/components/PageHeader";
-import { DataTable } from "@/components/fleet/query/data-table";
-import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
-import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
+import { DataTable } from "@/components/kit/query/data-table";
+import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AdminRoleBadge } from "@/components/AdminRoleBadge";
@@ -124,7 +124,7 @@ export function AdminsListPage() {
         description="管理可登录 Console 的管理员账户（仅 owner 可增删改）"
       />
 
-      <FleetListPage
+      <KitListPage
         list={shownList}
         toolbar={
           <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-2">
@@ -156,7 +156,7 @@ export function AdminsListPage() {
             getRowId={(row) => row.id}
           />
         </div>
-      </FleetListPage>
+      </KitListPage>
     </div>
   );
 }

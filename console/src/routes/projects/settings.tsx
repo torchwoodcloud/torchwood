@@ -4,12 +4,12 @@ import {
   removeProjectCommand,
   updateOAuthAllowlistCommand,
   updateProjectCommand,
-} from "@/fleet/projects";
+} from "@/kit/projects";
 import {
   removeOAuthProviderCommand,
   upsertOAuthProviderCommand,
-} from "@/fleet/oauthProviders";
-import { describeApiError } from "@/fleet/errors";
+} from "@/kit/oauthProviders";
+import { describeApiError } from "@/kit/errors";
 import { useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
