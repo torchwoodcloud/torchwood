@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
+import { predicateOf } from "@lynx-go/ui-kit/schema";
 import type { Predicate } from "@lynx-go/ui-kit/kernel";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { useUserTimezone } from "@/hooks/useTimezone";
@@ -14,7 +15,6 @@ import {
   type Subscription,
   type SubscriptionPlan,
 } from "@/api/subscriptions";
-import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ import { formatInt64 } from "@/lib/utils";
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { describeApiError } from "@/fleet/errors";
 import {
@@ -57,31 +58,27 @@ import {
 } from "@/fleet/subscriptions";
 
 export function PlansListPage() {
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const writeable = canWrite(role);
   const [search, setSearch] = useState("");
 
   // 列表 fleet 化（§12.9-2）：游标/页大小/时间排序进 URL（分页栈 = 浏览器
-  // 历史）；页内当前页搜索保持本地态（旧页语义）。
+  // 历史）；页内当前页搜索保持本地态（旧页语义）。scope/enabled 不再逐处
+  // 传（§12.10-③）：资源声明了 projectId，Provider 单源 + 未就绪自动停用。
   const list = useCollection(plansResource, {
     from: "/console/subscriptions/plans",
     search: plansSearch,
-    scope: { projectId: projectId ?? undefined },
-    query: { enabled: !!projectId },
   });
 
-  // 行删除命令化：kit plans 列表键随资源命令 ok 自动失效；存量 ["sub-plans"]
-  // 键（详情页仍消费）手动桥。RowDeleteButton 无表单容器——结果分支 toast。
+  // 行删除命令化：失效 = kit plans 键 + 存量 ["sub-plans"] 前缀
+  //（resource.legacyKeys 声明，§12.10-②——详情键仍消费由前缀覆盖）。
+  // RowDeleteButton 无表单容器——结果分支 toast。
   const remove = useCommand(removePlanCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("计划已删除");
-        void queryClient.invalidateQueries({ queryKey: ["sub-plans", projectId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -176,7 +173,7 @@ export function PlansListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
           </div>
         }
         emptyTitle={search !== "" ? "没有匹配的计划" : "暂无计划"}
@@ -199,8 +196,6 @@ export function PlansListPage() {
 
 export function PlanNewPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
@@ -209,13 +204,12 @@ export function PlanNewPage() {
   const [graceDays, setGraceDays] = useState("3");
 
   // 命令化：amount int64 校验 + grace_days 文本→整数收敛在 descriptor run 内
-  //（非法 → rejected 结果分支，toast）；ok 后 kit plans 键自动失效。
+  //（非法 → rejected 结果分支，toast）；ok 后失效 = kit plans 键 + 存量
+  // 前缀（resource.legacyKeys 声明，§12.10-②）。
   const create = useCommand(createPlanCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("计划已创建");
-        void queryClient.invalidateQueries({ queryKey: ["sub-plans", projectId] });
         navigate({ to: `/console/subscriptions/plans/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
@@ -262,8 +256,6 @@ export function PlanNewPage() {
 export function PlanDetailPage() {
   const { id } = useParams({ strict: false });
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const writeable = canWrite(role);
 
@@ -273,11 +265,9 @@ export function PlanDetailPage() {
     enabled: !!id,
   });
   const remove = useCommand(removePlanCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("计划已删除");
-        void queryClient.invalidateQueries({ queryKey: ["sub-plans", projectId] });
         navigate({ to: "/console/subscriptions/plans" });
       } else if (result) {
         toast.error(result.message);
@@ -314,19 +304,16 @@ export function PlanDetailPage() {
 const SUB_STATUS_OPTIONS = ["trialing", "active", "past_due", "canceled", "expired"] as const;
 
 export function SubscriptionsListPage() {
-  const { projectId } = useAuth();
   const navigate = useNavigate();
   const tz = useUserTimezone();
   const [search, setSearch] = useState("");
 
   // 列表 fleet 化（§12.9-2）：服务端过滤（UserID/状态/创建时间区间）、时间
   // 排序、游标/页大小进 URL（过滤/换向 = replace + 清游标回第一页）；页内
-  // 当前页搜索保持本地态（旧页语义）。
+  // 当前页搜索保持本地态（旧页语义）。scope/enabled 不再逐处传（§12.10-③）。
   const list = useCollection(subscriptionsResource, {
     from: "/console/subscriptions",
     search: subscriptionsSearch,
-    scope: { projectId: projectId ?? undefined },
-    query: { enabled: !!projectId },
   });
 
   const filters = filtersOf(list.query.predicate);
@@ -334,7 +321,8 @@ export function SubscriptionsListPage() {
   const [userIdInput, setUserIdInput] = useState(filters.user_id ?? "");
 
   // setFilter 写谓词（replace + 清游标回第一页）；datetime 字段在写入边界
-  // 做墙钟↔绝对换算——URL 存绝对时刻，跨时区分享同一过滤窗口。
+  // 做墙钟↔绝对换算——URL 存绝对时刻，跨时区分享同一过滤窗口。叶子归一化
+  // 用 kit predicateOf（0→null / 1→裸叶 / n→AND，§12.10-④）。
   const setFilter = (field: FilterField, value: string) => {
     const next = { ...filters, [field]: value || undefined };
     const leaves: Predicate[] = [];
@@ -346,7 +334,7 @@ export function SubscriptionsListPage() {
     if (after) leaves.push({ field: "created_after", op: "eq", value: after });
     const before = fromDateTimeLocalValue(next.created_before ?? "", tz);
     if (before) leaves.push({ field: "created_before", op: "eq", value: before });
-    list.setPredicate(leaves.length === 0 ? null : leaves.length === 1 ? leaves[0] : { all: leaves });
+    list.setPredicate(predicateOf(leaves));
   };
 
   const applyUserId = () => setFilter("user_id", userIdInput.trim());
@@ -503,7 +491,7 @@ export function SubscriptionsListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
           </div>
         }
         emptyTitle={search !== "" ? "没有匹配的订阅" : filtered ? "该过滤条件下暂无订阅" : "暂无订阅"}
@@ -530,8 +518,6 @@ export function SubscriptionsListPage() {
 
 export function SubscriptionDetailPage() {
   const { id } = useParams({ strict: false });
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const platformAdmin = isPlatformAdmin(role);
@@ -542,15 +528,13 @@ export function SubscriptionDetailPage() {
     enabled: !!id,
   });
 
-  // 写路径命令化（useCommand×2）：kit subscriptions 列表键随 ok 自动失效；
-  // 详情存量 ["subscriptions", id] 键手动桥；结果分支 toast（无表单容器）。
+  // 写路径命令化（useCommand×2）：失效 = kit subscriptions 列表键 + 存量
+  // ["subscriptions"] 前缀（resource.legacyKeys 声明，§12.10-②——详情键
+  // ["subscriptions", id] 由前缀覆盖）；结果分支 toast（无表单容器）。
   const cancel = useCommand(cancelSubscriptionCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("已标记期末取消");
-        void queryClient.invalidateQueries({ queryKey: ["subscriptions", projectId] });
-        void queryClient.invalidateQueries({ queryKey: ["subscriptions", id] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -559,11 +543,9 @@ export function SubscriptionDetailPage() {
     },
   });
   const expire = useCommand(expireSubscriptionCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("已强制过期");
-        void queryClient.invalidateQueries({ queryKey: ["subscriptions", id] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {

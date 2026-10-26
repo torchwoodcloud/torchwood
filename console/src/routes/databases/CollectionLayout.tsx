@@ -1,7 +1,7 @@
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { NavLink } from "@/router/nav-link";
 import { Outlet } from "@/router/outlet-context.tsx";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useCommand } from "@lynx-go/ui-kit";
 import { ArrowLeft, FileText, Layers, Radio } from "lucide-react";
 import { toast } from "sonner";
@@ -32,7 +32,6 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 export function CollectionLayout() {
   const { dbId, collId } = useParams({ strict: false });
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const platformAdmin = isPlatformAdmin(role);
@@ -49,14 +48,13 @@ export function CollectionLayout() {
     enabled: !!dbId && !!collId,
   });
 
-  // 删除命令化：kit collections 键随资源命令 ok 自动失效；存量 ["collections",
-  // dbId] 键手动桥。DeleteButton 无表单容器——结果分支 toast。
+  // 删除命令化：失效 = kit collections 键 + 存量前缀（resource.legacyKeys
+  // 声明，§12.10-②）。DeleteButton 无表单容器——结果分支 toast。
   const remove = useCommand(removeCollectionCommand, {
     scope: { projectId: projectId ?? undefined, dbId: dbId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Collection 已删除");
-        void queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
         navigate({ to: `/console/databases/${dbId}` });
       } else if (result) {
         toast.error(result.message);

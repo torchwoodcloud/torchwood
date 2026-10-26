@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/ui-kit";
+import { useCollection, useCommand, invalidateAfterCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
@@ -47,14 +47,16 @@ import {
 } from "@/components/resource/shared";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 
 // 列表 fleet 化（§12.9-2）：databases 顶层列表与 Database 详情内嵌的
 // collections 列表换轨 useCollection（游标/页大小进 URL，分页栈 = 浏览器
 // 历史）；页内当前页搜索保持本地态（旧页语义）；选择态受控归页面。
-// 建删命令化：kit 列表键随资源命令 ok 自动失效；存量 ["databases"] /
-// ["collections"] 键由页面 onSettled 手动桥。批量 N 连发保持聚合直调形态
-//（Promise.allSettled + 汇总 toast + 手动失效桥）。
+// 建删命令化：kit 列表键随资源命令 ok 自动失效；存量前缀键由资源
+// legacyKeys 声明桥（§12.10-②，页面 onSettled 手动桥退役）。批量 N 连发
+// 保持聚合直调形态（Promise.allSettled + 汇总 toast；失效经
+// invalidateAfterCommand 复用资源句柄声明——kit 键 + 存量前缀一并失效）。
 
 export function DatabasesListPage() {
   const { projectId } = useAuth();
@@ -67,21 +69,19 @@ export function DatabasesListPage() {
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const platformAdmin = isPlatformAdmin(role);
 
+  // scope/enabled 不再逐处传（§12.10-③）：资源声明了 projectId，Provider
+  // 单源 + 未就绪自动停用。
   const list = useCollection(databasesResource, {
     from: "/console/databases",
     search: databasesSearch,
-    scope: { projectId: projectId ?? undefined },
-    query: { enabled: !!projectId },
   });
 
-  // 行删除命令化：kit 列表键随资源命令 ok 自动失效（refetch 桥退役）；存量
-  // ["databases"] 键手动桥。RowDeleteButton 无表单容器——结果分支 toast。
+  // 行删除命令化：失效 = kit 键 + 存量前缀（resource.legacyKeys 声明）。
+  // RowDeleteButton 无表单容器——结果分支 toast。
   const remove = useCommand(removeDatabaseCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Database 已删除");
-        void queryClient.invalidateQueries({ queryKey: ["databases", projectId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -128,8 +128,11 @@ export function DatabasesListPage() {
       } else {
         toast.success(`已删除 ${selectedDatabases.length} 个 Database`);
       }
-      queryClient.invalidateQueries({ queryKey: ["databases", projectId] });
-      list.refetch();
+      // 直调批量路径无命令容器：失效经 invalidateAfterCommand 复用资源句柄
+      // 声明（kit 键刷新列表 + 存量 ["databases"]/["collections"] 前缀）。
+      invalidateAfterCommand(queryClient, removeDatabaseCommand, {
+        projectId: projectId ?? undefined,
+      });
       setSelectedIds(new Set());
     } finally {
       setBulkDeleting(false);
@@ -201,7 +204,7 @@ export function DatabasesListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
           </div>
         }
         emptyTitle={search !== "" ? "没有匹配的 Database" : "暂无 Database"}
@@ -236,20 +239,16 @@ export function DatabasesListPage() {
 
 export function DatabaseNewPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const [name, setName] = useState("");
   const [id, setId] = useState("");
 
-  // 命令化：ok 后 kit databases 键自动失效 + 存量键手动桥；结果分支 toast
-  //（FormPageWrapper 无结果盒）。
+  // 命令化：ok 后失效 = kit 键 + 存量前缀（resource.legacyKeys 声明）；
+  // 结果分支 toast（FormPageWrapper 无结果盒）。
   const create = useCommand(createDatabaseCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Database 创建成功");
-        void queryClient.invalidateQueries({ queryKey: ["databases", projectId] });
         navigate({ to: `/console/databases/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
@@ -303,22 +302,20 @@ export function DatabaseDetailPage() {
     enabled: !!dbId,
   });
 
-  // 嵌套 from = Database 详情完整路径；dbId 进 scope（适配器缺参静默空段）。
+  // 嵌套 from = Database 详情完整路径；dbId 进 scope（显式全量——嵌套 scope
+  // 是替换语义；projectId 未就绪由资源声明的 scope 键自动停用）。
   const collList = useCollection(collectionsResource, {
     from: "/console/databases/$dbId",
     search: collectionsSearch,
     scope: { projectId: projectId ?? undefined, dbId: dbId ?? undefined },
-    query: { enabled: !!projectId },
   });
 
-  // 删除命令化：kit 键自动失效（databases / collections:dbId 两族）；存量
-  // ["databases"] / ["collections", dbId] 键手动桥。结果分支 toast。
+  // 删除命令化：失效 = kit 键 + 存量前缀（两资源各自 legacyKeys 声明）。
+  // 结果分支 toast。
   const removeDb = useCommand(removeDatabaseCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Database 已删除");
-        void queryClient.invalidateQueries({ queryKey: ["databases", projectId] });
         navigate({ to: "/console/databases" });
       } else if (result) {
         toast.error(result.message);
@@ -333,7 +330,6 @@ export function DatabaseDetailPage() {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Collection 已删除");
-        void queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -434,8 +430,12 @@ export function DatabaseDetailPage() {
       } else {
         toast.success(`已删除 ${deletable.length} 个 Collection`);
       }
-      queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
-      collList.refetch();
+      // 直调批量路径无命令容器：失效经 invalidateAfterCommand 复用资源句柄
+      // 声明（kit 键刷新列表 + 存量 ["collections"] 前缀）。
+      invalidateAfterCommand(queryClient, removeCollectionCommand, {
+        projectId: projectId ?? undefined,
+        dbId: dbId ?? undefined,
+      });
       setSelectedIds(new Set());
     } finally {
       setBulkDeleting(false);
@@ -501,7 +501,7 @@ export function DatabaseDetailPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={collList} />
+            <KeysetPagination list={collList} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
           </div>
         }
         emptyTitle={search !== "" ? "没有匹配的 Collection" : "暂无 Collection"}

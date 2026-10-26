@@ -18,12 +18,11 @@ import {
   createApiKeyCommand,
   removeApiKeyCommand,
   editApiKeyDescriptor,
-  expireApiKeyDescriptor,
+  expireOldApiKeyCommand,
   type CreateApiKeyForm,
   type EditApiKeyForm,
 } from "@/fleet/apiKeys";
 import { describeApiError } from "@/fleet/errors";
-import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
@@ -61,15 +60,15 @@ import { Form as FleetForm } from "@/components/fleet/command/form";
 import { TextField } from "@/components/fleet/command/fields";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 
 // 命令族切片（design.md §12.3）：写路径换 useCommand/useCommandForm（结果
 // 两分 + __skipToast + onSettled toast 单源）；失效 = kit 键自动 + 存量
-// ["api-keys"] 键手动桥（isFleetKey 守卫）。列表骨架（ResourceListPage/
-// useServerPaging/页内搜索/批量选择）留存量——kit DataTable 行选择未至。
+// ["api-keys"] 键手动桥（isFleetKey 守卫）。列表已 fleet 化（§12.9-1）：
+// useCollection + DataTable selection 受控面（批量删/行删接线）。
 
 export function ApiKeysListPage() {
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const queryClient = useQueryClient();
@@ -81,11 +80,10 @@ export function ApiKeysListPage() {
 
   // 列表 fleet 化（§12.9-2）：游标/页大小/enabled 过滤进 URL（分页栈 =
   // 浏览器历史）；页内当前页搜索保持本地态（旧页语义）。
+  // scope/enabled 不再逐处传（§12.10-③）：资源声明了 projectId，Provider 单源 + 未就绪自动停用
   const list = useCollection(apiKeysResource, {
     from: "/console/api-keys",
     search: apiKeysSearch,
-    scope: { projectId: projectId ?? undefined },
-    query: { enabled: !!projectId },
   });
 
   const enabled = enabledOf(list.query.predicate);
@@ -93,13 +91,11 @@ export function ApiKeysListPage() {
     list.setPredicate(v === "all" ? null : { field: "enabled", op: "eq", value: v });
   };
 
-  // 命令接线：toast 单源 onSettled；kit 键自动失效 + 存量 ["api-keys"] 键手动桥。
+  // 命令接线：toast 单源 onSettled；失效 = kit 键 + 存量键（resource.legacyKeys 声明）。
   const remove = useCommand(removeApiKeyCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("API Key 已删除");
-        void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -245,7 +241,7 @@ export function ApiKeysListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
           </div>
         }
         emptyTitle={search !== "" ? "没有匹配的 API Key" : filtered ? "该状态下暂无 API Key" : "暂无 API Key"}
@@ -281,8 +277,6 @@ export function ApiKeysListPage() {
 
 export function ApiKeyNewPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
 
   // scope 词表来自 /.well-known/torchwood（服务端策略注册表派生的静态目录，
   // 长缓存即可）；加载失败时退回手动高级输入。
@@ -298,11 +292,9 @@ export function ApiKeyNewPage() {
   // useCommandForm：secret = reveal（ok payload，卸载即弃，§12.3 裁决 5）。
   const create = useCommandForm(createApiKeyCommand, {
     defaultValues: { name: "", wildcard: false, selected: [] as string[], manual: "" },
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("API Key 创建成功，请立即复制 Secret");
-        void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -362,13 +354,15 @@ export function ApiKeyNewPage() {
           submitting={create.submitting}
           result={create.result}
           submitLabel="创建"
+          submittingLabel="创建中…"
+          cancelLabel="取消"
           onCancel={() => navigate({ to: "/console/api-keys" })}
         >
           <TextField
             form={form}
             name="name"
             label="名称"
-            required
+            required="必填"
             placeholder="Production API Key"
           />
           <div className="space-y-3">
@@ -519,8 +513,6 @@ function ScopeResourceRow({
 export function ApiKeyDetailPage() {
   const { id } = useParams({ strict: false });
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const [editOpen, setEditOpen] = useState(false);
   const [rotateOpen, setRotateOpen] = useState(false);
@@ -533,11 +525,9 @@ export function ApiKeyDetailPage() {
   });
 
   const remove = useCommand(removeApiKeyCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("API Key 已删除");
-        void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
         navigate({ to: "/console/api-keys" });
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -609,9 +599,7 @@ function ApiKeyEditDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const queryClient = useQueryClient();
   const tz = useUserTimezone();
-  const { projectId } = useAuth();
 
   const edit = useCommandForm(editApiKeyDescriptor(key_), {
     defaultValues: {
@@ -620,11 +608,9 @@ function ApiKeyEditDialog({
       enabled: key_.enabled,
       expireAt: key_.expire_at ? new Date(key_.expire_at).toISOString() : "",
     } satisfies EditApiKeyForm,
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("API Key 已更新");
-        void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
         onOpenChange(false);
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -647,9 +633,11 @@ function ApiKeyEditDialog({
           submitting={edit.submitting}
           result={edit.result}
           submitLabel="保存"
+          submittingLabel="保存中…"
+          cancelLabel="取消"
           onCancel={() => onOpenChange(false)}
         >
-          <TextField form={form} name="name" label="名称" required />
+          <TextField form={form} name="name" label="名称" required="必填" />
           <form.Field name="scopes">
             {(field: {
               state: { value: unknown; meta: { errors: ReadonlyArray<unknown> } };
@@ -728,33 +716,28 @@ function ApiKeyRotateDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { projectId } = useAuth();
   const [step, setStep] = useState<"intro" | "created">("intro");
   const [newKey, setNewKey] = useState<APIKey | null>(null);
   const [newSecret, setNewSecret] = useState("");
 
   const create = useCommand(createApiKeyCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         setNewKey(result.payload.api_key);
         setNewSecret(result.payload.secret);
         setStep("created");
-        void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
     },
   });
 
-  const expireOld = useCommand(expireApiKeyDescriptor, {
-    scope: { projectId: projectId ?? undefined },
+  // 资源挂载句柄（非裸 descriptor）：invalidates/legacyKeys 注入生效
+  const expireOld = useCommand(expireOldApiKeyCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("旧 Key 已设置立即过期，轮换完成");
-        void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
         onOpenChange(false);
       } else if (failure) {
         toast.error(describeApiError(failure));

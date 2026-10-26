@@ -6,6 +6,7 @@ import {
   type Segment,
 } from "@lynx-go/ui-kit/kernel";
 import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
+import { skipToast as SKIP } from "@/api/client";
 import {
   listWebhooks,
   createWebhook,
@@ -18,62 +19,20 @@ import {
   type CreateWebhookResponse,
   type WebhookSecret,
 } from "@/api/webhooks";
-import { gatewayErrorCode, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/fleet/errors";
 
 // 列表 fleet 化（§12.9-2）：Webhooks 主列表走 useCollection（URL 即真相：
 // cursor/size 进 URL，分页栈 = 浏览器历史）。数据面复用 axios 管线，失败
 // 在适配器收敛为 ApiError（fleet/errors.ts 收敛缝）。
 //
 // 命令族切片（§12.3）：建/改/删/轮换挂资源 commands（kit 集合键由
-// useCommand 自动失效）。结果两分映射同 apiKeys 先例（400→rejected
-// {code,message}、409→conflict、其余 throw ApiError）；命令调用一律
-// __skipToast（toast 单源 = onSettled）。update 的字段 diff 归调用方
-//（页面持原实体快照——url/events 仅变更时随请求发送，proto3 optional）。
-
-// 网关错误体（结果分支用）。
-interface GatewayErrorBody {
-  error?: { code?: string; message?: string };
-}
-
-function gatewayMessage(err: unknown): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { data?: GatewayErrorBody } }).response?.data?.error?.message
-  ) {
-    return String((err as { response: { data: GatewayErrorBody } }).response.data.error!.message);
-  }
-  return err instanceof Error ? err.message : String(err);
-}
-
-function isStatus(err: unknown, status: number): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { status?: number } }).response?.status === status
-  );
-}
-
-/** 结果两分映射：400→rejected、409→conflict、其余 throw（toApiError 收敛）。 */
-async function runCommandMapped<Payload>(
-  op: () => Promise<Payload>
-): Promise<CommandResult<Payload>> {
-  try {
-    return { status: "ok", payload: await op() };
-  } catch (err) {
-    if (isStatus(err, 400)) {
-      return { status: "rejected", code: gatewayErrorCode(err), message: gatewayMessage(err) };
-    }
-    if (isStatus(err, 409)) {
-      return { status: "conflict", message: gatewayMessage(err) };
-    }
-    throw toApiError(err);
-  }
-}
-
-const SKIP = { __skipToast: true } as const;
+// useCommand 自动失效）；投递重投是子资源动作——挂资源但显式 invalidates: []
+// 不失效 webhooks 集合，存量 ["webhook-deliveries"] 键经资源 legacyKeys 桥
+//（§12.10-② expireOld 样板：挂载句柄注入生效）。结果两分映射同 apiKeys
+// 先例（400→rejected{code,message}、409→conflict、其余 throw ApiError）；
+// 命令调用一律 __skipToast（toast 单源 = onSettled）。update 的字段 diff
+// 归调用方（页面持原实体快照——url/events 仅变更时随请求发送，proto3
+// optional）。
 
 async function fetchWebhooks(
   q: CollectionQuery,
@@ -91,11 +50,27 @@ async function fetchWebhooks(
   }
 }
 
+// 投递重投（webhook 子资源动作）：重置投递行为新一轮投递——不改变
+// webhook 实体，invalidates: [] 显式不失效 webhooks 集合（kit 键）；存量
+// ["webhook-deliveries"] 键经资源 legacyKeys 桥。挂资源（expireOld 样板）
+// 仅为让 legacyKeys 注入生效——页面用挂载句柄。
+export const redeliverDeliveryDescriptor = {
+  run: async (input: {
+    webhookId: string;
+    deliveryId: string;
+  }): Promise<CommandResult<WebhookDelivery>> =>
+    runCommandMapped(() => redeliverDelivery(input.webhookId, input.deliveryId, SKIP)),
+  invalidates: [],
+};
+
 export const webhooksResource = defineResource({
   name: "webhooks",
   getId: (row: Webhook) => row.id,
   scope: ["projectId"],
   collection: fetchWebhooks,
+  // 存量键失效桥（§12.10-②）：命令 ok 后除 kit 键外失效存量 ["webhooks"]
+  // /["webhook-deliveries"] 前缀键——页面 onSettled 手动桥退役。
+  legacyKeys: () => [["webhooks"], ["webhook-deliveries"]],
   commands: {
     // 创建 payload 携带一次性明文密钥（页面 reveal，关闭即弃）。
     create: {
@@ -131,25 +106,17 @@ export const webhooksResource = defineResource({
       run: async (input: { id: string }): Promise<CommandResult<WebhookSecret>> =>
         runCommandMapped(() => rotateWebhookSecret(input.id, SKIP)),
     },
+    // 子资源动作（非实体变更）：invalidates: [] 在 descriptor 内声明（见上）。
+    redeliver: redeliverDeliveryDescriptor,
   },
 });
 
-// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
-export const createWebhookCommand = webhooksResource.commands!.create;
-export const updateWebhookCommand = webhooksResource.commands!.update;
-export const removeWebhookCommand = webhooksResource.commands!.remove;
-export const rotateWebhookSecretCommand = webhooksResource.commands!.rotateSecret;
-
-// 投递重投（webhook 子资源动作，users 会话撤销同款先例）：独立 descriptor
-// 不挂资源——不涉 webhooks 集合语义；存量 ["webhook-deliveries"] 键由页面
-// onSettled 手动桥。
-export const redeliverDeliveryDescriptor = {
-  run: async (input: {
-    webhookId: string;
-    deliveryId: string;
-  }): Promise<CommandResult<WebhookDelivery>> =>
-    runCommandMapped(() => redeliverDelivery(input.webhookId, input.deliveryId, SKIP)),
-};
+// 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
+export const createWebhookCommand = webhooksResource.commands.create;
+export const updateWebhookCommand = webhooksResource.commands.update;
+export const removeWebhookCommand = webhooksResource.commands.remove;
+export const rotateWebhookSecretCommand = webhooksResource.commands.rotateSecret;
+export const redeliverDeliveryCommand = webhooksResource.commands.redeliver;
 
 // URL 搜索 schema（路由 validateSearch 与绑定共用同一实例）。默认页大小
 // 20 = 旧页 useServerPaging 默认；订阅列表无真实服务端过滤参数——不设

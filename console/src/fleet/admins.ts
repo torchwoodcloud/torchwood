@@ -12,7 +12,8 @@ import {
   updateAdmin,
   type Admin,
 } from "@/api/admins";
-import { gatewayErrorCode, toApiError } from "@/fleet/errors";
+import { skipToast as SKIP } from "@/api/client";
+import { runCommandMapped, toApiError } from "@/fleet/errors";
 
 // 列表 fleet 化（§12.9-2）+ 命令族切片（§12.3，apiKeys 同款）：admins 是
 // 平台级资源（GET /console/admins，旧页不随项目作用域）——defineResource
@@ -36,51 +37,6 @@ async function fetchAdmins(q: CollectionQuery): Promise<Segment<Admin>> {
     throw toApiError(err);
   }
 }
-
-// 网关错误体（结果分支用）。
-interface GatewayErrorBody {
-  error?: { code?: string; message?: string };
-}
-
-function gatewayMessage(err: unknown): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { data?: GatewayErrorBody } }).response?.data?.error?.message
-  ) {
-    return String((err as { response: { data: GatewayErrorBody } }).response.data.error!.message);
-  }
-  return err instanceof Error ? err.message : String(err);
-}
-
-function isStatus(err: unknown, status: number): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { status?: number } }).response?.status === status
-  );
-}
-
-/** 结果两分映射：400→rejected、409→conflict、404 按 treatAs 由调用方裁决、其余 throw。 */
-async function runCommandMapped<Payload>(
-  op: () => Promise<Payload>,
-): Promise<CommandResult<Payload>> {
-  try {
-    return { status: "ok", payload: await op() };
-  } catch (err) {
-    if (isStatus(err, 400)) {
-      return { status: "rejected", code: gatewayErrorCode(err), message: gatewayMessage(err) };
-    }
-    if (isStatus(err, 409)) {
-      return { status: "conflict", message: gatewayMessage(err) };
-    }
-    throw toApiError(err);
-  }
-}
-
-const SKIP = { __skipToast: true } as const;
 
 export const adminsResource = defineResource({
   name: "admins",
@@ -127,7 +83,7 @@ export const adminsSearch = collectionQuerySchema({ defaultSize: 20 });
 // 命令式编排（N 条聚合等非 useCommand 面）的手动失效。
 export const adminsCollectionKey = ["collection", "admins"] as const;
 
-// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
-export const createAdminCommand = adminsResource.commands!.create;
-export const updateAdminCommand = adminsResource.commands!.update;
-export const removeAdminCommand = adminsResource.commands!.remove;
+// 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
+export const createAdminCommand = adminsResource.commands.create;
+export const updateAdminCommand = adminsResource.commands.update;
+export const removeAdminCommand = adminsResource.commands.remove;

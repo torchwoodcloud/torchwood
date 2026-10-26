@@ -6,6 +6,7 @@ import {
   type Segment,
 } from "@lynx-go/ui-kit/kernel";
 import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
+import { skipToast as SKIP } from "@/api/client";
 import {
   createInviteCode,
   createProject,
@@ -17,7 +18,7 @@ import {
   type InviteCode,
   type Project,
 } from "@/api/projects";
-import { toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/fleet/errors";
 
 // 列表 fleet 化（§12.9-2）：projects 是平台级资源（GET /server/projects，
 // 旧页不随项目作用域）——defineResource 不设 scope，直接请求；游标/页大小
@@ -41,6 +42,10 @@ export const projectsResource = defineResource({
   name: "projects",
   getId: (row: Project) => row.id,
   collection: fetchProjects,
+  // 存量键失效桥（§12.10-②，平台级资源——legacyKeys 与 scope 声明无关）：
+  // 命令 ok 后除 kit 键外失效存量 ["projects"] 宽前缀键（settings/详情页
+  // 仍吃存量键）。
+  legacyKeys: () => [["projects"]],
   commands: {
     // 新建项目（实体集合变更）：description 空 = 不发送（run 内收敛）。
     create: {
@@ -63,53 +68,12 @@ export const projectsResource = defineResource({
 // = 旧页默认；无服务端过滤参数——不设 filters。
 export const projectsSearch = collectionQuerySchema({ defaultSize: 20 });
 
-// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
-export const createProjectCommand = projectsResource.commands!.create;
+// 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
+export const createProjectCommand = projectsResource.commands.create;
 
 // —— 写路径命令化（§12.9 阶段 2）：settings 页的更新/删除 ——
-
-interface GatewayErrorBody {
-  error?: { code?: string; message?: string };
-}
-
-function gatewayMessage(err: unknown): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { data?: GatewayErrorBody } }).response?.data?.error?.message
-  ) {
-    return String((err as { response: { data: GatewayErrorBody } }).response.data.error!.message);
-  }
-  return err instanceof Error ? err.message : String(err);
-}
-
-function isStatus(err: unknown, status: number): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { status?: number } }).response?.status === status
-  );
-}
-
-async function runCommandMapped<Payload>(
-  op: () => Promise<Payload>,
-): Promise<CommandResult<Payload>> {
-  try {
-    return { status: "ok", payload: await op() };
-  } catch (err) {
-    if (isStatus(err, 400)) {
-      return { status: "rejected", message: gatewayMessage(err) };
-    }
-    if (isStatus(err, 409)) {
-      return { status: "conflict", message: gatewayMessage(err) };
-    }
-    throw toApiError(err);
-  }
-}
-
-const SKIP = { __skipToast: true } as const;
+//（裸 descriptor：不挂 resource——kit 集合键无谓失效可免；失效 = 自带
+// legacyKeys 宽前缀声明，§12.10-②。）
 
 export interface UpdateProjectInput {
   id: string;
@@ -120,6 +84,8 @@ export interface UpdateProjectInput {
 
 // 输入自包含（id 在入参里）——直接是常量 descriptor，无需工厂。
 export const updateProjectCommand: CommandDescriptor<UpdateProjectInput, Project> = {
+  // 存量键失效桥（§12.10-②）：["projects", id] 详情/["projects"] 全前缀族。
+  legacyKeys: () => [["projects"]],
   async run(i) {
     const { id, ...patch } = i;
     return runCommandMapped(() => updateProject(id, patch, SKIP));
@@ -128,6 +94,7 @@ export const updateProjectCommand: CommandDescriptor<UpdateProjectInput, Project
 
 export const removeProjectCommand: CommandDescriptor<{ id: string }, null> = {
   treatAs: { "not-found": { status: "ok" as const, payload: null } },
+  legacyKeys: () => [["projects"]],
   async run(i) {
     await runCommandMapped(async () => {
       await deleteProject(i.id, SKIP);
@@ -143,6 +110,8 @@ export const updateOAuthAllowlistCommand: CommandDescriptor<
   { id: string; urls: string[] },
   Project
 > = {
+  // 白名单落在 project 实体上（PATCH 回 Project）——失效存量 ["projects"]。
+  legacyKeys: () => [["projects"]],
   async run(i) {
     return runCommandMapped(() => updateOAuthRedirectAllowlist(i.id, i.urls, SKIP));
   },
@@ -152,6 +121,7 @@ export const createInviteCodeCommand: CommandDescriptor<
   { projectId: string; maxUses?: number; expireAt?: string },
   InviteCode
 > = {
+  legacyKeys: () => [["invite-codes"]],
   async run(i) {
     return runCommandMapped(() =>
       createInviteCode(
@@ -170,6 +140,7 @@ export const removeInviteCodeCommand: CommandDescriptor<
   { projectId: string; id: string },
   null
 > = {
+  legacyKeys: () => [["invite-codes"]],
   async run(i) {
     await runCommandMapped(async () => {
       await deleteInviteCode(i.projectId, i.id, SKIP);

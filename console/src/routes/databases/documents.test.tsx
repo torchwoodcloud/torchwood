@@ -1,11 +1,17 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Outlet } from "@/router/outlet-context.tsx";
 import { TestRouter } from "@/test-utils/TestRouter";
 import { AxiosError } from "axios";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DocumentDetailPage, DocumentsListPage } from "./documents";
-import { getCollection, getDocument, listDocuments, updateDocument } from "@/api/databases";
+import {
+  deleteDocument,
+  getCollection,
+  getDocument,
+  listDocuments,
+  updateDocument,
+} from "@/api/databases";
 import { canWrite } from "@/hooks/useAdminRole";
 
 // OCC 通道方言（§12.5）：冲突 = HTTP 400 + message 前缀域码（非 409）。
@@ -237,5 +243,33 @@ describe("DocumentsListPage（列表 fleet 化 URL 锚）", () => {
         expect.objectContaining({ pageToken: "tok-2" }),
       ),
     );
+  });
+
+  // §12.10-② 失效收口锚：行删除 ok 后 kit documents 集合键失效自动刷新
+  // 活跃列表（list.refetch 手动桥退役——缓存失效行为断言，非 refetch 断言）。
+  it("行删除 ok：kit 键失效自动刷新列表（descriptor invalidates 声明）", async () => {
+    vi.mocked(getCollection).mockReset().mockResolvedValue(collection);
+    vi.mocked(listDocuments)
+      .mockReset()
+      .mockResolvedValue({ rows: [document], nextPageToken: undefined });
+    vi.mocked(deleteDocument).mockReset().mockResolvedValue(undefined);
+    renderList();
+    await screen.findByText("hello");
+    expect(vi.mocked(listDocuments)).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    // torchwood 存量确认壳：确认钮与触发钮同名，scope 到对话框内
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    await waitFor(() =>
+      expect(vi.mocked(deleteDocument)).toHaveBeenCalledWith(
+        "app",
+        "posts",
+        "doc-1",
+        3,
+        { __skipToast: true },
+      ),
+    );
+    // kit 集合键失效（命令 scope 与列表绑定 scope 同形相交）→ 活跃列表 refetch
+    await waitFor(() => expect(vi.mocked(listDocuments)).toHaveBeenCalledTimes(2));
   });
 });

@@ -6,7 +6,8 @@ import {
   type ResourceScope,
   type Segment,
 } from "@lynx-go/ui-kit/kernel";
-import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
+import { collectionQuerySchema, filterValues } from "@lynx-go/ui-kit/schema";
+import { skipToast as SKIP } from "@/api/client";
 import {
   createUser,
   createUserToken,
@@ -18,7 +19,7 @@ import {
   type TokenBundle,
   type User,
 } from "@/api/users";
-import { gatewayErrorCode, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/fleet/errors";
 
 // 列表 fleet 化（§12.9-2）+ 命令族切片（§12.3，apiKeys 同款）：users 列表
 // 换 useCollection——游标/页大小/服务端过滤（ParseUserList 白名单 DSL 的
@@ -26,54 +27,10 @@ import { gatewayErrorCode, toApiError } from "@/fleet/errors";
 // ApiError（fleet/errors.ts）。写路径换 useCommand：结果两分映射——
 // 400→rejected、409→conflict、其余 throw ApiError；命令调用一律
 // __skipToast（toast 单源 = onSettled）；kit 列表键自动失效（descriptor 挂
-// resource），存量键（["users", …]——详情/编辑/会话页仍吃存量键）由页面
-// onSettled 手动桥接。会话撤销/令牌签发不涉 users 集合语义 → 裸 descriptor
-//（不挂 resource，不触发无谓的列表失效）。
-
-// 网关错误体（结果分支用）。
-interface GatewayErrorBody {
-  error?: { code?: string; message?: string };
-}
-
-function gatewayMessage(err: unknown): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { data?: GatewayErrorBody } }).response?.data?.error?.message
-  ) {
-    return String((err as { response: { data: GatewayErrorBody } }).response.data.error!.message);
-  }
-  return err instanceof Error ? err.message : String(err);
-}
-
-function isStatus(err: unknown, status: number): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { status?: number } }).response?.status === status
-  );
-}
-
-/** 结果两分映射：400→rejected、409→conflict、404 按 treatAs 由调用方裁决、其余 throw。 */
-async function runCommandMapped<Payload>(
-  op: () => Promise<Payload>,
-): Promise<CommandResult<Payload>> {
-  try {
-    return { status: "ok", payload: await op() };
-  } catch (err) {
-    if (isStatus(err, 400)) {
-      return { status: "rejected", code: gatewayErrorCode(err), message: gatewayMessage(err) };
-    }
-    if (isStatus(err, 409)) {
-      return { status: "conflict", message: gatewayMessage(err) };
-    }
-    throw toApiError(err);
-  }
-}
-
-const SKIP = { __skipToast: true } as const;
+// resource），存量键（["users", …]——详情/编辑/会话页仍吃存量键）由
+// resource.legacyKeys 宽前缀声明失效（§12.10-②，页面手动桥已退役）。
+// 会话撤销/令牌签发不涉 users 集合语义 → 裸 descriptor（不挂 resource，
+// 不触发无谓的列表失效；会话键桥在 descriptor 自带 legacyKeys）。
 
 // 服务端过滤字段（URL 谓词 eq 叶子）。created_after/created_before 在 URL
 // 存绝对时刻（ISO）：跨时区可分享；页面在写入边界做墙钟↔绝对换算（按管理
@@ -86,19 +43,13 @@ export type { FilterField as UserFilterField };
 export function userFiltersOf(
   predicate: Predicate | undefined
 ): Partial<Record<FilterField, string>> {
-  if (!predicate) return {};
-  const leaves = "all" in predicate ? predicate.all : "field" in predicate ? [predicate] : [];
+  // kit 纯函数投影（schema/filters）：谓词→field 单值 Record；本域再做
+  // 白名单 + 字符串 + 非空收敛（等价旧手写叶子遍历）。
+  const values = filterValues(predicate);
   const out: Partial<Record<FilterField, string>> = {};
-  for (const leaf of leaves) {
-    if (!("field" in leaf)) continue;
-    const field = leaf.field as FilterField;
-    if (
-      (FILTER_FIELDS as readonly string[]).includes(field) &&
-      typeof leaf.value === "string" &&
-      leaf.value !== ""
-    ) {
-      out[field] = leaf.value;
-    }
+  for (const field of FILTER_FIELDS) {
+    const v = values[field];
+    if (typeof v === "string" && v !== "") out[field] = v;
   }
   return out;
 }
@@ -149,6 +100,10 @@ export const usersResource = defineResource({
   getId: (row: User) => row.id,
   scope: ["projectId"],
   collection: fetchUsers,
+  // 存量键失效桥（§12.10-②）：命令 ok 后除 kit 键外失效存量 ["users"]
+  // 宽前缀键（["users", id] 详情 / ["users", id, "sessions"] 会话全前缀
+  // 族）——页面 onSettled 手动桥退役。
+  legacyKeys: () => [["users"]],
   commands: {
     create: {
       run: async (form: CreateUserForm): Promise<CommandResult<User>> =>
@@ -206,14 +161,15 @@ export const usersResource = defineResource({
   },
 });
 
-// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
-export const createUserCommand = usersResource.commands!.create;
-export const updateUserCommand = usersResource.commands!.update;
-export const removeUserCommand = usersResource.commands!.remove;
-export const resetUserPasswordCommand = usersResource.commands!.resetPassword;
+// 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
+export const createUserCommand = usersResource.commands.create;
+export const updateUserCommand = usersResource.commands.update;
+export const removeUserCommand = usersResource.commands.remove;
+export const resetUserPasswordCommand = usersResource.commands.resetPassword;
 
-// 裸 descriptor（不挂 resource——不涉 users 集合失效；存量会话键由页面桥）：
-// 会话撤销；令牌签发（模拟登录，payload 一次性展示）。
+// 裸 descriptor（不挂 resource——不涉 users 集合 kit 键失效；存量键桥在
+// descriptor 自带 legacyKeys）：会话撤销；令牌签发（模拟登录，payload
+// 一次性展示）。
 export const revokeUserSessionDescriptor = {
   run: async (input: {
     userId: string;
@@ -224,6 +180,9 @@ export const revokeUserSessionDescriptor = {
       return null;
     }),
   treatAs: { "not-found": { status: "ok" as const, payload: null } },
+  // 会话不是集合形态：只桥存量 ["users", …] 前缀（含 sessions 键），不触
+  // 发 kit 列表失效。
+  legacyKeys: () => [["users"]],
 };
 
 export const issueUserTokenDescriptor = {

@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import type { FunctionItem } from "@/api/functions";
 import { updateFunctionClientPolicyCommand } from "@/fleet/functions";
 import { describeApiError } from "@/fleet/errors";
-import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,8 +37,6 @@ export function FunctionClientPolicyCard({
   fn: FunctionItem;
   writeable: boolean;
 }) {
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
   const [callable, setCallable] = useState(fn.client_callable);
   const [limit, setLimit] = useState(String(fn.client_per_user_limit || 10));
   const [limitWindow, setLimitWindow] = useState<"minute" | "hour" | "day">(
@@ -54,14 +50,12 @@ export function FunctionClientPolicyCard({
   }, [fn]);
 
   // 命令接线（§12.3）：client_* 面是 function 实体更新——挂函数资源（kit
-  // 集合自动失效）+ 存量 ["functions"] 键手动桥；配额文本展示形在 descriptor
-  // run 内收敛整数。toast 单源 onSettled。
+  // 集合自动失效；资源挂载句柄），存量 ["functions"] 键由 resource.legacyKeys
+  // 桥；配额文本展示形在 descriptor run 内收敛整数。toast 单源 onSettled。
   const save = useCommand(updateFunctionClientPolicyCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("客户端调用策略已保存");
-        queryClient.invalidateQueries({ queryKey: ["functions"] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {

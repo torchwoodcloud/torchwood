@@ -1,10 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useOutletContext } from "@/router/outlet-context";
-import {
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import {
@@ -68,7 +65,6 @@ import {
 export function CollectionNewPage() {
   const { dbId } = useParams({ strict: false });
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const [name, setName] = useState("");
@@ -83,13 +79,13 @@ export function CollectionNewPage() {
   });
 
   // 命令化：schema 定义表单的提交形收敛（ID 空则从名称派生、权限空不发送）
-  // 在 descriptor run 内；ok 后 kit collections 键自动失效 + 存量键手动桥。
+  // 在 descriptor run 内；ok 后失效 = kit collections 键 + 存量前缀
+  //（resource.legacyKeys 声明，§12.10-②）。
   const create = useCommand(createCollectionCommand, {
     scope: { projectId: projectId ?? undefined, dbId: dbId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Collection 创建成功");
-        void queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
         navigate({ to: `/console/databases/${dbId}/collections/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
@@ -126,7 +122,6 @@ export function CollectionNewPage() {
 
 export function CollectionDetailPage() {
   const { dbId, collId } = useOutletContext<CollectionOutletContext>();
-  const queryClient = useQueryClient();
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
@@ -140,21 +135,17 @@ export function CollectionDetailPage() {
     queryFn: () => getCollection(dbId, collId),
   });
 
-  // 命令接线（§12.3）：schema 编辑器写路径挂 collections 资源（kit 集合键
-  // 自动失效）+ 存量 ["collections"] 键手动桥（详情键 + db 前缀列表键）；
-  // 提交形收敛（索引 orders 全 asc）在 descriptor run 内。toast 单源
-  // onSettled。
+  // 命令接线（§12.3）：schema 编辑器写路径挂 collections 资源——失效 =
+  // kit collections 键 + 存量前缀（resource.legacyKeys 声明，覆盖详情键
+  // ["collections", dbId, collId] 与 db 前缀列表键，§12.10-②）；提交形
+  // 收敛（索引 orders 全 asc）在 descriptor run 内。toast 单源 onSettled。
   const commandScope = { projectId: projectId ?? undefined, dbId: dbId ?? undefined };
-  const invalidateDetail = () =>
-    queryClient.invalidateQueries({ queryKey: ["collections", dbId, collId] });
-  const invalidateDb = () => queryClient.invalidateQueries({ queryKey: ["collections", dbId] });
 
   const updatePerms = useCommand(updateCollectionPermissionsCommand, {
     scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("权限已更新");
-        void invalidateDetail();
         setPermDialogOpen(false);
       } else if (result) {
         toast.error(result.message);
@@ -169,8 +160,6 @@ export function CollectionDetailPage() {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Attribute 已添加");
-        void invalidateDetail();
-        void invalidateDb();
         setAttrDialogOpen(false);
       } else if (result) {
         toast.error(result.message);
@@ -185,8 +174,6 @@ export function CollectionDetailPage() {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Index 已添加");
-        void invalidateDetail();
-        void invalidateDb();
         setIndexDialogOpen(false);
       } else if (result) {
         toast.error(result.message);
@@ -201,8 +188,6 @@ export function CollectionDetailPage() {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Attribute 已删除");
-        void invalidateDetail();
-        void invalidateDb();
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -216,8 +201,6 @@ export function CollectionDetailPage() {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Index 已删除");
-        void invalidateDetail();
-        void invalidateDb();
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -231,8 +214,6 @@ export function CollectionDetailPage() {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("集合设置已更新");
-        void invalidateDetail();
-        void invalidateDb();
         setSettingsDialogOpen(false);
       } else if (result) {
         toast.error(result.message);

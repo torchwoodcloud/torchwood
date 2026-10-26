@@ -6,6 +6,7 @@ import {
   type Segment,
 } from "@lynx-go/ui-kit/kernel";
 import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
+import { skipToast as SKIP } from "@/api/client";
 import {
   createAttribute,
   createCollection,
@@ -23,7 +24,7 @@ import {
   type Database,
   type Index,
 } from "@/api/databases";
-import { gatewayErrorCode, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/fleet/errors";
 
 // 列表 fleet 化（§12.9-2，databases 域）：databases 顶层列表 + Database 详情
 // 内嵌的 collections 列表。游标/页大小进 URL（分页栈 = 浏览器历史）；两个
@@ -32,55 +33,11 @@ import { gatewayErrorCode, toApiError } from "@/fleet/errors";
 // 收敛为 ApiError（fleet/errors.ts）。
 //
 // 建删命令族切片：database/collection 的 create/remove 挂各自资源（kit 列表
-// 键随 ok 自动失效）；存量 ["databases"] / ["collections"] 键由页面 onSettled
-// 手动桥。结果两分映射同 apiKeys（400→rejected、409→conflict、其余 throw
-// ApiError）；api 调用一律 __skipToast（toast 单源 = onSettled）。集合
-// schema 编辑器（属性/索引/设置/权限）同挂 collections 资源命令。
-
-// 网关错误体（结果分支用）。
-interface GatewayErrorBody {
-  error?: { code?: string; message?: string };
-}
-
-function gatewayMessage(err: unknown): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { data?: GatewayErrorBody } }).response?.data?.error?.message
-  ) {
-    return String((err as { response: { data: GatewayErrorBody } }).response.data.error!.message);
-  }
-  return err instanceof Error ? err.message : String(err);
-}
-
-function isStatus(err: unknown, status: number): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { status?: number } }).response?.status === status
-  );
-}
-
-/** 结果两分映射：400→rejected、409→conflict、404 按 treatAs 由调用方裁决、其余 throw。 */
-async function runCommandMapped<Payload>(
-  op: () => Promise<Payload>
-): Promise<CommandResult<Payload>> {
-  try {
-    return { status: "ok", payload: await op() };
-  } catch (err) {
-    if (isStatus(err, 400)) {
-      return { status: "rejected", code: gatewayErrorCode(err), message: gatewayMessage(err) };
-    }
-    if (isStatus(err, 409)) {
-      return { status: "conflict", message: gatewayMessage(err) };
-    }
-    throw toApiError(err);
-  }
-}
-
-const SKIP = { __skipToast: true } as const;
+// 键随 ok 自动失效）；存量 ["databases"] / ["collections"] 前缀键由资源
+// legacyKeys 声明桥（§12.10-②，页面 onSettled 手动桥退役）。结果两分映射同
+// apiKeys（400→rejected、409→conflict、其余 throw ApiError）；api 调用一律
+// __skipToast（toast 单源 = onSettled）。集合 schema 编辑器（属性/索引/设置/
+// 权限）同挂 collections 资源命令。
 
 // —— databases（顶层列表；scope 只有 projectId）——
 
@@ -109,6 +66,10 @@ export const databasesResource = defineResource({
   getId: (row: Database) => row.id,
   scope: ["projectId"],
   collection: fetchDatabases,
+  // 存量键失效桥（§12.10-②）：命令 ok 后除 kit 键外失效存量前缀键。
+  // 宽前缀两族——databases 命令 scope 只有 projectId（构不出 ["collections",
+  // dbId]），且删库连带其下集合缓存失活，["collections"] 前缀一并覆盖。
+  legacyKeys: () => [["databases"], ["collections"]],
   commands: {
     create: {
       run: async (input: { id: string; name: string }): Promise<CommandResult<Database>> =>
@@ -161,6 +122,10 @@ export const collectionsResource = defineResource({
   getId: (row: Collection) => row.id,
   scope: ["projectId", "dbId"],
   collection: fetchCollections,
+  // 存量键失效桥（§12.10-②）：宽前缀覆盖两形存量键——列表桥
+  // ["collections", dbId] 与详情键 ["collections", dbId, collId]（getCollection
+  // useQuery 仍消费）；命令 scope 的 dbId 构键，宽前缀等价且少一处闭包。
+  legacyKeys: () => [["collections"]],
   commands: {
     create: {
       run: async (form: CreateCollectionForm): Promise<CommandResult<Collection>> =>
@@ -298,14 +263,14 @@ export const collectionsResource = defineResource({
   },
 });
 
-// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
-export const createDatabaseCommand = databasesResource.commands!.create;
-export const removeDatabaseCommand = databasesResource.commands!.remove;
-export const createCollectionCommand = collectionsResource.commands!.create;
-export const removeCollectionCommand = collectionsResource.commands!.remove;
-export const updateCollectionSettingsCommand = collectionsResource.commands!.updateSettings;
-export const updateCollectionPermissionsCommand = collectionsResource.commands!.updatePermissions;
-export const addCollectionAttributeCommand = collectionsResource.commands!.addAttribute;
-export const addCollectionIndexCommand = collectionsResource.commands!.addIndex;
-export const removeCollectionAttributeCommand = collectionsResource.commands!.removeAttribute;
-export const removeCollectionIndexCommand = collectionsResource.commands!.removeIndex;
+// 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
+export const createDatabaseCommand = databasesResource.commands.create;
+export const removeDatabaseCommand = databasesResource.commands.remove;
+export const createCollectionCommand = collectionsResource.commands.create;
+export const removeCollectionCommand = collectionsResource.commands.remove;
+export const updateCollectionSettingsCommand = collectionsResource.commands.updateSettings;
+export const updateCollectionPermissionsCommand = collectionsResource.commands.updatePermissions;
+export const addCollectionAttributeCommand = collectionsResource.commands.addAttribute;
+export const addCollectionIndexCommand = collectionsResource.commands.addIndex;
+export const removeCollectionAttributeCommand = collectionsResource.commands.removeAttribute;
+export const removeCollectionIndexCommand = collectionsResource.commands.removeIndex;

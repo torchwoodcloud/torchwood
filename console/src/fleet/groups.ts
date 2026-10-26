@@ -6,6 +6,7 @@ import {
   type Segment,
 } from "@lynx-go/ui-kit/kernel";
 import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
+import { skipToast as SKIP } from "@/api/client";
 import {
   createGroup,
   createMembership,
@@ -18,7 +19,7 @@ import {
   type Group,
   type Membership,
 } from "@/api/groups";
-import { gatewayErrorCode, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/fleet/errors";
 
 // 列表 fleet 化（§12.9-2）+ 命令族切片（§12.3，apiKeys 同款）：groups 列表
 // 换 useCollection——游标/页大小进 URL（旧页无服务端过滤——不设 filters）；
@@ -26,53 +27,8 @@ import { gatewayErrorCode, toApiError } from "@/fleet/errors";
 //（fleet/errors.ts）。写路径换 useCommand：结果两分映射——400→rejected、
 // 409→conflict、其余 throw ApiError；命令调用一律 __skipToast（toast 单源 =
 // onSettled）；kit 列表键自动失效（descriptor 挂 resource），存量键
-//（["groups", …]/["memberships", …]——详情页仍吃存量键）由页面 onSettled
-// 手动桥接。
-
-// 网关错误体（结果分支用）。
-interface GatewayErrorBody {
-  error?: { code?: string; message?: string };
-}
-
-function gatewayMessage(err: unknown): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { data?: GatewayErrorBody } }).response?.data?.error?.message
-  ) {
-    return String((err as { response: { data: GatewayErrorBody } }).response.data.error!.message);
-  }
-  return err instanceof Error ? err.message : String(err);
-}
-
-function isStatus(err: unknown, status: number): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { status?: number } }).response?.status === status
-  );
-}
-
-/** 结果两分映射：400→rejected、409→conflict、404 按 treatAs 由调用方裁决、其余 throw。 */
-async function runCommandMapped<Payload>(
-  op: () => Promise<Payload>,
-): Promise<CommandResult<Payload>> {
-  try {
-    return { status: "ok", payload: await op() };
-  } catch (err) {
-    if (isStatus(err, 400)) {
-      return { status: "rejected", code: gatewayErrorCode(err), message: gatewayMessage(err) };
-    }
-    if (isStatus(err, 409)) {
-      return { status: "conflict", message: gatewayMessage(err) };
-    }
-    throw toApiError(err);
-  }
-}
-
-const SKIP = { __skipToast: true } as const;
+//（["groups", …]/["memberships", …]——详情页仍吃存量键）由
+// resource.legacyKeys 宽前缀声明失效（§12.10-②，页面手动桥已退役）。
 
 async function fetchGroups(
   q: CollectionQuery,
@@ -95,6 +51,10 @@ export const groupsResource = defineResource({
   getId: (row: Group) => row.id,
   scope: ["projectId"],
   collection: fetchGroups,
+  // 存量键失效桥（§12.10-②）：命令 ok 后除 kit 键外失效存量 ["groups"]/
+  // ["memberships"] 宽前缀键（["groups", id] 详情 / ["groups", id, "prefs"] /
+  // ["memberships", id, …] 成员页全前缀族）——页面 onSettled 手动桥退役。
+  legacyKeys: () => [["groups"], ["memberships"]],
   commands: {
     create: {
       run: async (input: { name: string }): Promise<CommandResult<Group>> =>
@@ -183,14 +143,14 @@ export const groupsResource = defineResource({
   },
 });
 
-// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
-export const createGroupCommand = groupsResource.commands!.create;
-export const removeGroupCommand = groupsResource.commands!.remove;
-export const updateGroupPrefsCommand = groupsResource.commands!.updatePrefs;
-export const addGroupMemberCommand = groupsResource.commands!.addMember;
-export const setGroupMemberRoleCommand = groupsResource.commands!.setMemberRole;
-export const setGroupMemberStatusCommand = groupsResource.commands!.setMemberStatus;
-export const removeGroupMemberCommand = groupsResource.commands!.removeMember;
+// 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
+export const createGroupCommand = groupsResource.commands.create;
+export const removeGroupCommand = groupsResource.commands.remove;
+export const updateGroupPrefsCommand = groupsResource.commands.updatePrefs;
+export const addGroupMemberCommand = groupsResource.commands.addMember;
+export const setGroupMemberRoleCommand = groupsResource.commands.setMemberRole;
+export const setGroupMemberStatusCommand = groupsResource.commands.setMemberStatus;
+export const removeGroupMemberCommand = groupsResource.commands.removeMember;
 
 // URL 搜索 schema（路由 validateSearch 与绑定共用同一实例）。默认页大小 20
 // = 旧页默认；无服务端过滤参数——不设 filters。

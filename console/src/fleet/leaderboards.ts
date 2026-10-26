@@ -4,6 +4,7 @@ import {
   type Segment,
 } from "@lynx-go/ui-kit/kernel";
 import { collectionQuerySchema } from "@lynx-go/ui-kit/schema";
+import { skipToast as SKIP } from "@/api/client";
 import {
   listBoards,
   createBoard,
@@ -15,7 +16,7 @@ import {
   type CreateBoardInput,
   type LeaderboardBoard,
 } from "@/api/leaderboards";
-import { gatewayErrorCode, toApiError } from "@/fleet/errors";
+import { runCommandMapped, toApiError } from "@/fleet/errors";
 
 // 列表 fleet 化（§12.9-2）：排行榜主列表换 useCollection。 boards 端点
 // （/console/leaderboards/boards）非分页——一次返回全量，无 next_page_token、
@@ -26,55 +27,11 @@ import { gatewayErrorCode, toApiError } from "@/fleet/errors";
 //
 // 命令族切片（§12.3）：榜建/改/删挂资源 commands（kit 集合键由 useCommand
 // 自动失效——现页 refresh 桥退场）；条目删除/结算弃奖/重跑是榜子资源写、
-// 不改变榜集合——独立 descriptor，失效由页面桥存量
-// ["leaderboards-top"/"-periods"/"-settlements"] 键。结果两分映射同 apiKeys
-// 先例（400→rejected{code,message}、409→conflict、其余 throw ApiError）；
-// 命令调用一律 __skipToast（toast 单源 = onSettled）。
-
-// 网关错误体（结果分支用）。
-interface GatewayErrorBody {
-  error?: { code?: string; message?: string };
-}
-
-function gatewayMessage(err: unknown): string {
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { data?: GatewayErrorBody } }).response?.data?.error?.message
-  ) {
-    return String((err as { response: { data: GatewayErrorBody } }).response.data.error!.message);
-  }
-  return err instanceof Error ? err.message : String(err);
-}
-
-function isStatus(err: unknown, status: number): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "response" in err &&
-    (err as { response?: { status?: number } }).response?.status === status
-  );
-}
-
-/** 结果两分映射：400→rejected、409→conflict、其余 throw（toApiError 收敛）。 */
-async function runCommandMapped<Payload>(
-  op: () => Promise<Payload>
-): Promise<CommandResult<Payload>> {
-  try {
-    return { status: "ok", payload: await op() };
-  } catch (err) {
-    if (isStatus(err, 400)) {
-      return { status: "rejected", code: gatewayErrorCode(err), message: gatewayMessage(err) };
-    }
-    if (isStatus(err, 409)) {
-      return { status: "conflict", message: gatewayMessage(err) };
-    }
-    throw toApiError(err);
-  }
-}
-
-const SKIP = { __skipToast: true } as const;
+// 不改变榜集合——独立 descriptor，存量
+// ["leaderboards-top"/"-periods"/"-settlements"] 前缀键在 descriptor 级
+// legacyKeys 声明（§12.10-②，宽前缀覆盖 boardId 形）——页面手动桥退役。
+// 结果两分映射同 apiKeys 先例（400→rejected{code,message}、409→conflict、
+// 其余 throw ApiError）；命令调用一律 __skipToast（toast 单源 = onSettled）。
 
 async function fetchBoards(): Promise<Segment<LeaderboardBoard>> {
   try {
@@ -123,13 +80,14 @@ export const boardsResource = defineResource({
   },
 });
 
-// 命令句柄提升（demo 同款 commands! 模式——Resource.commands 可选类型面）。
-export const createBoardCommand = boardsResource.commands!.create;
-export const updateBoardCommand = boardsResource.commands!.update;
-export const removeBoardCommand = boardsResource.commands!.remove;
+// 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
+export const createBoardCommand = boardsResource.commands.create;
+export const updateBoardCommand = boardsResource.commands.update;
+export const removeBoardCommand = boardsResource.commands.remove;
 
-// ——榜子资源命令（独立 descriptor：条目/结算写不改变榜集合；失效由页面桥
-// 存量 ["leaderboards-*"] 键）——
+// ——榜子资源命令（独立 descriptor：条目/结算写不改变榜集合；存量
+// ["leaderboards-*"] 前缀键在 descriptor 级 legacyKeys 声明——宽前缀覆盖
+// ["leaderboards-top"/"-periods"/"-settlements", boardId] 全族）——
 
 export const removeBoardEntryDescriptor = {
   run: async (input: {
@@ -142,6 +100,7 @@ export const removeBoardEntryDescriptor = {
       return null;
     }),
   treatAs: { "not-found": { status: "ok" as const, payload: null } },
+  legacyKeys: () => [["leaderboards-top"], ["leaderboards-periods"], ["leaderboards-settlements"]],
 };
 
 export const voidSettlementDescriptor = {
@@ -150,6 +109,7 @@ export const voidSettlementDescriptor = {
       await voidSettlement(input.boardId, input.period, SKIP);
       return null;
     }),
+  legacyKeys: () => [["leaderboards-top"], ["leaderboards-periods"], ["leaderboards-settlements"]],
 };
 
 export const rerunSettlementDescriptor = {
@@ -158,6 +118,7 @@ export const rerunSettlementDescriptor = {
       await rerunSettlement(input.boardId, input.period, SKIP);
       return null;
     }),
+  legacyKeys: () => [["leaderboards-top"], ["leaderboards-periods"], ["leaderboards-settlements"]],
 };
 
 // URL 搜索 schema（路由 validateSearch 与绑定共用同一实例）。端点全量返回

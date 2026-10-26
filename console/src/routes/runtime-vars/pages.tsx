@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import type { ApiError, CommandResult } from "@lynx-go/ui-kit/kernel";
 import { toast } from "sonner";
@@ -54,6 +54,7 @@ import {
 } from "@/components/resource/shared";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -206,34 +207,11 @@ function FootprintCell({ bytes }: { bytes: number }) {
   );
 }
 
-// useInvalidateVarSet 集中失效该集合相关全部查询（var 写会 bump revision，
-// var-sets 列表的 var_count/footprint/updated_at 也会变）。
-function useInvalidateVarSet(varSetId: string) {
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
-  return () => {
-    queryClient.invalidateQueries({ queryKey: ["runtime-var-sets", projectId] });
-    queryClient.invalidateQueries({
-      queryKey: ["runtime-var-set", projectId, varSetId],
-    });
-    queryClient.invalidateQueries({
-      queryKey: ["runtime-vars", projectId, varSetId],
-    });
-    queryClient.invalidateQueries({
-      queryKey: ["runtime-var-versions", projectId, varSetId],
-    });
-    queryClient.invalidateQueries({
-      queryKey: ["runtime-var-version", projectId, varSetId],
-    });
-  };
-}
-
 // ---------------------------------------------------------------------------
 // 列表页
 // ---------------------------------------------------------------------------
 
 export function VarSetsListPage() {
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const navigate = useNavigate();
@@ -243,11 +221,10 @@ export function VarSetsListPage() {
 
   // 列表 fleet 化（§12.9-2）：游标/页大小进 URL（分页栈 = 浏览器历史）；
   // 页内当前页搜索保持本地态（旧页语义）。vars/versions 子视图与表单不动。
+  // scope/enabled 不再逐处传（§12.10-③）：资源声明了 projectId，Provider 单源 + 未就绪自动停用。
   const list = useCollection(varSetsResource, {
     from: "/console/runtime-vars",
     search: varSetsSearch,
-    scope: { projectId: projectId ?? undefined },
-    query: { enabled: !!projectId },
   });
 
   const getSearchText = useCallback(
@@ -320,7 +297,7 @@ export function VarSetsListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
           </div>
         }
         emptyTitle={search !== "" ? "没有匹配的变量集" : "暂无变量集"}
@@ -351,7 +328,8 @@ export function VarSetsListPage() {
 
 // VarSetCreateDialog 新建集合（var_set_id 创建后不可改，D9）。命令化：表单
 // 本体不动；kit 列表键随资源命令 ok 自动失效（onCreated refetch 桥退役），
-// 存量 ["runtime-var-sets"] 键手动桥；结果分支无表单容器 → toast。
+// 存量 ["runtime-var-sets"] 键由资源 legacyKeys 桥（§12.10-②）；结果分支
+// 无表单容器 → toast。
 function VarSetCreateDialog({
   open,
   onOpenChange,
@@ -359,8 +337,6 @@ function VarSetCreateDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
   const [varSetId, setVarSetId] = useState("");
   const [visibility, setVisibility] =
     useState<VarSetVisibilityInput>("VAR_SET_VISIBILITY_PUBLIC");
@@ -375,13 +351,9 @@ function VarSetCreateDialog({
   }, [open]);
 
   const create = useCommand(createVarSetCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("变量集已创建");
-        void queryClient.invalidateQueries({
-          queryKey: ["runtime-var-sets", projectId],
-        });
         onOpenChange(false);
       } else if (result) {
         toast.error(result.message);
@@ -473,8 +445,6 @@ export function VarSetDetailPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
-  const queryClient = useQueryClient();
-  const invalidate = useInvalidateVarSet(varSetId);
   const platformAdmin = isPlatformAdmin(role);
 
   const [createVarOpen, setCreateVarOpen] = useState(false);
@@ -510,15 +480,14 @@ export function VarSetDetailPage() {
   const versionsRaw = versionsQuery.data;
   const versions = versionsRaw ?? [];
 
-  // 写路径命令化：kit var-sets 列表键随资源命令 ok 自动失效；vars/versions
-  // 子视图存量键经 invalidate()（useInvalidateVarSet）手动桥。删除/回滚走
-  // ConfirmDialog（无表单容器）——结果分支 toast。
+  // 写路径命令化：kit var-sets 列表键随资源命令 ok 自动失效；存量键
+  //（列表/详情/变量/版本）由资源与 descriptor 级 legacyKeys 桥（§12.10-②，
+  // useInvalidateVarSet 退役）。删除/回滚走 ConfirmDialog（无表单容器）——
+  // 结果分支 toast。
   const removeVar = useCommand(removeVarCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("变量已删除");
-        invalidate();
         setDeletingVarKey(null);
       } else if (result) {
         toast.error(result.message);
@@ -529,13 +498,9 @@ export function VarSetDetailPage() {
   });
 
   const removeSet = useCommand(removeVarSetCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("变量集已删除");
-        void queryClient.invalidateQueries({
-          queryKey: ["runtime-var-sets", projectId],
-        });
         navigate({ to: "/console/runtime-vars" });
       } else if (result) {
         toast.error(result.message);
@@ -546,14 +511,12 @@ export function VarSetDetailPage() {
   });
 
   const rollbackMut = useCommand(rollbackVarSetCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         if (rollbackVersion) {
           toast.success(
             `已回滚到版本 #${rollbackVersion.revision}，产生新版本 #${result.payload.revision}`
           );
-          invalidate();
         }
         setRollbackVersion(null);
       } else if (result) {
@@ -933,7 +896,7 @@ export function VarSetDetailPage() {
 // 变量新建/编辑 Dialog（key 编辑时禁改；类型 select 切换值输入控件；json 用
 // textarea）。命令化（useCommand×2，§12.3 裁决 8）：值展示形→oneof 提交形
 // 收敛与 JSON/整数校验在 descriptor run 内——rejected/conflict 走既有内联错
-// 误行（表单容器原样），失败通道 toast。
+// 误行（表单容器原样），失败通道 toast；存量键失效 = descriptor legacyKeys。
 // ---------------------------------------------------------------------------
 
 function VarFormDialog({
@@ -947,8 +910,6 @@ function VarFormDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const invalidate = useInvalidateVarSet(varSetId);
-  const { projectId } = useAuth();
   const [key, setKey] = useState("");
   const [kind, setKind] = useState<VarKind>("string");
   const [str, setStr] = useState("");
@@ -965,7 +926,6 @@ function VarFormDialog({
   ) => {
     if (result?.status === "ok") {
       toast.success(editing ? "变量已更新" : "变量已创建");
-      invalidate();
       onOpenChange(false);
     } else if (failure) {
       toast.error(describeApiError(failure));
@@ -974,11 +934,9 @@ function VarFormDialog({
   };
 
   const create = useCommand(createVarCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: settled,
   });
   const update = useCommand(editVarDescriptor(varSetId, editing?.key ?? ""), {
-    scope: { projectId: projectId ?? undefined },
     onSettled: settled,
   });
 
@@ -1381,8 +1339,6 @@ function VarSetSettingsDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const invalidate = useInvalidateVarSet(varSet.var_set_id);
-  const { projectId } = useAuth();
   const [visibility, setVisibility] = useState<VarSetVisibilityInput>(
     toVisibility(varSet.visibility)
   );
@@ -1399,13 +1355,11 @@ function VarSetSettingsDialog({
 
   // 命令化：visibility diff（未变化不发送）归 descriptor（闭包原实体，LWW
   // 无 OCC 前置守卫）；kit 列表键经 descriptor.invalidates 失效，存量键经
-  // invalidate() 桥；结果分支无表单容器 → toast。
+  // descriptor.legacyKeys 桥（§12.10-②）；结果分支无表单容器 → toast。
   const save = useCommand(editVarSetDescriptor(varSet), {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("集合设置已更新");
-        invalidate();
         onOpenChange(false);
       } else if (result) {
         toast.error(result.message);

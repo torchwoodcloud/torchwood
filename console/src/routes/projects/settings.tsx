@@ -12,7 +12,7 @@ import {
 import { describeApiError } from "@/fleet/errors";
 import { useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import { Copy, Plus, Trash2 } from "lucide-react";
@@ -151,18 +151,16 @@ function GeneralPanel({
   project: Project;
   editable: boolean;
 }) {
-  const queryClient = useQueryClient();
   const tz = useUserTimezone();
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description ?? "");
 
-  // 写路径命令化（§12.9 阶段 2）：结果两分；存量项目键手动桥。
+  // 写路径命令化（§12.9 阶段 2）：结果两分；存量项目键经 descriptor
+  // 自带 legacyKeys 宽前缀失效（§12.10-②，页面手动桥退役）。
   const update = useCommand(updateProjectCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("项目信息已保存");
-        void queryClient.invalidateQueries({ queryKey: ["projects", project.id] });
-        void queryClient.invalidateQueries({ queryKey: ["projects"] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -252,13 +250,11 @@ function DangerZonePanel({
   editable: boolean;
 }) {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   const remove = useCommand(removeProjectCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("项目已删除");
-        void queryClient.invalidateQueries({ queryKey: ["projects"] });
         navigate({ to: "/console/projects" });
       } else if (result) {
         toast.error(result.message);
@@ -303,14 +299,12 @@ function RegistrationPolicySection({
   project: Project;
   editable: boolean;
 }) {
-  const queryClient = useQueryClient();
   const policy = project.registration_policy || "open";
 
   const save = useCommand(updateProjectCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("注册策略已更新");
-        void queryClient.invalidateQueries({ queryKey: ["projects"] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -363,7 +357,6 @@ function RedirectAllowlistSection({
   project: Project;
   editable: boolean;
 }) {
-  const queryClient = useQueryClient();
   const [rows, setRows] = useState<string[]>(
     () => project.oauth_allowed_redirect_urls ?? []
   );
@@ -378,7 +371,6 @@ function RedirectAllowlistSection({
         );
         setRows(next);
         setDirty(false);
-        void queryClient.invalidateQueries({ queryKey: ["projects"] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -490,7 +482,6 @@ function InviteCodesSection({
   projectId: string;
   editable: boolean;
 }) {
-  const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const paging = useServerPaging();
 
@@ -506,7 +497,6 @@ function InviteCodesSection({
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("邀请码已吊销");
-        void queryClient.invalidateQueries({ queryKey: ["invite-codes", projectId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -617,7 +607,6 @@ function InviteCodeCreateDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const queryClient = useQueryClient();
   const [maxUses, setMaxUses] = useState("1");
   const [unlimited, setUnlimited] = useState(false);
   const [expireAt, setExpireAt] = useState("");
@@ -628,7 +617,6 @@ function InviteCodeCreateDialog({
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         setCreated(result.payload);
-        void queryClient.invalidateQueries({ queryKey: ["invite-codes", projectId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -736,7 +724,6 @@ function InviteCodeCreateDialog({
 function OAuthProvidersPanel() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
-  const queryClient = useQueryClient();
   const [selectedProvider, setSelectedProvider] = useState<string>("google");
   const [enabled, setEnabled] = useState(true);
   const [clientId, setClientId] = useState("");
@@ -759,7 +746,6 @@ function OAuthProvidersPanel() {
       if (result?.status === "ok") {
         toast.success("OAuth 配置已保存");
         setClientSecret("");
-        void queryClient.invalidateQueries({ queryKey: ["oauth-providers"] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -772,7 +758,6 @@ function OAuthProvidersPanel() {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("OAuth 配置已删除");
-        void queryClient.invalidateQueries({ queryKey: ["oauth-providers"] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {

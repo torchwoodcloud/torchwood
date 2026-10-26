@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
@@ -20,7 +20,7 @@ import {
   removeFunctionCommand,
   rotateFunctionSecretCommand,
   setFunctionScopesCommand,
-  invokeFunctionDescriptor,
+  invokeFunctionCommand,
 } from "@/fleet/functions";
 import { describeApiError } from "@/fleet/errors";
 import { PageHeader } from "@/components/PageHeader";
@@ -58,6 +58,7 @@ import {
 } from "@/components/resource/shared";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTimezone } from "@/hooks/useTimezone";
@@ -152,7 +153,6 @@ function OneTimeSecretDialog({
 }
 
 export function FunctionsListPage() {
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const navigate = useNavigate();
@@ -170,17 +170,15 @@ export function FunctionsListPage() {
 
   // 列表 fleet 化（§12.9-2）：游标/页大小进 URL（分页栈 = 浏览器历史）；
   // 页内当前页搜索保持本地态（旧页语义）。
+  // scope/enabled 不再逐处传（§12.10-③）：资源声明了 projectId，Provider 单源 + 未就绪自动停用。
   const list = useCollection(functionsResource, {
     from: "/console/functions",
     search: functionsSearch,
-    scope: { projectId: projectId ?? undefined },
-    query: { enabled: !!projectId },
   });
 
-  // 行删除命令接线（§12.3）：kit 集合键由 useCommand 自动失效；toast 单源
-  // onSettled。
+  // 行删除命令接线（§12.3）：kit 集合键由 useCommand 自动失效；存量键由
+  // resource.legacyKeys 桥；toast 单源 onSettled。
   const remove = useCommand(removeFunctionCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("函数已删除");
@@ -194,7 +192,6 @@ export function FunctionsListPage() {
 
   // 创建命令：payload 携带一次性 target_secret（reveal，关闭即弃）。
   const create = useCommand(createFunctionCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("函数创建成功");
@@ -310,7 +307,7 @@ export function FunctionsListPage() {
           }
           pagination={
             <div className="px-4 pb-4">
-              <KeysetPagination list={list} />
+              <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
             </div>
           }
           emptyTitle={search !== "" ? "没有匹配的函数" : "暂无函数"}
@@ -503,7 +500,6 @@ export function FunctionDetailPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
-  const queryClient = useQueryClient();
   const writeable = canWrite(role);
 
   const [name, setName] = useState("");
@@ -556,15 +552,14 @@ export function FunctionDetailPage() {
     setScopesText((fn.declared_scopes ?? []).join("\n"));
   }, [fn]);
 
-  // 命令接线（§12.3）：update/rotate/setScopes 挂函数资源（kit 集合自动
-  // 失效）+ 存量详情键手动桥；invoke 是动作（独立 descriptor）——存量
-  // ["invocations"] 键手动桥。toast 单源 onSettled。
+  // 命令接线（§12.3）：update/rotate/setScopes/remove 挂函数资源（kit 集合
+  // 自动失效）——存量 ["functions"] 详情/列表键由 resource.legacyKeys 桥；
+  // invoke 用资源挂载句柄（expireOld 样板）——存量 ["invocations"] 键同经
+  // 资源 legacyKeys 桥。toast 单源 onSettled。
   const update = useCommand(updateFunctionCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("函数设置已更新");
-        void queryClient.invalidateQueries({ queryKey: ["functions", projectId, functionId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -575,12 +570,10 @@ export function FunctionDetailPage() {
 
   // 轮换 payload 携带一次性明文（reveal，关闭即弃）。
   const rotate = useCommand(rotateFunctionSecretCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("签名密钥已轮换（旧钥保留一个宽限窗）");
         setRotatedSecret({ secret: result.payload.secret, fingerprint: result.payload.secret_fingerprint });
-        void queryClient.invalidateQueries({ queryKey: ["functions", projectId, functionId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -592,14 +585,12 @@ export function FunctionDetailPage() {
   // 执行身份 scopes（P0）：每行一条 "<resource>:<op>"，空 = 无平台访问。
   // 词表校验在服务端（assets/databases/users/groups/storage/subscriptions/
   // payments + read/write）；多行文本在 descriptor run 内收敛；保存成功后
-  // 同步输入框与查询缓存。
+  // 同步输入框。
   const saveScopes = useCommand(setFunctionScopesCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("执行身份 Scopes 已保存");
         setScopesText((result.payload.declared_scopes ?? []).join("\n"));
-        void queryClient.invalidateQueries({ queryKey: ["functions", projectId, functionId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -608,11 +599,10 @@ export function FunctionDetailPage() {
     },
   });
 
-  const run = useCommand(invokeFunctionDescriptor, {
+  const run = useCommand(invokeFunctionCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success(asyncExec ? "已入队异步调用" : "调用完成");
-        void queryClient.invalidateQueries({ queryKey: ["invocations", functionId] });
         if (!asyncExec) setSelectedInvocation(result.payload);
       } else if (result) {
         toast.error(result.message);
@@ -623,11 +613,9 @@ export function FunctionDetailPage() {
   });
 
   const removeFunction = useCommand(removeFunctionCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("函数已删除");
-        void queryClient.invalidateQueries({ queryKey: ["functions", projectId] });
         window.history.back();
       } else if (result) {
         toast.error(result.message);

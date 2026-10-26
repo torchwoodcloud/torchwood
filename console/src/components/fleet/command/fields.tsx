@@ -1,11 +1,9 @@
-// vendored from fleet-ui registry/command/fields.tsx @0.1.1（2026-10-25 命令族
-// 切片）。拷贝适配（design.md §12.1）：token 方言映射 text-muted→
-// text-muted-foreground、text-err→text-destructive、border-line/bg-panel/
-// outline-accent→torchwood 输入类；TextField 补 required 客户端校验（本地
-// 扩展，上游 PR 候选）；其余与上游一致。
-//
+// vendored from @lynx-go/ui registry/command/fields.tsx @0.2.1（2026-10-25 §12.10-⑤ 校验器标识缓存修复）
+// 拷贝适配（scripts/devtool.mjs --profile torchwood）：
+// token 方言映射 text-muted→text-muted-foreground、bg-panel→bg-card、border-line→border-border、text-fg→text-foreground、text-err→text-destructive；cn 统一 @/lib/utils。
+// 其余与上游一致。
 // AnyFormApi 的 any 泛型是上游形（校验器泛型从简、字段名保留类型）——
-// vendored 块保留上游写法。
+// vendored 块保留上游写法（torchwood eslint 豁免一行）。
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { ReactFormExtendedApi } from "@tanstack/react-form";
 import type { ReactNode } from "react";
@@ -13,7 +11,9 @@ import { Input } from "@/components/ui/input";
 
 /**
  * TextField / SelectField（command 块）—— TanStack Form 的字段接线。
- * 字段级错误（含 onSubmit 返回的 fieldErrors 映射）经 meta.errors 渲染。
+ * 字段级错误（含 onSubmit 返回的 fieldErrors 映射）经 meta.errors 渲染
+ * （双注册校验器的重复条目去重——onChange+onSubmit 同挂时 TanStack 会
+ * 产生双份，§12.10-⑤ 回流）。
  */
 
 function FieldErrors({ errors }: { errors: ReadonlyArray<unknown> }) {
@@ -63,11 +63,7 @@ interface FieldShellProps {
   children: ReactNode;
 }
 
-function requiredMessage({ value }: { value: unknown }): string | undefined {
-  return value === undefined || value === null || String(value).trim() === "" ? "必填" : undefined;
-}
-
-export function FieldShell({ label, children }: FieldShellProps) {
+function FieldShell({ label, children }: FieldShellProps) {
   return (
     <label className="block space-y-1">
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
@@ -82,9 +78,23 @@ export interface TextFieldProps<T extends object> {
   label: string;
   placeholder?: string;
   type?: "text" | "password" | "email";
-  /** 本地扩展（上游 @0.1.1 无）：必填客户端校验（onChange，空串/纯空白拒绝）。 */
-  required?: boolean;
+  /** 必填客户端校验（空串/纯空白拒绝）；字符串 = 自定义文案（§12.10-⑤ 回流） */
+  required?: boolean | string;
 }
+
+function requiredMessage(message: string) {
+  let validator = REQUIRED_VALIDATORS.get(message);
+  if (validator === undefined) {
+    validator = ({ value }: { value: unknown }): string | undefined =>
+      value === undefined || value === null || String(value).trim() === "" ? message : undefined;
+    // 缓存校验器标识：每次渲染新建函数会让 TanStack Field 判定 validators
+    // 变化而重置字段状态——提交错误刚写入就被下一次渲染清掉（torchwood 实咬）。
+    REQUIRED_VALIDATORS.set(message, validator);
+  }
+  return validator;
+}
+
+const REQUIRED_VALIDATORS = new Map<string, (meta: { value: unknown }) => string | undefined>();
 
 export function TextField<T extends object>({
   form,
@@ -102,8 +112,8 @@ export function TextField<T extends object>({
           required
             ? {
                 // onChange 即时反馈 + onSubmit 兜住"从未输入直接提交"
-                onChange: requiredMessage,
-                onSubmit: requiredMessage,
+                onChange: requiredMessage(required === true ? "Required" : required),
+                onSubmit: requiredMessage(required === true ? "Required" : required),
               }
             : undefined
         }
@@ -132,19 +142,37 @@ export interface SelectFieldProps<T extends object> {
   name: string & keyof T;
   label: string;
   options: ReadonlyArray<{ value: string; label: string }>;
+  /** 必填客户端校验（空串拒绝）；字符串 = 自定义文案 */
+  required?: boolean | string;
 }
 
-export function SelectField<T extends object>({ form, name, label, options }: SelectFieldProps<T>) {
+export function SelectField<T extends object>({
+  form,
+  name,
+  label,
+  options,
+  required = false,
+}: SelectFieldProps<T>) {
   return (
     <FieldShell label={label}>
-      <form.Field name={name}>
+      <form.Field
+        name={name}
+        validators={
+          required
+            ? {
+                onChange: requiredMessage(required === true ? "Required" : required),
+                onSubmit: requiredMessage(required === true ? "Required" : required),
+              }
+            : undefined
+        }
+      >
         {(field: {
           state: { value: unknown; meta: { errors: ReadonlyArray<unknown> } };
           handleChange(value: unknown): void;
         }) => (
           <>
             <select
-              className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+              className="h-8 w-full rounded-md border border-border bg-card px-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-accent"
               value={String(field.state.value ?? "")}
               onChange={(e) => field.handleChange(e.target.value)}
             >

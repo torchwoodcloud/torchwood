@@ -29,13 +29,13 @@ import {
   removeGroupMemberCommand,
 } from "@/fleet/groups";
 import { describeApiError } from "@/fleet/errors";
-import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { useServerPaging } from "@/hooks/useServerPaging";
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -77,7 +77,6 @@ function statusBadge(status: string) {
 }
 
 export function GroupsListPage() {
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -89,21 +88,18 @@ export function GroupsListPage() {
 
   // 列表 fleet 化（§12.9-2）：游标/页大小进 URL（分页栈 = 浏览器历史；旧页
   // 无服务端过滤）；页内当前页搜索保持本地态（旧页语义）。
+  // scope/enabled 不再逐处传（§12.10-③）：资源声明了 projectId，Provider 单源 + 未就绪自动停用
   const list = useCollection(groupsResource, {
     from: "/console/groups",
     search: groupsSearch,
-    scope: { projectId: projectId ?? undefined },
-    query: { enabled: !!projectId },
   });
 
-  // 命令接线（§12.3）：toast 单源 onSettled；kit 列表键自动失效（descriptor
-  // 挂 resource）+ 存量 ["groups", …] 键手动桥（详情/成员页仍吃存量键）。
+  // 命令接线（§12.3）：toast 单源 onSettled；失效 = kit 键 + 存量键
+  //（resource.legacyKeys 宽前缀 ["groups"]/["memberships"]——详情页仍吃存量键）。
   const remove = useCommand(removeGroupCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("用户组已删除");
-        void queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -147,7 +143,6 @@ export function GroupsListPage() {
         toast.success(`已删除 ${selectedGroups.length} 个用户组`);
       }
       void queryClient.invalidateQueries({ queryKey: groupsCollectionKey });
-      void queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
       setSelectedIds(new Set());
     } finally {
       setBulkDeleting(false);
@@ -224,7 +219,7 @@ export function GroupsListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
           </div>
         }
         emptyTitle={search !== "" ? "没有匹配的用户组" : "暂无用户组"}
@@ -265,18 +260,14 @@ export function GroupsListPage() {
 
 export function GroupNewPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const [name, setName] = useState("");
 
   // 无表单容器（FormPageWrapper 本地态）：结果分支 toast；failure → describeApiError。
   const create = useCommand(createGroupCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("用户组创建成功");
-        void queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
         navigate({ to: `/console/groups/${result.payload.id}` });
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -329,7 +320,6 @@ function MembershipRoleSelect({
 }
 
 function GroupPrefsCard({ groupId }: { groupId: string }) {
-  const queryClient = useQueryClient();
   const { role } = useAdminRole();
   const [prefsText, setPrefsText] = useState("{}");
   const writeable = canWrite(role);
@@ -345,12 +335,12 @@ function GroupPrefsCard({ groupId }: { groupId: string }) {
   }, [prefs]);
 
   // 无表单容器（JSON 文本域本地态）：结果分支 toast；failure → describeApiError。
+  // 存量 prefs 键（["groups", id, "prefs"]）由 resource.legacyKeys 宽前缀失效。
   const save = useCommand(updateGroupPrefsCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("用户组偏好已保存");
         setPrefsText(JSON.stringify(result.payload));
-        void queryClient.invalidateQueries({ queryKey: ["groups", groupId, "prefs"] });
       } else if (failure) {
         toast.error(describeApiError(failure));
       } else if (result) {
@@ -413,7 +403,6 @@ export function GroupDetailPage() {
   const { id: groupId } = useParams({ strict: false });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -442,20 +431,18 @@ export function GroupDetailPage() {
   });
   const memberships = membershipsData?.rows ?? [];
 
-  // 存量键手动桥（kit 列表键由 useCommand 按 resource 自动失效）。
+  // 存量键手动桥——仅剩批量移除成员的直调路径消费（非 useCommand 面，
+  // 无 descriptor 可挂失效）；命令路径已由 resource.legacyKeys 宽前缀覆盖。
   const invalidateGroup = () => {
     queryClient.invalidateQueries({ queryKey: ["groups", groupId] });
-    queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
     queryClient.invalidateQueries({ queryKey: ["memberships", groupId] });
   };
 
   // 命令接线（§12.3）：toast 单源 onSettled；无表单容器 → 结果分支 toast。
   const removeGroup = useCommand(removeGroupCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("用户组已删除");
-        void queryClient.invalidateQueries({ queryKey: ["groups", projectId] });
         navigate({ to: "/console/groups" });
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -464,7 +451,6 @@ export function GroupDetailPage() {
   });
 
   const invite = useCommand(addGroupMemberCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("成员邀请已创建");
@@ -472,7 +458,6 @@ export function GroupDetailPage() {
         setInviteName("");
         setInviteRole("member");
         setInviteStatus("pending");
-        invalidateGroup();
       } else if (failure) {
         toast.error(describeApiError(failure));
       } else if (result) {
@@ -482,11 +467,9 @@ export function GroupDetailPage() {
   });
 
   const removeMembership = useCommand(removeGroupMemberCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("成员已移除");
-        invalidateGroup();
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -494,11 +477,9 @@ export function GroupDetailPage() {
   });
 
   const setStatus = useCommand(setGroupMemberStatusCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("成员状态已更新");
-        invalidateGroup();
       } else if (failure) {
         toast.error(describeApiError(failure));
       } else if (result) {
@@ -508,11 +489,9 @@ export function GroupDetailPage() {
   });
 
   const setRole = useCommand(setGroupMemberRoleCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("成员角色已更新");
-        invalidateGroup();
       } else if (failure) {
         toast.error(describeApiError(failure));
       } else if (result) {

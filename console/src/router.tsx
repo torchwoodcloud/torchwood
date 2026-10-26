@@ -26,6 +26,7 @@ import { adminsSearch } from "@/fleet/admins";
 import { projectsSearch } from "@/fleet/projects";
 import { databasesSearch, collectionsSearch } from "@/fleet/databases";
 import { documentsSearch } from "@/fleet/documents";
+import { eventDefinitionsSearch } from "@/fleet/analytics";
 
 // 路由树（torchwood 批 A，design.md §12.2 裁决 1）：TanStack Router code-based
 // 集中表——镜像原 App.tsx 路由表，路径形态/守卫语义/lazy 分包零变化。
@@ -326,7 +327,7 @@ const listenRoute = createRoute({ getParentRoute: () => collectionLayoutRoute, p
 
 // Analytics：读方法对全角色会话开放，不设 RequireRole。
 const analyticsRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/analytics", ...guarded(<AnalyticsOverviewPage />) });
-const analyticsEventsRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/analytics/events", ...guarded(<AnalyticsEventsPage />) });
+const analyticsEventsRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/analytics/events", validateSearch: eventDefinitionsSearch.toSearchSchema(), ...guarded(<AnalyticsEventsPage />) });
 const analyticsEventDetailRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/analytics/events/$name", ...guarded(<AnalyticsEventDetailPage />) });
 const analyticsRetentionRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/analytics/retention", ...guarded(<AnalyticsRetentionPage />) });
 const analyticsUserActivityRoute = createRoute({ getParentRoute: () => consoleRoute, path: "/analytics/users/$userId", ...guarded(<AnalyticsUserActivityPage />) });

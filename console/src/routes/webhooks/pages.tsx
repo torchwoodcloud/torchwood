@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import { toast } from "sonner";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
@@ -18,7 +18,7 @@ import {
   updateWebhookCommand,
   removeWebhookCommand,
   rotateWebhookSecretCommand,
-  redeliverDeliveryDescriptor,
+  redeliverDeliveryCommand,
 } from "@/fleet/webhooks";
 import { describeApiError } from "@/fleet/errors";
 import { PageHeader } from "@/components/PageHeader";
@@ -54,6 +54,7 @@ import {
 } from "@/components/resource/shared";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { KeysetPagination } from "@/components/fleet/query/keyset-pagination";
+import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/fleet/query/pagination-zh";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTimezone } from "@/hooks/useTimezone";
@@ -300,7 +301,6 @@ function WebhookFormDialog({
 }
 
 export function WebhooksListPage() {
-  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const navigate = useNavigate();
@@ -312,18 +312,16 @@ export function WebhooksListPage() {
 
   // 列表 fleet 化（§12.9-2）：游标/页大小进 URL（分页栈 = 浏览器历史）；
   // 页内当前页搜索保持本地态（旧页语义）。
+  // scope/enabled 不再逐处传（§12.10-③）：资源声明了 projectId，Provider 单源 + 未就绪自动停用。
   const list = useCollection(webhooksResource, {
     from: "/console/webhooks",
     search: webhooksSearch,
-    scope: { projectId: projectId ?? undefined },
-    query: { enabled: !!projectId },
   });
 
   // 创建命令接线（§12.3）：kit 集合键由 useCommand 自动失效；payload 携带
   // 一次性明文密钥（reveal，关闭即弃——与 functions create 的 target_secret
   // 同语义）。toast 单源 onSettled。
   const create = useCommand(createWebhookCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         setCreatedSecret({ id: result.payload.webhook.id, secret: result.payload.secret });
@@ -337,9 +335,8 @@ export function WebhooksListPage() {
     },
   });
 
-  // 行删除命令接线：kit 集合键自动失效（本页无存量列表键消费方）。
+  // 行删除命令接线：kit 集合键自动失效；存量键由 resource.legacyKeys 桥。
   const remove = useCommand(removeWebhookCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Webhook 已删除");
@@ -405,7 +402,7 @@ export function WebhooksListPage() {
           }
           pagination={
             <div className="px-4 pb-4">
-              <KeysetPagination list={list} />
+              <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
             </div>
           }
           emptyTitle={search !== "" ? "没有匹配的 Webhook" : "暂无 Webhook"}
@@ -452,7 +449,6 @@ export function WebhooksListPage() {
 // 投递记录子视图：DLQ 浏览/重投管理面。status 过滤变化经 resetKeys 自动回
 // 第一页（机制，非手动 reset）；行内 Redeliver 仅终态行可重投。
 function DeliveriesCard({ webhookId, writeable }: { webhookId: string; writeable: boolean }) {
-  const queryClient = useQueryClient();
   const tz = useUserTimezone();
   const [statusFilter, setStatusFilter] = useState("");
 
@@ -476,13 +472,12 @@ function DeliveriesCard({ webhookId, writeable }: { webhookId: string; writeable
   });
   const deliveries = data?.rows ?? [];
 
-  // 重投命令接线（§12.3，裸 descriptor）：投递行不是 webhooks 集合语义——
-  // 存量 ["webhook-deliveries"] 键手动桥；toast 单源 onSettled。
-  const redeliver = useCommand(redeliverDeliveryDescriptor, {
+  // 重投命令接线（§12.3）：资源挂载句柄（expireOld 样板）——存量
+  // ["webhook-deliveries"] 键由资源 legacyKeys 桥；toast 单源 onSettled。
+  const redeliver = useCommand(redeliverDeliveryCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("已重置为立即重投");
-        void queryClient.invalidateQueries({ queryKey: ["webhook-deliveries", webhookId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -580,7 +575,6 @@ export function WebhookDetailPage() {
   const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
-  const queryClient = useQueryClient();
   const writeable = canWrite(role);
   const [editOpen, setEditOpen] = useState(false);
   const [rotatedSecret, setRotatedSecret] = useState<{ secret: string; fingerprint: string } | null>(null);
@@ -592,15 +586,14 @@ export function WebhookDetailPage() {
   });
 
   // 命令接线（§12.3）：update/rotate/remove 挂 webhook 资源（kit 集合自动
-  // 失效）+ 存量详情键手动桥；字段 diff 留在提交处（页面持原实体快照——
-  // url/events 仅变更时随请求发送，proto3 optional）。toast 单源 onSettled。
+  // 失效）——存量 ["webhooks"] 详情/列表键由 resource.legacyKeys 桥；字段
+  // diff 留在提交处（页面持原实体快照——url/events 仅变更时随请求发送，
+  // proto3 optional）。toast 单源 onSettled。
   const update = useCommand(updateWebhookCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Webhook 已更新");
         setEditOpen(false);
-        void queryClient.invalidateQueries({ queryKey: ["webhooks", projectId, webhookId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -611,12 +604,10 @@ export function WebhookDetailPage() {
 
   // 轮换 payload 携带一次性明文（reveal，关闭即弃）。
   const rotate = useCommand(rotateWebhookSecretCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("签名密钥已轮换（旧钥保留一个窗口期）");
         setRotatedSecret({ secret: result.payload.secret, fingerprint: result.payload.secret_fingerprint });
-        void queryClient.invalidateQueries({ queryKey: ["webhooks", projectId, webhookId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -626,11 +617,9 @@ export function WebhookDetailPage() {
   });
 
   const remove = useCommand(removeWebhookCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Webhook 已删除");
-        void queryClient.invalidateQueries({ queryKey: ["webhooks", projectId] });
         window.history.back();
       } else if (result) {
         toast.error(result.message);

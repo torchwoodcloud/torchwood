@@ -9,6 +9,25 @@ import { EventFeed } from "@/components/fleet/subscription/event-feed";
 import { Button } from "@/components/ui/button";
 import type { CollectionOutletContext } from "./CollectionLayout";
 
+
+// 订阅状态/瞬态文案（§12.10-⑤ labels 注入面；原 vendored 内置中文改页面注入）
+const STATUS_LABEL_ZH: Record<string, string> = {
+  live: "已连接",
+  reconnecting: "连接中…",
+  paused: "已暂停",
+  gapped: "保留间隙",
+  stalled: "已断开",
+  ended: "已结束",
+  error: "错误",
+};
+
+const EVENT_FEED_ZH = {
+  gapGapped: "保留间隙——请重新锚定 backlog 继续。",
+  gapStalled: "退避预算耗尽——请重连或改用轮询兜底。",
+  paused: "已暂停——恢复时从游标补帧",
+  count: (n: number) => `${n} 条事件`,
+} as const;
+
 // payload 摘要（120 字截断）——事件名外的载荷细节看大概即可，完整 JSON 在
 // 服务端审计/文档侧。
 function summarize(payload: Record<string, unknown>): string {
@@ -49,6 +68,9 @@ export function ListenPanel() {
       </div>
       <EventFeed
       sub={sub}
+      title="实时事件"
+      statusLabels={STATUS_LABEL_ZH}
+      labels={EVENT_FEED_ZH}
       getKey={(frame) => frame.seq}
       render={(frame: EventFrame) => (
         <>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { useCollection, useCommand } from "@lynx-go/ui-kit";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
@@ -57,29 +57,26 @@ import { useServerPaging } from "@/hooks/useServerPaging";
 import { RowDeleteButton } from "@/components/resource/shared";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
-import { useAuth } from "@/hooks/useAuth";
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/fleet/query/data-table";
 import { ListPage as FleetListPage } from "@/components/fleet/query/list-page";
 
 export function LeaderboardsListPage() {
-  const { projectId } = useAuth();
   const tz = useUserTimezone();
   const [search, setSearch] = useState("");
 
   // 列表 fleet 化（§12.9-2）：boards 端点全量返回（非分页、无服务端过滤），
   // useCollection 只吃四态/错误收敛面；榜 ID 页内搜索保持本地态（旧页语义）。
-  // 旧页 fetch 不随项目禁用 → 无 enabled 门（scope 仍带 projectId 分区缓存）。
+  // 旧页 fetch 不随项目禁用 → 无 enabled 门（scope 分区缓存归 Provider 单源，
+  // §12.10-③）。
   const list = useCollection(boardsResource, {
     from: "/console/leaderboards",
     search: boardsSearch,
-    scope: { projectId: projectId ?? undefined },
   });
 
   // 写路径命令化（§12.3）：remove 挂榜资源——kit 集合键由 useCommand 自动
   // 失效（现页 refresh 桥退场）；toast 单源 onSettled。
   const remove = useCommand(removeBoardCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("榜已删除（条目级联删除）");
@@ -220,7 +217,6 @@ export function LeaderboardsListPage() {
 const inputCls = "space-y-2";
 
 function CreateBoardDialog() {
-  const { projectId } = useAuth();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     id: "",
@@ -242,7 +238,6 @@ function CreateBoardDialog() {
   // 创建命令接线（§12.3）：kit 榜集合自动失效（onCreated 桥退场）；输入 =
   // 现页面提交形（rewards 映射留在提交处）。toast 单源 onSettled。
   const create = useCommand(createBoardCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("榜已创建");
@@ -416,7 +411,6 @@ function CreateBoardDialog() {
 }
 
 function EditBoardDialog({ board }: { board: LeaderboardBoard }) {
-  const { projectId } = useAuth();
   const [open, setOpen] = useState(false);
   const [valueMin, setValueMin] = useState(board.value_min ?? "");
   const [valueMax, setValueMax] = useState(board.value_max ?? "");
@@ -428,7 +422,6 @@ function EditBoardDialog({ board }: { board: LeaderboardBoard }) {
   // 编辑命令接线（§12.3）：kit 榜集合自动失效（onSaved 桥退场）；输入 =
   // 现页面提交形（clear_value_bounds 等语义留在提交处）。
   const update = useCommand(updateBoardCommand, {
-    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("榜已更新");
@@ -515,7 +508,6 @@ function EditBoardDialog({ board }: { board: LeaderboardBoard }) {
 
 export function BoardDetailPage() {
   const { boardId } = useParams({ strict: false });
-  const queryClient = useQueryClient();
   const tz = useUserTimezone();
   const { data: board } = useQuery({
     queryKey: ["leaderboards-board", boardId],
@@ -563,13 +555,12 @@ export function BoardDetailPage() {
   });
 
   // 条目删除命令接线（独立 descriptor）：不改变榜集合——存量
-  // ["leaderboards-top"/"-periods"] 键手动桥；toast 单源 onSettled（§12.3）。
+  // ["leaderboards-top"/"-periods"/"-settlements"] 键由 descriptor 级
+  // legacyKeys 桥（§12.10-②，宽前缀）；toast 单源 onSettled（§12.3）。
   const removeEntry = useCommand(removeBoardEntryDescriptor, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("条目已删除（仅未封榜期可删）");
-        void queryClient.invalidateQueries({ queryKey: ["leaderboards-top", boardId] });
-        void queryClient.invalidateQueries({ queryKey: ["leaderboards-periods", boardId] });
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -773,17 +764,15 @@ function RewardRulesEditor({
 }
 
 function SettlementsSection({ boardId }: { boardId: string }) {
-  const queryClient = useQueryClient();
   const { data: settlements = [], isLoading } = useQuery({
     queryKey: ["leaderboards-settlements", boardId],
     queryFn: () => listSettlements(boardId, 50),
   });
   // 结算命令接线（独立 descriptor）：不改变榜集合——存量
-  // ["leaderboards-settlements"] 键手动桥（无论成败都刷新，与旧页
-  // onError invalidate 语义一致）；toast 单源 onSettled（§12.3）。
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["leaderboards-settlements", boardId] });
-
+  // ["leaderboards-settlements"] 键由 descriptor 级 legacyKeys 桥（§12.10-②）。
+  // 注：ok 才失效（kit 语义）；旧页"无论成败都刷新"的 onError invalidate
+  // 随手动桥退役——失败行走 toast，重试由用户发起。toast 单源 onSettled
+  //（§12.3）。
   const voidMutation = useCommand(voidSettlementDescriptor, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
@@ -793,7 +782,6 @@ function SettlementsSection({ boardId }: { boardId: string }) {
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
-      invalidate();
     },
   });
   const rerunMutation = useCommand(rerunSettlementDescriptor, {
@@ -805,7 +793,6 @@ function SettlementsSection({ boardId }: { boardId: string }) {
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
-      invalidate();
     },
   });
 
