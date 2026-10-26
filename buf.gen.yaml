@@ -1,10 +1,10 @@
 version: v2
-# vendored grpcapi/v1/policy.proto 不在 torchwood 生成（其 Go 类型由库
-# genproto 模块提供；protopolicy 按扩展字段号读取本仓生成的 descriptor）。
+# 生成只覆盖本模块（directory: proto）；BSR 依赖（grpcapi policy.proto 等）
+# 不参与生成——grpcapi 的 Go 类型由库 genproto 模块
+# github.com/lynx-go/grpcapi/genproto 提供，protopolicy 按扩展字段号读取
+# 本仓生成的 descriptor。
 inputs:
   - directory: proto
-    exclude_paths:
-      - proto/grpcapi/v1/policy.proto
 plugins:
   - remote: buf.build/protocolbuffers/go:v1.36.10
     out: genproto
