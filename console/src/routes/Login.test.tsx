@@ -66,7 +66,7 @@ describe("Login 弹跳断路器", () => {
     });
     expect(screen.getByRole("textbox", { name: "Email" })).toBeTruthy();
     expect(screen.getByTestId("loc").textContent).toBe("/console/login?expired=1");
-    expect(screen.getByText("会话已过期，请重新登录")).toBeTruthy();
+    expect(screen.getByText("Session expired. Please sign in again.")).toBeTruthy();
   });
 
   it("无 expired 标记且已认证时保持原行为自动跳回 console", async () => {
@@ -89,7 +89,7 @@ describe("Login 弹跳断路器", () => {
     expect(
       screen.getByTestId("loc").textContent
     ).toBe("/console/login?reason=password_changed");
-    expect(screen.getByText("密码已修改，请重新登录")).toBeTruthy();
+    expect(screen.getByText("Password changed. Please sign in again.")).toBeTruthy();
   });
 
   it("未认证时不跳转,正常渲染登录表单", async () => {
@@ -100,6 +100,6 @@ describe("Login 弹跳断路器", () => {
       expect(getSetupStatus).toHaveBeenCalled();
     });
     expect(screen.getByRole("textbox", { name: "Email" })).toBeTruthy();
-    expect(screen.queryByText("会话已过期，请重新登录")).toBeNull();
+    expect(screen.queryByText("Session expired. Please sign in again.")).toBeNull();
   });
 });

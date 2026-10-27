@@ -100,20 +100,20 @@ describe("DocumentDetailPage", () => {
     expect(screen.getByText("meta (json)")).toBeTruthy();
     expect(screen.queryByRole("spinbutton")).toBeNull();
     expect(screen.queryByRole("textbox")).toBeNull();
-    expect(screen.getByRole("button", { name: /编辑/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /删除/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Edit/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Delete/ })).toBeTruthy();
   });
 
   it("点「编辑」进入表单，「取消」丢弃草稿回到只读", async () => {
     renderDetail();
-    fireEvent.click(await screen.findByRole("button", { name: /编辑/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Edit/ }));
     const countField = screen.getByLabelText("count (integer)");
     expect(screen.getByLabelText("meta (json)")).toBeTruthy();
     expect(screen.getByLabelText("count Δ")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /保存/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Save/ })).toBeTruthy();
 
     fireEvent.change(countField, { target: { value: "7" } });
-    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("spinbutton")).toBeNull();
     expect(screen.getByText("42")).toBeTruthy();
     expect(screen.queryByText("7")).toBeNull();
@@ -123,7 +123,7 @@ describe("DocumentDetailPage", () => {
     vi.mocked(canWrite).mockReturnValue(false);
     renderDetail();
     expect(await screen.findByText("count (integer)")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /编辑/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Edit/ })).toBeNull();
     expect(screen.queryByRole("spinbutton")).toBeNull();
   });
 
@@ -138,9 +138,9 @@ describe("DocumentDetailPage", () => {
       .mockResolvedValueOnce(document)
       .mockResolvedValue({ ...document, data: { ...document.data, count: 7 }, version: 4 });
     renderDetail();
-    fireEvent.click(await screen.findByRole("button", { name: /编辑/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Edit/ }));
     fireEvent.change(screen.getByLabelText("count (integer)"), { target: { value: "7" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
       expect(vi.mocked(updateDocument)).toHaveBeenCalledWith(
@@ -153,23 +153,23 @@ describe("DocumentDetailPage", () => {
     );
     // 回只读 + 用响应文档重建（count=7 呈现）
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "保存" })).toBeNull()
+      expect(screen.queryByRole("button", { name: "Save" })).toBeNull()
     );
     expect(screen.getByText("7")).toBeTruthy();
   });
 
-  it("OCC 冲突：结果盒中文文案 + 「刷新重载」重建表单（fresh-read）", async () => {
+  it("OCC 冲突：结果盒文案 + 「刷新重载」重建表单（fresh-read）", async () => {
     vi.mocked(updateDocument).mockRejectedValue(occConflict());
     renderDetail();
-    fireEvent.click(await screen.findByRole("button", { name: /编辑/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Edit/ }));
     fireEvent.change(screen.getByLabelText("title (string)"), { target: { value: "stale-edit" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    // 冲突走结果盒（非 toast）：域码中文 + 重载动作
+    // 冲突走结果盒（非 toast）：域码文案 + 重载动作
     expect(
-      await screen.findByText("文档已被其他修改抢先提交（版本不匹配），请刷新后重试")
+      await screen.findByText("The document was modified by someone else (version mismatch). Please refresh and retry")
     ).toBeTruthy();
-    const reload = screen.getByRole("button", { name: "刷新重载" });
+    const reload = screen.getByRole("button", { name: "Reload" });
 
     // fresh-read 重载：getDocument 二次调用（fetchQuery），草稿按服务端态重建
     fireEvent.click(reload);
@@ -179,18 +179,18 @@ describe("DocumentDetailPage", () => {
     );
     // 结果盒随 reset 清空，仍处编辑态
     expect(
-      screen.queryByText("文档已被其他修改抢先提交（版本不匹配），请刷新后重试")
+      screen.queryByText("The document was modified by someone else (version mismatch). Please refresh and retry")
     ).toBeNull();
-    expect(screen.getByRole("button", { name: "保存" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save" })).toBeTruthy();
   });
 
   it("required 缺失：rejected.fieldErrors 字段级红字，不发请求", async () => {
     renderDetail();
-    fireEvent.click(await screen.findByRole("button", { name: /编辑/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Edit/ }));
     fireEvent.change(screen.getByLabelText("title (string)"), { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(await screen.findByText("必填字段")).toBeTruthy();
+    expect(await screen.findByText("Required field")).toBeTruthy();
     expect(vi.mocked(updateDocument)).not.toHaveBeenCalled();
   });
 });
@@ -235,7 +235,7 @@ describe("DocumentsListPage（列表 fleet 化 URL 锚）", () => {
       expect.objectContaining({ pageSize: 20, pageToken: undefined }),
     );
     // 下一页 → 游标 push 进 URL → 请求带 page_token
-    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() =>
       expect(vi.mocked(listDocuments)).toHaveBeenLastCalledWith(
         "app",
@@ -256,10 +256,10 @@ describe("DocumentsListPage（列表 fleet 化 URL 锚）", () => {
     renderList();
     await screen.findByText("hello");
     expect(vi.mocked(listDocuments)).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     // torchwood 存量确认壳：确认钮与触发钮同名，scope 到对话框内
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(vi.mocked(deleteDocument)).toHaveBeenCalledWith(
         "app",

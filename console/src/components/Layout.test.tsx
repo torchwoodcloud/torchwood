@@ -55,7 +55,7 @@ describe("Layout 侧栏收起", () => {
 
   it("默认展开，点「收起菜单」切到图标栏并持久化", async () => {
     const { desktopSidebar } = await renderLayout();
-    const collapseButton = await screen.findByTitle("收起菜单");
+    const collapseButton = await screen.findByTitle("Collapse menu");
     expect(desktopSidebar.className).toContain("w-64");
     expect(within(desktopSidebar).getByText("Storage")).toBeTruthy();
 
@@ -65,13 +65,13 @@ describe("Layout 侧栏收起", () => {
     // 收起后标签隐藏，仅剩 title 提示（移动端抽屉恒展开，按桌面侧栏断言）。
     expect(within(desktopSidebar).queryByText("Storage")).toBeNull();
     expect(within(desktopSidebar).getByTitle("Storage")).toBeTruthy();
-    expect(screen.getByTitle("展开菜单")).toBeTruthy();
+    expect(screen.getByTitle("Expand menu")).toBeTruthy();
   });
 
   it("持久化收起态在刷新后生效，点「展开菜单」恢复", async () => {
     localStorage.setItem(COLLAPSED_KEY, "1");
     const { desktopSidebar } = await renderLayout();
-    const expandButton = await screen.findByTitle("展开菜单");
+    const expandButton = await screen.findByTitle("Expand menu");
     expect(desktopSidebar.className).toContain("w-16");
     expect(within(desktopSidebar).queryByText("Storage")).toBeNull();
 

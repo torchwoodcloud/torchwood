@@ -74,7 +74,7 @@ describe("OrdersListPage", () => {
       expect.objectContaining({ pageSize: 20, pageToken: undefined, sortOrder: undefined })
     );
     // 下一页 → 游标 push 进 URL → 请求带 page_token
-    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() =>
       expect(mockList).toHaveBeenLastCalledWith(
         expect.objectContaining({ pageToken: "tok-2" })
@@ -89,7 +89,7 @@ describe("OrdersListPage", () => {
     await renderList();
     await screen.findByText("1999 USD");
 
-    const head = screen.getByRole("button", { name: /创建时间/ });
+    const head = screen.getByRole("button", { name: /Created At/ });
     fireEvent.click(head);
     await waitFor(() =>
       expect(mockList).toHaveBeenLastCalledWith(
@@ -129,7 +129,7 @@ describe("OrderDetailPage（写路径命令化）", () => {
       </QueryClientProvider>
     );
     await act(async () => {});
-    fireEvent.click(await screen.findByRole("button", { name: "退款" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Refund" }));
     await waitFor(() =>
       expect(refundOrder).toHaveBeenCalledWith(
         "ord-1",

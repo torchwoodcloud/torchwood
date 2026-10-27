@@ -93,7 +93,7 @@ export function ProjectSettingsPage() {
     <div className="space-y-6 max-w-4xl">
       <PageHeader
         title="Settings"
-        description={`项目「${project.name}」的配置与管理`}
+        description={`Settings and management for "${project.name}"`}
       />
 
       <div className="flex gap-2 border-b pb-2">
@@ -102,14 +102,14 @@ export function ProjectSettingsPage() {
           size="sm"
           onClick={() => setTab("general")}
         >
-          基本信息
+          General
         </Button>
         <Button
           variant={tab === "auth" ? "default" : "ghost"}
           size="sm"
           onClick={() => setTab("auth")}
         >
-          注册与登录
+          Sign-up & Sign-in
         </Button>
         <Button
           variant={tab === "oauth" ? "default" : "ghost"}
@@ -123,7 +123,7 @@ export function ProjectSettingsPage() {
           size="sm"
           onClick={() => setTab("danger")}
         >
-          危险区
+          Danger Zone
         </Button>
       </div>
 
@@ -160,7 +160,7 @@ function GeneralPanel({
   const update = useCommand(updateProjectCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("项目信息已保存");
+        toast.success("Project info saved");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -179,32 +179,32 @@ function GeneralPanel({
       <DetailGrid
         items={[
           { label: "ID", value: project.id, mono: true },
-          { label: "名称", value: project.name },
-          { label: "描述", value: project.description || "—" },
-          { label: "状态", value: project.status },
-          { label: "创建时间", value: formatDateTime(project.created_at, tz) },
-          { label: "更新时间", value: formatDateTime(project.updated_at, tz) },
+          { label: "Name", value: project.name },
+          { label: "Description", value: project.description || "—" },
+          { label: "Status", value: project.status },
+          { label: "Created", value: formatDateTime(project.created_at, tz) },
+          { label: "Updated", value: formatDateTime(project.updated_at, tz) },
         ]}
       />
       <form className="space-y-4 rounded-lg border p-6" onSubmit={onSubmit}>
-        <h3 className="text-sm font-medium">编辑基本信息</h3>
+        <h3 className="text-sm font-medium">Edit Basic Info</h3>
         <FormField
           id="project_name"
-          label="名称"
+          label="Name"
           value={name}
           onChange={setName}
           required
-          placeholder="项目名称"
+          placeholder="Project name"
         />
         <FormField
           id="project_description"
-          label="描述"
+          label="Description"
           value={description}
           onChange={setDescription}
-          placeholder="可选描述"
+          placeholder="Optional description"
         />
         <Button type="submit" disabled={!editable || update.pending}>
-          {update.pending ? "保存中…" : "保存"}
+          {update.pending ? "Saving…" : "Save"}
         </Button>
       </form>
     </div>
@@ -254,7 +254,7 @@ function DangerZonePanel({
   const remove = useCommand(removeProjectCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("项目已删除");
+        toast.success("Project deleted");
         navigate({ to: "/console/projects" });
       } else if (result) {
         toast.error(result.message);
@@ -268,14 +268,15 @@ function DangerZonePanel({
     <Card className="border-destructive/40 p-5">
       <h3 className="text-sm font-semibold text-destructive">Danger Zone</h3>
       <p className="mt-1 text-xs text-muted-foreground">
-        删除项目将永久移除该项目及其全部数据（数据库、存储元数据、函数、账本等），
-        此操作不可撤销。仅平台管理员（owner/admin）可执行。
+        Deleting a project permanently removes the project and all of its data
+        (databases, storage metadata, functions, ledgers, etc.). This action
+        cannot be undone. Only platform admins (owner/admin) can perform it.
       </p>
       <div className="mt-4">
         {editable && (
           <DeleteButton
-            label="删除项目"
-            description="将永久删除该项目及其全部数据（数据库、存储元数据、函数、账本等），此操作不可撤销。"
+            label="Delete Project"
+            description="This will permanently delete the project and all of its data (databases, storage metadata, functions, ledgers, etc.). This action cannot be undone."
             onConfirm={() => remove.mutate({ id: project.id })}
             loading={remove.pending}
           />
@@ -286,9 +287,9 @@ function DangerZonePanel({
 }
 
 const REGISTRATION_POLICIES = [
-  { value: "open", label: "开放注册（open）", hint: "任何人对本项目网关自助注册（默认，现状）" },
-  { value: "invite_only", label: "邀请制（invite_only）", hint: "仅凭有效邀请码注册" },
-  { value: "closed", label: "关闭注册（closed）", hint: "一律拒绝（403 registration_closed）" },
+  { value: "open", label: "Open sign-up (open)", hint: "Anyone can self-register via this project's gateway (default, current behavior)" },
+  { value: "invite_only", label: "Invite-only (invite_only)", hint: "Registration requires a valid invite code" },
+  { value: "closed", label: "Closed (closed)", hint: "Always reject (403 registration_closed)" },
 ];
 
 // RegistrationPolicySection 注册策略切换（T-03）：owner/admin 即改即存。
@@ -304,7 +305,7 @@ function RegistrationPolicySection({
   const save = useCommand(updateProjectCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("注册策略已更新");
+        toast.success("Registration policy updated");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -315,9 +316,9 @@ function RegistrationPolicySection({
 
   return (
     <Card className="p-5">
-      <h3 className="text-sm font-semibold">注册策略</h3>
+      <h3 className="text-sm font-semibold">Registration Policy</h3>
       <p className="mt-1 text-xs text-muted-foreground">
-        控制本项目网关 account.signUp 的准入语义（T-03）。
+        Controls who can sign up through this project's gateway via account.signUp (T-03).
       </p>
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <Select
@@ -328,7 +329,7 @@ function RegistrationPolicySection({
           }}
         >
           <SelectTrigger className="w-full sm:w-72">
-            <SelectValue placeholder="选择注册策略" />
+            <SelectValue placeholder="Select a registration policy" />
           </SelectTrigger>
           <SelectContent>
             {REGISTRATION_POLICIES.map((p) => (
@@ -367,7 +368,7 @@ function RedirectAllowlistSection({
       if (result?.status === "ok") {
         const next = result.payload.oauth_allowed_redirect_urls ?? [];
         toast.success(
-          next.length ? "重定向白名单已更新" : "重定向白名单已清空，回落默认白名单"
+          next.length ? "Redirect allowlist updated" : "Redirect allowlist cleared, falling back to the default allowlist"
         );
         setRows(next);
         setDirty(false);
@@ -390,7 +391,7 @@ function RedirectAllowlistSection({
         ok = false;
       }
       if (!ok) {
-        toast.error(`无效的白名单条目：${u}（须为 http/https 绝对地址）`);
+        toast.error(`Invalid allowlist entry: ${u} (must be an absolute http/https URL)`);
         return;
       }
     }
@@ -401,13 +402,15 @@ function RedirectAllowlistSection({
     <Card className="p-5">
       <h3 className="text-sm font-semibold">Redirect Allowlist</h3>
       <p className="mt-1 text-xs text-muted-foreground">
-        重定向白名单：OAuth2 登录、魔法链接、恢复、验证等重定向流的允许落点；
-        未配置时回落默认白名单（localhost 系列 + 本站 origin）。条目按协议+主机匹配，可含路径前缀。
+        Redirect allowlist: allowed targets for OAuth2 sign-in, magic link, recovery,
+        and verification redirect flows; falls back to the default allowlist (localhost
+        ranges + this site's origin) when unset. Entries match by protocol + host,
+        optionally with a path prefix.
       </p>
       {!editable ? (
         <div className="mt-4 space-y-1.5">
           {(project.oauth_allowed_redirect_urls ?? []).length === 0 ? (
-            <p className="text-xs text-muted-foreground">未配置（使用默认白名单）。</p>
+            <p className="text-xs text-muted-foreground">Not configured (using the default allowlist).</p>
           ) : (
             (project.oauth_allowed_redirect_urls ?? []).map((u) => (
               <code key={u} className="block rounded-md border px-3 py-1.5 font-mono text-xs break-all">
@@ -446,7 +449,7 @@ function RedirectAllowlistSection({
             ))}
             {rows.length === 0 && (
               <p className="text-xs text-muted-foreground">
-                暂无条目：保存空列表即回落默认白名单。
+                No entries yet: saving an empty list falls back to the default allowlist.
               </p>
             )}
           </div>
@@ -461,10 +464,10 @@ function RedirectAllowlistSection({
               disabled={save.pending || rows.length >= 100}
             >
               <Plus className="h-3.5 w-3.5 mr-1" />
-              添加条目
+              Add Entry
             </Button>
             <Button size="sm" onClick={onSave} disabled={save.pending || !dirty}>
-              {save.pending ? "保存中…" : "保存"}
+              {save.pending ? "Saving…" : "Save"}
             </Button>
           </div>
         </>
@@ -496,7 +499,7 @@ function InviteCodesSection({
   const remove = useCommand(removeInviteCodeCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("邀请码已吊销");
+        toast.success("Invite code revoked");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -509,23 +512,23 @@ function InviteCodesSection({
     <Card className="p-5">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold">邀请码</h3>
+          <h3 className="text-sm font-semibold">Invite Codes</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            邀请制注册的准入凭证；一次性/限次/可过期/可吊销。
+            Credentials for invite-only sign-up; single-use / limited-use / expirable / revocable.
           </p>
         </div>
         {editable && (
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4 mr-1" />
-            生成邀请码
+            Generate Invite Code
           </Button>
         )}
       </div>
       <div className="mt-4 space-y-2">
         {isLoading ? (
-          <p className="text-xs text-muted-foreground">加载中…</p>
+          <p className="text-xs text-muted-foreground">Loading…</p>
         ) : codes.length === 0 ? (
-          <p className="text-xs text-muted-foreground">暂无邀请码。</p>
+          <p className="text-xs text-muted-foreground">No invite codes yet.</p>
         ) : (
           codes.map((c) => <InviteCodeRow key={c.id} code={c} onRevoke={() => remove.mutate({ projectId, id: c.id })} canRevoke={editable} />)
         )}
@@ -567,13 +570,13 @@ function InviteCodeRow({
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border px-3 py-2">
       <code className="font-mono text-xs break-all">{code.code}</code>
       <Badge variant={dead ? "secondary" : "default"}>
-        {code.revoked ? "已吊销" : exhausted ? "已用尽" : expired ? "已过期" : "有效"}
+        {code.revoked ? "Revoked" : exhausted ? "Exhausted" : expired ? "Expired" : "Active"}
       </Badge>
       <span className="text-xs text-muted-foreground">
-        {code.used_count}/{code.max_uses} 次
+        {code.used_count}/{code.max_uses} uses
       </span>
       <span className="text-xs text-muted-foreground">
-        {code.expire_at ? `过期 ${formatDateTime(code.expire_at, tz)}` : "永不过期"}
+        {code.expire_at ? `Expires ${formatDateTime(code.expire_at, tz)}` : "Never expires"}
       </span>
       <div className="ml-auto flex gap-2">
         <Button
@@ -581,16 +584,16 @@ function InviteCodeRow({
           variant="outline"
           onClick={() => {
             navigator.clipboard.writeText(code.code);
-            toast.success("邀请码已复制");
+            toast.success("Invite code copied");
           }}
         >
           <Copy className="h-3.5 w-3.5 mr-1" />
-          复制
+          Copy
         </Button>
         {canRevoke && !code.revoked && (
           <Button size="sm" variant="outline" onClick={onRevoke}>
             <Trash2 className="h-3.5 w-3.5 mr-1" />
-            吊销
+            Revoke
           </Button>
         )}
       </div>
@@ -639,8 +642,8 @@ function InviteCodeCreateDialog({
     <Dialog open={open} onOpenChange={close}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>生成邀请码</DialogTitle>
-          <DialogDescription>邀请码明文仅创建时完整显示一次。</DialogDescription>
+          <DialogTitle>Generate Invite Code</DialogTitle>
+          <DialogDescription>The invite code is shown in full only once, at creation time.</DialogDescription>
         </DialogHeader>
         {created ? (
           <div className="space-y-4">
@@ -651,15 +654,15 @@ function InviteCodeCreateDialog({
                 variant="secondary"
                 onClick={() => {
                   navigator.clipboard.writeText(created.code);
-                  toast.success("邀请码已复制");
+                  toast.success("Invite code copied");
                 }}
               >
                 <Copy className="h-3.5 w-3.5 mr-1" />
-                复制
+                Copy
               </Button>
             </div>
             <div className="flex justify-end">
-              <Button onClick={() => close(false)}>完成</Button>
+              <Button onClick={() => close(false)}>Done</Button>
             </div>
           </div>
         ) : (
@@ -681,12 +684,12 @@ function InviteCodeCreateDialog({
                 onChange={(e) => setUnlimited(e.target.checked)}
               />
               <Label htmlFor="invite-unlimited" className="font-normal">
-                不限次数
+                Unlimited uses
               </Label>
             </div>
             {!unlimited && (
               <div className="space-y-1.5">
-                <Label htmlFor="invite-max-uses">最大使用次数</Label>
+                <Label htmlFor="invite-max-uses">Max uses</Label>
                 <Input
                   id="invite-max-uses"
                   type="number"
@@ -698,7 +701,7 @@ function InviteCodeCreateDialog({
               </div>
             )}
             <div className="space-y-1.5">
-              <Label htmlFor="invite-expire">过期时间（留空 = 永不过期）</Label>
+              <Label htmlFor="invite-expire">Expiry (leave empty = never expires)</Label>
               <Input
                 id="invite-expire"
                 type="datetime-local"
@@ -708,10 +711,10 @@ function InviteCodeCreateDialog({
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => close(false)}>
-                取消
+                Cancel
               </Button>
               <Button type="submit" disabled={create.pending}>
-                {create.pending ? "生成中…" : "生成"}
+                {create.pending ? "Generating…" : "Generate"}
               </Button>
             </div>
           </form>
@@ -744,7 +747,7 @@ function OAuthProvidersPanel() {
   const save = useCommand(upsertOAuthProviderCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("OAuth 配置已保存");
+        toast.success("OAuth configuration saved");
         setClientSecret("");
       } else if (result) {
         toast.error(result.message);
@@ -757,7 +760,7 @@ function OAuthProvidersPanel() {
   const remove = useCommand(removeOAuthProviderCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("OAuth 配置已删除");
+        toast.success("OAuth configuration deleted");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -786,7 +789,7 @@ function OAuthProvidersPanel() {
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!projectId) {
-      toast.error("请先选择项目");
+      toast.error("Select a project first");
       return;
     }
     const scopes = scopesText
@@ -804,7 +807,7 @@ function OAuthProvidersPanel() {
 
   if (!projectId) {
     return (
-      <p className="text-sm text-muted-foreground">请先在侧边栏选择一个项目。</p>
+      <p className="text-sm text-muted-foreground">Select a project in the sidebar first.</p>
     );
   }
 
@@ -836,7 +839,7 @@ function OAuthProvidersPanel() {
             checked={enabled}
             onChange={(e) => setEnabled(e.target.checked)}
           />
-          <Label htmlFor="enabled">启用</Label>
+          <Label htmlFor="enabled">Enabled</Label>
         </div>
 
         <div className="space-y-2">
@@ -854,7 +857,7 @@ function OAuthProvidersPanel() {
             Client Secret / AppSecret
             {providers.find((p) => p.provider === selectedProvider)?.has_client_secret ? (
               <span className="text-muted-foreground font-normal ml-2">
-                （留空则保留原值）
+                (leave empty to keep the current value)
               </span>
             ) : null}
           </Label>
@@ -863,12 +866,12 @@ function OAuthProvidersPanel() {
             type="password"
             value={clientSecret}
             onChange={(e) => setClientSecret(e.target.value)}
-            placeholder="首次配置必填"
+            placeholder="Required for first-time setup"
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="scopes">Scopes（逗号分隔，微信可留空）</Label>
+          <Label htmlFor="scopes">Scopes (comma-separated, may be empty for WeChat)</Label>
           <Input
             id="scopes"
             value={scopesText}
@@ -877,23 +880,23 @@ function OAuthProvidersPanel() {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          回调地址：
+          Callback URL:
           <code className="ml-1 rounded bg-muted px-1 py-0.5">
             {oauthCallbackURL(selectedProvider)}
           </code>
         </p>
 
         <Button type="submit" disabled={!platformAdmin || save.pending}>
-          {save.pending ? "保存中…" : "保存配置"}
+          {save.pending ? "Saving…" : "Save Configuration"}
         </Button>
       </form>
 
       <div className="space-y-3">
-        <h3 className="text-sm font-medium">已配置</h3>
+        <h3 className="text-sm font-medium">Configured</h3>
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">加载中…</p>
+          <p className="text-sm text-muted-foreground">Loading…</p>
         ) : providers.length === 0 ? (
-          <p className="text-sm text-muted-foreground">暂无 OAuth 配置</p>
+          <p className="text-sm text-muted-foreground">No OAuth configuration yet</p>
         ) : (
           providers.map((p) => (
             <ProviderCard
@@ -953,7 +956,7 @@ function ProviderCard({
       </p>
       <div className="flex gap-2">
         <Button type="button" variant="outline" size="sm" onClick={onEdit} disabled={readonly}>
-          编辑
+          Edit
         </Button>
         {!readonly && (
           <Button
@@ -976,31 +979,31 @@ function MessagingPanel() {
   return (
     <Card className="p-5 space-y-4 text-sm">
       <p className="text-muted-foreground">
-        Email OTP 与 SMS OTP 目前使用<strong className="text-foreground">平台级</strong>
-        配置（环境变量 / <code className="rounded bg-muted px-1">configs/config.yaml</code>
-        ），项目级 SMTP 将在后续版本支持。
+        Email OTP and SMS OTP currently use<strong className="text-foreground"> platform-level </strong>
+        configuration (environment variables / <code className="rounded bg-muted px-1">configs/config.yaml</code>
+        ); project-level SMTP will be supported in a future release.
       </p>
       <div className="space-y-2">
-        <h3 className="font-medium">Email OTP（SMTP）</h3>
+        <h3 className="font-medium">Email OTP (SMTP)</h3>
         <ul className="list-disc pl-5 text-muted-foreground space-y-1">
           <li>
             <code>TORCHWOOD_MESSAGING_SMTP_HOST</code> / <code>PORT</code> /{" "}
             <code>USERNAME</code> / <code>PASSWORD</code>
           </li>
           <li>
-            开发模式：<code>TORCHWOOD_MESSAGING_DEV_LOG_OTP=true</code> 将验证码写入服务日志
+            Dev mode: <code>TORCHWOOD_MESSAGING_DEV_LOG_OTP=true</code> writes the OTP to the server log
           </li>
         </ul>
       </div>
       <div className="space-y-2">
-        <h3 className="font-medium">SMS OTP（Twilio）</h3>
+        <h3 className="font-medium">SMS OTP (Twilio)</h3>
         <ul className="list-disc pl-5 text-muted-foreground space-y-1">
           <li>
             <code>TORCHWOOD_MESSAGING_SMS_TWILIO_ACCOUNT_SID</code> /{" "}
             <code>AUTH_TOKEN</code> / <code>FROM</code>
           </li>
           <li>
-            开发模式：<code>TORCHWOOD_MESSAGING_DEV_LOG_SMS=true</code>
+            Dev mode: <code>TORCHWOOD_MESSAGING_DEV_LOG_SMS=true</code>
           </li>
         </ul>
       </div>

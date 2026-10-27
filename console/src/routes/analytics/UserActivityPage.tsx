@@ -21,7 +21,7 @@ function EventItem({ ev }: { ev: AnalyticsUserEvent }) {
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-sm font-medium">{ev.name}</span>
         {ev.source && (
-          <Badge variant="secondary" title="摄入通道（client 端会话 / server 可信代报）">
+          <Badge variant="secondary" title="Ingestion channel (client-side session / trusted server-side report)">
             {ev.source}
           </Badge>
         )}
@@ -34,7 +34,7 @@ function EventItem({ ev }: { ev: AnalyticsUserEvent }) {
         {ev.app_version && <span>app_version: {ev.app_version}</span>}
         {ev.session_id && <span className="font-mono">session: {ev.session_id}</span>}
         {ev.ingested_at && (
-          <span title="服务端接收时间（与上报时间不同说明存在离线补传或时钟偏差）">
+          <span title="Server receive time (a difference from the report time indicates offline backfill or clock skew)">
             ingested: {new Date(ev.ingested_at).toLocaleString()}
           </span>
         )}
@@ -78,16 +78,16 @@ export function AnalyticsUserActivityPage() {
 
   return (
     <>
-      <PageHeader title="行为轨迹" description={`用户 ${userId} 的事件时间线（raw 实时扫描）`} />
+      <PageHeader title="Activity timeline" description={`Event timeline for user ${userId} (raw realtime scan)`} />
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild variant="outline" size="sm">
-            <Link to="/console/users/$id" params={{ id: encodeURIComponent(userId) }}>返回用户详情</Link>
+            <Link to="/console/users/$id" params={{ id: encodeURIComponent(userId) }}>Back to user details</Link>
           </Button>
           <Input
             value={nameFilter}
             onChange={(e) => setNameFilter(e.target.value)}
-            placeholder="按事件名过滤（已加载页内）"
+            placeholder="Filter by event name (loaded pages)"
             className="max-w-xs"
           />
           <div className="flex items-center gap-2">
@@ -97,9 +97,9 @@ export function AnalyticsUserActivityPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">时间线</CardTitle>
+            <CardTitle className="text-base">Timeline</CardTitle>
             <CardDescription>
-              按 occurred_at 倒序（服务端接收时间与上报时间不同说明存在离线补传或时钟偏差）
+              Sorted by occurred_at descending (server receive time differing from report time indicates offline backfill or clock skew)
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -110,16 +110,16 @@ export function AnalyticsUserActivityPage() {
                 ))}
               </div>
             ) : q.error ? (
-              <p className="text-sm text-destructive">加载失败：{errText(q.error)}</p>
+              <p className="text-sm text-destructive">Failed to load: {errText(q.error)}</p>
             ) : events.length === 0 ? (
               <EmptyState
-                title="该用户暂无行为事件"
-                description="用户还没有产生任何事件上报（或事件已超出 raw 保留期）。"
+                title="No events for this user yet"
+                description="This user has no reported events yet (or the events have fallen outside the raw retention window)."
               />
             ) : filtered.length === 0 ? (
               <EmptyState
-                title="没有匹配的事件"
-                description="已加载页内没有匹配过滤条件的事件名；加载更多或更换关键字。"
+                title="No matching events"
+                description="No event names in the loaded pages match the filter; load more or change the keyword."
               />
             ) : (
               <>
@@ -140,7 +140,7 @@ export function AnalyticsUserActivityPage() {
                       onClick={() => q.fetchNextPage()}
                       disabled={q.isFetchingNextPage}
                     >
-                      {q.isFetchingNextPage ? "加载中…" : "加载更多"}
+                      {q.isFetchingNextPage ? "Loading…" : "Load more"}
                     </Button>
                   </div>
                 )}

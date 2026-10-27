@@ -32,9 +32,9 @@ export function ProjectSelector({ collapsed = false }: { collapsed?: boolean }) 
           "py-1.5 text-xs text-muted-foreground",
           collapsed ? "px-0 text-center" : "px-2"
         )}
-        title={collapsed ? "暂无项目，请先在 Projects 中创建" : undefined}
+        title={collapsed ? "No projects yet. Create one in Projects first" : undefined}
       >
-        {collapsed ? "—" : "暂无项目，请先在 Projects 中创建"}
+        {collapsed ? "—" : "No projects yet. Create one in Projects first"}
       </p>
     );
   }
@@ -54,7 +54,7 @@ export function ProjectSelector({ collapsed = false }: { collapsed?: boolean }) 
           <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-sidebar-accent text-[10px] font-semibold">
             {initial ?? "?"}
           </span>
-          {!collapsed && <SelectValue placeholder="选择项目" />}
+          {!collapsed && <SelectValue placeholder="Select project" />}
         </span>
       </SelectTrigger>
       <SelectContent>

@@ -60,7 +60,7 @@ import { Form as KitForm } from "@/components/kit/command/form";
 import { TextField } from "@/components/kit/command/fields";
 import { DataTable } from "@/components/kit/query/data-table";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 
 // 命令族切片（design.md §12.3）：写路径换 useCommand/useCommandForm（结果
@@ -95,7 +95,7 @@ export function ApiKeysListPage() {
   const remove = useCommand(removeApiKeyCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("API Key 已删除");
+        toast.success("API Key deleted");
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -136,9 +136,9 @@ export function ApiKeysListPage() {
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
-        toast.error(`删除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
+        toast.error(`Delete completed: ${succeeded} succeeded, ${failed} failed`);
       } else {
-        toast.success(`已删除 ${selectedKeys.length} 个 API Key`);
+        toast.success(`Deleted ${selectedKeys.length} API Keys`);
       }
       void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
       setSelectedIds(new Set());
@@ -157,7 +157,7 @@ export function ApiKeysListPage() {
         </span>
       ),
     },
-    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
+    { id: "name", header: "Name", cell: ({ row }) => row.original.name },
     {
       id: "scopes",
       header: "Scopes",
@@ -165,7 +165,7 @@ export function ApiKeysListPage() {
     },
     {
       id: "status",
-      header: "状态",
+      header: "Status",
       cell: ({ row }) => (
         <Badge variant={row.original.enabled ? "default" : "secondary"}>
           {row.original.enabled ? "Active" : "Disabled"}
@@ -174,14 +174,14 @@ export function ApiKeysListPage() {
     },
     {
       id: "created",
-      header: "创建时间",
+      header: "Created",
       cell: ({ row }) => formatDateTime(row.original.created_at, tz),
     },
     ...(platformAdmin
       ? [
           {
             id: "actions",
-            header: "操作",
+            header: "Actions",
             cell: ({ row }: { row: { original: APIKey } }) => (
               <RowDeleteButton
                 onConfirm={() => remove.mutate({ id: row.original.id })}
@@ -197,7 +197,7 @@ export function ApiKeysListPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="API Keys" description="管理当前项目的服务端 API Key" />
+      <PageHeader title="API Keys" description="Manage server API Keys for the current project" />
 
       <KitListPage
         list={shownList}
@@ -206,20 +206,20 @@ export function ApiKeysListPage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="当前页内搜索名称或 ID..."
+              placeholder="Search name or ID on this page..."
               className="h-8 w-56"
             />
             <Select
               value={enabled === undefined ? "all" : enabled ? "enabled" : "disabled"}
               onValueChange={setEnabledFilter}
             >
-              <SelectTrigger className="h-8 w-[120px]" aria-label="状态过滤">
+              <SelectTrigger className="h-8 w-[120px]" aria-label="Filter by status">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部状态</SelectItem>
-                <SelectItem value="enabled">启用</SelectItem>
-                <SelectItem value="disabled">禁用</SelectItem>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="enabled">Enabled</SelectItem>
+                <SelectItem value="disabled">Disabled</SelectItem>
               </SelectContent>
             </Select>
             {selectedKeys.length > 0 && platformAdmin ? (
@@ -233,7 +233,7 @@ export function ApiKeysListPage() {
               <Button asChild className="ml-auto">
                 <Link to="/console/api-keys/new">
                   <Plus className="h-4 w-4 mr-2" />
-                  新建 API Key
+                  New API Key
                 </Link>
               </Button>
             ) : null}
@@ -241,16 +241,16 @@ export function ApiKeysListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
           </div>
         }
-        emptyTitle={search !== "" ? "没有匹配的 API Key" : filtered ? "该状态下暂无 API Key" : "暂无 API Key"}
+        emptyTitle={search !== "" ? "No matching API Keys" : filtered ? "No API Keys with this status" : "No API Keys yet"}
         emptyDescription={
           search !== ""
-            ? "调整搜索词，或清空恢复当前页全部行"
+            ? "Adjust the search term, or clear it to restore all rows on this page"
             : filtered
-              ? "切换状态过滤或清空恢复全部"
-              : "创建 API Key 以访问服务端 API"
+              ? "Change the status filter or clear it to show all"
+              : "Create an API Key to access server APIs"
         }
       >
         <div className="px-6 pb-2 pt-2">
@@ -294,7 +294,7 @@ export function ApiKeyNewPage() {
     defaultValues: { name: "", wildcard: false, selected: [] as string[], manual: "" },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("API Key 创建成功，请立即复制 Secret");
+        toast.success("API Key created. Copy the secret now");
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -306,17 +306,17 @@ export function ApiKeyNewPage() {
   const copySecret = () => {
     if (createdSecret) {
       navigator.clipboard.writeText(createdSecret);
-      toast.success("Secret 已复制");
+      toast.success("Secret copied");
     }
   };
 
   if (createdSecret !== undefined) {
     return (
       <FormPageWrapper
-        title="API Key 已创建"
-        description="Secret 仅显示一次，请妥善保存"
+        title="API Key created"
+        description="The secret is shown only once. Store it safely"
         backTo="/console/api-keys"
-        submitLabel="返回列表"
+        submitLabel="Back to list"
         onSubmit={(e) => {
           e.preventDefault();
           navigate({ to: "/console/api-keys" });
@@ -326,7 +326,7 @@ export function ApiKeyNewPage() {
           <code className="break-all text-xs flex-1">{createdSecret}</code>
           <Button variant="secondary" size="sm" type="button" onClick={copySecret}>
             <Copy className="h-4 w-4 mr-1" />
-            复制
+            Copy
           </Button>
         </div>
       </FormPageWrapper>
@@ -336,14 +336,14 @@ export function ApiKeyNewPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-6">
       <div className="flex items-start gap-4">
-        <Button variant="ghost" size="icon" asChild aria-label="返回">
+        <Button variant="ghost" size="icon" asChild aria-label="Back">
           <Link to="/console/api-keys">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
         <div>
-          <h1 className="text-lg font-semibold">新建 API Key</h1>
-          <p className="text-sm text-muted-foreground">Secret 创建后仅显示一次</p>
+          <h1 className="text-lg font-semibold">New API Key</h1>
+          <p className="text-sm text-muted-foreground">The secret is shown only once after creation</p>
         </div>
       </div>
       {/* Form 块自带提交/取消（宿主不渲染 footer——FormPageWrapper 的 onSubmit
@@ -353,16 +353,16 @@ export function ApiKeyNewPage() {
           form={form}
           submitting={create.submitting}
           result={create.result}
-          submitLabel="创建"
-          submittingLabel="创建中…"
-          cancelLabel="取消"
+          submitLabel="Create"
+          submittingLabel="Creating…"
+          cancelLabel="Cancel"
           onCancel={() => navigate({ to: "/console/api-keys" })}
         >
           <TextField
             form={form}
             name="name"
-            label="名称"
-            required="必填"
+            label="Name"
+            required="Required"
             placeholder="Production API Key"
           />
           <div className="space-y-3">
@@ -377,7 +377,7 @@ export function ApiKeyNewPage() {
                       onChange={(e) => field.handleChange(e.target.checked)}
                     />
                     <Label htmlFor="scope-wildcard" className="font-normal">
-                      全部权限（<code className="font-mono text-xs">*</code> 通配，含未来新增资源）
+                      All permissions (<code className="font-mono text-xs">*</code> wildcard, includes future resources)
                     </Label>
                   </div>
                 )}
@@ -385,8 +385,8 @@ export function ApiKeyNewPage() {
               {catalog.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   {catalogFailed
-                    ? "Scope 词表加载失败，可直接在下方手动输入。"
-                    : "Scope 词表加载中…"}
+                    ? "Failed to load the scope catalog. Enter scopes manually below instead."
+                    : "Loading scope catalog…"}
                 </p>
               ) : (
                 // wildcard 跨字段联动经 Subscribe（selected 字段子树单独订阅，
@@ -432,7 +432,7 @@ export function ApiKeyNewPage() {
                     handleChange(value: unknown): void;
                   }) => (
                     <>
-                      <Label htmlFor="manual-scopes">自定义 Scopes（可选，逗号或换行分隔）</Label>
+                      <Label htmlFor="manual-scopes">Custom scopes (optional, comma- or newline-separated)</Label>
                       <textarea
                         id="manual-scopes"
                         value={String(field.state.value ?? "")}
@@ -442,8 +442,11 @@ export function ApiKeyNewPage() {
                         className="flex w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs text-sm transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
                       />
                       <p className="text-xs text-muted-foreground">
-                        追加词表之外的 scope，与上方勾选合并生效：支持资源级限定（如{" "}
-                        <code>databases:blog.read</code> 单库只读）与自定义服务 scope；词表不可用时也可完全在此手动输入。
+                        Add scopes beyond the catalog, merged with the selections above: supports
+                        resource-scoped scopes (e.g.{" "}
+                        <code>databases:blog.read</code> for read-only on a single database) and
+                        custom service scopes; if the catalog is unavailable, you can also enter
+                        scopes entirely here.
                       </p>
                     </>
                   )}
@@ -527,7 +530,7 @@ export function ApiKeyDetailPage() {
   const remove = useCommand(removeApiKeyCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("API Key 已删除");
+        toast.success("API Key deleted");
         navigate({ to: "/console/api-keys" });
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -543,7 +546,7 @@ export function ApiKeyDetailPage() {
   return (
     <DetailPageWrapper
       title={key.name}
-      description="API Key 详情"
+      description="API Key details"
       backTo="/console/api-keys"
       actions={
         // 与列表页一致：仅平台 admin 可编辑/轮换/删除 API Key（G8-5，R11-P1-2）。
@@ -551,11 +554,11 @@ export function ApiKeyDetailPage() {
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setEditOpen(true)}>
               <Pencil className="h-4 w-4 mr-2" />
-              编辑
+              Edit
             </Button>
             <Button variant="outline" onClick={() => setRotateOpen(true)}>
               <RefreshCw className="h-4 w-4 mr-2" />
-              轮换
+              Rotate
             </Button>
             <DeleteButton onConfirm={() => remove.mutate({ id: key.id })} loading={remove.pending} />
           </div>
@@ -565,12 +568,12 @@ export function ApiKeyDetailPage() {
       <DetailGrid
         items={[
           { label: "ID", value: key.id, mono: true },
-          { label: "名称", value: key.name },
+          { label: "Name", value: key.name },
           { label: "Scopes", value: key.scopes.join(", ") || "—" },
-          { label: "状态", value: key.enabled ? "Active" : "Disabled" },
-          { label: "过期时间", value: key.expire_at ? formatDateTime(key.expire_at, tz) : "永不过期" },
-          { label: "创建时间", value: formatDateTime(key.created_at, tz) },
-          { label: "更新时间", value: formatDateTime(key.updated_at, tz) },
+          { label: "Status", value: key.enabled ? "Active" : "Disabled" },
+          { label: "Expires", value: key.expire_at ? formatDateTime(key.expire_at, tz) : "Never expires" },
+          { label: "Created", value: formatDateTime(key.created_at, tz) },
+          { label: "Updated", value: formatDateTime(key.updated_at, tz) },
         ]}
       />
       <ApiKeyEditDialog
@@ -610,7 +613,7 @@ function ApiKeyEditDialog({
     } satisfies EditApiKeyForm,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("API Key 已更新");
+        toast.success("API Key updated");
         onOpenChange(false);
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -623,21 +626,21 @@ function ApiKeyEditDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>编辑 API Key</DialogTitle>
+          <DialogTitle>Edit API Key</DialogTitle>
           <DialogDescription>
-            禁用与过期立即生效（每次请求鉴权实时校验）；Secret 不可修改。
+            Disabling and expiry take effect immediately (checked on every request); the secret cannot be changed.
           </DialogDescription>
         </DialogHeader>
         <KitForm
           form={form}
           submitting={edit.submitting}
           result={edit.result}
-          submitLabel="保存"
-          submittingLabel="保存中…"
-          cancelLabel="取消"
+          submitLabel="Save"
+          submittingLabel="Saving…"
+          cancelLabel="Cancel"
           onCancel={() => onOpenChange(false)}
         >
-          <TextField form={form} name="name" label="名称" required="必填" />
+          <TextField form={form} name="name" label="Name" required="Required" />
           <form.Field name="scopes">
             {(field: {
               state: { value: unknown; meta: { errors: ReadonlyArray<unknown> } };
@@ -645,7 +648,7 @@ function ApiKeyEditDialog({
             }) => (
               <label className="block space-y-1">
                 <span className="text-xs font-medium text-muted-foreground">
-                  Scopes（逗号分隔）
+                  Scopes (comma-separated)
                 </span>
                 <Input
                   value={String(field.state.value ?? "")}
@@ -654,8 +657,9 @@ function ApiKeyEditDialog({
                   className="font-mono text-xs"
                 />
                 <p className="text-xs text-muted-foreground">
-                  支持资源级限定（如 <code>databases:blog</code> 限定单个库，
-                  <code>databases:blog.read</code> 单库只读）；清空 Scopes 请删除重建。
+                  Supports resource-scoped scopes (e.g. <code>databases:blog</code> targets a
+                  single database, <code>databases:blog.read</code> makes it read-only); to clear
+                  all scopes, delete and recreate the key.
                 </p>
               </label>
             )}
@@ -669,7 +673,7 @@ function ApiKeyEditDialog({
                   onChange={(e) => field.handleChange(e.target.checked)}
                 />
                 <Label htmlFor="edit-enabled" className="font-normal">
-                  启用（取消勾选 = 立即禁用，所有请求返回 401）
+                  Enabled (uncheck to disable immediately; all requests return 401)
                 </Label>
               </div>
             )}
@@ -684,7 +688,7 @@ function ApiKeyEditDialog({
               return (
                 <label className="block space-y-1">
                   <span className="text-xs font-medium text-muted-foreground">
-                    过期时间（留空 = 保持不变/永不过期）
+                    Expiry (leave empty to keep unchanged / never expires)
                   </span>
                   <Input
                     type="datetime-local"
@@ -693,7 +697,7 @@ function ApiKeyEditDialog({
                       field.handleChange(fromDateTimeLocalValue(e.target.value, tz))
                     }
                   />
-                  <p className="text-xs text-muted-foreground">过期后该 Key 立即失效（401）。</p>
+                  <p className="text-xs text-muted-foreground">Once expired, this key stops working immediately (401).</p>
                 </label>
               );
             }}
@@ -737,7 +741,7 @@ function ApiKeyRotateDialog({
   const expireOld = useCommand(expireOldApiKeyCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("旧 Key 已设置立即过期，轮换完成");
+        toast.success("Old key set to expire immediately; rotation complete");
         onOpenChange(false);
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -758,21 +762,21 @@ function ApiKeyRotateDialog({
     <Dialog open={open} onOpenChange={close}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>轮换 API Key</DialogTitle>
+          <DialogTitle>Rotate API Key</DialogTitle>
           <DialogDescription>
-            Secret 不支持原地更换；平滑轮换 = 双 Key 并存过渡。
+            The secret cannot be replaced in place; smooth rotation means two keys coexist during the transition.
           </DialogDescription>
         </DialogHeader>
         {step === "intro" ? (
           <div className="space-y-4 text-sm">
             <ol className="list-decimal list-inside space-y-1.5 text-muted-foreground">
-              <li>创建新 Key（自动预填相同 Scopes，名称加 -rotated 后缀）</li>
-              <li>将应用切换到新 Key（旧 Key 在此期间继续可用）</li>
-              <li>回到本页为旧 Key 设置过期时间，完成下线</li>
+              <li>Create a new key (same scopes pre-filled; the name gets a -rotated suffix)</li>
+              <li>Switch your app to the new key (the old key keeps working in the meantime)</li>
+              <li>Come back here to set an expiry on the old key to retire it</li>
             </ol>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => close(false)}>
-                取消
+                Cancel
               </Button>
               <Button
                 onClick={() =>
@@ -785,7 +789,7 @@ function ApiKeyRotateDialog({
                 }
                 disabled={create.pending}
               >
-                {create.pending ? "创建中…" : "① 创建新 Key"}
+                {create.pending ? "Creating…" : "① Create new key"}
               </Button>
             </div>
           </div>
@@ -799,20 +803,21 @@ function ApiKeyRotateDialog({
                 type="button"
                 onClick={() => {
                   navigator.clipboard.writeText(newSecret);
-                  toast.success("Secret 已复制");
+                  toast.success("Secret copied");
                 }}
               >
                 <Copy className="h-4 w-4 mr-1" />
-                复制
+                Copy
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              新 Key <span className="font-mono">{newKey?.id}</span> 的 Secret 仅显示这一次。
-              切换应用后，可为旧 Key 设置过期（也可稍后在旧 Key 详情页操作）。
+              The secret of new key <span className="font-mono">{newKey?.id}</span> is shown only
+              this once. After switching your app over, set an expiry on the old key (you can also
+              do this later from the old key's detail page).
             </p>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => close(false)}>
-                稍后手动下线
+                Retire later manually
               </Button>
               <Button
                 variant="outline"
@@ -821,10 +826,10 @@ function ApiKeyRotateDialog({
                   navigate({ to: `/console/api-keys/${key_.id}` });
                 }}
               >
-                前往旧 Key 设置过期
+                Set old key expiry
               </Button>
               <Button onClick={() => expireOld.mutate({ id: key_.id })} disabled={expireOld.pending}>
-                {expireOld.pending ? "处理中…" : "② 旧 Key 立即过期"}
+                {expireOld.pending ? "Processing…" : "② Expire old key now"}
               </Button>
             </div>
           </div>

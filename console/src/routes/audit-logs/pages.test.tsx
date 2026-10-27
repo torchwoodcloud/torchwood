@@ -100,14 +100,14 @@ describe("AuditLogsListPage（keyset 切片：URL 即真相）", () => {
     const params = lastParams();
     expect(params.page_size).toBe(50);
     expect(params.sort_order).toBeUndefined();
-    expect(screen.getByText(/CLI 更新 Function/)).toBeTruthy();
-    expect(screen.getByText(/共 45 条 · 本页 2 条/)).toBeTruthy();
+    expect(screen.getByText(/CLI Updated Function/)).toBeTruthy();
+    expect(screen.getByText(/45 total · 2 this page/)).toBeTruthy();
   });
 
   it("过滤输入写 filter=… 进 URL 并映射请求参数", async () => {
     await renderPage();
-    await screen.findByText(/共 45 条 · 本页 2 条/);
-    fireEvent.change(screen.getByLabelText("操作"), {
+    await screen.findByText(/45 total · 2 this page/);
+    fireEvent.change(screen.getByLabelText("Action"), {
       target: { value: "FunctionsService/UpdateFunction" },
     });
     await waitFor(() => expect(lastParams().action).toBe("FunctionsService/UpdateFunction"));
@@ -116,8 +116,8 @@ describe("AuditLogsListPage（keyset 切片：URL 即真相）", () => {
 
   it("时间列排序循环 asc→desc→无（URL sort 为真相，换向清游标）", async () => {
     await renderPage();
-    await screen.findByText(/共 45 条/);
-    const head = await screen.findByRole("button", { name: /时间/ });
+    await screen.findByText(/45 total/);
+    const head = await screen.findByRole("button", { name: /Time/ });
 
     fireEvent.click(head);
     await waitFor(() => expect(search().sort).toEqual(["created_at:asc"]));
@@ -134,31 +134,31 @@ describe("AuditLogsListPage（keyset 切片：URL 即真相）", () => {
   it("keyset 翻页：Next 压 cursor 进 URL（push，历史即分页栈），Prev 走浏览器历史", async () => {
     const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
     await renderPage();
-    await screen.findByText(/共 45 条/);
+    await screen.findByText(/45 total/);
 
-    fireEvent.click(screen.getByRole("button", { name: /下一页/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Next/ }));
     await waitFor(() => expect(search().cursor).toBe("t2"));
     await waitFor(() => expect(lastParams().page_token).toBe("t2"));
 
     // 服务端不透明游标 prev 不可本地算 → 块兜底 history.back
-    fireEvent.click(screen.getByRole("button", { name: /上一页/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Prev/ }));
     await waitFor(() => expect(back).toHaveBeenCalled());
   });
 
   it("页大小切换进 URL 并映射 page_size（keyset 语义：保位置改页宽）", async () => {
     await renderPage();
-    await screen.findByText(/共 45 条/);
+    await screen.findByText(/45 total/);
     // 页大小切换是原生 select（§12.10-⑤ 上游化后）——change 事件驱动
-    fireEvent.change(screen.getByLabelText("页大小"), { target: { value: "100" } });
+    fireEvent.change(screen.getByLabelText("Page size"), { target: { value: "100" } });
     await waitFor(() => expect(search().size).toBe(100));
     await waitFor(() => expect(lastParams().page_size).toBe(100));
   });
 
   it("平台视图范围：全部项目展开 include_platform + all_projects", async () => {
     await renderPage();
-    await screen.findByText(/共 45 条/);
-    fireEvent.click(screen.getByRole("combobox", { name: "视图范围" }));
-    fireEvent.click(await screen.findByRole("option", { name: /全部项目/ }));
+    await screen.findByText(/45 total/);
+    fireEvent.click(screen.getByRole("combobox", { name: "Scope" }));
+    fireEvent.click(await screen.findByRole("option", { name: /All projects/ }));
     await waitFor(() => {
       expect(lastParams().include_platform).toBe(true);
       expect(lastParams().all_projects).toBe(true);
@@ -169,8 +169,8 @@ describe("AuditLogsListPage（keyset 切片：URL 即真相）", () => {
   it("空态两分：源空与过滤空文案不同", async () => {
     mockList.mockImplementation(async () => page1({ audit_logs: [], meta: undefined }));
     await renderPage();
-    await screen.findByText("暂无审计记录");
-    fireEvent.change(screen.getByLabelText("操作"), { target: { value: "NoSuch" } });
-    await screen.findByText("没有匹配的审计记录");
+    await screen.findByText("No audit logs yet");
+    fireEvent.change(screen.getByLabelText("Action"), { target: { value: "NoSuch" } });
+    await screen.findByText("No matching audit logs");
   });
 });

@@ -94,7 +94,7 @@ describe("AdminsListPage（列表 fleet 化：URL 即真相）", () => {
       expect.objectContaining({ pageSize: 20, pageToken: undefined }),
     );
     // 下一页 → 游标 push 进 URL → 请求带 page_token
-    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() =>
       expect(mockList).toHaveBeenLastCalledWith(
         expect.objectContaining({ pageToken: "tok-2" }),
@@ -110,9 +110,9 @@ describe("AdminsListPage（列表 fleet 化：URL 即真相）", () => {
     await renderPage();
     await screen.findByText("ops@example.com");
     // 当前行（me）无删除钮；仅 other 行可删
-    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(mockDelete).toHaveBeenCalledWith("a-2", { __skipToast: true }),
     );

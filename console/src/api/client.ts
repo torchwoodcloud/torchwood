@@ -81,7 +81,7 @@ function forceReLogin() {
     return;
   }
   authRedirecting = true;
-  toast.error("会话已过期，请重新登录");
+  toast.error("Session expired, please sign in again");
   setProjectID(null);
   // expired 标记是弹跳断路器:Login 页看到它就不再"探测成功自动跳回 console",
   // 必须显式重新登录——否则一旦存在持续的 401 源,console↔login 会无限互跳。
@@ -101,7 +101,7 @@ api.interceptors.response.use(
     const message =
       error?.response?.data?.error?.message ||
       error?.message ||
-      "请求失败";
+      "Request failed";
 
     if (status === 401) {
       const isLoginRequest = config?.url === "/console/auth/sign-in";

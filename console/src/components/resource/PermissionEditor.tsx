@@ -46,9 +46,9 @@ export function PermissionEditor({
 
   return (
     <div className="space-y-3">
-      <Label>权限规则 (Permissions)</Label>
+      <Label>Permission rules</Label>
       <p className="text-sm text-muted-foreground">
-        格式 <code className="text-xs">操作类型:角色</code>，例如 <code className="text-xs">read:any</code>、<code className="text-xs">update:user:&lt;id&gt;</code>、<code className="text-xs">delete:group:&lt;id&gt;</code>
+        Format: <code className="text-xs">action:role</code>, e.g. <code className="text-xs">read:any</code>, <code className="text-xs">update:user:&lt;id&gt;</code>, <code className="text-xs">delete:group:&lt;id&gt;</code>
       </p>
 
       {permissions.length > 0 && (
@@ -70,7 +70,7 @@ export function PermissionEditor({
 
       <div className="flex items-end gap-2">
         <div className="space-y-1">
-          <Label className="text-xs">操作</Label>
+          <Label className="text-xs">Action</Label>
           <select
             value={permType}
             onChange={(e) => setPermType(e.target.value)}
@@ -82,7 +82,7 @@ export function PermissionEditor({
           </select>
         </div>
         <div className="flex-1 space-y-1">
-          <Label className="text-xs">角色</Label>
+          <Label className="text-xs">Role</Label>
           <Input
             value={role}
             onChange={(e) => setRole(e.target.value)}
@@ -97,7 +97,7 @@ export function PermissionEditor({
         </div>
         <Button type="button" size="sm" onClick={addPermission}>
           <Plus className="h-4 w-4 mr-1" />
-          添加
+          Add
         </Button>
       </div>
 

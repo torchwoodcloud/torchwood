@@ -52,7 +52,7 @@ const varSet: VarSet = {
   id: "feature_flags",
   var_set_id: "feature_flags",
   visibility: "VAR_SET_VISIBILITY_PUBLIC",
-  description: "客户端功能开关与阈值",
+  description: "Client feature flags and thresholds",
   etag: "3:1",
   revision: 3,
   var_count: 12,
@@ -98,7 +98,7 @@ describe("VarSetsListPage（列表 fleet 化）", () => {
       expect.objectContaining({ pageSize: 20, pageToken: undefined }),
     );
     // 下一页 → 游标 push 进 URL → 请求带 page_token
-    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() =>
       expect(mockList).toHaveBeenLastCalledWith(
         expect.objectContaining({ pageToken: "tok-2" }),
@@ -112,11 +112,11 @@ describe("VarSetsListPage（列表 fleet 化）", () => {
     await renderPage();
     // 空列表时工具栏与空态各有一个「新建变量集」钮（开门竞赛与空态渲染
     // 时序相关）——取第一个（工具栏钮，两者都开同一对话框）。
-    fireEvent.click(screen.getAllByRole("button", { name: "新建变量集" })[0]);
-    fireEvent.change(await screen.findByLabelText("集合 ID"), {
+    fireEvent.click(screen.getAllByRole("button", { name: "New variable set" })[0]);
+    fireEvent.change(await screen.findByLabelText("Set ID"), {
       target: { value: "feature_flags" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "创建" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() =>
       expect(mockCreateVarSet).toHaveBeenCalledWith(
         {
@@ -148,9 +148,9 @@ describe("VarSetDetailPage（写路径命令化）", () => {
       "/console/runtime-vars/feature_flags",
     );
     // 行内删除钮（title 定位，icon-only）
-    fireEvent.click(await screen.findByTitle("删除"));
+    fireEvent.click(await screen.findByTitle("Delete"));
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(mockDeleteVar).toHaveBeenCalledWith("feature_flags", "flag_a", {
         __skipToast: true,

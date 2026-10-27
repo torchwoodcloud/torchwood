@@ -75,7 +75,7 @@ export function FunctionTriggersCard({
   const create = useCommand(createTriggerDescriptor, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("触发器已创建");
+        toast.success("Trigger created");
         setShowCreate(false);
       } else if (result) {
         toast.error(result.message);
@@ -88,7 +88,7 @@ export function FunctionTriggersCard({
   const remove = useCommand(removeTriggerDescriptor, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("触发器已删除");
+        toast.success("Trigger deleted");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -100,7 +100,7 @@ export function FunctionTriggersCard({
   const rotate = useCommand(rotateTriggerTokenDescriptor, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("token 已轮换（旧 URL 立即失效）");
+        toast.success("Token rotated (the old URL is invalidated immediately)");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -112,7 +112,7 @@ export function FunctionTriggersCard({
   return (
     <Card>
       <CardHeader className="space-y-0 pb-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-sm">触发器</CardTitle>
+        <CardTitle className="text-sm">Triggers</CardTitle>
         {writeable && (
           <Button
             type="button"
@@ -121,24 +121,25 @@ export function FunctionTriggersCard({
             onClick={() => setShowCreate((v) => !v)}
           >
             <Plus className="size-4 mr-1" />
-            新建触发器
+            New Trigger
           </Button>
         )}
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            HTTP 触发器：公开 URL
-            <code className="font-mono"> /f/&#123;project&#125;/&#123;token&#125;</code>
-            ，平台只路由不验签（封套透传 method/path/raw_query/headers/body），
-            验签归函数代码；微信 SSV 等回调建议 async_ack 模式（200 是「已受理」语义）。
-            cron 触发器按 UTC 解析 5 字段表达式。
+            HTTP trigger: public URL
+            <code className="font-mono"> /f/&#123;project&#125;/&#123;token&#125;</code>; the
+            platform only routes and does not verify signatures (the envelope passes through
+            method/path/raw_query/headers/body), signature verification belongs to the function
+            code. Callbacks such as WeChat SSV should use the async_ack mode (200 means
+            "accepted"). Cron triggers parse 5-field expressions in UTC.
           </p>
 
           {showCreate && writeable && (
             <div className="rounded-md border p-3 space-y-3">
               <div className="flex items-center gap-3">
-                <Label className="w-16">类型</Label>
+                <Label className="w-16">Type</Label>
                 <Select
                   value={type}
                   onValueChange={(v) => setType(v as "http" | "cron" | "event")}
@@ -147,16 +148,16 @@ export function FunctionTriggersCard({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="http">HTTP 回调</SelectItem>
-                    <SelectItem value="cron">定时（cron）</SelectItem>
-                    <SelectItem value="event">事件（文档/系统行为）</SelectItem>
+                    <SelectItem value="http">HTTP callback</SelectItem>
+                    <SelectItem value="cron">Scheduled (cron)</SelectItem>
+                    <SelectItem value="event">Event (document / system behavior)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               {type === "http" ? (
                 <>
                   <div className="flex items-center gap-3">
-                    <Label className="w-16">响应模式</Label>
+                    <Label className="w-16">Response mode</Label>
                     <Select
                       value={responseMode}
                       onValueChange={(v) => setResponseMode(v as "sync" | "async_ack")}
@@ -166,9 +167,9 @@ export function FunctionTriggersCard({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="async_ack">
-                          async_ack（立即 200 + ack_body，回调场景推荐）
+                          async_ack (immediate 200 + ack_body, recommended for callbacks)
                         </SelectItem>
-                        <SelectItem value="sync">sync（同步执行，透传响应）</SelectItem>
+                        <SelectItem value="sync">sync (synchronous execution, response passed through)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -189,10 +190,11 @@ export function FunctionTriggersCard({
                       checked={handshake}
                       onChange={(e) => setHandshake(e.target.checked)}
                     />
-                    GET 握手回显（微信服务器 URL 验证：echostr 原样返回，不执行函数）
+                    GET handshake echo (WeChat server URL verification: echostr is returned as-is,
+                    the function is not executed)
                   </label>
                   <div className="flex items-center gap-3">
-                    <Label className="w-16">body 上限</Label>
+                    <Label className="w-16">Body limit</Label>
                     <Input
                       type="number"
                       className="w-28"
@@ -201,13 +203,13 @@ export function FunctionTriggersCard({
                       min={1}
                       max={1024}
                     />
-                    <span className="text-xs text-muted-foreground">KB（上限 1024 = 1MB）</span>
+                    <span className="text-xs text-muted-foreground">KB (limit 1024 = 1MB)</span>
                   </div>
                 </>
               ) : type === "cron" ? (
                 <>
                   <div className="flex items-center gap-3">
-                    <Label className="w-16">表达式</Label>
+                    <Label className="w-16">Expression</Label>
                     <Input
                       className="w-72 font-mono text-xs"
                       value={expr}
@@ -215,11 +217,11 @@ export function FunctionTriggersCard({
                       placeholder="0 3 * * *"
                     />
                     <span className="text-xs text-muted-foreground">
-                      分 时 日 月 周（UTC）
+                      minute hour day month weekday (UTC)
                     </span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Label className="w-16">错过策略</Label>
+                    <Label className="w-16">Misfire policy</Label>
                     <Select
                       value={misfire}
                       onValueChange={(v) => setMisfire(v as "skip" | "catch_up_once")}
@@ -229,9 +231,9 @@ export function FunctionTriggersCard({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="catch_up_once">
-                          catch_up_once（宕机恢复后补跑一次，推荐）
+                          catch_up_once (run once after downtime recovery, recommended)
                         </SelectItem>
-                        <SelectItem value="skip">skip（错过不补跑）</SelectItem>
+                        <SelectItem value="skip">skip (do not run missed schedules)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -239,7 +241,7 @@ export function FunctionTriggersCard({
               ) : (
                 <>
                   <div className="space-y-1">
-                    <Label className="w-16">订阅事件</Label>
+                    <Label className="w-16">Subscribed events</Label>
                     <textarea
                       className="flex min-h-20 w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs text-sm transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
                       value={eventsText}
@@ -250,29 +252,31 @@ export function FunctionTriggersCard({
                       spellCheck={false}
                     />
                     <p className="text-xs text-muted-foreground">
-                      一行一条，两种格式：文档写事件
+                      One per line, two formats: document write events
                       <code className="font-mono">
                         {" "}
                         databases.&#123;database&#125;.collections.&#123;collection&#125;.documents.&#123;create|update|delete|*&#125;
                       </code>
-                      （collection 与 op 段可为 <code className="font-mono">*</code>，
-                      database 段一期必须精确）；系统行为事件
+                      (the collection and op segments may be <code className="font-mono">*</code>;
+                      the database segment must be exact in phase 1); system behavior events
                       <code className="font-mono"> auth.users.* / payments.orders.* </code>
-                      等（域 = auth/payments/economy/subscriptions，尾段可为
-                      <code className="font-mono">*</code>，拼错域名会被直接拒绝）。
-                      文档事件的 data 只带摘要，全量按 document_id 用
-                      databases:read 回读；系统事件的 data 直接携带脱敏载荷
-                     （attrs）。
+                      etc. (domains = auth/payments/economy/subscriptions, the trailing segment may
+                      be <code className="font-mono">*</code>; a misspelled domain is rejected
+                      outright). Document event data carries only a summary; read back the full
+                      document by document_id with databases:read; system event data carries the
+                      sanitized payload (attrs) directly.
                     </p>
                   </div>
                   {/* 自环警告（v3 D13：平台一期不做硬防护，Console 编辑处警告） */}
                   <div className="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
                     <AlertTriangle className="size-4 mt-0.5 shrink-0" />
                     <span>
-                      请勿订阅本函数自身写入的集合——写 → 事件 → 再触发循环会
-                      无限放大（平台不做硬防护，仅靠
+                      Do not subscribe to collections written by this function itself — the write →
+                      event → re-trigger loop amplifies without bound (the platform has no hard
+                      protection; only the
                       <code className="font-mono"> invoke_total&#123;source=event&#125;</code>
-                      速率告警兜底）。链式调用多个函数时同样注意环。
+                      rate alert acts as a backstop). Also watch for cycles when chaining multiple
+                      functions.
                     </span>
                   </div>
                 </>
@@ -295,15 +299,15 @@ export function FunctionTriggersCard({
                   })
                 }
               >
-                {create.pending ? "创建中..." : "创建"}
+                {create.pending ? "Creating..." : "Create"}
               </Button>
             </div>
           )}
 
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">加载中...</p>
+            <p className="text-sm text-muted-foreground">Loading...</p>
           ) : triggers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">暂无触发器</p>
+            <p className="text-sm text-muted-foreground">No triggers yet</p>
           ) : (
             <div className="space-y-2">
               {triggers.map((trg: FunctionTrigger) => (
@@ -315,9 +319,9 @@ export function FunctionTriggersCard({
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary">{trg.type}</Badge>
                       {trg.enabled ? (
-                        <Badge variant="secondary">启用</Badge>
+                        <Badge variant="secondary">Enabled</Badge>
                       ) : (
-                        <Badge variant="destructive">禁用</Badge>
+                        <Badge variant="destructive">Disabled</Badge>
                       )}
                       <span className="font-mono text-xs text-muted-foreground">
                         {trg.id}
@@ -335,7 +339,7 @@ export function FunctionTriggersCard({
                               rotate.mutate({ functionId, triggerId: trg.id })
                             }
                           >
-                            轮换 token
+                            Rotate token
                           </Button>
                         )}
                         <RowDeleteButton
@@ -350,11 +354,11 @@ export function FunctionTriggersCard({
                   {trg.type === "http" ? (
                     <>
                       <div className="text-xs text-muted-foreground">
-                        模式：{trg.response_mode}
+                        Mode: {trg.response_mode}
                         {trg.response_mode === "async_ack" && trg.ack_body
                           ? ` · ack_body=${trg.ack_body}`
                           : ""}
-                        {trg.handshake ? ` · 握手：${trg.handshake}` : ""}
+                        {trg.handshake ? ` · handshake: ${trg.handshake}` : ""}
                         {` · body ≤ ${triggerBytes(trg.body_limit_bytes ?? 65536)}`}
                       </div>
                       {trg.invoke_path && (
@@ -367,7 +371,7 @@ export function FunctionTriggersCard({
                     <div className="text-xs text-muted-foreground">
                       <span className="font-mono">{trg.expr}</span> · {trg.misfire}
                       {trg.next_run_at
-                        ? ` · 下次 ${formatDateTime(trg.next_run_at, tz)}`
+                        ? ` · next run ${formatDateTime(trg.next_run_at, tz)}`
                         : ""}
                     </div>
                   ) : (
@@ -378,8 +382,9 @@ export function FunctionTriggersCard({
                         </div>
                       ))}
                       <p className="text-xs text-muted-foreground">
-                        事件触发：投递为 at-least-once，函数内以 data 的
-                        event_id/seq 做幂等；注意自环（勿订阅本函数写入的集合）。
+                        Event trigger: delivery is at-least-once; deduplicate inside the function
+                        using event_id/seq in data. Watch for self-loops (do not subscribe to
+                        collections this function writes to).
                       </p>
                     </div>
                   )}

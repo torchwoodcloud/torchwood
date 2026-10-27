@@ -87,7 +87,7 @@ export function JsonEditor({
           )}
         />
       </div>
-      {invalid ? <p className="mt-2 text-xs text-destructive">JSON 格式无效</p> : null}
+      {invalid ? <p className="mt-2 text-xs text-destructive">Invalid JSON format</p> : null}
     </div>
   );
 }

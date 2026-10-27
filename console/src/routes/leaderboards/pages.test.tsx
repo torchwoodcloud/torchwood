@@ -89,7 +89,7 @@ describe("LeaderboardsListPage", () => {
     const link = screen.getByRole("link", { name: "daily_final" }) as HTMLAnchorElement;
     expect(link.getAttribute("href")).toContain("/console/leaderboards/daily_final");
     // 行操作：每行一个删除入口（编辑对话框触发钮为图标钮，无文案断言）
-    expect(screen.getAllByRole("button", { name: "删除" }).length).toBe(2);
+    expect(screen.getAllByRole("button", { name: "Delete" }).length).toBe(2);
   });
 
   it("非分页端点即真相：listBoards 单次全量拉取，无分页控件", async () => {
@@ -99,21 +99,21 @@ describe("LeaderboardsListPage", () => {
     // boards 端点无 page_token/过滤参数 → 适配器不透传窗口，只拉一次
     expect(mockListBoards).toHaveBeenCalledTimes(1);
     expect(mockListBoards).toHaveBeenCalledWith();
-    expect(screen.queryByRole("button", { name: /下一页/ })).toBeNull();
-    expect(screen.queryByRole("combobox", { name: "页大小" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Next/ })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Page size" })).toBeNull();
   });
 
   it("榜 ID 页内搜索为本地态：输入即过滤当前结果", async () => {
     mockListBoards.mockResolvedValue(boards);
     await renderList();
     await screen.findByText("daily_final");
-    fireEvent.change(screen.getByPlaceholderText(/搜索榜 ID/), {
+    fireEvent.change(screen.getByPlaceholderText(/Search board ID/), {
       target: { value: "weekly" },
     });
     expect(screen.getByText("weekly_score")).toBeTruthy();
     expect(screen.queryByText("daily_final")).toBeNull();
     // 清空恢复全部行
-    fireEvent.change(screen.getByPlaceholderText(/搜索榜 ID/), { target: { value: "" } });
+    fireEvent.change(screen.getByPlaceholderText(/Search board ID/), { target: { value: "" } });
     expect(screen.getByText("daily_final")).toBeTruthy();
   });
 
@@ -123,10 +123,10 @@ describe("LeaderboardsListPage", () => {
     mockDeleteBoard.mockResolvedValue(undefined);
     await renderList();
     await screen.findByText("daily_final");
-    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     // torchwood 存量确认壳：确认钮与触发钮同名，scope 到对话框内
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(mockDeleteBoard).toHaveBeenCalledWith("daily_final", { __skipToast: true }),
     );

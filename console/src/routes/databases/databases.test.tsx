@@ -62,7 +62,7 @@ const db: Database = {
 const coll: Collection = {
   id: "posts",
   database_id: "app",
-  name: "文章",
+  name: "Posts",
   permissions: [],
   is_system: false,
   attributes: [],
@@ -104,7 +104,7 @@ describe("DatabasesListPage（列表 fleet 化 URL 锚）", () => {
       expect.objectContaining({ pageSize: 20, pageToken: undefined }),
     );
     // 下一页 → 游标 push 进 URL → 请求带 page_token
-    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() =>
       expect(mockListDatabases).toHaveBeenLastCalledWith(
         expect.objectContaining({ pageToken: "tok-2" }),
@@ -117,9 +117,9 @@ describe("DatabasesListPage（列表 fleet 化 URL 锚）", () => {
     mockDeleteDatabase.mockResolvedValue(undefined);
     await renderPage("/console/databases", <DatabasesListPage />);
     await screen.findByText("Production DB");
-    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(mockDeleteDatabase).toHaveBeenCalledWith("app", { __skipToast: true }),
     );
@@ -137,8 +137,8 @@ describe("CollectionNewPage（写路径命令化）", () => {
       // ok 后 navigate 到集合详情——目标路由注册
       [{ path: "/console/databases/$dbId/collections/$collId", element: <div /> }],
     );
-    fireEvent.change(await screen.findByLabelText("名称"), { target: { value: "My Posts" } });
-    fireEvent.click(screen.getByRole("button", { name: "创建" }));
+    fireEvent.change(await screen.findByLabelText("Name"), { target: { value: "My Posts" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() =>
       expect(mockCreateCollection).toHaveBeenCalledWith(
         "app",
@@ -158,12 +158,12 @@ describe("DatabaseDetailPage（collections 列表嵌套 scope URL 锚）", () =>
       <DatabaseDetailPage />,
       "/console/databases/app",
     );
-    await screen.findByText("文章");
+    await screen.findByText("Posts");
     expect(mockListCollections).toHaveBeenLastCalledWith(
       "app",
       expect.objectContaining({ pageSize: 20, pageToken: undefined }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() =>
       expect(mockListCollections).toHaveBeenLastCalledWith(
         "app",
@@ -201,10 +201,10 @@ describe("CollectionDetailPage（写路径命令化：schema 编辑器）", () =
       </QueryClientProvider>
     );
     await act(async () => {});
-    fireEvent.click(await screen.findByRole("button", { name: "删除" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
     // torchwood 存量确认壳：确认钮与触发钮同名，scope 到对话框内
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(mockDeleteAttribute).toHaveBeenCalledWith("app", "posts", "title", {
         __skipToast: true,

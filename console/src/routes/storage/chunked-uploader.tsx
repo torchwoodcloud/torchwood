@@ -169,7 +169,7 @@ export function ChunkedUploader({ bucketId, file, onSuccess, onError }: ChunkedU
         onErrorRef.current(
           err instanceof Error && err.message
             ? err.message
-            : `上传中断：已上传 ${uploadedRef.current}/${totalRef.current || "?"} 片，可重新选择文件续传`
+            : `Upload interrupted: ${uploadedRef.current}/${totalRef.current || "?"} chunks uploaded, reselect the file to resume`
         );
       }
     }
@@ -198,7 +198,7 @@ export function ChunkedUploader({ bucketId, file, onSuccess, onError }: ChunkedU
     localStorage.removeItem(key);
     setCancelled(true);
     setCancelling(false);
-    onError("已取消上传");
+    onError("Upload cancelled");
   };
 
   if (failed || cancelled) {
@@ -216,7 +216,7 @@ export function ChunkedUploader({ bucketId, file, onSuccess, onError }: ChunkedU
       </div>
       <Progress value={percent} />
       <p className="text-xs text-muted-foreground">
-        分片上传中（{uploaded}/{total}）…
+        Uploading chunks ({uploaded}/{total})…
       </p>
       <Button
         type="button"
@@ -225,7 +225,7 @@ export function ChunkedUploader({ bucketId, file, onSuccess, onError }: ChunkedU
         disabled={cancelling}
         onClick={() => void handleCancel()}
       >
-        {cancelling ? "取消中..." : "取消上传"}
+        {cancelling ? "Cancelling..." : "Cancel upload"}
       </Button>
     </div>
   );

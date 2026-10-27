@@ -18,7 +18,7 @@ import { describeApiError } from "@/kit/errors";
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/kit/query/data-table";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -67,7 +67,7 @@ export function AdminsListPage() {
   const remove = useCommand(removeAdminCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("管理员已删除");
+        toast.success("Admin deleted");
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -83,20 +83,20 @@ export function AdminsListPage() {
   const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
 
   const tableColumns: LegacyColumnDef<Admin, unknown>[] = [
-    { id: "email", header: "邮箱", cell: ({ row }) => row.original.email },
+    { id: "email", header: "Email", cell: ({ row }) => row.original.email },
     {
       id: "role",
-      header: "角色",
+      header: "Role",
       cell: ({ row }) => <AdminRoleBadge role={row.original.role} />,
     },
     {
       id: "created_at",
-      header: "创建时间",
+      header: "Created",
       cell: ({ row }) => formatDateTime(row.original.created_at, tz),
     },
     {
       id: "actions",
-      header: "操作",
+      header: "Actions",
       cell: ({ row }) => (
         <div className="flex items-center justify-end gap-1">
           {isOwner && row.original.id !== me?.id ? (
@@ -109,7 +109,7 @@ export function AdminsListPage() {
             </>
           ) : row.original.id === me?.id ? (
             <Badge variant="outline" className="text-xs">
-              当前账户
+              Current account
             </Badge>
           ) : null}
         </div>
@@ -120,8 +120,8 @@ export function AdminsListPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="系统管理员"
-        description="管理可登录 Console 的管理员账户（仅 owner 可增删改）"
+        title="Admins"
+        description="Manage admin accounts that can sign in to the Console (only owner can create, update or delete)"
       />
 
       <KitListPage
@@ -131,7 +131,7 @@ export function AdminsListPage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="当前页内搜索邮箱..."
+              placeholder="Search email on this page..."
               className="h-8 w-56"
             />
             {isOwner ? <CreateAdminDialog /> : null}
@@ -139,14 +139,14 @@ export function AdminsListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
           </div>
         }
-        emptyTitle={search !== "" ? "没有匹配的管理员" : "暂无管理员"}
+        emptyTitle={search !== "" ? "No matching admins" : "No admins yet"}
         emptyDescription={
           search !== ""
-            ? "调整搜索词，或清空恢复当前页全部行"
-            : "创建第一个管理员后即可协同管理 Console"
+            ? "Adjust the search term, or clear it to restore all rows on this page"
+            : "Create the first admin to start managing the Console together"
         }
       >
         <div className="px-6 pb-2 pt-2">
@@ -171,7 +171,7 @@ function CreateAdminDialog() {
   const create = useCommand(createAdminCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("管理员已创建");
+        toast.success("Admin created");
         setOpen(false);
         setEmail("");
         setPassword("");
@@ -189,13 +189,13 @@ function CreateAdminDialog() {
       <DialogTrigger asChild>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
-          新建管理员
+          New Admin
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>新建管理员</DialogTitle>
-          <DialogDescription>创建可登录 Console 的管理员账户</DialogDescription>
+          <DialogTitle>New Admin</DialogTitle>
+          <DialogDescription>Create an admin account that can sign in to the Console</DialogDescription>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -205,7 +205,7 @@ function CreateAdminDialog() {
           }}
         >
           <div className="space-y-2">
-            <Label htmlFor="admin-email">邮箱</Label>
+            <Label htmlFor="admin-email">Email</Label>
             <Input
               id="admin-email"
               type="email"
@@ -216,18 +216,18 @@ function CreateAdminDialog() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="admin-password">初始密码</Label>
+            <Label htmlFor="admin-password">Initial password</Label>
             <Input
               id="admin-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="至少 8 位，含字母和数字"
+              placeholder="At least 8 characters, with both letters and digits"
               required
             />
           </div>
           <div className="space-y-2">
-            <Label>角色</Label>
+            <Label>Role</Label>
             <Select value={role} onValueChange={setRole}>
               <SelectTrigger>
                 <SelectValue />
@@ -241,15 +241,15 @@ function CreateAdminDialog() {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              owner/admin 可查看管理员列表；owner 可增删改管理员。
+              owner/admin can view the admin list; owner can create, update or delete admins.
             </p>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              取消
+              Cancel
             </Button>
             <Button type="submit" disabled={create.pending}>
-              {create.pending ? "创建中…" : "创建"}
+              {create.pending ? "Creating…" : "Create"}
             </Button>
           </DialogFooter>
         </form>
@@ -267,7 +267,7 @@ function EditAdminDialog({ admin }: { admin: Admin }) {
   const update = useCommand(updateAdminCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("管理员已更新");
+        toast.success("Admin updated");
         setOpen(false);
         setPassword("");
       } else if (failure) {
@@ -287,7 +287,7 @@ function EditAdminDialog({ admin }: { admin: Admin }) {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>编辑管理员</DialogTitle>
+          <DialogTitle>Edit admin</DialogTitle>
           <DialogDescription>{admin.email}</DialogDescription>
         </DialogHeader>
         <form
@@ -298,14 +298,14 @@ function EditAdminDialog({ admin }: { admin: Admin }) {
             if (role !== admin.role) input.role = role;
             if (password) input.password = password;
             if (Object.keys(input).length === 0) {
-              toast.error("没有需要保存的变更");
+              toast.error("No changes to save");
               return;
             }
             update.mutate({ id: admin.id, ...input });
           }}
         >
           <div className="space-y-2">
-            <Label>角色</Label>
+            <Label>Role</Label>
             <Select value={role} onValueChange={setRole}>
               <SelectTrigger>
                 <SelectValue />
@@ -320,21 +320,21 @@ function EditAdminDialog({ admin }: { admin: Admin }) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor={`admin-pw-${admin.id}`}>重置密码（留空则不修改）</Label>
+            <Label htmlFor={`admin-pw-${admin.id}`}>Reset password (leave empty to keep unchanged)</Label>
             <Input
               id={`admin-pw-${admin.id}`}
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="至少 8 位，含字母和数字"
+              placeholder="At least 8 characters, with both letters and digits"
             />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              取消
+              Cancel
             </Button>
             <Button type="submit" disabled={update.pending}>
-              {update.pending ? "保存中…" : "保存"}
+              {update.pending ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>
         </form>

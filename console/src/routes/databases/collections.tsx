@@ -85,7 +85,7 @@ export function CollectionNewPage() {
     scope: { projectId: projectId ?? undefined, dbId: dbId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Collection 创建成功");
+        toast.success("Collection created");
         navigate({ to: `/console/databases/${dbId}/collections/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
@@ -100,10 +100,10 @@ export function CollectionNewPage() {
 
   return (
     <FormPageWrapper
-      title="新建 Collection"
+      title="New Collection"
       backTo={`/console/databases/${dbId}`}
-      backLabel="返回 Database"
-      submitLabel="创建"
+      backLabel="Back to database"
+      submitLabel="Create"
       onSubmit={(e) => {
         e.preventDefault();
         create.mutate({ dbId: dbId!, id, name, permissions });
@@ -111,8 +111,8 @@ export function CollectionNewPage() {
       loading={create.pending}
       submitDisabled={!isPlatformAdmin(role)}
     >
-      <FormField id="name" label="名称" value={name} onChange={setName} required placeholder="posts" />
-      <FormField id="id" label="ID（可选）" value={id} onChange={setId} placeholder="posts" />
+      <FormField id="name" label="Name" value={name} onChange={setName} required placeholder="posts" />
+      <FormField id="id" label="ID (optional)" value={id} onChange={setId} placeholder="posts" />
       <div className="pt-2 border-t">
         <PermissionEditor permissions={permissions} onChange={setPermissions} />
       </div>
@@ -145,7 +145,7 @@ export function CollectionDetailPage() {
     scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("权限已更新");
+        toast.success("Permissions updated");
         setPermDialogOpen(false);
       } else if (result) {
         toast.error(result.message);
@@ -159,7 +159,7 @@ export function CollectionDetailPage() {
     scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Attribute 已添加");
+        toast.success("Attribute added");
         setAttrDialogOpen(false);
       } else if (result) {
         toast.error(result.message);
@@ -173,7 +173,7 @@ export function CollectionDetailPage() {
     scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Index 已添加");
+        toast.success("Index added");
         setIndexDialogOpen(false);
       } else if (result) {
         toast.error(result.message);
@@ -187,7 +187,7 @@ export function CollectionDetailPage() {
     scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Attribute 已删除");
+        toast.success("Attribute deleted");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -200,7 +200,7 @@ export function CollectionDetailPage() {
     scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Index 已删除");
+        toast.success("Index deleted");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -213,7 +213,7 @@ export function CollectionDetailPage() {
     scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("集合设置已更新");
+        toast.success("Collection settings updated");
         setSettingsDialogOpen(false);
       } else if (result) {
         toast.error(result.message);
@@ -241,7 +241,7 @@ export function CollectionDetailPage() {
           <CollectionStatCard icon={Hash} label="Indexes" value={collection.indexes.length} />
           <CollectionStatCard
             icon={Calendar}
-            label="创建时间"
+            label="Created"
             value={formatDate(collection.created_at, tz)}
           />
         </div>
@@ -251,10 +251,10 @@ export function CollectionDetailPage() {
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Settings2 className="h-4 w-4" />
-                集合设置
+                Collection settings
               </CardTitle>
               <p className="mt-1 text-sm text-muted-foreground">
-                名称与可用状态；停用后客户端不可读写该集合
+                Name and availability; clients cannot read or write a disabled collection
               </p>
             </div>
             <Button
@@ -264,22 +264,22 @@ export function CollectionDetailPage() {
               disabled={readonly}
             >
               <Settings2 className="mr-1 h-4 w-4" />
-              编辑
+              Edit
             </Button>
           </CardHeader>
           <CardContent>
             <dl className="grid gap-4 sm:grid-cols-2">
               <div>
-                <dt className="text-sm text-muted-foreground">名称</dt>
+                <dt className="text-sm text-muted-foreground">Name</dt>
                 <dd className="mt-1 font-medium">{collection.name}</dd>
               </div>
               <div>
-                <dt className="text-sm text-muted-foreground">状态</dt>
+                <dt className="text-sm text-muted-foreground">Status</dt>
                 <dd className="mt-1">
                   {collection.disabled ? (
-                    <Badge variant="destructive">已停用</Badge>
+                    <Badge variant="destructive">Disabled</Badge>
                   ) : (
-                    <Badge variant="secondary">启用</Badge>
+                    <Badge variant="secondary">Enabled</Badge>
                   )}
                 </dd>
               </div>
@@ -292,15 +292,16 @@ export function CollectionDetailPage() {
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Shield className="h-4 w-4" />
-                权限规则
+                Permission rules
               </CardTitle>
               <p className="mt-1 text-sm text-muted-foreground">
-                集合级权限；无文档级权限的文档将回退到此规则
+                Collection-level permissions; documents without document-level permissions fall
+                back to these rules
               </p>
             </div>
             <Button size="sm" variant="outline" onClick={() => setPermDialogOpen(true)} disabled={readonly}>
               <Settings2 className="mr-1 h-4 w-4" />
-              编辑
+              Edit
             </Button>
           </CardHeader>
           <CardContent>
@@ -314,7 +315,7 @@ export function CollectionDetailPage() {
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                未设置自定义权限规则，使用系统默认策略。
+                No custom permission rules; the system default policy applies.
               </p>
             )}
           </CardContent>

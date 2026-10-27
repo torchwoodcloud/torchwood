@@ -59,7 +59,7 @@ import {
 } from "@/components/resource/shared";
 import { DataTable } from "@/components/kit/query/data-table";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import {
   Dialog,
@@ -83,17 +83,17 @@ const bucketColumns = (tz: string): LegacyColumnDef<Bucket, unknown>[] => [
   },
   {
     id: "name",
-    header: "名称",
+    header: "Name",
     cell: ({ row }) => (
       <span className="inline-flex items-center gap-2">
         {row.original.name}
-        {row.original.public && <Badge variant="secondary">公开</Badge>}
+        {row.original.public && <Badge variant="secondary">Public</Badge>}
       </span>
     ),
   },
   {
     id: "created",
-    header: "创建时间",
+    header: "Created",
     cell: ({ row }) => formatDateTime(row.original.created_at, tz),
   },
 ];
@@ -144,7 +144,7 @@ export function StorageListPage() {
   const remove = useCommand(removeBucketCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Bucket 已删除");
+        toast.success("Bucket deleted");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -187,9 +187,9 @@ export function StorageListPage() {
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
-        toast.error(`删除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
+        toast.error(`Deletion complete: ${succeeded} succeeded, ${failed} failed`);
       } else {
-        toast.success(`已删除 ${selectedBuckets.length} 个 Bucket`);
+        toast.success(`Deleted ${selectedBuckets.length} buckets`);
       }
       list.refetch();
       setSelectedIds(new Set());
@@ -204,7 +204,7 @@ export function StorageListPage() {
       ? [
           {
             id: "actions",
-            header: "操作",
+            header: "Actions",
             cell: ({ row }: { row: { original: Bucket } }) => (
               <RowDeleteButton
                 onConfirm={() => remove.mutate({ id: row.original.id })}
@@ -218,7 +218,7 @@ export function StorageListPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Storage" description="管理存储 Bucket" />
+      <PageHeader title="Storage" description="Manage storage buckets" />
 
       <KitListPage
         list={shownList}
@@ -227,7 +227,7 @@ export function StorageListPage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="当前页内搜索 Bucket 名称或 ID..."
+              placeholder="Search buckets by name or ID on this page..."
               className="h-8 w-56"
             />
             {selectedBuckets.length > 0 && writeable ? (
@@ -241,7 +241,7 @@ export function StorageListPage() {
               <Button asChild className="ml-auto">
                 <Link to="/console/storage/new">
                   <Plus className="h-4 w-4 mr-2" />
-                  新建 Bucket
+                  New bucket
                 </Link>
               </Button>
             ) : null}
@@ -249,17 +249,17 @@ export function StorageListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
           </div>
         }
-        emptyTitle={search !== "" ? "没有匹配的 Bucket" : "暂无 Bucket"}
+        emptyTitle={search !== "" ? "No matching buckets" : "No buckets yet"}
         emptyDescription={
-          search !== "" ? "调整搜索词，或清空恢复当前页全部行" : "创建 Bucket 以上传文件"
+          search !== "" ? "Adjust your search, or clear it to restore all rows on this page" : "Create a bucket to upload files"
         }
         emptyAction={
           writeable ? (
             <Button asChild>
-              <Link to="/console/storage/new">新建 Bucket</Link>
+              <Link to="/console/storage/new">New bucket</Link>
             </Button>
           ) : undefined
         }
@@ -296,7 +296,7 @@ export function BucketNewPage() {
   const create = useCommand(createBucketCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Bucket 创建成功");
+        toast.success("Bucket created");
         navigate({ to: `/console/storage/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
@@ -308,9 +308,9 @@ export function BucketNewPage() {
 
   return (
     <FormPageWrapper
-      title="新建 Bucket"
+      title="New bucket"
       backTo="/console/storage"
-      submitLabel="创建"
+      submitLabel="Create"
       onSubmit={(e) => {
         e.preventDefault();
         create.mutate({ name, public: publicBucket });
@@ -318,10 +318,10 @@ export function BucketNewPage() {
       loading={create.pending}
       submitDisabled={!canWrite(role)}
     >
-      <FormField id="name" label="Bucket 名称" value={name} onChange={setName} required placeholder="uploads" />
+      <FormField id="name" label="Bucket name" value={name} onChange={setName} required placeholder="uploads" />
       <label className="flex items-center gap-2 text-sm">
         <Checkbox checked={publicBucket} onChange={(e) => setPublicBucket(e.target.checked)} />
-        公开 Bucket（无凭证可匿名读取 read:any 文件）
+        Public bucket (read:any files readable anonymously without credentials)
       </label>
     </FormPageWrapper>
   );
@@ -368,7 +368,7 @@ export function BucketDetailPage() {
   const updateBucketHandle = useCommand(updateBucketCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Bucket 设置已更新");
+        toast.success("Bucket settings updated");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -380,7 +380,7 @@ export function BucketDetailPage() {
   const removeBucket = useCommand(removeBucketCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Bucket 已删除");
+        toast.success("Bucket deleted");
         navigate({ to: "/console/storage" });
       } else if (result) {
         toast.error(result.message);
@@ -393,7 +393,7 @@ export function BucketDetailPage() {
   const uploadMutation = useCommand(uploadFileDescriptor, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("文件上传成功");
+        toast.success("File uploaded");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -405,7 +405,7 @@ export function BucketDetailPage() {
   const deleteMutation = useCommand(removeFileDescriptor, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("文件已删除");
+        toast.success("File deleted");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -415,12 +415,12 @@ export function BucketDetailPage() {
   });
 
   const fileColumns: ColumnDef<FileItem>[] = [
-    { key: "name", header: "文件名", cell: (f) => f.name },
-    { key: "size", header: "大小", cell: (f) => formatBytes(f.size) },
-    { key: "type", header: "类型", cell: (f) => f.mime_type },
+    { key: "name", header: "Name", cell: (f) => f.name },
+    { key: "size", header: "Size", cell: (f) => formatBytes(f.size) },
+    { key: "type", header: "Type", cell: (f) => f.mime_type },
     {
       key: "created",
-      header: "上传时间",
+      header: "Uploaded At",
       cell: (f) => formatDateTime(f.created_at, tz),
     },
   ];
@@ -440,9 +440,9 @@ export function BucketDetailPage() {
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
-        toast.error(`删除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
+        toast.error(`Deletion complete: ${succeeded} succeeded, ${failed} failed`);
       } else {
-        toast.success(`已删除 ${selected.length} 个文件`);
+        toast.success(`Deleted ${selected.length} files`);
       }
       // 直调路径的失效（§12.10-② 命令式编排）：走 remove descriptor 的
       // legacyKeys 声明（["files"] 前缀），不手写存量键。
@@ -460,7 +460,7 @@ export function BucketDetailPage() {
     <div className="space-y-6">
       <DetailPageWrapper
         title={bucket.name}
-        description="Bucket 详情与文件管理"
+        description="Bucket details and file management"
         backTo="/console/storage"
         actions={
           writeable ? (
@@ -474,19 +474,19 @@ export function BucketDetailPage() {
         <DetailGrid
           items={[
             { label: "ID", value: bucket.id, mono: true },
-            { label: "名称", value: bucket.name },
-            { label: "创建时间", value: formatDateTime(bucket.created_at, tz) },
+            { label: "Name", value: bucket.name },
+            { label: "Created", value: formatDateTime(bucket.created_at, tz) },
           ]}
         />
       </DetailPageWrapper>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <UsageStatCard label="Bucket 数量" value={String(usage?.buckets ?? "—")} />
-        <UsageStatCard label="文件数量" value={String(usage?.files ?? "—")} />
-        <UsageStatCard label="总容量" value={usage ? formatBytes(usage.total_size) : "—"} />
+        <UsageStatCard label="Buckets" value={String(usage?.buckets ?? "—")} />
+        <UsageStatCard label="Files" value={String(usage?.files ?? "—")} />
+        <UsageStatCard label="Total size" value={usage ? formatBytes(usage.total_size) : "—"} />
         <Card>
           <CardHeader className="space-y-0 pb-3">
-            <CardTitle className="text-sm">公开访问</CardTitle>
+            <CardTitle className="text-sm">Public access</CardTitle>
           </CardHeader>
           <CardContent className="flex items-center gap-2">
             <Checkbox
@@ -497,7 +497,7 @@ export function BucketDetailPage() {
               }
             />
             <span className="text-sm text-muted-foreground">
-              允许无凭证匿名读取（read:any 文件）
+              Allow anonymous reads without credentials (read:any files)
             </span>
           </CardContent>
         </Card>
@@ -510,7 +510,7 @@ export function BucketDetailPage() {
             bucketId={bucketId!}
             file={chunkUpload.file}
             onSuccess={() => {
-              toast.success("文件上传成功");
+              toast.success("File uploaded");
               // 直调路径的失效（§12.10-② 命令式编排）：upload descriptor 的
               // legacyKeys 声明（["files"] 前缀）。
               invalidateAfterCommand(queryClient, uploadFileDescriptor, {});
@@ -526,8 +526,8 @@ export function BucketDetailPage() {
 
       <ResourceListPage
         title=""
-        cardTitle="文件列表"
-        searchPlaceholder="当前页内搜索文件名..."
+        cardTitle="Files"
+        searchPlaceholder="Search file names on this page..."
         isLoading={filesLoading}
         items={files}
         columns={fileColumns}
@@ -554,7 +554,7 @@ export function BucketDetailPage() {
                   e.target.value = "";
                   if (!file) return;
                   if (isTooLarge(file.size)) {
-                    toast.error("文件超过 156.25GB 分片上传上限");
+                    toast.error("File exceeds the 156.25GB chunked upload limit");
                     return;
                   }
                   if (shouldChunk(file.size)) {
@@ -583,7 +583,7 @@ export function BucketDetailPage() {
             <Button
               variant="ghost"
               size="icon"
-              title="下载"
+              title="Download"
               onClick={() => void downloadFile(bucketId!, f.id, f.name)}
             >
               <Download className="h-4 w-4" />
@@ -596,8 +596,8 @@ export function BucketDetailPage() {
             )}
           </>
         )}
-        emptyTitle="暂无文件"
-        emptyDescription="上传文件到此 Bucket"
+        emptyTitle="No files yet"
+        emptyDescription="Upload files to this bucket"
       />
     </div>
   );
@@ -650,7 +650,7 @@ export function FileDetailPage() {
   const remove = useCommand(removeFileDescriptor, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("文件已删除");
+        toast.success("File deleted");
         navigate({ to: `/console/storage/${bucketId}` });
       } else if (result) {
         toast.error(result.message);
@@ -663,7 +663,7 @@ export function FileDetailPage() {
   const rename = useCommand(renameFileDescriptor, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("文件名已更新");
+        toast.success("File name updated");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -690,7 +690,7 @@ export function FileDetailPage() {
       setShareExpires(formatDateTime(expires_at, tz));
       setShareOpen(true);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "生成分享链接失败");
+      toast.error(err instanceof Error ? err.message : "Failed to generate share link");
     } finally {
       setShareLoading(false);
     }
@@ -699,9 +699,9 @@ export function FileDetailPage() {
   const copyShare = async () => {
     try {
       await navigator.clipboard.writeText(shareUrl);
-      toast.success("链接已复制");
+      toast.success("Link copied");
     } catch {
-      toast.error("复制失败，请手动复制");
+      toast.error("Copy failed, please copy manually");
     }
   };
 
@@ -713,15 +713,15 @@ export function FileDetailPage() {
   return (
     <DetailPageWrapper
       title={file.name}
-      description="文件详情"
+      description="File details"
       backTo={`/console/storage/${bucketId}`}
-      backLabel="返回 Bucket"
+      backLabel="Back to bucket"
       actions={
         <div className="flex gap-2">
           {writeable && (
             <Button variant="outline" size="sm" onClick={generateShare} disabled={shareLoading}>
               <Link2 className="h-4 w-4 mr-2" />
-              分享链接
+              Share link
             </Button>
           )}
           <Button
@@ -730,7 +730,7 @@ export function FileDetailPage() {
             onClick={() => void downloadFile(bucketId!, file.id, file.name)}
           >
             <Download className="h-4 w-4 mr-2" />
-            下载
+            Download
           </Button>
           {writeable && (
             <DeleteButton
@@ -744,19 +744,19 @@ export function FileDetailPage() {
       <DetailGrid
         items={[
           { label: "ID", value: file.id, mono: true },
-          { label: "文件名", value: file.name },
-          { label: "大小", value: formatBytes(file.size) },
-          { label: "MIME 类型", value: file.mime_type },
+          { label: "Name", value: file.name },
+          { label: "Size", value: formatBytes(file.size) },
+          { label: "MIME type", value: file.mime_type },
           { label: "Bucket ID", value: file.bucket_id, mono: true },
-          { label: "创建时间", value: formatDateTime(file.created_at, tz) },
-          { label: "更新时间", value: formatDateTime(file.updated_at, tz) },
+          { label: "Created", value: formatDateTime(file.created_at, tz) },
+          { label: "Updated", value: formatDateTime(file.updated_at, tz) },
         ]}
       />
 
       {isImage && (
         <Card className="mt-6">
           <CardHeader>
-            <CardTitle className="text-base">预览</CardTitle>
+            <CardTitle className="text-base">Preview</CardTitle>
           </CardHeader>
           <CardContent>
             {previewUrl ? (
@@ -767,7 +767,7 @@ export function FileDetailPage() {
               />
             ) : (
               <div className="flex h-40 items-center justify-center rounded-lg border text-sm text-muted-foreground">
-                {previewFailed ? "预览加载失败" : "预览加载中..."}
+                {previewFailed ? "Failed to load preview" : "Loading preview..."}
               </div>
             )}
           </CardContent>
@@ -776,13 +776,13 @@ export function FileDetailPage() {
 
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle className="text-base">重命名</CardTitle>
+          <CardTitle className="text-base">Rename</CardTitle>
         </CardHeader>
         <CardContent className="flex items-end gap-2">
           <div className="flex-1 space-y-2">
             <FormField
               id="rename"
-              label="文件名"
+              label="Name"
               value={newName}
               onChange={(v) => {
                 setNewName(v);
@@ -797,7 +797,7 @@ export function FileDetailPage() {
               rename.mutate({ bucketId: bucketId!, fileId: fileId!, name: newName.trim() })
             }
           >
-            {rename.pending ? "保存中..." : "保存"}
+            {rename.pending ? "Saving..." : "Save"}
           </Button>
         </CardContent>
       </Card>
@@ -805,20 +805,20 @@ export function FileDetailPage() {
       <Dialog open={shareOpen} onOpenChange={setShareOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>分享链接</DialogTitle>
+            <DialogTitle>Share link</DialogTitle>
             <DialogDescription>
-              短期匿名访问链接，过期时间：{shareExpires}
+              Short-term anonymous access link, expires at: {shareExpires}
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-center gap-2">
             <Input readOnly value={shareUrl} className="font-mono text-xs" />
-            <Button size="icon" variant="outline" onClick={copyShare} title="复制">
+            <Button size="icon" variant="outline" onClick={copyShare} title="Copy">
               <Copy className="h-4 w-4" />
             </Button>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShareOpen(false)}>
-              关闭
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

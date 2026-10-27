@@ -123,29 +123,29 @@ function buildVarValue(form: VarFormValues): { value?: RuntimeVarValueInput; err
     case "string":
       return { value: { string_value: form.str } };
     case "integer": {
-      if (!form.num.trim()) return { error: "整数不能为空" };
+      if (!form.num.trim()) return { error: "Integer cannot be empty" };
       const n = Number(form.num);
-      if (!Number.isInteger(n)) return { error: "不是合法的整数" };
+      if (!Number.isInteger(n)) return { error: "Not a valid integer" };
       if (Math.abs(n) > SAFE_INTEGER_LIMIT) {
-        return { error: "超出安全整数范围（±2^53−1）" };
+        return { error: "Out of safe integer range (±2^53−1)" };
       }
       return { value: { integer_value: n } };
     }
     case "float": {
-      if (!form.num.trim()) return { error: "数值不能为空" };
+      if (!form.num.trim()) return { error: "Number cannot be empty" };
       const n = Number(form.num);
-      if (!Number.isFinite(n)) return { error: "不是合法的数值" };
+      if (!Number.isFinite(n)) return { error: "Not a valid number" };
       return { value: { float_value: n } };
     }
     case "boolean":
       return { value: { bool_value: form.bool === "true" } };
     case "json": {
-      if (!form.json.trim()) return { error: "JSON 不能为空" };
+      if (!form.json.trim()) return { error: "JSON cannot be empty" };
       try {
         JSON.parse(form.json);
       } catch (e) {
         return {
-          error: `JSON 格式不合法：${e instanceof Error ? e.message : String(e)}`,
+          error: `Invalid JSON format: ${e instanceof Error ? e.message : String(e)}`,
         };
       }
       return { value: { json_value: form.json } };
@@ -162,7 +162,7 @@ export function editVarDescriptor(
     run: async (input) => {
       const built = buildVarValue(input);
       const value = built.value;
-      if (!value) return { status: "rejected", message: built.error ?? "值不合法" };
+      if (!value) return { status: "rejected", message: built.error ?? "Invalid value" };
       return runCommandMapped(() =>
         updateVar(varSetId, key, { value, description: input.description }, SKIP)
       );
@@ -230,7 +230,7 @@ export const varSetsResource = defineResource({
       run: async (input: VarSubmitInput): Promise<CommandResult<RuntimeVar>> => {
         const built = buildVarValue(input);
         const value = built.value;
-        if (!value) return { status: "rejected", message: built.error ?? "值不合法" };
+        if (!value) return { status: "rejected", message: built.error ?? "Invalid value" };
         return runCommandMapped(() =>
           createVar(
             input.varSetId,

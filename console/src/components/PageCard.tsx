@@ -21,7 +21,7 @@ export function PageCard({
   icon: Icon,
   actions,
   backTo,
-  backLabel = "返回列表",
+  backLabel = "Back to list",
   children,
   contentClassName,
 }: PageCardProps) {

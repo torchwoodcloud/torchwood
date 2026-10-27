@@ -46,16 +46,16 @@ import {
 import { TrendChart } from "./metricChart";
 import { StatCard } from "@/components/kit/values/stat-card";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import {
   eventDefinitionsResource,
   eventDefinitionsSearch,
 } from "@/kit/analytics";
 
 const OVERVIEW_RANGES: { key: OverviewRange; label: string }[] = [
-  { key: "today", label: "今日" },
-  { key: "7d", label: "近 7 天" },
-  { key: "30d", label: "近 30 天" },
+  { key: "today", label: "Today" },
+  { key: "7d", label: "Last 7 days" },
+  { key: "30d", label: "Last 30 days" },
 ];
 
 function RangeSwitcher<T extends string | number>({
@@ -84,7 +84,7 @@ function RangeSwitcher<T extends string | number>({
 }
 
 function LoadError({ error }: { error: unknown }) {
-  return <p className="text-sm text-destructive">加载失败：{errText(error)}</p>;
+  return <p className="text-sm text-destructive">Failed to load: {errText(error)}</p>;
 }
 
 // AnalyticsOverviewPage 概览：日期范围切换 → KPI 卡 + 趋势图 + Top 事件表。
@@ -119,14 +119,14 @@ export function AnalyticsOverviewPage() {
     <>
       <PageHeader
         title="Analytics"
-        description="事件分析概览（UTC 切日口径；时间范围以服务端窗口护栏为准）"
+        description="Event analytics overview (UTC day boundaries; time ranges follow server-side window guards)"
       />
       <AnalyticsTabs />
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <RangeSwitcher value={range} options={OVERVIEW_RANGES} onChange={setRange} />
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">KPI 口径</span>
+            <span className="text-xs text-muted-foreground">KPI source</span>
             <SourceBadge source={overviewQ.data?.source} />
           </div>
         </div>
@@ -147,24 +147,24 @@ export function AnalyticsOverviewPage() {
             ))
           ) : (
             <>
-              <StatCard label="事件总量" value={num(kpi?.total_events).toLocaleString()} />
+              <StatCard label="Total events" value={num(kpi?.total_events).toLocaleString()} />
               <StatCard
-                label="活跃用户（UV）"
+                label="Active users (UV)"
                 value={num(kpi?.unique_users).toLocaleString()}
               />
               <StatCard
-                label="新增用户"
+                label="New users"
                 value={num(kpi?.new_users).toLocaleString()}
-                hint="首次上报口径（first_seen 表）"
+                hint="First-reported basis (first_seen table)"
               />
               <StatCard
-                label="人均事件"
+                label="Events per user"
                 value={num(kpi?.events_per_user).toFixed(2)}
               />
               <StatCard
-                label="今日实时"
+                label="Today (realtime)"
                 value={`${num(today?.total_events).toLocaleString()} / ${num(today?.unique_users).toLocaleString()}`}
-                hint="事件 / UV（raw 直读，恒为实时口径）"
+                hint="Events / UV (raw read, always realtime)"
               />
             </>
           )}
@@ -174,9 +174,9 @@ export function AnalyticsOverviewPage() {
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <CardTitle className="text-base">趋势</CardTitle>
+                <CardTitle className="text-base">Trend</CardTitle>
                 <CardDescription>
-                  事件数与活跃用户（{granularity === "HOUR" ? "按小时" : "按天"}，UTC 桶）
+                  Events and active users ({granularity === "HOUR" ? "hourly" : "daily"}, UTC buckets)
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -192,8 +192,8 @@ export function AnalyticsOverviewPage() {
               <LoadError error={trendQ.error} />
             ) : !hasData ? (
               <EmptyState
-                title="暂无事件数据"
-                description="接入端 SDK 或调用摄入 API 上报事件后，这里会出现趋势曲线。"
+                title="No event data yet"
+                description="The trend line appears once events are reported via the client SDK or the ingestion API."
               />
             ) : (
               <TrendChart
@@ -206,8 +206,8 @@ export function AnalyticsOverviewPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Top 事件</CardTitle>
-            <CardDescription>所选窗口内上报量前 10 的事件</CardDescription>
+            <CardTitle className="text-base">Top events</CardTitle>
+            <CardDescription>Top 10 events by reported volume in the selected window</CardDescription>
           </CardHeader>
           <CardContent>
             {kpiLoading ? (
@@ -216,15 +216,15 @@ export function AnalyticsOverviewPage() {
               <LoadError error={overviewQ.error} />
             ) : topEvents.length === 0 ? (
               <EmptyState
-                title="暂无 Top 事件"
-                description="窗口内还没有任何事件上报。"
+                title="No top events yet"
+                description="No events have been reported in this window yet."
               />
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>事件名</TableHead>
-                    <TableHead className="text-right">上报量</TableHead>
+                    <TableHead>Event name</TableHead>
+                    <TableHead className="text-right">Volume</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -266,22 +266,22 @@ export function AnalyticsEventsPage() {
     <>
       <PageHeader
         title="Analytics"
-        description="事件字典（按最近上报排序；点击事件名查看趋势与维度拆解）"
+        description="Event dictionary (sorted by most recent report; click an event name to view trend and property breakdown)"
       />
       <AnalyticsTabs />
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <CardTitle className="text-base">事件字典</CardTitle>
+              <CardTitle className="text-base">Event dictionary</CardTitle>
               <CardDescription>
-                近 30 天总量由 rollup worker 每小时刷新（新事件名的计数在下个整点后出现）
+                30-day totals are refreshed hourly by the rollup worker (counts for new event names appear after the next top of the hour)
               </CardDescription>
             </div>
             <Input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="按事件名过滤（已加载页内）"
+              placeholder="Filter by event name (loaded pages)"
               className="max-w-xs"
             />
           </div>
@@ -293,11 +293,11 @@ export function AnalyticsEventsPage() {
             <LoadError error={list.error} />
           ) : filtered.length === 0 ? (
             <EmptyState
-              title="暂无事件"
+              title="No events yet"
               description={
                 filter
-                  ? "没有匹配已加载页内事件名的条目。"
-                  : "还没有任何事件上报。接入端 SDK 或调用摄入 API 后，事件字典会自动生成（自由上报、事后发现）。"
+                  ? "No entries match the event name within loaded pages."
+                  : "No events reported yet. The event dictionary is generated automatically once events are reported via the client SDK or the ingestion API (free-form reporting, discoverable afterwards)."
               }
             />
           ) : (
@@ -305,10 +305,10 @@ export function AnalyticsEventsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>事件名</TableHead>
-                    <TableHead>首次上报</TableHead>
-                    <TableHead>最近上报</TableHead>
-                    <TableHead className="text-right">近 30 天</TableHead>
+                    <TableHead>Event name</TableHead>
+                    <TableHead>First seen</TableHead>
+                    <TableHead>Last seen</TableHead>
+                    <TableHead className="text-right">Last 30 days</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -331,7 +331,7 @@ export function AnalyticsEventsPage() {
                 </TableBody>
               </Table>
               <div className="mt-4">
-                <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+                <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
               </div>
             </>
           )}
@@ -342,9 +342,9 @@ export function AnalyticsEventsPage() {
 }
 
 const RETENTION_RANGES = [
-  { key: 7, label: "近 7 天" },
-  { key: 30, label: "近 30 天" },
-  { key: 90, label: "近 90 天" },
+  { key: 7, label: "Last 7 days" },
+  { key: 30, label: "Last 30 days" },
+  { key: 90, label: "Last 90 days" },
 ] as const;
 
 const RETENTION_SLOTS = 15; // D0–D14
@@ -369,7 +369,7 @@ export function AnalyticsRetentionPage() {
     <>
       <PageHeader
         title="Analytics"
-        description="留存矩阵（cohort × D0–D14，日粒度 UTC 切日）"
+        description="Retention matrix (cohort × D0–D14, daily granularity, UTC day boundaries)"
       />
       <AnalyticsTabs />
       <div className="space-y-4">
@@ -380,16 +380,16 @@ export function AnalyticsRetentionPage() {
             onChange={setDays}
           />
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">口径</span>
+            <span className="text-xs text-muted-foreground">Source</span>
             <SourceBadge source={q.data?.source} />
           </div>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">留存矩阵</CardTitle>
+            <CardTitle className="text-base">Retention matrix</CardTitle>
             <CardDescription>
-              单元格为 Dk 留存率（cohort+k 日仍活跃用户 / cohort 规模）
+              Each cell is the Dk retention rate (users still active on day cohort+k / cohort size)
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -399,8 +399,8 @@ export function AnalyticsRetentionPage() {
               <LoadError error={q.error} />
             ) : cohorts.length === 0 ? (
               <EmptyState
-                title="暂无留存数据"
-                description="留存矩阵基于 rollup worker 每小时重算的 user_days / first_seen 基座表。端 SDK 或摄入 API 上报事件并等待下个整点聚合后，这里会出现 cohort × D0–D14 矩阵。"
+                title="No retention data yet"
+                description="The retention matrix is based on the user_days / first_seen base tables recomputed hourly by the rollup worker. The cohort × D0–D14 matrix appears once events are reported via the client SDK or the ingestion API and the next hourly aggregation completes."
               />
             ) : (
               <div className="overflow-auto">
@@ -408,7 +408,7 @@ export function AnalyticsRetentionPage() {
                   <thead>
                     <tr className="border-b text-left text-muted-foreground">
                       <th className="py-2 pr-4 font-medium">Cohort</th>
-                      <th className="py-2 pr-4 font-medium">规模</th>
+                      <th className="py-2 pr-4 font-medium">Size</th>
                       {Array.from({ length: RETENTION_SLOTS }).map((_, k) => (
                         <th key={k} className="py-2 px-2 font-medium text-center">
                           D{k}

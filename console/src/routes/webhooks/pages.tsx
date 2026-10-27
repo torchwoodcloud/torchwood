@@ -54,7 +54,7 @@ import {
 } from "@/components/resource/shared";
 import { DataTable } from "@/components/kit/query/data-table";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTimezone } from "@/hooks/useTimezone";
@@ -108,17 +108,17 @@ const webhookColumns = (tz: string): LegacyColumnDef<Webhook, unknown>[] => [
   },
   {
     id: "status",
-    header: "状态",
+    header: "Status",
     cell: ({ row }) => webhookStatusBadge(row.original.status),
   },
   {
     id: "events",
-    header: "订阅",
-    cell: ({ row }) => `${row.original.events?.length ?? 0} 条`,
+    header: "Subscriptions",
+    cell: ({ row }) => `${row.original.events?.length ?? 0} events`,
   },
   {
     id: "created",
-    header: "创建时间",
+    header: "Created",
     cell: ({ row }) => formatDateTime(row.original.created_at, tz),
   },
 ];
@@ -135,7 +135,7 @@ function EventsEditor({
 }) {
   return (
     <div className="space-y-1">
-      <Label htmlFor="wh-events">订阅事件</Label>
+      <Label htmlFor="wh-events">Subscribed events</Label>
       <textarea
         id="wh-events"
         className="flex min-h-24 w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
@@ -148,16 +148,17 @@ function EventsEditor({
         disabled={disabled}
       />
       <p className="text-xs text-muted-foreground">
-        一行一条，与函数事件触发器同款 eventmatch 语法：文档写事件
+        One event per line, using the same eventmatch syntax as Function event triggers:
+        document write events
         <code className="font-mono">
           {" "}
           databases.&#123;database&#125;.collections.&#123;collection&#125;.documents.&#123;create|update|delete|*&#125;
         </code>
-        （collection 与 op 段可为 <code className="font-mono">*</code>，
-        database 段一期必须精确）；系统行为事件
+        (the collection and op segments may be <code className="font-mono">*</code>; the
+        database segment must be exact for now); platform behavior events
         <code className="font-mono"> auth.users.* / payments.orders.paid </code>
-        等（域 = auth/payments/economy/subscriptions，尾段可为
-        <code className="font-mono">*</code>，拼错域名会被直接拒绝）。1..64 条。
+        etc. (domains = auth/payments/economy/subscriptions; the last segment may be
+        <code className="font-mono">*</code>; misspelled domains are rejected outright). 1..64 entries.
       </p>
     </div>
   );
@@ -189,10 +190,10 @@ function OneTimeSecretDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{title ?? "新签名密钥"}</DialogTitle>
+          <DialogTitle>{title ?? "New signing secret"}</DialogTitle>
           <DialogDescription>
             {description ??
-              "轮换完成：新钥即刻生效，旧钥保留一个窗口期（v2 双签过渡，接收方不断流）。"}
+              "Rotation complete: the new secret takes effect immediately and the old one stays valid for a grace window (v2 dual-signature transition; receivers keep working)."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -200,15 +201,16 @@ function OneTimeSecretDialog({
             {secret}
           </pre>
           <p className="text-xs text-muted-foreground">
-            指纹：<code className="font-mono">{fingerprint}</code>
+            Fingerprint: <code className="font-mono">{fingerprint}</code>
           </p>
           <p className="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
-            ⚠ 明文仅本次显示，关闭后无法再查看。请立即配置到接收方
-            （按 X-Tw-Signature 头验签，方案见文档 Webhooks 章节）。
+            ⚠ The plaintext is shown only this once and cannot be viewed again after closing.
+            Configure it on the receiver now (verify via the X-Tw-Signature header; see the
+            Webhooks section of the docs).
           </p>
         </div>
         <DialogFooter>
-          <Button onClick={onClose}>我已保存</Button>
+          <Button onClick={onClose}>I've saved it</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -246,11 +248,11 @@ function WebhookFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{mode === "create" ? "新建 Webhook" : "编辑 Webhook"}</DialogTitle>
+          <DialogTitle>{mode === "create" ? "New Webhook" : "Edit Webhook"}</DialogTitle>
           <DialogDescription>
             {mode === "create"
-              ? "订阅平台事件并投递到你的 HTTPS endpoint（url 强制 https）"
-              : "未修改的字段不随请求发送；订阅串传入 = 全量替换"}
+              ? "Subscribe to platform events and deliver them to your HTTPS endpoint (url must be https)"
+              : "Unmodified fields are not sent; passing the event list replaces it entirely"}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -259,14 +261,14 @@ function WebhookFormDialog({
             e.preventDefault();
             const events = parseEvents(eventsText);
             if (events.length === 0) {
-              toast.error("至少填写一条订阅事件");
+              toast.error("At least one subscribed event is required");
               return;
             }
             onSubmit({ url: url.trim(), events, status });
           }}
         >
           <div className="space-y-2">
-            <Label htmlFor="wh-url">Endpoint URL（https）</Label>
+            <Label htmlFor="wh-url">Endpoint URL (https)</Label>
             <Input
               id="wh-url"
               className="font-mono text-xs"
@@ -278,20 +280,20 @@ function WebhookFormDialog({
           </div>
           <EventsEditor value={eventsText} onChange={setEventsText} />
           <div className="space-y-2">
-            <Label>状态</Label>
+            <Label>Status</Label>
             <Select value={status} onValueChange={(v) => setStatus(v as "enabled" | "paused")}>
               <SelectTrigger className="w-56">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="enabled">enabled（投递中）</SelectItem>
-                <SelectItem value="paused">paused（暂停投递）</SelectItem>
+                <SelectItem value="enabled">enabled (delivering)</SelectItem>
+                <SelectItem value="paused">paused (delivery paused)</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <DialogFooter>
             <Button type="submit" disabled={pending}>
-              {pending ? "保存中..." : mode === "create" ? "创建" : "保存"}
+              {pending ? "Saving..." : mode === "create" ? "Create" : "Save"}
             </Button>
           </DialogFooter>
         </form>
@@ -325,7 +327,7 @@ export function WebhooksListPage() {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         setCreatedSecret({ id: result.payload.webhook.id, secret: result.payload.secret });
-        toast.success("Webhook 已创建");
+        toast.success("Webhook created");
         setCreateOpen(false);
       } else if (result) {
         toast.error(result.message);
@@ -339,7 +341,7 @@ export function WebhooksListPage() {
   const remove = useCommand(removeWebhookCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Webhook 已删除");
+        toast.success("Webhook deleted");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -365,7 +367,7 @@ export function WebhooksListPage() {
       ? [
           {
             id: "actions",
-            header: "操作",
+            header: "Actions",
             cell: ({ row }: { row: { original: Webhook } }) => (
               <RowDeleteButton
                 onConfirm={() => remove.mutate({ id: row.original.id })}
@@ -380,7 +382,7 @@ export function WebhooksListPage() {
   return (
     <>
       <div className="space-y-6">
-        <PageHeader title="Webhooks" description="订阅平台事件并投递到你的 HTTPS endpoint" />
+        <PageHeader title="Webhooks" description="Subscribe to platform events and deliver them to your HTTPS endpoint" />
 
         <KitListPage
           list={shownList}
@@ -389,30 +391,30 @@ export function WebhooksListPage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="当前页内搜索 URL 或订阅串..."
+                placeholder="Search URL or event pattern on this page..."
                 className="h-8 w-56"
               />
               {writeable ? (
                 <Button className="ml-auto" onClick={() => setCreateOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
-                  新建 Webhook
+                  New Webhook
                 </Button>
               ) : null}
             </div>
           }
           pagination={
             <div className="px-4 pb-4">
-              <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+              <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
             </div>
           }
-          emptyTitle={search !== "" ? "没有匹配的 Webhook" : "暂无 Webhook"}
+          emptyTitle={search !== "" ? "No matching Webhooks" : "No Webhooks yet"}
           emptyDescription={
             search !== ""
-              ? "调整搜索词，或清空恢复当前页全部行"
-              : "创建订阅，平台事件将按 CloudEvents 信封投递到你的 endpoint"
+              ? "Adjust the search term, or clear it to restore all rows on this page"
+              : "Create a subscription; platform events will be delivered to your endpoint as CloudEvents envelopes"
           }
           emptyAction={
-            writeable ? <Button onClick={() => setCreateOpen(true)}>新建 Webhook</Button> : undefined
+            writeable ? <Button onClick={() => setCreateOpen(true)}>New Webhook</Button> : undefined
           }
         >
           <div className="px-6 pb-2 pt-2">
@@ -436,8 +438,8 @@ export function WebhooksListPage() {
 
       {createdSecret && (
         <OneTimeSecretDialog
-          title="签名密钥已生成"
-          description={`Webhook ${createdSecret.id} 创建成功；平台以该密钥签名（HMAC-SHA256）投递请求，接收方按 X-Tw-Signature 验签。`}
+          title="Signing secret generated"
+          description={`Webhook ${createdSecret.id} created; the platform signs deliveries with this secret (HMAC-SHA256) and receivers verify via X-Tw-Signature.`}
           secret={createdSecret.secret}
           onClose={() => setCreatedSecret(null)}
         />
@@ -477,7 +479,7 @@ function DeliveriesCard({ webhookId, writeable }: { webhookId: string; writeable
   const redeliver = useCommand(redeliverDeliveryCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("已重置为立即重投");
+        toast.success("Reset for immediate redelivery");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -489,13 +491,14 @@ function DeliveriesCard({ webhookId, writeable }: { webhookId: string; writeable
   return (
     <Card>
       <CardHeader className="space-y-0 pb-3">
-        <CardTitle className="text-sm">投递记录</CardTitle>
+        <CardTitle className="text-sm">Deliveries</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
-          投递语义：2xx = 送达；非 2xx 按重试梯度重投（即时 → 10s → 1m → 5m →
-          30m → 2h → 8h…约 15 次封顶 24h）。终态失败（status=failed）即 DLQ，
-          可手动 Redeliver（语义 = 全新一轮投递，attempts 归零）。
+          Delivery semantics: 2xx = delivered; non-2xx is retried on a backoff schedule
+          (immediate → 10s → 1m → 5m → 30m → 2h → 8h… about 15 attempts capped at 24h).
+          Terminal failures (status=failed) are the DLQ and can be redelivered manually
+          (a full new delivery round; attempts reset to zero).
         </p>
         <div className="flex items-center gap-2">
           <Select
@@ -503,10 +506,10 @@ function DeliveriesCard({ webhookId, writeable }: { webhookId: string; writeable
             onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}
           >
             <SelectTrigger className="h-8 w-[150px]">
-              <SelectValue placeholder="按状态过滤" />
+              <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部状态</SelectItem>
+              <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="pending">pending</SelectItem>
               <SelectItem value="delivered">delivered</SelectItem>
               <SelectItem value="failed">failed</SelectItem>
@@ -514,9 +517,9 @@ function DeliveriesCard({ webhookId, writeable }: { webhookId: string; writeable
           </Select>
         </div>
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">加载中...</p>
+          <p className="text-sm text-muted-foreground">Loading...</p>
         ) : deliveries.length === 0 ? (
-          <p className="text-sm text-muted-foreground">暂无投递记录</p>
+          <p className="text-sm text-muted-foreground">No deliveries yet</p>
         ) : (
           <div className="divide-y">
             {deliveries.map((d: WebhookDelivery) => (
@@ -592,7 +595,7 @@ export function WebhookDetailPage() {
   const update = useCommand(updateWebhookCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Webhook 已更新");
+        toast.success("Webhook updated");
         setEditOpen(false);
       } else if (result) {
         toast.error(result.message);
@@ -606,7 +609,7 @@ export function WebhookDetailPage() {
   const rotate = useCommand(rotateWebhookSecretCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("签名密钥已轮换（旧钥保留一个窗口期）");
+        toast.success("Signing secret rotated (old secret stays valid for a grace window)");
         setRotatedSecret({ secret: result.payload.secret, fingerprint: result.payload.secret_fingerprint });
       } else if (result) {
         toast.error(result.message);
@@ -619,7 +622,7 @@ export function WebhookDetailPage() {
   const remove = useCommand(removeWebhookCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Webhook 已删除");
+        toast.success("Webhook deleted");
         window.history.back();
       } else if (result) {
         toast.error(result.message);
@@ -642,7 +645,7 @@ export function WebhookDetailPage() {
           writeable ? (
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={() => setEditOpen(true)}>
-                编辑
+                Edit
               </Button>
               <Button
                 variant="outline"
@@ -650,7 +653,7 @@ export function WebhookDetailPage() {
                 onClick={() => rotate.mutate({ id: webhookId! })}
               >
                 <KeyRound className="h-4 w-4 mr-2" />
-                {rotate.pending ? "轮换中..." : "轮换密钥"}
+                {rotate.pending ? "Rotating..." : "Rotate secret"}
               </Button>
               <DeleteButton
                 onConfirm={() => remove.mutate({ id: webhookId! })}
@@ -664,27 +667,28 @@ export function WebhookDetailPage() {
           items={[
             { label: "ID", value: hook.id, mono: true },
             { label: "URL", value: hook.url, mono: true },
-            { label: "状态", value: webhookStatusBadge(hook.status) },
+            { label: "Status", value: webhookStatusBadge(hook.status) },
             {
-              label: "签名密钥指纹",
+              label: "Signing secret fingerprint",
               value: <code className="font-mono text-xs">{hook.secret_fingerprint}</code>,
             },
-            { label: "创建时间", value: formatDateTime(hook.created_at, tz) },
-            { label: "更新时间", value: formatDateTime(hook.updated_at, tz) },
+            { label: "Created", value: formatDateTime(hook.created_at, tz) },
+            { label: "Updated", value: formatDateTime(hook.updated_at, tz) },
           ]}
         />
       </DetailPageWrapper>
 
       <Card>
         <CardHeader className="space-y-0 pb-3">
-          <CardTitle className="text-sm">订阅事件</CardTitle>
+          <CardTitle className="text-sm">Subscribed events</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           <div className="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
             <AlertTriangle className="size-4 mt-0.5 shrink-0" />
             <span>
-              投递为 at-least-once、尽力保序（不承诺严格序）；接收方以信封的
-              event_id/seq 做幂等，并按 X-Tw-Signature 头验签。
+              Delivery is at-least-once with best-effort ordering (strict order is not
+              guaranteed); receivers should deduplicate using the envelope's event_id/seq
+              and verify the X-Tw-Signature header.
             </span>
           </div>
           {(hook.events ?? []).map((ev) => (

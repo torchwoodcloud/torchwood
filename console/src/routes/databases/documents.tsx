@@ -67,7 +67,7 @@ import { PermissionEditor } from "@/components/resource/PermissionEditor";
 import { Form as CommandForm } from "@/components/kit/command/form";
 import { DataTable } from "@/components/kit/query/data-table";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import {
   createDocumentCommand,
@@ -127,7 +127,7 @@ function DocumentListSection({
     scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Document 已删除");
+        toast.success("Document deleted");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -148,7 +148,7 @@ function DocumentListSection({
     },
     {
       id: "updated",
-      header: "更新时间",
+      header: "Updated",
       cell: ({ row }) => formatDateTime(row.original.updated_at, tz),
     },
     ...attributes.slice(0, 4).map((attr) => ({
@@ -165,7 +165,7 @@ function DocumentListSection({
       ? [
           {
             id: "actions",
-            header: "操作",
+            header: "Actions",
             cell: ({ row }: { row: { original: Document } }) => (
               <RowDeleteButton
                 onConfirm={() =>
@@ -206,7 +206,7 @@ function DocumentListSection({
 
   const handleBulkDelete = async (selected: Document[]) => {
     if (selected.length > MAX_BULK_OPERATIONS) {
-      toast.error(`单次批量操作最多 ${MAX_BULK_OPERATIONS} 个 Document`);
+      toast.error(`At most ${MAX_BULK_OPERATIONS} documents per bulk operation`);
       return;
     }
     setBulkDeleting(true);
@@ -216,7 +216,7 @@ function DocumentListSection({
         collId,
         selected.map((d) => d.id)
       );
-      toast.success(`已删除 ${affected} 个 Document`);
+      toast.success(`Deleted ${affected} documents`);
       // 直调批量路径无命令容器：复用文档命令的失效声明（§12.10-②）。
       invalidateDocumentsAfterBulkWrite(queryClient, commandScope);
       clearSelection();
@@ -227,7 +227,7 @@ function DocumentListSection({
 
   const handleBulkUpdate = async (ids: string[], data: Record<string, unknown>) => {
     if (ids.length > MAX_BULK_OPERATIONS) {
-      toast.error(`单次批量操作最多 ${MAX_BULK_OPERATIONS} 个 Document`);
+      toast.error(`At most ${MAX_BULK_OPERATIONS} documents per bulk operation`);
       return;
     }
     setBulkUpdating(true);
@@ -236,7 +236,7 @@ function DocumentListSection({
         document_ids: ids,
         data,
       });
-      toast.success(`已更新 ${affected} 个 Document`);
+      toast.success(`Updated ${affected} documents`);
       // 直调批量路径无命令容器：复用文档命令的失效声明（§12.10-②）。
       invalidateDocumentsAfterBulkWrite(queryClient, commandScope);
       clearSelection();
@@ -257,7 +257,7 @@ function DocumentListSection({
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="当前页内搜索 Document ID 或字段内容..."
+              placeholder="Search by document ID or field content on this page…"
               className="h-8 w-56"
             />
             {!readonly && selectedDocuments.length > 0 ? (
@@ -271,7 +271,7 @@ function DocumentListSection({
                   }}
                 >
                   <Settings2 className="mr-2 h-4 w-4" />
-                  批量更新 ({selectedDocuments.length})
+                  Bulk update ({selectedDocuments.length})
                 </Button>
                 <BulkDeleteButton
                   count={selectedDocuments.length}
@@ -284,7 +284,7 @@ function DocumentListSection({
               <Button asChild size="sm" className="ml-auto">
                 <Link to={documentsNewPath}>
                   <Plus className="mr-2 h-4 w-4" />
-                  新建 Document
+                  New Document
                 </Link>
               </Button>
             ) : null}
@@ -292,21 +292,21 @@ function DocumentListSection({
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
           </div>
         }
-        emptyTitle={search !== "" ? "没有匹配的 Document" : "暂无 Document"}
+        emptyTitle={search !== "" ? "No matching documents" : "No documents yet"}
         emptyDescription={
           search !== ""
-            ? "调整搜索词，或清空恢复当前页全部行"
+            ? "Adjust your search, or clear it to restore all rows on this page"
             : readonly
               ? undefined
-              : "在此 Collection 中创建第一条文档记录"
+              : "Create the first document in this collection"
         }
         emptyAction={
           readonly ? undefined : (
             <Button asChild size="sm">
-              <Link to={documentsNewPath}>新建 Document</Link>
+              <Link to={documentsNewPath}>New Document</Link>
             </Button>
           )
         }
@@ -361,9 +361,10 @@ function BulkUpdateDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>批量更新 Document</DialogTitle>
+          <DialogTitle>Bulk update documents</DialogTitle>
           <DialogDescription>
-            将 JSON 中的字段合并写入选中的 {count} 个 Document（单次最多 {MAX_BULK_OPERATIONS} 个）；留空的字段不会改动。
+            Merge the fields from the JSON into the {count} selected documents (up to{" "}
+            {MAX_BULK_OPERATIONS} per operation); fields left empty are not changed.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -373,15 +374,15 @@ function BulkUpdateDialog({
             try {
               data = JSON.parse(json);
             } catch {
-              toast.error("JSON 格式无效");
+              toast.error("Invalid JSON");
               return;
             }
             if (data === null || typeof data !== "object" || Array.isArray(data)) {
-              toast.error("必须是 JSON 对象，如 {\"status\":\"published\"}");
+              toast.error("Must be a JSON object, e.g. {\"status\":\"published\"}");
               return;
             }
             if (Object.keys(data).length === 0) {
-              toast.error("至少填写一个字段");
+              toast.error("At least one field is required");
               return;
             }
             onSubmit(data as Record<string, unknown>);
@@ -389,7 +390,7 @@ function BulkUpdateDialog({
           className="space-y-4"
         >
           <div className="space-y-2">
-            <Label htmlFor="bulk-json">字段 (JSON)</Label>
+            <Label htmlFor="bulk-json">Fields (JSON)</Label>
             <JsonEditor
               id="bulk-json"
               value={json}
@@ -400,10 +401,10 @@ function BulkUpdateDialog({
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              取消
+              Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "更新中..." : "更新"}
+              {loading ? "Updating…" : "Update"}
             </Button>
           </DialogFooter>
         </form>
@@ -586,7 +587,7 @@ export function DocumentNewPage() {
     scope: { projectId: projectId ?? undefined, dbId: dbId!, collId: collId! },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Document 已创建");
+        toast.success("Document created");
         navigate({ to: `/console/databases/${dbId}/collections/${collId}/documents/${result.payload.id}` });
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -609,13 +610,13 @@ export function DocumentNewPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-6">
       <div className="flex items-start gap-4">
-        <Button variant="ghost" size="icon" asChild aria-label="返回">
+        <Button variant="ghost" size="icon" asChild aria-label="Back">
           <Link to={documentsPath}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
         <div>
-          <h1 className="text-lg font-semibold">新建 Document</h1>
+          <h1 className="text-lg font-semibold">New Document</h1>
           <p className="text-sm text-muted-foreground">Collection: {collection.name}</p>
         </div>
       </div>
@@ -627,9 +628,9 @@ export function DocumentNewPage() {
             form={{ handleSubmit: submit }}
             submitting={create.pending}
             result={create.result}
-            submitLabel="创建"
-            submittingLabel="创建中…"
-            cancelLabel="取消"
+            submitLabel="Create"
+            submittingLabel="Creating…"
+            cancelLabel="Cancel"
             onCancel={() =>
                     void navigate({
                       to: "/console/databases/$dbId/collections/$collId/documents",
@@ -647,7 +648,7 @@ export function DocumentNewPage() {
             </div>
           </CommandForm>
         ) : (
-          <p className="text-sm text-muted-foreground">当前角色没有该集合的写权限。</p>
+          <p className="text-sm text-muted-foreground">Your role does not have write access to this collection.</p>
         )}
       </div>
     </div>
@@ -719,9 +720,9 @@ export function DocumentDetailPage() {
     {
       scope: { projectId: projectId ?? undefined, dbId: dbId!, collId: collId! },
       onSettled: (result, failure) => {
-        if (result?.status === "ok") {
-          toast.success("Document 已更新");
-          setIncrements({});
+      if (result?.status === "ok") {
+        toast.success("Document updated");
+        setIncrements({});
           // 用响应文档重建表单，避免与（可能被自增/服务端归一化修改的）服务端状态失同步。
           setValues(documentToValues(collection?.attributes ?? [], result.payload));
           setEditing(false);
@@ -750,7 +751,7 @@ export function DocumentDetailPage() {
     scope: { projectId: projectId ?? undefined, dbId: dbId!, collId: collId! },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Document 已删除");
+        toast.success("Document deleted");
         navigate({ to: `/console/databases/${dbId}/collections/${collId}/documents` });
       } else if (result) {
         toast.error(result.message);
@@ -772,13 +773,13 @@ export function DocumentDetailPage() {
       title="Document"
       description={`ID: ${document.id}`}
       backTo={documentsPath}
-      backLabel="返回文档列表"
+      backLabel="Back to documents"
       actions={
         collection.is_system || !writeable || editing ? null : (
           <>
             <Button size="sm" variant="outline" onClick={startEdit}>
               <Pencil className="mr-2 h-4 w-4" />
-              编辑
+              Edit
             </Button>
             <DeleteButton
               onConfirm={() =>
@@ -793,8 +794,8 @@ export function DocumentDetailPage() {
       <DetailGrid
         items={[
           { label: "ID", value: document.id, mono: true },
-          { label: "创建时间", value: formatDateTime(document.created_at, tz) },
-          { label: "更新时间", value: formatDateTime(document.updated_at, tz) },
+          { label: "Created", value: formatDateTime(document.created_at, tz) },
+          { label: "Updated", value: formatDateTime(document.updated_at, tz) },
         ]}
       />
       <Card className="mt-6">
@@ -822,13 +823,13 @@ export function DocumentDetailPage() {
                     variant="outline"
                     onClick={() => void reloadAfterConflict()}
                   >
-                    刷新重载
+                    Reload
                   </Button>
                 ) : undefined
               }
-              submitLabel="保存"
-              submittingLabel="保存中…"
-              cancelLabel="取消"
+              submitLabel="Save"
+              submittingLabel="Saving…"
+              cancelLabel="Cancel"
               onCancel={cancelEdit}
             >
               <DocumentFormFields
@@ -840,10 +841,11 @@ export function DocumentDetailPage() {
                 }
               />
               {collection.attributes.some((a) => a.type === "integer" || a.type === "float") && (
-                <div className="rounded-lg border p-4 space-y-3 max-w-lg">
-                  <p className="text-sm font-medium">字段自增</p>
+                  <div className="rounded-lg border p-4 space-y-3 max-w-lg">
+                  <p className="text-sm font-medium">Field increments</p>
                   <p className="text-xs text-muted-foreground">
-                    对数值字段做原子增减，不覆盖当前值；保存后立即生效（增量必须为整数）。
+                    Atomically increment or decrement numeric fields without overwriting the
+                    current value; takes effect on save (increments must be integers).
                   </p>
                   <div className="grid gap-3 sm:grid-cols-2">
                     {collection.attributes
@@ -857,7 +859,7 @@ export function DocumentDetailPage() {
                             onChange={(e) =>
                               setIncrements((prev) => ({ ...prev, [attr.key]: e.target.value }))
                             }
-                            placeholder="如 1、-1"
+                            placeholder="e.g. 1, -1"
                             type="number"
                             step="any"
                           />

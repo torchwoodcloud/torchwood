@@ -18,7 +18,7 @@ export function PageHeader({
   icon: Icon,
   actions,
   backTo,
-  backLabel = "返回列表",
+  backLabel = "Back to list",
 }: PageHeaderProps) {
   const { pathname } = useLocation();
   const iconClass = "h-5 w-5 shrink-0 text-muted-foreground";

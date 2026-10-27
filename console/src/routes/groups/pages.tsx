@@ -35,7 +35,7 @@ import { useServerPaging } from "@/hooks/useServerPaging";
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/kit/query/data-table";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -65,9 +65,9 @@ import {
 const MEMBERSHIP_ROLES = ["owner", "admin", "member"] as const;
 
 const STATUS_LABELS: Record<string, string> = {
-  pending: "待处理",
-  accepted: "已通过",
-  rejected: "已拒绝",
+  pending: "Pending",
+  accepted: "Accepted",
+  rejected: "Rejected",
 };
 
 function statusBadge(status: string) {
@@ -99,7 +99,7 @@ export function GroupsListPage() {
   const remove = useCommand(removeGroupCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("用户组已删除");
+        toast.success("Group deleted");
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -138,9 +138,9 @@ export function GroupsListPage() {
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
-        toast.error(`删除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
+        toast.error(`Delete completed: ${succeeded} succeeded, ${failed} failed`);
       } else {
-        toast.success(`已删除 ${selectedGroups.length} 个用户组`);
+        toast.success(`Deleted ${selectedGroups.length} groups`);
       }
       void queryClient.invalidateQueries({ queryKey: groupsCollectionKey });
       setSelectedIds(new Set());
@@ -159,22 +159,22 @@ export function GroupsListPage() {
         </span>
       ),
     },
-    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
+    { id: "name", header: "Name", cell: ({ row }) => row.original.name },
     {
       id: "total",
-      header: "成员数",
+      header: "Members",
       cell: ({ row }) => String(row.original.total ?? 0),
     },
     {
       id: "created",
-      header: "创建时间",
+      header: "Created",
       cell: ({ row }) => formatDateTime(row.original.created_at, tz),
     },
     ...(writeable
       ? [
           {
             id: "actions",
-            header: "操作",
+            header: "Actions",
               cell: ({ row }: { row: { original: Group } }) => (
               <RowDeleteButton
                 onConfirm={() => remove.mutate({ id: row.original.id })}
@@ -188,7 +188,7 @@ export function GroupsListPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Groups" description="管理项目用户组与成员邀请" />
+      <PageHeader title="Groups" description="Manage project groups and member invitations" />
 
       <KitListPage
         list={shownList}
@@ -197,7 +197,7 @@ export function GroupsListPage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="当前页内搜索用户组名称或 ID..."
+              placeholder="Search group name or ID on this page..."
               className="h-8 w-56"
             />
             {selectedGroups.length > 0 && writeable ? (
@@ -211,7 +211,7 @@ export function GroupsListPage() {
               <Button asChild className="ml-auto">
                 <Link to="/console/groups/new">
                   <Plus className="h-4 w-4 mr-2" />
-                  新建用户组
+                  New group
                 </Link>
               </Button>
             ) : null}
@@ -219,19 +219,19 @@ export function GroupsListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
           </div>
         }
-        emptyTitle={search !== "" ? "没有匹配的用户组" : "暂无用户组"}
+        emptyTitle={search !== "" ? "No matching groups" : "No groups yet"}
         emptyDescription={
           search !== ""
-            ? "调整搜索词，或清空恢复当前页全部行"
-            : "创建用户组并邀请成员协作"
+            ? "Adjust the search term, or clear it to restore all rows on this page"
+            : "Create groups and invite members to collaborate"
         }
         emptyAction={
           writeable ? (
             <Button asChild>
-              <Link to="/console/groups/new">新建用户组</Link>
+              <Link to="/console/groups/new">New group</Link>
             </Button>
           ) : undefined
         }
@@ -267,7 +267,7 @@ export function GroupNewPage() {
   const create = useCommand(createGroupCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("用户组创建成功");
+        toast.success("Group created");
         navigate({ to: `/console/groups/${result.payload.id}` });
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -279,9 +279,9 @@ export function GroupNewPage() {
 
   return (
     <FormPageWrapper
-      title="新建用户组"
+      title="New group"
       backTo="/console/groups"
-      submitLabel="创建"
+      submitLabel="Create"
       onSubmit={(e) => {
         e.preventDefault();
         create.mutate({ name });
@@ -289,7 +289,7 @@ export function GroupNewPage() {
       loading={create.pending}
       submitDisabled={!canWrite(role)}
     >
-      <FormField id="name" label="用户组名称" value={name} onChange={setName} required placeholder="Engineering" />
+      <FormField id="name" label="Group name" value={name} onChange={setName} required placeholder="Engineering" />
     </FormPageWrapper>
   );
 }
@@ -339,7 +339,7 @@ function GroupPrefsCard({ groupId }: { groupId: string }) {
   const save = useCommand(updateGroupPrefsCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("用户组偏好已保存");
+        toast.success("Group preferences saved");
         setPrefsText(JSON.stringify(result.payload));
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -354,11 +354,11 @@ function GroupPrefsCard({ groupId }: { groupId: string }) {
     try {
       data = JSON.parse(prefsText);
     } catch {
-      toast.error("JSON 格式无效");
+      toast.error("Invalid JSON");
       return;
     }
     if (data === null || typeof data !== "object" || Array.isArray(data)) {
-      toast.error("必须是 JSON 对象，如 {\"theme\":\"dark\"}");
+      toast.error("Must be a JSON object, e.g. {\"theme\":\"dark\"}");
       return;
     }
     save.mutate({ id: groupId, prefs: data as Record<string, unknown> });
@@ -369,10 +369,11 @@ function GroupPrefsCard({ groupId }: { groupId: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Settings2 className="h-4 w-4" />
-          用户组偏好
+          Group preferences
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          以 JSON 对象整体替换用户组偏好（如主题、通知开关等），保存后即时生效。
+          Replaces the group preferences wholesale with a JSON object (theme, notification
+          toggles, etc.). Takes effect immediately after saving.
         </p>
       </CardHeader>
       <CardContent>
@@ -391,7 +392,7 @@ function GroupPrefsCard({ groupId }: { groupId: string }) {
             placeholder='{"theme":"dark"}'
           />
           <Button type="submit" disabled={!writeable || isLoading || save.pending}>
-            {save.pending ? "保存中..." : "保存"}
+            {save.pending ? "Saving..." : "Save"}
           </Button>
         </form>
       </CardContent>
@@ -442,7 +443,7 @@ export function GroupDetailPage() {
   const removeGroup = useCommand(removeGroupCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("用户组已删除");
+        toast.success("Group deleted");
         navigate({ to: "/console/groups" });
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -453,7 +454,7 @@ export function GroupDetailPage() {
   const invite = useCommand(addGroupMemberCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("成员邀请已创建");
+        toast.success("Member invitation created");
         setInviteEmail("");
         setInviteName("");
         setInviteRole("member");
@@ -469,7 +470,7 @@ export function GroupDetailPage() {
   const removeMembership = useCommand(removeGroupMemberCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("成员已移除");
+        toast.success("Member removed");
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -479,7 +480,7 @@ export function GroupDetailPage() {
   const setStatus = useCommand(setGroupMemberStatusCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("成员状态已更新");
+        toast.success("Member status updated");
       } else if (failure) {
         toast.error(describeApiError(failure));
       } else if (result) {
@@ -491,7 +492,7 @@ export function GroupDetailPage() {
   const setRole = useCommand(setGroupMemberRoleCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("成员角色已更新");
+        toast.success("Member role updated");
       } else if (failure) {
         toast.error(describeApiError(failure));
       } else if (result) {
@@ -503,13 +504,13 @@ export function GroupDetailPage() {
   const membershipColumns: ColumnDef<Membership>[] = [
     {
       key: "email",
-      header: "邮箱 / 用户",
+      header: "Email / User",
       cell: (m) => m.email || m.user_id || "—",
     },
-    { key: "name", header: "名称", cell: (m) => m.name || "—" },
+    { key: "name", header: "Name", cell: (m) => m.name || "—" },
     {
       key: "roles",
-      header: "角色",
+      header: "Role",
       cell: (m) =>
         writeable ? (
           <Select
@@ -533,7 +534,7 @@ export function GroupDetailPage() {
     },
     {
       key: "status",
-      header: "状态",
+      header: "Status",
       cell: (m) =>
         writeable && m.status === "pending" ? (
           <Select
@@ -558,7 +559,7 @@ export function GroupDetailPage() {
     },
     {
       key: "joined",
-      header: "加入时间",
+      header: "Joined",
       cell: (m) => formatDateTime(m.joined_at, tz),
     },
   ];
@@ -578,9 +579,9 @@ export function GroupDetailPage() {
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
-        toast.error(`移除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
+        toast.error(`Removal completed: ${succeeded} succeeded, ${failed} failed`);
       } else {
-        toast.success(`已移除 ${selected.length} 个成员`);
+        toast.success(`Removed ${selected.length} members`);
       }
       invalidateGroup();
       clear();
@@ -596,7 +597,7 @@ export function GroupDetailPage() {
     <div className="space-y-6">
       <DetailPageWrapper
         title={group.name}
-        description="用户组详情与成员管理"
+        description="Group details and member management"
         backTo="/console/groups"
         actions={
           writeable ? (
@@ -610,10 +611,10 @@ export function GroupDetailPage() {
         <DetailGrid
           items={[
             { label: "ID", value: group.id, mono: true },
-            { label: "名称", value: group.name },
-            { label: "成员数", value: String(group.total ?? 0) },
-            { label: "创建时间", value: formatDateTime(group.created_at, tz) },
-            { label: "更新时间", value: formatDateTime(group.updated_at, tz) },
+            { label: "Name", value: group.name },
+            { label: "Members", value: String(group.total ?? 0) },
+            { label: "Created", value: formatDateTime(group.created_at, tz) },
+            { label: "Updated", value: formatDateTime(group.updated_at, tz) },
           ]}
         />
       </DetailPageWrapper>
@@ -624,10 +625,11 @@ export function GroupDetailPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <UserPlus className="h-4 w-4" />
-            邀请成员
+            Invite member
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            被邀请人需在 Client API 自行接受或拒绝邀请；此处仅用于管理员创建邀请或直接添加成员。
+            Invitees accept or decline invitations themselves via the Client API; this form is
+            only for admins to create invitations or add members directly.
           </p>
         </CardHeader>
         <CardContent>
@@ -636,7 +638,7 @@ export function GroupDetailPage() {
             onSubmit={(e) => {
               e.preventDefault();
               if (!inviteEmail.trim()) {
-                toast.error("请填写邮箱");
+                toast.error("Email is required");
                 return;
               }
               invite.mutate({
@@ -649,7 +651,7 @@ export function GroupDetailPage() {
             }}
           >
             <div className="space-y-2 lg:col-span-2">
-              <Label htmlFor="invite-email">邮箱</Label>
+              <Label htmlFor="invite-email">Email</Label>
               <Input
                 id="invite-email"
                 type="email"
@@ -660,20 +662,20 @@ export function GroupDetailPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="invite-name">显示名称</Label>
+              <Label htmlFor="invite-name">Display name</Label>
               <Input
                 id="invite-name"
                 value={inviteName}
                 onChange={(e) => setInviteName(e.target.value)}
-                placeholder="可选"
+                placeholder="Optional"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="invite-role">角色</Label>
+              <Label htmlFor="invite-role">Role</Label>
               <MembershipRoleSelect id="invite-role" value={inviteRole} onChange={setInviteRole} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="invite-status">初始状态</Label>
+              <Label htmlFor="invite-status">Initial status</Label>
               <Select value={inviteStatus} onValueChange={setInviteStatus}>
                 <SelectTrigger id="invite-status">
                   <SelectValue />
@@ -685,7 +687,7 @@ export function GroupDetailPage() {
               </Select>
             </div>
             <Button type="submit" disabled={!writeable || invite.pending}>
-              {invite.pending ? "提交中..." : "发送邀请"}
+              {invite.pending ? "Submitting..." : "Send invite"}
             </Button>
           </form>
         </CardContent>
@@ -693,8 +695,8 @@ export function GroupDetailPage() {
 
       <ResourceListPage
         title=""
-        cardTitle="成员列表"
-        searchPlaceholder="当前页内搜索成员邮箱、名称或 ID..."
+        cardTitle="Members"
+        searchPlaceholder="Search member email, name, or ID on this page..."
         isLoading={membershipsLoading}
         items={memberships}
         columns={membershipColumns}
@@ -731,8 +733,8 @@ export function GroupDetailPage() {
               )
             : undefined
         }
-        emptyTitle="暂无成员"
-        emptyDescription="使用上方表单邀请成员加入用户组"
+        emptyTitle="No members yet"
+        emptyDescription="Use the form above to invite members to this group"
       />
     </div>
   );

@@ -152,7 +152,7 @@ const rootRoute = createRootRoute({
     <Suspense
       fallback={
         <div className="flex justify-center py-16 text-sm text-muted-foreground">
-          加载中…
+          Loading…
         </div>
       }
     >

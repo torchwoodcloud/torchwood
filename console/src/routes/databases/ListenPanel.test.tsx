@@ -114,7 +114,7 @@ describe("ListenPanel", () => {
       id: "c1",
       channel: "databases.app.collections.posts",
     });
-    expect(await screen.findByText("已连接")).toBeTruthy();
+    expect(await screen.findByText("Connected")).toBeTruthy();
 
     act(() =>
       ws.serverSend({
@@ -135,7 +135,7 @@ describe("ListenPanel", () => {
         payload: { event: "databases.app.collections.posts.documents.d2.delete", event_id: "e2" },
       })
     );
-    await waitFor(() => expect(screen.getByText("2 条事件")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("2 events")).toBeTruthy());
     const rows = document.querySelectorAll("ul > li[data-key]");
     expect(rows[0]?.getAttribute("data-key")).toBe("2"); // d2.delete 最新在上
 
@@ -146,7 +146,7 @@ describe("ListenPanel", () => {
     // 暂停/恢复（页面编排）：暂停 → paused 指示灯 + 连接关闭；恢复 → 重连。
     act(() => {
       const btn = [...document.querySelectorAll("button")].find(
-        (b) => b.textContent?.trim() === "暂停"
+        (b) => b.textContent?.trim() === "Pause"
       );
       btn?.click();
     });
@@ -155,7 +155,7 @@ describe("ListenPanel", () => {
     );
     act(() => {
       const btn = [...document.querySelectorAll("button")].find(
-        (b) => b.textContent?.trim() === "恢复"
+        (b) => b.textContent?.trim() === "Resume"
       );
       btn?.click();
     });
@@ -167,7 +167,7 @@ describe("ListenPanel", () => {
   it("15m 到期断线（token_expired）：走 console auth refresh 后重新 hello + 重订", async () => {
     await renderPanel();
     const ws1 = await connectFirst();
-    expect(await screen.findByText("已连接")).toBeTruthy();
+    expect(await screen.findByText("Connected")).toBeTruthy();
 
     act(() => ws1.serverClose(1008, "token_expired"));
     await waitFor(() => expect(vi.mocked(refreshSession)).toHaveBeenCalledTimes(1));
@@ -184,7 +184,7 @@ describe("ListenPanel", () => {
       id: "c1",
       channel: "databases.app.collections.posts",
     });
-    expect(await screen.findByText("已连接")).toBeTruthy();
+    expect(await screen.findByText("Connected")).toBeTruthy();
   });
 
   it("refresh 持续失败：多轮退避后 stalled「已断开，点击重连」，点击后重连恢复", { timeout: 20000 }, async () => {
@@ -194,7 +194,7 @@ describe("ListenPanel", () => {
     vi.mocked(refreshSession).mockRejectedValue(new Error("session gone"));
     await renderPanel();
     const ws1 = await connectFirst();
-    expect(await screen.findByText("已连接")).toBeTruthy();
+    expect(await screen.findByText("Connected")).toBeTruthy();
 
     // 首连 + 4 次重试 = 5 个连接；每次服务端关闭 → 退避 → refresh（失败）
     // → 重开。第 5 次关闭后预算耗尽 → stalled。
@@ -207,12 +207,12 @@ describe("ListenPanel", () => {
       );
       act(() => MockWebSocket.instances[index].serverClose(1008, "token_expired"));
     }
-    // stalled 徽章（精确匹配——按钮文案是「已断开，点击重连」，substring 会撞两者）
-    expect(await screen.findByText("已断开")).toBeTruthy();
+    // stalled 徽章（精确匹配——按钮文案是「Disconnected — click to reconnect」，substring 会撞两者）
+    expect(await screen.findByText("Disconnected")).toBeTruthy();
     // refresh 按重试次数调用（每轮退避后一次），非按 close 次数。
     expect(vi.mocked(refreshSession)).toHaveBeenCalledTimes(4);
 
-    const reconnectBtn = await screen.findByText("已断开，点击重连");
+    const reconnectBtn = await screen.findByText("Disconnected — click to reconnect");
     // 会话已在别处恢复（refresh 转成功）；restart 重置退避预算立即重开。
     vi.mocked(refreshSession).mockResolvedValue(undefined);
     act(() => reconnectBtn.click());
@@ -221,6 +221,6 @@ describe("ListenPanel", () => {
     act(() => ws6.serverOpen());
     expect(ws6.frames()).toEqual([{ type: "hello", project_id: "proj-1" }]);
     act(() => ws6.serverSend({ type: "hello_ok", connection_id: "conn-6" }));
-    expect(await screen.findByText("已连接")).toBeTruthy();
+    expect(await screen.findByText("Connected")).toBeTruthy();
   });
 });

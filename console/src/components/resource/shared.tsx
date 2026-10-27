@@ -15,7 +15,7 @@ export function FormPageWrapper({
   backLabel,
   onSubmit,
   loading,
-  submitLabel = "保存",
+  submitLabel = "Save",
   submitDisabled,
   formClassName = "space-y-4 max-w-lg",
   children,
@@ -36,7 +36,7 @@ export function FormPageWrapper({
       <form onSubmit={onSubmit} className={formClassName}>
         {children}
         <Button type="submit" disabled={loading || submitDisabled}>
-          {loading ? "保存中..." : submitLabel}
+          {loading ? "Saving…" : submitLabel}
         </Button>
       </form>
     </PageCard>
@@ -141,9 +141,9 @@ export function NotFound({ backTo }: { backTo: string }) {
       <div className="rounded-full bg-muted p-4">
         <SearchX className="h-8 w-8 text-muted-foreground" />
       </div>
-      <p className="text-sm font-medium">资源不存在或已被删除</p>
+      <p className="text-sm font-medium">Resource not found or has been deleted</p>
       <Button asChild variant="outline">
-        <Link to={backTo}>返回列表</Link>
+        <Link to={backTo}>Back to list</Link>
       </Button>
     </div>
   );
@@ -152,8 +152,8 @@ export function NotFound({ backTo }: { backTo: string }) {
 export function DeleteButton({
   onConfirm,
   loading,
-  label = "删除",
-  description = "此操作不可撤销，确定要删除吗？",
+  label = "Delete",
+  description = "Are you sure you want to delete? This action cannot be undone.",
 }: {
   onConfirm: () => void;
   loading?: boolean;
@@ -170,9 +170,9 @@ export function DeleteButton({
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
-        title="确认删除"
+        title="Confirm deletion"
         description={description}
-        confirmLabel="删除"
+        confirmLabel="Delete"
         loading={loading}
         onConfirm={() => {
           onConfirm();
@@ -198,14 +198,14 @@ export function BulkDeleteButton({
     <>
       <Button variant="destructive" size="sm" onClick={() => setOpen(true)}>
         <Trash2 className="h-4 w-4 mr-2" />
-        删除 ({count})
+        Delete ({count})
       </Button>
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
-        title="确认批量删除"
-        description={`确定要删除选中的 ${count} 项吗？此操作不可撤销。`}
-        confirmLabel="删除"
+        title="Confirm bulk deletion"
+        description={`Are you sure you want to delete the selected ${count} item(s)? This action cannot be undone.`}
+        confirmLabel="Delete"
         loading={loading}
         onConfirm={() => {
           onConfirm();
@@ -228,15 +228,15 @@ export function RowDeleteButton({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button variant="ghost" size="icon" onClick={() => setOpen(true)} title="删除" disabled={disabled}>
+      <Button variant="ghost" size="icon" onClick={() => setOpen(true)} title="Delete" disabled={disabled}>
         <Trash2 className="h-4 w-4 text-destructive" />
       </Button>
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
-        title="确认删除"
-        description="此操作不可撤销，确定要删除吗？"
-        confirmLabel="删除"
+        title="Confirm deletion"
+        description="Are you sure you want to delete? This action cannot be undone."
+        confirmLabel="Delete"
         loading={loading}
         onConfirm={() => {
           onConfirm();

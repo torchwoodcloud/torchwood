@@ -19,8 +19,8 @@ export function AccountLayout() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="账户设置"
-        description="管理你的账户资料与偏好"
+        title="Account Settings"
+        description="Manage your account profile and preferences"
         icon={CircleUserRound}
       />
 

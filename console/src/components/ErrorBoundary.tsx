@@ -17,9 +17,9 @@ export function RouteErrorFallback({ error }: { error: unknown }) {
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
       <div className="max-w-md space-y-4 text-center">
-        <p className="text-lg font-semibold">页面渲染出错</p>
+        <p className="text-lg font-semibold">Something went wrong</p>
         <p className="text-xs text-destructive break-all">{message}</p>
-        <Button onClick={() => window.location.reload()}>刷新页面</Button>
+        <Button onClick={() => window.location.reload()}>Refresh page</Button>
       </div>
     </div>
   );

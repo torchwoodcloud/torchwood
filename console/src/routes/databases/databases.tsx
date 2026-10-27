@@ -47,7 +47,7 @@ import {
 } from "@/components/resource/shared";
 import { DataTable } from "@/components/kit/query/data-table";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 
 // 列表 fleet 化（§12.9-2）：databases 顶层列表与 Database 详情内嵌的
@@ -81,7 +81,7 @@ export function DatabasesListPage() {
   const remove = useCommand(removeDatabaseCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Database 已删除");
+        toast.success("Database deleted");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -124,9 +124,9 @@ export function DatabasesListPage() {
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
-        toast.error(`删除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
+        toast.error(`Delete completed: ${succeeded} succeeded, ${failed} failed`);
       } else {
-        toast.success(`已删除 ${selectedDatabases.length} 个 Database`);
+        toast.success(`Deleted ${selectedDatabases.length} databases`);
       }
       // 直调批量路径无命令容器：失效经 invalidateAfterCommand 复用资源句柄
       // 声明（kit 键刷新列表 + 存量 ["databases"]/["collections"] 前缀）。
@@ -149,17 +149,17 @@ export function DatabasesListPage() {
         </span>
       ),
     },
-    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
+    { id: "name", header: "Name", cell: ({ row }) => row.original.name },
     {
       id: "created",
-      header: "创建时间",
+      header: "Created",
       cell: ({ row }) => formatDateTime(row.original.created_at, tz),
     },
     ...(platformAdmin
       ? [
           {
             id: "actions",
-            header: "操作",
+            header: "Actions",
             cell: ({ row }: { row: { original: Database } }) => (
               <RowDeleteButton
                 onConfirm={() => remove.mutate({ id: row.original.id })}
@@ -173,7 +173,7 @@ export function DatabasesListPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Databases" description="管理数据库与集合" />
+      <PageHeader title="Databases" description="Manage databases and collections" />
 
       <KitListPage
         list={shownList}
@@ -182,7 +182,7 @@ export function DatabasesListPage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="当前页内搜索名称或 ID..."
+              placeholder="Search by name or ID on this page…"
               className="h-8 w-56"
             />
             {selectedDatabases.length > 0 && platformAdmin ? (
@@ -196,7 +196,7 @@ export function DatabasesListPage() {
               <Button asChild className="ml-auto">
                 <Link to="/console/databases/new">
                   <Plus className="h-4 w-4 mr-2" />
-                  新建 Database
+                  New Database
                 </Link>
               </Button>
             ) : null}
@@ -204,17 +204,19 @@ export function DatabasesListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
           </div>
         }
-        emptyTitle={search !== "" ? "没有匹配的 Database" : "暂无 Database"}
+        emptyTitle={search !== "" ? "No matching databases" : "No databases yet"}
         emptyDescription={
-          search !== "" ? "调整搜索词，或清空恢复当前页全部行" : "创建第一个 Database"
+          search !== ""
+            ? "Adjust your search, or clear it to restore all rows on this page"
+            : "Create your first database"
         }
         emptyAction={
           platformAdmin ? (
             <Button asChild size="sm">
-              <Link to="/console/databases/new">新建 Database</Link>
+              <Link to="/console/databases/new">New Database</Link>
             </Button>
           ) : undefined
         }
@@ -248,7 +250,7 @@ export function DatabaseNewPage() {
   const create = useCommand(createDatabaseCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Database 创建成功");
+        toast.success("Database created");
         navigate({ to: `/console/databases/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
@@ -260,9 +262,9 @@ export function DatabaseNewPage() {
 
   return (
     <FormPageWrapper
-      title="新建 Database"
+      title="New Database"
       backTo="/console/databases"
-      submitLabel="创建"
+      submitLabel="Create"
       onSubmit={(e) => {
         e.preventDefault();
         create.mutate({ id, name });
@@ -270,7 +272,7 @@ export function DatabaseNewPage() {
       loading={create.pending}
       submitDisabled={!isPlatformAdmin(role)}
     >
-      <FormField id="name" label="名称" value={name} onChange={setName} required placeholder="Production DB" />
+      <FormField id="name" label="Name" value={name} onChange={setName} required placeholder="Production DB" />
       <FormField
         id="id"
         label="ID"
@@ -278,7 +280,7 @@ export function DatabaseNewPage() {
         onChange={setId}
         required
         placeholder="app"
-        hint="小写字母开头，仅小写字母与数字，最长 28。创建后不可改。"
+        hint="Must start with a lowercase letter; lowercase letters and digits only, up to 28 characters. Cannot be changed after creation."
       />
     </FormPageWrapper>
   );
@@ -315,7 +317,7 @@ export function DatabaseDetailPage() {
   const removeDb = useCommand(removeDatabaseCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Database 已删除");
+        toast.success("Database deleted");
         navigate({ to: "/console/databases" });
       } else if (result) {
         toast.error(result.message);
@@ -329,7 +331,7 @@ export function DatabaseDetailPage() {
     scope: { projectId: projectId ?? undefined, dbId: dbId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Collection 已删除");
+        toast.success("Collection deleted");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -348,11 +350,11 @@ export function DatabaseDetailPage() {
             {row.original.id}
           </span>
           {/* 系统集合已不经 Databases 页列出（在 tw_<project>，走 Users/Storage/Groups）；徽章仅兜底 is_system。 */}
-          {row.original.is_system && <Badge variant="secondary">系统</Badge>}
+          {row.original.is_system && <Badge variant="secondary">System</Badge>}
         </span>
       ),
     },
-    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
+    { id: "name", header: "Name", cell: ({ row }) => row.original.name },
     {
       id: "attributes",
       header: "Attributes",
@@ -369,7 +371,7 @@ export function DatabaseDetailPage() {
       ? [
           {
             id: "actions",
-            header: "操作",
+            header: "Actions",
             cell: ({ row }: { row: { original: Collection } }) =>
               row.original.is_system ? null : (
                 <RowDeleteButton
@@ -426,9 +428,9 @@ export function DatabaseDetailPage() {
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
-        toast.error(`删除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
+        toast.error(`Delete completed: ${succeeded} succeeded, ${failed} failed`);
       } else {
-        toast.success(`已删除 ${deletable.length} 个 Collection`);
+        toast.success(`Deleted ${deletable.length} collections`);
       }
       // 直调批量路径无命令容器：失效经 invalidateAfterCommand 复用资源句柄
       // 声明（kit 键刷新列表 + 存量 ["collections"] 前缀）。
@@ -449,7 +451,7 @@ export function DatabaseDetailPage() {
     <div className="space-y-6">
       <DetailPageWrapper
         title={database.name}
-        description="Database 详情与 Collection 管理"
+        description="Database details and collection management"
         backTo="/console/databases"
         actions={
           platformAdmin ? (
@@ -463,8 +465,8 @@ export function DatabaseDetailPage() {
         <DetailGrid
           items={[
             { label: "ID", value: database.id, mono: true },
-            { label: "名称", value: database.name },
-            { label: "创建时间", value: formatDateTime(database.created_at, tz) },
+            { label: "Name", value: database.name },
+            { label: "Created", value: formatDateTime(database.created_at, tz) },
           ]}
         />
       </DetailPageWrapper>
@@ -478,7 +480,7 @@ export function DatabaseDetailPage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="当前页内搜索 Collection..."
+                placeholder="Search by name or ID on this page…"
                 className="h-8 w-56"
               />
               {selectedCollections.length > 0 && platformAdmin ? (
@@ -492,7 +494,7 @@ export function DatabaseDetailPage() {
                 <Button asChild className="ml-auto">
                   <Link to="/console/databases/$dbId/collections/new" params={{ dbId: dbId! }}>
                     <Plus className="h-4 w-4 mr-2" />
-                    新建 Collection
+                    New Collection
                   </Link>
                 </Button>
               ) : null}
@@ -501,17 +503,19 @@ export function DatabaseDetailPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={collList} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+            <KeysetPagination list={collList} pageSizeOptions={PAGE_SIZE_OPTIONS} />
           </div>
         }
-        emptyTitle={search !== "" ? "没有匹配的 Collection" : "暂无 Collection"}
+        emptyTitle={search !== "" ? "No matching collections" : "No collections yet"}
         emptyDescription={
-          search !== "" ? "调整搜索词，或清空恢复当前页全部行" : "在此 Database 中创建 Collection"
+          search !== ""
+            ? "Adjust your search, or clear it to restore all rows on this page"
+            : "Create a collection in this database"
         }
         emptyAction={
           platformAdmin ? (
             <Button asChild size="sm">
-              <Link to="/console/databases/$dbId/collections/new" params={{ dbId: dbId! }}>新建 Collection</Link>
+              <Link to="/console/databases/$dbId/collections/new" params={{ dbId: dbId! }}>New Collection</Link>
             </Button>
           ) : undefined
         }

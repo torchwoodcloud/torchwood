@@ -79,7 +79,7 @@ export function LeaderboardsListPage() {
   const remove = useCommand(removeBoardCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("榜已删除（条目级联删除）");
+        toast.success("Board deleted (entries are cascade-deleted)");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -102,7 +102,7 @@ export function LeaderboardsListPage() {
   const columns: LegacyColumnDef<LeaderboardBoard, unknown>[] = [
     {
       id: "id",
-      header: "榜 ID",
+      header: "Board ID",
       cell: ({ row }) => (
         <Link
           className="font-medium underline-offset-2 hover:underline"
@@ -114,18 +114,18 @@ export function LeaderboardsListPage() {
     },
     {
       id: "period",
-      header: "期 / 时区",
+      header: "Period / Time zone",
       cell: ({ row }) => (
         <span className="text-sm">
           {row.original.period_kind === "none"
-            ? "全期"
+            ? "All-time"
             : `${row.original.period_kind}${row.original.period_tz ? ` · ${row.original.period_tz}` : ""}`}
         </span>
       ),
     },
     {
       id: "semantics",
-      header: "排序 / 合并",
+      header: "Sort / Merge",
       cell: ({ row }) => (
         <div className="flex flex-wrap gap-1">
           <Badge variant="secondary">{row.original.sort ?? "desc"}</Badge>
@@ -139,28 +139,28 @@ export function LeaderboardsListPage() {
     },
     {
       id: "client_submit",
-      header: "客户端提交",
+      header: "Client submit",
       cell: ({ row }) =>
-        row.original.client_submit ? <Badge>开放</Badge> : <Badge variant="outline">仅服务端</Badge>,
+        row.original.client_submit ? <Badge>Open</Badge> : <Badge variant="outline">Server only</Badge>,
     },
     {
       id: "limit",
-      header: "限频 / 保留",
+      header: "Rate limit / Retention",
       cell: ({ row }) => (
         <span className="text-sm text-muted-foreground">
-          {row.original.per_subject_submit_limit ?? 100}/期 ·{" "}
-          {row.original.retention_periods ? `${row.original.retention_periods} 期` : "永久"}
+          {row.original.per_subject_submit_limit ?? 100}/period ·{" "}
+          {row.original.retention_periods ? `${row.original.retention_periods} periods` : "Forever"}
         </span>
       ),
     },
     {
       id: "updated_at",
-      header: "更新时间",
+      header: "Updated",
       cell: ({ row }) => (row.original.updated_at ? formatDateTime(row.original.updated_at, tz) : "—"),
     },
     {
       id: "actions",
-      header: "操作",
+      header: "Actions",
       cell: ({ row }) => (
         <div className="flex items-center gap-1">
           <EditBoardDialog board={row.original} />
@@ -176,8 +176,8 @@ export function LeaderboardsListPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="排行榜"
-        description="榜配置（期 / 排序 / 合并策略 / 限频 / 保留 / 奖励规则）。作弊处理：进入榜详情删条目——封榜后的期不可变；结算见详情页。"
+        title="Leaderboards"
+        description="Board configuration (period / sort / merge policy / rate limit / retention / reward rules). To handle cheating, delete entries from the board detail — sealed periods are immutable; see the detail page for settlements."
       />
 
       <KitListPage
@@ -187,7 +187,7 @@ export function LeaderboardsListPage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜索榜 ID..."
+              placeholder="Search board ID..."
               className="h-8 w-56"
             />
             <div className="ml-auto">
@@ -195,11 +195,11 @@ export function LeaderboardsListPage() {
             </div>
           </div>
         }
-        emptyTitle={search !== "" ? "没有匹配的排行榜" : "暂无排行榜"}
+        emptyTitle={search !== "" ? "No matching leaderboards" : "No leaderboards yet"}
         emptyDescription={
           search !== ""
-            ? "调整搜索词，或清空恢复全部榜"
-            : "创建第一个榜后即可开始提交分数"
+            ? "Adjust the search term, or clear it to show all boards"
+            : "Create your first board to start submitting scores"
         }
       >
         <div className="px-6 pb-2 pt-2">
@@ -240,7 +240,7 @@ function CreateBoardDialog() {
   const create = useCommand(createBoardCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("榜已创建");
+        toast.success("Board created");
         setOpen(false);
       } else if (result) {
         toast.error(result.message);
@@ -255,14 +255,14 @@ function CreateBoardDialog() {
       <DialogTrigger asChild>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
-          新建榜
+          New board
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>新建排行榜</DialogTitle>
+          <DialogTitle>New leaderboard</DialogTitle>
           <DialogDescription>
-            排序 / tiebreak / 期类型 / 合并策略在有条目后不可修改
+            Sort / tiebreak / period type / merge policy cannot be changed once entries exist
           </DialogDescription>
         </DialogHeader>
         <form
@@ -296,18 +296,18 @@ function CreateBoardDialog() {
           }}
         >
           <div className={inputCls}>
-            <Label htmlFor="board-id">榜 ID</Label>
+            <Label htmlFor="board-id">Board ID</Label>
             <Input
               id="board-id"
               value={form.id}
               onChange={(e) => setForm({ ...form, id: e.target.value })}
-              placeholder="daily_final（^[a-z_][a-z0-9_]*$ ≤40）"
+              placeholder="daily_final (^[a-z_][a-z0-9_]*$ ≤40)"
               required
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className={inputCls}>
-              <Label>主值排序</Label>
+              <Label>Primary sort</Label>
               <Select value={form.sort} onValueChange={(v) => setForm({ ...form, sort: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -316,20 +316,20 @@ function CreateBoardDialog() {
               </Select>
             </div>
             <div className={inputCls}>
-              <Label>tiebreak 列（可选）</Label>
+              <Label>Tiebreak column (optional)</Label>
               <Select
                 value={form.tiebreakOrder || "none"}
                 onValueChange={(v) => setForm({ ...form, tiebreakOrder: v === "none" ? "" : v })}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">不声明</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {LEADERBOARD_SORTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className={inputCls}>
-              <Label>并列裁决</Label>
+              <Label>Tie break</Label>
               <Select value={form.tieBreak} onValueChange={(v) => setForm({ ...form, tieBreak: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -338,7 +338,7 @@ function CreateBoardDialog() {
               </Select>
             </div>
             <div className={inputCls}>
-              <Label>合并策略</Label>
+              <Label>Merge policy</Label>
               <Select value={form.policy} onValueChange={(v) => setForm({ ...form, policy: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -347,7 +347,7 @@ function CreateBoardDialog() {
               </Select>
             </div>
             <div className={inputCls}>
-              <Label>期类型</Label>
+              <Label>Period type</Label>
               <Select value={form.periodKind} onValueChange={(v) => setForm({ ...form, periodKind: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -356,7 +356,7 @@ function CreateBoardDialog() {
               </Select>
             </div>
             <div className={inputCls}>
-              <Label>期时区（IANA）</Label>
+              <Label>Period time zone (IANA)</Label>
               <Input
                 value={form.periodTz}
                 onChange={(e) => setForm({ ...form, periodTz: e.target.value })}
@@ -365,24 +365,24 @@ function CreateBoardDialog() {
               />
             </div>
             <div className={inputCls}>
-              <Label>分数下限（可选）</Label>
+              <Label>Score min (optional)</Label>
               <Input value={form.valueMin} onChange={(e) => setForm({ ...form, valueMin: e.target.value })} placeholder="0" />
             </div>
             <div className={inputCls}>
-              <Label>分数上限（可选）</Label>
+              <Label>Score max (optional)</Label>
               <Input value={form.valueMax} onChange={(e) => setForm({ ...form, valueMax: e.target.value })} placeholder="3080" />
             </div>
             <div className={inputCls}>
-              <Label>每期每主体提交上限</Label>
+              <Label>Submissions per subject per period</Label>
               <Input type="number" min={1} max={10000} value={form.limit} onChange={(e) => setForm({ ...form, limit: e.target.value })} />
             </div>
             <div className={inputCls}>
-              <Label>保留期数（0=永久）</Label>
+              <Label>Retention periods (0 = forever)</Label>
               <Input type="number" min={0} value={form.retention} onChange={(e) => setForm({ ...form, retention: e.target.value })} />
             </div>
           </div>
           <div className={inputCls}>
-            <Label>主体类型（展示提示，无语义）</Label>
+            <Label>Subject type (display hint, no semantics)</Label>
             <Input value={form.subjectKind} onChange={(e) => setForm({ ...form, subjectKind: e.target.value })} />
           </div>
           <RewardRulesEditor
@@ -396,12 +396,12 @@ function CreateBoardDialog() {
               checked={form.clientSubmit}
               onChange={(e) => setForm({ ...form, clientSubmit: e.target.checked })}
             />
-            <Label htmlFor="client-submit">允许终端用户直接提交（client_submit）</Label>
+            <Label htmlFor="client-submit">Allow end users to submit directly (client_submit)</Label>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
             <Button type="submit" disabled={create.pending}>
-              {create.pending ? "创建中…" : "创建"}
+              {create.pending ? "Creating…" : "Create"}
             </Button>
           </DialogFooter>
         </form>
@@ -424,7 +424,7 @@ function EditBoardDialog({ board }: { board: LeaderboardBoard }) {
   const update = useCommand(updateBoardCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("榜已更新");
+        toast.success("Board updated");
         setOpen(false);
       } else if (result) {
         toast.error(result.message);
@@ -443,9 +443,9 @@ function EditBoardDialog({ board }: { board: LeaderboardBoard }) {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>编辑榜（可变字段）</DialogTitle>
+          <DialogTitle>Edit board (mutable fields)</DialogTitle>
           <DialogDescription>
-            {board.id} · 排序 / 期 / 合并策略在有条目后不可改
+            {board.id} · Sort / period / merge policy cannot be changed once entries exist
           </DialogDescription>
         </DialogHeader>
         <form
@@ -466,24 +466,24 @@ function EditBoardDialog({ board }: { board: LeaderboardBoard }) {
         >
           <div className="grid grid-cols-2 gap-3">
             <div className={inputCls}>
-              <Label>分数下限</Label>
+              <Label>Score min</Label>
               <Input value={valueMin} onChange={(e) => setValueMin(e.target.value)} />
             </div>
             <div className={inputCls}>
-              <Label>分数上限</Label>
+              <Label>Score max</Label>
               <Input value={valueMax} onChange={(e) => setValueMax(e.target.value)} />
             </div>
             <div className={inputCls}>
-              <Label>每期每主体提交上限</Label>
+              <Label>Submissions per subject per period</Label>
               <Input type="number" min={1} max={10000} value={limit} onChange={(e) => setLimit(e.target.value)} />
             </div>
             <div className={inputCls}>
-              <Label>保留期数（0=永久）</Label>
+              <Label>Retention periods (0 = forever)</Label>
               <Input type="number" min={0} value={retention} onChange={(e) => setRetention(e.target.value)} />
             </div>
           </div>
           <div className={inputCls}>
-            <Label>主体类型</Label>
+            <Label>Subject type</Label>
             <Input value={subjectKind} onChange={(e) => setSubjectKind(e.target.value)} />
           </div>
           <div className="flex items-center gap-2">
@@ -492,12 +492,12 @@ function EditBoardDialog({ board }: { board: LeaderboardBoard }) {
               checked={clientSubmit}
               onChange={(e) => setClientSubmit(e.target.checked)}
             />
-            <Label htmlFor={`cs-${board.id}`}>允许终端用户直接提交</Label>
+            <Label htmlFor={`cs-${board.id}`}>Allow end users to submit directly</Label>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
             <Button type="submit" disabled={update.pending}>
-              {update.pending ? "保存中…" : "保存"}
+              {update.pending ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>
         </form>
@@ -560,7 +560,7 @@ export function BoardDetailPage() {
   const removeEntry = useCommand(removeBoardEntryDescriptor, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("条目已删除（仅未封榜期可删）");
+        toast.success("Entry deleted (only unsealed periods can be deleted)");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -570,7 +570,7 @@ export function BoardDetailPage() {
   });
 
   if (!board) {
-    return <div className="p-6 text-sm text-muted-foreground">加载中…</div>;
+    return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
   }
 
   return (
@@ -580,28 +580,28 @@ export function BoardDetailPage() {
         <div>
           <h1 className="text-xl font-semibold">{board.id}</h1>
           <p className="text-sm text-muted-foreground">
-            {board.period_kind === "none" ? "全期" : `${board.period_kind} · ${board.period_tz}`}
+            {board.period_kind === "none" ? "All-time" : `${board.period_kind} · ${board.period_tz}`}
             {" · "}{board.sort ?? "desc"} / {board.policy ?? "best"}
             {board.tiebreak_order ? ` · tiebreak:${board.tiebreak_order}` : ""}
             {` · ${board.tie_break ?? "parallel"}`}
             {board.value_min !== undefined || board.value_max !== undefined
-              ? ` · 分数域 [${board.value_min ?? "-∞"}, ${board.value_max ?? "+∞"}]`
+              ? ` · Score range [${board.value_min ?? "-∞"}, ${board.value_max ?? "+∞"}]`
               : ""}
           </p>
         </div>
       </div>
 
       <div className="flex items-center gap-3">
-        <Label>期</Label>
+        <Label>Period</Label>
         <Select value={activePeriod} onValueChange={setPeriod}>
-          <SelectTrigger className="w-48"><SelectValue placeholder="选择期" /></SelectTrigger>
+          <SelectTrigger className="w-48"><SelectValue placeholder="Select period" /></SelectTrigger>
           <SelectContent>
-            {periods.length === 0 ? <SelectItem value="all">当前期（无历史期条目）</SelectItem> : null}
+            {periods.length === 0 ? <SelectItem value="all">Current period (no past-period entries)</SelectItem> : null}
             {periods.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
           </SelectContent>
         </Select>
         {top ? (
-          <span className="text-sm text-muted-foreground">共 {top.total} 条</span>
+          <span className="text-sm text-muted-foreground">{top.total} total</span>
         ) : null}
       </div>
 
@@ -614,15 +614,15 @@ export function BoardDetailPage() {
               <th className="p-2">subject</th>
               <th className="p-2">value</th>
               {board.tiebreak_order ? <th className="p-2">tiebreak</th> : null}
-              <th className="p-2">更新时间</th>
+              <th className="p-2">Updated</th>
               <th className="p-2" />
             </tr>
           </thead>
           <tbody>
             {topLoading ? (
-              <tr><td className="p-2 text-muted-foreground" colSpan={7}>加载中…</td></tr>
+              <tr><td className="p-2 text-muted-foreground" colSpan={7}>Loading…</td></tr>
             ) : topEntries.length === 0 ? (
-              <tr><td className="p-2 text-muted-foreground" colSpan={7}>该期暂无条目</td></tr>
+              <tr><td className="p-2 text-muted-foreground" colSpan={7}>No entries for this period</td></tr>
             ) : (
               topEntries.map((e) => (
                 <tr key={e.subject_id} className="border-b last:border-0">
@@ -666,7 +666,7 @@ export function BoardDetailPage() {
       <div className="rounded-md border p-4">
         <div className="flex items-end gap-2">
           <div className={inputCls}>
-            <Label>按 subject 查条目</Label>
+            <Label>Look up entry by subject</Label>
             <Input
               value={lookupSubject}
               onChange={(e) => setLookupSubject(e.target.value)}
@@ -679,7 +679,7 @@ export function BoardDetailPage() {
             disabled={!lookupSubject.trim() || lookup.isPending}
             onClick={() => lookup.mutate()}
           >
-            查询
+            Look up
           </Button>
         </div>
         {lookupResult ? (
@@ -689,11 +689,11 @@ export function BoardDetailPage() {
               {" · "}rank = {lookupResult.rank}
               {" · "}position = {lookupResult.position}
               {" · "}below = {lookupResult.below}
-              {" · "}提交 {lookupResult.entry.submit_count ?? 1} 次
+              {" · "}submitted {lookupResult.entry.submit_count ?? 1} times
             </div>
           ) : (
             <div className="mt-3 text-sm text-muted-foreground">
-              该期无此条目（total = {lookupResult.total}）
+              No entry for this period (total = {lookupResult.total})
             </div>
           )
         ) : null}
@@ -717,7 +717,7 @@ function RewardRulesEditor({
     onChange(rules.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   return (
     <div className="space-y-2">
-      <Label>奖励规则（Phase 2 结算；边界语义跟随 tie_break）</Label>
+      <Label>Reward rules (Phase 2 settlement; boundary semantics follow tie_break)</Label>
       {rules.map((r, i) => (
         <div key={i} className="grid grid-cols-6 gap-2 items-center">
           <Input
@@ -754,10 +754,10 @@ function RewardRulesEditor({
         onClick={() => onChange([...rules, { rank_min: "", rank_max: "", value_min: "", asset_code: "", amount: "" }])}
       >
         <Plus className="h-3 w-3 mr-1" />
-        添加规则
+        Add rule
       </Button>
       {periodKind === "none" ? (
-        <p className="text-xs text-muted-foreground">全期榜不支持奖励（无封榜时点）</p>
+        <p className="text-xs text-muted-foreground">All-time boards do not support rewards (there is no sealing point)</p>
       ) : null}
     </div>
   );
@@ -776,7 +776,7 @@ function SettlementsSection({ boardId }: { boardId: string }) {
   const voidMutation = useCommand(voidSettlementDescriptor, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("期已弃奖（settled 期不可 void）");
+        toast.success("Period voided (settled periods cannot be voided)");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -787,7 +787,7 @@ function SettlementsSection({ boardId }: { boardId: string }) {
   const rerunMutation = useCommand(rerunSettlementDescriptor, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("重跑完成（只补发未发放明细）");
+        toast.success("Rerun completed (only re-grants missing payouts)");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -797,27 +797,27 @@ function SettlementsSection({ boardId }: { boardId: string }) {
   });
 
   if (isLoading) {
-    return <div className="text-sm text-muted-foreground">结算加载中…</div>;
+    return <div className="text-sm text-muted-foreground">Loading settlements…</div>;
   }
   if (settlements.length === 0) {
     return (
       <div className="rounded-md border p-4 text-sm text-muted-foreground">
-        暂无结算记录（配置了奖励规则的榜，期封榜后由 worker 自动结算）
+        No settlements yet (boards with reward rules are settled automatically by the worker after each period is sealed)
       </div>
     );
   }
   return (
     <div className="space-y-2">
-      <h2 className="text-sm font-semibold">结榜发奖</h2>
+      <h2 className="text-sm font-semibold">Settlements</h2>
       <div className="rounded-md border">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50 text-left">
-              <th className="p-2">期</th>
-              <th className="p-2">状态</th>
-              <th className="p-2">条目 / 发放</th>
-              <th className="p-2">完成时间</th>
-              <th className="p-2">错误</th>
+              <th className="p-2">Period</th>
+              <th className="p-2">Status</th>
+              <th className="p-2">Entries / Grants</th>
+              <th className="p-2">Completed</th>
+              <th className="p-2">Error</th>
               <th className="p-2" />
             </tr>
           </thead>
@@ -876,19 +876,19 @@ function SettlementRow({
         <td className="p-2">
           <div className="flex gap-1">
             <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(!open)}>
-              {open ? "收起" : "明细"}
+              {open ? "Hide" : "Details"}
             </Button>
             <Button
               type="button" variant="ghost" size="sm" disabled={busy || settlement.status === "settled" || settlement.status === "voided"}
               onClick={onVoid}
             >
-              弃奖
+              Void
             </Button>
             <Button
               type="button" variant="ghost" size="sm" disabled={busy || settlement.status === "voided"}
               onClick={onRerun}
             >
-              重跑
+              Rerun
             </Button>
           </div>
         </td>
@@ -904,8 +904,8 @@ function SettlementRow({
                     <th className="p-1">subject</th>
                     <th className="p-1">asset</th>
                     <th className="p-1">amount</th>
-                    <th className="p-1">状态</th>
-                    <th className="p-1">错误</th>
+                    <th className="p-1">Status</th>
+                    <th className="p-1">Error</th>
                   </tr>
                 </thead>
                 <tbody>

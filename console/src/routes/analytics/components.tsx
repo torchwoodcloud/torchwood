@@ -12,9 +12,9 @@ export function SourceBadge({ source }: { source?: string }) {
     return (
       <Badge
         variant="secondary"
-        title="rollup 口径：数据聚合作业（小时级刷新）的预聚合结果"
+        title="rollup source: pre-aggregated results from the hourly aggregation job"
       >
-        rollup 预聚合
+        rollup pre-aggregated
       </Badge>
     );
   }
@@ -22,9 +22,9 @@ export function SourceBadge({ source }: { source?: string }) {
     return (
       <Badge
         variant="outline"
-        title="raw 口径：实时扫描原始事件（HOUR 粒度恒 raw；DAY 窗口超出 rollup 覆盖时回退）"
+        title="raw source: realtime scan over raw events (HOUR granularity is always raw; DAY windows fall back to raw beyond rollup coverage)"
       >
-        raw 实时扫描
+        raw realtime scan
       </Badge>
     );
   }
@@ -36,16 +36,16 @@ export function SourceNote({ source }: { source?: string }) {
   if (source !== "raw") return null;
   return (
     <p className="text-xs text-muted-foreground">
-      实时扫描口径（原始事件直查；HOUR 粒度恒 raw，DAY 窗口超出 rollup 覆盖时也回退 raw）。
+      Realtime scan source (direct query over raw events; HOUR granularity is always raw, and DAY windows also fall back to raw beyond rollup coverage).
     </p>
   );
 }
 
 // AnalyticsTabs 分析区二级导航（概览 / 事件 / 留存）。
 const tabs = [
-  { to: "/console/analytics", label: "概览", end: true },
-  { to: "/console/analytics/events", label: "事件", end: false },
-  { to: "/console/analytics/retention", label: "留存", end: false },
+  { to: "/console/analytics", label: "Overview", end: true },
+  { to: "/console/analytics/events", label: "Events", end: false },
+  { to: "/console/analytics/retention", label: "Retention", end: false },
 ];
 
 export function AnalyticsTabs() {

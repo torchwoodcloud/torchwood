@@ -60,7 +60,7 @@ function planPayloadOf(form: CreatePlanForm):
   | { rejected: CommandResult<never> } {
   if (form.amount === "" || !INT64_INPUT.test(form.amount)) {
     return {
-      rejected: { status: "rejected", message: "amount 必须是最小货币单位整数" },
+      rejected: { status: "rejected", message: "Amount must be an integer in the smallest currency unit" },
     };
   }
   return {

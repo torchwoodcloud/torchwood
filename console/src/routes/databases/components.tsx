@@ -70,21 +70,21 @@ export function AttributeList({
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <div>
           <CardTitle className="text-base">Attributes</CardTitle>
-          <p className="mt-1 text-sm text-muted-foreground">定义文档字段类型与约束</p>
+          <p className="mt-1 text-sm text-muted-foreground">Define document field types and constraints</p>
         </div>
         <Button size="sm" onClick={onAdd} disabled={disabled}>
           <Plus className="mr-2 h-4 w-4" />
-          添加
+          Add
         </Button>
       </CardHeader>
       <CardContent className="flex-1">
         {attributes.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-10 text-center">
             <ListTree className="mb-3 h-8 w-8 text-muted-foreground/50" />
-            <p className="text-sm text-muted-foreground">暂无字段定义</p>
+            <p className="text-sm text-muted-foreground">No field definitions yet</p>
             {!disabled && (
               <Button size="sm" variant="outline" className="mt-4" onClick={onAdd}>
-                添加第一个 Attribute
+                Add the first attribute
               </Button>
             )}
           </div>
@@ -94,7 +94,7 @@ export function AttributeList({
               <TableRow>
                 <TableHead>Key</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>约束</TableHead>
+                <TableHead>Constraints</TableHead>
                 {onRemove && <TableHead className="w-12" />}
               </TableRow>
             </TableHeader>
@@ -151,28 +151,28 @@ export function IndexList({
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <div>
           <CardTitle className="text-base">Indexes</CardTitle>
-          <p className="mt-1 text-sm text-muted-foreground">为查询性能创建索引</p>
+          <p className="mt-1 text-sm text-muted-foreground">Create indexes for query performance</p>
         </div>
         <Button size="sm" onClick={onAdd} disabled={!canAdd || disabled}>
           <Plus className="mr-2 h-4 w-4" />
-          添加
+          Add
         </Button>
       </CardHeader>
       <CardContent className="flex-1">
         {!canAdd && !disabled && (
           <p className="mb-4 rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-            请先添加至少一个 Attribute，再创建 Index。
+            Add at least one attribute before creating an index.
           </p>
         )}
         {indexes.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-10 text-center">
             <Hash className="mb-3 h-8 w-8 text-muted-foreground/50" />
             <p className="text-sm text-muted-foreground">
-              {disabled ? "暂无索引" : canAdd ? "暂无索引" : "添加 Attribute 后可创建索引"}
+              {disabled ? "No indexes yet" : canAdd ? "No indexes yet" : "Add an attribute to create indexes"}
             </p>
             {canAdd && !disabled && (
               <Button size="sm" variant="outline" className="mt-4" onClick={onAdd}>
-                添加第一个 Index
+                Add the first index
               </Button>
             )}
           </div>
@@ -249,8 +249,8 @@ export function AddAttributeDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>添加 Attribute</DialogTitle>
-          <DialogDescription>为 Collection 定义字段类型与约束。</DialogDescription>
+          <DialogTitle>Add Attribute</DialogTitle>
+          <DialogDescription>Define field types and constraints for the collection.</DialogDescription>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -292,7 +292,7 @@ export function AddAttributeDialog({
           </div>
           {STRING_LIKE_TYPES.has(type) && (
             <div className="space-y-2">
-              <Label htmlFor="attr-size">Size（可选）</Label>
+              <Label htmlFor="attr-size">Size (optional)</Label>
               <Input
                 id="attr-size"
                 type="number"
@@ -315,10 +315,10 @@ export function AddAttributeDialog({
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
-              取消
+              Cancel
             </Button>
             <Button type="submit" disabled={loading || !key.trim()}>
-              {loading ? "添加中..." : "添加"}
+              {loading ? "Adding…" : "Add"}
             </Button>
           </DialogFooter>
         </form>
@@ -365,8 +365,8 @@ export function AddIndexDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>添加 Index</DialogTitle>
-          <DialogDescription>选择索引类型，并指定参与索引的 Attribute。</DialogDescription>
+          <DialogTitle>Add Index</DialogTitle>
+          <DialogDescription>Choose the index type and select the attributes to index.</DialogDescription>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -422,10 +422,10 @@ export function AddIndexDialog({
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
-              取消
+              Cancel
             </Button>
             <Button type="submit" disabled={loading || !id.trim() || selected.length === 0}>
-              {loading ? "添加中..." : "添加"}
+              {loading ? "Adding…" : "Add"}
             </Button>
           </DialogFooter>
         </form>
@@ -459,9 +459,10 @@ export function EditPermissionsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>编辑 Collection 权限</DialogTitle>
+          <DialogTitle>Edit Collection Permissions</DialogTitle>
           <DialogDescription>
-            修改集合级权限规则。无文档级权限的文档将回退到此规则。
+            Edit collection-level permission rules. Documents without document-level permissions
+            fall back to these rules.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -473,10 +474,10 @@ export function EditPermissionsDialog({
           <PermissionEditor permissions={permissions} onChange={setPermissions} />
           <DialogFooter className="mt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              取消
+              Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "保存中..." : "保存"}
+              {loading ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>
         </form>
@@ -514,33 +515,34 @@ export function EditCollectionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>编辑集合设置</DialogTitle>
+          <DialogTitle>Edit Collection Settings</DialogTitle>
           <DialogDescription>
-            修改集合名称或停用/启用集合。停用后客户端 API 将拒绝读写该集合。
+            Edit the collection name or disable/enable the collection. Client APIs reject reads
+            and writes to a disabled collection.
           </DialogDescription>
         </DialogHeader>
         <form
           onSubmit={(e) => {
             e.preventDefault();
             if (!name.trim()) {
-              toast.error("名称不能为空");
+              toast.error("Name cannot be empty");
               return;
             }
             onSubmit({ name: name.trim(), disabled });
           }}
           className="space-y-4"
         >
-          <FormField id="name" label="名称" value={name} onChange={setName} placeholder="posts" />
+          <FormField id="name" label="Name" value={name} onChange={setName} placeholder="posts" />
           <label className="flex items-center gap-2 text-sm">
             <Checkbox checked={disabled} onChange={(e) => setDisabled(e.target.checked)} />
-            停用集合
+            Disable collection
           </label>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              取消
+              Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "保存中..." : "保存"}
+              {loading ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>
         </form>

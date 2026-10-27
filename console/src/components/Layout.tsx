@@ -178,7 +178,7 @@ function SidebarContent({
             size="icon"
             className="text-muted-foreground"
             onClick={onToggleCollapsed}
-            title="展开菜单"
+            title="Expand menu"
           >
             <PanelLeftOpen className="h-5 w-5" />
           </Button>
@@ -199,7 +199,7 @@ function SidebarContent({
                 size="icon"
                 className="-mr-1 shrink-0 text-muted-foreground"
                 onClick={onToggleCollapsed}
-                title="收起菜单"
+                title="Collapse menu"
               >
                 <PanelLeftClose className="h-4 w-4" />
               </Button>
@@ -261,7 +261,7 @@ function SidebarContent({
         <NavLink
           to="/console/account/profile"
           onClick={onNavigate}
-          title={collapsed ? (email ?? "账户设置") : undefined}
+          title={collapsed ? (email ?? "Account settings") : undefined}
           className={({ isActive }) =>
             cn(
               "flex w-full items-center gap-2 rounded-lg text-left transition-colors hover:bg-sidebar-accent",
@@ -280,7 +280,7 @@ function SidebarContent({
                   {email ?? "…"}
                 </span>
                 <span className="truncate text-[11px] leading-tight text-muted-foreground">
-                  账户设置
+                  Account settings
                 </span>
               </span>
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />

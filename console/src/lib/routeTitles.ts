@@ -22,10 +22,10 @@ const routeNames: Record<string, string> = {
   subscriptions: "Subscriptions",
   plans: "Plans",
   settings: "Settings",
-  new: "新建",
-  edit: "编辑",
+  new: "New",
+  edit: "Edit",
   collections: "Collections",
-  documents: "文档",
+  documents: "Documents",
   files: "Files",
   listen: "Listen",
 };

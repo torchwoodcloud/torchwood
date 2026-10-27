@@ -26,8 +26,8 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
-  confirmLabel = "确认",
-  cancelLabel = "取消",
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
   loading,
   destructive = true,
   onConfirm,
@@ -50,7 +50,7 @@ export function ConfirmDialog({
             onClick={onConfirm}
             disabled={loading}
           >
-            {loading ? "处理中..." : confirmLabel}
+            {loading ? "Processing…" : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

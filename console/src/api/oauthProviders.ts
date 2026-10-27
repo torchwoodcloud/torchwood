@@ -18,9 +18,9 @@ export interface ListOAuthProvidersResponse {
 export const OAUTH_PROVIDER_OPTIONS = [
   { id: "google", label: "Google", defaultScopes: ["openid", "email", "profile"] },
   { id: "github", label: "GitHub", defaultScopes: ["read:user", "user:email"] },
-  { id: "wechat_web", label: "微信 · 网站扫码", defaultScopes: [] },
-  { id: "wechat_mp", label: "微信 · 公众号 H5", defaultScopes: [] },
-  { id: "wechat_miniprogram", label: "微信 · 小程序", defaultScopes: [] },
+  { id: "wechat_web", label: "WeChat · Web QR", defaultScopes: [] },
+  { id: "wechat_mp", label: "WeChat · Official Account H5", defaultScopes: [] },
+  { id: "wechat_miniprogram", label: "WeChat · Mini Program", defaultScopes: [] },
 ] as const;
 
 // 服务端 providers 列表（in-memory crud，默认 page_size=50）；对接服务端分页。

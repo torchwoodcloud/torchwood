@@ -110,7 +110,7 @@ describe("FunctionsListPage（列表 fleet 化）", () => {
       expect.objectContaining({ pageSize: 20, pageToken: undefined }),
     );
     // 下一页 → 游标 push 进 URL → 请求带 page_token
-    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() =>
       expect(mockList).toHaveBeenLastCalledWith(
         expect.objectContaining({ pageToken: "tok-2" }),
@@ -124,10 +124,10 @@ describe("FunctionsListPage（列表 fleet 化）", () => {
     mockDelete.mockResolvedValue(undefined);
     await renderList();
     await screen.findByText("greet");
-    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     // torchwood 存量确认壳：确认钮与触发钮同名，scope 到对话框内
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(mockDelete).toHaveBeenCalledWith("fn-1", { __skipToast: true }),
     );
@@ -161,7 +161,7 @@ describe("FunctionTriggersCard（写路径命令化：裸 descriptor）", () => 
     vi.mocked(listFunctionTriggers).mockResolvedValue([httpTrigger]);
     vi.mocked(rotateFunctionTriggerToken).mockResolvedValue(httpTrigger);
     renderCard();
-    fireEvent.click(await screen.findByRole("button", { name: "轮换 token" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Rotate token" }));
     await waitFor(() =>
       expect(rotateFunctionTriggerToken).toHaveBeenCalledWith("fn-1", "trg-1", {
         __skipToast: true,
@@ -180,7 +180,7 @@ describe("FunctionClientPolicyCard（写路径命令化：资源命令）", () =
         <FunctionClientPolicyCard fn={makeFn({})} writeable />
       </QueryClientProvider>
     );
-    fireEvent.click(await screen.findByRole("button", { name: "保存策略" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save policy" }));
     await waitFor(() =>
       expect(vi.mocked(updateFunction)).toHaveBeenCalledWith(
         "fn-1",

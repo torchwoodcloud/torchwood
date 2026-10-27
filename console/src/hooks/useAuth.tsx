@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await apiLogout();
     } catch {
-      toast.error("登出失败，会话可能仍有效，请重试");
+      toast.error("Sign out failed. The session may still be active. Please try again.");
     }
     setProjectID(null);
     setProjectIdState(null);

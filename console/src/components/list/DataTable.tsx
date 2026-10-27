@@ -88,7 +88,7 @@ export function DataTable<T extends { id: string }>({
                 checked={headerChecked}
                 indeterminate={headerIndeterminate}
                 onChange={(e) => handleToggleAll(e.target.checked)}
-                aria-label="全选"
+                aria-label="Select all"
               />
             </TableHead>
           )}
@@ -99,7 +99,7 @@ export function DataTable<T extends { id: string }>({
                   type="button"
                   onClick={onSortToggle}
                   className="inline-flex items-center gap-1 hover:text-foreground"
-                  title={sortOrder === "ASC" ? "按时间正序，点击切换倒序" : "按时间倒序，点击切换正序"}
+                  title={sortOrder === "ASC" ? "Sorted ascending by time. Click to sort descending." : "Sorted descending by time. Click to sort ascending."}
                 >
                   {col.header}
                   {sortOrder === "ASC" ? (
@@ -113,7 +113,7 @@ export function DataTable<T extends { id: string }>({
               )}
             </TableHead>
           ))}
-          {hasActions && <TableHead className="w-32 text-right">操作</TableHead>}
+          {hasActions && <TableHead className="w-32 text-right">Actions</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -127,7 +127,7 @@ export function DataTable<T extends { id: string }>({
                     checked={isSelected(item.id)}
                     disabled={!rowSelectable}
                     onChange={() => onToggle(item.id)}
-                    aria-label={`选择 ${item.id}`}
+                    aria-label={`Select ${item.id}`}
                   />
                 </TableCell>
               )}
@@ -141,14 +141,14 @@ export function DataTable<T extends { id: string }>({
                   <div className="flex items-center justify-end gap-1">
                     {detailPath && (
                       <Button variant="ghost" size="icon" asChild>
-                        <Link to={detailPath(item)} title="查看详情">
+                        <Link to={detailPath(item)} title="View details">
                           <Eye className="h-4 w-4" />
                         </Link>
                       </Button>
                     )}
                     {editPath && (
                       <Button variant="ghost" size="icon" asChild>
-                        <Link to={editPath(item)} title="编辑">
+                        <Link to={editPath(item)} title="Edit">
                           <Pencil className="h-4 w-4" />
                         </Link>
                       </Button>

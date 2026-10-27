@@ -11,21 +11,21 @@ import type { CollectionOutletContext } from "./CollectionLayout";
 
 
 // 订阅状态/瞬态文案（§12.10-⑤ labels 注入面；原 vendored 内置中文改页面注入）
-const STATUS_LABEL_ZH: Record<string, string> = {
-  live: "已连接",
-  reconnecting: "连接中…",
-  paused: "已暂停",
-  gapped: "保留间隙",
-  stalled: "已断开",
-  ended: "已结束",
-  error: "错误",
+const STATUS_LABELS: Record<string, string> = {
+  live: "Connected",
+  reconnecting: "Connecting…",
+  paused: "Paused",
+  gapped: "Gapped",
+  stalled: "Disconnected",
+  ended: "Ended",
+  error: "Error",
 };
 
-const EVENT_FEED_ZH = {
-  gapGapped: "保留间隙——请重新锚定 backlog 继续。",
-  gapStalled: "退避预算耗尽——请重连或改用轮询兜底。",
-  paused: "已暂停——恢复时从游标补帧",
-  count: (n: number) => `${n} 条事件`,
+const EVENT_FEED_LABELS = {
+  gapGapped: "Retention gap — re-anchor the backlog to continue.",
+  gapStalled: "Backoff budget exhausted — reconnect or switch to polling fallback.",
+  paused: "Paused — frames buffered from cursor on resume",
+  count: (n: number) => `${n} events`,
 } as const;
 
 // payload 摘要（120 字截断）——事件名外的载荷细节看大概即可，完整 JSON 在
@@ -63,14 +63,14 @@ export function ListenPanel() {
           variant="outline"
           onClick={() => (paused ? sub.resume() : sub.pause())}
         >
-          {paused ? "恢复" : "暂停"}
+          {paused ? "Resume" : "Pause"}
         </Button>
       </div>
       <EventFeed
       sub={sub}
-      title="实时事件"
-      statusLabels={STATUS_LABEL_ZH}
-      labels={EVENT_FEED_ZH}
+      title="Realtime events"
+      statusLabels={STATUS_LABELS}
+      labels={EVENT_FEED_LABELS}
       getKey={(frame) => frame.seq}
       render={(frame: EventFrame) => (
         <>
@@ -85,11 +85,11 @@ export function ListenPanel() {
           </span>
         </>
       )}
-      emptyText="暂无事件。对该集合执行写操作后将在此实时显示。"
+      emptyText="No events yet. Writes to this collection will appear here in realtime."
         resyncAction={
           <Button variant="outline" size="sm" onClick={() => sub.restart()}>
             <RefreshCw className="mr-2 h-4 w-4" />
-            已断开，点击重连
+            Disconnected — click to reconnect
           </Button>
         }
       />

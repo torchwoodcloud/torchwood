@@ -52,21 +52,21 @@ describe("AccountProfilePage", () => {
     expect(screen.getByText("admin-1")).toBeTruthy();
     // 资料只读：字段以文本呈现，编辑控件仅存在于修改密码表单。
     expect(screen.queryByDisplayValue("liqiulin@outlook.com")).toBeNull();
-    expect(screen.getByLabelText("当前密码")).toBeTruthy();
-    expect(screen.getByLabelText("新密码")).toBeTruthy();
-    expect(screen.getByLabelText("确认新密码")).toBeTruthy();
+    expect(screen.getByLabelText("Current password")).toBeTruthy();
+    expect(screen.getByLabelText("New password")).toBeTruthy();
+    expect(screen.getByLabelText("Confirm new password")).toBeTruthy();
   });
 
   it("两次新密码不一致时不提交", async () => {
     renderPage(<AccountProfilePage />);
     await screen.findByText("liqiulin@outlook.com");
 
-    fireEvent.change(screen.getByLabelText("当前密码"), { target: { value: "OldPassw0rd" } });
-    fireEvent.change(screen.getByLabelText("新密码"), { target: { value: "NewPassw0rd" } });
-    fireEvent.change(screen.getByLabelText("确认新密码"), { target: { value: "OtherPassw0rd" } });
-    fireEvent.click(screen.getByRole("button", { name: "修改密码" }));
+    fireEvent.change(screen.getByLabelText("Current password"), { target: { value: "OldPassw0rd" } });
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "NewPassw0rd" } });
+    fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: "OtherPassw0rd" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change Password" }));
 
-    expect(screen.getByText("两次输入的新密码不一致")).toBeTruthy();
+    expect(screen.getByText("New passwords do not match")).toBeTruthy();
     expect(updateCurrentAdmin).not.toHaveBeenCalled();
   });
 
@@ -81,10 +81,10 @@ describe("AccountProfilePage", () => {
     renderPage(<AccountProfilePage />);
     await screen.findByText("liqiulin@outlook.com");
 
-    fireEvent.change(screen.getByLabelText("当前密码"), { target: { value: "OldPassw0rd" } });
-    fireEvent.change(screen.getByLabelText("新密码"), { target: { value: "NewPassw0rd" } });
-    fireEvent.change(screen.getByLabelText("确认新密码"), { target: { value: "NewPassw0rd" } });
-    fireEvent.click(screen.getByRole("button", { name: "修改密码" }));
+    fireEvent.change(screen.getByLabelText("Current password"), { target: { value: "OldPassw0rd" } });
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "NewPassw0rd" } });
+    fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: "NewPassw0rd" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change Password" }));
 
     await waitFor(() =>
       expect(updateCurrentAdmin).toHaveBeenCalledWith(
@@ -104,15 +104,15 @@ describe("AccountProfilePage", () => {
 
   it("改密 400 → rejected 走内联错误（结果两分，不跳登录页）", async () => {
     vi.mocked(updateCurrentAdmin).mockRejectedValue(
-      axiosErr(400, { code: "E_INVALID_CREDENTIALS", message: "当前密码不正确" })
+      axiosErr(400, { code: "E_INVALID_CREDENTIALS", message: "Current password is incorrect" })
     );
     renderPage(<AccountProfilePage />);
     await screen.findByText("liqiulin@outlook.com");
 
-    fireEvent.change(screen.getByLabelText("当前密码"), { target: { value: "WrongPassw0rd" } });
-    fireEvent.change(screen.getByLabelText("新密码"), { target: { value: "NewPassw0rd" } });
-    fireEvent.change(screen.getByLabelText("确认新密码"), { target: { value: "NewPassw0rd" } });
-    fireEvent.click(screen.getByRole("button", { name: "修改密码" }));
+    fireEvent.change(screen.getByLabelText("Current password"), { target: { value: "WrongPassw0rd" } });
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "NewPassw0rd" } });
+    fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: "NewPassw0rd" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change Password" }));
 
     await waitFor(() =>
       expect(updateCurrentAdmin).toHaveBeenCalledWith(
@@ -121,7 +121,7 @@ describe("AccountProfilePage", () => {
       )
     );
     // rejected 是结果分支（mutation.data）：渲染表单内联错误，不跳转
-    expect(await screen.findByText("当前密码不正确")).toBeTruthy();
+    expect(await screen.findByText("Current password is incorrect")).toBeTruthy();
   });
 });
 
@@ -141,10 +141,10 @@ describe("AccountPreferencesPage", () => {
 
     // 行内当前值 = 修改入口；未改动时弹层保存禁用。
     fireEvent.click(await screen.findByRole("button", { name: /Asia\/Shanghai/ }));
-    const saveButton = screen.getByRole("button", { name: "保存" }) as HTMLButtonElement;
+    const saveButton = screen.getByRole("button", { name: "Save" }) as HTMLButtonElement;
     expect(saveButton.disabled).toBe(true);
 
-    fireEvent.change(screen.getByPlaceholderText(/搜索时区/), {
+    fireEvent.change(screen.getByPlaceholderText(/Search time zones/), {
       target: { value: "Tokyo" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Asia/Tokyo" }));
@@ -171,8 +171,8 @@ describe("AccountPreferencesPage", () => {
     renderPage(<AccountPreferencesPage />);
     fireEvent.click(await screen.findByRole("button", { name: /Asia\/Shanghai/ }));
 
-    fireEvent.click(screen.getByRole("button", { name: /跟随浏览器/ }));
-    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    fireEvent.click(screen.getByRole("button", { name: /Follow browser/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(updateCurrentAdmin).toHaveBeenCalledWith(
         { timezone: "" },
@@ -184,6 +184,6 @@ describe("AccountPreferencesPage", () => {
   it("未设置偏好时行内显示跟随浏览器", async () => {
     vi.mocked(getCurrentAdmin).mockResolvedValue({ ...me, timezone: "" });
     renderPage(<AccountPreferencesPage />);
-    expect(await screen.findByRole("button", { name: /跟随浏览器（/ })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /Follow browser \(/ })).toBeTruthy();
   });
 });

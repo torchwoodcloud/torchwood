@@ -28,17 +28,17 @@ export function toApiError(err: unknown): ApiError {
 export function describeApiError(error: ApiError): string {
   switch (error.kind) {
     case "network":
-      return "网络不可达，请检查连接后重试";
+      return "Network unreachable, please check your connection and retry";
     case "auth":
-      return "会话已过期";
+      return "Session expired";
     case "forbidden":
-      return "没有访问该资源的权限";
+      return "You do not have permission to access this resource";
     case "not-found":
-      return "资源不存在";
+      return "Resource not found";
     case "decode":
-      return `响应格式异常（${error.detail}）`;
+      return `Unexpected response format (${error.detail})`;
     case "server":
-      return `服务端错误 ${error.status}${error.message ? `：${error.message}` : ""}`;
+      return `Server error ${error.status}${error.message ? `: ${error.message}` : ""}`;
   }
 }
 

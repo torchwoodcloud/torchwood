@@ -26,7 +26,7 @@ import { formatInt64 } from "@/lib/utils";
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/kit/query/data-table";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import { filtersOf, ordersResource, ordersSearch, refundOrderCommand, fulfillOrderCommand, type FilterField } from "@/kit/payments";
 import { describeApiError } from "@/kit/errors";
@@ -107,20 +107,20 @@ export function OrdersListPage() {
     },
     {
       id: "user",
-      header: "用户",
+      header: "User",
       cell: ({ row }) => (
         <span className="font-mono text-xs">{row.original.user_id ?? "—"}</span>
       ),
     },
     {
       id: "amount",
-      header: "金额",
+      header: "Amount",
       cell: ({ row }) => `${formatInt64(row.original.amount)} ${row.original.currency}`,
     },
-    { id: "purpose", header: "用途", cell: ({ row }) => row.original.purpose_kind },
+    { id: "purpose", header: "Purpose", cell: ({ row }) => row.original.purpose_kind },
     {
       id: "status",
-      header: "状态",
+      header: "Status",
       cell: ({ row }) => (
         <Badge variant={row.original.status === "paid" ? "default" : "secondary"}>
           {row.original.status}
@@ -129,7 +129,7 @@ export function OrdersListPage() {
     },
     {
       id: "created",
-      header: "创建时间",
+      header: "Created At",
       meta: { sortField: "created_at" },
       cell: ({ row }) => formatDateTime(row.original.created_at, tz),
     },
@@ -139,7 +139,7 @@ export function OrdersListPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="订单" description="项目支付订单（金额为最小货币单位）" />
+      <PageHeader title="Orders" description="Project payment orders (amounts in minor currency units)" />
 
       <KitListPage
         list={shownList}
@@ -154,27 +154,27 @@ export function OrdersListPage() {
             >
               <div className="space-y-1">
                 <Label htmlFor="orders-filter-user" className="text-xs text-muted-foreground">
-                  用户 ID
+                  User ID
                 </Label>
                 <Input
                   id="orders-filter-user"
                   value={userIdInput}
                   onChange={(e) => setUserIdInput(e.target.value)}
-                  placeholder="按 UserID 精确过滤"
+                  placeholder="Filter by exact UserID"
                   className="h-8 w-[280px] font-mono text-xs"
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">状态</Label>
+                <Label className="text-xs text-muted-foreground">Status</Label>
                 <Select
                   value={filters.status || "all"}
                   onValueChange={(v) => setFilter("status", v === "all" ? "" : v)}
                 >
-                  <SelectTrigger className="h-8 w-[130px]" aria-label="状态过滤">
+                  <SelectTrigger className="h-8 w-[130px]" aria-label="Filter by status">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">全部</SelectItem>
+                    <SelectItem value="all">All</SelectItem>
                     {ORDER_STATUS_OPTIONS.map((s) => (
                       <SelectItem key={s} value={s}>
                         {s}
@@ -185,7 +185,7 @@ export function OrdersListPage() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="orders-filter-after" className="text-xs text-muted-foreground">
-                  创建时间从
+                  Created From
                 </Label>
                 <Input
                   id="orders-filter-after"
@@ -197,7 +197,7 @@ export function OrdersListPage() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="orders-filter-before" className="text-xs text-muted-foreground">
-                  到
+                  To
                 </Label>
                 <Input
                   id="orders-filter-before"
@@ -208,34 +208,34 @@ export function OrdersListPage() {
                 />
               </div>
               <Button type="submit" variant="outline" size="sm">
-                查询
+                Apply
               </Button>
               {filtersDirty && (
                 <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
-                  清除
+                  Clear
                 </Button>
               )}
             </form>
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="当前页内搜索订单 ID / 用户 / 状态..."
+              placeholder="Search this page by order ID / user / status..."
               className="h-8 w-56"
             />
           </div>
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
           </div>
         }
-        emptyTitle={search !== "" ? "没有匹配的订单" : filtered ? "该过滤条件下暂无订单" : "暂无订单"}
+        emptyTitle={search !== "" ? "No matching orders" : filtered ? "No orders match these filters" : "No orders yet"}
         emptyDescription={
           search !== ""
-            ? "调整搜索词，或清空恢复当前页全部行"
+            ? "Adjust the search term, or clear it to restore all rows on this page"
             : filtered
-              ? "调整过滤条件，或清除恢复全部"
-              : "终端用户建单后将出现在此"
+              ? "Adjust the filters, or clear them to restore all"
+              : "Orders created by end users will appear here"
         }
       >
         <div className="px-6 pb-2 pt-2">
@@ -269,7 +269,7 @@ export function OrderDetailPage() {
   const refund = useCommand(refundOrderCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("已发起退款");
+        toast.success("Refund initiated");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -281,7 +281,7 @@ export function OrderDetailPage() {
   const fulfill = useCommand(fulfillOrderCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("已标记履约");
+        toast.success("Marked as fulfilled");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -295,8 +295,8 @@ export function OrderDetailPage() {
 
   return (
     <DetailPageWrapper
-      title={`订单 ${order.id}`}
-      description="订单详情"
+      title={`Order ${order.id}`}
+      description="Order details"
       backTo="/console/orders"
       actions={
         platformAdmin ? (
@@ -307,7 +307,7 @@ export function OrderDetailPage() {
               disabled={fulfill.pending || order.status !== "paid"}
               onClick={() => fulfill.mutate({ id: id! })}
             >
-              人工履约
+              Fulfill Manually
             </Button>
             <Button
               variant="destructive"
@@ -315,7 +315,7 @@ export function OrderDetailPage() {
               disabled={refund.pending || order.status !== "paid"}
               onClick={() => refund.mutate({ id: id! })}
             >
-              退款
+              Refund
             </Button>
           </div>
         ) : undefined
@@ -324,16 +324,16 @@ export function OrderDetailPage() {
       <DetailGrid
         items={[
           { label: "ID", value: order.id, mono: true },
-          { label: "用户", value: order.user_id ?? "—", mono: true },
-          { label: "金额", value: `${formatInt64(order.amount)} ${order.currency}`, mono: true },
-          { label: "渠道", value: order.provider },
-          { label: "用途", value: order.purpose_kind },
-          { label: "状态", value: order.status },
-          { label: "幂等键", value: order.idempotency_key ?? "—", mono: true },
-          { label: "渠道会话", value: order.provider_session_id ?? "—", mono: true },
-          { label: "创建时间", value: formatDateTime(order.created_at, tz) },
-          { label: "支付时间", value: formatDateTime(order.paid_at, tz) },
-          { label: "过期时间", value: formatDateTime(order.expires_at, tz) },
+          { label: "User", value: order.user_id ?? "—", mono: true },
+          { label: "Amount", value: `${formatInt64(order.amount)} ${order.currency}`, mono: true },
+          { label: "Provider", value: order.provider },
+          { label: "Purpose", value: order.purpose_kind },
+          { label: "Status", value: order.status },
+          { label: "Idempotency Key", value: order.idempotency_key ?? "—", mono: true },
+          { label: "Provider Session", value: order.provider_session_id ?? "—", mono: true },
+          { label: "Created At", value: formatDateTime(order.created_at, tz) },
+          { label: "Paid At", value: formatDateTime(order.paid_at, tz) },
+          { label: "Expires At", value: formatDateTime(order.expires_at, tz) },
         ]}
       />
     </DetailPageWrapper>

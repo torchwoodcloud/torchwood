@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/select";
 import { DataTable } from "@/components/kit/query/data-table";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import {
   auditLogsResource,
@@ -39,23 +39,23 @@ import {
 // —— 语义化渲染辅助：把 gRPC FullMethod / 结构化 metadata 变成人话 ——
 
 const VERB_LABELS: Record<string, string> = {
-  Create: "创建",
-  Update: "更新",
-  Delete: "删除",
-  Deploy: "部署",
-  Set: "设置",
-  Replay: "重放",
-  Rotate: "轮换",
-  Revoke: "吊销",
-  Ban: "封禁",
-  Enable: "启用",
-  Disable: "停用",
-  SignIn: "登录",
-  SignOut: "登出",
-  Refresh: "刷新",
-  Upload: "上传",
-  Import: "导入",
-  Sync: "同步",
+  Create: "Created",
+  Update: "Updated",
+  Delete: "Deleted",
+  Deploy: "Deployed",
+  Set: "Set",
+  Replay: "Replayed",
+  Rotate: "Rotated",
+  Revoke: "Revoked",
+  Ban: "Banned",
+  Enable: "Enabled",
+  Disable: "Disabled",
+  SignIn: "Signed in",
+  SignOut: "Signed out",
+  Refresh: "Refreshed",
+  Upload: "Uploaded",
+  Import: "Imported",
+  Sync: "Synced",
 };
 
 const CHANNEL_LABELS: Record<string, string> = {
@@ -64,7 +64,7 @@ const CHANNEL_LABELS: Record<string, string> = {
   console: "Console",
   function: "Function",
   api: "API Key",
-  user: "用户",
+  user: "User",
 };
 
 interface ActionParts {
@@ -111,7 +111,7 @@ function describeAudit(log: AuditLog): string {
   if (changes) {
     const fields = Object.keys(changes);
     if (fields.length > 0) {
-      detail = `（${fields.map((f) => humanizeChange(f, changes[f])).join("，")}）`;
+      detail = `(${fields.map((f) => humanizeChange(f, changes[f])).join(", ")})`;
     }
   }
   return `${channelLabel}${verbLabel(parts.verb)} ${parts.method.slice(parts.verb.length) || parts.service}${detail}`;
@@ -165,7 +165,7 @@ export function AuditLogsListPage() {
   const columns: LegacyColumnDef<AuditLog, unknown>[] = [
     {
       id: "created_at",
-      header: "时间",
+      header: "Time",
       meta: { sortField: "created_at" },
       cell: ({ row }) => (
         <span className="whitespace-nowrap text-xs text-muted-foreground">
@@ -175,7 +175,7 @@ export function AuditLogsListPage() {
     },
     {
       id: "change",
-      header: "变更",
+      header: "Change",
       cell: ({ row }) => (
         <div className="max-w-[320px]">
           <div className="truncate font-medium" title={describeAudit(row.original)}>
@@ -192,14 +192,14 @@ export function AuditLogsListPage() {
     },
     {
       id: "status",
-      header: "状态",
+      header: "Status",
       cell: ({ row }) => (
         <Badge variant={statusBadgeVariant(row.original.status)}>{row.original.status}</Badge>
       ),
     },
     {
       id: "channel",
-      header: "通道",
+      header: "Channel",
       cell: ({ row }) => {
         const channel = channelOf(row.original);
         return channel ? (
@@ -211,7 +211,7 @@ export function AuditLogsListPage() {
     },
     {
       id: "actor",
-      header: "操作者",
+      header: "Actor",
       cell: ({ row }) => (
         <span className="block max-w-[160px] truncate font-mono text-xs">
           {row.original.actor_kind ? `${row.original.actor_kind}:` : ""}
@@ -221,7 +221,7 @@ export function AuditLogsListPage() {
     },
     {
       id: "resource",
-      header: "资源",
+      header: "Resource",
       cell: ({ row }) => (
         <span className="block max-w-[140px] truncate font-mono text-xs">
           {row.original.resource_id || "—"}
@@ -243,8 +243,8 @@ export function AuditLogsListPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="审计日志"
-        description="管理面（Console / CLI / SDK / API Key）全部系统变更的完整审计轨迹"
+        title="Audit Logs"
+        description="Complete audit trail of all system changes across the management plane (Console / CLI / SDK / API Key)"
       />
 
       <KitListPage
@@ -253,25 +253,25 @@ export function AuditLogsListPage() {
           <div className="space-y-4 p-6 pb-0">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
               <div className="space-y-1">
-                <Label htmlFor="audit-action">操作</Label>
+                <Label htmlFor="audit-action">Action</Label>
                 <Input
                   id="audit-action"
-                  placeholder="如 FunctionsService/UpdateFunction"
+                  placeholder="e.g. FunctionsService/UpdateFunction"
                   value={filters.action ?? ""}
                   onChange={(e) => setFilter("action", e.target.value)}
                 />
               </div>
               <div className="space-y-1">
-                <Label>状态</Label>
+                <Label>Status</Label>
                 <Select
                   value={filters.status ?? "all"}
                   onValueChange={(v) => setFilter("status", v === "all" ? "" : v)}
                 >
-                  <SelectTrigger aria-label="状态">
-                    <SelectValue placeholder="全部" />
+                  <SelectTrigger aria-label="Status">
+                    <SelectValue placeholder="All" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">全部</SelectItem>
+                    <SelectItem value="all">All</SelectItem>
                     <SelectItem value="success">success</SelectItem>
                     <SelectItem value="denied">denied</SelectItem>
                     <SelectItem value="throttled">throttled</SelectItem>
@@ -279,7 +279,7 @@ export function AuditLogsListPage() {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="audit-actor">操作者 ID</Label>
+                <Label htmlFor="audit-actor">Actor ID</Label>
                 <Input
                   id="audit-actor"
                   value={filters.actor_id ?? ""}
@@ -287,7 +287,7 @@ export function AuditLogsListPage() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="audit-resource">资源 ID</Label>
+                <Label htmlFor="audit-resource">Resource ID</Label>
                 <Input
                   id="audit-resource"
                   value={filters.resource_id ?? ""}
@@ -295,7 +295,7 @@ export function AuditLogsListPage() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="audit-after">起始时间</Label>
+                <Label htmlFor="audit-after">From</Label>
                 <Input
                   id="audit-after"
                   type="datetime-local"
@@ -304,7 +304,7 @@ export function AuditLogsListPage() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="audit-before">截止时间</Label>
+                <Label htmlFor="audit-before">To</Label>
                 <Input
                   id="audit-before"
                   type="datetime-local"
@@ -316,18 +316,18 @@ export function AuditLogsListPage() {
             {platformAdmin && (
               <div className="flex flex-wrap items-center gap-3">
                 <div className="w-56 space-y-1">
-                  <Label>视图范围</Label>
+                  <Label>Scope</Label>
                   <Select
                     value={filters.scope ?? "project"}
                     onValueChange={(v) => setFilter("scope", v === "project" ? "" : v)}
                   >
-                    <SelectTrigger aria-label="视图范围">
+                    <SelectTrigger aria-label="Scope">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="project">当前项目</SelectItem>
-                      <SelectItem value="include_platform">当前项目 + 平台级</SelectItem>
-                      <SelectItem value="all_projects">全部项目</SelectItem>
+                      <SelectItem value="project">Current project</SelectItem>
+                      <SelectItem value="include_platform">Current project + platform</SelectItem>
+                      <SelectItem value="all_projects">All projects</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -337,14 +337,14 @@ export function AuditLogsListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
           </div>
         }
-        emptyTitle={filtered ? "没有匹配的审计记录" : "暂无审计记录"}
+        emptyTitle={filtered ? "No matching audit logs" : "No audit logs yet"}
         emptyDescription={
           filtered
-            ? "调整过滤条件，或清空过滤恢复全部记录"
-            : "等待系统变更产生新的审计行"
+            ? "Adjust the filters, or clear them to see all records"
+            : "New audit entries will appear as system changes occur"
         }
         appendix={
           <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
@@ -385,13 +385,13 @@ function AuditLogDetail({ log }: { log: AuditLog }) {
 
   const fields: [string, string][] = [
     ["ID", log.id],
-    ["项目", log.project_id || "（平台级）"],
-    ["状态", log.status],
-    ["操作者", `${log.actor_kind ?? ""}${log.actor_id ? `: ${log.actor_id}` : ""}`],
-    ["资源", log.resource_id || "—"],
+    ["Project", log.project_id || "(platform)"],
+    ["Status", log.status],
+    ["Actor", `${log.actor_kind ?? ""}${log.actor_id ? `: ${log.actor_id}` : ""}`],
+    ["Resource", log.resource_id || "—"],
     ["IP", log.ip || "—"],
     ["User-Agent", log.user_agent || "—"],
-    ["时间", log.created_at ? formatDateTime(log.created_at, tz) : "—"],
+    ["Time", log.created_at ? formatDateTime(log.created_at, tz) : "—"],
   ];
 
   return (
@@ -409,7 +409,7 @@ function AuditLogDetail({ log }: { log: AuditLog }) {
 
       {changes && Object.keys(changes).length > 0 && (
         <div className="space-y-2">
-          <div className="text-xs font-semibold text-muted-foreground">字段变更</div>
+          <div className="text-xs font-semibold text-muted-foreground">Field changes</div>
           <div className="rounded-md border p-3 space-y-1.5">
             {Object.entries(changes).map(([field, change]) => (
               <div key={field} className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 font-mono text-xs">
@@ -427,7 +427,7 @@ function AuditLogDetail({ log }: { log: AuditLog }) {
       {request !== undefined && (
         <div className="space-y-2">
           <div className="text-xs font-semibold text-muted-foreground">
-            请求摘要（脱敏后）
+            Request summary (sanitized)
           </div>
           <JsonEditor
             value={
@@ -445,7 +445,7 @@ function AuditLogDetail({ log }: { log: AuditLog }) {
 
       {(client !== undefined || Object.keys(rest).length > 0) && (
         <div className="space-y-2">
-          <div className="text-xs font-semibold text-muted-foreground">其他元数据</div>
+          <div className="text-xs font-semibold text-muted-foreground">Other metadata</div>
           <JsonEditor
             value={JSON.stringify({ ...(client ? { client } : {}), ...rest }, null, 2)}
             onChange={() => {}}

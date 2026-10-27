@@ -41,7 +41,7 @@ import { formatInt64 } from "@/lib/utils";
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/kit/query/data-table";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import { describeApiError } from "@/kit/errors";
 import {
@@ -78,7 +78,7 @@ export function PlansListPage() {
   const remove = useCommand(removePlanCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("计划已删除");
+        toast.success("Plan deleted");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -104,16 +104,16 @@ export function PlansListPage() {
       header: "Code",
       cell: ({ row }) => <span className="font-mono text-xs">{row.original.code}</span>,
     },
-    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
+    { id: "name", header: "Name", cell: ({ row }) => row.original.name },
     {
       id: "amount",
-      header: "金额",
+      header: "Amount",
       cell: ({ row }) => `${formatInt64(row.original.amount)} ${row.original.currency}`,
     },
-    { id: "interval", header: "周期", cell: ({ row }) => row.original.interval },
+    { id: "interval", header: "Interval", cell: ({ row }) => row.original.interval },
     {
       id: "status",
-      header: "状态",
+      header: "Status",
       cell: ({ row }) => (
         <Badge variant={row.original.status === "archived" ? "secondary" : "default"}>
           {row.original.status ?? "active"}
@@ -122,7 +122,7 @@ export function PlansListPage() {
     },
     {
       id: "created",
-      header: "创建时间",
+      header: "Created At",
       meta: { sortField: "created_at" },
       cell: ({ row }) => formatDateTime(row.original.created_at, tz),
     },
@@ -130,7 +130,7 @@ export function PlansListPage() {
       ? [
           {
             id: "actions",
-            header: "操作",
+            header: "Actions",
             cell: ({ row }: { row: { original: SubscriptionPlan } }) => (
               <RowDeleteButton
                 onConfirm={() => remove.mutate({ id: row.original.id })}
@@ -144,7 +144,7 @@ export function PlansListPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="订阅计划" description="平台托管 / 渠道托管共用计划" />
+      <PageHeader title="Subscription Plans" description="Plans shared across platform and provider modes" />
 
       <KitListPage
         list={shownList}
@@ -153,18 +153,18 @@ export function PlansListPage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="当前页内搜索 code / 名称..."
+              placeholder="Search this page by code / name..."
               className="h-8 w-56"
             />
             <div className="ml-auto flex gap-2">
               <Button variant="outline" asChild>
-                <Link to="/console/subscriptions">订阅列表</Link>
+                <Link to="/console/subscriptions">Subscriptions</Link>
               </Button>
               {writeable ? (
                 <Button asChild>
                   <Link to="/console/subscriptions/plans/new">
                     <Plus className="h-4 w-4 mr-2" />
-                    新建计划
+                    New Plan
                   </Link>
                 </Button>
               ) : null}
@@ -173,12 +173,12 @@ export function PlansListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
           </div>
         }
-        emptyTitle={search !== "" ? "没有匹配的计划" : "暂无计划"}
+        emptyTitle={search !== "" ? "No matching plans" : "No plans yet"}
         emptyDescription={
-          search !== "" ? "调整搜索词，或清空恢复当前页全部行" : undefined
+          search !== "" ? "Adjust the search term, or clear it to restore all rows on this page" : undefined
         }
       >
         <div className="px-6 pb-2 pt-2">
@@ -209,7 +209,7 @@ export function PlanNewPage() {
   const create = useCommand(createPlanCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("计划已创建");
+        toast.success("Plan created");
         navigate({ to: `/console/subscriptions/plans/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
@@ -221,9 +221,9 @@ export function PlanNewPage() {
 
   return (
     <FormPageWrapper
-      title="新建订阅计划"
+      title="New Subscription Plan"
       backTo="/console/subscriptions/plans"
-      submitLabel="创建"
+      submitLabel="Create"
       onSubmit={(e) => {
         e.preventDefault();
         create.mutate({ code, name, amount, currency, interval, graceDays });
@@ -232,11 +232,11 @@ export function PlanNewPage() {
       submitDisabled={!code || !name || !amount}
     >
       <FormField id="code" label="Code" value={code} onChange={setCode} required placeholder="pro" />
-      <FormField id="name" label="名称" value={name} onChange={setName} required />
-      <FormField id="amount" label="金额（最小单位整数）" value={amount} onChange={setAmount} required placeholder="999" />
-      <FormField id="currency" label="币种" value={currency} onChange={setCurrency} required />
+      <FormField id="name" label="Name" value={name} onChange={setName} required />
+      <FormField id="amount" label="Amount (minor units)" value={amount} onChange={setAmount} required placeholder="999" />
+      <FormField id="currency" label="Currency" value={currency} onChange={setCurrency} required />
       <div className="space-y-2">
-        <Label>周期</Label>
+        <Label>Interval</Label>
         <Select value={interval} onValueChange={setInterval}>
           <SelectTrigger>
             <SelectValue />
@@ -248,7 +248,7 @@ export function PlanNewPage() {
           </SelectContent>
         </Select>
       </div>
-      <FormField id="grace" label="宽限天数" value={graceDays} onChange={setGraceDays} />
+      <FormField id="grace" label="Grace Period (days)" value={graceDays} onChange={setGraceDays} />
     </FormPageWrapper>
   );
 }
@@ -267,7 +267,7 @@ export function PlanDetailPage() {
   const remove = useCommand(removePlanCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("计划已删除");
+        toast.success("Plan deleted");
         navigate({ to: "/console/subscriptions/plans" });
       } else if (result) {
         toast.error(result.message);
@@ -290,10 +290,10 @@ export function PlanDetailPage() {
       <DetailGrid
         items={[
           { label: "ID", value: plan.id, mono: true },
-          { label: "金额", value: `${formatInt64(plan.amount)} ${plan.currency}`, mono: true },
-          { label: "周期", value: plan.interval },
-          { label: "宽限天数", value: String(plan.grace_days ?? 0) },
-          { label: "状态", value: plan.status ?? "active" },
+          { label: "Amount", value: `${formatInt64(plan.amount)} ${plan.currency}`, mono: true },
+          { label: "Interval", value: plan.interval },
+          { label: "Grace Period (days)", value: String(plan.grace_days ?? 0) },
+          { label: "Status", value: plan.status ?? "active" },
         ]}
       />
     </DetailPageWrapper>
@@ -367,20 +367,20 @@ export function SubscriptionsListPage() {
     },
     {
       id: "user",
-      header: "用户",
+      header: "User",
       cell: ({ row }) => (
         <span className="font-mono text-xs">{row.original.user_id ?? "—"}</span>
       ),
     },
     {
       id: "plan",
-      header: "计划",
+      header: "Plan",
       cell: ({ row }) => row.original.plan_code ?? row.original.plan_id ?? "—",
     },
-    { id: "mode", header: "模式", cell: ({ row }) => row.original.mode },
+    { id: "mode", header: "Mode", cell: ({ row }) => row.original.mode },
     {
       id: "status",
-      header: "状态",
+      header: "Status",
       cell: ({ row }) => (
         <Badge variant={row.original.status === "active" ? "default" : "secondary"}>
           {row.original.status}
@@ -389,7 +389,7 @@ export function SubscriptionsListPage() {
     },
     {
       id: "created",
-      header: "创建时间",
+      header: "Created At",
       meta: { sortField: "created_at" },
       cell: ({ row }) => formatDateTime(row.original.created_at, tz),
     },
@@ -399,7 +399,7 @@ export function SubscriptionsListPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="订阅" description="用户订阅合同（不是资产）" />
+      <PageHeader title="Subscriptions" description="User subscription contracts (not assets)" />
 
       <KitListPage
         list={shownList}
@@ -414,27 +414,27 @@ export function SubscriptionsListPage() {
             >
               <div className="space-y-1">
                 <Label htmlFor="subs-filter-user" className="text-xs text-muted-foreground">
-                  用户 ID
+                  User ID
                 </Label>
                 <Input
                   id="subs-filter-user"
                   value={userIdInput}
                   onChange={(e) => setUserIdInput(e.target.value)}
-                  placeholder="按 UserID 精确过滤"
+                  placeholder="Filter by exact UserID"
                   className="h-8 w-[280px] font-mono text-xs"
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">状态</Label>
+                <Label className="text-xs text-muted-foreground">Status</Label>
                 <Select
                   value={filters.status || "all"}
                   onValueChange={(v) => setFilter("status", v === "all" ? "" : v)}
                 >
-                  <SelectTrigger className="h-8 w-[130px]" aria-label="状态过滤">
+                  <SelectTrigger className="h-8 w-[130px]" aria-label="Filter by status">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">全部</SelectItem>
+                    <SelectItem value="all">All</SelectItem>
                     {SUB_STATUS_OPTIONS.map((s) => (
                       <SelectItem key={s} value={s}>
                         {s}
@@ -445,7 +445,7 @@ export function SubscriptionsListPage() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="subs-filter-after" className="text-xs text-muted-foreground">
-                  创建时间从
+                  Created From
                 </Label>
                 <Input
                   id="subs-filter-after"
@@ -457,7 +457,7 @@ export function SubscriptionsListPage() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="subs-filter-before" className="text-xs text-muted-foreground">
-                  到
+                  To
                 </Label>
                 <Input
                   id="subs-filter-before"
@@ -468,11 +468,11 @@ export function SubscriptionsListPage() {
                 />
               </div>
               <Button type="submit" variant="outline" size="sm">
-                查询
+                Apply
               </Button>
               {filtersDirty && (
                 <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
-                  清除
+                  Clear
                 </Button>
               )}
             </form>
@@ -480,26 +480,26 @@ export function SubscriptionsListPage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="当前页内搜索用户 / 计划 / 状态..."
+                placeholder="Search this page by user / plan / status..."
                 className="h-8 w-56"
               />
               <Button variant="outline" asChild className="ml-auto">
-                <Link to="/console/subscriptions/plans">计划</Link>
+                <Link to="/console/subscriptions/plans">Plans</Link>
               </Button>
             </div>
           </div>
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
           </div>
         }
-        emptyTitle={search !== "" ? "没有匹配的订阅" : filtered ? "该过滤条件下暂无订阅" : "暂无订阅"}
+        emptyTitle={search !== "" ? "No matching subscriptions" : filtered ? "No subscriptions match these filters" : "No subscriptions yet"}
         emptyDescription={
           search !== ""
-            ? "调整搜索词，或清空恢复当前页全部行"
+            ? "Adjust the search term, or clear it to restore all rows on this page"
             : filtered
-              ? "调整过滤条件，或清除恢复全部"
+              ? "Adjust the filters, or clear them to restore all"
               : undefined
         }
       >
@@ -534,7 +534,7 @@ export function SubscriptionDetailPage() {
   const cancel = useCommand(cancelSubscriptionCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("已标记期末取消");
+        toast.success("Scheduled to cancel at period end");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -545,7 +545,7 @@ export function SubscriptionDetailPage() {
   const expire = useCommand(expireSubscriptionCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("已强制过期");
+        toast.success("Force expired");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -559,7 +559,7 @@ export function SubscriptionDetailPage() {
 
   return (
     <DetailPageWrapper
-      title={`订阅 ${sub.id}`}
+      title={`Subscription ${sub.id}`}
       backTo="/console/subscriptions"
       actions={
         platformAdmin ? (
@@ -570,7 +570,7 @@ export function SubscriptionDetailPage() {
               disabled={cancel.pending}
               onClick={() => cancel.mutate({ id: id!, reason: "console" })}
             >
-              期末取消
+              Cancel at Period End
             </Button>
             <Button
               variant="destructive"
@@ -578,7 +578,7 @@ export function SubscriptionDetailPage() {
               disabled={expire.pending}
               onClick={() => expire.mutate({ id: id!, reason: "console" })}
             >
-              强制过期
+              Force Expire
             </Button>
           </div>
         ) : undefined
@@ -587,14 +587,14 @@ export function SubscriptionDetailPage() {
       <DetailGrid
         items={[
           { label: "ID", value: sub.id, mono: true },
-          { label: "用户", value: sub.user_id ?? "—", mono: true },
-          { label: "计划", value: sub.plan_code ?? sub.plan_id ?? "—" },
-          { label: "模式", value: sub.mode },
-          { label: "状态", value: sub.status },
-          { label: "期末取消", value: sub.cancel_at_period_end ? "是" : "否" },
-          { label: "当前周期开始", value: formatDateTime(sub.current_period_start, tz) },
-          { label: "当前周期结束", value: formatDateTime(sub.current_period_end, tz) },
-          { label: "宽限至", value: formatDateTime(sub.grace_until, tz) },
+          { label: "User", value: sub.user_id ?? "—", mono: true },
+          { label: "Plan", value: sub.plan_code ?? sub.plan_id ?? "—" },
+          { label: "Mode", value: sub.mode },
+          { label: "Status", value: sub.status },
+          { label: "Cancel at Period End", value: sub.cancel_at_period_end ? "Yes" : "No" },
+          { label: "Current Period Start", value: formatDateTime(sub.current_period_start, tz) },
+          { label: "Current Period End", value: formatDateTime(sub.current_period_end, tz) },
+          { label: "Grace Until", value: formatDateTime(sub.grace_until, tz) },
         ]}
       />
     </DetailPageWrapper>

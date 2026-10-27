@@ -74,7 +74,7 @@ describe("toTrendSeries（MetricChart 投影，D 批）", () => {
     expect(series).toEqual([
       {
         key: "total",
-        label: "事件数",
+        label: "Events",
         points: [
           { t: Date.parse("2026-09-05T00:00:00Z"), v: 12 },
           { t: Date.parse("2026-09-06T00:00:00Z"), v: 3 },
@@ -82,7 +82,7 @@ describe("toTrendSeries（MetricChart 投影，D 批）", () => {
       },
       {
         key: "uv",
-        label: "活跃用户",
+        label: "Active users",
         points: [
           { t: Date.parse("2026-09-05T00:00:00Z"), v: 7 },
           { t: Date.parse("2026-09-06T00:00:00Z"), v: 0 },
@@ -93,8 +93,8 @@ describe("toTrendSeries（MetricChart 投影，D 批）", () => {
 
   it("空 points → 双空序列（块渲染「窗口内无样本」空态）", () => {
     expect(toTrendSeries([])).toEqual([
-      { key: "total", label: "事件数", points: [] },
-      { key: "uv", label: "活跃用户", points: [] },
+      { key: "total", label: "Events", points: [] },
+      { key: "uv", label: "Active users", points: [] },
     ]);
   });
 
@@ -106,7 +106,7 @@ describe("toTrendSeries（MetricChart 投影，D 批）", () => {
       ])
     );
     expect(built.fields).toEqual(["s0", "s1"]);
-    expect(built.labels).toEqual({ s0: "事件数", s1: "活跃用户" });
+    expect(built.labels).toEqual({ s0: "Events", s1: "Active users" });
     expect(built.rows).toHaveLength(2);
     expect(built.lastValues).toEqual({ s0: 0, s1: 0 });
   });
@@ -164,6 +164,6 @@ describe("errText", () => {
     const e = { response: { data: { error: { message: "timeseries: window exceeds limit" } } } };
     expect(errText(e)).toBe("timeseries: window exceeds limit");
     expect(errText(new Error("boom"))).toBe("boom");
-    expect(errText(undefined)).toBe("请求失败");
+    expect(errText(undefined)).toBe("Request failed");
   });
 });

@@ -113,12 +113,12 @@ export function toTrendSeries(
   return [
     {
       key: "total",
-      label: "事件数",
+      label: "Events",
       points: points.map((p) => ({ t: Date.parse(p.bucket), v: num(p.total) })),
     },
     {
       key: "uv",
-      label: "活跃用户",
+      label: "Active users",
       points: points.map((p) => ({ t: Date.parse(p.bucket), v: num(p.unique_users) })),
     },
   ];
@@ -126,10 +126,10 @@ export function toTrendSeries(
 
 // errText 提取 axios/gRPC 网关错误信息（ErrorResponse.error.message 优先）。
 export function errText(error: unknown): string {
-  if (!error) return "请求失败";
+  if (!error) return "Request failed";
   const e = error as {
     response?: { data?: { error?: { message?: string } } };
     message?: string;
   };
-  return e.response?.data?.error?.message || e.message || "请求失败";
+  return e.response?.data?.error?.message || e.message || "Request failed";
 }

@@ -79,7 +79,7 @@ describe("WebhooksListPage", () => {
     await renderList();
     expect(await screen.findByText("https://api.example.com/hooks")).toBeTruthy();
     expect(screen.getByText("wh-1")).toBeTruthy();
-    expect(screen.getByText("2 条")).toBeTruthy();
+    expect(screen.getByText("2 events")).toBeTruthy();
     expect(screen.getByText("enabled")).toBeTruthy();
   });
 
@@ -106,7 +106,7 @@ describe("WebhooksListPage", () => {
       expect.objectContaining({ pageSize: 20, pageToken: undefined }),
     );
     // 下一页 → 游标 push 进 URL → 请求带 page_token
-    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() =>
       expect(listWebhooks).toHaveBeenLastCalledWith(
         expect.objectContaining({ pageToken: "tok-2" }),
@@ -134,10 +134,10 @@ describe("WebhooksListPage", () => {
     vi.mocked(deleteWebhook).mockResolvedValue(undefined);
     await renderList();
     await screen.findByText("wh-1");
-    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     // torchwood 存量确认壳：确认钮与触发钮同名，scope 到对话框内
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(deleteWebhook).toHaveBeenCalledWith("wh-1", { __skipToast: true }),
     );
@@ -203,7 +203,7 @@ describe("WebhookDetailPage", () => {
     });
     vi.mocked(listDeliveries).mockResolvedValue({ rows: [] });
     renderDetail();
-    await screen.findByText("暂无投递记录");
+    await screen.findByText("No deliveries yet");
     expect(listDeliveries).toHaveBeenLastCalledWith("wh-1", {
       pageSize: 20,
       pageToken: "",

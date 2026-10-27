@@ -55,7 +55,7 @@ export function FunctionClientPolicyCard({
   const save = useCommand(updateFunctionClientPolicyCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("客户端调用策略已保存");
+        toast.success("Client policy saved");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -67,22 +67,25 @@ export function FunctionClientPolicyCard({
   return (
     <Card>
       <CardHeader className="space-y-0 pb-3">
-        <CardTitle className="text-sm">客户端调用</CardTitle>
+        <CardTitle className="text-sm">Client Invocations</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-3 max-w-3xl">
           <p className="text-xs text-muted-foreground">
-            开启后终端用户（Client API 登录态）可
-            <code className="font-mono"> POST /v1/functions/&#123;id&#125;:invoke</code>
-            同步调用本函数。平台强制每用户限频（超限 429 + RetryInfo）与每用户
-            并发闸门；调用经签名 HTTP 送达 endpoint target（v4：执行位置归
-            部署侧）。data 为 JSON object 且 ≤ 32KB。
+            When enabled, end users (signed in via the Client API) can invoke this function
+            synchronously via
+            <code className="font-mono"> POST /v1/functions/&#123;id&#125;:invoke</code>. The
+            platform enforces per-user rate limiting (429 + RetryInfo when exceeded) and a
+            per-user concurrency gate; invocations reach the endpoint target over signed HTTP
+            (v4: execution location belongs to the deployment side). data must be a JSON object
+            and ≤ 32KB.
           </p>
           <div className="text-xs text-muted-foreground">
-            幂等：客户端可携带幂等键（≤128 字符），
+            Idempotency: clients may carry an idempotency key (≤128 characters);
             <code className="font-mono">(project, function, user, key)</code>
-            唯一去重——网络超时重试返回既有执行原样（进行中返回 running），
-            广告奖励等「调用即发资产」场景请配合以 execution_id 派生业务幂等键。
+            deduplicates uniquely — retries after network timeouts return the existing execution
+            as-is (running if still in progress). For scenarios that grant assets on invocation,
+            such as ad rewards, derive a business idempotency key from execution_id.
           </div>
 
           <label className="flex items-center gap-2 text-sm">
@@ -91,12 +94,12 @@ export function FunctionClientPolicyCard({
               onChange={(e) => setCallable(e.target.checked)}
               disabled={!writeable}
             />
-            允许客户端调用（client_callable）
-            {fn.client_callable && <Badge variant="secondary">已开启</Badge>}
+            Allow client invocation (client_callable)
+            {fn.client_callable && <Badge variant="secondary">Enabled</Badge>}
           </label>
 
           <div className="flex items-center gap-3">
-            <Label className="w-28">每用户配额</Label>
+            <Label className="w-28">Per-user quota</Label>
             <Input
               type="number"
               className="w-28"
@@ -105,11 +108,11 @@ export function FunctionClientPolicyCard({
               min={1}
               disabled={!writeable || !callable}
             />
-            <span className="text-xs text-muted-foreground">次 / 窗口（开启 client_callable 时必须 ≥ 1）</span>
+            <span className="text-xs text-muted-foreground">invocations / window (must be ≥ 1 when client_callable is enabled)</span>
           </div>
 
           <div className="flex items-center gap-3">
-            <Label className="w-28">限频窗口</Label>
+            <Label className="w-28">Rate limit window</Label>
             <Select
               value={limitWindow}
               onValueChange={(v) => setLimitWindow(v as "minute" | "hour" | "day")}
@@ -119,9 +122,9 @@ export function FunctionClientPolicyCard({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="minute">minute（每分钟，UTC 对齐）</SelectItem>
-                <SelectItem value="hour">hour（每小时，UTC 对齐）</SelectItem>
-                <SelectItem value="day">day（每日，UTC 日期）</SelectItem>
+                <SelectItem value="minute">minute (per minute, UTC-aligned)</SelectItem>
+                <SelectItem value="hour">hour (per hour, UTC-aligned)</SelectItem>
+                <SelectItem value="day">day (per day, UTC date)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -140,7 +143,7 @@ export function FunctionClientPolicyCard({
                 })
               }
             >
-              {save.pending ? "保存中..." : "保存策略"}
+              {save.pending ? "Saving..." : "Save policy"}
             </Button>
           )}
         </div>

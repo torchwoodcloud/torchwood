@@ -64,17 +64,17 @@ describe("createApiKeyCommand（表单值→提交形收敛在 run 内）", () =
   });
 
   it("结果两分：400→rejected（带 gateway code）、409→conflict、其余 throw ApiError", async () => {
-    mockCreate.mockRejectedValue(axiosErr(400, { code: "E_INVALID_ARGUMENT", message: "名称无效" }));
+    mockCreate.mockRejectedValue(axiosErr(400, { code: "E_INVALID_ARGUMENT", message: "Invalid name" }));
     await expect(runCommand(createApiKeyCommand, { name: "", wildcard: false, selected: [], manual: "" }, {})).resolves.toEqual({
       status: "rejected",
       code: "E_INVALID_ARGUMENT",
-      message: "名称无效",
+      message: "Invalid name",
     });
 
-    mockCreate.mockRejectedValue(axiosErr(409, { message: "同名 Key 已存在" }));
+    mockCreate.mockRejectedValue(axiosErr(409, { message: "A key with the same name already exists" }));
     await expect(runCommand(createApiKeyCommand, { name: "x", wildcard: false, selected: [], manual: "" }, {})).resolves.toEqual({
       status: "conflict",
-      message: "同名 Key 已存在",
+      message: "A key with the same name already exists",
     });
 
     mockCreate.mockRejectedValue(axiosErr(500, { message: "boom" }));

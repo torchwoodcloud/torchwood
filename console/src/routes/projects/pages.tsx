@@ -19,7 +19,7 @@ import { formatDateTime } from "@/lib/datetime";
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/kit/query/data-table";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -69,10 +69,10 @@ export function ProjectsListPage() {
         </span>
       ),
     },
-    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
+    { id: "name", header: "Name", cell: ({ row }) => row.original.name },
     {
       id: "status",
-      header: "状态",
+      header: "Status",
       cell: ({ row }) => (
         <Badge variant={row.original.status === "active" ? "default" : "secondary"}>
           {row.original.status}
@@ -81,14 +81,14 @@ export function ProjectsListPage() {
     },
     {
       id: "created",
-      header: "创建时间",
+      header: "Created",
       cell: ({ row }) => formatDateTime(row.original.created_at, tz),
     },
   ];
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Projects" description="管理 Torchwood 项目" />
+      <PageHeader title="Projects" description="Manage Torchwood projects" />
 
       <KitListPage
         list={shownList}
@@ -97,14 +97,14 @@ export function ProjectsListPage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="当前页内搜索项目名称或 ID..."
+              placeholder="Search projects by name or ID on this page…"
               className="h-8 w-56"
             />
             {platformAdmin ? (
               <Button asChild className="ml-auto">
                 <Link to="/console/projects/new">
                   <Plus className="h-4 w-4 mr-2" />
-                  新建项目
+                  New Project
                 </Link>
               </Button>
             ) : null}
@@ -112,19 +112,19 @@ export function ProjectsListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
           </div>
         }
-        emptyTitle={search !== "" ? "没有匹配的项目" : "暂无项目"}
+        emptyTitle={search !== "" ? "No matching projects" : "No projects yet"}
         emptyDescription={
           search !== ""
-            ? "调整搜索词，或清空恢复当前页全部行"
-            : "创建第一个项目以开始使用"
+            ? "Adjust your search, or clear it to restore all rows on this page"
+            : "Create your first project to get started"
         }
         emptyAction={
           platformAdmin ? (
             <Button asChild>
-              <Link to="/console/projects/new">新建项目</Link>
+              <Link to="/console/projects/new">New Project</Link>
             </Button>
           ) : undefined
         }
@@ -155,7 +155,7 @@ export function ProjectNewPage() {
   const create = useCommand(createProjectCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("项目创建成功");
+        toast.success("Project created");
         navigate({ to: `/console/projects/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
@@ -167,10 +167,10 @@ export function ProjectNewPage() {
 
   return (
     <FormPageWrapper
-      title="新建项目"
-      description="添加新项目到平台"
+      title="New Project"
+      description="Add a new project to the platform"
       backTo="/console/projects"
-      submitLabel="创建"
+      submitLabel="Create"
       onSubmit={(e) => {
         e.preventDefault();
         create.mutate({ id, name, description: description || undefined });
@@ -185,15 +185,15 @@ export function ProjectNewPage() {
         onChange={setId}
         required
         placeholder="shop"
-        hint="小写字母开头，仅小写字母与数字，最长 28。创建后不可改。"
+        hint="Starts with a lowercase letter; only lowercase letters and digits, up to 28 characters. Cannot be changed after creation."
       />
-      <FormField id="name" label="名称" value={name} onChange={setName} required placeholder="My Project" />
+      <FormField id="name" label="Name" value={name} onChange={setName} required placeholder="My Project" />
       <FormField
         id="description"
-        label="描述"
+        label="Description"
         value={description}
         onChange={setDescription}
-        placeholder="可选描述"
+        placeholder="Optional description"
       />
     </FormPageWrapper>
   );
@@ -220,13 +220,13 @@ export function ProjectDetailPage() {
   return (
     <DetailPageWrapper
       title={project.name}
-      description="项目详情"
+      description="Project details"
       backTo="/console/projects"
       actions={
         <Button asChild variant="outline" size="sm">
           <Link to="/console/projects/$id/settings" params={{ id: project.id }}>
             <Settings className="h-4 w-4 mr-2" />
-            项目设置
+            Project Settings
           </Link>
         </Button>
       }
@@ -234,11 +234,11 @@ export function ProjectDetailPage() {
       <DetailGrid
         items={[
           { label: "ID", value: project.id, mono: true },
-          { label: "名称", value: project.name },
-          { label: "描述", value: project.description || "—" },
-          { label: "状态", value: project.status },
-          { label: "创建时间", value: formatDateTime(project.created_at, tz) },
-          { label: "更新时间", value: formatDateTime(project.updated_at, tz) },
+          { label: "Name", value: project.name },
+          { label: "Description", value: project.description || "—" },
+          { label: "Status", value: project.status },
+          { label: "Created", value: formatDateTime(project.created_at, tz) },
+          { label: "Updated", value: formatDateTime(project.updated_at, tz) },
         ]}
       />
     </DetailPageWrapper>

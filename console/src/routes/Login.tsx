@@ -10,7 +10,7 @@ import { getSetupStatus, signUp } from "@/api/auth";
 type SetupState = "loading" | "login" | "setup";
 
 const schemaResourceIDPattern = "^[a-z][a-z0-9]{0,27}$";
-const schemaResourceIDHint = "小写字母开头，仅小写字母与数字，最长 28。创建后不可改。";
+const schemaResourceIDHint = "Start with a lowercase letter; lowercase letters and digits only, up to 28. Immutable after creation.";
 
 export function Login() {
   const [email, setEmail] = useState("");
@@ -52,7 +52,7 @@ export function Login() {
       .catch(() => {
         if (!cancelled) {
           setSetupState("login");
-          setSetupProbeError("无法获取初始化状态，可重试或直接登录");
+          setSetupProbeError("Could not get setup status. You can retry or sign in directly.");
         }
       });
     return () => {
@@ -78,7 +78,7 @@ export function Login() {
       navigate({ to: "/console", replace: true });
     } catch (err) {
       const msg = extractErrorMessage(err);
-      setError(msg || "登录失败");
+      setError(msg || "Sign in failed");
     } finally {
       setLoading(false);
     }
@@ -88,7 +88,7 @@ export function Login() {
     e.preventDefault();
     setError("");
     if (password !== confirmPassword) {
-      setError("两次输入的密码不一致");
+      setError("Passwords do not match");
       return;
     }
     setLoading(true);
@@ -106,7 +106,7 @@ export function Login() {
       navigate({ to: "/console", replace: true });
     } catch (err) {
       const msg = extractErrorMessage(err);
-      setError(msg || "初始化失败");
+      setError(msg || "Setup failed");
     } finally {
       setLoading(false);
     }
@@ -120,7 +120,7 @@ export function Login() {
         <CardHeader>
           <CardTitle className="text-xl">Torchwood Console</CardTitle>
           <CardDescription>
-            {isSetup ? "首次部署：创建第一个管理员账户" : "使用管理员账户登录"}
+            {isSetup ? "Initial setup: create the first admin account" : "Sign in with your admin account"}
           </CardDescription>
         </CardHeader>
         <form onSubmit={isSetup ? handleSignUp : handleSubmit}>
@@ -147,7 +147,7 @@ export function Login() {
             </div>
             {isSetup && (
               <div className="space-y-2">
-                <Label htmlFor="confirm-password">确认密码</Label>
+                <Label htmlFor="confirm-password">Confirm password</Label>
                 <Input
                   id="confirm-password"
                   type="password"
@@ -185,8 +185,10 @@ export function Login() {
                   placeholder="app"
                 />
                 <p className="text-xs text-muted-foreground">
-                  规则同上。缺省 app，将作为项目自动创建的第一业务库（可改为其它合法
-                  id）。系统用户 / 文件 / 组不在此库，走 Users / Storage / Groups。
+                  Same rules as above. Defaults to app — it becomes the first
+                  business database auto-created with the project (can be
+                  changed to another valid id). System users / files / groups
+                  are not stored here; use Users / Storage / Groups.
                 </p>
               </div>
             )}
@@ -212,27 +214,28 @@ export function Login() {
                   size="sm"
                   onClick={probeSetup}
                 >
-                  重试
+                  Retry
                 </Button>
               </div>
             )}
             {sessionExpired && !error && (
-              <p className="text-sm text-muted-foreground">会话已过期，请重新登录</p>
+              <p className="text-sm text-muted-foreground">Session expired. Please sign in again.</p>
             )}
             {passwordChanged && !error && (
-              <p className="text-sm text-muted-foreground">密码已修改，请重新登录</p>
+              <p className="text-sm text-muted-foreground">Password changed. Please sign in again.</p>
             )}
             {error && <p className="text-sm text-destructive">{error}</p>}
             {isSetup && (
               <p className="text-xs text-muted-foreground">
-                注册后创建指定项目与数据库，首个管理员获得 owner 角色。
-                API Key 请登录后到 API Keys 页面生成。
+                Creates the specified project and database after signup; the
+                first admin gets the owner role. Generate API Keys on the
+                API Keys page after signing in.
               </p>
             )}
           </CardContent>
           <CardFooter>
             <Button type="submit" className="w-full" disabled={loading || setupState === "loading"}>
-              {loading ? (isSetup ? "初始化中..." : "登录中...") : isSetup ? "创建管理员并初始化" : "登录"}
+              {loading ? (isSetup ? "Setting up..." : "Signing in...") : isSetup ? "Create admin and initialize" : "Sign in"}
             </Button>
           </CardFooter>
         </form>

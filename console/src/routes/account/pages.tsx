@@ -65,19 +65,19 @@ export function AccountProfilePage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>资料</CardTitle>
+          <CardTitle>Profile</CardTitle>
           <CardDescription>
-            当前登录的 Console 管理员账户；邮箱与角色由 owner 管理，如需修改请联系管理员。
+            The currently signed-in Console admin account; email and role are managed by the owner. Contact an admin to change them.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <DetailGrid
             items={[
-              { label: "邮箱", value: me.email },
-              { label: "角色", value: <AdminRoleBadge role={me.role} /> },
+              { label: "Email", value: me.email },
+              { label: "Role", value: <AdminRoleBadge role={me.role} /> },
               { label: "ID", value: me.id, mono: true },
-              { label: "创建时间", value: formatDateTime(me.created_at, tz) },
-              { label: "更新时间", value: formatDateTime(me.updated_at, tz) },
+              { label: "Created", value: formatDateTime(me.created_at, tz) },
+              { label: "Updated", value: formatDateTime(me.updated_at, tz) },
             ]}
           />
         </CardContent>
@@ -114,9 +114,9 @@ function ChangePasswordCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>修改密码</CardTitle>
+        <CardTitle>Change Password</CardTitle>
         <CardDescription>
-          修改成功后所有设备的登录凭证将失效，需要重新登录。
+          After a successful change, sign-in credentials on all devices will be invalidated and you will need to sign in again.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -126,7 +126,7 @@ function ChangePasswordCard() {
             e.preventDefault();
             setError("");
             if (newPassword !== confirmPassword) {
-              setError("两次输入的新密码不一致");
+              setError("New passwords do not match");
               return;
             }
             change.mutate({
@@ -137,7 +137,7 @@ function ChangePasswordCard() {
         >
           <FormField
             id="current-password"
-            label="当前密码"
+            label="Current password"
             type="password"
             value={currentPassword}
             onChange={setCurrentPassword}
@@ -145,16 +145,16 @@ function ChangePasswordCard() {
           />
           <FormField
             id="new-password"
-            label="新密码"
+            label="New password"
             type="password"
             value={newPassword}
             onChange={setNewPassword}
             required
-            hint="至少 8 位，且同时包含字母和数字"
+            hint="At least 8 characters, with both letters and digits"
           />
           <FormField
             id="confirm-password"
-            label="确认新密码"
+            label="Confirm new password"
             type="password"
             value={confirmPassword}
             onChange={setConfirmPassword}
@@ -162,7 +162,7 @@ function ChangePasswordCard() {
           />
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
           <Button type="submit" disabled={change.pending}>
-            {change.pending ? "提交中…" : "修改密码"}
+            {change.pending ? "Submitting…" : "Change Password"}
           </Button>
         </form>
       </CardContent>
@@ -227,7 +227,7 @@ function TimezoneDialog({
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         queryClient.setQueryData(["console-admin-me"], result.payload);
-        toast.success("偏好已保存");
+        toast.success("Preferences saved");
         onOpenChange(false);
         setDraft(null);
         setFilter("");
@@ -254,14 +254,14 @@ function TimezoneDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>修改时区</DialogTitle>
+          <DialogTitle>Change Time Zone</DialogTitle>
           <DialogDescription>
-            时间字段将按所选时区显示（当前生效：{resolveTimezone(current)}）。
+            Time fields will be displayed in the selected time zone (current: {resolveTimezone(current)}).
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <Input
-            placeholder="搜索时区，如 Shanghai / Tokyo / Berlin…"
+            placeholder="Search time zones, e.g. Shanghai / Tokyo / Berlin…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
@@ -278,7 +278,7 @@ function TimezoneDialog({
             >
               <span className="flex items-center gap-2">
                 <Globe className="h-4 w-4" />
-                跟随浏览器
+                Follow browser
                 <span className="text-xs text-muted-foreground">{browserTz}</span>
               </span>
               {value === "" && <Check className="h-4 w-4" />}
@@ -300,20 +300,20 @@ function TimezoneDialog({
             ))}
             {timezones.length === 0 && (
               <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-                无匹配时区
+                No matching time zones
               </div>
             )}
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            取消
+            Cancel
           </Button>
           <Button
             disabled={!dirty || save.pending}
             onClick={() => save.mutate({ timezone: value })}
           >
-            {save.pending ? "保存中…" : "保存"}
+            {save.pending ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -332,16 +332,16 @@ export function AccountPreferencesPage() {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>偏好</CardTitle>
+          <CardTitle>Preferences</CardTitle>
           <CardDescription>
-            个人配置项；点击右侧当前值修改，保存后立即生效。
+            Personal settings; click the current value on the right to change it. Changes take effect immediately after saving.
           </CardDescription>
         </CardHeader>
         <CardContent className="border-t p-0">
           <PreferenceItem
-            title="时区"
-            description="所有时间字段按此时区显示"
-            value={me.timezone ? me.timezone : `跟随浏览器（${browserTimezone()}）`}
+            title="Time zone"
+            description="All time fields are displayed in this time zone"
+            value={me.timezone ? me.timezone : `Follow browser (${browserTimezone()})`}
             onEdit={() => setTzOpen(true)}
           />
         </CardContent>

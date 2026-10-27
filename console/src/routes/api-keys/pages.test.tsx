@@ -82,11 +82,11 @@ describe("ApiKeyNewPage（useCommandForm + reveal）", () => {
     mockCreate.mockResolvedValue({ api_key: key, secret: "sk-live-once" });
     await renderPage("/console/api-keys/new", <ApiKeyNewPage />);
 
-    fireEvent.change(screen.getByLabelText("名称"), { target: { value: "prod" } });
-    fireEvent.change(screen.getByLabelText("自定义 Scopes（可选，逗号或换行分隔）"), {
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "prod" } });
+    fireEvent.change(screen.getByLabelText("Custom scopes (optional, comma- or newline-separated)"), {
       target: { value: "storage:media" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "创建" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() =>
       expect(mockCreate).toHaveBeenCalledWith(
@@ -96,24 +96,24 @@ describe("ApiKeyNewPage（useCommandForm + reveal）", () => {
     );
     // reveal 屏：secret 只在这一帧
     expect(await screen.findByText("sk-live-once")).toBeTruthy();
-    expect(screen.getByText("API Key 已创建")).toBeTruthy();
+    expect(screen.getByText("API Key created")).toBeTruthy();
   });
 
   it("名称必填：空提交不发货，字段错误可见", async () => {
     await renderPage("/console/api-keys/new", <ApiKeyNewPage />);
-    fireEvent.click(screen.getByRole("button", { name: "创建" }));
-    await screen.findByText("必填");
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await screen.findByText("Required");
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
   it("rejected（400）走结果盒：message-first + code 前缀，非 toast 异常", async () => {
-    mockCreate.mockRejectedValue(axiosErr(400, { code: "E_INVALID_ARGUMENT", message: "名称无效" }));
+    mockCreate.mockRejectedValue(axiosErr(400, { code: "E_INVALID_ARGUMENT", message: "Invalid name" }));
     await renderPage("/console/api-keys/new", <ApiKeyNewPage />);
-    fireEvent.change(screen.getByLabelText("名称"), { target: { value: "x" } });
-    fireEvent.click(screen.getByRole("button", { name: "创建" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "x" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
     const box = await screen.findByRole("alert");
     expect(box.textContent).toContain("E_INVALID_ARGUMENT");
-    expect(box.textContent).toContain("名称无效");
+    expect(box.textContent).toContain("Invalid name");
   });
 });
 
@@ -122,15 +122,15 @@ describe("ApiKeyDetailPage（编辑对话框 diff + 轮换双命令）", () => {
     mockGet.mockResolvedValue(key);
     mockUpdate.mockResolvedValue({ ...key, name: "prod2" });
     await renderPage("/console/api-keys/$id", <ApiKeyDetailPage />, "/console/api-keys/key-1");
-    fireEvent.click(await screen.findByRole("button", { name: "编辑" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
 
-    fireEvent.change(await screen.findByLabelText("名称"), { target: { value: "prod2" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    fireEvent.change(await screen.findByLabelText("Name"), { target: { value: "prod2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
       expect(mockUpdate).toHaveBeenCalledWith("key-1", { name: "prod2" }, { __skipToast: true }),
     );
-    await waitFor(() => expect(screen.queryByRole("button", { name: "保存" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save" })).toBeNull());
   });
 
   it("轮换：① 建 -rotated 同 scopes → secret 屏；② 旧 Key 立即过期", async () => {
@@ -139,9 +139,9 @@ describe("ApiKeyDetailPage（编辑对话框 diff + 轮换双命令）", () => {
     mockCreate.mockResolvedValue({ api_key: rotated, secret: "sk-rotated-once" });
     mockUpdate.mockResolvedValue(key);
     await renderPage("/console/api-keys/$id", <ApiKeyDetailPage />, "/console/api-keys/key-1");
-    fireEvent.click(await screen.findByRole("button", { name: "轮换" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Rotate" }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "① 创建新 Key" }));
+    fireEvent.click(await screen.findByRole("button", { name: "① Create new key" }));
     await waitFor(() =>
       expect(mockCreate).toHaveBeenCalledWith(
         { name: "prod-rotated", scopes: key.scopes },
@@ -150,7 +150,7 @@ describe("ApiKeyDetailPage（编辑对话框 diff + 轮换双命令）", () => {
     );
     expect(await screen.findByText("sk-rotated-once")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "② 旧 Key 立即过期" }));
+    fireEvent.click(screen.getByRole("button", { name: "② Expire old key now" }));
     await waitFor(() => expect(mockUpdate).toHaveBeenCalled());
     const [id, input] = mockUpdate.mock.calls[0];
     expect(id).toBe("key-1");
@@ -167,10 +167,10 @@ describe("ApiKeyDetailPage（编辑对话框 diff + 轮换双命令）", () => {
       // onSettled navigate 回列表——目标路由要在 harness 里注册
       [{ path: "/console/api-keys", element: <div /> }],
     );
-    fireEvent.click(await screen.findByRole("button", { name: "删除" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
     // torchwood 存量确认壳：确认钮与触发钮同名，scope 到对话框内
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(mockDelete).toHaveBeenCalledWith("key-1", { __skipToast: true }),
     );
@@ -187,7 +187,7 @@ describe("ApiKeysListPage（行删命令接线）", () => {
       expect.objectContaining({ pageSize: 20, pageToken: undefined }),
     );
     // 下一页 → 游标 push 进 URL → 请求带 page_token
-    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() =>
       expect(mockList).toHaveBeenLastCalledWith(
         expect.objectContaining({ pageToken: "tok-2" }),
@@ -200,9 +200,9 @@ describe("ApiKeysListPage（行删命令接线）", () => {
     mockDelete.mockResolvedValue(undefined);
     await renderPage("/console/api-keys", <ApiKeysListPage />);
     await screen.findByText("prod");
-    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(mockDelete).toHaveBeenCalledWith("key-1", { __skipToast: true }),
     );

@@ -25,7 +25,7 @@ import { gatewayErrorBody, toApiError } from "@/kit/errors";
 // DOCUMENT.VERSION_CONFLICT（HTTP 409 反而不是 OCC——是重复键/幂等进行中）；
 // 网关错误体的 ErrorInfo/BadRequest details（域码 reason、current_version、
 // field_violations）在 HTTP 面被丢弃，域码判别唯一可靠面 = message 前缀
-// "DOMAIN.CODE:"。域码中文映射表在本层（消费方文案权）。
+// "DOMAIN.CODE:"。域码展示文案映射表在本层（消费方文案权）。
 
 // —— 列表 fleet 化（§12.9-2）：文档列表换轨 collection（命令族保持工厂
 // 形态——dbId/collId 闭包是既有消费面与 OCC 测试面，不搬进资源 commands；
@@ -43,16 +43,16 @@ export interface DocumentFormValues {
   version?: number;
 }
 
-// 域码 → 中文文案（结果通道呈现；失败通道仍走 describeApiError）。
+// 域码 → 展示文案（结果通道呈现；失败通道仍走 describeApiError）。
 const DOMAIN_MESSAGES: Record<string, string> = {
-  "DOCUMENT.VERSION_CONFLICT": "文档已被其他修改抢先提交（版本不匹配），请刷新后重试",
-  "DOCUMENT.VERSION_REQUIRED": "文档缺少 OCC 版本信息，请刷新后重试",
-  "DOCUMENT.VERSION_INVALID": "OCC 版本值非法，请刷新后重试",
-  "DOCUMENT.ALREADY_EXISTS": "Document ID 已存在，请更换 ID 后重试",
-  "DOCUMENT.NOT_FOUND": "文档不存在（可能已被删除）",
-  "DOCUMENT.INVALID_ARGUMENT": "请求参数无效",
-  "DOCUMENT.NO_FIELDS_TO_UPDATE": "没有可更新的字段变更",
-  "IDEMPOTENCY.IN_PROGRESS": "同幂等键的请求仍在进行中，请稍后重试",
+  "DOCUMENT.VERSION_CONFLICT": "The document was modified by someone else (version mismatch). Please refresh and retry",
+  "DOCUMENT.VERSION_REQUIRED": "The document is missing OCC version info. Please refresh and retry",
+  "DOCUMENT.VERSION_INVALID": "Invalid OCC version value. Please refresh and retry",
+  "DOCUMENT.ALREADY_EXISTS": "Document ID already exists. Please use a different ID and retry",
+  "DOCUMENT.NOT_FOUND": "Document not found (it may have been deleted)",
+  "DOCUMENT.INVALID_ARGUMENT": "Invalid request parameters",
+  "DOCUMENT.NO_FIELDS_TO_UPDATE": "No fields to update",
+  "IDEMPOTENCY.IN_PROGRESS": "A request with the same idempotency key is in progress, please try again later",
 };
 
 /** message 前缀域码解析（"DOCUMENT.VERSION_CONFLICT: ..." → 域码）。 */
@@ -63,7 +63,7 @@ export function domainCodeOf(message: string | undefined): string | undefined {
 
 function messageOf(domainCode: string | undefined, fallback: string | undefined): string {
   if (domainCode && DOMAIN_MESSAGES[domainCode]) return DOMAIN_MESSAGES[domainCode];
-  return fallback ?? "请求失败";
+  return fallback ?? "Request failed";
 }
 
 /**
@@ -136,8 +136,8 @@ function buildDocumentData(
     } catch (err) {
       return {
         issues: {
-          message: "Data JSON 格式无效",
-          fieldErrors: { __json: `JSON 解析失败：${err instanceof Error ? err.message : String(err)}` },
+          message: "Invalid Data JSON format",
+          fieldErrors: { __json: `JSON parse failed: ${err instanceof Error ? err.message : String(err)}` },
         },
       };
     }
@@ -147,21 +147,21 @@ function buildDocumentData(
   for (const attr of attributes) {
     const raw = values[attr.key];
     if (raw === undefined || raw === "") {
-      if (attr.required) fieldErrors[attr.key] = "必填字段";
+      if (attr.required) fieldErrors[attr.key] = "Required field";
       continue;
     }
     if (attr.type === "json") {
       try {
         data[attr.key] = JSON.parse(raw);
       } catch (err) {
-        fieldErrors[attr.key] = `JSON 解析失败：${err instanceof Error ? err.message : String(err)}`;
+        fieldErrors[attr.key] = `JSON parse failed: ${err instanceof Error ? err.message : String(err)}`;
       }
       continue;
     }
     data[attr.key] = parseFieldValue(attr.type, raw);
   }
   if (Object.keys(fieldErrors).length > 0) {
-    return { issues: { message: "部分字段未通过校验", fieldErrors } };
+    return { issues: { message: "Some fields failed validation", fieldErrors } };
   }
   return { data };
 }
@@ -178,13 +178,13 @@ function buildIncrement(
     if (!delta) continue;
     const n = Number(delta);
     if (!Number.isInteger(n)) {
-      fieldErrors[`${attr.key}Δ`] = "增量必须是整数";
+      fieldErrors[`${attr.key}Δ`] = "Increment must be an integer";
       continue;
     }
     if (n !== 0) increment[attr.key] = n;
   }
   if (Object.keys(fieldErrors).length > 0) {
-    return { issues: { message: "部分字段未通过校验", fieldErrors } };
+    return { issues: { message: "Some fields failed validation", fieldErrors } };
   }
   return Object.keys(increment).length > 0 ? { increment } : {};
 }

@@ -21,7 +21,7 @@ interface ListToolbarProps {
 export function ListToolbar({
   searchValue,
   onSearchChange,
-  searchPlaceholder = "搜索...",
+  searchPlaceholder = "Search…",
   actions,
   filters,
 }: ListToolbarProps) {
@@ -64,11 +64,11 @@ export function SelectionBar({ count, onClear, actions }: SelectionBarProps) {
 
   return (
     <div className="flex items-center justify-between rounded-lg border bg-muted/50 px-4 py-2">
-      <span className="text-sm font-medium">已选择 {count} 项</span>
+      <span className="text-sm font-medium">{count} selected</span>
       <div className="flex items-center gap-2">
         {actions}
         <Button variant="ghost" size="sm" onClick={onClear}>
-          取消选择
+          Clear selection
         </Button>
       </div>
     </div>
@@ -98,7 +98,7 @@ export function ListPagination({
   return (
     <div className="flex items-center justify-between pt-4">
       <p className="text-sm text-muted-foreground">
-        显示 {start}–{end}，共 {total} 条
+        Showing {start}–{end} of {total}
       </p>
       <div className="flex items-center gap-2">
         <Button
@@ -107,7 +107,7 @@ export function ListPagination({
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
         >
-          上一页
+          Previous
         </Button>
         <span className="text-sm text-muted-foreground">
           {page} / {totalPages}
@@ -118,7 +118,7 @@ export function ListPagination({
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
         >
-          下一页
+          Next
         </Button>
       </div>
     </div>
@@ -154,7 +154,7 @@ export function ListPaginationKeyset({
   return (
     <div className="flex items-center justify-between pt-4">
       <p className="text-sm text-muted-foreground">
-        显示 {start}–{end}
+        Showing {start}–{end}
       </p>
       <div className="flex items-center gap-2">
         <Select
@@ -167,16 +167,16 @@ export function ListPaginationKeyset({
           <SelectContent>
             {PAGE_SIZE_OPTIONS.map((n) => (
               <SelectItem key={n} value={String(n)}>
-                {n} 条
+                {n} / page
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Button variant="outline" size="sm" disabled={!hasPrev} onClick={onPrev}>
-          上一页
+          Previous
         </Button>
         <Button variant="outline" size="sm" disabled={!hasNext} onClick={onNext}>
-          下一页
+          Next
         </Button>
       </div>
     </div>

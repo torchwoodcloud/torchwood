@@ -92,7 +92,7 @@ describe("PlansListPage", () => {
       expect.objectContaining({ pageSize: 20, pageToken: undefined, sortOrder: undefined })
     );
     // 下一页 → 游标 push 进 URL → 请求带 page_token
-    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() =>
       expect(mockListPlans).toHaveBeenLastCalledWith(
         expect.objectContaining({ pageToken: "tok-2" })
@@ -105,9 +105,9 @@ describe("PlansListPage", () => {
     mockDeletePlan.mockResolvedValue(undefined);
     await renderPage("/console/subscriptions/plans", <PlansListPage />);
     await screen.findByText("999 USD");
-    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(mockDeletePlan).toHaveBeenCalledWith("p1", { __skipToast: true })
     );
@@ -125,11 +125,11 @@ describe("PlanNewPage（写路径命令化）", () => {
       [{ path: "/console/subscriptions/plans/$id", element: <div /> }],
     );
     fireEvent.change(screen.getByLabelText("Code"), { target: { value: "pro" } });
-    fireEvent.change(screen.getByLabelText("名称"), { target: { value: "Pro" } });
-    fireEvent.change(screen.getByLabelText("金额（最小单位整数）"), {
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Pro" } });
+    fireEvent.change(screen.getByLabelText("Amount (minor units)"), {
       target: { value: "999" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "创建" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() =>
       expect(mockCreatePlan).toHaveBeenCalledWith(
         {
@@ -158,8 +158,8 @@ describe("SubscriptionsListPage", () => {
     await screen.findByText("s1");
 
     // 自由文本输入本地态，提交（查询）才写 URL 谓词
-    fireEvent.change(screen.getByLabelText("用户 ID"), { target: { value: "u1" } });
-    fireEvent.click(screen.getByRole("button", { name: "查询" }));
+    fireEvent.change(screen.getByLabelText("User ID"), { target: { value: "u1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     await waitFor(() =>
       expect(mockListSubs).toHaveBeenLastCalledWith(
         expect.objectContaining({ userId: "u1", pageToken: undefined })
@@ -167,7 +167,7 @@ describe("SubscriptionsListPage", () => {
     );
 
     // 翻页后过滤再变化 → 清游标回第一页（keyset 游标与参数组合耦合）
-    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() =>
       expect(mockListSubs).toHaveBeenLastCalledWith(
         expect.objectContaining({ userId: "u1", pageToken: "tok-9" })

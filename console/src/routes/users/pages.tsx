@@ -34,7 +34,7 @@ import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/kit/query/data-table";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -113,7 +113,7 @@ export function UsersListPage() {
   const remove = useCommand(removeUserCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("用户已删除");
+        toast.success("User deleted");
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -154,9 +154,9 @@ export function UsersListPage() {
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
-        toast.error(`删除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
+        toast.error(`Deletion finished: ${succeeded} succeeded, ${failed} failed`);
       } else {
-        toast.success(`已删除 ${selectedUsers.length} 个用户`);
+        toast.success(`Deleted ${selectedUsers.length} users`);
       }
       void queryClient.invalidateQueries({ queryKey: usersCollectionKey });
       setSelectedIds(new Set());
@@ -175,11 +175,11 @@ export function UsersListPage() {
         </span>
       ),
     },
-    { id: "email", header: "邮箱", cell: ({ row }) => row.original.email },
-    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
+    { id: "email", header: "Email", cell: ({ row }) => row.original.email },
+    { id: "name", header: "Name", cell: ({ row }) => row.original.name },
     {
       id: "status",
-      header: "状态",
+      header: "Status",
       cell: ({ row }) => (
         <Badge variant={row.original.status === "active" ? "default" : "secondary"}>
           {row.original.status}
@@ -188,24 +188,24 @@ export function UsersListPage() {
     },
     {
       id: "verified",
-      header: "已验证",
-      cell: ({ row }) => (row.original.email_verified ? "是" : "否"),
+      header: "Verified",
+      cell: ({ row }) => (row.original.email_verified ? "Yes" : "No"),
     },
     {
       id: "created",
-      header: "创建时间",
+      header: "Created",
       cell: ({ row }) => formatDateTime(row.original.created_at, tz),
     },
     ...(writeable || platformAdmin
       ? [
           {
             id: "actions",
-            header: "操作",
+            header: "Actions",
             cell: ({ row }: { row: { original: User } }) => (
               <div className="flex items-center justify-end gap-1">
                 {writeable ? (
                   <Button variant="ghost" size="icon" asChild>
-                    <Link to="/console/users/$id/edit" params={{ id: row.original.id }} title="编辑">
+                    <Link to="/console/users/$id/edit" params={{ id: row.original.id }} title="Edit">
                       <Pencil className="h-4 w-4" />
                     </Link>
                   </Button>
@@ -227,7 +227,7 @@ export function UsersListPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Users" description="当前项目的注册用户" />
+      <PageHeader title="Users" description="Users registered in the current project" />
 
       <KitListPage
         list={shownList}
@@ -237,7 +237,7 @@ export function UsersListPage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="当前页内搜索邮箱、名称或 ID..."
+                placeholder="Search email, name or ID on this page..."
                 className="h-8 w-56"
               />
               {selectedUsers.length > 0 && platformAdmin ? (
@@ -249,7 +249,7 @@ export function UsersListPage() {
               ) : null}
               {writeable ? (
                 <Button asChild size="sm" className="ml-auto">
-                  <Link to="/console/users/new">创建用户</Link>
+                  <Link to="/console/users/new">New User</Link>
                 </Button>
               ) : null}
             </div>
@@ -262,27 +262,27 @@ export function UsersListPage() {
             >
               <div className="space-y-1">
                 <Label htmlFor="users-filter-id" className="text-xs text-muted-foreground">
-                  用户 ID
+                  User ID
                 </Label>
                 <Input
                   id="users-filter-id"
                   value={idInput}
                   onChange={(e) => setIdInput(e.target.value)}
-                  placeholder="按 UserID 精确过滤"
+                  placeholder="Filter by exact user ID"
                   className="h-8 w-[280px] font-mono text-xs"
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">状态</Label>
+                <Label className="text-xs text-muted-foreground">Status</Label>
                 <Select
                   value={filters.status || "all"}
                   onValueChange={(v) => setFilters({ status: v === "all" ? undefined : v })}
                 >
-                  <SelectTrigger className="h-8 w-[120px]" aria-label="状态">
+                  <SelectTrigger className="h-8 w-[120px]" aria-label="Status">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">全部</SelectItem>
+                    <SelectItem value="all">All</SelectItem>
                     <SelectItem value="active">active</SelectItem>
                     <SelectItem value="inactive">inactive</SelectItem>
                     <SelectItem value="blocked">blocked</SelectItem>
@@ -291,7 +291,7 @@ export function UsersListPage() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="users-filter-after" className="text-xs text-muted-foreground">
-                  创建时间从
+                  Created from
                 </Label>
                 <Input
                   id="users-filter-after"
@@ -303,7 +303,7 @@ export function UsersListPage() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="users-filter-before" className="text-xs text-muted-foreground">
-                  到
+                  To
                 </Label>
                 <Input
                   id="users-filter-before"
@@ -314,11 +314,11 @@ export function UsersListPage() {
                 />
               </div>
               <Button type="submit" variant="outline" size="sm">
-                查询
+                Apply
               </Button>
               {filtersDirty && (
                 <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
-                  清除
+                  Clear
                 </Button>
               )}
             </form>
@@ -326,23 +326,23 @@ export function UsersListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
           </div>
         }
         emptyTitle={
-          search !== "" ? "没有匹配的用户" : filtered ? "该过滤条件下暂无用户" : "暂无用户"
+          search !== "" ? "No matching users" : filtered ? "No users match these filters" : "No users yet"
         }
         emptyDescription={
           search !== ""
-            ? "调整搜索词，或清空恢复当前页全部行"
+            ? "Adjust the search term, or clear it to restore all rows on this page"
             : filtered
-              ? "调整过滤条件或清除恢复全部"
-              : "用户注册后将显示在此"
+              ? "Adjust the filters or clear them to see all rows"
+              : "Users will appear here once registered"
         }
         emptyAction={
           writeable ? (
             <Button asChild variant="outline" size="sm">
-              <Link to="/console/users/new">创建用户</Link>
+              <Link to="/console/users/new">New User</Link>
             </Button>
           ) : undefined
         }
@@ -383,7 +383,7 @@ export function CreateUserPage() {
   const create = useCommand(createUserCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("用户已创建");
+        toast.success("User created");
         navigate({ to: `/console/users/${result.payload.id}` });
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -395,10 +395,10 @@ export function CreateUserPage() {
 
   return (
     <FormPageWrapper
-      title="创建用户"
-      description="服务端直接创建用户，立即可用邮箱+密码登录"
+      title="New User"
+      description="Creates the user directly on the server; they can sign in with email + password immediately"
       backTo="/console/users"
-      submitLabel="创建"
+      submitLabel="Create"
       onSubmit={(e) => {
         e.preventDefault();
         create.mutate({ email, password, name, status, labels });
@@ -406,19 +406,19 @@ export function CreateUserPage() {
       loading={create.pending}
       submitDisabled={!canWrite(role)}
     >
-      <FormField id="email" label="邮箱" value={email} onChange={setEmail} required type="email" />
+      <FormField id="email" label="Email" value={email} onChange={setEmail} required type="email" />
       <FormField
         id="password"
-        label="密码"
+        label="Password"
         value={password}
         onChange={setPassword}
         required
         type="password"
-        placeholder="至少 8 位，含字母和数字"
+        placeholder="At least 8 characters, with both letters and digits"
       />
-      <FormField id="name" label="名称" value={name} onChange={setName} />
+      <FormField id="name" label="Name" value={name} onChange={setName} />
       <div className="space-y-2">
-        <Label htmlFor="status">状态</Label>
+        <Label htmlFor="status">Status</Label>
         <Select value={status} onValueChange={setStatus}>
           <SelectTrigger id="status">
             <SelectValue />
@@ -432,10 +432,10 @@ export function CreateUserPage() {
       </div>
       <FormField
         id="labels"
-        label="标签（逗号分隔）"
+        label="Labels (comma-separated)"
         value={labels}
         onChange={setLabels}
-        placeholder="例如: vip,beta"
+        placeholder="e.g. vip,beta"
       />
     </FormPageWrapper>
   );
@@ -457,7 +457,7 @@ function SessionsCard({ user }: { user: User }) {
   const revoke = useCommand(revokeUserSessionDescriptor, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("会话已删除，对应令牌立即失效");
+        toast.success("Session deleted; the corresponding token is invalidated immediately");
       } else if (failure) {
         toast.error(describeApiError(failure));
       }
@@ -467,13 +467,13 @@ function SessionsCard({ user }: { user: User }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">会话</CardTitle>
+        <CardTitle className="text-base">Sessions</CardTitle>
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">加载中...</p>
+          <p className="text-sm text-muted-foreground">Loading…</p>
         ) : sessions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">暂无会话</p>
+          <p className="text-sm text-muted-foreground">No sessions yet</p>
         ) : (
           <div className="space-y-2">
             {sessions.map((s: UserSession) => (
@@ -490,7 +490,7 @@ function SessionsCard({ user }: { user: User }) {
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground truncate">
                     {s.ip || "-"} · {s.user_agent || "-"} ·{" "}
-                    {s.expire_at ? `过期于 ${formatDateTime(s.expire_at, tz)}` : "无过期时间"}
+                    {s.expire_at ? `Expires at ${formatDateTime(s.expire_at, tz)}` : "No expiration"}
                   </div>
                 </div>
                 <Button
@@ -499,7 +499,7 @@ function SessionsCard({ user }: { user: User }) {
                   disabled={!writeable || revoke.pending}
                   onClick={() => revoke.mutate({ userId: user.id, sessionId: s.id })}
                 >
-                  删除
+                  Delete
                 </Button>
               </div>
             ))}
@@ -533,7 +533,7 @@ export function UserDetailPage() {
   const remove = useCommand(removeUserCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("用户已删除");
+        toast.success("User deleted");
         navigate({ to: "/console/users" });
       } else if (failure) {
         toast.error(describeApiError(failure));
@@ -545,7 +545,7 @@ export function UserDetailPage() {
   const resetPassword = useCommand(resetUserPasswordCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("密码已重置，该用户全部会话已失效");
+        toast.success("Password reset; all sessions of this user have been invalidated");
         setResetOpen(false);
         setNewPassword("");
       } else if (failure) {
@@ -576,7 +576,7 @@ export function UserDetailPage() {
   return (
     <DetailPageWrapper
       title={user.name || user.email}
-      description="用户详情"
+      description="User details"
       backTo="/console/users"
       actions={
         <div className="flex gap-2">
@@ -584,36 +584,36 @@ export function UserDetailPage() {
               不做角色 gating（docs/design/analytics.md §4.1/§9）。 */}
           <Button asChild size="sm" variant="outline">
             <Link to="/console/analytics/users/$userId" params={{ userId: encodeURIComponent(user.id) }}>
-              行为轨迹
+              Activity
             </Link>
           </Button>
           {platformAdmin && (
             <Button asChild size="sm" variant="outline">
               <Link to="/console/assets/users" search={{ owner: user.id }}>
-                用户资产
+                User assets
               </Link>
             </Button>
           )}
           {platformAdmin && (
             <Button asChild size="sm" variant="outline">
               <Link to="/console/subscriptions" search={{ q: user.id }}>
-                用户订阅
+                User subscriptions
               </Link>
             </Button>
           )}
           {platformAdmin && (
             <Button size="sm" onClick={() => issueToken.mutate({ userId: user.id })} disabled={issueToken.pending}>
-              模拟登录
+              Impersonate
             </Button>
           )}
           {platformAdmin && (
             <Button size="sm" variant="outline" onClick={() => setResetOpen(true)}>
-              重置密码
+              Reset password
             </Button>
           )}
           {writeable && (
             <Button asChild variant="outline" size="sm">
-              <Link to="/console/users/$id/edit" params={{ id: user.id }}>编辑</Link>
+              <Link to="/console/users/$id/edit" params={{ id: user.id }}>Edit</Link>
             </Button>
           )}
           {platformAdmin && (
@@ -626,22 +626,22 @@ export function UserDetailPage() {
         <DetailGrid
           items={[
             { label: "ID", value: user.id, mono: true },
-            { label: "邮箱", value: user.email },
-            { label: "名称", value: user.name },
-            { label: "状态", value: user.status },
-            { label: "邮箱已验证", value: user.email_verified ? "是" : "否" },
-            { label: "手机号", value: user.phone || "-" },
+            { label: "Email", value: user.email },
+            { label: "Name", value: user.name },
+            { label: "Status", value: user.status },
+            { label: "Email verified", value: user.email_verified ? "Yes" : "No" },
+            { label: "Phone", value: user.phone || "-" },
             {
-              label: "标签",
+              label: "Labels",
               value: user.labels && user.labels.length > 0 ? user.labels.join(", ") : "-",
             },
             {
-              label: "偏好",
+              label: "Preferences",
               value: user.prefs && Object.keys(user.prefs).length > 0 ? JSON.stringify(user.prefs) : "-",
               mono: true,
             },
-            { label: "创建时间", value: formatDateTime(user.created_at, tz) },
-            { label: "更新时间", value: formatDateTime(user.updated_at, tz) },
+            { label: "Created", value: formatDateTime(user.created_at, tz) },
+            { label: "Updated", value: formatDateTime(user.updated_at, tz) },
           ]}
         />
         <SessionsCard user={user} />
@@ -649,9 +649,9 @@ export function UserDetailPage() {
 
       <ConfirmDialog
         open={resetOpen}
-        title="重置密码"
-        description="重置后该用户的所有会话将立即失效，需要重新登录。"
-        confirmLabel="重置"
+        title="Reset password"
+        description="After the reset, all sessions of this user will be invalidated immediately and they will need to sign in again."
+        confirmLabel="Reset"
         loading={resetPassword.pending}
         onConfirm={() => resetPassword.mutate({ id: id!, password: newPassword })}
         onOpenChange={(open) => {
@@ -660,22 +660,22 @@ export function UserDetailPage() {
         }}
       >
         <div className="space-y-2">
-          <Label htmlFor="new-password">新密码</Label>
+          <Label htmlFor="new-password">New password</Label>
           <Input
             id="new-password"
             type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="至少 8 位，含字母和数字"
+            placeholder="At least 8 characters, with both letters and digits"
           />
         </div>
       </ConfirmDialog>
 
       <ConfirmDialog
         open={tokenOpen}
-        title="模拟登录"
-        description="将以该用户身份创建一个新会话并签发令牌（用户不会收到通知）。"
-        confirmLabel="签发"
+        title="Impersonate"
+        description="A new session will be created as this user and a token issued (the user will not be notified)."
+        confirmLabel="Issue"
         loading={issueToken.pending}
         onConfirm={() => issueToken.mutate({ userId: user.id })}
         onOpenChange={setTokenOpen}
@@ -685,11 +685,11 @@ export function UserDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setIssuedToken(null)}>
           <Card className="w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <CardHeader>
-              <CardTitle className="text-base">模拟登录令牌</CardTitle>
+              <CardTitle className="text-base">Impersonation token</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                将该令牌作为 Bearer token 调用 Client API（如 GET /v1/account/me）。有效期与 access token 一致。
+                Use this token as a Bearer token to call the Client API (e.g. GET /v1/account/me). It is valid for the same duration as the access token.
               </p>
               <pre className="max-h-48 overflow-auto rounded-md bg-muted p-3 font-mono text-xs break-all">
                 {issuedToken}
@@ -699,13 +699,13 @@ export function UserDetailPage() {
                 variant="outline"
                 onClick={() => {
                   navigator.clipboard.writeText(issuedToken);
-                  toast.success("已复制到剪贴板");
+                  toast.success("Copied to clipboard");
                 }}
               >
-                复制
+                Copy
               </Button>
               <Button size="sm" onClick={() => setIssuedToken(null)}>
-                关闭
+                Close
               </Button>
             </CardContent>
           </Card>
@@ -734,7 +734,7 @@ export function UserEditPage() {
   const update = useCommand(updateUserCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("用户已更新");
+        toast.success("User updated");
         // 用响应重建表单，避免与（可能被服务端归一化/回写修改的）服务端状态失同步（R11-P3-11）。
         setStatus(result.payload.status);
         setName(result.payload.name ?? "");
@@ -756,10 +756,10 @@ export function UserEditPage() {
 
   return (
     <FormPageWrapper
-      title="编辑用户"
+      title="Edit user"
       description={user.email}
       backTo={`/console/users/${id}`}
-      backLabel="返回详情"
+      backLabel="Back to details"
       onSubmit={(e) => {
         e.preventDefault();
         update.mutate({
@@ -773,10 +773,10 @@ export function UserEditPage() {
       loading={update.pending}
       submitDisabled={!canWrite(role)}
     >
-      <FormField id="name" label="名称" value={name || user.name} onChange={setName} />
-      <FormField id="email" label="邮箱" value={email || user.email} onChange={setEmail} type="email" />
+      <FormField id="name" label="Name" value={name || user.name} onChange={setName} />
+      <FormField id="email" label="Email" value={email || user.email} onChange={setEmail} type="email" />
       <div className="space-y-2">
-        <Label htmlFor="status">状态</Label>
+        <Label htmlFor="status">Status</Label>
         <Select value={currentStatus} onValueChange={setStatus}>
           <SelectTrigger id="status">
             <SelectValue />
@@ -789,7 +789,7 @@ export function UserEditPage() {
         </Select>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="email-verified">邮箱已验证</Label>
+        <Label htmlFor="email-verified">Email verified</Label>
         <Select
           value={emailVerified === undefined ? String(user.email_verified) : String(emailVerified)}
           onValueChange={(v) => setEmailVerified(v === "true")}
@@ -798,11 +798,11 @@ export function UserEditPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="true">已验证</SelectItem>
-            <SelectItem value="false">未验证</SelectItem>
+            <SelectItem value="true">Verified</SelectItem>
+            <SelectItem value="false">Unverified</SelectItem>
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">修改邮箱后该状态会被自动重置为未验证。</p>
+        <p className="text-xs text-muted-foreground">This status is reset to unverified automatically after the email is changed.</p>
       </div>
     </FormPageWrapper>
   );

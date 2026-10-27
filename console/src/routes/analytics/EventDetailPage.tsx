@@ -43,14 +43,14 @@ import {
 import { TrendChart } from "./metricChart";
 
 const GRANULARITIES: { key: "HOUR" | "DAY"; label: string }[] = [
-  { key: "DAY", label: "按天" },
-  { key: "HOUR", label: "按小时" },
+  { key: "DAY", label: "Daily" },
+  { key: "HOUR", label: "Hourly" },
 ];
 
 const RANGES: { key: DetailRange; label: string }[] = [
-  { key: "24h", label: "近 24 小时" },
-  { key: "7d", label: "近 7 天" },
-  { key: "30d", label: "近 30 天" },
+  { key: "24h", label: "Last 24 hours" },
+  { key: "7d", label: "Last 7 days" },
+  { key: "30d", label: "Last 30 days" },
 ];
 
 // AnalyticsEventDetailPage 事件详情：趋势（HOUR/DAY 切换）+ 维度拆解
@@ -114,16 +114,16 @@ export function AnalyticsEventDetailPage() {
     <>
       <PageHeader
         title={<span className="font-mono">{name}</span>}
-        description="事件详情：趋势与维度拆解"
+        description="Event detail: trend and property breakdown"
       />
       <div className="space-y-4">
         <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <CardTitle className="text-base">趋势</CardTitle>
+                <CardTitle className="text-base">Trend</CardTitle>
                 <CardDescription>
-                  事件数与活跃用户（{granularity === "HOUR" ? "按小时" : "按天"}，UTC 桶）
+                  Events and active users ({granularity === "HOUR" ? "hourly" : "daily"}, UTC buckets)
                 </CardDescription>
               </div>
               <SourceBadge source={trendQ.data?.source} />
@@ -132,7 +132,7 @@ export function AnalyticsEventDetailPage() {
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-4">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">粒度</span>
+                <span className="text-sm text-muted-foreground">Granularity</span>
                 {GRANULARITIES.map((g) => (
                   <Button
                     key={g.key}
@@ -145,7 +145,7 @@ export function AnalyticsEventDetailPage() {
                 ))}
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">范围</span>
+                <span className="text-sm text-muted-foreground">Range</span>
                 {RANGES.map((r) => (
                   <Button
                     key={r.key}
@@ -154,7 +154,7 @@ export function AnalyticsEventDetailPage() {
                     onClick={() => setRange(r.key)}
                     title={
                       granularity === "HOUR" && r.key === "30d"
-                        ? "按小时粒度窗口上限 7 天，将按 7 天查询"
+                        ? "Hourly granularity is limited to a 7-day window; querying the last 7 days instead"
                         : undefined
                     }
                   >
@@ -167,11 +167,11 @@ export function AnalyticsEventDetailPage() {
             {trendQ.isLoading ? (
               <Skeleton className="h-64 w-full" />
             ) : trendQ.error ? (
-              <p className="text-sm text-destructive">加载失败：{errText(trendQ.error)}</p>
+              <p className="text-sm text-destructive">Failed to load: {errText(trendQ.error)}</p>
             ) : trendAllZero ? (
               <EmptyState
-                title="窗口内暂无该事件"
-                description="该事件在所选窗口内没有上报记录；可切换粒度或扩大时间范围。"
+                title="No data for this event in the window"
+                description="This event has no reports in the selected window; switch the granularity or widen the time range."
               />
             ) : (
               <TrendChart points={trendPoints} granularity={granularity} />
@@ -181,9 +181,9 @@ export function AnalyticsEventDetailPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">维度拆解</CardTitle>
+            <CardTitle className="text-base">Property breakdown</CardTitle>
             <CardDescription>
-              按事件属性（props 键）拆解 Top-20，其余归并为 __other__（raw 实时扫描，窗口 ≤30 天）
+              Top-20 breakdown by event property (props key), with the rest merged into __other__ (raw realtime scan, window ≤ 30 days)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -197,29 +197,29 @@ export function AnalyticsEventDetailPage() {
               <Input
                 value={propKeyInput}
                 onChange={(e) => setPropKeyInput(e.target.value)}
-                placeholder="props 键名，例如 level、scene"
+                placeholder="Props key, e.g. level, scene"
                 className="max-w-xs"
               />
               <Button type="submit" size="sm" disabled={!propKeyValid}>
-                拆解
+                Break down
               </Button>
               <span className="text-xs text-muted-foreground">
-                键名规则：字母或下划线开头，仅含字母/数字/下划线/点，≤64 字符
+                Key rules: must start with a letter or underscore; only letters, digits, underscores, and dots; up to 64 characters
               </span>
             </form>
 
             {!appliedPropKey ? (
               <p className="text-sm text-muted-foreground">
-                输入一个 props 键名后点击"拆解"，查看该维度取值的分布。
+                Enter a props key and click "Break down" to see the distribution of its values.
               </p>
             ) : breakdownQ.isLoading ? (
               <Skeleton className="h-56 w-full" />
             ) : breakdownQ.error ? (
-              <p className="text-sm text-destructive">加载失败：{errText(breakdownQ.error)}</p>
+              <p className="text-sm text-destructive">Failed to load: {errText(breakdownQ.error)}</p>
             ) : !hasBreakdownData ? (
               <EmptyState
-                title="该维度在窗口内无数据"
-                description="所选窗口内该事件的 props 中没有出现此键；确认键名或调整时间范围后重试。"
+                title="No data for this dimension in the window"
+                description="This key does not appear in the event's props within the selected window; verify the key name or adjust the time range and retry."
               />
             ) : (
               <>
@@ -239,16 +239,16 @@ export function AnalyticsEventDetailPage() {
                         width={160}
                       />
                       <Tooltip />
-                      <Bar dataKey="total" name="事件数" fill="var(--chart-1)" radius={[0, 4, 4, 0]} isAnimationActive={false} />
+                      <Bar dataKey="total" name="Events" fill="var(--chart-1)" radius={[0, 4, 4, 0]} isAnimationActive={false} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>取值</TableHead>
-                      <TableHead className="text-right">事件数</TableHead>
-                      <TableHead className="text-right">活跃用户</TableHead>
+                      <TableHead>Value</TableHead>
+                      <TableHead className="text-right">Events</TableHead>
+                      <TableHead className="text-right">Active users</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -266,7 +266,7 @@ export function AnalyticsEventDetailPage() {
                   </TableBody>
                 </Table>
                 <p className="text-xs text-muted-foreground">
-                  (unset) = 该键未出现在事件 props 中；__other__ = Top-20 之外取值的归并桶。
+                  (unset) = the key does not appear in the event props; __other__ = merged bucket for values outside the Top-20.
                 </p>
               </>
             )}

@@ -78,7 +78,7 @@ describe("updateDocumentCommand（OCC 主面）", () => {
     );
   });
 
-  it("OCC 冲突：400 + VERSION_CONFLICT 前缀 → conflict（中文文案，非 409 通道）", async () => {
+  it("OCC 冲突：400 + VERSION_CONFLICT 前缀 → conflict（结果盒文案，非 409 通道）", async () => {
     vi.mocked(updateDocument).mockRejectedValue(
       httpError(400, "DOCUMENT.VERSION_CONFLICT: version_mismatch")
     );
@@ -89,7 +89,7 @@ describe("updateDocumentCommand（OCC 主面）", () => {
     );
     expect(result).toEqual({
       status: "conflict",
-      message: "文档已被其他修改抢先提交（版本不匹配），请刷新后重试",
+      message: "The document was modified by someone else (version mismatch). Please refresh and retry",
     });
   });
 
@@ -105,7 +105,7 @@ describe("updateDocumentCommand（OCC 主面）", () => {
     expect(result).toMatchObject({
       status: "rejected",
       code: "DOCUMENT.INVALID_ARGUMENT",
-      message: "请求参数无效",
+      message: "Invalid request parameters",
     });
   });
 
@@ -169,7 +169,7 @@ describe("updateDocumentCommand（OCC 主面）", () => {
     );
     expect(result).toMatchObject({
       status: "rejected",
-      fieldErrors: { title: "必填字段" },
+      fieldErrors: { title: "Required field" },
     });
     expect(vi.mocked(updateDocument)).not.toHaveBeenCalled();
   });
@@ -185,7 +185,7 @@ describe("updateDocumentCommand（OCC 主面）", () => {
     );
     expect(result).toMatchObject({
       status: "rejected",
-      fieldErrors: { meta: expect.stringContaining("JSON 解析失败") },
+      fieldErrors: { meta: expect.stringContaining("JSON parse failed") },
     });
 
     const incResult = await runCommand(
@@ -195,7 +195,7 @@ describe("updateDocumentCommand（OCC 主面）", () => {
     );
     expect(incResult).toMatchObject({
       status: "rejected",
-      fieldErrors: { "countΔ": "增量必须是整数" },
+      fieldErrors: { "countΔ": "Increment must be an integer" },
     });
   });
 });
@@ -259,7 +259,7 @@ describe("createDocumentCommand", () => {
     );
     expect(conflict).toMatchObject({
       status: "conflict",
-      message: "Document ID 已存在，请更换 ID 后重试",
+      message: "Document ID already exists. Please use a different ID and retry",
     });
   });
 });

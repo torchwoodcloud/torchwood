@@ -45,12 +45,12 @@ export function ListPage<T>({
   pagination,
   appendix,
   list,
-  emptyTitle = "暂无数据",
+  emptyTitle = "No data",
   emptyDescription,
   emptyAction,
   describeError,
-  errorTitle = "出错了",
-  retryLabel = "重试",
+  errorTitle = "Something went wrong",
+  retryLabel = "Retry",
   children,
 }: ListPageProps<T>) {
   const showHeader = title !== undefined || description !== undefined || actions !== undefined;

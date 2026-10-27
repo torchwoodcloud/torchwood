@@ -54,7 +54,7 @@ import {
 } from "@/components/resource/shared";
 import { DataTable } from "@/components/kit/query/data-table";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -97,10 +97,10 @@ const ID_PATTERN = "^[a-z_][a-z0-9_]*$";
 const KEY_PATTERN = "^[a-z_][a-z0-9_]*$";
 
 const ACTION_LABEL: Record<string, string> = {
-  RUNTIME_VAR_VERSION_ACTION_CREATE: "创建",
-  RUNTIME_VAR_VERSION_ACTION_UPDATE: "更新",
-  RUNTIME_VAR_VERSION_ACTION_DELETE: "删除",
-  RUNTIME_VAR_VERSION_ACTION_ROLLBACK: "回滚",
+  RUNTIME_VAR_VERSION_ACTION_CREATE: "Create",
+  RUNTIME_VAR_VERSION_ACTION_UPDATE: "Update",
+  RUNTIME_VAR_VERSION_ACTION_DELETE: "Delete",
+  RUNTIME_VAR_VERSION_ACTION_ROLLBACK: "Rollback",
 };
 
 const VAR_KINDS: VarKind[] = ["string", "integer", "float", "boolean", "json"];
@@ -156,8 +156,9 @@ function SecretWarningBanner() {
     <div className="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
       <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
       <p>
-        变量对持有 project_id 的客户端公开（public 集合）或仅登录用户可见（private
-        集合），禁止存放机密（API Key、密码、私钥等）。
+        Variables are readable by any client holding the project_id (public sets)
+        or visible to signed-in users only (private sets). Never store secrets
+        (API keys, passwords, private keys, etc.).
       </p>
     </div>
   );
@@ -167,7 +168,7 @@ function VisibilityBadge({ visibility }: { visibility: string }) {
   const isPublic = visibility !== "VAR_SET_VISIBILITY_PRIVATE";
   return (
     <Badge variant={isPublic ? "default" : "secondary"} title={visibility}>
-      {isPublic ? "公开" : "私有"}
+      {isPublic ? "Public" : "Private"}
     </Badge>
   );
 }
@@ -241,34 +242,34 @@ export function VarSetsListPage() {
   const columns: LegacyColumnDef<VarSet, unknown>[] = [
     {
       id: "var_set_id",
-      header: "集合 ID",
+      header: "Set ID",
       cell: ({ row }) => (
         <span className="font-mono text-xs">{row.original.var_set_id}</span>
       ),
     },
     {
       id: "visibility",
-      header: "可见性",
+      header: "Visibility",
       cell: ({ row }) => <VisibilityBadge visibility={row.original.visibility} />,
     },
     {
       id: "var_count",
-      header: "变量数",
+      header: "Variables",
       cell: ({ row }) => `${row.original.var_count} / ${VAR_COUNT_LIMIT}`,
     },
     {
       id: "revision",
-      header: "当前版本",
+      header: "Current version",
       cell: ({ row }) => `#${row.original.revision}`,
     },
     {
       id: "footprint",
-      header: "占用（上限 1 MB）",
+      header: "Usage (limit 1 MB)",
       cell: ({ row }) => <FootprintCell bytes={row.original.total_bytes} />,
     },
     {
       id: "updated_at",
-      header: "更新时间",
+      header: "Updated at",
       cell: ({ row }) => formatDateTime(row.original.updated_at, tz),
     },
   ];
@@ -276,7 +277,7 @@ export function VarSetsListPage() {
   return (
     <div className="space-y-6">
       <SecretWarningBanner />
-      <PageHeader title="Runtime Vars" description="管理项目级运行时配置：类型化变量集合、可见性与版本回滚" />
+      <PageHeader title="Runtime Vars" description="Manage project-level runtime configuration: typed variable sets, visibility, and version rollback" />
       <KitListPage
         list={shownList}
         toolbar={
@@ -284,31 +285,31 @@ export function VarSetsListPage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="当前页内搜索集合 ID 或描述..."
+              placeholder="Search set ID or description on this page…"
               className="h-8 w-56"
             />
             {platformAdmin ? (
               <Button className="ml-auto" onClick={() => setCreateOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
-                新建变量集
+                New variable set
               </Button>
             ) : null}
           </div>
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
           </div>
         }
-        emptyTitle={search !== "" ? "没有匹配的变量集" : "暂无变量集"}
+        emptyTitle={search !== "" ? "No matching variable sets" : "No variable sets yet"}
         emptyDescription={
           search !== ""
-            ? "调整搜索词，或清空恢复当前页全部行"
-            : "创建第一个变量集，向客户端下发功能开关、文案、阈值等运行时配置"
+            ? "Adjust the search term, or clear it to restore all rows on this page"
+            : "Create your first variable set to ship feature flags, copy, thresholds, and other runtime configuration to clients"
         }
         emptyAction={
           platformAdmin ? (
-            <Button onClick={() => setCreateOpen(true)}>新建变量集</Button>
+            <Button onClick={() => setCreateOpen(true)}>New variable set</Button>
           ) : undefined
         }
       >
@@ -353,7 +354,7 @@ function VarSetCreateDialog({
   const create = useCommand(createVarSetCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("变量集已创建");
+        toast.success("Variable set created");
         onOpenChange(false);
       } else if (result) {
         toast.error(result.message);
@@ -367,9 +368,10 @@ function VarSetCreateDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>新建变量集</DialogTitle>
+          <DialogTitle>New variable set</DialogTitle>
           <DialogDescription>
-            集合是变量的容器；创建后不可重命名（重建 + 回滚替代）。
+            A set is a container for variables; it cannot be renamed after
+            creation (recreate + rollback instead).
           </DialogDescription>
         </DialogHeader>
         <form
@@ -380,7 +382,7 @@ function VarSetCreateDialog({
           }}
         >
           <div className="space-y-1.5">
-            <Label htmlFor="var-set-id">集合 ID</Label>
+            <Label htmlFor="var-set-id">Set ID</Label>
             <Input
               id="var-set-id"
               value={varSetId}
@@ -392,41 +394,42 @@ function VarSetCreateDialog({
               className="font-mono text-xs"
             />
             <p className="text-xs text-muted-foreground">
-              小写字母/数字/下划线，字母或下划线开头，≤40 字符；创建后不可修改。
+              Lowercase letters, digits, and underscores; must start with a
+              letter or underscore, ≤40 characters; immutable after creation.
             </p>
           </div>
           <div className="space-y-1.5">
-            <Label>可见性</Label>
+            <Label>Visibility</Label>
             <Select value={visibility} onValueChange={(v) => setVisibility(v as VarSetVisibilityInput)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="VAR_SET_VISIBILITY_PUBLIC">
-                  公开（public）— 任何持有 project_id 的客户端可匿名读取
+                  Public — readable anonymously by any client holding the project_id
                 </SelectItem>
                 <SelectItem value="VAR_SET_VISIBILITY_PRIVATE">
-                  私有（private）— 仅项目登录用户可见
+                  Private — visible to signed-in project users only
                 </SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="var-set-description">描述（可选）</Label>
+            <Label htmlFor="var-set-description">Description (optional)</Label>
             <Input
               id="var-set-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               maxLength={256}
-              placeholder="客户端功能开关与阈值"
+              placeholder="Client feature flags and thresholds"
             />
           </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              取消
+              Cancel
             </Button>
             <Button type="submit" disabled={create.pending}>
-              {create.pending ? "创建中…" : "创建"}
+              {create.pending ? "Creating…" : "Create"}
             </Button>
           </div>
         </form>
@@ -487,7 +490,7 @@ export function VarSetDetailPage() {
   const removeVar = useCommand(removeVarCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("变量已删除");
+        toast.success("Variable deleted");
         setDeletingVarKey(null);
       } else if (result) {
         toast.error(result.message);
@@ -500,7 +503,7 @@ export function VarSetDetailPage() {
   const removeSet = useCommand(removeVarSetCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("变量集已删除");
+        toast.success("Variable set deleted");
         navigate({ to: "/console/runtime-vars" });
       } else if (result) {
         toast.error(result.message);
@@ -515,7 +518,7 @@ export function VarSetDetailPage() {
       if (result?.status === "ok") {
         if (rollbackVersion) {
           toast.success(
-            `已回滚到版本 #${rollbackVersion.revision}，产生新版本 #${result.payload.revision}`
+            `Rolled back to version #${rollbackVersion.revision}, created new version #${result.payload.revision}`
           );
         }
         setRollbackVersion(null);
@@ -558,30 +561,30 @@ export function VarSetDetailPage() {
       <SecretWarningBanner />
       <DetailPageWrapper
         title={varSet.var_set_id}
-        description={varSet.description || "运行时变量集"}
+        description={varSet.description || "Runtime variable set"}
         backTo="/console/runtime-vars"
       >
         <Card>
           <CardContent className="pt-6">
             <dl className="grid gap-4 sm:grid-cols-3">
               <div>
-                <dt className="text-sm text-muted-foreground">可见性</dt>
+                <dt className="text-sm text-muted-foreground">Visibility</dt>
                 <dd className="mt-1">
                   <VisibilityBadge visibility={varSet.visibility} />
                 </dd>
               </div>
               <div>
-                <dt className="text-sm text-muted-foreground">当前版本</dt>
+                <dt className="text-sm text-muted-foreground">Current version</dt>
                 <dd className="mt-1 font-medium">#{varSet.revision}</dd>
               </div>
               <div>
-                <dt className="text-sm text-muted-foreground">变量数</dt>
+                <dt className="text-sm text-muted-foreground">Variables</dt>
                 <dd className="mt-1 font-medium">
                   {varSet.var_count} / {VAR_COUNT_LIMIT}
                 </dd>
               </div>
               <div>
-                <dt className="text-sm text-muted-foreground">总值尺寸</dt>
+                <dt className="text-sm text-muted-foreground">Total value size</dt>
                 <dd className="mt-1 font-medium">
                   {formatBytes(varSet.total_bytes)} / 1 MB
                 </dd>
@@ -591,7 +594,7 @@ export function VarSetDetailPage() {
                 <dd className="mt-1 font-mono text-sm break-all">{varSet.etag}</dd>
               </div>
               <div>
-                <dt className="text-sm text-muted-foreground">更新时间</dt>
+                <dt className="text-sm text-muted-foreground">Updated at</dt>
                 <dd className="mt-1 font-medium">
                   {formatDateTime(varSet.updated_at, tz)}
                 </dd>
@@ -603,11 +606,11 @@ export function VarSetDetailPage() {
         {/* 区块 ①：变量编辑表格 */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle>变量（{vars.length}）</CardTitle>
+            <CardTitle>Variables ({vars.length})</CardTitle>
             {platformAdmin && (
               <Button size="sm" onClick={() => setCreateVarOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
-                新建变量
+                New variable
               </Button>
             )}
           </CardHeader>
@@ -616,18 +619,18 @@ export function VarSetDetailPage() {
               <LoadingTable columns={5} />
             ) : vars.length === 0 ? (
               <EmptyState
-                title="暂无变量"
-                description="新建类型化变量，客户端将按集合全量拉取（ETag 轮询）"
+                title="No variables yet"
+                description="Create typed variables; clients fetch the whole set with ETag polling"
               />
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Key</TableHead>
-                    <TableHead>类型</TableHead>
-                    <TableHead>值</TableHead>
-                    <TableHead>更新时间</TableHead>
-                    {platformAdmin && <TableHead className="text-right">操作</TableHead>}
+                    <TableHead>Type</TableHead>
+                    <TableHead>Value</TableHead>
+                    <TableHead>Updated at</TableHead>
+                    {platformAdmin && <TableHead className="text-right">Actions</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -654,7 +657,7 @@ export function VarSetDetailPage() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setEditingVar(v)}
-                                title="编辑"
+                                title="Edit"
                               >
                                 <Pencil className="h-4 w-4" />
                               </Button>
@@ -662,7 +665,7 @@ export function VarSetDetailPage() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setDeletingVarKey(v.key)}
-                                title="删除"
+                                title="Delete"
                               >
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
@@ -681,13 +684,13 @@ export function VarSetDetailPage() {
         {/* 区块 ②：版本历史（保留最近 50 版，D11） */}
         <Card>
           <CardHeader className="space-y-4">
-            <CardTitle>版本历史（{versions.length}，保留最近 50 版）</CardTitle>
+            <CardTitle>Version history ({versions.length}, last 50 kept)</CardTitle>
             <div className="flex flex-wrap items-end gap-2">
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">旧版本（基准）</Label>
+                <Label className="text-xs text-muted-foreground">Old version (base)</Label>
                 <Select value={diffA} onValueChange={setDiffA}>
                   <SelectTrigger className="w-36">
-                    <SelectValue placeholder="选择版本" />
+                    <SelectValue placeholder="Select version" />
                   </SelectTrigger>
                   <SelectContent>
                     {versions.map((v) => (
@@ -699,10 +702,10 @@ export function VarSetDetailPage() {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">新版本（对比）</Label>
+                <Label className="text-xs text-muted-foreground">New version (compare)</Label>
                 <Select value={diffB} onValueChange={setDiffB}>
                   <SelectTrigger className="w-36">
-                    <SelectValue placeholder="选择版本" />
+                    <SelectValue placeholder="Select version" />
                   </SelectTrigger>
                   <SelectContent>
                     {versions.map((v) => (
@@ -719,7 +722,7 @@ export function VarSetDetailPage() {
                 onClick={() => setDiffPair({ a: Number(diffA), b: Number(diffB) })}
               >
                 <ArrowRightLeft className="h-4 w-4 mr-2" />
-                对比两版
+                Compare versions
               </Button>
             </div>
           </CardHeader>
@@ -728,19 +731,19 @@ export function VarSetDetailPage() {
               <LoadingTable columns={6} />
             ) : versions.length === 0 ? (
               <EmptyState
-                title="暂无版本"
-                description="变量增删改与回滚会自动产生版本记录"
+                title="No versions yet"
+                description="Variable creates, updates, deletes, and rollbacks automatically produce version records"
               />
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>版本</TableHead>
-                    <TableHead>动作</TableHead>
-                    <TableHead>摘要</TableHead>
-                    <TableHead>操作者</TableHead>
-                    <TableHead>时间</TableHead>
-                    {platformAdmin && <TableHead className="text-right">操作</TableHead>}
+                    <TableHead>Version</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Summary</TableHead>
+                    <TableHead>Actor</TableHead>
+                    <TableHead>Time</TableHead>
+                    {platformAdmin && <TableHead className="text-right">Actions</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -767,7 +770,7 @@ export function VarSetDetailPage() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setViewRevision(v.revision)}
-                                title="查看全文"
+                                title="View snapshot"
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
@@ -776,7 +779,7 @@ export function VarSetDetailPage() {
                                 size="icon"
                                 disabled={isCurrent}
                                 onClick={() => setRollbackVersion(v)}
-                                title={isCurrent ? "已是当前版本" : "回滚到此版本"}
+                                title={isCurrent ? "Already the current version" : "Roll back to this version"}
                               >
                                 <History className="h-4 w-4" />
                               </Button>
@@ -795,16 +798,16 @@ export function VarSetDetailPage() {
         {/* 区块 ③：集合设置 */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle>集合设置</CardTitle>
+            <CardTitle>Set settings</CardTitle>
             {platformAdmin && (
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>
                   <Pencil className="h-4 w-4 mr-2" />
-                  编辑设置
+                  Edit settings
                 </Button>
                 <Button variant="destructive" size="sm" onClick={() => setDeleteSetOpen(true)}>
                   <Trash2 className="h-4 w-4 mr-2" />
-                  删除集合
+                  Delete set
                 </Button>
               </div>
             )}
@@ -812,18 +815,18 @@ export function VarSetDetailPage() {
           <CardContent>
             <dl className="grid gap-4 sm:grid-cols-2">
               <div>
-                <dt className="text-sm text-muted-foreground">可见性</dt>
+                <dt className="text-sm text-muted-foreground">Visibility</dt>
                 <dd className="mt-1">
                   <VisibilityBadge visibility={varSet.visibility} />
                   <p className="mt-1 text-xs text-muted-foreground">
                     {varSet.visibility === "VAR_SET_VISIBILITY_PRIVATE"
-                      ? "私有：仅项目登录用户可见，匿名客户端收到 404。"
-                      : "公开：任何持有 project_id 的客户端可匿名读取。"}
+                      ? "Private: visible to signed-in project users only; anonymous clients get a 404."
+                      : "Public: readable anonymously by any client holding the project_id."}
                   </p>
                 </dd>
               </div>
               <div>
-                <dt className="text-sm text-muted-foreground">描述</dt>
+                <dt className="text-sm text-muted-foreground">Description</dt>
                 <dd className="mt-1 font-medium">{varSet.description || "—"}</dd>
               </div>
             </dl>
@@ -844,9 +847,9 @@ export function VarSetDetailPage() {
       <ConfirmDialog
         open={deletingVarKey !== null}
         onOpenChange={(o) => !o && setDeletingVarKey(null)}
-        title="确认删除变量"
-        description={`删除变量 ${deletingVarKey ?? ""} 会立即生效并产生一个新版本；客户端下次拉取将不再收到该变量。可通过版本回滚恢复。`}
-        confirmLabel="删除"
+        title="Delete variable"
+        description={`Deleting variable ${deletingVarKey ?? ""} takes effect immediately and produces a new version; clients will no longer receive it on their next fetch. You can restore it via version rollback.`}
+        confirmLabel="Delete"
         loading={removeVar.pending}
         onConfirm={() =>
           deletingVarKey && removeVar.mutate({ varSetId, key: deletingVarKey })
@@ -865,9 +868,9 @@ export function VarSetDetailPage() {
       <ConfirmDialog
         open={rollbackVersion !== null}
         onOpenChange={(o) => !o && setRollbackVersion(null)}
-        title={`确认回滚到版本 #${rollbackVersion?.revision ?? ""}`}
-        description={`将集合回滚到版本 #${rollbackVersion?.revision ?? ""}：当前全部变量会被该版本的快照整替，同时产生一个新的版本记录；目标版本本身保持不变。`}
-        confirmLabel="回滚"
+        title={`Roll back to version #${rollbackVersion?.revision ?? ""}`}
+        description={`Rolling the set back to version #${rollbackVersion?.revision ?? ""} replaces all current variables with that version's snapshot and produces a new version record; the target version itself remains unchanged.`}
+        confirmLabel="Rollback"
         loading={rollbackMut.pending}
         onConfirm={() =>
           rollbackVersion &&
@@ -882,9 +885,9 @@ export function VarSetDetailPage() {
       <ConfirmDialog
         open={deleteSetOpen}
         onOpenChange={setDeleteSetOpen}
-        title="确认删除变量集"
-        description={`删除变量集 ${varSetId} 将连同全部变量与全部版本历史一起销毁（不可恢复）。此操作不可撤销。`}
-        confirmLabel="删除"
+        title="Delete variable set"
+        description={`Deleting variable set ${varSetId} destroys all its variables and the entire version history (irreversible). This action cannot be undone.`}
+        confirmLabel="Delete"
         loading={removeSet.pending}
         onConfirm={() => removeSet.mutate({ varSetId })}
       />
@@ -925,7 +928,7 @@ function VarFormDialog({
     failure: ApiError | null
   ) => {
     if (result?.status === "ok") {
-      toast.success(editing ? "变量已更新" : "变量已创建");
+      toast.success(editing ? "Variable updated" : "Variable created");
       onOpenChange(false);
     } else if (failure) {
       toast.error(describeApiError(failure));
@@ -982,9 +985,10 @@ function VarFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{editing ? "修改变量" : "新建变量"}</DialogTitle>
+          <DialogTitle>{editing ? "Edit variable" : "New variable"}</DialogTitle>
           <DialogDescription>
-            类型创建时锁定，修改变更时可直接切换类型（携带完整新值）。
+            Type is locked at creation; when editing you can switch type directly
+            (provide the full new value).
           </DialogDescription>
         </DialogHeader>
         <form
@@ -1010,12 +1014,13 @@ function VarFormDialog({
               className="font-mono text-xs"
             />
             <p className="text-xs text-muted-foreground">
-              小写字母/数字/下划线，字母或下划线开头，≤64 字符
-              {editing ? "；创建后不可修改" : ""}。
+              Lowercase letters, digits, and underscores; must start with a
+              letter or underscore, ≤64 characters
+              {editing ? "; immutable after creation" : ""}.
             </p>
           </div>
           <div className="space-y-1.5">
-            <Label>类型</Label>
+            <Label>Type</Label>
             <Select value={kind} onValueChange={(v) => setKind(v as VarKind)}>
               <SelectTrigger>
                 <SelectValue />
@@ -1030,12 +1035,12 @@ function VarFormDialog({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>值</Label>
+            <Label>Value</Label>
             {kind === "string" && (
               <Input
                 value={str}
                 onChange={(e) => setStr(e.target.value)}
-                placeholder="文本值"
+                placeholder="Text value"
               />
             )}
             {(kind === "integer" || kind === "float") && (
@@ -1069,27 +1074,28 @@ function VarFormDialog({
             )}
             {kind === "json" && (
               <p className="text-xs text-muted-foreground">
-                合法 JSON 文本（嵌套 ≤100 层，单值 ≤64KB），提交前会做格式校验。
+                Valid JSON text (nesting ≤100 levels, single value ≤64KB); format
+                is validated before submit.
               </p>
             )}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="var-description">描述（可选）</Label>
+            <Label htmlFor="var-description">Description (optional)</Label>
             <Input
               id="var-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               maxLength={256}
-              placeholder="新版结账页功能开关"
+              placeholder="Feature flag for the new checkout page"
             />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              取消
+              Cancel
             </Button>
             <Button type="submit" disabled={pending}>
-              {pending ? "保存中…" : "保存"}
+              {pending ? "Saving…" : "Save"}
             </Button>
           </div>
         </form>
@@ -1123,26 +1129,26 @@ function VersionSnapshotDialog({
     <Dialog open={revision !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>版本 #{revision} 全文快照</DialogTitle>
+          <DialogTitle>Version #{revision} full snapshot</DialogTitle>
           <DialogDescription>
             {data?.version
               ? `${ACTION_LABEL[data.version.action] ?? data.version.action} · ${data.version.summary || "—"} · ${data.version.actor} · ${formatDateTime(data.version.created_at, tz)}`
-              : "该版本全部变量的快照（{key:{t,v,d,c}} 的展开）"}
+              : "Snapshot of all variables in this version (expansion of {key:{t,v,d,c}})"}
           </DialogDescription>
         </DialogHeader>
         {isLoading ? (
           <LoadingTable columns={4} />
         ) : !data || data.entries.length === 0 ? (
-          <EmptyState title="空快照" description="该版本没有任何变量" />
+          <EmptyState title="Empty snapshot" description="No variables in this version" />
         ) : (
           <div className="max-h-[60vh] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Key</TableHead>
-                  <TableHead>类型</TableHead>
-                  <TableHead>值</TableHead>
-                  <TableHead>描述</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Value</TableHead>
+                  <TableHead>Description</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1270,28 +1276,28 @@ function VersionDiffDialog({
     <Dialog open={pair !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>版本对比</DialogTitle>
+          <DialogTitle>Version diff</DialogTitle>
           <DialogDescription>
             {pair
-              ? `版本 #${pair.a} → 版本 #${pair.b}${counts ? `：新增 ${counts.added} · 删除 ${counts.removed} · 变更 ${counts.changed} · 未变 ${diff?.unchanged ?? 0} 个键` : ""}`
-              : "逐 key 新旧值对照（前端计算）"}
+              ? `Version #${pair.a} → version #${pair.b}${counts ? `: ${counts.added} added · ${counts.removed} removed · ${counts.changed} changed · ${diff?.unchanged ?? 0} keys unchanged` : ""}`
+              : "Key-by-key old/new value comparison (computed client-side)"}
           </DialogDescription>
         </DialogHeader>
         {isLoading ? (
           <LoadingTable columns={4} />
         ) : !diff ? (
-          <EmptyState title="无法加载对比" description="版本快照获取失败" />
+          <EmptyState title="Failed to load diff" description="Failed to fetch version snapshots" />
         ) : diff.rows.length === 0 ? (
-          <EmptyState title="两版本内容完全一致" description="没有任何键发生新增、删除或变更" />
+          <EmptyState title="The two versions are identical" description="No keys were added, removed, or changed" />
         ) : (
           <div className="max-h-[60vh] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Key</TableHead>
-                  <TableHead>旧值（#{pair?.a}）</TableHead>
-                  <TableHead>新值（#{pair?.b}）</TableHead>
-                  <TableHead>变化</TableHead>
+                  <TableHead>Old value (#{pair?.a})</TableHead>
+                  <TableHead>New value (#{pair?.b})</TableHead>
+                  <TableHead>Change</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1307,12 +1313,12 @@ function VersionDiffDialog({
                       <DiffValueCell entry={row.b} />
                     </TableCell>
                     <TableCell className="align-top">
-                      {row.status === "added" && <Badge>新增</Badge>}
+                      {row.status === "added" && <Badge>Added</Badge>}
                       {row.status === "removed" && (
-                        <Badge variant="destructive">删除</Badge>
+                        <Badge variant="destructive">Removed</Badge>
                       )}
                       {row.status === "changed" && (
-                        <Badge variant="secondary">变更</Badge>
+                        <Badge variant="secondary">Changed</Badge>
                       )}
                     </TableCell>
                   </TableRow>
@@ -1359,7 +1365,7 @@ function VarSetSettingsDialog({
   const save = useCommand(editVarSetDescriptor(varSet), {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("集合设置已更新");
+        toast.success("Set settings updated");
         onOpenChange(false);
       } else if (result) {
         toast.error(result.message);
@@ -1377,9 +1383,10 @@ function VarSetSettingsDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>编辑集合设置</DialogTitle>
+            <DialogTitle>Edit set settings</DialogTitle>
             <DialogDescription>
-              元数据变更不产生版本记录、不影响客户端 ETag。
+              Metadata changes do not create version records and do not affect
+              client ETags.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -1394,7 +1401,7 @@ function VarSetSettingsDialog({
             }}
           >
             <div className="space-y-1.5">
-              <Label>可见性</Label>
+              <Label>Visibility</Label>
               <Select
                 value={visibility}
                 onValueChange={(v) => setVisibility(v as VarSetVisibilityInput)}
@@ -1404,35 +1411,36 @@ function VarSetSettingsDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="VAR_SET_VISIBILITY_PUBLIC">
-                    公开（public）— 任何持有 project_id 的客户端可匿名读取
+                    Public — readable anonymously by any client holding the project_id
                   </SelectItem>
                   <SelectItem value="VAR_SET_VISIBILITY_PRIVATE">
-                    私有（private）— 仅项目登录用户可见
+                    Private — visible to signed-in project users only
                   </SelectItem>
                 </SelectContent>
               </Select>
               {visibilityChanged && (
                 <p className="text-xs text-amber-600">
-                  可见性切换是破坏性操作，保存前需二次确认。
+                  Changing visibility is a destructive operation; a second
+                  confirmation is required before saving.
                 </p>
               )}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="settings-description">描述</Label>
+              <Label htmlFor="settings-description">Description</Label>
               <Input
                 id="settings-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 maxLength={256}
-                placeholder="客户端功能开关与阈值"
+                placeholder="Client feature flags and thresholds"
               />
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                取消
+                Cancel
               </Button>
               <Button type="submit" disabled={save.pending}>
-                {save.pending ? "保存中…" : "保存"}
+                {save.pending ? "Saving…" : "Save"}
               </Button>
             </div>
           </form>
@@ -1442,9 +1450,9 @@ function VarSetSettingsDialog({
         <ConfirmDialog
           open={confirmOpen}
           onOpenChange={setConfirmOpen}
-          title="确认切换为公开"
-          description="切换后整个变量集（含全部当前值）将对任何持有 project_id 的客户端公开，无需登录即可读取。请确认其中不含敏感信息。"
-          confirmLabel="切换为公开"
+          title="Switch to public"
+          description="After switching, the entire variable set (including all current values) becomes readable by any client holding the project_id, no sign-in required. Confirm that it contains no sensitive information."
+          confirmLabel="Switch to public"
           loading={save.pending}
           onConfirm={() => {
             setConfirmOpen(false);
@@ -1455,9 +1463,9 @@ function VarSetSettingsDialog({
         <ConfirmDialog
           open={confirmOpen}
           onOpenChange={setConfirmOpen}
-          title="确认切换为私有"
-          description="切换后匿名客户端将立即收到 404，App 会回退到内置默认值或本地缓存的 last-known-good 配置，直到用户登录。"
-          confirmLabel="切换为私有"
+          title="Switch to private"
+          description="After switching, anonymous clients immediately receive a 404; the app falls back to built-in defaults or locally cached last-known-good configuration until the user signs in."
+          confirmLabel="Switch to private"
           loading={save.pending}
           onConfirm={() => {
             setConfirmOpen(false);

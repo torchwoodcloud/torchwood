@@ -58,7 +58,7 @@ import {
 } from "@/components/resource/shared";
 import { DataTable } from "@/components/kit/query/data-table";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserTimezone } from "@/hooks/useTimezone";
@@ -79,7 +79,7 @@ const functionColumns = (tz: string): LegacyColumnDef<FunctionItem, unknown>[] =
   },
   {
     id: "name",
-    header: "名称",
+    header: "Name",
     cell: ({ row }) => row.original.name,
   },
   {
@@ -93,17 +93,17 @@ const functionColumns = (tz: string): LegacyColumnDef<FunctionItem, unknown>[] =
   },
   {
     id: "enabled",
-    header: "状态",
+    header: "Status",
     cell: ({ row }) =>
       row.original.enabled ? (
-        <Badge variant="secondary">启用</Badge>
+        <Badge variant="secondary">Enabled</Badge>
       ) : (
-        <Badge variant="destructive">禁用</Badge>
+        <Badge variant="destructive">Disabled</Badge>
       ),
   },
   {
     id: "created",
-    header: "创建时间",
+    header: "Created",
     cell: ({ row }) => formatDateTime(row.original.created_at, tz),
   },
 ];
@@ -136,16 +136,17 @@ function OneTimeSecretDialog({
           </pre>
           {fingerprint && (
             <p className="text-xs text-muted-foreground">
-              指纹：<code className="font-mono">{fingerprint}</code>
+              Fingerprint: <code className="font-mono">{fingerprint}</code>
             </p>
           )}
           <p className="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
-            ⚠ 明文仅本次显示，关闭后无法再查看（管理面只出指纹）。请立即
-            配置到函数侧（FDK 环境变量或部署注入）。
+            ⚠ The plaintext secret is shown only this once and cannot be viewed again after
+            closing (the admin console only shows the fingerprint). Configure it on the function
+            side immediately (FDK environment variables or deployment injection).
           </p>
         </div>
         <DialogFooter>
-          <Button onClick={onClose}>我已保存</Button>
+          <Button onClick={onClose}>I've saved it</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -181,7 +182,7 @@ export function FunctionsListPage() {
   const remove = useCommand(removeFunctionCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("函数已删除");
+        toast.success("Function deleted");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -194,7 +195,7 @@ export function FunctionsListPage() {
   const create = useCommand(createFunctionCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("函数创建成功");
+        toast.success("Function created");
         setCreateOpen(false);
         setName("");
         setTargetUrl("");
@@ -246,9 +247,9 @@ export function FunctionsListPage() {
       const failed = results.filter((r) => r.status === "rejected").length;
       const succeeded = results.length - failed;
       if (failed > 0) {
-        toast.error(`删除完成：成功 ${succeeded} 个，失败 ${failed} 个`);
+        toast.error(`Deletion finished: ${succeeded} succeeded, ${failed} failed`);
       } else {
-        toast.success(`已删除 ${selectedFunctions.length} 个函数`);
+        toast.success(`Deleted ${selectedFunctions.length} functions`);
       }
       list.refetch();
       setSelectedIds(new Set());
@@ -263,7 +264,7 @@ export function FunctionsListPage() {
       ? [
           {
             id: "actions",
-            header: "操作",
+            header: "Actions",
             cell: ({ row }: { row: { original: FunctionItem } }) => (
               <RowDeleteButton
                 onConfirm={() => remove.mutate({ id: row.original.id })}
@@ -278,7 +279,7 @@ export function FunctionsListPage() {
   return (
     <>
       <div className="space-y-6">
-        <PageHeader title="Functions" description="常驻服务函数：调用路由、触发器与 Webhooks" />
+        <PageHeader title="Functions" description="Resident service functions: invocation routing, triggers, and webhooks" />
 
         <KitListPage
           list={shownList}
@@ -287,7 +288,7 @@ export function FunctionsListPage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="当前页内搜索函数名称或 ID..."
+                placeholder="Search by name or ID on the current page..."
                 className="h-8 w-56"
               />
               {selectedFunctions.length > 0 && writeable ? (
@@ -300,24 +301,24 @@ export function FunctionsListPage() {
               {writeable ? (
                 <Button className="ml-auto" onClick={() => setCreateOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
-                  新建函数
+                  New Function
                 </Button>
               ) : null}
             </div>
           }
           pagination={
             <div className="px-4 pb-4">
-              <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+              <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
             </div>
           }
-          emptyTitle={search !== "" ? "没有匹配的函数" : "暂无函数"}
+          emptyTitle={search !== "" ? "No matching functions" : "No functions yet"}
           emptyDescription={
             search !== ""
-              ? "调整搜索词，或清空恢复当前页全部行"
-              : "创建函数并登记常驻服务的 target URL 开始使用"
+              ? "Adjust the search term, or clear it to restore all rows on this page"
+              : "Create a function and register a target URL for your resident service to get started"
           }
           emptyAction={
-            writeable ? <Button onClick={() => setCreateOpen(true)}>新建函数</Button> : undefined
+            writeable ? <Button onClick={() => setCreateOpen(true)}>New Function</Button> : undefined
           }
         >
           <div className="px-6 pb-2 pt-2">
@@ -343,9 +344,10 @@ export function FunctionsListPage() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>新建函数</DialogTitle>
+            <DialogTitle>New Function</DialogTitle>
             <DialogDescription>
-              登记函数常驻服务的调用终点（endpoint target；生产强制 https）
+              Register the invocation endpoint (endpoint target) for the function's resident
+              service; https is enforced in production
             </DialogDescription>
           </DialogHeader>
           <form
@@ -354,7 +356,7 @@ export function FunctionsListPage() {
               e.preventDefault();
               const timeout = Number.parseInt(timeoutSeconds, 10);
               if (!Number.isFinite(timeout) || timeout < 1 || timeout > 300) {
-                toast.error("timeout_seconds 需在 1..300 之间");
+                toast.error("timeout_seconds must be between 1 and 300");
                 return;
               }
               create.mutate({
@@ -367,7 +369,7 @@ export function FunctionsListPage() {
             }}
           >
             <div className="space-y-2">
-              <Label htmlFor="fn-name">名称</Label>
+              <Label htmlFor="fn-name">Name</Label>
               <Input
                 id="fn-name"
                 value={name}
@@ -387,12 +389,13 @@ export function FunctionsListPage() {
                 placeholder="https://fn.example.com/my-function"
               />
               <p className="text-xs text-muted-foreground">
-                函数 = 常驻服务（跑 FDK，任意 substrate——fleetly / k8s / 裸机）。
-                部署链走 fleetly CLI 或用户自有工具链，平台不再打包部署。
+                A function is a resident service (runs the FDK on any substrate — fleetly / k8s /
+                bare metal). Deployment goes through the fleetly CLI or your own toolchain; the
+                platform no longer packages deployments.
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="fn-timeout">超时（秒，1..300）</Label>
+              <Label htmlFor="fn-timeout">Timeout (seconds, 1..300)</Label>
               <Input
                 id="fn-timeout"
                 type="number"
@@ -408,11 +411,11 @@ export function FunctionsListPage() {
                 checked={enabled}
                 onChange={(e) => setEnabled(e.target.checked)}
               />
-              启用函数
+              Enable function
             </label>
             <DialogFooter>
               <Button type="submit" disabled={create.pending}>
-                {create.pending ? "创建中..." : "创建"}
+                {create.pending ? "Creating..." : "Create"}
               </Button>
             </DialogFooter>
           </form>
@@ -421,8 +424,8 @@ export function FunctionsListPage() {
 
       {createdSecret && (
         <OneTimeSecretDialog
-          title="函数签名密钥"
-          description={`函数 ${createdSecret.fingerprint ? "已创建" : "创建成功"}；调用时平台以该密钥签名（HMAC-SHA256）请求。`}
+          title="Function signing secret"
+          description={`Function ${createdSecret.fingerprint ? "created" : "created successfully"}; the platform signs (HMAC-SHA256) requests with this secret when invoking.`}
           secret={createdSecret.secret}
           fingerprint={createdSecret.fingerprint}
           onClose={() => setCreatedSecret(null)}
@@ -450,7 +453,7 @@ function TruncatedNotice({ truncated }: { truncated?: boolean }) {
   if (!truncated) return null;
   return (
     <p className="text-xs text-amber-600">
-      ⚠ 响应超过 1MiB 上限已截断
+      ⚠ Response exceeded the 1MiB limit and was truncated
     </p>
   );
 }
@@ -469,11 +472,11 @@ function InvocationDialog({
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                调用 {invocation.id}
+                Invocation {invocation.id}
                 {invocationStatusBadge(invocation.status)}
               </DialogTitle>
               <DialogDescription>
-                {invocation.duration_ms}ms · 状态码 {invocation.status_code}
+                {invocation.duration_ms}ms · status code {invocation.status_code}
                 {invocation.error && (
                   <span className="block text-destructive mt-1">{invocation.error}</span>
                 )}
@@ -483,7 +486,7 @@ function InvocationDialog({
               <div>
                 <Label>response</Label>
                 <pre className="mt-1 rounded-md bg-muted p-3 text-xs overflow-auto whitespace-pre-wrap break-all">
-                  {invocation.response || "(空)"}
+                  {invocation.response || "(empty)"}
                 </pre>
                 <TruncatedNotice truncated={invocation.response_truncated} />
               </div>
@@ -559,7 +562,7 @@ export function FunctionDetailPage() {
   const update = useCommand(updateFunctionCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("函数设置已更新");
+        toast.success("Function settings updated");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -572,7 +575,7 @@ export function FunctionDetailPage() {
   const rotate = useCommand(rotateFunctionSecretCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("签名密钥已轮换（旧钥保留一个宽限窗）");
+        toast.success("Signing secret rotated (the old secret stays valid for a grace window)");
         setRotatedSecret({ secret: result.payload.secret, fingerprint: result.payload.secret_fingerprint });
       } else if (result) {
         toast.error(result.message);
@@ -589,7 +592,7 @@ export function FunctionDetailPage() {
   const saveScopes = useCommand(setFunctionScopesCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("执行身份 Scopes 已保存");
+        toast.success("Execution scopes saved");
         setScopesText((result.payload.declared_scopes ?? []).join("\n"));
       } else if (result) {
         toast.error(result.message);
@@ -602,7 +605,7 @@ export function FunctionDetailPage() {
   const run = useCommand(invokeFunctionCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success(asyncExec ? "已入队异步调用" : "调用完成");
+        toast.success(asyncExec ? "Async invocation queued" : "Invocation completed");
         if (!asyncExec) setSelectedInvocation(result.payload);
       } else if (result) {
         toast.error(result.message);
@@ -615,7 +618,7 @@ export function FunctionDetailPage() {
   const removeFunction = useCommand(removeFunctionCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("函数已删除");
+        toast.success("Function deleted");
         window.history.back();
       } else if (result) {
         toast.error(result.message);
@@ -648,7 +651,7 @@ export function FunctionDetailPage() {
             { label: "ID", value: fn.id, mono: true },
             { label: "Target URL", value: fn.target?.url ?? "—", mono: true },
             {
-              label: "签名密钥指纹",
+              label: "Signing secret fingerprint",
               value: (
                 <span className="flex items-center gap-2">
                   <code className="font-mono text-xs">
@@ -656,20 +659,20 @@ export function FunctionDetailPage() {
                   </code>
                   {fn.target?.secret_rotated_at && (
                     <span className="text-xs text-muted-foreground">
-                      轮换于 {formatDateTime(fn.target.secret_rotated_at, tz)}
+                      Rotated at {formatDateTime(fn.target.secret_rotated_at, tz)}
                     </span>
                   )}
                 </span>
               ),
             },
-            { label: "创建时间", value: formatDateTime(fn.created_at, tz) },
+            { label: "Created", value: formatDateTime(fn.created_at, tz) },
           ]}
         />
       </DetailPageWrapper>
 
       <Card>
         <CardHeader className="space-y-0 pb-3">
-          <CardTitle className="text-sm">基本信息</CardTitle>
+          <CardTitle className="text-sm">General</CardTitle>
         </CardHeader>
         <CardContent>
           <form
@@ -678,7 +681,7 @@ export function FunctionDetailPage() {
               e.preventDefault();
               const timeout = Number.parseInt(timeoutSeconds, 10);
               if (!Number.isFinite(timeout) || timeout < 1 || timeout > 300) {
-                toast.error("timeout_seconds 需在 1..300 之间");
+                toast.error("timeout_seconds must be between 1 and 300");
                 return;
               }
               const input: {
@@ -699,7 +702,7 @@ export function FunctionDetailPage() {
             }}
           >
             <div className="space-y-2">
-              <Label htmlFor="fn-name">名称</Label>
+              <Label htmlFor="fn-name">Name</Label>
               <Input
                 id="fn-name"
                 value={name}
@@ -708,7 +711,7 @@ export function FunctionDetailPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="fn-target-url">Target URL（编辑仅改地址）</Label>
+              <Label htmlFor="fn-target-url">Target URL (editing only changes the URL)</Label>
               <Input
                 id="fn-target-url"
                 className="font-mono text-xs"
@@ -717,12 +720,12 @@ export function FunctionDetailPage() {
                 placeholder="https://fn.example.com/my-function"
               />
               <p className="text-xs text-muted-foreground">
-                密钥变更走「轮换密钥」；池策略/运行时/资源规格归部署侧
-                （fleetly 副本数 / k8s HPA / 用户自管）。
+                Secret changes go through "Rotate signing secret"; pool policy / runtime / resource
+                sizing belong to the deployment side (fleetly replicas / k8s HPA / user-managed).
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="fn-timeout">超时（秒，1..300）</Label>
+              <Label htmlFor="fn-timeout">Timeout (seconds, 1..300)</Label>
               <Input
                 id="fn-timeout"
                 type="number"
@@ -737,11 +740,11 @@ export function FunctionDetailPage() {
                 checked={enabled}
                 onChange={(e) => setEnabled(e.target.checked)}
               />
-              启用函数
+              Enable function
             </label>
             <div className="sm:col-span-2 flex items-center gap-3">
               <Button type="submit" disabled={!writeable || update.pending}>
-                {update.pending ? "保存中..." : "保存设置"}
+                {update.pending ? "Saving..." : "Save settings"}
               </Button>
               <Button
                 type="button"
@@ -750,7 +753,7 @@ export function FunctionDetailPage() {
                 onClick={() => rotate.mutate({ id: functionId! })}
               >
                 <KeyRound className="h-4 w-4 mr-2" />
-                {rotate.pending ? "轮换中..." : "轮换签名密钥"}
+                {rotate.pending ? "Rotating..." : "Rotate signing secret"}
               </Button>
             </div>
           </form>
@@ -759,19 +762,21 @@ export function FunctionDetailPage() {
 
       <Card>
         <CardHeader className="space-y-0 pb-3">
-          <CardTitle className="text-sm">执行身份 Scopes</CardTitle>
+          <CardTitle className="text-sm">Execution scopes</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-2 max-w-3xl">
             <p className="text-xs text-muted-foreground">
-              函数执行时平台注入短期 token（签名请求头 X-Tw-Execution-Token），
-              按下方声明访问平台能力；每行一条 &lt;resource&gt;:&lt;op&gt;
-              （如 assets:write），resource 仅限
+              When the function executes, the platform injects a short-lived token (signed request
+              header X-Tw-Execution-Token) that grants access to platform capabilities as declared
+              below; one &lt;resource&gt;:&lt;op&gt; per line (e.g. assets:write), where resource is
+              limited to
               assets / databases / users / groups / storage / subscriptions /
-              payments，op 为 read 或 write，留空 = 无平台访问。注意：声明
-              databases/storage 后，还需把对应集合/桶的权限授予角色
-              <code className="font-mono">key:function:{fn.id}</code>
-              ，否则请求通过但读不到数据。
+              payments and op is read or write; empty = no platform access. Note: after declaring
+              databases/storage, you must also grant the matching collection/bucket permissions to
+              role
+              <code className="font-mono">key:function:{fn.id}</code>, otherwise requests pass but
+              read no data.
             </p>
             <textarea
               className="flex min-h-[80px] w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
@@ -786,7 +791,7 @@ export function FunctionDetailPage() {
               disabled={!writeable || saveScopes.pending}
               onClick={() => saveScopes.mutate({ id: functionId!, scopesText })}
             >
-              {saveScopes.pending ? "保存中..." : "保存 Scopes"}
+              {saveScopes.pending ? "Saving..." : "Save scopes"}
             </Button>
           </div>
         </CardContent>
@@ -798,11 +803,11 @@ export function FunctionDetailPage() {
 
       <Card>
         <CardHeader className="space-y-0 pb-3">
-          <CardTitle className="text-sm">调用（Invocations）</CardTitle>
+          <CardTitle className="text-sm">Invocations</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="fn-data">Data（JSON，≤64KB）</Label>
+            <Label htmlFor="fn-data">Data (JSON, ≤64KB)</Label>
             <Input
               id="fn-data"
               className="font-mono text-xs"
@@ -816,14 +821,14 @@ export function FunctionDetailPage() {
                 checked={asyncExec}
                 onChange={(e) => setAsyncExec(e.target.checked)}
               />
-              异步调用（推荐，规避网关超时）
+              Async invocation (recommended, avoids gateway timeouts)
             </label>
             <Button
               onClick={() => run.mutate({ id: functionId!, data: dataInput, async: asyncExec })}
               disabled={!writeable || run.pending}
             >
               <Play className="h-4 w-4 mr-2" />
-              {run.pending ? "调用中..." : asyncExec ? "异步调用" : "同步调用"}
+              {run.pending ? "Invoking..." : asyncExec ? "Invoke async" : "Invoke sync"}
             </Button>
           </div>
           <div className="flex items-center gap-2">
@@ -832,10 +837,10 @@ export function FunctionDetailPage() {
               onValueChange={(v) => setInvStatusFilter(v === "all" ? "" : v)}
             >
               <SelectTrigger className="h-8 w-[150px]">
-                <SelectValue placeholder="按状态过滤" />
+                <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部状态</SelectItem>
+                <SelectItem value="all">All statuses</SelectItem>
                 <SelectItem value="queued">queued</SelectItem>
                 <SelectItem value="running">running</SelectItem>
                 <SelectItem value="completed">completed</SelectItem>
@@ -844,9 +849,9 @@ export function FunctionDetailPage() {
             </Select>
           </div>
           {invocationsLoading ? (
-            <p className="text-sm text-muted-foreground">加载中...</p>
+            <p className="text-sm text-muted-foreground">Loading...</p>
           ) : invocations.length === 0 ? (
-            <p className="text-sm text-muted-foreground">暂无调用记录</p>
+            <p className="text-sm text-muted-foreground">No invocations yet</p>
           ) : (
             <div className="divide-y">
               {invocations.map((inv: Invocation) => (
@@ -888,8 +893,8 @@ export function FunctionDetailPage() {
 
       {rotatedSecret && (
         <OneTimeSecretDialog
-          title="新签名密钥"
-          description="轮换完成：新钥即刻生效，旧钥保留一个宽限窗（双签过渡）。"
+          title="New signing secret"
+          description="Rotation complete: the new secret takes effect immediately; the old secret stays valid for a grace window (dual-signature transition)."
           secret={rotatedSecret.secret}
           fingerprint={rotatedSecret.fingerprint}
           onClose={() => setRotatedSecret(null)}

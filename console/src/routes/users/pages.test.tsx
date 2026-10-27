@@ -96,7 +96,7 @@ describe("UsersListPage（列表 fleet 化：URL 即真相）", () => {
       expect.objectContaining({ pageSize: 20, pageToken: undefined }),
     );
     // 下一页 → 游标 push 进 URL → 请求带 page_token
-    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() =>
       expect(mockList).toHaveBeenLastCalledWith(
         expect.objectContaining({ pageToken: "tok-2" }),
@@ -111,8 +111,8 @@ describe("UsersListPage（列表 fleet 化：URL 即真相）", () => {
     await screen.findByText("ada@example.com");
 
     // ID：受控输入按「查询」提交；URL 存原值，消毒在适配器（引号剥离）
-    fireEvent.change(screen.getByLabelText("用户 ID"), { target: { value: 'u "1"' } });
-    fireEvent.click(screen.getByRole("button", { name: "查询" }));
+    fireEvent.change(screen.getByLabelText("User ID"), { target: { value: 'u "1"' } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     await waitFor(() =>
       expect(mockList).toHaveBeenLastCalledWith(
         expect.objectContaining({ queries: ['equal("id","u1")'] }),
@@ -121,7 +121,7 @@ describe("UsersListPage（列表 fleet 化：URL 即真相）", () => {
     expect(search().filter).toEqual(['id:eq:u "1"']);
 
     // 状态：Select 即时应用（setPredicate = replace + 清游标回第一页）
-    fireEvent.click(screen.getByRole("combobox", { name: "状态" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Status" }));
     fireEvent.click(await screen.findByRole("option", { name: "blocked" }));
     await waitFor(() =>
       expect(mockList).toHaveBeenLastCalledWith(
@@ -132,7 +132,7 @@ describe("UsersListPage（列表 fleet 化：URL 即真相）", () => {
     );
 
     // 创建时间范围：datetime-local 墙钟按管理员时区（UTC）换算绝对时刻 → gt
-    fireEvent.change(screen.getByLabelText("创建时间从"), {
+    fireEvent.change(screen.getByLabelText("Created from"), {
       target: { value: "2026-01-01T00:00" },
     });
     await waitFor(() =>
@@ -154,9 +154,9 @@ describe("UsersListPage（列表 fleet 化：URL 即真相）", () => {
     mockDelete.mockResolvedValue(undefined);
     await renderPage();
     await screen.findByText("ada@example.com");
-    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(mockDelete).toHaveBeenCalledWith("u-1", { __skipToast: true }),
     );

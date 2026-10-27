@@ -59,7 +59,7 @@ interface ResourceListPageProps<T extends { id: string }> {
 export function ResourceListPage<T extends { id: string }>({
   title,
   description,
-  cardTitle = "列表",
+  cardTitle = "List",
   searchPlaceholder,
   isLoading,
   items,
@@ -72,7 +72,7 @@ export function ResourceListPage<T extends { id: string }>({
   detailPath,
   editPath,
   rowActions,
-  emptyTitle = "暂无数据",
+  emptyTitle = "No data",
   emptyDescription,
   emptyAction,
   serverPaging,

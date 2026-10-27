@@ -54,7 +54,7 @@ export function CollectionLayout() {
     scope: { projectId: projectId ?? undefined, dbId: dbId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("Collection 已删除");
+        toast.success("Collection deleted");
         navigate({ to: `/console/databases/${dbId}` });
       } else if (result) {
         toast.error(result.message);
@@ -77,9 +77,9 @@ export function CollectionLayout() {
         title={
           <span className="inline-flex items-center gap-2">
             {collection.name}
-            {collection.disabled && <Badge variant="destructive">已停用</Badge>}
+            {collection.disabled && <Badge variant="destructive">Disabled</Badge>}
             {/* 系统集合不经本页管理；徽章仅兜底 is_system。 */}
-            {collection.is_system && <Badge variant="secondary">系统</Badge>}
+            {collection.is_system && <Badge variant="secondary">System</Badge>}
           </span>
         }
         description={database ? `${database.name} · ${collection.id}` : collection.id}
@@ -97,7 +97,7 @@ export function CollectionLayout() {
         <Button variant="ghost" size="sm" className="w-fit" asChild>
           <Link to="/console/databases/$dbId" params={{ dbId: dbId }}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            返回 Database
+            Back to database
           </Link>
         </Button>
 
@@ -108,13 +108,13 @@ export function CollectionLayout() {
           </NavLink>
           <NavLink to={`${basePath}/documents`} className={navLinkClass}>
             <FileText className="h-4 w-4" />
-            文档
+            Documents
           </NavLink>
           {/* 试听：仅 platform admin；系统 / 停用集合 Realtime 订阅会被拒，不展示 */}
           {platformAdmin && !collection.is_system && !collection.disabled && (
             <NavLink to={`${basePath}/listen`} className={navLinkClass}>
               <Radio className="h-4 w-4" />
-              试听
+              Listen
             </NavLink>
           )}
         </nav>

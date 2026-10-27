@@ -4,11 +4,11 @@ import { MetricChart as KitMetricChart } from "@/components/kit/values/metric-ch
 import { formatBucket, toTrendSeries } from "./shared";
 
 // 图表披露文案（§12.10-⑤ labels 注入面；原 vendored 内置中文改页面注入）
-const METRIC_ZH = {
-  empty: "窗口内无样本",
-  more: (hidden: number) => `+${hidden} 条序列未显示——排序保持活跃序列优先`,
+const METRIC_LABELS = {
+  empty: "No samples in window",
+  more: (hidden: number) => `+${hidden} more series not shown — ranking keeps active series first`,
   serverCap: (shown: number, total: number) =>
-    `已达服务端上限——显示 ${shown} / ${total} 条序列`,
+    `Server cap reached — showing ${shown} of ${total} series`,
 } as const;
 
 // MetricChart 投影薄壳（D 批，design.md §12.6-3）：渲染面换 fleet-ui 块，
@@ -31,7 +31,7 @@ export function TrendChart({
       height={height}
       formatValue={(value) => value.toLocaleString()}
       formatTick={(t) => formatBucket(new Date(t).toISOString(), granularity)}
-      labels={METRIC_ZH}
+      labels={METRIC_LABELS}
     />
   );
 }

@@ -48,7 +48,7 @@ import { formatInt64, isInt64Input } from "@/lib/utils";
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/kit/query/data-table";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
-import { PAGE_SIZE_OPTIONS, PAGINATION_ZH } from "@/components/kit/query/pagination-zh";
+import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 import { assetDefsResource, assetDefsSearch, createAssetDefCommand, removeAssetDefCommand } from "@/kit/assets";
 import { describeApiError } from "@/kit/errors";
@@ -76,7 +76,7 @@ export function AssetDefsListPage() {
   const remove = useCommand(removeAssetDefCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("资产定义已删除");
+        toast.success("Asset definition deleted");
       } else if (result) {
         toast.error(result.message);
       } else if (failure) {
@@ -104,11 +104,11 @@ export function AssetDefsListPage() {
         <span className="font-mono text-xs">{row.original.code}</span>
       ),
     },
-    { id: "name", header: "名称", cell: ({ row }) => row.original.name },
-    { id: "class", header: "类别", cell: ({ row }) => row.original.class },
+    { id: "name", header: "Name", cell: ({ row }) => row.original.name },
+    { id: "class", header: "Class", cell: ({ row }) => row.original.class },
     {
       id: "status",
-      header: "状态",
+      header: "Status",
       cell: ({ row }) => (
         <Badge variant={row.original.status === "archived" ? "secondary" : "default"}>
           {row.original.status ?? "active"}
@@ -117,7 +117,7 @@ export function AssetDefsListPage() {
     },
     {
       id: "created",
-      header: "创建时间",
+      header: "Created",
       meta: { sortField: "created_at" },
       cell: ({ row }) => formatDateTime(row.original.created_at, tz),
     },
@@ -125,7 +125,7 @@ export function AssetDefsListPage() {
       ? [
           {
             id: "actions",
-            header: "操作",
+            header: "Actions",
             cell: ({ row }: { row: { original: AssetDef } }) => (
               <RowDeleteButton
                 onConfirm={() => remove.mutate({ id: row.original.id })}
@@ -139,7 +139,7 @@ export function AssetDefsListPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="资产定义" description="管理代币 / 物品 / 权益目录。终端用户无写入口。" />
+      <PageHeader title="Asset definitions" description="Manage currency / item / entitlement catalogs. End users have no write access." />
 
       <KitListPage
         list={shownList}
@@ -148,18 +148,18 @@ export function AssetDefsListPage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="当前页内搜索 code / 名称 / 类别..."
+              placeholder="Search code / name / class on this page..."
               className="h-8 w-56"
             />
             <div className="ml-auto flex gap-2">
               <Button variant="outline" asChild>
-                <Link to="/console/assets/users">查询用户资产</Link>
+                <Link to="/console/assets/users">Query user assets</Link>
               </Button>
               {writeable ? (
                 <Button asChild>
                   <Link to="/console/assets/defs/new">
                     <Plus className="h-4 w-4 mr-2" />
-                    新建定义
+                    New definition
                   </Link>
                 </Button>
               ) : null}
@@ -168,14 +168,14 @@ export function AssetDefsListPage() {
         }
         pagination={
           <div className="px-4 pb-4">
-            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} labels={PAGINATION_ZH} />
+            <KeysetPagination list={list} pageSizeOptions={PAGE_SIZE_OPTIONS} />
           </div>
         }
-        emptyTitle={search !== "" ? "没有匹配的资产定义" : "暂无资产定义"}
+        emptyTitle={search !== "" ? "No matching asset definitions" : "No asset definitions yet"}
         emptyDescription={
           search !== ""
-            ? "调整搜索词，或清空恢复当前页全部行"
-            : "创建 currency / stack / instance / entitlement 定义"
+            ? "Adjust your search, or clear it to restore all rows on this page"
+            : "Create currency / stack / instance / entitlement definitions"
         }
       >
         <div className="px-6 pb-2 pt-2">
@@ -205,7 +205,7 @@ export function AssetDefNewPage() {
   const create = useCommand(createAssetDefCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("资产定义已创建");
+        toast.success("Asset definition created");
         navigate({ to: `/console/assets/defs/${result.payload.id}` });
       } else if (result) {
         toast.error(result.message);
@@ -217,13 +217,13 @@ export function AssetDefNewPage() {
 
   return (
     <FormPageWrapper
-      title="新建资产定义"
+      title="New asset definition"
       backTo="/console/assets"
-      submitLabel="创建"
+      submitLabel="Create"
       onSubmit={(e) => {
         e.preventDefault();
         if (!isInt64Input(maxQuantity)) {
-          toast.error("max_quantity 必须是整数最小单位");
+          toast.error("max_quantity must be an integer in the smallest unit");
           return;
         }
         create.mutate({
@@ -238,9 +238,9 @@ export function AssetDefNewPage() {
       submitDisabled={!code || !name}
     >
       <FormField id="code" label="Code" value={code} onChange={setCode} required placeholder="gold" />
-      <FormField id="name" label="名称" value={name} onChange={setName} required placeholder="金币" />
+      <FormField id="name" label="Name" value={name} onChange={setName} required placeholder="Gold coin" />
       <div className="space-y-2">
-        <Label>类别</Label>
+        <Label>Class</Label>
         <Select value={klass} onValueChange={setKlass}>
           <SelectTrigger>
             <SelectValue />
@@ -254,13 +254,13 @@ export function AssetDefNewPage() {
           </SelectContent>
         </Select>
       </div>
-      <FormField id="decimals" label="小数位（仅展示）" value={decimals} onChange={setDecimals} />
+      <FormField id="decimals" label="Decimals (display only)" value={decimals} onChange={setDecimals} />
       <FormField
         id="max_quantity"
-        label="max_quantity（最小单位整数，可空）"
+        label="max_quantity (integer in smallest unit, optional)"
         value={maxQuantity}
         onChange={setMaxQuantity}
-        placeholder="留空表示不限"
+        placeholder="Leave empty for no limit"
       />
     </FormPageWrapper>
   );
@@ -286,7 +286,7 @@ export function AssetDefDetailPage() {
   const remove = useCommand(removeAssetDefCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
-        toast.success("资产定义已删除");
+        toast.success("Asset definition deleted");
         navigate({ to: "/console/assets" });
       } else if (result) {
         toast.error(result.message);
@@ -336,17 +336,17 @@ export function AssetDefDetailPage() {
         items={[
           { label: "ID", value: def.id, mono: true },
           { label: "Code", value: def.code, mono: true },
-          { label: "类别", value: def.class },
-          { label: "状态", value: def.status ?? "active" },
+          { label: "Class", value: def.class },
+          { label: "Status", value: def.status ?? "active" },
           { label: "decimals", value: String(def.decimals) },
           { label: "max_quantity", value: def.max_quantity ? formatInt64(def.max_quantity) : "—" },
-          { label: "创建时间", value: formatDateTime(def.created_at, tz) },
+          { label: "Created", value: formatDateTime(def.created_at, tz) },
         ]}
       />
 
       <Card>
         <CardHeader>
-          <CardTitle>用户持有（只读）</CardTitle>
+          <CardTitle>User holdings (read-only)</CardTitle>
         </CardHeader>
         <CardContent>
           <form
@@ -357,38 +357,38 @@ export function AssetDefDetailPage() {
             }}
           >
             <div className="space-y-2 min-w-[240px]">
-              <Label htmlFor="holder-owner">用户 ID</Label>
+              <Label htmlFor="holder-owner">User ID</Label>
               <Input
                 id="holder-owner"
                 value={ownerInput}
                 onChange={(e) => setOwnerInput(e.target.value)}
-                placeholder="按 UserID 过滤，留空显示全部"
+                placeholder="Filter by user ID, leave empty to show all"
               />
             </div>
             <Button type="submit" variant="outline">
-              查询
+              Query
             </Button>
             {ownerFilter ? (
               <Button type="button" variant="ghost" onClick={clearOwnerFilter}>
-                清除
+                Clear
               </Button>
             ) : null}
           </form>
           {holders.isLoading ? (
-            <p className="text-sm text-muted-foreground">加载中…</p>
+            <p className="text-sm text-muted-foreground">Loading…</p>
           ) : holderRows.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              {ownerFilter ? "该用户无此资产持有" : "暂无用户持有"}
+              {ownerFilter ? "This user holds none of this asset" : "No user holdings yet"}
             </p>
           ) : (
             <>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>用户 ID</TableHead>
-                    <TableHead>数量</TableHead>
-                    <TableHead>等级</TableHead>
-                    <TableHead>到期时间</TableHead>
+                    <TableHead>User ID</TableHead>
+                    <TableHead>Quantity</TableHead>
+                    <TableHead>Level</TableHead>
+                    <TableHead>Expires at</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -429,12 +429,12 @@ export function AssetDefDetailPage() {
 
 // 流水动词的中文标签；未知动词回退原值（服务端新增枚举时不至于显示空白）。
 const LEDGER_KIND_LABELS: Record<string, string> = {
-  grant: "发放",
-  consume: "消耗",
-  transfer_out: "转出",
-  transfer_in: "转入",
-  mutate: "变更",
-  expire: "失效",
+  grant: "Grant",
+  consume: "Consume",
+  transfer_out: "Transfer out",
+  transfer_in: "Transfer in",
+  mutate: "Adjust",
+  expire: "Expire",
 };
 
 // placeholderData 只在同项目同用户间复用：切换项目 / 用户后不再用旧数据占位，
@@ -546,7 +546,7 @@ export function UserAssetsPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>查询用户资产</CardTitle>
+          <CardTitle>Query user assets</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-3">
           <form
@@ -557,7 +557,7 @@ export function UserAssetsPage() {
             }}
           >
             <div className="space-y-2 min-w-[240px]">
-              <Label htmlFor="owner">用户 ID</Label>
+              <Label htmlFor="owner">User ID</Label>
               <Input
                 id="owner"
                 value={ownerId}
@@ -566,11 +566,11 @@ export function UserAssetsPage() {
               />
             </div>
             <Button type="submit" disabled={!ownerId.trim()}>
-              查询
+              Query
             </Button>
           </form>
           <Button variant="outline" asChild>
-            <Link to="/console/assets">返回定义</Link>
+            <Link to="/console/assets">Back to definitions</Link>
           </Button>
         </CardContent>
       </Card>
@@ -581,23 +581,23 @@ export function UserAssetsPage() {
               选中的项目；用户 ID 是项目内标识，项目不对时这里会显示「无持有」
               而不是目标项目的数据——把作用域显性化便于发现。 */}
           <p className="text-sm text-muted-foreground">
-            查询项目：<span className="font-mono text-foreground">{projectId ?? "—"}</span>
+            Querying project: <span className="font-mono text-foreground">{projectId ?? "—"}</span>
           </p>
           <Card>
             <CardContent className="pt-6">
               <Tabs defaultValue="holdings">
                 <TabsList>
-                  <TabsTrigger value="holdings">持有</TabsTrigger>
-                  <TabsTrigger value="ledger">流水</TabsTrigger>
+                  <TabsTrigger value="holdings">Holdings</TabsTrigger>
+                  <TabsTrigger value="ledger">Ledger</TabsTrigger>
                 </TabsList>
                 <TabsContent value="holdings">
                   <p className="mb-3 text-sm text-muted-foreground">
-                    只读视图，无 Grant / Consume / Transfer 操作入口。
+                    Read-only view, no Grant / Consume / Transfer actions.
                   </p>
                   {holdings.isLoading ? (
-                    <p className="text-sm text-muted-foreground">加载中…</p>
+                    <p className="text-sm text-muted-foreground">Loading…</p>
                   ) : holdingsRows.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">无持有</p>
+                    <p className="text-sm text-muted-foreground">No holdings</p>
                   ) : (
                     <>
                       <div className="relative mb-3 max-w-sm">
@@ -605,7 +605,7 @@ export function UserAssetsPage() {
                         <Input
                           value={holdingSearch}
                           onChange={(e) => setHoldingSearch(e.target.value)}
-                          placeholder="当前页内搜索 code / 名称 / 类别..."
+                          placeholder="Search code / name / class on this page..."
                           className="pl-9 pr-9"
                         />
                         {holdingSearch && (
@@ -621,12 +621,12 @@ export function UserAssetsPage() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>资产 Code</TableHead>
-                            <TableHead>名称</TableHead>
-                            <TableHead>类别</TableHead>
-                            <TableHead>数量</TableHead>
-                            <TableHead>等级</TableHead>
-                            <TableHead>到期时间</TableHead>
+                            <TableHead>Asset code</TableHead>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Class</TableHead>
+                            <TableHead>Quantity</TableHead>
+                            <TableHead>Level</TableHead>
+                            <TableHead>Expires at</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -643,7 +643,7 @@ export function UserAssetsPage() {
                         </TableBody>
                       </Table>
                       {filteredHoldings.length === 0 ? (
-                        <p className="mt-3 text-sm text-muted-foreground">当前页无匹配项</p>
+                        <p className="mt-3 text-sm text-muted-foreground">No matches on this page</p>
                       ) : null}
                       <ListPaginationKeyset
                         page={holdingsPaging.page}
@@ -667,10 +667,10 @@ export function UserAssetsPage() {
                       }}
                     >
                       <SelectTrigger className="h-8 w-[180px]">
-                        <SelectValue placeholder="全部资产" />
+                        <SelectValue placeholder="All assets" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">全部资产</SelectItem>
+                        <SelectItem value="all">All assets</SelectItem>
                         {(defOptions.data?.rows ?? []).map((d) => (
                           <SelectItem key={d.id} value={d.code}>
                             {d.code}
@@ -686,24 +686,24 @@ export function UserAssetsPage() {
                       }}
                     >
                       {ledgerAscending ? <ArrowUp className="h-3.5 w-3.5 mr-1" /> : <ArrowDown className="h-3.5 w-3.5 mr-1" />}
-                      {ledgerAscending ? "最早在前" : "最新在前"}
+                      {ledgerAscending ? "Oldest first" : "Newest first"}
                     </Button>
                   </div>
                   {ledger.isLoading ? (
-                    <p className="text-sm text-muted-foreground">加载中…</p>
+                    <p className="text-sm text-muted-foreground">Loading…</p>
                   ) : ledgerRows.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">无流水</p>
+                    <p className="text-sm text-muted-foreground">No ledger entries</p>
                   ) : (
                     <>
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>时间</TableHead>
-                            <TableHead>类型</TableHead>
-                            <TableHead>资产 Code</TableHead>
-                            <TableHead>名称</TableHead>
-                            <TableHead className="text-right">变动</TableHead>
-                            <TableHead className="text-right">变动后余额</TableHead>
+                            <TableHead>Time</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Asset code</TableHead>
+                            <TableHead>Name</TableHead>
+                            <TableHead className="text-right">Change</TableHead>
+                            <TableHead className="text-right">Balance after</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>

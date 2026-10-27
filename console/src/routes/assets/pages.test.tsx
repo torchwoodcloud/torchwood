@@ -89,7 +89,7 @@ describe("AssetDefsListPage", () => {
     expect(screen.queryByText(/Grant/i)).toBeNull();
     expect(screen.queryByText(/Consume/i)).toBeNull();
     expect(screen.queryByText(/Transfer/i)).toBeNull();
-    expect(screen.getByText("查询用户资产")).toBeTruthy();
+    expect(screen.getByText("Query user assets")).toBeTruthy();
   });
 
   it("URL 即真相：默认页大小/翻页游标透传 listAssetDefs（page_token）", async () => {
@@ -114,7 +114,7 @@ describe("AssetDefsListPage", () => {
       expect.objectContaining({ pageSize: 20, pageToken: undefined, sortOrder: undefined })
     );
     // 下一页 → 游标 push 进 URL → 请求带 page_token
-    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() =>
       expect(listAssetDefs).toHaveBeenLastCalledWith(
         expect.objectContaining({ pageToken: "tok-2" })
@@ -141,10 +141,10 @@ describe("AssetDefsListPage", () => {
     vi.mocked(deleteAssetDef).mockResolvedValue(undefined);
     await renderListPage();
     await screen.findByText("gold");
-    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     // torchwood 存量确认壳：确认钮与触发钮同名，scope 到对话框内
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(deleteAssetDef).toHaveBeenCalledWith("d1", { __skipToast: true })
     );
@@ -160,8 +160,8 @@ describe("UserAssetsPage", () => {
 
   it("只读查询表单，无资产写按钮", async () => {
     await wrap(<UserAssetsPage />);
-    expect(screen.getByLabelText("用户 ID")).toBeTruthy();
-    expect(screen.getByText("查询")).toBeTruthy();
+    expect(screen.getByLabelText("User ID")).toBeTruthy();
+    expect(screen.getByText("Query")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /grant/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /consume/i })).toBeNull();
   });
@@ -189,11 +189,11 @@ describe("UserAssetsPage", () => {
     expect(await screen.findByText("gold")).toBeTruthy();
     expect(await screen.findByText("金币")).toBeTruthy();
     expect(screen.getByText("100")).toBeTruthy();
-    expect(screen.getByText("查询项目：")).toBeTruthy();
+    expect(screen.getByText("Querying project:")).toBeTruthy();
     expect(screen.getByText("proj-1")).toBeTruthy();
     expect(listUserAssets).toHaveBeenCalledWith("u1", { pageSize: 20, pageToken: "" });
     expect(listUserLedger).toHaveBeenCalledWith("u1", { pageSize: 20, pageToken: "" });
-    expect((screen.getByLabelText("用户 ID") as HTMLInputElement).value).toBe("u1");
+    expect((screen.getByLabelText("User ID") as HTMLInputElement).value).toBe("u1");
   });
 
   it("持有支持当前页内按 code/名称搜索", async () => {
@@ -224,17 +224,17 @@ describe("UserAssetsPage", () => {
     expect(screen.getByText("貔貅")).toBeTruthy();
 
     // 按 code 片段搜索：只留 cdx_pixiu 行
-    fireEvent.change(screen.getByPlaceholderText(/当前页内搜索/), { target: { value: "cdx" } });
+    fireEvent.change(screen.getByPlaceholderText(/Search code \/ name \/ class/), { target: { value: "cdx" } });
     expect(screen.getByText("貔貅")).toBeTruthy();
     expect(screen.queryByText("金币")).toBeNull();
-    expect(screen.queryByText("当前页无匹配项")).toBeNull();
+    expect(screen.queryByText("No matches on this page")).toBeNull();
 
     // 按中文名称搜索：只留 gold 行；无匹配显示占位提示
-    fireEvent.change(screen.getByPlaceholderText(/当前页内搜索/), { target: { value: "金币" } });
+    fireEvent.change(screen.getByPlaceholderText(/Search code \/ name \/ class/), { target: { value: "金币" } });
     expect(screen.getByText("金币")).toBeTruthy();
     expect(screen.queryByText("貔貅")).toBeNull();
-    fireEvent.change(screen.getByPlaceholderText(/当前页内搜索/), { target: { value: "nope" } });
-    expect(screen.getByText("当前页无匹配项")).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText(/Search code \/ name \/ class/), { target: { value: "nope" } });
+    expect(screen.getByText("No matches on this page")).toBeTruthy();
     expect(screen.queryByText("金币")).toBeNull();
   });
 
@@ -277,16 +277,16 @@ describe("UserAssetsPage", () => {
     await act(async () => {});
     // radix Tabs 内容懒渲染：先切到流水 tab 再断言（radix Trigger 依赖
     // pointer 序列，jsdom 里需先 mouseDown 再 click 才会激活）。
-    const ledgerTab = screen.getByRole("tab", { name: "流水" });
+    const ledgerTab = screen.getByRole("tab", { name: "Ledger" });
     fireEvent.mouseDown(ledgerTab);
     fireEvent.click(ledgerTab);
-    expect(await screen.findByText("发放")).toBeTruthy();
-    expect(screen.getByText("消耗")).toBeTruthy();
+    expect(await screen.findByText("Grant")).toBeTruthy();
+    expect(screen.getByText("Consume")).toBeTruthy();
     expect(screen.getAllByText("玉").length).toBe(2);
     expect(screen.getAllByText("+6").length).toBe(1);
     expect(screen.getByText("-2")).toBeTruthy();
     expect(screen.getByText("19")).toBeTruthy();
-    expect(screen.getByText("变动后余额")).toBeTruthy();
+    expect(screen.getByText("Balance after")).toBeTruthy();
   });
 
   it("流水支持排序切换与按资产过滤，变更后回第一页", async () => {
@@ -308,13 +308,13 @@ describe("UserAssetsPage", () => {
       </QueryClientProvider>
     );
     await act(async () => {});
-    const ledgerTab = screen.getByRole("tab", { name: "流水" });
+    const ledgerTab = screen.getByRole("tab", { name: "Ledger" });
     fireEvent.mouseDown(ledgerTab);
     fireEvent.click(ledgerTab);
-    await screen.findByText("全部资产");
+    await screen.findByText("All assets");
 
     // 排序切换：desc → asc，分页回第一页
-    fireEvent.click(screen.getByRole("button", { name: /最新在前/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Newest first/ }));
     await vi.waitFor(() => {
       expect(listUserLedger).toHaveBeenLastCalledWith("u1", {
         pageSize: 20, pageToken: "", defCode: undefined, ascending: true,
@@ -372,7 +372,7 @@ describe("AssetDefDetailPage 用户持有列表", () => {
       nextPageToken: "tok-1",
     });
     await renderDetail();
-    expect(await screen.findByText("用户持有（只读）")).toBeTruthy();
+    expect(await screen.findByText("User holdings (read-only)")).toBeTruthy();
     expect(screen.getByText("u1")).toBeTruthy();
     expect(screen.getByText("u2")).toBeTruthy();
     expect(listDefHolders).toHaveBeenCalledWith("d1", {
@@ -393,9 +393,9 @@ describe("AssetDefDetailPage 用户持有列表", () => {
     });
     vi.mocked(listDefHolders).mockResolvedValue({ rows: [] });
     await renderDetail();
-    await screen.findByText("用户持有（只读）");
-    fireEvent.change(screen.getByLabelText("用户 ID"), { target: { value: "u2" } });
-    fireEvent.click(screen.getByRole("button", { name: "查询" }));
+    await screen.findByText("User holdings (read-only)");
+    fireEvent.change(screen.getByLabelText("User ID"), { target: { value: "u2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Query" }));
     await vi.waitFor(() => {
       expect(listDefHolders).toHaveBeenLastCalledWith("d1", {
         ownerId: "u2",
