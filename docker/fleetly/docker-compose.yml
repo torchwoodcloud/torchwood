@@ -112,10 +112,9 @@ services:
     # 应用镜像：GHCR 预构建（.github/workflows/image.yml），钉 sha tag；
     # 升级/回滚 = 改 tag 重部署（镜像形态裁决见 README §5）。镜像变更时
     # migrate 的 -source ref 须同步改为同一 commit（README §5）。
-    # 2026-10-16：v4 镜像 sha-c4d693bc 的 sha tag 在 GHCR 缺位（latest 已含该
-    # commit，revision label 核对过），暂以 latest 部署——部署期 tag→digest 钉定
-    # 保住 reproducibility；sha tag 传播后改回 sha 形态。
-    image: ghcr.io/torchwoodcloud/torchwood:latest
+    # 2026-10-27：回到 sha 钉定形态（2026-10-16 因 sha-c4d693bc 的 sha tag
+    # 在 GHCR 缺位暂用 latest，现已恢复）。
+    image: ghcr.io/torchwoodcloud/torchwood:sha-71f960d
     networks: [default]
     # 托管库引用：物化 FLEETLY_DB_TORCHWOOD_PG_* env（app 级）并把本服务挂
     # 到库共享网络（别名 = 实例名 torchwood-pg）。实例须先创建（runbook §0）。
@@ -160,7 +159,7 @@ services:
 
   # ==================== 常驻：worker（Functions 异步消费者） ====================
   worker:
-    image: ghcr.io/torchwoodcloud/torchwood:latest
+    image: ghcr.io/torchwoodcloud/torchwood:sha-71f960d
     networks: [default]
     labels:
       fleetly.databases: "torchwood-pg"
@@ -214,7 +213,7 @@ services:
           exit 1
         fi
         exec /migrate \
-          -source "github://torchwoodcloud/torchwood/db/migrations#c4d693bc" \
+          -source "github://torchwoodcloud/torchwood/db/migrations#71f960d" \
           -database "${FLEETLY_DB_TORCHWOOD_PG_URL}?sslmode=disable" \
           up
     labels:
@@ -282,7 +281,7 @@ services:
   # 用 owner/引导 DSN（运行态 tw_authenticator 对 tw_secrets 零权限）。
   # 等待环同 db-bootstrap（迁移未完成时重试，不静默半成功）。
   roles-sig:
-    image: ghcr.io/torchwoodcloud/torchwood:latest
+    image: ghcr.io/torchwoodcloud/torchwood:sha-71f960d
     command:
       - sh
       - -c
