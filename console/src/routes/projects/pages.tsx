@@ -101,7 +101,7 @@ export function ProjectsListPage() {
               className="h-8 w-56"
             />
             {platformAdmin ? (
-              <Button asChild className="ml-auto">
+              <Button size="sm" asChild className="ml-auto">
                 <Link to="/console/projects/new">
                   <Plus className="h-4 w-4 mr-2" />
                   New Project
@@ -123,7 +123,7 @@ export function ProjectsListPage() {
         }
         emptyAction={
           platformAdmin ? (
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link to="/console/projects/new">New Project</Link>
             </Button>
           ) : undefined

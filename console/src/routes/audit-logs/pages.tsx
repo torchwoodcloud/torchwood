@@ -10,6 +10,7 @@ import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { Label } from "@/components/ui/label";
 import { JsonEditor } from "@/components/ui/json-editor";
 import {
@@ -296,20 +297,18 @@ export function AuditLogsListPage() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="audit-after">From</Label>
-                <Input
+                <DateTimePicker
                   id="audit-after"
-                  type="datetime-local"
                   value={toDateTimeLocalValue(filters.created_after, tz)}
-                  onChange={(e) => setFilter("created_after", e.target.value)}
+                  onChange={(v) => setFilter("created_after", v)}
                 />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="audit-before">To</Label>
-                <Input
+                <DateTimePicker
                   id="audit-before"
-                  type="datetime-local"
                   value={toDateTimeLocalValue(filters.created_before, tz)}
-                  onChange={(e) => setFilter("created_before", e.target.value)}
+                  onChange={(v) => setFilter("created_before", v)}
                 />
               </div>
             </div>

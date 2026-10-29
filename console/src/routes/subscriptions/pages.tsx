@@ -19,6 +19,7 @@ import { useAdminRole, canWrite, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -157,11 +158,11 @@ export function PlansListPage() {
               className="h-8 w-56"
             />
             <div className="ml-auto flex gap-2">
-              <Button variant="outline" asChild>
+              <Button size="sm" variant="outline" asChild>
                 <Link to="/console/subscriptions">Subscriptions</Link>
               </Button>
               {writeable ? (
-                <Button asChild>
+                <Button size="sm" asChild>
                   <Link to="/console/subscriptions/plans/new">
                     <Plus className="h-4 w-4 mr-2" />
                     New Plan
@@ -447,11 +448,10 @@ export function SubscriptionsListPage() {
                 <Label htmlFor="subs-filter-after" className="text-xs text-muted-foreground">
                   Created From
                 </Label>
-                <Input
+                <DateTimePicker
                   id="subs-filter-after"
-                  type="datetime-local"
                   value={toDateTimeLocalValue(filters.created_after, tz)}
-                  onChange={(e) => setFilter("created_after", e.target.value)}
+                  onChange={(v) => setFilter("created_after", v)}
                   className="h-8 w-[210px]"
                 />
               </div>
@@ -459,11 +459,10 @@ export function SubscriptionsListPage() {
                 <Label htmlFor="subs-filter-before" className="text-xs text-muted-foreground">
                   To
                 </Label>
-                <Input
+                <DateTimePicker
                   id="subs-filter-before"
-                  type="datetime-local"
                   value={toDateTimeLocalValue(filters.created_before, tz)}
-                  onChange={(e) => setFilter("created_before", e.target.value)}
+                  onChange={(v) => setFilter("created_before", v)}
                   className="h-8 w-[210px]"
                 />
               </div>

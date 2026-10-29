@@ -208,7 +208,7 @@ export function GroupsListPage() {
               />
             ) : null}
             {writeable ? (
-              <Button asChild className="ml-auto">
+              <Button size="sm" asChild className="ml-auto">
                 <Link to="/console/groups/new">
                   <Plus className="h-4 w-4 mr-2" />
                   New group
@@ -230,7 +230,7 @@ export function GroupsListPage() {
         }
         emptyAction={
           writeable ? (
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link to="/console/groups/new">New group</Link>
             </Button>
           ) : undefined

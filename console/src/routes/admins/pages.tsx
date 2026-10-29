@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useCollection, useCommand } from "@lynx-go/uikit-core";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
-import { Plus, ShieldCheck } from "lucide-react";
+import { Eye, Pencil, Plus } from "lucide-react";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { ADMIN_ROLES, getCurrentAdmin, type Admin } from "@/api/admins";
 import {
@@ -74,7 +74,7 @@ export function AdminsListPage() {
     },
   });
 
-  const getSearchText = (a: Admin) => `${a.email} ${a.role}`.toLowerCase();
+  const getSearchText = (a: Admin) => `${a.id} ${a.email} ${a.role}`.toLowerCase();
   const shown =
     search === ""
       ? list.rows
@@ -83,7 +83,29 @@ export function AdminsListPage() {
   const shownList = useMemo(() => ({ ...list, rows: shown }), [list, shown]);
 
   const tableColumns: LegacyColumnDef<Admin, unknown>[] = [
-    { id: "email", header: "Email", cell: ({ row }) => row.original.email },
+    {
+      id: "id",
+      header: "ID",
+      cell: ({ row }) => (
+        <span className="inline-block max-w-[140px] truncate font-mono text-xs">
+          {row.original.id}
+        </span>
+      ),
+    },
+    {
+      id: "email",
+      header: "Email",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          <span className="truncate">{row.original.email}</span>
+          {row.original.id === me?.id ? (
+            <Badge variant="outline" className="text-xs">
+              Current account
+            </Badge>
+          ) : null}
+        </div>
+      ),
+    },
     {
       id: "role",
       header: "Role",
@@ -99,6 +121,7 @@ export function AdminsListPage() {
       header: "Actions",
       cell: ({ row }) => (
         <div className="flex items-center justify-end gap-1">
+          <DetailAdminDialog admin={row.original} />
           {isOwner && row.original.id !== me?.id ? (
             <>
               <EditAdminDialog admin={row.original} />
@@ -107,10 +130,6 @@ export function AdminsListPage() {
                 loading={remove.pending}
               />
             </>
-          ) : row.original.id === me?.id ? (
-            <Badge variant="outline" className="text-xs">
-              Current account
-            </Badge>
           ) : null}
         </div>
       ),
@@ -187,7 +206,7 @@ function CreateAdminDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
+        <Button size="sm" className="ml-auto">
           <Plus className="h-4 w-4 mr-2" />
           New Admin
         </Button>
@@ -281,8 +300,8 @@ function EditAdminDialog({ admin }: { admin: Admin }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon">
-          <ShieldCheck className="h-4 w-4" />
+        <Button variant="ghost" size="icon" title="Edit">
+          <Pencil className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -340,5 +359,51 @@ function EditAdminDialog({ admin }: { admin: Admin }) {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// 只读详情：admins 无详情路由（字段少，对话层面看全即可）；全角色可看。
+function DetailAdminDialog({ admin }: { admin: Admin }) {
+  const tz = useUserTimezone();
+  const [open, setOpen] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon" title="Details">
+          <Eye className="h-4 w-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Admin details</DialogTitle>
+          <DialogDescription>{admin.email}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 text-sm">
+          <DetailRow
+            label="ID"
+            value={<span className="font-mono text-xs break-all">{admin.id}</span>}
+          />
+          <DetailRow label="Email" value={admin.email} />
+          <DetailRow label="Role" value={<AdminRoleBadge role={admin.role} />} />
+          <DetailRow label="Timezone" value={admin.timezone || "Follows browser"} />
+          <DetailRow label="Created" value={formatDateTime(admin.created_at, tz)} />
+          <DetailRow label="Updated" value={formatDateTime(admin.updated_at, tz)} />
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-start gap-4">
+      <span className="w-20 shrink-0 text-muted-foreground">{label}</span>
+      <span className="min-w-0 break-all">{value}</span>
+    </div>
   );
 }

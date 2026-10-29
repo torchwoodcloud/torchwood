@@ -150,8 +150,8 @@ function getTimezoneOffsetMs(date: Date, tz: string): number {
   return asUTC - date.getTime();
 }
 
-// toDateTimeLocalValue 绝对时刻 → 用户时区墙钟的 datetime-local 值
-// （"yyyy-MM-ddTHH:mm"），供 <input type="datetime-local"> 显示。
+// toDateTimeLocalValue 绝对时刻 → 用户时区墙钟值（"yyyy-MM-ddTHH:mm"），
+// 供 ui/datetime-picker 显示（值域与原生 datetime-local input 同形）。
 export function toDateTimeLocalValue(
   value?: string | number | Date | null,
   pref?: string | null

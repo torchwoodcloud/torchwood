@@ -395,7 +395,7 @@ export function WebhooksListPage() {
                 className="h-8 w-56"
               />
               {writeable ? (
-                <Button className="ml-auto" onClick={() => setCreateOpen(true)}>
+                <Button size="sm" className="ml-auto" onClick={() => setCreateOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   New Webhook
                 </Button>

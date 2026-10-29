@@ -238,7 +238,7 @@ export function StorageListPage() {
               />
             ) : null}
             {writeable ? (
-              <Button asChild className="ml-auto">
+              <Button size="sm" asChild className="ml-auto">
                 <Link to="/console/storage/new">
                   <Plus className="h-4 w-4 mr-2" />
                   New bucket
@@ -258,7 +258,7 @@ export function StorageListPage() {
         }
         emptyAction={
           writeable ? (
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link to="/console/storage/new">New bucket</Link>
             </Button>
           ) : undefined

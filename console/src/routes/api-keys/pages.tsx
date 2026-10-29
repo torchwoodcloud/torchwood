@@ -36,6 +36,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
@@ -230,7 +231,7 @@ export function ApiKeysListPage() {
               />
             ) : null}
             {platformAdmin ? (
-              <Button asChild className="ml-auto">
+              <Button size="sm" asChild className="ml-auto">
                 <Link to="/console/api-keys/new">
                   <Plus className="h-4 w-4 mr-2" />
                   New API Key
@@ -690,12 +691,9 @@ function ApiKeyEditDialog({
                   <span className="text-xs font-medium text-muted-foreground">
                     Expiry (leave empty to keep unchanged / never expires)
                   </span>
-                  <Input
-                    type="datetime-local"
+                  <DateTimePicker
                     value={local}
-                    onChange={(e) =>
-                      field.handleChange(fromDateTimeLocalValue(e.target.value, tz))
-                    }
+                    onChange={(v) => field.handleChange(fromDateTimeLocalValue(v, tz))}
                   />
                   <p className="text-xs text-muted-foreground">Once expired, this key stops working immediately (401).</p>
                 </label>

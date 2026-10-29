@@ -13,6 +13,7 @@ import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -187,11 +188,10 @@ export function OrdersListPage() {
                 <Label htmlFor="orders-filter-after" className="text-xs text-muted-foreground">
                   Created From
                 </Label>
-                <Input
+                <DateTimePicker
                   id="orders-filter-after"
-                  type="datetime-local"
                   value={toDateTimeLocalValue(filters.created_after, tz)}
-                  onChange={(e) => setFilter("created_after", e.target.value)}
+                  onChange={(v) => setFilter("created_after", v)}
                   className="h-8 w-[210px]"
                 />
               </div>
@@ -199,11 +199,10 @@ export function OrdersListPage() {
                 <Label htmlFor="orders-filter-before" className="text-xs text-muted-foreground">
                   To
                 </Label>
-                <Input
+                <DateTimePicker
                   id="orders-filter-before"
-                  type="datetime-local"
                   value={toDateTimeLocalValue(filters.created_before, tz)}
-                  onChange={(e) => setFilter("created_before", e.target.value)}
+                  onChange={(v) => setFilter("created_before", v)}
                   className="h-8 w-[210px]"
                 />
               </div>

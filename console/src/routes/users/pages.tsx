@@ -40,6 +40,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -293,11 +294,10 @@ export function UsersListPage() {
                 <Label htmlFor="users-filter-after" className="text-xs text-muted-foreground">
                   Created from
                 </Label>
-                <Input
+                <DateTimePicker
                   id="users-filter-after"
-                  type="datetime-local"
                   value={toDateTimeLocalValue(filters.created_after, tz)}
-                  onChange={(e) => setCreatedAfter(e.target.value)}
+                  onChange={setCreatedAfter}
                   className="h-8 w-[210px]"
                 />
               </div>
@@ -305,11 +305,10 @@ export function UsersListPage() {
                 <Label htmlFor="users-filter-before" className="text-xs text-muted-foreground">
                   To
                 </Label>
-                <Input
+                <DateTimePicker
                   id="users-filter-before"
-                  type="datetime-local"
                   value={toDateTimeLocalValue(filters.created_before, tz)}
-                  onChange={(e) => setCreatedBefore(e.target.value)}
+                  onChange={setCreatedBefore}
                   className="h-8 w-[210px]"
                 />
               </div>

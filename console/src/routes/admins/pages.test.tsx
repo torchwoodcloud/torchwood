@@ -117,4 +117,35 @@ describe("AdminsListPage（列表 fleet 化：URL 即真相）", () => {
       expect(mockDelete).toHaveBeenCalledWith("a-2", { __skipToast: true }),
     );
   });
+
+  it("行展示 ID；Current account 标记在 email 后；详情弹层全角色可看", async () => {
+    mockMe.mockResolvedValue(me);
+    mockList.mockResolvedValue({ rows: [me, other], nextPageToken: undefined });
+    await renderPage();
+    await screen.findByText("ops@example.com");
+
+    // ID 列（mono 截断样式与 users 列表一致）
+    screen.getByText("a-1");
+    screen.getByText("a-2");
+
+    // Current account 标记挂在 email 后（不在 Actions 列）；self 行只有详情钮
+    const meRow = screen.getByText("me@example.com").closest("tr")!;
+    within(meRow).getByText("Current account");
+    expect(within(meRow).queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(within(meRow).queryByRole("button", { name: "Delete" })).toBeNull();
+
+    // other 行（owner）有编辑 + 删除；详情按钮每行都有
+    const otherRow = screen.getByText("ops@example.com").closest("tr")!;
+    within(otherRow).getByRole("button", { name: "Edit" });
+    within(otherRow).getByRole("button", { name: "Delete" });
+    expect(screen.getAllByRole("button", { name: "Details" })).toHaveLength(2);
+
+    // 详情弹层：只读字段全量（me 无 created_at → "—"；无时区偏好 → 跟随浏览器）
+    fireEvent.click(within(meRow).getByRole("button", { name: "Details" }));
+    const dialog = await screen.findByRole("dialog");
+    within(dialog).getByText("a-1");
+    within(dialog).getByText("Follows browser");
+    // me 无 created_at/updated_at → Created/Updated 均显示 "—"
+    expect(within(dialog).getAllByText("—")).toHaveLength(2);
+  });
 });

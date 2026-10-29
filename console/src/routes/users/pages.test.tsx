@@ -131,8 +131,9 @@ describe("UsersListPage（列表 fleet 化：URL 即真相）", () => {
       ),
     );
 
-    // 创建时间范围：datetime-local 墙钟按管理员时区（UTC）换算绝对时刻 → gt
-    fireEvent.change(screen.getByLabelText("Created from"), {
+    // 创建时间范围：选择器墙钟值按管理员时区（UTC）换算绝对时刻 → gt
+    fireEvent.click(screen.getByLabelText("Created from"));
+    fireEvent.change(await screen.findByLabelText("Date and time"), {
       target: { value: "2026-01-01T00:00" },
     });
     await waitFor(() =>

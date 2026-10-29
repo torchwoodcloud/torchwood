@@ -41,6 +41,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -702,11 +703,10 @@ function InviteCodeCreateDialog({
             )}
             <div className="space-y-1.5">
               <Label htmlFor="invite-expire">Expiry (leave empty = never expires)</Label>
-              <Input
+              <DateTimePicker
                 id="invite-expire"
-                type="datetime-local"
                 value={expireAt}
-                onChange={(e) => setExpireAt(e.target.value)}
+                onChange={setExpireAt}
               />
             </div>
             <div className="flex justify-end gap-2">

@@ -289,7 +289,7 @@ export function VarSetsListPage() {
               className="h-8 w-56"
             />
             {platformAdmin ? (
-              <Button className="ml-auto" onClick={() => setCreateOpen(true)}>
+              <Button size="sm" className="ml-auto" onClick={() => setCreateOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 New variable set
               </Button>

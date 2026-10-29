@@ -152,11 +152,11 @@ export function AssetDefsListPage() {
               className="h-8 w-56"
             />
             <div className="ml-auto flex gap-2">
-              <Button variant="outline" asChild>
+              <Button size="sm" variant="outline" asChild>
                 <Link to="/console/assets/users">Query user assets</Link>
               </Button>
               {writeable ? (
-                <Button asChild>
+                <Button size="sm" asChild>
                   <Link to="/console/assets/defs/new">
                     <Plus className="h-4 w-4 mr-2" />
                     New definition
