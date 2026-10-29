@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCollection, useCommand, useCommandForm } from "@lynx-go/uikit-core";
+import { collectionKey } from "@lynx-go/uikit-core/kernel";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Copy, Pencil, RefreshCw } from "lucide-react";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
@@ -141,6 +142,14 @@ export function ApiKeysListPage() {
       } else {
         toast.success(`Deleted ${selectedKeys.length} API Keys`);
       }
+      // 直调批量路径的失效双桥（§12.3 裁决 8 面不变）：kit 集合键前缀
+      //（kind/name/scope/scopeKeys 四段，覆盖本 scope 全部游标页）+ 存量
+      // ["api-keys"] 前缀（["api-keys", id] 详情读仍消费）。此前只打 legacy
+      // 前缀——kit 键首段是 kind，列表从不刷新（浏览器走查抓获的存量缺陷，
+      // 非 0.4.0 回归）。
+      void queryClient.invalidateQueries({
+        queryKey: collectionKey(apiKeysResource, list.query).slice(0, 4),
+      });
       void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
       setSelectedIds(new Set());
     } finally {
