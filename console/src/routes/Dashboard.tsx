@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { collectionQueryOptions } from "@lynx-go/uikit-core";
-import { scoped } from "@lynx-go/uikit-core/kernel";
+import { useCollectionData } from "@lynx-go/uikit-core";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, FolderKanban, FolderPlus } from "lucide-react";
 import { getCurrentAdmin } from "@/api/admins";
@@ -27,40 +26,39 @@ export function Dashboard() {
     staleTime: 60_000,
   });
 
-  // 数据面 = kit 资源（collectionQueryOptions 非 URL 上下文形态——命令失效
+  // 数据面 = kit 资源伴读绑定（useCollectionData 零 URL 形态——命令失效
   // 自动覆盖 kit 键）；统计口径 = 单页上限 100 计数（keyset 无总数，同旧页）。
-  const { data, isLoading: projectsLoading } = useQuery({
-    ...collectionQueryOptions(projectsResource, { window: { size: 100 } }),
-  });
-  const projects = data?.rows ?? [];
+  // keepPrevious: false 与原 useQuery 行为等价（项目切换回 skeleton 非旧数据）。
+  const projects = useCollectionData(projectsResource, { size: 100, keepPrevious: false });
 
   const selectedProjectId = projectId || "";
-  const activeProject = projects.find((p) => p.id === selectedProjectId);
+  const activeProject = projects.rows.find((p) => p.id === selectedProjectId);
 
-  const { data: apiKeyPage } = useQuery({
-    ...collectionQueryOptions(scoped(apiKeysResource, { projectId: selectedProjectId }), { window: { size: 100 } }),
+  const apiKeys = useCollectionData(apiKeysResource, {
+    scope: { projectId: selectedProjectId },
+    size: 100,
     enabled: !!selectedProjectId,
+    keepPrevious: false,
   });
-  const apiKeys = apiKeyPage?.rows ?? [];
-
-  const { data: bucketPage } = useQuery({
-    ...collectionQueryOptions(scoped(bucketsResource, { projectId: selectedProjectId }), { window: { size: 100 } }),
+  const buckets = useCollectionData(bucketsResource, {
+    scope: { projectId: selectedProjectId },
+    size: 100,
     enabled: !!selectedProjectId,
+    keepPrevious: false,
   });
-  const buckets = bucketPage?.rows ?? [];
-
   // keyset 分页下拿不到总数；统计卡取上限一页（100）计数，超出封顶。
-  const { data: dbPage } = useQuery({
-    ...collectionQueryOptions(scoped(databasesResource, { projectId: selectedProjectId }), { window: { size: 100 } }),
+  const databases = useCollectionData(databasesResource, {
+    scope: { projectId: selectedProjectId },
+    size: 100,
     enabled: !!selectedProjectId,
+    keepPrevious: false,
   });
-  const databases = dbPage?.rows ?? [];
 
-  const enabledKeys = apiKeys.filter((k) => k.enabled).length;
-  const publicBuckets = buckets.filter((b) => b.public).length;
+  const enabledKeys = apiKeys.rows.filter((k) => k.enabled).length;
+  const publicBuckets = buckets.rows.filter((b) => b.public).length;
   const localPart = me?.email?.split("@")[0] ?? "";
   const displayName = localPart ? localPart.charAt(0).toUpperCase() + localPart.slice(1) : "";
-  const recentProjects = [...projects]
+  const recentProjects = [...projects.rows]
     .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
     .slice(0, 6);
   const projectScope = activeProject ? `in ${activeProject.name}` : "no active project";
@@ -82,18 +80,18 @@ export function Dashboard() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Projects"
-          value={projectsLoading ? <Skeleton className="h-9 w-16" /> : projects.length}
+          value={projects.status === "loading" ? <Skeleton className="h-9 w-16" /> : projects.rows.length}
           hint={activeProject ? `active: ${activeProject.name}` : "no active project"}
         />
-        <StatCard label="Databases" value={databases.length} hint={projectScope} />
+        <StatCard label="Databases" value={databases.rows.length} hint={projectScope} />
         <StatCard
           label="Buckets"
-          value={buckets.length}
+          value={buckets.rows.length}
           hint={`${publicBuckets} public · ${projectScope}`}
         />
         <StatCard
           label="API Keys"
-          value={apiKeys.length}
+          value={apiKeys.rows.length}
           hint={`${enabledKeys} enabled · ${projectScope}`}
         />
       </div>
@@ -111,7 +109,7 @@ export function Dashboard() {
             view all →
           </Link>
         </div>
-        {projectsLoading ? (
+        {projects.status === "loading" ? (
           <div className="space-y-3 p-5">
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
