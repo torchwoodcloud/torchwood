@@ -328,7 +328,9 @@ export function DatabaseDetailPage() {
   });
 
   const removeColl = useCommand(removeCollectionCommand, {
-    scope: { projectId: projectId ?? undefined, dbId: dbId ?? undefined },
+    // 0.4.0 类型执法：显式命令 scope 必须覆盖声明键全集；参数/项目未就绪时
+    // 命令不可达，scope 缺省走 Provider 解析链。
+    scope: projectId && dbId ? { projectId, dbId } : undefined,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Collection deleted");

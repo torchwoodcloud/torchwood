@@ -50,8 +50,11 @@ export function CollectionLayout() {
 
   // 删除命令化：失效 = kit collections 键 + 存量前缀（resource.legacyKeys
   // 声明，§12.10-②）。DeleteButton 无表单容器——结果分支 toast。
+  // 0.4.0 类型执法：显式命令 scope 必须覆盖声明键全集；参数/项目未就绪时
+  // 命令不可达（下方 NotFound 兜底），scope 缺省走 Provider 解析链。
+  const commandScope = projectId && dbId ? { projectId, dbId } : undefined;
   const remove = useCommand(removeCollectionCommand, {
-    scope: { projectId: projectId ?? undefined, dbId: dbId ?? undefined },
+    scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Collection deleted");

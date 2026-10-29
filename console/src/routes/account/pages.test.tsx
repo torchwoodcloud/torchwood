@@ -132,7 +132,8 @@ describe("AccountPreferencesPage", () => {
   });
   afterEach(() => cleanup());
 
-  it("列表行展示当前时区，弹层内选中即暂存、显式保存才提交", async () => {
+  // radix Select 重交互在满载并行下贴 5s 默认线（§12.9 定向去抖先例，单跑恒绿）
+  it("列表行展示当前时区，弹层内选中即暂存、显式保存才提交", { timeout: 15_000 }, async () => {
     vi.mocked(updateCurrentAdmin).mockImplementation(async (input) => ({
       ...me,
       timezone: input.timezone,

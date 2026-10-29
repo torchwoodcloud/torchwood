@@ -80,9 +80,12 @@ export function CollectionNewPage() {
 
   // 命令化：schema 定义表单的提交形收敛（ID 空则从名称派生、权限空不发送）
   // 在 descriptor run 内；ok 后失效 = kit collections 键 + 存量前缀
-  //（resource.legacyKeys 声明，§12.10-②）。
+  //（resource.legacyKeys 声明，§12.10-②）。0.4.0 类型执法：显式命令 scope
+  // 必须覆盖声明键全集；参数/项目未就绪时命令不可达（下方 NotFound 兜底），
+  // scope 缺省走 Provider 解析链。
+  const commandScope = projectId && dbId ? { projectId, dbId } : undefined;
   const create = useCommand(createCollectionCommand, {
-    scope: { projectId: projectId ?? undefined, dbId: dbId ?? undefined },
+    scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Collection created");
@@ -139,7 +142,9 @@ export function CollectionDetailPage() {
   // kit collections 键 + 存量前缀（resource.legacyKeys 声明，覆盖详情键
   // ["collections", dbId, collId] 与 db 前缀列表键，§12.10-②）；提交形
   // 收敛（索引 orders 全 asc）在 descriptor run 内。toast 单源 onSettled。
-  const commandScope = { projectId: projectId ?? undefined, dbId: dbId ?? undefined };
+  // 0.4.0 类型执法：显式命令 scope 必须覆盖声明键全集（dbId/collId 由布局
+  // 路由上下文保证非空）；项目未就绪时命令不可达，走 Provider 解析链。
+  const commandScope = projectId ? { projectId, dbId, collId } : undefined;
 
   const updatePerms = useCommand(updateCollectionPermissionsCommand, {
     scope: commandScope,
