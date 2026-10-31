@@ -127,10 +127,7 @@ func FinalizeOffsetPage(params ListParams, total, returned int) (OffsetPage, err
 		page.NextToken = token
 	}
 	if params.Offset > 0 {
-		prev := params.Offset - int(params.PageSize)
-		if prev < 0 {
-			prev = 0
-		}
+		prev := max(params.Offset-int(params.PageSize), 0)
 		token, err := EncodePageToken(prev)
 		if err != nil {
 			return OffsetPage{}, err
@@ -143,14 +140,8 @@ func FinalizeOffsetPage(params ListParams, total, returned int) (OffsetPage, err
 // SliceOffsetPage 在内存全量列表上切页并收尾（repo 未做 LIMIT 的全量形状，
 // 如小表枚举端点）：切片钳制、终止契约与双向 token 一步完成。
 func SliceOffsetPage[T any](items []T, params ListParams) ([]T, OffsetPage, error) {
-	start := params.Offset
-	if start > len(items) {
-		start = len(items)
-	}
-	end := start + int(params.PageSize)
-	if end > len(items) {
-		end = len(items)
-	}
+	start := min(params.Offset, len(items))
+	end := min(start+int(params.PageSize), len(items))
 	page, err := FinalizeOffsetPage(params, len(items), end-start)
 	if err != nil {
 		return nil, OffsetPage{}, err
