@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@lynx-go/uikit-core':
-        specifier: ^0.4.0
-        version: 0.4.0(@tanstack/react-form@1.33.5(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@tanstack/react-query@5.101.4(react@19.2.8))(@tanstack/react-router@1.170.46(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
+        specifier: ^0.5.0
+        version: 0.5.0(@tanstack/react-form@1.33.5(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@tanstack/react-query@5.101.4(react@19.2.8))(@tanstack/react-router@1.170.46(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
       '@radix-ui/react-avatar':
         specifier: ^1.2.0
         version: 1.2.6(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -369,8 +369,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@lynx-go/uikit-core@0.4.0':
-    resolution: {integrity: sha512-0JES1es4VOLHGnV+FMfj2wwbmVNQh+CmRt6Bzu93H3lYEC0A33Ym54SAsUDh7h6KU03tmgEFShZ0EuCZhsagcA==}
+  '@lynx-go/uikit-core@0.5.0':
+    resolution: {integrity: sha512-mn7o3y/Eei6/7jrP899HApO6AUW827w2dXm0X6GlUQE5r1GQ0XEJWaqvnXW/epIENKADsoUIC9r9rQBLDdz4cQ==}
     peerDependencies:
       '@tanstack/react-form': '>=1.30'
       '@tanstack/react-query': '>=5.100'
@@ -2846,7 +2846,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@lynx-go/uikit-core@0.4.0(@tanstack/react-form@1.33.5(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@tanstack/react-query@5.101.4(react@19.2.8))(@tanstack/react-router@1.170.46(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)':
+  '@lynx-go/uikit-core@0.5.0(@tanstack/react-form@1.33.5(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@tanstack/react-query@5.101.4(react@19.2.8))(@tanstack/react-router@1.170.46(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@tanstack/react-form': 1.33.5(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       effect: 4.0.6

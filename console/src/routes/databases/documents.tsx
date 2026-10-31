@@ -7,11 +7,9 @@ import {
 } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useOutletContext } from "@/router/outlet-context";
-import {
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/uikit-core";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCollection, useCommand, useRecord, recordQueryOptions } from "@lynx-go/uikit-core";
+import { scoped } from "@lynx-go/uikit-core/kernel";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -22,13 +20,14 @@ import {
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { type CollectionOutletContext } from "@/routes/databases/CollectionLayout";
 import {
-  getCollection,
-  getDocument,
   bulkUpdateDocuments,
   bulkDeleteDocuments,
   type Attribute,
   type Document,
 } from "@/api/databases";
+import {
+  collectionsResource,
+} from "@/kit/databases";
 import {
   useAdminRole,
   canWrite,
@@ -121,8 +120,8 @@ function DocumentListSection({
   const commandScope = { projectId: projectId ?? undefined, dbId, collId };
 
   // 行删除命令化（§12.5-8）：无表单容器——结果分支以 toast 呈现；失效 =
-  // descriptor 声明（kit documents 键自动刷新列表 + 存量 ["documents"]
-  // 前缀，§12.10-②——手动桥与 list.refetch 退役）。
+  // descriptor 声明（kit documents 键自动刷新列表，§12.10-②——手动桥、
+  // list.refetch 与存量前缀桥均已退役）。
   const remove = useCommand(removeDocumentCommand(dbId, collId), {
     scope: commandScope,
     onSettled: (result, failure) => {
@@ -416,11 +415,14 @@ function BulkUpdateDialog({
 export function DocumentsListPage() {
   const { dbId, collId } = useOutletContext<CollectionOutletContext>();
   const { role } = useAdminRole();
+  const { projectId } = useAuth();
 
-  const { data: collection, isLoading } = useQuery({
-    queryKey: ["collections", dbId, collId],
-    queryFn: () => getCollection(dbId, collId),
+  const collectionRecord = useRecord(collectionsResource, {
+    id: collId,
+    scope: { projectId: projectId ?? undefined, dbId },
   });
+  const collection = collectionRecord.data;
+  const isLoading = collectionRecord.status === "loading";
 
   if (isLoading) return <DetailSkeleton />;
   if (!collection) return <NotFound backTo={`/console/databases/${dbId}`} />;
@@ -573,11 +575,14 @@ export function DocumentNewPage() {
   const [values, setValues] = useState<Record<string, string>>({ __json: "{}" });
   const [permissions, setPermissions] = useState<string[]>([]);
 
-  const { data: collection, isLoading } = useQuery({
-    queryKey: ["collections", dbId, collId],
-    queryFn: () => getCollection(dbId!, collId!),
-    enabled: !!dbId && !!collId,
+  // 父集合详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用（与旧
+  // enabled 同义）；collection 就绪后 attributes 供 create 命令工厂闭包。
+  const collectionRecord = useRecord(collectionsResource, {
+    id: collId ?? undefined,
+    scope: { projectId: projectId ?? undefined, dbId: dbId ?? undefined },
   });
+  const collection = collectionRecord.data;
+  const isLoading = collectionRecord.status === "loading";
 
   // 创建命令化（§12.5）：表单值展示形在 descriptor.run 内收敛；rejected 的
   // fieldErrors 回流字段级红字；conflict（重复 ID）/其余 rejected 走结果盒。
@@ -668,17 +673,25 @@ export function DocumentDetailPage() {
   const initializedDocRef = useRef<string | null>(null);
   const writeable = canWrite(role);
 
-  const { data: collection } = useQuery({
-    queryKey: ["collections", dbId, collId],
-    queryFn: () => getCollection(dbId!, collId!),
-    enabled: !!dbId && !!collId,
+  // 父集合 + 文档详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用
+  //（与旧 enabled 同义）；文档键形 = kit record 键，OCC 更新命令的
+  // invalidates（同资源全 kind）打在其上，保存 ok 后详情自刷新。
+  const collectionRecord = useRecord(collectionsResource, {
+    id: collId ?? undefined,
+    scope: { projectId: projectId ?? undefined, dbId: dbId ?? undefined },
   });
+  const collection = collectionRecord.data;
 
-  const { data: document, isLoading } = useQuery({
-    queryKey: ["documents", dbId, collId, docId],
-    queryFn: () => getDocument(dbId!, collId!, docId!),
-    enabled: !!dbId && !!collId && !!docId,
+  const documentRecord = useRecord(documentsResource, {
+    id: docId ?? undefined,
+    scope: {
+      projectId: projectId ?? undefined,
+      dbId: dbId ?? undefined,
+      collId: collId ?? undefined,
+    },
   });
+  const document = documentRecord.data;
+  const isLoading = documentRecord.status === "loading";
 
   // 仅在切换到新文档（id 变化）时重建表单，避免后台 refetch 覆盖编辑中的草稿；
   // collection 未就绪时不初始化，防止以空 attributes 建表单。
@@ -713,8 +726,8 @@ export function DocumentDetailPage() {
   // OCC 主面（§12.5）：保存命令化——version 随 data/increment 同一次 PATCH；
   // rejected.fieldErrors 回流字段红字；conflict（版本不匹配）→ 结果盒 +
   // 「刷新重载」（fetchQuery fresh-read 重建表单，草稿按服务端态重置）。
-  // 失效 = descriptor 声明（kit documents 键 + 存量 ["documents"] 前缀——
-  // 详情键经前缀失效，§12.10-②）。
+  // 失效 = descriptor 声明（kit documents 键全 kind——详情 record 键命中，
+  // §12.10-②）。
   const save = useCommand(
     updateDocumentCommand(dbId!, collId!, collection?.attributes ?? []),
     {
@@ -735,14 +748,21 @@ export function DocumentDetailPage() {
   );
 
   // OCC 冲突的「刷新重载」：刻意的 fetchQuery fresh-read（staleTime 0 绕过
-  // 缓存重建草稿），非失效路径——保留（§12.5-3）。
+  // 缓存重建草稿），非失效路径——保留（§12.5-3）；键/fn 经
+  // recordQueryOptions 单源（子视图 kit 化批——手拼键退役）。
   const reloadAfterConflict = async () => {
     save.reset();
-    const fresh = await queryClient.fetchQuery({
-      queryKey: ["documents", dbId, collId, docId],
-      queryFn: () => getDocument(dbId!, collId!, docId!),
-      staleTime: 0,
-    });
+    const fresh = await queryClient.fetchQuery(
+      recordQueryOptions(
+        scoped(documentsResource, {
+          projectId: projectId ?? undefined,
+          dbId: dbId!,
+          collId: collId!,
+        }),
+        docId!,
+        { staleTime: 0 }
+      )
+    );
     setValues(documentToValues(collection?.attributes ?? [], fresh));
     setIncrements({});
   };

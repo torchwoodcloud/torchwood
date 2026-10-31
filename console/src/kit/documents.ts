@@ -13,12 +13,13 @@ import { isAxiosError } from "axios";
 import {
   createDocument,
   deleteDocument,
+  getDocument,
   listDocuments,
   updateDocument,
   type Attribute,
   type Document,
 } from "@/api/databases";
-import { gatewayErrorBody, toApiError } from "@/kit/errors";
+import { gatewayErrorBody, recordOrNull, toApiError } from "@/kit/errors";
 
 // fleet-ui OCC 切片（documents，design.md §12.5）：update/delete 必带 version
 // （CAS）。通道方言：OCC 冲突 = HTTP 400 + FailedPrecondition + message 前缀
@@ -29,8 +30,9 @@ import { gatewayErrorBody, toApiError } from "@/kit/errors";
 
 // —— 列表 fleet 化（§12.9-2）：文档列表换轨 collection（命令族保持工厂
 // 形态——dbId/collId 闭包是既有消费面与 OCC 测试面，不搬进资源 commands；
-// 失效走 descriptor 声明（§12.10-②）：kit documents 键 + 存量 ["documents"]
-// 前缀键——页面 onSettled 手动桥与 list.refetch 退役）。——
+// 失效走 descriptor 声明（§12.10-②）：kit documents 键——列表与详情 record
+// 同资源全 kind 命中；页面 onSettled 手动桥、list.refetch 与存量前缀桥均已
+// 退役）。——
 
 export interface DocumentFormValues {
   /** 展示形字段值（string；__json = 无 attributes 集合的整体 JSON） */
@@ -191,13 +193,13 @@ function buildIncrement(
 
 // —— descriptor 工厂（裸 CommandDescriptor，路径参数闭包——批 B editApiKeyDescriptor 先例）——
 // 三工厂共用同一份失效声明（§12.10-②）：kit documents 键（selector 与命令
-// ctx scope 相交——页面传全量嵌套 scope）+ 存量 ["documents"] 前缀键（详情
-// ["documents", dbId, collId, docId] 仍消费）。
+// ctx scope 相交——页面传全量嵌套 scope；列表 collection 与详情 record
+// 全 kind 命中）。
 
-/** 裸 descriptor 的失效声明（kit documents 资源键 + 存量前缀桥）。 */
+/** 裸 descriptor 的失效声明（kit documents 资源键——列表/详情 record 同资源
+ * 全 kind 命中；存量 ["documents"] 前缀桥随子视图 kit 化退役，读者清零）。 */
 const DOCUMENTS_INVALIDATION = {
   invalidates: [{ resource: "documents" }],
-  legacyKeys: () => [["documents"]],
 } as const;
 
 /** 创建：表单展示形在 run 内收敛（data/permissions）；重复键 409 → conflict。 */
@@ -331,11 +333,16 @@ export const documentsResource = defineResource({
   getId: (row: Document) => row.id,
   scope: ["projectId", "dbId", "collId"],
   collection: fetchDocuments,
+  // 详情读（DocumentDetailPage OCC 主面，子视图 kit 化批）：404 → null 空态
+  // 直出（recordOrNull 手写方言）；OCC「刷新重载」经 recordQueryOptions
+  // 单源取键。ctx 嵌套参数由 scopeReady 就绪门保证，! 仅类型收窄。
+  record: (id, ctx) =>
+    recordOrNull(() => getDocument(ctx.dbId!, ctx.collId!, id)) as Promise<Document>,
 });
 
 // —— 批量直调路径的失效（§12.10-②）：bulk 更新/删除无命令容器（Promise
 // 直调 + 汇总 toast），页面经 invalidateAfterCommand 复用同一份失效声明
-//（kit documents 键自动刷新 useCollection 列表 + 存量前缀键）。——
+//（kit documents 键自动刷新 useCollection 列表与详情 record）。——
 
 /** 失效声明载体（run 不被执行——仅供 invalidateAfterCommand 读取声明面）。 */
 const BULK_INVALIDATION_DESCRIPTOR: CommandDescriptor<unknown, null> = {

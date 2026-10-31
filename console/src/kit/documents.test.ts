@@ -4,12 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createDocument,
   deleteDocument,
+  getDocument,
   updateDocument,
   type Attribute,
 } from "@/api/databases";
 import {
   createDocumentCommand,
   domainCodeOf,
+  documentsResource,
   removeDocumentCommand,
   updateDocumentCommand,
 } from "@/kit/documents";
@@ -22,6 +24,7 @@ vi.mock("@/api/databases", () => ({
   createDocument: vi.fn(),
   updateDocument: vi.fn(),
   deleteDocument: vi.fn(),
+  getDocument: vi.fn(),
   // 列表 fleet 化（§12.9-2）后 fetchDocuments 引用；OCC 用例不触达
   listDocuments: vi.fn(),
 }));
@@ -260,6 +263,32 @@ describe("createDocumentCommand", () => {
     expect(conflict).toMatchObject({
       status: "conflict",
       message: "Document ID already exists. Please use a different ID and retry",
+    });
+  });
+});
+
+describe("documentsResource.record（详情读，子视图 kit 化批）", () => {
+  const scope = { projectId: "p1", dbId: "app", collId: "posts" };
+
+  it("读取透传：ctx 嵌套参数进适配器（dbId/collId）", async () => {
+    vi.mocked(getDocument).mockResolvedValue({ id: "d1" } as never);
+    const rec = await documentsResource.record!("d1", scope);
+    expect(rec).toEqual({ id: "d1" });
+    expect(vi.mocked(getDocument)).toHaveBeenCalledWith("app", "posts", "d1");
+  });
+
+  it("404 → null（详情空态直出——recordOrNull 手写方言）", async () => {
+    vi.mocked(getDocument).mockRejectedValue(httpError(404, "no doc", "NotFound"));
+    const rec = await documentsResource.record!("gone", scope);
+    expect(rec).toBeNull();
+  });
+
+  it("其余失败经 toApiError 如实上抛（失败通道）", async () => {
+    vi.mocked(getDocument).mockRejectedValue(httpError(500, "boom", "Internal"));
+    await expect(documentsResource.record!("d1", scope)).rejects.toEqual({
+      kind: "server",
+      status: 500,
+      message: "boom",
     });
   });
 });

@@ -1,12 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCollection, useCommand, invalidateAfterCommand } from "@lynx-go/uikit-core";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useCollection,
+  useCommand,
+  useRecord,
+  invalidateAfterCommand,
+} from "@lynx-go/uikit-core";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
-  getDatabase,
   deleteDatabase,
   deleteCollection,
   type Database,
@@ -129,7 +133,7 @@ export function DatabasesListPage() {
         toast.success(`Deleted ${selectedDatabases.length} databases`);
       }
       // 直调批量路径无命令容器：失效经 invalidateAfterCommand 复用资源句柄
-      // 声明（kit 键刷新列表 + 存量 ["databases"]/["collections"] 前缀）。
+      // 声明（kit 键刷新列表 + 连带集合缓存失活，allScopes 级联）。
       invalidateAfterCommand(queryClient, removeDatabaseCommand, {
         projectId: projectId ?? undefined,
       });
@@ -298,11 +302,14 @@ export function DatabaseDetailPage() {
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const platformAdmin = isPlatformAdmin(role);
 
-  const { data: database, isLoading: dbLoading } = useQuery({
-    queryKey: ["databases", dbId],
-    queryFn: () => getDatabase(dbId!),
-    enabled: !!dbId,
+  // 详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用（与旧 enabled
+  // 同义）；projectId 未就绪由声明键自动停用；404 → null 走 NotFound 分支。
+  const databaseRecord = useRecord(databasesResource, {
+    id: dbId ?? undefined,
+    scope: { projectId: projectId ?? undefined },
   });
+  const database = databaseRecord.data;
+  const dbLoading = databaseRecord.status === "loading";
 
   // 嵌套 from = Database 详情完整路径；dbId 进 scope（显式全量——嵌套 scope
   // 是替换语义；projectId 未就绪由资源声明的 scope 键自动停用）。
@@ -435,7 +442,7 @@ export function DatabaseDetailPage() {
         toast.success(`Deleted ${deletable.length} collections`);
       }
       // 直调批量路径无命令容器：失效经 invalidateAfterCommand 复用资源句柄
-      // 声明（kit 键刷新列表 + 存量 ["collections"] 前缀）。
+      // 声明（kit collections 键刷新列表与详情 record）。
       invalidateAfterCommand(queryClient, removeCollectionCommand, {
         projectId: projectId ?? undefined,
         dbId: dbId ?? undefined,

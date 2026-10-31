@@ -1,12 +1,10 @@
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { NavLink } from "@/router/nav-link";
 import { Outlet } from "@/router/outlet-context.tsx";
-import { useQuery } from "@tanstack/react-query";
-import { useCommand } from "@lynx-go/uikit-core";
+import { useCommand, useRecord } from "@lynx-go/uikit-core";
 import { ArrowLeft, FileText, Layers, Radio } from "lucide-react";
 import { toast } from "sonner";
-import { getDatabase, getCollection } from "@/api/databases";
-import { removeCollectionCommand } from "@/kit/databases";
+import { collectionsResource, databasesResource, removeCollectionCommand } from "@/kit/databases";
 import { describeApiError } from "@/kit/errors";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
@@ -36,17 +34,19 @@ export function CollectionLayout() {
   const { role } = useAdminRole();
   const platformAdmin = isPlatformAdmin(role);
 
-  const { data: database } = useQuery({
-    queryKey: ["databases", dbId],
-    queryFn: () => getDatabase(dbId!),
-    enabled: !!dbId,
+  // 父子详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用（与旧
+  // enabled 同义）；scope 显式全量，projectId 未就绪由声明键自动停用。
+  const databaseRecord = useRecord(databasesResource, {
+    id: dbId ?? undefined,
+    scope: { projectId: projectId ?? undefined },
   });
-
-  const { data: collection, isLoading } = useQuery({
-    queryKey: ["collections", dbId, collId],
-    queryFn: () => getCollection(dbId!, collId!),
-    enabled: !!dbId && !!collId,
+  const collectionRecord = useRecord(collectionsResource, {
+    id: collId ?? undefined,
+    scope: { projectId: projectId ?? undefined, dbId: dbId ?? undefined },
   });
+  const database = databaseRecord.data;
+  const collection = collectionRecord.data;
+  const isLoading = collectionRecord.status === "loading";
 
   // 删除命令化：失效 = kit collections 键 + 存量前缀（resource.legacyKeys
   // 声明，§12.10-②）。DeleteButton 无表单容器——结果分支 toast。

@@ -47,6 +47,20 @@ export function gatewayErrorCode(err: unknown): string | undefined {
   return gatewayErrorBody(err)?.code;
 }
 
+// record 读的 404 空态帮手（子视图 kit 化批）：404 → null（详情页既有
+// `!data → NotFound` 分支直出空态——restRecord `notFound:"null"` 的手写
+// 方言，不引 restRecord，§12.9 阶段 5 维持）；其余失败经 toApiError
+// 如实上抛走失败通道。
+export async function recordOrNull<T>(op: () => Promise<T>): Promise<T | null> {
+  try {
+    return await op();
+  } catch (err) {
+    const apiErr = toApiError(err);
+    if (apiErr.kind === "not-found") return null;
+    throw apiErr;
+  }
+}
+
 // —— 结果两分映射的公共基件（§12.10-1 收敛：16 份逐字副本 → 单源）——
 // 各域错误映射曾逐文件复制 gatewayMessage/isStatus/runCommandMapped，实证
 // 14/16 语义全同、2 份静默漂移（丢 code）、仅 documents 有真 OCC 方言——

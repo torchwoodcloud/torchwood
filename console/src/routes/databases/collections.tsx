@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useOutletContext } from "@/router/outlet-context";
-import { useQuery } from "@tanstack/react-query";
-import { useCommand } from "@lynx-go/uikit-core";
+import { useCommand, useRecord } from "@lynx-go/uikit-core";
 import { toast } from "sonner";
 import {
   Settings2,
@@ -17,13 +16,11 @@ import {
   type CollectionOutletContext,
 } from "@/routes/databases/CollectionLayout";
 import {
-  getDatabase,
-  getCollection,
-} from "@/api/databases";
-import {
   addCollectionAttributeCommand,
   addCollectionIndexCommand,
+  collectionsResource,
   createCollectionCommand,
+  databasesResource,
   removeCollectionAttributeCommand,
   removeCollectionIndexCommand,
   updateCollectionPermissionsCommand,
@@ -71,12 +68,15 @@ export function CollectionNewPage() {
   const [id, setId] = useState("");
   const [permissions, setPermissions] = useState<string[]>([]);
 
-  // 父资源（Database）不存在时渲染 NotFound（R11-P2-9）。
-  const { data: database, isLoading: dbLoading, isError: dbError } = useQuery({
-    queryKey: ["databases", dbId],
-    queryFn: () => getDatabase(dbId!),
-    enabled: !!dbId,
+  // 父资源（Database）不存在时渲染 NotFound（R11-P2-9）。详情读换轨
+  // useRecord（子视图 kit 化批）：id 未就绪即停用（与旧 enabled 同义）。
+  const databaseRecord = useRecord(databasesResource, {
+    id: dbId ?? undefined,
+    scope: { projectId: projectId ?? undefined },
   });
+  const database = databaseRecord.data;
+  const dbLoading = databaseRecord.status === "loading";
+  const dbError = databaseRecord.status === "error";
 
   // 命令化：schema 定义表单的提交形收敛（ID 空则从名称派生、权限空不发送）
   // 在 descriptor run 内；ok 后失效 = kit collections 键 + 存量前缀
@@ -133,15 +133,19 @@ export function CollectionDetailPage() {
   const [permDialogOpen, setPermDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 
-  const { data: collection, isLoading } = useQuery({
-    queryKey: ["collections", dbId, collId],
-    queryFn: () => getCollection(dbId, collId),
+  // 详情读换轨 useRecord（子视图 kit 化批）：schema 编辑器六命令的缺省
+  // 失效（同资源全 kind）现打在本 record 键上，编辑后详情自刷新。
+  const collectionRecord = useRecord(collectionsResource, {
+    id: collId,
+    scope: { projectId: projectId ?? undefined, dbId },
   });
+  const collection = collectionRecord.data;
+  const isLoading = collectionRecord.status === "loading";
 
   // 命令接线（§12.3）：schema 编辑器写路径挂 collections 资源——失效 =
-  // kit collections 键 + 存量前缀（resource.legacyKeys 声明，覆盖详情键
-  // ["collections", dbId, collId] 与 db 前缀列表键，§12.10-②）；提交形
-  // 收敛（索引 orders 全 asc）在 descriptor run 内。toast 单源 onSettled。
+  // kit collections 键（同资源缺省全 kind：列表 collection 与详情 record
+  // 一并刷新）；提交形收敛（索引 orders 全 asc）在 descriptor run 内。
+  // toast 单源 onSettled。
   // 0.4.0 类型执法：显式命令 scope 必须覆盖声明键全集（dbId/collId 由布局
   // 路由上下文保证非空）；项目未就绪时命令不可达，走 Provider 解析链。
   const commandScope = projectId ? { projectId, dbId, collId } : undefined;

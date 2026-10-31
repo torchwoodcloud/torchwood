@@ -16,6 +16,8 @@ import {
   deleteCollection,
   deleteDatabase,
   deleteIndex,
+  getCollection,
+  getDatabase,
   listCollections,
   listDatabases,
   updateCollection,
@@ -24,7 +26,7 @@ import {
   type Database,
   type Index,
 } from "@/api/databases";
-import { runCommandMapped, toApiError } from "@/kit/errors";
+import { recordOrNull, runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2，databases 域）：databases 顶层列表 + Database 详情
 // 内嵌的 collections 列表。游标/页大小进 URL（分页栈 = 浏览器历史）；两个
@@ -66,17 +68,33 @@ export const databasesResource = defineResource({
   getId: (row: Database) => row.id,
   scope: ["projectId"],
   collection: fetchDatabases,
-  // 存量键失效桥（§12.10-②）：命令 ok 后除 kit 键外失效存量前缀键。
-  // 宽前缀两族——databases 命令 scope 只有 projectId（构不出 ["collections",
-  // dbId]），且删库连带其下集合缓存失活，["collections"] 前缀一并覆盖。
-  legacyKeys: () => [["databases"], ["collections"]],
+  // 详情读（DatabaseDetailPage / CollectionLayout / CollectionNewPage 等子视图，
+  // 子视图 kit 化批）：404 → null 空态直出（recordOrNull 手写方言，不引
+  // restRecord）；T 与 collection 共享，null 经单次断言收窄、由页面
+  // `!data` 空态分支消费。
+  record: (id) => recordOrNull(() => getDatabase(id)) as Promise<Database>,
+  // 存量键失效桥（§12.10-②）已退役（子视图 kit 化批）：["databases"] /
+  // ["collections"] 前缀读者清零（详情读全部换轨 kit record 键）；删库连带
+  // 集合缓存失活由 collectionsResource 的 kit 键失效承接（同资源声明覆盖）。
   commands: {
     create: {
+      // 建删变更库的存在性：连带失效其下集合缓存（旧资源级 legacyKeys
+      // ["collections"] 前缀桥的 kit 键承接）。dbId 在命令侧不可知（投影
+      // 相交会 miss）→ allScopes 显式逃逸，宽度与旧前缀桥一致；invalidates
+      // 声明优先 = 整体替换缺省，同资源失效须显式带上。
+      invalidates: [
+        { resource: "databases" },
+        { resource: "collections", allScopes: true },
+      ],
       run: async (input: { id: string; name: string }): Promise<CommandResult<Database>> =>
         runCommandMapped(() => createDatabase(input, SKIP)),
     },
     // 删除已删 → 幂等 ok（apiKeys/documents remove 先例）
     remove: {
+      invalidates: [
+        { resource: "databases" },
+        { resource: "collections", allScopes: true },
+      ],
       run: async (input: { id: string }): Promise<CommandResult<null>> =>
         runCommandMapped(async () => {
           await deleteDatabase(input.id, SKIP);
@@ -122,10 +140,13 @@ export const collectionsResource = defineResource({
   getId: (row: Collection) => row.id,
   scope: ["projectId", "dbId"],
   collection: fetchCollections,
-  // 存量键失效桥（§12.10-②）：宽前缀覆盖两形存量键——列表桥
-  // ["collections", dbId] 与详情键 ["collections", dbId, collId]（getCollection
-  // useQuery 仍消费）；命令 scope 的 dbId 构键，宽前缀等价且少一处闭包。
-  legacyKeys: () => [["collections"]],
+  // 详情读（CollectionLayout / CollectionDetailPage / documents 三页子视图）：
+  // 404 → null 空态直出；ctx.dbId 由 scopeReady 就绪门保证（查询未就绪即
+  // 停用），! 仅类型收窄。
+  record: (id, ctx) =>
+    recordOrNull(() => getCollection(ctx.dbId!, id)) as Promise<Collection>,
+  // 存量键失效桥已退役（子视图 kit 化批）：["collections"] 前缀唯一读者
+  // 是详情键（现 kit record 键，同资源缺省失效全 kind 命中）。
   commands: {
     create: {
       run: async (form: CreateCollectionForm): Promise<CommandResult<Collection>> =>
