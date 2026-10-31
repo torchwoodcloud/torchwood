@@ -1,20 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/uikit-core";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCollection, useCollectionData, useCommand, useRecord } from "@lynx-go/uikit-core";
 import { predicateOf } from "@lynx-go/uikit-core/schema";
 import type { Predicate } from "@lynx-go/uikit-core/kernel";
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
+import { deleteUser, type User, type UserSession } from "@/api/users";
 import {
-  getUser,
-  deleteUser,
-  listUserSessions,
-  type User,
-  type UserSession,
-} from "@/api/users";
-import {
+  userSessionsResource,
   usersResource,
   usersSearch,
   usersCollectionKey,
@@ -29,6 +24,7 @@ import {
 } from "@/kit/users";
 import { describeApiError } from "@/kit/errors";
 import { useAdminRole, canWrite, isPlatformAdmin } from "@/hooks/useAdminRole";
+import { useAuth } from "@/hooks/useAuth";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
 import { PageHeader } from "@/components/PageHeader";
@@ -109,8 +105,8 @@ export function UsersListPage() {
   };
   const filtersDirty = list.query.predicate != null;
 
-  // 命令接线（§12.3）：toast 单源 onSettled；失效 = kit 键 + 存量键
-  //（resource.legacyKeys 宽前缀 ["users"]——详情/会话页仍吃存量键）。
+  // 命令接线（§12.3）：toast 单源 onSettled；失效 = kit 键（users 资源缺省
+  // 同资源全 kind——列表与详情 record 一并刷新）。
   const remove = useCommand(removeUserCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
@@ -442,18 +438,24 @@ export function CreateUserPage() {
 
 function SessionsCard({ user }: { user: User }) {
   const { role } = useAdminRole();
+  const { projectId } = useAuth();
   const tz = useUserTimezone();
   const writeable = canWrite(role);
 
-  const { data: sessions = [], isLoading } = useQuery({
-    queryKey: ["users", user.id, "sessions"],
-    queryFn: () => listUserSessions(user.id),
-    enabled: !!user.id,
+  // 会话列表换轨 useCollectionData（伴读绑定，子视图 kit 化批）：整取方言
+  //（listUserSessions 无分页）——行 = .rows；scope 未就绪自动停用（旧
+  // enabled 同义）。
+  const sessionsList = useCollectionData(userSessionsResource, {
+    scope: { projectId: projectId ?? undefined, userId: user.id },
   });
+  const sessions = sessionsList.rows;
+  const isLoading = sessionsList.status === "loading";
 
-  // 裸 descriptor（不挂 resource）：会话不是 users 集合形态；存量
-  // ["users", …] 前缀（含本会话键）由 descriptor 自带 legacyKeys 失效。
+  // 裸 descriptor（不挂 resource）：失效 = descriptor 声明的 kit
+  // user-sessions 键；显式全量 scope——裸 descriptor 不采纳 Provider
+  // context，缺省空 scope 会让投影匹配 miss。
   const revoke = useCommand(revokeUserSessionDescriptor, {
+    scope: { projectId: projectId ?? undefined, userId: user.id },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Session deleted; the corresponding token is invalidated immediately");
@@ -513,6 +515,7 @@ export function UserDetailPage() {
   const { id } = useParams({ strict: false });
   const navigate = useNavigate();
   const { role } = useAdminRole();
+  const { projectId } = useAuth();
   const [resetOpen, setResetOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [tokenOpen, setTokenOpen] = useState(false);
@@ -521,14 +524,16 @@ export function UserDetailPage() {
   const writeable = canWrite(role);
   const platformAdmin = isPlatformAdmin(role);
 
-  const { data: user, isLoading } = useQuery({
-    queryKey: ["users", id],
-    queryFn: () => getUser(id!),
-    enabled: !!id,
+  // 详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用（与旧 enabled
+  // 同义）；404 → null 走既有 NotFound 分支。
+  const userRecord = useRecord(usersResource, {
+    id: id ?? undefined,
+    scope: { projectId: projectId ?? undefined },
   });
+  const user = userRecord.data;
 
-  // 命令接线（§12.3）：toast 单源 onSettled；失效 = kit 键 + 存量键
-  //（resource.legacyKeys 宽前缀 ["users"]）。
+  // 命令接线（§12.3）：toast 单源 onSettled；失效 = kit 键（users 资源缺省
+  // 同资源全 kind——详情 record 命中）。
   const remove = useCommand(removeUserCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
@@ -541,7 +546,13 @@ export function UserDetailPage() {
   });
 
   // 对话框内含输入框但无错误行容器 → 结果分支 toast（api-keys 编辑对话框同款）。
+  // 失效 = descriptor 声明（users + user-sessions，§12.10-②）；显式全量
+  // scope——user-sessions 键投影轴含 userId，缺省 Provider（仅 projectId）
+  // 会 miss。类型执法：声明键未就绪时命令不可达（下方 NotFound 兜底），
+  // scope 缺省走 Provider 解析链。
+  const commandScope = projectId && id ? { projectId, userId: id } : undefined;
   const resetPassword = useCommand(resetUserPasswordCommand, {
+    scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Password reset; all sessions of this user have been invalidated");
@@ -555,8 +566,11 @@ export function UserDetailPage() {
     },
   });
 
-  // 裸 descriptor：令牌签发不涉 users 集合；payload 一次性展示（reveal 语义）。
+  // 裸 descriptor：令牌签发不涉 users 集合（失效 = kit user-sessions 键——
+  // 模拟登录新建会话）；payload 一次性展示（reveal 语义）。显式全量 scope
+  // 同上（裸 descriptor 不采纳 Provider context；user 未就绪时命令不可达）。
   const issueToken = useCommand(issueUserTokenDescriptor, {
+    scope: { projectId: projectId ?? undefined, userId: user?.id },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         setTokenOpen(false);
@@ -569,7 +583,7 @@ export function UserDetailPage() {
     },
   });
 
-  if (isLoading) return <DetailSkeleton />;
+  if (userRecord.status === "loading") return <DetailSkeleton />;
   if (!user) return <NotFound backTo="/console/users" />;
 
   return (
@@ -718,16 +732,20 @@ export function UserEditPage() {
   const { id } = useParams({ strict: false });
   const navigate = useNavigate();
   const { role } = useAdminRole();
+  const { projectId } = useAuth();
   const [status, setStatus] = useState<string>("");
   const [name, setName] = useState<string>("");
   const [email, setEmail] = useState<string>("");
   const [emailVerified, setEmailVerified] = useState<boolean | undefined>(undefined);
 
-  const { data: user, isLoading } = useQuery({
-    queryKey: ["users", id],
-    queryFn: () => getUser(id!),
-    enabled: !!id,
+  // 详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用（与旧 enabled
+  // 同义）；404 → null 走既有 NotFound 分支。
+  const userRecord = useRecord(usersResource, {
+    id: id ?? undefined,
+    scope: { projectId: projectId ?? undefined },
   });
+  const user = userRecord.data;
+  const isLoading = userRecord.status === "loading";
 
   // 无表单容器（FormPageWrapper 本地态）：结果分支 toast；failure → describeApiError。
   const update = useCommand(updateUserCommand, {

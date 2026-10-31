@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runCommand } from "@lynx-go/uikit-core/kernel";
 import {
   apiKeysResource,
@@ -7,13 +7,23 @@ import {
   removeApiKeyCommand,
 } from "./apiKeys";
 
+// mock 工厂列出 kit/apiKeys.ts import 的该模块全部具名导出（子视图 kit 化
+// 批起 getAPIKey 进 record 槽）。
 vi.mock("@/api/apiKeys", () => ({
+  listAPIKeys: vi.fn(),
+  getAPIKey: vi.fn(),
   createAPIKey: vi.fn(),
   updateAPIKey: vi.fn(),
   deleteAPIKey: vi.fn(),
 }));
-import { createAPIKey, updateAPIKey, deleteAPIKey } from "@/api/apiKeys";
+import {
+  createAPIKey,
+  getAPIKey,
+  updateAPIKey,
+  deleteAPIKey,
+} from "@/api/apiKeys";
 
+const mockGet = vi.mocked(getAPIKey);
 const mockCreate = vi.mocked(createAPIKey);
 const mockUpdate = vi.mocked(updateAPIKey);
 const mockDelete = vi.mocked(deleteAPIKey);
@@ -33,6 +43,10 @@ const key = {
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
 };
+
+beforeEach(() => {
+  mockGet.mockReset();
+});
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -150,8 +164,36 @@ describe("removeApiKeyCommand（treatAs：已删 → 幂等 ok）", () => {
   });
 });
 
+describe("apiKeysResource.record（详情读，子视图 kit 化批）", () => {
+  it("读取透传；404 → null；其余失败如实上抛", async () => {
+    mockGet.mockResolvedValue(key);
+    expect(await apiKeysResource.record!("key-1", { projectId: "p1" })).toEqual(key);
+    expect(mockGet).toHaveBeenCalledWith("key-1");
+
+    mockGet.mockRejectedValue(axiosErr(404));
+    expect(await apiKeysResource.record!("gone", { projectId: "p1" })).toBeNull();
+
+    mockGet.mockRejectedValue(axiosErr(500, { message: "boom" }));
+    await expect(apiKeysResource.record!("x", { projectId: "p1" })).rejects.toEqual({
+      kind: "server",
+      status: 500,
+      message: "boom",
+    });
+  });
+});
+
+describe('失效声明（存量 ["api-keys"] 前缀桥退役后的 kit 单源）', () => {
+  it("资源级 legacyKeys 退役；edit 裸 descriptor 保留同资源 invalidates 全 kind", () => {
+    expect(apiKeysResource.legacyKeys).toBeUndefined();
+    // 裸 descriptor 的 legacyKeys 条目退役：声明面不再有该键（invalidates
+    // 保留——kit 键全 kind，编辑 ok 后列表与详情一并刷新）。
+    expect(Object.hasOwn(editApiKeyDescriptor(key), "legacyKeys")).toBe(false);
+    expect(editApiKeyDescriptor(key).invalidates).toEqual([{ resource: "api-keys" }]);
+  });
+});
+
 describe("apiKeysResource 形状", () => {
-  it("资源名与存量 queryKey 首段对齐（桥接失效锚点）", () => {
+  it("资源名 = 旧 legacy 前缀首段（kit 键首段自持，失效同源）", () => {
     expect(apiKeysResource.name).toBe("api-keys");
     expect(apiKeysResource.getId?.(key)).toBe("key-1");
   });

@@ -1,15 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/uikit-core";
+import { useCollection, useCommand, useRecord } from "@lynx-go/uikit-core";
 import { predicateOf } from "@lynx-go/uikit-core/schema";
 import type { Predicate } from "@lynx-go/uikit-core/kernel";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
 import { toast } from "sonner";
-import { getOrder, type PaymentOrder } from "@/api/payments";
+import { type PaymentOrder } from "@/api/payments";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
+import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -252,19 +252,23 @@ export function OrdersListPage() {
 
 export function OrderDetailPage() {
   const { id } = useParams({ strict: false });
+  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const platformAdmin = isPlatformAdmin(role);
 
-  const { data: order, isLoading } = useQuery({
-    queryKey: ["payments-orders", id],
-    queryFn: () => getOrder(id!),
-    enabled: !!id,
+  // 详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用（与旧 enabled
+  // 同义）；404 → null 空态直出；refund/fulfill 缺省同资源失效命中详情
+  // record 键（全 kind）。
+  const orderRecord = useRecord(ordersResource, {
+    id: id ?? undefined,
+    scope: { projectId: projectId ?? undefined },
   });
+  const order = orderRecord.data;
+  const isLoading = orderRecord.status === "loading";
 
-  // 命令接线（§12.3）：refund/fulfill 挂订单资源——失效 = kit 集合键 +
-  // 存量 ["payments-orders"] 前缀（resource.legacyKeys 声明，§12.10-②——
-  // 覆盖列表前缀与详情键两形）；toast 单源 onSettled。
+  // 命令接线（§12.3）：refund/fulfill 挂订单资源——失效 = kit 键缺省同资源
+  //（列表 collection 与详情 record 全 kind）；toast 单源 onSettled。
   const refund = useCommand(refundOrderCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {

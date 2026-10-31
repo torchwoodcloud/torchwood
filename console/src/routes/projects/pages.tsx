@@ -1,11 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/uikit-core";
+import { useCollection, useCommand, useRecord } from "@lynx-go/uikit-core";
 import { toast } from "sonner";
 import { Plus, Settings } from "lucide-react";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
-import { getProject, type Project } from "@/api/projects";
+import { type Project } from "@/api/projects";
 import {
   projectsResource,
   projectsSearch,
@@ -204,11 +203,12 @@ export function ProjectNewPage() {
 export function ProjectDetailPage() {
   const { id } = useParams({ strict: false });
   const tz = useUserTimezone();
-  const { data: project, isLoading } = useQuery({
-    queryKey: ["projects", id],
-    queryFn: () => getProject(id!),
-    enabled: !!id,
-  });
+  // 详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用（与旧 enabled
+  // 同义）；404 → null 空态直出（recordOrNull 手写方言，不引 restRecord）。
+  // projectsResource 平台级无 scope 声明——useRecord 不传 scope。
+  const projectRecord = useRecord(projectsResource, { id: id ?? undefined });
+  const project = projectRecord.data;
+  const isLoading = projectRecord.status === "loading";
 
   // 浏览即选中：同步全局 selector（X-Torchwood-Project）到当前 :id，
   // 使离开本页后的项目作用域页面（Users/Storage 等）跟随最后浏览的项目。

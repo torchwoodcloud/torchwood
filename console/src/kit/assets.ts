@@ -6,9 +6,20 @@ import {
   type Segment,
 } from "@lynx-go/uikit-core/kernel";
 import { collectionQuerySchema } from "@lynx-go/uikit-core/schema";
-import { createAssetDef, deleteAssetDef, listAssetDefs, type AssetDef } from "@/api/assets";
+import {
+  createAssetDef,
+  deleteAssetDef,
+  getAssetDef,
+  listAssetDefs,
+  listDefHolders,
+  listUserAssets,
+  listUserLedger,
+  type AssetDef,
+  type AssetHolding,
+  type AssetLedgerEntry,
+} from "@/api/assets";
 import { skipToast as SKIP } from "@/api/client";
-import { runCommandMapped, toApiError } from "@/kit/errors";
+import { recordOrNull, runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2）：资产定义主列表换 useCollection——游标/页大小/
 // 时间排序进 URL（分页栈 = 浏览器历史），数据面复用 axios 管线，失败在
@@ -16,11 +27,16 @@ import { runCommandMapped, toApiError } from "@/kit/errors";
 // （本地态），不是服务端过滤参数 → 无谓词白名单。
 //
 // 命令族切片（写路径命令化，§12.3）：建/删挂资源 commands（kit 集合键由
-// useCommand 自动失效）；存量 ["asset-defs"] 前缀键（详情/下拉选项仍消费）
-// 由资源 legacyKeys 声明桥（§12.10-②，页面 onSettled 手动桥退役）。结果
-// 两分映射同 apiKeys 先例（400→rejected {code,message}、409→conflict、
+// useCommand 自动失效）；存量 ["asset-defs"] 前缀桥随子视图 kit 化退役
+//（详情读换轨 record 键、下拉全量换轨 useCollectionData，读者清零）。
+// 结果两分映射同 apiKeys 先例（400→rejected {code,message}、409→conflict、
 // 其余 throw ApiError）；api 调用一律 __skipToast（toast 单源 = onSettled）。
 // 创建的 decimals/上限文本展示形在 run 内收敛为提交形。
+//
+// 子视图 kit 化批新增三个伴读子列表资源（def-holders / user-assets /
+// user-ledger）：零 URL 形态（useCollectionData），分页窗口由页面经
+// useServerPaging 手动喂 window；过滤/主体参数进 scope 对象不进声明键——
+// 对象全部键进 queryKey，声明键只定就绪门与失效投影轴。
 
 // —— 新建：decimals/上限为文本展示形，run 内收敛提交形（decimals 非法回退
 // 0；max_quantity 空 = 不限不发送）——
@@ -63,9 +79,12 @@ export const assetDefsResource = defineResource({
   getId: (row: AssetDef) => row.id,
   scope: ["projectId"],
   collection: fetchAssetDefs,
-  // 存量键失效桥（§12.10-②）：宽前缀覆盖 ["asset-defs", projectId]（列表桥）
-  // 与 ["asset-defs", id]（详情键）两形。
-  legacyKeys: () => [["asset-defs"]],
+  // 详情读（AssetDefDetailPage，子视图 kit 化批）：404 → null 空态直出
+  //（recordOrNull 手写方言，不引 restRecord）。
+  record: (id) => recordOrNull(() => getAssetDef(id)) as Promise<AssetDef>,
+  // 存量键失效桥（§12.10-②）已退役（子视图 kit 化批）：["asset-defs"] /
+  // ["asset-defs-all"] 前缀读者清零（详情读换轨 kit record 键、定义下拉
+  // 全量换轨 useCollectionData——同资源缺省失效全 kind 命中）。
   commands: {
     create: {
       run: async (form: CreateAssetDefForm): Promise<CommandResult<AssetDef>> =>
@@ -97,3 +116,83 @@ export const assetDefsResource = defineResource({
 // 命令句柄提升（§12.10-⑥：commands 在 spec 出现 ⇒ 类型非可选，免 !）。
 export const createAssetDefCommand = assetDefsResource.commands.create;
 export const removeAssetDefCommand = assetDefsResource.commands.remove;
+
+// —— 伴读子列表资源（子视图 kit 化批）：零 URL 形态（useCollectionData），
+// 只读无命令；分页窗口由页面经 useServerPaging 手动喂 window；过滤/主体
+// 参数进 scope 对象不进声明键（对象全部键进 queryKey，声明键只定就绪门与
+// 失效投影轴）——守卫缺参静默空段 + toApiError 上抛，照 fetchCollections 形态。——
+
+// 定义维度持有列表（AssetDefDetailPage 内嵌）：scope 声明 projectId/defId
+//（就绪门 + 失效轴），owner 过滤进 scope 对象（键变化 = 换查询）。
+async function fetchDefHolders(
+  q: CollectionQuery,
+  ctx: ResourceScope
+): Promise<Segment<AssetHolding>> {
+  if (ctx.projectId == null || ctx.defId == null) return { rows: [] };
+  try {
+    const page = await listDefHolders(ctx.defId, {
+      ownerId: ctx.owner || undefined,
+      pageSize: q.window.size,
+      pageToken: q.window.cursor || undefined,
+    });
+    return { rows: page.rows, nextCursor: page.nextPageToken };
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+export const defHoldersResource = defineResource({
+  name: "def-holders",
+  scope: ["projectId", "defId"],
+  collection: fetchDefHolders,
+});
+
+// 用户持有列表（UserAssetsPage 持有 tab）：owner 是查询主体但非声明键
+//（就绪门由 projectId + 页面 enabled: !!queryOwner 手动门共同承担）。
+async function fetchUserAssets(
+  q: CollectionQuery,
+  ctx: ResourceScope
+): Promise<Segment<AssetHolding>> {
+  if (ctx.projectId == null || ctx.owner == null) return { rows: [] };
+  try {
+    const page = await listUserAssets(ctx.owner, {
+      pageSize: q.window.size,
+      pageToken: q.window.cursor || undefined,
+    });
+    return { rows: page.rows, nextCursor: page.nextPageToken };
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+export const userAssetsResource = defineResource({
+  name: "user-assets",
+  scope: ["projectId"],
+  collection: fetchUserAssets,
+});
+
+// 用户流水列表（UserAssetsPage 流水 tab）：defCode/ascending 过滤同样进
+// scope 对象（ResourceScope 值域是 string——boolean 以 "1" 编码，适配器解码）。
+async function fetchUserLedger(
+  q: CollectionQuery,
+  ctx: ResourceScope
+): Promise<Segment<AssetLedgerEntry>> {
+  if (ctx.projectId == null || ctx.owner == null) return { rows: [] };
+  try {
+    const page = await listUserLedger(ctx.owner, {
+      pageSize: q.window.size,
+      pageToken: q.window.cursor || undefined,
+      defCode: ctx.defCode || undefined,
+      ascending: ctx.ascending === "1" || undefined,
+    });
+    return { rows: page.rows, nextCursor: page.nextPageToken };
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+export const userLedgerResource = defineResource({
+  name: "user-ledger",
+  scope: ["projectId"],
+  collection: fetchUserLedger,
+});

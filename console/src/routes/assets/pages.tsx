@@ -1,20 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/uikit-core";
+import { useCollection, useCollectionData, useCommand, useRecord } from "@lynx-go/uikit-core";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Plus, Search, X } from "lucide-react";
-import {
-  getAssetDef,
-  listAssetDefs,
-  listDefHolders,
-  listUserAssets,
-  listUserLedger,
-  type AssetDef,
-} from "@/api/assets";
+import type { AssetDef } from "@/api/assets";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
 import { useServerPaging } from "@/hooks/useServerPaging";
@@ -50,7 +42,15 @@ import { DataTable } from "@/components/kit/query/data-table";
 import { KeysetPagination } from "@/components/kit/query/keyset-pagination";
 import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
-import { assetDefsResource, assetDefsSearch, createAssetDefCommand, removeAssetDefCommand } from "@/kit/assets";
+import {
+  assetDefsResource,
+  assetDefsSearch,
+  createAssetDefCommand,
+  defHoldersResource,
+  removeAssetDefCommand,
+  userAssetsResource,
+  userLedgerResource,
+} from "@/kit/assets";
 import { describeApiError } from "@/kit/errors";
 
 const CLASSES = ["currency", "stack", "instance", "entitlement"] as const;
@@ -70,9 +70,9 @@ export function AssetDefsListPage() {
     search: assetDefsSearch,
   });
 
-  // 行删除命令接线（§12.3）：挂 asset-defs 资源——失效 = kit 集合键 +
-  // 存量 ["asset-defs"] 前缀（resource.legacyKeys 声明，§12.10-②）。
-  // toast 单源 onSettled。
+  // 行删除命令接线（§12.3）：挂 asset-defs 资源——失效 = descriptor 声明
+  //（kit 键同资源全 kind：列表 collection、详情 record、定义下拉全量一并
+  // 命中；存量前缀桥随子视图 kit 化退役）。toast 单源 onSettled。
   const remove = useCommand(removeAssetDefCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
@@ -199,8 +199,8 @@ export function AssetDefNewPage() {
   const [decimals, setDecimals] = useState("0");
   const [maxQuantity, setMaxQuantity] = useState("");
 
-  // 创建命令接线（§12.3）：挂 asset-defs 资源——失效 = kit 集合键 + 存量
-  // ["asset-defs"] 前缀（resource.legacyKeys 声明，§12.10-②）；
+  // 创建命令接线（§12.3）：挂 asset-defs 资源——失效 = descriptor 声明
+  //（kit 键同资源全 kind，存量前缀桥随子视图 kit 化退役）；
   // decimals/上限文本展示形在 descriptor run 内收敛。toast 单源 onSettled。
   const create = useCommand(createAssetDefCommand, {
     onSettled: (result, failure) => {
@@ -274,14 +274,17 @@ export function AssetDefDetailPage() {
   const tz = useUserTimezone();
   const writeable = canWrite(role);
 
-  const { data: def, isLoading } = useQuery({
-    queryKey: ["asset-defs", id],
-    queryFn: () => getAssetDef(id!),
-    enabled: !!id,
+  // 详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用（与旧 enabled
+  // 同义）；projectId 未就绪由声明键自动停用；404 → null 走 NotFound 分支。
+  const defRecord = useRecord(assetDefsResource, {
+    id: id ?? undefined,
+    scope: { projectId: projectId ?? undefined },
   });
+  const def = defRecord.data;
+  const isLoading = defRecord.status === "loading";
 
-  // 删除命令接线（§12.3）：挂 asset-defs 资源——失效 = kit 集合键 + 存量
-  // ["asset-defs"] 前缀（resource.legacyKeys 声明，§12.10-②）。
+  // 删除命令接线（§12.3）：挂 asset-defs 资源——失效 = descriptor 声明
+  //（kit 键同资源全 kind，本详情 record 键命中，存量前缀桥退役）。
   // toast 单源 onSettled。
   const remove = useCommand(removeAssetDefCommand, {
     onSettled: (result, failure) => {
@@ -297,22 +300,22 @@ export function AssetDefDetailPage() {
   });
 
   // 用户持有列表（定义维度）：UserID 过滤 + keyset 分页；过滤变化经
-  // resetKeys 自动回第一页。
+  // resetKeys 自动回第一页。换轨 useCollectionData（子视图 kit 化批）：
+  // defId 声明键定就绪门，owner 过滤进 scope 对象（进 queryKey 不进失效
+  // 轴）；窗口吃 useServerPaging；行 = .rows、下一页 = .segment?.nextCursor；
+  // 旧 placeholderData 同页复用 → keepPrevious 缺省 true（零代码）。
   const [ownerInput, setOwnerInput] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("");
   const holdersPaging = useServerPaging(20, { resetKeys: [ownerFilter] });
-  const holders = useQuery({
-    queryKey: ["def-holders", projectId, id, ownerFilter, holdersPaging.pageSize, holdersPaging.pageToken],
-    queryFn: () =>
-      listDefHolders(id!, {
-        ownerId: ownerFilter || undefined,
-        pageSize: holdersPaging.pageSize,
-        pageToken: holdersPaging.pageToken,
-      }),
-    enabled: !!id,
-    placeholderData: (prev) => prev,
+  const holders = useCollectionData(defHoldersResource, {
+    scope: {
+      projectId: projectId ?? undefined,
+      defId: id ?? undefined,
+      owner: ownerFilter || undefined,
+    },
+    window: { size: holdersPaging.pageSize, cursor: holdersPaging.pageToken || undefined },
   });
-  const holderRows = holders.data?.rows ?? [];
+  const holderRows = holders.rows;
 
   const applyOwnerFilter = () => {
     setOwnerFilter(ownerInput.trim());
@@ -374,7 +377,7 @@ export function AssetDefDetailPage() {
               </Button>
             ) : null}
           </form>
-          {holders.isLoading ? (
+          {holders.status === "loading" ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : holderRows.length === 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -414,9 +417,9 @@ export function AssetDefDetailPage() {
                 pageSize={holdersPaging.pageSize}
                 rowCount={holderRows.length}
                 hasPrev={holdersPaging.hasPrev}
-                hasNext={!!holders.data?.nextPageToken}
+                hasNext={!!holders.segment?.nextCursor}
                 onPrev={holdersPaging.goPrev}
-                onNext={() => holdersPaging.goNext(holders.data?.nextPageToken)}
+                onNext={() => holdersPaging.goNext(holders.segment?.nextCursor)}
                 onPageSizeChange={holdersPaging.setPageSize}
               />
             </>
@@ -437,18 +440,6 @@ const LEDGER_KIND_LABELS: Record<string, string> = {
   expire: "Expire",
 };
 
-// placeholderData 只在同项目同用户间复用：切换项目 / 用户后不再用旧数据占位，
-// 避免「流水还是上一项目的、持有已是新项目的空结果」这类错位显示。
-function sameScopePlaceholder<T>(
-  prev: T | undefined,
-  prevKey: readonly unknown[] | undefined,
-  projectId: string | null,
-  owner: string,
-): T | undefined {
-  if (!prev || !prevKey) return undefined;
-  return prevKey[1] === projectId && prevKey[2] === owner ? prev : undefined;
-}
-
 export function UserAssetsPage() {
   const { projectId } = useAuth();
   const tz = useUserTimezone();
@@ -468,58 +459,55 @@ export function UserAssetsPage() {
     setOwnerId(queryOwner);
   }, [queryOwner]);
 
+  // 持有/流水/定义下拉换轨 kit 伴读资源（子视图 kit 化批）：queryOwner 等
+  // 过滤/主体参数进 scope 对象（全部键进 queryKey，不进声明键）——就绪门 =
+  // 声明键 projectId（自动）+ enabled: !!queryOwner 手动门（随迁保留）；
+  // 窗口吃 useServerPaging；行 = .rows、下一页 = .segment?.nextCursor。旧
+  // placeholderData 的同项目同用户同源复用 → keepPrevious 缺省 true（复用
+  // 面放宽为跨 scope——过渡帧短暂可见旧属主行，见切片报告）。
   const holdingsPaging = useServerPaging();
-  const holdings = useQuery({
-    queryKey: ["user-assets", projectId, queryOwner, holdingsPaging.pageSize, holdingsPaging.pageToken],
-    queryFn: () =>
-      listUserAssets(queryOwner, { pageSize: holdingsPaging.pageSize, pageToken: holdingsPaging.pageToken }),
-    enabled: !!projectId && !!queryOwner,
-    placeholderData: (prev, prevQuery) => sameScopePlaceholder(prev, prevQuery?.queryKey, projectId, queryOwner),
+  const holdings = useCollectionData(userAssetsResource, {
+    scope: { projectId: projectId ?? undefined, owner: queryOwner || undefined },
+    window: { size: holdingsPaging.pageSize, cursor: holdingsPaging.pageToken || undefined },
+    enabled: !!queryOwner,
   });
-  const holdingsRows = holdings.data?.rows ?? [];
+  const holdingsRows = holdings.rows;
   // 流水过滤与排序：defCode 空 = 全部资产；ascending 缺省最新在前。
   // 过滤/排序变化经 resetKeys 自动 reset（keyset 游标绑定参数组合）。
   const [ledgerDefCode, setLedgerDefCode] = useState("");
   const [ledgerAscending, setLedgerAscending] = useState(false);
   const ledgerPaging = useServerPaging(20, { resetKeys: [ledgerDefCode, ledgerAscending] });
-  const ledger = useQuery({
-    queryKey: [
-      "user-ledger",
-      projectId,
-      queryOwner,
-      ledgerDefCode,
-      ledgerAscending,
-      ledgerPaging.pageSize,
-      ledgerPaging.pageToken,
-    ],
-    queryFn: () =>
-      listUserLedger(queryOwner, {
-        pageSize: ledgerPaging.pageSize,
-        pageToken: ledgerPaging.pageToken,
-        defCode: ledgerDefCode || undefined,
-        ascending: ledgerAscending || undefined,
-      }),
-    enabled: !!projectId && !!queryOwner,
-    placeholderData: (prev, prevQuery) => sameScopePlaceholder(prev, prevQuery?.queryKey, projectId, queryOwner),
+  const ledger = useCollectionData(userLedgerResource, {
+    scope: {
+      projectId: projectId ?? undefined,
+      owner: queryOwner || undefined,
+      defCode: ledgerDefCode || undefined,
+      // ResourceScope 值域是 string——boolean 以 "1" 编码，适配器解码。
+      ascending: ledgerAscending ? "1" : undefined,
+    },
+    window: { size: ledgerPaging.pageSize, cursor: ledgerPaging.pageToken || undefined },
+    enabled: !!queryOwner,
   });
-  const ledgerRows = ledger.data?.rows ?? [];
+  const ledgerRows = ledger.rows;
   // 资产类型下拉选项：项目全部定义（首屏一次拉取，页大小取服务端上限）。
-  const defOptions = useQuery({
-    queryKey: ["asset-defs-all", projectId],
-    queryFn: () => listAssetDefs({ pageSize: 100 }),
-    enabled: !!projectId && !!queryOwner,
+  // 复用 assetDefsResource 的 collection 槽（size 100 整窗、staleTime 60s
+  // 随迁；enabled 只剩 queryOwner 手动门——projectId 由声明键自动停用）。
+  const defOptions = useCollectionData(assetDefsResource, {
+    scope: { projectId: projectId ?? undefined },
+    size: 100,
     staleTime: 60_000,
+    enabled: !!queryOwner,
   });
   // def code/id → 名称映射：持有/流水行只带 code（id 兜底），名称从这里投影。
   const { defNameByCode, defNameById } = useMemo(() => {
     const byCode = new Map<string, string>();
     const byId = new Map<string, string>();
-    for (const d of defOptions.data?.rows ?? []) {
+    for (const d of defOptions.rows) {
       byCode.set(d.code, d.name);
       byId.set(d.id, d.name);
     }
     return { defNameByCode: byCode, defNameById: byId };
-  }, [defOptions.data]);
+  }, [defOptions.rows]);
   const defNameOf = (defCode: string | undefined, defId: string) =>
     (defCode && defNameByCode.get(defCode)) || defNameById.get(defId) || "—";
 
@@ -528,7 +516,9 @@ export function UserAssetsPage() {
   const [holdingSearch, setHoldingSearch] = useState("");
   const filteredHoldings = useMemo(
     () =>
-      filterByQuery(holdingsRows, holdingSearch, (h) => {
+      // kit 行是 ReadonlyArray——filterByQuery 吃可变数组，浅拷贝过界（过滤
+      // 是纯函数，拷贝成本可忽略）。
+      filterByQuery([...holdingsRows], holdingSearch, (h) => {
         const name = defNameOf(h.def_code, h.def_id);
         return `${h.def_code} ${name === "—" ? "" : name} ${h.class ?? ""}`;
       }),
@@ -594,7 +584,7 @@ export function UserAssetsPage() {
                   <p className="mb-3 text-sm text-muted-foreground">
                     Read-only view, no Grant / Consume / Transfer actions.
                   </p>
-                  {holdings.isLoading ? (
+                  {holdings.status === "loading" ? (
                     <p className="text-sm text-muted-foreground">Loading…</p>
                   ) : holdingsRows.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No holdings</p>
@@ -650,9 +640,9 @@ export function UserAssetsPage() {
                         pageSize={holdingsPaging.pageSize}
                         rowCount={filteredHoldings.length}
                         hasPrev={holdingsPaging.hasPrev}
-                        hasNext={!!holdings.data?.nextPageToken}
+                        hasNext={!!holdings.segment?.nextCursor}
                         onPrev={holdingsPaging.goPrev}
-                        onNext={() => holdingsPaging.goNext(holdings.data?.nextPageToken)}
+                        onNext={() => holdingsPaging.goNext(holdings.segment?.nextCursor)}
                         onPageSizeChange={holdingsPaging.setPageSize}
                       />
                     </>
@@ -671,7 +661,7 @@ export function UserAssetsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All assets</SelectItem>
-                        {(defOptions.data?.rows ?? []).map((d) => (
+                        {defOptions.rows.map((d) => (
                           <SelectItem key={d.id} value={d.code}>
                             {d.code}
                           </SelectItem>
@@ -689,7 +679,7 @@ export function UserAssetsPage() {
                       {ledgerAscending ? "Oldest first" : "Newest first"}
                     </Button>
                   </div>
-                  {ledger.isLoading ? (
+                  {ledger.status === "loading" ? (
                     <p className="text-sm text-muted-foreground">Loading…</p>
                   ) : ledgerRows.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No ledger entries</p>
@@ -731,9 +721,9 @@ export function UserAssetsPage() {
                         pageSize={ledgerPaging.pageSize}
                         rowCount={ledgerRows.length}
                         hasPrev={ledgerPaging.hasPrev}
-                        hasNext={!!ledger.data?.nextPageToken}
+                        hasNext={!!ledger.segment?.nextCursor}
                         onPrev={ledgerPaging.goPrev}
-                        onNext={() => ledgerPaging.goNext(ledger.data?.nextPageToken)}
+                        onNext={() => ledgerPaging.goNext(ledger.segment?.nextCursor)}
                         onPageSizeChange={ledgerPaging.setPageSize}
                       />
                     </>

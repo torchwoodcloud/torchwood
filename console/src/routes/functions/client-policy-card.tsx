@@ -49,9 +49,10 @@ export function FunctionClientPolicyCard({
     setLimitWindow((fn.client_limit_window as "minute" | "hour" | "day") || "day");
   }, [fn]);
 
-  // 命令接线（§12.3）：client_* 面是 function 实体更新——挂函数资源（kit
-  // 集合自动失效；资源挂载句柄），存量 ["functions"] 键由 resource.legacyKeys
-  // 桥；配额文本展示形在 descriptor run 内收敛整数。toast 单源 onSettled。
+  // 命令接线（§12.3）：client_* 面是 function 实体更新——挂函数资源（缺省
+  // 同资源失效全 kind：列表 collection 与详情 record 一并刷新；存量前缀桥
+  // 随子视图 kit 化退役）；配额文本展示形在 descriptor run 内收敛整数。
+  // toast 单源 onSettled。
   const save = useCommand(updateFunctionClientPolicyCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/uikit-core";
+import { useCollection, useCollectionData, useCommand, useRecord } from "@lynx-go/uikit-core";
 import type { ApiError, CommandResult } from "@lynx-go/uikit-core/kernel";
 import { toast } from "sonner";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
@@ -15,10 +14,6 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  getVarSet,
-  getVersion,
-  listVars,
-  listVersions,
   type RuntimeVar,
   type RuntimeVarValue,
   type RuntimeVarVersion,
@@ -34,6 +29,9 @@ import {
   removeVarCommand,
   removeVarSetCommand,
   rollbackVarSetCommand,
+  runtimeVarVersionResource,
+  runtimeVarVersionsResource,
+  runtimeVarsResource,
   type VarKind,
   varSetsResource,
   varSetsSearch,
@@ -328,9 +326,8 @@ export function VarSetsListPage() {
 }
 
 // VarSetCreateDialog 新建集合（var_set_id 创建后不可改，D9）。命令化：表单
-// 本体不动；kit 列表键随资源命令 ok 自动失效（onCreated refetch 桥退役），
-// 存量 ["runtime-var-sets"] 键由资源 legacyKeys 桥（§12.10-②）；结果分支
-// 无表单容器 → toast。
+// 本体不动；kit 键随资源命令 ok 自动失效（同资源缺省——onCreated refetch 桥
+// 与存量前缀桥均已退役）；结果分支无表单容器 → toast。
 function VarSetCreateDialog({
   open,
   onOpenChange,
@@ -461,32 +458,32 @@ export function VarSetDetailPage() {
   const [diffA, setDiffA] = useState("");
   const [diffB, setDiffB] = useState("");
 
-  const varSetQuery = useQuery({
-    queryKey: ["runtime-var-set", projectId, varSetId],
-    queryFn: () => getVarSet(varSetId),
-    enabled: !!projectId && !!varSetId,
+  // 子视图 kit 化批：集合详情读换轨 useRecord、vars/versions 子列表换轨
+  // useCollectionData（整取方言 window: "all"）——id/scope 未就绪即自动停用
+  //（与旧 enabled: !!projectId && !!varSetId 同义）；失效 = var 级命令的
+  // invalidates 声明（kit 键全 kind 命中，legacy 前缀桥退役）。
+  const varSetRecord = useRecord(varSetsResource, {
+    id: varSetId || undefined,
+    scope: { projectId: projectId ?? undefined },
   });
-  const varsQuery = useQuery({
-    queryKey: ["runtime-vars", projectId, varSetId],
-    queryFn: () => listVars(varSetId),
-    enabled: !!projectId && !!varSetId,
+  const varsData = useCollectionData(runtimeVarsResource, {
+    scope: { projectId: projectId ?? undefined, varSetId: varSetId || undefined },
+    window: "all",
   });
-  const versionsQuery = useQuery({
-    queryKey: ["runtime-var-versions", projectId, varSetId],
-    queryFn: () => listVersions(varSetId),
-    enabled: !!projectId && !!varSetId,
+  const versionsData = useCollectionData(runtimeVarVersionsResource, {
+    scope: { projectId: projectId ?? undefined, varSetId: varSetId || undefined },
+    window: "all",
   });
 
-  const vars = varsQuery.data ?? [];
-  // 用 query 原始引用（跨渲染稳定）做 effect 依赖；`?? []` 的派生数组每次
-  // 渲染都是新身份，直接进 deps 会让 effect 每帧重跑。
-  const versionsRaw = versionsQuery.data;
-  const versions = versionsRaw ?? [];
+  const vars = varsData.rows;
+  // 行数组引用由 query data 单源派生（跨渲染稳定），可直接作 effect 依赖
+  //（无旧 `?? []` 派生数组每帧换身份问题）。
+  const versions = versionsData.rows;
 
-  // 写路径命令化：kit var-sets 列表键随资源命令 ok 自动失效；存量键
-  //（列表/详情/变量/版本）由资源与 descriptor 级 legacyKeys 桥（§12.10-②，
-  // useInvalidateVarSet 退役）。删除/回滚走 ConfirmDialog（无表单容器）——
-  // 结果分支 toast。
+  // 写路径命令化：var 级命令（varCreate/varRemove/rollback）的失效 = descriptor
+  // invalidates 声明（三资源 kit 键全 kind——详情 record/vars/versions 列表/
+  // 版本快照一并刷新，§12.10-② 存量前缀桥退役）。删除/回滚走 ConfirmDialog
+  //（无表单容器）——结果分支 toast。
   const removeVar = useCommand(removeVarCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
@@ -543,17 +540,17 @@ export function VarSetDetailPage() {
 
   // 版本对比缺省选中：A = 最老版（基准），B = 最新版。
   useEffect(() => {
-    if (!versionsRaw || versionsRaw.length === 0 || diffA || diffB) return;
-    const revs = versionsRaw.map((v) => v.revision);
+    if (versions.length === 0 || diffA || diffB) return;
+    const revs = versions.map((v) => v.revision);
     setDiffA(String(Math.min(...revs)));
     setDiffB(String(Math.max(...revs)));
-  }, [versionsRaw, diffA, diffB]);
+  }, [versions, diffA, diffB]);
 
   const diffReady =
     !!diffA && !!diffB && diffA !== diffB && versions.length >= 2;
 
-  if (varSetQuery.isLoading) return <DetailSkeleton />;
-  const varSet = varSetQuery.data;
+  if (varSetRecord.status === "loading") return <DetailSkeleton />;
+  const varSet = varSetRecord.data;
   if (!varSet) return <NotFound backTo="/console/runtime-vars" />;
 
   return (
@@ -615,7 +612,7 @@ export function VarSetDetailPage() {
             )}
           </CardHeader>
           <CardContent>
-            {varsQuery.isLoading ? (
+            {varsData.status === "loading" ? (
               <LoadingTable columns={5} />
             ) : vars.length === 0 ? (
               <EmptyState
@@ -727,7 +724,7 @@ export function VarSetDetailPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {versionsQuery.isLoading ? (
+            {versionsData.status === "loading" ? (
               <LoadingTable columns={6} />
             ) : versions.length === 0 ? (
               <EmptyState
@@ -899,7 +896,7 @@ export function VarSetDetailPage() {
 // 变量新建/编辑 Dialog（key 编辑时禁改；类型 select 切换值输入控件；json 用
 // textarea）。命令化（useCommand×2，§12.3 裁决 8）：值展示形→oneof 提交形
 // 收敛与 JSON/整数校验在 descriptor run 内——rejected/conflict 走既有内联错
-// 误行（表单容器原样），失败通道 toast；存量键失效 = descriptor legacyKeys。
+// 误行（表单容器原样），失败通道 toast；失效 = descriptor invalidates 声明。
 // ---------------------------------------------------------------------------
 
 function VarFormDialog({
@@ -1119,11 +1116,14 @@ function VersionSnapshotDialog({
 }) {
   const { projectId } = useAuth();
   const tz = useUserTimezone();
-  const { data, isLoading } = useQuery({
-    queryKey: ["runtime-var-version", projectId, varSetId, revision],
-    queryFn: () => getVersion(varSetId, revision!),
-    enabled: revision !== null,
+  // 版本快照详情读换轨 useRecord（子视图 kit 化批）：id = revision，未选版本
+  //（null → undefined）自动停用（与旧 enabled 同义）；404 → null 空态直出。
+  const versionRecord = useRecord(runtimeVarVersionResource, {
+    id: revision ?? undefined,
+    scope: { projectId: projectId ?? undefined, varSetId: varSetId || undefined },
   });
+  const data = versionRecord.data;
+  const isLoading = versionRecord.status === "loading";
 
   return (
     <Dialog open={revision !== null} onOpenChange={(o) => !o && onClose()}>
@@ -1246,23 +1246,23 @@ function VersionDiffDialog({
   onClose: () => void;
 }) {
   const { projectId } = useAuth();
-  const aQuery = useQuery({
-    queryKey: ["runtime-var-version", projectId, varSetId, pair?.a],
-    queryFn: () => getVersion(varSetId, pair!.a),
-    enabled: pair !== null,
+  // 两侧快照读换轨 useRecord（子视图 kit 化批）：revision 类参数
+  // `pair?.a ?? undefined`——未选对比对（null）自动停用（与旧 enabled 同义）。
+  const aRecord = useRecord(runtimeVarVersionResource, {
+    id: pair?.a ?? undefined,
+    scope: { projectId: projectId ?? undefined, varSetId: varSetId || undefined },
   });
-  const bQuery = useQuery({
-    queryKey: ["runtime-var-version", projectId, varSetId, pair?.b],
-    queryFn: () => getVersion(varSetId, pair!.b),
-    enabled: pair !== null,
+  const bRecord = useRecord(runtimeVarVersionResource, {
+    id: pair?.b ?? undefined,
+    scope: { projectId: projectId ?? undefined, varSetId: varSetId || undefined },
   });
 
   const diff = useMemo(() => {
-    if (!aQuery.data || !bQuery.data) return null;
-    return diffEntries(aQuery.data.entries, bQuery.data.entries);
-  }, [aQuery.data, bQuery.data]);
+    if (!aRecord.data || !bRecord.data) return null;
+    return diffEntries(aRecord.data.entries, bRecord.data.entries);
+  }, [aRecord.data, bRecord.data]);
 
-  const isLoading = aQuery.isLoading || bQuery.isLoading;
+  const isLoading = aRecord.status === "loading" || bRecord.status === "loading";
   const counts = useMemo(() => {
     if (!diff) return null;
     return {
@@ -1360,8 +1360,9 @@ function VarSetSettingsDialog({
   }, [open, varSet]);
 
   // 命令化：visibility diff（未变化不发送）归 descriptor（闭包原实体，LWW
-  // 无 OCC 前置守卫）；kit 列表键经 descriptor.invalidates 失效，存量键经
-  // descriptor.legacyKeys 桥（§12.10-②）；结果分支无表单容器 → toast。
+  // 无 OCC 前置守卫）；失效 = descriptor invalidates（var-sets 全 kind——列表
+  // 与详情 record 一并刷新，§12.10-② 存量前缀桥退役）；结果分支无表单容器
+  // → toast。
   const save = useCommand(editVarSetDescriptor(varSet), {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {

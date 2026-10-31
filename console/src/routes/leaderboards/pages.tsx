@@ -1,26 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
-import { useCollection, useCommand } from "@lynx-go/uikit-core";
+import { useCollection, useCollectionData, useCommand, useRecord } from "@lynx-go/uikit-core";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { toast } from "sonner";
 import { Pencil, Plus, Trophy } from "lucide-react";
 import {
-  getBoard,
   getBoardEntry,
-  getSettlement,
-  listSettlements,
   LEADERBOARD_PERIOD_KINDS,
   LEADERBOARD_POLICIES,
   LEADERBOARD_SORTS,
   LEADERBOARD_TIE_BREAKS,
-  listBoardPeriods,
-  listBoardTop,
   type LeaderboardBoard,
   type LeaderboardScoreSnapshot,
   type LeaderboardSettlement,
 } from "@/api/leaderboards";
 import {
+  boardPeriodsResource,
+  boardSettlementsResource,
+  boardTopResource,
   boardsResource,
   boardsSearch,
   createBoardCommand,
@@ -29,8 +27,10 @@ import {
   removeBoardEntryDescriptor,
   voidSettlementDescriptor,
   rerunSettlementDescriptor,
+  type LeaderboardSettlementDetail,
 } from "@/kit/leaderboards";
 import { describeApiError } from "@/kit/errors";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -508,17 +508,21 @@ function EditBoardDialog({ board }: { board: LeaderboardBoard }) {
 
 export function BoardDetailPage() {
   const { boardId } = useParams({ strict: false });
+  const { projectId } = useAuth();
   const tz = useUserTimezone();
-  const { data: board } = useQuery({
-    queryKey: ["leaderboards-board", boardId],
-    queryFn: () => getBoard(boardId!),
-    enabled: !!boardId,
+  // 榜详情读换轨 useRecord（子视图 kit 化批——反身缺口#1 闭合）：id 未就绪
+  // 即停用（与旧 enabled 同义）；update/remove 缺省同资源失效现命中详情
+  // record 键（旧页详情读无失效桥，保存后详情不刷新）。
+  const boardRecord = useRecord(boardsResource, {
+    id: boardId ?? undefined,
+    scope: { projectId: projectId ?? undefined },
   });
-  const { data: periods = [] } = useQuery({
-    queryKey: ["leaderboards-periods", boardId],
-    queryFn: () => listBoardPeriods(boardId!),
-    enabled: !!boardId,
+  const board = boardRecord.data;
+  // 期列表换轨 leaderboards-periods 资源伴读绑定（整取方言——端点无分页）。
+  const periodsData = useCollectionData(boardPeriodsResource, {
+    scope: { projectId: projectId ?? undefined, boardId },
   });
+  const periods = periodsData.rows;
   const [period, setPeriod] = useState<string>("");
   const activePeriod = period || periods[0] || "";
   const topPaging = useServerPaging();
@@ -527,24 +531,17 @@ export function BoardDetailPage() {
     topPaging.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boardId, activePeriod]);
-  const { data: top, isLoading: topLoading } = useQuery({
-    queryKey: [
-      "leaderboards-top",
-      boardId,
-      activePeriod,
-      topPaging.pageSize,
-      topPaging.pageToken,
-    ],
-    queryFn: () =>
-      listBoardTop(boardId!, {
-        period: activePeriod || undefined,
-        pageSize: topPaging.pageSize,
-        pageToken: topPaging.pageToken,
-      }),
-    enabled: !!boardId,
-    placeholderData: (prev) => prev,
+  // top 榜换轨 leaderboards-top 资源伴读绑定（子视图 kit 化批）：activePeriod
+  // 进 scope 对象不进声明键（对象全键进 queryKey，期切换 = 新键）；游标/页
+  // 大小 = window。旧页 enabled 只有 !!boardId（scopeReady 已覆盖；空 period
+  // 照旧取服务端默认期）→ 不再手动门；旧 placeholderData = keepPrevious
+  // 缺省 true（零代码）。
+  const top = useCollectionData(boardTopResource, {
+    scope: { projectId: projectId ?? undefined, boardId, period: activePeriod },
+    window: { size: topPaging.pageSize, cursor: topPaging.pageToken || undefined },
   });
-  const topEntries = top?.rows ?? [];
+  const topEntries = top.rows;
+  const topLoading = top.status === "loading";
 
   const [lookupSubject, setLookupSubject] = useState("");
   const [lookupResult, setLookupResult] = useState<LeaderboardScoreSnapshot | null>(null);
@@ -554,10 +551,13 @@ export function BoardDetailPage() {
     onError: () => setLookupResult(null),
   });
 
-  // 条目删除命令接线（独立 descriptor）：不改变榜集合——存量
-  // ["leaderboards-top"/"-periods"/"-settlements"] 键由 descriptor 级
-  // legacyKeys 桥（§12.10-②，宽前缀）；toast 单源 onSettled（§12.3）。
+  // 条目删除命令接线（独立 descriptor）：失效 = descriptor invalidates 声明
+  //（kit leaderboards-top/periods 键——期集合由条目派生连带；结算面收窄剔除；
+  // 子视图 kit 化批 legacyKeys 宽桥退役）。裸 descriptor 不采纳 Provider
+  // context → 显式全量 scope（projectId 环境态 + 路径 boardId）；toast 单源
+  // onSettled（§12.3）。
   const removeEntry = useCommand(removeBoardEntryDescriptor, {
+    scope: { projectId: projectId ?? undefined, boardId },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Entry deleted (only unsealed periods can be deleted)");
@@ -600,7 +600,7 @@ export function BoardDetailPage() {
             {periods.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
           </SelectContent>
         </Select>
-        {top ? (
+        {top.total !== undefined ? (
           <span className="text-sm text-muted-foreground">{top.total} total</span>
         ) : null}
       </div>
@@ -656,9 +656,9 @@ export function BoardDetailPage() {
           pageSize={topPaging.pageSize}
           rowCount={topEntries.length}
           hasPrev={topPaging.hasPrev}
-          hasNext={!!top?.nextPageToken}
+          hasNext={!!top.segment?.nextCursor}
           onPrev={topPaging.goPrev}
-          onNext={() => topPaging.goNext(top?.nextPageToken)}
+          onNext={() => topPaging.goNext(top.segment?.nextCursor)}
           onPageSizeChange={topPaging.setPageSize}
         />
       </div>
@@ -764,16 +764,22 @@ function RewardRulesEditor({
 }
 
 function SettlementsSection({ boardId }: { boardId: string }) {
-  const { data: settlements = [], isLoading } = useQuery({
-    queryKey: ["leaderboards-settlements", boardId],
-    queryFn: () => listSettlements(boardId, 50),
+  const { projectId } = useAuth();
+  // 结算列表换轨 leaderboards-settlements 资源伴读绑定（固定 limit 50 语义
+  // 在适配器内保真）。
+  const settlementsData = useCollectionData(boardSettlementsResource, {
+    scope: { projectId: projectId ?? undefined, boardId },
   });
-  // 结算命令接线（独立 descriptor）：不改变榜集合——存量
-  // ["leaderboards-settlements"] 键由 descriptor 级 legacyKeys 桥（§12.10-②）。
-  // 注：ok 才失效（kit 语义）；旧页"无论成败都刷新"的 onError invalidate
-  // 随手动桥退役——失败行走 toast，重试由用户发起。toast 单源 onSettled
-  //（§12.3）。
+  const settlements = settlementsData.rows;
+  const isLoading = settlementsData.status === "loading";
+  // 结算命令接线（独立 descriptor）：失效 = descriptor invalidates 声明
+  //（kit leaderboards-settlements 键全 kind——列表 collection 与详情 record
+  // 一并刷新；子视图 kit 化批 legacyKeys 宽桥退役）。裸 descriptor 不采纳
+  // Provider context → 显式全量 scope。注：ok 才失效（kit 语义）；旧页"无论
+  // 成败都刷新"的 onError invalidate 随手动桥退役——失败行走 toast，重试由
+  // 用户发起。toast 单源 onSettled（§12.3）。
   const voidMutation = useCommand(voidSettlementDescriptor, {
+    scope: { projectId: projectId ?? undefined, boardId },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Period voided (settled periods cannot be voided)");
@@ -785,6 +791,7 @@ function SettlementsSection({ boardId }: { boardId: string }) {
     },
   });
   const rerunMutation = useCommand(rerunSettlementDescriptor, {
+    scope: { projectId: projectId ?? undefined, boardId },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Rerun completed (only re-grants missing payouts)");
@@ -853,12 +860,19 @@ function SettlementRow({
   busy: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const { projectId } = useAuth();
   const tz = useUserTimezone();
-  const { data: detail } = useQuery({
-    queryKey: ["leaderboards-settlement-detail", boardId, settlement.period],
-    queryFn: () => getSettlement(boardId, settlement.period),
-    enabled: open,
+  // 结算详情读换轨 useRecord（子视图 kit 化批——反身缺口#2 闭合）：对话框
+  // enabled 门保留（period 是行内参数，非声明键）；void/rerun 的 invalidates
+  // 同资源全 kind 命中展开行（旧页无失效桥，弃奖后 grants 不刷新）。
+  const detailRecord = useRecord(boardSettlementsResource, {
+    id: settlement.period,
+    scope: { projectId: projectId ?? undefined, boardId },
+    query: { enabled: open },
   });
+  // kit 单 T 资源：record 槽与 collection 行共享 T——信封面按声明点方言投影
+  //（kit/leaderboards.ts boardSettlementsResource.record 注释）。
+  const detail = detailRecord.data as LeaderboardSettlementDetail | undefined;
   const statusStyle =
     settlement.status === "settled" ? "default" : settlement.status === "voided" ? "outline" : "secondary";
   return (

@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/uikit-core";
+import { useCollection, useCommand, useRecord } from "@lynx-go/uikit-core";
 import { predicateOf } from "@lynx-go/uikit-core/schema";
 import type { Predicate } from "@lynx-go/uikit-core/kernel";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
@@ -10,12 +9,11 @@ import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import {
-  getPlan,
-  getSubscription,
   type Subscription,
   type SubscriptionPlan,
 } from "@/api/subscriptions";
 import { useAdminRole, canWrite, isPlatformAdmin } from "@/hooks/useAdminRole";
+import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,9 +71,8 @@ export function PlansListPage() {
     search: plansSearch,
   });
 
-  // 行删除命令化：失效 = kit plans 键 + 存量 ["sub-plans"] 前缀
-  //（resource.legacyKeys 声明，§12.10-②——详情键仍消费由前缀覆盖）。
-  // RowDeleteButton 无表单容器——结果分支 toast。
+  // 行删除命令化：失效 = kit plans 键缺省同资源（列表 collection 与详情
+  // record 全 kind）。RowDeleteButton 无表单容器——结果分支 toast。
   const remove = useCommand(removePlanCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
@@ -205,8 +202,8 @@ export function PlanNewPage() {
   const [graceDays, setGraceDays] = useState("3");
 
   // 命令化：amount int64 校验 + grace_days 文本→整数收敛在 descriptor run 内
-  //（非法 → rejected 结果分支，toast）；ok 后失效 = kit plans 键 + 存量
-  // 前缀（resource.legacyKeys 声明，§12.10-②）。
+  //（非法 → rejected 结果分支，toast）；ok 后失效 = kit plans 键缺省同资源
+  //（列表 collection 与详情 record 全 kind）。
   const create = useCommand(createPlanCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
@@ -257,14 +254,19 @@ export function PlanNewPage() {
 export function PlanDetailPage() {
   const { id } = useParams({ strict: false });
   const navigate = useNavigate();
+  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const writeable = canWrite(role);
 
-  const { data: plan, isLoading } = useQuery({
-    queryKey: ["sub-plans", id],
-    queryFn: () => getPlan(id!),
-    enabled: !!id,
+  // 详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用（与旧 enabled
+  // 同义）；404 → null 空态直出；remove 缺省同资源失效命中详情 record 键。
+  const planRecord = useRecord(plansResource, {
+    id: id ?? undefined,
+    scope: { projectId: projectId ?? undefined },
   });
+  const plan = planRecord.data;
+  const isLoading = planRecord.status === "loading";
+
   const remove = useCommand(removePlanCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
@@ -517,19 +519,23 @@ export function SubscriptionsListPage() {
 
 export function SubscriptionDetailPage() {
   const { id } = useParams({ strict: false });
+  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const platformAdmin = isPlatformAdmin(role);
 
-  const { data: sub, isLoading } = useQuery({
-    queryKey: ["subscriptions", id],
-    queryFn: () => getSubscription(id!),
-    enabled: !!id,
+  // 详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用（与旧 enabled
+  // 同义）；404 → null 空态直出；cancel/expire 缺省同资源失效命中详情
+  // record 键（全 kind）。
+  const subRecord = useRecord(subscriptionsResource, {
+    id: id ?? undefined,
+    scope: { projectId: projectId ?? undefined },
   });
+  const sub = subRecord.data;
+  const isLoading = subRecord.status === "loading";
 
-  // 写路径命令化（useCommand×2）：失效 = kit subscriptions 列表键 + 存量
-  // ["subscriptions"] 前缀（resource.legacyKeys 声明，§12.10-②——详情键
-  // ["subscriptions", id] 由前缀覆盖）；结果分支 toast（无表单容器）。
+  // 写路径命令化（useCommand×2）：失效 = kit subscriptions 键缺省同资源
+  //（列表 collection 与详情 record 全 kind）；结果分支 toast（无表单容器）。
   const cancel = useCommand(cancelSubscriptionCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {

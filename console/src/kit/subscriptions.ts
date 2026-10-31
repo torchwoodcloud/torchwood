@@ -13,23 +13,24 @@ import {
   createPlan,
   deletePlan,
   expireSubscription,
+  getPlan,
+  getSubscription,
   listPlans,
   listSubscriptions,
   type Subscription,
   type SubscriptionPlan,
 } from "@/api/subscriptions";
-import { runCommandMapped, toApiError } from "@/kit/errors";
+import { recordOrNull, runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2）：订阅域两个列表（plans / subscriptions）各换
 // useCollection——过滤/时间排序/游标/页大小进 URL，数据面复用 axios 管线，
 // 失败在适配器收敛为 ApiError。code/名称页内搜索是本地态，不走谓词。
 //
 // 命令族切片（写路径命令化）：计划建/删挂 plansResource、订阅期末取消/强制
-// 过期挂 subscriptionsResource（kit 列表键随 ok 自动失效）；存量
-// ["sub-plans"] / ["subscriptions"] 前缀键由资源 legacyKeys 声明桥
-//（§12.10-②，页面 onSettled 手动桥退役）。结果两分映射同 apiKeys
-//（400→rejected、409→conflict、其余 throw ApiError）；api 调用一律
-// __skipToast（toast 单源 = onSettled/结果盒）。
+// 过期挂 subscriptionsResource（kit 键——列表 collection + 详情 record 全
+// kind——随 ok 缺省同资源失效）。结果两分映射同 apiKeys（400→rejected、
+// 409→conflict、其余 throw ApiError）；api 调用一律 __skipToast（toast 单源
+// = onSettled/结果盒）。
 
 // —— 计划新建：表单值（展示形）在 run 内收敛为提交形 ——
 //（grace_days 文本 → 整数回退 0；amount 为最小单位整数字符串——客户端
@@ -103,9 +104,10 @@ export const plansResource = defineResource({
   getId: (row: SubscriptionPlan) => row.id,
   scope: ["projectId"],
   collection: fetchPlans,
-  // 存量键失效桥（§12.10-②）：宽前缀覆盖 ["sub-plans", projectId]（列表桥）
-  // 与 ["sub-plans", id]（详情键）两形。
-  legacyKeys: () => [["sub-plans"]],
+  // 详情读（PlanDetailPage，子视图 kit 化批）：404 → null 空态直出
+  //（recordOrNull 手写方言，不引 restRecord）；create/remove 缺省同资源
+  // 失效现命中详情 record 键（全 kind）。
+  record: (id) => recordOrNull(() => getPlan(id)) as Promise<SubscriptionPlan>,
   commands: {
     // 表单值→提交形收敛在 run 内（amount int64 校验、grace_days 文本→整数）
     create: {
@@ -179,9 +181,10 @@ export const subscriptionsResource = defineResource({
   getId: (row: Subscription) => row.id,
   scope: ["projectId"],
   collection: fetchSubscriptions,
-  // 存量键失效桥（§12.10-②）：宽前缀覆盖 ["subscriptions", projectId]
-  //（列表桥）与 ["subscriptions", id]（详情键）两形。
-  legacyKeys: () => [["subscriptions"]],
+  // 详情读（SubscriptionDetailPage，子视图 kit 化批）：404 → null 空态直出
+  //（recordOrNull 手写方言，不引 restRecord）；cancel/expire 缺省同资源
+  // 失效现命中详情 record 键（全 kind）。
+  record: (id) => recordOrNull(() => getSubscription(id)) as Promise<Subscription>,
   commands: {
     // 期末取消（custom verb，reason = "console" 操作审计）
     cancel: {

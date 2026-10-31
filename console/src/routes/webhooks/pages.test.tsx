@@ -204,9 +204,11 @@ describe("WebhookDetailPage", () => {
     vi.mocked(listDeliveries).mockResolvedValue({ rows: [] });
     renderDetail();
     await screen.findByText("No deliveries yet");
+    // 投递列表换轨 kit collection 槽（子视图 kit 化批）：空游标归一 undefined
+    //（适配器 cursor || undefined 方言，同 databases 域）。
     expect(listDeliveries).toHaveBeenLastCalledWith("wh-1", {
       pageSize: 20,
-      pageToken: "",
+      pageToken: undefined,
       status: undefined,
     });
 
@@ -222,7 +224,7 @@ describe("WebhookDetailPage", () => {
     await waitFor(() =>
       expect(listDeliveries).toHaveBeenLastCalledWith("wh-1", {
         pageSize: 20,
-        pageToken: "",
+        pageToken: undefined,
         status: "failed",
       })
     );

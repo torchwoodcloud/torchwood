@@ -1,19 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/uikit-core";
+import { useCollection, useCollectionData, useCommand, useRecord } from "@lynx-go/uikit-core";
 import { toast } from "sonner";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { Plus, KeyRound, RotateCcw, AlertTriangle } from "lucide-react";
 import {
-  getWebhook,
-  listDeliveries,
   type Webhook,
   type WebhookDelivery,
 } from "@/api/webhooks";
 import {
   webhooksResource,
   webhooksSearch,
+  webhookDeliveriesResource,
   createWebhookCommand,
   updateWebhookCommand,
   removeWebhookCommand,
@@ -337,7 +335,8 @@ export function WebhooksListPage() {
     },
   });
 
-  // 行删除命令接线：kit 集合键自动失效；存量键由 resource.legacyKeys 桥。
+  // 行删除命令接线：kit 键（列表 collection + 详情 record）由缺省同资源
+  // 失效自动命中。
   const remove = useCommand(removeWebhookCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
@@ -451,31 +450,27 @@ export function WebhooksListPage() {
 // 投递记录子视图：DLQ 浏览/重投管理面。status 过滤变化经 resetKeys 自动回
 // 第一页（机制，非手动 reset）；行内 Redeliver 仅终态行可重投。
 function DeliveriesCard({ webhookId, writeable }: { webhookId: string; writeable: boolean }) {
+  const { projectId } = useAuth();
   const tz = useUserTimezone();
   const [statusFilter, setStatusFilter] = useState("");
 
   const paging = useServerPaging(20, { resetKeys: [statusFilter] });
-  const { data, isLoading } = useQuery({
-    queryKey: [
-      "webhook-deliveries",
+  // 投递列表换轨 useCollectionData（子视图 kit 化批）：status 过滤进 scope
+  // 旁路键（全量对象进 queryKey，声明键只定就绪门），过滤变化回第一页仍走
+  // useServerPaging resetKeys 机制；refetchInterval 5s 现值随迁；旧
+  // placeholderData = keepPrevious 缺省 true（零代码）。
+  const deliveries = useCollectionData(webhookDeliveriesResource, {
+    scope: {
+      projectId: projectId ?? undefined,
       webhookId,
-      statusFilter,
-      paging.pageSize,
-      paging.pageToken,
-    ],
-    queryFn: () =>
-      listDeliveries(webhookId, {
-        pageSize: paging.pageSize,
-        pageToken: paging.pageToken,
-        status: statusFilter || undefined,
-      }),
-    placeholderData: (prev) => prev,
+      status: statusFilter || undefined,
+    },
+    window: { size: paging.pageSize, cursor: paging.pageToken || undefined },
     refetchInterval: 5000,
   });
-  const deliveries = data?.rows ?? [];
 
-  // 重投命令接线（§12.3）：资源挂载句柄（expireOld 样板）——存量
-  // ["webhook-deliveries"] 键由资源 legacyKeys 桥；toast 单源 onSettled。
+  // 重投命令接线（§12.3）：资源挂载句柄——失效由 descriptor 显式声明打
+  // webhook-deliveries 资源键；toast 单源 onSettled。
   const redeliver = useCommand(redeliverDeliveryCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
@@ -516,13 +511,13 @@ function DeliveriesCard({ webhookId, writeable }: { webhookId: string; writeable
             </SelectContent>
           </Select>
         </div>
-        {isLoading ? (
+        {deliveries.status === "loading" ? (
           <p className="text-sm text-muted-foreground">Loading...</p>
-        ) : deliveries.length === 0 ? (
+        ) : deliveries.rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">No deliveries yet</p>
         ) : (
           <div className="divide-y">
-            {deliveries.map((d: WebhookDelivery) => (
+            {deliveries.rows.map((d: WebhookDelivery) => (
               <div key={d.id} className="flex items-start justify-between gap-2 py-2">
                 <div className="min-w-0 space-y-1">
                   <div className="flex items-center gap-2">
@@ -561,11 +556,11 @@ function DeliveriesCard({ webhookId, writeable }: { webhookId: string; writeable
         <ListPaginationKeyset
           page={paging.page}
           pageSize={paging.pageSize}
-          rowCount={deliveries.length}
+          rowCount={deliveries.rows.length}
           hasPrev={paging.hasPrev}
-          hasNext={!!data?.nextPageToken}
+          hasNext={!!deliveries.segment?.nextCursor}
           onPrev={paging.goPrev}
-          onNext={() => paging.goNext(data?.nextPageToken)}
+          onNext={() => paging.goNext(deliveries.segment?.nextCursor)}
           onPageSizeChange={paging.setPageSize}
         />
       </CardContent>
@@ -582,16 +577,20 @@ export function WebhookDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [rotatedSecret, setRotatedSecret] = useState<{ secret: string; fingerprint: string } | null>(null);
 
-  const { data: hook, isLoading } = useQuery({
-    queryKey: ["webhooks", projectId, webhookId],
-    queryFn: () => getWebhook(webhookId!),
-    enabled: !!webhookId,
+  // 详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用（与旧 enabled
+  // 同义）；404 → null 空态直出（record 槽方言）；键形 = kit record 键，
+  // update/rotate/remove 命令的缺省同资源失效现命中它——保存后详情自刷新。
+  const webhookRecord = useRecord(webhooksResource, {
+    id: webhookId ?? undefined,
+    scope: { projectId: projectId ?? undefined },
   });
+  const hook = webhookRecord.data;
+  const isLoading = webhookRecord.status === "loading";
 
-  // 命令接线（§12.3）：update/rotate/remove 挂 webhook 资源（kit 集合自动
-  // 失效）——存量 ["webhooks"] 详情/列表键由 resource.legacyKeys 桥；字段
-  // diff 留在提交处（页面持原实体快照——url/events 仅变更时随请求发送，
-  // proto3 optional）。toast 单源 onSettled。
+  // 命令接线（§12.3）：update/rotate/remove 挂 webhook 资源——缺省同资源
+  // 失效现命中 kit 集合键 + 详情 record 键；字段 diff 留在提交处（页面持
+  // 原实体快照——url/events 仅变更时随请求发送，proto3 optional）。
+  // toast 单源 onSettled。
   const update = useCommand(updateWebhookCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {

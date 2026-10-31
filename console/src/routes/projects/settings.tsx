@@ -1,30 +1,29 @@
 import {
   createInviteCodeCommand,
+  inviteCodesResource,
+  projectsResource,
   removeInviteCodeCommand,
   removeProjectCommand,
   updateOAuthAllowlistCommand,
   updateProjectCommand,
 } from "@/kit/projects";
 import {
+  oauthProvidersResource,
   removeOAuthProviderCommand,
   upsertOAuthProviderCommand,
 } from "@/kit/oauthProviders";
 import { describeApiError } from "@/kit/errors";
 import { useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useCommand } from "@lynx-go/uikit-core";
+import { useCollectionData, useCommand, useRecord } from "@lynx-go/uikit-core";
 import { toast } from "sonner";
 import { Copy, Plus, Trash2 } from "lucide-react";
 import {
-  getProject,
-  listInviteCodes,
   type Project,
   type InviteCode,
 } from "@/api/projects";
 import {
   OAUTH_PROVIDER_OPTIONS,
-  listOAuthProviders,
   oauthCallbackURL,
   type OAuthProvider,
 } from "@/api/oauthProviders";
@@ -77,11 +76,12 @@ export function ProjectSettingsPage() {
   const [tab, setTab] = useState<SettingsTab>("general");
   const { role } = useAdminRole();
 
-  const { data: project, isLoading } = useQuery({
-    queryKey: ["projects", id],
-    queryFn: () => getProject(id!),
-    enabled: !!id,
-  });
+  // 详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用（与旧 enabled
+  // 同义）；404 → null 空态直出（recordOrNull 手写方言，不引 restRecord）。
+  // projectsResource 平台级无 scope 声明——useRecord 不传 scope。
+  const projectRecord = useRecord(projectsResource, { id: id ?? undefined });
+  const project = projectRecord.data;
+  const isLoading = projectRecord.status === "loading";
 
   const synced = useProjectScopeSync(project?.id);
 
@@ -489,13 +489,15 @@ function InviteCodesSection({
   const [createOpen, setCreateOpen] = useState(false);
   const paging = useServerPaging();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["invite-codes", projectId, paging.pageSize, paging.pageToken],
-    queryFn: () =>
-      listInviteCodes(projectId, { pageSize: paging.pageSize, pageToken: paging.pageToken }),
-    placeholderData: (prev) => prev,
+  // 分页子列表换轨 useCollectionData（子视图 kit 化批）：projectId 进 kit 键
+  // scope，useServerPaging 游标进 window；keepPrevious 缺省 true = 旧
+  // placeholderData 语义（零代码）。建删命令的失效声明打在同一 kit 键上。
+  const codesList = useCollectionData(inviteCodesResource, {
+    scope: { projectId },
+    window: { size: paging.pageSize, cursor: paging.pageToken || undefined },
   });
-  const codes = data?.rows ?? [];
+  const codes = codesList.rows;
+  const isLoading = codesList.status === "loading";
 
   const remove = useCommand(removeInviteCodeCommand, {
     onSettled: (result, failure) => {
@@ -540,9 +542,9 @@ function InviteCodesSection({
           pageSize={paging.pageSize}
           rowCount={codes.length}
           hasPrev={paging.hasPrev}
-          hasNext={!!data?.nextPageToken}
+          hasNext={!!codesList.segment?.nextCursor}
           onPrev={paging.goPrev}
-          onNext={() => paging.goNext(data?.nextPageToken)}
+          onNext={() => paging.goNext(codesList.segment?.nextCursor)}
           onPageSizeChange={paging.setPageSize}
         />
       )}
@@ -735,16 +737,21 @@ function OAuthProvidersPanel() {
   const platformAdmin = isPlatformAdmin(role);
 
   const oauthPaging = useServerPaging();
-  const { data: providersData, isLoading } = useQuery({
-    queryKey: ["oauth-providers", projectId, oauthPaging.pageSize, oauthPaging.pageToken],
-    queryFn: () =>
-      listOAuthProviders({ pageSize: oauthPaging.pageSize, pageToken: oauthPaging.pageToken }),
+  // 分页子列表换轨 useCollectionData（子视图 kit 化批）：projectId 进 kit 键
+  // scope，分页游标进 window；keepPrevious 缺省 true = 旧 placeholderData 语义。
+  // upsert/remove 命令的失效声明打在同一 kit 键上（命令 scope 显式传同源）。
+  const providersList = useCollectionData(oauthProvidersResource, {
+    scope: { projectId: projectId ?? undefined },
+    window: { size: oauthPaging.pageSize, cursor: oauthPaging.pageToken || undefined },
     enabled: !!projectId,
-    placeholderData: (prev) => prev,
   });
-  const providers = providersData?.rows ?? [];
+  const providers = providersList.rows;
+  const isLoading = providersList.status === "loading";
 
+  // 命令 scope 显式传（projectId 在环境上下文不在 input——失效匹配与列表键
+  // 同源相交，half-scope 裁决 SKILL §12.12）。
   const save = useCommand(upsertOAuthProviderCommand, {
+    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("OAuth configuration saved");
@@ -758,6 +765,7 @@ function OAuthProvidersPanel() {
   });
 
   const remove = useCommand(removeOAuthProviderCommand, {
+    scope: { projectId: projectId ?? undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("OAuth configuration deleted");
@@ -915,9 +923,9 @@ function OAuthProvidersPanel() {
             pageSize={oauthPaging.pageSize}
             rowCount={providers.length}
             hasPrev={oauthPaging.hasPrev}
-            hasNext={!!providersData?.nextPageToken}
+            hasNext={!!providersList.segment?.nextCursor}
             onPrev={oauthPaging.goPrev}
-            onNext={() => oauthPaging.goNext(providersData?.nextPageToken)}
+            onNext={() => oauthPaging.goNext(providersList.segment?.nextCursor)}
             onPageSizeChange={oauthPaging.setPageSize}
           />
         )}

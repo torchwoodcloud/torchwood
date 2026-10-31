@@ -3,6 +3,7 @@ import {
   type CollectionQuery,
   type CommandResult,
   type CommandDescriptor,
+  type ResourceScope,
   type Segment,
 } from "@lynx-go/uikit-core/kernel";
 import { collectionQuerySchema } from "@lynx-go/uikit-core/schema";
@@ -12,13 +13,15 @@ import {
   createProject,
   deleteInviteCode,
   deleteProject,
+  getProject,
+  listInviteCodes,
   listProjects,
   updateOAuthRedirectAllowlist,
   updateProject,
   type InviteCode,
   type Project,
 } from "@/api/projects";
-import { runCommandMapped, toApiError } from "@/kit/errors";
+import { recordOrNull, runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2）：projects 是平台级资源（GET /server/projects，
 // 旧页不随项目作用域）——defineResource 不设 scope，直接请求；游标/页大小
@@ -42,9 +45,12 @@ export const projectsResource = defineResource({
   name: "projects",
   getId: (row: Project) => row.id,
   collection: fetchProjects,
-  // 存量键失效桥（§12.10-②，平台级资源——legacyKeys 与 scope 声明无关）：
-  // 命令 ok 后除 kit 键外失效存量 ["projects"] 宽前缀键（settings/详情页
-  // 仍吃存量键）。
+  // 详情读（ProjectDetailPage / ProjectSettingsPage，子视图 kit 化批）：
+  // 404 → null 空态直出（recordOrNull 手写方言，不引 restRecord）。
+  record: (id) => recordOrNull(() => getProject(id)) as Promise<Project>,
+  // 存量键失效桥（§12.10-②）保留：壳层读者仍在——ProjectBootstrap /
+  // ProjectSelector 读 ["projects"] 列表（不在子视图 kit 化批范围）；详情/
+  // 设置页详情读已换轨 kit record 键（本资源命令 ok 的缺省同资源失效命中）。
   legacyKeys: () => [["projects"]],
   commands: {
     // 新建项目（实体集合变更）：description 空 = 不发送（run 内收敛）。
@@ -84,7 +90,11 @@ export interface UpdateProjectInput {
 
 // 输入自包含（id 在入参里）——直接是常量 descriptor，无需工厂。
 export const updateProjectCommand: CommandDescriptor<UpdateProjectInput, Project> = {
-  // 存量键失效桥（§12.10-②）：["projects", id] 详情/["projects"] 全前缀族。
+  // 双通道失效：invalidates 打 kit projects 键（详情/设置页 record 读换轨后
+  // 的承接——旧 ["projects"] 宽前缀不再命中 kit 键形，缺了它保存后受控
+  // Select/DetailGrid 会回显旧值）；legacyKeys 仍打壳层 ["projects"] 列表
+  //（ProjectBootstrap / ProjectSelector 仍在读，保留）。
+  invalidates: [{ resource: "projects" }],
   legacyKeys: () => [["projects"]],
   async run(i) {
     const { id, ...patch } = i;
@@ -94,6 +104,8 @@ export const updateProjectCommand: CommandDescriptor<UpdateProjectInput, Project
 
 export const removeProjectCommand: CommandDescriptor<{ id: string }, null> = {
   treatAs: { "not-found": { status: "ok" as const, payload: null } },
+  // 双通道失效同 update（kit 键 + 壳层宽前缀）。
+  invalidates: [{ resource: "projects" }],
   legacyKeys: () => [["projects"]],
   async run(i) {
     await runCommandMapped(async () => {
@@ -104,13 +116,42 @@ export const removeProjectCommand: CommandDescriptor<{ id: string }, null> = {
   },
 };
 
+// —— invite-codes（settings Auth 面内嵌分页列表，子视图 kit 化批）：scope
+// ["projectId"]，ctx 缺参静默空段（与 collections/documents 同方言）；伴读
+// 形由页面 useCollectionData 消费（useServerPaging 游标进 window）。——
+
+async function fetchInviteCodes(
+  q: CollectionQuery,
+  ctx: ResourceScope
+): Promise<Segment<InviteCode>> {
+  if (ctx.projectId == null) return { rows: [] };
+  try {
+    const page = await listInviteCodes(ctx.projectId, {
+      pageSize: q.window.size,
+      pageToken: q.window.cursor || undefined,
+    });
+    return { rows: page.rows, nextCursor: page.nextPageToken };
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+export const inviteCodesResource = defineResource({
+  name: "invite-codes",
+  getId: (row: InviteCode) => row.id,
+  scope: ["projectId"],
+  collection: fetchInviteCodes,
+});
+
 // —— settings 其余写路径（OAuth 白名单/邀请码）——
 
 export const updateOAuthAllowlistCommand: CommandDescriptor<
   { id: string; urls: string[] },
   Project
 > = {
-  // 白名单落在 project 实体上（PATCH 回 Project）——失效存量 ["projects"]。
+  // 白名单落在 project 实体上（PATCH 回 Project）——双通道失效同 update
+  //（kit projects 键 + 壳层 ["projects"] 宽前缀）。
+  invalidates: [{ resource: "projects" }],
   legacyKeys: () => [["projects"]],
   async run(i) {
     return runCommandMapped(() => updateOAuthRedirectAllowlist(i.id, i.urls, SKIP));
@@ -121,7 +162,11 @@ export const createInviteCodeCommand: CommandDescriptor<
   { projectId: string; maxUses?: number; expireAt?: string },
   InviteCode
 > = {
-  legacyKeys: () => [["invite-codes"]],
+  // 失效 = kit invite-codes 键（子视图 kit 化批：存量 ["invite-codes"] 前缀桥
+  // 退役——最后读者 settings 分页列表已换轨 useCollectionData）；projectId 在
+  // input → scopeOf 派生命令 scope（M2 同源：既喂 run ctx 又喂失效匹配）。
+  scopeOf: (i) => ({ projectId: i.projectId }),
+  invalidates: [{ resource: "invite-codes" }],
   async run(i) {
     return runCommandMapped(() =>
       createInviteCode(
@@ -140,7 +185,9 @@ export const removeInviteCodeCommand: CommandDescriptor<
   { projectId: string; id: string },
   null
 > = {
-  legacyKeys: () => [["invite-codes"]],
+  // 失效/命令 scope 同 create（scopeOf 派生）。
+  scopeOf: (i) => ({ projectId: i.projectId }),
+  invalidates: [{ resource: "invite-codes" }],
   async run(i) {
     await runCommandMapped(async () => {
       await deleteInviteCode(i.projectId, i.id, SKIP);

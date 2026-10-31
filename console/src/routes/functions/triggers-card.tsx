@@ -1,15 +1,16 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useCommand } from "@lynx-go/uikit-core";
+import { useCollectionData, useCommand } from "@lynx-go/uikit-core";
 import { toast } from "sonner";
 import { AlertTriangle, Plus } from "lucide-react";
-import { listFunctionTriggers, type FunctionTrigger } from "@/api/functions";
+import { type FunctionTrigger } from "@/api/functions";
 import {
   createTriggerDescriptor,
+  functionTriggersResource,
   removeTriggerDescriptor,
   rotateTriggerTokenDescriptor,
 } from "@/kit/functions";
 import { describeApiError } from "@/kit/errors";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,6 +47,7 @@ export function FunctionTriggersCard({
   writeable: boolean;
 }) {
   const tz = useUserTimezone();
+  const { projectId } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [type, setType] = useState<"http" | "cron" | "event">("http");
   // http 表单
@@ -61,18 +63,20 @@ export function FunctionTriggersCard({
     "databases.app.collections.*.documents.create"
   );
 
-  const queryKey = ["function-triggers", functionId];
-
-  const { data: triggers = [], isLoading } = useQuery({
-    queryKey,
-    queryFn: () => listFunctionTriggers(functionId),
+  // 触发器列表换轨 useCollectionData（子视图 kit 化批）：端点无分页契约——
+  // window "all" 整取（适配器不透传 window）；scope 全量嵌套（functionId 进
+  // 声明键定就绪门）。
+  const triggers = useCollectionData(functionTriggersResource, {
+    scope: { projectId: projectId ?? undefined, functionId },
+    window: "all",
   });
 
   // 命令接线（§12.3，裸 descriptor——触发器是 function 子资源）：不涉
-  // functions 集合失效；存量 ["function-triggers"] 键由 descriptor 级
-  // legacyKeys 桥（§12.10-②）。创建的表单展示形在 descriptor run 内收敛
-  // 为提交形。toast 单源 onSettled。
+  // functions 集合失效；失效 = descriptor 声明（function-triggers 资源键）+
+  // 页面传全量嵌套 scope 与列表绑定同形相交（half-scope 陷阱 §12.12）。
+  // 创建的表单展示形在 descriptor run 内收敛为提交形。toast 单源 onSettled。
   const create = useCommand(createTriggerDescriptor, {
+    scope: { projectId: projectId ?? undefined, functionId },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Trigger created");
@@ -86,6 +90,7 @@ export function FunctionTriggersCard({
   });
 
   const remove = useCommand(removeTriggerDescriptor, {
+    scope: { projectId: projectId ?? undefined, functionId },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Trigger deleted");
@@ -98,6 +103,7 @@ export function FunctionTriggersCard({
   });
 
   const rotate = useCommand(rotateTriggerTokenDescriptor, {
+    scope: { projectId: projectId ?? undefined, functionId },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Token rotated (the old URL is invalidated immediately)");
@@ -304,13 +310,13 @@ export function FunctionTriggersCard({
             </div>
           )}
 
-          {isLoading ? (
+          {triggers.status === "loading" ? (
             <p className="text-sm text-muted-foreground">Loading...</p>
-          ) : triggers.length === 0 ? (
+          ) : triggers.rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">No triggers yet</p>
           ) : (
             <div className="space-y-2">
-              {triggers.map((trg: FunctionTrigger) => (
+              {triggers.rows.map((trg: FunctionTrigger) => (
                 <div
                   key={trg.id}
                   className="rounded-md border p-3 space-y-2 text-sm"

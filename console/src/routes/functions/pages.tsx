@@ -1,20 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/uikit-core";
+import { useCollection, useCollectionData, useCommand, useRecord } from "@lynx-go/uikit-core";
 import { toast } from "sonner";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { Plus, Play, KeyRound } from "lucide-react";
 import {
-  getFunction,
   deleteFunction,
-  listInvocations,
   type FunctionItem,
   type Invocation,
 } from "@/api/functions";
 import {
   functionsResource,
   functionsSearch,
+  invocationsResource,
   createFunctionCommand,
   updateFunctionCommand,
   removeFunctionCommand,
@@ -177,8 +175,8 @@ export function FunctionsListPage() {
     search: functionsSearch,
   });
 
-  // 行删除命令接线（§12.3）：kit 集合键由 useCommand 自动失效；存量键由
-  // resource.legacyKeys 桥；toast 单源 onSettled。
+  // 行删除命令接线（§12.3）：kit 键（列表 collection + 详情 record）由
+  // useCommand 缺省同资源失效自动命中；toast 单源 onSettled。
   const remove = useCommand(removeFunctionCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
@@ -516,35 +514,31 @@ export function FunctionDetailPage() {
   // 轮换响应的一次性明文回显。
   const [rotatedSecret, setRotatedSecret] = useState<{ secret: string; fingerprint: string } | null>(null);
 
-  const { data: fn, isLoading } = useQuery({
-    queryKey: ["functions", projectId, functionId],
-    queryFn: () => getFunction(functionId!),
-    enabled: !!functionId,
+  // 详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用（与旧 enabled
+  // 同义）；404 → null 空态直出（record 槽方言）；键形 = kit record 键，
+  // update/rotate/setScopes 等命令的缺省同资源失效现命中它。
+  const functionRecord = useRecord(functionsResource, {
+    id: functionId ?? undefined,
+    scope: { projectId: projectId ?? undefined },
   });
+  const fn = functionRecord.data;
+  const isLoading = functionRecord.status === "loading";
 
-  // 调用记录子列表对接服务端分页；status 精确过滤（排障面）变化经 resetKeys
-  // 自动回第一页（机制，非手动 reset）。
+  // 调用记录子列表换轨 useCollectionData（子视图 kit 化批）：status 精确过滤
+  //（排障面）进 scope 旁路键（全量对象进 queryKey，声明键只定就绪门），变化
+  // 回第一页仍走 useServerPaging resetKeys 机制；refetchInterval 3s 现值随迁；
+  // 旧 placeholderData = keepPrevious 缺省 true（零代码）。
   const [invStatusFilter, setInvStatusFilter] = useState("");
   const invocationsPaging = useServerPaging(20, { resetKeys: [invStatusFilter] });
-  const { data: invocationsData, isLoading: invocationsLoading } = useQuery({
-    queryKey: [
-      "invocations",
-      functionId,
-      invStatusFilter,
-      invocationsPaging.pageSize,
-      invocationsPaging.pageToken,
-    ],
-    queryFn: () =>
-      listInvocations(functionId!, {
-        pageSize: invocationsPaging.pageSize,
-        pageToken: invocationsPaging.pageToken,
-        status: invStatusFilter || undefined,
-      }),
-    enabled: !!functionId,
-    placeholderData: (prev) => prev,
+  const invocations = useCollectionData(invocationsResource, {
+    scope: {
+      projectId: projectId ?? undefined,
+      functionId: functionId ?? undefined,
+      status: invStatusFilter || undefined,
+    },
+    window: { size: invocationsPaging.pageSize, cursor: invocationsPaging.pageToken || undefined },
     refetchInterval: 3000,
   });
-  const invocations = invocationsData?.rows ?? [];
 
   useEffect(() => {
     if (!fn) return;
@@ -555,10 +549,9 @@ export function FunctionDetailPage() {
     setScopesText((fn.declared_scopes ?? []).join("\n"));
   }, [fn]);
 
-  // 命令接线（§12.3）：update/rotate/setScopes/remove 挂函数资源（kit 集合
-  // 自动失效）——存量 ["functions"] 详情/列表键由 resource.legacyKeys 桥；
-  // invoke 用资源挂载句柄（expireOld 样板）——存量 ["invocations"] 键同经
-  // 资源 legacyKeys 桥。toast 单源 onSettled。
+  // 命令接线（§12.3）：update/rotate/setScopes/remove 挂函数资源——缺省同
+  // 资源失效现命中 kit 集合键 + 详情 record 键；invoke 同挂资源，失效由
+  // descriptor 显式声明打 invocations 资源键。toast 单源 onSettled。
   const update = useCommand(updateFunctionCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
@@ -848,13 +841,13 @@ export function FunctionDetailPage() {
               </SelectContent>
             </Select>
           </div>
-          {invocationsLoading ? (
+          {invocations.status === "loading" ? (
             <p className="text-sm text-muted-foreground">Loading...</p>
-          ) : invocations.length === 0 ? (
+          ) : invocations.rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">No invocations yet</p>
           ) : (
             <div className="divide-y">
-              {invocations.map((inv: Invocation) => (
+              {invocations.rows.map((inv: Invocation) => (
                 <button
                   key={inv.id}
                   type="button"
@@ -876,11 +869,11 @@ export function FunctionDetailPage() {
           <ListPaginationKeyset
             page={invocationsPaging.page}
             pageSize={invocationsPaging.pageSize}
-            rowCount={invocations.length}
+            rowCount={invocations.rows.length}
             hasPrev={invocationsPaging.hasPrev}
-            hasNext={!!invocationsData?.nextPageToken}
+            hasNext={!!invocations.segment?.nextCursor}
             onPrev={invocationsPaging.goPrev}
-            onNext={() => invocationsPaging.goNext(invocationsData?.nextPageToken)}
+            onNext={() => invocationsPaging.goNext(invocations.segment?.nextCursor)}
             onPageSizeChange={invocationsPaging.setPageSize}
           />
         </CardContent>

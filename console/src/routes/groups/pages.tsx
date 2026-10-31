@@ -1,25 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCollection, useCommand } from "@lynx-go/uikit-core";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  invalidateAfterCommand,
+  useCollection,
+  useCollectionData,
+  useCommand,
+  useRecord,
+} from "@lynx-go/uikit-core";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";
 import { Plus, Settings2, UserPlus } from "lucide-react";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
-  getGroup,
   deleteGroup,
-  listMemberships,
   deleteMembership,
-  getGroupPrefs,
   type Group,
   type Membership,
 } from "@/api/groups";
 import {
+  groupPrefsResource,
   groupsResource,
   groupsSearch,
   groupsCollectionKey,
+  membershipsResource,
   createGroupCommand,
   removeGroupCommand,
   updateGroupPrefsCommand,
@@ -30,6 +35,7 @@ import {
 } from "@/kit/groups";
 import { describeApiError } from "@/kit/errors";
 import { useAdminRole, canWrite } from "@/hooks/useAdminRole";
+import { useAuth } from "@/hooks/useAuth";
 import { ResourceListPage } from "@/components/list/ResourceListPage";
 import { useServerPaging } from "@/hooks/useServerPaging";
 import { PageHeader } from "@/components/PageHeader";
@@ -94,8 +100,8 @@ export function GroupsListPage() {
     search: groupsSearch,
   });
 
-  // 命令接线（§12.3）：toast 单源 onSettled；失效 = kit 键 + 存量键
-  //（resource.legacyKeys 宽前缀 ["groups"]/["memberships"]——详情页仍吃存量键）。
+  // 命令接线（§12.3）：toast 单源 onSettled；失效 = kit 键（groups 资源
+  // 缺省同资源全 kind——列表与详情 record 一并刷新）。
   const remove = useCommand(removeGroupCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
@@ -321,22 +327,32 @@ function MembershipRoleSelect({
 
 function GroupPrefsCard({ groupId }: { groupId: string }) {
   const { role } = useAdminRole();
+  const { projectId } = useAuth();
   const [prefsText, setPrefsText] = useState("{}");
   const writeable = canWrite(role);
 
-  const { data: prefs, isLoading } = useQuery({
-    queryKey: ["groups", groupId, "prefs"],
-    queryFn: () => getGroupPrefs(groupId),
-    enabled: !!groupId,
+  // 偏好详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用（与旧
+  // enabled 同义）；prefs 读无 404→null 空态分支（卡片对 !prefs 无消费
+  // 面——失败如实上抛，404→null 会把 "null" 写进 JSON 文本域，见 kit 注）。
+  const prefsRecord = useRecord(groupPrefsResource, {
+    id: groupId,
+    scope: { projectId: projectId ?? undefined, groupId },
   });
+  const prefs = prefsRecord.data;
+  const isLoading = prefsRecord.status === "loading";
 
   useEffect(() => {
     if (prefs !== undefined) setPrefsText(JSON.stringify(prefs));
   }, [prefs]);
 
   // 无表单容器（JSON 文本域本地态）：结果分支 toast；failure → describeApiError。
-  // 存量 prefs 键（["groups", id, "prefs"]）由 resource.legacyKeys 宽前缀失效。
+  // 失效 = descriptor 声明（groups + group-prefs，§12.10-②）；显式全量嵌套
+  // scope——group-prefs 键投影轴含 groupId，缺省 Provider（仅 projectId）
+  // 会 miss。类型执法：声明键未就绪时命令不可达（上方详情 NotFound 兜底），
+  // scope 缺省走 Provider 解析链。
+  const commandScope = projectId ? { projectId, groupId } : undefined;
   const save = useCommand(updateGroupPrefsCommand, {
+    scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Group preferences saved");
@@ -405,6 +421,7 @@ export function GroupDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { role } = useAdminRole();
+  const { projectId } = useAuth();
   const tz = useUserTimezone();
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -413,33 +430,35 @@ export function GroupDetailPage() {
   const [inviteStatus, setInviteStatus] = useState<string>("pending");
   const writeable = canWrite(role);
 
-  const { data: group, isLoading: groupLoading } = useQuery({
-    queryKey: ["groups", groupId],
-    queryFn: () => getGroup(groupId!),
-    enabled: !!groupId,
+  // 详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用（与旧 enabled
+  // 同义）；404 → null 走既有 NotFound 分支。
+  const groupRecord = useRecord(groupsResource, {
+    id: groupId ?? undefined,
+    scope: { projectId: projectId ?? undefined },
   });
+  const group = groupRecord.data;
 
+  // 成员列表换轨 useCollectionData（伴读绑定，子视图 kit 化批）：scope 未
+  // 就绪自动停用（旧 enabled 同义）；翻页过渡 keepPrevious 缺省 true（旧
+  // placeholderData 同义，零代码）；行 = .rows、下一页 token = segment.nextCursor。
   const membershipsPaging = useServerPaging();
-  const { data: membershipsData, isLoading: membershipsLoading } = useQuery({
-    queryKey: ["memberships", groupId, membershipsPaging.pageSize, membershipsPaging.pageToken],
-    queryFn: () =>
-      listMemberships(groupId!, {
-        pageSize: membershipsPaging.pageSize,
-        pageToken: membershipsPaging.pageToken,
-      }),
-    enabled: !!groupId,
-    placeholderData: (prev) => prev,
+  const membershipsList = useCollectionData(membershipsResource, {
+    scope: { projectId: projectId ?? undefined, groupId },
+    window: {
+      size: membershipsPaging.pageSize,
+      cursor: membershipsPaging.pageToken || undefined,
+    },
   });
-  const memberships = membershipsData?.rows ?? [];
-
-  // 存量键手动桥——仅剩批量移除成员的直调路径消费（非 useCommand 面，
-  // 无 descriptor 可挂失效）；命令路径已由 resource.legacyKeys 宽前缀覆盖。
-  const invalidateGroup = () => {
-    queryClient.invalidateQueries({ queryKey: ["groups", groupId] });
-    queryClient.invalidateQueries({ queryKey: ["memberships", groupId] });
-  };
+  const membershipsData = membershipsList.segment;
+  const memberships = [...membershipsList.rows];
+  const membershipsLoading = membershipsList.status === "loading";
 
   // 命令接线（§12.3）：toast 单源 onSettled；无表单容器 → 结果分支 toast。
+  // 失效 = descriptor 声明（§12.10-②）；成员命令族显式全量嵌套 scope——
+  // memberships 键投影轴含 groupId，缺省 Provider（仅 projectId）会 miss。
+  // 类型执法：声明键未就绪时命令不可达（下方详情 NotFound 兜底），scope
+  // 缺省走 Provider 解析链。
+  const commandScope = projectId && groupId ? { projectId, groupId } : undefined;
   const removeGroup = useCommand(removeGroupCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
@@ -452,6 +471,7 @@ export function GroupDetailPage() {
   });
 
   const invite = useCommand(addGroupMemberCommand, {
+    scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Member invitation created");
@@ -468,6 +488,7 @@ export function GroupDetailPage() {
   });
 
   const removeMembership = useCommand(removeGroupMemberCommand, {
+    scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Member removed");
@@ -478,6 +499,7 @@ export function GroupDetailPage() {
   });
 
   const setStatus = useCommand(setGroupMemberStatusCommand, {
+    scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Member status updated");
@@ -490,6 +512,7 @@ export function GroupDetailPage() {
   });
 
   const setRole = useCommand(setGroupMemberRoleCommand, {
+    scope: commandScope,
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("Member role updated");
@@ -583,14 +606,20 @@ export function GroupDetailPage() {
       } else {
         toast.success(`Removed ${selected.length} members`);
       }
-      invalidateGroup();
+      // 直调批量路径无命令容器：复用 removeMember 命令的失效声明（§12.10-②
+      // ——kit groups/memberships 键自动刷新详情与成员列表；旧手动桥
+      // invalidateGroup 已退役）。scope 传全量嵌套对象（与成员命令绑定同形）。
+      invalidateAfterCommand(queryClient, removeGroupMemberCommand, {
+        projectId: projectId ?? undefined,
+        groupId: groupId!,
+      });
       clear();
     } finally {
       setBulkDeleting(false);
     }
   };
 
-  if (groupLoading) return <DetailSkeleton />;
+  if (groupRecord.status === "loading") return <DetailSkeleton />;
   if (!group) return <NotFound backTo="/console/groups" />;
 
   return (
@@ -705,9 +734,9 @@ export function GroupDetailPage() {
           page: membershipsPaging.page,
           pageSize: membershipsPaging.pageSize,
           hasPrev: membershipsPaging.hasPrev,
-          hasNext: !!membershipsData?.nextPageToken,
+          hasNext: !!membershipsData?.nextCursor,
           onPrev: membershipsPaging.goPrev,
-          onNext: () => membershipsPaging.goNext(membershipsData?.nextPageToken),
+          onNext: () => membershipsPaging.goNext(membershipsData?.nextCursor),
           onPageSizeChange: membershipsPaging.setPageSize,
         }}
         selectionActions={

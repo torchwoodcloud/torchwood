@@ -13,24 +13,27 @@ import {
   createUserToken,
   deleteUser,
   deleteUserSession,
+  getUser,
+  listUserSessions,
   listUsers,
   updateUser,
   updateUserPassword,
   type TokenBundle,
   type User,
+  type UserSession,
 } from "@/api/users";
-import { runCommandMapped, toApiError } from "@/kit/errors";
+import { recordOrNull, runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2）+ 命令族切片（§12.3，apiKeys 同款）：users 列表
 // 换 useCollection——游标/页大小/服务端过滤（ParseUserList 白名单 DSL 的
 // 四参）进 URL；数据面复用 axios 管线（刷新/项目头），失败在适配器收敛为
 // ApiError（kit/errors.ts）。写路径换 useCommand：结果两分映射——
 // 400→rejected、409→conflict、其余 throw ApiError；命令调用一律
-// __skipToast（toast 单源 = onSettled）；kit 列表键自动失效（descriptor 挂
-// resource），存量键（["users", …]——详情/编辑/会话页仍吃存量键）由
-// resource.legacyKeys 宽前缀声明失效（§12.10-②，页面手动桥已退役）。
-// 会话撤销/令牌签发不涉 users 集合语义 → 裸 descriptor（不挂 resource，
-// 不触发无谓的列表失效；会话键桥在 descriptor 自带 legacyKeys）。
+// __skipToast（toast 单源 = onSettled）；失效 = descriptor 声明（kit 键自动
+// 失效；重置密码连带 user-sessions 显式声明）。存量 ["users"] 前缀桥已随
+// 子视图 kit 化退役（详情/编辑/会话读全部换轨 kit record/collection 键，
+// 读者清零）。会话撤销/令牌签发不涉 users 集合语义 → 裸 descriptor（不挂
+// resource，不触发无谓的列表失效；失效 = kit user-sessions 键显式声明）。
 
 // 服务端过滤字段（URL 谓词 eq 叶子）。created_after/created_before 在 URL
 // 存绝对时刻（ISO）：跨时区可分享；页面在写入边界做墙钟↔绝对换算（按管理
@@ -100,10 +103,12 @@ export const usersResource = defineResource({
   getId: (row: User) => row.id,
   scope: ["projectId"],
   collection: fetchUsers,
-  // 存量键失效桥（§12.10-②）：命令 ok 后除 kit 键外失效存量 ["users"]
-  // 宽前缀键（["users", id] 详情 / ["users", id, "sessions"] 会话全前缀
-  // 族）——页面 onSettled 手动桥退役。
-  legacyKeys: () => [["users"]],
+  // 详情读（UserDetailPage / UserEditPage 子视图，子视图 kit 化批）：404 →
+  // null 空态直出（recordOrNull 手写方言，不引 restRecord）；同资源命令
+  // 缺省失效全 kind 命中本键（update/remove/resetPassword 后详情自刷新）。
+  record: (id) => recordOrNull(() => getUser(id)) as Promise<User>,
+  // 存量键失效桥已退役（子视图 kit 化批）：["users"] 前缀读者清零（详情/
+  // 编辑换轨 kit record 键、会话列表换轨 user-sessions collection 键）。
   commands: {
     create: {
       run: async (form: CreateUserForm): Promise<CommandResult<User>> =>
@@ -154,7 +159,12 @@ export const usersResource = defineResource({
       // 已删 → 幂等 ok：删除目标消失视为已达成（apiKeys remove 同款）
       treatAs: { "not-found": { status: "ok" as const, payload: null } },
     },
+    // 重置密码 = 服务端全量吊销该用户会话（页面 toast 同文案）：连带失效
+    // user-sessions 集合（旧 legacyKeys 宽桥打 ["users", id, "sessions"] 的
+    // kit 键承接，行为保真）；声明优先 = 整体替换缺省，同资源 users 显式
+    // 带上。页面侧须显式传全量 scope（user-sessions 键投影轴含 userId）。
     resetPassword: {
+      invalidates: [{ resource: "users" }, { resource: "user-sessions" }],
       run: async (input: { id: string; password: string }): Promise<CommandResult<User>> =>
         runCommandMapped(() => updateUserPassword(input.id, input.password, SKIP)),
     },
@@ -167,9 +177,13 @@ export const updateUserCommand = usersResource.commands.update;
 export const removeUserCommand = usersResource.commands.remove;
 export const resetUserPasswordCommand = usersResource.commands.resetPassword;
 
-// 裸 descriptor（不挂 resource——不涉 users 集合 kit 键失效；存量键桥在
-// descriptor 自带 legacyKeys）：会话撤销；令牌签发（模拟登录，payload
-// 一次性展示）。
+// 裸 descriptor（不挂 resource——撤销/签发不涉 users 集合 kit 键失效）：
+// 会话撤销；令牌签发（模拟登录，payload 一次性展示）。二者变更的都是
+// user-sessions 集合（撤销删会话、签发建会话）而非 user 实体 → 失效声明 =
+// kit user-sessions 键（撤销旧走 ["users"] 宽桥连详情键一并打过——过宽，
+// 收窄；签发旧无失效声明，会话列表不自动刷新——本切片补齐）。页面侧须
+// 显式传全量 scope（user-sessions 键投影轴含 userId；裸 descriptor 不采纳
+// Provider context）。
 export const revokeUserSessionDescriptor = {
   run: async (input: {
     userId: string;
@@ -180,15 +194,36 @@ export const revokeUserSessionDescriptor = {
       return null;
     }),
   treatAs: { "not-found": { status: "ok" as const, payload: null } },
-  // 会话不是集合形态：只桥存量 ["users", …] 前缀（含 sessions 键），不触
-  // 发 kit 列表失效。
-  legacyKeys: () => [["users"]],
+  invalidates: [{ resource: "user-sessions" }],
 };
 
 export const issueUserTokenDescriptor = {
+  invalidates: [{ resource: "user-sessions" }],
   run: async (input: { userId: string }): Promise<CommandResult<TokenBundle>> =>
     runCommandMapped(() => createUserToken(input.userId, SKIP)),
 };
+
+// —— user-sessions（SessionsCard 内嵌会话列表；嵌套 scope 加 userId）——
+
+// 整取方言：listUserSessions 无分页参数——窗口忽略，全量行单段直出。
+async function fetchUserSessions(
+  _q: CollectionQuery,
+  ctx: ResourceScope
+): Promise<Segment<UserSession>> {
+  if (ctx.projectId == null || ctx.userId == null) return { rows: [] };
+  try {
+    return { rows: await listUserSessions(ctx.userId) };
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+export const userSessionsResource = defineResource({
+  name: "user-sessions",
+  getId: (row: UserSession) => row.id,
+  scope: ["projectId", "userId"],
+  collection: fetchUserSessions,
+});
 
 // URL 搜索 schema（路由 validateSearch 与绑定共用同一实例）。默认页大小 20
 // = 旧页默认；filters = 旧页真实传给服务端的四参（无其他服务端过滤）。

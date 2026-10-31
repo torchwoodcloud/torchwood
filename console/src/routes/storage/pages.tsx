@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { invalidateAfterCommand, useCollection, useCommand } from "@lynx-go/uikit-core";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  invalidateAfterCommand,
+  useCollection,
+  useCollectionData,
+  useCommand,
+  useRecord,
+} from "@lynx-go/uikit-core";
 import { toast } from "sonner";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { Plus, Download, UploadCloud, Link2, Copy } from "lucide-react";
 import {
-  getBucket,
   deleteBucket,
-  listFiles,
-  getFile,
   createFileToken,
-  getStorageUsage,
   deleteFile,
   downloadFile,
   previewFile,
@@ -27,6 +29,8 @@ import {
   createBucketCommand,
   updateBucketCommand,
   removeBucketCommand,
+  filesResource,
+  storageUsageResource,
   uploadFileDescriptor,
   removeFileDescriptor,
   renameFileDescriptor,
@@ -138,8 +142,8 @@ export function StorageListPage() {
     search: bucketsSearch,
   });
 
-  // 行删除命令接线（§12.3）：remove 挂桶资源——kit 集合键由 useCommand 自动
-  // 失效；存量 ["buckets"]/["storage-usage"] 键由 resource.legacyKeys 桥。
+  // 行删除命令接线（§12.3）：remove 挂桶资源——kit 键由 useCommand 自动失效
+  //（删除连带用量统计：invalidates 显式带 storage-usage，legacy 前缀桥退役）。
   // toast 单源 onSettled。
   const remove = useCommand(removeBucketCommand, {
     onSettled: (result, failure) => {
@@ -292,7 +296,7 @@ export function BucketNewPage() {
   const [name, setName] = useState("");
   const [publicBucket, setPublicBucket] = useState(false);
 
-  // 创建命令接线：kit 桶集合自动失效；存量 ["buckets"] 键由 resource.legacyKeys 桥。
+  // 创建命令接线：kit 键自动失效（桶集合 + 项目用量统计，invalidates 显式声明）。
   const create = useCommand(createBucketCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
@@ -339,31 +343,40 @@ export function BucketDetailPage() {
   const [chunkUpload, setChunkUpload] = useState<{ file: File; key: string } | null>(null);
   const writeable = canWrite(role);
 
-  const { data: bucket, isLoading: bucketLoading } = useQuery({
-    queryKey: ["buckets", bucketId],
-    queryFn: () => getBucket(bucketId!),
-    enabled: !!bucketId,
+  // 子视图 kit 化批：桶详情读换轨 useRecord、用量单例读换轨 useRecord
+  //（storage-usage 资源，id = "current" 哨兵；projectId 进 scope 键——项目
+  // 分离保真）、文件列表换轨 useCollectionData 分页形——id/scope 未就绪即
+  // 自动停用（与旧 enabled 同义）；失效 = 桶/文件命令的 invalidates 声明
+  //（kit 键全 kind 命中，legacy 前缀桥退役）。
+  const bucketRecord = useRecord(bucketsResource, {
+    id: bucketId || undefined,
+    scope: { projectId: projectId ?? undefined },
   });
+  const bucket = bucketRecord.data;
+  const bucketLoading = bucketRecord.status === "loading";
 
-  const { data: usage } = useQuery({
-    queryKey: ["storage-usage", projectId],
-    queryFn: getStorageUsage,
-    enabled: !!projectId,
+  const usageRecord = useRecord(storageUsageResource, {
+    id: "current",
+    scope: { projectId: projectId ?? undefined },
   });
+  const usage = usageRecord.data;
 
   const filesPaging = useServerPaging();
-  const { data: filesData, isLoading: filesLoading } = useQuery({
-    queryKey: ["files", bucketId, filesPaging.pageSize, filesPaging.pageToken],
-    queryFn: () =>
-      listFiles(bucketId!, { pageSize: filesPaging.pageSize, pageToken: filesPaging.pageToken }),
-    enabled: !!bucketId,
-    placeholderData: (prev) => prev,
+  const filesData = useCollectionData(filesResource, {
+    scope: { projectId: projectId ?? undefined, bucketId: bucketId || undefined },
+    window: { size: filesPaging.pageSize, cursor: filesPaging.pageToken || undefined },
   });
-  const files = filesData?.rows ?? [];
+  const files = useMemo(
+    // rows 是 ReadonlyArray——ResourceListPage.items 形参为可变数组，浅拷贝
+    // 过桥（rows 引用跨渲染稳定，memo 不重复分配）。
+    () => [...filesData.rows],
+    [filesData.rows]
+  );
+  const filesLoading = filesData.status === "loading";
 
-  // 命令接线（§12.3）：桶 update/remove 挂资源（kit 集合自动失效），
-  // 存量 ["buckets"]/["storage-usage"] 键由 resource.legacyKeys 桥；文件命令
-  // 独立 descriptor——存量 ["files"] 键由 descriptor.legacyKeys 桥。
+  // 命令接线（§12.3）：桶 update/remove 挂资源（kit 键自动失效，legacy 前缀
+  // 桥已退役）；文件命令独立 descriptor——invalidates 指向 files 资源，无
+  // __scopeKeys 故显式传全量 scope（空 scope 投影对声明键集必 miss）。
   // toast 单源 onSettled。
   const updateBucketHandle = useCommand(updateBucketCommand, {
     onSettled: (result, failure) => {
@@ -391,6 +404,9 @@ export function BucketDetailPage() {
   });
 
   const uploadMutation = useCommand(uploadFileDescriptor, {
+    // 裸 descriptor 无 __scopeKeys 不采纳 context——显式全量 scope（files
+    // 资源声明键集 projectId/bucketId 的失效投影轴）。
+    scope: { projectId: projectId ?? undefined, bucketId: bucketId || undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("File uploaded");
@@ -403,6 +419,8 @@ export function BucketDetailPage() {
   });
 
   const deleteMutation = useCommand(removeFileDescriptor, {
+    // 同上：全量 scope（空 scope 投影必 miss）。
+    scope: { projectId: projectId ?? undefined, bucketId: bucketId || undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("File deleted");
@@ -445,8 +463,12 @@ export function BucketDetailPage() {
         toast.success(`Deleted ${selected.length} files`);
       }
       // 直调路径的失效（§12.10-② 命令式编排）：走 remove descriptor 的
-      // legacyKeys 声明（["files"] 前缀），不手写存量键。
-      invalidateAfterCommand(queryClient, removeFileDescriptor, {});
+      // invalidates 声明；scope 必传全量（files 资源声明 ["projectId",
+      // "bucketId"]，空 scope 投影必 miss——子视图 kit 化批实参修正）。
+      invalidateAfterCommand(queryClient, removeFileDescriptor, {
+        projectId: projectId ?? undefined,
+        bucketId: bucketId || undefined,
+      });
       clear();
     } finally {
       setBulkDeleting(false);
@@ -512,8 +534,11 @@ export function BucketDetailPage() {
             onSuccess={() => {
               toast.success("File uploaded");
               // 直调路径的失效（§12.10-② 命令式编排）：upload descriptor 的
-              // legacyKeys 声明（["files"] 前缀）。
-              invalidateAfterCommand(queryClient, uploadFileDescriptor, {});
+              // invalidates 声明；scope 全量（空 scope 投影必 miss——实参修正）。
+              invalidateAfterCommand(queryClient, uploadFileDescriptor, {
+                projectId: projectId ?? undefined,
+                bucketId: bucketId || undefined,
+              });
               setChunkUpload(null);
             }}
             onError={() => {
@@ -536,9 +561,9 @@ export function BucketDetailPage() {
           page: filesPaging.page,
           pageSize: filesPaging.pageSize,
           hasPrev: filesPaging.hasPrev,
-          hasNext: !!filesData?.nextPageToken,
+          hasNext: !!filesData.segment?.nextCursor,
           onPrev: filesPaging.goPrev,
-          onNext: () => filesPaging.goNext(filesData?.nextPageToken),
+          onNext: () => filesPaging.goNext(filesData.segment?.nextCursor),
           onPageSizeChange: filesPaging.setPageSize,
         }}
         detailPath={(f) => `/console/storage/${bucketId}/files/${f.id}`}
@@ -606,6 +631,7 @@ export function BucketDetailPage() {
 export function FileDetailPage() {
   const { bucketId, fileId } = useParams({ strict: false });
   const navigate = useNavigate();
+  const { projectId } = useAuth();
   const { role } = useAdminRole();
   const tz = useUserTimezone();
   const [shareOpen, setShareOpen] = useState(false);
@@ -614,11 +640,15 @@ export function FileDetailPage() {
   const [shareLoading, setShareLoading] = useState(false);
   const writeable = canWrite(role);
 
-  const { data: file, isLoading } = useQuery({
-    queryKey: ["files", bucketId, fileId],
-    queryFn: () => getFile(bucketId!, fileId!),
-    enabled: !!bucketId && !!fileId,
+  // 文件详情读换轨 useRecord（子视图 kit 化批）：id/scope 未就绪即自动停用
+  //（与旧 enabled 同义）；404 → null 空态直出；失效 = 文件命令 invalidates
+  //（kit record 键全 kind 命中）。
+  const fileRecord = useRecord(filesResource, {
+    id: fileId || undefined,
+    scope: { projectId: projectId ?? undefined, bucketId: bucketId || undefined },
   });
+  const file = fileRecord.data;
+  const isLoading = fileRecord.status === "loading";
 
   // Round3 H5-1：预览经 axios blob 拉取（自动带 X-Torchwood-Project 头），
   // 再 createObjectURL 渲染；卸载时 revokeObjectURL 防泄漏。
@@ -645,9 +675,11 @@ export function FileDetailPage() {
     };
   }, [bucketId, fileId]);
 
-  // 文件命令接线（独立 descriptor）：存量 ["files"] 键由 descriptor.legacyKeys
-  // 桥（前缀匹配覆盖文件列表/详情键）；toast 单源 onSettled（§12.3）。
+  // 文件命令接线（独立 descriptor）：invalidates 指向 files 资源（列表/详情
+  // kit 键全 kind 命中，存量前缀桥退役）；无 __scopeKeys——显式全量 scope
+  //（空 scope 投影必 miss）；toast 单源 onSettled（§12.3）。
   const remove = useCommand(removeFileDescriptor, {
+    scope: { projectId: projectId ?? undefined, bucketId: bucketId || undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("File deleted");
@@ -661,6 +693,8 @@ export function FileDetailPage() {
   });
 
   const rename = useCommand(renameFileDescriptor, {
+    // 同上：全量 scope（空 scope 投影必 miss）。
+    scope: { projectId: projectId ?? undefined, bucketId: bucketId || undefined },
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
         toast.success("File name updated");

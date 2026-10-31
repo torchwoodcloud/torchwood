@@ -191,8 +191,18 @@ describe("UserAssetsPage", () => {
     expect(screen.getByText("100")).toBeTruthy();
     expect(screen.getByText("Querying project:")).toBeTruthy();
     expect(screen.getByText("proj-1")).toBeTruthy();
-    expect(listUserAssets).toHaveBeenCalledWith("u1", { pageSize: 20, pageToken: "" });
-    expect(listUserLedger).toHaveBeenCalledWith("u1", { pageSize: 20, pageToken: "" });
+    // kit 窗口方言：首屏 cursor undefined（旧页传 ""——api 层 pageQuery 等价归一）；
+    // ascending/defCode 过滤缺省 undefined 随 scope 对象键缺省透传。
+    expect(listUserAssets).toHaveBeenCalledWith("u1", {
+      pageSize: 20,
+      pageToken: undefined,
+    });
+    expect(listUserLedger).toHaveBeenCalledWith("u1", {
+      pageSize: 20,
+      pageToken: undefined,
+      defCode: undefined,
+      ascending: undefined,
+    });
     expect((screen.getByLabelText("User ID") as HTMLInputElement).value).toBe("u1");
   });
 
@@ -313,11 +323,11 @@ describe("UserAssetsPage", () => {
     fireEvent.click(ledgerTab);
     await screen.findByText("All assets");
 
-    // 排序切换：desc → asc，分页回第一页
+    // 排序切换：desc → asc，分页回第一页（ascending 以 "1" 编码进 scope，适配器解码为 true）
     fireEvent.click(screen.getByRole("button", { name: /Newest first/ }));
     await vi.waitFor(() => {
       expect(listUserLedger).toHaveBeenLastCalledWith("u1", {
-        pageSize: 20, pageToken: "", defCode: undefined, ascending: true,
+        pageSize: 20, pageToken: undefined, defCode: undefined, ascending: true,
       });
     });
 
@@ -329,7 +339,7 @@ describe("UserAssetsPage", () => {
     fireEvent.click(option);
     await vi.waitFor(() => {
       expect(listUserLedger).toHaveBeenLastCalledWith("u1", {
-        pageSize: 20, pageToken: "", defCode: "jade", ascending: true,
+        pageSize: 20, pageToken: undefined, defCode: "jade", ascending: true,
       });
     });
   });
@@ -375,10 +385,11 @@ describe("AssetDefDetailPage 用户持有列表", () => {
     expect(await screen.findByText("User holdings (read-only)")).toBeTruthy();
     expect(screen.getByText("u1")).toBeTruthy();
     expect(screen.getByText("u2")).toBeTruthy();
+    // kit 窗口方言：首屏 cursor undefined（旧页传 ""——api 层 pageQuery 等价归一）
     expect(listDefHolders).toHaveBeenCalledWith("d1", {
       ownerId: undefined,
       pageSize: 20,
-      pageToken: "",
+      pageToken: undefined,
     });
   });
 
@@ -400,8 +411,22 @@ describe("AssetDefDetailPage 用户持有列表", () => {
       expect(listDefHolders).toHaveBeenLastCalledWith("d1", {
         ownerId: "u2",
         pageSize: 20,
-        pageToken: "",
+        pageToken: undefined,
       });
     });
+  });
+
+  // 详情读换轨 kit record 槽（子视图 kit 化批）的 404 空态方言：适配器
+  // recordOrNull 把 404 收敛为 null → 页面 NotFound 直出（非 error 通道）。
+  it("详情 404 → NotFound 直出（record 槽 404→null 空态）", async () => {
+    vi.mocked(getAssetDef).mockRejectedValue(
+      Object.assign(new Error("req failed"), {
+        isAxiosError: true,
+        response: { status: 404, data: { error: { code: "NotFound", message: "gone" } } },
+      })
+    );
+    await renderDetail();
+    expect(await screen.findByText("Resource not found or has been deleted")).toBeTruthy();
+    expect(screen.queryByText("User holdings (read-only)")).toBeNull();
   });
 });

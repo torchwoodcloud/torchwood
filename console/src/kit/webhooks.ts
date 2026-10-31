@@ -9,6 +9,8 @@ import { collectionQuerySchema } from "@lynx-go/uikit-core/schema";
 import { skipToast as SKIP } from "@/api/client";
 import {
   listWebhooks,
+  getWebhook,
+  listDeliveries,
   createWebhook,
   updateWebhook,
   deleteWebhook,
@@ -19,20 +21,23 @@ import {
   type CreateWebhookResponse,
   type WebhookSecret,
 } from "@/api/webhooks";
-import { runCommandMapped, toApiError } from "@/kit/errors";
+import { recordOrNull, runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2）：Webhooks 主列表走 useCollection（URL 即真相：
 // cursor/size 进 URL，分页栈 = 浏览器历史）。数据面复用 axios 管线，失败
 // 在适配器收敛为 ApiError（kit/errors.ts 收敛缝）。
 //
-// 命令族切片（§12.3）：建/改/删/轮换挂资源 commands（kit 集合键由
-// useCommand 自动失效）；投递重投是子资源动作——挂资源但显式 invalidates: []
-// 不失效 webhooks 集合，存量 ["webhook-deliveries"] 键经资源 legacyKeys 桥
-//（§12.10-② expireOld 样板：挂载句柄注入生效）。结果两分映射同 apiKeys
-// 先例（400→rejected{code,message}、409→conflict、其余 throw ApiError）；
-// 命令调用一律 __skipToast（toast 单源 = onSettled）。update 的字段 diff
-// 归调用方（页面持原实体快照——url/events 仅变更时随请求发送，proto3
+// 命令族切片（§12.3）：建/改/删/轮换挂资源 commands（kit 集合键 + 详情
+// record 键由 useCommand 缺省同资源失效自动命中）；投递重投是子资源动作
+// ——invalidates 显式声明只打 webhook-deliveries 资源（声明优先 = 整体
+// 替换缺省，不失效 webhooks 集合语义保持）。结果两分映射同 apiKeys 先例
+//（400→rejected{code,message}、409→conflict、其余 throw ApiError）；命令
+// 调用一律 __skipToast（toast 单源 = onSettled）。update 的字段 diff 归
+// 调用方（页面持原实体快照——url/events 仅变更时随请求发送，proto3
 // optional）。
+//
+// 子视图 kit 化批：详情读 record 槽 + webhook-deliveries 子视图资源化——
+// 存量 ["webhooks"] / ["webhook-deliveries"] 前缀桥随读者清零全量退役。
 
 async function fetchWebhooks(
   q: CollectionQuery,
@@ -50,17 +55,46 @@ async function fetchWebhooks(
   }
 }
 
+// ——deliveries（Webhook 详情内嵌投递记录列表（DLQ 浏览/重投管理面）；嵌套
+// scope 加 webhookId，ctx 缺参静默空段）。status 过滤走 scope 旁路键（不进
+// 声明键——全量对象进 queryKey，声明键只定就绪门与失效投影轴）。——
+async function fetchDeliveries(
+  q: CollectionQuery,
+  ctx: ResourceScope
+): Promise<Segment<WebhookDelivery>> {
+  if (ctx.projectId == null || ctx.webhookId == null) return { rows: [] };
+  try {
+    const page = await listDeliveries(ctx.webhookId, {
+      pageSize: q.window.size,
+      pageToken: q.window.cursor || undefined,
+      status: ctx.status || undefined,
+    });
+    return { rows: page.rows, nextCursor: page.nextPageToken };
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+export const webhookDeliveriesResource = defineResource({
+  name: "webhook-deliveries",
+  getId: (row: WebhookDelivery) => row.id,
+  scope: ["projectId", "webhookId"],
+  collection: fetchDeliveries,
+});
+
 // 投递重投（webhook 子资源动作）：重置投递行为新一轮投递——不改变
-// webhook 实体，invalidates: [] 显式不失效 webhooks 集合（kit 键）；存量
-// ["webhook-deliveries"] 键经资源 legacyKeys 桥。挂资源（expireOld 样板）
-// 仅为让 legacyKeys 注入生效——页面用挂载句柄。
+// webhook 实体。invalidates 显式声明只打 webhook-deliveries 子视图资源；
+// 声明优先 = 整体替换缺省，webhooks 集合/详情 record 不失效语义保持。
+// allScopes 显式逃逸：命令挂 webhooks 资源，生效 scope 只有 projectId
+//（context 采纳），webhookId 投影必 miss——宽度与旧 ["webhook-deliveries"]
+// 前缀桥一致（databases create→collections 同款裁决）。
 export const redeliverDeliveryDescriptor = {
   run: async (input: {
     webhookId: string;
     deliveryId: string;
   }): Promise<CommandResult<WebhookDelivery>> =>
     runCommandMapped(() => redeliverDelivery(input.webhookId, input.deliveryId, SKIP)),
-  invalidates: [],
+  invalidates: [{ resource: "webhook-deliveries", allScopes: true }],
 };
 
 export const webhooksResource = defineResource({
@@ -68,9 +102,14 @@ export const webhooksResource = defineResource({
   getId: (row: Webhook) => row.id,
   scope: ["projectId"],
   collection: fetchWebhooks,
-  // 存量键失效桥（§12.10-②）：命令 ok 后除 kit 键外失效存量 ["webhooks"]
-  // /["webhook-deliveries"] 前缀键——页面 onSettled 手动桥退役。
-  legacyKeys: () => [["webhooks"], ["webhook-deliveries"]],
+  // 详情读（WebhookDetailPage，子视图 kit 化批）：404 → null 空态直出
+  //（recordOrNull 手写方言，不引 restRecord）；update/rotate/remove 命令的
+  // 缺省同资源失效（全 kind）现命中此键——保存后详情自刷新。
+  record: (id) => recordOrNull(() => getWebhook(id)) as Promise<Webhook>,
+  // 存量键失效桥已退役（子视图 kit 化批）：["webhooks"] /
+  // ["webhook-deliveries"] 前缀读者清零——详情读走 kit record 键（缺省同
+  // 资源失效命中），投递列表走 webhook-deliveries 资源键（redeliver 命令
+  // 显式 invalidates 打其上）。
   commands: {
     // 创建 payload 携带一次性明文密钥（页面 reveal，关闭即弃）。
     create: {
@@ -106,7 +145,8 @@ export const webhooksResource = defineResource({
       run: async (input: { id: string }): Promise<CommandResult<WebhookSecret>> =>
         runCommandMapped(() => rotateWebhookSecret(input.id, SKIP)),
     },
-    // 子资源动作（非实体变更）：invalidates: [] 在 descriptor 内声明（见上）。
+    // 子资源动作（非实体变更）：invalidates 在 descriptor 内声明（见上——
+    // 只打 webhook-deliveries 资源键）。
     redeliver: redeliverDeliveryDescriptor,
   },
 });

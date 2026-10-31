@@ -10,19 +10,21 @@ import { collectionQuerySchema } from "@lynx-go/uikit-core/schema";
 import {
   createAPIKey,
   deleteAPIKey,
+  getAPIKey,
   listAPIKeys,
   updateAPIKey,
   type APIKey,
   type UpdateAPIKeyInput,
 } from "@/api/apiKeys";
 import { skipToast as SKIP } from "@/api/client";
-import { runCommandMapped, toApiError } from "@/kit/errors";
+import { recordOrNull, runCommandMapped, toApiError } from "@/kit/errors";
 
 // fleet-ui 命令族切片（api-keys 首个 commands 资源，design.md §12.3）：
 // 结果两分映射——400→rejected{code,message}、409→conflict、其余 throw
 // ApiError（toApiError 收敛缝）；命令调用一律 __skipToast（toast 单源 =
-// onSettled/结果盒，防与 axios 拦截器双 toast）。失效：kit 键自动 +
-// 存量 ["api-keys"] 键由页面 onSettled 手动桥接（isFleetKey 守卫）。
+// onSettled/结果盒，防与 axios 拦截器双 toast）。失效 = descriptor 声明
+//（kit 键——列表 collection 与详情 record 同资源全 kind 命中；存量
+// ["api-keys"] 前缀桥随子视图 kit 化退役，读者清零）。
 
 // —— 新建：表单值（展示形）在 run 内收敛为提交形（wildcard/勾选/手输合并）——
 
@@ -86,9 +88,12 @@ export function editApiKeyDescriptor(key: APIKey) {
       }),
     // delete 已删 → 幂等 ok 同族语义：编辑目标消失视为已达成
     treatAs: { "not-found": { status: "ok" as const, payload: key } },
-    // 裸 descriptor 的失效声明（§12.10-②）：kit 键 + 存量 ["api-keys"] 前缀
+    // 裸 descriptor 的失效声明（§12.10-②）：kit api-keys 键全 kind（列表
+    // collection + 详情 record）。声明优先 = 整体替换缺省，同资源失效显式
+    // 带上；存量 ["api-keys"] 前缀桥随子视图 kit 化退役（读者清零）。裸
+    // descriptor 不采纳 Provider context——调用方 useCommandForm 传 scope
+    //（页面）使命令 ctx 与读键的声明轴（projectId）相交命中。
     invalidates: [{ resource: "api-keys" }],
-    legacyKeys: () => [["api-keys"]],
   };
 }
 
@@ -142,9 +147,11 @@ export const apiKeysResource = defineResource({
   getId: (row: APIKey) => row.id,
   scope: ["projectId"],
   collection: fetchApiKeys,
-  // 存量键失效桥（§12.10-②）：命令 ok 后除 kit 键外失效存量 ["api-keys"]
-  // 前缀键——页面 onSettled 手动桥退役。
-  legacyKeys: () => [["api-keys"]],
+  // 详情读（ApiKeyDetailPage，子视图 kit 化批）：404 → null 空态直出
+  //（recordOrNull 手写方言，不引 restRecord）。
+  record: (id) => recordOrNull(() => getAPIKey(id)) as Promise<APIKey>,
+  // 存量键失效桥（§12.10-②）已退役（子视图 kit 化批）：["api-keys"] 前缀
+  // 读者清零（详情读换轨 kit record 键，同资源缺省失效全 kind 命中）。
   commands: {
     // 表单值→提交形收敛在 run 内（wildcard/勾选/手输合并去重排序）
     create: {
@@ -153,7 +160,7 @@ export const apiKeysResource = defineResource({
     },
     // update 不进资源 commands：它需要原实体快照做 diff（输入不自包含），
     // 经 editApiKeyDescriptor(key) 工厂按行构造、页面级 useCommandForm 消费
-    //（失效 = invalidates 声明 + 存量键 legacyKeys，见工厂内）。
+    //（失效 = 工厂内 invalidates 声明，kit 键全 kind）。
     remove: {
       run: async (input: { id: string }): Promise<CommandResult<null>> =>
         runCommandMapped(async () => {

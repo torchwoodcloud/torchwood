@@ -13,41 +13,38 @@ import {
   createVarSet,
   deleteVar,
   deleteVarSet,
+  getVarSet,
+  getVersion,
   listVarSets,
+  listVars,
+  listVersions,
   rollback,
   updateVar,
   updateVarSet,
+  type GetRuntimeVarVersionResponse,
   type RuntimeVar,
   type RuntimeVarValueInput,
   type RuntimeVarVersion,
   type VarSet,
   type VarSetVisibilityInput,
 } from "@/api/runtimeVars";
-import { runCommandMapped, toApiError } from "@/kit/errors";
+import { recordOrNull, runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2）：var-sets 主列表走 useCollection（URL 即真相：
-// cursor/size 进 URL，分页栈 = 浏览器历史）。vars/versions 子视图仍为有意
-// 的全量拉取（设计决定 D13/D11），不在此列。数据面复用 axios 管线，失败
+// cursor/size 进 URL，分页栈 = 浏览器历史）。数据面复用 axios 管线，失败
 // 在适配器收敛为 ApiError（kit/errors.ts 收敛缝）。
 //
 // 命令族切片（写路径命令化）：全部写动词挂 varSetsResource——var 写会 bump
-// 集合 revision/var_count/footprint，列表（kit 键）随资源命令 ok 自动失效；
-// 存量键失效桥（§12.10-②）：集合级动词（create/remove）经资源 legacyKeys
-// 失效 ["runtime-var-sets"] 前缀（宽前缀）；var 级动词（varCreate/varRemove/
-// rollback）与裸工厂（editVar/editVarSet）在 descriptor 级声明全族前缀键
-//（列表/详情/变量/版本/版本快照）——页面 useInvalidateVarSet 手动桥退役。
+// 集合 revision/var_count/footprint，列表（kit 键）随资源命令 ok 自动失效。
+// 子视图 kit 化批：详情读（getVarSet）挂 varSetsResource.record；vars/versions
+// 子视图仍为有意的全量拉取（设计决定 D13/D11）——runtime-vars /
+// runtime-var-versions collection 整取方言 + runtime-var-version 快照 record
+// 槽（record-only 资源，见其声明点说明）。
+// 存量前缀桥（§12.10-②）已退役（读者清零）：var 级动词与裸工厂的子视图
+// 键族改由 descriptor.invalidates 声明（kit 键全 kind 命中）。
 // 并发面 = LWW（design.md §12.5 已证：UpdateVarSet/UpdateVar 等无写前件），
 // 不设 OCC 守卫；结果两分映射同 apiKeys（400→rejected、409→conflict、其余
 // throw ApiError）；api 调用一律 __skipToast（toast 单源 = onSettled）。
-
-/** var 级写的存量子视图键族（宽前缀，projectId/varSetId 形全覆盖）。 */
-const varSetSubviewKeys = () => [
-  ["runtime-var-sets"],
-  ["runtime-var-set"],
-  ["runtime-vars"],
-  ["runtime-var-versions"],
-  ["runtime-var-version"],
-];
 
 // —— 新建集合：表单值（展示形）在 run 内原样收敛为提交形 ——
 
@@ -87,10 +84,10 @@ export function editVarSetDescriptor(varSet: VarSet): CommandDescriptor<EditVarS
           SKIP
         )
       ),
-    // 裸工厂无 __resource：kit 列表键（visibility 列会变）显式声明失效；
-    // 存量子视图键族（§12.10-②）在 legacyKeys 声明——两者并存。
+    // 裸工厂无 __resource：kit 键显式声明失效。真实变更面 = 集合元数据
+    //（visibility/description，D10 不入版本链）→ 收窄为仅 var-sets（列表 +
+    // 详情 record 全 kind）；旧 legacyKeys 宽桥连带刷 versions 属过宽，退役。
     invalidates: [{ resource: varSetsResource.name }],
-    legacyKeys: varSetSubviewKeys,
   };
 }
 
@@ -167,14 +164,83 @@ export function editVarDescriptor(
         updateVar(varSetId, key, { value, description: input.description }, SKIP)
       );
     },
-    // var 写 bump 集合 revision/var_count/footprint——kit 列表键显式声明失效；
-    // 存量子视图键族（§12.10-②）在 legacyKeys 声明——两者并存。
-    invalidates: [{ resource: varSetsResource.name }],
-    legacyKeys: varSetSubviewKeys,
+    // var 写 bump 集合 revision/var_count/footprint（新版本入链）——三个资源
+    // 的 kit 键（含详情 record/版本 record 全 kind）一并显式失效（字符串字面量
+    // ——资源声明在本文件后段，模块初始化期求值避免 TDZ）。
+    invalidates: [
+      { resource: "runtime-var-sets" },
+      { resource: "runtime-vars" },
+      { resource: "runtime-var-versions" },
+    ],
   };
 }
 
 // —— 列表 ——
+
+// —— runtime-vars（集合详情内嵌变量列表；嵌套 scope 加 varSetId，ctx 缺参静默空段）——
+
+// D13：变量整取端点（≤500 keys/集合，page_size 1000 一页取全）无谓词/游标
+// 参数——查询窗口忽略，行全量直出（整取方言，页面 window: "all"）。
+async function fetchVars(
+  _q: CollectionQuery,
+  ctx: ResourceScope
+): Promise<Segment<RuntimeVar>> {
+  if (ctx.projectId == null || ctx.varSetId == null) return { rows: [] };
+  try {
+    return { rows: await listVars(ctx.varSetId) };
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+export const runtimeVarsResource = defineResource({
+  name: "runtime-vars",
+  // RuntimeVar 无 id 字段——key 创建后不可改（D3），即自然主键。
+  getId: (row: RuntimeVar) => row.key,
+  scope: ["projectId", "varSetId"],
+  collection: fetchVars,
+});
+
+// —— runtime-var-versions（版本历史列表 + 版本快照详情；嵌套 scope 同上）——
+
+// D11：版本链整取端点（保留最近 50 版，page_size 200 一页取全）无谓词/游标
+// 参数——同上整取方言。
+async function fetchVersions(
+  _q: CollectionQuery,
+  ctx: ResourceScope
+): Promise<Segment<RuntimeVarVersion>> {
+  if (ctx.projectId == null || ctx.varSetId == null) return { rows: [] };
+  try {
+    return { rows: await listVersions(ctx.varSetId) };
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+export const runtimeVarVersionsResource = defineResource({
+  name: "runtime-var-versions",
+  // 版本主键 = revision（int64 已在 api 层归一 number）。
+  getId: (row: RuntimeVarVersion) => row.revision,
+  scope: ["projectId", "varSetId"],
+  collection: fetchVersions,
+});
+
+// —— runtime-var-version（版本快照全文单读；record-only 资源）——
+// 资源拆分说明：kit 资源单 T 契约钉死 record 返回型 = collection 行型，而
+// 快照 GetRuntimeVarVersionResponse ≠ 版本元数据 RuntimeVarVersion——拆出
+// record-only 资源，命名恰 = 旧 legacy 快照前缀首段（单数形）。快照内容不可
+// 变（api 层契约）：命令 invalidates 不含本资源（旧宽桥连带刷属过宽，收窄；
+// 新 revision 的快照键无缓存自然 fresh fetch）。
+export const runtimeVarVersionResource = defineResource({
+  name: "runtime-var-version",
+  scope: ["projectId", "varSetId"],
+  // 版本快照详情读（VersionSnapshotDialog / VersionDiffDialog，子视图 kit 化
+  // 批）：404 → null 空态直出（recordOrNull 手写方言，不引 restRecord）；
+  // id = revision；ctx.varSetId 由 scopeReady 就绪门保证（查询未就绪即停用），
+  // ! 仅类型收窄。staleTime 维持缺省（行为保真）。
+  record: (id: number, ctx: ResourceScope) =>
+    recordOrNull(() => getVersion(ctx.varSetId!, id)) as Promise<GetRuntimeVarVersionResponse>,
+});
 
 async function fetchVarSets(
   q: CollectionQuery,
@@ -197,10 +263,12 @@ export const varSetsResource = defineResource({
   getId: (row: VarSet) => row.id,
   scope: ["projectId"],
   collection: fetchVarSets,
-  // 存量键失效桥（§12.10-②，宽前缀）：集合级动词 ok 后除 kit 键外失效存量
-  // ["runtime-var-sets"] 前缀键（覆盖 ["runtime-var-sets", projectId] 形）；
-  // var 级动词的子视图键族在各自 descriptor 内声明（见上）。
-  legacyKeys: () => [["runtime-var-sets"]],
+  // 详情读（VarSetDetailPage，子视图 kit 化批）：404 → null 空态直出
+  //（recordOrNull 手写方言，不引 restRecord）。
+  record: (id) => recordOrNull(() => getVarSet(id)) as Promise<VarSet>,
+  // 存量键失效桥已退役（子视图 kit 化批）：["runtime-var-sets"] 前缀读者
+  // 清零（列表走 kit 集合键、详情读换轨 kit record 键，同资源缺省失效全
+  // kind 命中）。
   commands: {
     // 新建集合（var_set_id 创建后不可改，D9）
     create: {
@@ -239,8 +307,13 @@ export const varSetsResource = defineResource({
           )
         );
       },
-      // var 写 bump revision/var_count/footprint——存量子视图键族全桥（§12.10-②）
-      legacyKeys: varSetSubviewKeys,
+      // var 写 bump revision/var_count/footprint——三资源 kit 键全失效
+      //（invalidates 声明优先 = 整体替换缺省，同资源显式带上）。
+      invalidates: [
+        { resource: "runtime-var-sets" },
+        { resource: "runtime-vars" },
+        { resource: "runtime-var-versions" },
+      ],
     },
     // 删除变量：已删 → 幂等 ok
     varRemove: {
@@ -253,17 +326,26 @@ export const varSetsResource = defineResource({
           return null;
         }),
       treatAs: { "not-found": { status: "ok" as const, payload: null } },
-      legacyKeys: varSetSubviewKeys,
+      invalidates: [
+        { resource: "runtime-var-sets" },
+        { resource: "runtime-vars" },
+        { resource: "runtime-var-versions" },
+      ],
     },
     // 回滚到目标版本（custom verb）；目标=当前版本 → 400 InvalidArgument（D12）
-    // → rejected；窗口淘汰 → 404（失败通道，describeApiError）
+    // → rejected；窗口淘汰 → 404（失败通道，describeApiError）。
+    // 真实变更面 = 全量变量替换 + 新版本入链 + 集合 revision bump → 三资源全失效。
     rollback: {
       run: async (input: {
         varSetId: string;
         targetRevision: number;
       }): Promise<CommandResult<RuntimeVarVersion>> =>
         runCommandMapped(() => rollback(input.varSetId, input.targetRevision, SKIP)),
-      legacyKeys: varSetSubviewKeys,
+      invalidates: [
+        { resource: "runtime-var-sets" },
+        { resource: "runtime-vars" },
+        { resource: "runtime-var-versions" },
+      ],
     },
   },
 });

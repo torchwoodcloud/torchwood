@@ -9,22 +9,23 @@ import {
 import { collectionQuerySchema, filterValues } from "@lynx-go/uikit-core/schema";
 import { skipToast as SKIP } from "@/api/client";
 import {
+  getOrder,
   listOrders,
   manualFulfillOrder,
   refundOrder,
   type PaymentOrder,
 } from "@/api/payments";
-import { runCommandMapped, toApiError } from "@/kit/errors";
+import { recordOrNull, runCommandMapped, toApiError } from "@/kit/errors";
 
 // 列表 fleet 化（§12.9-2）：订单列表换 useCollection——过滤（UserID/状态/
 // 创建时间区间）/时间排序/游标/页大小进 URL，数据面复用 axios 管线，失败
 // 在适配器收敛为 ApiError。订单 ID/用户的页内搜索是本地态，不走谓词。
 //
 // 命令族切片（写路径命令化，§12.3）：退款/人工履约挂订单资源——订单实体
-// 状态机变更，kit 集合键由 useCommand 自动失效；存量 ["payments-orders"]
-// 键（详情仍消费）由页面 onSettled 手动桥。结果两分映射同 apiKeys 先例
-//（400→rejected{code,message}、409→conflict、其余 throw ApiError）；api
-// 调用一律 __skipToast（toast 单源 = onSettled）。
+// 状态机变更，kit 键（列表 collection + 详情 record 全 kind）由 useCommand
+// 缺省同资源失效。结果两分映射同 apiKeys 先例（400→rejected{code,message}、
+// 409→conflict、其余 throw ApiError）；api 调用一律 __skipToast（toast 单源
+// = onSettled）。
 
 // 谓词 eq 叶子 → ListOrdersFilter 键的白名单（真实服务端过滤参数，
 // payments.proto ListOrdersRequest 结构化字段）；created_after/created_before
@@ -78,9 +79,10 @@ export const ordersResource = defineResource({
   getId: (row: PaymentOrder) => row.id,
   scope: ["projectId"],
   collection: fetchOrders,
-  // 存量键失效桥（§12.10-②）：宽前缀覆盖 ["payments-orders", projectId]
-  //（列表桥）与 ["payments-orders", id]（详情键）两形。
-  legacyKeys: () => [["payments-orders"]],
+  // 详情读（OrderDetailPage，子视图 kit 化批）：404 → null 空态直出
+  //（recordOrNull 手写方言，不引 restRecord）；refund/fulfill 缺省同资源
+  // 失效现命中详情 record 键（全 kind）。
+  record: (id) => recordOrNull(() => getOrder(id)) as Promise<PaymentOrder>,
   commands: {
     // 退款（paid → refunded）；reason 缺省 console（操作审计标记）。
     refund: {

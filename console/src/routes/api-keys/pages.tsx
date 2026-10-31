@@ -1,13 +1,17 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCollection, useCommand, useCommandForm } from "@lynx-go/uikit-core";
-import { collectionKey } from "@lynx-go/uikit-core/kernel";
+import {
+  invalidateAfterCommand,
+  useCollection,
+  useCommand,
+  useCommandForm,
+  useRecord,
+} from "@lynx-go/uikit-core";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Copy, Pencil, RefreshCw } from "lucide-react";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import {
-  getAPIKey,
   deleteAPIKey,
   type APIKey,
 } from "@/api/apiKeys";
@@ -24,6 +28,7 @@ import {
   type EditApiKeyForm,
 } from "@/kit/apiKeys";
 import { describeApiError } from "@/kit/errors";
+import { useAuth } from "@/hooks/useAuth";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";
@@ -66,12 +71,14 @@ import { PAGE_SIZE_OPTIONS } from "@/api/pagination";
 import { ListPage as KitListPage } from "@/components/kit/query/list-page";
 
 // 命令族切片（design.md §12.3）：写路径换 useCommand/useCommandForm（结果
-// 两分 + __skipToast + onSettled toast 单源）；失效 = kit 键自动 + 存量
-// ["api-keys"] 键手动桥（isFleetKey 守卫）。列表已 fleet 化（§12.9-1）：
-// useCollection + DataTable selection 受控面（批量删/行删接线）。
+// 两分 + __skipToast + onSettled toast 单源）；失效 = descriptor 声明（kit
+// 键——列表 collection 与详情 record 同资源全 kind，子视图 kit 化批换绑后
+// 存量前缀桥退役）。列表已 fleet 化（§12.9-1）：useCollection + DataTable
+// selection 受控面（批量删/行删接线）。
 
 export function ApiKeysListPage() {
   const { role } = useAdminRole();
+  const { projectId } = useAuth();
   const tz = useUserTimezone();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -93,7 +100,7 @@ export function ApiKeysListPage() {
     list.setPredicate(v === "all" ? null : { field: "enabled", op: "eq", value: v });
   };
 
-  // 命令接线：toast 单源 onSettled；失效 = kit 键 + 存量键（resource.legacyKeys 声明）。
+  // 命令接线：toast 单源 onSettled；失效 = descriptor 声明（kit 键同资源全 kind）。
   const remove = useCommand(removeApiKeyCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
@@ -142,15 +149,13 @@ export function ApiKeysListPage() {
       } else {
         toast.success(`Deleted ${selectedKeys.length} API Keys`);
       }
-      // 直调批量路径的失效双桥（§12.3 裁决 8 面不变）：kit 集合键前缀
-      //（kind/name/scope/scopeKeys 四段，覆盖本 scope 全部游标页）+ 存量
-      // ["api-keys"] 前缀（["api-keys", id] 详情读仍消费）。此前只打 legacy
-      // 前缀——kit 键首段是 kind，列表从不刷新（浏览器走查抓获的存量缺陷，
-      // 非 0.4.0 回归）。
-      void queryClient.invalidateQueries({
-        queryKey: collectionKey(apiKeysResource, list.query).slice(0, 4),
+      // 直调批量路径无命令容器（§12.3 裁决 8 面不变）：复用 remove 命令的
+      // 失效声明（invalidateAfterCommand 单源——kit api-keys 键全 kind：列表
+      // collection 全游标页 + 详情 record 一并命中；存量 ["api-keys"] 前缀
+      // 桥随子视图 kit 化退役）。
+      invalidateAfterCommand(queryClient, removeApiKeyCommand, {
+        projectId: projectId ?? undefined,
       });
-      void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
       setSelectedIds(new Set());
     } finally {
       setBulkDeleting(false);
@@ -527,15 +532,19 @@ export function ApiKeyDetailPage() {
   const { id } = useParams({ strict: false });
   const navigate = useNavigate();
   const { role } = useAdminRole();
+  const { projectId } = useAuth();
   const [editOpen, setEditOpen] = useState(false);
   const [rotateOpen, setRotateOpen] = useState(false);
   const tz = useUserTimezone();
 
-  const { data: key, isLoading } = useQuery({
-    queryKey: ["api-keys", id],
-    queryFn: () => getAPIKey(id!),
-    enabled: !!id,
+  // 详情读换轨 useRecord（子视图 kit 化批）：id 未就绪即停用（与旧 enabled
+  // 同义）；projectId 未就绪由声明键自动停用；404 → null 走 NotFound 分支。
+  const keyRecord = useRecord(apiKeysResource, {
+    id: id ?? undefined,
+    scope: { projectId: projectId ?? undefined },
   });
+  const key = keyRecord.data;
+  const isLoading = keyRecord.status === "loading";
 
   const remove = useCommand(removeApiKeyCommand, {
     onSettled: (result, failure) => {
@@ -612,9 +621,13 @@ function ApiKeyEditDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { projectId } = useAuth();
   const tz = useUserTimezone();
 
   const edit = useCommandForm(editApiKeyDescriptor(key_), {
+    // 裸 descriptor 不采纳 Provider context：显式传 scope（与详情 record 键
+    // 同 projectId 轴），ok 后 invalidates 声明命中 kit 键刷新详情。
+    scope: { projectId: projectId ?? undefined },
     defaultValues: {
       name: key_.name,
       scopes: key_.scopes.join(", "),
@@ -744,7 +757,8 @@ function ApiKeyRotateDialog({
     },
   });
 
-  // 资源挂载句柄（非裸 descriptor）：invalidates/legacyKeys 注入生效
+  // 资源挂载句柄（非裸 descriptor）：缺省同资源失效生效（Provider context
+  // 采纳——kit 键全 kind，列表与详情 record 一并刷新）
   const expireOld = useCommand(expireOldApiKeyCommand, {
     onSettled: (result, failure) => {
       if (result?.status === "ok") {
