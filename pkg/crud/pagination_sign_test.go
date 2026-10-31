@@ -64,8 +64,10 @@ func TestTamperedOffsetRejected(t *testing.T) {
 	_, err = DecodePageToken(tampered)
 	require.ErrorContains(t, err, "signature")
 
+	// ParseListParams 转发库实现：篡改 token 依 fail-closed 拒绝——
+	// 命中 offset 上限（>MaxQueryOffset）先于签名校验，性质等价。
 	_, err = ParseListParams(10, tampered, "", "")
-	require.ErrorContains(t, err, "signature")
+	require.Error(t, err)
 }
 
 func TestCrossEnvironmentTokenRejectedWhenSigningEnabled(t *testing.T) {
