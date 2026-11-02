@@ -3,7 +3,7 @@ package cli
 import (
 	"flag"
 
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 )
 
 // newRPCCmd 是逃生舱命令：按完整 gRPC 方法名调用任意 Server API 方法，

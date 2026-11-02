@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useCollectionData } from "@lynx-go/uikit-core";
+import { useCollectionData } from "@lynxland/uikit-core";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, FolderKanban, FolderPlus } from "lucide-react";
 import { getCurrentAdmin } from "@/api/admins";

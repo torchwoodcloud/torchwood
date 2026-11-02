@@ -7,7 +7,7 @@ import {
   useCollectionData,
   useCommand,
   useRecord,
-} from "@lynx-go/uikit-core";
+} from "@lynxland/uikit-core";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime } from "@/lib/datetime";
 import { toast } from "sonner";

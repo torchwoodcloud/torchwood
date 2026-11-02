@@ -100,7 +100,7 @@ func (r *assetDefRepo) List(ctx context.Context, projectID string, includeArchiv
 	} else {
 		q = q.Order("ad.created_at DESC")
 	}
-	err = q.Limit(limit).Scan(ctx2)
+	err = q.Limit(int64(limit)).Scan(ctx2)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func (r *assetHoldingRepo) ListByOwner(ctx context.Context, projectID string, ow
 		Where("ah.owner_id = ?", ownerID).
 		Where("ah.created_at < ?", before).
 		Order("ah.created_at DESC").
-		Limit(limit).
+		Limit(int64(limit)).
 		Scan(ctx2)
 	if err != nil {
 		return nil, err
@@ -251,7 +251,7 @@ func (r *assetHoldingRepo) ListByDef(ctx context.Context, projectID string, owne
 	} else {
 		q = q.Order("ah.created_at DESC")
 	}
-	err = q.Limit(limit).Scan(ctx2)
+	err = q.Limit(int64(limit)).Scan(ctx2)
 	if err != nil {
 		return nil, err
 	}
@@ -452,7 +452,7 @@ func (r *assetLedgerRepo) ListByOwner(ctx context.Context, projectID string, own
 	if defID != "" {
 		q = q.Where("ale.def_id = ?", defID)
 	}
-	err = q.Order("ale.created_at " + order).Limit(limit).Scan(ctx2)
+	err = q.Order("ale.created_at " + order).Limit(int64(limit)).Scan(ctx2)
 	if err != nil {
 		return nil, err
 	}

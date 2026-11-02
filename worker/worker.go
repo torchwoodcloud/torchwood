@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lynx-go/lynx"
+	"github.com/lynxland/lynx"
 	"github.com/redis/go-redis/v9"
 	appfunctions "github.com/torchwoodcloud/torchwood/internal/app/functions"
 	appwebhooks "github.com/torchwoodcloud/torchwood/internal/app/webhooks"

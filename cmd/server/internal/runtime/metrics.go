@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	lynxhttp "github.com/lynx-go/lynx/server/http"
+	lynxhttp "github.com/lynxland/lynx/server/http"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )

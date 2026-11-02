@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lynx-go/lynx"
+	"github.com/lynxland/lynx"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"

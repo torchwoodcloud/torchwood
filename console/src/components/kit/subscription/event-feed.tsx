@@ -1,4 +1,4 @@
-// vendored from @lynx-go/ui registry/subscription/event-feed.tsx @0.2.1（2026-10-25 §12.10-⑤ 上游回流 re-vendor（labels 面））
+// vendored from @lynxland/ui registry/subscription/event-feed.tsx @0.2.1（2026-10-25 §12.10-⑤ 上游回流 re-vendor（labels 面））
 // 拷贝适配（scripts/devtool.mjs --profile torchwood）：
 // token 方言映射 text-muted→text-muted-foreground、bg-panel→bg-card、border-line→border-border、divide-line→divide-border；cn 统一 @/lib/utils。
 // 手工步骤（判断题，工具不自动改）：
@@ -10,7 +10,7 @@
 // 手工适配层（判断题，devtool 交接单）：① demo Badge tone → 本仓 shadcn
 // variant（live=default、error=destructive、其余 secondary+amber 字色）；
 // ② warn 系 token 本仓无 → amber 惯例；③ 瞬态文案经 labels 由 ListenPanel 注入。
-import type { SubscriptionEngine } from "@lynx-go/uikit-core/react";
+import type { SubscriptionEngine } from "@lynxland/uikit-core/react";
 import { PauseCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import { useSyncExternalStore } from "react";

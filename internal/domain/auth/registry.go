@@ -5,9 +5,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/lynx-go/grpcapi/policy"
-	"github.com/lynx-go/grpcapi/policy/scope"
-	"github.com/lynx-go/grpcapi/principal"
+	"github.com/lynxland/grpcapi/policy"
+	"github.com/lynxland/grpcapi/policy/scope"
+	"github.com/lynxland/grpcapi/principal"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )

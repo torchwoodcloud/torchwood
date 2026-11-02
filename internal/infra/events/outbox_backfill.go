@@ -32,7 +32,7 @@ func ScanOutboxSeqRange(ctx context.Context, db *clients.Database, after, upto i
 		Where("seq > ?", after).
 		Where("seq <= ?", upto).
 		Order("seq ASC").
-		Limit(limit).
+		Limit(int64(limit)).
 		Scan(ctx)
 	if err != nil {
 		return nil, err

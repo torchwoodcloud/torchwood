@@ -130,9 +130,10 @@ func (r *webhookRepo) CountWebhooks(ctx context.Context, projectID string) (int,
 	if err != nil {
 		return 0, err
 	}
-	return conn.NewSelect().Model((*model.WebhookSubscription)(nil)).ModelTableExpr(expr, sch).
+	n, err := conn.NewSelect().Model((*model.WebhookSubscription)(nil)).ModelTableExpr(expr, sch).
 		Where("ws.project_id = ?", projectID).
 		Count(ctx)
+	return int(n), err
 }
 
 // ListEnabledWebhooks 项目内启用的订阅（worker 订阅匹配器周期快照扫描；

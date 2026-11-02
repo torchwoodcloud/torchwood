@@ -3,7 +3,7 @@ package contexts
 import (
 	"context"
 
-	"github.com/lynx-go/grpcapi/contextx"
+	"github.com/lynxland/grpcapi/contextx"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 )
 

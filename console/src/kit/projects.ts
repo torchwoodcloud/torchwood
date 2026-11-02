@@ -5,8 +5,8 @@ import {
   type CommandDescriptor,
   type ResourceScope,
   type Segment,
-} from "@lynx-go/uikit-core/kernel";
-import { collectionQuerySchema } from "@lynx-go/uikit-core/schema";
+} from "@lynxland/uikit-core/kernel";
+import { collectionQuerySchema } from "@lynxland/uikit-core/schema";
 import { skipToast as SKIP } from "@/api/client";
 import {
   createInviteCode,

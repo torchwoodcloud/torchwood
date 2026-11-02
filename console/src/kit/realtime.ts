@@ -4,7 +4,7 @@ import type {
   ResourceScope,
   SubscriptionDescriptor,
   Transport,
-} from "@lynx-go/uikit-core/kernel";
+} from "@lynxland/uikit-core/kernel";
 import { refreshSession } from "@/api/auth";
 import {
   helloFrame,

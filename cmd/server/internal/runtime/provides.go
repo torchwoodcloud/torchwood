@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/google/wire"
-	"github.com/lynx-go/grpcapi/policy"
-	"github.com/lynx-go/grpcapi/policy/protopolicy"
+	"github.com/lynxland/grpcapi/policy"
+	"github.com/lynxland/grpcapi/policy/protopolicy"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )

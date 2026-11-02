@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lynx-go/grpcapi/server"
-	"github.com/lynx-go/lynx"
+	"github.com/lynxland/grpcapi/server"
+	"github.com/lynxland/lynx"
 	"google.golang.org/grpc"
 	grpchealth "google.golang.org/grpc/health"
 	grpc_health_v1 "google.golang.org/grpc/health/grpc_health_v1"

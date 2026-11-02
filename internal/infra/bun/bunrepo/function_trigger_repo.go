@@ -161,7 +161,7 @@ func (r *triggerRepo) ClaimDueCron(ctx context.Context, projectID string, now ti
 		Where("ft.type = ?", domainfunctions.TriggerTypeCron).
 		Where("ft.next_run_at <= ?", now).
 		Order("ft.next_run_at").
-		Limit(limit).
+		Limit(int64(limit)).
 		Scan(ctx)
 	if err != nil {
 		return nil, err

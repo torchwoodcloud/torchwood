@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 
 	"github.com/torchwoodcloud/torchwood/sdk/go/server"
 )

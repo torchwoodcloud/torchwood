@@ -5,8 +5,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/lynx-go/grpcapi/authz"
-	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
+	"github.com/lynxland/grpcapi/authz"
+	grpcapiinterceptor "github.com/lynxland/grpcapi/interceptor"
 	"github.com/stretchr/testify/require"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	"github.com/torchwoodcloud/torchwood/internal/api/interceptor"

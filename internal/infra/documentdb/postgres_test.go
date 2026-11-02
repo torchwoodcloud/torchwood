@@ -1487,7 +1487,7 @@ func TestListDocuments_KeysetContinuationSkipsCount(t *testing.T) {
 	}
 
 	hook := &countQueryHook{}
-	db.AddQueryHook(hook)
+	db.DB = db.WithQueryHook(hook)
 
 	// 首页：保持精确 COUNT，total=7；满页发 keyset token（keyset-only：
 	// 不再发 offset 族 token）。
@@ -1929,7 +1929,7 @@ func TestBulkDocuments_StatementCount(t *testing.T) {
 	}
 
 	hook := &bulkStatementHook{}
-	db.AddQueryHook(hook)
+	db.DB = db.WithQueryHook(hook)
 
 	affected, err := docDB.BulkUpdateDocuments(ctx, projectID, "app", "docs", ids,
 		map[string]any{"title": "bulk"}, nil, databases.SystemPrincipal)

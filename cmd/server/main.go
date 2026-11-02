@@ -10,8 +10,8 @@ import (
 	_ "time/tzdata"
 
 	"github.com/joho/godotenv"
-	"github.com/lynx-go/lynx"
-	lynxzap "github.com/lynx-go/lynx/contrib/zap"
+	"github.com/lynxland/lynx"
+	lynxzap "github.com/lynxland/lynx/contrib/zap"
 	"github.com/spf13/pflag"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )

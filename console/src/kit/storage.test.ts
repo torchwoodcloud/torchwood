@@ -1,4 +1,4 @@
-import { runCommand, type CollectionQuery } from "@lynx-go/uikit-core/kernel";
+import { runCommand, type CollectionQuery } from "@lynxland/uikit-core/kernel";
 import { AxiosError } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {

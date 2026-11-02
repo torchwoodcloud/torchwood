@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useOutletContext } from "@/router/outlet-context";
-import { useCommand, useRecord } from "@lynx-go/uikit-core";
+import { useCommand, useRecord } from "@lynxland/uikit-core";
 import { toast } from "sonner";
 import {
   Settings2,

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 	"github.com/stretchr/testify/require"
 )
 

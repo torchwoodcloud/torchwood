@@ -7,7 +7,7 @@ import {
   useCollectionData,
   useCommand,
   useRecord,
-} from "@lynx-go/uikit-core";
+} from "@lynxland/uikit-core";
 import { toast } from "sonner";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { Plus, Download, UploadCloud, Link2, Copy } from "lucide-react";

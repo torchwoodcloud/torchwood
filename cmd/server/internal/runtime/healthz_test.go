@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynx-go/lynx"
-	lynxhttp "github.com/lynx-go/lynx/server/http"
+	"github.com/lynxland/lynx"
+	lynxhttp "github.com/lynxland/lynx/server/http"
 	"github.com/stretchr/testify/require"
 )
 

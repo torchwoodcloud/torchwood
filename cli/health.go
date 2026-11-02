@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 )
 
 const (

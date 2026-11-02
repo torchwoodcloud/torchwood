@@ -219,8 +219,8 @@ func (r *functionRepo) ListInvocations(ctx context.Context, projectID, functionI
 	var ms []model.FunctionInvocation
 	err = cond(conn.NewSelect().Model(&ms).ModelTableExpr(expr, sch)).
 		Order("created_at DESC").
-		Limit(limit).
-		Offset(offset).
+		Limit(int64(limit)).
+		Offset(int64(offset)).
 		Scan(ctx)
 	if err != nil {
 		return nil, 0, err
@@ -229,7 +229,7 @@ func (r *functionRepo) ListInvocations(ctx context.Context, projectID, functionI
 	for i := range ms {
 		out[i] = *mapInvocationToDomain(&ms[i])
 	}
-	return out, total, nil
+	return out, int(total), nil
 }
 
 func (r *functionRepo) UpdateInvocation(ctx context.Context, e *domainfunctions.InvocationRecord) error {

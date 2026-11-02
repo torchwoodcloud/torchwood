@@ -7,8 +7,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/lynx-go/lynx"
-	"github.com/lynx-go/lynx/boot"
+	"github.com/lynxland/lynx"
+	"github.com/lynxland/lynx/boot"
 	"github.com/torchwoodcloud/torchwood/internal/domain/projects"
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
 	"github.com/torchwoodcloud/torchwood/internal/infra/projectschema"

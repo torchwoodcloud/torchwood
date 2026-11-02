@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/lynx-go/grpcapi/authz"
-	"github.com/lynx-go/grpcapi/policy"
+	"github.com/lynxland/grpcapi/authz"
+	"github.com/lynxland/grpcapi/policy"
 
 	"github.com/stretchr/testify/require"
 	"github.com/torchwoodcloud/torchwood/internal/api/interceptor"

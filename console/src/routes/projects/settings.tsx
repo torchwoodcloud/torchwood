@@ -15,7 +15,7 @@ import {
 import { describeApiError } from "@/kit/errors";
 import { useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useCollectionData, useCommand, useRecord } from "@lynx-go/uikit-core";
+import { useCollectionData, useCommand, useRecord } from "@lynxland/uikit-core";
 import { toast } from "sonner";
 import { Copy, Plus, Trash2 } from "lucide-react";
 import {

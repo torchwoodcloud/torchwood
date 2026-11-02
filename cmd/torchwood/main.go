@@ -4,8 +4,8 @@ import (
 	"context"
 	"os"
 
-	"github.com/lynx-go/commands"
-	lynxbuildinfo "github.com/lynx-go/lynx/buildinfo"
+	"github.com/lynxland/commands"
+	lynxbuildinfo "github.com/lynxland/lynx/buildinfo"
 )
 
 func main() {

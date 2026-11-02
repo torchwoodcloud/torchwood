@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/lynx-go/lynx"
+	"github.com/lynxland/lynx"
 	domainshared "github.com/torchwoodcloud/torchwood/internal/domain/shared"
 )
 

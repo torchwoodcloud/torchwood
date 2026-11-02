@@ -99,7 +99,7 @@ func TestCatalogGlobal_PublicTablesRows(t *testing.T) {
 	dbCount, err := db.NewSelect().Model((*model.DocumentDatabase)(nil)).
 		Where("project_id = ? AND database_id = ?", projectID, "app").Count(ctx)
 	require.NoError(t, err)
-	require.Equal(t, 1, dbCount)
+	require.Equal(t, int64(1), dbCount)
 
 	collRow := new(model.DocumentCollection)
 	require.NoError(t, db.NewSelect().Model(collRow).
@@ -174,7 +174,7 @@ func TestGetCollection_SingleQuery(t *testing.T) {
 	defer cleanup()
 
 	hook := &queryCountHook{}
-	db.AddQueryHook(hook)
+	db.DB = db.WithQueryHook(hook)
 
 	docDB := NewPostgresDocumentDB(db, nil)
 	require.NoError(t, docDB.CreateDatabase(ctx, projectID, "app", "Application DB"))

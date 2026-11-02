@@ -4,10 +4,10 @@ deps:
   - buf.build/googleapis/googleapis
   - buf.build/bufbuild/protovalidate
   - buf.build/grpc-ecosystem/grpc-gateway
-  # grpcapi 的 policy.proto 声明语法归库持有（lynx-go/grpcapi），label 与
-  # go.mod 的库 tag 配对升级；其 Go 类型由 github.com/lynx-go/grpcapi/genproto
+  # grpcapi 的 policy.proto 声明语法归库持有（lynxland/grpcapi），label 与
+  # go.mod 的库 tag 配对升级；其 Go 类型由 github.com/lynxland/grpcapi/genproto
   # 提供，不在本仓生成（见 buf.gen.yaml）。
-  - buf.build/lynx-go/grpcapi:v0.4.0
+  - buf.build/lynxland/grpcapi
 modules:
   - path: proto
 lint:

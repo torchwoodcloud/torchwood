@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynx-go/grpcapi/policy"
+	"github.com/lynxland/grpcapi/policy"
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"

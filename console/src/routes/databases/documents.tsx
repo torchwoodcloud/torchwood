@@ -8,8 +8,8 @@ import {
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useOutletContext } from "@/router/outlet-context";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCollection, useCommand, useRecord, recordQueryOptions } from "@lynx-go/uikit-core";
-import { scoped } from "@lynx-go/uikit-core/kernel";
+import { useCollection, useCommand, useRecord, recordQueryOptions } from "@lynxland/uikit-core";
+import { scoped } from "@lynxland/uikit-core/kernel";
 import { toast } from "sonner";
 import {
   ArrowLeft,

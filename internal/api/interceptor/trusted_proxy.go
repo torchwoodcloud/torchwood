@@ -3,11 +3,11 @@ package interceptor
 import (
 	"context"
 
-	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
+	grpcapiinterceptor "github.com/lynxland/grpcapi/interceptor"
 )
 
 // trusted_proxy 薄适配（grpcapi 阶段 1，DESIGN §7）：机制本体已上收
-// github.com/lynx-go/grpcapi/interceptor，此处保留 torchwood 包内符号
+// github.com/lynxland/grpcapi/interceptor，此处保留 torchwood 包内符号
 // （类型别名 + 函数委托），供 serverhttp handlers、audit 拦截器与既有
 // 测试零改动引用。
 //

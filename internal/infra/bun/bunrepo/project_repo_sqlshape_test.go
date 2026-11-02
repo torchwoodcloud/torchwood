@@ -54,7 +54,7 @@ func newRenderOnlyDB(t *testing.T) (*bun.DB, *sqlShapeHook) {
 		pgdriver.WithReadTimeout(500*time.Millisecond),
 	))
 	bunDB := bun.NewDB(sqldb, pgdialect.New())
-	bunDB.AddQueryHook(hook)
+	bunDB = bunDB.WithQueryHook(hook)
 	t.Cleanup(func() { _ = bunDB.Close() })
 	return bunDB, hook
 }

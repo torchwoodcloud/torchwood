@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { runCommand } from "@lynx-go/uikit-core/kernel";
+import { runCommand } from "@lynxland/uikit-core/kernel";
 import {
   apiKeysResource,
   createApiKeyCommand,

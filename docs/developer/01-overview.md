@@ -102,7 +102,7 @@ torchwood/
 ├── worker/                     # 后台作业实现（异步调用 / cron 与事件触发器 / webhook 投递 / outbox 分发 /
 │                               #   分片清理 / Stream 修剪 / 计费与订阅 / 资产过期 / 用量与 analytics 聚合 /
 │                               #   leaderboards 结榜清理）
-├── cli/                        # Torchwood CLI 实现（lynx-go/commands；经 sdk/go InvokeJSON 调 Server API）
+├── cli/                        # Torchwood CLI 实现（lynxland/commands；经 sdk/go InvokeJSON 调 Server API）
 ├── pkg/                        # 通用可复用库（见 §3）
 ├── sdk/                        # go/（client · server · functions · query · docexamples）
 │                               # | typescript/（client · server · query） | demo/
@@ -122,7 +122,7 @@ torchwood/
 |------|------|------|-----------|
 | server | `cmd/server` | Lynx Runner，监听四组端口：gRPC `127.0.0.1:9060`、HTTP `:9080`（grpc-gateway + 自定义 HTTP handler + `/v1/realtime` WebSocket + Console SPA `/console/` + landing 页）、metrics `127.0.0.1:9040`、debug `127.0.0.1:6060`（pprof 诊断）。装配代码在 `cmd/server/internal/runtime/`，服务注册顺序 grpc → gateway → realtime-subscriber → metrics → debug | `security.jwt.secret` 必填；authz 策略语义断言（`AssertSemantic`）失败即启动失败 |
 | worker | `cmd/worker` | 后台任务常驻进程，lynx 服务组件：Functions v4 异步投递（异步调用队列消费、cron 触发器调度、事件触发器消费组、webhook 到期投递、孤儿恢复、调用记录清理）、outbox 事件分发、chunk 分片清理、Redis Stream 修剪、支付订单关单、资产过期、订阅计费、用量聚合、leaderboards 清理与结榜、analytics rollup 与维护（完整节奏见 `13-operations.md`）。与 server 共享 `app/domain/infra`，但 Wire 装配独立、无 `api` 层 | `data.database.source` 必填 |
-| torchwood CLI | `cmd/torchwood` | 开发者命令行工具，基于 `lynx-go/commands`，经 `sdk/go/server.InvokeJSON` 按 protoregistry 动态分发调用 Server API。`rpc` 命令覆盖全部 Server RPC，新增 RPC 无需在 CLI 登记。退出码契约：0 成功 / 1 参数与校验错 / 2=40x / 3=5xx / 4=429 | `TORCHWOOD_CLI_*` 环境覆盖 |
+| torchwood CLI | `cmd/torchwood` | 开发者命令行工具，基于 `lynxland/commands`，经 `sdk/go/server.InvokeJSON` 按 protoregistry 动态分发调用 Server API。`rpc` 命令覆盖全部 Server RPC，新增 RPC 无需在 CLI 登记。退出码契约：0 成功 / 1 参数与校验错 / 2=40x / 3=5xx / 4=429 | `TORCHWOOD_CLI_*` 环境覆盖 |
 
 CLI 的实现细节见 `02-quickstart.md` §7；版本化资源迁移（runbook）命令组见 `19-runbook.md`。
 

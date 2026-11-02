@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lynx-go/grpcapi/authz"
-	"github.com/lynx-go/grpcapi/policy"
-	"github.com/lynx-go/grpcapi/principal"
+	"github.com/lynxland/grpcapi/authz"
+	"github.com/lynxland/grpcapi/policy"
+	"github.com/lynxland/grpcapi/principal"
 	"github.com/torchwoodcloud/torchwood/internal/domain/audit"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"

@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/lynx-go/grpcapi/policy"
+	"github.com/lynxland/grpcapi/policy"
 	"github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
 	"github.com/torchwoodcloud/torchwood/pkg/query"

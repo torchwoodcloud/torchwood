@@ -52,8 +52,8 @@ func (r *inviteCodeRepo) ListInviteCodes(ctx context.Context, projectID string, 
 	err = r.db.NewSelect().Model(&ms).
 		Where("project_id = ?", projectID).
 		Order("created_at DESC").
-		Limit(limit).
-		Offset(offset).
+		Limit(int64(limit)).
+		Offset(int64(offset)).
 		Scan(ctx)
 	if err != nil {
 		return nil, 0, err
@@ -62,7 +62,7 @@ func (r *inviteCodeRepo) ListInviteCodes(ctx context.Context, projectID string, 
 	for i := range ms {
 		out[i] = mapInviteCodeToDomain(&ms[i])
 	}
-	return out, total, nil
+	return out, int(total), nil
 }
 
 func (r *inviteCodeRepo) GetInviteCode(ctx context.Context, projectID, id string) (*projects.InviteCode, error) {

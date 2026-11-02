@@ -7,7 +7,7 @@
 package cli
 
 import (
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 )
 
 // NewGlobalFlags 构造全局旗标载体（内建默认值就位；version 由 main 包

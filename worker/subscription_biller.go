@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/lynx-go/lynx"
+	"github.com/lynxland/lynx"
 	appsubs "github.com/torchwoodcloud/torchwood/internal/app/subscriptions"
 )
 

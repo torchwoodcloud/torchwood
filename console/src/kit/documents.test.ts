@@ -1,4 +1,4 @@
-import { runCommand } from "@lynx-go/uikit-core/kernel";
+import { runCommand } from "@lynxland/uikit-core/kernel";
 import { AxiosError } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {

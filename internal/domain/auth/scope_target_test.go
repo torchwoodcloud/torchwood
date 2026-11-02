@@ -1,7 +1,7 @@
 package auth
 
 import (
-	"github.com/lynx-go/grpcapi/policy"
+	"github.com/lynxland/grpcapi/policy"
 
 	"testing"
 

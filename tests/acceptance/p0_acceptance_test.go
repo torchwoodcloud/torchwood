@@ -39,7 +39,7 @@ import (
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 
-	"github.com/lynx-go/grpcapi/authz"
+	"github.com/lynxland/grpcapi/authz"
 )
 
 func TestP0_Section6_AdminProjectAccess(t *testing.T) {

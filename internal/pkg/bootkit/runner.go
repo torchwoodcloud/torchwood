@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/lynx-go/lynx"
+	"github.com/lynxland/lynx"
 )
 
 // Runner 是可由 RunnerService 驱动的后台消费端口最小形态（如

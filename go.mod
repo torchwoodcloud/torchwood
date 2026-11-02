@@ -13,10 +13,10 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
-	github.com/lynx-go/commands v0.3.0
-	github.com/lynx-go/grpcapi/genproto v0.3.0
-	github.com/lynx-go/lynx v1.20.0
-	github.com/lynx-go/lynx/contrib/zap v1.20.0
+	github.com/lynxland/commands v0.4.0
+	github.com/lynxland/grpcapi/genproto v0.4.0
+	github.com/lynxland/lynx v1.21.0
+	github.com/lynxland/lynx/contrib/zap v1.21.0
 	github.com/minio/minio-go/v7 v7.2.0
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/pquerna/otp v1.5.0
@@ -28,9 +28,9 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/torchwoodcloud/torchwood/genproto v0.0.0-00010101000000-000000000000
 	github.com/torchwoodcloud/torchwood/sdk/go v0.0.0-00010101000000-000000000000
-	github.com/uptrace/bun v1.2.18
-	github.com/uptrace/bun/dialect/pgdialect v1.2.18
-	github.com/uptrace/bun/driver/pgdriver v1.2.18
+	github.com/uptrace/bun v1.3.0
+	github.com/uptrace/bun/dialect/pgdialect v1.3.0
+	github.com/uptrace/bun/driver/pgdriver v1.3.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/image v0.44.0
 	golang.org/x/oauth2 v0.36.0
@@ -72,8 +72,8 @@ require (
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/lynx-go/grpcapi v0.4.0
-	github.com/lynxland/appkit v0.7.0
+	github.com/lynxland/appkit v0.8.0
+	github.com/lynxland/grpcapi v0.5.0
 	github.com/minio/crc64nvme v1.1.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/moby/term v0.5.2 // indirect

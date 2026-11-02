@@ -3,8 +3,8 @@ package testutil
 import (
 	"context"
 
-	"github.com/lynx-go/grpcapi/authz"
-	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
+	"github.com/lynxland/grpcapi/authz"
+	grpcapiinterceptor "github.com/lynxland/grpcapi/interceptor"
 	"github.com/torchwoodcloud/torchwood/internal/api/interceptor"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
@@ -166,7 +166,8 @@ func (e *InterceptorEnv) InvokeUnaryHandler(ctx context.Context, method string, 
 }
 
 func (e *InterceptorEnv) AuditLogCount(ctx context.Context) (int, error) {
-	return e.DB.NewSelect().Model((*model.AuditLog)(nil)).Count(ctx)
+	n, err := e.DB.NewSelect().Model((*model.AuditLog)(nil)).Count(ctx)
+	return int(n), err
 }
 
 func (e *InterceptorEnv) LatestAuditLog(ctx context.Context) (*model.AuditLog, error) {

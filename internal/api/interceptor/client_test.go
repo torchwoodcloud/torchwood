@@ -5,7 +5,7 @@ import (
 	"net"
 	"testing"
 
-	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
+	grpcapiinterceptor "github.com/lynxland/grpcapi/interceptor"
 	"github.com/stretchr/testify/require"
 	"github.com/torchwoodcloud/torchwood/internal/api/interceptor"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/contexts"

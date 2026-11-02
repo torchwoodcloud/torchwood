@@ -78,7 +78,7 @@ func (r *settlementRepo) ListByBoard(ctx context.Context, projectID, boardID str
 		Where("ls.project_id = ?", projectID).
 		Where("ls.board_id = ?", boardID).
 		Order("ls.period_key DESC").
-		Limit(limit).
+		Limit(int64(limit)).
 		Scan(ctx2)
 	if err != nil {
 		return nil, err

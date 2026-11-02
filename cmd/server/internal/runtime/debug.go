@@ -1,7 +1,7 @@
 package runtime
 
 import (
-	lynxdebug "github.com/lynx-go/lynx/debug"
+	lynxdebug "github.com/lynxland/lynx/debug"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/config"
 )
 

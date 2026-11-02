@@ -1,10 +1,10 @@
-// vendored from @lynx-go/ui registry/query/data-table.tsx @0.2.1（2026-10-25 §12.10-⑤ 上游回流 re-vendor）
+// vendored from @lynxland/ui registry/query/data-table.tsx @0.2.1（2026-10-25 §12.10-⑤ 上游回流 re-vendor）
 // 拷贝适配（scripts/devtool.mjs --profile torchwood）：
 // token 方言映射 text-muted→text-muted-foreground、bg-panel-2→bg-muted、border-line→border-border、text-fg→text-foreground；cn 统一 @/lib/utils。
 // 其余与上游一致。
 // LegacyColumnDef<T, any> 是上游形（列定义值类型开放）——vendored 保留。
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { CollectionHandle } from "@lynx-go/uikit-core/react";
+import type { CollectionHandle } from "@lynxland/uikit-core/react";
 import { flexRender, type RowData } from "@tanstack/react-table";
 import {
   getCoreRowModel,

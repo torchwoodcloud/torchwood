@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 )
 
 // verb 是叶子动词的统一载体（commands.Command + Flagged）：声明式元信息 +

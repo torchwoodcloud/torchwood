@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useCollection } from "@lynx-go/uikit-core";
-import { predicateOf } from "@lynx-go/uikit-core/schema";
+import { useCollection } from "@lynxland/uikit-core";
+import { predicateOf } from "@lynxland/uikit-core/schema";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
-import type { Predicate } from "@lynx-go/uikit-core/kernel";
+import type { Predicate } from "@lynxland/uikit-core/kernel";
 import type { AuditLog } from "@/api/auditLogs";
 import { useAdminRole, isPlatformAdmin } from "@/hooks/useAdminRole";
 import { useUserTimezone } from "@/hooks/useTimezone";

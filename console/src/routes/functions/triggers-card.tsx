@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useCollectionData, useCommand } from "@lynx-go/uikit-core";
+import { useCollectionData, useCommand } from "@lynxland/uikit-core";
 import { toast } from "sonner";
 import { AlertTriangle, Plus } from "lucide-react";
 import { type FunctionTrigger } from "@/api/functions";

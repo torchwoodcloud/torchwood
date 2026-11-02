@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lynx-go/lynx"
+	"github.com/lynxland/lynx"
 	"github.com/redis/go-redis/v9"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	"github.com/torchwoodcloud/torchwood/internal/domain/storage"

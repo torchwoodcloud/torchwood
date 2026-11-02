@@ -6,7 +6,7 @@ import {
   useCommand,
   useRecord,
   invalidateAfterCommand,
-} from "@lynx-go/uikit-core";
+} from "@lynxland/uikit-core";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";

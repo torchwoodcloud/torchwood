@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	gscope "github.com/lynx-go/grpcapi/policy/scope"
+	gscope "github.com/lynxland/grpcapi/policy/scope"
 )
 
 // 本文件实现资源级 scope（安全审计 2026-09-08 T-02）：

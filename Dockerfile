@@ -32,11 +32,11 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 ARG DATE=unknown
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags "-s -w -X github.com/lynx-go/lynx/buildinfo.Version=$VERSION -X github.com/lynx-go/lynx/buildinfo.Commit=$COMMIT -X github.com/lynx-go/lynx/buildinfo.Date=$DATE" -o /out/server ./cmd/server && \
+    go build -trimpath -ldflags "-s -w -X github.com/lynxland/lynx/buildinfo.Version=$VERSION -X github.com/lynxland/lynx/buildinfo.Commit=$COMMIT -X github.com/lynxland/lynx/buildinfo.Date=$DATE" -o /out/server ./cmd/server && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags "-s -w -X github.com/lynx-go/lynx/buildinfo.Version=$VERSION -X github.com/lynx-go/lynx/buildinfo.Commit=$COMMIT -X github.com/lynx-go/lynx/buildinfo.Date=$DATE" -o /out/worker ./cmd/worker && \
+    go build -trimpath -ldflags "-s -w -X github.com/lynxland/lynx/buildinfo.Version=$VERSION -X github.com/lynxland/lynx/buildinfo.Commit=$COMMIT -X github.com/lynxland/lynx/buildinfo.Date=$DATE" -o /out/worker ./cmd/worker && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags "-s -w -X github.com/lynx-go/lynx/buildinfo.Version=$VERSION -X github.com/lynx-go/lynx/buildinfo.Commit=$COMMIT -X github.com/lynx-go/lynx/buildinfo.Date=$DATE" -o /out/torchwood ./cmd/torchwood
+    go build -trimpath -ldflags "-s -w -X github.com/lynxland/lynx/buildinfo.Version=$VERSION -X github.com/lynxland/lynx/buildinfo.Commit=$COMMIT -X github.com/lynxland/lynx/buildinfo.Date=$DATE" -o /out/torchwood ./cmd/torchwood
 
 # ---------- 3) 运行时 ----------
 FROM alpine:3.21

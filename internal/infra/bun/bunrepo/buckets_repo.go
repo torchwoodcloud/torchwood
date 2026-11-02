@@ -88,7 +88,7 @@ func (r *BucketRepository) List(ctx context.Context, projectID string, limit, of
 	var ms []model.Bucket
 	err = conn.NewSelect().Model(&ms).ModelTableExpr(expr, sch).
 		OrderExpr("b.created_at DESC, b.id DESC").
-		Limit(limit).Offset(offset).
+		Limit(int64(limit)).Offset(int64(offset)).
 		Scan(ctx)
 	if err != nil {
 		return nil, 0, err

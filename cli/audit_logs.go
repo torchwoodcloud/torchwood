@@ -3,7 +3,7 @@ package cli
 import (
 	"flag"
 
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 )
 
 const methodAuditLogsList = "/torchwood.server.v1.AuditLogsService/ListAuditLogs"

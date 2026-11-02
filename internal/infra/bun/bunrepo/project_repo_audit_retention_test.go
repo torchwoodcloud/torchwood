@@ -33,6 +33,6 @@ func TestProjectRepo_DeleteControlPlaneRows_KeepsAuditLogs(t *testing.T) {
 	require.NoError(t, err)
 	keyCount, err := db.NewSelect().Table("api_keys").Where("project_id = ?", projectID).Count(ctx)
 	require.NoError(t, err)
-	require.Equal(t, 1, auditCount, "审计行必须随项目删除保留")
-	require.Equal(t, 0, keyCount, "api_keys 属控制面派生行，随项目删除清理")
+	require.Equal(t, int64(1), auditCount, "审计行必须随项目删除保留")
+	require.Equal(t, int64(0), keyCount, "api_keys 属控制面派生行，随项目删除清理")
 }

@@ -1,12 +1,12 @@
 package runtime
 
 import (
-	"github.com/lynx-go/grpcapi/policy"
+	"github.com/lynxland/grpcapi/policy"
 
 	"context"
 	"testing"
 
-	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
+	grpcapiinterceptor "github.com/lynxland/grpcapi/interceptor"
 	"github.com/stretchr/testify/require"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"google.golang.org/grpc"

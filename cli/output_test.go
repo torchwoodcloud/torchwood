@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

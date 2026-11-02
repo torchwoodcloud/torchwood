@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lynx-go/lynx"
+	"github.com/lynxland/lynx"
 	appanalytics "github.com/torchwoodcloud/torchwood/internal/app/analytics"
 )
 

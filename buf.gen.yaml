@@ -1,7 +1,7 @@
 version: v2
 # 生成只覆盖本模块（directory: proto）；BSR 依赖（grpcapi policy.proto 等）
 # 不参与生成——grpcapi 的 Go 类型由库 genproto 模块
-# github.com/lynx-go/grpcapi/genproto 提供，protopolicy 按扩展字段号读取
+# github.com/lynxland/grpcapi/genproto 提供，protopolicy 按扩展字段号读取
 # 本仓生成的 descriptor。
 inputs:
   - directory: proto

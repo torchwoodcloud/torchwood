@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/lynx-go/lynx"
+	"github.com/lynxland/lynx"
 	"github.com/prometheus/client_golang/prometheus"
 	appleaderboards "github.com/torchwoodcloud/torchwood/internal/app/leaderboards"
 )

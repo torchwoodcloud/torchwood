@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	lynxbuildinfo "github.com/lynx-go/lynx/buildinfo"
+	lynxbuildinfo "github.com/lynxland/lynx/buildinfo"
 	"github.com/stretchr/testify/require"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 	"github.com/torchwoodcloud/torchwood/internal/infra/health"

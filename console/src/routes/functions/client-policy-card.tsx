@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useCommand } from "@lynx-go/uikit-core";
+import { useCommand } from "@lynxland/uikit-core";
 import { toast } from "sonner";
 import type { FunctionItem } from "@/api/functions";
 import { updateFunctionClientPolicyCommand } from "@/kit/functions";

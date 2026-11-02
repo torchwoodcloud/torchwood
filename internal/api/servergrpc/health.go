@@ -3,7 +3,7 @@ package servergrpc
 import (
 	"context"
 
-	lynxbuildinfo "github.com/lynx-go/lynx/buildinfo"
+	lynxbuildinfo "github.com/lynxland/lynx/buildinfo"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"
 )
 

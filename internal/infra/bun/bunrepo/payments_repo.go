@@ -177,7 +177,7 @@ func (r *paymentOrderRepo) ListByUser(ctx context.Context, projectID, userID str
 		Where("po.user_id = ?", userID).
 		Where("po.created_at < ?", before).
 		Order("po.created_at DESC").
-		Limit(limit).
+		Limit(int64(limit)).
 		Scan(ctx2)
 	if err != nil {
 		return nil, err
@@ -218,7 +218,7 @@ func (r *paymentOrderRepo) ListByProject(ctx context.Context, projectID string, 
 	} else {
 		sel = sel.Order("po.created_at DESC")
 	}
-	err = sel.Limit(limit).Scan(ctx2)
+	err = sel.Limit(int64(limit)).Scan(ctx2)
 	if err != nil {
 		return nil, err
 	}

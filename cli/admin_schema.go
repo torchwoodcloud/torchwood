@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 
 	"github.com/torchwoodcloud/torchwood/internal/infra/documentdb"
 )

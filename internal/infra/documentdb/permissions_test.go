@@ -588,7 +588,7 @@ func TestPermissions_ListBackfillNoExtraQueries(t *testing.T) {
 	makeDoc("d2")
 
 	hook := &queryCountHook{}
-	db.AddQueryHook(hook)
+	db.DB = db.WithQueryHook(hook)
 	list := func() int {
 		t.Helper()
 		before := hook.snapshot()

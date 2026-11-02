@@ -5,8 +5,8 @@ import (
 	"log/slog"
 
 	"github.com/google/wire"
-	"github.com/lynx-go/lynx"
-	"github.com/lynx-go/lynx/boot"
+	"github.com/lynxland/lynx"
+	"github.com/lynxland/lynx/boot"
 	appanalytics "github.com/torchwoodcloud/torchwood/internal/app/analytics"
 	"github.com/torchwoodcloud/torchwood/internal/app/assets"
 	appbilling "github.com/torchwoodcloud/torchwood/internal/app/billing"

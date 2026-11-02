@@ -1,6 +1,6 @@
 import { AxiosError } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CommandDescriptor } from "@lynx-go/uikit-core/kernel";
+import type { CommandDescriptor } from "@lynxland/uikit-core/kernel";
 import { getPlan, getSubscription } from "@/api/subscriptions";
 
 // AttachedCommands 的推断类型只保留字面量里出现过的声明键——缺省缺席断言走

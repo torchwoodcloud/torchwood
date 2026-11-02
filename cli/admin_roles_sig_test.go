@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 	"github.com/stretchr/testify/require"
 
 	"github.com/torchwoodcloud/torchwood/internal/infra/clients"
@@ -42,7 +42,7 @@ func twSecretsRowCount(t *testing.T, ctx context.Context, db *clients.Database) 
 	n, err := db.NewSelect().TableExpr("public.tw_secrets").
 		Where("purpose = ?", clients.RolesSigPurpose).Count(ctx)
 	require.NoError(t, err)
-	return n
+	return int(n)
 }
 
 // TestAdminSyncRolesSigViaCLI 是 B15 admin 作业 CLI 集成测试（有测试库时真

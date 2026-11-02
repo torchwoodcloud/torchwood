@@ -1,4 +1,4 @@
-// vendored from @lynx-go/ui registry/values/metric-chart.tsx @0.2.1（2026-10-25 §12.10-⑤ 上游回流 re-vendor（labels 面））
+// vendored from @lynxland/ui registry/values/metric-chart.tsx @0.2.1（2026-10-25 §12.10-⑤ 上游回流 re-vendor（labels 面））
 // 拷贝适配（scripts/devtool.mjs --profile torchwood）：
 // token 方言映射 text-muted→text-muted-foreground、border-line→border-border、text-fg→text-foreground；cn 统一 @/lib/utils。
 // 手工步骤（判断题，工具不自动改）：

@@ -97,7 +97,7 @@ func (r *webhookDeliveryRepo) ListDeliveries(ctx context.Context, projectID, web
 		limit = 50
 	}
 	var ms []model.WebhookDelivery
-	err = q.Order("created_at DESC").Limit(limit).Offset(offset).Scan(ctx, &ms)
+	err = q.Order("created_at DESC").Limit(int64(limit)).Offset(int64(offset)).Scan(ctx, &ms)
 	if err != nil {
 		return domainwebhooks.DeliveryListPage{}, err
 	}
@@ -105,7 +105,7 @@ func (r *webhookDeliveryRepo) ListDeliveries(ctx context.Context, projectID, web
 	for i := range ms {
 		items = append(items, *mapDeliveryToDomain(&ms[i]))
 	}
-	return domainwebhooks.DeliveryListPage{Items: items, Total: total}, nil
+	return domainwebhooks.DeliveryListPage{Items: items, Total: int(total)}, nil
 }
 
 // ClaimDue 单项目内原子领取到期投递：候选扫描（无锁，命中
@@ -129,7 +129,7 @@ func (r *webhookDeliveryRepo) ClaimDue(ctx context.Context, projectID string, no
 		Where("wd.status = ?", domainwebhooks.DeliveryStatusPending).
 		Where("wd.next_attempt_at <= ?", now).
 		Order("wd.next_attempt_at").
-		Limit(limit).
+		Limit(int64(limit)).
 		Scan(ctx)
 	if err != nil {
 		return nil, err

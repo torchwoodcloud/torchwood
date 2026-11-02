@@ -65,7 +65,7 @@ func (r *auditRepo) ListByActor(ctx context.Context, projectID, actorID string, 
 	if err := r.db.NewSelect().Model(&rows).
 		Where("al.project_id = ? AND al.actor_id = ?", projectID, actorID).
 		Order("al.created_at DESC").
-		Limit(limit).
+		Limit(int64(limit)).
 		Scan(ctx); err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (r *auditRepo) List(ctx context.Context, filter audit.ListFilter) ([]audit.
 	} else {
 		query = query.Order("al.created_at DESC")
 	}
-	if err := query.Limit(pageSize).Offset(filter.Offset).Scan(ctx); err != nil {
+	if err := query.Limit(int64(pageSize)).Offset(int64(filter.Offset)).Scan(ctx); err != nil {
 		return nil, 0, err
 	}
 	out := make([]audit.Entry, 0, len(rows))
@@ -134,7 +134,7 @@ func (r *auditRepo) List(ctx context.Context, filter audit.ListFilter) ([]audit.
 			CreatedAt:  row.CreatedAt,
 		})
 	}
-	return out, total, nil
+	return out, int(total), nil
 }
 
 func applyAuditListFilter(query *bun.SelectQuery, filter audit.ListFilter) *bun.SelectQuery {

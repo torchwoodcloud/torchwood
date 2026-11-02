@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 
 	"github.com/torchwoodcloud/torchwood/internal/pkg/runbook"
 	"github.com/torchwoodcloud/torchwood/sdk/go/server"

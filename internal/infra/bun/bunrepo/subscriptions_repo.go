@@ -101,7 +101,7 @@ func (r *subscriptionPlanRepo) List(ctx context.Context, projectID string, inclu
 	} else {
 		q = q.Order("sp.created_at DESC")
 	}
-	if err := q.Limit(limit).Scan(ctx2); err != nil {
+	if err := q.Limit(int64(limit)).Scan(ctx2); err != nil {
 		return nil, err
 	}
 	out := make([]subscriptions.Plan, 0, len(rows))
@@ -309,7 +309,7 @@ func (r *subscriptionRepo) ListByUser(ctx context.Context, projectID, userID str
 		Where("ss.user_id = ?", userID).
 		Where("ss.created_at < ?", before).
 		Order("ss.created_at DESC").
-		Limit(limit).
+		Limit(int64(limit)).
 		Scan(ctx2)
 	if err != nil {
 		return nil, err
@@ -350,7 +350,7 @@ func (r *subscriptionRepo) ListByProject(ctx context.Context, projectID string, 
 	} else {
 		sel = sel.Order("ss.created_at DESC")
 	}
-	err = sel.Limit(limit).Scan(ctx2)
+	err = sel.Limit(int64(limit)).Scan(ctx2)
 	if err != nil {
 		return nil, err
 	}

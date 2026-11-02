@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	grpcapiinterceptor "github.com/lynx-go/grpcapi/interceptor"
+	grpcapiinterceptor "github.com/lynxland/grpcapi/interceptor"
 	"github.com/stretchr/testify/require"
 	clientv1 "github.com/torchwoodcloud/torchwood/genproto/client/v1"
 	serverv1 "github.com/torchwoodcloud/torchwood/genproto/server/v1"

@@ -2,7 +2,7 @@ package runtime
 
 import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/lynx-go/grpcapi/gateway"
+	"github.com/lynxland/grpcapi/gateway"
 	sharedv1 "github.com/torchwoodcloud/torchwood/genproto/shared/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"

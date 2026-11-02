@@ -7,7 +7,7 @@ import {
   useCommand,
   useCommandForm,
   useRecord,
-} from "@lynx-go/uikit-core";
+} from "@lynxland/uikit-core";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Copy, Pencil, RefreshCw } from "lucide-react";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";

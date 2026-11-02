@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useCollection, useCommand, useRecord } from "@lynx-go/uikit-core";
-import { predicateOf } from "@lynx-go/uikit-core/schema";
-import type { Predicate } from "@lynx-go/uikit-core/kernel";
+import { useCollection, useCommand, useRecord } from "@lynxland/uikit-core";
+import { predicateOf } from "@lynxland/uikit-core/schema";
+import type { Predicate } from "@lynxland/uikit-core/kernel";
 import type { LegacyColumnDef } from "@tanstack/react-table/legacy";
 import { useUserTimezone } from "@/hooks/useTimezone";
 import { formatDateTime, fromDateTimeLocalValue, toDateTimeLocalValue } from "@/lib/datetime";

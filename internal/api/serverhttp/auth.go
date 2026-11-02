@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/lynx-go/grpcapi/policy"
+	"github.com/lynxland/grpcapi/policy"
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"
 	"github.com/torchwoodcloud/torchwood/internal/domain/shared"
 	"google.golang.org/grpc/codes"

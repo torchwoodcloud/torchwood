@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 	"github.com/stretchr/testify/require"
 
 	"github.com/torchwoodcloud/torchwood/internal/domain/databases"
@@ -89,11 +89,11 @@ func TestAdminExportImportRoundTripViaCLI(t *testing.T) {
 	dbCount, err := db.NewSelect().Model((*model.DocumentDatabase)(nil)).
 		Where("project_id = ? AND database_id = ?", projectID, "app").Count(ctx)
 	require.NoError(t, err)
-	require.Equal(t, 1, dbCount)
+	require.Equal(t, int64(1), dbCount)
 	collCount, err := db.NewSelect().Model((*model.DocumentCollection)(nil)).
 		Where("project_id = ? AND database_id = ?", projectID, "app").Count(ctx)
 	require.NoError(t, err)
-	require.Equal(t, 1, collCount)
+	require.Equal(t, int64(1), collCount)
 	list, err := p.ListDocuments(ctx, projectID, "app", "notes", databases.Query{}, databases.SystemPrincipal)
 	require.NoError(t, err)
 	require.Len(t, list.Documents, 3)

@@ -11,7 +11,7 @@
 
 ## 项目结构补充
 - `console/`：React + Vite + TanStack Query + shadcn/ui 管理后台前端，通过 `console/embed.go` 嵌入 Go 二进制。
-- `cmd/torchwood/`：Torchwood CLI 二进制（`bin/torchwood`）入口，只保留 CLI 装配（`app.go` 根命令表登记 + `main.go`）；全部命令实现细节在仓库根顶层组件包 `cli/`（与 `worker/` 同级模式）。CLI 基于 `github.com/lynx-go/commands`（零依赖子命令 CLI 框架），通过 sdk/go（server 包 InvokeJSON）以 API Key 调用 Server API；CLI 源码不直接 import genproto/grpc（`cli/import_guard_test.go` 兜底，覆盖 `cli/` 与 `cmd/torchwood/`），方法覆盖完整性由 `sdk/go/server` 的测试保证，新增 RPC 无需在 CLI 登记。全局旗标在子命令路径之后、位置参数之前给出（环境变量 `TORCHWOOD_CLI_*` 优先）；退出码契约 0/1/2=40x/3=5xx/4=429 经 `commands.ExitCode` 钩子注入（`cli/root.go` `RPCExitCode`）。`runbook` 命令组提供版本化资源迁移（类 sql migrate 的 up/down，18 个幂等动词 + 服务端状态面 + checksum 防篡改，使用文档 `docs/developer/19-runbook.md`）。
+- `cmd/torchwood/`：Torchwood CLI 二进制（`bin/torchwood`）入口，只保留 CLI 装配（`app.go` 根命令表登记 + `main.go`）；全部命令实现细节在仓库根顶层组件包 `cli/`（与 `worker/` 同级模式）。CLI 基于 `github.com/lynxland/commands`（零依赖子命令 CLI 框架），通过 sdk/go（server 包 InvokeJSON）以 API Key 调用 Server API；CLI 源码不直接 import genproto/grpc（`cli/import_guard_test.go` 兜底，覆盖 `cli/` 与 `cmd/torchwood/`），方法覆盖完整性由 `sdk/go/server` 的测试保证，新增 RPC 无需在 CLI 登记。全局旗标在子命令路径之后、位置参数之前给出（环境变量 `TORCHWOOD_CLI_*` 优先）；退出码契约 0/1/2=40x/3=5xx/4=429 经 `commands.ExitCode` 钩子注入（`cli/root.go` `RPCExitCode`）。`runbook` 命令组提供版本化资源迁移（类 sql migrate 的 up/down，18 个幂等动词 + 服务端状态面 + checksum 防篡改，使用文档 `docs/developer/19-runbook.md`）。
 - `internal/pkg/runbook/`：Torchwood runbook 引擎（文件层/编排层/动词对账决策层）——`cli` 的 runbook 命令组与未来 server 侧工具共享；RPC 通道由调用方注入（`Caller` 函数类型），生产适配（InvokeJSON → Caller）在 `cli/runbook.go`。
 - `internal/api/serverhttp/`：自定义 HTTP handler，例如 Storage multipart 上传下载。
 - `pkg/query/`：字符串查询 DSL 解析器（编译为 typed AST），供动态文档层与 SDK/CLI 使用。

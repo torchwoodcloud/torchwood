@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 
 	"github.com/torchwoodcloud/torchwood/pkg/idgen"
 )

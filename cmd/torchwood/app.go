@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 
 	"github.com/torchwoodcloud/torchwood/cli"
 )

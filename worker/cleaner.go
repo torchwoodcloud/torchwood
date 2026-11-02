@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/lynx-go/lynx"
+	"github.com/lynxland/lynx"
 )
 
 // OrphanChunkCleaner 抽象 Storage 的孤儿分片清理能力（wire 绑定到

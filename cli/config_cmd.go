@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 )
 
 // newConfigCmd 管理 CLI 本地配置文件（~/.torchwood/config.yaml）：profile

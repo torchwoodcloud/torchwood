@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/lynx-go/lynx"
-	"github.com/lynx-go/lynx/lynxtest"
+	"github.com/lynxland/lynx"
+	"github.com/lynxland/lynx/lynxtest"
 	"github.com/stretchr/testify/require"
 	"github.com/torchwoodcloud/torchwood/internal/pkg/testutil"
 )

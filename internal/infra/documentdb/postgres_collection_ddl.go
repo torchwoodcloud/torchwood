@@ -221,7 +221,7 @@ func (p *postgresDocumentDB) ListCollections(ctx context.Context, projectID, dat
 	err = p.conn(ctx).NewSelect().Model(&ms).
 		Where("project_id = ? AND database_id = ?", projectID, databaseID).
 		Order("created_at DESC").
-		Limit(pageSize).Offset(offset).Scan(ctx)
+		Limit(int64(pageSize)).Offset(int64(offset)).Scan(ctx)
 	if err != nil {
 		return nil, databases.ListMeta{}, p.mapError(err)
 	}

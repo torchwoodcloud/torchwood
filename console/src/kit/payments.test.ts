@@ -1,6 +1,6 @@
 import { AxiosError } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CommandDescriptor } from "@lynx-go/uikit-core/kernel";
+import type { CommandDescriptor } from "@lynxland/uikit-core/kernel";
 import { getOrder } from "@/api/payments";
 import { fulfillOrderCommand, ordersResource, refundOrderCommand } from "@/kit/payments";
 

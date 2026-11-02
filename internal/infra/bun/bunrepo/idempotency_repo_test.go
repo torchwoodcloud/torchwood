@@ -102,7 +102,7 @@ func TestIdempotencyStore_TryClaimRetriesOnVanishingConflict(t *testing.T) {
 	require.Equal(t, databases.IdempotencyClaimAcquired, peer.State)
 
 	hook := &releaseRaceHook{db: db, key: key}
-	db.AddQueryHook(hook)
+	db.DB = db.WithQueryHook(hook)
 
 	claim, err := s.TryClaim(ctx, key, "fp1")
 	require.NoError(t, err, "竞态（冲突行消失）应经重试自愈，不上抛")

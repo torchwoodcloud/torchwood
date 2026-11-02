@@ -1,11 +1,11 @@
-// vendored from @lynx-go/ui registry/query/list-page.tsx @0.2.1（2026-10-25 §12.10 余款 re-vendor（错误态文案透传面））
+// vendored from @lynxland/ui registry/query/list-page.tsx @0.2.1（2026-10-25 §12.10 余款 re-vendor（错误态文案透传面））
 // 拷贝适配（scripts/devtool.mjs --profile torchwood）：
 // token 方言映射 text-muted→text-muted-foreground；cn 统一 @/lib/utils。
 // 手工适配层（判断题）：①容器改全宽（本仓页面统一 PageHeader + 自有页宽）；
 // ②错误态中文经 props 注入（errorTitle/describeError/retryLabel 缺省值），
 // states 块保持上游纯拷贝。
-import type { CollectionHandle } from "@lynx-go/uikit-core";
-import type { ApiError } from "@lynx-go/uikit-core/kernel";
+import type { CollectionHandle } from "@lynxland/uikit-core";
+import type { ApiError } from "@lynxland/uikit-core/kernel";
 import { describeApiError } from "@/kit/errors";
 import type { ReactNode } from "react";
 import { Card } from "@/components/ui/card";

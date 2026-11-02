@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 )
 
 // newTestApp 复刻 cmd/torchwood/app.go 的根命令表装配，供包内端到端分发

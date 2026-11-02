@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lynx-go/grpcapi/policy"
+	"github.com/lynxland/grpcapi/policy"
 )
 
 // 本文件是五档访问语义与 grpcapi v3 requirement 树的双向映射（执行侧迁移，

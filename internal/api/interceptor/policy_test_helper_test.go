@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/lynx-go/grpcapi/authz"
-	"github.com/lynx-go/grpcapi/policy"
+	"github.com/lynxland/grpcapi/authz"
+	"github.com/lynxland/grpcapi/policy"
 	"google.golang.org/grpc"
 
 	domainauth "github.com/torchwoodcloud/torchwood/internal/domain/auth"

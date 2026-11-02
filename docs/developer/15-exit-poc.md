@@ -101,7 +101,7 @@
 
 ### A11 grpcapi v0.3.0 发版与本地 replace 摘除〔2026-10-23，grpcapi 执行侧迁移立条〕
 
-- **出处**：`go.mod` 的 `replace github.com/lynx-go/grpcapi => /home/qiulin/workspace/qiulin/grpcapi`（钉 main@`5ea3974`，v0.3.0 未打 tag）；`docs/developer/21-grpcapi-execution-migration.md` §8。
+- **出处**：`go.mod` 的 `replace github.com/lynxland/grpcapi => /home/qiulin/workspace/qiulin/grpcapi`（钉 main@`5ea3974`，v0.3.0 未打 tag）；`docs/developer/21-grpcapi-execution-migration.md` §8。
 - **要做什么**：grpcapi 打 v0.3.0 tag（含 G-1 方向感知实例门/G-2 文档化与冻结面），torchwood 切 tag 并摘 replace。
 - **完成判据**：`go.mod` 无 grpcapi replace 项；干净环境（无相邻 checkout，如 CI）`go build ./...` 与 `mise run test` 通过；grpcapi 仓库存在 v0.3.0 tag 且其 commit ≥ `5ea3974`。
 - **建议归属**：grpcapi 发版 + torchwood 单独小 commit。

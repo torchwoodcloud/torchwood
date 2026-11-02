@@ -3,7 +3,7 @@ package contexts
 import (
 	"context"
 
-	"github.com/lynx-go/grpcapi/contextx"
+	"github.com/lynxland/grpcapi/contextx"
 )
 
 // ClientInfo captures request metadata useful for session and audit records.

@@ -163,7 +163,7 @@ func (p *postgresDocumentDB) scanChanges(ctx context.Context, projectID, topic s
 		Where("topic = ?", topic).
 		Where("seq > ?", sinceSeq).
 		Order("seq ASC").
-		Limit(limit)
+		Limit(int64(limit))
 	if documentID != "" {
 		q = q.Where("payload->>'document_id' = ?", documentID)
 	}

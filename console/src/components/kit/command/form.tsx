@@ -1,8 +1,8 @@
-// vendored from @lynx-go/ui registry/command/form.tsx @0.2.1（2026-10-25 §12.10-⑤ 上游回流 re-vendor（labels 面，bisect 误还原后重拷））
+// vendored from @lynxland/ui registry/command/form.tsx @0.2.1（2026-10-25 §12.10-⑤ 上游回流 re-vendor（labels 面，bisect 误还原后重拷））
 // 拷贝适配（scripts/devtool.mjs --profile torchwood）：
 // token 方言映射 text-err→text-destructive、bg-err→bg-destructive、border-err→border-destructive；cn 统一 @/lib/utils。
 // 其余与上游一致。
-import type { CommandResult } from "@lynx-go/uikit-core/kernel";
+import type { CommandResult } from "@lynxland/uikit-core/kernel";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 

@@ -681,7 +681,7 @@ Hub 内部分工（与 §4.5 一致，这里再写死一次）：
 
 #### 4.1 挂载点与 `http.Server` 超时（锁定）
 
-lynx v1.3.0 的 `lynxhttp.WithTimeout` 设置的是 **`http.Server` 的 `ReadHeaderTimeout` / `ReadTimeout` / `WriteTimeout`**（`github.com/lynx-go/lynx@v1.3.0/server/http/server.go`），**不是** handler 级 `http.TimeoutHandler`。`NewGRPCGatewayServer`（`grpc_gateway.go` L99–101）把整个 combined mux 交给同一个 60s timeout 的 `http.Server`。仅按路径把 `/v1/realtime` 分到另一个 handler **换不掉 listener 超时**：Go 在 serve 时把 deadline 打到 `net.Conn`；Hijack/Upgrade 之后 deadline 仍在。JWT access 默认 15m，连接会在约 60s 被杀。ping **不能**重置 `http.Server` 一次性 Read/Write deadline。
+lynx v1.3.0 的 `lynxhttp.WithTimeout` 设置的是 **`http.Server` 的 `ReadHeaderTimeout` / `ReadTimeout` / `WriteTimeout`**（`github.com/lynxland/lynx@v1.3.0/server/http/server.go`），**不是** handler 级 `http.TimeoutHandler`。`NewGRPCGatewayServer`（`grpc_gateway.go` L99–101）把整个 combined mux 交给同一个 60s timeout 的 `http.Server`。仅按路径把 `/v1/realtime` 分到另一个 handler **换不掉 listener 超时**：Go 在 serve 时把 deadline 打到 `net.Conn`；Hijack/Upgrade 之后 deadline 仍在。JWT access 默认 15m，连接会在约 60s 被杀。ping **不能**重置 `http.Server` 一次性 Read/Write deadline。
 
 **锁定实现（两件事都做）**：
 

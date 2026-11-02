@@ -65,19 +65,19 @@ func TestOutboxRepo_ReplayDeadLetter(t *testing.T) {
 		ID string `bun:"event_id"`
 	})(nil)).TableExpr("document_events_outbox_dead").Where("event_id = ?", "e1").Count(ctx)
 	require.NoError(t, err)
-	require.Equal(t, 0, n)
+	require.Equal(t, int64(0), n)
 
 	n, err = db.NewSelect().Model((*struct {
 		ID string `bun:"event_id"`
 	})(nil)).TableExpr("document_events_outbox").Where("event_id = ?", "e1").Count(ctx)
 	require.NoError(t, err)
-	require.Equal(t, 1, n)
+	require.Equal(t, int64(1), n)
 
 	// 幂等：二次重放应成功且不产生重复
 	require.NoError(t, repo.ReplayDeadLetter(ctx, "e1", "p1"))
 	n, err = db.NewSelect().TableExpr("document_events_outbox").Where("event_id = ?", "e1").Count(ctx)
 	require.NoError(t, err)
-	require.Equal(t, 1, n)
+	require.Equal(t, int64(1), n)
 
 	// project 错配应失败（不存在于 dead 且不在 outbox 的 project 错配）
 	_, err = db.ExecContext(ctx, `INSERT INTO document_events_outbox_dead (event_id, project_id, topic, channel, payload, attempts, last_error, created_at, failed_at) VALUES ('e2', 'p1', 'topic', 'ch', '{}', 10, 'err', NOW(), NOW())`)

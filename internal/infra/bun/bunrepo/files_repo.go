@@ -128,7 +128,7 @@ func (r *FileRepository) ListByBucket(ctx context.Context, projectID, bucketID, 
 		sel = sel.Where("f.owner_user_id = ?", ownerUserID)
 	}
 	err = sel.OrderExpr("f.created_at DESC, f.id DESC").
-		Limit(limit).Offset(offset).
+		Limit(int64(limit)).Offset(int64(offset)).
 		Scan(ctx)
 	if err != nil {
 		return nil, 0, err

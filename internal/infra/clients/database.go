@@ -133,7 +133,7 @@ func newDatabase(cfg *config.Database, logger *slog.Logger) (*Database, func(), 
 		return nil, func() {}, fmt.Errorf("database ping failed: %w", pingErr)
 	}
 	if hook := NewSlowQueryHook(cfg.GetSlowQueryThreshold(), cfg.GetDebug(), logger); hook != nil {
-		db.AddQueryHook(hook)
+		db = db.WithQueryHook(hook)
 	}
 	return &Database{db}, func() { _ = db.Close() }, nil
 }

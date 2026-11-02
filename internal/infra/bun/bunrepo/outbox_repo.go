@@ -26,12 +26,13 @@ func (r *outboxRepo) ListDeadLetters(ctx context.Context, projectID string, page
 	ctx2, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	var total int
-	if total, err = r.db.Conn(ctx2).NewSelect().Model((*model.DocumentEventsOutboxDead)(nil)).Where("project_id = ?", projectID).Count(ctx2); err != nil {
+	c64, err := r.db.Conn(ctx2).NewSelect().Model((*model.DocumentEventsOutboxDead)(nil)).Where("project_id = ?", projectID).Count(ctx2)
+	if err != nil {
 		return nil, 0, "", err
 	}
+	total := int(c64)
 	var rows []model.DocumentEventsOutboxDead
-	if err := r.db.Conn(ctx2).NewSelect().Model(&rows).Where("project_id = ?", projectID).Order("created_at DESC").Offset(params.Offset).Limit(int(params.PageSize)).Scan(ctx2); err != nil {
+	if err := r.db.Conn(ctx2).NewSelect().Model(&rows).Where("project_id = ?", projectID).Order("created_at DESC").Offset(int64(params.Offset)).Limit(int64(params.PageSize)).Scan(ctx2); err != nil {
 		return nil, 0, "", err
 	}
 	out := make([]events.DeadLetter, len(rows))

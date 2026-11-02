@@ -171,7 +171,7 @@ func (r *UserRepository) List(ctx context.Context, projectID string, f domainuse
 	sel := conn.NewSelect().Model(&ms).ModelTableExpr(expr, sch)
 	sel = applyUserListFilters(sel, parsed)
 	sel = applyUserListOrder(sel, parsed)
-	if err := sel.Limit(limit).Offset(offset).Scan(ctx); err != nil {
+	if err := sel.Limit(int64(limit)).Offset(int64(offset)).Scan(ctx); err != nil {
 		return nil, err
 	}
 	out := &domainusers.ListResult{

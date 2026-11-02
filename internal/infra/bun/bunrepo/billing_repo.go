@@ -97,7 +97,7 @@ func (r *usageRepo) List(ctx context.Context, projectID, metric string, from, to
 	if limit <= 0 {
 		limit = 25
 	}
-	if err := q.Order("ur.period_start DESC", "ur.id DESC").Limit(limit).Scan(ctx2); err != nil {
+	if err := q.Order("ur.period_start DESC", "ur.id DESC").Limit(int64(limit)).Scan(ctx2); err != nil {
 		return nil, err
 	}
 	out := make([]billing.Rollup, len(ms))
@@ -279,7 +279,7 @@ func (r *statementRepo) List(ctx context.Context, projectID string, limit int, b
 	if limit <= 0 {
 		limit = 25
 	}
-	if err := q.Order("bs.period_start DESC").Limit(limit).Scan(ctx2); err != nil {
+	if err := q.Order("bs.period_start DESC").Limit(int64(limit)).Scan(ctx2); err != nil {
 		return nil, err
 	}
 	out := make([]billing.Statement, 0, len(ms))

@@ -7,8 +7,8 @@
 package main
 
 import (
-	"github.com/lynx-go/lynx"
-	"github.com/lynx-go/lynx/boot"
+	"github.com/lynxland/lynx"
+	"github.com/lynxland/lynx/boot"
 	"github.com/torchwoodcloud/torchwood/cmd/server/internal/runtime"
 	"github.com/torchwoodcloud/torchwood/internal/api/clientgrpc"
 	"github.com/torchwoodcloud/torchwood/internal/api/consolegrpc"

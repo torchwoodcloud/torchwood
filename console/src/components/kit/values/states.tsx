@@ -1,8 +1,8 @@
-// vendored from @lynx-go/ui registry/values/states.tsx @0.2.1（2026-10-25 §12.10 余款 re-vendor（describeError 面，内置中文 describe 退役））
+// vendored from @lynxland/ui registry/values/states.tsx @0.2.1（2026-10-25 §12.10 余款 re-vendor（describeError 面，内置中文 describe 退役））
 // 拷贝适配（scripts/devtool.mjs --profile torchwood）：
 // token 方言映射 text-muted→text-muted-foreground、text-err→text-destructive；cn 统一 @/lib/utils。
 // 其余与上游一致。
-import type { ApiError } from "@lynx-go/uikit-core/kernel";
+import type { ApiError } from "@lynxland/uikit-core/kernel";
 import { RotateCw, SearchX } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";

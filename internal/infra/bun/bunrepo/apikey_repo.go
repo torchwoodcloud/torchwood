@@ -71,7 +71,7 @@ func (r *apiKeyRepo) ListAPIKeys(ctx context.Context, projectID string, limit, o
 		return nil, 0, err
 	}
 	var ms []model.APIKey
-	err = cond(r.db.NewSelect().Model(&ms)).Order("created_at DESC").Limit(limit).Offset(offset).Scan(ctx)
+	err = cond(r.db.NewSelect().Model(&ms)).Order("created_at DESC").Limit(int64(limit)).Offset(int64(offset)).Scan(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -79,7 +79,7 @@ func (r *apiKeyRepo) ListAPIKeys(ctx context.Context, projectID string, limit, o
 	for i := range ms {
 		out[i] = *mapAPIKeyToDomain(&ms[i])
 	}
-	return out, total, nil
+	return out, int(total), nil
 }
 
 // apiKeyUpdateCols 是 UpdateAPIKey 的列白名单（T-02）：仅治理字段，

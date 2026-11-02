@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 
 	"github.com/torchwoodcloud/torchwood/pkg/query"
 )

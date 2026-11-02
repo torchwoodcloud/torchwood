@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lynx-go/grpcapi/policy"
+	"github.com/lynxland/grpcapi/policy"
 )
 
 // 本文件是授权策略的 domain 断言层（项目主权）：从 *policy.Set（规范树，

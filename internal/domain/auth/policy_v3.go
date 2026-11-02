@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/lynx-go/grpcapi/policy"
+	"github.com/lynxland/grpcapi/policy"
 )
 
 // 本文件保留五档语义的类型与视图助手：MethodPolicy 是规范树（见

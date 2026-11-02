@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 	"github.com/stretchr/testify/require"
 
 	"github.com/torchwoodcloud/torchwood/internal/pkg/runbook"

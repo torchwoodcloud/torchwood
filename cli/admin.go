@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"github.com/lynx-go/commands"
+	"github.com/lynxland/commands"
 )
 
 // newAdminCmd 提供平台运维管理命令（W-J）。outbox 走 Server RPC（需 API
