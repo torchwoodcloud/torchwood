@@ -73,7 +73,7 @@ require (
 	github.com/klauspost/crc32 v1.3.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lynx-go/grpcapi v0.4.0
-	github.com/lynx-go/lynx-start v0.5.1
+	github.com/lynxland/appkit v0.7.0
 	github.com/minio/crc64nvme v1.1.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/moby/term v0.5.2 // indirect

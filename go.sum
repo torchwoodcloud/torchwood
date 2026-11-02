@@ -113,10 +113,10 @@ github.com/lynx-go/grpcapi/genproto v0.3.0 h1:0QuNp66jKV+AvuG+hN/ByC/9PvOcevaNwP
 github.com/lynx-go/grpcapi/genproto v0.3.0/go.mod h1:KCxDet6GpsDFsZmMfxT26fzxeRu1dmRzPFTqKrJUkSI=
 github.com/lynx-go/lynx v1.20.0 h1:qxYQxnvh/uMAoLZwE3Oc9ZM7yt/GnXTxxdySQ9DB0k4=
 github.com/lynx-go/lynx v1.20.0/go.mod h1:1/ICMKO0zAR7FD2ZFYkDp1kh6PtksttKm97371A71jA=
-github.com/lynx-go/lynx-start v0.5.1 h1:SO2BX27ykZczZEqeaMbi45GaVdMtm5IOttAWKuRe8XY=
-github.com/lynx-go/lynx-start v0.5.1/go.mod h1:PmbmrU+nWkW5TVGFJ6P3C5RWWzh90CjJqiu06tFLeIQ=
 github.com/lynx-go/lynx/contrib/zap v1.20.0 h1:rd3nloFwt/9ZZUP6f7cScpY+xPTnVzL8tmn7gMX5wCo=
 github.com/lynx-go/lynx/contrib/zap v1.20.0/go.mod h1:Eb+uFhGpX+SJpbXXlTvZ0Ksz0wP3SA+pn9RxD5Sqi2Q=
+github.com/lynxland/appkit v0.7.0 h1:1gKXkRvYm0bX3/UBbi3DgxTq96TCxSA18X6vrZQF3PY=
+github.com/lynxland/appkit v0.7.0/go.mod h1:5qjo2EiywxauhDEtZgJyFLWtKa5QSwD/2tPoW1jLzgc=
 github.com/minio/crc64nvme v1.1.1 h1:8dwx/Pz49suywbO+auHCBpCtlW1OfpcLN7wYgVR6wAI=
 github.com/minio/crc64nvme v1.1.1/go.mod h1:eVfm2fAzLlxMdUGc0EEBGSMmPwmXD5XiNRpnu9J3bvg=
 github.com/minio/md5-simd v1.1.2 h1:Gdi1DZK69+ZVMoNHRXJyNcxrMA4dSxoYHZSQbirFg34=

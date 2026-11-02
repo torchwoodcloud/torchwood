@@ -1,8 +1,8 @@
-// Package crud —— lynx-start 基础库的同源件转发层（dogfood 采纳，
-// 2026-11-01，lynx-start battery-roadmap 首循环①）。
+// Package crud —— appkit 基础库的同源件转发层（dogfood 采纳，
+// 2026-11-01，appkit battery-roadmap 首循环①）。
 //
 // 分页收尾/时间游标/过滤摘要/排序白名单解析等 ORM 中立基元直接消费
-// github.com/lynx-go/lynx-start/crud v0.5.1，本仓不再维护逐字副本。
+// github.com/lynxland/appkit/crud v0.7.0，本仓不再维护逐字副本。
 // page token 签名机械（pagination.go）暂留本地：密钥推导 purpose 是
 // torchwood 专属（换库会作废在途游标），且白盒测试依赖进程内钩子
 // （pageTokenMarshal/seal）——随 v2 keyset 分页换装整体退役。
@@ -11,7 +11,7 @@
 package crud
 
 import (
-	base "github.com/lynx-go/lynx-start/crud"
+	base "github.com/lynxland/appkit/crud"
 )
 
 const (
