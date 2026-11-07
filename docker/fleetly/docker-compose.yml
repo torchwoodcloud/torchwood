@@ -226,10 +226,12 @@ services:
   #
   # 托管实例没有 postgres 入口 initdb 钩子：tw_authenticator 的创建与
   # bootstrap-roles.sql 授权由本作业承接（configs 挂载两个 SQL，外部值经
-  # configs API 上传）。平台 init job 并行执行且无 depends_on —— 授权依赖
-  # migrate 产出的三角色（000004），故 grants 段带 5s×48 的有界等待环；
+  # configs API 上传）。平台 init job 串行执行（F1.13）且序经 ADR-0098 after 承载显式化
+  # （migrate → db-bootstrap）——grants 段的 5s×48 等待环保留为纵深（不依赖序）；
   # 任一前置失败在预算内显式失败（不静默半成功）。
   db-bootstrap:
+    # ADR-0098 after 承载：db-bootstrap 在 migrate 后（等待环退役——
+    # 字母序 db-bootstrap<migrate 的死锁形态由声明序显式化消灭）。
     # percona 发行版镜像内自带 psql（与实例同发行版/同大版本）——用 psql 客户端面。
     image: percona/percona-distribution-postgresql:18
     command:
@@ -272,6 +274,10 @@ services:
     labels:
       fleetly.job: "init"
       fleetly.job.timeout: "10m"
+      # ADR-0098 after 承载：声明序 db-bootstrap 在 migrate 后（字典序
+      # db-bootstrap<migrate 的处女库冷启动死锁形态由显式序消灭，d4 手改
+      # spec 序的当批操作解正式化入仓）。
+      fleetly.job.after: "migrate"
       fleetly.databases: "torchwood-pg"
     # 一次性作业无 healthcheck(P0-4 job 方言白名单不收;平台按任务终态判定作业)。
   # ==================== 一次性作业 3：roles-sig（B15 密钥落库） ====================
@@ -310,5 +316,7 @@ services:
     labels:
       fleetly.job: "init"
       fleetly.job.timeout: "10m"
+      # ADR-0098 after 承载：roles-sig 在 db-bootstrap 后（等待环同款退役）。
+      fleetly.job.after: "db-bootstrap"
       fleetly.databases: "torchwood-pg"
     # 一次性作业无 healthcheck(P0-4 job 方言白名单不收;平台按任务终态判定作业)。
